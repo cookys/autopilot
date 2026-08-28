@@ -107,7 +107,10 @@ module.exports = {
   CAPABILITY_EVIDENCE_SOURCES: capabilityEvidence.SOURCES,
   CAPABILITY_EVIDENCE_STATES: capabilityEvidence.STATES,
   CAPABILITY_EVIDENCE_REVOCATION_REASONS: capabilityEvidence.REVOCATION_REASONS,
-  CAPABILITY_ROLE_IDS: roles.ROLE_IDS,
+  // Repointed, not extended (plan 2026-08-28-consult-discuss-qualification.md
+  // §2.6 finding [5]): these two barrel names already promised the
+  // CAPABILITY role variant; no new export names are added here.
+  CAPABILITY_ROLE_IDS: roles.CAPABILITY_ROLE_IDS,
   CAPABILITY_ROLE_ALIASES: roles.LEGACY_ROLE_ALIASES,
   CapabilityEvidenceError: capabilityEvidence.CapabilityEvidenceError,
   MAX_QUALIFIED_TTL_DAYS: capabilityEvidence.MAX_QUALIFIED_TTL_DAYS,
@@ -117,7 +120,7 @@ module.exports = {
   normalizeCapabilityEvidenceIdentity: capabilityEvidence.normalizeIdentity,
   normalizeCapabilityEvidenceReceipt: capabilityEvidence.normalizeCapabilityEvidenceReceipt,
   normalizeCapabilityEvidenceScope: capabilityEvidence.normalizeScope,
-  normalizeCapabilityRole: roles.normalizeRole,
+  normalizeCapabilityRole: roles.normalizeCapabilityRole,
   verifyEvaluationCorpus: capabilityEvidence.verifyEvaluationCorpus,
   ...localDeployment,
   ...profileCutover,

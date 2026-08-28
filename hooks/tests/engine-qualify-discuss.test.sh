@@ -2,10 +2,11 @@
 # hooks/tests/engine-qualify-discuss.test.sh
 #
 # Suite tests for the discuss qualification exam (D2,
-# docs/plans/2026-08-28-consult-discuss-qualification.md). `scripts/
-# engine-qualify.sh discuss --plan` does not exist yet — that flag is a
-# later-wave deliverable (D3) — so this file exercises the generator, grader
-# and corpus directly, which is where all of D2's scored logic lives.
+# docs/plans/2026-08-28-consult-discuss-qualification.md). Exercises the
+# generator, grader and corpus directly, which is where all of D2's scored
+# logic lives. The final section is the D3 companion: `scripts/engine-
+# qualify.sh discuss --plan` exits 0 and prints the five frozen identities
+# without any provider call.
 . "$(dirname "$0")/lib.sh"
 
 GEN="$REPO_ROOT/evals/discuss-eval-generator.js"
@@ -155,5 +156,73 @@ assert_exit_code "$?" 0 "rubric seal check: FROZEN"
 
 node "$REPO_ROOT/scripts/rubric-freeze.js" check "$CORPUS" "$CORPUS_SEAL" >/dev/null 2>&1
 assert_exit_code "$?" 0 "corpus seal check: FROZEN"
+
+# ── D3: `scripts/engine-qualify.sh discuss --plan` dry-run ─────────────────
+# The companion assertion this file's header comment asked for once D3
+# landed (mirrors engine-qualify-consult.test.sh's D3 section).
+SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
+NEVER_CALL="$TEST_TMP/discuss-never-call.sh"
+cat >"$NEVER_CALL" <<'SH'
+#!/usr/bin/env bash
+exit 99
+SH
+chmod +x "$NEVER_CALL"
+
+HASH_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+HASH_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+HASH_C="$(printf 'discuss-plan-containment' | sha256sum | cut -d' ' -f1)"
+DISCUSS_PLAN_ARGS=(
+  discuss
+  --plan
+  --engine eng-discuss
+  --model eng-discuss-exact
+  --model-version 2026-08-28
+  --runner cc-shim
+  --runner-version 1.0.0
+  --family openai
+  --harness-version discuss-harness-v1
+  --effort high
+  --prompt-config-hash "$HASH_A"
+  --semantic-fingerprint "$HASH_B"
+  --containment-fingerprint "$HASH_C"
+  --task-class code_review
+  --domain repository
+  --language en
+  --tool diff_read
+  --panel-cmd "$NEVER_CALL"
+)
+
+PLAN_OUT="$($SCRIPT "${DISCUSS_PLAN_ARGS[@]}" 2>&1)"
+PLAN_RC=$?
+assert_exit_code "$PLAN_RC" "0" "discuss --plan exits 0"
+assert_contains "$PLAN_OUT" '"role": "discuss"' "discuss --plan prints the requested role"
+assert_contains "$PLAN_OUT" '"generator":' "discuss --plan prints the generator identity"
+assert_contains "$PLAN_OUT" '"grader":' "discuss --plan prints the grader identity"
+assert_contains "$PLAN_OUT" '"corpus":' "discuss --plan prints the corpus identity"
+assert_contains "$PLAN_OUT" '"rubric":' "discuss --plan prints the rubric identity"
+assert_contains "$PLAN_OUT" '"seal":' "discuss --plan prints the seal identity"
+assert_contains "$PLAN_OUT" '"case_plan":' "discuss --plan prints the case plan"
+assert_not_contains "$PLAN_OUT" '"authority_status"' "discuss --plan output is a plan document, not a qualification verdict"
+
+PLAN_OUT2="$($SCRIPT "${DISCUSS_PLAN_ARGS[@]}" 2>&1)"
+assert_eq "$PLAN_OUT" "$PLAN_OUT2" "discuss --plan produces byte-identical stdout on a second run with an identical seed envelope"
+
+IMPL_FLAG_OUT="$($SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --dispatch-bin /bin/true 2>&1)"
+IMPL_FLAG_RC=$?
+assert_exit_code "$IMPL_FLAG_RC" "2" "discuss --plan combined with an implementer-only flag exits 2"
+
+EXPIRES_30_RC=0
+$SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --expires-days 30 >/dev/null 2>&1 || EXPIRES_30_RC=$?
+assert_exit_code "$EXPIRES_30_RC" "0" "discuss --expires-days 30 is accepted"
+EXPIRES_31_RC=0
+$SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --expires-days 31 >/dev/null 2>&1 || EXPIRES_31_RC=$?
+assert_exit_code "$EXPIRES_31_RC" "2" "discuss --expires-days 31 is rejected (flat 30-day cap)"
+
+RUNNER_BIN_RC=0
+$SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --runner-bin /bin/true >/dev/null 2>&1 || RUNNER_BIN_RC=$?
+assert_exit_code "$RUNNER_BIN_RC" "2" "discuss rejects --runner-bin (not live-rail)"
+DISPATCH_TIMEOUT_RC=0
+$SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --dispatch-timeout 60s >/dev/null 2>&1 || DISPATCH_TIMEOUT_RC=$?
+assert_exit_code "$DISPATCH_TIMEOUT_RC" "2" "discuss rejects --dispatch-timeout (not live-rail)"
 
 finalize_test

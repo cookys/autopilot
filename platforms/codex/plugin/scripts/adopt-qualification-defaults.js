@@ -78,7 +78,13 @@ const { spawnSync } = require('child_process');
 const SCRIPT_DIR = __dirname;
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 
-const VALID_ROLES = new Set(['implementer', 'reviewer', 'verification_author', 'owner', 'explorer']);
+// Sourced from the registry (plan 2026-08-28-consult-discuss-qualification.md
+// §2.6), not hand-listed: the capability namespace, which includes the two
+// qualification-seat-only roles `consult` and `discuss` alongside the
+// execution roles. Adoption is disclosure of qualification evidence, never an
+// execution-authority grant, so the wider namespace is the correct one here.
+const { CAPABILITY_ROLE_IDS } = require('../src/engine/roles');
+const VALID_ROLES = new Set(CAPABILITY_ROLE_IDS);
 
 function fail(msg, code) {
   process.stderr.write(`adopt-qualification-defaults: ${msg}\n`);

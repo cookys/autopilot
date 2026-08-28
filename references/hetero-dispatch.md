@@ -561,43 +561,49 @@ Full per-runner usage recipes (incl. the cc-shim env setup and which models are 
 The resolver's `family_of()` recognises openai/anthropic/google/xai/minimax/zhipu for the
 decorrelation overlap check.
 
-## The consult seat — configured, not hand-typed
+## The consult seat — `scripts/dispatch-consult.sh`
 
 A mid-run heterogeneous second opinion used to be hand-typed `dispatch-review.sh` argv:
 the operator picked a runner, a model and an effort at the keyboard, so the choice was
 invisible to the roster and unreproducible between runs. It is now a **seat** in
-`review-loop-config.md`, resolved like every other:
+`review-loop-config.md`, resolved AND dispatched by one script (plan
+`docs/plans/2026-08-28-consult-discuss-qualification.md` D8):
 
 ```bash
-eng="$(scripts/resolve-review-loop.sh --field consult_engine)"
-run="$(scripts/resolve-review-loop.sh --field consult_runner)"
-eff="$(scripts/resolve-review-loop.sh --field consult_effort)"
-ep="$(scripts/resolve-review-loop.sh --field consult_endpoint)"
-[ -n "$eng" ] || { echo "no consult seat configured — hand-typed argv is still legal"; }
-scripts/dispatch-review.sh --runner "$run" --model "$eng" --effort "$eff" \
-  ${ep:+--endpoint "$ep"} --diff-file <question> --spec-file <what to decide>
+scripts/dispatch-consult.sh --question-file <what to decide> --artifact <diff/file/test-output> [--artifact <more>...]
 ```
 
-An EMPTY seat is the default and means exactly what it meant before: pick argv by hand.
-A configured seat means the roster states which engine answers consults, so a run summary
-can name it and a reviewer can check it.
+`dispatch-consult.sh` owns switch resolution itself — it reads `consult_dispatch` from the
+resolved roster and refuses (exit 2, naming the field) before any transport spawns when the
+seat is off. It is **not** `dispatch-review.sh`: that rail only succeeds after parsing a
+`SHIP-AS-IS`/`FIX-THEN-SHIP` verdict, which a consult answer must never carry. Consult rides
+`dispatch-author.sh`'s raw-prompt rail instead, carrying the frozen consult response schema
+(`evals/consult-eval-rubric.md`) with no review-verdict protocol anywhere in the prompt, the
+parser, or the output. A response carrying a loop-convergence verdict token is rejected.
+
+**Blind-evidence preflight is structural, not a caller responsibility.** Before any
+dispatch, the script runs `scripts/check-blind-evidence.sh` over the question file and every
+`--artifact`, and refuses (exit 4) a payload carrying an implementer's self-report, summary,
+or self-verdict — only artifacts and the original question ever reach a consult engine
+(`references/blind-dispatch.md` § Verifier isolation).
 
 Two properties carry over from the other seats, and both matter here:
 
 - **Qualification still gates it.** Naming a runner with no recorded role qualification
   (today `cursor`) makes the resolver EXIT 3 unless `$AUTOPILOT_QUALIFICATION_OVERRIDE`
-  carries an unexpired entry for that engine/runner AND `"role": "consult"`. An override
-  for a different role does not admit the consult seat. The admitted seat is announced on
-  stderr and listed in `override_admitted_seats` — a recorded operator decision, never
-  evidence of qualification.
+  carries an unexpired entry for that engine/runner AND `"role": "consult"`, OR the seat
+  holds a recorded, non-demoted `consult` role-qualification row (D7's switch-on
+  qualification gate, when `consult_dispatch: on`). `dispatch-consult.sh` surfaces the
+  resolver's own refusal message rather than inventing its own.
 - **A consult is still ADVICE.** Same trust boundary as the peer-consult channel below:
   it never substitutes qc@depth-0, artifact verification, or the decorrelated review
   rails. Routing it through a seat makes the choice reproducible; it does not promote the
   answer.
 
-The sibling `discuss_*` seat (heterogeneous participation in `think-tank` / `brainstorm`)
-resolves identically but **has no executable consumer yet** — it is declared so a roster
-can state the intent, and no skill reads it today. Do not describe it as live.
+The sibling `discuss_*` seat (heterogeneous participation in `think-tank`) now also has an
+executable consumer, `scripts/dispatch-discuss.js` (plan D9), called from
+`skills/think-tank/SKILL.md`. It resolves and dispatches the same way — own switch
+resolution, `dispatch-author.sh`'s raw-prompt rail, a closed production schema, advisory only.
 
 ## Peer consult — the codex plugin channel (Claude Code only, capability-gated)
 

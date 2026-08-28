@@ -53,6 +53,13 @@ const {
 } = require('../evals/va-eval-grader');
 const implGenerator = require('../evals/impl-eval-generator');
 const implGrader = require('../evals/impl-eval-grader');
+const consultGenerator = require('../evals/consult-eval-generator');
+const discussGenerator = require('../evals/discuss-eval-generator');
+// D4 (plan 2026-08-28-consult-discuss-qualification.md) — the five-identity
+// seal/pin verification shared by the `--plan` dry-run and (once wired) any
+// real consult/discuss administration. See scripts/lib/qualification-asset-seals.js
+// for the load-bearing contract (throws on ANY rubric/corpus seal drift).
+const qualificationAssetSeals = require('./lib/qualification-asset-seals');
 const {
   expandTilde,
 } = require('./lib/jsonl-store');
@@ -195,7 +202,7 @@ const ACTIVE_SESSION_RUNS = new Map();
 // same-role bundle's README (docs/plans/evidence/<date>-*-qualification-*/*/README.md)
 // and edit only the seat identity, rather than reconstructing flags from memory.
 const HELP = `Usage:
-  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer>
+  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer|consult|discuss>
     --engine <display-id> --model <exact-model-id> --model-version <version>
     --runner <name> --runner-version <version> --family <family>
     --harness-version <version> --effort <effort>
@@ -221,6 +228,15 @@ const HELP = `Usage:
     [--dispatch-timeout <dur>]  (per-case rail timeout, default corpus 600s)
   implementer --expires-days caps at 90 (its schema ceiling); all other roles
   keep the flat 30-day cap.
+
+  consult and discuss are QUALIFICATION-SEAT roles (never live-rail): they take
+  the same --panel-cmd / --remote-provider-cmd broker transport as reviewer/owner
+  and REJECT --dispatch-bin/--runner-bin/--dispatch-timeout with a usage error.
+  Both support [--plan]: a dry-run that verifies the five frozen identities
+  (generator, grader, corpus, rubric, seal), runs the corpus admission gates,
+  prints the case plan, and exits WITHOUT any provider/broker call. [--plan]
+  combined with an implementer-only flag exits 2 (the flags are rejected before
+  --plan is ever consulted).
 
 The qualifier generates fresh role-specific known-bad, clean, and defect-reversal trials.
 Reviewer output uses {"verdict":"pass|fail","findings":[...]} with a structured
@@ -280,7 +296,8 @@ function positiveInteger(value, label, minimum = 1) {
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer'].includes(argv[0])) {
+  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer', 'consult', 'discuss']
+    .includes(argv[0])) {
     usage(2, `unknown subcommand: ${argv[0]}`);
   }
   const options = {
@@ -289,6 +306,7 @@ function parseArgs(argv) {
     expiresDays: 30,
     store: null,
     emitRow: false,
+    plan: false,
     taskClasses: [],
     domains: [],
     languages: [],
@@ -336,6 +354,10 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--emit-row') {
       options.emitRow = true;
+      continue;
+    }
+    if (arg === '--plan') {
+      options.plan = true;
       continue;
     }
     if (['-h', '--help'].includes(arg)) usage(0);
@@ -419,6 +441,15 @@ function parseArgs(argv) {
   const expiresCap = options.role === 'implementer' ? IMPL_EXPIRES_CAP : 30;
   if (options.expiresDays > expiresCap) {
     usage(2, `${options.role} --expires-days cannot exceed ${expiresCap}`);
+  }
+  // --plan is the D3 dry-run surface (plan 2026-08-28-consult-discuss-
+  // qualification.md §8 ruling 1): consult/discuss only. `--plan` combined
+  // with an implementer-only flag (--dispatch-bin/--runner-bin/
+  // --dispatch-timeout) still exits 2 regardless of this check's order,
+  // because those flags are unconditionally rejected below for every
+  // non-implementer role, --plan or not.
+  if (options.plan && !['consult', 'discuss'].includes(options.role)) {
+    usage(2, '--plan is only supported for the consult and discuss roles');
   }
   if (options.role === 'implementer') {
     // Live-rail transport: no broker XOR. Reject broker-only flags outright so
@@ -3289,8 +3320,113 @@ function gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken }
   return { collection, collection_threw: collectionThrew, oracle };
 }
 
+// ---------------------------------------------------------------------------
+// D3 `--plan` dry-run (plan 2026-08-28-consult-discuss-qualification.md, §8
+// ruling 1): materializes the corpus, verifies the five frozen identities and
+// the rubric/corpus seals (scripts/lib/qualification-asset-seals.js — D4),
+// runs the corpus's own admission gates, and prints the case plan. Makes NO
+// panel/broker/provider call — `executePanelCase` is never referenced below.
+// ---------------------------------------------------------------------------
+
+// Deterministic, seed-envelope-only derivation (no run_nonce, no wall clock):
+// an identical invocation (identical pinned assets) always produces the same
+// admin/oracle seeds, so `--plan`'s stdout is byte-identical run over run.
+function planSeed(label, generatorHash) {
+  return byteHash(`engine-qualify:plan-seed:${label}:${generatorHash}`);
+}
+
+function buildConsultCasePlan(identities) {
+  const adminSeed = planSeed('consult-admin', identities.generator);
+  const oracleKey = planSeed('consult-oracle', identities.generator);
+  const admission = consultGenerator.runAdmission({ adminSeed, oracleKey });
+  if (admission.failures.length > 0) {
+    throw new Error(`consult corpus admission gates failed: ${admission.failures.join('; ')}`);
+  }
+  const trials = admission.administration.trials.map((trial) => ({
+    trial: trial.trial,
+    cases: trial.cases.map((c) => ({ case_id: c.case_id, family: c.family })),
+  }));
+  return {
+    budget: consultGenerator.CORPUS.budget,
+    trials,
+    admission: {
+      pass: true,
+      checked_cases: admission.checked_cases,
+      overfitter_checked: admission.overfitter_checked,
+      negative_control_admission_failed: admission.negative_control_admission_failed,
+    },
+  };
+}
+
+function buildDiscussCasePlan() {
+  const cases = discussGenerator.buildAdministration();
+  const gateReport = discussGenerator.runAdmissionGates(cases);
+  if (!gateReport.pass) {
+    throw new Error(`discuss corpus admission gates failed: ${gateReport.failures.join('; ')}`);
+  }
+  const byTrial = new Map();
+  for (const c of cases) {
+    if (!byTrial.has(c.trial)) byTrial.set(c.trial, []);
+    byTrial.get(c.trial).push({ case_id: c.case_id, family: c.family });
+  }
+  const trials = [...byTrial.keys()].sort((a, b) => a - b).map((trial) => ({
+    trial,
+    cases: byTrial.get(trial),
+  }));
+  return {
+    budget: discussGenerator.CORPUS.budget,
+    trials,
+    admission: {
+      pass: true,
+      solvability: gateReport.solvability,
+      trap_discrimination: gateReport.trapDiscrimination,
+      overfitter_discrimination: gateReport.overfitterDiscrimination,
+      negative_control: gateReport.negativeControl,
+    },
+  };
+}
+
+function runPlanDryRun(options) {
+  const identities = qualificationAssetSeals.frozenIdentities(options.role);
+  const casePlan = options.role === 'consult'
+    ? buildConsultCasePlan(identities)
+    : buildDiscussCasePlan();
+  const output = {
+    schema_version: 1,
+    role: options.role,
+    mode: 'plan',
+    // KR7 / D4: the five frozen identities — generator, grader, corpus,
+    // rubric, seal — printed for every `--plan` invocation.
+    identities: {
+      generator: identities.generator,
+      grader: identities.grader,
+      corpus: identities.corpus,
+      rubric: identities.rubric,
+      seal: identities.seal,
+    },
+    case_plan: casePlan,
+  };
+  process.stdout.write(`${JSON.stringify(output, null, 1)}\n`);
+  process.exit(0);
+}
+
 function runQualification(options) {
   const role = options.role || 'reviewer';
+  if (options.plan) return runPlanDryRun(options);
+  if (role === 'consult' || role === 'discuss') {
+    // Real (non-`--plan`) consult/discuss administration is DEFERRED — see
+    // this deliverable's final report for the citation. KR8 forbids real-
+    // money administration in this project, and D3's acceptance criteria
+    // (plan §"D3", lines ~446-495) require only `--plan` and the broker/
+    // provider transport identity-binding tests, not a live administration
+    // run. Failing loud here (not silently) so a real invocation attempt is
+    // never mistaken for a supported path.
+    throw new Error(
+      `${role} qualification administration (non-\`--plan\`) is not yet wired — `
+      + 'see docs/plans/2026-08-28-consult-discuss-qualification.md D3/D7 and '
+      + 'this deliverable\'s final report for the deferral citation',
+    );
+  }
   if (role === 'brain') return runBrainQualification(options);
   if (role === 'verification_author') return runVaQualification(options);
   if (role === 'implementer') return runImplQualification(options);

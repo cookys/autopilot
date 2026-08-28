@@ -110,6 +110,21 @@ Agent({
 
 Dispatch ALL roles simultaneously — do not wait for one to complete before dispatching the next.
 
+### Step 3.5: Optional External Discuss Seat
+
+Call `scripts/dispatch-discuss.js` once per round-set, **unconditionally** — the wrapper itself is the decision point: it resolves `discuss_dispatch` from the project's review-loop config and refuses (non-zero exit, no transport spawned) when the seat is off or unqualified. Do not re-implement that gate here; just call it and use whatever it returns.
+
+```bash
+node scripts/dispatch-discuss.js --bundle-file <round-bundle.json>
+```
+
+Build `<round-bundle.json>` from this round: `{round_id, question, transcript: [each role's {role, position, risk_tags, anchors} so far], artifacts: [shared domain context items], axes: [declared debate axes with their claim_vector], taken_axes: [axes already stated by a role above]}`.
+
+- **Exit 0**: stdout is one positional contribution (`{round_id, axis_id, claim_vector, position, risk_tags, anchors}`). Add it to the round as a labeled **external role** — advisory only, same trust boundary as `autopilot:survey` input. It never counts as sole basis for consensus, never becomes the CEO recommendation by itself, and never carries a verdict.
+- **Non-zero exit** (switch off, unqualified seat, rail failure): proceed with the debate unchanged — no fallback substitute, no retry.
+
+Exactly one call per round-set — this is a single evidence draw, not a multi-turn negotiation.
+
 ### Step 4: Cross-Collision Synthesis
 
 After all roles report back, synthesize into a Decision Brief:

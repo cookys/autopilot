@@ -541,6 +541,93 @@ function vaRequest(content = VA_ENVELOPE) {
   });
   equal(child.status, 1, 'reviewer mode refuses an owner-role request');
 }
+// Full mode<->role matrix (adversarial-QC finding [9]): EXPECTED_ROLE_BY_MODE
+// gates every {QRP_PROMPT_MODE, request.role} pair to EXACTLY its own
+// binding — reviewer<->reviewer, brain<->owner, va<->verification_author,
+// consult<->consult, discuss<->discuss — and nothing else. The two cases
+// above already cover brain-mode-vs-reviewer-role and reviewer-mode-vs-
+// owner-role; these close the remaining pairs explicitly named by the
+// finding (reviewer mode as TARGET, both directions against consult/
+// discuss) plus the consult<->discuss cross-pair, so no combination is
+// asserted only by inference.
+function roleOnlyRequest(role, content = 'x') {
+  return {
+    schema_version: 1,
+    request_id: 'req-matrix',
+    role,
+    payload: { format: 'unified_diff', content },
+  };
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'reviewer',
+    },
+    request: roleOnlyRequest('discuss'),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'reviewer mode refuses a discuss-role request');
+  check(/not a reviewer-role case/.test(child.stderr), 'reviewer-mode/discuss-role refusal names the reviewer-role expectation');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'reviewer',
+    },
+    request: roleOnlyRequest('consult'),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'reviewer mode refuses a consult-role request');
+  check(/not a reviewer-role case/.test(child.stderr), 'reviewer-mode/consult-role refusal names the reviewer-role expectation');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'discuss',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'discuss mode refuses a reviewer-role request');
+  check(/not a discuss-role case/.test(child.stderr), 'discuss-mode/reviewer-role refusal names the discuss-role expectation');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'consult',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'consult mode refuses a reviewer-role request');
+  check(/not a consult-role case/.test(child.stderr), 'consult-mode/reviewer-role refusal names the consult-role expectation');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'discuss',
+    },
+    request: roleOnlyRequest('consult'),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'discuss mode refuses a consult-role request (cross-pair, not just vs. reviewer)');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'va',
+    },
+    request: roleOnlyRequest('discuss'),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'va mode refuses a discuss-role request');
+}
 {
   const { child } = runProvider({
     env: {

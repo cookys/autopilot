@@ -1,5 +1,101 @@
 # Changelog
 
+## v2.35.1 — consult/discuss qualification wave 2 (D3-D5, D7-D10)
+
+Completes `docs/plans/2026-08-28-consult-discuss-qualification.md`'s frozen 10-deliverable DAG
+(wave 1 — D1/D2/D6 — shipped v2.34.46). Project status: complete except paid administration, which
+is Board-gated (`docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md`, D10).
+
+**D3 — engine-qualify chassis for consult/discuss.** `consult`/`discuss` are qualification-seat
+roles, never execution roles (§2.6 namespace ruling): `src/engine/roles.js` gains
+`CAPABILITY_ROLE_IDS`/`normalizeCapabilityRole` alongside the byte-identical, untouched execution
+`ROLE_IDS`/`normalizeRole` — `resolve-scaffold-tier.js` stays pinned to the execution-only export.
+`scripts/engine-qualify.js` admits both roles into its subcommand allowlist with a new `--plan`
+dry-run: verifies the five frozen identities (generator, grader, corpus, rubric, seal) via
+`scripts/lib/qualification-asset-seals.js`, runs the corpus's own admission gates, and prints a
+deterministic case plan — no provider/broker call. Real (non-`--plan`) administration is explicitly
+deferred with a loud, cited error (Board-gated per KR8/D10), not silently unsupported.
+`scripts/qualification-case-broker.js` and `scripts/qualification-review-provider.js` extend to
+carry both exams: the broker's `--role` whitelist widens to accept `consult`/`discuss`; the provider
+gains two dedicated `QRP_PROMPT_MODE`s (never a `reviewer`-mode reuse), each with its own system
+prompt, case intro, expected-role check, and envelope validation — a mode/role mismatch fails closed.
+
+**D4 — load-bearing asset seals** (`scripts/lib/qualification-asset-seals.js`): pins and verifies
+the five frozen identities (generator, grader, corpus, rubric, seal) for both exams; the qualifier
+refuses on any drift rather than silently grading against a moved target.
+
+**D5 — capability-evidence trial kinds.** `capability-evidence.js` gains two additive
+`internal_eval` methodology kinds, `consult_panel` (10 cases/trial) and `discuss_rounds` (8
+cases/trial), each with zero-tolerance channels and promotion enforcement
+(`enforceConsultPromotion`/`enforceDiscussPromotion`) — following the same additive pattern as
+`impl_dispatch`/`va_declared_plan`. Role↔methodology pinning is bidirectional: `role=consult`
+requires `consult_panel` and `role=discuss` requires `discuss_rounds` in both directions, closing a
+gap where the generic `role_eval` whitelist would have admitted either role via the reviewer-corpus
+threshold branch. Consumer-matrix rows (a)-(j) cover schema round-trip, frozen-pre-D5-validator
+rejection, promotion-vs-provisional demotion, barrel/normalizer separation, adopter-VALID_ROLES
+derivation, and construction-level rejection at `task-authority.js`/`execution-profile.js` (not just
+schema validation).
+
+**D7 — switch-on qualification gate (both resolvers).** When `consult_dispatch`/`discuss_dispatch`
+is "on", that seat must additionally satisfy a non-demoted role-qualification row for the exact
+`{engine,runner,role}`, or a matching unexpired operator override — for **every** runner, not only
+the declarative `UNQUALIFIED_RUNNERS` list (the vacuum this plan closes; the reconciliation tension
+this creates once a listed runner earns a real qualification is recorded, not resolved, as BACKLOG
+R9). `engine-scorecard.js seat-status` gains `--require-evidence` (strict store parse,
+`validateRecordRow` forgery/anchor rejection, applicability-scope match, honest strike-decay
+projection). New `scripts/lib/qualification-applicability-scope.js` derives the frozen
+`{task_classes,domains,languages,tool_surface}` scope from each corpus manifest — the resolver
+constructs this itself, never from a caller-supplied file. Inert when the switch is off (byte-parity
+preserved). 20-case acceptance matrix (i)-(xx) plus a mutation control (delete the gate against a
+pinned pre-D7 baseline; three cases flip to admit).
+
+**D8 — `scripts/dispatch-consult.sh`**, the consult seat's executable consumer: resolver-driven
+switch resolution and dispatch invocation both live in the script (a real entry point a test can
+drive). Rides `dispatch-author.sh`'s raw-prompt rail — never `dispatch-review.sh`, which requires a
+review verdict a consult answer must never carry. Runs `check-blind-evidence.sh` as a structural
+preflight so an implementer's self-report/summary never reaches the consult engine, validates the
+frozen consult response schema, and rejects any loop-convergence verdict token in the response.
+`references/hetero-dispatch.md`'s hand-copied consult recipe (four `--field` calls, manual argv
+assembly) is replaced with a call to the wrapper.
+
+**D9 — `scripts/dispatch-discuss.js`**, the discuss seat's executable consumer, plus one guarded
+`skills/think-tank/SKILL.md` call site (Step 3.5): calls the wrapper unconditionally and uses
+whatever it returns, never re-implementing the switch guard in prose (`brainstorm` deliberately not
+wired — plan non-goal). Resolves `discuss_dispatch` via the real resolver, rides the same raw-prompt
+rail for exactly one stateless round-bundle contribution, and validates the closed
+`{round_id, axis_id, claim_vector, position, risk_tags, anchors}` schema — `axis_id`/`claim_vector`
+are normative, `position` is display prose only, and a verdict token anywhere fails closed. The
+prompt temp file is created with mode 0600 (never world-readable); `claim_vector` validation rejects
+any token outside the selected axis's own pinned vector, closing a gap where an unknown or
+foreign-axis token passed.
+
+**D10 — wiring + administration proposal.** `references/consult-discuss-seats.md` (new) documents
+both rails; `project-config-template/review-loop-config.md`'s discuss_* "declared but not consumed"
+note is rewritten now that D9 wires it. `sync-codex-plugin-skills.sh`'s `SUPPORT_FILES` gains the
+twelve pinned consult/discuss eval assets D4 sealed but never mirrored, so the codex-mirrored
+`engine-qualify.js` can `require()` its own generators — verified with both `--plan` subcommands run
+green from inside `platforms/codex/plugin`. `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md`
+is a Board decision document only (no paid administration executed): candidate `{engine, runner}`
+pairs read from the live scorecard, a case-count cost estimate, and the real `--plan` output as
+the acceptance proof.
+
+**Hardening.** Two rounds of hetero cross-family review plus a depth-0 adversarial panel closed 10
+findings, including a 🔴 role_eval methodology bypass (closed by D5's bidirectional role↔methodology
+pin) and three non-binding assertions rebuilt binding: a FIFO no-read proof for the switch-off "zero
+store reads" claim, a direct-store-bytes forgery case bypassing `engine-scorecard.js record`'s own
+write-time validation (the old test never reached the row it claimed to reject), and
+`dispatch-discuss.test.sh`'s "exactly one dispatch" proof moved from an overwritten argv snapshot to
+an append-only call log. `dispatch-consult.sh` guards every `shift 2` against a trailing flag with
+no value (previously hung the arg-parse loop under `set -u` without `set -e`). All 10 findings
+independently verified via planted-negative mutation (revert → confirmed red → restore → confirmed
+green); 8/8 targeted mutations flip red at the final tip.
+
+prose-justification: this release adds 15 lines to `skills/think-tank/SKILL.md` (Step 3.5, the
+guarded `dispatch-discuss.js` call site required by D9). It is one procedural step calling an
+executable wrapper unconditionally and using whatever it returns — no re-implemented gate logic,
+no new skill-teaching prose — so the per-skill ratchet grows but the contract-card shape (canonical
+definition + review checklist) is unaffected. No other skill file changed this release.
+
 ## v2.35.0 — Agent Call persistent-peer boundary
 
 **`autopilot:agent-call`** adds one deliberately thin route for contacting an already-running,

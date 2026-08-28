@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.35.0-E8A838?style=flat-square" alt="v2.35.0">
+  <img src="https://img.shields.io/badge/version-2.35.1-E8A838?style=flat-square" alt="v2.35.1">
   <img src="https://img.shields.io/badge/skills-29-4A90D9?style=flat-square" alt="29 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-26-6B8E6B?style=flat-square" alt="26 Hooks">

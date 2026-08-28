@@ -410,19 +410,37 @@ assert_contains "$ON_PARTIAL_CONSULT_ERR" "consult tuple must be wholly empty or
   "consult_dispatch=on + partial tuple error names the consult tuple integrity requirement"
 
 # ── 9. Switch-on with a fully-populated seat tuple resolves fine at the ────
-# tuple-integrity layer (D7's role-qualification gate does not exist yet in
-# this wave — a complete tuple must not be rejected here for that reason).
+# tuple-integrity layer (D7's role-qualification gate — role evidence or a
+# matching operator override — now DOES exist and DOES run for this seat;
+# an unexpired override isolates the tuple-integrity assertion from D7's own
+# admission matrix, which hooks/tests/resolve-review-loop-consult-discuss-
+# gate.test.sh covers case-by-case).
+ON_FULL_OVR="$TEST_TMP/on-full-override.json"
+cat > "$ON_FULL_OVR" <<'JSON'
+{"schema":1,"overrides":[
+  {"engine":"gpt-5.6","runner":"codex","role":"consult","reason":"tuple-integrity fixture","operator":"cookys","expires":"2099-01-01"},
+  {"engine":"gpt-5.6","runner":"codex","role":"discuss","reason":"tuple-integrity fixture","operator":"cookys","expires":"2099-01-01"}
+]}
+JSON
+
 ON_FULL_CONSULT_CFG="$TEST_TMP/on-full-consult.md"
 printf -- '- consult_engine: gpt-5.6\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$ON_FULL_CONSULT_CFG"
-ON_FULL_CONSULT_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_FULL_CONSULT_CFG" bash "$SCRIPT" 2>/dev/null)"; ON_FULL_CONSULT_EXIT=$?
-assert_eq "0" "$ON_FULL_CONSULT_EXIT" "consult_dispatch=on with a fully-populated consult seat tuple does not exit 3 at the tuple-integrity layer"
+ON_FULL_CONSULT_JSON="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$ON_FULL_OVR" REVIEW_LOOP_CONFIG_OVERRIDE="$ON_FULL_CONSULT_CFG" bash "$SCRIPT" 2>/dev/null)"; ON_FULL_CONSULT_EXIT=$?
+assert_eq "0" "$ON_FULL_CONSULT_EXIT" "consult_dispatch=on with a fully-populated consult seat tuple + override does not exit 3 at the tuple-integrity layer"
 assert_eq "on" "$(json_get "$ON_FULL_CONSULT_JSON" consult_dispatch)" "fully-populated consult_dispatch=on resolves with consult_dispatch: on in the output"
 
 ON_FULL_DISCUSS_CFG="$TEST_TMP/on-full-discuss.md"
 printf -- '- discuss_engine: gpt-5.6\n- discuss_runner: codex\n- discuss_effort: high\n- discuss_dispatch: on\n' > "$ON_FULL_DISCUSS_CFG"
-ON_FULL_DISCUSS_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_FULL_DISCUSS_CFG" bash "$SCRIPT" 2>/dev/null)"; ON_FULL_DISCUSS_EXIT=$?
-assert_eq "0" "$ON_FULL_DISCUSS_EXIT" "discuss_dispatch=on with a fully-populated discuss seat tuple does not exit 3 at the tuple-integrity layer"
+ON_FULL_DISCUSS_JSON="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$ON_FULL_OVR" REVIEW_LOOP_CONFIG_OVERRIDE="$ON_FULL_DISCUSS_CFG" bash "$SCRIPT" 2>/dev/null)"; ON_FULL_DISCUSS_EXIT=$?
+assert_eq "0" "$ON_FULL_DISCUSS_EXIT" "discuss_dispatch=on with a fully-populated discuss seat tuple + override does not exit 3 at the tuple-integrity layer"
 assert_eq "on" "$(json_get "$ON_FULL_DISCUSS_JSON" discuss_dispatch)" "fully-populated discuss_dispatch=on resolves with discuss_dispatch: on in the output"
+
+# Without the override (and without a qualification row), the SAME
+# fully-populated tuple now correctly exits 3 — the D7 vacuum this plan
+# closes (plan §0a): switch on + no evidence + no override refuses for
+# EVERY runner, not only the declarative UNQUALIFIED_RUNNERS list.
+ON_FULL_CONSULT_NOEVIDENCE_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_FULL_CONSULT_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "3" "$ON_FULL_CONSULT_NOEVIDENCE_EXIT" "consult_dispatch=on with a fully-populated tuple but NO evidence and NO override exits 3 (D7's vacuum-closing gate)"
 
 # ── 10. JS validator mirrors the same switch-on ⇒ tuple check ──────────────
 export ON_FULL_CONSULT_JSON

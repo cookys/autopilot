@@ -16,8 +16,7 @@ BACKLOG 2026-08-28 item 1 (P1). Item 2 (implementer ladder) is a sibling branch.
 
 1. Hard rule (identical sentence) on `skills/l4`, `skills/l5`, `skills/l6`: wait
    on leaves only via `run_in_background` / child-Agent task-notification, then
-   end the turn. Forbidden: `sleep` loops; `cat`/`tail` of leaf output into own
-   context (schema criteria tables only); Monitor to wait on a leaf; Bash > 40.
+   end the turn. Forbidden: 前景 `sleep` 輪詢與把 leaf raw output 灌回 context（背景 `run_in_background` until-loop 等外部條件是允許的，一次通知；只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。
 2. Rewrite `level-front-door.md` sites that taught `Monitor(sleep …)` and
    snapshot/directive poll loops: deadline = one-shot `Bash(run_in_background)`;
    `directive-poll` once at a stage boundary.
@@ -29,7 +28,7 @@ BACKLOG 2026-08-28 item 1 (P1). Item 2 (implementer ladder) is a sibling branch.
 
 | Id | Condition |
 |----|-----------|
-| a | ≥ 3 Bash calls containing `sleep N` with N ≥ 30 |
+| a | ≥ 3 foreground Bash calls containing `sleep N` with N ≥ 30 (background `run_in_background` sleep does not count) |
 | b | any `cat` / `tail` / `sed -n` / `head` whose target path contains `/tasks/` and ends in `.output` |
 | c | Bash tool_use count > 40 |
 

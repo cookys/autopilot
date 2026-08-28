@@ -5,20 +5,27 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { extractBashCommands, analyzeCommands } = require('./check-foreman-polling.js');
 
-function jsonl(command) {
+function jsonl(command, run_in_background = false) {
+  const input = { command };
+  if (run_in_background) {
+    input.run_in_background = true;
+  }
   return JSON.stringify({
     type: 'assistant',
     message: {
       role: 'assistant',
-      content: [{ type: 'tool_use', name: 'Bash', input: { command } }],
+      content: [{ type: 'tool_use', name: 'Bash', input }],
     },
   });
 }
 
 test('extracts Bash tool_use from JSONL', () => {
-  const text = `${jsonl('git status')}\n${jsonl('sleep 240')}\n`;
+  const text = `${jsonl('git status')}\n${jsonl('sleep 240', true)}\n`;
   const cmds = extractBashCommands(text);
-  assert.deepEqual(cmds, ['git status', 'sleep 240']);
+  assert.deepEqual(cmds, [
+    { command: 'git status', run_in_background: false },
+    { command: 'sleep 240', run_in_background: true },
+  ]);
 });
 
 test('GREEN: two git Bash calls', () => {
@@ -71,3 +78,26 @@ test('RED: bash cap 41', () => {
   assert.equal(r.verdict, 'RED');
   assert.ok(r.reasons.some((s) => s.startsWith('bash_cap')));
 });
+
+test('GREEN: background until-loop with sleep >=30', () => {
+  const r = analyzeCommands([
+    { command: 'until [ -f /tmp/done ]; do sleep 30; done', run_in_background: true },
+    { command: 'until test -f /tmp/ok; do sleep 60; done', run_in_background: true },
+    'git status',
+  ], 'x');
+  assert.equal(r.verdict, 'GREEN');
+  assert.equal(r.counts.sleep_ge_30, 0);
+  assert.equal(r.counts.bash, 3);
+});
+
+test('RED: foreground sleep x 3', () => {
+  const r = analyzeCommands([
+    { command: 'sleep 30', run_in_background: false },
+    { command: 'sleep 60', run_in_background: false },
+    { command: 'sleep 120', run_in_background: false },
+  ], 'x');
+  assert.equal(r.verdict, 'RED');
+  assert.ok(r.reasons.some((s) => s.startsWith('sleep_loop')));
+  assert.equal(r.counts.sleep_ge_30, 3);
+});
+

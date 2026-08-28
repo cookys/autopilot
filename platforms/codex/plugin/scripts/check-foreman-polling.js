@@ -2,7 +2,7 @@
 /**
  * check-foreman-polling.js — fail-closed gate on a depth-1 foreman transcript.
  *
- * A sub-orchestrator that waits on leaves with sleep loops, cats leaf
+ * A sub-orchestrator that waits on leaves with foreground sleep loops, cats leaf
  * `<session>/tasks/*.output` into its own context, or burns >40 Bash calls is
  * a red-line (revival.3d session 5ca9b104: opus foreman polling cost).
  *
@@ -31,7 +31,7 @@ const HELP = `Usage:
   -h, --help
 
 Reads Claude Code task transcripts (JSONL or plain text). Red if any of:
-  (a) >=${SLEEP_TRIP} Bash calls with sleep N (N>=${SLEEP_MIN_SECS})
+  (a) >=${SLEEP_TRIP} foreground Bash calls with sleep N (N>=${SLEEP_MIN_SECS})
   (b) cat|tail|sed -n|head targeting a path containing /tasks/ ending in .output
   (c) Bash call count > ${BASH_CAP}
 `;
@@ -76,18 +76,31 @@ function extractBashCommands(text) {
       const input = node.input || node.arguments || {};
       const cmd = input.command || input.cmd;
       if (typeof cmd === 'string' && cmd.length) {
-        commands.push(cmd);
+        const bg = input.run_in_background === true || input.run_in_background === 'true';
+        commands.push({ command: cmd, run_in_background: bg });
         jsonlHits += 1;
       }
     });
   }
   if (jsonlHits > 0) return commands;
 
-  // Plain-text tool dumps: Bash(command: "...") or <invoke name="Bash">
-  const re = /\bBash\b[\s\S]{0,400}?command["']?\s*[:=]\s*["']([^"']+)["']/gi;
+  // Plain-text tool dumps: Bash(command: "...", run_in_background: true) or <invoke name="Bash">
+  const re = /\bBash\b\s*\(([\s\S]{0,600}?)\)/gi;
   let m;
   while ((m = re.exec(text)) !== null) {
-    commands.push(m[1]);
+    const body = m[1];
+    const cmdMatch = /command["']?\s*[:=]\s*["']([^"']+)["']/i.exec(body);
+    if (cmdMatch) {
+      const bg = /run_in_background["']?\s*[:=]\s*true\b/i.test(body);
+      commands.push({ command: cmdMatch[1], run_in_background: bg });
+    }
+  }
+  if (commands.length > 0) return commands;
+
+  // Fallback for loose command: "..." lines if not in parentheses
+  const reLoose = /\bBash\b[\s\S]{0,400}?command["']?\s*[:=]\s*["']([^"']+)["']/gi;
+  while ((m = reLoose.exec(text)) !== null) {
+    commands.push({ command: m[1], run_in_background: false });
   }
   return commands;
 }
@@ -123,9 +136,14 @@ function leafOutputReads(command) {
 function analyzeCommands(commands, file) {
   const sleepGe30 = [];
   const leafReads = [];
-  for (const cmd of commands) {
-    for (const secs of sleepSeconds(cmd)) {
-      if (secs >= SLEEP_MIN_SECS) sleepGe30.push(secs);
+  for (const entry of commands) {
+    const cmd = typeof entry === 'string' ? entry : entry.command;
+    const isBg = typeof entry === 'object' && entry !== null && Boolean(entry.run_in_background);
+
+    if (!isBg) {
+      for (const secs of sleepSeconds(cmd)) {
+        if (secs >= SLEEP_MIN_SECS) sleepGe30.push(secs);
+      }
     }
     for (const target of leafOutputReads(cmd)) {
       leafReads.push(target);
@@ -135,7 +153,7 @@ function analyzeCommands(commands, file) {
   const reasons = [];
   if (sleepGe30.length >= SLEEP_TRIP) {
     reasons.push(
-      `sleep_loop: ${sleepGe30.length} Bash sleep N (N>=${SLEEP_MIN_SECS}) (threshold ${SLEEP_TRIP})`,
+      `sleep_loop: ${sleepGe30.length} foreground Bash sleep N (N>=${SLEEP_MIN_SECS}) (threshold ${SLEEP_TRIP})`,
     );
   }
   if (leafReads.length > 0) {
@@ -192,7 +210,11 @@ function expandPaths(argv) {
   return out;
 }
 
-function jsonlTool(command) {
+function jsonlTool(command, run_in_background = false) {
+  const input = { command };
+  if (run_in_background) {
+    input.run_in_background = true;
+  }
   return JSON.stringify({
     type: 'assistant',
     message: {
@@ -201,7 +223,7 @@ function jsonlTool(command) {
         {
           type: 'tool_use',
           name: 'Bash',
-          input: { command },
+          input,
         },
       ],
     },
@@ -214,6 +236,8 @@ function runSelfTest() {
   const sleepRed = path.join(dir, 'sleep.output');
   const catRed = path.join(dir, 'cat.output');
   const bashRed = path.join(dir, 'bashcap.output');
+  const bgUntilGreen = path.join(dir, 'bg-until.output');
+  const fgSleepRed = path.join(dir, 'fg-sleep.output');
 
   const gitCmd = jsonlTool('git status --short');
   fs.writeFileSync(clean, `${gitCmd}\n${jsonlTool('git diff --stat')}\n`);
@@ -229,11 +253,33 @@ function runSelfTest() {
   for (let i = 0; i < 41; i += 1) many.push(jsonlTool(`echo ${i}`));
   fs.writeFileSync(bashRed, `${many.join('\n')}\n`);
 
+  // Background until-loop with sleep >=30 must be GREEN (does not count toward sleep_loop)
+  fs.writeFileSync(
+    bgUntilGreen,
+    [
+      gitCmd,
+      jsonlTool('until [ -f /tmp/done ]; do sleep 30; done', true),
+      'Bash(command: "until test -f /tmp/ok; do sleep 60; done", run_in_background: true)',
+    ].join('\n') + '\n',
+  );
+
+  // Foreground sleep x 3 must be RED
+  fs.writeFileSync(
+    fgSleepRed,
+    [
+      jsonlTool('sleep 30'),
+      jsonlTool('sleep 60'),
+      jsonlTool('sleep 120'),
+    ].join('\n') + '\n',
+  );
+
   const cases = [
     { file: clean, want: 'GREEN' },
     { file: sleepRed, want: 'RED', reason: 'sleep_loop' },
     { file: catRed, want: 'RED', reason: 'leaf_output_read' },
     { file: bashRed, want: 'RED', reason: 'bash_cap' },
+    { file: bgUntilGreen, want: 'GREEN' },
+    { file: fgSleepRed, want: 'RED', reason: 'sleep_loop' },
   ];
 
   const failures = [];

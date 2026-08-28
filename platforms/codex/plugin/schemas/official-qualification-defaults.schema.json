@@ -127,7 +127,7 @@
     },
     "role": {
       "type": "string",
-      "enum": ["implementer", "reviewer", "verification_author", "owner", "explorer"]
+      "enum": ["implementer", "reviewer", "verification_author", "owner", "explorer", "consult", "discuss"]
     },
     "administration": {
       "type": "object",

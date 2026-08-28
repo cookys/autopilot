@@ -15,6 +15,14 @@ const {
 const {
   ROLE_IDS,
   normalizeRole,
+  // CAPABILITY_ROLE_IDS / normalizeCapabilityRole (plan 2026-08-28-consult-
+  // discuss-qualification.md §2.6): record/current/seat-status validate role
+  // input against the qualification-evidence namespace (adds consult/discuss).
+  // `normalizeRole` stays imported AND re-exported byte-identical below because
+  // resolve-scaffold-tier.js consumes THIS module's `normalizeRole` export for
+  // execution-authority scaffold-tier admission — that must never widen.
+  CAPABILITY_ROLE_IDS,
+  normalizeCapabilityRole,
 } = require('../src/engine/roles');
 const {
   validateEvidenceProducer,
@@ -305,7 +313,7 @@ function validateRecordRow(row) {
     failValidation('engine must be a non-empty string');
   }
 
-  const canonicalRole = normalizeRole(row.role, { allowLegacy: true });
+  const canonicalRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
   if (!canonicalRole) {
     failValidation(`invalid role '${row.role}'`);
   }
@@ -513,7 +521,7 @@ function parseCurrentArgs(args) {
 
   if (!role) failUsage('--role is required');
   const requestedRole = role;
-  role = normalizeRole(role, { allowLegacy: true });
+  role = normalizeCapabilityRole(role, { allowLegacy: true });
   if (!role) failUsage(`invalid role '${requestedRole}'`);
   if (requireEvidence && !scope) {
     failUsage('--require-evidence or --identity-file requires --scope-file');
@@ -572,7 +580,7 @@ function parseReportArgs(args) {
 
   if (!role) failUsage('--role is required');
   const requestedRole = role;
-  role = normalizeRole(role, { allowLegacy: true });
+  role = normalizeCapabilityRole(role, { allowLegacy: true });
   if (!role) failUsage(`invalid role '${requestedRole}'`);
   if (key !== 'capability' && key !== 'cost') failUsage(`invalid --key '${key}'`);
   if (requireEvidence && !scope) {
@@ -638,7 +646,7 @@ function parseLadderArgs(args) {
 
   if (!role) failUsage('--role is required');
   const requestedRole = role;
-  role = normalizeRole(role, { allowLegacy: true });
+  role = normalizeCapabilityRole(role, { allowLegacy: true });
   if (!role) failUsage(`invalid role '${requestedRole}'`);
   if (!LADDER_ROLES.has(role)) {
     failUsage(`ladder is not enabled for evidence-only role '${role}'; use report`);
@@ -1244,7 +1252,7 @@ function currentRowsForRole(role, nowMs, options = {}) {
 
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
-    const storedRole = normalizeRole(row.role, { allowLegacy: true });
+    const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     row.role = storedRole;
     if (row.evidence !== undefined) {
@@ -1536,7 +1544,7 @@ function findSeatBaseline(engine, runner, role, nowMs, allRows) {
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
     if (row.engine !== engine || row.runner !== runner) continue;
-    const storedRole = normalizeRole(row.role, { allowLegacy: true });
+    const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     let evidence = row.evidence;
     if (evidence !== undefined) {
@@ -1858,7 +1866,7 @@ function parseSeatStatusArgs(args) {
   if (!runnerToken) failUsage(`invalid --runner token '${runner}'`);
 
   const requestedRole = role;
-  const canonicalRole = normalizeRole(role, { allowLegacy: true });
+  const canonicalRole = normalizeCapabilityRole(role, { allowLegacy: true });
   if (!canonicalRole) failUsage(`invalid role '${requestedRole}'`);
   const roleToken = seatToken(canonicalRole);
   if (!roleToken) failUsage(`invalid --role token '${canonicalRole}'`);
@@ -1996,5 +2004,10 @@ module.exports = {
   seatIdentityHash,
   engineToken,
   seatToken,
+  // Execution-role normalizer, byte-identical behavior: resolve-scaffold-tier.js
+  // depends on this staying scoped to ROLE_IDS (never consult/discuss).
   normalizeRole,
+  // Capability-role normalizer, additive export for consumers that validate
+  // against the qualification-evidence namespace (e.g. D7's seat-status gate).
+  normalizeCapabilityRole,
 };

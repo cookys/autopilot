@@ -9,7 +9,12 @@ const {
   isSha256,
   sha256,
 } = require('./owner-kernel/canonical');
-const { ROLES } = require('./roles');
+// CAPABILITY_ROLES, not ROLES (plan 2026-08-28-consult-discuss-qualification.md
+// §2.6): the qualification-evidence path validates against the capability
+// namespace, which includes the two qualification-seat-only roles `consult`
+// and `discuss` in addition to the execution roles. Kept under the name
+// `ROLES` locally so every call site below is unchanged.
+const { CAPABILITY_ROLES: ROLES } = require('./roles');
 
 const CAPABILITY_EVIDENCE_SCHEMA_VERSION = 1;
 const SOURCES = new Set([
@@ -53,6 +58,10 @@ const MAX_QUALIFIED_TTL_DAYS = Object.freeze({
   implementer: 90,
   verification_author: 60,
   explorer: 90,
+  // Qualification-seat roles (plan 2026-08-28-consult-discuss-qualification.md
+  // D3): flat 30-day cap, no ceiling exception, for both.
+  consult: 30,
+  discuss: 30,
 });
 const METHODOLOGY_KINDS = new Set([
   'role_eval',

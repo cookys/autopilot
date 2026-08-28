@@ -169,7 +169,7 @@
       "items": { "$ref": "#/$defs/token" }
     },
     "role": {
-      "enum": ["owner", "implementer", "reviewer", "verification_author", "explorer"]
+      "enum": ["owner", "implementer", "reviewer", "verification_author", "explorer", "consult", "discuss"]
     },
     "scope": {
       "type": "object",

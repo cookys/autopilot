@@ -26,6 +26,7 @@ const {
   ROLE_IDS,
   ROLES,
   normalizeRole,
+  CAPABILITY_ROLE_IDS,
 } = require(path.join(root, 'src', 'engine', 'roles'));
 const { validateJsonSchema } = require(path.join(root, 'scripts', 'validate-json-schema'));
 
@@ -161,16 +162,37 @@ const evidenceSchema = JSON.parse(fs.readFileSync(
   path.join(root, 'schemas', 'capability-evidence.schema.json'),
   'utf8',
 ));
+// SPLIT (plan 2026-08-28-consult-discuss-qualification.md §2.6, generation-2
+// namespace revision): capability-evidence validates against the wider
+// CAPABILITY_ROLE_IDS (adds the two qualification-seat-only roles `consult`
+// and `discuss`); task-authority-envelope and role-execution-grant — the
+// execution-authority schemas — stay on the untouched execution ROLE_IDS.
+// A single shared equality assertion here would be exactly the
+// one-object-shared-by-two-populations mistake the plan repairs.
+{
+  const schemaName = 'capability-evidence.schema.json';
+  const schema = JSON.parse(fs.readFileSync(path.join(root, 'schemas', schemaName), 'utf8'));
+  check(
+    JSON.stringify(schema.$defs.role.enum) === JSON.stringify(CAPABILITY_ROLE_IDS),
+    `${schemaName} uses the capability role taxonomy (includes consult/discuss)`,
+  );
+}
 for (const schemaName of [
-  'capability-evidence.schema.json',
   'task-authority-envelope.schema.json',
   'role-execution-grant.schema.json',
 ]) {
   const schema = JSON.parse(fs.readFileSync(path.join(root, 'schemas', schemaName), 'utf8'));
   check(
     JSON.stringify(schema.$defs.role.enum) === JSON.stringify(ROLE_IDS),
-    `${schemaName} uses the canonical capability role taxonomy`,
+    `${schemaName} uses the canonical EXECUTION role taxonomy (never consult/discuss)`,
   );
+  for (const bogusRole of ['consult', 'discuss']) {
+    check(
+      validateJsonSchema(schema.$defs.role, bogusRole).valid === false,
+      `${schemaName} role enum REJECTS the qualification-seat role '${bogusRole}' — `
+      + 'neither role may appear in an effect permission or a role-execution grant',
+    );
+  }
 }
 check(validateJsonSchema(evidenceSchema, qualified).valid === true, 'canonical evidence matches its JSON schema');
 check(

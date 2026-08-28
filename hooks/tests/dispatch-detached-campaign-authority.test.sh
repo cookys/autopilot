@@ -26,7 +26,9 @@ git -C "$REPO" config user.name "Campaign Authority Test"
 printf '%s\n' '## Detached strict authority' 'Frozen fixture spec.' > "$REPO/docs/plans/spec.md"
 printf '%s\n' \
   '- implementer_engine: gpt-5.3-codex-spark' \
-  '- implementer_runner: codex' > "$REPO/.claude/review-loop-config.md"
+  '- implementer_runner: codex' \
+  '- reviewer_engine: claude-opus' \
+  '- reviewer_runner: claude-native' > "$REPO/.claude/review-loop-config.md"
 git -C "$REPO" add -A
 git -C "$REPO" commit -qm "base"
 BASE="$(git -C "$REPO" rev-parse HEAD)"

@@ -120,7 +120,22 @@ function stageCondition(record, event, nowMs, quietSecs) {
   const state = alive ? procState(pid) : 'absent';
   if (state.startsWith('D')) return { condition: 'blocked', reason: 'd_state_resource_holder' };
   if (!alive || state.startsWith('Z')) {
-    return record.resources ? { condition: 'unknown', reason: 'owner_absent_resource_holder' } : { condition: 'dead', reason: 'owner_absent' };
+    // KNOWN FALSE POSITIVE for a CC-native /l4-/l6 foreman (docs/BACKLOG.md
+    // "`/l4` watcher reports `owner_absent` for every healthy CC-native
+    // foreman", v2.34.39 2026-08-24): `run-ledger.sh stage-acquire` records
+    // the PID of the SHELL that invoked it, and that shell exits immediately
+    // after recording the lease — the foreman itself keeps running as a
+    // separate CC agent turn, not as a child of that shell. So `pid` here
+    // dying is expected and NORMAL for a CC-native foreman seconds after
+    // every stage-acquire; it does NOT mean the foreman died. PID liveness
+    // is only a trustworthy dead-signal for a foreman whose owning process
+    // stays resident for the stage's duration (e.g. a long-lived CLI/daemon
+    // runner) — the `note` field below flags that unreliability inline so a
+    // reader of the CONDITION line meets the caveat at the liveness
+    // judgement itself, not only in reference docs.
+    return record.resources
+      ? { condition: 'unknown', reason: 'owner_absent_resource_holder' }
+      : { condition: 'dead', reason: 'owner_absent', note: 'pid_liveness_unreliable_for_cc_native' };
   }
   const eventGeneration = Number(event?.generation);
   const eventPid = Number(event?.pid);
@@ -144,6 +159,14 @@ function stageCondition(record, event, nowMs, quietSecs) {
   }
   if (age >= quietSecs && quietSecs > 0) return { condition: 'unknown', reason: 'stale_without_bounded_inquiry' };
   return { condition: 'working', reason: 'fresh_heartbeat' };
+}
+
+// conditionSuffix — appends ` note=<c.note>` to a CONDITION line when
+// stageCondition attached one (currently only the CC-native owner_absent
+// false-positive caveat), else ''. A single helper so all three emit sites
+// below stay in sync rather than drifting on the trailing-field format.
+function conditionSuffix(c) {
+  return c && c.note ? ` note=${c.note}` : '';
 }
 
 const state = {
@@ -222,7 +245,7 @@ function tickLedger(args, nowMs) {
           const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
           if (state.conditionState.get(identity) !== cKey) {
             state.conditionState.set(identity, cKey);
-            emit(`CONDITION run=${lease.run_id || '?'} ${rec.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}`);
+            emit(`CONDITION run=${lease.run_id || '?'} ${rec.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}${conditionSuffix(c)}`);
           }
         }
         continue;
@@ -239,7 +262,7 @@ function tickLedger(args, nowMs) {
       const cKey = `${c.condition}:${rec.generation}:${c.reason}`;
       if (state.conditionState.get(identity) !== cKey) {
         state.conditionState.set(identity, cKey);
-        emit(`CONDITION run=${rec.run_id || '?'} ${rec.stage} ${c.condition} gen=${rec.generation} reason=${c.reason}`);
+        emit(`CONDITION run=${rec.run_id || '?'} ${rec.stage} ${c.condition} gen=${rec.generation} reason=${c.reason}${conditionSuffix(c)}`);
       }
     }
   }
@@ -253,7 +276,7 @@ function tickLedger(args, nowMs) {
     const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
     if (state.conditionState.get(identity) !== cKey) {
       state.conditionState.set(identity, cKey);
-      emit(`CONDITION run=${lease.run_id || '?'} ${lease.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}`);
+      emit(`CONDITION run=${lease.run_id || '?'} ${lease.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}${conditionSuffix(c)}`);
     }
   }
   // Use file mtime as the freshest liveness signal (covers heartbeat rewrites too).

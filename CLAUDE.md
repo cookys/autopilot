@@ -17,7 +17,7 @@ What each one does — purpose, when to call it, pointer to its contract — liv
 
 A caution learned the hard way (2026-08-06): several of these were fully built, tested and documented, yet doing nothing — an age threshold left at `0`, a hook never installed, a scanner keyed on an id the residue did not carry. **A script existing is not evidence it is running.** When one is supposed to be protecting something, check that it actually fires. It is one of a family — a module with zero callers, a suite that passes when you delete the gate it tests, a shadow derived from the answer it checks, an assertion pinned to one machine, a green test writing fixture rows into the real store. Each incident and its preventing artifact: [`references/evidence-discipline.md`](references/evidence-discipline.md). Read it before recording anything as verified.
 
-**Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-explore.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js` `lib/plan-review-timeout.js` `lib/plan-review-panel.js`
+**Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-explore.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/cursor-model.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js` `lib/plan-review-timeout.js` `lib/plan-review-panel.js`
 
 **Routing & config resolution** — `resolve-dispatch.sh` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
 
@@ -25,23 +25,23 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js` `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
 
-**Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `qualification-review-provider.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-todo-tools-pin.js` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js` `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js`
+**Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `qualification-review-provider.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-todo-tools-pin.js` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js` `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js` `build-qualification-defaults.js` `adopt-qualification-defaults.js` `qualification-sweep.sh`
 
 **Execution profiles** — `build-profile-payload.js` `profile-session.js` `check-profile-isolation.js` `measure-profile-context.js`
 
 **Diff scanning & anti-gaming** — `completeness-scan.sh` `error-path-scan.sh` `secret-scan-diff.js` `check-redispatch-prompt.sh` `check-dispatch-suppression.sh` `diff-file-list.sh` `diff-scope-report.sh` `diff-since-last-round.sh` `probe-diff-domain.sh` `classify-diff-risk.sh` `check-disjointness.sh` `check-test-integrity.sh` `check-blind-evidence.sh` `lib/test-integrity-l1.py`
 
-**Verification & review synthesis** — `dispatch-experience-critic.sh` `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `qc-panel.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js` `check-holdout-coverage.sh`
+**Verification & review synthesis** — `dispatch-experience-critic.sh` `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `qc-panel.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-foreman-polling.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js` `check-holdout-coverage.sh`
 
 **Task tree & risk** — `tree.js` `risk-counter.js`
 
-**Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-claude-md-inventory.js` `check-contract-schema.js` `check-hook-inventory.js` `check-l1-cache-key-parity.js` `check-optin-changelog.js` `check-readme-parity.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh`
+**Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-claude-md-inventory.js` `check-contract-schema.js` `check-hook-inventory.js` `check-js-syntax.js` `check-l1-cache-key-parity.js` `check-optin-changelog.js` `check-readme-parity.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh`
 
 **Setup & install** — `dev-setup.sh` `dev-update.sh` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js`
 
-**Skills tooling, evals & measurement** — `distill-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh`
+**Skills tooling, evals & measurement** — `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh`
 
-**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js`
+**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js`
 
 
 ## When adding a new script
@@ -98,6 +98,18 @@ Rationale: a new script/hook/reference is real work but it is **not** a new user
 
 Mechanics: bump via `scripts/sync-version.js --version <V> --hook-count <N> --skill-count <M>` (opt-in/disabled counts are preserved from canonical when omitted). A version bump triggers the finish-flow L-5.5 release gate (`scripts/preflight-release.sh`: CHANGELOG entry + INDEX row + mirror parity).
 
+**Concurrent-session PATCH collisions**: two sessions working this repo in parallel occasionally pick
+the same next PATCH number — version-mirror files with identical values merge silently with no git
+conflict, so nothing warns you. Before pushing a version bump, check `git show
+origin/develop:.claude-plugin/plugin.json` for the real canonical version. Convention (established
+both directions, 2026-08-21): **whoever pushes to `origin` second yields the number** — rebase onto
+`origin/develop`; a CHANGELOG collision resolves as two sections (own section moves to the new number,
+on top); re-run `sync-version.js` with the freed number; re-stamp every reference to the old number in
+files YOU changed (CHANGELOG heading, INDEX row, plan/README status lines, in-code `(vX.Y.Z)`
+comments, test-file headers, and your branch name if it embeds the version). Grep for stragglers only
+within your own changed files — another session's already-shipped old-number references are history,
+not drift.
+
 ## Coexistence with superpowers
 
 Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/coexistence.md`](docs/coexistence.md).
@@ -116,6 +128,7 @@ Autopilot is standalone-capable. When `superpowers` is installed, orchestrators 
 | Architecture decisions | `docs/adr/` (ADR-0001: verification over attestation — binding on governance work) |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |
+| Dogfood / coexistence knowledge | `.claude/knowledge/` — read `INDEX.md` first. Gitignored on purpose: a write there is not saved until `git add -f` + commit (`references/knowledge-routing.md`) |
 
 ## Reply preference
 

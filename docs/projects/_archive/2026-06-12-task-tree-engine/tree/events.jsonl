@@ -30,3 +30,4 @@
 {"schema_version":1,"ts":"2026-06-12T08:11:26Z","node":"p6","type":"verdict","verdict":"pass","confidence":0.85}
 {"schema_version":1,"ts":"2026-06-12T08:11:26Z","node":"p7","type":"verdict","verdict":"pass","confidence":0.9}
 {"schema_version":1,"ts":"2026-06-12T08:25:35Z","node":"p0","type":"node_report","evidence_pointers":["references/multi-agent-portability.md:156-184@a134862"],"artifact_paths":[]}
+{"schema_version":1,"ts":"2026-08-22T23:08:17Z","node":"root","type":"board_signoff","authorized_by":"board:cookys (CEO-delegated 2026-08-23)","decision":"abort","scope":"amendment-6-overdue-review: 2/50 samples in 72 days, agreement 0/2, sample-accrual rate proves the shadow instrument cannot reach graduation on this repo's workflow; abort shadow, adapter stays inactive; re-entry = fresh campaign if reviewer-baseline sampling becomes routine (e.g. qc-panel shadow rows)"}

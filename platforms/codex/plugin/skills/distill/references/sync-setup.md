@@ -22,8 +22,11 @@ Cloning the pack only lets a machine **consume** the existing skills. To also **
 1. **Install autopilot** on that machine — the `distill` skill (the factory) ships with it.
 2. **Clone the pack** to `~/.claude/skills/autopilot-distill-skills/` (see Option A below) — distill
    writes approved global skills there. (First-ever `~/.claude/skills/` creation → one CC restart.)
-3. *(optional)* Create `~/.autopilot/distill/identifiers.deny` with that machine's real hostnames /
-   client names (one per line) so the lint can catch the identifiers a regex can't infer.
+3. Nothing to configure for identifier safety — and that is deliberate. `scripts/identifier-scan.js`
+   catches structured tokens only; the machine's real hostnames and client names are caught by the
+   **human review gate in Step 3**, never by a per-machine list. (A deny-list would silently pass
+   every name it was not told and still report "clean" — rejected under ADR-0001; see
+   `references/knowledge-routing.md` §5.)
 4. Run **`/autopilot:distill`** — it scans *this* machine's `~/.claude/projects/`, proposes candidates
    from its own history, you approve, and it writes them into the cloned pack (global) or the relevant
    project's `.claude/skills/`.

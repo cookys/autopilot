@@ -1,0 +1,9 @@
+{
+  "run_nonce": "afb3d4baab4b3c4fd042391d3bfe64446c8cf8e8409831dce07c0b59ef197abd",
+  "admin_seed": "522a5091c1ec841dd837b66e7ae39258ad9869aa362e6619535f9cab36b42012",
+  "oracle_key": "fbc7d29221f3d95b3a00984042463b8dcd7c6fabadab188083ca8cddd2caed9e",
+  "oracle_key_commitment": "01fd976ba90e7d786b32e3b2e837e11b60bca52dbba6695e3e6692e8b7d4b709",
+  "generator_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+  "corpus_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+  "driver_hash": "f9ac479113ca73021276518c417529c8290bad2c85f6ca5278d22256572b7316"
+}

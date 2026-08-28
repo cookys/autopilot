@@ -1,12 +1,13 @@
 # Loop-Convergence 鐵律 → Gate 對照表
 
-Single source of truth for the 5 gates that downgrade the "a human should have pulled the
-brake on a spinning hetero review loop" rule from "someone remembers to watch" into machine
-gates / brief-template hard constraints. Origin: 2026-07-14 codex replay-driver incident
+Single source of truth for the mechanical / brief-template gates that downgrade
+"a human should have pulled the brake" from "someone remembers to watch" into
+machine gates. Origin of rows 1–5: 2026-07-14 codex replay-driver incident
 (8 artifact generations v1→v3.4, `tests_executed:false` for the whole run, `ship_ready:false`
-monotonic, verdicts oscillating FAIL/PASS, hours unattended).
+monotonic, verdicts oscillating FAIL/PASS, hours unattended). Row 6: 2026-08-28
+revival.3d `5ca9b104` foreman sleep/cat polling cost.
 
-Methodology: `autopilot-distill-skills:ironlaw-to-gate`. Last verified: 2026-07-14.
+Methodology: `autopilot-distill-skills:ironlaw-to-gate`. Last verified: 2026-08-28.
 
 ## The table
 
@@ -17,6 +18,7 @@ Methodology: `autopilot-distill-skills:ironlaw-to-gate`. Last verified: 2026-07-
 | 3 | Generation cap — artifact version番号 is the round counter; cap 3 gens still REWORK-shape ⇒ halt (incident: climbed to v3.4) | `scripts/check-loop-convergence.js` gate 3 (parses `artifact_generation` as number `2` OR string `"3.4"`) | `node scripts/check-loop-convergence.js --artifacts-dir <dir> --generation-cap 3 --enforce` | ✅ mechanical. Trusts `artifact_generation` monotonicity; a forged/rewritten counter is not detected. REWORK-shape is a field-name heuristic (missing `ship_ready` + no verdict field ⇒ reads REWORK = fail-toward-halt, the safe direction). |
 | 4 | 裸跑禁令 — a multi-hour autonomous hetero loop MUST have a named depth-0 clock owner (incident: hours unattended, no brake) | Brief-template hard constraint: `skills/ceo-agent/references/level-front-door.md` § 裸跑禁令 + `references/hetero-dispatch.md` invariant 6 | (review-only — no code gate; the clock owner *runs* gate 1+3 as its brake) | ⚠️ **doc forcing-function, not a machine gate** — "is there a live clock owner" is not repo-observable. Honestly review-only; mechanized part = the brake it wields (gates 1+3). |
 | 5 | 規模預算 — every dispatch brief carries a LOC/complexity budget; over-budget ⇒ escalate, don't grind | Brief-template hard constraint: `skills/ceo-agent/references/task-prompt-templates.md` § HOW MUCH + `references/hetero-dispatch.md` invariant 5 | `scripts/measure-task-width.sh --json` (upper-bound file-disjoint churn sanity check) | ⚠️ **半機械 / doc forcing-function**: the *presence* of a budget in a brief is not repo-gate-able; `measure-task-width.sh` only bounds realized width (file-disjoint churn ≠ semantic coupling). |
+| 6 | Foreman 禁止輪詢 — 工頭等 leaf 只能用 `run_in_background`／task-notification 喚醒並結束回合；禁止前景 `sleep` 輪詢與把 leaf raw output 灌回 context（背景 `run_in_background` until-loop 等外部條件是允許的，一次通知；只收 schema 判準表）、Monitor 等 leaf、Bash >40 皆紅（incident: revival.3d `5ca9b104`, 28/30 opus 工頭用量高於全部 leaf） | `scripts/check-foreman-polling.js` over `<session>/tasks/<agentId>.output` | `node scripts/check-foreman-polling.js <transcript>` (exit 1 = RED) | ✅ mechanical over the transcript. Does not see Monitor tool_use (Bash-only). Depth-0 harvest; red = do not merge. |
 
 ## Verification (gates 1 + 3, the 🔴 mechanical pair)
 

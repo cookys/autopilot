@@ -109,9 +109,40 @@ function validateReviewLoopConfig(value) {
   assertOneOf(value, 'implementer_effort', schemaEnum('implementer_effort'));
   assertOneOf(value, 'reviewer_runner', schemaEnum('reviewer_runner'));
   assertOneOf(value, 'implementer_runner', schemaEnum('implementer_runner'));
+  assertField(value, 'implementer_ladder', Array.isArray, 'an array');
+  {
+    const runnerEnum = schemaEnum('implementer_runner');
+    const effortEnum = schemaEnum('implementer_effort');
+    for (const [index, row] of value.implementer_ladder.entries()) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)
+          || typeof row.engine !== 'string' || row.engine.length === 0
+          || !effortEnum.includes(row.effort)
+          || !runnerEnum.includes(row.runner)) {
+        throw new Error(
+          `review-loop output JSON field implementer_ladder[${index}] must be {engine,effort,runner}`,
+        );
+      }
+    }
+  }
   assertOneOf(value, 'spec_review', schemaEnum('spec_review'));
   assertOneOf(value, 'plan_review', schemaEnum('plan_review'));
   assertOneOf(value, 'independent_harness', schemaEnum('independent_harness'));
+  assertOneOf(value, 'consult_dispatch', schemaEnum('consult_dispatch'));
+  assertOneOf(value, 'discuss_dispatch', schemaEnum('discuss_dispatch'));
+  // consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
+  // misconfiguration, never a silent no-op (plan §4 D6, evidence-discipline
+  // §14). Tuple-presence only — the switch-on QUALIFICATION gate over role
+  // evidence is D7 and out of scope here.
+  if (value.consult_dispatch === 'on') {
+    for (const field of ['consult_engine', 'consult_runner', 'consult_effort']) {
+      assertField(value, field, nonEmptyString, 'a non-empty string when consult_dispatch=on');
+    }
+  }
+  if (value.discuss_dispatch === 'on') {
+    for (const field of ['discuss_engine', 'discuss_runner', 'discuss_effort']) {
+      assertField(value, field, nonEmptyString, 'a non-empty string when discuss_dispatch=on');
+    }
+  }
   assertOneOf(value, 'qc_panel_aggregation', schemaEnum('qc_panel_aggregation'));
   assertOneOf(value, 'review_risk', schemaEnum('review_risk'));
   assertOneOf(value, 'review_diff_scope', schemaEnum('review_diff_scope'));

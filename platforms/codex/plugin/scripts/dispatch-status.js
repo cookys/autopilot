@@ -171,7 +171,7 @@ function scanTokenKeys(obj, acc) {
     if (typeof v !== 'number') continue;
     if (k === 'input_tokens' || k === 'prompt_tokens' || k === 'inputTokens') acc.input = v;
     else if (k === 'output_tokens' || k === 'completion_tokens' || k === 'outputTokens') acc.output = v;
-    else if (k === 'cache_read_input_tokens' || k === 'cached_tokens' || k === 'cacheReadInputTokens') acc.cache = v;
+    else if (k === 'cache_read_input_tokens' || k === 'cached_tokens' || k === 'cacheReadInputTokens' || k === 'cacheReadTokens') acc.cache = v;
     else if (k === 'total_tokens' || k === 'totalTokens') acc.total = v;
   }
 }
@@ -791,6 +791,7 @@ function main(argv) {
         seats_done: seats.filter((s) => s.status === 'done').length,
         seats_failed: seats.filter((s) => s.status === 'failed').length,
         seats_pending: seats.filter((s) => s.status === 'pending').length,
+        seats_unratified: seats.filter((s) => s.unratified_available === true).length,
         in_flight: inFlight,
         seats,
       };

@@ -1,0 +1,71 @@
+toolchain BEFORE = origin/develop (87b5fead)
+toolchain AFTER  = worktree
+
+── control: delete assertions from a *.test.sh suite
+  BEFORE (develop toolchain + template config)
+    source=template matched=0 ok=true kinds=[] exit=0
+    ok   BEFORE test_paths_matched                      0
+    ok   BEFORE violations                              []
+    ok   BEFORE exit                                    0
+  AFTER (this branch + .claude/test-integrity-config.md, warn)
+    source=base matched=1 ok=true kinds=[deleted_line] exit=0
+    ok   AFTER  test_paths_matched                      1
+    ok   AFTER  violation kinds                         [deleted_line]
+  BLOCK (same config, mode: block) -> exit=1 ok=false
+    ok   BLOCK  exit code                               1
+    ok   BLOCK  ok                                      false
+
+── control: weaken an assertion (assert_eq -> true)
+  BEFORE (develop toolchain + template config)
+    source=template matched=0 ok=true kinds=[] exit=0
+    ok   BEFORE test_paths_matched                      0
+    ok   BEFORE violations                              []
+    ok   BEFORE exit                                    0
+  AFTER (this branch + .claude/test-integrity-config.md, warn)
+    source=base matched=1 ok=true kinds=[deleted_line] exit=0
+    ok   AFTER  test_paths_matched                      1
+    ok   AFTER  violation kinds                         [deleted_line]
+  BLOCK (same config, mode: block) -> exit=1 ok=false
+    ok   BLOCK  exit code                               1
+    ok   BLOCK  ok                                      false
+
+── control: add a skip to a suite (pure addition)
+  BEFORE (develop toolchain + template config)
+    source=template matched=0 ok=true kinds=[] exit=0
+    ok   BEFORE test_paths_matched                      0
+    ok   BEFORE violations                              []
+    ok   BEFORE exit                                    0
+  AFTER (this branch + .claude/test-integrity-config.md, warn)
+    source=base matched=1 ok=true kinds=[skip_marker] exit=0
+    ok   AFTER  test_paths_matched                      1
+    ok   AFTER  violation kinds                         [skip_marker]
+  BLOCK (same config, mode: block) -> exit=1 ok=false
+    ok   BLOCK  exit code                               1
+    ok   BLOCK  ok                                      false
+
+── control: delete an entire test file
+  BEFORE (develop toolchain + template config)
+    source=template matched=0 ok=true kinds=[] exit=0
+    ok   BEFORE test_paths_matched                      0
+    ok   BEFORE violations                              []
+    ok   BEFORE exit                                    0
+  AFTER (this branch + .claude/test-integrity-config.md, warn)
+    source=base matched=1 ok=true kinds=[deleted_line] exit=0
+    ok   AFTER  test_paths_matched                      1
+    ok   AFTER  violation kinds                         [deleted_line]
+  BLOCK (same config, mode: block) -> exit=1 ok=false
+    ok   BLOCK  exit code                               1
+    ok   BLOCK  ok                                      false
+
+── attribution: which change catches the added skip, config or engine?
+    new config + OLD engine : matched=0 kinds=[malformed_config]
+    ok   old engine rejects a test_paths config         [malformed_config]
+    ok   old engine still matches nothing               0
+    new config + NEW engine : matched=1 kinds=[skip_marker]
+    ok   new config + new engine kinds                  [skip_marker]
+
+── documented gap: early exit inserted mid-suite is NOT detected
+    matched=1 kinds=[]  <- deliberately empty; see config comments
+    ok   early-exit gap is real                         []
+
+ALL CONTROLS BEHAVED AS RECORDED

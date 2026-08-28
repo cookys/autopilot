@@ -23,7 +23,12 @@ unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE E
 EMPTY_CFG="$TEST_TMP/empty-config.md"
 : > "$EMPTY_CFG"
 CODEX_IMPL_CFG="$TEST_TMP/impl-codex.md"
-printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > "$CODEX_IMPL_CFG"
+# allow_same_runner_dual_seat: this roster names implementer_runner codex and
+# inherits the built-in reviewer default, which is ALSO codex — a real dual-seat
+# collision under the runner-axis gate. Opting in (rather than diversifying the
+# reviewer) keeps every other resolved value byte-identical, which matters because
+# this fixture is about quota/capability telemetry, not decorrelation.
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- allow_same_runner_dual_seat: on\n' > "$CODEX_IMPL_CFG"
 
 json_get() { # json key -> raw json value
   local json="$1" key="$2"
@@ -182,7 +187,10 @@ printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- re
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field implementer_runner)" "cc-shim implementer_runner honored"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field reviewer_runner)" "grok reviewer_runner honored"
 QCFG="$TEST_TMP/rl-qoderclicn.md"
-printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n' > "$QCFG"
+# This fixture deliberately puts qoderclicn in BOTH seats to prove the enum accepts
+# it in each — which is now a dual-seat collision. Opt in: the subject is enum
+# acceptance, not decorrelation policy.
+printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- allow_same_runner_dual_seat: on\n' > "$QCFG"
 assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field implementer_runner)" "qoderclicn implementer_runner honored"
 assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field reviewer_runner)" "qoderclicn reviewer_runner honored"
 RCFG="$TEST_TMP/rl-ccshim-rev.md"
@@ -428,9 +436,9 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"discuss_dispatch":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
-assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
+assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"
@@ -513,7 +521,11 @@ mkdir -p "$IMPLMISS_DIR"
 IMPLMISS_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
 assert_contains "$(json_get "$IMPLMISS_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: no scorecard row" \
   "missing implementer row surfaces a capability warning under --check-scorecard"
-# 20b. Expired row → loud warning naming the status
+# 20b. Calendar tooth pulled 2026-08-22 (no-confidence-decay P1/P2): a
+# past-expires qualified row is now admissible (status=provisional,
+# observed_status=qualified) — expires is advisory-only and never downgrades
+# admissibility here either. No implementer warning; was "loud warning naming
+# the expired status" pre-cut.
 IMPLEXP_DIR="$TEST_TMP/impl-expired"
 mkdir -p "$IMPLEXP_DIR"
 cat > "$IMPLEXP_DIR/rec.json" <<'JSON'
@@ -521,8 +533,8 @@ cat > "$IMPLEXP_DIR/rec.json" <<'JSON'
 JSON
 ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLEXP_DIR/rec.json" > /dev/null
 IMPLEXP_OUT="$(ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
-assert_contains "$(json_get "$IMPLEXP_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: scorecard row status=expired" \
-  "expired implementer row surfaces a status-named capability warning"
+assert_not_contains "$(json_get "$IMPLEXP_OUT" capability_warnings)" "implementer seat" \
+  "past-expires implementer row is admissible (calendar tooth pulled), no implementer warning"
 # 20c. Admissible (fresh) row → NO implementer warning; warning absent without --check-scorecard
 IMPLOK_DIR="$TEST_TMP/impl-ok"
 mkdir -p "$IMPLOK_DIR"
@@ -545,6 +557,20 @@ assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "EVIDENCE-FREE 
   "override file flips the warning to a loud evidence-free notice"
 assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "first-use audition" \
   "override reason surfaces in the warning"
+cat > "$TEST_TMP/qual-override-malformed.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"grok-4.5","runner":"grok","role":"implementer","reason":"malformed expiry","operator":"cookys","expires":"forever"}]}
+JSON
+IMPLOVR_BAD_OUT="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$TEST_TMP/qual-override-malformed.json" ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_not_contains "$(json_get "$IMPLOVR_BAD_OUT" capability_warnings)" "EVIDENCE-FREE operator override" \
+  "malformed override expiry never advertises admission"
+assert_contains "$(json_get "$IMPLOVR_BAD_OUT" capability_warnings)" "no scorecard row" \
+  "malformed override expiry preserves refusal guidance"
+cat > "$TEST_TMP/qual-override-no-operator.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"grok-4.5","runner":"grok","role":"implementer","reason":"missing operator","expires":"2099-01-01"}]}
+JSON
+IMPLOVR_NO_OPERATOR_OUT="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$TEST_TMP/qual-override-no-operator.json" ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_not_contains "$(json_get "$IMPLOVR_NO_OPERATOR_OUT" capability_warnings)" "EVIDENCE-FREE operator override" \
+  "override without operator never advertises admission"
 
 EXPDIR="$TEST_TMP/check-expired"
 mkdir -p "$EXPDIR"

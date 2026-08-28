@@ -77,6 +77,11 @@
       "maxItems": 4,
       "items": { "type": "object" }
     },
+    "unratified_observations": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "type": "object" }
+    },
     "reviewer_verdicts": {
       "type": "array",
       "maxItems": 4,

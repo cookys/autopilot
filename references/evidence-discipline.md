@@ -205,6 +205,19 @@ recorded prompt-hash history), keep the FAIL rows untouched, and re-sit fresh �
 independent seeds then put the same subjects at the same margins, that is capability signal:
 stop. A third sitting after that is selecting on the exam's own noise.
 
+**Second data point (2026-08-27), from the other direction — the RAIL is part of the instrument too.**
+`grok-4.6` on the `grok` CLI is a recorded implementer FAIL: 23/24, the single miss an integrity
+violation carrying a `false_pass_critical` — a behaviour failure, not a capability one. The same model
+family at the same effort, administered through the `cursor` rail, returned a clean 24/24 with all four
+zero-tolerance counters at zero. Three variables differ between the rows (runner, harness version, and
+the fast lane), so this attributes nothing to a specific harness property — but it does show that a
+FAIL can be a claim about the rail, and it is direct evidence for the premise `engine-onboarding`
+otherwise asserts on principle: qualification binds to **engine + runner + role**, never to a model
+name. Note the reasoning that nearly prevented the measurement: "its sibling failed on a more direct
+rail, so the expected value is poor" silently equates *the model failed* with *the model failed on that
+rail* — the exact conflation the binding rule exists to forbid.
+Evidence: `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/`.
+
 ## 11. A grep is not a call graph — and a rule can be spelled in arithmetic
 
 **2026-08-16 → fired 2026-08-17.** A retirement sweep asked "does anything enforce capability-claim
@@ -263,6 +276,227 @@ without writing new content — resume, re-open, rsync, checkout, chmod.
 Rule: when the claim is about *when a record was produced*, date it from a field **inside the
 record**. If the store has no per-record timestamp, say so and downgrade the claim; do not let
 `ls -lt` stand in for one. Evidence: `docs/plans/evidence/2026-08-20-interactive-cc-drivability-spike/`.
+
+---
+
+## 13. A fixture anchored to a non-production shape certifies a dead gate — pin bidirectionally
+
+**Incident (2026-08-21, p6d-corrective-gates R2 review).** A gate's precondition read
+`campaignControl.resume_candidate` at top level; production attaches it to the generation-claim
+object. The unit test built its fixture in the SAME wrong shape — so the planted red fired, the
+greens passed, mutations of the predicate went red, and the suite certified a gate that never
+fires in production. The reviewer proved it with a REVERSE mutation: correcting the code made
+the test go red — a test that fails when the code is fixed is anchored to a phantom shape.
+
+Rule: when a test feeds a hand-built object into a unit that production feeds from elsewhere,
+(a) derive the fixture shape from the PRODUCER's write site (cite it in the test), and
+(b) pin BIDIRECTIONALLY — the production shape must trigger, and the plausible-wrong shape
+must NOT ("reverse pin"). Forward mutation (neuter the gate → red) catches dead logic;
+only the reverse pin catches dead WIRING. Evidence:
+`docs/projects/_archive/2026-08-21-p6d-corrective-gates/` (R2/R3 reviewer reports).
+
+---
+
+## 14. A named mechanism with no resolvable referent is worse than a dead script
+
+**Incident (found 2026-08-24, knowledge-routing review).** `skills/distill/SKILL.md` asserted, in two
+places, that "the lint **reliably catches** structured tokens (email / IPv4 / `/home/<user>/` / FQDN /
+key-shapes); bare hostnames and client names are the **gate's** job", and twice instructed the reader
+to configure `~/.autopilot/distill/identifiers.deny` — a file **no code has ever read into a
+decision**: nothing in the repo created it, no test fixture supplied it, and its only consumer was an
+optional read that silently fell back to empty. The lint itself *did* exist — buried as an undocumented `--path` mode inside
+`distill-scan.js`, a script whose every other line and whose entire inventory row describe a
+conversation-history frequency scanner. Neither sentence named a path. So a reader following the skill
+had no way to tell which half was real, and **no gate could tell either**.
+
+> **Prose 具名的機制沒有可解參照的實作,等同從未寫過 —— 而且它比 dead script 更毒,因為連「去檢查它
+> 有沒有在跑」的對象都不存在。**
+
+§1's dead script is at least inspectable: you can open it, grep its callers, and discover it is inert.
+An unnamed mechanism offers nothing to inspect. The reader inherits a belief in a defense with no
+address, and the belief propagates — a reviewer reads "the lint reliably catches", concludes the
+structured-token class is handled, and spends their attention elsewhere. The false confidence is the
+damage, and it is the same shape as §8: a label standing in for a property.
+
+**This family was already named.** `CLAUDE.md` recorded the 2026-08-06 caution — *a script existing is
+not evidence it is running* — and this very file collected the family around it. The distill sentence
+was written afterwards and survived every subsequent review. **Naming a failure class does not defend
+against it; only a gate does.** Three weeks, in a repo whose CLAUDE.md carries the warning in bold.
+
+The enforcer pair, both required because either alone is inert:
+
+1. **The writing rule** — an asserted mechanism must name its executable path
+   (`references/skill-contract-card.md` § Review checklist). Without this the gate has nothing to
+   dereference; the ghost lint slipped through precisely by never naming one.
+2. **The gate** — `scripts/doc-drift-gate.js`'s `script-refs` check dereferences every
+   `scripts/<name>.<ext>` reference in `skills/**` and `references/*.md` and fails on any that does
+   not resolve (run by the doc-drift gate check in `preflight-portability.sh` — `check_doc_drift`,
+   labeled "doc-drift gate: internal links resolve + code-fences balance").
+
+**Check**: for every sentence in a skill that promises a mechanical defense, ask *what is its path?*
+If the sentence cannot answer, the defense is unverifiable — and per §"The one question", the working
+case and the broken case look identical from where you are standing.
+
+---
+
+## 15. A claim's layer decides its evidence class — get the layer wrong and no amount of evidence saves it
+
+**Incident (2026-08-25, peer-coordination spike for the `docs/BACKLOG.md` peer-coordination-skill
+item).** A message sent to a peer's machine landed on the wrong session on that machine — the receiving
+protocol addresses a *machine* (one identifier shared by every session on it), not a *session*. The
+first report called this "misdelivery" and proposed logging a failure rate. That was wrong: the
+message reached the machine it was addressed to. The protocol never promised to select a session — it
+has no field for one — so nothing failed at the transport layer; the outcome there is a documented
+fact about the interface, not a rate to be measured. A same-day correction swung the other way and
+called the whole thing "not a failure, session-selection is merely undefined" — which was *closer* but
+still wrong, because it silently discarded a real failure one layer up: **the intended recipient may
+never see the message, and that layer carries no receipt at all.** Three tellings, three different
+claims, and every one of them was backed by real observation. What changed between them was never the
+evidence — it was which layer the sentence was actually about.
+
+Split the claim before asking what would verify it:
+
+| Layer | What the evidence would need to show | Evidence class |
+|---|---|---|
+| Transport (reaches the addressed identifier) | Delivery per the interface's own contract | **Interface fact** — the type signature already proves it; verified once, by reading the schema |
+| Addressing (selects among multiple valid targets sharing that identifier) | Whether the interface has a field for this at all | **Interface fact** — same: read the schema, do not infer it from a sample of outcomes |
+| Recipient (the intended party actually observes it) | Whether delivery in fact occurred, this time, for this message | **Behavior observation** — needs a repro count, a machine, a date; a single instance proves only that a single instance happened |
+
+An interface fact needs exactly one dereference — reading the type signature, the enum, the schema —
+and no amount of repeating that dereference on other machines strengthens it, because the object under
+test is the definition, not an environment. A behavior observation is the opposite: one instance never
+generalizes, and reporting it as a rate (`n/n`) implies a denominator the incident does not support
+unless the trial was actually repeated **and** every leg of it was pinned to the same layer.
+
+The two errors above are the same root cause pointing in different directions. Reading a schema and
+mistaking what it enumerates for a promise about behavior converts an interface fact into a false rate
+(§"the working case and the broken case look identical" from below — here the confusion is not that
+the outcomes look alike, but that a *fact about the type* and a *claim about an event* look alike once
+both are phrased as prose). And correcting that error by re-deriving the interface fact still leaves a
+genuine behavior-layer claim unaddressed, if there was one riding along in the same sentence.
+
+> **Check**: before asking what evidence a claim needs, ask what *layer* it is a claim about. A
+> sentence that mixes layers — "X failed" when X is actually "Y is undefined and Z has no receipt" —
+> will pass any evidence-quality check aimed at the wrong layer, because the check was never aimed at
+> what the sentence actually asserts.
+
+---
+
+## 16. A blind gate usually has two layers — fixing one leaves it blind
+
+**Incident (2026-08-23, v2.34.38).** `check-test-integrity` was blind to all 300 test suites in this
+repo. The visible layer looked like a missing config: autopilot had no
+`.claude/test-integrity-config.md`, so the check fell back to a generic template glob. Fixing that
+alone would have changed nothing, because the real layer underneath was that `parse_config` tested
+`#` before `##` — `test_paths` had never been settable for **any** project, on any repo, ever. Worse,
+supplying a `test_paths` value didn't fail loudly; it silently tripped `malformed_config` and fell
+back to the same broken default, so the 510-line acceptance suite had never once exercised that code
+path. Three documents claimed the config gap was already noted; none of them was true — an undocumented
+gap is bad, but a gap **three docs claim is documented** is worse, because a reader stops looking.
+
+A second layer in the same incident: the same "one bad regex" bypass reappeared three separate times
+across a hardening round (`skip;`, a `#` truncated inside quotes, `( skip )` in a subshell) — each a
+different one-character evasion of the same detection regex. Patching regexes one bypass at a time
+never converges, because the bypass space is a grammar, not a finite list of known-bad strings. What
+converged it was replacing the regex with a quote/escape-aware scanner driven by an enumerated grammar
+of command-position/tail classes (45 probe classes) — and **naming the five classes it still does not
+cover** (a time/coproc prefix, a leading redirect, a heredoc body, `eval`, a heredoc-form skip), each
+pinned with its own boundary assertion so a future reader knows exactly where the blind spots are
+rather than discovering them by incident.
+
+> **Check**: when a gate reports "nothing to check" or "all clean" on a domain it should obviously see
+> activity in, do not stop at the first explanation that fits. Ask whether the absence has a second,
+> independent cause underneath the first, and whether any existing documentation claiming the gap is
+> known is itself unverified. Verify a repaired detection gate by planting an adversarial bypass
+> yourself — never accept a self-report that "it now catches X" — and prefer enumerating the class of
+> evasions over patching each observed instance, because the difference is the gap between "one bug
+> fixed" and "no further bug in this shape ships silently."
+
+**Related**: `scripts/check-test-integrity.sh`, `scripts/lib/test-integrity-l1.py`.
+
+## 17. Fixing the instance is not fixing the assumption — count the copies before you close
+
+**Incident (2026-08-27, v2.34.42–44).** A heterogeneous review panel found that
+`probe-engine-capability.sh` derived a runner's binary from the runner token, so the `cursor` runner
+probed `cursor` — the IDE launcher — instead of `cursor-agent`. It was fixed, verified, and shipped.
+
+The same assumption had **two more independent copies**. `qualification-sweep.sh` carried its own
+inline `verbin="$runner"`, and it was found only when the tool was actually operated: it folded
+stderr into stdout, ran the sanitizer over the launcher's error sentence, and passed
+`--runner-version Error:-No-Cursor-IDE-installation-found.-...` into a **paid** qualification
+administration. `runner_version` is part of the deployment identity that decides whether the evidence
+is applicable later, so the run was about to mint a row that looked authoritative and could never
+match anything. (A third copy existed in `src/readiness/probe.js` and was correct — but unexported and
+welded to its module, so no other caller could reuse it. Correct and unreachable is still a copy.)
+
+Two things generalise. First, **a review finding is about a site, not about the belief** — the panel
+could only report what was in the diff it was given. Second, all three defects this release was built
+around (`*/` closing a block comment, a fabricated `--cwd` flag, this one) were found by **using** the
+thing, and two of them had already passed review with a PASS verdict attached.
+
+> **Check**: when a review or an incident identifies a wrong assumption, do not close on the site that
+> was reported. Grep for every other place that encodes the same belief and say how many you found —
+> "one copy, checked" is a finding; silence is not. If several copies exist, the fix is one owner the
+> others consume, and the count of independent copies must go **down**, not up. Then ask what would
+> have surfaced it earlier than operating it in production, and build that instead of trusting the
+> next review to catch the next copy.
+
+**Related**: `scripts/lib/runner-binary.js`, `scripts/qualification-sweep.sh`, `scripts/check-js-syntax.js`.
+
+---
+
+## 18. A bound inside a fail-closed guard must refuse when it truncates
+
+**Incident (2026-08-27, v2.34.44).** The repaired version-probe guard validated the first stdout line
+and then scanned the tail for error markers — bounded at 20 lines. The same `Error: ...` line refused
+when it sat at line 2 and was **accepted** when it sat at line 23. Only its distance from the top
+decided whether the guard saw it. A module whose entire contract is "anything I cannot positively
+validate refuses" had a limit that silently stopped looking, which is the same shape as the bug it was
+written to prevent: a value nobody checked becoming an identity.
+
+The sibling defect in the same code: stdout and stderr were folded with `2>&1`, so a diagnostic on
+stderr could be read as the value. Separating the streams is what made "the version" a positively
+identified thing rather than "whatever came out first".
+
+A bound is not the problem — unbounded scanning of untrusted output is its own hazard. The problem is
+a bound that fails **open**. The repair keeps a limit and refuses when the limit is reached, with a
+reason distinguishable from a real error line, so an operator can tell "too much output to vouch for"
+apart from "the output announced a failure". Every other bound in the module was then audited and
+each one's behaviour recorded, rather than assumed.
+
+> **Check**: for every cap, slice, `head -n`, timeout, or buffer limit sitting inside a guard, ask what
+> happens to the material past it. If the answer is "it is not examined" and the guard's contract is
+> fail-closed, the bound is a bypass with a length prefix. Refuse on truncation and give it its own
+> reason string. Then enumerate the other bounds in the same unit and state each one's direction —
+> a table of bounds that all fail closed is evidence; one unaudited bound is where the next one hides.
+
+**Related**: `scripts/lib/runner-binary.js`.
+
+---
+
+## 19. A proxy is not the measurement — name what you counted and when it is written
+
+**Incident (2026-08-27.)** A paid qualification run was killed mid-flight. Asked how much had been
+spent, the orchestrator counted entries in the administration's `raw/` output directory, saw zero, and
+reported "0 of 24 dispatches spent". The directory is written per case **on completion**; the dispatch
+logs showed **seven** cases had already run. The number was not a lie and not a guess — it was a
+plausible stand-in adopted without asking what it actually measures relative to the event being
+claimed.
+
+This is the same failure as the two around it, one layer up: an error sentence was accepted as a
+version because it was string-shaped, and a directory count was accepted as a spend count because it
+was in the right place. In each case the observation was real and the **binding between observation
+and claim** was never checked.
+
+> **Check**: before reporting a quantity as fact, state what produced it and when that artefact is
+> written relative to the event you are describing. If the artefact lands at completion, it cannot
+> count things in flight. Prefer a source that is written by the event itself (a dispatch log, a
+> receipt) over one written by its aftermath, and when only a proxy is available, report it as a proxy
+> and say so — "raw/ shows 0 completed cases; in-flight count unknown" is honest, and "0 spent" is not.
+
+**Related**: `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/`.
+
+---
 
 ---
 

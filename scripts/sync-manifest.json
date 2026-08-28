@@ -110,6 +110,15 @@
       "trigger": ["scripts/", "CLAUDE.md"]
     },
     {
+      "id": "check-js-syntax",
+      "title": "syntax-check every tracked .js/.cjs/.mjs file (node --check)",
+      "generator": null,
+      "check": "node scripts/check-js-syntax.js",
+      "fix": "open the file Node names and fix the reported syntax error (see its stderr message in the ritual output)",
+      "tier": "both",
+      "trigger": ["*.js", "*.cjs", "*.mjs"]
+    },
+    {
       "id": "l1-cache-key-parity",
       "title": "L1 JS-runtime cache key jest/vitest versions vs test pins",
       "generator": null,

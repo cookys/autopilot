@@ -30,13 +30,13 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # WALL-CLOCK CAP FOR EVERY RUNNER, not just agy (default 5m).
 #                               #   agy: passed as --print-timeout
-#                               #   codex / grok / qoder: enforced via an external `timeout`
+#                               #   codex / grok / qoder / cursor: enforced via an external `timeout`
 #                               # Exceeding it is a NON-ZERO EXIT, which is fail-closed to
 #                               # status:no_verdict — the review is lost, not merely slow. A
 #                               # large diff at a high effort routinely needs more than 5m
@@ -66,6 +66,16 @@
 #   ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN and does NOT redirect HOME (native session
 #   credentials commonly live under the real HOME). Reuses the same canonical PROMPT_FILE
 #   every other runner reads — no second prompt-assembly source.
+#   NEVER point CLAUDE_CONFIG_DIR at the real ~/.claude for a fresh-HOME child process
+#   (headless exam/dispatch use case): a `claude -p` subprocess whose CLAUDE_CONFIG_DIR
+#   resolves to a real, already-populated ~/.claude treats it as needing initialization and
+#   RESETS .claude.json in place (verified on claude CLI 2.1.233: 88k -> 36k, every project
+#   entry / mcpServer / onboarding flag gone) — plus there is a live-session write race if a
+#   real session has that file open. If native OAuth is genuinely needed for a headless/exam
+#   dispatch, point CLAUDE_CONFIG_DIR at a DEDICATED empty directory (mode 0700) seeded with
+#   only .credentials.json (mode 0600) copied from the real one — never the real directory
+#   itself. A CLI restore backup lands at ~/.claude/backups/.claude.json.backup.<ts> if this
+#   is hit by accident.
 #   anthropic-compatible runner: direct HTTP POST to an Anthropic-compatible /v1/messages
 #   endpoint (MiniMax-M3, GLM-*, …) via dispatch-anthropic-review.js — NOT claude/cc-shim.
 #   Auth from env only: MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN
@@ -81,12 +91,27 @@
 #   documented levers: --setting-sources project + --strict-mcp-config + --tools "" (all tools off) +
 #   HOME=<scratch> + scratch cwd + no --dangerously-skip-permissions; STDIN prompt; env -u
 #   ANTHROPIC_API_KEY.
+#   cursor runner: drives the Cursor CLI (`cursor-agent`, NOT `cursor`). READ-ONLY posture via
+#   `--mode ask` (P9: refused to write in the S2a spike) from a scratch cwd, prompt on STDIN
+#   (P7), `--trust` mandatory headlessly (P3), `--output-format text` (P13: clean prose on
+#   stdout, empty stderr — feeds the SAME plain VERDICT: parser every other runner uses).
+#   `--model` MUST be a full cursor-agent model id (`cursor-agent --list-models`); there is no
+#   default and no family-alias resolution on this rail (that lives only in
+#   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
+#   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
+#   (P12); cursor-agent rejects both flags with "error: unknown option".
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
 #     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "...",
 #     "usage": { ... }|null }
+#   no_verdict emissions additionally carry "unratified_verdict":
+#   "SHIP-AS-IS"|"FIX-THEN-SHIP"|null — a transport-destroyed but content-verified
+#   verdict (full battery incl. leak scan + proof checks; locator = unique derived
+#   BEGIN + first END). HUMAN-adjudication-only: never authority, never emitted on
+#   reviewed/precondition paths (schemas/review-result.schema.json; reader set closed
+#   by check-canonical-invariants.sh reader-allowlist).
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
 #   NOT treat as pass) ; 2 = precondition_failed.
@@ -118,6 +143,31 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # Canonical json_escape, so die_precondition can emit VALID JSON for any message.
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/lib/json-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/json-emit.sh" || true
+# cursor_is_family_alias — single source of truth for the cursor family-alias
+# vocabulary (grok46|codex53), used by the --runner cursor precondition below.
+# FAIL-CLOSED (unlike the best-effort sources above): dispatch-author.sh:111-112 and
+# dispatch-hetero.sh:486-487 source this same lib unconditionally, so a missing/unreadable
+# copy already hard-fails those rails. A fail-open source here would silently disable the
+# alias-rejection guard at the `command -v cursor_is_family_alias` check below — a bare
+# family alias (e.g. "grok46") would then pass through as if it were a full cursor-agent
+# model id. Hard-error before any runner is spawned; no die_precondition available yet
+# (defined below, after arg parsing) so this exits directly. Checks BOTH failure shapes:
+# unreadable (the `-r` guard) AND sourced-but-failed (the lib itself `return`s/exits
+# nonzero, or vanishes between the `-r` check and the `.` — a TOCTOU race) — `.`'s own
+# exit status is never trusted implicitly; `set -uo pipefail` (no `-e`) means a failing
+# source would otherwise fall through silently to arg parsing with the alias predicate
+# undefined.
+_REVIEW_CURSOR_MODEL_LIB="$_REVIEW_SELF_DIR/lib/cursor-model.sh"
+_review_die_cursor_lib() {
+  echo "dispatch-review.sh: required lib unreadable: $_REVIEW_CURSOR_MODEL_LIB (cannot enforce cursor family-alias rejection)" >&2
+  exit 2
+}
+if [ -r "$_REVIEW_CURSOR_MODEL_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$_REVIEW_CURSOR_MODEL_LIB" || _review_die_cursor_lib
+else
+  _review_die_cursor_lib
+fi
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 REVIEW_USAGE_JSON="null"
@@ -182,8 +232,8 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, or kimi (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, or cursor (got: $RUNNER)" ;; esac
 if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
   case "$RUNNER" in
     qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
@@ -202,6 +252,15 @@ if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
   esac
 fi
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
+if [[ "$RUNNER" = "cursor" ]]; then
+  # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
+  # lib/cursor-model.sh) — --model must already be a full cursor-agent model id.
+  # cursor_is_family_alias is the single source of truth for the alias vocabulary
+  # (grok46|codex53) — see lib/cursor-model.sh; do not restate the pattern here.
+  if command -v cursor_is_family_alias >/dev/null 2>&1 && cursor_is_family_alias "$MODEL"; then
+    die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models"
+  fi
+fi
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
   [[ -f "$SPEC_FILE" && -r "$SPEC_FILE" ]] || die_precondition "--spec-file must be a readable regular file"
@@ -352,12 +411,184 @@ passive_capture() {
   fi
 }
 
-# Canonical "no_verdict" emitter used by the hardened parser rails.
+# ── content-integrity battery + unratified salvage (verdict-bytes preservation) ──
+# validate_review_block is THE battery: the authoritative rail and salvage run the
+# exact same checks over a block file — never a re-listed subset (plan R3 §2). Only
+# the LOCATOR differs: the main rail skips leading chrome lines up to the derived
+# BEGIN, but ONLY while a leading line carries no trace of the framing vocabulary
+# (no "AUTOPILOT-REVIEW"/"AUTOPILOT-END" substring, no derived-nonce substring) —
+# a leading line that DOES carry that vocabulary and is not byte-exactly the
+# derived BEGIN is a HARD REJECT, never a skip (anti-echo anchor now on the
+# vocabulary, not on line position: a harness may print one line of chrome before
+# the frame, but a fabricated/truncated/echoed frame is still rejected, not
+# silently skipped or accepted). Salvage requires exactly one derived BEGIN in the
+# capture and takes the first derived END after it (g2-adjudication #8). Returns 0
+# and sets BATTERY_VERDICT/BATTERY_FINDINGS/BATTERY_PROOF, or returns 1 and sets
+# BATTERY_FAIL_REASON. Defined here (before the dispatch section) because the
+# no_verdict funnel below is called from the runner branches, which execute before
+# the parser section further down.
+prompt_framing_leakage() {
+  awk '
+    BEGIN { found = 0 }
+    {
+      # Models sometimes structurally echo the framing inside a Markdown quote
+      # or an indented code block. Normalize only those structural prefixes and
+      # retain the exact-line checks; ordinary lexical use of the vocabulary is
+      # still permitted as a legitimate finding.
+      line = $0
+      sub(/^[[:space:]]*>[[:space:]]?/, "", line)
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ /^<<<AUTOPILOT-(REVIEW|END)-[0-9a-f]{32}>>>$/ \
+          || line ~ /^diff --git [^[:space:]]+ [^[:space:]]+$/ \
+          || line ~ /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ \
+          || line ~ /^Diff under review:[[:space:]]*$/ \
+          || line ~ /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ \
+          || line ~ /^<one finding per line>[[:space:]]*$/) {
+        found = 1
+      }
+      next
+    }
+    { next }
+    END { exit(found ? 0 : 1) }' "$1"
+}
+
+validate_review_block() {
+  local block_file="$1"
+  BATTERY_VERDICT=""; BATTERY_FINDINGS=""; BATTERY_PROOF=""; BATTERY_FAIL_REASON=""
+  local block_bytes
+  block_bytes="$(wc -c < "$block_file")"
+  if [ "$block_bytes" -gt 16384 ]; then
+    BATTERY_FAIL_REASON="response wrapped block exceeded the fail-closed size cap"; return 1
+  fi
+  if prompt_framing_leakage "$block_file"; then
+    BATTERY_FAIL_REASON="response wrapped block contained prompt-text leakage"; return 1
+  fi
+  local total_count fix_count ship_count
+  total_count="$(awk 'BEGIN { c = 0 } /^VERDICT:/ { c += 1 } END { print c + 0 }' "$block_file")"
+  fix_count="$(awk 'BEGIN { c = 0 } /^VERDICT: FIX-THEN-SHIP$/{ c += 1 } END { print c + 0 }' "$block_file")"
+  ship_count="$(awk 'BEGIN { c = 0 } /^VERDICT: SHIP-AS-IS$/{ c += 1 } END { print c + 0 }' "$block_file")"
+  if [ "${total_count:-0}" -ne 1 ] || (( fix_count + ship_count != 1 )); then
+    BATTERY_FAIL_REASON="response wrapped block has no single valid anchored VERDICT line"; return 1
+  fi
+  if [ "$fix_count" -eq 1 ]; then
+    BATTERY_VERDICT="FIX-THEN-SHIP"
+  else
+    BATTERY_VERDICT="SHIP-AS-IS"
+  fi
+  local has_findings
+  has_findings="$(awk 'BEGIN { found = 0 } /^FINDINGS:/ { found = 1; exit } END { print found }' "$block_file")"
+  if [ "$has_findings" != "1" ]; then
+    BATTERY_FAIL_REASON="response wrapped block missing a parseable FINDINGS line"; return 1
+  fi
+  BATTERY_FINDINGS="$(awk '
+    BEGIN { capture = 0; in_fence = 0 }
+    /^FINDINGS:/ {
+      capture = 1
+      sub(/^[[:space:]]*FINDINGS:[[:space:]]*/, "", $0)
+      if (length($0) > 0) {
+        print $0
+      }
+      next
+    }
+    !capture { next }
+    capture && /^```/ { in_fence = 1 - in_fence; next }
+    !in_fence && /^NO-FINDING-PROOF:/ { exit }
+    !in_fence && length($0) > 0 { print $0 }
+  ' "$block_file")"
+  if [ -z "${BATTERY_FINDINGS:-}" ]; then
+    BATTERY_FINDINGS="none"
+  fi
+  local proof_line_count
+  proof_line_count="$(awk '
+    BEGIN { c = 0; in_fence = 0 }
+    /^```/ { in_fence = 1 - in_fence; next }
+    !in_fence && /^NO-FINDING-PROOF:/ { c += 1 }
+    END { print c + 0 }
+  ' "$block_file")"
+  if [ "$BATTERY_VERDICT" = "SHIP-AS-IS" ]; then
+    if [ "${proof_line_count:-0}" -ne 1 ]; then
+      BATTERY_FAIL_REASON="SHIP-AS-IS requires exactly one anchored NO-FINDING-PROOF line"; return 1
+    fi
+    BATTERY_PROOF="$(awk '
+      BEGIN { in_fence = 0 }
+      /^```/ { in_fence = 1 - in_fence; next }
+      !in_fence && /^NO-FINDING-PROOF:/ {
+        sub(/^NO-FINDING-PROOF:[[:space:]]*/, "", $0)
+        print
+      }
+    ' "$block_file")"
+    # Anchor on the FIELD LABELS, not on one hard-coded separator: kimi-code/k3
+    # (2026-08-15) separated its last field with a period and lost a substantive
+    # proof to punctuation. Any separator punctuation/whitespace run is accepted;
+    # all three labels must still appear IN ORDER with non-empty content, and the
+    # tautology blacklist below is untouched.
+    if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]evidence=(.+)[[:space:]\;,.]conclusion=(.+)$ ]]; then
+      BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
+    fi
+    local proof_checked proof_evidence proof_conclusion proof_value proof_normalized
+    proof_checked="$(printf '%s' "${BASH_REMATCH[1]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    proof_evidence="$(printf '%s' "${BASH_REMATCH[2]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    proof_conclusion="$(printf '%s' "${BASH_REMATCH[3]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    for proof_value in "$proof_checked" "$proof_evidence" "$proof_conclusion"; do
+      proof_normalized="$(printf '%s' "$proof_value" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:][:punct:]]*//; s/[[:space:][:punct:]]*$//')"
+      case "$proof_normalized" in
+        ""|none|"no finding"|"no findings"|"no must-fix"|"no must-fix remains"|n/a|na|checked|"all passed"|"looks good"|diff|tests|spec|code|"acceptance criteria"|"requirements satisfied")
+          BATTERY_FAIL_REASON="NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value"; return 1
+          ;;
+      esac
+    done
+  fi
+  return 0
+}
+
+# Salvage: content-verified, transport-unratified. Runs ONLY from the no_verdict
+# funnel; a full battery pass lands in the non-authoritative unratified_verdict
+# column (status/verdict/exit unchanged — consumers may not derive authority from
+# it; guarded by check-canonical-invariants). Total no-op unless the capture is
+# readable and non-empty and both derived markers are passed explicitly
+# (g2-adjudication #3).
+SALVAGE_CAPTURE=""
+UNRATIFIED_VERDICT="null"
+SALVAGE_BLOCK="" # registered in the EXIT trap: a signal between mktemp and rm must not leak
+salvage_unratified_verdict() {
+  local capture="$1" begin="$2" end="$3"
+  UNRATIFIED_VERDICT="null"
+  [ -n "$capture" ] && [ -r "$capture" ] && [ -s "$capture" ] || return 0
+  [ -n "$begin" ] && [ -n "$end" ] || return 0
+  local begin_count
+  begin_count="$(awk -v begin="$begin" 'BEGIN { c = 0 } { sub(/\r$/, "", $0); if ($0 == begin) c += 1 } END { print c + 0 }' "$capture")"
+  [ "${begin_count:-0}" -eq 1 ] || return 0
+  local salvage_block
+  salvage_block="$(mktemp -t dispatch-review-salvage-XXXXXX)"
+  SALVAGE_BLOCK="$salvage_block"
+  if ! awk -v begin="$begin" -v end="$end" '
+      BEGIN { started = 0; ended = 0 }
+      { sub(/\r$/, "", $0) }
+      !started { if ($0 == begin) started = 1; next }
+      $0 == end { ended = 1; exit }
+      { print }
+      END { exit (started && ended) ? 0 : 1 }
+    ' "$capture" > "$salvage_block"; then
+    rm -f "$salvage_block"; SALVAGE_BLOCK=""
+    return 0
+  fi
+  if validate_review_block "$salvage_block"; then
+    UNRATIFIED_VERDICT="\"$BATTERY_VERDICT\""
+  fi
+  rm -f "$salvage_block"; SALVAGE_BLOCK=""
+  return 0
+}
+
+# Canonical "no_verdict" emitter used by the hardened parser rails AND every
+# runner-branch transport-failure exit (the funnel — g1 disposition 77d5af59).
+# Each caller sets SALVAGE_CAPTURE to its runner-specific parse target first;
+# unset falls back to PARSE_INPUT, and pre-marker calls salvage nothing.
 emit_no_verdict() {
   local reason="$1"
   passive_capture "no_verdict"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON"
+  salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
+  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s }\n' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT"
   exit 1
 }
 
@@ -384,10 +615,14 @@ KIMI_CWD=""   # set only on the kimi path; same trap-reap rationale
 KIMI_OUT=""   # kimi reviewer stdout; reaped on EXIT after parser
 KIMI_ERR=""   # kimi stderr chrome
 KIMI_CLEAN="" # normalized kimi stdout; reaped on EXIT if interrupted
+CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
+CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
+CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 AGY_CWD=""
 AGY_OUT=""
 AGY_ERR=""
 AGY_PARSED=""
+AGY_SALVAGE="" # best-effort extracted response for unratified salvage on the agy rc≠0 path
 cleanup() {
   # $? at trap entry = the script's exit code — its authoritative status contract
   # (0 reviewed / 1 no_verdict / 2 precondition_failed; anything else = killed/aborted).
@@ -406,10 +641,15 @@ cleanup() {
   [ -n "$KIMI_OUT" ] && rm -f "$KIMI_OUT"
   [ -n "$KIMI_ERR" ] && rm -f "$KIMI_ERR"
   [ -n "$KIMI_CLEAN" ] && rm -f "$KIMI_CLEAN"
+  [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD"
+  [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
+  [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD"
   [ -n "$AGY_OUT" ] && rm -f "$AGY_OUT"
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
+  [ -n "$AGY_SALVAGE" ] && rm -f "$AGY_SALVAGE"
+  [ -n "$SALVAGE_BLOCK" ] && rm -f "$SALVAGE_BLOCK"
   # Observability: stamp ended_at + final_status (from the exit code, the one source
   # every emit path already honors) so dispatch-status.js reports phase:"exited" with
   # the outcome on every exit path. declare -F guard: the trap is armed a few lines
@@ -658,10 +898,8 @@ if [[ "$RUNNER" = "codex" ]]; then
   if [ "$CODEX_RC" -ne 0 ]; then
     printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$CODEX_RC" >> "$RAW_LOG"
-    passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "codex exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CODEX_RC"
-    exit 1
+    SALVAGE_CAPTURE="$CODEX_OUT"
+    emit_no_verdict "codex exited non-zero (rc=$CODEX_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$CODEX_OUT"
 elif [[ "$RUNNER" = "grok" ]]; then
@@ -698,10 +936,8 @@ elif [[ "$RUNNER" = "grok" ]]; then
   if [ "$GROK_RC" -ne 0 ]; then
     printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$GROK_RC"
-    exit 1
+    SALVAGE_CAPTURE="$RAW_LOG"
+    emit_no_verdict "grok exited non-zero (rc=$GROK_RC) — fail-closed, partial output not parsed"
   fi
 
 elif [[ "$RUNNER" = "qoderclicn" ]]; then
@@ -745,12 +981,48 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   if [ "$QODER_RC" -ne 0 ]; then
     printf '\n[dispatch-review: qoder exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$QODER_RC" "$([ "$QODER_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "qoder exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$QODER_RC"
-    exit 1
+    SALVAGE_CAPTURE="$QODER_OUT"
+    emit_no_verdict "qoder exited non-zero (rc=$QODER_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$QODER_OUT"
+elif [[ "$RUNNER" = "cursor" ]]; then
+  BIN="${BIN:-cursor-agent}"
+  command -v "$BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $BIN (Cursor CLI — cursor-agent, not cursor)"
+  # READ-ONLY review of an UNTRUSTED diff, same posture as grok/qoder: scratch cwd (never the
+  # repo); `--mode ask` (P9: refused to write in the S2a spike — this plan does not rely on it
+  # against an adversarial prompt, only against a cooperative one, so cursor stays OUT of the
+  # blind-review allowlist above); enforced `timeout` (cursor has no print-timeout flag) as the
+  # hang backstop; FAIL-CLOSED before the shared parser on any non-zero exit; no --force.
+  # P3: --trust is MANDATORY headlessly — without it the run aborts on workspace trust.
+  # P7: -p reads the prompt from STDIN (same rail as qoder — a large diff as one argv arg can
+  # hit ARG_MAX).
+  # P13: --output-format text returns clean assistant prose on stdout with EMPTY stderr, so the
+  # SAME plain VERDICT: parser every other runner uses consumes stdout unchanged (never
+  # stream-json).
+  # P12: effort is encoded in the MODEL ID (…-low/-low-fast/-high-fast), NOT a flag —
+  # cursor-agent rejects --reasoning-effort/--effort with "error: unknown option". Do NOT add
+  # either here.
+  # SPLIT STREAMS (same rail as qoder/codex): parse STDOUT only, keep STDERR as chrome; never
+  # salvage from stderr.
+  CURSOR_OUT="$(mktemp -t dispatch-review-cursor-out-XXXXXX)"
+  CURSOR_ERR="$(mktemp -t dispatch-review-cursor-err-XXXXXX)"
+  CURSOR_CWD="$(mktemp -d -t dispatch-review-cursorcwd-XXXXXX)"
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
+      --output-format text < "$4"' \
+      _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$CURSOR_OUT" 2> "$CURSOR_ERR"
+  CURSOR_RC=$?   # no set -e in this script (top is `set -uo pipefail`) — capturing $? is safe
+  wait_output_quiescent "$CURSOR_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  rm -rf "$CURSOR_CWD"; CURSOR_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  cat "$CURSOR_OUT" > "$RAW_LOG"
+  printf '\n--- cursor stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$CURSOR_ERR" >> "$RAW_LOG"
+  if [ "$CURSOR_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: cursor exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$CURSOR_RC" "$([ "$CURSOR_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    SALVAGE_CAPTURE="$CURSOR_OUT"
+    emit_no_verdict "cursor exited non-zero (rc=$CURSOR_RC) — fail-closed, partial output not parsed"
+  fi
+  PARSE_INPUT="$CURSOR_OUT"
 elif [[ "$RUNNER" = "kimi" ]]; then
   # Kimi Code CLI (Moonshot) — Revival review seat for kimi-code/k3 (user 2026-07-28).
   # Binary: `kimi` from PATH (typical: ~/.kimi-code/bin/kimi). Model alias e.g. kimi-code/k3.
@@ -791,13 +1063,13 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   cat "$KIMI_OUT" > "$RAW_LOG"
   printf '\n--- kimi stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$KIMI_ERR" >> "$RAW_LOG"
-  if [ "$KIMI_RC" -ne 0 ]; then
-    printf '\n[dispatch-review: kimi exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
-      "$KIMI_RC" "$([ "$KIMI_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    emit_no_verdict "kimi exited non-zero (rc=$KIMI_RC) — fail-closed, partial output not parsed"
-  fi
   # kimi-code often prefixes a thinking bullet ("• ") before the nonce block; extract
   # the first AUTOPILOT-REVIEW…END span so the shared parser sees a clean start.
+  # Runs BEFORE the rc check (pre-merge review round-1 MUST-FIX, 2026-08-21): the
+  # salvage funnel matches the derived BEGIN by exact line, so pointing it at the
+  # pre-normalization bytes made the kimi rail's salvage inert for exactly the
+  # bullet-prefixed shape this comment documents as common. RAW_LOG keeps the raw
+  # pre-normalization bytes (written above) for humans.
   if ! awk 'NR==1 && $0 ~ /^<<<AUTOPILOT-REVIEW-/' "$KIMI_OUT" | grep -q .; then
     KIMI_CLEAN="$(mktemp -t dispatch-review-kimi-clean-XXXXXX)"
     awk '
@@ -816,6 +1088,12 @@ elif [[ "$RUNNER" = "kimi" ]]; then
     fi
     rm -f "$KIMI_CLEAN"
     KIMI_CLEAN=""
+  fi
+  if [ "$KIMI_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: kimi exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$KIMI_RC" "$([ "$KIMI_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    SALVAGE_CAPTURE="$KIMI_OUT"
+    emit_no_verdict "kimi exited non-zero (rc=$KIMI_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$KIMI_OUT"
 elif [[ "$RUNNER" = "cc-shim" ]]; then
@@ -876,10 +1154,8 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   if [ "$CCSHIM_RC" -ne 0 ]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CCSHIM_RC" "$([ "$CCSHIM_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CCSHIM_RC"
-    exit 1
+    SALVAGE_CAPTURE="$RAW_LOG"
+    emit_no_verdict "cc-shim exited non-zero (rc=$CCSHIM_RC) — fail-closed, partial output not parsed"
   fi
 elif [[ "$RUNNER" = "claude-native" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
@@ -904,10 +1180,8 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   if [ "$CNATIVE_RC" -ne 0 ]; then
     printf '\n[dispatch-review: claude-native (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CNATIVE_RC" "$([ "$CNATIVE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "claude-native exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CNATIVE_RC"
-    exit 1
+    SALVAGE_CAPTURE="$RAW_LOG"
+    emit_no_verdict "claude-native exited non-zero (rc=$CNATIVE_RC) — fail-closed, partial output not parsed"
   fi
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_ARGS=(
@@ -928,10 +1202,8 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   if [ "$ANTHROPIC_RC" -ne 0 ]; then
     printf '\n[dispatch-review: anthropic-compatible transport exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$ANTHROPIC_RC" >> "$RAW_LOG"
-    passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "anthropic-compatible transport exited non-zero (rc=%s) — fail-closed, raw output not parsed", "usage": null }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$ANTHROPIC_RC"
-    exit 1
+    SALVAGE_CAPTURE="$RAW_LOG"
+    emit_no_verdict "anthropic-compatible transport exited non-zero (rc=$ANTHROPIC_RC) — fail-closed, raw output not parsed"
   fi
 else
   AGY_BIN="${BIN:-agy}"
@@ -975,6 +1247,14 @@ else
     printf '\n[dispatch-review: agy exited non-zero (rc=%s) — native envelope and partial response NOT parsed]\n' \
       "$AGY_RC" >> "$RAW_LOG"
     REVIEW_USAGE_JSON="null"
+    # Best-effort salvage capture: if the native envelope is still intact despite the
+    # non-zero exit, extract the response text for the funnel; extraction failure
+    # simply leaves SALVAGE_CAPTURE unset (salvage no-ops).
+    AGY_SALVAGE="$(mktemp -t dispatch-review-agy-salvage-XXXXXX)"
+    if node "$_REVIEW_SELF_DIR/dispatch-status.js" --log "$AGY_OUT" --agy-envelope 2>/dev/null \
+        | node -e 'const fs=require("fs");let d="";process.stdin.on("data",(c)=>{d+=c;}).on("end",()=>{try{fs.writeFileSync(process.argv[1],JSON.parse(d).response);}catch(e){process.exit(1);}})' "$AGY_SALVAGE"; then
+      SALVAGE_CAPTURE="$AGY_SALVAGE"
+    fi
     emit_no_verdict "agy exited non-zero (rc=$AGY_RC) — fail-closed, native envelope not parsed"
   fi
   if ! node "$_REVIEW_SELF_DIR/dispatch-status.js" --log "$AGY_OUT" --agy-envelope \
@@ -1000,24 +1280,61 @@ fi
 
 
 # --- parse verdict (fail-closed and fail-toward-block) ---
-awk -v begin="$BEGIN" -v end="$END" '
-  BEGIN { started=0; ended=0; leading=1 }
+# CHROME BUDGET (first-pass qc 🟠 chrome-battery-bypass): the skipped prefix is
+# bounded. The old locator required the frame at line 1, so the block size cap
+# also bounded the whole response; allowing an UNBOUNDED prefix quietly removed
+# that. A 10MB preamble followed by a small valid block would have been accepted
+# with none of the preamble ever inspected. Real harness chrome is one or two
+# lines (cc-shim prints a single unrecognized-model notice), so this budget is
+# orders of magnitude above any legitimate case and only catches the pathological
+# one. It cannot open a hole: bounding a prefix is strictly more conservative
+# than not bounding it.
+CHROME_MAX_LINES="${AUTOPILOT_REVIEW_CHROME_MAX_LINES:-200}"
+CHROME_MAX_BYTES="${AUTOPILOT_REVIEW_CHROME_MAX_BYTES:-65536}"
+awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
+    -v chrome_max_lines="$CHROME_MAX_LINES" -v chrome_max_bytes="$CHROME_MAX_BYTES" '
+  BEGIN { started=0; ended=0; leading=1; chrome_lines=0; chrome_bytes=0; bail=0 }
   {
     sub(/\r$/, "", $0)
-    if (leading && $0 ~ /^[[:space:]]*$/) {
-      next
-    }
     if (leading) {
-      leading=0
-      if ($0 != begin) { exit 2 }
-      started=1
+      if ($0 ~ /^[[:space:]]*$/) { next }
+      if ($0 == begin) { leading=0; started=1; next }
+      # Chrome-skip guard: a leading line may be skipped ONLY if it carries no
+      # trace of the framing vocabulary. If it does — but is not byte-exactly the
+      # derived BEGIN line — that is a HARD REJECT, never a skip (see comment at
+      # ~1290: this rejects a truncated/echoed frame instead of silently passing
+      # it or accepting a fabricated verdict planted further down).
+      if (index($0, "AUTOPILOT-REVIEW") || index($0, "AUTOPILOT-END") || index($0, derived)) {
+        bail=7; exit 7
+      }
+      # PROMPT-ECHO guard. validate_review_block runs prompt_framing_leakage over
+      # the extracted BLOCK, so before the chrome skip existed a model echoing the
+      # prompt was caught there (or by the positional anchor). A skipped prefix
+      # escapes that scan entirely, so the SAME anchored patterns are rejected
+      # here — the prefix is held to the leak rule too, not just to a size budget.
+      # Same structural normalization the leak scan uses (a Markdown quote marker
+      # or indentation must not launder an echoed line). Real harness chrome — a
+      # bracketed notice line, a JSON blob — matches none of these.
+      echo_line = $0
+      sub(/^[[:space:]]*>[[:space:]]?/, "", echo_line)
+      sub(/^[[:space:]]+/, "", echo_line)
+      if (echo_line ~ /^diff --git [^[:space:]]+ [^[:space:]]+$/ \
+          || echo_line ~ /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ \
+          || echo_line ~ /^Diff under review:[[:space:]]*$/ \
+          || echo_line ~ /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ \
+          || echo_line ~ /^<one finding per line>[[:space:]]*$/) {
+        bail=9; exit 9
+      }
+      chrome_lines += 1
+      chrome_bytes += length($0) + 1
+      if (chrome_lines > chrome_max_lines || chrome_bytes > chrome_max_bytes) { bail=8; exit 8 }
       next
     }
     if (!started) { next }
-    if ($0 == begin) { exit 3 }
+    if ($0 == begin) { bail=3; exit 3 }
     if (ended) {
       if ($0 !~ /^[[:space:]]*$/) {
-        exit 6
+        bail=6; exit 6
       }
       next
     }
@@ -1028,153 +1345,44 @@ awk -v begin="$BEGIN" -v end="$END" '
     print $0
   }
   END {
-    if (!started) { exit 4 }
+    # A rule-level bail is AUTHORITATIVE: without this guard END rewrites it
+    # (exit 3 -> 5, exit 7/8 -> 2), so the emitted reason names the wrong failure.
+    if (bail) { exit bail }
+    if (!started) { exit 2 }
     if (!ended) { exit 5 }
   }
 ' "$PARSE_INPUT" > "$BLOCK_FILE"
 PARSE_RC=$?
 if [ "$PARSE_RC" -ne 0 ]; then
-  emit_no_verdict "response did not start with the expected wrapped block"
+  case "$PARSE_RC" in
+    2) emit_no_verdict "no derived BEGIN frame found in response" ;;
+    3) emit_no_verdict "duplicate derived BEGIN marker found inside capture" ;;
+    5) emit_no_verdict "frame began but derived END marker was never found" ;;
+    6) emit_no_verdict "trailing non-blank content after the derived END marker" ;;
+    7) emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
+    8) emit_no_verdict "leading chrome exceeded the budget (${CHROME_MAX_LINES} lines / ${CHROME_MAX_BYTES} bytes) before any derived BEGIN frame" ;;
+    9) emit_no_verdict "leading chrome echoed prompt/diff structure — the skipped prefix is held to the same leak rule as the block" ;;
+    *) emit_no_verdict "response did not start with the expected wrapped block" ;;
+  esac
 fi
 
-BLOCK_BYTES="$(wc -c < "$BLOCK_FILE")"
-if [ "$BLOCK_BYTES" -gt 16384 ]; then
-  emit_no_verdict "response wrapped block exceeded the fail-closed size cap"
+# The content battery (size cap, leak scan, VERDICT exactness, FINDINGS,
+# NO-FINDING-PROOF structure + tautology blacklist) lives in validate_review_block
+# — defined next to emit_no_verdict, shared VERBATIM with salvage. Only the locator
+# above (vocabulary-guarded chrome skip to the derived BEGIN) is main-rail-specific.
+if ! validate_review_block "$BLOCK_FILE"; then
+  emit_no_verdict "$BATTERY_FAIL_REASON"
 fi
-
-prompt_framing_leakage() {
-  awk '
-    BEGIN { found = 0 }
-    {
-      # Models sometimes structurally echo the framing inside a Markdown quote
-      # or an indented code block. Normalize only those structural prefixes and
-      # retain the exact-line checks; ordinary lexical use of the vocabulary is
-      # still permitted as a legitimate finding.
-      line = $0
-      sub(/^[[:space:]]*>[[:space:]]?/, "", line)
-      sub(/^[[:space:]]+/, "", line)
-      if (line ~ /^<<<AUTOPILOT-(REVIEW|END)-[0-9a-f]{32}>>>$/ \
-          || line ~ /^diff --git [^[:space:]]+ [^[:space:]]+$/ \
-          || line ~ /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ \
-          || line ~ /^Diff under review:[[:space:]]*$/ \
-          || line ~ /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ \
-          || line ~ /^<one finding per line>[[:space:]]*$/) {
-        found = 1
-      }
-      next
-    }
-    { next }
-    END { exit(found ? 0 : 1) }' "$BLOCK_FILE"
-}
-
-if prompt_framing_leakage; then
-  emit_no_verdict "response wrapped block contained prompt-text leakage"
-fi
-
-TOTAL_VERDICT_COUNT="$(awk 'BEGIN { c = 0 } /^VERDICT:/ { c += 1 } END { print c + 0 }' "$BLOCK_FILE")"
-FIX_VERDICT_COUNT="$(awk 'BEGIN { c = 0 } /^VERDICT: FIX-THEN-SHIP$/{ c += 1 } END { print c + 0 }' "$BLOCK_FILE")"
-SHIP_VERDICT_COUNT="$(awk 'BEGIN { c = 0 } /^VERDICT: SHIP-AS-IS$/{ c += 1 } END { print c + 0 }' "$BLOCK_FILE")"
-if [ "${TOTAL_VERDICT_COUNT:-0}" -ne 1 ] || (( FIX_VERDICT_COUNT + SHIP_VERDICT_COUNT != 1 )); then
-  emit_no_verdict "response wrapped block has no single valid anchored VERDICT line"
-fi
-
-if [ "$FIX_VERDICT_COUNT" -eq 1 ]; then
-  VERDICT="FIX-THEN-SHIP"
-elif [ "$SHIP_VERDICT_COUNT" -eq 1 ]; then
-  VERDICT="SHIP-AS-IS"
-else
-  emit_no_verdict "response wrapped block has no single valid anchored VERDICT line"
-fi
-
-HAS_FINDINGS="$(awk 'BEGIN { found = 0 } /^FINDINGS:/ { found = 1; exit } END { print found }' "$BLOCK_FILE")"
-if [ "$HAS_FINDINGS" != "1" ]; then
-  emit_no_verdict "response wrapped block missing a parseable FINDINGS line"
-fi
-FINDINGS="$(awk '
-  BEGIN { capture = 0; in_fence = 0 }
-  /^FINDINGS:/ {
-    capture = 1
-    sub(/^[[:space:]]*FINDINGS:[[:space:]]*/, "", $0)
-    if (length($0) > 0) {
-      print $0
-    }
-    next
-  }
-  !capture { next }
-  capture && /^```/ { in_fence = 1 - in_fence; next }
-  !in_fence && /^NO-FINDING-PROOF:/ { exit }
-  !in_fence && length($0) > 0 { print $0 }
-' "$BLOCK_FILE")"
-if [ -z "${FINDINGS:-}" ]; then
-  FINDINGS="none"
-fi
-
-PROOF_LINE_COUNT="$(awk '
-  BEGIN { c = 0; in_fence = 0 }
-  /^```/ { in_fence = 1 - in_fence; next }
-  !in_fence && /^NO-FINDING-PROOF:/ { c += 1 }
-  END { print c + 0 }
-' "$BLOCK_FILE")"
+VERDICT="$BATTERY_VERDICT"
+FINDINGS="$BATTERY_FINDINGS"
+# Proof handling notes (both battery-enforced; history preserved with the checks in
+# validate_review_block): SHIP proofs anchor on FIELD LABELS, not one separator
+# (2026-08-15 kimi period-separator lesson); a stray NO-FINDING-PROOF on a non-SHIP
+# verdict is IGNORED, never fatal (2026-08-15 MiniMax lesson — discarding a review
+# with real findings fails closed in the WRONG direction).
 NO_FINDING_PROOF=""
 if [ "$VERDICT" = "SHIP-AS-IS" ]; then
-  if [ "${PROOF_LINE_COUNT:-0}" -ne 1 ]; then
-    emit_no_verdict "SHIP-AS-IS requires exactly one anchored NO-FINDING-PROOF line"
-  fi
-  NO_FINDING_PROOF="$(awk '
-    BEGIN { in_fence = 0 }
-    /^```/ { in_fence = 1 - in_fence; next }
-    !in_fence && /^NO-FINDING-PROOF:/ {
-      sub(/^NO-FINDING-PROOF:[[:space:]]*/, "", $0)
-      print
-    }
-  ' "$BLOCK_FILE")"
-  # Anchor on the FIELD LABELS, not on one hard-coded separator.
-  #
-  # The old pattern demanded a literal `;` before both `evidence=` and
-  # `conclusion=`. Measured 2026-08-15: `kimi-code/k3` returned one of the most
-  # substantive proofs seen — eight named surfaces, seven numbered evidence items
-  # quoting actual code, an explicit conclusion — and was rejected as "empty
-  # fields" for one reason: it separated the last field with a period
-  # (`...no runtime behavior change. conclusion=Both gates...`) instead of a
-  # semicolon. A gate that discards a reviewer for punctuation, and that a
-  # reviewer is MORE likely to trip the more thorough its prose is, selects
-  # against the exact behaviour it exists to demand.
-  #
-  # So: any run of separator punctuation or whitespace is accepted, and the
-  # labels themselves carry the structure. Nothing else is relaxed — all three
-  # labels must still be present IN ORDER with non-empty content, and the
-  # tautology blacklist below is untouched. `checked=diff; evidence=none;
-  # conclusion=looks good` still fails, exactly as before.
-  if [[ ! "$NO_FINDING_PROOF" =~ ^checked=(.+)[[:space:]\;,.]evidence=(.+)[[:space:]\;,.]conclusion=(.+)$ ]]; then
-    emit_no_verdict "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"
-  fi
-  PROOF_CHECKED="$(printf '%s' "${BASH_REMATCH[1]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-  PROOF_EVIDENCE="$(printf '%s' "${BASH_REMATCH[2]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-  PROOF_CONCLUSION="$(printf '%s' "${BASH_REMATCH[3]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-  for PROOF_VALUE in "$PROOF_CHECKED" "$PROOF_EVIDENCE" "$PROOF_CONCLUSION"; do
-    PROOF_NORMALIZED="$(printf '%s' "$PROOF_VALUE" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:][:punct:]]*//; s/[[:space:][:punct:]]*$//')"
-    case "$PROOF_NORMALIZED" in
-      ""|none|"no finding"|"no findings"|"no must-fix"|"no must-fix remains"|n/a|na|checked|"all passed"|"looks good"|diff|tests|spec|code|"acceptance criteria"|"requirements satisfied")
-        emit_no_verdict "NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value"
-        ;;
-    esac
-  done
-else
-  # A non-SHIP verdict means the reviewer FOUND something. A stray
-  # NO-FINDING-PROOF line there is redundant noise, not a contract breach — and
-  # discarding the whole review over it fails closed in the WRONG direction: it
-  # turns "the reviewer found real problems" into "no verdict", which reads
-  # downstream as "did not clear" and silently drops the findings.
-  #
-  # Measured 2026-08-15: `MiniMax-M3` emitted `NO-FINDING-PROOF: not applicable;
-  # MUST-FIX present.` on 3 of 3 runs alongside well-formed MUST-FIX findings,
-  # and all three reviews were thrown away. Tightening the prompt wording was
-  # tried first and did not change the behaviour, so the prompt is not the lever.
-  #
-  # The line is ignored, never parsed, and never surfaced: `no_finding_proof`
-  # stays null for non-SHIP verdicts exactly as before. The gate that matters
-  # here is the findings block, which is validated independently above.
-  :
+  NO_FINDING_PROOF="$BATTERY_PROOF"
 fi
 
 printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s }\n' \

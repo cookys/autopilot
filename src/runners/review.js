@@ -20,6 +20,12 @@ const REVIEW_RESULT_FIELDS = [
   'error',
   'usage',
 ];
+// Optional, non-authoritative columns. `unratified_verdict` (verdict-bytes
+// preservation, v2.34.33) records a transport-destroyed but content-verified
+// verdict for HUMAN adjudication only — it is never copied into `verdict` or
+// `status`, and non-null is admitted only on status:no_verdict. Consumers deriving
+// authority from it are rejected by the check-canonical-invariants reader guard.
+const REVIEW_RESULT_OPTIONAL_FIELDS = ['unratified_verdict'];
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
 const NO_FINDING_TAUTOLOGIES = new Set([
@@ -88,8 +94,17 @@ function validateReviewResult(value) {
     }
   }
   for (const field of Object.keys(value)) {
-    if (!REVIEW_RESULT_FIELDS.includes(field)) {
+    if (!REVIEW_RESULT_FIELDS.includes(field) && !REVIEW_RESULT_OPTIONAL_FIELDS.includes(field)) {
       throw new Error(`review output JSON has unknown field: ${field}`);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'unratified_verdict')) {
+    if (value.unratified_verdict !== null
+      && !['SHIP-AS-IS', 'FIX-THEN-SHIP'].includes(value.unratified_verdict)) {
+      throw new Error('review output JSON unratified_verdict must be SHIP-AS-IS, FIX-THEN-SHIP, or null');
+    }
+    if (value.unratified_verdict !== null && value.status !== 'no_verdict') {
+      throw new Error('review output JSON unratified_verdict must be null unless status is no_verdict');
     }
   }
   if (typeof value.runner !== 'string' || value.runner.length === 0) {

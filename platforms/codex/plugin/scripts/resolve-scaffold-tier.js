@@ -7,21 +7,28 @@
  * references/scaffold-tiers.md — the single canonical home).
  *
  * Maps {runner, model, role[, effort]} to a scaffold tier from recorded qualification
- * evidence. FAIL-CLOSED: T2 (maximum scaffolding) for missing, unknown, stale,
- * conflicting, or malformed evidence — tiers are earned, never assumed.
+ * evidence. FAIL-CLOSED: T2 (maximum scaffolding) for missing, unknown, requalify-
+ * required (mechanical no-confidence threshold, never a date), conflicting, or
+ * malformed evidence — tiers are earned, never assumed.
  *
  *   T0  fresh + complete qualification for this role  (contract-only prompt)
  *   T1  fresh + partial  qualification for this role  (contract + obligation checklist)
  *   T2  everything else                                (full prescribed process)
  *
  * Evidence source: the engine scorecard (~/.autopilot/engine-scorecard/scorecard.jsonl),
- * the house qualification record written by engine-qualify. Freshness follows the
- * canonical rule in references/scaffold-tiers.md: the record's own `expires` field is
- * the cutoff, and a record without one is STALE (fail-closed) — house rows have
- * carried `expires` since the first onboarding run. Within this one source the
- * LATEST fresh row per tuple is authoritative — an append-only store accumulates
- * requalification history, and supersession is not disagreement. The canonical
- * conflicting→T2 rule concerns two SOURCES disagreeing; it applies once
+ * the house qualification record written by engine-qualify. FRESHNESS IS EVIDENCE-
+ * DERIVED, NEVER CALENDAR-DERIVED (BLOCKER 2, 2026-08-22 review repair — the fourth
+ * calendar tooth on a production path; Board ruling: "同一個模型不需要日期授權" /
+ * references/strike-decay.md). A row is "fresh" when the SEAT's (engine+runner+role)
+ * strike-decay admission projection — the SAME projection scripts/engine-scorecard.js
+ * computes for every other admission consumer (resolve-review-loop.sh,
+ * dispatch-contract.js) — is `qualified` (i.e. NOT `requalify_required`, and not
+ * `no_record`). `expires` is never compared to `now` anywhere below; a past-expires
+ * qualified row stays T0/T1-eligible and an expiry-less row is no longer punished for
+ * lacking a date. Within this one source the LATEST admission-fresh row per tuple is
+ * authoritative for QUALITY (complete/partial/unqualified) — an append-only store
+ * accumulates requalification history, and supersession is not disagreement. The
+ * canonical conflicting→T2 rule concerns two SOURCES disagreeing; it applies once
  * engine-capability-state joins as the higher-precedence input. Imported/provisional
  * priors never lift above T2. Malformed lines are skipped (and can only push toward
  * T2, never away from it).
@@ -61,6 +68,45 @@ if (!Number.isFinite(now)) usage('--now must be ISO-8601');
 const storePath = args.scorecard
   || path.join(os.homedir(), '.autopilot', 'engine-scorecard', 'scorecard.jsonl');
 
+// BLOCKER 2: reuse scripts/engine-scorecard.js's admission projection (the ONLY
+// admission authority per references/strike-decay.md) rather than a third hand-rolled
+// copy of the fold. That module resolves its own store paths from
+// ENGINE_SCORECARD_DIR/ENGINE_CAPABILITY_DIR at REQUIRE time, so ENGINE_SCORECARD_DIR
+// is pinned here to this process's own --scorecard directory BEFORE the require —
+// guaranteeing the projection reads the exact same store this file's local match-scan
+// below reads, never a stray inherited env var. ENGINE_CAPABILITY_DIR (the strikes
+// store) is left to the caller/environment, exactly like every other admission
+// consumer (resolve-review-loop.sh, dispatch-contract.js).
+process.env.ENGINE_SCORECARD_DIR = path.dirname(storePath);
+let engineScorecard = null;
+try {
+  // eslint-disable-next-line global-require
+  engineScorecard = require('./engine-scorecard');
+} catch {
+  // Requiring it is impractical only if the module itself is broken/missing — that
+  // is itself a fail-closed condition (seatAdmission stays null below => T2).
+  engineScorecard = null;
+}
+
+// Seat-level (engine+runner+role — NOT effort-scoped, per strike-decay.md's pair
+// scoping) admission projection, computed ONCE. `args.model` is the same vendor
+// engine identity dispatch-hetero.sh hands to `--engine` at the strike writer
+// (scripts/dispatch-hetero.sh seat_strike_capture) and to this script's own
+// `--model` — same seat, same token.
+let seatAdmission = null;
+if (engineScorecard) {
+  try {
+    const engineTok = engineScorecard.engineToken(args.model);
+    const runnerTok = engineScorecard.seatToken(args.runner);
+    const roleTok = engineScorecard.normalizeRole(args.role, { allowLegacy: true });
+    if (engineTok && runnerTok && roleTok) {
+      seatAdmission = engineScorecard.computeSeatProjection(engineTok, runnerTok, roleTok, now).projection;
+    }
+  } catch {
+    seatAdmission = null; // fail closed — no admission info => not fresh
+  }
+}
+
 function emit(tier, rationale, refs) {
   process.stdout.write(`${JSON.stringify({
     tier,
@@ -69,7 +115,7 @@ function emit(tier, rationale, refs) {
     inputs: {
       runner: args.runner, model: args.model, role: args.role,
       effort: args.effort || null,
-      scorecard: storePath, freshness: 'record-expires',
+      scorecard: storePath, freshness: 'seat-admission-projection',
     },
   }, null, 2)}\n`);
   process.exit(0);
@@ -98,9 +144,13 @@ if (matches.length === 0) {
   emit('T2', `no qualification row for ${args.runner}/${args.model} role=${args.role}${malformed ? ` (${malformed} malformed line(s) skipped)` : ''} — fails closed`, []);
 }
 
-function isFresh(row) {
-  const t = Date.parse(row.expires || '');
-  return Number.isFinite(t) && t > now;
+// BLOCKER 2 fix: fresh = the SEAT's admission projection says `qualified` — never a
+// per-row `expires` comparison. `row` is accepted for signature symmetry with the old
+// per-row predicate and because a future per-row admission source could need it, but
+// admission_status is a SEAT property (engine+runner+role), identical for every row
+// sharing that tuple, so every row here shares the same verdict.
+function isFresh(_row) {
+  return !!seatAdmission && seatAdmission.admission_status === 'qualified';
 }
 function isImportedPrior(row) {
   return row.version_source === 'imported' || row.provisional === true
@@ -126,7 +176,7 @@ if (fresh.length === 0) {
   emit('T2',
     priors.length === matches.length
       ? 'only imported/provisional priors exist — priors never lift above T2'
-      : 'qualification evidence exists but is stale (expired or expiry-less) — fails closed',
+      : 'qualification evidence exists but the seat currently requires requalification (mechanical no-confidence threshold) or has no admissible baseline — fails closed (calendar dates are advisory only, never decide authority)',
     refs(matches));
 }
 

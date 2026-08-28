@@ -177,17 +177,31 @@ REACTING too fast, not from seeing too little):
    The leaf dispatches need nothing extra — their run manifests are already
    emitted by `dispatch-hetero.sh`/`dispatch-review.sh`.
 3. **Depth-0 arms ONE watcher** right after dispatch:
-   `node scripts/watch-foreman.js --ledger <path> --root <foreman-run-id>` behind the Monitor tool
-   (CC; `persistent: false`, timeout ≈ expected run length) — events: `STAGE`
-   (deliverable transitions), `LEAF_START/LEAF_END` (hetero dispatches), `QUIET` /
-   `LEAF_STALL` (silence beyond `--quiet-secs`, default 600). Non-CC fallback:
-   run the same tool with `--once` as a manual snapshot poller.
+   `node scripts/watch-foreman.js --ledger <path> --root <foreman-run-id>` as a
+   background process whose **completion / event lines wake depth-0 via the host
+   task-notification** (not a Monitor sleep loop, not a `sleep` poller). Events:
+   `STAGE` (deliverable transitions), `LEAF_START/LEAF_END` (hetero dispatches),
+   `QUIET` / `LEAF_STALL` (silence beyond `--quiet-secs`, default 600). Non-CC
+   fallback: run the same tool with `--once` **once at a stage boundary** (a
+   snapshot, not a polling loop).
 4. **Report-only discipline** (R6): `QUIET`/`LEAF_STALL` are observations,
    never verdicts. Cross-check first (`dispatch-status.js --run <id>`, ledger
    tail, git activity); a quiet foreman is usually doing between-turns work;
    NEVER grab a stage the foreman holds a lease on — escalate to the user if
    genuinely wedged (`run-ledger.sh resume` is the recovery path, and only
    after the foreman is confirmed dead).
+
+   HONEST BOUNDARY (LIVENESS): a `CONDITION ... dead reason=owner_absent` line
+   means only that the recorded lease PID has exited — for a CC-native
+   foreman that is the EXPECTED shape seconds after every `stage-acquire`
+   (the acquiring shell records its own PID and exits immediately; the
+   foreman keeps running as a separate agent turn, not as that shell's
+   child), not evidence the foreman died. The line self-flags this
+   (`note=pid_liveness_unreliable_for_cc_native`) — treat `dead` as
+   "confirmed foreman dead" only for a runner whose owning process stays
+   resident for the stage (a long-lived CLI/daemon runner), and for a
+   CC-native foreman fall back to git activity / `dispatch-status.js` before
+   escalating to `run-ledger.sh resume`.
 5. **Advisory directive channel (Phase 2 — nudge, never seize).** Depth-0 may
    queue a one-way *advisory* nudge to a running stage's lease holder — it does
    NOT auto-kill, does NOT grab the lease, and never overrides the holder's
@@ -197,9 +211,10 @@ REACTING too fast, not from seeing too little):
    that stage has no live lease (you cannot nudge a stage nobody holds); the
    directive binds to the lease's current generation. Foreman duty (in the
    prompt, non-optional): **at every stage boundary — before `stage-acquire` of
-   the next stage — poll your own directives** (`run-ledger.sh directive-poll
+   the next stage — read your own directives once** (`run-ledger.sh directive-poll
    --ledger <path> --run-id <foreman-run-id> [--stage <stage>]`) and honor +
-   record any pending guidance, then ack it. Reachability differs by runner —
+   record any pending guidance, then ack it. Do not loop `directive-poll` while
+   waiting on a leaf. Reachability differs by runner —
    see [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md)
    § Directive reachability: pi-rpc = mid-run steer; a CC foreman = stage
    boundary; one-shot batch runners = only the NEXT round's dispatch. The
@@ -334,13 +349,13 @@ agy is the deferred `stream-json` rail (spike-gated, NOT built — see
 [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md) § "Deferred").
 
 **A background foreman that yields its turn to wait on its OWN background child (e.g.
-a long `engine implement-review` run) is NOT auto-woken.** When that child completes,
-depth-0 receives the completed notification and MUST `SendMessage` the foreman to
-resume it — nothing else revives a foreman parked behind its own sub-dispatch. Prefer
-to head this off in the foreman brief: instruct it to **wait with a blocking primitive**
-(a high-timeout foreground `Bash`, or `TaskOutput` block on the child) rather than
-yielding, and — if it must yield the turn — to first write out each unit's status and
-the concrete next step so depth-0 can resume it deterministically.
+a long `engine implement-review` run) is NOT auto-woken unless the host delivers a
+task-notification.** Canonical wait: dispatch the leaf with `run_in_background` /
+child `Agent`, **end the turn**, and resume only on that notification (or a depth-0
+`SendMessage` if the host parked the foreman). Forbidden: `sleep` loops, `cat`/`tail`
+of `<session>/tasks/<id>.output` into the foreman context, Monitor-waiting on a leaf.
+Leaves return a schema-typed criteria table; raw leaf output never enters the
+foreman prompt. Foreman Bash count cap: 40 (gate: `scripts/check-foreman-polling.js`).
 
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 
@@ -476,12 +491,13 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
 - Pick a wall-clock deadline and a round cap before dispatch (a small fixed
   default, e.g. 30 min / 3 rounds, scaled to task size). **Token-estimate budget
   is deferred** (needs a counting source — Open Q3).
-- `Monitor` arms the deadline by emitting on a timer, not via a built-in clock —
-  e.g. `Monitor(command: "sleep 1800; echo DEADLINE_HIT", timeout_ms: 1900000)`;
-  when the `DEADLINE_HIT` event fires you `TaskStop` the foreman if still running.
-  (Cancel the guard with `TaskStop <monitor-id>` once the foreman returns normally,
-  else it fires a harmless stale event at the cap.) The wall-clock itself is plain
-  depth-0 timing (no new primitive).
+- Arm the deadline with a **one-shot background Bash**, not a Monitor sleep loop —
+  e.g. `Bash(command: "sleep 1800; echo DEADLINE_HIT", run_in_background: true)`;
+  when the `DEADLINE_HIT` notification wakes you, `TaskStop` the foreman if still
+  running. (Kill the background timer once the foreman returns normally, else it
+  fires a harmless stale event at the cap.) The wall-clock itself is plain
+  depth-0 timing (no new primitive). Foremen must not use this timer to wait on
+  leaves.
 - **On timeout or cap-hit, judge by git artifacts BEFORE acting.** Read the foreman
   worktree branch's commit progress (`git -C <worktree> log`), **never the foreman's
   self-report**, to decide whether it is healthily advancing. Healthily progressing →
@@ -525,8 +541,10 @@ Use this 7-step recovery sequence:
    where `buffer_secs` avoids exact-boundary wake and `jitter_secs` reduces herd
    collisions on shared accounts.
 4. Schedule the wakeup using one of the real wakeup primitives:
-   - Primary: `Monitor` one-shot timer, e.g.
-     `Monitor(command: "sleep ${delay}; echo QUOTA_WAKEUP", timeout_ms: ...)`
+   - Primary: one-shot `Bash(run_in_background: true)` timer, e.g.
+     `Bash(command: "sleep ${delay}; echo QUOTA_WAKEUP", run_in_background: true)`
+     — the host task-notification wakes the session; do not Monitor-loop or
+     poll from a live turn.
    - Alternate portability path: `"/loop"` with a self-throttled checkpointed prompt
      that waits until `now >= wake_at` before leaving reset mode.
 5. On wakeup, run the **separate probe budget** first against the endpoint that maps to
@@ -612,6 +630,24 @@ tier**. Pass the diff's risk inputs (size, protected-path, oracle-available, sec
 and a cross-family panel are mandatory — enforce with `resolve-review-loop.sh --enforce` (exit 3 on
 an unsatisfied high-risk gate). This hardens HONEST-but-WEAK implementers only — NOT a malicious
 worker (see the test-integrity isolation BACKLOG).
+
+**Two operating rules the panel itself will not enforce for you** (both learned by hitting them,
+2026-08-27):
+
+- **Pre-check the reviewer payload before you spend a dispatch.** `scripts/check-blind-evidence.sh
+  --payload <spec-file> --json` refuses a payload carrying implementer narrative (blind-evidence rule
+  K1). A spec that tells the panel what the author concluded — "the author decided X, judge it", "a
+  bypass was found and fixed here" — primes exactly what the blind rail exists to prevent, and
+  `dispatch-review.sh` will reject it as `precondition_failed` **after** you have queued the seat.
+  Write the questions without the answers, run the checker, then dispatch. State the open design
+  questions as questions the reviewer must answer *from the diff*, never as decisions to ratify.
+- **Reproduce every finding yourself before forwarding it.** A panel seat reports what it believes it
+  read; depth-0 owns what gets acted on. Reproducing takes minutes and does three things a forward
+  does not: it upgrades a Major to a Critical when the impact is worse than reported, it catches the
+  finding that is simply wrong (a NUL byte in a test fixture misread as a space, claimed to make the
+  suite "permanently red" — the suite was green), and it gives the implementer a command to re-run
+  rather than a claim to interpret. **Reject on the record**, with the evidence, rather than silently
+  dropping — an unadjudicated finding reappears next round.
 
 **The depth-0 qc is DISPATCHED, never the CEO eyeballing the diff inline.** A
 single self-read from the CEO's own context is itself only a first-pass and does

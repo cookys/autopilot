@@ -48,6 +48,27 @@ mkdir -p "$HOOK_TMPDIR"
 # different TMPDIR can still export its own after sourcing lib.sh.
 export TMPDIR="$HOOK_TMPDIR"
 
+# Same class of leak, one layer up (2026-08-22 incident). HOOK_HOME above exists
+# precisely because "~/.autopilot/* writes must be isolated", but HOME is only
+# handed to hook children — a test that invokes scripts/*.sh directly still lets
+# the SCRIPT resolve its store from the real os.homedir(). That is how
+# dispatch-hetero.sh's seat_strike_capture wrote 46 fixture strike rows into the
+# operator's ~/.autopilot/engine-capability/strikes.jsonl across three separate
+# suites (dispatch-hetero, and the dispatch-lineage family found only on a second
+# sweep). Patching suites one at a time kept missing one, so isolate the stores
+# GLOBALLY here — the same reasoning, and the same fix, that TMPDIR got above.
+# A suite needing a different store can still export its own after sourcing lib.sh
+# (several do, for case-specific fixtures).
+#
+# Note this is a floor, not a substitute for asserting: a store env var that is set
+# but never checked is indistinguishable from one that is ignored. Suites that
+# actually dispatch also assert the real store's size is unchanged.
+HOOK_ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"
+HOOK_ENGINE_SCORECARD_DIR="$TEST_TMP/engine-scorecard"
+mkdir -p "$HOOK_ENGINE_CAPABILITY_DIR" "$HOOK_ENGINE_SCORECARD_DIR"
+export ENGINE_CAPABILITY_DIR="$HOOK_ENGINE_CAPABILITY_DIR"
+export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
+
 write_mission_governance() {
   local target="$1"
   local mode="$2"
@@ -95,7 +116,43 @@ STUB
   chmod +x "$stub"
 }
 
-cleanup_test_tmp() { rm -rf "$TEST_TMP"; }
+# Best-effort liveness sidecar: hold an exclusive flock on
+# $TEST_TMP/.autopilot-live.lock for the lifetime of this test. This is what
+# lets a standalone `*.test.sh` run survive hooks/tests/lib/suite-residue-reap.sh
+# when it fires from a concurrently running suite in another shell — TEST_TMP
+# carries no dispatch-worktree marker or lock of its own, so without this the
+# reaper's lockless branch would `rm -rf` a live test's TEST_TMP out from under
+# it. Entirely best-effort: any failure here (no flock, no free fd, etc.)
+# leaves the test running exactly as before this lock was added.
+#
+# This `exec {fd}>>path` creates the lock FILE before the flock a few lines
+# down acquires it — the reaper's age gate on this exact open->flock gap
+# (AUTOPILOT_SUITE_REAP_MIN_AGE, hooks/tests/lib/suite-residue-reap.sh) is
+# what makes this window safe rather than a race the reaper could win.
+__TEST_LIVE_LOCK_PATH="$TEST_TMP/.autopilot-live.lock"
+__TEST_LIVE_LOCK_FD=""
+# NOTE: `exec {fd}>>path` with no command applies ALL its redirections
+# (including a same-line `2>/dev/null`) PERMANENTLY to this shell — that
+# would silently blackhole every later stderr in the test (assertion
+# diagnostics, -x traces, everything). Wrapping the bare `exec` in a `{ ; }`
+# group scopes the group's own `2>/dev/null` to the group only (restored
+# after), while the fd the exec opens still escapes the group and persists,
+# which is exactly the behavior wanted here.
+if { exec {__TEST_LIVE_LOCK_FD}>>"$__TEST_LIVE_LOCK_PATH"; } 2>/dev/null; then
+  if ! flock -n "$__TEST_LIVE_LOCK_FD" 2>/dev/null; then
+    { exec {__TEST_LIVE_LOCK_FD}>&-; } 2>/dev/null || true
+    __TEST_LIVE_LOCK_FD=""
+  fi
+else
+  __TEST_LIVE_LOCK_FD=""
+fi
+
+cleanup_test_tmp() {
+  if [ -n "$__TEST_LIVE_LOCK_FD" ]; then
+    { exec {__TEST_LIVE_LOCK_FD}>&-; } 2>/dev/null || true
+  fi
+  rm -rf "$TEST_TMP"
+}
 trap cleanup_test_tmp EXIT
 
 # Some legacy dispatch integration tests exercise behavior after the engine-admission

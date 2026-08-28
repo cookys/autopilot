@@ -75,11 +75,14 @@ function createPanelManifest({
       seat.transport_status = null;
       flush();
     },
-    seatSettle(seatId, { status, transportStatus }) {
+    seatSettle(seatId, { status, transportStatus, unratifiedAvailable }) {
       const seat = seatOf(seatId);
       if (!seat) return;
       seat.status = status;
       seat.transport_status = transportStatus || null;
+      // Display-only marker: a failed seat left a content-valid but transport-
+      // unratified payload behind (human adjudication candidate). Never authority.
+      if (unratifiedAvailable !== undefined) seat.unratified_available = Boolean(unratifiedAvailable);
       seat.ended_at = stamp();
       flush();
     },

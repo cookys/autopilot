@@ -239,6 +239,18 @@ OUT="$(bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXI
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 on clean payload"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check reports clean payload"
 
+# D6 mirror parity, made concrete: the schema<->shell enum reconciliation AND the
+# properties/x-field-order/required three-way equality run FROM INSIDE the
+# generated package, against its own mirrored schema/shell — not just diffed
+# byte-for-byte against canonical above. A drift here would mean the mirror's
+# check-contract-schema.js and its mirrored schema/shell disagree with each
+# other even while every file is byte-identical to canonical individually
+# (e.g. a partial hand-edit inside the package only).
+MIRROR_CONTRACT_OUT="$(node "$PLUGIN_DIR/scripts/check-contract-schema.js" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "Codex plugin mirrored check-contract-schema.js exits 0 from inside the generated package"
+assert_contains "$MIRROR_CONTRACT_OUT" "contract-schema-ok" "Codex plugin mirrored contract-schema gate reports ok"
+assert_contains "$MIRROR_CONTRACT_OUT" "three-way equality" "Codex plugin mirrored contract-schema gate runs the three-way equality check"
+
 PROFILE_CATALOG_OUT="$(node "$PLUGIN_DIR/scripts/build-profile-payload.js" catalog \
   --check --repo "$PLUGIN_DIR" 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "Codex package validates its profile catalog from its own root"
@@ -361,6 +373,16 @@ for extra in brain-capability-evidence-corpus.json va-capability-evidence-corpus
   printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/$extra"
   cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
 done
+# implementer live-rail suite joined the sync list in v2.34.34 (the packaged
+# engine-qualify.js requires the generator/grader/corpus at load time and the
+# grader spawns the oracle driver .cjs).
+for extra in impl-eval-generator.js impl-eval-grader.js impl-oracle-driver.cjs; do
+  printf "'use strict';\n" > "$SYNC_SANDBOX/evals/$extra"
+  cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
+done
+printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/impl-capability-evidence-corpus.json"
+cp "$SYNC_SANDBOX/evals/impl-capability-evidence-corpus.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/impl-capability-evidence-corpus.json"
 mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example" \
   "$SYNC_SANDBOX/platforms/codex/skill-adapters"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"

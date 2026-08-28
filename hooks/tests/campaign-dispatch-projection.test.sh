@@ -19,7 +19,9 @@ printf '## Strict bridge\nFrozen authority.\n' > "$REPO/docs/plans/spec.md"
 printf 'required\n' > "$REPO/required.txt"
 printf '%s\n' \
   '- implementer_engine: gpt-5.3-codex-spark' \
-  '- implementer_runner: codex' > "$REPO/.claude/review-loop-config.md"
+  '- implementer_runner: codex' \
+  '- reviewer_engine: claude-opus' \
+  '- reviewer_runner: claude-native' > "$REPO/.claude/review-loop-config.md"
 git -C "$REPO" add .
 git -C "$REPO" commit -qm "base"
 BASE="$(git -C "$REPO" rev-parse HEAD)"

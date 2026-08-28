@@ -123,6 +123,17 @@ check_sync_agent_bodies() {
   bash "$REPO/scripts/sync-all.sh" --check --only sync-agent-bodies >/dev/null 2>&1
 }
 
+# ─── 7b. every tracked .js parses ───
+# NOTE (2026-08-27): this file runs NAMED rituals via --only, so a new row in
+# sync-manifest.json is NOT picked up here automatically — only CI (full
+# sync-all.sh --check) and the pre-commit hook (--check --changed) get it for
+# free. A syntax gate that skipped the portability preflight would be exactly the
+# "wired in but switched off" failure CLAUDE.md warns about, so it is named
+# explicitly. Add an --only line here whenever a ritual must gate this preflight.
+check_js_syntax() {
+  bash "$REPO/scripts/sync-all.sh" --check --only check-js-syntax >/dev/null 2>&1
+}
+
 # ─── 8. .agents/skills symlink physically resolves ───
 check_agents_skills_symlink() {
   [ -L "$REPO/.agents/skills" ] || return 1
@@ -261,6 +272,7 @@ run_check "session-start.js emits hookSpecificOutput envelope when env set" chec
 run_check "session-start.js emits additional_context envelope when env unset" check_session_start_plain_envelope
 run_check "sync-version.js --check: canonical & mirrors in sync" check_sync_version
 run_check "sync-agent-bodies.sh --check: agent-bodies/ in sync with agents/" check_sync_agent_bodies
+run_check "check-js-syntax.js: every tracked .js/.cjs/.mjs parses" check_js_syntax
 run_check ".agents/skills symlink resolves to ../skills (target exists)" check_agents_skills_symlink
 run_check ".agents/skills adapter targets CARRY their name: invariant (≥2 seeds)" check_adapter_targets_carry_invariant
 run_check "scripts/validate.sh: all skills pass structural validation" check_validate_skills

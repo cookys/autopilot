@@ -1,5 +1,1130 @@
 # Changelog
 
+## v2.34.46 — execution-oracle lock for parallel suite runs, an honest liveness caveat, consult/discuss qualification wave 1
+
+**Suite execution-oracle lock** (new: `hooks/tests/lib/suite-oracle-lock.sh`, sourced by `run.sh`):
+depth-0's exclusive ownership of the execution oracle was prose, not a lock — a second concurrent
+`hooks/tests/run.sh --parallel` full-suite run could silently interleave and corrupt shared `/tmp`
+state, and pgrep-by-command-name waiters could not tell the runs apart. A single well-known,
+action-keyed `flock` (not per-runner) now gates the `--parallel` action; a second concurrent holder
+refuses fast, naming the first holder's run id — never a command name.
+`AUTOPILOT_SUITE_ORACLE_LOCK=0` opts out. A follow-up hardening pass closed 5 🟠 findings from
+hetero review "sol": a publication race where a contender's flock could fail an instant before the
+holder finished writing its owner sidecar (bounded 3×100ms retry, honest "not yet published"
+fallback, never fabricates); the lock fd leaking into `--parallel` worker subshells via plain fork
+(bash sets no close-on-exec), letting an orphaned worker outlive a SIGKILLed suite and hold the
+flock via its inherited duplicate (worker subshell now closes its inherited copy at launch); every
+infra-error path (helper unavailable, non-directory TMPDIR, open/publish failure, identity
+mismatch) used to warn and run unguarded — now fails closed (rc 2, distinct from rc 1 contention)
+via a shared refusal helper that always names `AUTOPILOT_SUITE_ORACLE_LOCK=0` as the one remaining
+bypass; post-`flock` fd-to-path identity revalidation (`flock()` has no atomicity guarantee with
+the preceding `open()`) with one retry before failing closed; and sidecar owner-identity
+publication now goes through an atomic same-directory `mktemp`+rename that refuses a pre-existing
+symlink or foreign-owned target instead of following/clobbering it. Planted negatives verified for
+3 of the 5 findings (revert → confirmed red → restore → confirmed green, twice each).
+`hooks/tests/suite-oracle-lock.test.sh`: 32/32 assertions (new test file). No regression in
+`suite-residue-reaper.test.sh` (51/51) or `watch-foreman.test.sh` (22/22).
+
+**`watch-foreman.js` honest `owner_absent` caveat**: a `CONDITION ... dead reason=owner_absent` line
+is the EXPECTED shape seconds after every `stage-acquire` for a CC-native foreman — the acquiring
+shell records its own PID and exits immediately, the foreman keeps running as a separate agent
+turn, not as that shell's child — not evidence the foreman died. The emitted line now self-flags
+this with `note=pid_liveness_unreliable_for_cc_native`; the HONEST BOUNDARY caveat in
+`skills/ceo-agent/references/level-front-door.md` moved from watch-tree lineage coverage onto
+stage-lease liveness (§4, where a reader decides whether to escalate), naming the fallback (git
+activity / `dispatch-status.js`) before reaching for `run-ledger.sh resume`. Mirrored to
+`platforms/codex/plugin/`.
+
+**consult/discuss qualification, wave 1** (`docs/plans/2026-08-28-consult-discuss-qualification.md`,
+D1/D2/D6 of the frozen 10-deliverable DAG — D3-D5 and D7-D10 remain wave 2, not attempted here):
+D1 ships the consult exam — a 20-case corpus (5 families × 2 cases × 2 trials), generator, grader,
+closed response schema, mechanical oracles, planted deviants with matching mutation controls, and
+frozen rubric/corpus seals. D2 ships the discuss exam on the same shape — 16 cases (4 families × 2
+cases × 2 trials), one-shot transcript-contribution semantics, `axis_id` + `claim_vector` binding,
+and a symmetry control. D6 wires the `consult_dispatch`/`discuss_dispatch` roster switches
+(default **off**) end-to-end — schema, shell resolver, JS resolver, template, roster fixtures,
+codex mirror — with schema three-way equality (properties/x-field-order/required) and default-off
+parity gates; D6 acceptance step 6 (behavioral parity through the real `dispatch-consult.sh` /
+`dispatch-discuss.js` wrapper entry points, D8/D9) is explicitly deferred and documented as such
+rather than faked as a pass. Two rounds of cross-family hetero review (gpt-5.6-sol via codex; 8
+🟠 findings total, all accepted and closed) then a depth-0 panel: fresh MiniMax-M3 SHIP-AS-IS,
+7/7 mutation controls verified red. Round-1 findings closed cross-channel confident-signal leaks in
+both graders (a response could smuggle a competing answer or escalation phrase through
+`aside`/`authority.reference` and still pass C2/C4 exclusivity) and pinned the D6 baseline to two
+frozen pre-D6 golden fixtures instead of a moving `origin/develop` ref. Round-2 findings closed the
+remaining axis-contamination gap in the discuss grader's D-a/D-b families, added canonical
+verdict-token coverage across every checkable channel in both graders, and made D6's "on + empty
+seat tuple" case exit 3 across all four surfaces per the plan's tuple-integrity rule.
+
+**BACKLOG hygiene**: retired the two shipped entries this release's suite-oracle-lock and
+owner_absent-caveat work closed (`docs/BACKLOG.md`).
+
+prose-justification: this release adds 12 lines under `skills/` — the `owner_absent` HONEST
+BOUNDARY caveat relocated onto stage-lease liveness in
+`skills/ceo-agent/references/level-front-door.md`. It is a correction of an existing caveat's
+placement (moved, then expanded with the concrete CC-native-foreman mechanism and the
+git-activity/`dispatch-status.js` fallback), not new skill teaching text or a rewritten skill;
+the per-skill ratchet is unaffected. Everything else this release touches
+(`hooks/tests/lib/suite-oracle-lock.sh`, `evals/consult-*`, `evals/discuss-*`) is engine or test
+surface, not prose.
+
+## v2.34.45 — suite-residue reaper hardened, dispatch-rail sourcing fail-closed, an implementer ladder
+
+Nine fixes/hardenings and two new capabilities, spanning two sessions.
+
+**Suite-residue reaper** (new: `hooks/tests/lib/suite-residue-reap.sh`, sourced by `run.sh`):
+`hooks/tests/run.sh --parallel` deterministically stranded `hetero-*-log-*` files, sandbox
+roots and manifests on every run, plus scratch dirs and dispatch worktrees on interrupt — the
+mechanism behind the 82 worktrees / 627 manifests recorded in BACKLOG. The reaper runs before
+every suite and again from a top-level EXIT trap. Liveness is judged by `flock`, never by cwd
+or age alone; a directory with no lock file is an unknown and an unknown never authorizes
+deletion. A follow-up hardening pass then closed 7 adversarial-QC findings on the first cut:
+a TOCTOU race between `open()` and `flock()` on a lock file (closed with a minimum-age gate,
+default 60s), `hetero-*` worktree removal now goes through `git worktree remove --force` (was
+a raw `rm -rf`, leaving dangling `.git/worktrees/` admin entries), the lockless-deletion "no
+other live run" check is re-evaluated fresh before each deletion instead of once upfront,
+`run.sh`'s interrupt trap now signals a killed worker's whole process-group subtree (job
+control via `set -m`) and forwards the received signal instead of always sending SIGTERM, and
+the manifest dir is rejected if it's a symlink whose realpath escapes the canonical tmp root.
+92 assertions across the two suites, with planted-negative sanity confirming the gates are
+load-bearing (`AUTOPILOT_SUITE_REAP=0` kill switch).
+
+**Dispatch-rail fail-closed sourcing** (`dispatch-review.sh`, `dispatch-hetero.sh`):
+`dispatch-review.sh` sourced `lib/cursor-model.sh` fail-open (`[ -r ... ] && . ... || true`)
+while `dispatch-author.sh`/`dispatch-hetero.sh` sourced it unconditionally — a missing or
+unreadable lib silently disabled the cursor-family-alias rejection guard instead of failing
+the dispatch. Now hard-errors before argument parsing, and a follow-up closed the remaining
+gap: the sourcing call's own exit status went unchecked, so a lib that sourced but `return`ed
+nonzero (or vanished in the TOCTOU window between the readability check and the `.`) fell
+through the same way. `dispatch-hetero.sh` also restated the alias vocabulary as a literal
+`grok46|codex53` case pattern instead of deriving it from `lib/cursor-model.sh`'s single
+source of truth — fixed, with a new reconciliation lint that fails if any `dispatch-*.sh`
+wrapper restates that literal again.
+
+**`validate-json-schema.js`**: non-integer JSON numbers (ratios, scores) were rejected
+outright — no artifact carrying a `capability_score` could be schema-validated at all. Now
+accepts a non-integer literal iff it round-trips losslessly (parse to a double, re-serialize,
+exact byte match against the source), and a hetero-review follow-up closed a sign-loss gap:
+`-0` took the integer branch and `JSON.stringify(-0) === '0'` silently dropped the sign, so
+`-0` is now rejected explicitly at both the file-preflight and in-memory boundaries.
+`build-qualification-defaults.js` no longer normalizes `capability_score` to a string
+workaround; it ships as a real JSON number again, `adopt-qualification-defaults.js` drops the
+matching `Number()` conversion on adoption, and `references/official-qualification-defaults.json`
+was regenerated and re-validated.
+
+**`doc-drift-gate.js`**: was walking live `.claude/worktrees/agent-*/` nested git worktrees
+and resolving their `scripts/...` refs against the wrong root, producing false FAILs whenever
+a session had a live agent worktree. Any subdirectory that is itself a git worktree/repo root
+is now skipped at the single choke point that feeds every check (links/fences/script-refs).
+
+**Implementer ladder** (new: `src/engine/implementer-ladder.js`, feature): optional
+`implementer_ladder` (engine/effort@runner rungs) plus a campaign `unit_class` selects the
+starting rung; each red-repair generation climbs to the next rung, then falls through to
+existing convergence adjudication once the top rung is reached. Absent ladder is a no-op.
+Adds an `implementer_ladder` field to `resolve-review-loop.sh`'s JSON output and the
+review-loop contract schema.
+
+**Foreman no-polling gate** (new: `scripts/check-foreman-polling.js` + test): foreman wait is
+notification-only per the l4/l5/l6 hard rule — `Monitor(sleep)` and raw-transcript polling
+(`cat`/`tail`/`sed -n`/`head` on `/tasks/*.output`, or 3+ `sleep N` (N≥30) calls) in the
+foreman's own transcript now fails the depth-0 harvest gate. A follow-up distinguished
+foreground from background sleep: a `sleep` inside `run_in_background` is not polling and is
+now exempted from the gate.
+
+**Fixes/hygiene**: `resolve-review-loop.test.sh` had a swapped-argument `assert_eq` call
+(inverting its expected/actual failure labels) and a stale `EXPECTED_KEYS` constant that
+predated the implementer-ladder's new `implementer_ladder` output key — both fixed, 313/313
+assertions passing. Codex mirror (`platforms/codex/plugin/`) resynced after the
+knowledge-routing reference edits landed without a `sync-codex-plugin-skills.sh` run. BACKLOG
+hygiene: retired the completed suite-residue entry, added two honest follow-ups (a still-open
+parallel-only flake and a known-incomplete symlinked-TMPDIR fallback in the reaper), and
+recorded foreman-polling / implementer-ladder ground truth from a real `/l4` run.
+
+**Plan doc**: `docs/plans/2026-08-28-consult-discuss-qualification.md` — consult/discuss role
+qualification suites plus a default-off config switch — reached APPROVED status after 2 review
+rounds (4 generations total, one round re-seated after a transport failure), 32 accepted
+findings folded in. Plan doc only; no code implemented against it in this release.
+
+prose-justification: this release's `skills/`+`references/` growth is knowledge routed out of
+local session memory into the durable repo per `references/knowledge-routing.md`, not skill
+teaching text growth — `references/evidence-discipline.md` (+97, a new §, promoted lessons),
+`skills/ceo-agent/references/level-front-door.md` (+68/-19, the notification-only no-polling
+rule and the implementer-ladder config surface), `references/qualification-defaults.md`
+(+30/-13, the restored-real-number `capability_score` documentation), and small
+`references/hetero-dispatch.md` / `skills/l4,l5,l6` foreman-polling-rule additions. None of it
+is a new skill or a rewritten one; the per-skill ratchet is unaffected.
+
+## v2.34.44 — the version binary got an owner, and a bad version now refuses the seat
+
+`qualification-sweep.sh` derived the `--runner-version` identity token by assuming the
+version binary is named after the runner, special-casing only `cc-shim` -> `claude`. For
+`runner: cursor` the binary is `cursor-agent`; plain `cursor` is the Cursor IDE launcher.
+It answers `--version` with `Error: No Cursor IDE installation found. …` on **stderr**, the
+sweep folded stderr in with `2>&1`, and the sanitizer only strips characters — so the error
+sentence became the deployment identity of a real, paid administration. `runner_version`
+is what decides whether qualification evidence still applies at Stage 4, so the row looked
+authoritative and could never match anything. Caught by operating the tool; the run was
+killed at 0 of 24 administration dispatches.
+
+Second instance of one root cause: a heterogeneous QC panel had already fixed the same
+wrong assumption in `probe-engine-capability.sh` (v2.34.42). It recurred because the
+mapping had no owner — every call site carried its own copy.
+
+Two layers, both new:
+
+- **The map has one owner.** `scripts/lib/runner-binary.js` holds runner → version-binary
+  for all ten supported runners, each entry recorded against how that runner is actually
+  invoked (`dispatch-hetero.sh` `*_BIN` defaults, `dispatch-review.sh` rails). Identity
+  entries are written out explicitly: `codex: codex` is a checked fact, a fallthrough is
+  an assumption. An unknown runner **refuses** — it never falls through to its own name,
+  which is the bug class itself. `src/readiness/probe.js` consumes the module and drops its
+  private copy; `probe-engine-capability.sh` keeps its case statement (per-runner presence
+  logic, not name mapping, already correct since v2.34.42).
+- **An unusable version aborts the seat, uncharged.** Resolution runs *before* credential
+  resolution and the Stage-0 probe, so a refused seat costs nothing at all. Refused:
+  unknown runner, binary not on PATH, `--version` exiting non-zero, output on stderr only
+  (the two streams are no longer folded), empty output, and anything not version-shaped.
+  "Version-shaped" is a positive grammar — a real version token within the first **two**
+  whitespace tokens of a short line that states no requirement or failure — not "contains
+  `digit.digit` somewhere"; the loose form still admitted diagnostics like `Cannot start:
+  requires Node 18.0`. ANSI colouring is stripped before validation and before
+  tokenization, so a token can never carry escape parameters. The shape and ANSI
+  tightenings came from a heterogeneous consult (`codex`/`gpt-5.6-sol`, high) on the
+  proposed rule; the position bound and the requirement/failure-word rejection came from
+  the first-pass QC panel on the same rail, which found that `Requires Node 18.0` and
+  `Node 18.0 required` still minted tokens — short requirement diagnostics with a genuine
+  version token near the front. The original fixture had hidden that: its `Cannot start:`
+  case is refused for an unrelated reason (its version token sits fifth), so the table
+  looked like it covered requirement diagnostics when it did not.
+
+Also: probe receipts record the **resolved** binary and its version line, not the runner
+token (`bin` was `command -v cursor` — `n/a` — and `bin_version` was the error sentence);
+`--plan` prints the version binary each seat will probe, so the mismatch is visible for
+free before anything is spent.
+
+Hardening found while self-reviewing the new resolver, on the surface that matters most —
+these values come from an arbitrary CLI's output. The four resolved fields are read with
+`read -r` rather than `eval`-ed, so a hostile or merely odd `--version` is not a
+code-execution surface; and the receipt's `bin`/`bin_version` pass through `receiptSafe()`
+(every C0/C1 control byte, `"` and `\` stripped), because they now carry real CLI output into a
+printf JSON template and a quote in a version banner would otherwise write an unparseable
+line into an append-only evidence file.
+
+A depth-0 QC panel then found two more, both reproduced before fixing. `receiptSafe()` had
+leaned on `\s+` to remove control characters, so it stripped only TAB/LF/VT/FF/CR — BEL, SOH,
+BS, SO, SUB, US, NUL, DEL and the C1 range survived, and six of those are not legal JSON
+string content. A version banner carrying one wrote a permanently unparseable line into the
+append-only receipt file, and the docstring claiming otherwise made it a false claim as well
+as a defect. Every C0/C1 byte is now replaced with a space — a space, not deletion, because
+deleting welds neighbours into a plausible-looking different version.
+
+And only the FIRST stdout line was validated, so `tool 1.2.3\nError: something failed` still
+minted `tool-1.2.3`. Lines after the first are now scanned too — but with the error/diagnostic
+subset of the grammar, not the whole of it, so benign provenance (`built from abc123`, a
+copyright line) still passes while a failure announcement refuses. A non-empty **stderr** with
+exit 0 deliberately does **not** refuse: the incident was caused by *reading* stderr as the
+version, and refusing to read it closes that completely; stderr says nothing about whether the
+positively-validated stdout token is right, and every roster runner is an npm-installed CLI
+that prints update notices there on a healthy run. It is reported (`stderr`,
+`stderr_nonempty`) rather than acted on, and a test pins the decision so it cannot be flipped
+silently. Rule shape and the stderr call were both confirmed on a heterogeneous consult
+(`codex`/`gpt-5.6-sol`, high).
+
+A third panel pass found that the tail scan's own bound failed OPEN: it stopped after 20
+lines and accepted what it had already seen, so `tool 1.2.3` + 22 benign lines +
+`Error: something failed` minted an identity while the same error at line 2 refused — the
+same error and the same exit code, with only its distance from the top deciding whether the
+guard looked. That is the original bug's shape (a value nobody checked becoming an identity),
+so the unlikeliness of a `--version` printing 20+ lines and then failing is beside the point.
+Every captured line is now scanned, and output longer than 200 lines is refused outright with
+its own reason (`version_output_unscannable_N_over_200`) so "too much output to vouch for"
+stays distinguishable from "an actual error line". The byte bound is now explicit too —
+overflow surfaces as spawnSync `ENOBUFS` and refuses.
+
+The rest of the module's bounds were audited in the same pass rather than one panel at a
+time: the line-length cap, the token-count cap, the version-token position bound and the
+probe timeout all already refuse, and the stderr truncation gates nothing. A test now pins
+that — every bound refuses rather than silently stopping.
+
+The regression oracle: `hooks/tests/runner-binary.test.sh` drives PATH stubs and asserts
+that a runner whose version probe emits an error string is **refused**, never recorded.
+
+prose-justification: this release adds **one** prose line net — a row in
+`skills/engine-onboarding/SKILL.md`'s script table for `scripts/lib/runner-binary.js`, which
+CLAUDE.md § "When adding a new script" requires. Measured: `git diff origin/develop --stat --
+skills/ references/` = 1 file, +2/-1. The +5% the gate reports is accumulated drift against the
+v2.34.35 baseline that crosses the threshold on this release rather than growth introduced by it;
+the engine surface is flat (Δengine=-5) because this change is script + test, not skill prose.
+
+## v2.34.43 — the roster gained roles, and an enum stopped pretending to be a gate
+
+Which heterogeneous engine serves which role is now configuration. `review-loop-config.md`
+gains a `consult` seat (a mid-run ad-hoc second opinion, previously hand-typed
+`dispatch-review.sh` argv) and a `discuss` seat (hetero participation in `think-tank` /
+`brainstorm`), each an engine/effort/runner/endpoint tuple resolved like every other seat.
+`review` and `plan` were **not** added: they are the existing `reviewer_*` and
+`plan_reviewer_*` seats, and declaring them a second time is the duplication the
+no-second-canonical-statement rule exists to prevent. A separate roster file was considered
+and rejected on a heterogeneous consult (`codex`/`gpt-5.6-sol`, high) — it would restate
+nothing, but it would split one operator-facing roster across two ownership and precedence
+chains that can disagree.
+
+v2.34.42 deferred all six schema `runner` enum sites to Phase 5 on the reasoning that the
+enum is what makes a runner assignable. That reasoning is **corrected here**, on the same
+consult rail: a runner enum is a *syntax* table — "can a roster spell this token" — and it
+already carries runners with no per-role qualification evidence. It was never the gate it
+was being asked to be. All six sites now widen with `cursor`, on both the schema and shell
+sides, and qualification moved to where it can actually express a role:
+
+A seat naming a runner in `UNQUALIFIED_RUNNERS` (today exactly `cursor`, whose capability
+record is `status: unverified` / `H0`) is **refused, exit 3**, unless
+`$AUTOPILOT_QUALIFICATION_OVERRIDE` carries an unexpired entry matching that exact engine,
+runner **and role**. An implementer-role override does not admit a reviewer seat. Admitted
+seats are announced on stderr as evidence-free and listed in `override_admitted_seats` — a
+recorded operator decision, never evidence of qualification, and re-derived from the file on
+every resolve rather than stored as an attestation (ADR-0001). Same override file, same
+shape, same vocabulary the implementer seat has used since `cd3f5f85`.
+
+Exit 3 rather than the implementer seat's report-only posture, deliberately. The implementer
+seat has a mechanical enforcer downstream (`dispatch-contract.js`); the reviewer-class,
+consult and discuss seats have none, and a report nobody acts on is exactly the quiet bypass
+the qualification gate exists to prevent. For those seats the resolver *is* the enforcer.
+
+`UNQUALIFIED_RUNNERS` is a declared list rather than a derivation, because there is no 1:1
+map from runner token to capability record — `cc-shim`, `kimi`, `qoderclicn` and `pi` have no
+record at all, so "absent means unqualified" would refuse rosters that ship today, and
+"absent means qualified" would mean *deleting* `cursor.json` opens the gate. It is instead
+reconciled by test: any runner a roster can name whose capability record says `unverified`
+must appear in the list, and any entry no roster can name is flagged as gating nothing.
+
+`allow_same_runner_dual_seat` (default **off**) governs whether an override-admitted runner
+may hold the implementer seat and a reviewer-class seat at once; off refuses, on permits with
+a stderr warning and `same_runner_dual_seat: true` for the run summary. The axis is the
+**runner**, not the model family, and that is a correction to the consult's own ruling made
+on named evidence: the shipped template already resolves `reviewer_family ==
+implementer_family == openai` and its `auto` implementer runner resolves to the reviewer's
+`codex`, so a family-axis gate would reject the shipped default on day one — and a single
+`cursor` rail serves both grok and gpt ids, so two cursor seats show *different* families and
+a family test would miss precisely the case the rule names. One vendor, one auth and one
+server-side prompt layer is a rail property.
+
+Worth recording, because it was believed otherwise: the "roster placing cursor in both an
+implementer and a reviewer-class seat is rejected" rule frozen in the plan's disposition was
+**never implemented anywhere**. `resolve-review-loop.sh` contained no occurrence of `cursor`
+at all; dual occupancy was rejected only incidentally, because cursor was unspellable in
+every enum. It is now a real, tested rule.
+
+The contract widening propagates fail-closed — `src/engine/resolve-review-loop.js` derives its
+field list from the schema, so any pre-resolved roster JSON missing the eleven new fields is
+now rejected rather than silently defaulted. Callers holding a cached roster must re-resolve.
+
+Also in this release, from the previous run's backlog:
+
+- **A repo-wide `node --check` gate.** v2.34.41 was a block comment that terminated itself and
+  left two files invalid for a day, under a commit calling itself "comment-only" with
+  `QC-Verdict: PASS` from two seats. `check-js-syntax.js` parses every tracked `.js`/`.cjs`/`.mjs`
+  (544 + 4 + 0 today, all clean, empty exclusion list) and fails closed. Module type is delegated
+  to `node --check` rather than reimplementing the `package.json` walk — verified empirically that
+  Node already applies the resolution real Node would. One `sync-manifest` row reaches pre-commit
+  and CI; `preflight-portability.sh` runs *named* rituals via `--only` and does **not** pick a new
+  one up automatically, so it is named there explicitly and an overbroad claim in
+  `docs/scripts-inventory.md` is corrected.
+- **A cursor crash is now `runner_failed`, not `precondition_failed`.** The old mapping told a
+  caller "we never dispatched" when the engine had in fact run and died. The split now falls where
+  the invocation does; fail-closed stderr handling is unchanged.
+- **`dispatch-review.sh` tolerates harness chrome ahead of the wrapped block.** cc-shim prints a
+  notice line first, which cost four of four cc-shim panel seats their reviews in the last run —
+  complete, correctly framed verdicts discarded as `no_verdict` and recovered by hand. A leading
+  line is skipped only if it carries no trace of the framing vocabulary; a line that carries it
+  but is not byte-exactly the derived BEGIN is a hard reject, which is what keeps a real observed
+  truncated frame (two angle brackets, not three) from being silently passed over.
+- `grok46|codex53` is no longer restated in either wrapper; both derive from `_CURSOR_FAMILIES`
+  via `cursor_is_family_alias`.
+
+No live `cursor-agent` model call was made in this release. Cursor remains unqualified; what
+changed is that routing it is now an explicit, recorded, role-scoped operator decision instead
+of an impossibility.
+
+### Found while verifying this release — recorded because they are the point
+
+The CHANGELOG section above was written before the release was verified. Everything below was
+found afterwards, and three of the four are the kind of failure this repo's evidence discipline
+exists to catch, so they belong in the release record rather than in a run summary that scrolls
+away.
+
+- **The L2 integration tier had not run since `de3fbc03`.** `hooks/tests/run.sh` refuses to start
+  that tier if ANY `hooks/tests/*.test.sh` is non-executable, and
+  `dispatch-hetero-cursor-routing.test.sh` was committed at mode `100644`. So the whole tier
+  exited before running a single test — the tests existed, were documented, and were doing
+  nothing. `chmod +x` restores it. Everything below was found in the first real run of that tier.
+
+- **`src/harness/capabilities/cursor.json` was invalid and took `autopilot harness report` down
+  entirely.** It shipped without `expires_at`, which the loader requires, so the command exited 1
+  with `expires_at must be a non-empty string` for every caller — not a stale count, the whole
+  report. Repaired with `expires_at` (+14d, the agy/codex/minimax convention) and
+  `verified_at: null`, mirroring `copilot-cli.json`, the other unverified record. No capability
+  field is promoted; the record still says `unverified` / `H0` about everything.
+
+- **The new admission gate was bypassed by its own documented recipe.** `--field` mode returned
+  before the admission pass ran, so `resolve-review-loop.sh --field reviewer_runner` on an
+  unqualified roster printed `cursor` with exit 0 and no refusal — while JSON mode correctly
+  exited 3. The consult caller this release documents in `references/hetero-dispatch.md` reads
+  its seat with exactly that flag. The gate shipped switched off along the only path anyone was
+  told to use. Found by the first-pass heterogeneous qc review, not by the tests written
+  alongside the gate; the block now runs before the field dispatch, with regression coverage
+  across five field names plus the positive case that a matching override still lets field mode
+  through.
+
+- **`awk`'s `END` block was rewriting the parser's rejection reason.** In awk, a rule-level
+  `exit N` jumps to `END`, and `END`'s own `exit` overrides the status. Three of
+  `dispatch-review.sh`'s five rejection paths therefore reported the wrong cause — a duplicate
+  BEGIN surfaced as "END marker never found", a truncated or echoed frame as "no derived BEGIN
+  frame found". The parser failed closed in every case, so no verdict was ever wrongly accepted;
+  what was broken was the diagnostic, which is the entire value of having distinguishable
+  messages. It survived its own commit because every existing assertion checked the STATUS and
+  none checked the reason.
+
+Two hardenings to the chrome-tolerant parser came out of the same review. The skipped prefix is
+now **bounded** (200 lines / 64KB) — when the frame had to start at line 1 the block size cap
+incidentally bounded the whole response, and an unbounded prefix silently removed that. And the
+prefix is now held to the **same leak rule as the block**: `prompt_framing_leakage` has always
+rejected anchored `diff --git` / `@@` / prompt-skeleton lines inside the block, and a skipped
+prefix escaped that scan entirely, so a leading `diff --git` line the old positional rail
+rejected had become tolerated. Both directions are tested, including that a Markdown quote
+marker cannot launder an echoed hunk header, and that real cc-shim chrome still parses.
+
+Known residual, not fixed: `hooks/tests/dispatch-worktree-lifecycle.test.sh` fails
+intermittently under `run.sh --parallel` while passing standalone and in a serial full run, with
+a rotating set of co-failures. The parallel workload is being executed for the first time since
+`de3fbc03`, which makes resource contention the leading hypothesis, but it is a hypothesis — the
+flake is undiagnosed and is flagged rather than papered over.
+
+### Depth-0 QC panel round 2 — four admission bypasses in the gate itself
+
+The panel FAILED this release on the surface it introduces. All four holes were in the two
+Board rulings this change implements, and all four are now closed with reproductions on
+record. The panel independently corroborated the two design choices — the runner axis, and
+widening all six enums with admission as the gate — so those stand unchanged.
+
+- **🔴 Only the primary reviewer tuple was gated.** `reviewer_engine_low_risk` is a SECOND
+  selectable reviewer engine on the same runner, emitted for every low-risk round, and it
+  never entered the admission inventory. A roster could carry a valid override for the
+  primary engine and put a completely unqualified, unoverridden engine in the low-risk slot.
+  Ruling 1 is per **exact engine + runner + role**, so an override for one engine must never
+  admit a sibling that merely shares the runner. Every selectable engine now gets its own
+  seat row; the low-risk seat resolves to role `reviewer`, so an operator writes that one role
+  and must list each engine separately. Audited the rest of the surface while fixing it:
+  `reviewer_engine_low_risk` was the only ungated engine field, because the fallback-preference
+  lists can only reorder rows that are already `status: "qualified"` in the scorecard.
+
+- **🔴 An aggregate flag was gating a per-seat security check.** Panel seats entered the
+  inventory only when `QC_PANEL_SEATS_COMPLETE` was true, so a cursor panel seat sitting next
+  to ONE ragged sibling was skipped entirely and the roster resolved clean — and an incomplete
+  panel is exactly when a bad seat is most likely present. Every parsed seat is now inspected
+  on its own, walking the union of the engine and runner index sets so a ragged array cannot
+  hide a row. An incomplete panel of qualified runners still resolves; only the unqualified
+  seat is fatal.
+
+- **🟠 The dual-seat gate could only see unqualified runners.** It accumulated override-admitted
+  runners only, so `gpt-5.6-sol` implementing and `gpt-5.6-sol` reviewing its own work passed
+  at the default `off`. The rationale has no qualified-engine exemption. The comparison now runs
+  over every seat, on the **configured runner token** — comparing resolved runners would reject
+  the shipped template, whose `auto` implementer resolves to the reviewer's `codex`, which is
+  the identical failure mode that disqualified the family axis. `auto` is inert; an inherited
+  built-in default is NOT (a roster naming only `implementer_runner: codex` really does put one
+  rail on both sides of the loop, and that path is the most likely way the hazard arrives).
+
+- **🟠 Recording an evidence-free admission was fail-open.** If the append to
+  `override_admitted_seats` failed, it silently kept the previous array — so an admission could
+  succeed while vanishing from the record that makes it auditable. Ruling 1 requires the record,
+  not merely the warning. An admission that cannot be recorded is now refused.
+
+**Scope correction on a hetero consult (`codex`/`gpt-5.6-sol`).** Extending the dual-seat gate
+naively put the terminal `qc_panel` under the same binary rule, which would reject
+well-decorrelated three-seat panels. The panel is a multi-seat body with
+`union-on-verified-critical` aggregation and majority forbidden, so ONE seat sharing the
+implementer's rail still leaves seats that each block alone. The panel is therefore out of the
+loop-seat gate and has its own proportionate runner-axis rule instead — which it needed
+regardless, since its existing control is family-based and cannot see one rail serving several
+families. Any overlap warns and sets `same_runner_dual_seat`; only TOTAL overlap, meaning the
+terminal gate has no runner decorrelation anywhere, is refused, and even that is openable.
+
+A scoped re-review of those fixes then caught one more, and it is exactly the class worth
+recording: a ragged panel index carrying a runner but NO engine is unusable — it cannot review
+anything — yet it counted as a panel seat for the diversity ratio. Every engine-bearing seat
+could sit on the implementer's own rail while one orphan runner kept overlap below total,
+downgrading a TOTAL loss of runner decorrelation to a warning. Diversity now counts only
+engine-bearing seats, while admission still walks the union, because an orphan row can still
+NAME an unqualified rail and must be refused on that ground. The two sets are deliberately
+different and both directions are tested.
+
+Implementing that panel rule then produced a second correction, on evidence. The partial-overlap
+WARNING fired on the repo's own RECOMMENDED configuration — the shipped panel is
+`codex, claude-native, agy`, three rails on purpose, so any `codex` implementer overlaps exactly
+one seat — and it demonstrably broke a caller: `dispatch-author.sh --strict-contract` turned the
+extra stderr line into an empty result, dropping `dispatch-author-contract` from 46 assertions to
+33. A warning that fires on the recommended setup is noise that trains readers to ignore the
+channel carrying the real signal. Partial panel overlap is now silent and no longer sets
+`same_runner_dual_seat`; TOTAL overlap keeps its teeth. Panel/implementer overlap is still
+reported at the family level by the pre-existing cross-family control.
+
+The same consult ruled that inherited defaults stay in scope, accepting the stated cost: three
+test fixtures that name one runner and inherit the rest had to change. A reconcile consult, run
+after the measured cost turned out to be 8 test files rather than the 39 assertions first
+estimated, confirmed ruling (A) stands but refined the remedy: DIVERSIFY the reviewer where
+possible and reserve the blanket opt-in for rosters where same-rail review is intentional. So the
+8 dispatch/campaign/gate fixtures name a decorrelated reviewer (none of them referenced
+`reviewer_engine` or `reviewer_runner` in any assertion, so this is invisible to what they test),
+while the three fixtures that deliberately put one runner in both seats to prove enum acceptance
+keep the explicit opt-in. `dispatch-contract` returns to exactly its base 316 assertions.
+
+Not fixed, recorded for backlog with the panel's agreement: `dispatch-review.sh:146-147,239`
+sources `lib/cursor-model.sh` behind a readability guard and so silently skips the family-alias
+precondition if the lib is unreadable, where `dispatch-author.sh` sources it unconditionally —
+a fail-open asymmetry whose downstream failure is still closed; the `-p` argv assertion in the
+routing test is a bare substring where its siblings are line-anchored; no committed negative
+feeds a stale roster JSON; and the js-syntax module-type negative is one-sided.
+
+Also recorded: the intermittent `dispatch-worktree-lifecycle.test.sh` failure under
+`run.sh --parallel` is NOT introduced by this release. Depth-0 bisected it — at the base commit
+the L2 tier could not run at all, and neither that test nor the runner is touched by this diff.
+It is pre-existing code, first observable because this release fixed the mode bug that was
+hiding the entire tier.
+
+prose-justification: the +5% is two documentation surfaces this release deliberately creates.
+`project-config-template/review-loop-config.md` gains the operator-facing explanation of how to
+route an unqualified engine — the override file's exact shape, why an admitted seat is a recorded
+decision and not evidence, and why the dual-seat axis is the runner rather than the model family —
+plus four Field-reference rows for the new keys. `references/hetero-dispatch.md` gains the consult
+seat's caller recipe, which is what stops a mid-run consult from going back to hand-typed argv, and
+states plainly that `discuss_*` has no executable consumer yet. Both are the config surface itself,
+not commentary on it: a per-role routing control whose refusal path is undocumented is a control
+operators will route around. Engine surface is flat (Δ+1) because the work landed as resolver logic
+and tests rather than new skill text.
+
+## v2.34.42 — a cursor runner rail, shipped and deliberately unrouted
+
+A new `cursor` runner reaches `dispatch-hetero.sh`, `dispatch-review.sh`, and `dispatch-author.sh`:
+edit-only, wrapper-commits the same as `grok`/`qoderclicn` — no absolute-worktree anchor, honors
+process cwd AND `--workspace`. `scripts/lib/cursor-model.sh` is the single executable source for
+the enabled model-id set (`cursor_model_for`, `cursor_enabled_ids`, `cursor_is_enabled_id`), and it
+validates against a live `cursor-agent --list-models` by **exact string equality, never
+containment** — `cursor-grok-4.6-low` is a strict prefix of `cursor-grok-4.6-low-fast`, so a
+containment check would silently void the fail-closed guarantee the whole rail depends on. Effort
+is the model-id suffix, not a flag: there is no `--reasoning-effort` on this CLI. The default lane
+is non-fast; `-fast` is opt-in only via `--cursor-fast`, which never silently no-ops.
+
+The one deliberate `auto` behavior change: `--runner auto --model cursor-grok-4.6-low` used to
+route silently to the xAI `grok` CLI, and `gpt-5.3-codex-low` silently to the OpenAI `codex`
+CLI — neither of those CLIs serves those ids. Both now **fail closed with exit 2**, naming the
+explicit runner the caller needs (`--runner cursor`). Every other `--runner` value is unchanged.
+`dispatch-status.js` also now reads Cursor's `cacheReadTokens` field — cache accounting on this
+rail previously read null.
+
+State plainly what did **not** land in this release: the review-loop contract schema's `runner`
+enum and `resolve-review-loop.sh`'s admission tables were left untouched — they're deferred to
+Phase 5 alongside Stage-1 implementer qualification. This is a **deliberate deviation from the
+plan's literal Phase 3 text**, which said to add `cursor` to all six schema enum sites. That
+instruction turned out to be internally unsatisfiable: only `reviewer_runner` and
+`implementer_runner` are `x-shell-validated`, so adding `cursor` there breaks
+`check-contract-schema.js` against a resolver the same plan freezes until Phase 5 — and on a
+Phase 5 *recorded fail* the resolver stays closed permanently, so the gate would never go green
+again. Four of the six sites are reviewer-class roles the plan's own admission matrix says get
+`cursor` **never** in this plan. The schema enum is what makes a runner *assignable*, so it
+belongs with admission, not with executability. Adjudicated by a heterogeneous consult
+(`codex`/`gpt-5.6-sol`, effort high), which returned the same conclusion independently.
+Cursor is shipped and executable but
+**deliberately unrouted**: no roster seat can assign it, `auto` refuses it by design, and no live
+`cursor-agent` model call was made anywhere in this release — only `--version` and
+`--list-models` were re-derived. The plan's live KR1/KR2/KR4 receipts are still outstanding.
+Cursor is also deliberately excluded from the blind-review allowlist pending an adversarial
+`--mode ask` probe.
+
+prose-justification: `references/hetero-dispatch.md` grew by three edits (the max-tokens
+Unsupported row, the `auto`-fail-closed prose, and a new `cursor` runner-table row) to document
+the rail this release ships; `docs/scripts-inventory.md` gained one index row for
+`scripts/lib/cursor-model.sh`. The rest of the +5% baseline carry-forward reported here is
+inherited from the v2.34.39/v2.34.41 growth already on `develop`, not reset by this patch.
+
+## v2.34.41 — a comment closed itself and took the plan-review rail down with it
+
+`scripts/dispatch-plan-review.js` and its codex mirror stopped parsing entirely at v2.34.39.
+A header block comment documenting the sealed-state recovery recipe contained the shell glob
+`~/.autopilot/plan-review/*/state.json` — and the `*/` in that path terminated the `/** … */`
+comment. Everything after it parsed as code, so `node scripts/dispatch-plan-review.js --help`
+died with `SyntaxError: Invalid left-hand side expression in postfix operation` and every
+bounded plan review on the rail was unrunnable.
+
+The recipe is now `grep -rl --include=state.json <logical_plan_id> ~/.autopilot/plan-review/`,
+which needs no glob before `/state.json`, and the comment carries an inline warning about the
+two-character sequence so the next editor does not reintroduce it.
+
+Worth recording plainly: the commit that broke it described itself as "comment-only or
+prose-only — no executable logic changed" and carried `QC-Verdict: PASS` from two cross-family
+heterogeneous review seats. Nobody ran `node --check`. This is the same family as the incidents
+in `references/evidence-discipline.md` — a shipped artifact that exists, is documented, is
+reviewed, and does not run. A repo-wide `node --check` gate is the mechanizable follow-up.
+
+prose-justification: this release adds ZERO lines under `skills/` or `references/` — measured
+14921 both here and at `origin/develop`. The +741 (5%) over the v2.34.35 baseline was already on
+develop, shipped by the v2.34.39 knowledge-promotion work (`references/knowledge-routing.md` plus
+the evidence-discipline additions) without a baseline refresh or a justification line. Recording
+it rather than resetting the baseline: the delta is not this fix's to erase.
+
+## v2.34.40 — L5 qualification override finally reaches strict dispatch
+
+`dispatch-contract.js` already supported the Board-approved, explicit per-invocation
+`--qualification-override` rail, and `resolve-review-loop.sh` already advertised
+`AUTOPILOT_QUALIFICATION_OVERRIDE`. The final `dispatch-hetero.sh` strict preflight silently
+dropped that environment binding, so an operator could supply the documented evidence-free
+first-use authority and L5 would still reject it before model spend.
+
+The strict dispatcher now forwards the exact override path as an argv element and emits
+`engine_assurance: "operator-override"`. Missing, malformed, mismatched, expired, or operator-less
+overrides remain fail-closed. Isolated regressions remove the implementer scorecard row, prove the
+override is required, then prove detached dispatch preserves the loud assurance marker. Canonical
+and Codex package mirrors remain identical.
+
+prose-justification: this release changes no skill prose. Any per-skill growth reported by the
+release gate is carried from earlier releases; this patch changes only engine dispatch, validation,
+tests, mirrors, and release records.
+
+## v2.34.39 — 知識寫進了會蒸發的層,而「什麼可以公開」從來只活在一個人的習慣裡
+
+prose-justification: `skills/learn`、`skills/handoff`、`skills/distill` 三份 SKILL.md 都長了。
+learn 多了 step 0(目的地判定 + promotion contract),handoff 多了 3.5(把耐久內容路由出去),
+distill 的 Step 3 從一句沒有位址的承諾換成一段有腳本路徑、有負向範圍的合約。三處都是把先前
+**不存在於 repo 內**的規則搬進來,不是加註解;政策本體收在 `references/knowledge-routing.md`,
+三份 skill 都只引用不複述。
+
+**Headline**: 兩個正交的缺陷。**耐久性** —— 知識被寫進會蒸發的層:`HANDOFF.md`(它自己的 Resume
+step 5 就叫下一個 session 刪掉它)、machine-local memory、以及 **gitignore 掉的
+`.claude/knowledge/`**。證據不是假設:`.claude/knowledge/INDEX.md` 最後一列記著
+`claude-code-plugin-dogfood-lessons.md`(2026-05-14,五條 dogfood 教訓)**從未 commit 進本 repo**,
+2026-07-16 被 doc-sync sweep 發現不見,至今沒救回。寫了、編了索引、沒了。
+**披露控制** —— 這個 repo 是公開的,而「什麼可以公開」這條線從來沒被寫下來,它只存在於寫那三個
+`docs(knowledge):` commit 的人的習慣裡。習慣不是政策:交不出去,也沒有任何 skill 引用得到。
+
+新增 [`references/knowledge-routing.md`](references/knowledge-routing.md):以**類別**(而非實例清單)
+寫下披露線 —— 可公開的是廠商名/版號/事故敘事/repo 內路徑/錯誤訊息,不可公開的是主機名/fleet handle/
+`/home/<user>/`/pane 位址/endpoint alias/任何憑證形狀;唯一判準是
+**「把所有 fleet-specific token 刪掉後,這段還能教人嗎?」**。三個 sink 各自帶 write contract,其中
+`.claude/knowledge/` 的是 **promotion**,而且刻意**不是**一個動作:`git add -f` → 跑 `identifier-scan.js` 做 Layer 1 機械前篩 → 給使用者看 diff → **`AskUserQuestion` 阻塞閘(Layer 2,非 approve 一律 STOP)** → 核准後才 commit。`git diff` 只會顯示,它不會問、不會擋、不會等 —— 而 `handoff` step 3.5 呼叫 `learn` 的正是 context 快用完的那條路徑,最容易一次跑完全部。
+**不 commit 就等於沒寫。**`.gitignore` 裡 `.claude/knowledge/` 那條 ignore 規則,現在自己上方的註解說明這個 fail-closed 選擇是刻意的。
+`CLAUDE.md` 的「Where context lives」多一列指向 `.claude/knowledge/` —— B4(沒有任何東西會自動載入它)
+的完整修法,不需要新 hook:`CLAUDE.md` 是唯一會被自動注入的 in-repo 檔案,一列指標就讓下一個 agent
+的發現路徑存在。
+
+**以及一條被具名了三週卻沒人擋下的假機制。** `skills/distill/SKILL.md` 兩處斷言「the lint
+**reliably catches** structured tokens」,並兩處要求設定 `~/.autopilot/distill/identifiers.deny`
+—— 那份 deny-list **從來不存在**。lint 本身倒是存在,只是埋成 `distill-scan.js` 一個沒有文件的
+`--path` 模式,而那支腳本從頭到尾(連 inventory 列)都在講 conversation-history 頻率掃描。
+兩句話**都沒有指出路徑**,所以讀者無從分辨哪一半是真的 —— **任何閘也無從分辨**。
+`identifier-scan.js` 現在是唯一的實作(`distill-scan.js --path` 改為委派,deny-list 整組移除),
+標頭第一段就寫負向範圍:**bare hostname / client 名 / pane 位址 / endpoint alias 零覆蓋**,
+clean exit 的意思是「沒有結構化 token 命中」,永遠不是「可以公開」。覆蓋範圍以
+`hooks/tests/fixtures/identifier-scan/` 為準,而不是以任何一段散文為準。
+deny-list 依 ADR-0001 否決並記錄理由:它會靜默放行每一個沒被告知過的名字,然後掛上 "lint-clean"
+標籤 —— 那個標籤證明的是查過一份清單,不是文字乾淨,比沒有 lint 更毒,因為它製造出結束人審的信心。
+
+**這一族早就被命名過了,而它三週內復發。** `CLAUDE.md` 2026-08-06 就用粗體寫著「a script existing is
+not evidence it is running」,`references/evidence-discipline.md` 就是為了收集這一族而寫的。distill
+那句話是**之後**才寫的,並且通過了後續每一次 review。§14 新增這個成員:**prose 具名的機制沒有可解參照
+的實作,等同從未寫過 —— 而且它比 dead script 更毒,因為連「去檢查它有沒有在跑」的對象都不存在。**
+§1 的 dead script 至少可以打開來看、grep 它的呼叫者;沒有位址的機制連檢查對象都沒有。
+**命名一個失效類別不會產生防禦,閘才會。** 執法是一對,缺一則空轉:寫作規則(`skill-contract-card.md`
+review checklist —— 被斷言的機制必須指出可執行檔路徑)讓閘有東西可以解參照;閘
+(`doc-drift-gate.js` 的 `script-refs`,由 `preflight-portability.sh` 的 doc-drift gate check 執行)則把不存在的
+路徑打紅。幽靈 lint 正是靠著從不具名而躲過去的。
+
+**發現的、與設計簡報相左的三件事**(記在此處以免下一個 session 重踩):(1) lint 不是幽靈,是**沒有位址
+的真實實作** —— 所以修法是抽出並具名,不是新寫一支競品;(2) referent-resolution 閘**早就存在**
+(`checkScriptRefs`),缺的從來是寫作規則那一半;(3) `identifiers.deny` 有**第三處**引用,在
+`skills/distill/references/sync-setup.md`,簡報只知道兩處 —— 留一處活著就是留一條活的假參照。
+
+**升級注意(移除一個設定面)**:`~/.autopilot/distill/identifiers.deny` 從此**被忽略**。它先前是
+`skills/distill/references/sync-setup.md` 記載的選用設定,現在整組拿掉,理由如上(ADR-0001)。
+本機從未有過這個檔,但別台機器可能照文件建過 —— 那是刻意的移除,不是疏漏:唯一的替代是 Step 3 的人審,
+因為那正是這類識別字唯一擋得住的地方。版號仍走 PATCH:沒有任何 consumer 的行為依賴那份清單存在
+(它從頭到尾都是 optional 且靜默 fallback 為空)。
+
+**first-pass review 之後修的四條**(depth-0 panel 之前):(1) 三處用「`.gitignore` 第 6 行」指涉 ignore
+規則 —— 而這個 commit 自己插進去的註解把規則推到第 12 行,連帶 2026-04-12 的沿革也標錯(那天加的是
+`session-start-sha` 和 `knowledge/`,`settings.local.json` 是 5/14)。**行號指涉在自己會改的檔案上,
+定義上就不可解**,改成用 pattern 指涉;這正是本次要立的 §14 那條規則落在自己頭上。
+(2) promotion contract 的 `git commit` 沒有 pathspec,但給使用者看的 `git diff --cached` 有 ——
+learn 常在有其他檔案已 staged 時被叫用,於是**披露閘顯示的比它 commit 的少**。commit 補上
+`-- .claude/knowledge/`。(3) scanner 會命中 `z.ai` —— 而 `z.ai` 正是路由表 Publishable 欄自己舉的例。
+distill Step 3 原本寫「exit 1 ⇒ 退出批次」,那會把合法 candidate 踢掉,並訓練出「看到紅燈就跳過」的
+習慣。改成:**exit 1 的意思是「這些請分類」,不是「不合格」**,並加一份 `vendor-domain-overlap.md`
+fixture 把這個假陽性類別釘住(有人把 pattern 調窄讓它不再命中,測試就轉紅,逼他同步改三處文字)。
+(4) 委派後 unreadable file 從靜默跳過變成拋例外 + exit 1(在 `--path` 契約裡是「有命中」);
+改為 exit 2 並在標頭誠實記下與抽出前的兩個行為差異。
+
+BACKLOG 多一列(n=1,只記錄不動工):autopilot 沒有「外部實戰經驗回饋進 autopilot 自己」的路徑 ——
+`learn` 記事實不記 skill,`distill` 明確不以 autopilot 為目標。
+
+## v2.34.38 — anti-gaming 閘第一次看得見這個 repo 的測試面(以及它的設定表面從來沒能用過)
+
+prose-justification: 沒有動任何 `skills/` 檔案。一個新的 `.claude/` 專案設定、一個 parser bug
+修復、一組 shell 語意、以及把四條負控制立成常駐迴歸。
+
+**Headline**: `check-test-integrity.sh` 是擋 delegated implementer「刪測試／弱化斷言／加 skip」
+的閘。在這個 repo 上它**一個測試檔都沒看過**——對一個改了 `hooks/tests/run.sh` 的 range 回
+`{ "ok": true, "test_paths_matched": 0, "source": "template" }`。修的過程挖出兩層,不是一層:
+
+**(1) 表層:autopilot 沒有自己的 `.claude/test-integrity-config.md`。** 於是引擎退回
+`project-config-template/test-integrity-config.md`,而那份的 `test_paths` 是通用生態慣例
+(`**/*_test.go`、`tests/**`、`**/*.test.js` …)。這個 repo 的測試主力是 **260 個
+`*.test.sh` shell 套件加 40 個 `*.test.js`**,住在 `hooks/tests/`、`hooks/`、`scripts/`、
+`scripts/tests/`、`platforms/codex/plugin/scripts/`、`evals/`——template 的 glob 一個都不match。
+
+**(2) 底層,而且比較嚴重:那份設定的 `test_paths` 欄位從來就不能用。** `parse_config` 把
+`line.startswith("#")` 排在 `line.startswith("##")` **之前**,所以每一個 section heading 都被
+當成註解吞掉,`section` 永遠是 `None`,任何 `- <glob>` 行都以 "Unrecognized config line" 被
+判 malformed。也就是說:**任何專案**寫 `test_paths` / `surface_paths` 都無效,一律靜默退回內建
+預設,而且沒有任何一條既有測試碰過那條路徑(510 行的 acceptance 套件只設定過 `mode:`)。
+拿新設定去餵 `origin/develop` 的引擎,回的是 `malformed_config` + `test_paths_matched: 0`——
+這條就是證據。`##` 的判斷現在排在 `#` 之前;`mode:` 語意逐字不變。
+
+**(3) L0 引擎現在懂 shell 套件的 skip 語意。** `get_lang_key` 原本對 `.sh` 回 `None`,所以
+「新增一個 skip」這條 gaming vector 在 bash 套件上完全無聲(`deleted_line` 本來就與語言無關,
+刪除／弱化那兩條一直是看得到的,只要路徑 match)。校準方式是**真的去跑閘**而不是把它的 regex
+再抄一份到檢查器裡(`evidence/skip-calibration.sh`:把每個 `*.test.sh` 當全新檔案放進拋棄式
+repo,於是每一行都以「新增行」進入引擎):260 個套件、**7** 條命中——5 條在
+`mission-terminal-rollover.test.sh`(全是真正的條件式 skip),另外 2 條在
+`check-test-integrity.test.sh` 自己身上,是 §11c-bis 用來把 skip 種進 fixture 的 `sed` payload。
+後面這兩條是**真實但無害的假陽性類別,選擇記錄而不是調掉**:一個「把 skip 寫進 fixture」的套件,
+逐字看起來就和「自己 skip」的套件一模一樣——行層偵測器沒有「這串是資料」的概念。這個類別很窄
+(要在測試撰寫行裡出現字面 skip token),在 `warn` 下不花任何成本,但翻到 `block` 就會擋住對這個
+測試檔本身的編輯——這正是升 block 需要先有準確度紀錄的又一個理由。
+
+**這條規則被繞過三次,所以第三次不再補 regex。** first-pass review 抓到兩條(`&& skip` 只錨行首、
+shell 借用 python 註解剝除導致 `${#…}` 把整行截掉);depth-0 三席權威 panel(sol@max FIX-THEN-SHIP
+3🔴、MiniMax-M3 FIX-THEN-SHIP 2🟠、GLM-5.2 SHIP-AS-IS)又抓到三條並在真引擎上逐條重現:`skip;`
+(裸形式的尾巴只認空白或行尾)、`printf ' #' && skip "r"`(**引號內**的 `#` 仍被當註解截斷)、
+`( skip "r" )`(`(` 不在命令位置集合)。
+
+**改法是把 shell 文法列舉出來,不是再打三個補丁。** `strip_trailing_comment` 的 shell 分支換成
+真正的掃描器 `shell_code_view`——逐字元追蹤引號與跳脫,`#` 只有在詞邊界且未被引號包住時才是註解;
+偵測改由列舉出來的**命令位置**(行首、`;` `&` `|` `(` `{` `!` 反引號、`then/else/elif/do`、
+`NAME=value` 前綴)與**尾巴**類別(空白+引數、行尾、`;` `&` `|` `)`)驅動。`(` 在所有尾巴類別中
+排除,所以 `skip()` / `skip ()` 仍是**定義**;`}` 排除,所以 `${skip}` 仍是**展開**;`case` 的
+`in skip)` 是 pattern 不是命令,明確不納入。完整列舉(含刻意排除與具名未涵蓋)寫在 project README。
+
+**引號段在偵測前收斂成 `Q` 佔位符**,這一刀把 DATA 和 CODE 分開:一個「把 skip 寫進 fixture」的
+套件(這個 repo 的 `check-test-integrity.test.sh` 自己就是)不再被讀成「自己 skip」。校準因此從
+7 條回到 **5 條**——先前那 2 條自我指涉假陽性是真的消失了,不是被容忍。代價具名:`eval "skip"`
+與 heredoc 內文的 skip 因此看不見。
+
+**具名未涵蓋類別(五條,逐條有斷言釘住當前邊界)**:A14 `time`/`coproc` 前綴、A16 前置重導向、
+B9 heredoc 內文、D2 eval 字串、D3 heredoc 內的 skip。補上任何一條都會讓對應斷言轉紅,強迫
+README 表、設定檔註解、BACKLOG 三處同步。
+
+**violation 現在引用原始行而不是剝除後的投影**——否則讀者看到的是 `skip Q`,拿不到 reason 文字。
+
+**mode 刻意是 `warn`,不是 `block`,而且理由寫在設定檔裡。** L0 對 match 到的測試檔**每一行
+刪除**都記一條 `deleted_line`;在這個 repo 日常的測試維護(改個 case 名、修 `assert_eq` 參數
+順序、收緊一個界)天天在刪行。block 會擋掉幾乎每一個誠實的 commit,而接下來發生的事必然是有人
+把它關掉——那正是它當初瞎掉的路徑。要不要升 block 需要「違規流準確到可以擋」的實證,那個實證
+現在不存在,已立 BACKLOG。
+
+**證據(這一批真正的交付物)**: `docs/projects/_archive/2026-08-23-test-integrity-coverage/evidence/negative-controls.sh`
+是可重跑的 reproducer,在 `$TMPDIR` 的拋棄式 repo 裡對四個 gaming 動作各跑三次——BEFORE
+(origin/develop 工具鏈 + template 設定)、AFTER(本支 + 新設定,warn)、BLOCK(同設定 mode 翻
+block)。四條全部 BEFORE `matched=0 / violations=[] / exit 0`,AFTER 逐條命中,BLOCK 逐條
+`exit 1`。另有 `evidence/real-range-before-after.sh` 在**真實歷史 range**(`687f9e56`,38 檔其中
+10 個 `*.test.sh`)上重跑同一組對照:BEFORE `matched=0 violations=0`,AFTER `matched=10`、
+**22 條 `deleted_line` 分佈在 4 個套件**,外加 `hooks/tests/lib.sh` 正確被列為 `surface_touch`。
+
+負控制連同 coverage meta-test 一起進了 `hooks/tests/check-test-integrity.test.sh`
+(**70 → 101 assertions**;基線是把 `git archive origin/develop` 拆到 scratch clone 實測出來的,
+不是估的),並經**六向**突變驗證會精確轉紅:退回 parser 修復 → **19** 紅;拔掉 shell lang_key →
+**8** 紅(全部且僅有 skip 相關);刪掉設定檔 → **2** 紅;從設定拿掉 `**/*.test.js` → **1** 紅
+(coverage `300 → 260`);把 shell 註解規則退回 python 版 → **2** 紅;把 skip 錨點縮回行首 →
+**6** 紅。還原後 101 全綠。
+
+**coverage 斷言不寫死數字**: 測試在拋棄式 repo 裡放上 `git ls-files '*.test.sh' '*.test.js'`
+的**真實**清單,套上**真實**的 `.claude/test-integrity-config.md`,要求 `test_paths_matched`
+等於檔案數(今天 300/300)。用一個沒被涵蓋的命名慣例新增套件,這條就紅——這是唯一能阻止它再
+瞎一次的東西。附 floor guard(枚舉回 0 時直接判紅),免得 `0 == 0` 假綠。
+
+**誠實留下的缺口**: 塞進套件中段的 `exit 0` / `return 0` **抓不到**,而且是刻意不抓——line-level
+regex 分不出它和本 repo 既有的正當 bail-out。實測 260 個 `*.test.sh`:**19** 個有 top-level
+`exit 0`、41 個有任意縮排的、只有 **2** 個把它放在最後一行,也就是說多數是 guard clause,正是
+gaming early-exit 的形狀;要分開需要 L0 沒有攜帶的檔案位置資訊(「這個 exit 後面還有沒有斷言」)。
+這條缺口在設定檔註解、引擎註解、BACKLOG 各寫一次,並且被一條**會在缺口被補上時轉紅**的斷言釘住。
+(先前這裡寫的「36 個套件結尾」在任何一種量法下都對不上,已依實測更正。)
+
+**誠實性修正(depth-0 panel F2/F3)**:README 宣稱 early-exit 缺口「寫在設定檔、引擎、BACKLOG
+三處」,但 `.claude/test-integrity-config.md` 裡**根本沒有**那段——已補上,並一併寫入三條具名
+未涵蓋類別;`docs/projects/INDEX.md` 仍留著被自己 review 推翻的「36 個套件結尾」,改成實測值
+(19 top-level / 41 任意縮排 / 2 在最後一行)。**說有記錄卻沒記錄,比沒記錄更糟。**
+另外 README / BACKLOG / INDEX 三處把 `package.json` 列為已設定的 surface path,但設定檔刻意沒有
+這一條(理由正確)——三處散文改成與檔案一致。
+
+**設定檔的兩個小修正**(同樣來自 first-pass review):`- 'package.json'` 拿掉了——不含 `/` 的
+pattern 會對每個路徑片段比對,等於掃進 `website/`、`.opencode/`、`platforms/opencode/` 與 eval
+fixture 共 13 個檔,而本 repo 根本沒有 root `package.json`;另外「兩種形狀都由 run.sh 列舉」改成
+精確敘述:300 個檔裡 `run.sh` 實際執行 275 個,其餘 25 個是 codex 鏡像、`scripts/tests/`、
+`evals/skill-transport/test/` 與三個 eval fixture。
+
+**注意(給 reviewer)**: 這個 range 自己會觸發 `protected_path_touch`——它動了
+`scripts/lib/test-integrity-l1.py` 和新增了 `.claude/test-integrity-config.md`,兩者都在閘的
+protected 清單上,而該類 violation 不可 waive、且無視 mode 一律 `ok: false`。這是設計如此:
+動閘本身必須走結構性審查。
+
+## v2.34.37 — 三個「觸發器已經響了」的修:一個靜默失效的執法路徑,兩個把主機當斷言的測試
+
+prose-justification: 這一刀沒有動任何 `skills/` 檔案。三筆都是 shipped code 與其測試的修復,
+沒有新表面、沒有新 prose。
+
+**Headline**: 三筆各自獨立的 Fix,共同點是**觸發條件都已經發生過**。第一筆是真缺陷:strike
+執法在每個 UTC 午夜之後最多 24 小時內是無聲的 no-op。另外兩筆是同一族的測試病——把「這台機器
+跑得多快」寫成斷言,於是紅字的意義隨負載飄移,而「紅字部分為雜訊就不再被讀」是本 repo 已經
+記錄過的危害(v2.34.22 教訓)。
+
+**(1) `engine-scorecard.js` 的預設時鐘不再截到 UTC 午夜。** `nowArgToMs` 原本預設
+`todayMsUtc()`(`Date.now()` 截到當日 UTC 午夜),而 strike-decay projection 裡每一個 instant
+比較都繼承了那個截斷,結果是每個午夜之後最多 24 小時,projection 讀到的是**過去**:
+
+- 同一個 UTC 日稍晚簽發的 evidence receipt 在 `evaluation_time` 上「尚未生效」,`deriveStatus`
+  拒收它,`findSeatBaseline` 因此挑不到 baseline,`seat-status` 對一個 store 裡明明有 QUALIFIED
+  列的 seat 回 `no_record`(events 153/154/155 在它們自己的施測當日就是這樣)。
+- `foldSeatStrikes` 的可計數視窗是 `observedMs <= nowMs`,所以**今天稍晚寫進去的每一筆 strike
+  都被拒收**。`dispatch-contract.js` 從不傳 `--now`,所以這就是生產路徑。修前實測:三筆 strike
+  在預設時鐘下 `rejected_strikes: 3 / strikes_since_pass: 0`,同一列給一個未來的 `--now` 立刻
+  變成 `strikes_since_pass: 3 / would_requalify: true`。
+
+修法是預設值改成 `Date.now()`,`todayMsUtc()` 整支移除。**顯式 `--now` 的解析逐字不變**:
+date-only 仍是該日午夜,full timestamp 仍是該 instant,`nowMs` 的值一模一樣。唯一刻意保留日粒度
+的是 `computeExpiryWarning`——它的右手邊 `expires` 契約上就是 date-only,因此用新的
+`startOfUtcDayMsOf` 把**左右兩邊**都留在日粒度。這一項的**輸出對帶時間戳的 `--now` 確實變了**,
+不能說成完全不變:以 `expires: 2026-08-24` 的列為例,`--now 2026-08-24T10:00:00Z` 修前
+`expiry_warning=true`(午夜 < 10:00Z)、修後 `false`,與 `--now 2026-08-24` 一致。方向是**消除**
+date-only 與 full-timestamp 兩種 `--now` 原本就存在的分歧,而不是製造分歧;該欄位依
+`references/strike-decay.md` 為 advisory-only,不參與 admission。
+釘住的 pass-instant tiebreak(`observedMs > baselineMs` 嚴格大於)未被觸碰。覆蓋:
+`hooks/tests/calendar-teeth-negative.test.sh` 的 `instant1`-`instant4`,四條全部**不帶 `--now`**,
+因為那才是生產路徑;fixture 的 instant 取 `max(UTC 午夜 + 1ms, now - 60s)`,所以任何時刻跑都不會
+退化成 vacuous。Planted negative:把截斷改回去,`instant1/2/3` 三條同時轉紅。
+
+**(2) `external-lifecycle-witness` 的 bounded-shutdown 上界改成負載相對。**
+`lease_epipe_stop_bounded` 斷言 `Date.now() - startedAt < 500` —— 一個絕對牆鐘上界,跑在一條這份
+suite 並不擁有的 event loop 上。負載一重,關機贏了 race 卻仍量到 >500 ms,因為 loop 在「resolve」
+與「取時間戳」之間被搶走。修前實測:64 個背景 CPU burner,連跑 5 次 suite → 3 紅,每一紅都恰好
+落在這一條。斷言**沒有被刪** —— bounded shutdown 是真的保證。新的 `measureBoundedStop` 在同一瞬間
+起關機與一個名目 500 ms 的 `sleep`,兩者跑在同一條被餓死的 loop 上,通過條件是關機先於那個並發
+計時器完成。同構造的姊妹斷言 `stop_bounded` 一併改用同一個 helper(同缺陷同檔,只修一半等於留著
+下次再觸發)。兩條都吐 `*_bound_measurement=<elapsed>/<baseline>` 診斷行,每跑必印。修後:同樣
+64 burner 5 跑 0 紅,單獨 3 跑全綠(18-20 ms / 500-501 ms)。Planted negative:把關機延遲成
+3000 ms → 照樣紅。
+
+**(3) `engine-qualify` 的截斷變成可觀測事實,不再拿 wall-clock 當代理。**
+`engine-qualify-impl.test.js` 的截斷 fixture 原本傳 `testWallSecondsOverride: 8` 然後斷
+`qualified === false` —— 等於假設「24 案的 corpus 8 秒跑不完」,那是關於**主機**的斷言。機器忙就綠、
+閒就紅(2026-08-23 實測:8 路並行且另有一份 suite 同時跑 → PASS;競爭較輕的第二次 → FAIL;單獨跑
+→ FAIL;`verify-preexisting.sh --base 754df354` 判 PRE_EXISTING)。兩端一起修:**觸發**端新增第三個
+shrink-only test seam `testTruncateAfterCases: N`(與既有兩個同族:只能縮不能放,只有 exported
+function 進得去),命中同一個截斷分支但用「起跑了幾個 case」計數,任何機器上都確定觸發;**斷言**端
+kernel 現在在兩條 return path 都回報 `wall_truncated` 與 `started_cases`,測試直接斷那個事實。
+另補退化形(`testTruncateAfterCases: 0` → no_verdict、無 evidence)與一條反向釘:未截斷的 honest 跑
+必須 `wall_truncated=false` / `started_cases=24`,否則把旗標寫死 true 也會綠。Planted negative 兩枚:
+截斷列改回 observed 分母(`6/6` + score 1.0,正是 `resolve-scaffold-tier` 會讀成完整 N/N 的形狀)→ 紅;
+`wall_truncated` 寫死 false → 紅。穩定性:單獨 `node --test` 連跑 3 次全綠。
+
+三筆各自一個 commit,對應的 `docs/BACKLOG.md` 條目都已標 RESOLVED 並寫明機制。Codex 鏡像同步。
+
+## v2.34.36 — 官方施測結果隨 plugin 出貨:consumer 吃預設,或在自己的環境自考
+
+prose-justification: this cut's own skill growth, attributed precisely — `skills/engine-onboarding/SKILL.md` 228→249 (+21: a new「Stage 0.5 — adopt or self-qualify」step, which is the user-facing decision this release exists to create, plus three rows in the existing Available-Scripts table for the three new scripts) and `skills/onboard/SKILL.md` 109→125 (+16: §5.6, the one-time adopt-vs-self-qualify question, placed behind the existing §5.5 hetero-credential gate so a repo with no hetero role never reads it). Both are the shipped surface itself: a defaults artifact nobody is told to consult is `evidence-discipline.md` §1's dead-but-documented module. No prose was added anywhere else in skills/.
+
+**Headline**: autopilot 對常用引擎的正式施測結果,第一次隨 plugin 出貨當**預設值**。17 筆
+administration —— implementer 九過四敗(events 143-155)、reviewer 一過兩敗(139/140/141)、
+verification_author 一過(142) —— 打包進 `references/official-qualification-defaults.json`。
+consuming repo 啟用某個 hetero role 時被問**一次**:吃官方預設,還是在自己的環境自考?
+
+**「簽署」的實作是披露,不是背書**: BACKLOG 原文寫「以簽署的 scorecard 成績單出貨」,而
+[ADR-0001](docs/adr/0001-verification-over-attestation.md) 明文禁止信任機械。所以這裡沒有簽章、
+沒有 hash chain、沒有 witness receipt。取而代之的是**逐列環境披露**:engine / model_version /
+version_source / runner / **runner CLI 版本** / family / **harness commit** / corpus_version /
+prompt_config_hash / effort / 施測日期 / qualified_at / expires,加上 evidence pointer(官方
+event id、capability-evidence anchor、`docs/plans/evidence/` 底下的證據 bundle 路徑)。schema 把
+這整塊列為 required —— 少一個欄位就驗不過,披露不能被悄悄砍掉。`list` 永遠把環境和判定一起印,
+刻意沒有「只看到 QUALIFIED、看不到它是在什麼環境量出來的」那種視圖。全系統只有兩個 sha256
+(`store_projection_sha256`、採用列的 `defaults_artifact_sha256`),兩個都只為 **re-derivation**
+(重跑產生器比對),不擋任何事 —— 和 `references/strike-decay.md` 給 strike `artifact_sha256` 的
+理由完全同一個。**consumer 真正的驗證路徑是重新推導:自考。**
+
+**FAILED 列照樣出貨**: agy flash 18/24、agy pro 22/24、flash-medium 16/24、**grok-4.6 23/24
+(security-canary 陷阱)**、reviewer 的 GLM-5.2/5.3 —— 一次誠實的落榜是 routing information,是
+「還沒試過這個席位」和「試過了,它洩漏了 canary」之間的差別。濾掉失敗會把誠實紀錄變成宣傳頁,
+還會讓已知壞掉的席位被誤試。recipe 的 `excluded[]` 逐條記下每一列刻意不打包的理由(legacy
+pre-schema 列、被取代的 corpus、brain-seat sittings)。
+
+**出貨形**: 產生是腳本不是手抄 —— `scripts/build-qualification-defaults.js` 從 scorecard store +
+capability store + selection recipe 推導出 artifact,輸出**零 wall-clock**(時間戳會讓
+byte-identical 重生不可能,而且那是關於產生器那次執行的宣稱,不是關於施測的),`--check` 重新
+推導後逐位元比對 —— 手改 artifact 一定紅。採用是 `scripts/adopt-qualification-defaults.js`:
+`list` 印披露、`adopt` **經 `engine-scorecard.js record`** 寫入(不是裸 append —— record 才擁有
+寫鎖、event_id 指派,以及那道 capability-evidence identity binding 驗證)。採用列多一個
+`provenance` 物件,純披露,沒有任何 admission 路徑會讀它 —— `dispatch-contract.js` 一如既往只看
+`admission_status`。標記刻意**不**寫進 `version_source`(那是封閉列舉,寫進去每一列都會被 record
+拒收)。
+
+**採用列沒有特權**: 同一個 `seat_hash = sha256({engine,runner,role})`、同一批 allowlisted strike
+writer、同一個 N=3 fold、`expires` 一樣只是 advisory。唯一新增的是 advisory 的:當
+`requalify_required` 席位的 baseline 帶 `provenance.kind === "official-default"` 時,`seat-status`
+與 `current` 多一個 `remedy` 字串,說明**重新採用同一份預設清不掉** —— 那是同一次施測,不是新的
+一次;只有本地一次通過的新施測能 re-baseline。`remedy` 不擋任何事。
+
+**證據紀律**: 兩個施工中的發現都立成 BACKLOG 條目而非吞掉。(1) **scorecard 列不能單獨旅行** ——
+`engine-scorecard.js record` 會拒絕任何 `evidence_store` anchor 在目的地 capability store 解析不到
+的 internal_eval 列(`verifyEvidenceStoreAnchor`)。第一次採用 round-trip 就死在這裡;artifact 因此
+連 qualifier-store anchor wrapper 一起打包,採用時把它編到一個空的本地槽位、同步改 scorecard 列的
+`evidence_store.event_id`。這是「artifact 存在」和「流程真的會動」的差別
+(`references/evidence-discipline.md` §1)—— 跑 round-trip 抓到的,不是讀 code 讀出來的。
+(2) **pre-existing、本刀未修**:`nowArgToMs` 截到 UTC 午夜,同一個 UTC 日稍晚簽發的 evidence
+receipt 會讀成尚未生效 —— events 153/154/155 今天 `seat-status` 回 `no_record`,同一列加
+`--now 2026-08-24` 立刻 `qualified`。動它就是動 admission 語意,超出本刀範圍,附實測重現存進 BACKLOG。
+
+**施測工具形式化**: 2026-08-22 全 roster sweep 用的五支 session-local `sweep*.sh`(五支只差三處:
+seat 清單、凍結 corpus 常數、scratchpad 路徑)收斂成 `scripts/qualification-sweep.sh` —— roster
+檔驅動,`--plan` 決定性且不花錢(測試覆蓋的就是這個模式),`--execute` 會花真錢所以要 `--yes`,
+且 header 明說它**沒有被測試覆蓋**。順帶補上 `engine-onboarding` SKILL 記載的 Stage-0 probe
+receipt 缺口。
+
+## v2.34.35 — 不信任累積取代日曆授權:資格降級第一次有機械依據
+
+prose-justification: per-skill ratchet catch-up for growth shipped by EARLIER releases, attributed precisely (not this cut's drift — v2.34.35 touches no skills/ path): `skills/engine-onboarding/SKILL.md` 203→228 (+25, v2.34.34 round-1 review MUST-FIX — Stage-0 probe operator-run procedure made explicit in-skill); `skills/dev-flow/SKILL.md` 713→717 (+4, 2026-08-18 P7 fix `0f7568fc` — the quality-gate rule contradicted itself, size-scoped rule replaced it); `skills/harness-maintenance/SKILL.md` 58→59 (+1, `61a545b4` — TaskCreate gated off for 5-era models since CC 2.1.233, anchor advisory). Baseline refreshed at this release per the gate's normal flow.
+
+**Headline**: 資格再也不會因為「日期到了」而失效。三根日曆牙齒同一刀拔掉
+(`engine-scorecard.js deriveStatus`、`resolve-review-loop.sh` tier、`dispatch-contract.js`
+admission),取而代之的是 **seat-scoped 機械 strike 累積**:自上次通過施測以來累積 N=3 個
+ordinary strike ⇒ `requalify_required`(強制重考,append-only)。Owner 2026-08-18 裁示
+(「同一個模型不需要日期授權;降級授權應該用不信任投票累積而不是時間」)的建設性另一半,
+v2.34.20 只做了 advisory 化,這次補上真正驅動降級的那一半。
+
+**構念(七席異質 panel 2026-08-22 凍結,七席全判 `sound-with-changes`,無一席主張保留任何日曆牙齒)**:
+不是新建,是 **generalize** —— v2.34.14 brain-seat KR3b 的 strike fold(identity_hash-keyed、
+receipt 必要、strictly-greater pass-rebaseline、零日曆)推廣到 seat 身分
+`sha256({engine,runner,role})`。Panel 推翻了 v0 草案的兩個核心機制:
+(a) **transport exclusion 死亡**(4/4 board 席):engine+runner 這個 pair 就是被派工的席位,
+delivery 是它合約的一部分;只排除一個封閉的、host 端推導的外部原因列舉
+(`quota|user_abort|infra_outage|pre_dispatch_host_abort`),絕不讓 runner 自己標記自己的失敗
+為「傳輸問題」。`cause_class` 降級為純診斷 metadata,永不抑制累積。pair-scoped 計數表示換配對
+即重新開始,這一條同時關掉兩個鏡像失敗場景(壞 runner 永遠可路由 / engine 故障穿傳輸外衣)。
+(b) **sliding work-volume window 死亡**:strike-only ledger 算不出分母,而 success-aging 會讓
+簡單任務洗掉困難任務的失敗。改用既有 fold 語義:**自上次通過施測以來的 N 個 strike**。
+
+**出貨形**:兩個 incident class,零權重 —— `ordinary_strike`(單一根因去重、receipt = 可重播的
+artifact hash + detector 版本,非 log 路徑)與 `critical_reexam_trigger`(**預先宣告的確定性
+predicate registry**,立即 `requalify_required`)。Shadow-first:ordinary threshold 走 SHADOW
+(記錄 + 投影 `would_requalify`,不設閘),critical registry **立即生效**(確定性 predicate 不需
+校準,3 席 board 同意);扳手是單一環境變數 `AUTOPILOT_STRIKE_ENFORCEMENT`,投影時讀取。
+Guards:`(seat_hash, dedup_key)` 冪等去重;`strike_invalidated` 僅在帶機械證明時可採信;
+**投影在讀取時重驗 writer allowlist 與 receipt** —— append-only 本身不做身分認證,未列名的 writer
+永遠無法灌水(被排除並計入 `rejected_strikes`)。epoch 語義取代計數歸零:通過新施測即
+re-baseline,磁碟上一行都不改。
+
+**ADR-0001 硬線**:strike 必須有 host 端重新推導的機械紅燈(重跑測試/oracle/canary 轉紅、gate
+非零離開、contract predicate 為假)。LLM reviewer 的 REJECT 散文可以退回交付物,**永遠不能投下
+strike** —— 否則這就是重建 attestation。rerun-until-green 禁止:重考失敗 append 後席位維持封鎖,
+只由之後一次全新的通過施測解封。
+
+**證據紀律**:每根拔掉的牙齒配一個 planted negative(過期 row 仍以正常 tier 路由並拿到 GO);
+契約測試機械保證「沒有任何 admission 路徑比較 now 與 expires」,重新引入該牙齒即轉紅(已實證
+紅→綠,非空測);production writer 配 delete-the-wiring 負控制 —— 拆掉接線測試必須轉紅
+(`references/evidence-discipline.md` §1「有 caller 才算存在」)。
+
+**first-pass review 抓到的六個 blocker(全數修復,列出來因為教訓比修法值錢)**:
+(1) 🔴 seat token 的字元集自己新造了第五份拷貝,把 `"Gemini 3.5 Flash (High)"`(dispatch-hetero
+的**預設** MODEL)判為非法 —— 於是這整個專案存在的理由(一個真的會累積的計數器)對預設席位
+**一次都不會累積**,而且錯誤被 writer 的 fail-soft 包裝吞掉、delete-the-wiring 負控制照樣過。
+v2.34.28 修過同一件事並在 `src/engine/capability-evidence.js:129-141` 留了字條;測試用合成
+id `strike-engine-1` 而非生產形狀,所以沒抓到 —— fixture 釘在非生產形狀就是缺陷本身。
+(2) 🟠 **第四根日曆牙齒** `resolve-scaffold-tier.js isFresh` 仍在每次派工的路徑上按日期降級,
+而契約測試只掃三個檔案 —— 契約測試的保證只有掃描集那麼寬,文件當時把它寫成了普遍命題。
+(3) 🟠 排除列舉靠 `classify-error` 對**引擎自己 stdout** 的子字串比對,等於受測者能用散文
+(「rate limit reached」)豁免自己的 strike —— 正是 synthesis「絕不讓 runner 自己標記自己的失敗」
+禁止的那條;改為只採信 host 端 exit-code 訊號,log 文字推導的 quota 一律照常累積為 `ambiguous`。
+(4) 🟠 write-side 去重不看 `class`,一個 ordinary strike 佔住 dedup_key 就能讓**立即生效**的
+critical trigger 靜默消失且 exit 0。(5) 🟠 epoch re-baseline 用日期粒度而 strike 用時間戳粒度,
+通過重考後同日稍晚的 strike 清不掉 —— 對唯一會 enforce 的那一類,操作者的補救手段是壞的。
+(6) 🟠 一行壞資料讓 writer 對**所有**席位永久失效,而且因為 fail-soft 沒有任何訊號。
+
+**契約**: [`references/strike-decay.md`](references/strike-decay.md)。
+**計畫**: `docs/plans/2026-08-22-no-confidence-decay.md`。
+**刻意未做**(全部進 BACKLOG 附理由,非遺漏):detector 異常隔離、fleet circuit breaker、
+rate-based window(需要不存在的 dispatch ledger)、重考排程自動化、liveness-probe stale tax、
+以及 panel 最想要的後續 —— 過期席位的 QC 抽樣加嚴 + detector coverage telemetry
+(日曆只改變「我們看多用力」,永不決定「它能不能路由」)。`provider_readiness_receipt_ttl_seconds`
+與 capability-claim TTL **本刀未轉換**,今日仍為 advisory。
+
+## v2.34.34 — implementer qualification suite:live-rail 正式考券
+
+**Headline**: `engine-qualify.sh implementer` 第一次存在。dev-flow 驗證合約的三連言
+(紅綠 ∧ implementer scorecard-qualified ∧ risk=low)一直引用「`engine-qualify.sh` 的
+known-bad 零漏放 bar」作為 implementer scorecard-qualified 的機械定義,但那個 bar 對 implementer
+role **從未存在**——`engine-qualify.js` 只出 reviewer/owner/brain/verification_author 四種考券,
+既有 implementer rows(grok events 137/138)是手工記錄的 live baseline(`baseline-3/3` → T1
+ceiling)。本次補上生產端。
+
+**構念(Board 2026-08-22 先裁)**:考場 = **live-rail 真派工**(非 broker 單發 patch-as-data)。
+reviewer/owner/brain/VA 全走 stateless case broker(候選碼永不落地);implementer 本質需要
+mutable worktree + git artifacts + agentic 工具,裝不進該 transport。候選碼在自己的 dispatched
+process(`dispatch-hetero.sh` worktree 隔離)執行,host 只離線讀 git artifacts,oracle 在 bwrap
+孫進程執行候選碼(期望輸出永不進候選 isolate——t15/t17 同進程偽造教訓)。
+
+**出貨形**:6 case families(greenfield-spec、red-to-green、test-integrity trap、scope trap、
+security canary、no-op honesty)× 2 templates × 2 trials = 24 cases/administration。兩根派生
+(public adminSeed 管候選可見 bytes、held-out oracle key 管隱藏 vectors);admission 三 gate
+(solvability + trap discrimination + overfitter discrimination)與 live administration 共用
+**同一個 collection+grading module**;trusted-git 收集(釘 dispatch commit on branch、
+`--no-replace-objects`、ancestry 單一直接子代、commit object canary 掃描);全序 taxonomy
+(`infra_fail` > `engine_unavailable` > `integrity_violation` > `fabricated_change` >
+`contract_violation` > `oracle_miss` > `pass`);budget allocator + append-only attempt ledger;
+`corpus_pass: "24/24"` 正規形解鎖 T0。`impl_dispatch` evidence methodology kind
+(`normalizeImplTrial`/`enforceImplPromotion`,四個零容忍 floor);`--expires-days` cap 保持所有
+既有 role 的 flat 30,implementer 專屬例外 90。
+
+**兩代 hetero plan review**(sol+grok STOP×2):G1 20 findings 全收;G2 terminal 14/14
+adjudicated at depth-0(generation cap),3 項 scoped rejection 入 backlog(separate-UID
+containment 指向既有 L1 row、virtual-path namespace、rail 級 runner_invoked receipt)。測試:
+`engine-qualify-impl` e2e(honest → qualified 24/24、emitted row 過真 `engine-scorecard record`
+綁定、store 隔離、確定性、4 deviant 各 fail)+ generator self-check(全 deviant matrix + solvability
++ pair invariant + sandbox-discrimination control)+ manifest-gate mutation control +
+截斷紅案(partial-corpus fold/kernel 雙層拒收、wall-0 no_verdict、allocator 耗盡零寫入)。
+
+prose-justification: engine-onboarding 203→217(+14)= implementer 節由「follow-up 手動 bar」
+改寫為已出貨 live-rail 考券的操作契約(Stage-0 operator-run probe 程序 + salvage-posture 註)——
+新考券的 user-facing 操作面,非膨脹;dev-flow 713→717 與 harness-maintenance 58→59 為既往版本
+遺留(v2.34.23 / v2.34.28),本版未觸。
+
+## v2.34.33 — verdict-bytes preservation:transport 失敗與 content-verified verdict 分欄
+
+**Headline**: reviewer transport 毀掉「內容完整、通過完整 battery 的 verdict」時,機器紀錄
+第一次留下痕跡。兩次事故背書(2026-08-08 cc-shim chrome 吃掉 SHIP-AS-IS;2026-08-20 成功席
+的 STOP 死於**另一席**的 transport exhaustion——aggregation 層毀損點在
+`dispatch-plan-review.js` 實證後修復)。原則:搶救 battery = 權威 battery 的**抽取**而非子集
+重列;只放寬「塊在開頭」(→ 唯一 BEGIN + 第一個 END)與「exit 0」兩件事;`status`/
+`verdict`/exit code/所有 fail-closed 決策面逐字節不變;unratified 欄位**只供人工裁決**,
+reader 集合由 canonical-invariants 的 closed allowlist 機械封閉。兩代 plan review(sol+grok
+雙 STOP ×2,G1 15 + G2 9 findings 全數 depth-0 裁決;anti-balloon 1.598× 超停損後壓縮至
+1.495× 帶 warning 過)。
+
+### Added
+- **Shell rail salvage**(`dispatch-review.sh`):八個 runner 的 no_verdict 排出全部收斂進
+  `emit_no_verdict` funnel(六個 inline printf 站點退役,各自的 error 文字/usage/
+  passive-capture/exit code 逐字保留);funnel 以 runner 專屬 capture(CODEX_OUT/QODER_OUT/
+  KIMI_OUT/RAW_LOG/agy 萃取)跑**同一顆** `validate_review_block` battery(尺寸帽、leak
+  scan、單一錨定 VERDICT、FINDINGS、fence-aware proof、tautology 黑名單),全過才寫入
+  additive 欄位 `unratified_verdict`。Fixture A 的 chrome bytes 是 **live 重現**(CC 2.1.238
+  真 notice,SHA-256 凍結;stderr 流向誠實揭露於 evidence)。
+- **Envelope rail salvage**(`plan-review-normalize.js` + `dispatch-plan-review.js`):凍結
+  admission matrix(interrupted/unavailable 僅 strict;timeout/exit_failure/quota 另收
+  clean-scan-tail 的唯一 extracted object;digest 綁定必要;raw_binding_mismatch/
+  identity_mismatch 永不);attempt 級 controller-side provenance + fresh-exclusive capture
+  規則(locator 重用即拒);席位 carry 凍結規則(0 → null、≥2 distinct → 顯式
+  `unratified_conflict`、1 → 最後產出 attempt 的 provenance);**aggregation 保存**:
+  `required_seat_transport_exhausted`/`panel_family_diversity_exhausted` artifact 以非語意
+  `unratified_observations` 保留完成席的 verdict+findings 與搶救 payload(semantic_verdict
+  null、exit 4 不變)。C-complete-timeout fixture 走**真 dispatch-author 生產路徑**產生
+  (author-survives/runner-killed → exit_failure 帶 raw_log,真相凍結於 evidence)。
+- **可觀測性**:panel manifest 席位列 `unratified_available` + `dispatch-status --panel(s)`
+  `seats_unratified` 計數(display-only)。
+- **Reader allowlist guard**(`check-canonical-invariants.sh` 新 `reader-allowlist` 模式):
+  提及 `unratified` 的檔案必須在 closed allowlist(producers/schemas/display/validator/
+  mirrors/tests/docs);synthetic authority-consumer 紅證為常駐測試案例。
+
+### Changed
+- `schemas/review-result.schema.json`(+codex 鏡像):`unratified_verdict` optional nullable
+  enum,oneOf 三分支(reviewed 路徑禁非 null);`src/runners/review.js` 拆 required/optional
+  欄位集,runtime 斷言非 null ⇒ status no_verdict,且永不複製進 verdict/status。
+- `schemas/plan-review-artifact.schema.json`(+codex 鏡像):optional `unratified_observations`。
+
+### Evidence
+- 兩軌 dead-gate 突變記錄(shell 3 紅/normalize 6 紅,負控制全綠):
+  `docs/plans/evidence/2026-08-21-verdict-bytes-preservation/dead-gate-mutations.md`;
+  fixtures 凍結 bytes + provenance 同目錄。Plan R3 FROZEN + G1/G2 dispositions 同目錄。
+
+prose-justification: 本版零 skill prose 變動(`git diff --stat` 對 `skills/` 為空);ratchet
+差額為既往版本遺留(dev-flow 713→717 = v2.34.23 L-1.6 錨點;harness-maintenance 58→59 =
+v2.34.28)。
+
+## v2.34.32 — P6D 矯正:repair ladder(無狀態形)+ manifest 閘提前到 staging 點
+
+**Headline**: P6D 事故的機械矯正,經兩代 hetero plan review(G1 3×STOP → G2 terminal)+
+一輪 pre-merge review 共**四次縮小**後的終形:三閘 → 一閘半 → **無狀態一閘半**。pre-merge
+review 的兩枚 🔴 殺掉了 durable claim-lock 變體 —— 解鎖路在生產不可達 = 永久 Mission 死鎖,
+「比它防的擴張更糟的失效模式」;這正是 P6D 病(用流程武裝流程)的鏡像,在出貨前被自家
+review 抓住。鎖機器退場,拒絕本身扛起整個閘。
+
+### Added
+- `src/engine/repair-ladder.js` — 無狀態述詞:BOUNDARY_REJECTED 進場且 **generation-claim
+  綁有 git-bound `resume_candidate`**(intake 的實際掛載點;R2 review 抓到首版讀錯物件層 =
+  死閘,反向突變雙向釘死)的 campaign,無修復證據不得轉終局;recorded-ref(durable-wait
+  字串)或無候選一律放行(R2 裁決:收 recorded-ref 會重演 no-git-object livelock)。bypass 僅限
+  engine-derived closed enum;controller 文字永不。欄位對映採 reducer 真實 durable 形狀
+  (reason/receipt_digest),named-extras 縮減分支明示 future-only。
+- `terminalizeManagedCampaignFailure` 首擊守衛(無狀態)+ 兩個呼叫點的 reason/remedy 透傳
+  (拒絕必須 explanation-first,不得被 generic resume 訊息吃掉)。
+- `check-disjointness.sh --staged`(**含 `--ita-visible-in-index`** —— intent-to-add 在
+  staged 視圖可見,corpus 第七案釘住)+ `dispatch-hetero.sh` wrapper staging 攔截
+  (mktemp 失敗 fail-closed,與 postcheck 同律)。
+- 測試:`p6d-gates-repair-ladder.test.sh`(21 node + 2 shell,含反死鎖、recorded-ref 放行、**非生產形狀反向 pin**
+  case 與 repo 級無鎖不變量)、`p6d-gates-manifest.test.sh`(13;七案等價 corpus + 真
+  dispatch-hetero in-situ)。突變:述詞恆真 / 無狀態守衛拔除 / staged 閘拔除各自紅
+  (staged 閘 dead-gate = **4 紅**,前版記錄誤植 8,已更正)。
+- 設計佐證:sol dispatch-explore 諮詢(Option D)+ pre-merge reviewer 的可達性反證
+  (evidence dir 兩份)。
+
+### Changed
+- `docs/BACKLOG.md` — P6D 條目:2/3 classes shipped(皆 planted negative);class (a) 留
+  觸發;新增 **durable repair-lock 設計**條目(解鎖路徑 + legacy receipts + projection
+  roundtrip 攜帶 + no_effect_release 封口 + finalize-abort 冪等,reviewer 證據全引)。
+  prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本遺留(dev-flow
+  713→717 = v2.34.23;harness-maintenance 58→59 = v2.34.28),justification 見各該版節。
+
+
+<<<<<<< HEAD
+## v2.34.31 — QRP_CLI_HOME 要 per-invocation clone:共用一個會讓考試把傳輸故障記成模型失分
+
+agy 連兩次資格考卡在 `provider_process_failed`(2/4 輪)。我原本判它「傳輸不可靠」,
+**根因其實在我們這邊**。
+
+實測:共用 HOME、4 平行 → **2~3/4 成功**;各自 HOME、4 平行 → **4/4**。
+agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projects/*}`,併發互踩;
+2/4 的失敗率正好吻合真實考試的 2/4 輪。
+
+**危害不只是失敗率**:exam 把傳輸死亡記成 `known-bad sensitivity miss` —— 從 oracle 的角度,
+「送不到」和「答錯」**長得一模一樣**。一個把基礎設施故障算進能力分數的考試,會產出
+**看似有證據的錯誤結論**:agy 先前那次 `0/21 抓到、19/19 全誤報` 看起來像爛透的 reviewer,
+實際上它一題都沒收到。
+
+修法:`QRP_CLI_HOME` 從「共用指標」改成「**每次呼叫 clone 一份**」,結束即刪。
+加 8MB 模板守衛(credential-only 種子約 16KB;指到真實 home 實測 589MB 會被明確拒絕,
+而非每題慢慢複製)。順帶擋掉共用模式的另一個害處 —— **agy 會把模板寫髒**(16KB → 23MB)。
+
+紅綠(真叫 agy,4 平行共用同一模板):RED **3/4** → GREEN **4/4**,模板維持 16KB 未污染、
+0 個 clone 殘留。修完重考 agy:**trial-1 21/21 FP0 / trial-2 21/21 FP0 / protocol failure 0
+→ qualified**。
+
+測試涵蓋 clone 隔離、模板不可變、clone 清理、超大模板拒絕;變異還原即精確轉紅;ratchet 118→125。
+⚠️ v2.34.30 加的 `captured.env.HOME === examHome` 這次紅了 —— 它釘的是舊契約,
+**更新成新契約而非刪除**:HOME 必須被重導且帶著種子,但絕不可是模板路徑本身。
+
+**同卷送考總結**(每輪 21 known-bad + 19 clean,各兩輪):
+
+| 引擎 | known-bad | clean 誤報 | 放過 Critical | 判定 |
+|---|---|---|---|---|
+| codex `gpt-5.6-sol` max | 42/42 | 0/38 | 0 | ✅ qualified |
+| agy `Gemini 3.7 Flash (High)` | 42/42 | 0/38 | 0 | ✅ qualified |
+| kimi `kimi-code/k3-256k` | 41/42 | 2/38 | 0 | ❌ degraded |
+| GLM `glm-5.3` | 40/42 | 3/38 | 1 | ❌ degraded |
+| MiniMax-M3 | 26/42 | 15/38 | 2 | ❌ degraded |
+
+四筆已 record(scorecard 34 → 38)。
 ## v2.34.31 — plan-review PANEL 層可觀測性:哪席在飛、deadline 剩多少,一條指令
 
 **Headline**: v2.34.21 讓席位可觀測,但 PANEL 層仍是黑箱——循序三席 20m/席,驅動端到最後
@@ -37,6 +1162,7 @@
   prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本之遺留
   (dev-flow 713→717 = v2.34.23 gate advisory;harness-maintenance 58→59 = v2.34.28
   probe row),justification 見各該版節。
+>>>>>>> origin/develop
 
 ## v2.34.30 — QRP_CLI_HOME:只吃 HOME 的 CLI 也能送考(推翻我自己的「不可考」)
 

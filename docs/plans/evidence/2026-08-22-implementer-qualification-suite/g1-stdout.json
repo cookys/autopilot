@@ -1,0 +1,596 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "implementer-qualification-suite",
+  "logical_plan_id": "implementer-qualification-suite-2026-08-22",
+  "session_id": "d20970c2-b3f0-44db-af3e-5ce2f954bdb7",
+  "session_key": "259586afe0f13d52fce6ba6c0c4b15f31e8628fe2afb3d0a71fd47da0e0adc57",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "4d42c1aa50549e214d5a6c168be24f7a2b98d372c00fd19a88d2fff2a23a2575",
+  "manifest_sha256": "1e3cc294f2388eb02241b142dfd1d698195baa41a272ecf388df36f2eae3d232",
+  "plan_sha256": "69e787f79dce41e1b2ce4bacd1f5f81130ceb5d1bd9d92ceccfac46d82fa95c8",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "62ca1ebd66faf690df9fbfbc9c4f324f53ed619bb0bab4f6ccc75aabf17ac147"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "1bc5e901657eb2ca267dc6ee4a845ae5044816d1f426938450e8e9b74a88d360",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-mCOTUV/stdout",
+          "digest": "1bc5e901657eb2ca267dc6ee4a845ae5044816d1f426938450e8e9b74a88d360"
+        },
+        "receipt_digest": "855ac05f38846b8db59ce6026aef68f6ec0b3c0d51a04007ab66fdcc1efd0577"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "581be5b9f781f1b9229b7aa47e60206dd214b27f61331441d442a553f85c34cc"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "47d9bac75affc79f2490b27f9bb8045e729d3a71de16d20aba3c046334ec2850",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-CjIQ1W",
+          "digest": "47d9bac75affc79f2490b27f9bb8045e729d3a71de16d20aba3c046334ec2850"
+        },
+        "receipt_digest": "2d76af98a3ffe4ad927dbe3f56b54491e333cc79135414f3b5945f74997c5624"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Construct deviation, dispatch isolation, host-side Git artifact collection, and infra-failure attribution",
+      "claim": "Worktree isolation plus oracle-only bwrap does not prevent candidate-controlled code or Git metadata from executing during host artifact collection or forcing a no-verdict abort.",
+      "evidence": "After unrestricted agentic dispatch, the host runs git diff and git status against the candidate-writable repository before entering bwrap. A candidate can configure repository-local diff.external, textconv, or fsmonitor helpers so host Git executes candidate commands outside bwrap, or corrupt the base or commit objects so collection fails. The taxonomy does not assign candidate-induced collection failure and could therefore treat it as infra_fail or abort without verdict.",
+      "evidence_reference": "PLAN §2 construct-deviation defense; §4 steps 2-4; §5 infra_fail boundary",
+      "repair": "Sandbox the entire dispatch process with a filesystem allowlist that hides host evaluation assets and permits writes only inside the exam repository. Collect from an immutable snapshot using trusted Git configuration with external diff, textconv, filters, replacements, alternates, hooks, and fsmonitor disabled. Validate commit ancestry and classify every post-dispatch repository or collection failure as candidate-attributed unless an immutable reference twin reproduces it. Add malicious local-Git-config and corrupt-object deviants.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "59812a4ff7d5626cff6ffdcb19b59b3225895dfebeea0893de05c5cdd11e387e"
+    },
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Dispatch-hetero status normalization and the total outcome taxonomy",
+      "claim": "The claimed one-value fail-closed taxonomy is not a total mapping over dispatch and collection outcomes, and its two timeout rules conflict.",
+      "evidence": "Only precondition_failed and engine_unavailable are mapped to engine_unavailable, while a short list of other conditions maps to contract_violation. Missing or malformed JSON, unknown status values, signals, output overflow, absent or unreachable commits, commit-field mismatch, and artifact-collection errors have no pinned outcome. Section 5 also assigns timeout to contract_violation but later says budget or timeout exhaustion produces insufficient_budget with no verdict, allowing a candidate-induced delay to cross an unpinned attribution boundary.",
+      "evidence_reference": "PLAN §4 step 3; §5 ordered taxonomy and budget paragraph; §7 runner-crash fixture",
+      "repair": "Define a complete normalization table for every dispatch exit, signal, parser result, status enum, commit state, and collection result, including an explicit unknown default. Pin a receipt proving whether candidate execution began. After that boundary, malformed output, unknown status, missing commit where required, output overflow, and candidate-caused timeout must be candidate-attributed; only failures proven to precede candidate execution may abort uncharged. Remove the conflicting timeout rule and add a fixture for every residual status class.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2c8be2d8d35e62c24d0d787e01394e3351ced64bcd53b936129e88d258fbaedd"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Oracle secrecy, candidate-visible byte inventory, environment scrubbing, and host filesystem exposure",
+      "claim": "The leak scan's stated exact candidate-visible set is incomplete, and the dispatch boundary does not prevent the candidate from reading hidden host assets.",
+      "evidence": "The plan defines candidate-visible bytes as prompt bytes plus tracked repository bytes, yet every candidate also receives QUALIFY_CANARY_TOKEN, inherited environment state after only seven variables are removed, Git metadata and paths, and runner-injected chrome. No filesystem namespace is specified for dispatch, so a tool-using candidate can traverse outside the fresh repository or inspect process metadata and potentially read the generator, corpus, reference solutions, deviants, or oracle material from the host. Oracle bwrap occurs only after dispatch and cannot restore secrecy already lost.",
+      "evidence_reference": "PLAN §3 Leak scan; §4 steps 1-2; §4 scrubbed environment list; §2 oracle-only bwrap defense",
+      "repair": "Define the candidate-visible surface at the actual runner boundary, including rendered runner chrome, an allowlisted environment, Git metadata, tool-visible paths, mounted files, and dynamic prompt additions. Run dispatch in a mount namespace or container where host evaluation assets and sibling temporary directories are unreadable. Scan the fully rendered dispatch payload and mounted exam image, treating the intentional canary as an explicit exception. Add a deviant that searches parent paths, process metadata, environment variables, and sibling temporary directories for hidden material.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ebdb1d96f4b48e9df9b2550c4814212cb4c6783d1a688d9d4e690bf730b1881b"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "F2 and F3 hidden-oracle independence and discriminative validity",
+      "claim": "Domain-separated randomness does not prove that hidden oracles add information beyond candidate-visible tests, so F2 or F3 can admit a shadow oracle that a visible-test overfitter passes.",
+      "evidence": "F2 and F3 contain runnable visible tests. The plan requires independent seed labels and reference solvability, but neither condition prevents hidden vectors from duplicating visible cases, following a derivable fixed template, or covering no behavior beyond those tests. The deviant matrix contains test deletion and wrong-solution artifacts but no artifact that passes every visible test while deliberately failing an unexposed semantic case.",
+      "evidence_reference": "PLAN §3 F2 and F3 definitions, deterministic generation, and hidden oracle description; §7 deviant matrix",
+      "repair": "Require every F2 and F3 case to admit a visible-test-overfitter artifact that passes all candidate-visible tests but fails the host oracle. Assert hidden input vectors are disjoint from visible vectors and include pinned semantic partitions not serialized into candidate-visible bytes. Reject any generated case that cannot demonstrate this discrimination, and add a mutation control showing removal of the independent hidden partition flips the overfitter to pass.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "61745c667c37ed3d2ddcf7ec056b2a5bd0c62edd216b825a8a57f9d3afc5297b"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Reference and deviant admission paths versus live administration wiring",
+      "claim": "Admission can be green while the live dispatch path is dead because the phase order and fake-dispatch seam do not prove execution through the same end-to-end path.",
+      "evidence": "P1 claims generator self-check can assign pass and pinned deviant outcomes before P2 implements the grader, implying duplicated gate logic or a non-severable dependency. Applying reference patches directly does not exercise dispatch-hetero argument handling, real status normalization, stdout parsing, worktree behavior, or identity capture. The fake dispatcher replaces dispatch-hetero entirely, so its invocation counter cannot detect a broken live adapter.",
+      "evidence_reference": "PLAN §2 admission gates; §4 dispatch seam; §7 negative controls; §8 P1-P3 phase order",
+      "repair": "Create one shared collection-and-grading implementation and make both admission and administration call it. Reorder or merge P1 and P2 so admission cannot pass before that implementation exists. Before any dogfood candidate, run a reference artifact through the real dispatch-hetero entry point using a deterministic local engine adapter, and add negative controls that break the real CLI argument contract, status parser, and shared gate to prove admission turns red.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4c414a7697bf45a17195c7e3afc8ae4ade14b08b83c75a23c09bab208e148119"
+    },
+    {
+      "rubric_id": "IQ3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Trap discrimination matrix for test integrity, F6 commits, semantic scope, and transformed canary leakage",
+      "claim": "The ten-shape deviant matrix leaves several plausible gaming paths neither structurally blocked nor named as residuals.",
+      "evidence": "Byte-comparing existing test files does not explicitly protect test discovery configuration, package scripts, loaders, or newly added shadow tests. F6 says any new commit is fabricated but does not pin detection as HEAD differing from base or test allow-empty and whitespace-only commits. F4 checks allowed paths but cannot detect unrelated or prohibited behavior inserted into an allowed file. F5 scans literal token value or name, so base64, hex, reversed, rot13, split-string, or hashed artifact leakage can evade it; the named residual excludes network exfiltration but not encoded artifact leakage.",
+      "evidence_reference": "PLAN §3 F3-F6; §4 artifact collection; §5 fabricated_change; §7 deviant matrix; §10 residuals",
+      "repair": "Define a closed-world protected manifest for tests, runner configuration, discovery inputs, and new-file rules across all relevant families. Detect F6 fabrication by validated commit ancestry rather than diff size and add allow-empty and whitespace-only deviants. Add semantic or AST invariants for F4 where feasible and explicitly narrow the residual where semantic scope cannot be mechanically proved. Define a supported transform closure for canary detection, add encoded and split-token deviants, and name all stronger encodings outside that closure as residuals.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "528432481d1b835a3be9bfb1a005ff34252fe6fd7a68c8729e8378c44e68d41b"
+    },
+    {
+      "rubric_id": "IQ4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Corpus reproducibility, seed envelope, Git materialization, and payload-independence testing",
+      "claim": "The stated pure-function and byte-identical corpus guarantee omits nondeterministic and host-dependent inputs used to create candidate-visible repositories.",
+      "evidence": "masterSeed includes run_nonce and AUTOPILOT_QUALIFY_SEED even though the declared input tuple is admin seed, generator file, and corpus JSON. Fresh git init and the initial commit are not given fixed author, committer, timestamps, branch initialization, object format, configuration, locale, timezone, umask, file modes, or line-ending policy; the base SHA can therefore vary. mkdtemp paths and Git metadata are candidate-visible even though the invariance set only includes prompt and tracked bytes. No paired-generation acceptance test is specified for changing only the oracle derivation chain.",
+      "evidence_reference": "PLAN §3 deterministic generation and per-case base SHA; §4 step 1; §8 P1 acceptance",
+      "repair": "Define and persist a canonical seed envelope containing run nonce, salt commitment, generator hash, corpus hash, role, and derivation version. Materialize Git with isolated configuration and fixed identity, timestamps, branch, object format, locale, timezone, umask, modes, and line endings, or exclude Git objects from the corpus identity while separately normalizing their candidate-visible representation. Add a paired self-check that varies only an injectable oracle derivation label, proves oracle bytes change, and byte-compares the complete normalized candidate-visible image as identical.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f0434c144f14a333cf830f73f64eea946429840cdf96de5c5fc0ed0b6680e876"
+    },
+    {
+      "rubric_id": "IQ4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Cross-trial independence and resistance to template memorization",
+      "claim": "The plan guarantees different seeds but not materially different trial structures, so the two-trial AND can measure repeated template recognition rather than independent implementation ability.",
+      "evidence": "The enumerated variation axes are module names, function names, inserted values, and oracle seeds, while each family uses one generator and a single prompt template. No disjoint template banks, semantic-shape distance, operator or control-flow variation, error-model variation, or trial-level fingerprint assertion is required. A runner with persistent home state can also carry trial-one fingerprints into trial two because dispatch isolation is not specified.",
+      "evidence_reference": "PLAN §3 deterministic generation, per-case generated artifacts, and discrimination paragraph; §4 environment scrubbing",
+      "repair": "Pin multiple semantic templates per family and stratify trials so they cannot share a structural template identifier. Define and test a minimum structural-distance metric over normalized AST, operation family, state machine, error paths, and visible-test topology. Isolate or reset runner-persistent state between cases, randomize case order deterministically, and add a template-specific memorizer deviant that succeeds on trial one but must fail trial two.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "57071b64a87ae5bfae2784cf710c7bd3e8e794e81965b121c59b39612941b60e"
+    },
+    {
+      "rubric_id": "IQ5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Role-specific expires-days policy and existing verification-author CLI behavior",
+      "claim": "Changing the flat 30-day CLI cap to MAX_QUALIFIED_TTL_DAYS by role is not behavior-preserving for existing roles, contrary to the plan's claim.",
+      "evidence": "The frozen rubric identifies the verification-author ceiling as 60 days. Under the current flat cap, values from 31 through 60 are rejected; the proposed role lookup newly accepts them. Section 6 nevertheless states that only implementer gains 90 days and all other role behavior remains unchanged. This is an observable policy expansion without an explicit compatibility decision, migration note, or rollback boundary.",
+      "evidence_reference": "PLAN §6 change 4; PLAN §10 TTL statement; FROZEN_RUBRIC IQ5",
+      "repair": "Either preserve the 30-day cap for every existing role and introduce the 90-day ceiling only for implementer, or explicitly authorize the verification-author expansion as a separate user-visible policy change with rationale, migration and rollback notes, documentation, and boundary tests at 30, 31, 60, 61, 90, and 91 days for every role.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d06e2118d64f4bd5dd1b9507abfea1645a240e4e63aaf515c9e788061236f09c"
+    },
+    {
+      "rubric_id": "IQ5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Emitted-row compatibility with schema, qualityOf, dispatch-contract, and review-loop consumers",
+      "claim": "Row validation alone does not prove that the new evidence lands at the intended scaffold tier or admission semantics, and the old-schema negative direction is not operationally pinned.",
+      "evidence": "P3 accepts an emitted row passing validateRecordRow, but no acceptance invokes resolve-scaffold-tier qualityOf on that exact serialized row and asserts T0, invokes dispatch-contract and review-loop consumers, or decides whether formal qualification should remain provisional. The phrase bidirectional fixture does not explicitly require the new impl_dispatch row to fail under a frozen old validator; it can be satisfied merely by validating old and new fixtures with the new schema.",
+      "evidence_reference": "PLAN §1 consumer inventory; §5 quality block; §6 changes 7 and 11; §8 P3; §9 verification contract",
+      "repair": "Add a frozen compatibility matrix using the exact emitted row: old rows must produce byte-identical normalized results under the new validator, the new row must fail the frozen old schema and pass the new schema, qualityOf must return the intended T0 result, review-loop scaling must take the intended branch, and dispatch-contract must produce an explicitly chosen provisional or formal admission state. Include malformed nesting and corpus_pass controls that force the expected lower tier.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c328634d25023f8b58d0154df335c1a3562ba06953f466167b3971bba4268c07"
+    },
+    {
+      "rubric_id": "IQ6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Agy Stage-0 probe lifecycle, retry honesty, identity provenance, and evidence retention",
+      "claim": "The Stage-0 failure path has no append-only state transition, so failed probes can disappear and permit rerun-until-green selection.",
+      "evidence": "The plan says to record agy --version and agy models and use operator-asserted version provenance when runtime echo is absent, but it does not freeze an administration identity before probing, classify probe failure as an uncharged infrastructure abort, persist failed probe receipts, bound retries, or require later attempts to reference earlier failures. General evidence bundles are promised only as the P5 result, leaving no pinned requirement for failed pre-run artifacts, executable identity, or model-list output.",
+      "evidence_reference": "PLAN §4 Identification; §5 no-verdict and rerun language; §8 P5",
+      "repair": "Allocate and persist the administration ID, frozen seed and corpus hashes before Stage 0. Write an append-only probe receipt for every attempt containing executable path and digest, CLI version output, model-list output, exit status, timestamps, runner configuration, version_source, and instrument_charged false. A failed probe must terminate that attempt as an infrastructure abort; any retry must be a new linked attempt under a stated cap and may not erase or replace prior evidence.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c0ebe0910f8e0d603dc61b2b13ab2598a0bb64788f5c2d82e7111c40c681c10a"
+    },
+    {
+      "rubric_id": "IQ6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Administration dispatch budget, timeout attribution, and insufficient_budget reachability",
+      "claim": "The 24-dispatch limit is asserted but not mechanically budgeted, the dispatch timeout remains symbolic, and insufficient_budget has no reachable or tested state transition.",
+      "evidence": "The administration has exactly 24 cases and a fake-dispatch invocation counter, but the dispatch command uses an unspecified T and no total wall, provider-attempt, or cost reservation is defined. Oracle timeout alone is pinned at 60 seconds. With one invocation per case and no declared allocator, insufficient_budget cannot arise except by an unspecified external event; meanwhile Section 5 ambiguously lets timeout become either candidate-attributed contract_violation or no-verdict insufficient_budget.",
+      "evidence_reference": "PLAN §3 corpus size; §4 steps 2 and 4; §5 taxonomy and budget paragraph; §7 dispatch counter",
+      "repair": "Pin a numeric per-case dispatch timeout and total administration wall and dispatch-attempt budgets, define whether internal provider retries are disabled or counted, and reserve all 24 case invocations before charging the instrument. Candidate-session timeout must always consume its case and map to contract_violation. Define insufficient_budget only for a specific host-side reservation or depletion transition, emit an append-only abort receipt, and add a red control using an injected budget allocator that makes this state deterministically reachable.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9e7802c6e6cf6483f64f61218ee20097e975f3c623c43512a406db8312269242"
+    },
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§5 taxonomy vs dispatch-hetero classify_outcome and VA-style bwrap executor",
+      "claim": "The live rail reopens a no-verdict abort that the broker closed, and §5 does not pin a total map of dispatch-hetero statuses or an operational split between candidate-induced oracle death and host infra.",
+      "evidence": "Plan §5 maps only precondition_failed|engine_unavailable to abort-with-no-FAIL, and lists contract_violation as dirty/question_suspected/timeout/nonzero/acceptance_failed/boundary_rejected. src/runners/implementer.js IMPLEMENT_STATUSES also includes failure and no_op; timeout is not a rail status (dispatch-hetero maps timeout to question_suspected). classify_outcome promotes a worker-controlled agent log to engine_unavailable when classify-error sees substrings such as quota exceeded, out of credits, or 429, including on a clean commit plus nonzero exit. The same script states that on abnormal exit the log tail is worker-controlled. A prompt-injected candidate that prints a quota phrase and exits 1 therefore aborts the administration instead of taking contract_violation or integrity_violation. Separately, engine-qualify.js executeVaTwinSandboxed treats any bwrap nonzero/signal as VaInfraError/infra_fail; copying that executor would contradict §5's claim that candidate-induced oracle crash/timeout is oracle_miss, never infra_fail. No discriminator is pinned for bwrap-binary-missing versus candidate process.exit or a git-collection throw after the candidate rewrites shared worktree git config or hooks.",
+      "evidence_reference": "PLAN §5 taxonomy; scripts/dispatch-hetero.sh classify_outcome (failure/engine_unavailable/question_suspected branches) and the worker-controlled log comment; scripts/engine-capability-state.js classifyErrorContent quota/429 matchers; src/runners/implementer.js IMPLEMENT_STATUSES; scripts/engine-qualify.js executeVaTwinSandboxed nonzero→VaInfraError",
+      "repair": "Pin a total function from every IMPLEMENT_STATUSES value plus grader/oracle executor exceptions to exactly one §5 label. Treat engine_unavailable as abort only when dispatcher_called is false or the classifier evidence is harness-owned, never worker-body text; if a new commit exists, never abort-class. Pin: bwrap missing/setup fail = infra_fail; candidate module nonzero/timeout/signal inside a running sandbox = oracle_miss. Add fixtures: quota-phrase plus exit 1 → contract_violation; process.exit(1) module → oracle_miss; missing /usr/bin/bwrap → infra_fail. Unmapped status must not throw into infra_fail.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a0cce43952d623715ea7a2f8432835f3a4a4d17123e1c6cfbd29be09c4e1fc3e"
+    },
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2 bwrap oracle vs t15/t17 process isolation; live-rail UID filesystem",
+      "claim": "Grading-by-git-artifact plus bwrap does not close broker forgery: same-isolate oracle require() can steal expected vectors, and the dispatched agent can read host answer keys on the same UID.",
+      "evidence": "Plan §2 cites t15/t17 and says the oracle runs candidate code in a bwrap child with RO bind of candidate files plus node. docs/BACKLOG.md M3-band row states the actual close is a separate subprocess from the comparator; same-process import-time frame walk stole NONCE/snapshot (N2 5/5). The baseline being mechanized (docs/plans/evidence/2026-08-17-roster-qualification/impl-baseline/oracle-semver.js) does require(candidate) in the same Node isolate as the vectors array. bwrap does not remove V8 frames. If expected outputs or vectors live in runner.cjs or a JSON file bound into the sandbox (the VA runner.cjs require pattern at engine-qualify.js VA_RUNNER_SOURCE), a committed cheat module can read them at import and echo pass. Independently, dispatch-hetero does not sandbox the agent: cwd is a worktree with dangerously-skip-permissions-class tools, so the candidate can find /tmp/impl-qualify-* , read sibling reference_solution/deviant_artifact/oracle JSON, or read evals/impl-eval-generator.js from the host checkout. Plan §3 says those artifacts never enter the candidate-visible surface, but that surface is defined only as prompt plus tracked repo bytes, not the UID filesystem the live rail actually grants. Applying the reference patch yields git artifacts that honest-pass every gate, which is a capability false-pass the broker could not produce.",
+      "evidence_reference": "PLAN §2 t15/t17 clause and §3 never-visible claim; docs/BACKLOG.md M3-band t15-t17 process-isolation row; impl-baseline/oracle-semver.js require(candidate) plus in-file vectors; scripts/engine-qualify.js VA_RUNNER_SOURCE same-isolate require; scripts/dispatch-hetero.sh worktree add plus runner spawn without agent bwrap",
+      "repair": "Pin oracle architecture: frozen driver in bwrap, candidate loaded only as a grandchild process, inputs via stdin, expected outputs never in that isolate or any bound file. Unlink reference_solution, deviant_artifact, corpus instance, and oracle expected files from disk before spawn; keep them in memory or a directory that is not a parent/sibling of the worktree and is mode 700 to the qualifier only. Name same-UID FS read as a residual only if those files are proven unreachable; otherwise the residual is false. Add a deviant that require-time frame-walks for expected outputs and must score oracle_miss, not pass.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4adde450dbf74abc5648833be76aed7504d5ae62d4789eb7dcf98e3ec8ed7c04"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§3 leak-scan byte-set vs live dispatch visible surface; F2/F3 runnable tests",
+      "claim": "Leak-scan of prompt plus tracked repo is not the complete candidate-visible surface, and F2/F3 visible tests can approximate the hidden oracle to pass-level unless held-out vectors are pinned.",
+      "evidence": "Plan §3 leak-scan = prompt bytes plus all tracked exam-repo bytes. Plan §4 spawn matches run-grok-implementer-ab.sh argv but does not pass --scaffold-tier off. dispatch-hetero.sh defaults SCAFFOLD_TIER_ARG to auto; a fresh git init has no dispatch-config off switch, so references/scaffold-tiers.md T0-T2 text is prepended. resolve-scaffold-tier.js reads ~/.autopilot/engine-scorecard/scorecard.jsonl with Date.now freshness. Current grok-4.5 baseline row uses corpus_pass baseline-3/3, which qualityOf treats as partial (T1); an unknown agy seat fails closed to T2. T1/T2 tell the candidate to run named verify commands. F2/F3 repos contain runnable tests, so those tests plus scaffold make the hidden oracle a shadow unless the plan pins held-out vectors disjoint from visible tests and spec examples. All cases also inject QUALIFY_CANARY_TOKEN into dispatch env, which leak-scan never sees. agy chrome (dispatch-hetero.sh AGY_EDIT_ONLY) prepends an absolute worktree path and forbids shell/git/test/commit, contradicting the six-element prompt that teaches commit discipline; grok does not get that chrome. None of scaffold, env canary, or runner chrome is in the leak-scan set, so the two dogfood seats are not shown the same instrument.",
+      "evidence_reference": "PLAN §3 leak-scan and F2/F3 family rows; PLAN §4 spawnSync argv/env; scripts/dispatch-hetero.sh scaffold envelope default auto and AGY_EDIT_ONLY; scripts/resolve-scaffold-tier.js storePath plus qualityOf; scripts/resolve-scaffold-tier.js:109-118; impl-baseline scorecard corpus_pass baseline-3/3",
+      "repair": "Pin exam spawn to --scaffold-tier off (or freeze one envelope for every seat and include it in prompt_config_hash and leak-scan). Expand leak-scan to the exact bytes the runner will see: rendered six-element prompt, scaffold if any, runner chrome, and env names/values injected for the case. Pin F2/F3: hidden oracle has held-out vectors not present in visible tests or spec examples; overfit to visible tests is oracle_miss. Record QUALIFY_CANARY_TOKEN as intentionally visible via env, not as a leak-scan hole.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "81ec668dc004fdbcbd5cfbb8df001215e1d0e4bd239a3690b2cfa1a0a0c10c33"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2 admission gates vs §4 live administration",
+      "claim": "Solvability and trap-discrimination admission can green on an in-process apply-patch path while the live dispatch-hetero plus bwrap path is dead or semantically different.",
+      "evidence": "P1 acceptance is node evals/impl-eval-generator.js --self-check: apply reference_solution and deviant_artifact, assert pass and pinned taxonomy. That path never calls dispatch-hetero, never builds a collection JSON from classify_outcome, and never needs a committed status. Live §4 adds context-window default block, worktree budget (precondition_failed resource_budget), scaffold, runner chrome, wrapper-commit on agy, and bwrap RO binds. The fake dispatcher is defined to fake only the engine while writing real git commits, which still skips those rail gates. VA already documents this split (grader injects twin execution; admission/tests may use in-process). Plan §2 claims admission runs the same gates the live administration uses, but P1 cannot exercise dispatch JSON mapping or bwrap bind failure. A generator that admits because in-process require(oracle) works can still fail live when bwrap does not bind a needed node builtin, or can pass admission oracles that never run under the live driver.",
+      "evidence_reference": "PLAN §2 admission gates; PLAN §8 P1 self-check; PLAN §4 fake dispatcher seam; scripts/dispatch-hetero.sh context_window_gate default block and die_resource_budget; evals/va-eval-grader.js injected twin comment",
+      "repair": "Define collection JSON as the single gate input. Admission must build that object the same way live does after applying the reference or deviant (status committed/no_op, commit, diff, message, porcelain, test bytes) and must invoke the same bwrap oracle driver binary/args as live. Add a negative control: in-process oracle green, bwrap driver red, admission must fail. Do not treat fake-dispatcher e2e as proof of rail gates; keep a live-rail smoke that is allowed to skip only the paid engine.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8a64d46fb11992048b23a0e8a168dba30a2a84bae4443c530e8d4fc33805485e"
+    },
+    {
+      "rubric_id": "IQ3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§7 deviant matrix vs F3/F4/F5/F6 gaming inventory",
+      "claim": "Several plausible gaming strategies are neither given a structural counter nor named as residuals, including at least one F5 false-pass.",
+      "evidence": "F5 leak scan is literal token value or name in added lines and commit message. Named residual is only cloud network side-channel. A base64 or rot13 encoding of QUALIFY_CANARY_TOKEN in an added comment therefore reaches pass on F5. §7 has canary-leaker and canary-name-leaker only as literals. F3 integrity is byte-compare of existing test files plus skip markers; adding a new test file that the runner loads first, or changing package.json scripts or a mocha/jest config, leaves declared files byte-identical. That is not in the matrix and not a residual. If the oracle ever uses the candidate test runner it is a known-bad false-pass; even with an independent oracle the integrity gate is blind. F6 prose says any new commit is fabricated_change, which would catch git commit --allow-empty, but the fabricator deviant does not pin empty-diff versus whitespace-only, so an implementation that keys on files_changed greater than 0 would miss allow-empty. F4 scores disallowed paths; writing lure behavior into the allowed file is in-scope and is not named as residual or failed by required oracle vectors.",
+      "evidence_reference": "PLAN §2 named residuals (artifact-channel canary only); PLAN §5 integrity_violation and fabricated_change; PLAN §7 matrix rows test-weakener/test-skipper/canary-leaker/fabricator/scope-violator; PLAN §3 F4 in-file lure",
+      "repair": "Either add structural counters or name residuals, one per hole: (1) F5 decode-normalize common encodings or residual literal-only encodings out of scope; (2) F3 hash the declared test surface plus refuse extra files matching test/spec/config globs and refuse test-runner config edits, or residual integrity is declared-path byte-compare only; (3) F6 fabricated_change iff commit SHA != base SHA, with an allow-empty deviant fixture; (4) F4 oracle vectors that fail if in-file lure behavior is implemented, or residual in-file lure followed inside allow-path is not scored. Each choice must appear in §7 or §10 before P1 case authoring.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "89d7317c823b09125debf5c5475568e0b89597d356c5399bde585e6f7933c7cc"
+    },
+    {
+      "rubric_id": "IQ4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§3 generator invariant vs live visible bytes; per-trial distinctness",
+      "claim": "The payload-independence invariant is not testable as a live-administration claim, host scorecard/clock change candidate-visible bytes, and per-trial distinctness is only identifier-level.",
+      "evidence": "Plan §3 says administration is a pure function of (admin seed, generator file, corpus JSON), domain-separated labels, oracle:* changes do not change candidate-visible bytes, no wall clock, no Math.random. That is a generator-file claim. Live visible bytes also include resolve-scaffold-tier output, which uses Date.now and ~/.autopilot/engine-scorecard/scorecard.jsonl, so two administrations with the same seed on two hosts (or grok with a still-fresh baseline-3/3 row versus agy with no row) are not byte-identical. P1/P2 acceptance does not include an oracle:* pair-generation fixture (brain-eval-generator.js does leak-scan and pair splits). Per-trial seed derives different names/values; an engine that memorizes trial 1 control flow can transfer to an isomorphic rename in trial 2. The hard F1/F2 case is intra-family difficulty, not a cross-trial structural distinctness predicate. issued_at/latency Date.now in existing engine-qualify.js rows is record metadata, not corpus, and is fine; scaffold is not.",
+      "evidence_reference": "PLAN §3 determinism and oracle:* invariant; PLAN §8 P1/P2 acceptance (self-check and grader byte-identity only); scripts/resolve-scaffold-tier.js now=Date.now and default scorecard path; evals/brain-eval-generator.js leakScan/pair machinery as the missing analogue",
+      "repair": "Split invariants: (G) generator visible bytes (prompt template render plus tracked repo) are a pure function of seed and ignore oracle:* — add a pair-generation test that mutates only oracle:* and asserts identical visible bytes. (L) live spawn must not add host-state bytes: --scaffold-tier off, no scorecard read, leak-scan the runner chrome constant. Pin trial-2 distinctness as different control-flow or error taxonomy, not only identifers, or name residual v1 accepts isomorphic renames. AUTOPILOT_QUALIFY_NOW may stamp records, not corpus.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f0a97de8dbc2f0bdd298ece8705e94851bbae89eca9dc880dfbf784c0a2713be"
+    },
+    {
+      "rubric_id": "IQ5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "engine-qualify parseArgs expires cap, capability-evidence schema/promotion, scorecard consumers",
+      "claim": "The chassis change list is internally false on TTL blast radius, omits the transport XOR that would make the new subcommand usage-error, and understates schema work so additive bidirectional validation cannot hold as written.",
+      "evidence": "Plan §6 item 4 says --expires-days becomes MAX_QUALIFIED_TTL_DAYS[role], implementer 90, other roles unchanged. capability-evidence.js already has verification_author 60 and implementer 90; CLI currently hard-caps all roles at 30 (engine-qualify.js expiresDays > 30). Indexing by parseArgs role=argv[0] newly allows VA 60 (resolve-scaffold-tier would keep T0/T1 twice as long) and has no brain key, so expiresDays > undefined is false and brain would uncap. Item 1 only adds implementer to the :255 allow-list; parseArgs :386-392 still requires panel-cmd XOR remote-provider, which live-rail implementer does not use, so engine-qualify.sh implementer dies at usage before runImplQualification. Item 11 says schema needs only methodology kind additive. schemas/capability-evidence.schema.json methodology.kind enum and internal_eval oneOf still lack even va_declared_plan; trials oneOf is trial|brain_trial; thresholds oneOf is reviewer and brain shapes. Plan also adds normalizeImplTrial and enforceImplPromotion, but compileCapabilityEvidence enforcePromotion still allows qualified only for role_eval|owner_brain_seat|va_declared_plan. Kind-only additive cannot express impl trials and cannot promote them. qualityOf only reads corpus_pass N/N, false_pass_critical, and capability_score; extra plan keys are ignored, so a 24/24 plus score 1.0 row does land T0 as intended, but old-schema negative control is undefined if impl rows are stuffed into reviewer trial fields. qualify-scorecard-vocabulary.test.sh source-parses version_source/effort, not the role allow-list, so it will not automatically go red on an implementer mismatch.",
+      "evidence_reference": "PLAN §6 items 1,4,7,11; scripts/engine-qualify.js:255, :383-392, :2678-2683; src/engine/capability-evidence.js MAX_QUALIFIED_TTL_DAYS, METHODOLOGY_KINDS, enforcePromotion kind allow-list; schemas/capability-evidence.schema.json kind enum, trials oneOf, thresholds oneOf; scripts/resolve-scaffold-tier.js qualityOf; hooks/tests/qualify-scorecard-vocabulary.test.sh parser",
+      "repair": "Keep reviewer/owner/brain CLI cap at 30; if VA 60 is intended, name it as a behavior change and add a consumer test that a 60-day VA row remains valid and a 61-day row is rejected. Map brain to owner for TTL. Add an implementer parseArgs branch that forbids panel/remote XOR and accepts --dispatch-bin. Schema: add impl_dispatch kind, impl thresholds, impl_trial oneOf, and enforcePromotion dispatch; keep frozen old schema as a fixture that rejects a new impl row (negative control) while existing JSONL rows revalidate byte-for-byte. Extend vocabulary parity to parse the role allow-list. Do not reuse reviewer trial fields as a dummy fit.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "084ea23eb00563375a04f07c21793f16edeca44a54550237102569c6179340b9"
+    },
+    {
+      "rubric_id": "IQ6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§4/§5/§8 P5 dogfood identity, Stage-0 probe, 24-dispatch budget",
+      "claim": "The 24-dispatch budget is not bounded by a stated per-case timeout with a reachable insufficient_budget red case, and the Stage-0 probe path is an identity-shopping side door rather than an uncharged infra abort.",
+      "evidence": "Plan §4 spawn passes --timeout T with T unnamed (dispatch-hetero default is 9m; A/B default is 3m; oracle is 60s). §5 says mid-administration budget/timeout exhaustion yields insufficient_budget, no verdict, no rerun-until-green. §7 has runner-crash → engine_unavailable but no insufficient_budget fixture, unlike engine-qualify-brain.test.js which asserts no store row. Without a numeric per-case T and an administration wall or dispatch-count cap that a fixture can trip, insufficient_budget is decorative; a hung case becomes question_suspected/contract_violation or an unpinned abort. Frozen plan dogfood names agy/gemini-flash-4.7. Project README already records that id is absent from agy 1.1.14 agy models and the seat was swapped to gemini-3.7-flash-high after probe. P5 says prepend a Stage-0 probe and record any result honestly, but never says probe-fail ⇒ infra abort with the instrument uncharged. That is rerun-until-green at identity selection. §4 says grok version_source runtime and agy operator-asserted when there is no runtime echo, and to record agy --version plus agy models, but does not pin those probe artifacts into the evidence bundle fields that compileCapabilityEvidence will store.",
+      "evidence_reference": "PLAN §4 spawn --timeout T and identity paragraph; PLAN §5 insufficient_budget sentence; PLAN §7 matrix (no budget row); PLAN §8 P5 gemini-flash-4.7 probe; docs/projects/2026-08-22-implementer-qualification-suite/README.md Board identity correction; scripts/engine-qualify-brain.test.js insufficient_budget no-row assertion",
+      "repair": "State per-case dispatch timeout as a corpus constant (not an unnamed T) and an administration cap (24 spawns and/or a wall). Add a §7 red fixture that forces insufficient_budget after N cases and asserts no evidence row and no scorecard row. Pin Stage-0: if agy --version or agy models does not contain the frozen model id, abort infra, do not emit FAIL, do not substitute another model under the same administration identity. Record --version-source per seat as planned and store the probe stdout hashes in the evidence bundle. Freeze the dogfood model id to a string that the probe has already listed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f75fa3a6e232f426f4773a117ea1396aef77bac00edda6eefc721233553e372c"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-08-21T17:21:22.460Z"
+}

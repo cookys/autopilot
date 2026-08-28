@@ -8,6 +8,10 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-08-27 | arch | 訂閱不等於便宜:同一個 CLI、同一組登入,指向 first-party 模型走「大方的池」,指向第三方模型走「按 API 價計費的池」,差一個數量級;`auto` 沒有獨立額度(是母池的子項),`-fast` 是進出各 2 倍、只買延遲不省錢;CLI 查不到用量,只有互動模式的 slash command 有 | [vendor-quota-shapes.md](vendor-quota-shapes.md) |
+| 2026-08-25 | arch | 驗證一份「描述環境」的文件要獨立重畫地圖再 diff,不是逐句查證——逐句查不出它少畫了一整條通道;三位審查者全過,且其中一人據以推理的前提本身就是漏掉的那條 | [architecture.md](architecture.md) |
+| 2026-08-25 | arch | 讀斷言不等於測斷言:一席讀了「改鬆會變紅」的註解判 Verified Clean,另一席突變後發現全綠、真實語料 5→2;panel 合成必須 union-on-verified-critical,多數決會壓掉盲點catch | [architecture.md](architecture.md) |
+| 2026-08-25 | arch | 協定的句子攔不住一個 process:depth-0 獨佔 oracle 的規定寫得很清楚,已回傳的 foreman 仍出於盡責自己再跑一輪,15 個並行進程讓整個時間窗紅綠都不可解讀;獨佔要靠鎖不靠散文 | [architecture.md](architecture.md) |
 | 2026-08-02 | arch | Mission freeze 前先把 canonical outputs 經所有 deterministic generator 展開，mirrors 一起進 output/change/reservation/verification；若執行中才發現遺漏，舊 lease 誠實 terminalize，再用 additive successor 沿用同一 lineage | [architecture.md](architecture.md) |
 | 2026-07-31 | arch | Persistent implementer transcript 只保證上下文連續，不會自動產生 ICC/WLB/LSM lifecycle evidence；L5/L6 fallback 必須在第一次 effect 前接上 canonical adapter，事後不得偽造 `can_close` receipt | [architecture.md](architecture.md) |
 | 2026-07-29 | debug | CLI `--help` 只證明 option 存在，不證明可組合：Kimi 0.28.0 的 non-interactive `--prompt` 與 interactive `--plan` 互斥；hermetic fixture 若照抄錯誤 argv 也會假綠，需 live smoke | [debug-patterns.md](debug-patterns.md) |
@@ -15,9 +19,6 @@
 | 2026-07-26 | arch | Severity 不等於當票修復權；同模型新 context 是 peer、不是 Heto；主席不可用時改走全部合格異質席聯審，逐票排除 implementation lineage／能力與 context 不足席 | [architecture.md](architecture.md) |
 | 2026-07-24 | arch | Merge 完成後 cleanup 是 terminal invariant：驗證 worktree inactive/clean 與 branch containment，移除 worktree，再用 preserve-first reaper 或 `git branch -d`，最後重新列舉確認零殘留 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
 | 2026-07-16 | debug | Silent-retry 假死（CLI×z.ai 確定性 529）— 分層診斷四步 + logging proxy 定位；readiness 探針要同傳輸同 payload | [debug-patterns.md](debug-patterns.md) |
-| 2026-07-16 | debug | Git worktree 共享 .git/config — worker 裸 git config 寫穿主 clone 身分（Test Bot 事故）；teardown identity 校驗防線 BACKLOG | [debug-patterns.md](debug-patterns.md) |
-| 2026-07-16 | arch | Git ref lifecycle races — enumeration status / stable snapshots / verified ack publication / prepared ref restore / lifetime flock / probe-first review / SHA-256 disclosure | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
-| 2026-05-14 | arch | Claude Code plugin dogfood 5 lessons — catalog snapshot vs disk drift / cross-cwd hook state merge / chain prose 同檔自相矛盾 / multi-round review progressive uncovery / dogfood observe-vs-invoke trade-off | ⚠️ `claude-code-plugin-dogfood-lessons.md` 遺失（從未 commit 進本 repo；鏡像 repo 不在此機。2026-07-16 doc-sync 發現。若他機還有請補回並 commit） |
 
 ## 知識分類
 
@@ -26,7 +27,7 @@
 | [architecture.md](architecture.md) | Review repair authority、peer/Heto 分界與 fallback panel 資格 |
 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) | Git refs / dispatch branch lifecycle 的 race-safe enumeration、ack publication、prepared restore、worktree lifetime lock 與 reviewer probe patterns |
 | [debug-patterns.md](debug-patterns.md) | 診斷技巧與假死 pattern：CLI option 相容性、529 silent-retry 分層診斷、worktree config 寫穿身分污染 |
-| ⚠️ `claude-code-plugin-dogfood-lessons.md`（遺失，見上） | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
+| ⚠️ `claude-code-plugin-dogfood-lessons.md`（**遺失**：2026-05-14 寫成並登錄，但從未 commit 進本 repo；2026-07-16 doc-sync 發現時鏡像 repo 不在此機。若他機還有請補回並 commit。這是 `references/knowledge-routing.md` §4「不 commit 就等於沒寫」的前例） | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
 
 ## 跨 repo mirror
 

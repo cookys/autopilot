@@ -561,6 +561,11 @@ function validateContract(contract, context) {
     if (!hasOwn(contract, key)) errors.push(`contract: missing required field '${key}'`);
   }
   if (contract.schema_version !== 1) errors.push('schema_version: must be 1');
+  if (hasOwn(contract, 'unit_class')
+      && contract.unit_class !== 'mechanical'
+      && contract.unit_class !== 'judgment') {
+    errors.push('unit_class: must be mechanical or judgment when present');
+  }
   if (!nonEmptyString(contract.ticket)
       || contract.ticket.length > 128
       || !/^[A-Za-z0-9._-]+$/.test(contract.ticket)) {

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "cursor-cli-adaptor-2026-08-26-r2",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "99da262229e8cb0698b6f1794955b9ff84efb62f58adb4e1907bb545ee95a1d6",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and fixed with a probe rather than a hedge: --reasoning-effort high and --effort high are each rejected by the frozen CLI with error: unknown option, and the suffixed ids already ran to a result event in 6.1. P12 now cites that behavioral pair. The --help bracket-override syntax is removed from the claim entirely - nothing in this plan uses it and it has no receipt, which is exactly the standard the rubric asks for."
+    },
+    {
+      "fingerprint": "23ca6fc44d8516c4f33ff8d7922b34787f55d7ca251ebd0e51998ad9e962c99e",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and this is the systemic fix the previous two rounds kept approximating. The enabled-id set is now defined once and executably in cursor-model.sh (cursor_enabled_ids / cursor_is_enabled_id); the auto guard calls the predicate instead of carrying a list, and the negative-control test enumerates the same function instead of restating one. Three hand-maintained copies drifting while the test stays green was the real hazard, not any single missing id."
+    },
+    {
+      "fingerprint": "428370bab876721713217eb2e65b55d756bf8bff2e21d80e09c539d69f2855ef",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: the argv said CURSOR_BIN while the same section defined the per-rail contract as BIN with an existing --bin override - an override that could be silently bypassed. One contract now: CURSOR_BIN is dispatch-hetero-local, and both review and author rails use $BIN throughout, including the exact argv."
+    },
+    {
+      "fingerprint": "82e3e90be981fe9f569378d07ac23b53e119257b117d5d49c3771a4495e710c2",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and the generation-2 repair overshot in this respect: it moved resolve-review-loop.sh's allowlists into Phase 2, which admits a cursor roster seat before any review rail exists to execute it. Admission moves back to Phase 3; Phase 2 keeps only the schema and readiness contracts base dispatch needs, and the cross-phase rule - every runner the resolver accepts must be executable by its downstream dispatcher - is asserted at the Phase 3 boundary."
+    },
+    {
+      "fingerprint": "9340b0637e555cdf7004791b6c342620b5b36b581da4a31d0768423940b4f81f",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: declaring Stage 0 met from probes on cursor-grok-4.6-low-fast and then qualifying cursor-grok-4.6-high-fast is precisely the score-transfer-across-scopes error engine-onboarding forbids, and --list-models containment is inventory rather than behavior. G0, G0.5, G1, and G2 are now re-executed on the frozen id with receipts appended before the suite starts."
+    },
+    {
+      "fingerprint": "a3d53e2c95ec09cfafacefe756df87fe5bbd22ae0112dce0c59d10e6dbcb4f8c",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and correct: this is the third and narrowest form of the section 1 hole. Section 2.6 said wildcard families while section 3a and the test said exact table rows, and the table rows are non-fast, so --cursor-fast made gpt-5.3-codex-low-fast reachable and unguarded. Resolved by the same single-source repair: the match set is the table closed under fast, computed by cursor_enabled_ids, and every consumer derives from it rather than restating it."
+    }
+  ]
+}

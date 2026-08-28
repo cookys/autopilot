@@ -27,7 +27,7 @@ git init -q -b main "$MINI_REPO"
   mkdir -p docs/plans
   printf '## Unit spec\nBody.\n' > docs/plans/spec.md
   mkdir -p .claude
-  printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > .claude/review-loop-config.md
+  printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > .claude/review-loop-config.md
   printf 'keep\n' > keep.txt
   git add .
   git commit -qm "B"
@@ -293,5 +293,10 @@ cat > "$TEST_TMP/override-expired.json" <<'JSON'
 JSON
 KR6_OUT=$(ENGINE_SCORECARD_DIR="$EMPTY_SCORES" ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACTS_DIR/base.json" --repo "$MINI_REPO" --qualification-override "$TEST_TMP/override-expired.json" --json 2>&1 || true)
 assert_contains "$KR6_OUT" "no qualified scorecard row" "expired override refused"
+cat > "$TEST_TMP/override-malformed-expiry.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"gpt-5.3-codex-spark","runner":"codex","role":"implementer","reason":"malformed expiry","operator":"cookys","expires":"forever"}]}
+JSON
+KR6_OUT=$(ENGINE_SCORECARD_DIR="$EMPTY_SCORES" ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACTS_DIR/base.json" --repo "$MINI_REPO" --qualification-override "$TEST_TMP/override-malformed-expiry.json" --json 2>&1 || true)
+assert_contains "$KR6_OUT" "no qualified scorecard row" "malformed override expiry refused"
 
 finalize_test

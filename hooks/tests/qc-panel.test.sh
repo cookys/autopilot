@@ -204,6 +204,23 @@ assert_eq "0" "$SKIP_EXIT" "null-verdict report exits 0"
 assert_contains "$SKIP_OUT" '"status":"skipped"'             "skipped status in output"
 assert_contains "$SKIP_OUT" '"skipped_reason":"null-verdict"' "null-verdict reason"
 
+# Authority pin (verdict-bytes preservation, v2.34.33): a no_verdict artifact that
+# CARRIES a salvaged unratified_verdict must still be a null-verdict skip — the
+# salvage column is human-adjudication data and can never become the panel verdict.
+UNRAT_REPORT="$TEST_TMP/unratified-report.json"
+printf '%s\n' '{"verdict":null,"unratified_verdict":"SHIP-AS-IS"}' > "$UNRAT_REPORT"
+UNRAT_OUT_DIR="$TEST_TMP/unratified-panel-out"
+mkdir -p "$UNRAT_OUT_DIR"
+UNRAT_OUT="$("$SCRIPT" \
+  --report "$UNRAT_REPORT" \
+  --artifacts "$ARTIFACT" \
+  --out "$UNRAT_OUT_DIR" \
+  --node unratified-node 2>&1)"
+UNRAT_EXIT=$?
+assert_eq "0" "$UNRAT_EXIT" "unratified-bearing null-verdict report still exits 0"
+assert_contains "$UNRAT_OUT" '"skipped_reason":"null-verdict"' \
+  "unratified_verdict never becomes the panel verdict (still null-verdict skip)"
+
 # No calibration sample for skipped runs
 SKIP_SAMPLES="$TEST_TMP/calibration-skip"
 mkdir -p "$SKIP_SAMPLES"

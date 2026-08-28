@@ -139,6 +139,36 @@ check_no_relative_links() {
   fi
 }
 
+# ── reader-allowlist invariant ─────────────────────────────────────────────────────
+# A token whose READERS form a CLOSED set. Built for the unratified_* salvage columns
+# (verdict-bytes preservation, v2.34.33): content-verified but transport-unratified
+# data exists ONLY for human adjudication — no consumer may derive authority from it,
+# and the cheapest durable enforcement is "any new file that mentions the token must
+# be explicitly allowlisted here" (g1 disposition 2162610231 + 6d7fb3b4). Scans the
+# whole tree (tracked or not) so a rogue consumer is caught before it ever lands.
+check_reader_allowlist() {
+  local label="$1"; local token="$2"; shift 2
+  local allowed=("$@")
+  local file hit candidate bad_found=0
+  while IFS= read -r file; do
+    hit=0
+    for candidate in "${allowed[@]}"; do
+      # shellcheck disable=SC2254
+      case "$file" in
+        $candidate) hit=1; break ;;
+      esac
+    done
+    if [ "$hit" = "0" ]; then
+      bad "reader-allowlist[$label]: $file mentions '$token' but is not in the closed reader allowlist — unratified data is HUMAN-adjudication-only, never authority (docs/plans/2026-08-21-verdict-bytes-preservation.md §2). If this file is a legitimate producer/display/test, add it to the seed in the SAME commit."
+      bad_found=1
+    fi
+  done < <(grep -rIl \
+      --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude \
+      --exclude-dir=.autopilot --exclude-dir=worktrees \
+      -- "$token" . 2>/dev/null | sed 's|^\./||')
+  [ "$bad_found" = "0" ] && ok "reader-allowlist[$label]: every '$token' mention is allowlisted"
+}
+
 # ── reference-mode invariant ───────────────────────────────────────────────────────
 # referencing_file must contain anchor_in_referrer; canonical_file must contain
 # heading_in_canonical. Both are fixed-string matches.
@@ -268,6 +298,30 @@ check_reference "reviewer→blind-dispatch/VerifierIsolation" \
 check_reference "code-review→blind-dispatch/VerifierIsolation" \
   "skills/quality-pipeline/references/code-review.md" "(canonical: references/blind-dispatch.md § Verifier isolation)" \
   "references/blind-dispatch.md" "## Verifier isolation — artifacts only, never the implementer's self-report (EVERY dispatch)"
+
+# reader-allowlist #1 — the unratified_* salvage columns. Producers, schemas,
+# display-only projections, the pass-through validator, the codex PLUGIN mirror
+# subtree (kept byte-equal to canonical by sync-codex-plugin-skills --check — the
+# narrower seed is deliberate: platform-NATIVE sources like platforms/codex/hooks/*
+# have no canonical counterpart and no parity gate, so they stay OUTSIDE the
+# allowlist; round-1 review 2026-08-21), tests, and docs. Everything else that
+# mentions the token is a rogue consumer.
+check_reader_allowlist "unratified-columns" \
+  "unratified" \
+  "scripts/dispatch-review.sh" \
+  "scripts/dispatch-plan-review.js" \
+  "scripts/dispatch-status.js" \
+  "scripts/lib/plan-review-normalize.js" \
+  "scripts/lib/plan-review-panel.js" \
+  "scripts/check-canonical-invariants.sh" \
+  "src/runners/review.js" \
+  "schemas/*" \
+  "platforms/codex/plugin/*" \
+  "hooks/tests/*" \
+  "docs/*" \
+  "CHANGELOG.md" \
+  "README.md" \
+  "README.zh-TW.md"
 
 # reference #5 — level-front-door references code-review's Panel aggregation section.
 check_reference "level-front-door→code-review/PanelAggregation" \

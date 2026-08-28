@@ -597,7 +597,7 @@ git -C "$STRICT_SBX" commit -q -m "Prereq commit"
 STRICT_DEP_SHA=$(git -C "$STRICT_SBX" rev-parse HEAD)
 
 printf '## Unit spec\nStable spec content\n' > "$STRICT_SBX/docs/plans/spec.md"
-printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > "$STRICT_SBX/.claude/review-loop-config.md"
+printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$STRICT_SBX/.claude/review-loop-config.md"
 git -C "$STRICT_SBX" add -A
 git -C "$STRICT_SBX" commit -q -m "Base commit"
 STRICT_BASE_SHA=$(git -C "$STRICT_SBX" rev-parse HEAD)

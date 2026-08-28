@@ -83,6 +83,8 @@ cat > .claude/review-loop-config.md <<EOF
 # Review Loop Config
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_runner: codex
+- reviewer_engine: claude-opus
+- reviewer_runner: claude-native
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible

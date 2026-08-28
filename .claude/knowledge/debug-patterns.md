@@ -1,4 +1,4 @@
-<!-- last-verified: 2026-07-29 -->
+<!-- last-verified: 2026-08-23 -->
 # Debug Patterns
 
 ## Kimi non-interactive prompt cannot be combined with interactive plan mode
@@ -6,7 +6,7 @@
 **Problem**: Kimi Code CLI 0.28.0 advertises both `--prompt` and `--plan`, but the options are mutually exclusive. `src/runners/kimi.js` passed both, so surface probing succeeded while every real author call failed immediately with `Cannot combine --prompt with --plan.` The hermetic test encoded the same invalid argv and therefore stayed green.
 **Solution**: Distinguish option presence from option compatibility. For the one-off read-only review, invoke non-interactive `--prompt` without `--plan` from a mode-0700 empty scratch cwd with no repository context. Product follow-up must remove the incompatible flag (or use a separately probed compatible read-only mode), correct the fixture, and add an opt-in live non-empty-output smoke.
 **Failed attempts**: Treating `--help` token presence as a valid option-combination contract; retrying the shipped adapter unchanged.
-**Related**: `docs/BACKLOG.md` entry “Native Kimi author adapter passes mutually exclusive `--prompt` and `--plan`”.
+**Related**: `docs/BACKLOG.md` entry “Native Kimi author adapter passes mutually exclusive `--prompt` and `--plan`”. *(2026-08-23 re-verify: `src/runners/kimi.js` no longer passes `--plan` — the product follow-up shipped.)*
 
 ## Silent-retry 假死：Claude CLI × z.ai 確定性 529
 **Date**: 2026-07-16 | **Context**: C1 verification-author 連續失敗（529 ×2、exit-124 零位元組 ×2），五家族 15+ 次 author 全滅
@@ -20,3 +20,10 @@
 **Problem**: `git worktree` 的 local config 預設**共用主 repo 的 `.git/config`**（除非啟用 `extensions.worktreeConfig`）。在 worktree 裡執行裸 `git config user.name X` 等同直接改主 clone 身分——隔離 worktree 擋得住檔案寫入，擋不住 config 寫穿。事故鏈：oracle fixture 用裸 `git config`（教壞 worker）→ worker 在 worktree 根實驗 → 寫穿 → 主 clone 之後所有 commit 換人。
 **Solution**: 立即：`git config user.name/user.email` 修回真實身分（歷史不重寫）。系統性（BACKLOG）：(a) dispatch-hetero/author 在 run 前快照主 repo 的 `user.name`/`user.email`，teardown 比對，變動 → 修回 + 大聲警告（containment 類防線）；(b) oracle fixture 一律 `git -C "$MINI_REPO" config` 或 subshell `-c user.name=... -c user.email=...` inline，絕不裸寫；(c) worker prompt 紀律已含「不得在 worktree 根建 fixture repo / 跑 git init/config」。
 **Related**: wrapper commit 已用 `-c` inline identity（不受污染影響）；worker 自行 commit 的路徑才中招。commit 前 identity 校驗可考慮進 pre-commit（`autopilot-distill-skills:git-identity` 的機械化版）。
+
+## Edit/Write tool parameters decode `\uNNNN` escapes before they reach the file
+**Date**: 2026-08-17 | **Context**: fixing a report group-key line in `engine-capability-state.js` that used a backslash-`u`-`0000` (NUL) escape sequence as a template-literal join separator
+**Problem**: Tool call arguments travel as JSON, and `\uNNNN` is a legal JSON escape — so by the time an `Edit` tool's `old_string` (or a `Write` tool's `content`) reaches the comparison/write step, it has already been decoded into the real character. A file's source line containing the **literal six-character sequence** `\`, `u`, `0`, `0`, `0`, `0` therefore never matches an `old_string` written the same way in a tool call — the tool call's copy decoded into an actual NUL, the file's copy stayed six literal characters, and the two are not equal even though they look identical in every editor. `Read` shows the file's literal source; the tool parameter layer does not. Four failed match attempts before the mismatch was diagnosed. Recurred at second remove three weeks later: generating a *new* `.js` file with `Write` and using the same escape sequence as a join separator produced a file that ran correctly and passed every test, but silently contained a real NUL byte — git classified the file as binary ("Binary files differ" in the diff), and two independent heterogeneous reviewers both flagged the core grader file as unauditable before anyone noticed why.
+**Solution**: To edit a line containing such an escape, anchor `old_string` on an adjacent line that contains no escape, or edit by line number with `sed -i '<N>s/…//'` / `perl` (literal backslashes need doubling inside a single-quoted shell argument). To *mention* such a sequence in written content, spell it with a placeholder (`uNNNN`) or a full-width backslash rather than the real escape, then verify with `cat -v` that no `^@` (NUL) appears. Any file freshly produced by `Write` should be sanity-checked with `file <path>` to confirm it is still plain text before trusting it; a join/delimiter character in generated code should be a printable character (e.g. `|`), never an escape sequence.
+**Failed attempts**: Retrying the same `old_string` match with cosmetic changes (four times) before realizing the mismatch was at the parameter-decoding layer, not the text itself; describing the fix afterward by writing the same escape sequence into prose, reproducing a literal NUL a second time in the same investigation.
+**Related**: `scripts/identifier-scan.js`'s key-shape pattern class is unrelated but adjacent — both are "the tool layer sees something different from what a human reading the file sees."

@@ -105,6 +105,9 @@ const MAX_DIFF_BYTES = 2 * 1024 * 1024;
 // agy/kimi take it on argv (see callCli). Kept as one list so the validation
 // message and the dispatch switch can never disagree about what is supported.
 const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi'];
+// A credential-only QRP_CLI_HOME seed is ~16 KB; 8 MB leaves room for a config
+// tree while still refusing a real home.
+const CLI_HOME_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
 // Conservative ceiling for argv-delivered prompts. Linux ARG_MAX is typically
 // ~2MB for the whole argv+environ block; stay well under it so the environment
 // and the other arguments always fit.
@@ -503,8 +506,41 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   // QRP_CLI_HOME redirects only the harness child's HOME; this process keeps the
   // broker-assigned one. Never fall back to the ambient HOME if unset — an exam
   // that silently reads the host home is not the exam we claim to be running.
-  const childEnv = process.env.QRP_CLI_HOME
-    ? { ...process.env, HOME: process.env.QRP_CLI_HOME }
+  //
+  // PER-INVOCATION CLONE, not a shared pointer. Probed 2026-08-21: agy writes
+  // $HOME/.gemini/config/{config.json,mcp_config.json,projects/*} on every run, so
+  // four concurrent cases against ONE QRP_CLI_HOME failed 2/4 with "permission
+  // check failed" / "produced no output" — while four with private HOMEs passed
+  // 4/4. That is exactly the 2-of-4-trials failure rate the agy qualification hit,
+  // and the exam scored it as a MODEL miss (`known-bad sensitivity miss`) because
+  // a dead transport and a wrong answer look identical from the oracle's side.
+  let cloneHome = null;
+  if (process.env.QRP_CLI_HOME) {
+    const template = process.env.QRP_CLI_HOME;
+    // Guard the template size: pointing this at a real home (589 MB observed) would
+    // copy it per case. A credential-only seed is ~16 KB, so anything large means
+    // the operator seeded the wrong thing — say so instead of silently crawling.
+    let bytes = 0;
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (bytes > CLI_HOME_TEMPLATE_MAX_BYTES) return;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.isFile()) bytes += fs.statSync(full).size;
+      }
+    };
+    try { walk(template); } catch { /* unreadable entries surface on copy below */ }
+    if (bytes > CLI_HOME_TEMPLATE_MAX_BYTES) {
+      throw new Error(
+        `QRP_CLI_HOME template exceeds ${CLI_HOME_TEMPLATE_MAX_BYTES} bytes — seed a `
+        + 'credential-only exam dir, not a real home (it is cloned once per case)',
+      );
+    }
+    cloneHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-clihome-'));
+    fs.cpSync(template, cloneHome, { recursive: true, dereference: false });
+  }
+  const childEnv = cloneHome
+    ? { ...process.env, HOME: cloneHome }
     : process.env;
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
@@ -527,6 +563,7 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
         try { stream.destroy(); } catch { /* already closed */ }
       }
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
+      if (cloneHome) fs.rmSync(cloneHome, { recursive: true, force: true });
       if (error) reject(error);
       else resolve(value);
     };

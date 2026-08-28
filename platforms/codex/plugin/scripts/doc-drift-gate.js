@@ -2,6 +2,16 @@
 /**
  * Generic deterministic doc-drift gate (Layer 1 baseline) for autopilot:doc-sync.
  * Ported from scripts/doc-drift-gate.py.
+ *
+ * Nested-worktree rule: any subdirectory that is itself a git worktree/repo root
+ * (carries its own `.git` file or dir) is skipped entirely, for every check below —
+ * they all consume the single `files` list produced by getMdFiles(), so the skip is
+ * enforced at one choke point. Rationale: a nested worktree (e.g. .claude/worktrees/
+ * agent-*, a live background-agent checkout) is a DIFFERENT repository; its docs'
+ * relative links/script-refs resolve against ITS OWN root, not this scan's
+ * AUDIT_ROOT/cwd — scanning it produces false drift. `.claude/worktrees` in
+ * DEFAULT_EXCLUDES is a fast path in front of this; isNestedGitRoot() below is the
+ * general rule and catches any other nested repo/worktree regardless of location.
  */
 
 const fs = require('fs');
@@ -19,7 +29,13 @@ const DEFAULT_EXCLUDES = [
   // Byte-frozen eval fixtures (digest-pinned byte-copies of live skills; their relative
   // links intentionally dangle from the pack location — rewriting them would break the
   // byte-identity the skill-onoff arm-parity tests assert).
-  "evals/skill-onoff/packs"
+  "evals/skill-onoff/packs",
+  // Fast path in front of the general nested-git-root rule below (isNestedGitRoot):
+  // live background-agent worktrees under .claude/worktrees/ are separate git repos
+  // whose scripts/... references resolve against THEIR OWN root, not this scan's
+  // AUDIT_ROOT — scanning them here produces false drift for whichever repo isn't
+  // the one currently checked out there.
+  ".claude/worktrees"
 ];
 
 // Regex configuration
@@ -52,6 +68,23 @@ function readTextFileNormalized(filePath) {
   }
   // Normalize CRLF to LF
   return text.replace(/\r\n/g, '\n');
+}
+
+// General rule (the fast-path .claude/worktrees exclude above is a shortcut in front
+// of this, not a replacement for it): a subdirectory that is itself a git worktree or
+// repo root — i.e. carries its own `.git` (dir for a normal repo, file for a linked
+// worktree's gitdir pointer) — is a DIFFERENT repository than the one being scanned.
+// Its markdown's scripts/... references, relative links, etc. resolve against ITS OWN
+// root, not this scan's AUDIT_ROOT/cwd, so descending into it produces false drift.
+// Only checked on subdirectories encountered during the walk, never on the scan roots
+// themselves (which legitimately carry `.git`) — see call site below.
+function isNestedGitRoot(dirpath) {
+  try {
+    fs.lstatSync(path.join(dirpath, '.git'));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -92,6 +125,9 @@ function getMdFiles(roots, excludes) {
       }
 
       if (isDirectory && !entry.isSymbolicLink()) {
+        if (isNestedGitRoot(fullPath)) {
+          continue; // nested worktree/repo root — see isNestedGitRoot doc comment
+        }
         walk(fullPath);
       } else if (isFile && entry.name.endsWith('.md')) {
         out.add(fullPath);

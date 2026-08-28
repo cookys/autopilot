@@ -1,0 +1,107 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "implementer-qualification-suite-2026-08-22",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "59812a4ff7d5626cff6ffdcb19b59b3225895dfebeea0893de05c5cdd11e387e",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: trusted-git collection profile (plumbing reads, --no-ext-diff/--no-textconv, -c hooksPath/fsmonitor/filters disabled, scrubbed GIT_* env, GIT_CONFIG_GLOBAL/SYSTEM=/dev/null), commit-ancestry validation; any post-dispatch collection failure = integrity_violation (candidate-attributed); malicious-git-config deviant pins it."
+  },
+  {
+   "fingerprint": "2c8be2d8d35e62c24d0d787e01394e3351ced64bcd53b936129e88d258fbaedd",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: total normalization table over IMPLEMENT_STATUSES ∪ JSON-parse ∪ collection outcomes with a dispatcher_called receipt boundary — pre-boundary failures abort uncharged, post-boundary unknown/malformed/overflow/missing-commit = candidate-attributed (default contract_violation); timeout conflict resolved: candidate-session timeout always consumes the case as contract_violation; insufficient_budget is a host-side allocator transition only."
+  },
+  {
+   "fingerprint": "ebdb1d96f4b48e9df9b2550c4814212cb4c6783d1a688d9d4e690bf730b1881b",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: dispatch env is a constructed allowlist (never inherited-minus-7) with canary as the sole intentional secret; corpus secrets (oracle vectors, reference solutions, deviants) exist in qualifier memory only — never on disk during dispatch, so parent-path traversal finds nothing; candidate-visible surface redefined as the full rendered payload; same-UID /proc introspection named residual per the L1 doctrine (no local same-UID boundary is forgery-proof)."
+  },
+  {
+   "fingerprint": "61745c667c37ed3d2ddcf7ec056b2a5bd0c62edd216b825a8a57f9d3afc5297b",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: hidden oracle must carry held-out vectors disjoint from candidate-visible tests/spec examples; every F2/F3 case admits a visible-test-overfitter deviant (passes all visible tests, fails hidden oracle → oracle_miss); admission rejects cases lacking this discrimination; mutation control: removing the held-out partition flips the overfitter to pass."
+  },
+  {
+   "fingerprint": "4c414a7697bf45a17195c7e3afc8ae4ade14b08b83c75a23c09bab208e148119",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: one shared collection-and-grading module consumed by BOTH admission and administration (collection JSON is the single gate input); P1/P2 merged so admission cannot green before the shared module exists; live-rail smoke runs a reference artifact through real dispatch-hetero.sh via its engine-bin seams (--agy-bin/--grok-bin deterministic local engine) — the fake-dispatcher concept is DROPPED; red controls break CLI arg contract and status parser."
+  },
+  {
+   "fingerprint": "528432481d1b835a3be9bfb1a005ff34252fe6fd7a68c8729e8378c44e68d41b",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: closed-world per-case manifest — any added/modified path outside the case allowlist = integrity_violation (covers shadow test files and runner/discovery config); fabricated_change decided by ancestry (HEAD != pinned base), with allow-empty and whitespace-only deviants; canary detection over a pinned transform closure {literal, base64, hex, reversed} with encodings beyond the closure a named residual; F4 in-file lure countered by held-out oracle vectors where the lure is semantically detectable, else named residual."
+  },
+  {
+   "fingerprint": "f0434c144f14a333cf830f73f64eea946429840cdf96de5c5fc0ed0b6680e876",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: canonical seed envelope (run_nonce, salt commitment, generator hash, corpus hash, role, derivation version) persisted in evidence; git materialization under pinned env (fixed author/committer/dates, TZ=UTC, umask, init.defaultBranch, autocrlf=false, isolated config) so base SHA is seed-pure; pair-generation fixture mutates only oracle:* labels and asserts byte-identical candidate-visible bytes."
+  },
+  {
+   "fingerprint": "57071b64a87ae5bfae2784cf710c7bd3e8e794e81965b121c59b39612941b60e",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted with modification: per-family ≥2 disjoint semantic templates with trials stratified across templates; runner-persistent-state risk mitigated by fresh repos/no --resume-session and named residual. REJECTED as over-instrumentation (backlog candidate): normalized-AST structural-distance metric and the template-memorizer deviant — template disjointness is asserted by the generator self-check instead; v1 does not claim resistance to isomorphic-rename memorization."
+  },
+  {
+   "fingerprint": "d06e2118d64f4bd5dd1b9507abfea1645a240e4e63aaf515c9e788061236f09c",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: flat 30-day CLI cap retained for every existing role; implementer-only exception map ({implementer: 90}); brain untouched (no undefined-key uncap); boundary tests at 30/31/90/91."
+  },
+  {
+   "fingerprint": "c328634d25023f8b58d0154df335c1a3562ba06953f466167b3971bba4268c07",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: consumer compatibility matrix on the exact emitted row — resolve-scaffold-tier qualityOf must return the intended tier, dispatch-contract must take the declared branch (formal row admits at provisional assurance on observed_status=qualified; store remains untrusted telemetry by design), review-loop density must take the intended branch; frozen OLD validator kept as fixture and must REJECT a new impl_dispatch row (negative direction) while old rows revalidate byte-for-byte under the new validator."
+  },
+  {
+   "fingerprint": "c0ebe0910f8e0d603dc61b2b13ab2598a0bb64788f5c2d82e7111c40c681c10a",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: administration identity + frozen hashes allocated BEFORE Stage-0; append-only probe receipts (executable path+digest, version output, models output, rc, timestamps, version_source, instrument_charged:false) for every attempt; probe failure = uncharged infra abort; retries are new linked attempts capped at 2; no model substitution under the same administration identity."
+  },
+  {
+   "fingerprint": "9e7802c6e6cf6483f64f61218ee20097e975f3c623c43512a406db8312269242",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: per-case dispatch timeout is a corpus constant (600s) plus an administration wall (14400s) and a 24-spawn reservation allocator initialized before charging; internal provider retries disabled/counted; candidate-session timeout always consumes its case as contract_violation; insufficient_budget defined solely as the allocator depletion transition with an append-only abort receipt and a red fixture asserting no evidence row and no scorecard row."
+  },
+  {
+   "fingerprint": "a0cce43952d623715ea7a2f8432835f3a4a4d17123e1c6cfbd29be09c4e1fc3e",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: total map from every IMPLEMENT_STATUSES value + grader/oracle exceptions to exactly one label; abort-class permitted only when dispatcher_called=false or the evidence is harness-owned (worker-body quota text never aborts); a new commit existing forbids abort-class; pinned fixtures: quota-phrase+exit1 → contract_violation, bwrap missing → infra_fail, candidate module nonzero/timeout inside a running sandbox → oracle_miss."
+  },
+  {
+   "fingerprint": "4adde450dbf74abc5648833be76aed7504d5ae62d4789eb7dcf98e3ec8ed7c04",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: oracle architecture pinned — frozen driver inside bwrap, candidate loaded only as a grandchild process, inputs via stdin, expected outputs never present in the candidate isolate nor any bound file; corpus secrets in-memory only (no reference/deviant/oracle files on disk to read); same-UID residual scoped to /proc introspection with nothing secret on disk."
+  },
+  {
+   "fingerprint": "81ec668dc004fdbcbd5cfbb8df001215e1d0e4bd239a3690b2cfa1a0a0c10c33",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: exam spawns pin --scaffold-tier off (flag existence verified at implementation; fallback = freeze one envelope per administration into prompt_config_hash and the leak scan); leak scan runs over the exact rendered dispatch payload (prompt + scaffold decision + env names/values + tracked bytes) with QUALIFY_CANARY_TOKEN recorded as intentionally visible; F2/F3 held-out-vector pin as per the overfitter adoption."
+  },
+  {
+   "fingerprint": "8a64d46fb11992048b23a0e8a168dba30a2a84bae4443c530e8d4fc33805485e",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: collection JSON is the single gate input; admission builds it exactly as live does (status, commit, diff, message, porcelain, test bytes) and invokes the SAME bwrap oracle driver binary/argv; negative control where the in-process oracle is green but the bwrap driver is red must fail admission; live-rail smoke through the real dispatch-hetero entry retained — only the paid engine is substituted."
+  },
+  {
+   "fingerprint": "89d7317c823b09125debf5c5475568e0b89597d356c5399bde585e6f7933c7cc",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted (overlaps F6): per-hole counters/residuals as adopted there — canary transform closure with residual, closed-world test-surface manifest refusing extra test/spec/config paths and runner-config edits, fabricated_change iff HEAD != base with allow-empty deviant, F4 in-file lure via held-out vectors where feasible else named residual."
+  },
+  {
+   "fingerprint": "f0a97de8dbc2f0bdd298ece8705e94851bbae89eca9dc880dfbf784c0a2713be",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: invariants split — (G) generator-visible bytes are a pure function of the seed envelope, pair-generation fixture mutates only oracle:* and asserts identical bytes; (L) live spawn adds no host-state bytes (--scaffold-tier off, no scorecard read, runner chrome constant covered by the leak scan); trial-2 distinctness via template stratification with the F8 residual; AUTOPILOT_QUALIFY_* seed env pinned into the persisted envelope."
+  },
+  {
+   "fingerprint": "084ea23eb00563375a04f07c21793f16edeca44a54550237102569c6179340b9",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted: TTL per the F9 adoption (implementer-only exception; brain keyed to owner semantics untouched); implementer parseArgs branch waives the panel/remote XOR and accepts --runner/--effort/--dispatch-timeout/--runner-bin; schema work named in full: impl_dispatch methodology kind, impl thresholds, impl trial oneOf, enforceImplPromotion dispatch, frozen old-schema fixture rejecting the new row as the negative control."
+  },
+  {
+   "fingerprint": "f75fa3a6e232f426f4773a117ea1396aef77bac00edda6eefc721233553e372c",
+   "disposition": "accepted_blocker",
+   "rationale": "Adopted (overlaps F11/F12): numeric per-case timeout + administration wall + reservation allocator with reachable insufficient_budget red fixture asserting no store rows; Stage-0 probe must contain the frozen model id or the attempt aborts uncharged with its receipt retained — substitution under the same administration identity forbidden; per-seat --version-source and probe stdout hashes pinned into the evidence bundle."
+  }
+ ]
+}

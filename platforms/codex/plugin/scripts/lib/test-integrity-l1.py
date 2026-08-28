@@ -116,9 +116,16 @@ def parse_config(content):
         line = raw_line.strip()
         if not line:
             continue
-        if line.startswith("#"):
-            continue
-
+        # `##` MUST be tested before the generic `#` comment skip. It used to be
+        # tested after, which made this entire branch unreachable: every section
+        # heading was swallowed as a comment, `section` never left None, and so
+        # `test_paths` / `surface_paths` could not be configured by ANY project.
+        # A project that tried was not ignored quietly — every `- <glob>` line
+        # tripped `malformed_config`, which forces mode=block and ok=false — so
+        # the practical effect was that declaring test_paths hard-failed while
+        # the built-in defaults silently stood in. autopilot had no config at
+        # all, which is why ITS failure was the silent one
+        # (`test_paths_matched: 0`, `ok: true`).
         if line.startswith("##"):
             heading = line[2:].strip().lower()
             if "mode" in heading:
@@ -129,6 +136,9 @@ def parse_config(content):
                 section = "surface_paths"
             else:
                 section = None
+            continue
+
+        if line.startswith("#"):
             continue
 
         mode_match = re.match(r"^mode\s*:\s*(\w+)\s*$", line, re.IGNORECASE)
@@ -203,9 +213,71 @@ def decode_git_token(token):
     return token
 
 
+def shell_code_view(line):
+    """Project one shell line onto its CODE, dropping comments and string data.
+
+    Regexes over raw shell source have now produced three separate one-token
+    evasions of the skip detector, so this is a scanner with an explicit model
+    instead of another pattern. It enumerates two grammar axes (the full
+    enumeration, including what is deliberately excluded and what remains
+    uncovered, lives in the project README):
+
+    `#` starts a comment ONLY at a word boundary, unquoted and unescaped, so
+    every non-comment hash survives: `${#arr[@]}` and `$#` (a `#` whose
+    predecessor is not a blank or a command delimiter), `a#b` (mid-word),
+    an escaped hash, and any `#` inside '...' or "..." -- including `$'...'`
+    and `$"..."`, whose quote character opens the span.
+
+    Quoted spans collapse to a single `Q` placeholder. That is what separates
+    DATA from CODE: a suite that WRITES `skip "x"` into a fixture (this repo's
+    own check-test-integrity.test.sh does exactly that) is no longer confused
+    with a suite that skips. It also means a skip smuggled through `eval "skip"`
+    or a heredoc body is invisible -- named, accepted limitations, not oversights.
+    """
+    out = []
+    i = 0
+    n = len(line)
+    # Start-of-line counts as a word boundary, so a leading `#` is a comment.
+    prev_is_boundary = True
+    while i < n:
+        c = line[i]
+        if c == "\\" and i + 1 < n:
+            out.append("X")
+            i += 2
+            prev_is_boundary = False
+            continue
+        if c == "'":
+            j = line.find("'", i + 1)
+            out.append("Q")
+            i = n if j == -1 else j + 1
+            prev_is_boundary = False
+            continue
+        if c == '"':
+            j = i + 1
+            while j < n:
+                if line[j] == "\\":
+                    j += 2
+                    continue
+                if line[j] == '"':
+                    break
+                j += 1
+            out.append("Q")
+            i = j + 1 if j < n else n
+            prev_is_boundary = False
+            continue
+        if c == "#" and prev_is_boundary:
+            break
+        out.append(c)
+        prev_is_boundary = c.isspace() or c in ";&|("
+        i += 1
+    return "".join(out)
+
+
 def strip_trailing_comment(line, lang_key):
     if lang_key in ("python", "ruby"):
         line = re.sub(r"(?<=\S)\s*#.*$", "", line)
+    if lang_key == "shell":
+        line = shell_code_view(line)
     if lang_key in ("js_ts", "go", "java_kotlin", "rust"):
         line = re.sub(r"//.*$", "", line)
     return line
@@ -1625,6 +1697,52 @@ def main():
             ],
             "solo": [re.compile(r"\bfit\b"), re.compile(r"\bfdescribe\b")],
         },
+        # Shell suites (bats, shunit2, and autopilot's own bash `*.test.sh`
+        # convention). Patterns are deliberately narrow and were calibrated
+        # against all 260 tracked `*.test.sh` files in this repo: each one
+        # below matches ZERO existing lines except the 5 genuine conditional
+        # skips in mission-terminal-rollover.test.sh, so an ADDED match is
+        # signal rather than noise.
+        #
+        # KNOWN GAP (documented, not silent): an early `exit 0` / `return 0`
+        # inserted mid-suite is the other way to neuter a bash suite, and it
+        # is NOT detected. A line-level regex cannot tell it apart from the
+        # legitimate bail-outs this repo already writes: of the 260 tracked
+        # `*.test.sh`, 19 contain a top-level `exit 0` line and 41 contain one
+        # at some indentation (only 2 have it as their final line, so these are
+        # mostly guard clauses — exactly the shape a gaming early-exit takes).
+        # Separating the two needs file-position context ("is there an
+        # assertion after this exit?") that the L0 layer does not carry.
+        # Tracked in docs/BACKLOG.md.
+        "shell": {
+            "skip": [
+                # `skip` in COMMAND POSITION, in any of its invocation forms.
+                # Derived from an explicit grammar enumeration rather than from
+                # the bugs found so far -- three successive one-token evasions
+                # (`&& skip`, a `${#...}`-truncated line, `skip;` / `( skip )`)
+                # showed that patching per bug just moves the hole.
+                #
+                # Command position (A): line start; after `;` `&` `|` `(` `{`
+                # `!` or a backtick; after the reserved words then/else/elif/do;
+                # and after any run of NAME=value assignment prefixes.
+                # Tail (C): blank+argument, end of line, or one of `;` `&` `|`
+                # `)`. `(` is excluded from every tail class so that `skip()`
+                # and `skip ()` stay DEFINITIONS, and `}` is excluded so that
+                # `${skip}` stays an expansion.
+                # Deliberately NOT included: the `in` of a `case` arm, where
+                # `skip)` is a pattern rather than a command.
+                re.compile(
+                    r"(?:^|[;&|(`{!]|\b(?:then|else|elif|do)\b)"
+                    r"\s*(?:[A-Za-z_][A-Za-z0-9_]*=[^\s;&|()]*\s+)*"
+                    r"skip(?:\s+[^\s(]|\s*$|\s*[;&|)])"
+                ),
+                # shunit2 / bats-support conditional skip helpers.
+                re.compile(r"\bstartSkipping\s*\("),
+                re.compile(r"\bskip_if(_not)?\b"),
+                re.compile(r"\bbats_skip\b"),
+            ],
+            "solo": [],
+        },
     }
 
     def get_lang_key(file_path):
@@ -1641,6 +1759,8 @@ def main():
             return "java_kotlin"
         if extension == "rb":
             return "ruby"
+        if extension in ["sh", "bash", "bats"]:
+            return "shell"
         return None
 
     violations = []
@@ -1742,7 +1862,12 @@ def main():
 
                 if line.startswith("+") and lang_key:
                     content = line[1:]
+                    # Match on the comment/quote-stripped view, but REPORT the
+                    # source line. For shell the view collapses quoted spans to
+                    # `Q`, so reporting it would render a real violation as
+                    # `skip Q` and cost the reader the reason text.
                     checked = strip_trailing_comment(content, lang_key)
+                    reported = content.strip()
                     rules = marker_patterns.get(lang_key, {})
                     for rx in rules.get("solo", []):
                         if rx.search(checked):
@@ -1752,7 +1877,7 @@ def main():
                                     "file": file_path,
                                     "kind": "solo_marker",
                                     "line": new_current,
-                                    "detail": checked.strip(),
+                                    "detail": reported,
                                 }
                             )
                             break
@@ -1764,7 +1889,7 @@ def main():
                                     "file": file_path,
                                     "kind": "skip_marker",
                                     "line": new_current,
-                                    "detail": checked.strip(),
+                                    "detail": reported,
                                 }
                             )
                             break

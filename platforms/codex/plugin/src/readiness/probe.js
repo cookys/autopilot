@@ -52,16 +52,11 @@ const ERROR_OUTCOMES = new Map([
   ['rate_limited', 'rate_limited'],
   ['429', 'rate_limited'],
 ]);
-const BINARY_BY_RUNNER = Object.freeze({
-  codex: 'codex',
-  agy: 'agy',
-  grok: 'grok',
-  qoderclicn: 'qoderclicn',
-  'cc-shim': 'claude',
-  'anthropic-compatible': 'claude',
-  'claude-native': 'claude',
-  kimi: 'kimi',
-});
+// The runner -> version-binary map has ONE owner (scripts/lib/runner-binary.js). This
+// file used to carry its own copy; so did scripts/qualification-sweep.sh, and the sweep's
+// copy was missing cursor -> cursor-agent, which cost a paid administration on 2026-08-27.
+// Consume the canonical map; never re-declare it.
+const { RUNNER_VERSION_BINARY: BINARY_BY_RUNNER } = require('../../scripts/lib/runner-binary');
 const OUTCOME_POLICY = Object.freeze({
   success: { readiness: 'ready', capability: 'available', confidence: 'high' },
   auth_failed: { readiness: 'blocked', capability: 'unknown', confidence: 'high' },

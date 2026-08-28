@@ -18,7 +18,7 @@
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
 #       [--model "Gemini 3.5 Flash (High)"]   # default; names: `agy models` / `grok models`
-#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, *qwen*/*qwq*→qoderclicn, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
@@ -29,6 +29,13 @@
 #                                              #   pi (EXPLICIT only): pi coding agent over RPC
 #                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
 #                                              #   provider default minimax via PI_RPC_PROVIDER).
+#                                              #   cursor (EXPLICIT only, never auto — every cursor
+#                                              #   model id contains grok/gpt/codex/claude, so
+#                                              #   auto-selection cannot disambiguate vendor-hosted
+#                                              #   from vendor-native): Cursor CLI (cursor-agent),
+#                                              #   one OAuth login over ~60 models. --model names a
+#                                              #   family alias (grok46|codex53) resolved by
+#                                              #   lib/cursor-model.sh, or a full model id verbatim.
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--endpoint <name>]                    # cc-shim only: resolve creds via
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
@@ -50,6 +57,13 @@
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
+#       [--cursor-bin cursor-agent]            # alternate/pinned Cursor CLI (test seam)
+#       [--cursor-fast]                        # cursor: opt into the `-fast` model-id lane
+#                                              #   (default non-fast). Runner-scoped: any other
+#                                              #   --runner is a die_precondition, same posture as
+#                                              #   --endpoint with a non-cc-shim runner. Also a
+#                                              #   die_precondition together with a --model that
+#                                              #   already names a full id (mapper bypassed there).
 #       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
 #       [--campaign-contract-sha256 <digest>]    # intake-bound digest for private snapshot
 #       [--campaign-seal <path>]                # intake-validated seal, rechecked at leaf admission
@@ -74,7 +88,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn"|"cursor", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -121,6 +135,7 @@ CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PA
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
 MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
+CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
 KEEP=0
 RETENTION_OWNER=""
 RETENTION_REASON=""
@@ -170,6 +185,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$SELF_DIR/lib/context-window.sh" ] && . "$SELF_DIR/lib/context-window.sh" || true
 CONTEXT_WINDOW_GATE=""     # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
+RUNNER_RESOLVED=0     # 1 only after set_runner_flags completes; die_precondition uses this to
+                       # distinguish "agy selected" from "resolution never happened" (FINDING 1)
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
 IS_PI=0
@@ -177,6 +194,8 @@ PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
+CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
+CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped, see usage above
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
@@ -206,6 +225,7 @@ STRICT_UNIT_ID=""
 STRICT_CONTRACT_SHA=""
 STRICT_SPEC_SHA=""
 STRICT_GO=""
+STRICT_ENGINE_ASSURANCE=""
 STRICT_SCOPE_ALLOW_PATHS=()
 STRICT_SCOPE_DENY_PATHS=()
 STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS=()
@@ -381,6 +401,17 @@ OUTCOME_GATE_ATTEMPTS=0
 OUTCOME_RESOURCES_CREATED=0
 OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
 CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
+# FINDING 6 fix (2026-08-22 review repair): AUTOPILOT_STRIKE_WRITER=off is a debug
+# escape hatch that suppresses seat_strike_capture's write. Left silent, a suppressed
+# strike is indistinguishable from "nothing was strike-eligible" — the exact
+# "existing is not evidence it is running" failure family (CLAUDE.md /
+# evidence-discipline.md §1). These two vars are set ONLY when a strike WOULD have
+# been written and the hatch suppressed it; write_manifest emits them into the
+# manifest sidecar (never into this script's own stdout/exit code) so a suppressed
+# strike is visible in the run's artifacts. Empty/unset = not suppressed = no
+# marker in the manifest at all (default-on behavior stays byte-identical).
+STRIKE_WRITER_SUPPRESSED=""
+STRIKE_WRITER_SUPPRESSED_SEAT=""
 # shellcheck source=/dev/null
 . "$SELF_DIR/lib/worktree-reap.sh"
 # When dispatch_new claims a Work Order, terminal finalizer must fail closed (never swallow).
@@ -452,6 +483,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/json-emit.sh"
 # shellcheck source=lib/grok-effort.sh
 . "$SELF_DIR/lib/grok-effort.sh"
+# shellcheck source=lib/cursor-model.sh
+. "$SELF_DIR/lib/cursor-model.sh"
 # Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
 _flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 
@@ -693,6 +726,7 @@ emit() { # status commit files ins del worktree error
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
   # validates required-field presence, not a closed set). usage is parsed from the HARNESS
@@ -712,13 +746,14 @@ emit() { # status commit files ins del worktree error
     # the tail is worker-controlled → usage stays null (honest, not fabricated).
     if [ "${IS_CODEX:-0}" -eq 0 ] && [ "${IS_GROK:-0}" -eq 0 ] \
        && [ "${IS_CCSHIM:-0}" -eq 0 ] && [ "${IS_PI:-0}" -eq 0 ] \
-       && [ "${IS_QODER:-0}" -eq 0 ]; then
+       && [ "${IS_QODER:-0}" -eq 0 ] && [ "${IS_CURSOR:-0}" -eq 0 ]; then
       usage_json="${AGY_USAGE_JSON:-null}"
     else
       local log_format="plain"
       [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
       [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
       [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
+      [ "${IS_CURSOR:-0}" -eq 1 ] && log_format="jsonl"
       usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
     fi
     case "$usage_json" in
@@ -733,6 +768,9 @@ emit() { # status commit files ins del worktree error
   local strict_fields=""
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_fields=", \"unit_id\": $strict_unit_json, \"contract_sha256\": $strict_contract_sha_json, \"spec_sha256\": $strict_spec_sha_json, \"go\": $strict_go_json"
+    if [ -n "${STRICT_ENGINE_ASSURANCE:-}" ]; then
+      strict_fields+=", \"engine_assurance\": \"$(_flat_json_escape "$STRICT_ENGINE_ASSURANCE")\""
+    fi
   fi
   local campaign_fields=""
   if [ "${CAMPAIGN_PROJECTION_BOUND:-0}" -eq 1 ]; then
@@ -853,6 +891,7 @@ run_strict_contract_preflight() {
   local normalized_timeout caller_timeout
   local tmp_json
   local rc
+  local -a contract_check_args
 
   [ "$STRICT_CONTRACT" -eq 1 ] || return 0
   [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] || die_precondition "--strict-contract requires --contract-file"
@@ -861,7 +900,16 @@ run_strict_contract_preflight() {
   CONSUMING_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$CONSUMING_REPO_ROOT" ] || die_precondition "not inside a git repository"
 
-  contract_check_out="$(node "$SELF_DIR/dispatch-contract.js" check --contract "$CONTRACT_FILE" --repo "$CONSUMING_REPO_ROOT" --json 2>&1)"
+  contract_check_args=(
+    check
+    --contract "$CONTRACT_FILE"
+    --repo "$CONSUMING_REPO_ROOT"
+    --json
+  )
+  if [ -n "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ]; then
+    contract_check_args+=(--qualification-override "$AUTOPILOT_QUALIFICATION_OVERRIDE")
+  fi
+  contract_check_out="$(node "$SELF_DIR/dispatch-contract.js" "${contract_check_args[@]}" 2>&1)"
   rc=$?
 
   contract_check_json="$(printf '%s' "$contract_check_out" | extract_last_json)"
@@ -898,6 +946,7 @@ run_strict_contract_preflight() {
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
   STRICT_CONTRACT_SHA="$(extract_json_value "$contract_check_json" contract_sha256 2>/dev/null || true)"
   STRICT_SPEC_SHA="$(extract_json_value "$contract_check_json" spec_sha256 2>/dev/null || true)"
+  STRICT_ENGINE_ASSURANCE="$(extract_json_value "$contract_check_json" assurance 2>/dev/null || true)"
   strict_model="$(extract_json_value "$contract_check_json" resolved_engine.model 2>/dev/null || true)"
   strict_runner="$(extract_json_value "$contract_check_json" resolved_engine.runner 2>/dev/null || true)"
   STRICT_GO="$verdict"
@@ -1342,12 +1391,23 @@ NODE
 }
 
 die_precondition() {
-  local runner="agy"
-  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
-  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
-  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
-  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
-  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  # agy is the DEFAULT rail — it has no IS_AGY flag, it is the else-case. So "no IS_*
+  # set" is ambiguous between "agy was selected" and "resolution has not happened yet".
+  # RUNNER_RESOLVED disambiguates: only trust the else-case "agy" once set_runner_flags
+  # has actually completed (FINDING 1). Before that, emit the sentinel "unresolved" —
+  # not "agy", not "auto" (the latter is also a valid --runner INPUT value, so a caller
+  # who passed --runner grok and failed an early precondition must never see "auto" in
+  # the output despite never saying it).
+  local runner="unresolved"
+  if [ "${RUNNER_RESOLVED:-0}" -eq 1 ]; then
+    runner="agy"
+    [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+    [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+    [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+    [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
+    [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+    [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  fi
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
@@ -1411,6 +1471,7 @@ die_resource_budget() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
@@ -1437,6 +1498,7 @@ write_manifest() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
   # grok --output-format json / agy response-only plain log with a separate private
   # native envelope / cc-shim plain).
@@ -1446,6 +1508,7 @@ write_manifest() {
   [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
   [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
   [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && log_format="jsonl"
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
   local scope_json="null"; [ -n "${MANIFEST_SCOPE_UNIT:-}" ] && scope_json="\"$(_flat_json_escape "$MANIFEST_SCOPE_UNIT")\""
@@ -1463,13 +1526,20 @@ write_manifest() {
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
   fi
+  # FINDING 6 fix: only present when seat_strike_capture actually suppressed a
+  # would-have-fired strike under AUTOPILOT_STRIKE_WRITER=off — absent (not just
+  # false) in the default-on case, so the field's mere presence is the signal.
+  local strike_suppressed_fields=""
+  if [ "${STRIKE_WRITER_SUPPRESSED:-}" = "1" ]; then
+    strike_suppressed_fields=", \"strike_writer_suppressed\": true, \"strike_writer_suppressed_seat\": \"$(_flat_json_escape "$STRIKE_WRITER_SUPPRESSED_SEAT")\""
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" "$strike_suppressed_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -1504,6 +1574,8 @@ while [ $# -gt 0 ]; do
     --pi-bin) PI_BIN="${2:-}"; shift 2 ;;
     --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
     --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
+    --cursor-bin) CURSOR_BIN="${2:-}"; shift 2 ;;
+    --cursor-fast) CURSOR_FAST=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --conformance-intent) CONFORMANCE_INTENT_FILE="${2:-}"; shift 2 ;;
@@ -1625,6 +1697,7 @@ set_runner_flags() {
   IS_CCSHIM=0
   IS_PI=0
   IS_QODER=0
+  IS_CURSOR=0
   case "$RUNNER" in
     codex)   IS_CODEX=1 ;;
     agy)     ;;
@@ -1632,13 +1705,33 @@ set_runner_flags() {
     cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
     pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
     qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN (Qwen); honors -w/--cwd + edit-only (grok-shaped rail)
+    cursor)  IS_CURSOR=1 ;;    # Cursor CLI (cursor-agent). EXPLICIT only, never auto — see the
+                               # auto-branch fail-closed guard below (R-1).
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
       # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
       # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
       # a bare model name must NOT silently route there.
       model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
-      if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
+      # 🔴 auto MUST NEVER SELECT cursor. This is a REFUSAL, not a route — placed before
+      # the *grok*/*gpt* tests below on purpose. Every cursor model id contains grok, gpt,
+      # codex, or claude (R-1, docs/plans/2026-08-26-cursor-cli-adaptor.md §6), so
+      # auto-selection cannot disambiguate a vendor-hosted (Cursor) id from a vendor-native
+      # one. Match semantics defined ONCE here (§3a):
+      #   (a) prefix-open: ANY "cursor-" prefixed id fails closed, in or out of the Phase 1
+      #       table (cursor-grok-4.5-high must NOT reach the *grok* branch either) — the
+      #       prefix is unambiguous, so it can be closed openly. Names --runner cursor only.
+      #   (b) table-closed: a NON-prefixed id fails closed IFF cursor_is_enabled_id "$MODEL"
+      #       — a bare gpt-5.3-codex-* id is ALSO a real native-codex family and must not be
+      #       over-captured, so this arm names BOTH --runner codex and --runner cursor and
+      #       lets the caller choose. No id list of its own: it calls cursor_is_enabled_id,
+      #       the single source of truth in lib/cursor-model.sh — three hand-maintained
+      #       copies would drift while the test stayed green.
+      if [[ "$model_lc" == cursor-* ]]; then
+        die_precondition "auto-routing refuses Cursor-hosted model id '$MODEL' (cursor- prefix) — pass --runner cursor explicitly"
+      elif cursor_is_enabled_id "$MODEL"; then
+        die_precondition "auto-routing refuses ambiguous model id '$MODEL' (also a Cursor-hosted id) — pass --runner codex or --runner cursor explicitly"
+      elif [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
         IS_CODEX=1
       elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
         IS_GROK=1
@@ -1646,8 +1739,12 @@ set_runner_flags() {
         IS_QODER=1
       fi
       ;;
-    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn (got: $RUNNER)" ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor (got: $RUNNER)" ;;
   esac
+  # Only reached if resolution actually completed (no die_precondition fired above,
+  # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
+  # init comment and die_precondition (FINDING 1).
+  RUNNER_RESOLVED=1
 }
 
 D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
@@ -1749,8 +1846,31 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
 fi
 set_runner_flags
 
+# --- --cursor-fast: runner-scoped, never a silent no-op (§3a, Global Constraint 5). ---
+if [ "$CURSOR_FAST" -eq 1 ]; then
+  [ "$IS_CURSOR" -eq 1 ] || die_precondition "--cursor-fast applies only to --runner cursor (got runner: $RUNNER)"
+fi
+
+# --- cursor effort resolution (post-parse): a family alias (grok46|codex53) is resolved
+# to a full model id via lib/cursor-model.sh; a full id already supplied passes through
+# untouched, and --cursor-fast against a full id is a die_precondition (the mapper is
+# bypassed on that path, so the flag would otherwise be silently ignored).
+# The alias test uses cursor_is_family_alias (lib/cursor-model.sh's single source of
+# truth over _CURSOR_FAMILIES) rather than a literal `grok46|codex53` case pattern here:
+# a family added to _CURSOR_FAMILIES and not to a hand-restated pattern would silently
+# fall through as an already-full id instead of being resolved. ---
+if [ "$IS_CURSOR" -eq 1 ]; then
+  if cursor_is_family_alias "$MODEL"; then
+    MODEL="$(cursor_model_for "$CURSOR_BIN" "$MODEL" "$EFFORT" "$CURSOR_FAST")" \
+      || die_precondition "cursor model resolution failed for family '$MODEL' effort '$EFFORT'"
+  else
+    [ "$CURSOR_FAST" -eq 1 ] \
+      && die_precondition "--cursor-fast applies only when --model names a family alias; pass the -fast id directly"
+  fi
+fi
+
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   validate_d2_agy_claims
 fi
@@ -1771,7 +1891,7 @@ normalize_agy_model() {
 }
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
   MODEL="$(normalize_agy_model "$MODEL")"
 fi
 
@@ -1860,6 +1980,8 @@ elif [ "$IS_GROK" -eq 1 ]; then
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
 elif [ "$IS_QODER" -eq 1 ]; then
   command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (install Qoder CLI CN or pass --qoder-bin)"
+elif [ "$IS_CURSOR" -eq 1 ]; then
+  command -v "$CURSOR_BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $CURSOR_BIN (install Cursor CLI or pass --cursor-bin)"
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
@@ -2079,6 +2201,7 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   [ "${IS_CCSHIM:-0}" -eq 1 ] && local_runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && local_runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && local_runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && local_runner="cursor"
 
   if [[ "$SKILL_MODE" == "auto" ]]; then
     cap_state="$(node "$SELF_DIR/engine-capability-state.js" current --runner "$local_runner" --model "$MODEL" --role implementer 2>/dev/null)"
@@ -2725,6 +2848,7 @@ abort_dispatch() {
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
+  [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
   [ -n "$AGY_STDERR" ] && rm -f "$AGY_STDERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
@@ -2915,6 +3039,30 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       --reasoning-effort "$5" --dangerously-skip-permissions --no-session-persistence < "$3"' \
       _ "$WT" "$QODER_BIN" "$QODER_PROMPT_FILE" "$MODEL" "$EFFORT"
   rm -f "$QODER_PROMPT_FILE"
+elif [ "$IS_CURSOR" -eq 1 ]; then
+  # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
+  # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:
+  #   P4/P5 cwd AND --workspace anchor edits → no agy-style absolute-path anchor.
+  #   P6 edit-only by default → wrapper commits, same rail as grok/qoderclicn.
+  #   P3 --trust is MANDATORY headlessly. P8 -f auto-approves tools. P7 -p reads stdin.
+  #   P12 effort is the MODEL ID, not a flag — do NOT add --reasoning-effort.
+  CURSOR_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  # Feed the prompt via STDIN (P7), NOT a positional argv arg: a large task prompt as one
+  # arg can hit ARG_MAX before cursor-agent runs. --workspace anchors edits at the real
+  # worktree (P4/P5), so no agy-style absolute-path anchor is needed. Same edit-only +
+  # wrapper-commit rail as grok/qoderclicn.
+  CURSOR_PROMPT_FILE="$(mktemp -t dispatch-hetero-cursor-prompt-XXXXXX)"
+  printf '%s' "${CURSOR_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CURSOR_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec "$2" -p --trust --force --workspace "$1" \
+      --model "$4" --output-format stream-json < "$3"' \
+      _ "$WT" "$CURSOR_BIN" "$CURSOR_PROMPT_FILE" "$MODEL"
+  rm -f "$CURSOR_PROMPT_FILE"
 elif [ "$IS_PI" -eq 1 ]; then
   # Directive channel (Phase 2): forward the R0 ledger coords to the supervisor so a
   # depth-0 `directive-send` actually DELIVERS mid-run on the production pi path (the
@@ -3009,14 +3157,20 @@ compute_artifacts() {
 # must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"
   git -C "$WT" add -A
+  if ! run_strict_staged_precheck; then
+    # Staged manifest violation: leave the worktree staged for in-place repair;
+    # classify_outcome surfaces boundary_rejected on the equality branch.
+    :
+  else
   _identity_args=()
   if ! git -C "$WT" var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
      || ! git -C "$WT" var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
     _identity_args=(-c user.email=autopilot@example.invalid -c user.name=Autopilot)
   fi
   git -C "$WT" -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
+  fi
 fi
 
 # --- verify by artifacts, never by self-report ---
@@ -3125,6 +3279,73 @@ process.exit(0);
   fi
 
   STRICT_POSTCHECK_STATUS="ok"
+  return 0
+}
+
+# Pre-commit manifest gate (P6D KR2, plan R2' 2026-08-21; GO checkpoint scoped
+# to WRAPPER-OWNED staging). The P6D incident's broad `git add -A` swept two
+# dependency symlinks into an otherwise-green candidate; the post-commit
+# boundary gate caught it only after the commit existed. This precheck runs the
+# SAME comparator (check-disjointness --staged) between the wrapper's `add -A`
+# and its capture commit: a violation leaves the worktree staged-but-uncommitted
+# (repairable in place) and the run classifies boundary_rejected. Engines that
+# self-commit never pass through here — the post-commit gate remains their
+# authoritative (and tested) backstop.
+STRICT_PRECOMMIT_REJECTED=0
+run_strict_staged_precheck() {
+  local allow_file deny_file staged_out staged_rc out_dir temp_path
+  [ "$STRICT_CONTRACT" -eq 1 ] || return 0
+  if [ "${#STRICT_SCOPE_ALLOW_PATHS[@]}" -eq 0 ] && [ "${#STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}" -eq 0 ]; then
+    return 0 # no declared manifest → postcheck will fail it authoritatively
+  fi
+  allow_file="$(mktemp -t "hetero-staged-allow-XXXXXX")" || {
+    STRICT_PRECOMMIT_REJECTED=1
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    STRICT_POSTCHECK_ERROR="boundary_rejected: failed to allocate staged-precheck allow temp file"
+    return 1
+  }
+  for out_dir in "${STRICT_SCOPE_ALLOW_PATHS[@]}" "${STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}"; do
+    [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$allow_file"
+  done
+  deny_file=""
+  if [ "${#STRICT_SCOPE_DENY_PATHS[@]}" -gt 0 ]; then
+    deny_file="$(mktemp -t "hetero-staged-deny-XXXXXX")" || {
+      rm -f "$allow_file"
+      STRICT_PRECOMMIT_REJECTED=1
+      STRICT_POSTCHECK_STATUS="boundary_rejected"
+      STRICT_POSTCHECK_ERROR="boundary_rejected: failed to allocate staged-precheck deny temp file"
+      return 1
+    }
+    for out_dir in "${STRICT_SCOPE_DENY_PATHS[@]}"; do
+      [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$deny_file"
+    done
+  fi
+  if [ -n "$deny_file" ]; then
+    staged_out="$( "$SELF_DIR/check-disjointness.sh" validate --staged --repo "$WT" --no-default-deny --allow-file "$allow_file" --deny-file "$deny_file" 2>&1 )" && staged_rc=0 || staged_rc=$?
+  else
+    staged_out="$( "$SELF_DIR/check-disjointness.sh" validate --staged --repo "$WT" --no-default-deny --allow-file "$allow_file" 2>&1 )" && staged_rc=0 || staged_rc=$?
+  fi
+  rm -f "$allow_file"; [ -n "$deny_file" ] && rm -f "$deny_file"
+  if [ "$staged_rc" -ne 0 ]; then
+    local undeclared_touches deny_hits_json
+    undeclared_touches="$(printf '%s' "$staged_out" | extract_json_value undeclared_touches 2>/dev/null || true)"
+    deny_hits_json="$(printf '%s' "$staged_out" | extract_json_value denylist_hits 2>/dev/null || true)"
+    if [ -n "$deny_hits_json" ] && [ "$deny_hits_json" != "null" ]; then
+      temp_path="$(printf '%s' "$deny_hits_json" | json_array_first)"
+    elif [ -n "$undeclared_touches" ] && [ "$undeclared_touches" != "null" ]; then
+      temp_path="$(printf '%s' "$undeclared_touches" | json_array_first)"
+    else
+      temp_path=""
+    fi
+    STRICT_PRECOMMIT_REJECTED=1
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    if [ -n "$temp_path" ]; then
+      STRICT_POSTCHECK_ERROR="boundary_rejected: staged path violates scope '${temp_path}' (pre-commit manifest gate; commit NOT created; unstage/remove the extra paths and rerun)"
+    else
+      STRICT_POSTCHECK_ERROR="boundary_rejected: staged paths violate scope (pre-commit manifest gate; commit NOT created); ${staged_out}"
+    fi
+    return 1
+  fi
   return 0
 }
 
@@ -3318,6 +3539,21 @@ run_strict_contract_postchecks() {
   return 0
 }
 
+# _hetero_runner_token — the single derivation of "which runner is this dispatch using"
+# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER/IS_CURSOR flags, shared by
+# passive_capture and seat_strike_capture (factored out rather than copy-pasted, per repo
+# convention).
+_hetero_runner_token() {
+  local runner="agy"
+  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  printf '%s' "$runner"
+}
+
 passive_capture() {
   local status="${1:-}"
   CLASSIFIED_ERROR=""
@@ -3331,12 +3567,7 @@ passive_capture() {
           quota_exhausted) quota_status="exhausted"; confidence="high" ;;
           rate_limited)    quota_status="limited"; confidence="medium" ;;
         esac
-        local runner="agy"
-        [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
-        [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
-        [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
-        [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
-        [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+        local runner; runner="$(_hetero_runner_token)"
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         # Exact effort/endpoint tuple — null endpoint means explicit no-endpoint wallet.
         local _ep_key="${ENDPOINT:-}"
@@ -3381,6 +3612,153 @@ _is_engine_unavailable() {
     quota_exhausted|rate_limited|auth_failed|overloaded) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Detector identity for seat_strike_capture's strikes (references/strike-decay.md).
+# Bump this literal whenever the classification logic below materially changes.
+STRIKE_DETECTOR_VERSION="1"
+
+# seat_strike_capture — the FIRST REAL PRODUCTION WRITER of seat-scoped no-confidence
+# strikes (references/strike-decay.md, scripts/engine-capability-state.js `strike-seat`).
+# Fires ONLY on a post-dispatcher_called fail-closed OUTCOME_STATUS: the pair was routed
+# and did not deliver. Always fail-soft — never changes this script's own exit code,
+# stdout bytes, or OUTCOME_* state (wrapped exactly like passive_capture: subshell,
+# output to /dev/null, `|| true`).
+#
+# THE CLOSED EXCLUSION LIST — read this comment, don't trace control flow, to know what
+# never strikes:
+#   1. AUTOPILOT_STRIKE_WRITER=off          — operator escape hatch so debugging the rail
+#                                             can never poison the store. Default is ON.
+#   2. OUTCOME_DISPATCHER_CALLED = 0        — pre-dispatch host abort; nothing was routed.
+#   3. OUTCOME_STATUS = engine_unavailable  — the closed external-cause enum in practice:
+#                                             quota_exhausted | rate_limited | auth_failed |
+#                                             overloaded, per _is_engine_unavailable().
+#   4. OUTCOME_STATUS in {committed, no_op, question_suspected} — success, or not a
+#                                             fail-closed delivery outcome.
+# Everything else that reaches here with dispatcher_called=1 is strike-eligible.
+#
+# FINDING 6 fix (2026-08-22 review repair): exclusion #1 (AUTOPILOT_STRIKE_WRITER=off)
+# is now evaluated LAST, after strike-eligibility (exclusions #2-#4) is already
+# decided — so we know whether this run WOULD have struck before deciding whether the
+# hatch suppresses it. A suppressed strike is never silent: STRIKE_WRITER_SUPPRESSED
+# is set and write_manifest is called again so the run's manifest sidecar carries
+# `strike_writer_suppressed: true` + the seat. This never touches OUTCOME_*, this
+# script's stdout, or its exit code — same fail-soft contract as before.
+seat_strike_capture() {
+  [ "${OUTCOME_DISPATCHER_CALLED:-1}" -eq 0 ] && return 0
+
+  local status="${OUTCOME_STATUS:-}"
+  local cause_class=""
+  # cause_class mapping — derived ONLY from the host's own classification of OUTCOME_STATUS,
+  # never from anything the runner said about itself (ADR-0001). Diagnostic only; never
+  # suppresses accrual (references/strike-decay.md § The seat is the pair).
+  case "$status" in
+    # strict-contract boundary/acceptance rejections: the host mechanically re-derived a
+    # false predicate against what the engine produced — engine-attributable.
+    acceptance_failed|boundary_rejected)
+      cause_class="engine_output" ;;
+    # an envelope/transport-shaped failure the host detected (unparseable result, not a
+    # content judgment) — delivery is part of the pair's contract (strike-decay.md), so
+    # this STILL ACCRUES; cause_class only steers remedy at threshold.
+    no_verdict)
+      cause_class="runner_delivery" ;;
+    # generic fail-closed outcomes (nonzero exit, dirty tree) where the host cannot
+    # mechanically attribute fault to engine vs runner from that signal alone.
+    failure|dirty)
+      cause_class="ambiguous" ;;
+    # BLOCKER 3 fix (2026-08-22 review repair): OUTCOME_STATUS=engine_unavailable is set
+    # in classify_outcome from CLASSIFIED_ERROR, which is classify-error's LOG-TEXT match
+    # FIRST, exit code only as a fallback when text is unknown — i.e. it can be driven
+    # entirely by prose the measured engine itself wrote to its own stdout. "A runner is
+    # never trusted to label its own failure 'transport'" (strike-decay.md), so the STRIKE
+    # EXCLUSION may not ride on that text-tainted classification. Re-derive independently
+    # from the EXIT CODE ALONE (no --string/--file — engine-capability-state.js's
+    # classify-error then exercises only its host-observed exit-code map, :2132-2143 as of
+    # the review) and only honor the exclusion if THAT reclassification also names a
+    # transport signal. A text-only "engine_unavailable" (ordinary host exit code) is not
+    # host-corroborated, so it falls through and accrues, diagnostically ambiguous — this
+    # changes only what the strike writer treats as excluded, never OUTCOME_STATUS/stdout.
+    engine_unavailable)
+      local __exit_only_class=""
+      __exit_only_class="$("$SELF_DIR/engine-capability-state.js" classify-error --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)" || __exit_only_class=""
+      if _is_engine_unavailable "$__exit_only_class"; then
+        return 0
+      fi
+      cause_class="ambiguous" ;;
+    # everything else — committed / no_op / question_suspected / any status not in the
+    # fail-closed set — is not a strike.
+    *)
+      return 0 ;;
+  esac
+
+  # A strike WOULD be written from this point on — every exclusion has already
+  # returned. Only now does the debug hatch get to suppress it, and only LOUDLY:
+  # set outside the write subshell (subshell vars don't survive back to this
+  # function) so write_manifest can stamp the manifest sidecar before we return.
+  if [ "${AUTOPILOT_STRIKE_WRITER:-on}" = "off" ]; then
+    STRIKE_WRITER_SUPPRESSED="1"
+    STRIKE_WRITER_SUPPRESSED_SEAT="$MODEL/$(_hetero_runner_token)/implementer"
+    write_manifest 2>/dev/null || true
+    return 0
+  fi
+
+  (
+    local runner; runner="$(_hetero_runner_token)"
+    local artifact_sha=""
+    if [ -n "${LOG:-}" ] && [ -r "${LOG:-}" ]; then
+      artifact_sha="$(sha256sum "$LOG" 2>/dev/null | awk '{print $1}')"
+    fi
+    if [ -z "$artifact_sha" ]; then
+      # $LOG unreadable — fall back to the sha256 of the outcome JSON (a real digest of
+      # a real artifact, never a placeholder). Built directly from OUTCOME_* env vars —
+      # deliberately NOT calling emit() here, which has real side effects (git-identity
+      # restore) this fail-soft path must never trigger twice.
+      local outcome_json
+      outcome_json="$(OUTCOME_STATUS="${OUTCOME_STATUS:-}" OUTCOME_COMMIT="${OUTCOME_COMMIT:-}" \
+        OUTCOME_FILES="${OUTCOME_FILES:-0}" OUTCOME_INS="${OUTCOME_INS:-0}" \
+        OUTCOME_DEL="${OUTCOME_DEL:-0}" OUTCOME_WT="${OUTCOME_WT:-}" \
+        OUTCOME_ERR="${OUTCOME_ERR:-}" node -e '
+          const p = process.env;
+          process.stdout.write(JSON.stringify({
+            status: p.OUTCOME_STATUS, commit: p.OUTCOME_COMMIT,
+            files: Number(p.OUTCOME_FILES), ins: Number(p.OUTCOME_INS), del: Number(p.OUTCOME_DEL),
+            worktree: p.OUTCOME_WT, error: p.OUTCOME_ERR
+          }));
+        ' 2>/dev/null)" || outcome_json=""
+      artifact_sha="$(printf '%s' "$outcome_json" | sha256sum 2>/dev/null | awk '{print $1}')"
+    fi
+    [ -z "$artifact_sha" ] && exit 0
+
+    # dedup_key: frozen contract §2.7.2 — "<non-empty: root-incident id + detector id>".
+    # Root-incident id (DISPATCH_RUN_ID is the caller-supplied --run-id when given — a
+    # retry that reuses the same run-id collides on purpose — or else a per-process id
+    # already unique by construction), bound to base/head sha + the outcome status, PLUS
+    # the detector id (same value passed as --detector-id below) so the key composition
+    # matches the contract literally, not just in spirit. No timestamp, no bare $$:
+    # retrying the SAME root incident dedups; two genuinely different dispatches
+    # (different run id and/or different shas) do not.
+    local dedup_key="${DISPATCH_RUN_ID:-unknown}:${BASE_SHA:-unknown}:${HEAD_SHA:-unknown}:${status}:dispatch_hetero_classify_outcome"
+    local receipt_ref="log=${LOG:-none} commit=${HEAD_SHA:-none}"
+
+    local strike_args=(
+      strike-seat
+      --engine "$MODEL"
+      --runner "$runner"
+      --role implementer
+      --class ordinary_strike
+      --cause-class "$cause_class"
+      --writer dispatch_hetero_failclosed
+      --dedup-key "$dedup_key"
+      --detector-id dispatch_hetero_classify_outcome
+      --detector-version "${STRIKE_DETECTOR_VERSION:-1}"
+      --artifact-sha256 "$artifact_sha"
+      --receipt-ref "$receipt_ref"
+    )
+    if [ -n "${ENGINE_CAPABILITY_DIR:-}" ]; then
+      strike_args+=(--store "$ENGINE_CAPABILITY_DIR")
+    fi
+    node "$SELF_DIR/engine-capability-state.js" "${strike_args[@]}" >/dev/null 2>&1
+  ) || true
 }
 
 # classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the
@@ -3440,7 +3818,14 @@ classify_outcome() {
     # HEAD!=BASE strict postcheck path). Valid receipt → explicit successful
     # no-op with dispatcher_called:false semantics. Missing/forged/stale/foreign
     # receipt remains ordinary no_op/failure.
-    if [ -n "$DIRTY" ]; then
+    if [ "${STRICT_PRECOMMIT_REJECTED:-0}" -eq 1 ]; then
+      # Pre-commit manifest gate refusal (KR2): staged extras named, commit never
+      # created, worktree kept staged for the cheap in-place repair (KR3 ladder
+      # points here). Authoritative boundary_rejected, same family as postcheck.
+      passive_capture "failure"
+      OUTCOME_STATUS="boundary_rejected"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+      OUTCOME_ERR="$STRICT_POSTCHECK_ERROR"; OUTCOME_EXIT=1
+    elif [ -n "$DIRTY" ]; then
       # edits exist but were never committed — e.g. the agy wrapper-commit above failed,
       # or the worker hand-edited without committing. Surface it (don't mis-score no_op).
       passive_capture "dirty"
@@ -3519,6 +3904,9 @@ classify_outcome() {
   # Observability: stamp the manifest so post-mortem status reads phase:"exited" with the
   # final status even after processes/locks are gone (both inline and detached paths).
   manifest_finalize "$OUTCOME_STATUS"
+  # Seat strike writer (P4, references/strike-decay.md) — fail-soft, never mutates
+  # OUTCOME_* or this function's already-decided status/exit.
+  seat_strike_capture
 }
 
 # ============================ R1 DETACH (setsid kill-survival) ============================
@@ -3620,12 +4008,12 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
-      STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
+      STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
@@ -3640,8 +4028,9 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
+    declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
-      _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
+      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

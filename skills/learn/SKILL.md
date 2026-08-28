@@ -26,6 +26,62 @@ Record reusable knowledge so future sessions avoid the same mistakes.
 
 ## Flow
 
+0. **Decide the destination** — before writing anything, apply the one question from
+   [`references/knowledge-routing.md`](../../references/knowledge-routing.md) §2:
+   **「把所有 fleet-specific token 刪掉後,這段還能教人嗎?」**
+
+   | Answer | Destination | Write contract |
+   |---|---|---|
+   | **No** — the identifiers were the content | `~/.claude/projects/<slug>/memory/` | Default sink. Write directly; done. |
+   | **Yes** — a publishable fact or gotcha | `.claude/knowledge/` | **Promotion** (below). Steps 1–5 apply. |
+   | **Yes**, and it binds *other skills* rather than being looked up | `references/` | Normal review path — see the Categories table. |
+
+   `.claude/knowledge/` is **deliberately gitignored** (the `.claude/knowledge/` entry in
+   `.gitignore` — the `.claude` dir is local state, fail-closed so scratch never leaks into this
+   public repo). A write there is therefore not a save. Completing it means finishing the promotion
+   contract in **three steps, with a mandatory stop between step 2 and step 3** — not one motion.
+   `git diff` only displays; it does not ask, block, or wait, and `learn` is routinely invoked from
+   the low-context `handoff` step 3.5 path, which is exactly the path most likely to run everything
+   in one shot with no human decision point.
+
+   **Step 1 — write, mechanically pre-filter, and show the diff:**
+
+   ```bash
+   git add -f .claude/knowledge/<file>.md .claude/knowledge/INDEX.md
+   # Layer 1 — mechanical pre-filter for structured shapes. exit 1 means "classify
+   # these", not "abort" — do not skip the human gate below because of it.
+   node scripts/identifier-scan.js .claude/knowledge/<file>.md
+   git diff --cached .claude/knowledge/
+   ```
+
+   **Step 2 — the human disclosure gate (mandatory, blocking):** ask via `AskUserQuestion` — approve
+   / edit / cancel — showing the diff above. **STOP on anything but approve.** This is the Layer 2
+   gate: the scanner in step 1 catches structured shapes so the person reviewing can spend their
+   attention on the unstructured class it cannot see at all (bare hostnames, client names, pane
+   addresses, endpoint aliases — routing doc §5). Match the gating style of
+   `skills/distill/SKILL.md` Step 3, which names `AskUserQuestion` and gates per-candidate the same
+   way.
+
+   **Step 3 — only after explicit approval, in a separate tool call:**
+
+   ```bash
+   git commit -m "docs(knowledge): <one-line summary>" -- .claude/knowledge/
+   ```
+
+   The trailing pathspec is required: `learn` is often invoked mid-task with unrelated files already
+   staged, and an unscoped commit would sweep them in under a `docs(knowledge):` message — leaving
+   the user having approved a strict subset of what actually landed.
+
+   > **不 commit 就等於沒寫.** An uncommitted file there is invisible to `git status` (ignored), to
+   > every other clone, and to CI — one `git clean -xdf` or worktree teardown from gone. Precedent:
+   > the ⚠️ row for `claude-code-plugin-dogfood-lessons.md` in `.claude/knowledge/INDEX.md` records it
+   > (2026-05-14) as 從未 commit 進本 repo, found missing by a doc-sync sweep 2026-07-16 and never
+   > recovered. It was written; it was indexed; it is gone.
+
+   The `git diff --cached` in step 1 only displays. The **`AskUserQuestion` blocking step in step 2 is
+   the human disclosure gate**, not ceremony: `scripts/identifier-scan.js` sees structured tokens only
+   and is blind to bare hostnames, client names, pane addresses and endpoint aliases (routing doc §5).
+
 1. **Dedup check** — search existing knowledge before writing:
    ```bash
    grep -ri "<keyword>" .claude/knowledge/*.md
@@ -64,6 +120,10 @@ Record reusable knowledge so future sessions avoid the same mistakes.
 | `arch` | `architecture.md` | Design decisions, pitfalls |
 | `env` | `environment.md` | Paths, Docker, config |
 | `api` | (in relevant file) | API misuse patterns |
+| `discipline` | `references/` (typically the `evidence-discipline.md` family) | Repo-level rule binding **other** skills — not a fact to look up but a rule to follow. Normal review path, never `git add -f`. |
+
+Destination for every category above is decided by step 0, not by this table: a `debug` lesson that
+only makes sense on one machine still goes to `memory/`.
 
 ## Invocation
 

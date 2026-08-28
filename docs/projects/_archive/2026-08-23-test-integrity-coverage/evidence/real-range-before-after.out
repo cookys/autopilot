@@ -1,0 +1,16 @@
+### Real historical range: 687f9e56~1..687f9e56
+    files touched: 38, of which *.test.sh: 10
+
+--- BEFORE: base commit has no .claude/test-integrity-config.md -> template globs
+    source=template  test_paths_matched=0  violations=0  ok=True  warning=possible misconfiguration: zero test paths matched the diff
+
+--- AFTER: same range, the new config supplied via --allow-env-config
+    source=env  test_paths_matched=10  violations=22  ok=True
+    kinds: {'deleted_line': 22}
+    surface_touches: ['hooks/tests/lib.sh']
+    files carrying violations (4): ['hooks/tests/dispatch-contract.test.sh', 'hooks/tests/engine-scorecard.test.sh', 'hooks/tests/resolve-review-loop.test.sh', 'hooks/tests/resolve-scaffold-tier.test.sh']
+
+### This ship's own range (87b5fead..400c857f) — expected to self-trip protected_path_touch
+    source=template  test_paths_matched=0  ok=False  kinds={'protected_path_touch': 2}
+      protected: .claude/test-integrity-config.md
+      protected: scripts/lib/test-integrity-l1.py

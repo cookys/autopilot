@@ -77,6 +77,14 @@ fi
 BEGIN="$(printf '%s\n' "$MARKERS" | sed -n '1p')"
 END="$(printf '%s\n' "$MARKERS" | sed -n '2p')"
 MODE="${STUB_MODE:-pass}"
+# TRUNCATED_BEGIN: the derived BEGIN with one leading and one trailing angle
+# bracket stripped (three chevrons -> two) — the real truncated-frame shape
+# observed in the wild, used by the chrome-skip-guard negative below.
+TRUNCATED_BEGIN="${BEGIN#<}"
+TRUNCATED_BEGIN="${TRUNCATED_BEGIN%>}"
+# EMBEDDED_BEGIN_LINE: the exact derived BEGIN buried inside a longer line of
+# prose — the echo shape the positional anchor originally defended against.
+EMBEDDED_BEGIN_LINE="some prose $BEGIN more prose"
 
 case "$MODE" in
   pass)
@@ -150,7 +158,11 @@ case "$MODE" in
     echo "$END"
     ;;
   prompt_echo)
-    echo "Model repeated prompt: this is not the wrapped block."
+    # A real whole-prompt echo reproduces the framing markers too (they are part
+    # of the instructions the model is echoing) — so the chrome-skip guard must
+    # still hard-reject this: the leading line carries the vocabulary but is not
+    # byte-exactly the derived BEGIN.
+    echo "Model repeated prompt: beginning with: $BEGIN and more prose"
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
     echo "FINDINGS: none"
@@ -177,6 +189,71 @@ case "$MODE" in
     echo "VERDICT: FIX-THEN-SHIP"
     echo "FINDINGS: this valid finding discusses prompt, diff, marker, Diff under review:, diff --git, @@ -1 +1 @@, and <one finding per line> as vocabulary"
     echo "$END"
+    ;;
+  vbp_chrome_then_block)
+    # Fixture A: frozen unknown-model notice bytes ahead of an intact valid block, rc=0.
+    cat "${VBP_NOTICE_FILE:?VBP_NOTICE_FILE required for vbp_chrome_then_block}"
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  vbp_block_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_ship_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target slice was traced; conclusion=current requirements have no concrete blocking failure"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_truncated_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    exit 7
+    ;;
+  vbp_leak_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS:"
+    echo "diff --git a/x b/x"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_two_blocks_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: none"
+    echo "$END"
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff; evidence=trace; conclusion=nothing blocks"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_ship_tautology_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff; evidence=none; conclusion=looks good"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_kimi_bullet_then_die)
+    # The documented-common kimi shape: thinking bullet ahead of the nonce block.
+    echo "• $BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    exit 7
     ;;
   trailing)
     echo "$BEGIN"
@@ -232,6 +309,70 @@ case "$MODE" in
     echo 'line one with "quotes"'
     echo 'line two with "$RAW_LOG" and \backslash\'
     echo "$END"
+    ;;
+  chrome_then_valid)
+    # The real observed loss: one line of harness chrome (e.g. cc-shim's
+    # unrecognized-model notice) ahead of an otherwise complete, correctly
+    # framed block. Must be skipped, not rejected.
+    echo '[claude-code:unrecognized_model] {"model":"unknown"}'
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  chrome_multi_then_valid)
+    # Multiple leading chrome lines, one with leading whitespace — both must
+    # still be treated as pure chrome and skipped.
+    echo '[claude-code:unrecognized_model] {"model":"unknown"}'
+    echo '   some indented harness banner line'
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  diff_echo_chrome)
+    # A model echoing the DIFF back before emitting its frame. The block-level
+    # leak scan (prompt_framing_leakage) has always rejected these exact anchored
+    # patterns INSIDE the block; a skipped prefix would let them ride in front of
+    # it unexamined. Must be rejected, not skipped.
+    echo 'diff --git a/foo.txt b/foo.txt'
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  hunk_echo_chrome)
+    # Same, via a quoted hunk header — the structural normalization must stop a
+    # Markdown quote marker from laundering the echoed line.
+    echo '> @@ -1,2 +1,2 @@'
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  truncated_frame_chrome)
+    # A REAL truncated frame (two angle brackets, not three) as leading
+    # chrome, followed by a complete valid block. Carries framing vocabulary
+    # but is not byte-exactly the derived BEGIN — HARD REJECT, never a skip.
+    echo "$TRUNCATED_BEGIN"
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  embedded_begin_chrome)
+    # The derived BEGIN embedded inside a longer prose line (echo shape) as
+    # leading chrome, followed by a complete valid block. Must be rejected.
+    echo "$EMBEDDED_BEGIN_LINE"
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  chrome_only_no_frame)
+    # Pure chrome, no frame anywhere in the capture.
+    echo '[claude-code:unrecognized_model] {"model":"unknown"}'
+    echo 'no frame follows this line at all'
     ;;
   *)
     echo "$BEGIN"
@@ -308,6 +449,29 @@ echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=t
 echo "$end"
 EOF
 chmod +x "$STUB_QODERCN_MARKER"
+
+# A WELL-FORMED verdict block on stdout AND the engine process exits non-zero
+# (an engine that answers correctly then crashes on teardown) — no runner
+# previously exercised this combination end-to-end. Pins current production
+# behaviour: the RC check runs BEFORE the parser on every rail, so a
+# non-zero exit is fail-closed to no_verdict regardless of stdout content
+# (verdict-bytes go through salvage_unratified_verdict, but status/exit are
+# unchanged).
+STUB_QODERCN_NONZERO="$TEST_TMP/qoderclicn-nonzero"
+cat > "$STUB_QODERCN_NONZERO" <<'EOF'
+#!/usr/bin/env bash
+PROMPT="$(cat)"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -n "$begin" ] && [ -n "$end" ] || exit 0
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
+echo "$end"
+exit 9
+EOF
+chmod +x "$STUB_QODERCN_NONZERO"
 
 STUB_SPAWN_MARKER="$TEST_TMP/spawn-marker-runner"
 cat > "$STUB_SPAWN_MARKER" <<'EOF'
@@ -561,6 +725,91 @@ OUT="$(STUB_MODE=no_end "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$D
 assert_eq "1" "$EXIT" "missing END exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "missing END → no_verdict"
 
+# 4j. Chrome-skip locator (v-frame-loss fix): leading chrome lines with no
+# framing vocabulary are skipped up to the derived BEGIN; leading chrome that
+# DOES carry framing vocabulary without being byte-exactly the derived BEGIN
+# is a HARD REJECT, never a skip.
+
+# POSITIVE: one line of harness chrome ahead of a complete, valid, exactly
+# framed block. This is the regression that discarded four real reviews.
+OUT="$(STUB_MODE=chrome_then_valid "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "harness chrome ahead of a valid block still reviews (exit 0)"
+assert_contains "$OUT" '"status": "reviewed"' "harness chrome ahead of a valid block → reviewed"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "harness chrome ahead of a valid block: verdict parsed"
+assert_contains "$OUT" 'does not reverse' "harness chrome ahead of a valid block: findings parsed"
+
+# BUDGET (first-pass qc 🟠 chrome-battery-bypass): the skipped prefix is bounded.
+# The old locator required the frame at line 1, so the block size cap also
+# bounded the whole response; an unbounded prefix removed that, letting a huge
+# preamble ride in front of a small valid block with none of it inspected.
+# Real chrome is one or two lines, so the budget only catches the pathological
+# case — and these two assertions pin BOTH directions: just under the budget
+# still reviews, just over it fails closed. Without the second, the budget could
+# be set to infinity and nothing would notice.
+OUT="$(STUB_MODE=chrome_then_valid AUTOPILOT_REVIEW_CHROME_MAX_LINES=5 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "chrome within budget still reviews (exit 0)"
+assert_contains "$OUT" '"status": "reviewed"' "chrome within budget → reviewed"
+
+OUT="$(STUB_MODE=chrome_then_valid AUTOPILOT_REVIEW_CHROME_MAX_LINES=0 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "chrome OVER budget fails closed (exit 1)"
+assert_contains "$OUT" '"status": "no_verdict"' "chrome over budget → no_verdict"
+assert_contains "$OUT" 'exceeded the budget' "chrome over budget names the budget"
+
+OUT="$(STUB_MODE=chrome_then_valid AUTOPILOT_REVIEW_CHROME_MAX_BYTES=1 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "chrome over the BYTE budget fails closed (exit 1)"
+assert_contains "$OUT" 'exceeded the budget' "byte budget also names the budget"
+
+# NEGATIVE: the skipped prefix is held to the SAME leak rule as the block. The
+# block-level scan (prompt_framing_leakage) rejects these anchored prompt/diff
+# patterns; before this guard a skipped prefix escaped that scan entirely, so a
+# leading `diff --git` line — which the old positional rail rejected — was
+# tolerated. Both directions matter: these must fail, real harness chrome must not.
+OUT="$(STUB_MODE=diff_echo_chrome "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "diff-echo as leading chrome fails closed (exit 1)"
+assert_contains "$OUT" '"status": "no_verdict"' "diff-echo as leading chrome → no_verdict"
+assert_contains "$OUT" 'echoed prompt/diff structure' "diff-echo names the leak rule, not the budget"
+
+OUT="$(STUB_MODE=hunk_echo_chrome "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "quoted hunk-header echo as leading chrome fails closed (exit 1)"
+assert_contains "$OUT" 'echoed prompt/diff structure' "a Markdown quote marker does not launder an echoed hunk header"
+
+# POSITIVE: multiple leading chrome lines, including one with leading
+# whitespace, still parse.
+OUT="$(STUB_MODE=chrome_multi_then_valid "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "multiple leading chrome lines still review (exit 0)"
+assert_contains "$OUT" '"status": "reviewed"' "multiple leading chrome lines → reviewed"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "multiple leading chrome lines: verdict parsed"
+
+# NEGATIVE: a REAL truncated frame (two angle brackets, not three) as leading
+# chrome, followed by a complete valid block. Proves the fix did not just
+# weaken the parser into "skip until you find begin" — a malformed frame that
+# carries the vocabulary is rejected, not silently skipped.
+OUT="$(STUB_MODE=truncated_frame_chrome "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "truncated frame as leading chrome exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "truncated frame as leading chrome → no_verdict"
+# The REASON must be the framing-vocabulary rejection, not a generic "no BEGIN
+# frame". awk's END block used to rewrite the rule-level exit code (7 -> 2,
+# 3 -> 5, 8 -> 2), so the parser failed closed but named the wrong failure. This
+# assertion is what pins the code path, not just the outcome.
+assert_contains "$OUT" 'framing vocabulary' "truncated frame names the vocabulary rejection, not a generic missing-frame"
+assert_not_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "truncated-frame chrome never authorizes a verdict"
+
+# NEGATIVE: the derived BEGIN embedded inside a longer prose line (the echo
+# shape the original positional anchor defended against) as leading chrome,
+# followed by a valid block. Must still be rejected.
+OUT="$(STUB_MODE=embedded_begin_chrome "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "embedded BEGIN inside a prose line exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "embedded BEGIN inside a prose line → no_verdict"
+assert_not_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "embedded-BEGIN chrome never authorizes a verdict"
+
+# NEGATIVE (unchanged behaviour): chrome only, no frame anywhere → no_verdict.
+OUT="$(STUB_MODE=chrome_only_no_frame "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "chrome with no frame at all exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "chrome with no frame at all → no_verdict"
+
 # 5. agy native JSON path: response feeds the existing framing parser while usage
 # comes only from the closed harness envelope.
 if command -v bwrap >/dev/null 2>&1; then
@@ -616,6 +865,16 @@ OUT="$(STUB_MODE=ship_no_end "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-P
 assert_eq "1" "$EXIT" "qoderclicn capped partial wrapped block is no_verdict"
 assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn capped partial SHIP never passes"
 assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn partial SHIP is not accepted"
+
+# A well-formed, complete, correctly-framed SHIP-AS-IS block on stdout, then
+# the qoder process exits non-zero (rc=9) — engine answered correctly then
+# crashed on teardown. Pinning current production behaviour: fail-closed to
+# no_verdict, the well-formed block is NOT accepted despite being intact.
+OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_QODERCN_NONZERO" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "qoderclicn well-formed block + nonzero exit: exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn well-formed block + nonzero exit → no_verdict"
+assert_contains "$OUT" "qoder exited non-zero (rc=9)" "qoderclicn well-formed block + nonzero exit names the exit code"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn well-formed block + nonzero exit never authorizes shipping"
 
 # 5c. Blind review requires no-tools containment and hides the caller escape sentinel.
 OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -744,7 +1003,10 @@ const server = http.createServer((req, res) => {
     } else if (calls === 3) {
       response.content[0].text = wrapped('```\nVERDICT: SHIP-AS-IS\n```\nVERDICT: SHIP-AS-IS with trailing prose\nFINDINGS: none\n');
     } else if (calls === 4) {
-      response.content[0].text = `Model repeated prompt.\n${wrapped('VERDICT: FIX-THEN-SHIP\nFINDINGS: none\n')}`;
+      // A real whole-prompt echo reproduces the framing markers too — the
+      // leading line must carry the vocabulary (not just generic prose) to
+      // still exercise the chrome-skip guard's hard-reject path.
+      response.content[0].text = `Model repeated prompt: beginning with: ${nonceBegin} and more prose\n${wrapped('VERDICT: FIX-THEN-SHIP\nFINDINGS: none\n')}`;
     } else if (calls === 5) {
       response.content[0].text = wrapped('VERDICT: FIX-THEN-SHIP\nFINDINGS:\ndiff --git a/x b/x\nline after fake diff\n');
     }
@@ -1150,5 +1412,110 @@ BE_ERR="$(bash "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax 
   --diff-file "$BE_DIFF" --spec-file "$BE_SPEC" --allow-narrative "fixture override test" 2>&1 >/dev/null | head -20)"
 assert_contains "$BE_ERR" "BLIND-EVIDENCE OVERRIDE" \
   "--allow-narrative admits the payload with a loud stderr override record"
+
+# ── verdict-bytes preservation (v2.34.33): unratified_verdict salvage column ──
+# Frozen rules (plan R3 §2/§3 + g2-adjudication #6/#7/#8): salvage runs the FULL
+# authoritative content battery over the runner-specific capture; only the positional
+# start-anchor (→ unique BEGIN + first END) and the exit-0 requirement are dropped.
+# status/verdict/exit stay fail-closed on every path; the field is display/adjudication
+# data, never authority.
+VBP_NOTICE="$REPO_ROOT/docs/plans/evidence/2026-08-21-verdict-bytes-preservation/fixtures/unknown-model-notice.cc-2.1.238.txt"
+SCHEMA_CHECK_JS="$REPO_ROOT/scripts/validate-json-schema.js"
+RESULT_SCHEMA="$REPO_ROOT/schemas/review-result.schema.json"
+vbp_json() {  # capture STDOUT ONLY (pure JSON) — stderr chrome would break schema checks
+  DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 STUB_MODE="$1" \
+    "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>/dev/null
+}
+vbp_schema_ok() {
+  local doc="$TEST_TMP/vbp-result-$RANDOM.json"
+  printf '%s\n' "$1" > "$doc"
+  node "$SCHEMA_CHECK_JS" --schema "$RESULT_SCHEMA" --document "$doc" >/dev/null 2>&1
+}
+
+# Fixture A: frozen real-world unknown-model notice bytes (the exact chrome that
+# caused the observed 4/4 data loss) ahead of an intact valid block, rc=0. Post
+# chrome-skip-guard fix: this notice carries NO framing vocabulary, so it is
+# skipped as pure chrome and the block is accepted DIRECTLY — reviewed,
+# authoritative, no salvage needed. (Pre-fix this fell through to no_verdict +
+# salvaged unratified_verdict; that fallback is no longer exercised by this
+# exact real-world capture.)
+OUT="$(VBP_NOTICE_FILE="$VBP_NOTICE" vbp_json vbp_chrome_then_block)"; EXIT=$?
+assert_eq "$EXIT" "0" "A: chrome-prepend now reviews directly (exit 0)"
+assert_contains "$OUT" '"status": "reviewed"' "A: chrome-prepend is reviewed, not no_verdict"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "A: verdict parsed directly behind the frozen notice bytes"
+assert_not_contains "$OUT" 'unratified_verdict' "A: no salvage key on the direct-accept path (g2 #7)"
+vbp_schema_ok "$OUT" || fail "A: directly-reviewed artifact behind chrome fails the result schema"
+
+# Fixture B: complete block then runner dies rc=7 → salvaged, exit 1 unchanged.
+OUT="$(vbp_json vbp_block_then_die)"; EXIT=$?
+assert_eq "$EXIT" "1" "B: runner death still exits 1"
+assert_contains "$OUT" '"status": "no_verdict"' "B: runner death stays no_verdict"
+assert_contains "$OUT" '"unratified_verdict": "FIX-THEN-SHIP"' \
+  "B: complete block before non-zero exit is salvaged"
+
+# SHIP with a VALID proof then death → salvaged SHIP-AS-IS (proof battery passes).
+OUT="$(vbp_json vbp_ship_then_die)"
+assert_contains "$OUT" '"unratified_verdict": "SHIP-AS-IS"' \
+  "B-ship: valid-proof SHIP block before death is salvaged"
+assert_contains "$OUT" '"no_finding_proof": null' \
+  "B-ship: authoritative proof column stays null on no_verdict"
+vbp_schema_ok "$OUT" || fail "B-ship: salvaged SHIP artifact fails the result schema"
+
+# Fixture B2: truncated block (no END) → never salvaged.
+OUT="$(vbp_json vbp_truncated_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "B2: truncated block is never salvaged"
+
+# Fixture E: leak line inside the block → battery parity → null.
+OUT="$(vbp_json vbp_leak_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "E: leak scan applies to salvage"
+
+# Fixture F: two BEGIN blocks → ambiguous → null.
+OUT="$(vbp_json vbp_two_blocks_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "F: two blocks are ambiguous, never salvaged"
+
+# Fixture G: tautological SHIP proof → full-battery parity → null.
+OUT="$(vbp_json vbp_ship_tautology_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "G: tautology blacklist applies to salvage"
+
+# Kimi rail (pre-merge review round-1 MUST-FIX): the bullet-prefix normalization now
+# runs BEFORE the rc check, so the documented-common "• <BEGIN>" shape salvages on a
+# runner death. Red evidence for the inert pre-fix shape is the reviewer's recorded
+# two-sided probe (bullet → null / unprefixed → salvaged) in the round-1 report.
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 STUB_MODE=vbp_kimi_bullet_then_die \
+  "$SCRIPT" --runner kimi --model kimi-code/k3 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>/dev/null)"; EXIT=$?
+assert_eq "$EXIT" "1" "kimi: runner death still exits 1"
+assert_contains "$OUT" '"status": "no_verdict"' "kimi: runner death stays no_verdict"
+assert_contains "$OUT" '"unratified_verdict": "FIX-THEN-SHIP"' \
+  "kimi: bullet-prefixed block before death is salvaged (normalized capture)"
+
+# Reviewed path stays byte-identical: the key is NOT emitted on success (g2 #7)...
+OUT="$(vbp_json pass)"; EXIT=$?
+assert_eq "$EXIT" "0" "reviewed path still exits 0"
+assert_not_contains "$OUT" 'unratified_verdict' "reviewed emit is byte-identical (no salvage key)"
+vbp_schema_ok "$OUT" || fail "reviewed artifact without the optional key fails the result schema"
+
+# ...and the strict JS consumer admits the key on no_verdict without granting authority,
+# while still rejecting arbitrary unknown keys (closed-contract pin).
+NODE_PIN="$(node -e '
+const { parseReviewOutput } = require(process.argv[1] + "/src/runners/review");
+const base = { runner: "codex", model: "m", status: "no_verdict", verdict: null,
+  findings: "", no_finding_proof: null, raw_log: "/tmp/x", error: "died", usage: null };
+const out = {};
+const withKey = { ...base, unratified_verdict: "SHIP-AS-IS" };
+try { const p = parseReviewOutput(JSON.stringify(withKey));
+  out.admitted = true; out.verdict_stays = p.verdict === null; out.status_stays = p.status === "no_verdict";
+} catch (e) { out.admitted = false; }
+try { parseReviewOutput(JSON.stringify({ ...base, totally_unknown: 1 })); out.unknown_rejected = false; }
+catch (e) { out.unknown_rejected = true; }
+try { parseReviewOutput(JSON.stringify({ ...base, status: "reviewed", verdict: "FIX-THEN-SHIP", unratified_verdict: "SHIP-AS-IS" })); out.reviewed_nonnull_rejected = false; }
+catch (e) { out.reviewed_nonnull_rejected = true; }
+console.log(JSON.stringify(out));
+' "$REPO_ROOT")"
+assert_contains "$NODE_PIN" '"admitted":true' "runner contract admits unratified_verdict on no_verdict"
+assert_contains "$NODE_PIN" '"verdict_stays":true' "unratified_verdict is never copied into verdict"
+assert_contains "$NODE_PIN" '"status_stays":true' "unratified_verdict never changes status"
+assert_contains "$NODE_PIN" '"unknown_rejected":true' "arbitrary unknown keys still fail closed"
+assert_contains "$NODE_PIN" '"reviewed_nonnull_rejected":true' \
+  "non-null unratified_verdict outside no_verdict is rejected"
 
 finalize_test

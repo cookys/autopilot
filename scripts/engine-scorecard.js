@@ -19,6 +19,10 @@ const {
 const {
   validateEvidenceProducer,
 } = require('./engine-capability-state');
+const {
+  canonicalJson,
+  sha256,
+} = require('../src/engine/owner-kernel/canonical');
 
 const VALID_ROLES = new Set(ROLE_IDS);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
@@ -29,9 +33,44 @@ const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
 // `engine-scorecard.js record` rejected its own emitted row. Two spellings for
 // one concept is not ideal — but rewriting evidence rows is worse. New rows
 // should use `operator-asserted`.
-const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted']);
+// `official-default` (v2.34.36) marks a row that arrived by ADOPTION of the
+// shipped official qualification defaults rather than by a local
+// administration. It says how the row got into THIS store; the original
+// administration's own version_source is preserved under
+// row.provenance.administration_version_source. It is disclosure, not
+// authority — no admission path branches on it.
+const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted', 'official-default']);
+// `expired` stays a legal INPUT status (rows written before the 2026-08-22
+// no-confidence-decay cut may still legitimately carry it on disk) but the
+// projection (deriveStatus, below) never PRODUCES it any more — a stale/
+// past-expires row now derives `qualified` with `expiry_warning: true`
+// instead. Calendar dates are advisory-only everywhere; see
+// references/strike-decay.md.
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
+// --- strike-decay projection (2026-08-22 no-confidence-decay P1) ------------------
+// Closed registries, frozen contract §2.7.3. The strike STORE (write path,
+// validation-at-write, dedup-idempotent append, invalidation) is owned by
+// engine-capability-state.js; this file owns the read-time PROJECTION only —
+// it never writes strikes.jsonl.
+const STRIKE_WRITER_ALLOWLIST = new Set([
+  'fuse', 'conformance_audit', 'dispatch_hetero_failclosed', 'qualification_admin',
+]);
+const CRITICAL_REEXAM_PREDICATES = new Set([
+  'security_canary_disclosure', 'protected_test_tampering', 'evidence_hash_manipulation',
+]);
+const ORDINARY_STRIKE_THRESHOLD = 3;
+const STRIKE_POLICY_VERSION = 2;
+const SEAT_TOKEN_RE = /^[A-Za-z0-9._@:-]+$/;
+// Engine token uses the CANONICAL vendor model-id charset (src/engine/capability-evidence.js
+// `modelId`, :129-141) — NOT the narrower SEAT_TOKEN_RE below. Real vendor ids contain
+// spaces, parens and slashes ("Gemini 3.5 Flash (High)", "kimi-code/k3-256k"); runner and
+// role stay internal enumerations and keep the narrower charset. Both engine-scorecard.js
+// (read side) and engine-capability-state.js (write side, `seat-hash`) MUST apply this same
+// regex to the engine field so both sides hash the identical set — a divergence here
+// silently orphans strikes from their projection.
+const ENGINE_TOKEN_RE = /^(?![\s])[A-Za-z0-9 ._:()/-]{1,128}(?<![\s])$/u;
+const HEX64_RE = /^[0-9a-f]{64}$/i;
 const TRANSCRIPT_PROVIDERS = new Set(['codex', 'grok', 'opencode', 'agy']);
 const TRANSCRIPT_EXTENSIONS = new Set(['.json', '.jsonl', '.ndjson']);
 const MAX_TRANSCRIPT_FILES = 10000;
@@ -74,10 +113,11 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
+  node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--now <ISO-date>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
-  --role is required for current/report/ladder.\n\
+  --role is required for current/report/ladder/seat-status.\n\
   --key accepts capability (default) or cost.\n\
-  --now accepts ISO date; used by current/report/ladder for deterministic TTL checks.\n\
+  --now accepts ISO date; used by current/report/ladder/seat-status for deterministic TTL checks.\n\
   All disk-backed views are untrusted telemetry: stored qualified rows are projected\n\
     as provisional and report/ladder cannot produce a routing candidate.\n\
   --require-evidence additionally excludes legacy rows and requires --scope-file.\n\
@@ -86,6 +126,11 @@ const HELP_TEXT = `Usage:\n\
   verification_author/explorer rows are evidence-only in v1; use current/report, not ladder.\n\
   import-transcripts requires explicit roots and emits aggregate-only, untrusted telemetry;\n\
     it never appends scorecard rows. --output atomically writes the same JSON printed to stdout.\n\
+  seat-status prints the §2.7.5 admission projection for one engine+runner+role seat:\n\
+    admission_status/expiry_warning/strikes_since_pass/critical_trigger/would_requalify/\n\
+    strike_threshold/strike_policy_version/rejected_strikes, plus seat_hash and the\n\
+    baseline (baseline_event_id/baseline_qualified_at). Calendar dates never gate admission;\n\
+    AUTOPILOT_STRIKE_ENFORCEMENT=enforce arms ordinary-strike requalification (shadow by default).\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -179,14 +224,48 @@ function toDateMs(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function todayMsUtc() {
-  return toDateMs(new Date().toISOString().slice(0, 10)) || Date.now();
+// Start of the UTC day containing `ms`. Used ONLY by computeExpiryWarning, whose
+// right-hand side (`expires`) is contractually DATE-ONLY (:342) — a date-vs-date
+// comparison must not become time-of-day sensitive. It is deliberately NOT the
+// default clock: see nowArgToMs.
+function startOfUtcDayMsOf(ms) {
+  if (!Number.isFinite(ms)) return ms;
+  const iso = new Date(ms).toISOString().slice(0, 10);
+  const floor = Date.parse(`${iso}T00:00:00.000Z`);
+  return Number.isFinite(floor) ? floor : ms;
 }
 
+// v2.34.37: the DEFAULT clock is the real instant, not UTC midnight.
+//
+// It used to be `todayMsUtc()` — Date.now() truncated to the start of the current
+// UTC day — and every instant comparison downstream inherited that truncation,
+// which made the projection read the *past* for up to 24h after every midnight:
+//
+//   (a) an evidence receipt issued later the same UTC day (issued_at
+//       2026-08-22T20:00Z, evaluation_time 2026-08-22T00:00Z) is not yet valid,
+//       so deriveStatus refuses it, findSeatBaseline picks no baseline, and
+//       `seat-status` answers `no_record` for a seat that has a QUALIFIED row on
+//       disk (reproduced: scorecard events 153/154/155 on their administration
+//       day; `--now <next day>` flipped the same rows to `qualified`).
+//   (b) foldSeatStrikes' countable window is `observedMs <= nowMs`, so every
+//       strike written later the same UTC day was REJECTED — strike enforcement
+//       was a silent no-op for up to 24h after each midnight. Reproduced: three
+//       strikes stamped at the wall instant projected
+//       `rejected_strikes: 3 / strikes_since_pass: 0` under the default clock and
+//       `strikes_since_pass: 3 / would_requalify: true` under an explicit future
+//       `--now`. `dispatch-contract.js` never passes `--now`, so this was the
+//       production path.
+//
+// An EXPLICIT `--now` is still honoured verbatim: a date-only value keeps meaning
+// start-of-that-day (toDateMs), a full timestamp keeps meaning that instant. Only
+// the default changed. The pinned pass-instant tiebreak (a strike stamped at
+// exactly the baseline instant does not count — `observedMs > baselineMs` is
+// strict; calendar-teeth-negative "tie1") is untouched: this function never
+// participates in that comparison's right-hand side.
 function nowArgToMs(value, required = false) {
   const ms = toDateMs(value);
   if (value === undefined || value === null || value === '') {
-    return required ? failValidation('missing --now value') : todayMsUtc();
+    return required ? failValidation('missing --now value') : Date.now();
   }
   if (ms === null) failUsage(`invalid --now date: ${value}`);
   return ms;
@@ -297,9 +376,17 @@ function validateRecordRow(row) {
         failValidation(`scorecard ${field} does not match capability evidence`);
       }
     }
-    const evidenceStatus = evidence.state === 'qualified'
-      ? 'qualified' : evidence.state === 'stale' ? 'expired' : 'failed';
-    if (row.status !== evidenceStatus) {
+    // Calendar tooth (a) pulled 2026-08-22: a `stale` evidence receipt is
+    // advisory-only (surfaced as expiry_warning at read time), never an
+    // admission downgrade — so a stale-receipt row now expects `qualified`.
+    // Rows recorded before this cut may still legitimately carry the literal
+    // `expired` string for a stale receipt; accepted on input for replay
+    // idempotency, never produced by the projection going forward.
+    const evidenceStatus = evidence.state === 'qualified' || evidence.state === 'stale'
+      ? 'qualified' : 'failed';
+    const evidenceStatusOk = row.status === evidenceStatus
+      || (evidence.state === 'stale' && row.status === 'expired');
+    if (!evidenceStatusOk) {
       failValidation(`scorecard status does not match capability evidence state '${evidence.state}'`);
     }
     if (row.qualified_at !== evidence.issued_at.slice(0, 10)
@@ -432,9 +519,9 @@ function parseCurrentArgs(args) {
     failUsage('--require-evidence or --identity-file requires --scope-file');
   }
 
-  const nowMs = now === undefined
-    ? (requireEvidence ? Date.now() : todayMsUtc())
-    : nowArgToMs(now, false);
+  // Default clock = real instant for every command (v2.34.37, was UTC-midnight
+  // truncated unless --require-evidence). See nowArgToMs.
+  const nowMs = nowArgToMs(now, false);
 
   return { role, nowMs, requireEvidence, scope, identity };
 }
@@ -492,9 +579,9 @@ function parseReportArgs(args) {
     failUsage('--require-evidence or --identity-file requires --scope-file');
   }
 
-  const nowMs = now === undefined
-    ? (requireEvidence ? Date.now() : todayMsUtc())
-    : nowArgToMs(now, false);
+  // Default clock = real instant for every command (v2.34.37, was UTC-midnight
+  // truncated unless --require-evidence). See nowArgToMs.
+  const nowMs = nowArgToMs(now, false);
   return {
     role,
     key,
@@ -563,9 +650,9 @@ function parseLadderArgs(args) {
   return {
     role,
     implementerFamily,
-    nowMs: now === undefined
-      ? (requireEvidence ? Date.now() : todayMsUtc())
-      : nowArgToMs(now, false),
+    // Default clock = real instant for every command (v2.34.37, was UTC-midnight
+    // truncated unless --require-evidence). See nowArgToMs.
+    nowMs: nowArgToMs(now, false),
     requireEvidence,
     scope,
     identity,
@@ -1283,6 +1370,10 @@ function currentRowsForRole(role, nowMs, options = {}) {
       ? { ...evidenceReceipt, state: 'provisional' }
       : evidenceReceipt;
 
+    // Strike-decay projection (frozen contract §2.7.5): pair-scoped to this
+    // row's own engine+runner+role seat — the only admission authority.
+    const seatProjection = computeSeatProjection(row.engine, row.runner, row.role, nowMs).projection;
+
     output.push({
       engine: row.engine,
       runner: row.runner,
@@ -1307,6 +1398,20 @@ function currentRowsForRole(role, nowMs, options = {}) {
       admissible: false,
       observed_status: evidenceBackedStatus,
       event_id: toEventId(row.event_id) || 0,
+      // §2.7.5 projection fields. expiry_warning is THIS row's own `expires`
+      // (advisory-only, never gates admission_status).
+      admission_status: seatProjection.admission_status,
+      expiry_warning: computeExpiryWarning(row.expires, nowMs),
+      strikes_since_pass: seatProjection.strikes_since_pass,
+      critical_trigger: seatProjection.critical_trigger,
+      would_requalify: seatProjection.would_requalify,
+      strike_threshold: seatProjection.strike_threshold,
+      strike_policy_version: seatProjection.strike_policy_version,
+      rejected_strikes: seatProjection.rejected_strikes,
+      // Present only when this seat's baseline is an adopted official default
+      // AND the seat is requalify_required. Advisory operator guidance; no
+      // consumer gates on it (dispatch-contract.js reads admission_status).
+      ...(seatProjection.remedy === undefined ? {} : { remedy: seatProjection.remedy }),
     });
   }
 
@@ -1326,13 +1431,335 @@ function deriveStatus(row, nowMs, resolvedEvidenceReceipt = null) {
       evaluation_time: new Date(nowMs).toISOString(),
     });
     if (receipt.state === 'qualified') return 'qualified';
-    if (receipt.state === 'stale') return 'expired';
+    // Calendar tooth (a) pulled 2026-08-22 (no-confidence-decay P1): a stale
+    // evidence receipt is advisory-only — surfaced as `expiry_warning` in the
+    // projection, never a downgrade to `expired`. See references/strike-decay.md.
+    if (receipt.state === 'stale') return 'qualified';
     return 'failed';
   }
   if (row.status !== 'qualified') return row.status;
-  const expiresMs = toDateMs(row.expires);
-  if (expiresMs === null) return row.status;
-  return expiresMs < nowMs ? 'expired' : row.status;
+  // Calendar tooth (a) pulled 2026-08-22: `expires` never flips a qualified
+  // row to `expired` here. It is surfaced separately as `expiry_warning`
+  // (computeExpiryWarning, below) and plays no part in admission.
+  return row.status;
+}
+
+// --- strike-decay projection helpers (frozen contract §2.7) -----------------------
+
+function isHex64(value) {
+  return typeof value === 'string' && HEX64_RE.test(value);
+}
+
+function seatToken(value) {
+  return typeof value === 'string' && SEAT_TOKEN_RE.test(value.trim()) ? value.trim() : null;
+}
+
+// Engine field only: canonical vendor model-id charset, see ENGINE_TOKEN_RE comment above.
+function engineToken(value) {
+  return typeof value === 'string' && ENGINE_TOKEN_RE.test(value.trim()) ? value.trim() : null;
+}
+
+// Two independent call sites derive the same seat_hash (this file's read-time
+// projection, and engine-capability-state.js's `seat-hash` write-time helper)
+// from the identical two-line algorithm and the identical canonicalJson/sha256
+// primitives — never by shelling out cross-script. A seat_hash mismatch
+// between the two would silently orphan every strike from its projection.
+function seatIdentityHash(engine, runner, role) {
+  return sha256(canonicalJson({ engine: String(engine), runner: String(runner), role: String(role) }));
+}
+
+// `expires` is a DATE, not an instant — so this stays a date-vs-date comparison.
+// The default clock became the real instant in v2.34.37 (nowArgToMs); without the
+// floor here, an advisory-only warning would newly fire on the expiry date itself
+// (00:00:00.001Z onward) rather than the day after, and would answer differently
+// for `--now 2026-08-24` vs `--now 2026-08-24T10:00:00Z`. Neither is a defect the
+// clock fix set out to change, and expiry is advisory-only either way
+// (references/strike-decay.md: calendar tooth (a) is pulled).
+function computeExpiryWarning(expiresValue, nowMs) {
+  const ms = toDateMs(expiresValue);
+  return ms !== null && ms < startOfUtcDayMsOf(nowMs);
+}
+
+// Start-of-day instant for a DATE-ONLY string (qualified_at is pinned date-only, :342).
+// Used only as the fold threshold fallback below — matches toDateMs (start-of-day),
+// the same granularity row selection/sorting already uses, so ties resolve by event_id.
+function startOfDayMs(dateValue) {
+  if (typeof dateValue !== 'string' || dateValue.length < 10) return null;
+  // `qualified_at` is contractually date-only (:342), but rows recorded without
+  // an `evidence` field (manual/legacy) are not schema-bound to that shape at
+  // write time — take only the date portion so a stray full timestamp here
+  // still yields the intended start of its calendar day, not an invalid string.
+  const datePart = dateValue.slice(0, 10);
+  const ms = Date.parse(`${datePart}T00:00:00.000Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// BLOCKER 5 fix (2026-08-22 review repair): the fold threshold must be an INSTANT,
+// not a date. `qualified_at` is date-only (:342), but a `critical_reexam_trigger` (or
+// any strike) can be stamped same-day, after the pass, with a full timestamp — and the
+// fold compares observedMs > baselineMs (foldSeatStrikes). Using date-only start-of-day
+// as the threshold left every same-day-after-pass strike still counting against a seat
+// whose administration just passed, defeating the operator's only remedy.
+//
+// FINDING 2 fix (2026-08-22 second review repair): the first cut of this fallback
+// used END of the pass date, which is FAIL-OPEN — a critical strike recorded later
+// that same day, after a same-day pass, fell inside the [start, end] window and was
+// silently treated as pre-pass and cleared. That is exactly backwards for the ONE
+// class that enforces regardless of the shadow flag. Every modern administration
+// carries `evidence.issued_at` (an exact instant, preferred above and unaffected by
+// this fallback); only legacy DATE-ONLY rows (no evidence, or evidence without
+// issued_at) reach this fallback, and for those the safe direction is to count the
+// strike, not clear it. Fix: fall back to START of the pass date instead — any
+// same-day strike (any instant that day, at or after 00:00:00.000Z) is treated as
+// AFTER the baseline and counts. This still preserves the pinned pass-instant
+// tiebreak (brainSeatStatus / :1580 validObserved): a strike stamped at exactly the
+// `issued_at` instant on the full-timestamp path still fails `observedMs >
+// baselineMs` (strict) — that tiebreak is unaffected by this fallback, which only
+// ever engages when there is no `issued_at` to be strict about.
+function baselineInstantMs(row, evidence) {
+  if (evidence && typeof evidence.issued_at === 'string') {
+    const ms = Date.parse(evidence.issued_at);
+    if (Number.isFinite(ms)) return ms;
+  }
+  return startOfDayMs(row.qualified_at);
+}
+
+// Baseline = the newest scorecard row for this seat (engine+runner+role, NOT
+// full configured identity) whose derived status is `qualified` — calendar
+// plays no part (deriveStatus above never emits `expired`) — ordered by
+// qualified_at then event_id. Scans the RAW store (not the current/latest-per-
+// identity collapse) because a seat's true qualification history spans every
+// configured-identity variant (corpus/harness/runner_version churn) that ever
+// passed under this engine+runner+role.
+function findSeatBaseline(engine, runner, role, nowMs, allRows) {
+  let best = null;
+  for (const row of allRows) {
+    if (!row || typeof row !== 'object') continue;
+    if (row.engine !== engine || row.runner !== runner) continue;
+    const storedRole = normalizeRole(row.role, { allowLegacy: true });
+    if (storedRole !== role) continue;
+    let evidence = row.evidence;
+    if (evidence !== undefined) {
+      try {
+        evidence = compileCapabilityEvidence(evidence);
+      } catch {
+        continue;
+      }
+    }
+    const status = deriveStatus({ ...row, evidence }, nowMs);
+    if (status !== 'qualified') continue;
+    const qMs = toDateMs(row.qualified_at);
+    if (qMs === null) continue;
+    const eid = toEventId(row.event_id) || 0;
+    if (!best || qMs > best.qMs || (qMs === best.qMs && eid > best.eid)) {
+      const instantMs = baselineInstantMs(row, evidence);
+      best = {
+        qMs,
+        eid,
+        qualified_at: row.qualified_at,
+        event_id: eid,
+        expires: row.expires,
+        instantMs: instantMs === null ? qMs : instantMs,
+        // Adoption provenance (v2.34.36). Present only on rows copied in from
+        // the shipped official defaults by scripts/adopt-qualification-defaults.js.
+        // It is DISCLOSURE, never authority: nothing here participates in the
+        // admission decision — it only lets a requalify_required verdict name
+        // the operator's remedy (references/qualification-defaults.md).
+        provenance: (row.provenance && typeof row.provenance === 'object' && !Array.isArray(row.provenance))
+          ? row.provenance
+          : null,
+      };
+    }
+  }
+  return best;
+}
+
+// Fold, in the frozen-contract order (§2.7.5, plan 2026-08-22-no-confidence-decay):
+// countable-strike validation -> invalidation subtraction -> dedup -> tallies.
+// `schema_version: 1` rows (legacy brain-seat strikes) are ignored entirely —
+// they feed brainSeatStatus in engine-capability-state.js only.
+function foldSeatStrikes(seatHashValue, baselineQMs, nowMs) {
+  const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
+  const lines = fs.existsSync(strikesFile)
+    ? fs.readFileSync(strikesFile, 'utf8').split(/\r?\n/).filter((l) => l.trim().length > 0)
+    : [];
+
+  let rejected = 0;
+  const parsedRows = [];
+  for (const line of lines) {
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      // Unparseable JSON is a rejected strike, not a crash — we cannot tell
+      // whether it targeted this seat, so it counts against every seat query
+      // (evidence-discipline §4: corrupt rows never silently vanish).
+      rejected += 1;
+      continue;
+    }
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      rejected += 1;
+      continue;
+    }
+    if (row.schema_version !== 2) continue; // legacy v1 or unrecognized — ignored entirely
+    if (row.seat_hash !== seatHashValue) continue; // not this seat's row
+    parsedRows.push(row);
+  }
+
+  // Countable-strike validation (contract step 2). An unauthorised writer,
+  // missing receipt, malformed artifact hash, invalid class/predicate, or a
+  // timestamp outside the (baseline, now] window can never inflate the count
+  // — every such row is EXCLUDED and tallied into rejected_strikes.
+  const countable = new Map(); // event_id -> { class, dedup_key }
+  for (const row of parsedRows) {
+    if (row.kind !== 'strike') continue;
+    const eid = toEventId(row.event_id);
+    const validClass = row.class === 'ordinary_strike' || row.class === 'critical_reexam_trigger';
+    const validPredicate = row.class === 'critical_reexam_trigger'
+      ? CRITICAL_REEXAM_PREDICATES.has(row.predicate_id)
+      : (row.predicate_id === null || row.predicate_id === undefined);
+    const validWriter = typeof row.writer === 'string' && STRIKE_WRITER_ALLOWLIST.has(row.writer);
+    const validReceipt = typeof row.receipt_ref === 'string' && row.receipt_ref.length > 0;
+    const validArtifact = isHex64(row.artifact_sha256);
+    const validDedup = typeof row.dedup_key === 'string' && row.dedup_key.length > 0;
+    const observedMs = Date.parse(row.observed_at);
+    // PINNED tiebreak (brainSeatStatus, engine-capability-state.js): a strike
+    // stamped at EXACTLY the pass instant does not count — strictly-greater.
+    const validObserved = Number.isFinite(observedMs)
+      && observedMs > baselineQMs
+      && observedMs <= nowMs;
+
+    if (eid === null || !validClass || !validPredicate || !validWriter
+        || !validReceipt || !validArtifact || !validDedup || !validObserved) {
+      rejected += 1;
+      continue;
+    }
+    countable.set(eid, { class: row.class, dedup_key: row.dedup_key });
+  }
+
+  // Invalidation subtraction (contract step 3): only an allowlisted writer
+  // with all three mechanical proof fields well-formed may remove exactly one
+  // countable strike, matched by event_id on the same seat. A structurally
+  // invalid invalidation removes nothing and is itself rejected.
+  for (const row of parsedRows) {
+    if (row.kind !== 'strike_invalidated') continue;
+    const validWriter = typeof row.writer === 'string' && STRIKE_WRITER_ALLOWLIST.has(row.writer);
+    const validProofArtifact = isHex64(row.proof_artifact_sha256);
+    const validProofDetector = typeof row.proof_detector_id === 'string'
+      && SEAT_TOKEN_RE.test(row.proof_detector_id.trim());
+    const targetEventId = toEventId(row.invalidates_event_id);
+    const validTarget = targetEventId !== null;
+    // FINDING 3 fix (2026-08-22 review repair): two additional read-validation
+    // conditions before an invalidation is honoured. Cross-seat deletion is
+    // already impossible via the seat_hash-scoped parsedRows filter above —
+    // deliberately not touched here (panel: do not "improve" it).
+    const ownEventId = toEventId(row.event_id);
+    // 1. observed_at must be well-formed AND within (baseline, now] — same
+    //    window discipline as a countable strike; an invalidation stamped
+    //    before the current baseline or in the future is not honoured.
+    const observedMs = Date.parse(row.observed_at);
+    const validObserved = Number.isFinite(observedMs)
+      && observedMs > baselineQMs
+      && observedMs <= nowMs;
+    // 2. invalidates_event_id must be strictly less than the invalidation
+    //    row's own event_id — a strike cannot be invalidated before it exists.
+    const validOrder = ownEventId !== null && validTarget && targetEventId < ownEventId;
+
+    if (!validWriter || !validProofArtifact || !validProofDetector || !validTarget
+        || !validObserved || !validOrder) {
+      rejected += 1;
+      continue;
+    }
+    countable.delete(targetEventId);
+  }
+
+  // Dedup (contract step 4 — FINDING 1 fix, 2026-08-22 review repair): the key
+  // is (seat_hash, dedup_key, class), matching the write side exactly
+  // (engine-capability-state.js `appendStrike`, "BLOCKER 4 fix" comment).
+  // seat_hash is already the filter scope above, so here the composite is
+  // (dedup_key, class). Deduping on dedup_key ALONE was class-blind: an
+  // ordinary_strike that reached the store first (lower event_id) would
+  // silently hide a later critical_reexam_trigger sharing the same
+  // dedup_key — exactly the one class that ENFORCES regardless of the
+  // shadow flag. Two rows of the SAME class sharing a dedup_key still
+  // collapse to one (retry idempotency preserved); two rows of DIFFERENT
+  // classes sharing a dedup_key are independent root incidents and both
+  // survive dedup.
+  const lowestByDedupKey = new Map();
+  for (const [eid, info] of countable.entries()) {
+    const key = JSON.stringify([info.class, info.dedup_key]);
+    const existing = lowestByDedupKey.get(key);
+    if (existing === undefined || eid < existing) lowestByDedupKey.set(key, eid);
+  }
+  const keepIds = new Set(lowestByDedupKey.values());
+
+  let strikesSincePass = 0;
+  let criticalTrigger = false;
+  for (const [eid, info] of countable.entries()) {
+    if (!keepIds.has(eid)) continue;
+    if (info.class === 'critical_reexam_trigger') criticalTrigger = true;
+    else if (info.class === 'ordinary_strike') strikesSincePass += 1;
+  }
+
+  return { strikesSincePass, criticalTrigger, rejected };
+}
+
+function strikeEnforcementMode() {
+  return process.env.AUTOPILOT_STRIKE_ENFORCEMENT === 'enforce' ? 'enforce' : 'shadow';
+}
+
+// The ONLY admission authority (frozen contract §2.7.5). Computed fresh at
+// read time from the append-only stores — never mutates a stored row.
+function computeSeatProjection(engine, runner, role, nowMs) {
+  const seatHashValue = seatIdentityHash(engine, runner, role);
+  const allRows = readStoreRows(true);
+  const baseline = findSeatBaseline(engine, runner, role, nowMs, allRows);
+
+  const projection = {
+    admission_status: baseline ? 'qualified' : 'no_record',
+    expiry_warning: baseline ? computeExpiryWarning(baseline.expires, nowMs) : false,
+    strikes_since_pass: 0,
+    critical_trigger: false,
+    would_requalify: false,
+    strike_threshold: ORDINARY_STRIKE_THRESHOLD,
+    strike_policy_version: STRIKE_POLICY_VERSION,
+    rejected_strikes: 0,
+  };
+
+  if (baseline) {
+    const fold = foldSeatStrikes(seatHashValue, baseline.instantMs, nowMs);
+    projection.strikes_since_pass = fold.strikesSincePass;
+    projection.critical_trigger = fold.criticalTrigger;
+    projection.rejected_strikes = fold.rejected;
+    projection.would_requalify = projection.strikes_since_pass >= ORDINARY_STRIKE_THRESHOLD;
+    if (projection.critical_trigger
+        || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
+      projection.admission_status = 'requalify_required';
+    }
+    // An ADOPTED OFFICIAL DEFAULT that has accumulated no-confidence must tell
+    // the operator the way out, because the way out is different from a
+    // self-qualified seat's: re-adopting the same default changes nothing (it
+    // is the same administration), so the only re-baseline is a fresh LOCAL
+    // administration. Additive and advisory — admission_status is untouched.
+    if (projection.admission_status === 'requalify_required'
+        && baseline.provenance
+        && baseline.provenance.kind === 'official-default') {
+      const cmd = typeof baseline.provenance.self_qualify_command === 'string'
+        && baseline.provenance.self_qualify_command.length > 0
+        ? baseline.provenance.self_qualify_command
+        : `scripts/engine-qualify.sh ${role} --engine ${engine} --runner ${runner}`;
+      projection.remedy = `This seat routes on an ADOPTED OFFICIAL DEFAULT (official event ${
+        baseline.provenance.official_event_id === undefined ? 'unknown' : baseline.provenance.official_event_id
+      }), which has now accumulated mechanical no-confidence in YOUR environment. Re-adopting the same default cannot clear it — it is the same administration. Re-baseline with a fresh local administration: ${cmd}`;
+    }
+  }
+
+  return {
+    seat_hash: seatHashValue,
+    baseline_event_id: baseline ? baseline.event_id : null,
+    baseline_qualified_at: baseline ? baseline.qualified_at : null,
+    projection,
+  };
 }
 
 function sortByCapability(a, b) {
@@ -1386,6 +1813,70 @@ function cmdRecord(args) {
   });
 
   process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
+}
+
+function parseSeatStatusArgs(args) {
+  let engine = null;
+  let runner = null;
+  let role = null;
+  let now;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (isHelpToken(arg)) usage(0);
+
+    if (arg === '--engine') {
+      if (i + 1 >= args.length) failUsage('--engine requires a value');
+      engine = args[++i];
+      continue;
+    }
+    if (arg === '--runner') {
+      if (i + 1 >= args.length) failUsage('--runner requires a value');
+      runner = args[++i];
+      continue;
+    }
+    if (arg === '--role') {
+      if (i + 1 >= args.length) failUsage('--role requires a value');
+      role = args[++i];
+      continue;
+    }
+    if (arg === '--now') {
+      if (i + 1 >= args.length) failUsage('--now requires a value');
+      now = args[++i];
+      continue;
+    }
+    failUsage(`unknown option: ${arg}`);
+  }
+
+  if (!engine) failUsage('--engine is required');
+  if (!runner) failUsage('--runner is required');
+  if (!role) failUsage('--role is required');
+
+  const engineTok = engineToken(engine);
+  if (!engineTok) failUsage(`invalid --engine token '${engine}'`);
+  const runnerToken = seatToken(runner);
+  if (!runnerToken) failUsage(`invalid --runner token '${runner}'`);
+
+  const requestedRole = role;
+  const canonicalRole = normalizeRole(role, { allowLegacy: true });
+  if (!canonicalRole) failUsage(`invalid role '${requestedRole}'`);
+  const roleToken = seatToken(canonicalRole);
+  if (!roleToken) failUsage(`invalid --role token '${canonicalRole}'`);
+
+  const nowMs = nowArgToMs(now);
+
+  return { engine: engineTok, runner: runnerToken, role: roleToken, nowMs };
+}
+
+function cmdSeatStatus(args) {
+  const { engine, runner, role, nowMs } = parseSeatStatusArgs(args);
+  const result = computeSeatProjection(engine, runner, role, nowMs);
+  process.stdout.write(`${JSON.stringify({
+    ...result.projection,
+    seat_hash: result.seat_hash,
+    baseline_event_id: result.baseline_event_id,
+    baseline_qualified_at: result.baseline_qualified_at,
+  })}\n`);
 }
 
 function cmdCurrent(args) {
@@ -1471,7 +1962,7 @@ function cmdLadder(args) {
   process.stdout.write(`${JSON.stringify(ladder)}\n`);
 }
 
-(function main() {
+function main() {
   const argv = process.argv.slice(2);
 
   if (argv.length === 0) usage(2);
@@ -1485,5 +1976,25 @@ function cmdLadder(args) {
   else if (command === 'report') cmdReport(commandArgs);
   else if (command === 'ladder') cmdLadder(commandArgs);
   else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
+  else if (command === 'seat-status') cmdSeatStatus(commandArgs);
   else failUsage(`unknown subcommand '${command}'`);
-})();
+}
+
+if (require.main === module) {
+  main();
+}
+
+// BLOCKER 2 (2026-08-22 review repair): resolve-scaffold-tier.js needs the SAME
+// admission projection this file computes (strike-decay.md's only admission
+// authority) rather than a third hand-rolled copy of the fold. Exported for that
+// reuse — SCORECARD_DIR/CAPABILITY_DIR are resolved once at require time from
+// ENGINE_SCORECARD_DIR/ENGINE_CAPABILITY_DIR, so a caller that wants a specific
+// store must set those env vars BEFORE requiring this module (see
+// resolve-scaffold-tier.js's own comment at its require site).
+module.exports = {
+  computeSeatProjection,
+  seatIdentityHash,
+  engineToken,
+  seatToken,
+  normalizeRole,
+};

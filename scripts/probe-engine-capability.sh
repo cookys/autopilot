@@ -25,7 +25,7 @@ Usage:
     [--store <path>] [--now <ISO>] [--role <role>]
 
 Options:
-  --runner <r>       Specify runner name (e.g. codex, agy, grok, qoderclicn, cc-shim).
+  --runner <r>       Specify runner name (e.g. codex, agy, grok, qoderclicn, cursor, cc-shim).
   --model <m>        Specify model name.
   --effort <e>       Exact effort partition written into the capability row.
   --endpoint <v>     Exact endpoint wallet name, or @none for explicit endpoint:null.
@@ -193,6 +193,14 @@ case "$RUNNER" in
     if command -v qoderclicn >/dev/null 2>&1; then
       BINARY_FOUND=1
       RUNNER_VERSION="$(qoderclicn --version 2>&1 | head -n 1 || echo "unknown")"
+    fi
+    ;;
+  cursor)
+    # The binary is cursor-agent, NOT cursor — a name-derived fallthrough would
+    # probe the wrong command entirely.
+    if command -v cursor-agent >/dev/null 2>&1; then
+      BINARY_FOUND=1
+      RUNNER_VERSION="$(cursor-agent --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
   cc-shim)
@@ -411,6 +419,16 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
           --permission-mode dont_ask --tools "" --no-session-persistence --output-format text \
           >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
+      ;;
+    cursor)
+      # scratch --workspace (never the repo; cursor-agent has no --cwd). --trust
+      # is required or the run aborts on workspace trust. No --reasoning-effort:
+      # cursor-agent has no such flag — effort lives in the model-id suffix, so
+      # an effort-bearing tuple never reaches this branch (see the
+      # _EFFORT_CONSUMER gate above; cursor is deliberately NOT in that list).
+      ( cd "$PROBE_CWD" && printf 'Respond only with OK' | cursor-agent -p --trust --mode ask \
+        --workspace "$PROBE_CWD" --model "$MODEL" --output-format text ) \
+        >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       ;;
     cc-shim)
       # cc-shim doesn't run without env, but if it runs, send a minimal prompt.

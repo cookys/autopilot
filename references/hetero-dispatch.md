@@ -96,7 +96,7 @@ only where the installed runner exposes a verified enforceable surface:
 |-----------------|-----------------------------------------------|
 | `anthropic-compatible` | Direct adapter `--max-tokens <n>` (Anthropic API `max_tokens`) |
 | `qoderclicn` | Qoder CLI `--max-output-tokens <n>` |
-| `codex`, `agy`, `grok`, `cc-shim`, `claude-native` | Unsupported: exit 2 with `status=precondition_failed` before runner resolution or spawn |
+| `codex`, `agy`, `grok`, `cc-shim`, `claude-native`, `cursor` | Unsupported: exit 2 with `status=precondition_failed` before runner resolution or spawn |
 
 The value must be an unpadded positive base-10 integer in the inclusive range; missing, zero,
 negative, fractional, non-numeric, or over-range values fail before spend. Omitting the flag adds no
@@ -112,7 +112,7 @@ scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
     [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
 ```
 
-JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, `"pi"`, or `"qoderclicn"` per `--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn` — `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, `*qwen*`/`*qwq*` → qoderclicn, else agy; `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, `"pi"`, `"qoderclicn"`, `"cursor"`, or `"unresolved"` per `--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor` — `"unresolved"` appears only on a `precondition_failed` raised BEFORE runner resolution, meaning no rail was selected (e.g. a `--runner auto` refusal of a Cursor-hosted id, or a missing `--branch`); `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, `*qwen*`/`*qwq*` → qoderclicn, else agy; **`auto` never selects `cursor`** — a `cursor-` prefixed model id (or a Cursor-hosted `gpt-5.3-codex-*` id) makes `auto` fail closed with exit 2 naming the explicit runner (`--runner cursor` is required); `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
 
 ### Outcome states
 
@@ -168,7 +168,7 @@ depends on the runner:
 | Runner | Reachability | Mechanism |
 |--------|--------------|-----------|
 | `pi` (RPC duplex) | **mid-run** | the supervisor ([`pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)) polls the ledger on its own cadence (`PI_RPC_DIRECTIVE_POLL_SECS`, default 5s), **validates the directive's bound lease (generation+nonce) against the CURRENT lease before steering** — a stale directive is never steered to the current worker, only terminalized as expired — then delivers a native RPC `steer` prefixed `[depth-0 directive] …` and acks `directive_delivered` **from the supervisor** (never the worker; an ack failure is emitted as a `supervisor_directive_ack_failed` log event, not swallowed). At shutdown any still-pending directive is `directive_expired(run_ended)` — the expiry runs AFTER the child teardown ladder is armed, so a lock-contended ledger can't delay worker teardown. Enabled only when `--ledger/--run-id/--stage` are all passed (`dispatch-hetero.sh --runner pi` forwards its own coords automatically) — otherwise byte-identical to before. |
-| CC foreman (dev-flow inline) | **stage boundary** | the foreman polls its own run-id at each stage boundary (before `stage-acquire` of the next stage), honors + records, then acks. |
+| CC foreman (dev-flow inline) | **stage boundary** | the foreman reads its own run-id **once** at each stage boundary (before `stage-acquire` of the next stage), honors + records, then acks. Not a wait-loop. |
 | one-shot batch runners (`codex exec` / `agy -p` / `grok` / `cc-shim`) | **UNREACHABLE mid-run** | no duplex channel — a directive can only shape the **NEXT** round's dispatch prompt. No pretend-channel is offered. |
 
 AUTHORITY LINES (non-negotiable): a directive is **advisory** — the lease holder keeps the stage,
@@ -521,6 +521,25 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
   prune`. Unmarked dirs and unparseable manifests are never deleted. Complements (not
   replaces) `dispatch-hetero.sh --gc`, which stays the config-gated worktree-only reaper.
 
+## Implementer ladder (unit class + red repair)
+
+A project may set `implementer_ladder` in `.claude/review-loop-config.md` as a comma list of
+`engine/effort@runner` rungs (each runner must be a valid `implementer_runner`). When the field is
+absent the resolver emits `implementer_ladder: []` and dispatch keeps using the three
+`implementer_engine` / `implementer_effort` / `implementer_runner` fields.
+
+When the ladder is present:
+
+- campaign contract `unit_class: mechanical` starts at rung 0; omitted or `judgment` starts at
+  rung 1 (a one-rung ladder always uses that rung)
+- repair generation `r` (0-based, first dispatch is 0) uses `min(start + r, top)`
+- hitting the top rung and going red again is existing `awaiting_convergence_adjudication`, not a
+  new state
+- `on_engine_unavailable` stays the availability axis and is not reused for this climb
+
+The engine records the dispatched tuple plus `implementer_ladder_rung` on the
+`dispatch_implementation` ledger row.
+
 ## Wired engines (runners) — how to pick one
 
 `--runner` (or `implementer_runner`/`reviewer_runner` in `.claude/review-loop-config.md`):
@@ -533,6 +552,7 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
 | `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3:** baseline reviewer calibration is 10/10 known-bad, 0 false-pass-on-critical, 3/3 clean, but its diff-only seat later produced false central claims in 5/6 observations. The exact `MiniMax-M3` + `cc-shim` + `minimax` tuple requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; independently verify its findings. **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
 | `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |
 | `qoderclicn` | Qoder CLI CN → Alibaba `Qwen3.8-Max-Preview` (also gateways GLM-5.2 / DeepSeek-V4 / Kimi / MiniMax-M2.7) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--tools ""`) | needs Qoder CLI CN auth (`~/.qoder-cn`). HONORS `-w`/`--cwd` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; effort → `--reasoning-effort`; `--qoder-bin` test seam. Reviewer splits STDOUT/STDERR (a benign `fatal: not a git repository` on stderr from the non-git scratch cwd stays out of the parse). Auto-selected for `*qwen*`/`*qwq*`. Spike-verified 2026-07-24 (edit-only + `-w` honored, both paths e2e-passed on Qwen3.8-Max-Preview). |
+| `cursor` | Cursor CLI (`cursor-agent`) → ~60 models across five vendors on one OAuth login; this plan's effort mapping covers `cursor-grok-4.6-*` and `gpt-5.3-codex-*` only | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--mode ask`) | needs `cursor-agent` login. HONORS process cwd AND `--workspace <abs>` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; `--trust` MANDATORY headlessly (the run aborts on workspace trust without it). Effort is the **model-id suffix**, not a flag — there is no `--reasoning-effort` on this rail. `--cursor-bin`/`--cursor-fast` test seams (default lane is non-fast). **EXPLICIT-only — `auto` refuses cursor ids and fails closed, never selects cursor.** Reviewer/author rails are bound to `--output-format text`. Deliberately excluded from the blind-review allowlist. **NOT yet qualified — no roster admission** (`resolve-review-loop.sh` has no cursor entry; Stage-1 implementer qualification is a separate, deferred phase). |
 
 For AUTHORING flows, prefer `anthropic-compatible` when the request is a large single-shot payload where `cc-shim` (Claude Code CLI transport) can stall or fail with 529-style endpoint pathologies. This path runs the same direct `dispatch-anthropic-review.js --raw` transport with `MINIMAX_API_KEY`/`ANTHROPIC_COMPATIBLE_AUTH_TOKEN`, and it resolves credentials by endpoint name the same way as cc-shim when `--endpoint <name>` is supplied.
 
@@ -540,6 +560,44 @@ Full per-runner usage recipes (incl. the cc-shim env setup and which models are 
 [`../project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md) § Gotchas.
 The resolver's `family_of()` recognises openai/anthropic/google/xai/minimax/zhipu for the
 decorrelation overlap check.
+
+## The consult seat — configured, not hand-typed
+
+A mid-run heterogeneous second opinion used to be hand-typed `dispatch-review.sh` argv:
+the operator picked a runner, a model and an effort at the keyboard, so the choice was
+invisible to the roster and unreproducible between runs. It is now a **seat** in
+`review-loop-config.md`, resolved like every other:
+
+```bash
+eng="$(scripts/resolve-review-loop.sh --field consult_engine)"
+run="$(scripts/resolve-review-loop.sh --field consult_runner)"
+eff="$(scripts/resolve-review-loop.sh --field consult_effort)"
+ep="$(scripts/resolve-review-loop.sh --field consult_endpoint)"
+[ -n "$eng" ] || { echo "no consult seat configured — hand-typed argv is still legal"; }
+scripts/dispatch-review.sh --runner "$run" --model "$eng" --effort "$eff" \
+  ${ep:+--endpoint "$ep"} --diff-file <question> --spec-file <what to decide>
+```
+
+An EMPTY seat is the default and means exactly what it meant before: pick argv by hand.
+A configured seat means the roster states which engine answers consults, so a run summary
+can name it and a reviewer can check it.
+
+Two properties carry over from the other seats, and both matter here:
+
+- **Qualification still gates it.** Naming a runner with no recorded role qualification
+  (today `cursor`) makes the resolver EXIT 3 unless `$AUTOPILOT_QUALIFICATION_OVERRIDE`
+  carries an unexpired entry for that engine/runner AND `"role": "consult"`. An override
+  for a different role does not admit the consult seat. The admitted seat is announced on
+  stderr and listed in `override_admitted_seats` — a recorded operator decision, never
+  evidence of qualification.
+- **A consult is still ADVICE.** Same trust boundary as the peer-consult channel below:
+  it never substitutes qc@depth-0, artifact verification, or the decorrelated review
+  rails. Routing it through a seat makes the choice reproducible; it does not promote the
+  answer.
+
+The sibling `discuss_*` seat (heterogeneous participation in `think-tank` / `brainstorm`)
+resolves identically but **has no executable consumer yet** — it is declared so a roster
+can state the intent, and no skill reads it today. Do not describe it as live.
 
 ## Peer consult — the codex plugin channel (Claude Code only, capability-gated)
 

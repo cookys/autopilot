@@ -3,6 +3,13 @@
 *~
 node_modules/
 .claude/session-start-sha
+# .claude/knowledge/ is ignored ON PURPOSE (fail-closed): this repo is PUBLIC, and the
+# .claude dir is local state, so nothing lands here by accident. A knowledge file becomes
+# real only via the promotion contract, which is deliberately NOT one motion: git add -f
+# and show the diff, then STOP for an explicit human approval, and only then commit.
+# 不 commit 就等於沒寫: an uncommitted file here is invisible to git status, to every
+# clone, and to CI. The contract and the disclosure line are canonical in
+# references/knowledge-routing.md — this comment is a pointer, not a second authority.
 .claude/knowledge/
 .claude/settings.local.json
 .claude/next-state.json

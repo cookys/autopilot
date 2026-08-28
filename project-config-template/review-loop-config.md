@@ -63,6 +63,17 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - review_diff_scope: full
 - min_panel_size: 3
 - density_scaling: off
+- consult_engine:
+- consult_effort:
+- consult_runner:
+- consult_endpoint:
+- discuss_engine:
+- discuss_effort:
+- discuss_runner:
+- discuss_endpoint:
+- consult_dispatch: off
+- discuss_dispatch: off
+- allow_same_runner_dual_seat: off
 
 > **The terminal qc panel** (`qc_panel`) is the authoritative depth-0 gate — a
 > **disjoint-family** panel (OpenAI / Anthropic / Google), distinct from the inner-loop
@@ -76,6 +87,60 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 > pass); **majority vote is forbidden** (it would suppress the single-track blind-spot catch that
 > is the whole reason for a panel).
 >
+> **Per-role heterogeneous routing (2026-08-27).** Every seat above names its own engine,
+> so "which hetero engine serves this role" is configuration, not hand-typed argv. The two
+> seats added in this release are `consult` (a mid-run ad-hoc second opinion, previously
+> hand-typed `dispatch-review.sh` argv) and `discuss` (heterogeneous participation in
+> `think-tank` / `brainstorm`). Both default EMPTY, which is exactly the previous behaviour.
+> `review` and `plan` are NOT new roles — they are the existing `reviewer_*` and
+> `plan_reviewer_*` seats; point those at a different engine rather than declaring a second
+> one, or you get two canonical statements of the same seat.
+>
+> **Routing an UNQUALIFIED engine.** A runner with no recorded role qualification (today:
+> `cursor` — `src/harness/capabilities/cursor.json` is `status: unverified` / `H0`) may be
+> named in any seat, but the resolver **refuses the roster (exit 3)** unless
+> `$AUTOPILOT_QUALIFICATION_OVERRIDE` carries an unexpired entry matching that exact
+> engine / runner / **role**:
+>
+> ```json
+> { "schema": 1, "overrides": [ { "engine": "cursor-grok-4.6-high", "runner": "cursor",
+>   "role": "reviewer", "reason": "why this is acceptable today", "operator": "who decided",
+>   "expires": "2026-12-31" } ] }
+> ```
+>
+> An admitted seat is announced on stderr as an EVIDENCE-FREE operator override and listed
+> in the resolved `override_admitted_seats`. That list records a **decision**, never
+> evidence of qualification — nothing downstream may read it as a scorecard. Being spellable
+> in a runner enum means "the roster can name this token", not "this engine is qualified".
+>
+> **`allow_same_runner_dual_seat`** (default `off`) governs whether one runner may hold the
+> implementer seat and a reviewer-class **loop** seat at once. Off refuses (exit 3); on permits
+> it, warns on stderr, and sets `same_runner_dual_seat: true` for the run summary.
+>
+> It applies to **qualified engines too** — "one vendor, one auth, one server-side prompt layer
+> is not decorrelation" has no qualified-engine exemption; `gpt-5.6-sol` reviewing
+> `gpt-5.6-sol`'s own work is the same loss whether or not both seats are qualified.
+>
+> The axis is the **runner**, not the model family: one rail can serve several families (a
+> single `cursor` rail hosts both grok and gpt ids), so a family test would miss exactly the
+> case the rule names. The comparison is over the **configured token**, and `auto` is inert —
+> it delegates the choice rather than asserting a rail. That is what keeps this template valid,
+> since its `auto` implementer runner resolves to the reviewer's `codex`. An **inherited
+> default does count**: a roster naming only `implementer_runner: codex` collides with the
+> built-in reviewer default `codex`, because the resolved loop really does put one rail on both
+> sides — name a different reviewer runner, or opt in.
+>
+> The terminal **`qc_panel` is not governed by this key.** A panel is a multi-seat body
+> (`min_panel_size` 3, `union-on-verified-critical`, majority forbidden), so one seat sharing
+> the implementer's rail still leaves independent seats that can each block alone. The panel has
+> its own proportionate rule instead: only **total** overlap — every seat carrying both an
+> engine and a runner sitting on the implementer's rail, so the terminal gate has no runner
+> decorrelation at all — is refused (and that is openable too). **Partial** overlap is silent
+> by design: the shipped panel above spans three rails on purpose, so a `codex` implementer
+> overlaps exactly one seat in the recommended setup, and a warning that fires on the
+> recommended setup is noise. Panel/implementer overlap is still reported at the family level
+> by the pre-existing cross-family control.
+
 > **Preset `all-calibrated`**: Setting `qc_panel` to exactly `all-calibrated` expands to the full, calibrated 5-family reviewer roster. The concrete engine list is maintained inside the resolver script (single source of truth) and covers all families with recorded reviewer calibration/spike evidence.
 
 ## Field reference
@@ -96,8 +161,14 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|qoderclicn\|cc-shim\|pi` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, `*qwen*`/`*qoder*`→fail-loud requiring explicit `qoderclicn`, else agy; **`qoderclicn`, `cc-shim`, and `pi` must be set EXPLICITLY** (see Gotchas) |
+| `implementer_ladder` | optional ordered rungs `engine/effort@runner`. Absent/empty = the three `implementer_*` fields are the single rung. Campaign `unit_class: mechanical` starts at rung 0; `judgment` (default) starts at 1 unless the ladder has one rung. A red repair round climbs one rung, then caps at the top and uses existing convergence adjudication. `on_engine_unavailable` is unchanged (availability only). Each runner must be a valid `implementer_runner` | comma list, e.g. `gemini-3.7-flash-low/low@agy, grok-4.6/low@grok, sonnet/medium@codex` |
 | `reviewer_endpoint` | **named endpoint** for a `cc-shim`/`anthropic-compatible` REVIEWER — resolves creds via `resolve-endpoint.sh` (`AUTOPILOT_ENDPOINT_<NAME>_*`, populated from `~/.autopilot/endpoints.env`). `/l5`/`/l6` passes it as `--endpoint <name>` so you don't hand-type it. Empty = none (raw `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before) | an endpoint name `[A-Za-z0-9_]` (e.g. `glm`, `minimax`), or empty |
 | `implementer_endpoint` | same, for a `cc-shim` IMPLEMENTER (→ `dispatch-hetero.sh --endpoint`). Empty = none | an endpoint name `[A-Za-z0-9_]`, or empty |
+| `consult_engine` / `consult_effort` / `consult_runner` / `consult_endpoint` | the **consult** seat: a mid-run ad-hoc heterogeneous second opinion. Read by callers as `resolve-review-loop.sh --field consult_engine` (etc.) instead of hand-typing `dispatch-review.sh` argv — see `references/hetero-dispatch.md`. Tuple is wholly empty or engine+runner+effort all present | engine name / `low\|medium\|high\|xhigh\|max` / any reviewer runner incl. `cursor` / endpoint name, all optionally empty |
+| `discuss_engine` / `discuss_effort` / `discuss_runner` / `discuss_endpoint` | the **discuss** seat: heterogeneous participation in `think-tank` / `brainstorm`. **Declared but not yet consumed by any executable caller** — the seat exists so a roster can state the intent; no skill reads it today. Same tuple rule | as above |
+| `consult_dispatch` | whether the consult rail (`scripts/dispatch-consult.sh`) is live. DEFAULT OFF. `off` = today's behavior byte-for-byte — the `consult_*` tuple stays data a caller may read by hand, no new dispatch. `on` requires a non-empty `consult_*` tuple | `on\|off` (default `off`) |
+| `discuss_dispatch` | whether the discuss rail (`scripts/dispatch-discuss.js`) is live. DEFAULT OFF. `off` = today's behavior byte-for-byte — `discuss_*` stays declared but not consumed. `on` requires a non-empty `discuss_*` tuple | `on\|off` (default `off`) |
+| `allow_same_runner_dual_seat` | may one runner hold the implementer seat and a reviewer-class **loop** seat simultaneously? `off` = resolver exit 3. `on` = permitted, stderr warning, `same_runner_dual_seat: true`. Applies to qualified engines too; runner axis, not family axis; compares the CONFIGURED token (`auto` is inert, an inherited default is not). `qc_panel` has its own proportionate rule — see the note above | `off` (default) \| `on` |
 | `on_engine_unavailable` | what to do when a dispatch engine is unavailable (quota exhausted / `precondition_failed`) | `ask\|solo-fallback\|wait-reset` (default `ask`). **Behavior matrix**: `ask` — BOTH engine-quota death and `precondition_failed` stop the run and escalate to the user (no automatic `--solo` inline fallback, no automatic quota-reset wakeup). Fail-closed: the expensive depth-0 session model never silently takes over implementation labor. `solo-fallback` — legacy: `precondition_failed` falls back to `--solo` inline; quota death follows the §1.b auto-wakeup recovery (see `level-front-door.md`). `wait-reset` — quota death follows §1.b auto-wakeup; `precondition_failed` (non-quota) still escalates to the user. **Engine wiring**: when a dispatch dies `engine_unavailable`/`precondition_failed`, `engine implement-review` applies this matrix mechanically and emits an additive `engine_unavailable: {policy, action, error_class}` on its result (`action` ∈ `escalate\|solo-fallback\|wait-reset`; auth/unparseable deaths always `escalate` — waiting can't fix auth) so the orchestrator acts on `action` instead of re-deriving the policy from raw dispatch JSON |
 | `loop_max_rounds` | adversarial-loop convergence cap per phase | integer (default 5) |
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
@@ -268,6 +339,33 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the
   override forgeability the implementer's green missed).
+- **`--endpoint <name>` vs. hand-exporting `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`.** When a
+  named endpoint is configured (`resolve-endpoint.sh`, creds from `~/.autopilot/endpoints.env`,
+  `AUTOPILOT_ENDPOINT_<NAME>_*`), pass `--endpoint <name>` to `dispatch-review.sh`/`dispatch-hetero.sh`
+  — do NOT also hand-export `ANTHROPIC_BASE_URL` first. The dispatcher clears that variable to an
+  empty string before resolving the named endpoint, so a manual export is silently overwritten and
+  produces confusing "it worked with export but not with --endpoint" reports. Also:
+  `load-endpoints-env.sh` is a bash script (source it from bash, not zsh — zsh chokes on its
+  arithmetic/substitution syntax) and only DEFINES a function; you still have to call
+  `autopilot_load_endpoints_env` afterward.
+- **`--timeout` default (5m) is too short for a large diff at a high effort level** — a ~166 KB diff
+  at `codex effort=max` has hit `rc=124` (timeout). A timeout is FAIL-CLOSED to `no_verdict`: the
+  review is lost, not merely slow. Size the timeout to the diff — 15–20m for anything large.
+- **Diagnose every `no_verdict` from the `raw_log`, never from file size alone.** A large raw log can
+  be a prompt echo with zero real response. `rc=124` = timeout; `rc=1` is commonly a quota exhaustion;
+  `"did not start with the expected wrapped block"` means the response framing was corrupted by
+  harness chrome — chrome sometimes lands BEFORE a fully intact wrapped block (e.g. a session-title
+  generator's own prefix), and that block can be adopted directly from the raw log — but ONLY if its
+  markers are the derived nonce hash, not the raw nonce (`dispatch-review.sh` derives the accepted
+  marker as `SHA256("autopilot-review-v1:" || nonce)`, so a bare echo of the visible nonce value
+  cannot forge one), the opening and closing markers match each other exactly, and the block contains
+  no leaked prompt/instruction text. A block merely resembling a verdict (visible VERDICT/FINDINGS
+  text with no matching derived markers) is NOT safe to adopt — it may be the model echoing the
+  prompt's own output-format example back at you.
+- **When the primary reviewer's provider has a sustained outage** (repeated 529s), don't retry
+  indefinitely — reroute the review to a qualified reviewer on a different provider (e.g. `--runner
+  codex` against an OpenAI-hosted model) rather than burning rounds against a dead endpoint. This is
+  exactly the situation the decorrelated roster exists for.
 
 ## Capability-state advisory (v2.31.2 — emitted fields, not config keys)
 

@@ -229,5 +229,5 @@ pre-commit manifest divergence, and workflow expansion before a local repair att
 - Clean six-path candidate: `22a4f7bdf`
 - Fable 5 consultation: live `claude -p --model claude-fable-5` response on 2026-08-21;
   quoted above without changing its wording
-- Corrective-work pointer: [`docs/BACKLOG.md`](../../BACKLOG.md), entry
+- Corrective-work pointer: [`docs/BACKLOG.md`](../../../BACKLOG.md), entry
   “Contract-first escalation and local-repair gates — P6D incident follow-up”

@@ -13,6 +13,10 @@
 > **complete except paid administration**, which is Board-gated — see
 > `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md` (D10). No further
 > implementation waves are planned.
+> **Administration wave AUTHORIZED by Board 2026-08-28** per the decision section appended to
+> `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md`. KR8's zero-spend rule
+> remains true of D1-D10 (historical statement); the administration wave runs under the recorded
+> authorization with its own spend gate.
 > **Owner**: depth-0 (Board owns merge and owns the separate administration authorization).
 > **Branch**: `plan/consult-discuss-qualification` (plan doc only; no code touched).
 > **Frame**: PATCH on `2.34.44` — new scripts, new evals assets, new config fields. No new skill, no new agent.

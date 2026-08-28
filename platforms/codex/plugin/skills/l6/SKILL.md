@@ -127,6 +127,7 @@ Hard rules:
 - **Depth-0 context discipline**: depth-0 never authors implementation or verification content inline — even verification-prompt authoring is dispatched (dispatch-author.sh). Inline execution only via --solo or a recorded precondition_failed fallback.
 - **Expensive-model thrift**: depth-0 assumes the session model is the most expensive engine in the fleet; inline fallback (`--solo` or authoring content itself) is an escalation event governed by `on_engine_unavailable` (from `resolve-review-loop.sh`), never a silent default.
 - **Every depth-0 `Agent` dispatch MUST pass `model` explicitly** (foreman = `opus`; mechanical inventory / file work = `sonnet`/`haiku`) — a subagent with no `model` inherits the parent session's model, silently burning the expensive session engine (the exact spend the thrift rule guards) on a Fable-class CEO's foreman. See the model-inheritance warning in [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md) § "Dispatching the foreman".
+- 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止 `sleep` 迴圈、禁止 `cat`/`tail` leaf output 進自己 context（只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。
 
 **Capability profile (shadow):** `/l6` fixes heterogeneous implementation and verification-author
 topology only. When the host supplies a current verified envelope/grant/profile payload, forward it

@@ -1,0 +1,2 @@
+No tools called in this turn. Waiting for subagent response.
+Permission denied for command(hostname). Matches user-configured deny rule.

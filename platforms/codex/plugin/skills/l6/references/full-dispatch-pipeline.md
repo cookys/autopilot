@@ -73,6 +73,12 @@ deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
    checks, and compares the results.
 6. Convergence-by-verification gates continue/rework; merge only after the
    QC-Verdict is earned.
+7. **Foreman harvest (depth-0, fail-closed):** run
+   `node scripts/check-foreman-polling.js <foreman-transcript.output>` on the
+   depth-1 sub-orchestrator transcript (`<session>/tasks/<agentId>.output`).
+   Red (sleep loop, `cat`/`tail` of leaf `.output`, or Bash count > 40) **blocks
+   merge**. Leaves return a schema-typed criteria table; raw leaf output never
+   enters the foreman prompt.
 
 The `/l6` verification-author handoff is strict dispatch-unit-only and must use:
 

@@ -702,7 +702,7 @@ Two items:
    `run_in_background` + notification wake. Add a gate: a sub-orchestrator transcript with
    `sleep` in a loop, or `cat`/`tail` of a child output file into its own context, is a red-line
    violation. Leaves return a schema-typed criteria table; their raw output never enters the
-   foreman prompt.
+   foreman prompt. → plan 2026-08-28 (`docs/plans/2026-08-28-foreman-no-polling.md`).
 2. **Implementer ladder by unit class, not one seat.** `review-loop-config.md` has a single
    `implementer_engine`. Add `implementer_ladder: gemini-3.7-flash-low → grok-4.6/low → sonnet`
    with two triggers: contract field `unit_class: mechanical|judgment` picks the starting rung; a

@@ -53,8 +53,10 @@ levels, or runners inline. Fields consumed by the loop:
 
 Foreman dispatch is never fire-and-forget: depth-0 pre-assigns the run-ledger
 path, the foreman heartbeats it, and depth-0 watches
-`node scripts/watch-foreman.js --ledger <path>` (Monitor on CC, `--once` poll
-elsewhere). Ritual + report-only discipline: front-door § "Live sensing".
+`node scripts/watch-foreman.js --ledger <path>` (background + task-notification
+on CC; `--once` snapshot **only at a stage boundary** elsewhere). Ritual +
+report-only discipline: front-door § "Live sensing". Foreman wait on leaves is
+notification-only — see `/l5` Hard rules and `scripts/check-foreman-polling.js`.
 
 ## Capability-state surface rule
 

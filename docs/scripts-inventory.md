@@ -154,6 +154,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/doc-drift-gate.js`](../scripts/doc-drift-gate.js) + [`scripts/test-doc-drift-gate.sh`](../scripts/test-doc-drift-gate.sh) | Layer-1 deterministic doc↔code gate（links / fences / script-refs；`skills/doc-sync` 的 stopping condition；`scripts/...` 以被稽核 repo root 解析，支援 `--repo-root`）＋ consuming-repo root 回歸測試。 |
 | [`scripts/classify-diff-risk.sh`](../scripts/classify-diff-risk.sh) | Diff → risk-tier 分類（engine `implement-review` 的 review_risk 輸入之一）。 |
 | [`scripts/check-loop-convergence.js`](../scripts/check-loop-convergence.js) | Loop-convergence 煞車（連續零執行輪 / generation cap 仍 REWORK ⇒ halt+escalate）；/l4-/l6 depth-0 clock owner 的機械閘。 |
+| [`scripts/check-foreman-polling.js`](../scripts/check-foreman-polling.js) | Foreman transcript 禁輪詢閘：≥3× `sleep N` (N≥30)、`cat|tail|sed -n|head` of `/tasks/*.output`、或 Bash >40 ⇒ RED。Depth-0 harvest 對工頭 `.output` 跑；紅＝不合併。`--self-test` 內建 fixtures。 |
 | [`scripts/check-escalation-coverage.js`](../scripts/check-escalation-coverage.js) / [`scripts/rubric-freeze.js`](../scripts/rubric-freeze.js) | Loop-convergence-gates 專案配套：escalation 出口覆蓋檢查 / rubric 凍結（防 mid-run 改分規）。 |
 | [`scripts/probe-mutation.js`](../scripts/probe-mutation.js) | Mutation-validated probe 執行器（`adjudicate-findings.js` refute 路徑的機械後盾）。 |
 | [`scripts/resolve-worktree-teardown.sh`](../scripts/resolve-worktree-teardown.sh) | Worktree teardown policy resolver（`scripts/lib/worktree-reap.sh` 消費）。 |

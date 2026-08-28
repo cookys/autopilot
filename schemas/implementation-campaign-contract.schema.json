@@ -15,7 +15,8 @@
     "max_owned_worktrees",
     "temp_capacity_limit",
     "max_prompt_bytes",
-    "max_finding_recurrence"
+    "max_finding_recurrence",
+    "unit_class"
   ],
   "type": "object",
   "required": [
@@ -128,6 +129,11 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 32
+    },
+    "unit_class": {
+      "description": "Determinacy of the unit. mechanical starts implementer_ladder at rung 0; judgment (default when omitted) starts at rung 1 unless the ladder has a single rung.",
+      "type": "string",
+      "enum": ["mechanical", "judgment"]
     },
     "verify_cmd": {
       "type": "string",

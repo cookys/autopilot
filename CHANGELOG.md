@@ -1,5 +1,91 @@
 # Changelog
 
+## v2.34.45 — suite-residue reaper hardened, dispatch-rail sourcing fail-closed, an implementer ladder
+
+Nine fixes/hardenings and two new capabilities, spanning two sessions.
+
+**Suite-residue reaper** (new: `hooks/tests/lib/suite-residue-reap.sh`, sourced by `run.sh`):
+`hooks/tests/run.sh --parallel` deterministically stranded `hetero-*-log-*` files, sandbox
+roots and manifests on every run, plus scratch dirs and dispatch worktrees on interrupt — the
+mechanism behind the 82 worktrees / 627 manifests recorded in BACKLOG. The reaper runs before
+every suite and again from a top-level EXIT trap. Liveness is judged by `flock`, never by cwd
+or age alone; a directory with no lock file is an unknown and an unknown never authorizes
+deletion. A follow-up hardening pass then closed 7 adversarial-QC findings on the first cut:
+a TOCTOU race between `open()` and `flock()` on a lock file (closed with a minimum-age gate,
+default 60s), `hetero-*` worktree removal now goes through `git worktree remove --force` (was
+a raw `rm -rf`, leaving dangling `.git/worktrees/` admin entries), the lockless-deletion "no
+other live run" check is re-evaluated fresh before each deletion instead of once upfront,
+`run.sh`'s interrupt trap now signals a killed worker's whole process-group subtree (job
+control via `set -m`) and forwards the received signal instead of always sending SIGTERM, and
+the manifest dir is rejected if it's a symlink whose realpath escapes the canonical tmp root.
+92 assertions across the two suites, with planted-negative sanity confirming the gates are
+load-bearing (`AUTOPILOT_SUITE_REAP=0` kill switch).
+
+**Dispatch-rail fail-closed sourcing** (`dispatch-review.sh`, `dispatch-hetero.sh`):
+`dispatch-review.sh` sourced `lib/cursor-model.sh` fail-open (`[ -r ... ] && . ... || true`)
+while `dispatch-author.sh`/`dispatch-hetero.sh` sourced it unconditionally — a missing or
+unreadable lib silently disabled the cursor-family-alias rejection guard instead of failing
+the dispatch. Now hard-errors before argument parsing, and a follow-up closed the remaining
+gap: the sourcing call's own exit status went unchecked, so a lib that sourced but `return`ed
+nonzero (or vanished in the TOCTOU window between the readability check and the `.`) fell
+through the same way. `dispatch-hetero.sh` also restated the alias vocabulary as a literal
+`grok46|codex53` case pattern instead of deriving it from `lib/cursor-model.sh`'s single
+source of truth — fixed, with a new reconciliation lint that fails if any `dispatch-*.sh`
+wrapper restates that literal again.
+
+**`validate-json-schema.js`**: non-integer JSON numbers (ratios, scores) were rejected
+outright — no artifact carrying a `capability_score` could be schema-validated at all. Now
+accepts a non-integer literal iff it round-trips losslessly (parse to a double, re-serialize,
+exact byte match against the source), and a hetero-review follow-up closed a sign-loss gap:
+`-0` took the integer branch and `JSON.stringify(-0) === '0'` silently dropped the sign, so
+`-0` is now rejected explicitly at both the file-preflight and in-memory boundaries.
+`build-qualification-defaults.js` no longer normalizes `capability_score` to a string
+workaround; it ships as a real JSON number again, `adopt-qualification-defaults.js` drops the
+matching `Number()` conversion on adoption, and `references/official-qualification-defaults.json`
+was regenerated and re-validated.
+
+**`doc-drift-gate.js`**: was walking live `.claude/worktrees/agent-*/` nested git worktrees
+and resolving their `scripts/...` refs against the wrong root, producing false FAILs whenever
+a session had a live agent worktree. Any subdirectory that is itself a git worktree/repo root
+is now skipped at the single choke point that feeds every check (links/fences/script-refs).
+
+**Implementer ladder** (new: `src/engine/implementer-ladder.js`, feature): optional
+`implementer_ladder` (engine/effort@runner rungs) plus a campaign `unit_class` selects the
+starting rung; each red-repair generation climbs to the next rung, then falls through to
+existing convergence adjudication once the top rung is reached. Absent ladder is a no-op.
+Adds an `implementer_ladder` field to `resolve-review-loop.sh`'s JSON output and the
+review-loop contract schema.
+
+**Foreman no-polling gate** (new: `scripts/check-foreman-polling.js` + test): foreman wait is
+notification-only per the l4/l5/l6 hard rule — `Monitor(sleep)` and raw-transcript polling
+(`cat`/`tail`/`sed -n`/`head` on `/tasks/*.output`, or 3+ `sleep N` (N≥30) calls) in the
+foreman's own transcript now fails the depth-0 harvest gate. A follow-up distinguished
+foreground from background sleep: a `sleep` inside `run_in_background` is not polling and is
+now exempted from the gate.
+
+**Fixes/hygiene**: `resolve-review-loop.test.sh` had a swapped-argument `assert_eq` call
+(inverting its expected/actual failure labels) and a stale `EXPECTED_KEYS` constant that
+predated the implementer-ladder's new `implementer_ladder` output key — both fixed, 313/313
+assertions passing. Codex mirror (`platforms/codex/plugin/`) resynced after the
+knowledge-routing reference edits landed without a `sync-codex-plugin-skills.sh` run. BACKLOG
+hygiene: retired the completed suite-residue entry, added two honest follow-ups (a still-open
+parallel-only flake and a known-incomplete symlinked-TMPDIR fallback in the reaper), and
+recorded foreman-polling / implementer-ladder ground truth from a real `/l4` run.
+
+**Plan doc**: `docs/plans/2026-08-28-consult-discuss-qualification.md` — consult/discuss role
+qualification suites plus a default-off config switch — reached APPROVED status after 2 review
+rounds (4 generations total, one round re-seated after a transport failure), 32 accepted
+findings folded in. Plan doc only; no code implemented against it in this release.
+
+prose-justification: this release's `skills/`+`references/` growth is knowledge routed out of
+local session memory into the durable repo per `references/knowledge-routing.md`, not skill
+teaching text growth — `references/evidence-discipline.md` (+97, a new §, promoted lessons),
+`skills/ceo-agent/references/level-front-door.md` (+68/-19, the notification-only no-polling
+rule and the implementer-ladder config surface), `references/qualification-defaults.md`
+(+30/-13, the restored-real-number `capability_score` documentation), and small
+`references/hetero-dispatch.md` / `skills/l4,l5,l6` foreman-polling-rule additions. None of it
+is a new skill or a rewritten one; the per-skill ratchet is unaffected.
+
 ## v2.34.44 — the version binary got an owner, and a bad version now refuses the seat
 
 `qualification-sweep.sh` derived the `--runner-version` identity token by assuming the

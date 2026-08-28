@@ -239,6 +239,18 @@ OUT="$(bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXI
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 on clean payload"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check reports clean payload"
 
+# D6 mirror parity, made concrete: the schema<->shell enum reconciliation AND the
+# properties/x-field-order/required three-way equality run FROM INSIDE the
+# generated package, against its own mirrored schema/shell — not just diffed
+# byte-for-byte against canonical above. A drift here would mean the mirror's
+# check-contract-schema.js and its mirrored schema/shell disagree with each
+# other even while every file is byte-identical to canonical individually
+# (e.g. a partial hand-edit inside the package only).
+MIRROR_CONTRACT_OUT="$(node "$PLUGIN_DIR/scripts/check-contract-schema.js" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "Codex plugin mirrored check-contract-schema.js exits 0 from inside the generated package"
+assert_contains "$MIRROR_CONTRACT_OUT" "contract-schema-ok" "Codex plugin mirrored contract-schema gate reports ok"
+assert_contains "$MIRROR_CONTRACT_OUT" "three-way equality" "Codex plugin mirrored contract-schema gate runs the three-way equality check"
+
 PROFILE_CATALOG_OUT="$(node "$PLUGIN_DIR/scripts/build-profile-payload.js" catalog \
   --check --repo "$PLUGIN_DIR" 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "Codex package validates its profile catalog from its own root"

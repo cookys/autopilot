@@ -107,6 +107,14 @@ DEF_DISCUSS_ENGINE=""
 DEF_DISCUSS_EFFORT=""
 DEF_DISCUSS_RUNNER=""
 DEF_DISCUSS_ENDPOINT=""
+# consult_dispatch / discuss_dispatch (v2.34.44+, D6): whether the consult/discuss
+# RAIL is live (scripts/dispatch-consult.sh / dispatch-discuss.js), independent of
+# whether the seat tuple above is configured. DEFAULT OFF on both — off is today's
+# behavior byte-for-byte: the seat stays data a caller may read by hand, no new
+# dispatch, no new refusal. The switch-on qualification gate (role evidence /
+# override enforcement) is D7 and is NOT implemented by this field plumbing.
+DEF_CONSULT_DISPATCH="off"
+DEF_DISCUSS_DISPATCH="off"
 # Board ruling 2026-08-27: dual-seat occupancy by an UNQUALIFIED (override-admitted)
 # runner is configurable but DEFAULT CLOSED. See the schema description for why the
 # axis is the runner and not the model family.
@@ -386,6 +394,8 @@ DISCUSS_ENGINE="$(read_field "$CONFIG" discuss_engine "$DEF_DISCUSS_ENGINE")"
 DISCUSS_EFFORT="$(read_field "$CONFIG" discuss_effort "$DEF_DISCUSS_EFFORT")"
 DISCUSS_RUNNER="$(read_field "$CONFIG" discuss_runner "$DEF_DISCUSS_RUNNER")"
 DISCUSS_ENDPOINT="$(read_field "$CONFIG" discuss_endpoint "$DEF_DISCUSS_ENDPOINT")"
+CONSULT_DISPATCH="$(read_field "$CONFIG" consult_dispatch "$DEF_CONSULT_DISPATCH")"
+DISCUSS_DISPATCH="$(read_field "$CONFIG" discuss_dispatch "$DEF_DISCUSS_DISPATCH")"
 ALLOW_DUAL_SEAT="$(read_field "$CONFIG" allow_same_runner_dual_seat "$DEF_ALLOW_DUAL_SEAT")"
 PLAN_MAX_GENERATIONS="$(read_field "$CONFIG" plan_review_max_generations "$DEF_PLAN_MAX_GENERATIONS")"
 PLAN_MAX_WALL_SECONDS="$(read_field "$CONFIG" plan_review_max_wall_seconds "$DEF_PLAN_MAX_WALL_SECONDS")"
@@ -452,6 +462,36 @@ case "$ALLOW_DUAL_SEAT" in
     exit 3
     ;;
 esac
+
+# consult_dispatch / discuss_dispatch (D6 field plumbing only — the switch-on
+# qualification gate over role evidence/overrides is D7, not implemented here).
+case "$CONSULT_DISPATCH" in
+  off|on) ;;
+  *)
+    echo "resolve-review-loop: invalid consult_dispatch (must be off|on): $CONSULT_DISPATCH" >&2
+    exit 3
+    ;;
+esac
+case "$DISCUSS_DISPATCH" in
+  off|on) ;;
+  *)
+    echo "resolve-review-loop: invalid discuss_dispatch (must be off|on): $DISCUSS_DISPATCH" >&2
+    exit 3
+    ;;
+esac
+
+# consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
+# misconfiguration, never a silent no-op (plan §4 D6, evidence-discipline §14).
+# Tuple-presence only — the switch-on QUALIFICATION gate over role evidence is
+# D7 and out of scope here.
+if [[ "$CONSULT_DISPATCH" == "on" && ( -z "$CONSULT_ENGINE" || -z "$CONSULT_RUNNER" || -z "$CONSULT_EFFORT" ) ]]; then
+  echo "resolve-review-loop: consult_dispatch=on requires consult_engine, consult_runner, and consult_effort" >&2
+  exit 3
+fi
+if [[ "$DISCUSS_DISPATCH" == "on" && ( -z "$DISCUSS_ENGINE" || -z "$DISCUSS_RUNNER" || -z "$DISCUSS_EFFORT" ) ]]; then
+  echo "resolve-review-loop: discuss_dispatch=on requires discuss_engine, discuss_runner, and discuss_effort" >&2
+  exit 3
+fi
 
 if [[ "$PLAN_REVIEW" == "on" && ( -z "$PLAN_REV_ENGINE" || -z "$PLAN_REV_RUNNER" || -z "$PLAN_REV_EFFORT" ) ]]; then
   echo "resolve-review-loop: plan_review=on requires plan_reviewer_engine, plan_reviewer_runner, and plan_reviewer_effort" >&2
@@ -1812,6 +1852,8 @@ if [[ -n "$FIELD" ]]; then
     discuss_effort) printf '%s\n' "$DISCUSS_EFFORT" ;;
     discuss_runner) printf '%s\n' "$DISCUSS_RUNNER" ;;
     discuss_endpoint) printf '%s\n' "$DISCUSS_ENDPOINT" ;;
+    consult_dispatch) printf '%s\n' "$CONSULT_DISPATCH" ;;
+    discuss_dispatch) printf '%s\n' "$DISCUSS_DISPATCH" ;;
     allow_same_runner_dual_seat) printf '%s\n' "$ALLOW_DUAL_SEAT" ;;
     plan_review_max_generations) printf '%s\n' "$PLAN_MAX_GENERATIONS" ;;
     plan_review_max_wall_seconds) printf '%s\n' "$PLAN_MAX_WALL_SECONDS" ;;
@@ -1910,10 +1952,11 @@ READINESS_ARGS=(
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
 )
-SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "discuss_dispatch": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
 SEATS_ARGS=(
   "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
   "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
+  "$CONSULT_DISPATCH" "$DISCUSS_DISPATCH"
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'

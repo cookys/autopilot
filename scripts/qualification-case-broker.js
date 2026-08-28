@@ -101,7 +101,7 @@ const CLIENT_SOURCE = [
 
 const HELP = `Usage:
   node scripts/qualification-case-broker.js run
-    --role <reviewer|owner|verification_author> --provider <provider-id> --model <exact-model-id>
+    --role <reviewer|owner|verification_author|consult|discuss> --provider <provider-id> --model <exact-model-id>
     --provider-cmd '<trusted host adapter command>'
     [--provider-env <name>] [--timeout-ms <n>]
 
@@ -206,8 +206,17 @@ function parseArgs(argv) {
 
 function normalizeOptions(raw) {
   const role = requireToken(raw.role, 'role');
-  if (!['reviewer', 'owner', 'verification_author'].includes(role)) {
-    throw new BrokerError('role must be reviewer, owner, or verification_author', 'invalid_argument');
+  // Transport extension (plan 2026-08-28-consult-discuss-qualification.md,
+  // D3 finding [2]): `consult` and `discuss` are qualification-seat roles
+  // that ride the SAME case-only broker/provider transport as reviewer/
+  // owner/verification_author. No change to the socket protocol, the
+  // sandbox, or the case-request shape below — only this role whitelist
+  // widens.
+  if (!['reviewer', 'owner', 'verification_author', 'consult', 'discuss'].includes(role)) {
+    throw new BrokerError(
+      'role must be reviewer, owner, verification_author, consult, or discuss',
+      'invalid_argument',
+    );
   }
   const providerCmd = String(raw.providerCmd || '');
   if (providerCmd.trim().length === 0 || providerCmd.length > 16_384

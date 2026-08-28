@@ -55,21 +55,135 @@ lines 60-66, adapted to consult/discuss's own corpus/generator/transport):
 node docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/derive-hashes.js
 ```
 
-### Values (derived 2026-08-29, repo HEAD `cb2bdcf2`)
+### Values (re-derived 2026-08-29, after the depth-0 consult/discuss
+disclosure fix — see below)
 
 | Role | `prompt_config_hash` | `semantic_fingerprint` |
 |---|---|---|
-| consult | `8f108df70f79ef446f3851bda092cfaa638ae7630d62bbe2756e7f749e9e72a0` | `808cc41d7bda965df32119b3d532046c8f231f93ef9f7b783534c9eb8f4f6b70` |
-| discuss | `e68344d6559f6f2805d56cb5e52b1df4c0259082f37293075f4c09d8664800ba` | `b41ac8ca0b4d2cf10ff6c258a1b6562389cfeb40684e71a12fa95c89d785ef57` |
+| consult | `bd446077cb1ebef71ae10e0853263b9a2e7b4f97e8018185633724d7cd898e6d` | `858070e19b6f849d90d1e6ddd957ab6e0065dd98060994740e39618251a478c1` |
+| discuss | `fb843a7adee3dd3d8a937af8117053e2d48d571523216d72ef7ae6da937adb49` | `c934ce0412bd0497951db5981ae00847745160f01fb954f7eebcd71c1d8bb5ba` |
 
 `containment_fingerprint` (shared, both roles — same transport file):
-`0b677ed1cfa0aa6dd7034810fb738f4d9d0ed1671fa710035d1ecd4ea9d72e35`
+`9e25bea8fb433ca99c1a3b4c7d54431ad8e2b3e51ce70082462d553de09275c6`
 
-`--harness-version qrp:2f7d9546` used in every run.sh is this same
+`--harness-version qrp:9e25bea8` used in every run.sh is this same
 `containment_fingerprint`'s first 8 hex chars, prefixed `qrp:` (the transport
 identifier convention `dispatch-hetero:<short-blob>` uses elsewhere, adapted
 for the `qualification-review-provider.js` transport since these seats never
 go through `dispatch-hetero.sh`).
+
+**Why these values changed (2026-08-29)**: the first live administration
+(the `plan-out.json`/`raw/consult-exchanges.jsonl` files under each seat
+directory below) failed 56/56 across every administered seat because of
+three exam-design defects, root-caused and fixed the same day: (A) the
+consult candidate envelope omitted `closed_label_set` while every oracle
+label is a prefixed token the candidate could not otherwise derive
+(`scripts/engine-qualify.js` `buildConsultCaseEnvelope`); (B) C2 required
+echoing a fabricated `missing_artifact_id` the candidate never saw
+(`evals/consult-eval-generator.js` `buildC2`, `evals/consult-eval-grader.js`
+`falseConfidence`); (C) the discuss envelope had the same undisclosed-
+vocabulary defect for its declared axis/claim-vector set
+(`buildDiscussCaseEnvelope`). Both corpus manifests' `corpus_version` moved
+to `*-v2` to mark this a fresh evaluation separate from the failed
+administration recorded in each seat's `raw/` directory (which is left
+intact as historical evidence of the failure, not overwritten).
+`qualification-review-provider.js`'s system prompts changed too (reference
+the new envelope fields explicitly), which is why `containment_fingerprint`
+moved. The failed `raw/consult-exchanges.jsonl` / `discuss-exchanges.jsonl`
+files below predate this fix and must not be read as evidence against the
+current corpus/generator/grader.
+
+**`containment_fingerprint` changed AGAIN (2026-08-29, same day, transport
+fix — not the envelope-disclosure fix above)**: seat 6's live discuss
+administration (`seat6-gemini-3.7-flash-high-agy-discuss/raw/discuss-exchanges.jsonl`)
+failed 16/16 with `transport_ok:false, "case broker failed:
+provider_process_failed"` even after the envelope fix landed. Root-caused
+(debugger, reproduced offline against agy 1.1.22): in headless `-p` mode agy
+cannot prompt for tool confirmation, so it SOFT-DENIES any tool request and
+exits 0 with EMPTY stdout (agy's own log: `tool_confirmation_manager.go
+"Print mode: soft-denying tool confirmation"`) — the discuss system prompt
+reliably makes the model reach for a tool, so every headless case died this
+way. Neither `--sandbox` nor `--mode plan` change this. Fix in
+`scripts/qualification-review-provider.js` `callCli()`: the `kind === 'agy'`
+branch now passes `--dangerously-skip-permissions` (giving agy a resolvable
+decision instead of an unpromptable one), safe ONLY because the per-case
+cloned `QRP_CLI_HOME`'s `.gemini/antigravity-cli/settings.json` now gets a
+force-merged `permissions.deny` blocklist (`command(*)`, `write_file(*)`,
+`edit_file(*)`, `read_file(*)`, `web_search(*)`, `web_fetch(*)`) — verified
+offline that deny rules win over the flag (a `command(hostname)` request
+under this merged config returns "Permission denied ... Matches
+user-configured deny rule", not real output). A third hunk also appends
+captured stderr to the empty-stdout error message, so a future transport
+failure surfaces its diagnosis instead of the generic message seat 6's
+evidence carried. This is a Claude-authored code fix, stub-tested only (see
+`scripts/qualification-review-provider.test.js` section 11) — no live/paid
+provider call was made to produce this fingerprint; a depth-0 operator runs
+the live containment probe (and, if it passes, the actual seat 6 `--execute`
+re-administration) after merge. The failed `raw/discuss-exchanges.jsonl`
+predates this fix too and must not be read as evidence against the current
+transport.
+
+**ALL FOUR values changed AGAIN (2026-08-29, hetero review repair on
+`fix/agy-qrp-containment` before merge)**: sol (FIX-THEN-SHIP) and MiniMax
+(SHIP-AS-IS) found four issues in the transport fix and the pre-existing
+disclosure fix above; depth-0 machine-verified finding [2]. Repairs, each
+changing one of these values:
+
+1. 🔴 `deny-not-total`: the deny-merge only ran inside the OPTIONAL
+   `QRP_CLI_HOME` clone step, so an agy invocation with `QRP_CLI_HOME` unset
+   spawned flag-armed (`--dangerously-skip-permissions`) with NO deny list —
+   silently uncontained. Fixed by making `QRP_CLI_HOME` a hard requirement
+   for `kind === 'agy'` (refuses before spawn if unset) plus a post-write
+   readback verification that the deny union actually landed on disk before
+   spawn ever runs. `qualification-review-provider.js` changed again ⇒
+   `containment_fingerprint` moved to the value above (was
+   `441227738a06e9214c72bbadbb238aa349b42b964b923da2d7a90904d55d4cf4`).
+2. 🟠 `seal-pin-scope`: `scripts/lib/qualification-asset-seals.js`'s
+   `EXPECTED_*_SEAL_HASH` pinned ONLY the rubric's seal file bytes — the
+   corpus manifest's own seal file (`evals/*-capability-evidence-
+   corpus.seal.json`) had no static pin at all, so `frozenIdentities()`'s
+   `seal` field could report "the seal is fine" without the file that would
+   actually catch a corpus-seal tamper ever being hashed against anything
+   (depth-0 verified concretely: corpus-seal file sha256 `4117459c...` vs
+   the stale rubric-only pin `1643508f...`). Fixed: `seal` is now
+   `combinedSealHash(rubricSealFileHash, corpusSealFileHash)` — one digest
+   binding BOTH seal files' own bytes, pinned and refused on drift in
+   either. Not a `derive-hashes.js`-tracked value (see the five-identity
+   table below, which this bundle does not duplicate — `--plan`'s own
+   output is the canonical source for those five per role).
+3. 🟠 `consult-label-position-leak`: C4/C5's `closed_label_set` put
+   `expectedLabel` at a FIXED position (index 0) drawn from a FIXED
+   distractor pool per value — plus, discovered while fixing this, C4/C5's
+   grading (`scopeDrift`/`authorityViolation`) never checked
+   `response.answer.label` against `oracle.expected_label` AT ALL, so ANY
+   label (not just position 0) passed as long as aside/authority were
+   correct. Fixed in `evals/consult-eval-generator.js` (seed-derived
+   distractor picks + seed-derived shuffle, both keyed on `caseSeed` never
+   `oracleKey`) and `evals/consult-eval-grader.js` (`oracleMiss` widened
+   from C1-only to also check C4/C5's `expected_label`, always-on). A new
+   admission-level "pick-first discrimination" check proves a position-0
+   label-only strategy can no longer clear the family's full pass bar.
+   `consult-eval-generator.js`/`consult-eval-grader.js` bytes changed ⇒
+   `prompt_config_hash`/`semantic_fingerprint` moved to the values above
+   (were `2ff3fe6ab3a13154fc1a316c0ba05445e730d068d9f96d0529701ff542a55204` /
+   `da6e86f5aa8d132470badc7e2db0cc91b4429be427492e84ed518b88e85e6161`).
+   `evals/consult-capability-evidence-corpus.json`'s `corpus_version` moved
+   `consult-v2` → `consult-v3` to mark this a fresh evaluation baseline
+   (discuss is untouched by this finding; its values above are unchanged).
+4. 🔵 every seat's `plan-out.json` under `seat<N>-<slug>/` reported the
+   PRE-repair identities. `--plan` is free (no live provider call, no
+   money spent — see the header comment at the top of this file), so all 7
+   were regenerated in place by re-running `./run.sh plan` after the three
+   repairs above landed; each now reports `admission.pass: true` against the
+   POST-repair identities (verified: `grep`-checked against the values in
+   the table above, all 7 match).
+
+All four `run.sh` fields (`PROMPT_CONFIG_HASH`, `SEMANTIC_FINGERPRINT`,
+`CONTAINMENT_FINGERPRINT`, `HARNESS_VERSION`) were re-derived via
+`derive-hashes.js` and refreshed across all 7 seats per the table above (the
+containment fingerprint moved for every seat, consult/discuss both, since
+the transport file is shared; the prompt/semantic pair moved only for the 5
+consult seats, since only consult's generator/corpus changed this round).
 
 **Important honesty note**: `engine-qualify.js` does **not** cross-check
 `--prompt-config-hash`/`--semantic-fingerprint`/`--containment-fingerprint`

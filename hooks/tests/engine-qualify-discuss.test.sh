@@ -241,7 +241,7 @@ assert_contains "$NOEXEC_OUT" "Board decision" "refusal cites the Board authoriz
 LIVE_OUT="$(node "$REPO_ROOT/scripts/engine-qualify-discuss.test.js" 2>&1)"
 LIVE_RC=$?
 assert_exit_code "$LIVE_RC" "0" "discuss live-administration suite passes"
-assert_contains "$LIVE_OUT" "51 assertions passed" \
+assert_contains "$LIVE_OUT" "55 assertions passed" \
   "green 16/16 qualifies with the D5 discuss_rounds methodology; one wrong-content case fails without qualifying; a crashed provider classifies as provider_unavailable, distinct from a content-quality failure in the SAME run; a case with a mismatched provider identity fails closed; --execute is required and refuses by name; --panel-cmd is refused for lacking identity binding; a wall-truncated run reports the full 16-case denominator, never a shrunken one; a corrupted generator refuses via seal drift before any provider call AND before its top-level code ever executes (sentinel fixture); the recorded evidence binds all five sealed identities (not just the corpus hash) and the record-path guard rejects a tampered binding; the generated row passes the production D5 promotion path, a kind-swapped row is rejected, an altered-scope row fails strict admission, and the row's scope_hash matches the shared applicability-scope module's own output"
 
 finalize_test

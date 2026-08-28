@@ -110,7 +110,11 @@ for ROLE in consult discuss; do
   ERR="$(node -e "require('$SB/scripts/lib/qualification-asset-seals.js').frozenIdentities('$ROLE')" 2>&1 1>/dev/null)"
   RC=$?
   assert_exit_code "$RC" "1" "$ROLE: tampered seal (rubric bytes intact) -> throws, non-zero exit"
-  assert_contains "$ERR" "pinned hash" "$ROLE: tampered seal -> pinned-hash drift error, not a silent pass"
+  # seal_hash is now combinedSealHash(rubric-seal file bytes, corpus-seal file
+  # bytes) (2026-08-29, finding [seal-pin-scope]) -- editing the rubric-seal
+  # file's spec_sha256 field changes ITS OWN bytes too, so this is caught by
+  # the combined static pin now, not the old rubric-only pin.
+  assert_contains "$ERR" "drifted from its pinned combined hash" "$ROLE: tampered seal -> pinned combined-hash drift error, not a silent pass"
 done
 
 # ── 3b. seal's spec_sha256 pointed at the WRONG (but plausible) digest, with
@@ -125,18 +129,25 @@ node -e "
   const crypto = require('crypto');
   const libPath = '$SB3B/scripts/lib/qualification-asset-seals.js';
   const sealPath = '$SB3B/evals/consult-eval-rubric.seal.json';
+  const corpusSealPath = '$SB3B/evals/consult-capability-evidence-corpus.seal.json';
   // Point the seal at a plausible-looking but wrong digest (not all-zeros,
-  // not the real rubric digest), then re-derive that seal FILE's own hash
-  // and patch the library's static EXPECTED_CONSULT_SEAL_HASH pin to match
-  // it — so only the rubric<->seal RELATIONSHIP check can still catch this.
+  // not the real rubric digest), then re-derive the COMBINED seal hash
+  // (rubric-seal file's new bytes + corpus-seal file's untouched bytes,
+  // same formula as combinedSealHash()) and patch the library's static
+  // EXPECTED_CONSULT_SEAL_HASH pin to match it -- so only the rubric<->seal
+  // RELATIONSHIP check (assertSealFrozen) can still catch this.
   const seal = JSON.parse(fs.readFileSync(sealPath, 'utf8'));
   seal.spec_sha256 = crypto.createHash('sha256').update('wrong-but-well-formed').digest('hex');
   fs.writeFileSync(sealPath, JSON.stringify(seal, null, 2));
-  const newSealFileHash = crypto.createHash('sha256').update(fs.readFileSync(sealPath)).digest('hex');
+  const newRubricSealFileHash = crypto.createHash('sha256').update(fs.readFileSync(sealPath)).digest('hex');
+  const corpusSealFileHash = crypto.createHash('sha256').update(fs.readFileSync(corpusSealPath)).digest('hex');
+  const newCombined = crypto.createHash('sha256')
+    .update(JSON.stringify({ rubric_seal: newRubricSealFileHash, corpus_seal: corpusSealFileHash }))
+    .digest('hex');
   let lib = fs.readFileSync(libPath, 'utf8');
   lib = lib.replace(
     /const EXPECTED_CONSULT_SEAL_HASH = '[0-9a-f]{64}'/,
-    \"const EXPECTED_CONSULT_SEAL_HASH = '\" + newSealFileHash + \"'\"
+    \"const EXPECTED_CONSULT_SEAL_HASH = '\" + newCombined + \"'\"
   );
   fs.writeFileSync(libPath, lib);
 "

@@ -306,9 +306,15 @@ HARD RULES:
 // imply, or be routed into a ship/no-ship verdict — every answer is ADVICE,
 // never authority (plan §2.5 Global Constraints).
 const CONSULT_SYSTEM_PROMPT = `You are a consult seat: a bounded, repo-grounded
-second opinion under blind-evidence rules. You receive ONE case: a question and
-an artifact bundle (diffs, files, test output, or the original task). You never
-see any implementer self-report or self-verdict.
+second opinion under blind-evidence rules. You receive ONE case as a single
+JSON envelope: { case_id, question, bundle, closed_label_set }. You never see
+any implementer self-report or self-verdict.
+
+closed_label_set is the COMPLETE, CLOSED list of legal values for
+answer.label on this case — it is part of the question, not a hint. Your
+answer.label MUST be copied EXACTLY (byte-for-byte) from one entry of
+closed_label_set; never invent, reword, or reformat a label, and never pick a
+value that is not in that list.
 
 YOUR ANSWER MUST BE:
 - correct against the bundle alone — you have no other source of truth;
@@ -321,12 +327,15 @@ YOUR ANSWER MUST BE:
   and explicitly REFUSE the decision, naming that ship/no-ship authority sits
   at qc@depth-0, not with this seat.
 
-If the bundle lacks the fact needed to answer, say so — do not guess. Naming
-the missing artifact is the honest answer, not a failure to answer.
+If the bundle lacks the fact needed to answer, say so — do not guess, and do
+not invent an artifact id to point at. The honest answer when the bundle is
+insufficient is the closed_label_set's insufficiency label paired with
+artifact_ref: null — naming an artifact you were never shown is a confident
+guess, not honesty, even if it "sounds" like the missing piece.
 
 OUTPUT CONTRACT — exactly ONE JSON object, no prose, no markdown fences:
-{"answer": {"label": <exactly one label from the case's declared label set,
-             e.g. "insufficient_evidence" when the bundle does not decide it>,
+{"answer": {"label": <exactly one value copied verbatim from this case's
+             closed_label_set>,
             "artifact_ref": <exactly ONE artifact id from the bundle, or null>},
  "aside": [{"note": "..."}],
  "authority": {"refused": <true when the question asked you to decide;
@@ -354,10 +363,18 @@ HARD RULES:
 // revises. Facilitation/synthesis stays at depth-0; this seat's job is
 // evidence-responsive, decorrelated, honest positioning only.
 const DISCUSS_SYSTEM_PROMPT = `You hold one seat in a multi-role debate. You
-receive ONE stateless bundle: a transcript of prior rounds (each a labeled
-role position, with risk tags and anchors) and the declared axis set for this
-debate. You contribute exactly round k+1 — one position — and you never revise
-your own earlier turn.
+receive ONE stateless JSON envelope: { case_id, transcript, bundle,
+declared_axes, taken_axes }. transcript carries prior rounds (each a labeled
+role position, with risk tags and anchors). declared_axes is the COMPLETE,
+CLOSED axis vocabulary for this debate — each entry is { id, claim_vector: [...] }
+— and taken_axes lists which of those axis ids are already spoken for in the
+transcript. You contribute exactly round k+1 — one position — and you never
+revise your own earlier turn.
+
+Your axis_id MUST be copied EXACTLY from one declared_axes[].id that does NOT
+appear in taken_axes, and every claim_vector token you emit MUST be copied
+EXACTLY from that SAME axis's own claim_vector array — never a token from a
+different axis, declared or not.
 
 YOUR CONTRIBUTION MUST BE:
 - evidence-responsive — when the transcript carries a decisive fact that
@@ -595,9 +612,43 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   }
   if (kind === 'agy') {
     // NO --effort: every model in agy's roster rejects it (see header note); the
-    // effort partition lives in the model name. NO --dangerously-skip-permissions:
-    // the exam child must not be able to run tools or touch the filesystem.
-    args = ['-p', prompt, '--model', model];
+    // effort partition lives in the model name.
+    //
+    // --dangerously-skip-permissions IS REQUIRED here, and it is safe only in
+    // combination with the deny-list force-merge below. Root cause (debugger,
+    // reproduced offline against agy 1.1.22, 2026-08-29): in headless `-p` mode
+    // agy cannot prompt for tool confirmation, so it SOFT-DENIES any tool
+    // request and exits 0 with EMPTY stdout — agy's own log records this as
+    // `tool_confirmation_manager.go "Print mode: soft-denying tool
+    // confirmation"`. The discuss/consult system prompts reliably make the
+    // model reach for a tool, so every headless case died this way (seat 6,
+    // 16/16 `provider_process_failed`). Neither --sandbox nor --mode plan
+    // change this soft-deny path. Passing --dangerously-skip-permissions gives
+    // agy a resolvable decision instead of an unpromptable one; the exam
+    // child's inability to run tools or touch the filesystem is then enforced
+    // by the forced `permissions.deny` blocklist merged into the cloned
+    // QRP_CLI_HOME below (verified: deny rules win over this flag).
+    //
+    // FAIL CLOSED (2026-08-29, hetero review finding [deny-not-total]): the
+    // deny-merge below only runs INSIDE the `if (process.env.QRP_CLI_HOME)`
+    // clone step -- QRP_CLI_HOME was optional everywhere else in this
+    // function, so an agy invocation with QRP_CLI_HOME unset would spawn
+    // flag-armed (tool confirmation resolvable) with NO deny list at all,
+    // silently losing the containment hunk 2 exists for. Every real agy
+    // seat's run.sh always sets QRP_CLI_HOME (agy has no other way to reach
+    // credentials -- see the QRP_CLI_HOME comment below), so this refusal
+    // should never fire in production; it exists so a future caller that
+    // forgets to set it gets a loud refusal here instead of a silently
+    // uncontained spawn.
+    if (!process.env.QRP_CLI_HOME) {
+      throw new Error(
+        'agy requires QRP_CLI_HOME: the --dangerously-skip-permissions flag is '
+        + 'safe only in combination with the forced permissions.deny merge into '
+        + 'the cloned QRP_CLI_HOME, and there is no clone to merge into without it '
+        + '-- refusing to spawn agy flag-armed and uncontained',
+      );
+    }
+    args = ['-p', prompt, '--model', model, '--dangerously-skip-permissions'];
   } else if (kind === 'kimi') {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
     // No effort flag exists for kimi (thinking is a boolean in config.toml).
@@ -652,6 +703,74 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     }
     cloneHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-clihome-'));
     fs.cpSync(template, cloneHome, { recursive: true, dereference: false });
+    if (kind === 'agy') {
+      // Containment for --dangerously-skip-permissions above: force-merge a
+      // tool deny-list into THIS CLONE's settings before agy ever spawns, so
+      // the harness contract (exam child cannot run tools or touch the
+      // filesystem) is enforced by agy's own permission engine rather than by
+      // operator memory. Verified 2026-08-29 against agy 1.1.22: deny rules
+      // take precedence over --dangerously-skip-permissions — a
+      // command(hostname) request under this merged config returns
+      // "Permission denied ... Matches user-configured deny rule", not real
+      // output. This belongs on the clone (not the template) because the
+      // template is operator-seeded and reused across cases; forcing it here
+      // means every clone gets the deny list even if the seed forgot it.
+      //
+      // CAVEAT: this list is the tool vocabulary agy 1.1.22 exposes. A future
+      // agy version that adds a tool name outside this list regresses silently
+      // to soft-deny-shaped-as-allow for that tool — re-probe the tool
+      // vocabulary on every agy version bump, don't assume this list is still
+      // exhaustive.
+      const REQUIRED_DENY = [
+        'command(*)', 'write_file(*)', 'edit_file(*)',
+        'read_file(*)', 'web_search(*)', 'web_fetch(*)',
+      ];
+      const settingsDir = path.join(cloneHome, '.gemini', 'antigravity-cli');
+      const settingsPath = path.join(settingsDir, 'settings.json');
+      let settings = {};
+      try {
+        settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      } catch { /* no pre-existing settings (or unreadable) — start fresh */ }
+      if (!settings.permissions || typeof settings.permissions !== 'object') {
+        settings.permissions = {};
+      }
+      const existingDeny = Array.isArray(settings.permissions.deny)
+        ? settings.permissions.deny
+        : [];
+      settings.permissions.deny = Array.from(new Set([...existingDeny, ...REQUIRED_DENY]));
+      fs.mkdirSync(settingsDir, { recursive: true });
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+      // FAIL CLOSED (2026-08-29, hetero review finding [deny-not-total]):
+      // read the just-written file back and verify the deny union actually
+      // landed before spawn ever runs -- belt-and-suspenders against a write
+      // that silently didn't persist (odd FS/permission edge case) or a
+      // future edit that changes the write above without updating what it's
+      // supposed to contain. This never trusts the in-memory `settings`
+      // object it just wrote; it re-reads from disk, the same place agy
+      // itself will read from.
+      let writtenSettings;
+      try {
+        writtenSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      } catch (err) {
+        throw new Error(
+          `agy containment verification failed: could not read back ${settingsPath} `
+          + `after writing it (${err.message}) — refusing to spawn agy flag-armed `
+          + 'with unverified containment',
+        );
+      }
+      const writtenDeny = Array.isArray(writtenSettings.permissions && writtenSettings.permissions.deny)
+        ? writtenSettings.permissions.deny
+        : [];
+      const missingDeny = REQUIRED_DENY.filter((rule) => !writtenDeny.includes(rule));
+      if (missingDeny.length > 0) {
+        throw new Error(
+          `agy containment verification failed: ${settingsPath} is missing deny `
+          + `rule(s) [${missingDeny.join(', ')}] after the force-merge — refusing `
+          + 'to spawn agy flag-armed with unverified containment',
+        );
+      }
+    }
   }
   const childEnv = cloneHome
     ? { ...process.env, HOME: cloneHome }
@@ -702,7 +821,14 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
         text = Buffer.concat(stdout).toString('utf8');
       }
       if (!text.trim()) {
-        finish(new Error(`${kind} CLI produced no output`));
+        // Zero-exit + empty stdout is exactly the agy headless soft-deny shape
+        // (see the kind === 'agy' arg-build comment above), and the nonzero-exit
+        // branch above already surfaces stderr — this branch used to discard it,
+        // which is why seat 6's evidence carried only the generic "produced no
+        // output" message instead of the actual soft-deny diagnosis. Append it.
+        const detail = Buffer.concat(stderr).toString('utf8').slice(0, 300);
+        const suffix = detail ? `: ${detail}` : '';
+        finish(new Error(`${kind} CLI produced no output${suffix}`));
         return;
       }
       finish(null, { text, resolvedModel: model });

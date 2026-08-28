@@ -703,7 +703,8 @@ Two items:
    `sleep` in a loop, or `cat`/`tail` of a child output file into its own context, is a red-line
    violation. Leaves return a schema-typed criteria table; their raw output never enters the
    foreman prompt. → plan 2026-08-28 (`docs/plans/2026-08-28-foreman-no-polling.md`).
-2. **Implementer ladder by unit class, not one seat.** `review-loop-config.md` has a single
+2. **Implementer ladder by unit class, not one seat.** → plan 2026-08-28
+   (`docs/plans/2026-08-28-implementer-ladder.md`). `review-loop-config.md` has a single
    `implementer_engine`. Add `implementer_ladder: gemini-3.7-flash-low → grok-4.6/low → sonnet`
    with two triggers: contract field `unit_class: mechanical|judgment` picks the starting rung; a
    red repair round climbs one rung; top rung then enters `awaiting_convergence_adjudication`

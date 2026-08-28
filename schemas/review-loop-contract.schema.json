@@ -11,6 +11,7 @@
     "implementer_engine",
     "implementer_effort",
     "implementer_runner",
+    "implementer_ladder",
     "loop_max_rounds",
     "loop_convergence_verdict",
     "spec_review",
@@ -145,6 +146,35 @@
       ],
       "x-shell-validated": true,
       "x-shell-var": "IMPL_RUNNER"
+    },
+    "implementer_ladder": {
+      "type": "array",
+      "description": "Optional ordered implementer rungs. Each item is engine/effort@runner. Empty when the field is absent: the three implementer_* fields are the single implicit rung. Availability fallback remains on_engine_unavailable.",
+      "items": {
+        "type": "object",
+        "required": ["engine", "effort", "runner"],
+        "additionalProperties": false,
+        "properties": {
+          "engine": { "type": "string", "minLength": 1 },
+          "effort": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "xhigh", "max"]
+          },
+          "runner": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "codex",
+              "agy",
+              "grok",
+              "cc-shim",
+              "pi",
+              "qoderclicn",
+              "cursor"
+            ]
+          }
+        }
+      }
     },
     "loop_max_rounds": {
       "type": "integer"
@@ -694,6 +724,7 @@
     "implementer_engine",
     "implementer_effort",
     "implementer_runner",
+    "implementer_ladder",
     "loop_max_rounds",
     "loop_convergence_verdict",
     "spec_review",

@@ -109,6 +109,21 @@ function validateReviewLoopConfig(value) {
   assertOneOf(value, 'implementer_effort', schemaEnum('implementer_effort'));
   assertOneOf(value, 'reviewer_runner', schemaEnum('reviewer_runner'));
   assertOneOf(value, 'implementer_runner', schemaEnum('implementer_runner'));
+  assertField(value, 'implementer_ladder', Array.isArray, 'an array');
+  {
+    const runnerEnum = schemaEnum('implementer_runner');
+    const effortEnum = schemaEnum('implementer_effort');
+    for (const [index, row] of value.implementer_ladder.entries()) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)
+          || typeof row.engine !== 'string' || row.engine.length === 0
+          || !effortEnum.includes(row.effort)
+          || !runnerEnum.includes(row.runner)) {
+        throw new Error(
+          `review-loop output JSON field implementer_ladder[${index}] must be {engine,effort,runner}`,
+        );
+      }
+    }
+  }
   assertOneOf(value, 'spec_review', schemaEnum('spec_review'));
   assertOneOf(value, 'plan_review', schemaEnum('plan_review'));
   assertOneOf(value, 'independent_harness', schemaEnum('independent_harness'));

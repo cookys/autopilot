@@ -12,6 +12,11 @@ const {
 } = require('../../scripts/check-repair-scope');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
+const {
+  applyImplementerLadder,
+  repairRoundFromImplementationRound,
+  unitClassFromContract,
+} = require('./implementer-ladder');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
@@ -3528,6 +3533,13 @@ class AutopilotEngine {
           cwd: resolvedTaskCwd,
         });
         campaignLifecycleRoot = campaignAuthority.campaign_id;
+        {
+          const ladderSelection = applyImplementerLadder(roster, {
+            unitClass: unitClassFromContract(campaignAuthority.contract),
+            repairRound: repairRoundFromImplementationRound(input.implementationRound),
+          });
+          roster = ladderSelection.roster;
+        }
         if (!implementationBaseEnv || typeof implementationBaseEnv !== 'object'
             || Array.isArray(implementationBaseEnv)) {
           throw new TypeError('managed implementation env must be an object');
@@ -3612,6 +3624,17 @@ class AutopilotEngine {
               ? { zeroDiffReceipt: missionZeroDiffReceipt } : {}),
           });
         }
+      }
+      {
+        const ladderSelection = applyImplementerLadder(roster, {
+          unitClass: unitClassFromContract(
+            campaignAuthority && campaignAuthority.contract
+              ? campaignAuthority.contract
+              : null,
+          ),
+          repairRound: repairRoundFromImplementationRound(input.implementationRound),
+        });
+        roster = ladderSelection.roster;
       }
       implementationArgs = buildImplementationArgs({
         roster,
@@ -4072,8 +4095,12 @@ class AutopilotEngine {
 
     ledger.push(
       this.ledgerEntry('dispatch_implementation', dispatchStatus || 'blocked', startedAt, {
-        runner: parsed ? parsed.runner : null,
-        model: parsed ? parsed.model : null,
+        runner: parsed ? parsed.runner : roster.implementer_runner,
+        model: parsed ? parsed.model : roster.implementer_engine,
+        implementer_ladder_rung: Number.isInteger(roster.implementer_ladder_rung)
+          ? roster.implementer_ladder_rung
+          : null,
+        implementer_effort: roster.implementer_effort,
         base: input.base,
         branch: input.branch,
         commit: parsed ? parsed.commit : null,

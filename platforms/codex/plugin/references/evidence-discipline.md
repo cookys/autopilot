@@ -205,6 +205,19 @@ recorded prompt-hash history), keep the FAIL rows untouched, and re-sit fresh �
 independent seeds then put the same subjects at the same margins, that is capability signal:
 stop. A third sitting after that is selecting on the exam's own noise.
 
+**Second data point (2026-08-27), from the other direction — the RAIL is part of the instrument too.**
+`grok-4.6` on the `grok` CLI is a recorded implementer FAIL: 23/24, the single miss an integrity
+violation carrying a `false_pass_critical` — a behaviour failure, not a capability one. The same model
+family at the same effort, administered through the `cursor` rail, returned a clean 24/24 with all four
+zero-tolerance counters at zero. Three variables differ between the rows (runner, harness version, and
+the fast lane), so this attributes nothing to a specific harness property — but it does show that a
+FAIL can be a claim about the rail, and it is direct evidence for the premise `engine-onboarding`
+otherwise asserts on principle: qualification binds to **engine + runner + role**, never to a model
+name. Note the reasoning that nearly prevented the measurement: "its sibling failed on a more direct
+rail, so the expected value is poor" silently equates *the model failed* with *the model failed on that
+rail* — the exact conflation the binding rule exists to forbid.
+Evidence: `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/`.
+
 ## 11. A grep is not a call graph — and a rule can be spelled in arithmetic
 
 **2026-08-16 → fired 2026-08-17.** A retirement sweep asked "does anything enforce capability-claim
@@ -400,6 +413,90 @@ rather than discovering them by incident.
 > fixed" and "no further bug in this shape ships silently."
 
 **Related**: `scripts/check-test-integrity.sh`, `scripts/lib/test-integrity-l1.py`.
+
+## 17. Fixing the instance is not fixing the assumption — count the copies before you close
+
+**Incident (2026-08-27, v2.34.42–44).** A heterogeneous review panel found that
+`probe-engine-capability.sh` derived a runner's binary from the runner token, so the `cursor` runner
+probed `cursor` — the IDE launcher — instead of `cursor-agent`. It was fixed, verified, and shipped.
+
+The same assumption had **two more independent copies**. `qualification-sweep.sh` carried its own
+inline `verbin="$runner"`, and it was found only when the tool was actually operated: it folded
+stderr into stdout, ran the sanitizer over the launcher's error sentence, and passed
+`--runner-version Error:-No-Cursor-IDE-installation-found.-...` into a **paid** qualification
+administration. `runner_version` is part of the deployment identity that decides whether the evidence
+is applicable later, so the run was about to mint a row that looked authoritative and could never
+match anything. (A third copy existed in `src/readiness/probe.js` and was correct — but unexported and
+welded to its module, so no other caller could reuse it. Correct and unreachable is still a copy.)
+
+Two things generalise. First, **a review finding is about a site, not about the belief** — the panel
+could only report what was in the diff it was given. Second, all three defects this release was built
+around (`*/` closing a block comment, a fabricated `--cwd` flag, this one) were found by **using** the
+thing, and two of them had already passed review with a PASS verdict attached.
+
+> **Check**: when a review or an incident identifies a wrong assumption, do not close on the site that
+> was reported. Grep for every other place that encodes the same belief and say how many you found —
+> "one copy, checked" is a finding; silence is not. If several copies exist, the fix is one owner the
+> others consume, and the count of independent copies must go **down**, not up. Then ask what would
+> have surfaced it earlier than operating it in production, and build that instead of trusting the
+> next review to catch the next copy.
+
+**Related**: `scripts/lib/runner-binary.js`, `scripts/qualification-sweep.sh`, `scripts/check-js-syntax.js`.
+
+---
+
+## 18. A bound inside a fail-closed guard must refuse when it truncates
+
+**Incident (2026-08-27, v2.34.44).** The repaired version-probe guard validated the first stdout line
+and then scanned the tail for error markers — bounded at 20 lines. The same `Error: ...` line refused
+when it sat at line 2 and was **accepted** when it sat at line 23. Only its distance from the top
+decided whether the guard saw it. A module whose entire contract is "anything I cannot positively
+validate refuses" had a limit that silently stopped looking, which is the same shape as the bug it was
+written to prevent: a value nobody checked becoming an identity.
+
+The sibling defect in the same code: stdout and stderr were folded with `2>&1`, so a diagnostic on
+stderr could be read as the value. Separating the streams is what made "the version" a positively
+identified thing rather than "whatever came out first".
+
+A bound is not the problem — unbounded scanning of untrusted output is its own hazard. The problem is
+a bound that fails **open**. The repair keeps a limit and refuses when the limit is reached, with a
+reason distinguishable from a real error line, so an operator can tell "too much output to vouch for"
+apart from "the output announced a failure". Every other bound in the module was then audited and
+each one's behaviour recorded, rather than assumed.
+
+> **Check**: for every cap, slice, `head -n`, timeout, or buffer limit sitting inside a guard, ask what
+> happens to the material past it. If the answer is "it is not examined" and the guard's contract is
+> fail-closed, the bound is a bypass with a length prefix. Refuse on truncation and give it its own
+> reason string. Then enumerate the other bounds in the same unit and state each one's direction —
+> a table of bounds that all fail closed is evidence; one unaudited bound is where the next one hides.
+
+**Related**: `scripts/lib/runner-binary.js`.
+
+---
+
+## 19. A proxy is not the measurement — name what you counted and when it is written
+
+**Incident (2026-08-27.)** A paid qualification run was killed mid-flight. Asked how much had been
+spent, the orchestrator counted entries in the administration's `raw/` output directory, saw zero, and
+reported "0 of 24 dispatches spent". The directory is written per case **on completion**; the dispatch
+logs showed **seven** cases had already run. The number was not a lie and not a guess — it was a
+plausible stand-in adopted without asking what it actually measures relative to the event being
+claimed.
+
+This is the same failure as the two around it, one layer up: an error sentence was accepted as a
+version because it was string-shaped, and a directory count was accepted as a spend count because it
+was in the right place. In each case the observation was real and the **binding between observation
+and claim** was never checked.
+
+> **Check**: before reporting a quantity as fact, state what produced it and when that artefact is
+> written relative to the event you are describing. If the artefact lands at completion, it cannot
+> count things in flight. Prefer a source that is written by the event itself (a dispatch log, a
+> receipt) over one written by its aftermath, and when only a proxy is available, report it as a proxy
+> and say so — "raw/ shows 0 completed cases; in-flight count unknown" is honest, and "0 spent" is not.
+
+**Related**: `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/`.
+
+---
 
 ---
 

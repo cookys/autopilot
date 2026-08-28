@@ -9,7 +9,7 @@ For Claude Code-specific conventions, see [`CLAUDE.md`](CLAUDE.md). For cross-ag
 ## Project Structure (spec)
 
 ```
-skills/              28 lifecycle/methodology skills (SKILL.md format)
+skills/              29 lifecycle/methodology skills (SKILL.md format)
 agents/              3 methodology agents (reviewer, debugger, planner) — markdown body + YAML frontmatter
 hooks/               Claude Code hooks (bash + JS) and hooks.json manifest
 platforms/codex/     Codex skills + production PostCompact package + repo-local marketplace

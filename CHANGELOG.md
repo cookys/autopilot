@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.35.0 — Agent Call persistent-peer boundary
+
+**`autopilot:agent-call`** adds one deliberately thin route for contacting an already-running,
+exactly named coding-agent session. Claude↔Claude keeps the harness-native `ListAgents` /
+`SendMessage` fast path; other local harness combinations call the separately installed Agent
+Call CLI. `channel_accepted` and `injected_unverified` remain transport receipts rather than model
+observation, and any missing binary, offline target, or adapter refusal terminates the route — it
+never selects another session or falls through to `Task`, a foreman, or a heterogeneous worker.
+
+The skill keeps lifecycle ownership where it already belongs: invoking projects retain conflict,
+merge, review, permission, and evidence policy. Autopilot does not copy Agent Call's tmux/session
+adapter recipes and Agent Call does not become an orchestration scheduler. Added the optional
+coexistence boundary to both user guides and the skills catalog, materialized the Codex package
+mirror, and raised the public inventory to 29 skills.
+
 ## v2.34.46 — execution-oracle lock for parallel suite runs, an honest liveness caveat, consult/discuss qualification wave 1
 
 **Suite execution-oracle lock** (new: `hooks/tests/lib/suite-oracle-lock.sh`, sourced by `run.sh`):

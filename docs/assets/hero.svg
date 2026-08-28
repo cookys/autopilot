@@ -44,7 +44,7 @@
   <g transform="translate(58 252)">
     <rect x="0" y="0" width="92" height="26" rx="13" fill="none" stroke="#3b4a6b" stroke-width="1"/>
     <circle cx="16" cy="13" r="3.5" fill="#4a90d9"/>
-    <text x="27" y="18" class="chip">28 skills</text>
+    <text x="27" y="18" class="chip">29 skills</text>
     <rect x="102" y="0" width="94" height="26" rx="13" fill="none" stroke="#3b4a6b" stroke-width="1"/>
     <circle cx="118" cy="13" r="3.5" fill="#7c9e8c"/>
     <text x="129" y="18" class="chip">3 agents</text>

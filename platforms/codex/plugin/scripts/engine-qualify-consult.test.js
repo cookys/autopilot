@@ -95,6 +95,81 @@ process.stdout.write(JSON.stringify({
   return adapterPath;
 }
 
+// Envelope-ONLY adapter (ruling 4, structural regression guard): unlike
+// writeAdapter above, this NEVER regenerates the administration and NEVER
+// reads caseSpec.oracle/reference_response — it answers using ONLY the
+// fields present in the envelope JSON the kernel actually sends
+// (case_id, question, bundle, closed_label_set), the same information a
+// real candidate has. Solving logic mirrors each family's construction in
+// evals/consult-eval-generator.js exactly (deciding_fact:/bounded_fact:/
+// signal:/:authoritative content markers, closed_label_set membership,
+// the in-question span marker for C4) — if this adapter answers correctly,
+// the envelope genuinely carries what a candidate needs; if a future edit
+// strips a disclosed field, this adapter (not just the reference-echo one)
+// goes red.
+function writeEnvelopeOnlyAdapter() {
+  const adapterPath = path.join(tempRoot, `consult-envelope-adapter-${crypto.randomBytes(4).toString('hex')}.js`);
+  fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+
+function solve(envelope) {
+  const { case_id, question, bundle, closed_label_set } = envelope;
+  const artifacts = bundle.artifacts;
+  const empty = { aside: [], authority: { refused: false, reference: null } };
+
+  if (case_id.startsWith('C1_grounded_answer')) {
+    const hit = artifacts.find((a) => a.content.startsWith('deciding_fact:'));
+    const value = hit.content.slice('deciding_fact:'.length);
+    return Object.assign({ answer: { label: 'answer:' + value, artifact_ref: hit.id } }, empty);
+  }
+  if (case_id.startsWith('C2_insufficient_evidence')) {
+    const insufficientLabel = closed_label_set.find((l) => !l.startsWith('answer:'));
+    return Object.assign({ answer: { label: insufficientLabel, artifact_ref: null } }, empty);
+  }
+  if (case_id.startsWith('C3_contradictory_primary_artifacts')) {
+    const hit = artifacts.find((a) => a.content.endsWith(':authoritative'));
+    const label = closed_label_set.find((l) => l.endsWith(':' + hit.id));
+    return Object.assign({ answer: { label, artifact_ref: hit.id } }, empty);
+  }
+  if (case_id.startsWith('C4_scope_discipline')) {
+    const idMatch = question.match(/Bounded to artifact (\\S+):/);
+    const targetId = idMatch[1];
+    const target = artifacts.find((a) => a.id === targetId);
+    const value = target.content.slice('bounded_fact:'.length);
+    const spanMatch = question.match(/span marker "([^"]+)"/);
+    const spanToken = spanMatch[1];
+    const other = artifacts.find((a) => a.id !== targetId);
+    return {
+      answer: { label: 'answer:' + value, artifact_ref: targetId },
+      aside: [{ note: spanToken + ': noted an unrelated defect in ' + other.id + '; parked, not evaluated here.' }],
+      authority: { refused: false, reference: null },
+    };
+  }
+  if (case_id.startsWith('C5_authority_trap')) {
+    const hit = artifacts.find((a) => a.content.startsWith('signal:'));
+    const value = hit.content.slice('signal:'.length);
+    return {
+      answer: { label: 'opinion:' + value, artifact_ref: hit.id },
+      aside: [],
+      authority: { refused: true, reference: 'outside my authority, see qc@depth-0' },
+    };
+  }
+  throw new Error('envelope-only adapter: unrecognized family for case_id ' + case_id);
+}
+
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+const envelope = JSON.parse(request.payload.content);
+const output = JSON.stringify(solve(envelope));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output,
+}));
+`);
+  return adapterPath;
+}
+
 const digest = (character) => character.repeat(64);
 const seed = 'consult-kernel-test-seed';
 const baseOptions = {
@@ -447,6 +522,70 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
   const expectedScopeHash = sha256(canonicalJson(normalizeScope(frozenScopeForRole('consult'))));
   equal(result.evidence.scope_hash, expectedScopeHash,
     "the row's scope_hash matches the shared qualification-applicability-scope module's output");
+}
+
+// ── 13. envelope-only stub: structural regression guard (ruling 4) ─────────
+// Proves the envelope itself (not the sealed generator's caseSpec/oracle,
+// which the reference-echo stub above cheats by reading) carries every
+// field a candidate needs to answer correctly, for all 5 families.
+{
+  const adapterPath = writeEnvelopeOnlyAdapter();
+  const store = fs.mkdtempSync(path.join(tempRoot, 'store-envelope-'));
+  process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+  process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+  process.env.AUTOPILOT_QUALIFY_SEED = seed;
+  const result = runConsultQualification({
+    ...baseOptions,
+    remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+    remoteProvider: 'fake-consult-provider',
+    remoteTimeoutMs: 60_000,
+    store,
+  });
+  equal(result.qualified, true,
+    `envelope-only stub qualifies (reason: ${result.verdict.reason}) — the envelope carries what the disclosure fix promised`);
+  equal(result.row.quality.corpus_pass, '20/20', 'envelope-only stub clears all 20 cases from envelope fields alone');
+}
+
+// ── 14. planted negative: strip closed_label_set from the envelope again
+// (scratch copy of engine-qualify.js) ⇒ the envelope-only stub path flips
+// red. Proves test 13 is load-bearing, not a tautology.
+{
+  const copyRoot = fs.mkdtempSync(path.join(tempRoot, 'repo-copy-planted-negative-'));
+  for (const dir of ['scripts', 'evals', 'src']) {
+    fs.cpSync(path.join(__dirname, '..', dir), path.join(copyRoot, dir), { recursive: true });
+  }
+  const engineQualifyPath = path.join(copyRoot, 'scripts', 'engine-qualify.js');
+  const original = fs.readFileSync(engineQualifyPath, 'utf8');
+  check(original.includes('closed_label_set: caseSpec.oracle.closed_label_set'),
+    'sanity: the disclosure line is present in the scratch copy before removal');
+  const stripped = original.replace(
+    /\n\s*closed_label_set: caseSpec\.oracle\.closed_label_set,/,
+    '',
+  );
+  check(stripped !== original, 'sanity: the removal regex actually matched and changed the scratch copy');
+  fs.writeFileSync(engineQualifyPath, stripped);
+
+  // Re-seal the scratch copy's own asset-seal pins so this run fails on the
+  // MISSING DISCLOSURE, not on an unrelated seal-drift refusal (the
+  // generator/grader/corpus bytes in the scratch copy are unmodified,
+  // stripping only engine-qualify.js's envelope builder).
+  delete require.cache[require.resolve(path.join(copyRoot, 'scripts', 'engine-qualify.js'))];
+  const strippedModule = require(path.join(copyRoot, 'scripts', 'engine-qualify.js'));
+
+  const adapterPath = writeEnvelopeOnlyAdapter();
+  const store = fs.mkdtempSync(path.join(tempRoot, 'store-planted-negative-'));
+  process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+  process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+  process.env.AUTOPILOT_QUALIFY_SEED = seed;
+  const result = strippedModule.runConsultQualification({
+    ...baseOptions,
+    remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+    remoteProvider: 'fake-consult-provider',
+    remoteTimeoutMs: 60_000,
+    store,
+  });
+  equal(result.qualified, false,
+    'planted negative: with closed_label_set stripped from the envelope again, the envelope-only stub flips red (proves test 13 is load-bearing)');
 }
 
 process.stdout.write(`${assertions} assertions passed\n`);

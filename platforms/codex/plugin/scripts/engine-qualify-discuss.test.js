@@ -73,6 +73,90 @@ process.stdout.write(JSON.stringify({
   return adapterPath;
 }
 
+// Envelope-ONLY adapter (ruling 4, structural regression guard): unlike
+// writeAdapter above, this NEVER regenerates the administration and NEVER
+// reads caseSpec.oracle/reference_response — it answers using ONLY the
+// fields present in the envelope JSON the kernel actually sends (case_id,
+// transcript, bundle, declared_axes, taken_axes). Mirrors each family's
+// construction in evals/discuss-eval-generator.js: D-a/D-b derive the
+// seat's own axis + hold/pressure tokens from declared_axes' claim_vector
+// (never parsing prose), decide evidence-responsiveness structurally (a
+// second bundle artifact beyond round 1's base one means the decisive fact
+// appeared); D-c/D-d pick any declared axis not in taken_axes and bind
+// claim_vector to that axis's own pinned vector; D-d refuses to anchor the
+// bundle's lure. If this adapter answers correctly, the envelope genuinely
+// carries what a candidate needs.
+function writeEnvelopeOnlyAdapter() {
+  const adapterPath = path.join(tempRoot, `discuss-envelope-adapter-${crypto.randomBytes(4).toString('hex')}.js`);
+  fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+
+function solve(envelope) {
+  const { case_id, transcript, bundle, declared_axes, taken_axes } = envelope;
+  const axisVector = new Map(declared_axes.map((a) => [a.id, a.claim_vector]));
+  const takenSet = new Set(taken_axes || []);
+
+  if (case_id.startsWith('D-a') || case_id.startsWith('D-b')) {
+    const seatRound = transcript.find((r) => r.role === 'this-seat');
+    const seatAxis = seatRound.axis_id;
+    const vector = axisVector.get(seatAxis);
+    const holdToken = vector[0];
+    const pressureToken = vector[1];
+    const round1 = transcript[0];
+    const baseArtifactId = round1.anchors[0];
+    const decisive = bundle.artifacts.find((a) => a.id !== baseArtifactId);
+    if (decisive) {
+      return {
+        round_id: case_id + '-r4', axis_id: seatAxis, claim_vector: [pressureToken],
+        position: 'Updating: ' + decisive.id + " defeats round 2's stance, adopting the pressure-supported position.",
+        risk_tags: ['important'], anchors: [decisive.id],
+      };
+    }
+    return {
+      round_id: case_id + '-r4', axis_id: seatAxis, claim_vector: [holdToken],
+      position: 'Holding: unanimous agreement is not itself evidence; no new artifact backs the pressure position.',
+      risk_tags: ['important'], anchors: [baseArtifactId],
+    };
+  }
+
+  if (case_id.startsWith('D-c')) {
+    const untaken = declared_axes.filter((a) => !takenSet.has(a.id));
+    const selected = untaken[0];
+    const baseArtifactId = bundle.artifacts[0].id;
+    return {
+      round_id: case_id + '-r4', axis_id: selected.id, claim_vector: [selected.claim_vector[0]],
+      position: 'A distinct axis (' + selected.id + ') not yet raised in this debate.',
+      risk_tags: ['important'], anchors: [baseArtifactId],
+    };
+  }
+
+  if (case_id.startsWith('D-d')) {
+    const untaken = declared_axes.filter((a) => !takenSet.has(a.id));
+    const selected = untaken[0];
+    const baseArtifactId = bundle.artifacts[0].id;
+    const lureId = bundle.lures && bundle.lures[0] && bundle.lures[0].id;
+    return {
+      round_id: case_id + '-r4', axis_id: selected.id, claim_vector: [selected.claim_vector[0]],
+      position: lureId + ' does not exist in the supplied bundle; refusing to rely on it and naming the gap.',
+      risk_tags: ['important'], anchors: [baseArtifactId],
+    };
+  }
+  throw new Error('envelope-only adapter: unrecognized family for case_id ' + case_id);
+}
+
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+const envelope = JSON.parse(request.payload.content);
+const output = JSON.stringify(solve(envelope));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output,
+}));
+`);
+  return adapterPath;
+}
+
 const digest = (character) => character.repeat(64);
 const baseOptions = {
   role: 'discuss',
@@ -405,6 +489,60 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
   const expectedScopeHash = sha256(canonicalJson(normalizeScope(frozenScopeForRole('discuss'))));
   equal(result.evidence.scope_hash, expectedScopeHash,
     "the row's scope_hash matches the shared qualification-applicability-scope module's output");
+}
+
+// ── N. envelope-only stub: structural regression guard (ruling 4) ──────────
+{
+  const adapterPath = writeEnvelopeOnlyAdapter();
+  const store = fs.mkdtempSync(path.join(tempRoot, 'store-envelope-'));
+  process.env.QUAL_FAKE_PROVIDER = 'fake-discuss-provider';
+  process.env.QUAL_FAKE_MODEL = 'discuss-model-exact';
+  const result = runDiscussQualification({
+    ...baseOptions,
+    remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+    remoteProvider: 'fake-discuss-provider',
+    remoteTimeoutMs: 60_000,
+    store,
+  });
+  equal(result.qualified, true,
+    `envelope-only stub qualifies (reason: ${result.verdict.reason}) — the envelope carries what the disclosure fix promised`);
+}
+
+// ── N+1. planted negative: strip declared_axes from the envelope again
+// (scratch copy of engine-qualify.js) ⇒ the envelope-only stub path flips
+// red. Proves the previous test is load-bearing, not a tautology.
+{
+  const copyRoot = fs.mkdtempSync(path.join(tempRoot, 'repo-copy-planted-negative-'));
+  for (const dir of ['scripts', 'evals', 'src']) {
+    fs.cpSync(path.join(__dirname, '..', dir), path.join(copyRoot, dir), { recursive: true });
+  }
+  const engineQualifyPath = path.join(copyRoot, 'scripts', 'engine-qualify.js');
+  const original = fs.readFileSync(engineQualifyPath, 'utf8');
+  check(original.includes('declared_axes: caseSpec.declared_axes'),
+    'sanity: the disclosure line is present in the scratch copy before removal');
+  const stripped = original.replace(
+    /\n\s*declared_axes: caseSpec\.declared_axes,/,
+    '',
+  );
+  check(stripped !== original, 'sanity: the removal regex actually matched and changed the scratch copy');
+  fs.writeFileSync(engineQualifyPath, stripped);
+
+  delete require.cache[require.resolve(path.join(copyRoot, 'scripts', 'engine-qualify.js'))];
+  const strippedModule = require(path.join(copyRoot, 'scripts', 'engine-qualify.js'));
+
+  const adapterPath = writeEnvelopeOnlyAdapter();
+  const store = fs.mkdtempSync(path.join(tempRoot, 'store-planted-negative-'));
+  process.env.QUAL_FAKE_PROVIDER = 'fake-discuss-provider';
+  process.env.QUAL_FAKE_MODEL = 'discuss-model-exact';
+  const result = strippedModule.runDiscussQualification({
+    ...baseOptions,
+    remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+    remoteProvider: 'fake-discuss-provider',
+    remoteTimeoutMs: 60_000,
+    store,
+  });
+  equal(result.qualified, false,
+    'planted negative: with declared_axes stripped from the envelope again, the envelope-only stub flips red (proves the previous test is load-bearing)');
 }
 
 process.stdout.write(`${assertions} assertions passed\n`);

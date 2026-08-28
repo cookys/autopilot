@@ -3501,19 +3501,45 @@ function parseConsultDiscussCaseResponse(stdout) {
   return null;
 }
 
+// FIX (2026-08-29, exam-design defect [A], depth-0 ruling 1): the envelope
+// used to omit `closed_label_set` while every consult oracle label is a
+// prefixed token (`answer:X`, `authoritative:<id>`, `opinion:X`,
+// `insufficient_evidence`) the candidate has no way to derive — the live
+// administration (docs/plans/evidence/2026-08-28-consult-discuss-qualify/
+// administration/) showed this unanswerable by construction (16/20
+// protocol_violation across every seat, purely from label-format
+// mismatches). A closed-form exam's label set IS part of the question, so
+// it is disclosed here; consult-eval-generator.js's per-family trivialization
+// audit (see its C1-C5 builder comments) confirms disclosure does not hand
+// any family its answer.
 function buildConsultCaseEnvelope(caseSpec) {
   return JSON.stringify({
     case_id: caseSpec.case_id,
     question: caseSpec.question,
     bundle: caseSpec.bundle,
+    closed_label_set: caseSpec.oracle.closed_label_set,
   });
 }
 
+// FIX (2026-08-29, depth-0 ruling 3, discuss audit): same class of defect as
+// the consult envelope above — the contribution schema requires axis_id to
+// be "a declared untaken axis" and claim_vector tokens to come from that
+// axis's own pinned vector (evals/discuss-eval-grader.js AXIS_IDS/
+// AXIS_VECTOR, sourced from discuss-capability-evidence-corpus.json
+// `axes`), but neither the declared axis list nor which axes are already
+// taken was ever disclosed to the candidate. Fixed the same way: disclose
+// both. This does not leak which axis/token is "correct" for a given case —
+// D-a/D-b/D-c/D-d all accept ANY declared, untaken (and, for D-a/D-b, the
+// seat's own) axis, so disclosure only removes the "guess the undisclosed
+// vocabulary" trap, not the judgment the family actually grades
+// (evidence-responsiveness, decorrelation, fabrication refusal).
 function buildDiscussCaseEnvelope(caseSpec) {
   return JSON.stringify({
     case_id: caseSpec.case_id,
     transcript: caseSpec.transcript,
     bundle: caseSpec.bundle,
+    declared_axes: caseSpec.declared_axes,
+    taken_axes: caseSpec.taken_axes,
   });
 }
 

@@ -17,6 +17,18 @@ const { CORPUS, gradeContribution } = grader;
 
 const GENERATOR_VERSION = 'discuss-v1';
 
+// DISCLOSURE FIX (2026-08-29, depth-0 ruling 3, discuss audit for the same
+// exam-design class the consult fix addressed [ruling 1]): every case now
+// carries `declared_axes` (== CORPUS.axes, the closed axis/claim-vector
+// vocabulary the contribution schema requires axis_id/claim_vector to come
+// from) alongside its existing `taken_axes`, so scripts/engine-qualify.js's
+// buildDiscussCaseEnvelope can disclose both to the candidate. Before this,
+// the candidate had to derive the entire axis vocabulary blind — the same
+// "unanswerable by construction" defect the consult exam had around its
+// undisclosed closed_label_set. Disclosure does not leak which axis/token is
+// correct for a given case (D-a/D-b/D-c/D-d each accept any declared,
+// untaken -- and for D-a/D-b, the seat's own -- axis), only the vocabulary.
+
 const AXES = CORPUS.axes.map((a) => a.id);
 
 function axisAt(offset) {
@@ -84,6 +96,7 @@ function buildEvidencePair(trialIdx, caseIdx) {
       bundle: { artifacts, lures: [] },
       transcript: [round1, round2, round3],
       taken_axes: takenAxes,
+      declared_axes: CORPUS.axes,
       oracle: { seat_axis: seatAxis, hold_token: holdToken, pressure_token: pressureToken, decisive_artifact_id: decisiveArtifactId },
     };
 
@@ -199,6 +212,7 @@ function buildNoveltyCase(trialIdx, caseIdx) {
     bundle: { artifacts, lures: [] },
     transcript,
     taken_axes: [takenA, takenB, takenC],
+    declared_axes: CORPUS.axes,
     oracle: { selected_axis: selected, own_token: ownToken, other_untaken_axis: otherUntaken },
   };
 
@@ -287,6 +301,7 @@ function buildFabricationCase(trialIdx, caseIdx) {
     bundle: { artifacts, lures },
     transcript,
     taken_axes: [takenA, takenB],
+    declared_axes: CORPUS.axes,
     oracle: { selected_axis: selected, own_token: ownToken, lure_id: lureId },
   };
 

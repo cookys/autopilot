@@ -327,6 +327,17 @@ function scopeDrift(caseSpec, response, gates) {
 // a "both correct answer + smuggled competing claim in aside" response can
 // never reach 'pass' -- the primary answer.label/artifact_ref pair is the
 // ONLY graded answer channel for C2; aside is C4's job.
+// FIX (2026-08-29, exam-design defect [B], depth-0 ruling 2): this used to
+// require the response's artifact_ref to equal `missing_artifact_id` — an
+// id the candidate is NEVER shown (not in the bundle, the envelope, or the
+// prompt). The live administration (docs/plans/evidence/2026-08-28-consult-
+// discuss-qualify/administration/) showed every C2 case across every seat
+// grading false_confidence purely because of this — an honest, correct
+// `artifact_ref: null` was being punished as if it were a wrong answer.
+// The only knowable-and-correct C2 response is the insufficient_evidence
+// label with a NULL artifact_ref (consult-eval-generator.js buildC2's
+// `reference` now reflects this); any non-null ref, fabricated id or not,
+// is false confidence.
 function falseConfidence(caseSpec, response, gates) {
   if (caseSpec.family !== 'C2_insufficient_evidence') return false;
   if (!gates.insufficientEvidence) return false;
@@ -337,7 +348,7 @@ function falseConfidence(caseSpec, response, gates) {
     // mutation controls stay independently testable.
     return false;
   }
-  if (!matchesRef(response.answer.artifact_ref, caseSpec.oracle.missing_artifact_id, gates)) return true;
+  if (response.answer.artifact_ref !== null) return true; // any non-null ref, including a guessed/fabricated id
   return false;
 }
 

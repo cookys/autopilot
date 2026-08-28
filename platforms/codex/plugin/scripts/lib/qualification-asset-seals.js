@@ -97,8 +97,14 @@ function assertPinned(filePath, expectedHash, label) {
 // a silent edit — that is precisely the drift these constants exist to catch.
 // ---------------------------------------------------------------------------
 
-const EXPECTED_CONSULT_GENERATOR_HASH = 'fddf7f4f579f3dfbcafc00b623931b46d270739ddf1df12842ad44c07b82a411'
-const EXPECTED_CONSULT_GRADER_HASH = 'aa5e80426b1ffa92abb0d5b90b86e3f2ec12746f3841873b1fd333e0cdc81cd0'
+// 2026-08-29 re-seal (depth-0 consult/discuss disclosure fix, rulings 1/2/3/5):
+// consult generator+grader and consult+discuss corpus manifests changed
+// bytes (closed_label_set disclosure, C2 fabricated-id removal, C4/C5
+// distractor redesign, C4 aside_span_token disclosure, discuss declared_axes
+// disclosure, corpus_version bump to *-v2). discuss's grader.js was NOT
+// touched, so its hash is unchanged below.
+const EXPECTED_CONSULT_GENERATOR_HASH = '7a81493f4ea03d89b35fd434d1166a0e9c0c600f25ca855dc16125c60dfa68f5'
+const EXPECTED_CONSULT_GRADER_HASH = '743492535f6cd070348d7aee30b24f3868b3948fbfb08f97445b8bb2295e8567'
 // D7 re-seal (plan 2026-08-28-consult-discuss-qualification.md D7): the
 // applicability_scope field was added to both corpus manifests, changing
 // their bytes — a deliberate re-seal, per the comment above, not silent
@@ -107,13 +113,13 @@ const EXPECTED_CONSULT_GRADER_HASH = 'aa5e80426b1ffa92abb0d5b90b86e3f2ec12746f38
 // touch — the corpus manifest's own seal is checked by the live
 // assertSealFrozen(p.corpus, p.corpusSeal, ...) relationship check below,
 // which has no separate static pin.
-const EXPECTED_CONSULT_CORPUS_HASH = 'd34452f3cd29c3218b22e1fe667feae6107d0ff2cc2ab8358e42c1835fdb0730'
+const EXPECTED_CONSULT_CORPUS_HASH = 'ba20373ee7fb965618567431532cb000ed6007d7fde02275ae8d4b5d909f3c01'
 const EXPECTED_CONSULT_RUBRIC_HASH = '8c303e33074d97065bf011c33f89a6dddd642837184834ea578ad31c2c0402cc'
 const EXPECTED_CONSULT_SEAL_HASH = '1643508f2a53f3383094ebfea04fd49d702605576d6764c88ca4c29f5da3d436'
 
-const EXPECTED_DISCUSS_GENERATOR_HASH = '7c90708c7110c270b48fd1d3c0c563d61504ad4d9f7d8ea93d96fc1713342bbd'
+const EXPECTED_DISCUSS_GENERATOR_HASH = 'c95ed1f514a39eca6d03ea3bb0298bbab95ddea32550bd12551bd8be7e056b0f'
 const EXPECTED_DISCUSS_GRADER_HASH = '60864b9302a3a514ac06be2ac56cff7694674933358da19debb2c8305d806bbe'
-const EXPECTED_DISCUSS_CORPUS_HASH = 'f2dbb2a7c259503e1a086e38e5cf44775bfc110ac13e7bdd737bac3dc3da6889'
+const EXPECTED_DISCUSS_CORPUS_HASH = '36d1070ff1d4798eb9cf8bf8a74772b41462e6c1396baa3c84cdfc71b48d8e2f'
 const EXPECTED_DISCUSS_RUBRIC_HASH = '6a60a549626eeeab1f49974f020a059db6e24ac9e1834f44b5a442c4b9b86104'
 const EXPECTED_DISCUSS_SEAL_HASH = '7dc0eeb6967ff1beeb5d3be03110d9d89a81dd735e17d7740d1118136b8c7523'
 

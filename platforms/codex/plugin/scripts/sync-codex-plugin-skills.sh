@@ -91,6 +91,23 @@ SUPPORT_FILES=(
   "evals/impl-capability-evidence-corpus.json"
   "evals/impl-oracle-driver.cjs"
   "evals/reviewer-eval-generator.js"
+  # D4 (plan 2026-08-28-consult-discuss-qualification.md): the twelve pinned
+  # consult/discuss qualification assets. rubric-freeze.js seals verify both
+  # the rubric bytes and its seal on every qualifier invocation ("--plan" and
+  # real administration alike), so an unmirrored asset here is a
+  # "rubric-freeze.js check" that cannot run inside the codex package.
+  "evals/consult-eval-generator.js"
+  "evals/consult-eval-grader.js"
+  "evals/consult-eval-rubric.md"
+  "evals/consult-eval-rubric.seal.json"
+  "evals/consult-capability-evidence-corpus.json"
+  "evals/consult-capability-evidence-corpus.seal.json"
+  "evals/discuss-eval-generator.js"
+  "evals/discuss-eval-grader.js"
+  "evals/discuss-eval-rubric.md"
+  "evals/discuss-eval-rubric.seal.json"
+  "evals/discuss-capability-evidence-corpus.json"
+  "evals/discuss-capability-evidence-corpus.seal.json"
 )
 
 HOOK_BASELINE_SOURCE="hooks/hooks.json"

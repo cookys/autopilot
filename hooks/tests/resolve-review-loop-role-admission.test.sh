@@ -496,4 +496,81 @@ for r in $DECLARED; do
   esac
 done
 
+# ── 8. Scoped exception: a role-qualified row does not delist globally ─────
+# BACKLOG `UNQUALIFIED_RUNNERS reconciliation tension once a listed runner
+# earns a consult/discuss qualification` (docs/plans/2026-08-28-consult-
+# discuss-qualification.md §6 R9, §8 ruling 7). The loop above reconciles
+# UNQUALIFIED_RUNNERS against a HARNESS capability record (src/harness/
+# capabilities/*.json `status`) — a per-RUNNER bit that says nothing about
+# any one ROLE. Once a listed runner earns a real per-{engine,runner,role}
+# qualification row (D1/D2's own administration), a naive reading of that
+# loop's premise ("unverified => must be listed") could be mistaken for
+# "verified for one role => safe to drop from the list, or safe to treat as
+# admitted everywhere". Neither holds: ruling 7 keeps list membership
+# unchanged regardless of any exam pass, and D7's admission gate is scoped to
+# the EXACT role a seat names, not to the runner as a whole. This section
+# proves the scoped exception behaviorally with a genuine, D1/D2-graded
+# qualification row (never a hand-typed pass) rather than restating it as
+# prose: (a) the row does not delist cursor from UNQUALIFIED_RUNNERS, (b) the
+# row admits the SAME role's seat via D7 (switch on), and (c) the SAME row
+# leaves a DIFFERENT role's seat for the SAME runner still list-gated —
+# per-role evidence, not a blanket "this runner is fine now" bit.
+FIXTURE_JS="$REPO_ROOT/hooks/tests/lib/consult-discuss-genuine-row-fixture.js"
+R9_CAP_DIR="$TEST_TMP/r9-engine-capability"
+R9_SC_DIR="$TEST_TMP/r9-engine-scorecard"
+mkdir -p "$R9_CAP_DIR" "$R9_SC_DIR"
+
+# Plant a genuine, non-demoted qualification row for cursor in the CONSULT
+# role only — reviewer/implementer/discuss stay evidence-free for cursor.
+R9_ROW="$(ENGINE_CAPABILITY_DIR="$R9_CAP_DIR" ENGINE_SCORECARD_DIR="$R9_SC_DIR" \
+  node "$FIXTURE_JS" consult --engine eng-r9-recon --runner cursor)" \
+  || fail "R9 fixture: could not generate a genuine consult qualification row for cursor"
+printf '%s\n' "$R9_ROW" | ENGINE_CAPABILITY_DIR="$R9_CAP_DIR" ENGINE_SCORECARD_DIR="$R9_SC_DIR" \
+  node "$REPO_ROOT/scripts/engine-scorecard.js" record >/dev/null \
+  || fail "R9 fixture: engine-scorecard.js record failed for the planted consult row"
+
+# (a) scoped exception: list membership is UNCHANGED by the row's existence.
+# DECLARED was extracted from the script source above and cannot be affected
+# by any evidence store — this pins the invariant ruling 7 requires so a
+# future edit that tries to auto-delist on qualification evidence goes red.
+case " $DECLARED " in
+  *" cursor "*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "R9: a role-qualified row for cursor must NOT remove it from UNQUALIFIED_RUNNERS (ruling 7: list membership stays out of scope of any exam pass)" ;;
+esac
+
+# (b) SAME role, switch on: D7 reads the planted row and admits (plan D7
+# cases xv/xvi cover this in isolation; this repeats it here so it shares the
+# store with (c) below and proves the two coexist correctly).
+CFG_R9_CONSULT_ON="$TEST_TMP/cfg-r9-consult-on.md"
+cat > "$CFG_R9_CONSULT_ON" <<'EOF'
+- consult_engine: eng-r9-recon
+- consult_runner: cursor
+- consult_effort: high
+- consult_dispatch: on
+EOF
+RC_R9_CONSULT_ON="$(ENGINE_CAPABILITY_DIR="$R9_CAP_DIR" ENGINE_SCORECARD_DIR="$R9_SC_DIR" \
+  REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_R9_CONSULT_ON" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "0" "$RC_R9_CONSULT_ON" "R9(b): cursor consult seat + planted row + switch on: D7 admits via the SAME-role qualification row"
+
+# (c) DIFFERENT role, same runner, same store: reviewer has no qualification-
+# row escape hatch at all (only consult/discuss ever reach
+# _try_qualification_row) — so the exact same planted row that admits (b)
+# leaves this seat refused. A naive BLANKET reading of the row ("cursor now
+# has evidence, so treat it as qualified everywhere") would wrongly predict
+# exit 0 here; this is the mutation control for the scoped-exception clause —
+# if per-role scoping ever regressed to a blanket rule, this assertion is what
+# flips from 3 to 0 and goes red.
+CFG_R9_REVIEWER="$TEST_TMP/cfg-r9-reviewer.md"
+cat > "$CFG_R9_REVIEWER" <<'EOF'
+- reviewer_engine: eng-r9-recon
+- reviewer_effort: high
+- reviewer_runner: cursor
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_effort: high
+- implementer_runner: auto
+EOF
+RC_R9_REVIEWER="$(ENGINE_CAPABILITY_DIR="$R9_CAP_DIR" ENGINE_SCORECARD_DIR="$R9_SC_DIR" \
+  REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_R9_REVIEWER" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "3" "$RC_R9_REVIEWER" "R9(c): the SAME planted consult row does NOT admit a DIFFERENT role (reviewer) for the same runner — list still gates other roles (per-role evidence, not a blanket unverified bit)"
+
 finalize_test

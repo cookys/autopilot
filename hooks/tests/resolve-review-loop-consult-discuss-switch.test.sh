@@ -252,9 +252,16 @@ assert_eq "27" "$POP_B_COUNT" "Population B file bound is pinned at 27 (git grep
 # of "Population B" (pre-existing, unrelated hooks/ roster configs that
 # should all still resolve to the off default). Same false-positive class as
 # SELF's own exclusion above.
+# EXCLUDED (R9 reconciliation, docs/BACKLOG.md follow-up to plan §6 R9/§8
+# ruling 7): hooks/tests/resolve-review-loop-role-admission.test.sh's own §8
+# scoped-exception fixture carries a genuine `- consult_dispatch: on` roster
+# to prove D7 admits a role-qualified cursor consult seat while the SAME row
+# still leaves a different role list-gated — that file's own acceptance test
+# for the switch-on path, not a member of "Population B" either.
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
-POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
+ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
+POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
 assert_eq "0" "$POP_B_EXPLICIT_SWITCH" "none of Population B's 26 partial roster configs set consult_dispatch/discuss_dispatch explicitly — they all resolve via the off default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────

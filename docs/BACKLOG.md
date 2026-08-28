@@ -48,26 +48,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ---
 
 ## Active entries
-
-### `UNQUALIFIED_RUNNERS` reconciliation tension once a listed runner earns a consult/discuss qualification
-
-- **Trigger**: a listed runner (today only `cursor`) is administered and passes a real `consult` or
-  `discuss` role-qualification exam (`scripts/engine-qualify.js consult|discuss`), producing a
-  recorded, non-demoted qualification row for that `{engine, runner}` pair.
-- **Context**: `scripts/resolve-review-loop.sh`'s `UNQUALIFIED_RUNNERS="cursor"` list (`:146`) is
-  declarative and reconciled by a test asserting: any roster-nameable runner holding an
-  `unverified` capability record must be listed, and any listed entry no roster can name is flagged
-  as blocking nothing. A real consult/discuss qualification pass makes "unverified" (list
-  membership) and "qualified for this role" (evidence store) simultaneously true for the same
-  runner, and the reconciliation test's premise gets murky — the list stops being a clean proxy for
-  "has no role evidence at all." `docs/plans/2026-08-28-consult-discuss-qualification.md` §6 R9
-  names this tension explicitly and §8 ruling 7 rules list-membership changes **out of scope** for
-  that plan: nothing in it removes `cursor` from `UNQUALIFIED_RUNNERS`, and an exam pass does not do
-  so automatically. This entry is the deferred follow-up the ruling points at.
-- **Effort**: S (likely a scoped-exception clause in the reconciliation test plus a role-aware read
-  of the list, not a redesign)
-- **Source**: `docs/plans/2026-08-28-consult-discuss-qualification.md` §6 R9, §8 ruling 7 (D10,
-  2026-08-28)
 ### `dispatch-review` raw-log deviation 採信判準必要但不充分 —— 回音的 prompt 樣板可冒充 verdict
 - **Trigger**: 下一次 depth-0 依 P5 判準（2026-07-31）以 raw-log deviation 採信一個 `no_verdict` 席次時；或為 `dispatch-review.sh` 加任何 verdict 解析路徑時。
 - **Context**: P5 立的採信條件是「verdict block 完整、nonce 匹配、block 閉合」。2026-08-08 codepower 的 qc panel 出現一個**同時滿足這三條、但內容是被回音的 prompt 樣板**的案例：`gpt-5.6-sol@codex` 在額度耗盡前只吐出 `VERDICT: SHIP-AS-IS or FIX-THEN-SHIP` / `FINDINGS: one finding per line, or the single word none` —— 那是提示裡的格式說明，不是答案；nonce 之所以兩端匹配，是因為 nonce 本來就寫在 prompt 裡。259 bytes、閉合、匹配，depth-0 差一步就把空回讀成 SHIP。三條判準無法區分「模型回答了」與「模型把題目抄回來了」。**建議補第四條：block 內容必須與 prompt 樣板實質不同**（例如樣板行的字面比對、或要求 FINDINGS 之外至少一個非樣板 token）。同一 run 另有一個相鄰案例可作對照：`MiniMax-M3` 的 block 內容是真的（4 條具體 MUST-FIX），只因多印一行未填的 `NO-FINDING-PROOF:` 樣板而被 parser 判 `no_verdict` —— **一個該擋沒擋、一個不該擋卻擋了**，兩者都指向「以樣板殘留為訊號」這個維度尚未被建模。

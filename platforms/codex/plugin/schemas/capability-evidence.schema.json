@@ -58,7 +58,9 @@
       "items": {
         "oneOf": [
           { "$ref": "#/$defs/trial" },
-          { "$ref": "#/$defs/brain_trial" }
+          { "$ref": "#/$defs/brain_trial" },
+          { "$ref": "#/$defs/consult_trial" },
+          { "$ref": "#/$defs/discuss_trial" }
         ]
       }
     },
@@ -86,7 +88,14 @@
         "source": { "const": "internal_eval" },
         "methodology": {
           "properties": {
-            "kind": { "enum": ["role_eval", "owner_brain_seat"] }
+            "kind": {
+              "enum": [
+                "role_eval",
+                "owner_brain_seat",
+                "consult_panel",
+                "discuss_rounds"
+              ]
+            }
           }
         }
       }
@@ -231,6 +240,8 @@
           "enum": [
             "role_eval",
             "owner_brain_seat",
+            "consult_panel",
+            "discuss_rounds",
             "external_prior",
             "runtime_probe",
             "ordinary_receipt",
@@ -289,6 +300,48 @@
                 "max_pair_deltas": { "type": "integer", "minimum": 0 },
                 "max_asks_on_legal_controls": { "type": "integer", "minimum": 0 }
               }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "min_trials",
+                "max_false_confidence",
+                "max_precedence_misses",
+                "max_authority_violations",
+                "max_scope_drift",
+                "max_oracle_misses",
+                "max_protocol_violations"
+              ],
+              "properties": {
+                "min_trials": { "type": "integer", "minimum": 2 },
+                "max_false_confidence": { "type": "integer", "minimum": 0 },
+                "max_precedence_misses": { "type": "integer", "minimum": 0 },
+                "max_authority_violations": { "type": "integer", "minimum": 0 },
+                "max_scope_drift": { "type": "integer", "minimum": 0 },
+                "max_oracle_misses": { "type": "integer", "minimum": 0 },
+                "max_protocol_violations": { "type": "integer", "minimum": 0 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "min_trials",
+                "max_sycophantic_capitulations",
+                "max_evidence_blindness",
+                "max_zero_information",
+                "max_fabricated_anchors",
+                "max_protocol_violations"
+              ],
+              "properties": {
+                "min_trials": { "type": "integer", "minimum": 2 },
+                "max_sycophantic_capitulations": { "type": "integer", "minimum": 0 },
+                "max_evidence_blindness": { "type": "integer", "minimum": 0 },
+                "max_zero_information": { "type": "integer", "minimum": 0 },
+                "max_fabricated_anchors": { "type": "integer", "minimum": 0 },
+                "max_protocol_violations": { "type": "integer", "minimum": 0 }
+              }
             }
           ]
         },
@@ -324,6 +377,24 @@
         {
           "properties": {
             "kind": { "const": "owner_brain_seat" },
+            "corpus_version": { "$ref": "#/$defs/token" },
+            "corpus_manifest_hash": { "$ref": "#/$defs/sha256" },
+            "thresholds": { "type": "object" },
+            "basis": { "type": "null" }
+          }
+        },
+        {
+          "properties": {
+            "kind": { "const": "consult_panel" },
+            "corpus_version": { "$ref": "#/$defs/token" },
+            "corpus_manifest_hash": { "$ref": "#/$defs/sha256" },
+            "thresholds": { "type": "object" },
+            "basis": { "type": "null" }
+          }
+        },
+        {
+          "properties": {
+            "kind": { "const": "discuss_rounds" },
             "corpus_version": { "$ref": "#/$defs/token" },
             "corpus_manifest_hash": { "$ref": "#/$defs/sha256" },
             "thresholds": { "type": "object" },
@@ -480,6 +551,68 @@
         "decision_trace_hash": { "$ref": "#/$defs/sha256" },
         "round_stream_hash": { "$ref": "#/$defs/sha256" },
         "corpus_manifest_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "consult_trial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trial_id",
+        "observed_at",
+        "corpus_manifest_hash",
+        "cases_total",
+        "cases_passed",
+        "false_confidence",
+        "precedence_misses",
+        "authority_violations",
+        "scope_drift",
+        "oracle_misses",
+        "protocol_violations",
+        "response_stream_hash"
+      ],
+      "properties": {
+        "trial_id": { "$ref": "#/$defs/token" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "corpus_manifest_hash": { "$ref": "#/$defs/sha256" },
+        "cases_total": { "type": "integer", "minimum": 1 },
+        "cases_passed": { "type": "integer", "minimum": 0 },
+        "false_confidence": { "type": "integer", "minimum": 0 },
+        "precedence_misses": { "type": "integer", "minimum": 0 },
+        "authority_violations": { "type": "integer", "minimum": 0 },
+        "scope_drift": { "type": "integer", "minimum": 0 },
+        "oracle_misses": { "type": "integer", "minimum": 0 },
+        "protocol_violations": { "type": "integer", "minimum": 0 },
+        "response_stream_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "discuss_trial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trial_id",
+        "observed_at",
+        "corpus_manifest_hash",
+        "cases_total",
+        "cases_passed",
+        "sycophantic_capitulations",
+        "evidence_blindness",
+        "zero_information",
+        "fabricated_anchors",
+        "protocol_violations",
+        "transcript_stream_hash"
+      ],
+      "properties": {
+        "trial_id": { "$ref": "#/$defs/token" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "corpus_manifest_hash": { "$ref": "#/$defs/sha256" },
+        "cases_total": { "type": "integer", "minimum": 1 },
+        "cases_passed": { "type": "integer", "minimum": 0 },
+        "sycophantic_capitulations": { "type": "integer", "minimum": 0 },
+        "evidence_blindness": { "type": "integer", "minimum": 0 },
+        "zero_information": { "type": "integer", "minimum": 0 },
+        "fabricated_anchors": { "type": "integer", "minimum": 0 },
+        "protocol_violations": { "type": "integer", "minimum": 0 },
+        "transcript_stream_hash": { "$ref": "#/$defs/sha256" }
       }
     }
   }

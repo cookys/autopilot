@@ -96,7 +96,7 @@ Hard rules:
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 - Only admitted graph nodes become implementation tasks. Plan phase headings, modules, tests,
   review seats, and retries stay inside the owning deliverable and gate-attempt budget.
-- 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止 `sleep` 迴圈、禁止 `cat`/`tail` leaf output 進自己 context（只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。
+- 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止前景 `sleep` 輪詢與把 leaf raw output 灌回 context（背景 `run_in_background` until-loop 等外部條件是允許的，一次通知；只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。
 
 **Capability profile (shadow):** `/l5` fixes heterogeneous-implementer topology only. When the host
 supplies a current verified envelope/grant/profile payload, forward it unchanged; never infer

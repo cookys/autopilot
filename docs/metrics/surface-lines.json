@@ -1,7 +1,7 @@
 {
-  "version": "2.35.0",
-  "prose": 15158,
-  "engine": 56997,
+  "version": "2.35.2",
+  "prose": 15279,
+  "engine": 57308,
   "skills": {
     "agent-call": 28,
     "audit": 89,
@@ -30,7 +30,7 @@
     "survey": 136,
     "team": 149,
     "test-strategy": 102,
-    "think-tank": 155,
+    "think-tank": 170,
     "think-tank-dialectic": 36
   },
   "note": "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f); skills{} = per-SKILL.md line counts for the check-8 per-skill ratchet (references/skill-contract-card.md)"

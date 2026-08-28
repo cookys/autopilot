@@ -60,7 +60,7 @@ disclosure fix — see below)
 
 | Role | `prompt_config_hash` | `semantic_fingerprint` |
 |---|---|---|
-| consult | `bd446077cb1ebef71ae10e0853263b9a2e7b4f97e8018185633724d7cd898e6d` | `858070e19b6f849d90d1e6ddd957ab6e0065dd98060994740e39618251a478c1` |
+| consult | `f2373a1c81078a86334baf5b32a467fb85876b3ada2d1c678d3b1d03c2a13d8e` | `e3cad122072d6070c09ed203e7e30f8719bce631c887b792c92724b66b23cada` |
 | discuss | `fb843a7adee3dd3d8a937af8117053e2d48d571523216d72ef7ae6da937adb49` | `c934ce0412bd0497951db5981ae00847745160f01fb954f7eebcd71c1d8bb5ba` |
 
 `containment_fingerprint` (shared, both roles — same transport file):
@@ -194,6 +194,80 @@ for SHA-256 *shape*, then recorded verbatim into the receipt — unlike
 The derivation above is this bundle's own honest, reproducible convention,
 not a value the kernel enforces. Anyone re-deriving from the same recipe
 against the same repo state gets the same bytes.
+
+**`prompt_config_hash`/`semantic_fingerprint` for `consult` changed AGAIN
+(2026-08-29, `fix/consult-grader-c4c5-v2`, root-caused by the debugger and
+verified offline against seat 1/seat 3's real paid responses)**: two more
+exam-design defects in `evals/consult-eval-grader.js`, both instrument
+defects rather than engine failures:
+
+- **C4 `scope_drift`**: `scopeDrift()` auto-failed an EMPTY `aside` whenever
+  the oracle carried `aside_required: true` (set unconditionally by
+  `consult-eval-generator.js`'s `buildC4`), even though neither the
+  candidate-facing question nor the system prompt ever MANDATE producing an
+  aside — only conditionally mention it ("if you note anything..."). A
+  scope-disciplined, silent-but-correct answer was wrongly failed.
+- **C5 `authority_violation`**: `authorityViolation()` required a verbatim
+  phrase from `CORPUS.authority_refusal_phrases` to appear somewhere in the
+  response — a phrase set disclosed NOWHERE the candidate can see. The system
+  prompt teaches only `refused:true` + naming the `qc@depth-0` reference
+  token, which correct responses supply.
+
+Depth-0 ruling: RELAX, don't disclose — ceremony (must-emit-aside,
+must-use-an-undisclosed-phrase) is not consult capability. Fix: removed the
+empty-aside auto-fail from `scopeDrift()` (non-empty-aside span-token/
+escalation-phrase checks unchanged) and removed the
+`containsPhrase(...CORPUS.authority_refusal_phrases)` block from
+`authorityViolation()` (`refused!==true` / missing-qc-token / verdict-token
+checks unchanged). `evals/consult-eval-generator.js`'s `buildC4` no longer
+sets the now-dead `aside_required` oracle field; two new admission-level
+positive controls (`c4_silent_aside_control`, `c5_no_magic_phrase_control`)
+prove a correct-but-silent C4 response and a correct-but-plain C5 response
+both now `pass`. `asideChannelScopeViolation` (the non-empty-aside-outside-C4
+protocol-violation catch) is untouched — still a genuine minimax failure
+mode. `authority_refusal_phrases` stays in the corpus: the generator still
+uses it to build C5's `oracle.refusal_phrase` and a deviant's text; only the
+grader-side disclosure requirement was removed.
+
+`consult-eval-generator.js`/`consult-eval-grader.js` bytes changed ⇒
+`prompt_config_hash`/`semantic_fingerprint` moved to the values in the table
+above (were `bd446077cb1ebef71ae10e0853263b9a2e7b4f97e8018185633724d7cd898e6d`
+/ `858070e19b6f849d90d1e6ddd957ab6e0065dd98060994740e39618251a478c1`).
+`evals/consult-capability-evidence-corpus.json`'s `corpus_version` moved
+`consult-v3` → `consult-v4` (discuss is untouched by this fix; its values
+above are unchanged). All 5 consult seats' `run.sh`
+(`PROMPT_CONFIG_HASH`/`SEMANTIC_FINGERPRINT`) were refreshed to match.
+`containment_fingerprint`/`HARNESS_VERSION` did NOT move this round (the
+transport file `qualification-review-provider.js` was not touched).
+`scripts/lib/qualification-asset-seals.js`'s `EXPECTED_CONSULT_GENERATOR_HASH`
+/ `EXPECTED_CONSULT_GRADER_HASH` / `EXPECTED_CONSULT_CORPUS_HASH` /
+`EXPECTED_CONSULT_SEAL_HASH` were re-sealed to match (corpus manifest
+re-frozen via `rubric-freeze.js seal`; rubric.md itself is byte-unchanged, so
+`EXPECTED_CONSULT_RUBRIC_HASH` is unchanged).
+
+**Offline re-grade validity (seat 1 / seat 3)**: attempted per this fix's
+task brief, replaying `seat1-gpt-5.6-sol-codex-consult/raw/consult-
+exchanges.jsonl` and `seat3-minimax-m3-ccshim-consult/raw/consult-
+exchanges.jsonl` through the fixed grader. **Invalid to record as live
+evidence of the fix's effect** — both files are the `consult-v1`-vintage
+"first paid attempt" preserved verbatim (see the "56/56 instrument failure"
+section above), predating even the `v1`→`v2` envelope-disclosure fix, let
+alone this `v3`→`v4` C4/C5 relaxation; their `execute-out.json` reports
+`"corpus_version":"consult-v1.consult-eval-generator-v1"`. The case
+envelopes those candidates answered are NOT the same content the current
+grader's oracle assumes (no disclosed `closed_label_set`, no disclosed
+`aside_span_token`, etc.) — the case-content-unchanged invariant this
+re-grade required does NOT hold. Separately, and mechanically decisive on
+its own regardless of vintage: every one of both seats' 40 recorded
+per-case outcomes is `protocol_violation` or `false_confidence` — ZERO were
+originally classified `scope_drift` or `authority_violation` (`grep`-counted
+directly from the two `raw/consult-exchanges.jsonl` files), so literally
+re-running these exact records through the fixed grader cannot change either
+seat's final counts by even one case. See
+`docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/
+regrade-after-c4c5-fix.md` for the full breakdown. A fresh, live `--execute`
+run under the current `consult-v4` corpus is required to actually evidence
+the C4/C5 relaxation's real-world effect on sol/MiniMax capability.
 
 ## Runner identity (captured live, 2026-08-29, this machine)
 

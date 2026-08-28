@@ -127,8 +127,17 @@ function combinedSealHash(rubricSealFileHash, corpusSealFileHash) {
 // distractor redesign, C4 aside_span_token disclosure, discuss declared_axes
 // disclosure, corpus_version bump to *-v2). discuss's grader.js was NOT
 // touched, so its hash is unchanged below.
-const EXPECTED_CONSULT_GENERATOR_HASH = 'cf285b317c49ec09284a3c85e50df861e50788479d8714e761244083d9b1b968'
-const EXPECTED_CONSULT_GRADER_HASH = 'ab3b4ad2f7d77e420ef43532238b00bcab6616d5b7c7ed2f91efc586fba510a2'
+//
+// 2026-08-29 re-seal (fix/consult-grader-c4c5-v2): the C4/C5 exam-design
+// instrument fixes changed generator.js (dropped the dead aside_required
+// oracle field, added two positive-control checks -- c4_silent_aside /
+// c5_no_magic_phrase) and grader.js (scopeDrift no longer auto-fails an
+// empty aside; authorityViolation no longer requires an undisclosed magic
+// phrase) -- deliberate re-seals, not drift. corpus_version bumped
+// consult-v3 -> consult-v4 (byte change from the version bump only;
+// discuss is untouched).
+const EXPECTED_CONSULT_GENERATOR_HASH = 'f995d91357498b69ef9c30dcf5bbfb95f192d96e1890e633e17a37ae4f6d3218'
+const EXPECTED_CONSULT_GRADER_HASH = '82616d4c17459839882653c898e9479128a175697fbbcc18b0bca1af9325dac0'
 // D7 re-seal (plan 2026-08-28-consult-discuss-qualification.md D7): the
 // applicability_scope field was added to both corpus manifests, changing
 // their bytes — a deliberate re-seal, per the comment above, not silent
@@ -143,9 +152,9 @@ const EXPECTED_CONSULT_GRADER_HASH = 'ab3b4ad2f7d77e420ef43532238b00bcab6616d5b7
 // including a re-seal that touches only the corpus seal (as this same
 // change does below: the consult corpus_version bumped to consult-v3
 // alongside the C4/C5 distractor redesign, requiring a corpus reseal).
-const EXPECTED_CONSULT_CORPUS_HASH = 'f740fe40274b945dcb20dce2ff3994e8ee589ba6d5d981c3b6af85a5eaa7b3ef'
+const EXPECTED_CONSULT_CORPUS_HASH = 'b3dd42888c0ad5d128f41d40a4754573135152229bd84a54b0d93d7346ea292c'
 const EXPECTED_CONSULT_RUBRIC_HASH = '8c303e33074d97065bf011c33f89a6dddd642837184834ea578ad31c2c0402cc'
-const EXPECTED_CONSULT_SEAL_HASH = '6648973ada0788bf579484bb4e2c4ff16464ba1df4c6ef76e0cde20221ad0fba'
+const EXPECTED_CONSULT_SEAL_HASH = 'd6e391d10dbc44bcf5b5a8c98eb0f30c0c80749bcead318a44eda2feaceeff03'
 
 const EXPECTED_DISCUSS_GENERATOR_HASH = 'c95ed1f514a39eca6d03ea3bb0298bbab95ddea32550bd12551bd8be7e056b0f'
 const EXPECTED_DISCUSS_GRADER_HASH = '60864b9302a3a514ac06be2ac56cff7694674933358da19debb2c8305d806bbe'

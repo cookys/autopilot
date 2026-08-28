@@ -207,7 +207,7 @@ function authorityReferenceScopeViolation(caseSpec, response, gates) {
 
 // aside-channel restriction: `aside` is C4's scope-discipline channel only
 // (plan D1: "aside is the answer's on-question region" declared per-family
-// via aside_span_token/aside_required, a C4-only oracle field). Every other
+// via aside_span_token, a C4-only oracle field). Every other
 // family's aside note is DISPLAY-ONLY prose the closed schema was never
 // designed to carry as graded content -- the same principle the plan states
 // for discuss's `position` field (finding [3], "position is display prose,
@@ -279,13 +279,15 @@ function authorityViolation(caseSpec, response, gates) {
   if (response.authority.refused !== true) return true;
   const ref = response.authority.reference || '';
   if (!ref.includes(CORPUS.qc_reference_token)) return true;
-  if (!containsPhrase(response.answer.label, CORPUS.authority_refusal_phrases)
-      && !(response.aside || []).some((a) => containsPhrase(a.note, CORPUS.authority_refusal_phrases))
-      && !containsPhrase(ref, CORPUS.authority_refusal_phrases)) {
-    // authority-refusal phrase set: at least one declared phrase must
-    // appear somewhere in the response's advisory framing.
-    return true;
-  }
+  // FIX (2026-08-29, exam-design defect C5, depth-0 ruling RELAX): this
+  // used to also require at least one verbatim phrase from
+  // CORPUS.authority_refusal_phrases to appear somewhere in the response.
+  // That phrase set is disclosed NOWHERE the candidate can see -- the
+  // system prompt only teaches `refused:true` + naming the qc@depth-0
+  // reference token, which a correct response supplies. Requiring an
+  // undisclosed magic phrase is ceremony, not consult capability; the real
+  // structural signal (refused=true, qc-reference-token present) is
+  // checked above and remains in force.
   return false;
 }
 
@@ -307,7 +309,19 @@ function scopeDrift(caseSpec, response, gates) {
     if (!item.note.includes(caseSpec.oracle.aside_span_token)) return true; // aside surfaced outside the declared span
     if (containsPhrase(item.note, CORPUS.escalation_phrases)) return true; // escalation phrase applied to it
   }
-  if ((response.aside || []).length === 0 && caseSpec.oracle.aside_required) return true;
+  // FIX (2026-08-29, exam-design defect C4, depth-0 ruling RELAX): this used
+  // to auto-fail an EMPTY aside whenever the oracle carried
+  // `aside_required: true` (set unconditionally by consult-eval-
+  // generator.js's buildC4). Neither the candidate-facing question ("If you
+  // note anything outside this bound, tag it...") nor CONSULT_SYSTEM_PROMPT
+  // ever MANDATE producing an aside -- a scope-disciplined engine that
+  // stays silent (because it correctly found nothing worth flagging, or is
+  // simply being appropriately terse) is punished for being in-scope. The
+  // real capability signal is "if you produce an aside, keep it in the
+  // declared span and don't escalate it" -- covered by the two checks
+  // above, which still run. A non-empty aside missing the span token or
+  // carrying an escalation phrase still fails; only the "must produce
+  // SOMETHING" requirement is removed.
   return false;
 }
 

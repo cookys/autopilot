@@ -2,10 +2,10 @@
 # resolve-review-loop-consult-discuss-switch.test.sh — D6 acceptance surface
 # (docs/plans/2026-08-28-consult-discuss-qualification.md § D6). Covers the
 # eight D6 assertions (1-4b, 5-7) plus concrete mirror parity. Assertion 6
-# ("behavioral parity through the real wrapper entry points" —
-# scripts/dispatch-consult.sh / dispatch-discuss.js) is EXPLICITLY DEFERRED:
-# those two scripts are D8/D9, Wave 2, and do not exist in this Wave-1 worktree.
-# See the DEFERRED-TO-WAVE-2 marker below.
+# ("behavioral parity through the real wrapper entry points") drives
+# scripts/dispatch-consult.sh (D8) and scripts/dispatch-discuss.js (D9)
+# directly against a fail-hard shadow dispatch-author.sh, now that both Wave-2
+# wrappers exist.
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
@@ -161,6 +161,13 @@ assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-
 # frozen historical/pinned copy, never itself fed through
 # validateReviewLoopConfig as a live literal). Raw bound moves 6 -> 7.
 #
+# RECOUNTED AGAIN 2026-08-28 (D7 landing, Wave 2): D7's own gate test added
+# hooks/tests/fixtures/pre-d7-resolve-review-loop.sh, the SAME frozen-baseline
+# class as the pre-D6 fixture above (a pinned pre-D7 copy of
+# resolve-review-loop.sh whose printf'd JSON construction literally contains
+# "reviewer_engine" — never fed through validateReviewLoopConfig as a live
+# literal). Raw bound moves 7 -> 8.
+#
 # NOTE ON evals/clean/11-review-loop-tier-fields.diff: this file is a FROZEN
 # git-diff snapshot of a 2026 v2.32.23 commit (schema state that predates even
 # consult_engine/discuss_engine), consumed ONLY by scripts/calibration.sh's
@@ -185,7 +192,7 @@ POP_A_RAW_COUNT="$(
     git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" 2>/dev/null; } \
     | sort -u | wc -l | tr -d '[:space:]'
 )"
-assert_eq "7" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 7 files (direct callers + JSON-literal grep, incl. the round-1 frozen pre-D6 resolver fixture)"
+assert_eq "8" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 8 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures)"
 
 # Per-object parity subset: files whose roster literal is genuinely fed through
 # validateReviewLoopConfig, either directly (JS payload) or via the live
@@ -291,20 +298,48 @@ NODE
 assert_contains "$MIGRATION_OUT" "missing field: consult_dispatch" "pre-widening roster JSON fails loudly, naming the missing consult_dispatch field"
 assert_not_contains "$MIGRATION_OUT" "SILENTLY-PASSED" "migration negative never silently passes"
 
-# ── 6. DEFERRED-TO-WAVE-2 ───────────────────────────────────────────────────
-# scripts/dispatch-consult.sh and scripts/dispatch-discuss.js are D8/D9 (Wave
-# 2 of docs/plans/2026-08-28-consult-discuss-qualification.md) and do not
-# exist in this Wave-1 worktree. D6 step 6 ("Behavioral parity through the
-# real wrapper entry points" — invoke both wrappers directly with a
-# PATH-shadowed dispatch-author.sh that exits 99 if spawned; both switches off
-# => both wrappers exit non-zero with zero transport spawns) cannot be
-# implemented for real without fabricating those scripts, which is explicitly
-# out of scope here. This assertion is left UNCOVERED on purpose — do not
-# stub dispatch-consult.sh / dispatch-discuss.js to fake it green.
-assert_file_absent "$REPO_ROOT/scripts/dispatch-consult.sh" \
-  "DEFERRED-TO-WAVE-2: dispatch-consult.sh does not exist yet (D8) — step-6 wrapper assertion not implemented here"
-assert_file_absent "$REPO_ROOT/scripts/dispatch-discuss.js" \
-  "DEFERRED-TO-WAVE-2: dispatch-discuss.js does not exist yet (D9) — step-6 wrapper assertion not implemented here"
+# ── 6. Behavioral parity through the real wrapper entry points ─────────────
+# scripts/dispatch-consult.sh (D8) and scripts/dispatch-discuss.js (D9) have
+# now landed (Wave 2 of docs/plans/2026-08-28-consult-discuss-qualification.md).
+# Both wrappers own switch resolution themselves (round-2 finding [6]), so
+# there is a real entry point to drive here: invoke each directly, with the
+# shipped (both-off) template, against a fail-hard shadow dispatch-author.sh
+# that records an invocation marker and exits 99 if ever spawned. Both must
+# exit non-zero BEFORE any transport spawn.
+SHADOW_AUTHOR_MARKER="$TEST_TMP/step6-shadow-invoked"
+SHADOW_AUTHOR_BIN="$TEST_TMP/step6-shadow-dispatch-author.sh"
+cat > "$SHADOW_AUTHOR_BIN" <<EOF
+#!/usr/bin/env bash
+echo "SHADOW INVOKED" >> "$SHADOW_AUTHOR_MARKER"
+exit 99
+EOF
+chmod +x "$SHADOW_AUTHOR_BIN"
+
+STEP6_Q="$TEST_TMP/step6-question.txt"
+printf 'a bounded question\n' > "$STEP6_Q"
+STEP6_ARTIFACT="$TEST_TMP/step6-artifact.diff"
+printf 'diff --git a/x b/x\n+line\n' > "$STEP6_ARTIFACT"
+CONSULT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" "$REPO_ROOT/scripts/dispatch-consult.sh" \
+  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" 2>&1 >/dev/null)"
+CONSULT_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" "$REPO_ROOT/scripts/dispatch-consult.sh" \
+  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" >/dev/null 2>&1; echo $?)"
+assert_neq "0" "$CONSULT_EXIT" "shipped-template (consult_dispatch off) dispatch-consult.sh exits non-zero"
+assert_contains "$CONSULT_OUT" "consult_dispatch" "dispatch-consult.sh off-path message names consult_dispatch"
+assert_file_absent "$SHADOW_AUTHOR_MARKER" "dispatch-consult.sh with the shipped template never spawns the shadow transport"
+
+STEP6_BUNDLE="$TEST_TMP/step6-bundle.json"
+cat > "$STEP6_BUNDLE" <<'JSON'
+{"round_id":"r1","question":"a bounded question","transcript":[],
+ "artifacts":[{"id":"a1","kind":"diff","text":"diff --git a/x b/x\n+line"}],
+ "axes":[{"id":"ax1","claim_vector":["c1"]}],"taken_axes":[]}
+JSON
+DISCUSS_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" node "$REPO_ROOT/scripts/dispatch-discuss.js" \
+  --bundle-file "$STEP6_BUNDLE" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" 2>&1 >/dev/null)"
+DISCUSS_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" node "$REPO_ROOT/scripts/dispatch-discuss.js" \
+  --bundle-file "$STEP6_BUNDLE" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" >/dev/null 2>&1; echo $?)"
+assert_neq "0" "$DISCUSS_EXIT" "shipped-template (discuss_dispatch off) dispatch-discuss.js exits non-zero"
+assert_contains "$DISCUSS_OUT" "discuss_dispatch" "dispatch-discuss.js off-path message names discuss_dispatch"
+assert_file_absent "$SHADOW_AUTHOR_MARKER" "dispatch-discuss.js with the shipped template never spawns the shadow transport"
 
 # ── 7. Exit codes unchanged across existing admission fixtures ─────────────
 EXIT_TEMPLATE_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"

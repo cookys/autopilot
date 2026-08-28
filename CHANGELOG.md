@@ -1,5 +1,73 @@
 # Changelog
 
+## v2.34.46 — execution-oracle lock for parallel suite runs, an honest liveness caveat, consult/discuss qualification wave 1
+
+**Suite execution-oracle lock** (new: `hooks/tests/lib/suite-oracle-lock.sh`, sourced by `run.sh`):
+depth-0's exclusive ownership of the execution oracle was prose, not a lock — a second concurrent
+`hooks/tests/run.sh --parallel` full-suite run could silently interleave and corrupt shared `/tmp`
+state, and pgrep-by-command-name waiters could not tell the runs apart. A single well-known,
+action-keyed `flock` (not per-runner) now gates the `--parallel` action; a second concurrent holder
+refuses fast, naming the first holder's run id — never a command name.
+`AUTOPILOT_SUITE_ORACLE_LOCK=0` opts out. A follow-up hardening pass closed 5 🟠 findings from
+hetero review "sol": a publication race where a contender's flock could fail an instant before the
+holder finished writing its owner sidecar (bounded 3×100ms retry, honest "not yet published"
+fallback, never fabricates); the lock fd leaking into `--parallel` worker subshells via plain fork
+(bash sets no close-on-exec), letting an orphaned worker outlive a SIGKILLed suite and hold the
+flock via its inherited duplicate (worker subshell now closes its inherited copy at launch); every
+infra-error path (helper unavailable, non-directory TMPDIR, open/publish failure, identity
+mismatch) used to warn and run unguarded — now fails closed (rc 2, distinct from rc 1 contention)
+via a shared refusal helper that always names `AUTOPILOT_SUITE_ORACLE_LOCK=0` as the one remaining
+bypass; post-`flock` fd-to-path identity revalidation (`flock()` has no atomicity guarantee with
+the preceding `open()`) with one retry before failing closed; and sidecar owner-identity
+publication now goes through an atomic same-directory `mktemp`+rename that refuses a pre-existing
+symlink or foreign-owned target instead of following/clobbering it. Planted negatives verified for
+3 of the 5 findings (revert → confirmed red → restore → confirmed green, twice each).
+`hooks/tests/suite-oracle-lock.test.sh`: 32/32 assertions (new test file). No regression in
+`suite-residue-reaper.test.sh` (51/51) or `watch-foreman.test.sh` (22/22).
+
+**`watch-foreman.js` honest `owner_absent` caveat**: a `CONDITION ... dead reason=owner_absent` line
+is the EXPECTED shape seconds after every `stage-acquire` for a CC-native foreman — the acquiring
+shell records its own PID and exits immediately, the foreman keeps running as a separate agent
+turn, not as that shell's child — not evidence the foreman died. The emitted line now self-flags
+this with `note=pid_liveness_unreliable_for_cc_native`; the HONEST BOUNDARY caveat in
+`skills/ceo-agent/references/level-front-door.md` moved from watch-tree lineage coverage onto
+stage-lease liveness (§4, where a reader decides whether to escalate), naming the fallback (git
+activity / `dispatch-status.js`) before reaching for `run-ledger.sh resume`. Mirrored to
+`platforms/codex/plugin/`.
+
+**consult/discuss qualification, wave 1** (`docs/plans/2026-08-28-consult-discuss-qualification.md`,
+D1/D2/D6 of the frozen 10-deliverable DAG — D3-D5 and D7-D10 remain wave 2, not attempted here):
+D1 ships the consult exam — a 20-case corpus (5 families × 2 cases × 2 trials), generator, grader,
+closed response schema, mechanical oracles, planted deviants with matching mutation controls, and
+frozen rubric/corpus seals. D2 ships the discuss exam on the same shape — 16 cases (4 families × 2
+cases × 2 trials), one-shot transcript-contribution semantics, `axis_id` + `claim_vector` binding,
+and a symmetry control. D6 wires the `consult_dispatch`/`discuss_dispatch` roster switches
+(default **off**) end-to-end — schema, shell resolver, JS resolver, template, roster fixtures,
+codex mirror — with schema three-way equality (properties/x-field-order/required) and default-off
+parity gates; D6 acceptance step 6 (behavioral parity through the real `dispatch-consult.sh` /
+`dispatch-discuss.js` wrapper entry points, D8/D9) is explicitly deferred and documented as such
+rather than faked as a pass. Two rounds of cross-family hetero review (gpt-5.6-sol via codex; 8
+🟠 findings total, all accepted and closed) then a depth-0 panel: fresh MiniMax-M3 SHIP-AS-IS,
+7/7 mutation controls verified red. Round-1 findings closed cross-channel confident-signal leaks in
+both graders (a response could smuggle a competing answer or escalation phrase through
+`aside`/`authority.reference` and still pass C2/C4 exclusivity) and pinned the D6 baseline to two
+frozen pre-D6 golden fixtures instead of a moving `origin/develop` ref. Round-2 findings closed the
+remaining axis-contamination gap in the discuss grader's D-a/D-b families, added canonical
+verdict-token coverage across every checkable channel in both graders, and made D6's "on + empty
+seat tuple" case exit 3 across all four surfaces per the plan's tuple-integrity rule.
+
+**BACKLOG hygiene**: retired the two shipped entries this release's suite-oracle-lock and
+owner_absent-caveat work closed (`docs/BACKLOG.md`).
+
+prose-justification: this release adds 12 lines under `skills/` — the `owner_absent` HONEST
+BOUNDARY caveat relocated onto stage-lease liveness in
+`skills/ceo-agent/references/level-front-door.md`. It is a correction of an existing caveat's
+placement (moved, then expanded with the concrete CC-native-foreman mechanism and the
+git-activity/`dispatch-status.js` fallback), not new skill teaching text or a rewritten skill;
+the per-skill ratchet is unaffected. Everything else this release touches
+(`hooks/tests/lib/suite-oracle-lock.sh`, `evals/consult-*`, `evals/discuss-*`) is engine or test
+surface, not prose.
+
 ## v2.34.45 — suite-residue reaper hardened, dispatch-rail sourcing fail-closed, an implementer ladder
 
 Nine fixes/hardenings and two new capabilities, spanning two sessions.

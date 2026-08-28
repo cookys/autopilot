@@ -2,6 +2,8 @@
 
 > **Status**: **APPROVED for implementation** (depth-0 terminal adjudication, 2026-08-28) — authored
 > 2026-08-28, two bounded review rounds complete, 32 findings accepted and folded in. See Review log.
+> **Wave 1 shipped v2.34.46**: D1 (consult exam), D2 (discuss exam), D6 (config switch), plus two
+> post-ship hetero review rounds (8 findings closed). D3-D5 and D7-D10 remain wave 2.
 > **Owner**: depth-0 (Board owns merge and owns the separate administration authorization).
 > **Branch**: `plan/consult-discuss-qualification` (plan doc only; no code touched).
 > **Frame**: PATCH on `2.34.44` — new scripts, new evals assets, new config fields. No new skill, no new agent.

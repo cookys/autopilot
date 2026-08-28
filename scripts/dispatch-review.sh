@@ -145,8 +145,21 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$_REVIEW_SELF_DIR/lib/json-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/json-emit.sh" || true
 # cursor_is_family_alias — single source of truth for the cursor family-alias
 # vocabulary (grok46|codex53), used by the --runner cursor precondition below.
-# shellcheck source=/dev/null
-[ -r "$_REVIEW_SELF_DIR/lib/cursor-model.sh" ] && . "$_REVIEW_SELF_DIR/lib/cursor-model.sh" || true
+# FAIL-CLOSED (unlike the best-effort sources above): dispatch-author.sh:111-112 and
+# dispatch-hetero.sh:486-487 source this same lib unconditionally, so a missing/unreadable
+# copy already hard-fails those rails. A fail-open source here would silently disable the
+# alias-rejection guard at the `command -v cursor_is_family_alias` check below — a bare
+# family alias (e.g. "grok46") would then pass through as if it were a full cursor-agent
+# model id. Hard-error before any runner is spawned; no die_precondition available yet
+# (defined below, after arg parsing) so this exits directly.
+_REVIEW_CURSOR_MODEL_LIB="$_REVIEW_SELF_DIR/lib/cursor-model.sh"
+if [ -r "$_REVIEW_CURSOR_MODEL_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$_REVIEW_CURSOR_MODEL_LIB"
+else
+  echo "dispatch-review.sh: required lib unreadable: $_REVIEW_CURSOR_MODEL_LIB (cannot enforce cursor family-alias rejection)" >&2
+  exit 2
+fi
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 REVIEW_USAGE_JSON="null"

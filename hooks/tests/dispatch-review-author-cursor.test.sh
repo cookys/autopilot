@@ -53,11 +53,18 @@ FULL_MODEL="cursor-grok-4.6-high-fast"
 # well-formed-block "pass"/"stderr_salvage" bodies satisfy both contracts).
 #
 # Modes (via CURSOR_STUB_MODE env, default "pass"):
-#   pass            - emit a well-formed <<<AUTOPILOT-REVIEW-...>>> block on STDOUT, exit 0
-#   nonzero         - print to stderr, exit 7
-#   empty           - exit 0, no output at all
-#   stderr_salvage  - emit the SAME well-formed block, but on STDERR, nothing on
-#                     stdout, exit 0 — the no-salvage negative control
+#   pass                - emit a well-formed <<<AUTOPILOT-REVIEW-...>>> block on STDOUT, exit 0
+#   nonzero             - print to stderr, exit 7, NOTHING on stdout
+#   nonzero_with_stdout - emit the SAME well-formed block on STDOUT, THEN exit 7 —
+#                         the "engine answered correctly then the process itself
+#                         failed" combination (distinct from plain "nonzero": here
+#                         stdout genuinely has a parseable-looking verdict, so this
+#                         is the case that would slip through if fail-closed only
+#                         checked "is stdout non-empty" instead of also gating on
+#                         the exit code)
+#   empty               - exit 0, no output at all
+#   stderr_salvage      - emit the SAME well-formed block, but on STDERR, nothing on
+#                         stdout, exit 0 — the no-salvage negative control
 # If CURSOR_ARGV_FILE is set, argv is recorded there (one arg per line) on every call.
 STUB="$TEST_TMP/cursor-agent-stub"
 cat > "$STUB" <<'EOF'
@@ -80,6 +87,10 @@ case "${CURSOR_STUB_MODE:-pass}" in
     ;;
   nonzero)
     echo "cursor-agent: fixture failure" >&2
+    exit 7
+    ;;
+  nonzero_with_stdout)
+    emit_block
     exit 7
     ;;
   empty)
@@ -129,6 +140,17 @@ OUT="$(env CURSOR_STUB_MODE=nonzero "$REVIEW_SCRIPT" --runner cursor --model "$F
 assert_exit_code "$EXIT" "1" "review: non-zero cursor exit fails closed (exit 1)"
 assert_contains "$OUT" '"status": "no_verdict"' "review: non-zero cursor exit yields no_verdict"
 assert_not_contains "$OUT" '"status": "reviewed"' "review: non-zero cursor exit is never reviewed"
+
+# R4b — 🔵 nonzero exit + non-empty, well-formed stdout: the process itself failed
+# (rc=7) AFTER printing a valid-looking verdict block. Distinct from R4 (nonzero,
+# empty stdout) and R6 (exit 0, block on stderr only) — this is the combination
+# where a classifier that keys off "stdout is non-empty" instead of the exit code
+# would wrongly coerce a pass. Must still fail closed.
+OUT="$(env CURSOR_STUB_MODE=nonzero_with_stdout "$REVIEW_SCRIPT" --runner cursor --model "$FULL_MODEL" --diff-file "$DIFF" --bin "$STUB" 2>&1)"; EXIT=$?
+assert_exit_code "$EXIT" "1" "review: nonzero exit with well-formed stdout fails closed (exit 1)"
+assert_contains "$OUT" '"status": "no_verdict"' "review: nonzero exit with well-formed stdout yields no_verdict"
+assert_not_contains "$OUT" '"status": "reviewed"' "review: nonzero exit with well-formed stdout is never reviewed"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "review: nonzero exit with well-formed stdout never authorizes shipping"
 
 # R5 — fail-closed on empty stdout (exit 0, nothing printed).
 OUT="$(env CURSOR_STUB_MODE=empty "$REVIEW_SCRIPT" --runner cursor --model "$FULL_MODEL" --diff-file "$DIFF" --bin "$STUB" 2>&1)"; EXIT=$?
@@ -241,5 +263,38 @@ assert_contains "$(printf '%s\n' "$AUTHOR_ARGV_CONTENT" | tr '\n' ' ')" "--outpu
 assert_not_contains "$AUTHOR_ARGV_CONTENT" "--force" "author argv: does NOT contain --force"
 assert_not_contains "$AUTHOR_ARGV_CONTENT" "--reasoning-effort" "author argv: does NOT contain --reasoning-effort"
 assert_not_contains "$AUTHOR_ARGV_CONTENT" "--cwd" "author argv: does NOT contain --cwd"
+
+# ==================================================================================
+# R8 — fail-CLOSED sourcing of lib/cursor-model.sh (the asymmetry fix): an unreadable
+# copy must hard-error before any runner is spawned, not silently disable the
+# family-alias rejection guard (which is what `[ -r ... ] && . ... || true` did before
+# this fix — the alias check reads `command -v cursor_is_family_alias`, so a lib that
+# failed to source made that guard a silent no-op). dispatch-author.sh:111-112 and
+# dispatch-hetero.sh's own cursor-model.sh source were already unconditional
+# (fail-closed by ordinary bash `.` semantics); dispatch-review.sh was the outlier.
+#
+# Exercised against a COPY of scripts/ with lib/cursor-model.sh made unreadable —
+# never mutates the real repo tree.
+# ---------------------------------------------------------------------------
+SCRIPTS_COPY="$TEST_TMP/scripts-copy"
+mkdir -p "$SCRIPTS_COPY"
+cp -r "$REPO_ROOT/scripts/." "$SCRIPTS_COPY/"
+UNREADABLE_LIB="$SCRIPTS_COPY/lib/cursor-model.sh"
+chmod 000 "$UNREADABLE_LIB"
+
+R8_STUB_ARGV="$TEST_TMP/r8-stub-argv.txt"
+: > "$R8_STUB_ARGV"
+OUT="$(env CURSOR_STUB_MODE=pass CURSOR_ARGV_FILE="$R8_STUB_ARGV" \
+  "$SCRIPTS_COPY/dispatch-review.sh" --runner cursor --model "$FULL_MODEL" --diff-file "$DIFF" --bin "$STUB" 2>&1)"; EXIT=$?
+chmod 644 "$UNREADABLE_LIB"   # restore before any later use/cleanup of the copy
+
+assert_neq "0" "$EXIT" "review: unreadable lib/cursor-model.sh hard-errors (nonzero exit)"
+assert_contains "$OUT" "$UNREADABLE_LIB" "review: unreadable-lib error names the exact lib path"
+assert_not_contains "$OUT" '"status": "reviewed"' "review: unreadable-lib run never reaches reviewed"
+if [ -s "$R8_STUB_ARGV" ]; then
+  fail "review: unreadable-lib run must not have written any cursor-agent argv (no runner spawned)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
 
 finalize_test

@@ -94,12 +94,19 @@ if [ -f "$RUN_COUNT_FILE" ]; then
 fi
 assert_eq "1" "$run_count" "Case 1: fake runner started exactly once"
 
-# Assert exact model argument reached the fake process
+# Assert the FULL cc-shim argv shape, not just that --model was present somewhere.
+# --model-only coverage would pass even if --setting-sources/--strict-mcp-config/--tools
+# were silently dropped (the surface-reduction posture dispatch-author.sh:1051-1055
+# documents as mirroring dispatch-review.sh's blast-radius controls) — that regression
+# must fail this test. Exact pin, in order: -p --model <model> --setting-sources project
+# --strict-mcp-config --tools "" (empty --tools value, per the bash -c template at
+# scripts/dispatch-author.sh's cc-shim branch).
 argv_content=""
 if [ -f "$RECORDED_ARGV" ]; then
   argv_content=$(cat "$RECORDED_ARGV")
 fi
-assert_contains "$argv_content" "--model glm-5.2" "Case 1: model argument glm-5.2 reached fake process"
+assert_eq "-p --model glm-5.2 --setting-sources project --strict-mcp-config --tools " \
+  "$argv_content" "Case 1: full cc-shim argv shape reached fake process (not just --model)"
 
 # Assert endpoint-derived ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN reached the fake process
 recorded_url=""

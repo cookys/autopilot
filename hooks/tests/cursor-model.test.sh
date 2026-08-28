@@ -295,4 +295,43 @@ for fn in cursor_enabled_ids cursor_is_enabled_id cursor_is_family_alias _cursor
   _assert_source_fork_free "$fn"
 done
 
+# ---------------------------------------------------------------------------
+# 13. RECONCILIATION — no dispatch-*.sh wrapper restates the family-alias
+# vocabulary as a literal `grok46|codex53` (or single-name) case/regex
+# pattern instead of calling cursor_is_family_alias. This is the drift the
+# header of cursor_is_family_alias names explicitly: "a family added to
+# _CURSOR_FAMILIES and not to a wrapper's hardcoded pattern would be
+# silently accepted as a full model id by that wrapper". A source-level
+# grep, not a runtime oracle — same posture as test 12 above: it catches
+# the actual regression shape (a wrapper hand-writing the family list as a
+# case label), not every conceivable restatement.
+#
+# Scope: every scripts/dispatch-*.sh EXCEPT cursor-model.sh itself (the
+# vocabulary's legitimate definition site) and platforms/**/dispatch-*.sh
+# (generated mirrors of the canonical scripts/, resynced by
+# sync-codex-plugin-skills.sh — not a second source to lint independently).
+# Comment-only lines are excluded (prose referencing the vocabulary by name,
+# e.g. "a family alias (grok46|codex53) is resolved via...", is fine — only
+# executable restatement is the regression).
+# ---------------------------------------------------------------------------
+_RECONCILE_DIR="$REPO_ROOT/scripts"
+_recon_hit=0
+for _wrapper in "$_RECONCILE_DIR"/dispatch-*.sh; do
+  [ -f "$_wrapper" ] || continue
+  # The glob is scripts/dispatch-*.sh (no recursion into scripts/lib/), so
+  # cursor-model.sh's own definition site is out of scope by construction.
+  while IFS= read -r _line; do
+    # Strip leading whitespace, then skip pure-comment lines.
+    _trimmed="${_line#"${_line%%[![:space:]]*}"}"
+    case "$_trimmed" in
+      '#'*) continue ;;
+    esac
+    fail "reconciliation: $_wrapper restates the family-alias vocabulary as a literal case/regex pattern instead of calling cursor_is_family_alias — line: $_line"
+    _recon_hit=1
+  done < <(grep -n 'grok46|codex53\|codex53|grok46' "$_wrapper" 2>/dev/null | cut -d: -f2-)
+done
+if [ "$_recon_hit" -eq 0 ]; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
 finalize_test

@@ -1854,18 +1854,19 @@ fi
 # --- cursor effort resolution (post-parse): a family alias (grok46|codex53) is resolved
 # to a full model id via lib/cursor-model.sh; a full id already supplied passes through
 # untouched, and --cursor-fast against a full id is a die_precondition (the mapper is
-# bypassed on that path, so the flag would otherwise be silently ignored). ---
+# bypassed on that path, so the flag would otherwise be silently ignored).
+# The alias test uses cursor_is_family_alias (lib/cursor-model.sh's single source of
+# truth over _CURSOR_FAMILIES) rather than a literal `grok46|codex53` case pattern here:
+# a family added to _CURSOR_FAMILIES and not to a hand-restated pattern would silently
+# fall through as an already-full id instead of being resolved. ---
 if [ "$IS_CURSOR" -eq 1 ]; then
-  case "$MODEL" in
-    grok46|codex53)
-      MODEL="$(cursor_model_for "$CURSOR_BIN" "$MODEL" "$EFFORT" "$CURSOR_FAST")" \
-        || die_precondition "cursor model resolution failed for family '$MODEL' effort '$EFFORT'"
-      ;;
-    *)
-      [ "$CURSOR_FAST" -eq 1 ] \
-        && die_precondition "--cursor-fast applies only when --model names a family alias; pass the -fast id directly"
-      ;;
-  esac
+  if cursor_is_family_alias "$MODEL"; then
+    MODEL="$(cursor_model_for "$CURSOR_BIN" "$MODEL" "$EFFORT" "$CURSOR_FAST")" \
+      || die_precondition "cursor model resolution failed for family '$MODEL' effort '$EFFORT'"
+  else
+    [ "$CURSOR_FAST" -eq 1 ] \
+      && die_precondition "--cursor-fast applies only when --model names a family alias; pass the -fast id directly"
+  fi
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \

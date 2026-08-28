@@ -549,32 +549,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: M (skill is thin; the two references and the spike sweep are the work)
 - **Source**: cross-repo request via peer relay, 2026-08-24/25; ruled by two-round heterogeneous panel
 
-### `/l4` watcher reports `owner_absent` for every healthy CC-native foreman
-- **Trigger**: Next time a `/l4`/`/l5`/`/l6` run's stage events are read by a human or a gate.
-- **Context**: `run-ledger.sh stage-acquire` records the PID of the shell that ran it, and that shell
-  exits immediately, so `watch-foreman.js` emits `CONDITION ... dead reason=owner_absent` seconds
-  after every healthy `stage-acquire`. Observed on all three stages of the v2.34.39 run while the
-  foreman was demonstrably progressing (commits landing, worktree live). The reference does carry an
-  HONEST BOUNDARY note about CC-native foremen, but it is attached to **watch-tree lineage coverage**,
-  not to **stage-lease liveness**, so the false positive is undocumented where a reader meets it.
-- **Effort**: S (either bind the lease to a durable identity, or document the false positive on the
-  liveness condition itself — the second is honest and cheap)
-- **Source**: v2.34.39 `/l4` depth-0 run (2026-08-24)
-
-### Depth-0's exclusive ownership of the execution oracle is prose, not a lock
-- **Trigger**: Any run where more than one participant could plausibly start the full suite.
-- **Context**: The `/l4` protocol assigns the independent execution oracle to depth-0 so an
-  implementer never verifies its own work. During v2.34.39 a returned foreman armed its own full-suite
-  run — out of diligence, to close a gap it had honestly disclosed — while depth-0 was already running
-  one; `pgrep` found 15 matching processes including orphaned earlier attempts. Concurrent runs share
-  temp state, so every result in that window was uninterpretable in both directions. Worse, the
-  orphans' waiters were `pgrep` loops keyed on the **command name**, so they would have reported
-  depth-0's result as the implementer's. Fix shape: a lock keyed on the action (not the runner), and
-  waiters keyed on a run identity. Recorded as knowledge in `.claude/knowledge/architecture.md`
-  ("A protocol sentence does not stop a process"); this row is the mechanisation half.
-- **Effort**: S–M
-- **Source**: v2.34.39 `/l4` depth-0 run (2026-08-24)
-
 ## 2026-08-28 foreman cost is the polling loop, not the model (revival.3d session 5ca9b104)
 
 Evidence (grok cost split, `revival.3d/NOTE-FOR-FABLE-FOREMAN-COST.md`): 30 opus foremen, 28 of them

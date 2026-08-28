@@ -156,10 +156,14 @@ done
 # not "continue and hope". AUTOPILOT_SUITE_ORACLE_LOCK=0 opts out.
 if [ "$PARALLEL" -eq 1 ] && command -v suite_oracle_lock_acquire >/dev/null 2>&1; then
   if ! suite_oracle_lock_acquire; then
-    # Refusal message (naming the holder's run id) already printed to
-    # stderr by suite_oracle_lock_acquire; SUITE_ORACLE_LOCK_REFUSAL_MSG=""
-    # means it fail-opened (rc 2, unsupported) rather than refused (rc 1) —
-    # only rc 1 (refusal) is fatal.
+    # Both non-zero returns (1 = another run holds it, 2 = an
+    # open/identity/publish step failed) are hard refusals as of the
+    # 2026-08-28 depth-0 ruling: infra errors fail CLOSED now, not open —
+    # AUTOPILOT_SUITE_ORACLE_LOCK=0 is the only remaining bypass. The
+    # message (naming the holder's run id, or the infra failure) is already
+    # printed to stderr by suite_oracle_lock_acquire; SUITE_ORACLE_LOCK_REFUSAL_MSG
+    # is always non-empty on a real refusal, only empty for the AUTOPILOT_SUITE_ORACLE_LOCK=0
+    # opt-out (which returns 0, never reaches this branch).
     if [ -n "$SUITE_ORACLE_LOCK_REFUSAL_MSG" ]; then
       exit 1
     fi
@@ -370,6 +374,21 @@ else
       local ecf="$PARALLEL_TMP/$i.ec"
       local donef="$PARALLEL_TMP/$i.done"
       (
+        # hetero review finding #2 (2026-08-28): bash does not set
+        # close-on-exec on fds by default, so this worker subshell inherits
+        # a live DUPLICATE of the oracle-lock fd (if this run.sh process
+        # holds one — see suite_oracle_lock_acquire above). flock is tied to
+        # the OPEN FILE DESCRIPTION, which both fds reference after fork; a
+        # worker that keeps its inherited copy open keeps the lock held even
+        # after run.sh itself dies (SIGKILL bypasses run.sh's own EXIT trap
+        # entirely, but does not touch already-forked children — they run on
+        # as orphans, inherited fd and all), so a "fresh" suite invocation
+        # right after a killed one is wrongly refused by its own orphaned
+        # worker. Close this subshell's copy immediately — it never needs
+        # the lock; only run.sh's own top-level process does.
+        if [ -n "${SUITE_ORACLE_LOCK_FD:-}" ]; then
+          { exec {SUITE_ORACLE_LOCK_FD}>&-; } 2>/dev/null || true
+        fi
         bash "$file" >"$out" 2>&1
         echo $? >"$ecf"
         # Done marker last so readers only see complete buffers.

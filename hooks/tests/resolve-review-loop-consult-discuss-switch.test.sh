@@ -245,7 +245,16 @@ assert_eq "27" "$POP_B_COUNT" "Population B file bound is pinned at 27 (git grep
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the
 # same field name for an unrelated reason (already covered above).
-POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
+# EXCLUDED (Wave 2, D8/D9 landing): hooks/tests/dispatch-consult.test.sh and
+# hooks/tests/dispatch-discuss.test.sh legitimately carry their own
+# `- consult_dispatch: on` / `- discuss_dispatch: on` roster fixtures — those
+# wrappers' OWN acceptance tests exercising the switch-on path, not a member
+# of "Population B" (pre-existing, unrelated hooks/ roster configs that
+# should all still resolve to the off default). Same false-positive class as
+# SELF's own exclusion above.
+DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
+DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
+POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
 assert_eq "0" "$POP_B_EXPLICIT_SWITCH" "none of Population B's 26 partial roster configs set consult_dispatch/discuss_dispatch explicitly — they all resolve via the off default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────

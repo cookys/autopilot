@@ -12,13 +12,95 @@
 #   bash hooks/tests/run.sh state-checkpoint   # filter (substring match on file)
 #   bash hooks/tests/run.sh --parallel [N]     # parallel L2 (N workers; default nproc)
 #   bash hooks/tests/run.sh --parallel 8 filter
+#
+# Residue reaper: immediately after arg parsing, this runner registers itself
+# as a live suite run and reaps stale ${TMPDIR} residue this suite itself
+# leaks (hetero-* worktrees, autopilot-test-* dirs, hooks-run-parallel.*
+# scratch, *.manifest.json) — see hooks/tests/lib/suite-residue-reap.sh for
+# the incident and the safety invariant. A single `reaper: ...` summary line
+# is always printed; set AUTOPILOT_SUITE_REAP_VERBOSE=1 for the raw JSON
+# envelope too. AUTOPILOT_SUITE_REAP=0 disables the reaper entirely (kill
+# switch). An EXIT/INT/TERM trap also reaps on interrupt so a killed run
+# cleans up after itself.
 
 set -uo pipefail
+
+# Job control (finding suite-residue-reap-4): with it OFF (the script default),
+# a `&` background job shares THIS script's own process group — measured via
+# `ps -o pgid` on both the job and $$ — so a killed worker's own children
+# (e.g. an *.test.sh's `git worktree add` subprocess) are NOT in the signaled
+# set and become ORPHANS that keep running after the "interrupted" worker
+# wrapper dies (reproduced: a SIGTERM'd wrapper subshell left its `sleep`
+# grandchild alive and unkilled). With `set -m` ON, each `&` job becomes the
+# leader of its OWN new process group (also measured), so `kill -SIGNAL -$pid`
+# in the interrupt trap below reaches the worker's entire subtree without
+# touching run.sh's own group.
+set -m
 
 TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOKS_DIR="$(cd "$TESTS_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
 cd "$REPO_ROOT"
+
+# shellcheck source=../../scripts/lib/prune-tmp-residue.sh
+[ -r "$REPO_ROOT/scripts/lib/prune-tmp-residue.sh" ] && . "$REPO_ROOT/scripts/lib/prune-tmp-residue.sh"
+# shellcheck source=../../scripts/lib/worktree-reap.sh
+[ -r "$REPO_ROOT/scripts/lib/worktree-reap.sh" ] && . "$REPO_ROOT/scripts/lib/worktree-reap.sh"
+# shellcheck source=lib/suite-residue-reap.sh
+[ -r "$TESTS_DIR/lib/suite-residue-reap.sh" ] && . "$TESTS_DIR/lib/suite-residue-reap.sh"
+
+# Global; set by the parallel branch, cleared after its own successful rm -rf.
+# The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
+PARALLEL_TMP=""
+declare -a PARALLEL_CHILD_PIDS=()
+
+__suite_on_exit() {
+  local status=$?
+  if [ -n "$PARALLEL_TMP" ]; then
+    rm -rf "$PARALLEL_TMP"
+  fi
+  if command -v suite_residue_reap >/dev/null 2>&1; then
+    suite_residue_reap >/dev/null 2>&1 || true
+  fi
+  if command -v suite_run_lock_release >/dev/null 2>&1; then
+    suite_run_lock_release || true
+  fi
+  return "$status"
+}
+trap __suite_on_exit EXIT
+
+__suite_on_interrupt() {
+  local sig="$1"
+  local pid
+  # finding suite-residue-reap-4: PARALLEL_CHILD_PIDS is pruned as each worker
+  # completes (see the completion loop below) rather than accumulating for the
+  # whole run, so a PID recorded here is proven to still belong to a tracked
+  # worker of THIS run — never a reused PID some unrelated later process
+  # happens to have picked up after the original worker already exited.
+  #
+  # Forward the RECEIVED signal (INT stays INT, TERM stays TERM) instead of
+  # `kill`'s default SIGTERM regardless of which one arrived, to the worker's
+  # WHOLE process group (`-$pid`, valid because of `set -m` above — each
+  # worker is its own group leader, so this reaches its full subtree without
+  # touching run.sh's own group). Fall back to a plain-PID signal too in case
+  # the group form ever fails to reach anything (belt and suspenders; a
+  # redundant second signal to an already-dying process is harmless).
+  for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
+    [ -n "$pid" ] || continue
+    kill -s "$sig" -- "-$pid" >/dev/null 2>&1 || true
+    kill -s "$sig" "$pid" >/dev/null 2>&1 || true
+  done
+  for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
+    [ -n "$pid" ] && wait "$pid" 2>/dev/null || true
+  done
+  if [ "$sig" = "INT" ]; then
+    exit 130
+  else
+    exit 143
+  fi
+}
+trap '__suite_on_interrupt INT' INT
+trap '__suite_on_interrupt TERM' TERM
 
 # ── Argument parsing ──
 # Support, in any order: optional --parallel [N], optional substring FILTER.
@@ -58,6 +140,32 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# ── Residue reaper: pre-run reap + registry lock ──
+if command -v suite_run_lock_acquire >/dev/null 2>&1; then
+  # finding suite-residue-reap-3: suite_run_lock_acquire now fails closed
+  # (returns 1 / sets SUITE_RUN_LOCK_ACQUIRE_FAILED=1) instead of always
+  # reporting success — surface it so a silent registration failure (this run
+  # is then invisible to any OTHER concurrent run's foreign-run protection)
+  # is at least visible in the run's own output, without making it fatal.
+  if ! suite_run_lock_acquire; then
+    echo "reaper: WARN this run could not register itself as live (best-effort; continuing)" >&2
+  fi
+fi
+if command -v suite_residue_reap >/dev/null 2>&1; then
+  __REAP_JSON="$(suite_residue_reap 2>/dev/null || true)"
+  if [ -n "$__REAP_JSON" ]; then
+    __reap_reaped="$(printf '%s' "$__REAP_JSON" | grep -o '"reaped":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    __reap_live="$(printf '%s' "$__REAP_JSON" | grep -o '"skipped_live":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    __reap_unknown="$(printf '%s' "$__REAP_JSON" | grep -o '"skipped_unknown":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    __reap_foreign="$(printf '%s' "$__REAP_JSON" | grep -o '"skipped_foreign_run":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    echo "reaper: reaped ${__reap_reaped:-0} stale residue entries (live ${__reap_live:-0}, unknown ${__reap_unknown:-0}, foreign ${__reap_foreign:-0})"
+    if [ "${AUTOPILOT_SUITE_REAP_VERBOSE:-0}" = "1" ]; then
+      echo "reaper: $__REAP_JSON"
+    fi
+  fi
+  unset __REAP_JSON __reap_reaped __reap_live __reap_unknown __reap_foreign
+fi
 
 # Resolve parallel worker count when requested.
 if [ "$PARALLEL" -eq 1 ]; then
@@ -225,9 +333,10 @@ else
     fi
 
     # Temp dir for per-file stdout/stderr buffers + exit codes + done markers.
+    # Global PARALLEL_TMP (declared above argument parsing) is what the
+    # top-level __suite_on_exit trap cleans up if this run is interrupted;
+    # the local `rm -rf` below on the clean-completion path clears it again.
     PARALLEL_TMP="$(mktemp -d "${TMPDIR:-/tmp}/hooks-run-parallel.XXXXXX")"
-    # shellcheck disable=SC2064
-    trap 'rm -rf "$PARALLEL_TMP"' EXIT
 
     start_one() {
       local file="$1"
@@ -241,6 +350,7 @@ else
         # Done marker last so readers only see complete buffers.
         touch "$donef"
       ) &
+      PARALLEL_CHILD_PIDS+=("$!")
     }
 
     print_result() {
@@ -291,6 +401,14 @@ else
           print_result "$i"
           finished=$((finished + 1))
           active=$((active - 1))
+          # finding suite-residue-reap-4: prune this worker's PID from the
+          # interrupt trap's kill set as soon as it's known complete.
+          # PARALLEL_CHILD_PIDS[$i] is start_one's PID for file $i (one
+          # start_one call per index, in the same order); leaving it in the
+          # array after this point would let a SIGINT/SIGTERM arriving later
+          # in the run signal whatever unrelated process the OS has since
+          # reused that PID for.
+          unset "PARALLEL_CHILD_PIDS[$i]"
           found=1
           break
         fi
@@ -315,7 +433,11 @@ else
     wait 2>/dev/null || true
 
     rm -rf "$PARALLEL_TMP"
-    trap - EXIT
+    PARALLEL_TMP=""
+    # Defense in depth: every index should already be unset by the completion
+    # loop above by this point; clear the array outright so nothing stale can
+    # possibly survive into a later phase of this same run.sh process.
+    PARALLEL_CHILD_PIDS=()
   fi
 
   # Run global-state/timing-sensitive tests only after the parallel pool is fully

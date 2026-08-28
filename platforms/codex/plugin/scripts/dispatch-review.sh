@@ -151,14 +151,22 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # alias-rejection guard at the `command -v cursor_is_family_alias` check below — a bare
 # family alias (e.g. "grok46") would then pass through as if it were a full cursor-agent
 # model id. Hard-error before any runner is spawned; no die_precondition available yet
-# (defined below, after arg parsing) so this exits directly.
+# (defined below, after arg parsing) so this exits directly. Checks BOTH failure shapes:
+# unreadable (the `-r` guard) AND sourced-but-failed (the lib itself `return`s/exits
+# nonzero, or vanishes between the `-r` check and the `.` — a TOCTOU race) — `.`'s own
+# exit status is never trusted implicitly; `set -uo pipefail` (no `-e`) means a failing
+# source would otherwise fall through silently to arg parsing with the alias predicate
+# undefined.
 _REVIEW_CURSOR_MODEL_LIB="$_REVIEW_SELF_DIR/lib/cursor-model.sh"
-if [ -r "$_REVIEW_CURSOR_MODEL_LIB" ]; then
-  # shellcheck source=/dev/null
-  . "$_REVIEW_CURSOR_MODEL_LIB"
-else
+_review_die_cursor_lib() {
   echo "dispatch-review.sh: required lib unreadable: $_REVIEW_CURSOR_MODEL_LIB (cannot enforce cursor family-alias rejection)" >&2
   exit 2
+}
+if [ -r "$_REVIEW_CURSOR_MODEL_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$_REVIEW_CURSOR_MODEL_LIB" || _review_die_cursor_lib
+else
+  _review_die_cursor_lib
 fi
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""

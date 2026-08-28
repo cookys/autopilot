@@ -297,4 +297,40 @@ else
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 fi
 
+# ==================================================================================
+# R8b — fail-CLOSED on a READABLE lib that fails to source (returns nonzero). This is
+# the gap R8 alone did not cover: `[ -r "$lib" ] && . "$lib"` only guards readability —
+# if the file is readable but its own top-level `return 1` (or a syntax error under
+# some shells) makes the `.` itself fail, the OLD code (`. "$lib" || true`, i.e. no
+# check at all on the source's own exit status) would fall through to arg parsing with
+# cursor_is_family_alias silently undefined, same as the unreadable case. Distinct
+# failure mode from R8 (readability), so needs its own oracle.
+#
+# Exercised against a SECOND copy of scripts/ with lib/cursor-model.sh REPLACED by a
+# readable stub that immediately `return 1`s — never mutates the real repo tree.
+# ---------------------------------------------------------------------------
+SCRIPTS_COPY_B="$TEST_TMP/scripts-copy-b"
+mkdir -p "$SCRIPTS_COPY_B"
+cp -r "$REPO_ROOT/scripts/." "$SCRIPTS_COPY_B/"
+FAILING_LIB="$SCRIPTS_COPY_B/lib/cursor-model.sh"
+cat > "$FAILING_LIB" <<'EOF'
+# stub cursor-model.sh: readable, but fails to source (simulates a corrupt/truncated lib)
+return 1
+EOF
+chmod 644 "$FAILING_LIB"
+
+R8B_STUB_ARGV="$TEST_TMP/r8b-stub-argv.txt"
+: > "$R8B_STUB_ARGV"
+OUT="$(env CURSOR_STUB_MODE=pass CURSOR_ARGV_FILE="$R8B_STUB_ARGV" \
+  "$SCRIPTS_COPY_B/dispatch-review.sh" --runner cursor --model "$FULL_MODEL" --diff-file "$DIFF" --bin "$STUB" 2>&1)"; EXIT=$?
+
+assert_neq "0" "$EXIT" "review: readable-but-failing lib/cursor-model.sh hard-errors (nonzero exit)"
+assert_contains "$OUT" "$FAILING_LIB" "review: readable-but-failing lib error names the exact lib path"
+assert_not_contains "$OUT" '"status": "reviewed"' "review: readable-but-failing lib run never reaches reviewed"
+if [ -s "$R8B_STUB_ARGV" ]; then
+  fail "review: readable-but-failing lib run must not have written any cursor-agent argv (no runner spawned)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
 finalize_test

@@ -306,6 +306,18 @@ done
 # the actual regression shape (a wrapper hand-writing the family list as a
 # case label), not every conceivable restatement.
 #
+# Pattern covers TWO restatement shapes, both as executable code (never
+# inside a comment):
+#   (a) the joint alternation `grok46|codex53` (or reversed order), the
+#       shape the original dispatch-hetero.sh regression took; and
+#   (b) a BARE single-name case label — `grok46)` or `codex53)` preceded by
+#       start-of-line or a non-identifier character — since a wrapper could
+#       just as easily hand-roll two separate case arms instead of one
+#       alternation arm, and the header comment above already promises
+#       coverage of "(or single-name)" restatements. The non-identifier
+#       guard avoids false positives on an unrelated identifier that merely
+#       ends in "grok46" (e.g. a hypothetical "code2grok46)").
+#
 # Scope: every scripts/dispatch-*.sh EXCEPT cursor-model.sh itself (the
 # vocabulary's legitimate definition site) and platforms/**/dispatch-*.sh
 # (generated mirrors of the canonical scripts/, resynced by
@@ -315,6 +327,7 @@ done
 # executable restatement is the regression).
 # ---------------------------------------------------------------------------
 _RECONCILE_DIR="$REPO_ROOT/scripts"
+_RECONCILE_PATTERN='grok46\|codex53|codex53\|grok46|(^|[^[:alnum:]_])grok46\)|(^|[^[:alnum:]_])codex53\)'
 _recon_hit=0
 for _wrapper in "$_RECONCILE_DIR"/dispatch-*.sh; do
   [ -f "$_wrapper" ] || continue
@@ -328,7 +341,7 @@ for _wrapper in "$_RECONCILE_DIR"/dispatch-*.sh; do
     esac
     fail "reconciliation: $_wrapper restates the family-alias vocabulary as a literal case/regex pattern instead of calling cursor_is_family_alias — line: $_line"
     _recon_hit=1
-  done < <(grep -n 'grok46|codex53\|codex53|grok46' "$_wrapper" 2>/dev/null | cut -d: -f2-)
+  done < <(grep -nE "$_RECONCILE_PATTERN" "$_wrapper" 2>/dev/null | cut -d: -f2-)
 done
 if [ "$_recon_hit" -eq 0 ]; then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))

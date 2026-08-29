@@ -641,4 +641,120 @@ D3_RC=$?
 assert_exit_code "$D3_RC" "0" "D3 classifyQualificationOutcome suite passes"
 assert_contains "$D3_OUT" "OK sweep=" "D3 suite reports OK sweep"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# D3.regress — real run-loop: a plain-prose (non-JSON) consult response must
+# recover the sealed grader's checkProtocol() reason (STEP-2 tier2), not
+# fall to STEP-3 default-deny (tier1/unknown_reason). Drives the actual
+# runConsultQualification administration path (not classifyQualificationOutcome
+# directly) with a stubbed remote provider, mirroring the adapter pattern in
+# scripts/engine-qualify-consult.test.js.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D3_REGRESS_RAWDIR="$TEST_TMP/d3-regress-raw"
+mkdir -p "$D3_REGRESS_RAWDIR"
+D3_REGRESS_OUT="$(node - "$REPO_ROOT" "$D3_REGRESS_RAWDIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+const root = process.argv[2];
+const rawDir = process.argv[3];
+const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
+
+// The case-broker's remote transport binds a unix domain socket under
+// os.tmpdir() (autopilot-case-broker-XXXXXX/socket/case.sock); this test
+// harness's own TMPDIR (hooks/tests/lib.sh, keyed by this file's long test
+// name) can push that path past the kernel's UNIX_PATH_MAX (~108 bytes),
+// failing with EINVAL — an OS constraint, unrelated to the fix under test.
+// Use a short TMPDIR scoped to just this subprocess (and its broker/adapter
+// children, which inherit env) so the socket path stays well under the
+// limit; clean it up when done.
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d3-regress-'));
+const adapterPath = path.join(tempRoot, 'prose-adapter.js');
+// Adapter answers EVERY case with plain prose — never JSON — so
+// parseConsultDiscussCaseResponse() returns null and the kernel's
+// grader.classify() returns 'protocol_violation' for each case.
+fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output: 'Sure, here is my answer in plain English: the artifact looks fine to me.',
+}));
+`);
+
+const digest = (ch) => ch.repeat(64);
+const seed = 'd3-regress-consult-seed';
+process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+process.env.AUTOPILOT_QUALIFY_SEED = seed;
+
+const result = runConsultQualification({
+  role: 'consult',
+  trials: 2,
+  expiresDays: 30,
+  emitRow: false,
+  execute: true,
+  taskClasses: ['consult'],
+  domains: ['cross-cutting'],
+  languages: ['en'],
+  tools: ['read_only'],
+  engine: 'consult-engine',
+  model: 'consult-model-exact',
+  modelVersion: '2026-08-28',
+  versionSource: 'operator-asserted',
+  runner: 'consult-harness',
+  runnerVersion: '1.0.0',
+  family: 'test-family',
+  harnessVersion: 'consult-harness-v1',
+  effort: 'high',
+  promptConfigHash: digest('a'),
+  semanticFingerprint: digest('b'),
+  containmentFingerprint: digest('c'),
+  panelReadOnlyBinds: [],
+  panelEnvironment: [],
+  providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+  remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+  remoteProvider: 'fake-consult-provider',
+  remoteTimeoutMs: 60_000,
+  store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+  rawDir,
+});
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+assert(result.qualified === false, 'a plain-prose administration must not qualify');
+const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
+  .trim().split('\n').map((line) => JSON.parse(line));
+assert(exchanges.length > 0, 'exchanges recorded');
+for (const row of exchanges) {
+  assert(row.transport_ok === true, `case ${row.case_id}: transport should be ok, got transport_ok=${row.transport_ok} error=${row.transport_error}`);
+  assert(row.outcome === 'protocol_violation', `case ${row.case_id}: outcome should be protocol_violation, got ${row.outcome}`);
+  const tc = row.tier_classification;
+  assert(tc && tc.tier === 'tier2', `case ${row.case_id}: tier_classification.tier should be tier2, got ${JSON.stringify(tc)}`);
+  assert(tc && tc.step === 2, `case ${row.case_id}: tier_classification.step should be 2, got ${JSON.stringify(tc)}`);
+  assert(tc && tc.signal === 'response is not a JSON object', `case ${row.case_id}: tier_classification.signal should be "response is not a JSON object", got ${JSON.stringify(tc)}`);
+  assert(!(tc && tc.step === 3 && tc.signal === 'unknown_reason'),
+    `case ${row.case_id}: must NOT fall to STEP-3 default-deny (tier1/step3/unknown_reason); got ${JSON.stringify(tc)}`);
+}
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write(`OK exchanges=${exchanges.length}\n`);
+NODE
+)"
+D3_REGRESS_RC=$?
+assert_exit_code "$D3_REGRESS_RC" "0" "D3.regress non-JSON consult response recovers grader reason via real run-loop (STEP-2 tier2, not STEP-3 default-deny): $D3_REGRESS_OUT"
+assert_contains "$D3_REGRESS_OUT" "OK exchanges=" "D3.regress suite reports OK exchanges"
+
 finalize_test

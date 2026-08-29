@@ -3752,7 +3752,7 @@ function runConsultDiscussQualification(options) {
           outcome = grader.classify(caseSpec, responseParsed, undefined);
           // classify() returns a bare label; recover the protocol reason for
           // the D3 tier classifier without changing the sealed grader.
-          if (outcome === 'protocol_violation' && responseParsed
+          if (outcome === 'protocol_violation'
               && typeof grader.checkProtocol === 'function') {
             try {
               graderReason = grader.checkProtocol(caseSpec, responseParsed, undefined) || null;

@@ -19,7 +19,17 @@
  *                                 QRP_CLI_KIND=agy → `agy -p <prompt> --model`,
  *                                 QRP_CLI_KIND=kimi → `kimi -m <model> -p <prompt>`
  *                                 — both take the prompt as an ARGV value, not on
- *                                 stdin, so they run in promptViaArgv mode)
+ *                                 stdin, so they run in promptViaArgv mode;
+ *                                 QRP_CLI_KIND=grok → `grok --prompt-file <tmp>
+ *                                 --model --deny "Bash(*)" ...` (forced tool-deny
+ *                                 argv, promptViaFile mode — avoids ARG_MAX);
+ *                                 QRP_CLI_KIND=qoderclicn → `qoderclicn -p --model
+ *                                 --tools "" --permission-mode dont_ask`, prompt on
+ *                                 stdin;
+ *                                 QRP_CLI_KIND=cursor → ALWAYS REFUSES. cursor-agent
+ *                                 exposes no verified tool-deny/sandbox mechanism —
+ *                                 see the callCli() cursor branch for the full
+ *                                 reasoning and the R-3 citation.)
  *
  * ⚠️ agy takes NO --effort. Probed 2026-08-20 (agy 1.1.16) across three model
  * families: `--effort low|medium|high` → "--effort is not supported for <model>",
@@ -114,10 +124,15 @@ const REQUEST_TIMEOUT_MS = (() => {
   return parsed;
 })();
 const MAX_DIFF_BYTES = 2 * 1024 * 1024;
-// CLI harnesses this adapter can drive. codex/claude take the prompt on stdin;
-// agy/kimi take it on argv (see callCli). Kept as one list so the validation
-// message and the dispatch switch can never disagree about what is supported.
-const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi'];
+// CLI harnesses this adapter can drive. codex/claude/qoderclicn take the prompt on
+// stdin; agy/kimi take it on argv; grok takes it via --prompt-file (see callCli).
+// `cursor` is a KNOWN but ALWAYS-REFUSING kind (cursor-agent has no verified
+// tool-deny/sandbox mechanism — see the callCli() cursor branch) — it stays in this
+// list so an operator gets the precise refusal reason from callCli() rather than
+// the generic "QRP_CLI_KIND must be one of" message. Kept as one list so the
+// validation message and the dispatch switch can never disagree about what is
+// supported.
+const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi', 'grok', 'qoderclicn', 'cursor'];
 // A credential-only QRP_CLI_HOME seed is ~16 KB; 8 MB leaves room for a config
 // tree while still refusing a real home.
 const CLI_HOME_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
@@ -601,6 +616,19 @@ function resolveCliBin(kind) {
   return 'kimi';
 }
 
+// grok_effort_clamp — Node mirror of scripts/lib/grok-effort.sh's grok_effort_clamp
+// (bash is the canonical owner for the dispatch-hetero.sh rail; this file cannot
+// `source` a bash lib, so the SAME table is restated here for the QRP transport).
+// Re-probed 2026-08-29 against grok 1.0.13: `grok --effort bogus -p hi` still lists
+// exactly `xhigh, high, medium, low` — the enum grok-effort.sh's header warns can
+// move. Re-probe both copies together on any grok CLI upgrade.
+function grokEffortClamp(effort) {
+  switch (effort) {
+    case 'low': case 'medium': case 'high': case 'xhigh': return effort;
+    default: return 'xhigh'; // 'max' and anything unrecognized clamp to the ceiling
+  }
+}
+
 function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   const { spawn } = require('child_process');
   const fs = require('fs');
@@ -608,10 +636,14 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   const path = require('path');
   let args;
   let sidecar = null;
-  // codex/claude read the prompt on stdin; agy/kimi take it as an argv value.
-  // Keep this a per-kind property rather than a special case at the call site —
-  // the delivery channel is part of the harness contract, same as the arg shape.
+  let promptFile = null;
+  // codex/claude/qoderclicn read the prompt on stdin; agy/kimi take it as an argv
+  // value; grok takes it via --prompt-file (avoids ARG_MAX the same way codex's
+  // sidecar avoids it for OUTPUT — see the promptViaFile branch below). Keep this a
+  // per-kind property rather than a special case at the call site — the delivery
+  // channel is part of the harness contract, same as the arg shape.
   const promptViaArgv = kind === 'agy' || kind === 'kimi';
+  const promptViaFile = kind === 'grok';
   if (promptViaArgv) {
     // A case that overflows ARG_MAX would surface as an opaque spawn E2BIG.
     // Fail with the actual reason instead: a silent transport failure during an
@@ -667,6 +699,97 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
     // No effort flag exists for kimi (thinking is a boolean in config.toml).
     args = ['-m', model, '-p', prompt];
+  } else if (kind === 'grok') {
+    // CONTAINMENT (probed live, grok 1.0.13, 2026-08-29): grok's tool-permission
+    // vocabulary mirrors Claude Code's tool names (Bash/Write/Edit/Read/Grep/Glob/
+    // WebSearch/WebFetch — confirmed via `grok --allow "<Name>(*)"` accepting each
+    // without "unknown tool prefix", and the real tool name for shell exec observed
+    // as `run_terminal_command` under `--output-format streaming-json`, gated by the
+    // `Bash` permission prefix). CRITICAL FINDING that makes this branch exist:
+    // `--tools ""` (the flag that DOES contain agy/claude/qoderclicn) does **NOT**
+    // block tool execution for grok — a live probe with `--tools ""` alone actually
+    // ran `hostname` and returned the REAL host's hostname in the response. Only
+    // explicit `--deny "<Name>(*)"` rules block execution, and they were verified to
+    // WIN over both `--always-approve` and `--permission-mode bypassPermissions`
+    // (two separate live probes: `hostname` was NOT executed, response text named
+    // "Denied by permission policy: deny rule on bash", exit 0, no real hostname in
+    // output). REQUIRED_DENY below is deny-by-argv (not a settings-file merge like
+    // agy) — every one of these flags is forced by the adapter on EVERY grok
+    // invocation, never conditional on QRP_CLI_HOME being set, so containment does
+    // not depend on the clone step succeeding.
+    //
+    // `--permission-mode dontAsk` covers the tool surface NOT explicitly denied
+    // (Grep/Glob/todo_write/spawn_subagent/scheduler_*/web tools already denied
+    // above/etc.) so a headless run cannot hang on an interactive confirmation it
+    // can never answer; `--no-subagents` removes subagent spawning as a surface
+    // entirely (defense in depth — a denied-tool subagent still cannot exec, but
+    // there is no reason to let the surface exist for the exam at all).
+    //
+    // VERSION-DRIFT CAVEAT (same posture as agy's REQUIRED_DENY comment): this is
+    // grok 1.0.13's tool vocabulary. Re-probe `grok --allow "<Name>(*)"` for each
+    // name on any grok CLI upgrade — an added tool category outside this list would
+    // regress silently to allowed-by-omission.
+    const REQUIRED_DENY = ['Bash', 'Write', 'Edit', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch'];
+    promptFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-grok-prompt-')), 'prompt.txt');
+    fs.writeFileSync(promptFile, prompt);
+    args = ['--prompt-file', promptFile, '--model', model, '--no-alt-screen', '--permission-mode', 'dontAsk', '--no-subagents'];
+    for (const name of REQUIRED_DENY) args.push('--deny', `${name}(*)`);
+    if (effort) args.push('--reasoning-effort', grokEffortClamp(effort));
+  } else if (kind === 'qoderclicn') {
+    // CONTAINMENT (probed live, qoderclicn 1.1.35, 2026-08-29): `--tools ""` (its
+    // own documented "disable all built-in tools" value) reliably prevented REAL
+    // tool execution across three separate live probes (two `hostname` prompts, one
+    // `Read /etc/hostname` prompt) — the CLI's own real hostname never appeared in
+    // any response; the model sometimes fabricated a plausible-looking FAKE value
+    // instead of cleanly refusing (an exam-grading nuisance, not a host-exposure
+    // one — the fabricated values were never the real "cookys-aimax395").
+    //
+    // 🔴 CRITICAL FINDING that makes the comment below load-bearing: combining
+    // `--disallowed-tools Bash` (the OTHER deny mechanism qoderclicn exposes) with
+    // `--dangerously-skip-permissions` DID let the model actually execute `hostname`
+    // and return the REAL host's hostname — skip-permissions overrides
+    // --disallowed-tools for this CLI, the exact failure class this whole file
+    // exists to prevent. `--tools ""` PLUS `--dangerously-skip-permissions` was
+    // separately probed and did NOT leak (the model reported the shell tool
+    // unavailable) — but the safe, load-bearing rule here is simpler and stronger:
+    // **NEVER pass --dangerously-skip-permissions for this kind, full stop** — it is
+    // not in this branch's args and must never be added. Containment is `--tools ""`
+    // alone, plus `--permission-mode dont_ask` (headless-safe: never hangs on an
+    // unanswerable confirmation) with no bypass flag anywhere in the invocation.
+    //
+    // VERSION-DRIFT CAVEAT: re-run all four probes above (`hostname` x2, `Read
+    // /etc/hostname`, and the skip-permissions/disallowed-tools combination) on any
+    // qoderclicn upgrade — this is the same class of silent regression agy's
+    // REQUIRED_DENY comment warns about.
+    args = ['-p', '--model', model, '--tools', '', '--permission-mode', 'dont_ask', '--no-session-persistence'];
+    if (effort) args.push('--reasoning-effort', effort); // qoder tolerates all 5 levels, no clamp (see lib/grok-effort.sh header)
+  } else if (kind === 'cursor') {
+    // REFUSAL, not containment — cursor-agent exposes NO verified tool-deny or
+    // sandbox mechanism this adapter can force. The only permission-shaped surface
+    // this repo has ever probed is `--mode ask` (docs/plans/2026-08-26-cursor-cli-
+    // adaptor.md P9/P13), and that same plan's own risk register (R-3) already
+    // ruled it out for exactly this purpose: "`--mode ask` read-only is not proven
+    // tamper-resistant... P9 is one cooperative probe... evidence of refusal, not
+    // evidence of server-side enforcement against an adversarial or injected
+    // prompt" — and the plan's own mitigation was to exclude cursor from the
+    // blind-review allowlist until it earns "its own adversarial probe." A consult/
+    // discuss exam prompt IS an adversarial-shaped prompt (it is graded, the model
+    // has every incentive to reach for a tool to "help"), so this adapter inherits
+    // that same unresolved risk. There is also no `--allow`/`--deny`/`--sandbox`
+    // flag documented or probed anywhere in this repo for cursor-agent (unlike
+    // agy/grok/qoderclicn, all of which have a real, verified deny mechanism this
+    // file forces). Per this file's own safety contract: "if it has no such model,
+    // the adapter must refuse to run rather than expose the host." So this branch
+    // NEVER builds args and NEVER spawns — it throws before anything else runs,
+    // unconditionally, regardless of QRP_CLI_HOME/model/effort. Lifting this refusal
+    // requires a real adversarial containment probe against cursor-agent itself
+    // (R-3's own stated bar), not just re-reading this comment.
+    throw new Error(
+      'cursor-agent has no verified tool-deny/sandbox mechanism (see the callCli() '
+      + "cursor branch and docs/plans/2026-08-26-cursor-cli-adaptor.md R-3) — refusing "
+      + 'to spawn cursor flag-armed and uncontained. This kind will refuse EVERY case '
+      + 'until a real adversarial containment probe is run against cursor-agent.',
+    );
   } else if (kind === 'codex') {
     sidecar = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-codex-')),
@@ -784,10 +907,26 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
           + 'to spawn agy flag-armed with unverified containment',
         );
       }
+    } else if (kind === 'qoderclicn') {
+      // qoderclicn exposes a real --config-dir flag (verified live: pointing it at
+      // an empty dir made the CLI report "Not logged in", i.e. it stopped reading
+      // the real ~/.qoder-cn/.auth) — cleaner than agy's HOME-wide redirect, no
+      // settings-merge dance needed since this kind's containment is pure argv
+      // (--tools ""; see the args-building branch above). The clone is still
+      // per-invocation (same concurrency-safety reasoning as agy's HOME clone).
+      args.push('--config-dir', cloneHome);
     }
   }
   const childEnv = cloneHome
-    ? { ...process.env, HOME: cloneHome }
+    ? {
+      ...process.env,
+      HOME: cloneHome,
+      // grok reads GROK_HOME (default ~/.grok), not HOME, for its config/credential
+      // root (verified: `GROK_HOME` documented in ~/.grok/README.md's env-var table).
+      // Setting HOME too is harmless (grok prefers GROK_HOME when both are set) and
+      // keeps this kind consistent with every other kind's isolation guarantee.
+      ...(kind === 'grok' ? { GROK_HOME: cloneHome } : {}),
+    }
     : process.env;
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
@@ -810,6 +949,7 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
         try { stream.destroy(); } catch { /* already closed */ }
       }
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
+      if (promptFile) fs.rmSync(path.dirname(promptFile), { recursive: true, force: true });
       if (cloneHome) fs.rmSync(cloneHome, { recursive: true, force: true });
       if (error) reject(error);
       else resolve(value);
@@ -894,9 +1034,9 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     });
     child.once('close', (status, signal) => settleFromExit(status, signal));
     child.stdin.once('error', () => {});
-    // argv-mode kinds already carry the prompt; close stdin immediately so a CLI
-    // that waits on it cannot hang the exam until the timeout.
-    child.stdin.end(promptViaArgv ? '' : prompt);
+    // argv/file-mode kinds already carry the prompt; close stdin immediately so a
+    // CLI that waits on it cannot hang the exam until the timeout.
+    child.stdin.end((promptViaArgv || promptViaFile) ? '' : prompt);
   });
 }
 

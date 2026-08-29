@@ -6,9 +6,9 @@ Companion to `../PROPOSAL.md`. That document recommends seats and proves the
 Board-authorized seat and proves each one's `--plan` smoke passes. **No
 `--execute` has been run by anyone producing this bundle — no money has been
 spent.** Every `run.sh` defaults to `plan` and requires the literal argument
-`execute` to attempt a paid call; two of the seven (seats 5, 8) additionally
-self-refuse `execute` before it could ever reach the network (see § Seat
-readiness below).
+`execute` to attempt a paid call; seat 8 (`cursor`) self-refuses `execute`
+before it could ever reach the network (unconditional containment refusal —
+see § Seat readiness below); seat 5 (`qoderclicn`) is READY as of this round.
 
 ## Layout
 
@@ -462,6 +462,46 @@ regrade-after-c4c5-fix.md` for the full breakdown. A fresh, live `--execute`
 run under the current `consult-v4` corpus is required to actually evidence
 the C4/C5 relaxation's real-world effect on sol/MiniMax capability.
 
+**`containment_fingerprint` changed AGAIN (2026-08-29, `feat/qrp-grok-cursor-adapters`,
+new transport adapters)**: `scripts/qualification-review-provider.js`'s `callCli()`
+gained THREE new `QRP_CLI_KIND` branches — `grok`, `qoderclicn`, `cursor` (`CLI_KINDS`
+was `{codex, claude, agy, kimi}`; now `{codex, claude, agy, kimi, grok, qoderclicn,
+cursor}`). `grok` and `qoderclicn` are real, containment-verified transports (see
+`../grok-containment-probe/` and `../qoderclicn-containment-probe/`); `cursor` is a
+**deliberate unconditional refusal** — see `../cursor-containment-probe/` and R-3 in
+`docs/plans/2026-08-26-cursor-cli-adaptor.md`. Two critical containment findings drove
+the design, both live-probed before being wired in:
+
+1. For **grok**, `--tools ""` (the flag that DOES contain agy/claude/qoderclicn) does
+   **NOT** block tool execution — a live probe with only that flag actually ran
+   `hostname` and returned the real host's hostname. Only explicit
+   `--deny "<Name>(*)"` rules (grok's tool-permission vocabulary mirrors Claude Code's:
+   `Bash`/`Write`/`Edit`/`Read`/`Grep`/`Glob`/`WebSearch`/`WebFetch`) block execution,
+   verified to win over both `--always-approve` and `--permission-mode
+   bypassPermissions`. The adapter forces all 8 deny rules on every invocation via
+   argv, unconditionally (never gated on `QRP_CLI_HOME`).
+2. For **qoderclicn**, combining its OTHER deny mechanism (`--disallowed-tools Bash`)
+   with `--dangerously-skip-permissions` DID let the model execute `hostname` and
+   return the real hostname — skip-permissions overrides `--disallowed-tools` for this
+   CLI. `--tools ""` (qoderclicn's own documented "disable all built-in tools" value)
+   held across three separate live probes with NO skip-permissions flag anywhere in
+   the invocation — the load-bearing rule this adapter enforces.
+
+`scripts/qualification-review-provider.js` changed (new callCli() branches, new
+`grokEffortClamp()` helper, `CLI_KINDS` widened) ⇒ `containment_fingerprint`/
+`HARNESS_VERSION` moved for **every** seat, consult and discuss both, same
+shared-file-hash reasoning as every prior containment-fingerprint move in this file.
+`evals/consult-*`/`evals/discuss-*` are untouched by this change ⇒
+`prompt_config_hash`/`semantic_fingerprint` are UNCHANGED (see the table above).
+`scripts/qualification-review-provider.test.js` gained sections 12 (grok), 13
+(qoderclicn), and 14 (cursor refusal) — argv/containment-flag assertions, clone-config
+(`GROK_HOME`/`--config-dir`) assertions, and negative "other kinds unaffected"
+controls, bringing the suite to 198 assertions (was 161). All 5 pre-existing seats'
+`run.sh` (`CONTAINMENT_FINGERPRINT`/`HARNESS_VERSION` only) were refreshed and
+re-smoked (`--plan`, all still exit 0). Seat 5 (qoderclicn) and seat 8 (cursor) are
+both REWRITTEN this round — see the Seat readiness table below for their new status —
+and a new `seat-grok-4.6-consult/` seat was added.
+
 ## Runner identity (captured live, 2026-08-29, this machine)
 
 | Runner | `--version` probe (`scripts/lib/runner-binary.js version --runner <r> --json`) | Token used |
@@ -469,7 +509,8 @@ the C4/C5 relaxation's real-world effect on sol/MiniMax capability.
 | codex | `codex-cli 0.150.1`, `ok:true` | `codex-cli-0.150.1` |
 | cc-shim (`claude`) | `2.1.250 (Claude Code)`, `ok:true` | `2.1.250-Claude-Code` |
 | agy | `1.1.22`, `ok:true` | `1.1.22` (matches the Board-cited version) |
-| qoderclicn | `1.1.28`, `ok:true` | `1.1.28` |
+| qoderclicn | `1.1.35`, `ok:true` (re-probed 2026-08-29) | `1.1.35` |
+| grok | `1.0.13`, `ok:true` | `1.0.13` |
 | cursor (`cursor-agent`) | `ok:false`, `reason:"missing_binary"` | none — binary absent on this machine right now |
 
 Every `run.sh` re-probes its runner live at invocation time (fail-closed —
@@ -515,34 +556,40 @@ after running every `--plan` smoke below.
 | 2 | gpt-5.6-sol / codex | discuss | **PASS** (exit 0) | **READY** — same transport as seat 1 |
 | 3 | MiniMax-M3 / cc-shim | consult | **PASS** (exit 0) | **READY** — `minimax` endpoint ready, cc-shim `claude` CLI present, exam config dir staged |
 | 4 | GLM-5.3 / cc-shim | consult | **PASS** (exit 0) | **READY** — `glm` endpoint ready, same transport as seat 3 |
-| 5 | Qwen3.8-Max / qoderclicn | consult | **PASS** (exit 0) | **NOT-READY** — kernel gap: `qualification-review-provider.js`'s `CLI_KINDS` allowlist is `{codex, claude, agy, kimi}`; `qoderclicn` is wired only into the `dispatch-hetero.sh` live-rail (the `implementer` role), never into the `--remote-provider-cmd` broker transport `consult`/`discuss` require. The `qoderclicn` binary itself IS present and healthy (`1.1.28`) — this is purely an adapter gap, not a credential problem. `run.sh execute` self-refuses with this exact reason before any dispatch. |
+| 5 | Qwen3.8-Max / qoderclicn | consult | **PASS** (exit 0) | **READY** (fixed this round) — `qualification-review-provider.js` now carries a `qoderclicn` `QRP_CLI_KIND` branch (`--tools ""` containment, `--config-dir` credential clone; NEVER `--dangerously-skip-permissions` — see `../qoderclicn-containment-probe/`). qoderclicn 1.1.35 present, credential-only exam config-dir staged, Qwen3.8-Max already a qualified `implementer` via this same binary (scorecard event 148) so transport/creds were pre-proven; only the consult QRP path is new. |
 | 6 | Gemini 3.7 Flash (High) / agy | discuss | **PASS** (exit 0) | **READY** — agy 1.1.22 present, model id confirmed via `agy models`, credential-only exam home staged |
-| 8 | cursor-grok-4.6-high-fast / cursor | consult | **PASS** (exit 0) | **NOT-READY**, two independent reasons: (a) same kernel gap as seat 5 — no `QRP_CLI_KIND=cursor`; (b) the `cursor-agent` binary is **not installed on this machine right now** (`runner-binary.js` probe: `reason:"missing_binary"`) — it was present for the 2026-08-27 `cursor` implementer administration, so this is an environment fact as of this session, not a code claim. `run.sh execute` self-refuses with both reasons before any dispatch. |
+| 8 | cursor-grok-4.6-high-fast / cursor | consult | **PASS** (exit 0) | **NOT-READY**, for a NEW reason this round: `qualification-review-provider.js` now HAS a `cursor` `QRP_CLI_KIND` branch, but it is a deliberate, unconditional REFUSAL — cursor-agent exposes no verified tool-deny/sandbox mechanism (`--mode ask` is documented NOT tamper-resistant, `docs/plans/2026-08-26-cursor-cli-adaptor.md` R-3) — see `../cursor-containment-probe/`. Separately, and independently, the `cursor-agent` binary is still **not installed on this machine** (`runner-binary.js` probe: `reason:"missing_binary"`) — an environment fact, not the reason for the refusal (the adapter would refuse identically with the binary present). `run.sh execute` self-refuses with both reasons before any dispatch. |
+| — | grok-4.6 / grok | consult | **PASS** (exit 0) | **READY** (new this round) — `docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/seat-grok-4.6-consult/`. grok 1.0.13 present, `grok models` confirms `grok-4.6` as the default/available engine (grok-4.5 also listed but not used — 4.6 is newer and available on this rail), credential-only exam `GROK_HOME` clone staged. This repairs the event-149 rail-attributed failure the Board decision cited as unrepaired at authorization time. |
 
 (Seat 7, kimi, is Board-deferred for quota and is out of scope for this
-bundle.)
+bundle. The grok seat has no Board seat number — it repairs an
+already-authorized-but-unrepaired rail rather than adding a new numbered
+seat; see `../PROPOSAL.md` line 267.)
 
 ## Kernel argv fields this bundle could not honestly populate as "verified"
 
-- **Seats 5 and 8's `--remote-provider-cmd`/`QRP_CLI_KIND`**: the argv is
-  assembled to the believed-correct shape (matching the pattern that works
-  for codex/claude/agy) but is **untestable against the real transport**
-  today — `qualification-review-provider.js` has no `qoderclicn` or `cursor`
-  CLI kind. If either adapter is added, re-run that seat's `--plan` (still
-  free) before ever attempting `--execute`.
+- **Seat 8's `--remote-provider-cmd`/`QRP_CLI_KIND`**: `qualification-review-
+  provider.js` now HAS a `cursor` CLI kind, so the argv shape below is no
+  longer speculative — but that kind is a deliberate unconditional refusal
+  (see the Seat readiness table above), so `--execute` still cannot reach the
+  real transport. (Seat 5's `qoderclicn` kind is fixed this round — this
+  no longer applies to it; see the Seat readiness table.)
 - **Seat 8's `--runner-version`**: since the `cursor-agent` binary is absent
   on this machine, `run.sh` cannot re-probe it live. It falls back to the
   last known-good probed value from the 2026-08-27 implementer bundle
   (`2026.08.25-3e8eec8`), explicitly labelled as **not re-verified today** in
   both the script's stderr and this table. A real `--execute` must re-probe
   first.
-- **`--effort` for cc-shim/agy/qoderclicn/cursor seats**: `QRP_CLI_EFFORT` is
-  only forwarded to the `codex` CLI kind (per
-  `qualification-review-provider.js`'s header note); for every other kind
-  here, `--effort` is a receipt-only identity classification, not an
-  enforced transport parameter. Seat 6's `EFFORT="baked-in-model-name"` and
-  seat 3's `EFFORT="default"` are honest labels for "not enforced, no better
-  data" rather than a measured value.
+- **`--effort` for cc-shim/agy seats**: `QRP_CLI_EFFORT` is forwarded to the
+  `codex`, `grok`, and `qoderclicn` CLI kinds (grok clamped through
+  `grokEffortClamp()`, matching `scripts/lib/grok-effort.sh`'s table exactly;
+  qoderclicn passed through raw — it tolerates all 5 levels, no clamp
+  needed); for `claude`/`agy`/`kimi`/`cursor`, `--effort` stays a
+  receipt-only identity classification, not an enforced transport parameter
+  (agy/kimi bake the tier into the model name; cursor never reaches a
+  transport at all). Seat 6's `EFFORT="baked-in-model-name"` and seat 3's
+  `EFFORT="default"` are honest labels for "not enforced, no better data"
+  rather than a measured value.
 - **A real `--execute` grading outcome for any seat**: by design, nothing in
   this bundle produces one — that is the Board's separate, explicit
   authorization to spend, not something this administration-scripts task is

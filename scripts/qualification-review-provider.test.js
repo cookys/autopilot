@@ -129,8 +129,24 @@ try {
     path.join(process.env.HOME || '', '.gemini', 'antigravity-cli', 'settings.json'), 'utf8',
   );
 } catch { /* no settings written (non-agy kinds, or no clone) */ }
+// grok delivers its prompt via --prompt-file, not stdin/argv — capture the
+// file's content from INSIDE the child, before callCli's cleanup removes it
+// (same timing reasoning as settingsJson above).
+let promptFileContent = null;
+const promptFileFlag = process.argv.indexOf('--prompt-file');
+if (promptFileFlag !== -1) {
+  try { promptFileContent = fs.readFileSync(process.argv[promptFileFlag + 1], 'utf8'); } catch { /* n/a */ }
+}
+// qoderclicn's containment clone rides --config-dir, not HOME — capture
+// whatever landed in it (if anything) for the same before-cleanup reason.
+let configDirEntries = null;
+const configDirFlag = process.argv.indexOf('--config-dir');
+if (configDirFlag !== -1) {
+  try { configDirEntries = fs.readdirSync(process.argv[configDirFlag + 1]).sort(); } catch { /* n/a */ }
+}
 fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({
   argv: process.argv.slice(2), env: process.env, stdin, settingsJson,
+  promptFileContent, configDirEntries,
 }));
 if (process.env.STUB_SPAWN_ORPHAN) {
   // A detached descendant in its OWN process group that INHERITS stdout: it
@@ -936,6 +952,168 @@ function roleOnlyRequest(role, content = 'x') {
   check(/produced no output/.test(child.stderr), 'the no-output message is still present');
   check(child.stderr.includes('Print mode: soft-denying tool confirmation'),
     'the captured stderr diagnosis is appended to the no-output error');
+}
+
+// ── 12. grok transport: forced --deny containment, prompt-via-file, effort clamp ─
+// Why: `--tools ""` does NOT block grok's tool execution (live probe: it actually
+// ran `hostname` and returned the real host's hostname) — only explicit
+// `--deny "<Name>(*)"` rules do, and they win over --always-approve/
+// --permission-mode bypassPermissions. See the callCli() grok branch for the
+// full live-probe evidence.
+{
+  // (a) argv assertion: every required deny rule is present, the prompt travels
+  // via --prompt-file (never argv, never stdin), and the headless-safe flags ride
+  // along.
+  const { captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'grok', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(captured !== null, 'grok stub captured the invocation');
+  check(captured.argv.includes('--prompt-file'), 'grok argv carries --prompt-file');
+  check(captured.stdin === '', 'grok never receives the prompt on stdin');
+  check(typeof captured.promptFileContent === 'string' && captured.promptFileContent.length > 0,
+    'the --prompt-file target actually holds the composed prompt');
+  check(captured.promptFileContent.includes('CASE INPUT BELOW'),
+    'the prompt-file content carries the same fenced case framing as every other kind');
+  for (const name of ['Bash', 'Write', 'Edit', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch']) {
+    check(captured.argv.includes('--deny') && captured.argv.includes(`${name}(*)`),
+      `grok argv denies ${name}(*)`);
+  }
+  check(captured.argv.includes('--no-subagents'), 'grok argv disables subagent spawning');
+  const pmIdx = captured.argv.indexOf('--permission-mode');
+  equal(captured.argv[pmIdx + 1], 'dontAsk', 'grok runs in headless-safe dontAsk permission mode');
+  check(!captured.argv.includes('--always-approve') && !captured.argv.includes('--dangerously-skip-permissions'),
+    'grok never carries an auto-approve/skip-permissions flag (deny-by-argv only)');
+}
+{
+  // (b) effort clamp: xhigh/max both surface as the grok-accepted xhigh ceiling;
+  // an already-valid level passes through unchanged.
+  const { captured: high } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'grok', QRP_CLI_BIN: stubClaude, QRP_CLI_EFFORT: 'high' },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  const highIdx = high.argv.indexOf('--reasoning-effort');
+  equal(high.argv[highIdx + 1], 'high', 'a genuinely valid grok level passes through unchanged');
+  // QRP_CLI_EFFORT is validated upstream against /^[a-z]+$/ (main()), so 'max' is
+  // the reachable clamp case, not an arbitrary invalid string.
+  const { captured: maxed } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'grok', QRP_CLI_BIN: stubClaude, QRP_CLI_EFFORT: 'max' },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  const maxIdx = maxed.argv.indexOf('--reasoning-effort');
+  equal(maxed.argv[maxIdx + 1], 'xhigh', "'max' clamps to grok's xhigh ceiling");
+}
+{
+  // (c) QRP_CLI_HOME clone: grok gets GROK_HOME set to the clone (not just HOME).
+  const template = path.join(tempRoot, 'grok-clihome-template');
+  fs.mkdirSync(template, { recursive: true });
+  fs.writeFileSync(path.join(template, 'auth.json'), '{}');
+  const { captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'grok', QRP_CLI_BIN: stubClaude,
+      QRP_CLI_HOME: template,
+    },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(captured !== null && captured.env.GROK_HOME === captured.env.HOME,
+    'grok gets GROK_HOME pointed at the same per-invocation clone as HOME');
+  check(captured.env.GROK_HOME !== template, 'GROK_HOME never receives the template path itself');
+}
+{
+  // (d) negative: no other kind gains GROK_HOME.
+  const { captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(!('GROK_HOME' in captured.env), 'non-grok kinds never get GROK_HOME set');
+}
+
+// ── 13. qoderclicn transport: --tools "" containment, --config-dir clone ────────
+// Why: qoderclicn's OTHER deny mechanism (--disallowed-tools) is overridden by
+// --dangerously-skip-permissions in a live probe (real hostname leaked); --tools
+// "" alone held across three live probes. So this kind must NEVER carry
+// --dangerously-skip-permissions, and containment is --tools "" + dont_ask only.
+{
+  const { captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'qoderclicn', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(captured !== null, 'qoderclicn stub captured the invocation');
+  equal(captured.argv[0], '-p', 'qoderclicn opens with -p');
+  check(captured.stdin.includes('CASE INPUT BELOW'), 'qoderclicn receives the prompt on stdin');
+  const toolsIdx = captured.argv.indexOf('--tools');
+  equal(captured.argv[toolsIdx + 1], '', 'qoderclicn disables all built-in tools via --tools ""');
+  const pmIdx = captured.argv.indexOf('--permission-mode');
+  equal(captured.argv[pmIdx + 1], 'dont_ask', 'qoderclicn runs headless-safe dont_ask permission mode');
+  check(!captured.argv.includes('--dangerously-skip-permissions'),
+    'qoderclicn NEVER carries --dangerously-skip-permissions (verified to defeat --disallowed-tools)');
+  check(captured.argv.includes('--no-session-persistence'),
+    'qoderclicn disables session persistence for the exam run');
+}
+{
+  // (b) QRP_CLI_HOME clone rides --config-dir, never HOME (qoderclicn's own
+  // documented flag; verified live to redirect away from ~/.qoder-cn/.auth).
+  const template = path.join(tempRoot, 'qoder-clihome-template');
+  const authDir = path.join(template, '.auth');
+  fs.mkdirSync(authDir, { recursive: true });
+  fs.writeFileSync(path.join(authDir, 'user'), 'seed');
+  const { captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'qoderclicn', QRP_CLI_BIN: stubClaude,
+      QRP_CLI_HOME: template,
+    },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  const cfgIdx = captured.argv.indexOf('--config-dir');
+  check(cfgIdx !== -1, 'qoderclicn argv carries --config-dir');
+  check(captured.argv[cfgIdx + 1] !== template, '--config-dir never receives the template path itself');
+  check(Array.isArray(captured.configDirEntries) && captured.configDirEntries.includes('.auth'),
+    'the cloned --config-dir carries the seeded .auth directory');
+}
+{
+  // (c) negative: no other kind gains --config-dir.
+  const { captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(!captured.argv.includes('--config-dir'), 'non-qoderclicn kinds never get --config-dir');
+}
+
+// ── 14. cursor transport: unconditional refusal (no verified containment) ───────
+// Why: cursor-agent exposes no --allow/--deny/--sandbox mechanism this repo has
+// ever probed, and its only permission-shaped flag (--mode ask) is documented as
+// NOT proven tamper-resistant (docs/plans/2026-08-26-cursor-cli-adaptor.md R-3).
+// Per this file's own safety contract, an unprovable containment means refuse to
+// run — never spawn cursor-agent at all.
+{
+  const { child, captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'cursor', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'cursor always fails the case (never a successful administration)');
+  check(/no verified tool-deny\/sandbox mechanism/.test(child.stderr),
+    'the refusal names the missing containment mechanism');
+  check(captured === null, 'cursor never reaches spawn — the stub is never invoked, whatever the input');
+}
+{
+  // (b) the refusal fires regardless of role/mode/model/effort — it is
+  // unconditional. Uses a VALID consult envelope (not roleOnlyRequest's stub
+  // content) so the case clears envelope validation and actually reaches
+  // callCli() — proving the refusal is cursor's own, not an envelope-shape miss.
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'cursor', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'consult', QRP_CLI_EFFORT: 'high',
+    },
+    request: roleOnlyRequest('consult', JSON.stringify({ question: 'q', bundle: {} })),
+    stubOutput: '{"answer":{"label":"x","artifact_ref":null},"aside":[],"authority":{"refused":false,"reference":null}}',
+  });
+  equal(child.status, 1, 'cursor refuses a consult-mode case exactly like a reviewer-mode one');
+  check(/no verified tool-deny\/sandbox mechanism/.test(child.stderr),
+    'the consult-mode refusal is the same containment refusal, not an envelope-validation miss');
 }
 
 // ── QRP_CLI_HOME redirects ONLY the harness child's HOME ───────────────────────

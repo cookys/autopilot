@@ -1,0 +1,1 @@
+model call failed: cursor-agent has no verified tool-deny/sandbox mechanism (see the callCli() cursor branch and docs/plans/2026-08-26-cursor-cli-adaptor.md R-3) — refusing to spawn cursor flag-armed and uncontained. This kind will refuse EVERY case until a real adversarial containment probe is run against cursor-agent.

@@ -647,3 +647,39 @@ never receives this value). Future qualification `run.sh` templates for effort-l
 (agy, cc-shim/QRP, and any other transport whose CLI takes no `--effort`) should default straight
 to a valid enum value (`"high"` or `"none"` per `engine-scorecard.js`'s own documented convention),
 never an ad hoc descriptive string.
+
+### Managed-campaign controller cannot record `BOUNDARY_REJECTED` — lease-fenced by its own synthesized stage identity
+- **Trigger**: any `engine implement-review` campaign whose implementer commit is boundary-rejected (unauthorized output path / diff cap) — reproduced 2026-08-29 (`campaign-v1-3b6a9770…`, replayed through the real reducer).
+- **Context**: `src/engine/autopilot-engine.js:6477` writes composition events with `controller-<event>:<gen>` stage identities; `src/engine/implementation-campaign.js:886/738` lease-fences `BOUNDARY_REJECTED` (and `AWAITING_CONVERGENCE`, `:971`) against `live_lease.stage_identity` (`campaign-mutation:0`), so the rejection is unrecordable, the journal strands at `IMPLEMENTING` with a held lease, controller durable state diverges (`boundary_rejected` vs journal `IMPLEMENTING`), and neither `--resume` (`campaign-intake.js:780 campaign_state_lease_open`) nor a repair round nor terminalization is reachable. The terminal path already uses the real lease identity (`:2756`) — do the same for lease-releasing bridge events; regression test: IMPLEMENTING + boundary rejection ⇒ `BOUNDARY_REJECTED`, never `LEASE_FENCED`.
+- **Effort**: Fix
+- **Source**: l6-verdict-stability-p1-20260829T1804Z campaign attempt 2; debugger replay 2026-08-29.
+
+### L6 managed campaigns can never satisfy `reviewer_qualification` — strict provider-readiness bootstrap compiles for `l5` only
+- **Trigger**: next `/l6` run on any repo with `mission_convergence.enforcement_mode: enforce` (reproduced 2026-08-29: attempt 1b blocked at rounds 0 for every seat).
+- **Context**: `bin/autopilot.js:396-399` builds `createStrictL5ProviderBootstrap` only when `AUTOPILOT_LEVEL === 'l5'`; managed dev-flow admission (`scripts/session-mode.js:349`) requires `marker.level === AUTOPILOT_LEVEL`; so an `l6` marker gets neither the readiness authority nor `reviewer_qualified` and the disk-scorecard path is `untrusted_telemetry` by design. Workaround used: session marker set to `l5` (deviation recorded). Fix: gate the bootstrap on `l5|l6` and let `provider-bootstrap.js strict_level` carry the actual level.
+- **Effort**: Fix
+- **Source**: l6-verdict-stability-p1 attempt 1b/1c, 2026-08-29.
+
+### `dispatch-author.sh` success predicate is "non-empty stdout" — truncated / tool-narrating output reports `authored`
+- **Trigger**: already fired twice (2026-08-29, qoderclicn/Qwen3.8-Max-Preview: a 100-byte preamble ending at `[` and a 130 KB mid-file draft with 36 text-form ```` ```tool ```` fences both returned `status:authored`, exit 0, `final_status:null`).
+- **Context**: header line 102 / `emit_result "authored"` at :1222 treat any bytes as an artifact. Needs a positive completion check (declared terminal marker, `bash -n`/parse for the declared kind, zero tool-fence narration) and a `truncated` status; manifests also record `parent_run_id/root_run_id: null, depth: 0` despite exported lineage.
+- **Effort**: S
+- **Source**: l6-verdict-stability-p1 attempt 1 (author-1788027293-2263145, author-1788027402-2269364).
+
+### Verification-author seats on agy / cc-shim / anthropic-compatible are structurally NO-GO under the exact-tuple quota gate
+- **Trigger**: next time a VA seat other than codex/grok/qoderclicn is configured (GLM-5.3@anthropic-compatible is VA-qualified, event 142, yet unroutable on 2026-08-29).
+- **Context**: `dispatch-contract.js` always queries capability state with `--effort <resolver effort>` (and `withResolverConfig` injects `verification_author_effort: high` when absent), but `probe-engine-capability.sh` refuses to observe an effort-bearing tuple for runners that do not consume `--effort` (agy carries effort in the model name; cc-shim/anthropic-compatible have none) ⇒ `quota: unknown` ⇒ NO-GO forever. Either the checker must query the effort-less partition for those runners or the probe must observe it.
+- **Effort**: Fix
+- **Source**: l6-verdict-stability-p1 roster rotation 2026-08-29 (commits 8d6f8786, 83d993a5).
+
+### No supported withdraw for a never-granted DRAFT Mission adoption; graph revisions mint unbounded lineages
+- **Trigger**: next time a frozen execution graph must be revised before or between grants (three adoptions now exist for `qualification-verdict-stability`: 2e784929 DRAFT, 83828e5e ACTIVE with an unreleasable live claim, 420ac261 current).
+- **Context**: `mission prepare` binds the adoption key to {repo_identity, intent, acceptance hashes} (`src/engine/mission-policy.js:195-233`) and pins the graph digest; revising the graph re-derives the same key and fails `MISSION_BINDING_MISMATCH` (`src/mission/runtime.js:781-787`). `successor` needs a terminal source and re-runs the same graph (`:902-907`, `:952`); `rollover` needs COMPLETE. The only way forward is perturbing the intent (graph digest folded into `requirements_hash`, commit 5402cbd5). Add `mission withdraw --prepared <receipt>` refusing unless zero claims and zero events; also a release path for a claim whose campaign was killed mid-flight (attempt-3 claim c434b7f9 stays live).
+- **Effort**: S
+- **Source**: mission-lineage authoring 2026-08-29 (commits 0279dccc, 5402cbd5, 500703b1).
+
+### `hooks/tests/run.sh` is red on `develop` — sealed campaign `verify_cmd` is unsatisfiable
+- **Trigger**: already fired (salvage campaign `campaign-v1-e9bcae52…` `acceptance_failed` on `bash hooks/tests/run.sh` with a byte-identical cherry-pick; seven suites red on base 500703b1: codex-plugin-package, execution-profile, mission-terminal-rollover, next-touch-validation, provider-readiness-consumer, qualification-review-provider, resolve-review-loop [timeout]).
+- **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so any campaign on this base fails acceptance regardless of the candidate. Triage the seven (environmental vs real regression), then either fix `develop` or make the graph's `verification_commands` name the suites the node actually touches.
+- **Effort**: L (triage) — blocks every managed campaign on this repo until done.
+- **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.

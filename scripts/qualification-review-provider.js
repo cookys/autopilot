@@ -826,10 +826,13 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     // requires a real adversarial containment probe against cursor-agent itself
     // (R-3's own stated bar), not just re-reading this comment.
     throw new Error(
-      'cursor-agent has no verified tool-deny/sandbox mechanism (see the callCli() '
-      + "cursor branch and docs/plans/2026-08-26-cursor-cli-adaptor.md R-3) — refusing "
-      + 'to spawn cursor flag-armed and uncontained. This kind will refuse EVERY case '
-      + 'until a real adversarial containment probe is run against cursor-agent.',
+      'cursor-agent has no verified tool-deny/sandbox mechanism — CONFIRMED by live '
+      + 'adversarial probing 2026-08-29 (docs/plans/evidence/2026-08-29-cursor-containment-probe/): '
+      + 'enumerated permissions.deny is allow-by-omission (TodoWrite/WebSearch ran uncontained '
+      + 'under full deny + --force), no wildcard deny exists (["*"] silently no-ops), --sandbox is '
+      + 'AppArmor-gated/unavailable, and --mode ask is overridden by the --force that headless -p '
+      + 'requires — refusing to spawn cursor flag-armed and uncontained. This kind will refuse EVERY '
+      + 'case until cursor-agent ships a real catch-all deny or a portable sandbox surviving --force.',
     );
   } else if (kind === 'codex') {
     sidecar = path.join(

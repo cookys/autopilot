@@ -1,0 +1,1 @@
+The exact return value is shown in the tool output above, beginning with `"mode": "catalog"`. It lists six namespaces: Cursor, GitHub, Gmail, Google Calendar, Google Drive, and Slack; Slack has `needsAuth`, while the other MCP namespaces are `ready`.

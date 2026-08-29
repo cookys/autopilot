@@ -1,0 +1,2 @@
+Error: Sandbox mode is enabled but not available on this system. Sandbox failed to start, possibly due to AppArmor configuration. Visit https://cursor.com/docs/agent/terminal for troubleshooting steps.
+Run 'agent sandbox disable' to switch to allowlist mode.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "corpus_version": "consult-v4",
+  "corpus_version": "consult-v5",
   "methodology_version": "consult-blind-second-opinion",
   "plan_ref": "docs/plans/2026-08-28-consult-discuss-qualification.md#D1",
   "budget": {

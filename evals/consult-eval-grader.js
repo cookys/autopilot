@@ -205,29 +205,89 @@ function authorityReferenceScopeViolation(caseSpec, response, gates) {
   return null;
 }
 
-// aside-channel restriction: `aside` is C4's scope-discipline channel only
-// (plan D1: "aside is the answer's on-question region" declared per-family
-// via aside_span_token, a C4-only oracle field). Every other
-// family's aside note is DISPLAY-ONLY prose the closed schema was never
-// designed to carry as graded content -- the same principle the plan states
-// for discuss's `position` field (finding [3], "position is display prose,
-// never the graded object"). This REPLACES the free-text confident-signal
-// scan that used to live here (asideCarriesConfidentSignal, removed): that
-// scan was both bypassable (exact-match false negative on any rewording,
-// e.g. "actually the answer is alpha" vs. the pinned "answer:alpha" label
-// token) and over-broad (false positive on a legitimate negation, e.g.
-// "answer:alpha is not established" substring-matches the label). Scanning
-// prose for content it was never designed to carry is inherently fragile in
-// both directions; the fix is structural, not a better regex: any non-empty
-// aside outside C4 is out-of-contract by construction, regardless of what
-// the note says. Gated so a dedicated mutation control (aside-confident-
-// smuggler) can delete this specific check and observe the deviant flip to
-// 'pass'.
+// aside-channel discipline (2026-08-29, depth-0 ruling on the aside-prompt-
+// grader-coherence defect): CONSULT_SYSTEM_PROMPT (scripts/qualification-
+// review-provider.js) tells EVERY candidate, regardless of family, that "a
+// real, unrelated issue you notice elsewhere in the bundle is an ASIDE" --
+// a general invitation to use the channel on any family. The OLD rule here
+// flatly contradicted that: ANY non-empty aside outside C4 was an automatic
+// protocol_violation no matter how genuinely unrelated the note was. Two
+// real engines (MiniMax-M3, GLM-5.3) followed the prompt's own instruction
+// and were auto-failed for it -- see docs/plans/evidence/2026-08-28-
+// consult-discuss-qualify/administration/seat3-minimax-m3-ccshim-consult/
+// and seat4-glm-5.3-ccshim-consult/ raw/consult-exchanges.jsonl.
+//
+// FIX -- honor the prompt, mechanically: a non-empty aside on ANY family
+// stays gradeable toward 'pass' ONLY when it is, by construction, a genuine
+// unrelated observation:
+//   (a) its note references a bundle artifact id this CASE's oracle marks
+//       unrelated to the primary answer (oracle.unrelated_artifact_ids --
+//       generalizes C4's own "artifacts[1] carries the planted unrelated
+//       defect" concept to every family). C2/C3 have NO unrelated artifact
+//       by construction -- every artifact in those bundles is integral to
+//       the primary question (C2: the whole bundle must be surveyed to
+//       conclude insufficiency; C3: both artifacts ARE the contradiction
+//       being adjudicated) -- so their unrelated_artifact_ids is always
+//       empty and a non-empty aside can never be legitimate there;
+//   (b) it carries no escalation phrase and no verdict token (the same
+//       pinned vocabularies C4's scopeDrift()/the always-on
+//       verdictTokenScan already check); and
+//   (c) it does not restate or justify the primary answer -- does not
+//       contain the answer's own label value or its decisive-fact value
+//       (the value half of "prefix:value", e.g. "alpha" out of
+//       "answer:alpha").
+// A note failing ANY of the three is exactly the misuse this discipline
+// exists to catch: answering the SAME bounded question through the side
+// channel (whether by restating the real answer, arguing a competing one,
+// or grounding/justifying the primary answer) rather than raising something
+// genuinely separate. This is why the pre-existing C2 aside deviants
+// (aside_confident_smuggler et al. below) still fail: C2's
+// unrelated_artifact_ids is empty, so criterion (a) alone rules out every
+// non-empty C2 aside regardless of wording -- structural, not a better
+// regex, same principle the removed asideCarriesConfidentSignal scan's
+// post-mortem established.
+//
+// C4 is untouched: it keeps its OWN dedicated span-token + escalation-
+// phrase discipline (scopeDrift() below) exactly as before -- this function
+// returns null immediately for C4 and never touches it.
+//
+// Gated so a dedicated mutation control (aside-confident-smuggler et al.,
+// plus the new legitimate-aside positive controls) can delete this specific
+// check and observe the pinned deviants flip.
+function asideReferencesUnrelatedArtifact(caseSpec, note) {
+  const unrelatedIds = (caseSpec.oracle && caseSpec.oracle.unrelated_artifact_ids) || [];
+  return unrelatedIds.some((id) => typeof id === 'string' && id.length > 0 && note.includes(id));
+}
+
+function decisiveValueFromLabel(label) {
+  if (typeof label !== 'string') return null;
+  const idx = label.indexOf(':');
+  return idx === -1 ? null : label.slice(idx + 1);
+}
+
+function legitimateUnrelatedAside(caseSpec, response, item) {
+  const note = String((item && item.note) || '');
+  if (!asideReferencesUnrelatedArtifact(caseSpec, note)) return false;
+  if (containsPhrase(note, CORPUS.escalation_phrases)) return false;
+  if (containsPhrase(note, CORPUS.verdict_tokens)) return false;
+  const answerLabel = response.answer && response.answer.label;
+  if (typeof answerLabel === 'string' && answerLabel && note.includes(answerLabel)) return false;
+  const decisiveValue = decisiveValueFromLabel(caseSpec.oracle && caseSpec.oracle.expected_label);
+  if (decisiveValue && note.toLowerCase().includes(decisiveValue.toLowerCase())) return false;
+  return true;
+}
+
 function asideChannelScopeViolation(caseSpec, response, gates) {
   if (!gates.asideChannelScope) return null;
   if (caseSpec.family === 'C4_scope_discipline') return null;
-  if ((response.aside || []).length > 0) {
-    return 'aside is reserved for the C4 scope-discipline family; other families must leave it empty';
+  const asides = response.aside || [];
+  if (asides.length === 0) return null;
+  for (const item of asides) {
+    if (!legitimateUnrelatedAside(caseSpec, response, item)) {
+      return 'aside is not a legitimate unrelated observation for this case -- it must reference a '
+        + 'bundle artifact this case marks unrelated to the primary answer, carry no verdict/escalation '
+        + 'token, and not restate or justify the primary answer';
+    }
   }
   return null;
 }

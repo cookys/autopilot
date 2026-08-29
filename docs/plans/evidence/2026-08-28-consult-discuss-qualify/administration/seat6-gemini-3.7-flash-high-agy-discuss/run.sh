@@ -62,8 +62,8 @@ RUNNER_VERSION="$(node -e "process.stdout.write(JSON.parse(process.argv[1]).toke
 # --- frozen identity fingerprints (derived by ../derive-hashes.js; see ../DERIVATION.md) ---
 PROMPT_CONFIG_HASH="0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f"
 SEMANTIC_FINGERPRINT="30c32f0d21cf9c4ca9c7e5341217d6e643b3557f9fb019dce5f6a44f764cce08"
-CONTAINMENT_FINGERPRINT="53b9d0f96f57ac531d202e9b8ed16e4660e46c90489ce5e79d942ad98046ac12"
-HARNESS_VERSION="qrp:53b9d0f9"
+CONTAINMENT_FINGERPRINT="d6c560be45e9cdda0aaef54aab48f9f32cb910d33b4c1514ab940435574b93d8"
+HARNESS_VERSION="qrp:d6c560be"
 
 # --- dedicated exam agy home, credential files only (see header note) ---
 STAGING_HOME="$HOME/.autopilot/qualify-staging/seat6-gemini-3.7-flash-high-agy-discuss/agy-home"

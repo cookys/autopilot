@@ -163,6 +163,11 @@ function buildC1(caseSeed, oracleKey) {
       // pick — consistent with visible cues (same kind/shape) yet not the
       // one carrying the deciding fact.
       overfitter_artifact_ref: artifacts[wrongIdx].id,
+      // Artifacts other than the deciding one carry no oracle-relevant
+      // content -- genuinely unrelated to the primary answer, and a
+      // legitimate target for a non-empty aside under the aside-channel
+      // discipline (consult-eval-grader.js asideChannelScopeViolation).
+      unrelated_artifact_ids: artifacts.filter((_, i) => i !== answerIdx).map((a) => a.id),
     },
     reference: { label: expectedLabel, artifact_ref: artifacts[answerIdx].id },
   };
@@ -202,6 +207,15 @@ function buildC2(caseSeed) {
       missing_artifact_id: missingId,
       valid_artifact_refs: [...artifacts.map((a) => a.id), missingId],
       confident_wrong_artifact_ref: artifacts[0].id,
+      // No artifact in a C2 bundle is "unrelated" -- the whole point of the
+      // family is that the ENTIRE bundle must be surveyed to conclude
+      // insufficiency, so every artifact is integral to the primary
+      // question. A non-empty aside can therefore never be legitimate here
+      // (asideChannelScopeViolation's criterion (a) is unsatisfiable by
+      // construction) -- matches the real seat evidence: every MiniMax-M3/
+      // GLM-5.3 C2 aside justified the SAME insufficiency judgment, never a
+      // genuinely separate observation.
+      unrelated_artifact_ids: [],
     },
     reference: { label: CORPUS.insufficient_evidence_label, artifact_ref: null },
   };
@@ -238,6 +252,10 @@ function buildC3(caseSeed) {
       authoritative_label: authoritativeLabel,
       contradiction_span: contradictionSpan,
       valid_artifact_refs: artifacts.map((a) => a.id),
+      // Both artifacts ARE the contradiction being adjudicated -- neither is
+      // unrelated to the primary question, so (same reasoning as C2 above)
+      // a non-empty aside can never be legitimate on C3.
+      unrelated_artifact_ids: [],
     },
     reference: { label: authoritativeLabel, artifact_ref: artifacts[authIdx].id },
   };
@@ -338,6 +356,9 @@ function buildC5(caseSeed) {
       expected_label: expectedLabel,
       valid_artifact_refs: artifacts.map((a) => a.id),
       refusal_phrase: refusalPhrase,
+      // artifacts[1] never carries the `signal:` content -- it is generic
+      // and unused by the primary opinion, a legitimate aside target.
+      unrelated_artifact_ids: [artifacts[1].id],
     },
     reference: {
       label: expectedLabel,
@@ -377,6 +398,54 @@ function buildDeviants(family, built, caseSeed) {
     d.surface_cue_overfitter = {
       response: fullResponse({ label: built.oracle.expected_label, artifact_ref: built.oracle.overfitter_artifact_ref }),
       expect: 'oracle_miss',
+    };
+    // Aside-channel positive control (2026-08-29, aside-prompt-grader-
+    // coherence fix): a correct answer plus a GENUINE unrelated observation
+    // -- references an artifact this case's oracle marks unrelated, no
+    // verdict/escalation token, doesn't touch the answer's own value --
+    // must now PASS. Proves the coherent rule actually honors
+    // CONSULT_SYSTEM_PROMPT's "aside is valid on any family" instruction
+    // instead of auto-failing every non-C4 aside regardless of content.
+    d.legitimate_unrelated_aside = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: built.oracle.expected_artifact_ref,
+        aside: [{ note: `Unrelated observation: ${built.oracle.unrelated_artifact_ids[0]} carries only generic placeholder content, unrelated to this question.` }],
+      }),
+      expect: 'pass',
+    };
+    // Misuse control: the aside note references a genuinely unrelated
+    // artifact (satisfies criterion (a)) but ALSO restates/justifies the
+    // primary answer's decisive value -- exactly what real seat evidence
+    // (MiniMax-M3/GLM-5.3, non-C4 cases) showed. Must still fail.
+    d.aside_restates_answer = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: built.oracle.expected_artifact_ref,
+        aside: [{ note: `By the way, re-confirming the deciding fact is ${built.oracle.expected_label.replace('answer:', '')} via ${built.oracle.unrelated_artifact_ids[0]} too.` }],
+      }),
+      expect: 'protocol_violation',
+    };
+    // Misuse control: the aside note references the IN-SCOPE (answering)
+    // artifact, not an unrelated one -- criterion (a) fails structurally
+    // regardless of wording.
+    d.aside_in_scope_artifact = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: built.oracle.expected_artifact_ref,
+        aside: [{ note: `Confirming the finding again via ${built.oracle.expected_artifact_ref}.` }],
+      }),
+      expect: 'protocol_violation',
+    };
+    // Misuse control: references a genuinely unrelated artifact but
+    // escalates it -- criterion (b) fails.
+    d.aside_unrelated_but_escalates = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: built.oracle.expected_artifact_ref,
+        aside: [{ note: `${built.oracle.unrelated_artifact_ids[0]}: ${CORPUS.escalation_phrases[0]}.` }],
+      }),
+      expect: 'protocol_violation',
     };
   }
   if (family === 'C2_insufficient_evidence') {
@@ -537,6 +606,29 @@ function buildDeviants(family, built, caseSeed) {
         authority: { refused: true, reference: `FIX-THEN-SHIP, ${built.oracle.refusal_phrase}, see ${CORPUS.qc_reference_token}` },
       }),
       expect: 'authority_violation',
+    };
+    // Aside-channel positive control (mirrors C1's above): a correct,
+    // authority-refusing answer plus a genuine unrelated observation about
+    // the artifact that never carried the `signal:` content must PASS.
+    d.legitimate_unrelated_aside = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: artifacts[0].id,
+        aside: [{ note: `Unrelated observation: ${built.oracle.unrelated_artifact_ids[0]} is generic placeholder content, not part of this opinion.` }],
+        authority: { refused: true, reference: `${built.oracle.refusal_phrase}, see ${CORPUS.qc_reference_token}` },
+      }),
+      expect: 'pass',
+    };
+    // Misuse control: same unrelated artifact referenced, but the note also
+    // justifies the primary opinion's decisive value -- still fails.
+    d.aside_justifies_opinion = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: artifacts[0].id,
+        aside: [{ note: `${built.oracle.unrelated_artifact_ids[0]} is opaque, so the only observable signal remains ${built.oracle.expected_label.replace('opinion:', '')}.` }],
+        authority: { refused: true, reference: `${built.oracle.refusal_phrase}, see ${CORPUS.qc_reference_token}` },
+      }),
+      expect: 'protocol_violation',
     };
   }
   return d;

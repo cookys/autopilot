@@ -4468,6 +4468,8 @@ function main() {
 if (require.main === module) main();
 
 module.exports = {
+  buildConsultCaseEnvelope,
+  buildDiscussCaseEnvelope,
   createSessionRoleCapabilityVerifier,
   ownerRuleViolations,
   runBrainQualification,

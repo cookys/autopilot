@@ -954,16 +954,27 @@ function roleOnlyRequest(role, content = 'x') {
     'the captured stderr diagnosis is appended to the no-output error');
 }
 
-// ── 12. grok transport: forced --deny containment, prompt-via-file, effort clamp ─
+// ── 12. grok transport: CATCH-ALL --deny "*" containment, prompt-via-file, effort clamp ─
 // Why: `--tools ""` does NOT block grok's tool execution (live probe: it actually
-// ran `hostname` and returned the real host's hostname) — only explicit
-// `--deny "<Name>(*)"` rules do, and they win over --always-approve/
-// --permission-mode bypassPermissions. See the callCli() grok branch for the
-// full live-probe evidence.
+// ran `hostname` and returned the real host's hostname). An EARLIER version of this
+// adapter used an enumerated `--deny "<Name>(*)"` list (8 named tools) — a hetero
+// security review (sol, FIX-THEN-SHIP, 🔴 grok-default-deny) correctly flagged that
+// as allow-by-omission: a future/unknown grok tool name outside the list would run
+// UNCONTAINED. The fix is a single catch-all `--deny "*"`, verified live against
+// THREE tools (one filesystem/exec, two deliberately NOVEL — `todo_write` and
+// `spawn_subagent`, never named anywhere in this file) — all three denied, real
+// hostname absent, even under `--always-approve`/`--permission-mode
+// bypassPermissions`. See the callCli() grok branch and
+// docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/
+// grok-containment-probe/ for the full live-probe evidence.
 {
-  // (a) argv assertion: every required deny rule is present, the prompt travels
-  // via --prompt-file (never argv, never stdin), and the headless-safe flags ride
-  // along.
+  // (a) BINDING argv assertion: containment is the wildcard `--deny "*"` — and
+  // ONLY the wildcard. This test fails if the branch is ever weakened back to an
+  // enumerated per-tool-name list (the exact regression the security review
+  // caught): it asserts `--deny` appears EXACTLY ONCE in argv, with value `*`,
+  // and it explicitly checks that NONE of the OLD enumerated tool-name deny
+  // entries are present — an enumeration-shaped fix that happened to also add a
+  // `--deny "*"` alongside the old list would still fail this test.
   const { captured } = runProvider({
     env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'grok', QRP_CLI_BIN: stubClaude },
     request: reviewerRequest(),
@@ -976,11 +987,18 @@ function roleOnlyRequest(role, content = 'x') {
     'the --prompt-file target actually holds the composed prompt');
   check(captured.promptFileContent.includes('CASE INPUT BELOW'),
     'the prompt-file content carries the same fenced case framing as every other kind');
-  for (const name of ['Bash', 'Write', 'Edit', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch']) {
-    check(captured.argv.includes('--deny') && captured.argv.includes(`${name}(*)`),
-      `grok argv denies ${name}(*)`);
+  const denyIndexes = captured.argv
+    .map((token, index) => (token === '--deny' ? index : -1))
+    .filter((index) => index !== -1);
+  equal(denyIndexes.length, 1,
+    'grok argv carries EXACTLY ONE --deny flag (a catch-all, never an enumerated list)');
+  equal(captured.argv[denyIndexes[0] + 1], '*',
+    'the single --deny value is the wildcard "*", not a per-tool-name pattern');
+  for (const oldEnumeratedName of ['Bash', 'Write', 'Edit', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch']) {
+    check(!captured.argv.includes(`${oldEnumeratedName}(*)`),
+      `grok argv never regresses to the old enumerated deny entry for ${oldEnumeratedName}`);
   }
-  check(captured.argv.includes('--no-subagents'), 'grok argv disables subagent spawning');
+  check(captured.argv.includes('--no-subagents'), 'grok argv disables subagent spawning (defense in depth)');
   const pmIdx = captured.argv.indexOf('--permission-mode');
   equal(captured.argv[pmIdx + 1], 'dontAsk', 'grok runs in headless-safe dontAsk permission mode');
   check(!captured.argv.includes('--always-approve') && !captured.argv.includes('--dangerously-skip-permissions'),
@@ -1029,11 +1047,19 @@ function roleOnlyRequest(role, content = 'x') {
   check(!('GROK_HOME' in captured.env), 'non-grok kinds never get GROK_HOME set');
 }
 
-// ── 13. qoderclicn transport: --tools "" containment, --config-dir clone ────────
+// ── 13. qoderclicn transport: --tools "" deny-ALL containment, --config-dir clone ─
 // Why: qoderclicn's OTHER deny mechanism (--disallowed-tools) is overridden by
 // --dangerously-skip-permissions in a live probe (real hostname leaked); --tools
-// "" alone held across three live probes. So this kind must NEVER carry
-// --dangerously-skip-permissions, and containment is --tools "" + dont_ask only.
+// "" alone held across FIVE live probes — including a security-review follow-up
+// with two tools NOVEL to the original probe set (`TodoWrite`, `Agent`/subagent-
+// spawn — see callCli()'s qoderclicn branch comment for the full evidence and the
+// structural argument for why "" is allowlist-empty-equals-deny-all, not
+// allow-by-omission: the model hallucinates a fake tool-call block instead of
+// getting a runtime "denied" refusal, meaning the tool was never registered at
+// all). So this kind must NEVER carry --dangerously-skip-permissions, and
+// containment is --tools "" + dont_ask only — an EMPTY allowlist, not a list of
+// denied names, so no future/unknown tool can be missed the way an enumerated
+// deny list could.
 {
   const { captured } = runProvider({
     env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'qoderclicn', QRP_CLI_BIN: stubClaude },
@@ -1043,8 +1069,18 @@ function roleOnlyRequest(role, content = 'x') {
   check(captured !== null, 'qoderclicn stub captured the invocation');
   equal(captured.argv[0], '-p', 'qoderclicn opens with -p');
   check(captured.stdin.includes('CASE INPUT BELOW'), 'qoderclicn receives the prompt on stdin');
-  const toolsIdx = captured.argv.indexOf('--tools');
-  equal(captured.argv[toolsIdx + 1], '', 'qoderclicn disables all built-in tools via --tools ""');
+  // BINDING: --tools must appear EXACTLY ONCE with an EMPTY value (the allowlist
+  // itself, not a per-name denial) — this is what makes containment total rather
+  // than enumerated. A regression to --disallowed-tools <name> (the mechanism
+  // proven defeatable by --dangerously-skip-permissions) would fail this.
+  const toolsIndexes = captured.argv
+    .map((token, index) => (token === '--tools' ? index : -1))
+    .filter((index) => index !== -1);
+  equal(toolsIndexes.length, 1, 'qoderclicn argv carries EXACTLY ONE --tools flag');
+  equal(captured.argv[toolsIndexes[0] + 1], '',
+    'qoderclicn disables ALL built-in tools via an EMPTY --tools allowlist (deny-all by construction)');
+  check(!captured.argv.includes('--disallowed-tools'),
+    'qoderclicn never uses --disallowed-tools (proven defeatable by --dangerously-skip-permissions)');
   const pmIdx = captured.argv.indexOf('--permission-mode');
   equal(captured.argv[pmIdx + 1], 'dont_ask', 'qoderclicn runs headless-safe dont_ask permission mode');
   check(!captured.argv.includes('--dangerously-skip-permissions'),

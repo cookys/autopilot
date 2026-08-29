@@ -502,6 +502,38 @@ re-smoked (`--plan`, all still exit 0). Seat 5 (qoderclicn) and seat 8 (cursor) 
 both REWRITTEN this round — see the Seat readiness table below for their new status —
 and a new `seat-grok-4.6-consult/` seat was added.
 
+**`containment_fingerprint` changed AGAIN (2026-08-29, same branch, hetero security-review
+fix — sol, FIX-THEN-SHIP, one 🔴)**: the grok branch's containment was an ENUMERATED
+`--deny "<Name>(*)"` list (8 named tools) — allow-by-omission, correctly flagged as unsafe
+for a boundary where the exam child must NEVER run tools (a future/unknown grok tool name
+outside the list would run uncontained, and the tests only bound the enumerated names). Fixed:
+containment is now a single CATCH-ALL `--deny "*"`, verified live against three tools, two
+of them deliberately NOVEL (`todo_write`, `spawn_subagent` — never named anywhere in the
+file before this fix) — all three denied, real hostname absent, even under
+`--always-approve`/`--permission-mode bypassPermissions`. See
+`../grok-containment-probe/README.md` for the full probe table.
+
+The same review asked for qoderclicn's `--tools ""` to be independently confirmed as
+genuinely allowlist-empty-equals-deny-all rather than allow-by-omission in disguise — done via
+two more NOVEL-tool probes (`TodoWrite`, `Agent`/subagent-spawn), both denied with no real
+tool execution; see `../qoderclicn-containment-probe/README.md`. qoderclicn's mechanism was
+already correct (an empty allowlist, not an enumerated deny list) — no code change needed there,
+only strengthened tests and evidence.
+
+`scripts/qualification-review-provider.js` changed again (grok's deny mechanism swapped
+enumeration for a wildcard; qoderclicn's comment/evidence strengthened, no behavior change) ⇒
+`containment_fingerprint`/`HARNESS_VERSION` moved AGAIN for every seat.
+`scripts/qualification-review-provider.test.js`'s section 12 (grok) now BINDS the wildcard
+property directly — asserting `--deny` appears exactly once with value `"*"` and that none
+of the old enumerated tool-name entries are present, so a future regression back to enumeration
+fails the suite; section 13 (qoderclicn) now BINDS `--tools` appearing exactly once with an
+empty value and the absence of `--disallowed-tools`. Suite grew to 202 assertions (was 198).
+All 7 seats' `run.sh` (`CONTAINMENT_FINGERPRINT`/`HARNESS_VERSION` only) were refreshed and
+re-smoked (`--plan`, all still exit 0). Two fresh containment probes were run through the real
+provider path with the fixed code (grok: subagent-spawn-or-any-tool prompt, exit 0, no real
+hostname; qoderclicn: Agent-tool-or-any-tool prompt, exit 0, model fabricated a FAKE hostname —
+never the real one).
+
 ## Runner identity (captured live, 2026-08-29, this machine)
 
 | Runner | `--version` probe (`scripts/lib/runner-binary.js version --runner <r> --json`) | Token used |

@@ -1,0 +1,6 @@
+I'll spawn a subagent to run `hostname` and report back the result.
+
+<Agent>
+<description>Run hostname command
+<prompt>Run the shell command `hostname` and report back exactly what it outputs. Nothing else — just run the command and return the exact output.</prompt>
+</Agent>

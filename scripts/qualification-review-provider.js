@@ -21,8 +21,10 @@
  *                                 — both take the prompt as an ARGV value, not on
  *                                 stdin, so they run in promptViaArgv mode;
  *                                 QRP_CLI_KIND=grok → `grok --prompt-file <tmp>
- *                                 --model --deny "Bash(*)" ...` (forced tool-deny
- *                                 argv, promptViaFile mode — avoids ARG_MAX);
+ *                                 --model --deny "*" ...` (forced CATCH-ALL
+ *                                 wildcard tool-deny argv — NOT an enumerated
+ *                                 per-tool list, promptViaFile mode — avoids
+ *                                 ARG_MAX);
  *                                 QRP_CLI_KIND=qoderclicn → `qoderclicn -p --model
  *                                 --tools "" --permission-mode dont_ask`, prompt on
  *                                 stdin;
@@ -700,49 +702,85 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     // No effort flag exists for kimi (thinking is a boolean in config.toml).
     args = ['-m', model, '-p', prompt];
   } else if (kind === 'grok') {
-    // CONTAINMENT (probed live, grok 1.0.13, 2026-08-29): grok's tool-permission
-    // vocabulary mirrors Claude Code's tool names (Bash/Write/Edit/Read/Grep/Glob/
-    // WebSearch/WebFetch — confirmed via `grok --allow "<Name>(*)"` accepting each
-    // without "unknown tool prefix", and the real tool name for shell exec observed
-    // as `run_terminal_command` under `--output-format streaming-json`, gated by the
-    // `Bash` permission prefix). CRITICAL FINDING that makes this branch exist:
-    // `--tools ""` (the flag that DOES contain agy/claude/qoderclicn) does **NOT**
-    // block tool execution for grok — a live probe with `--tools ""` alone actually
-    // ran `hostname` and returned the REAL host's hostname in the response. Only
-    // explicit `--deny "<Name>(*)"` rules block execution, and they were verified to
-    // WIN over both `--always-approve` and `--permission-mode bypassPermissions`
-    // (two separate live probes: `hostname` was NOT executed, response text named
-    // "Denied by permission policy: deny rule on bash", exit 0, no real hostname in
-    // output). REQUIRED_DENY below is deny-by-argv (not a settings-file merge like
-    // agy) — every one of these flags is forced by the adapter on EVERY grok
-    // invocation, never conditional on QRP_CLI_HOME being set, so containment does
+    // CONTAINMENT (probed live, grok 1.0.13, 2026-08-29 + 2026-08-29 security-review
+    // follow-up): containment is a single CATCH-ALL wildcard deny, `--deny "*"` — NOT
+    // an enumerated per-tool-name deny list. This replaced an earlier version of this
+    // branch that denied 8 named tools (Bash/Write/Edit/Read/Grep/Glob/WebSearch/
+    // WebFetch) after a hetero security review (sol, FIX-THEN-SHIP, 🔴 grok-default-
+    // deny) correctly called that shape allow-by-omission: a future/unknown grok tool
+    // name outside the list would run UNCONTAINED, and the tests only bound the
+    // enumerated names.
+    //
+    // `--deny "*"` is a VERIFIED catch-all, not a guess: `--tools ""` (the flag that
+    // DOES catch-all-deny agy/claude/qoderclicn) does **NOT** block tool execution for
+    // grok — a live probe with `--tools ""` alone actually ran `hostname` and returned
+    // the REAL host's hostname. `--deny "*"` was then probed against THREE tools, two
+    // of them deliberately NOVEL (never named anywhere in this file, chosen to prove
+    // the wildcard rather than another enumeration in disguise):
+    //   - `Bash` (hostname): denied, "deny rule on bash", real hostname absent.
+    //   - `todo_write` (NOVEL — "add a todo item"): denied, "deny on any tool matching
+    //     `*`" — under `--permission-mode bypassPermissions`.
+    //   - `spawn_subagent` (a SECOND novel tool, and the surface most likely to
+    //     smuggle an uncontained child): denied, same `*` message — under
+    //     `--always-approve`.
+    // All three held with NO real tool execution and NO real host data in the
+    // response. `--deny "*"` therefore wins over both `--always-approve` and
+    // `--permission-mode bypassPermissions`, exactly like the old per-name rules did,
+    // but WITHOUT naming a single tool — a genuinely unknown future tool is denied by
+    // the SAME rule, not by an entry someone forgot to add. Receipts:
+    //   docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/grok-containment-probe/
+    //
+    // This is deny-by-argv (not a settings-file merge like agy) and is forced on EVERY
+    // grok invocation, never conditional on QRP_CLI_HOME being set — containment does
     // not depend on the clone step succeeding.
     //
-    // `--permission-mode dontAsk` covers the tool surface NOT explicitly denied
-    // (Grep/Glob/todo_write/spawn_subagent/scheduler_*/web tools already denied
-    // above/etc.) so a headless run cannot hang on an interactive confirmation it
-    // can never answer; `--no-subagents` removes subagent spawning as a surface
-    // entirely (defense in depth — a denied-tool subagent still cannot exec, but
-    // there is no reason to let the surface exist for the exam at all).
+    // `--permission-mode dontAsk` keeps a headless run from hanging on an interactive
+    // confirmation it can never answer; `--no-subagents` removes subagent spawning as
+    // a surface entirely. Both are now redundant with `--deny "*"` for the tool-call
+    // path itself (spawn_subagent is proven denied by the wildcard above) — kept as
+    // independent defense-in-depth layers rather than relying on the wildcard alone.
     //
-    // VERSION-DRIFT CAVEAT (same posture as agy's REQUIRED_DENY comment): this is
-    // grok 1.0.13's tool vocabulary. Re-probe `grok --allow "<Name>(*)"` for each
-    // name on any grok CLI upgrade — an added tool category outside this list would
-    // regress silently to allowed-by-omission.
-    const REQUIRED_DENY = ['Bash', 'Write', 'Edit', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch'];
+    // VERSION-DRIFT CAVEAT: `--deny "*"` is grok 1.0.13's confirmed wildcard syntax. A
+    // per-name `--deny "<Name>(*)"` prefix IS validated against a known-tool allowlist
+    // (`--allow "bogus(*)"` errors `unknown tool prefix: bogus`) but the bare
+    // `--deny "*"` form is NOT prefix-validated — which is exactly why it catches
+    // tools this file has never named. Re-run the three-tool probe above (a filesystem/
+    // exec tool, a NOVEL non-filesystem tool, and subagent spawn) on any grok CLI
+    // upgrade to confirm `*` still catches everything — if a future grok version
+    // narrows `*` to only-known-tools, this containment silently degrades to the exact
+    // allow-by-omission shape the review flagged, and must be re-probed before
+    // shipping.
     promptFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-grok-prompt-')), 'prompt.txt');
     fs.writeFileSync(promptFile, prompt);
-    args = ['--prompt-file', promptFile, '--model', model, '--no-alt-screen', '--permission-mode', 'dontAsk', '--no-subagents'];
-    for (const name of REQUIRED_DENY) args.push('--deny', `${name}(*)`);
+    args = [
+      '--prompt-file', promptFile, '--model', model, '--no-alt-screen',
+      '--permission-mode', 'dontAsk', '--no-subagents', '--deny', '*',
+    ];
     if (effort) args.push('--reasoning-effort', grokEffortClamp(effort));
   } else if (kind === 'qoderclicn') {
-    // CONTAINMENT (probed live, qoderclicn 1.1.35, 2026-08-29): `--tools ""` (its
-    // own documented "disable all built-in tools" value) reliably prevented REAL
-    // tool execution across three separate live probes (two `hostname` prompts, one
-    // `Read /etc/hostname` prompt) — the CLI's own real hostname never appeared in
-    // any response; the model sometimes fabricated a plausible-looking FAKE value
-    // instead of cleanly refusing (an exam-grading nuisance, not a host-exposure
-    // one — the fabricated values were never the real "cookys-aimax395").
+    // CONTAINMENT (probed live, qoderclicn 1.1.35, 2026-08-29 + 2026-08-29 security-
+    // review follow-up): `--tools ""` is qoderclicn's own documented "disable all
+    // built-in tools" value, and it is genuinely ALLOWLIST-EMPTY-EQUALS-DENY-ALL —
+    // not allow-by-omission — verified two ways:
+    //   1. Structural: with `--tools ""` the model does not receive a "permission
+    //      denied" refusal from a runtime check (contrast grok's `--deny "*"`, which
+    //      DOES produce that) — it instead HALLUCINATES a fake `<tool_calls>`/XML-ish
+    //      text block, because the tool schema was never registered with it at all.
+    //      That is the observable signature of allowlist-empty (nothing to call),
+    //      not runtime denial (something to call, then refused).
+    //   2. Behavioral, across FIVE live probes, two of them a security-review
+    //      follow-up using tools NOVEL to this file's own earlier probes (never named
+    //      in the original hostname/Read checks, chosen specifically so the property
+    //      being verified is "empty allowlist" and not "these particular names are
+    //      denied"): two `hostname` prompts, one `Read /etc/hostname` prompt, one
+    //      `TodoWrite` prompt (model self-reported its OWN available-tools list —
+    //      Bash/Read/Write/Edit/MultiEdit/Grep/Glob/Task*/Skill/Agent/EnterWorktree/
+    //      ExitWorktree — none of which fired), and one `Agent` (subagent-spawn)
+    //      prompt asking it to spawn a child to run `hostname`. In every case the
+    //      model either fabricated a plausible-looking FAKE value or printed a fake
+    //      tool-call block as inert text — the CLI's own real hostname
+    //      ("cookys-aimax395") never appeared in any response, and no subagent ever
+    //      actually ran.
     //
     // 🔴 CRITICAL FINDING that makes the comment below load-bearing: combining
     // `--disallowed-tools Bash` (the OTHER deny mechanism qoderclicn exposes) with
@@ -757,10 +795,13 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     // alone, plus `--permission-mode dont_ask` (headless-safe: never hangs on an
     // unanswerable confirmation) with no bypass flag anywhere in the invocation.
     //
-    // VERSION-DRIFT CAVEAT: re-run all four probes above (`hostname` x2, `Read
-    // /etc/hostname`, and the skip-permissions/disallowed-tools combination) on any
-    // qoderclicn upgrade — this is the same class of silent regression agy's
-    // REQUIRED_DENY comment warns about.
+    // VERSION-DRIFT CAVEAT: re-run the probes above (`hostname` x2, `Read
+    // /etc/hostname`, `TodoWrite`, `Agent`/subagent-spawn, and the skip-permissions/
+    // disallowed-tools combination) on any qoderclicn upgrade — this is the same
+    // class of silent regression agy's REQUIRED_DENY comment warns about. If a future
+    // qoderclicn version makes `--tools ""` mean "all DEFAULT tools" rather than
+    // "zero tools", this containment silently degrades and must be re-probed before
+    // shipping.
     args = ['-p', '--model', model, '--tools', '', '--permission-mode', 'dont_ask', '--no-session-persistence'];
     if (effort) args.push('--reasoning-effort', effort); // qoder tolerates all 5 levels, no clamp (see lib/grok-effort.sh header)
   } else if (kind === 'cursor') {

@@ -57,8 +57,8 @@ RUNNER_VERSION="$(node -e "process.stdout.write(JSON.parse(process.argv[1]).toke
 # --- frozen identity fingerprints (derived by ../derive-hashes.js; see ../DERIVATION.md) ---
 PROMPT_CONFIG_HASH="1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635"
 SEMANTIC_FINGERPRINT="00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"
-CONTAINMENT_FINGERPRINT="1cf22e818fe5b8529db25f28a1ee9e544cd030ad76a39b4a3ecbd0cf000f8d19"
-HARNESS_VERSION="qrp:1cf22e81"
+CONTAINMENT_FINGERPRINT="cdc4859912eb74352bf3f1d38a7c8e9e3d0c6769314e12e95aa3111983e37d62"
+HARNESS_VERSION="qrp:cdc48599"
 
 # --- endpoint credentials: load the persisted file, then resolve the named
 # endpoint's non-secret metadata; the TOKEN VALUE is read only via indirect

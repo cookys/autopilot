@@ -77,8 +77,8 @@ fi
 # --- frozen identity fingerprints (derived by ../derive-hashes.js; see ../DERIVATION.md) ---
 PROMPT_CONFIG_HASH="f2373a1c81078a86334baf5b32a467fb85876b3ada2d1c678d3b1d03c2a13d8e"
 SEMANTIC_FINGERPRINT="e3cad122072d6070c09ed203e7e30f8719bce631c887b792c92724b66b23cada"
-CONTAINMENT_FINGERPRINT="9e25bea8fb433ca99c1a3b4c7d54431ad8e2b3e51ce70082462d553de09275c6"
-HARNESS_VERSION="qrp:9e25bea8"
+CONTAINMENT_FINGERPRINT="53b9d0f96f57ac531d202e9b8ed16e4660e46c90489ce5e79d942ad98046ac12"
+HARNESS_VERSION="qrp:53b9d0f9"
 
 # --- transport env: BELIEVED shape only — QRP_CLI_KIND=cursor does not
 # exist in qualification-review-provider.js today (see STATUS above). Set

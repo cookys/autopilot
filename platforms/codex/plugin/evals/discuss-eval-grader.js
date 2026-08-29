@@ -125,11 +125,24 @@ function validateSchema(caseObj, response, gates) {
     return outcome('protocol_violation', `missing key(s): ${missing.join(',')}`);
   }
 
-  if (typeof response.round_id !== 'string' || response.round_id === '') {
-    return outcome('protocol_violation', 'round_id must be a non-empty string');
+  // TYPE COERCION (2026-08-29, depth-0 ruling, discuss round_id instrument
+  // defect): a discuss contribution's round identity is semantically
+  // identical whether emitted as the string "4" or the JSON number 4 -- the
+  // real seat-6 Gemini administration produced exactly one protocol_violation
+  // over this (round_id echoed as a bare number), the only thing between it
+  // and 16/16. JSON-type pedantry on an opaque identity field is not discuss
+  // capability (same RELAX principle the C4/C5 fix applied). Accept string
+  // OR finite number, coerce to string for every downstream check (including
+  // the no-verdict-guard scan below) -- but this coercion is scoped to
+  // round_id ONLY; every other field keeps its strict type check untouched.
+  const roundIdIsCoercible = typeof response.round_id === 'string'
+    || (typeof response.round_id === 'number' && Number.isFinite(response.round_id));
+  if (!roundIdIsCoercible || String(response.round_id) === '') {
+    return outcome('protocol_violation', 'round_id must be a non-empty string (or a finite number, coerced to string)');
   }
+  const roundIdStr = String(response.round_id);
   if (gates.noVerdictGuard) {
-    const roundIdLower = response.round_id.toLowerCase();
+    const roundIdLower = roundIdStr.toLowerCase();
     const roundIdVerdictHit = VERDICT_TOKENS.find((t) => roundIdLower.includes(t));
     if (roundIdVerdictHit) {
       return outcome('protocol_violation', `verdict token present in round_id: ${roundIdVerdictHit}`);

@@ -55,22 +55,93 @@ lines 60-66, adapted to consult/discuss's own corpus/generator/transport):
 node docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/derive-hashes.js
 ```
 
-### Values (re-derived 2026-08-29, after the depth-0 consult/discuss
-disclosure fix — see below)
+### Values (re-derived 2026-08-29, after the discuss round_id fix — see below)
 
 | Role | `prompt_config_hash` | `semantic_fingerprint` |
 |---|---|---|
 | consult | `f2373a1c81078a86334baf5b32a467fb85876b3ada2d1c678d3b1d03c2a13d8e` | `e3cad122072d6070c09ed203e7e30f8719bce631c887b792c92724b66b23cada` |
-| discuss | `fb843a7adee3dd3d8a937af8117053e2d48d571523216d72ef7ae6da937adb49` | `c934ce0412bd0497951db5981ae00847745160f01fb954f7eebcd71c1d8bb5ba` |
+| discuss | `0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f` | `30c32f0d21cf9c4ca9c7e5341217d6e643b3557f9fb019dce5f6a44f764cce08` |
 
 `containment_fingerprint` (shared, both roles — same transport file):
-`9e25bea8fb433ca99c1a3b4c7d54431ad8e2b3e51ce70082462d553de09275c6`
+`53b9d0f96f57ac531d202e9b8ed16e4660e46c90489ce5e79d942ad98046ac12`
 
-`--harness-version qrp:9e25bea8` used in every run.sh is this same
+`--harness-version qrp:53b9d0f9` used in every run.sh is this same
 `containment_fingerprint`'s first 8 hex chars, prefixed `qrp:` (the transport
 identifier convention `dispatch-hetero:<short-blob>` uses elsewhere, adapted
 for the `qualification-review-provider.js` transport since these seats never
 go through `dispatch-hetero.sh`).
+
+**All values changed AGAIN (2026-08-29, `fix/discuss-round-id-type`,
+depth-0-verified discuss round_id instrument defect)**: the real seat-6
+Gemini administration recorded in this bundle's `raw/` (see the transport-fix
+section above) produced exactly ONE `protocol_violation` across all 16
+discuss cases — `D-d-t2-c2`, `round_id` echoed as the JSON number `4`
+instead of the string `"4"` — the only thing between that administration and
+16/16. Root cause: `DISCUSS_SYSTEM_PROMPT`'s own single `round_id` example
+(`scripts/qualification-review-provider.js`, output contract) was already a
+quoted string, but the disclosed transcript shows PRIOR rounds numbered
+plainly (`round: 1`, `round: 2`, `round: 3` — real JSON numbers), inviting a
+model to compute "my round is 3+1=4" and emit that as a bare number rather
+than reading the output contract's quoting literally. (Earlier drafts of
+this fix cited `BRAIN_SYSTEM_PROMPT`'s own `round_id` example — a bare
+number — as a second, contradictory disclosure; that is a DIFFERENT prompt
+for a DIFFERENT role/mode, `QRP_PROMPT_MODE=brain`, whose `round_id` genuinely
+is a number end-to-end — its own bundle field is validated
+`typeof bundle.round_id !== 'number'` and its grader compares
+`row.round_id !== round.round_id` numerically. Brain's prompt/grader were
+left untouched; only the DISCUSS-scoped instrument moved.)
+
+Fix, depth-0 ruling — RELAX, don't just re-word: a discuss contribution's
+round identity is semantically identical whether emitted as `"4"` or `4`;
+JSON-type pedantry on an opaque identity field is not discuss capability
+(same principle the C4/C5 consult fix applied). Two changes:
+
+1. `DISCUSS_SYSTEM_PROMPT`'s `round_id` output-contract line
+   (`scripts/qualification-review-provider.js`) now spells out explicitly
+   that `round_id` is always a quoted string, copied verbatim, even though
+   prior transcript rounds are disclosed as plain numbers — closing the
+   "compute round+1 as a number" gap named above. Checked the discuss
+   ENVELOPE/transcript disclosure itself too (`buildDiscussCaseEnvelope`,
+   `scripts/engine-qualify.js`, and `evals/discuss-eval-generator.js`'s
+   `buildAdministration()`): every `round_id` VALUE the envelope discloses
+   (in `reference_response`/`transcript` round objects) is already a STRING
+   (`` `${caseObj.case_id}-r4` `` template literals) — the only numeric field
+   disclosed is `transcript[].round` (a distinct key, the 1/2/3 round
+   ordinal), not `round_id` itself — so no envelope-side change was needed
+   beyond the prompt wording fix.
+2. `evals/discuss-eval-grader.js`'s `validateSchema()` now COERCES
+   `response.round_id`: string OR finite number both accepted, normalized to
+   string for every downstream check (including the no-verdict-guard scan).
+   Scoped to `round_id` only — every other field (`axis_id`, `claim_vector`,
+   `position`, `risk_tags`, `anchors`) keeps its strict type check
+   unchanged, and the no-verdict-guard substring scan on `round_id` still
+   fires on a coerced value (verified: a numeric-looking-but-verdict-tainted
+   `round_id` still fails).
+
+`qualification-review-provider.js` changed (DISCUSS-scoped prompt wording
+only; CONSULT/BRAIN/VA/REVIEWER prompt text is byte-identical) ⇒
+`containment_fingerprint`/`HARNESS_VERSION` moved for **every** seat, consult
+included, since the transport file is shared and this fingerprint hashes the
+whole file, not per-role prompt text (see "Important honesty note" below —
+this is documentation convention, not a kernel-enforced identity).
+`evals/discuss-eval-grader.js` bytes changed and `evals/discuss-capability-
+evidence-corpus.json`'s `corpus_version` moved `discuss-v2` → `discuss-v3`
+to mark a fresh evaluation baseline (`discuss-eval-generator.js` itself is
+byte-unchanged) ⇒ discuss's `prompt_config_hash`/`semantic_fingerprint`
+moved to the values in the table above (were
+`fb843a7adee3dd3d8a937af8117053e2d48d571523216d72ef7ae6da937adb49` /
+`c934ce0412bd0497951db5981ae00847745160f01fb954f7eebcd71c1d8bb5ba`); consult
+is untouched by this fix (its values above are unchanged).
+`scripts/lib/qualification-asset-seals.js`'s `EXPECTED_DISCUSS_GRADER_HASH`
+/ `EXPECTED_DISCUSS_CORPUS_HASH` / `EXPECTED_DISCUSS_SEAL_HASH` were
+re-sealed to match (corpus manifest re-frozen via `rubric-freeze.js seal`;
+`discuss-eval-rubric.md` and `EXPECTED_DISCUSS_GENERATOR_HASH` are
+byte-unchanged). All 7 seats' `run.sh` `CONTAINMENT_FINGERPRINT`/
+`HARNESS_VERSION` were refreshed; the 2 discuss seats
+(`seat2-gpt-5.6-sol-codex-discuss`, `seat6-gemini-3.7-flash-high-agy-discuss`)
+additionally had `PROMPT_CONFIG_HASH`/`SEMANTIC_FINGERPRINT` refreshed. The
+`hooks/tests/lib/honest-consult-discuss-solver-e2e.test.js` end-to-end
+validator confirms discuss stays 16/16 after this fix.
 
 **Why these values changed (2026-08-29)**: the first live administration
 (the `plan-out.json`/`raw/consult-exchanges.jsonl` files under each seat

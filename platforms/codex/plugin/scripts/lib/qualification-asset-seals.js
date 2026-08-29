@@ -157,15 +157,35 @@ const EXPECTED_CONSULT_RUBRIC_HASH = '8c303e33074d97065bf011c33f89a6dddd64283718
 const EXPECTED_CONSULT_SEAL_HASH = 'd6e391d10dbc44bcf5b5a8c98eb0f30c0c80749bcead318a44eda2feaceeff03'
 
 const EXPECTED_DISCUSS_GENERATOR_HASH = 'c95ed1f514a39eca6d03ea3bb0298bbab95ddea32550bd12551bd8be7e056b0f'
-const EXPECTED_DISCUSS_GRADER_HASH = '60864b9302a3a514ac06be2ac56cff7694674933358da19debb2c8305d806bbe'
-const EXPECTED_DISCUSS_CORPUS_HASH = '36d1070ff1d4798eb9cf8bf8a74772b41462e6c1396baa3c84cdfc71b48d8e2f'
+// 2026-08-29 re-seal (fix/discuss-round-id-type): the discuss round_id
+// instrument defect fix -- evals/discuss-eval-grader.js's validateSchema()
+// now COERCES response.round_id (string OR finite number both accepted,
+// normalized to string for the no-verdict-guard scan) instead of rejecting
+// a numeric round_id as protocol_violation. Root cause: the real seat-6
+// Gemini administration echoed round_id as a bare JSON number and failed
+// solely on that; DISCUSS_SYSTEM_PROMPT (scripts/qualification-review-
+// provider.js) was also strengthened to spell out that round_id is always a
+// quoted string even though prior transcript rounds are disclosed as plain
+// numbers (round: 1, round: 2, ...) -- but qualification-review-provider.js
+// is NOT one of the five sealed assets here, so that prompt edit does not
+// move any hash in this file (it DOES move the administration bundle's
+// containment_fingerprint -- see docs/plans/evidence/2026-08-28-consult-
+// discuss-qualify/administration/DERIVATION.md). Only grader.js bytes
+// changed -> EXPECTED_DISCUSS_GRADER_HASH moved (was
+// 60864b9302a3a514ac06be2ac56cff7694674933358da19debb2c8305d806bbe).
+// corpus_version bumped discuss-v2 -> discuss-v3 to mark a fresh evaluation
+// baseline (generator.js untouched, so EXPECTED_DISCUSS_GENERATOR_HASH is
+// unchanged) -> EXPECTED_DISCUSS_CORPUS_HASH moved (was
+// 36d1070ff1d4798eb9cf8bf8a74772b41462e6c1396baa3c84cdfc71b48d8e2f) and the
+// corpus manifest was re-frozen via `rubric-freeze.js seal`, moving its seal
+// file's bytes -> EXPECTED_DISCUSS_SEAL_HASH (combinedSealHash) moved too
+// (was e51b8eefd2f903a58a89f25d9598754adede238a56b97f42a63b022bc28ccfff).
+// rubric.md itself is byte-unchanged -> EXPECTED_DISCUSS_RUBRIC_HASH
+// unchanged.
+const EXPECTED_DISCUSS_GRADER_HASH = '39b5ba15b49f1377b6e01d66727f2863ebc854dca8e80c20071c84a7b8af6b1a'
+const EXPECTED_DISCUSS_CORPUS_HASH = '1525bb71a1dbf7c022d09ce3ac1115401b81504dc7f72e8e08a077faa88babf2'
 const EXPECTED_DISCUSS_RUBRIC_HASH = '6a60a549626eeeab1f49974f020a059db6e24ac9e1834f44b5a442c4b9b86104'
-// discuss's rubric-seal and corpus-seal FILE BYTES are unchanged this round
-// (only consult's grader/generator/corpus moved) -- but the COMBINED-HASH
-// FORMULA changed for both roles, so this constant moves too even though
-// its inputs did not: it now reports the combined identity, not just the
-// rubric seal's.
-const EXPECTED_DISCUSS_SEAL_HASH = 'e51b8eefd2f903a58a89f25d9598754adede238a56b97f42a63b022bc28ccfff'
+const EXPECTED_DISCUSS_SEAL_HASH = '6e2943238215f0f0f45099621f5c6628fc3af93111630128c1f676ad53c1ba94'
 
 const PATHS = {
   consult: {

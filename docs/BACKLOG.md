@@ -610,3 +610,28 @@ Two items:
   go through Bash. Tune: make the cap configurable per level, or exclude Bash calls that invoke
   autopilot's own scripts (`dispatch-review.sh`, `resolve-review-loop.sh`, `node --test`) from the
   count. Keep sleep_loop and leaf_output_read as the hard reds.
+
+## 2026-08-29 dispatch residue governance: mechanism in autopilot, declaration via project DI
+
+Evidence: revival.3d 2026-08-28 — 40 dispatches left 35 `.vite-<tag>` caches, 625 root-owned Chrome
+udd dirs (238 MB+), 118 `/tmp/rw3d-*`, and 5 live Chromes holding 5.7 GB on GPU1 that killed the next
+line's WebGPU context. Owner: "治理你自己每一輪生產的垃圾要系統化". The project shipped
+`scripts/lab/reap-run.mjs` (`--tag/--check/--all-stale/--self-test` + hourly user timer) as a stopgap
+adapter; ruling: the **mechanism belongs in autopilot**, the project only declares what counts as residue.
+
+Split:
+- **autopilot (mechanism)**: tag-is-ownership naming contract (worktree dir, branch `l6/<tag>`, any
+  file/dir/process the leaf creates carries `<tag>`); `reap --tag` at the end of every merge; `--check`
+  gate before dispatching a resource-bound line; `--all-stale` timer; receipts merged into
+  `LifecycleResidueReceipt.zero_residue` (today it only counts worktrees/branches —
+  `reap-dispatch-worktrees.sh`/`reap-dispatch-branches.sh`); self-test harness that injects fake residue
+  incl. root-owned dirs; whitelist semantics (never touch non-`l6/` branches, foreign worktrees,
+  `/tmp/claude-*`, flock-held tags).
+- **project DI** `.claude/residue-config.md` (draft fields): `kinds[]` each with `glob` (with `<tag>`),
+  `owner: self|root` (needs `sudo -n`), `process_match` (cmdline substring with `<tag>`, exact per-pid —
+  **never `pkill -f`**, leaves' briefs live on argv), `port_from` (file glob + regex), `stale_after`,
+  `whitelist[]`; plus `resource_check[]` (e.g. `nvidia-smi` GPU index + mem threshold).
+- Leaves are not trusted to clean up ("已收" was false 3× on 2026-08-28); they only owe correct naming.
+
+Reference impl to absorb: revival.3d `scripts/lab/reap-run.mjs` + `docs/governance/dispatch.md`
+"派遣殘留物治理".

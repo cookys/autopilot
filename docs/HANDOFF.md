@@ -1,95 +1,70 @@
 ## 目標
 
-把 Cursor CLI(`cursor-agent`)接成 autopilot 的異質引擎 rail,並讓使用者能逐角色設定
-hetero engine 走哪個引擎。**本 session 已完成並合進 develop**;此交接是為了 clear ctx 後接續
-剩下的 backlog,不是為了接續一項未完成的工作。
+實作已核准的「資格判定穩定性重設計」(雙層門檻 + 匯總多次施測),把 consult/discuss 資格從「單次滿分才過」改成「可重現的能力估計」,再收尾整個 consult/discuss qualification campaign。
 
 ## 現況
 
-- Branch `develop` @ `b1a14e0c`,**乾淨**,無殘留 worktree、無 stash。
-- **領先 origin/develop 1 個 commit**(`b1a14e0c` 的 knowledge/docs 路由)—— 其餘全部已推。
-- 版本 **v2.34.44**。preflight 8/8、全套件 282/282、gates 全綠。
-- 本 session 出貨(全部走 `/l4` foreman + sonnet leaves + depth-0 跨家族權威 panel):
-  - **v2.34.41** — `dispatch-plan-review.js` 註解裡的 `*/` 讓整支 parse 不了,躺了一天
-  - **plan** `docs/plans/2026-08-26-cursor-cli-adaptor.md` — 3 輪 6 代 hetero review,44 個 blocker 全數裁決修復
-  - **v2.34.42** — cursor rail 本體(plan Phase 1–4)
-  - **v2.34.43** — 逐角色 hetero 路由設定檔 + backlog 清掃
-  - **v2.34.44** — runner→binary 唯一擁有者 + 版本驗不過即拒絕席次
-  - **evidence** `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/` — implementer 資格考 24/24
+- Branch `develop` @ `38471c2f`,**乾淨**,**與 origin/develop 同步**,無殘留 worktree、無 stash。版本 **v2.35.2**。session marker 已清。
+- **verdict-stability plan 已 APPROVED 並合併**:`docs/plans/2026-08-29-qualification-verdict-stability.md`(2 代跨家族 plan review、6+7=13 條發現全摺入)。**尚未開始實作**。
+- **consult/discuss qualification 專案本體已出貨**(wave 1 v2.34.46、wave 2 v2.35.1、儀器五輪修復 + 三 QRP adapter + 誠實考生驗證器,全在 develop)。
+- **施測已跑完 9 席,結果已進 canonical scorecard**(events 157-165),但**都是單次施測、100% 線**,已知對隨機噪音敏感(見「已決事項」)。cursor 無法圍堵、未參加(19 份探針證據 `docs/plans/evidence/2026-08-29-cursor-containment-probe/`)。
+- 無 in-flight 背景工作;所有 worker 已收。
+
+### canonical scorecard 現有 consult/discuss 列(單次,待 D1 降 provisional)
+```
+157 kimi-code/k3    kimi         consult qualified 20/20
+158 gpt-5.6-sol     codex        consult qualified 20/20
+159 claude-fable-5  claude-native consult qualified 20/20
+160 grok-4.6        grok         consult qualified 20/20
+161 Qwen3.8-Max     qoderclicn   consult failed    19/20  (1× protocol_violation=aside濫用)
+162 GLM-5.3         cc-shim      consult failed    18/20
+163 gpt-5.6-sol     codex        discuss failed    9/16   (真失能,zero_information)
+164 gemini-3.7-flash agy         discuss FAILED    15/16  ← 翻盤冤案:另兩次都 16/16
+165 MiniMax-M3      cc-shim      consult QUALIFIED 20/20  ← 翻盤:第一次 19/20
+```
 
 ## 已決事項(不重議)
 
-- **資格閘不拆,override 顯式且留痕** — Board 裁示,已機器化於 `resolve-review-loop.sh`。
-- **雙席 decorrelation 預設關、可開、開了要警告** — 同上。
-- **cursor 只 earned 了 implementer** — `cursor-grok-4.6-high-fast`,90 天效期自 2026-08-27。
-  `review`/`plan` 維持 `gpt-5.6-sol`/codex(唯一過 reviewer 考的);`consult`/`discuss` 只能 override。
-- **schema runner enum 是語法表,admission 才是閘** — 推翻了本 session 稍早「整批延到 Phase 5」的裁決。
-- **雙席比對用 runner 軸,不用模型家族軸** — 家族軸會擋掉出廠預設,且一條 cursor rail 同時服務
-  grok 與 gpt id,家族軸剛好漏掉裁示點名的情況。
-- **Phase 5 只考了 implementer** — 其餘角色未考,依使用者裁示「設定檔先做」。
+- **判定重設計的設計已定並經 review 核准**:雙層(信任違規零容忍一票否決 / 能力失手匯總統計);匯總 3 跑(consult 60 / discuss 48);Wilson 下界 z=1.645、τ=0.85;判定邊界誠實標為真值 **≈0.923**(不是 0.90——我原本的 0.90/z=1.96 自相矛盾,被 review 抓出,已改);**早停只淘汰、合格永不靠單一/部分樣本**(根除翻盤噪音);**不動 sealed grader**(hash 逐位元組不變);信任掃描看 pre-parse stdout(防 verdict 藏尾巴);真 supersession 契約(reader 認得、壓過舊 qualified 列)。細節在 plan D0–D8。
+- **現有 9 席是單次判定,是雜訊不是定論** — Gemini discuss 兩次 16/16、一次 15/16 卻被記 FAILED;MiniMax 19→20 翻成 QUALIFIED。故 D1 必須先把 events 157-165 降 provisional。
+- **cursor 考不了、留 roster 外** — cursor-agent 無可信圍堵:列舉 deny 是 allow-by-omission(TodoWrite/WebSearch 在完整 deny+--force 下照跑)、無 wildcard(`["*"]` 靜默失效)、--sandbox AppArmor 不可攜、--mode ask 被 --force 壓過。19 份實測證據。
+- **儀器已端到端驗過** — 誠實考生 solver(`hooks/tests/lib/honest-consult-discuss-solver.js`)只看 envelope 拿 20/20 consult + 16/16 discuss;五輪修復(envelope 揭露、agy 圍堵、C4/C5 relax、round_id、aside-channel coherent)封住整個資訊缺口類別。
+- **失敗列也是紀錄** — 照使用者「照實記」裁示:qualified + failed 都記,沒參加的(cursor、未施測角色×引擎組合)不寫成績列,只在 ledger 誠實標「沒考」。
+- **semver = PATCH**(改既有 script 行為,非新 skill/agent)。
 
 ## 下一步
 
-1. `git push origin develop`(領先 1 個 commit)。
-2. 若要用 cursor 當 implementer,編輯 `.claude/review-loop-config.md`:
-   `implementer_engine: cursor-grok-4.6-high-fast` / `implementer_runner: cursor` / `implementer_effort: high`
-   —— 已 earned,**不需要 override 檔**。
-3. Backlog(無觸發器,依價值排序):
-   - `dispatch-review.sh:146-147,239` 用 `[ -r ] && . … || true` + `command -v` 守 alias 拒絕,
-     lib 讀不到就靜默跳過(fail-open),而 `dispatch-author.sh:111-112` 是無條件 source —— 不對稱。
-   - `discuss_*` 設定欄位**沒有任何 consumer**(已在 schema description 與文件中據實標明)。
-   - parallel suite 的 flake 已查明是 `/tmp` 陳舊 hetero worktree 殘留,非程式碼問題,附證據在 backlog。
-   - GLM 的四條 🔵(e2e stub 只斷言 `--model`、`dispatch-review.test` 缺 nonzero+stdout 組合、
-     `grok46|codex53` 在兩個 wrapper 各自重述而非取自 `cursor_is_enabled_id`)。
-   - `consult`/`discuss` 沒有評量套件 —— 要 earned 就得先有人寫考卷。
+1. `git pull --ff-only`(確認仍與 origin 同步;本 session 有並行 session,推前必查 `git show origin/develop:.claude-plugin/plugin.json`)。
+2. 讀 `docs/plans/2026-08-29-qualification-verdict-stability.md` 全文(APPROVED 版,D0–D8)。
+3. **派 /l4 foreman 實作 plan**,DAG 序:D0(凍 review base)→ **D1 先降 provisional**(備份兩個 store→append `record_kind:supersession` marker→ledger banner)→ D2 `wilsonLower` helper → D3 error-class→tier 窮舉表(兩張,對照真實 grader 輸出)+ protocol_subtype 在 verdict 引擎外算 → D4 verdict 引擎(fail-only sequential)→ D5 supersession 契約(reader 認得,D7 前必落)→ D6 精確二項 OC 當 normative oracle + 隨機引擎模擬證明可重現 → D7 重跑協定(**付費,約 3×,是 Board/使用者單獨授權關,plan 不授權**)→ D8 mirror+release。
+4. 每個 deliverable 走 code review 對 plan 的 13 條要求把關(尤其 [0] IID 論證、[4] pre-parse 信任輸入、[5] supersession reader 契約)。
+5. D7 真金重跑前**停下問使用者授權**。
 
 ## 驗證方式
 
 ```bash
-AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh   # 8/8
-node scripts/check-js-syntax.js                                   # 549 files
-bash scripts/sync-codex-plugin-skills.sh --check                  # mirror parity
-scripts/resolve-review-loop.sh >/dev/null && echo ok              # roster resolves
-node scripts/engine-scorecard.js seat-status \
-  --engine cursor-grok-4.6-high-fast --runner cursor --role implementer   # qualified
+git status --short                                              # 乾淨
+grep '"version"' .claude-plugin/plugin.json                     # 2.35.2(D8 才 bump 2.35.3)
+bash hooks/tests/honest-consult-discuss-solver.test.sh          # 16 assertions PASS(儀器不可回歸)
+bash hooks/tests/engine-qualify-consult.test.sh                 # PASS
+AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh  # 8/8
+python3 -c "import json;[print(r['event_id'],r['engine'],r['role'],r['status']) for r in map(json.loads,open('$HOME/.autopilot/engine-scorecard/scorecard.jsonl')) if r.get('role') in ('consult','discuss')]"
+# D1 後上面應多出 supersession marker 列,且 seat-status 對 164/165 顯示 provisional/downgraded
 ```
 
 ## Read-order
 
-1. `docs/plans/2026-08-26-cursor-cli-adaptor.md` — plan 本體,
-   Review log 記了三輪六代的軌跡與「為何 blocker 數不收斂」。
-2. `references/hetero-dispatch.md` — cursor rail 契約、consult 席次、
-   `--runner` 列表。
-3. `project-config-template/review-loop-config.md` — 新的
-   `consult_*` / `discuss_*` / `allow_same_runner_dual_seat` 欄位與 override 契約。
-4. `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/README.md`
-   — 資格考結果,含 grok rail 失敗 vs cursor rail 通過的對照與其歸因限制。
+1. `docs/plans/2026-08-29-qualification-verdict-stability.md` — APPROVED plan,實作的 binding spec;Review log 記了 13 條裁決與兩個攻擊面(supersession 契約、OC-preservation invariant)。
+2. `docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md` — 施測總帳:怎麼考的、誰過誰敗、誰沒參加;含 effort-enum bug 與翻盤的誠實紀錄。
+3. `docs/plans/2026-08-28-consult-discuss-qualification.md` — 原 consult/discuss 專案(已 SHIPPED);§8 裁決仍拘束(advisory 到期、requalify_required token、shadow 不武裝、CAPABILITY_ROLE_IDS 分軌)。
+4. `scripts/qualification-review-provider.js` — 7 種 QRP adapter(codex/claude/agy/kimi/grok/qoderclicn 可用、cursor 拒絕),verdict 引擎改動的落點附近。
 
 ## 陷阱
 
-**本 session 新發現 — 已路由至 `references/evidence-discipline.md` §17–19,此處僅留指標:**
-一個 assumption 可能有多份獨立副本(修一份不等於修完);fail-closed 守衛裡的上限若截斷不拒絕就是
-帶長度前綴的 bypass;代理指標不是量測(我把 `raw/` 目錄數當成派工數,報錯了一個數字)。
-
-**操作面,未寫成 reference:**
-- `scripts/load-endpoints-env.sh` 必須在 **bash** 裡 source **且呼叫** `autopilot_load_endpoints_env`
-  —— 只 source 會什麼都不載入,且靜默。
-- `cursor-agent` 會**自動更新**(本 session 中途 2026.08.11 → 2026.08.25)。版本綁定的探針證據
-  跨 session 可能已失效,plan §0.1 的探針表就是舊版跑的。
-- 資格考的 `--execute` 花真錢。`--plan` 免費且會印出完整 argv,先跑它。
-
-**繼承自上一份 handoff(2026-08-23),當時未被路由出去,仍有效:**
-- test-integrity 設定**從 base commit 讀**;測試 range 的 base 必須含 `.claude/test-integrity-config.md`,
-  否則回 `source: template, matched: 0`,會被誤判成「修了沒生效」。
-- **qc-gate 只認 `QC-Verdict: PASS` 字彙**,`SHIP-AS-IS` 不吃;trailer 必須與 `Co-Authored-By` 同末段。
-- **foreman 停車不自醒**:等自己的背景子程序時不會被喚醒,只有 depth-0 `SendMessage` 能救
-  (已寫入 `level-front-door.md`)。
-- **CC foreman 的 `owner_absent` 是假象**:`stage-acquire` 跑在瞬時 shell 裡,watcher 判 dead 但
-  agent 還活著。看 git artifacts,別信這個訊號。
-- 判紅**只信 Summary 段**;`preflight-release-routing` 裡的 `FAIL [slash-entry-probe]` 是嵌套 fixture。
-
-**已路由出本檔的內容**(依 `references/knowledge-routing.md` §3):
-`references/evidence-discipline.md` §17–19 + §10 延伸(discipline)、
-`skills/ceo-agent/references/level-front-door.md` §3 兩條 panel 操作規則(discipline)、
-`.claude/knowledge/vendor-quota-shapes.md`(可公開事實,已過揭露閘)、
-`~/.claude/projects/<slug>/memory/`(機器本地:引擎清單與路由決策)。
+**已路由出本檔(見下)。此處只留指標:**
+- **base-drift + 共用 checkout**:worktree agent 從 origin 切、非本地 HEAD——派依賴前序 commit 的 worker 前先 push;另有並行 session 直接在主 checkout 切分支的劫持風險,每次 merge/commit 前 `git branch --show-current` 重驗。(已在 memory `concurrent-session-version-yield.md`。)
+- **capability/containment docs 會騙人**:grok `--tools ""` 看似擋工具其實照跑、cursor deny 是假鎖——任何「這個 CLI 能圍堵/有某能力」的宣稱,一律用**新工具名活體探針**驗,不信 docs、不信舊 adapter。(本 session 新教訓,已 route 到 learn。)
+- **離線重判舊回應會低估重跑**:用修正後 grader 重判**舊 prompt 下的回應**,不等於用**修正 prompt 重跑**——MiniMax/GLM 離線預覽說仍敗,實跑卻 18-19/20。修了 prompt 就要重跑,別靠離線判。(已 route 到 learn。)
+- **run.sh effort 是 receipt-only 但要合法 enum**:agy/cc-shim 席曾塞 `baked-in-model-name`/`default`,record 的 enum 拒收。已修+進 BACKLOG。
+- **`--emit-row --store <scorecard路徑>`** 會讓 evidence 落到 scorecard 的 dirname 而非 canonical `~/.autopilot/engine-capability/`——記帳要走 production record + 重錨。
+- **cc-shim endpoint 三步驟**(bash 非 zsh、source 後要呼叫 `autopilot_load_endpoints_env`、`--endpoint minimax` 不手動 export)。(已在 memory `dispatch-review-runner-setup.md`。)

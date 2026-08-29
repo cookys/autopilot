@@ -22,8 +22,10 @@ administration/
 ```
 
 Seat numbering follows the Board decision list in `../PROPOSAL.md` §"Board
-decision — 2026-08-28 (authorization)"; seat 7 (kimi) is deferred (quota) and
-has no directory here.
+decision — 2026-08-28 (authorization)"; seat 7 (kimi) was originally deferred
+(quota) and had no directory here — quota is now confirmed back and
+`seat7-kimi-k3-kimi-consult/` was assembled 2026-08-29 (see § "Seat 7 (kimi)"
+below).
 
 ## Identity fingerprint derivations
 
@@ -517,10 +519,125 @@ after running every `--plan` smoke below.
 | 4 | GLM-5.3 / cc-shim | consult | **PASS** (exit 0) | **READY** — `glm` endpoint ready, same transport as seat 3 |
 | 5 | Qwen3.8-Max / qoderclicn | consult | **PASS** (exit 0) | **NOT-READY** — kernel gap: `qualification-review-provider.js`'s `CLI_KINDS` allowlist is `{codex, claude, agy, kimi}`; `qoderclicn` is wired only into the `dispatch-hetero.sh` live-rail (the `implementer` role), never into the `--remote-provider-cmd` broker transport `consult`/`discuss` require. The `qoderclicn` binary itself IS present and healthy (`1.1.28`) — this is purely an adapter gap, not a credential problem. `run.sh execute` self-refuses with this exact reason before any dispatch. |
 | 6 | Gemini 3.7 Flash (High) / agy | discuss | **PASS** (exit 0) | **READY** — agy 1.1.22 present, model id confirmed via `agy models`, credential-only exam home staged |
+| 7 | kimi-code/k3 / kimi | consult | **PASS** (exit 0) | **READY** — kimi CLI present (`kimi --version` → `0.39.1`), quota confirmed back via a live `kimi -m kimi-code/k3 -p ...` PONG probe just prior to assembly, QRP `QRP_CLI_KIND=kimi` supported (`CLI_KINDS` allowlist), credential-only exam `QRP_CLI_HOME` staged (28 KB, config.toml + credentials/ + oauth/ + device_id, well under the adapter's 8 MB cap) |
 | 8 | cursor-grok-4.6-high-fast / cursor | consult | **PASS** (exit 0) | **NOT-READY**, two independent reasons: (a) same kernel gap as seat 5 — no `QRP_CLI_KIND=cursor`; (b) the `cursor-agent` binary is **not installed on this machine right now** (`runner-binary.js` probe: `reason:"missing_binary"`) — it was present for the 2026-08-27 `cursor` implementer administration, so this is an environment fact as of this session, not a code claim. `run.sh execute` self-refuses with both reasons before any dispatch. |
+| Fable | claude-fable-5 / claude-native | consult | **PASS** (exit 0) | **READY for --plan; --execute UNVERIFIED live** — `claude` CLI present (2.1.251), staged exam `CLAUDE_CONFIG_DIR` lets `claude --version` succeed with the real `~/.claude/.claude.json` mtime unchanged before/after; the paid `claude -p "reply PONG" --model claude-fable-5` probe was deliberately NOT run (this administration is scoped to free `--plan` smokes only — see § "Seat Fable" below) |
 
-(Seat 7, kimi, is Board-deferred for quota and is out of scope for this
-bundle.)
+### Seat 7 (kimi) — assembled 2026-08-29, quota confirmed back
+
+Seat 7 was Board-deferred for quota at the 2026-08-28 authorization and had
+no directory in this bundle; quota is now confirmed back (a live
+`kimi -m kimi-code/k3 -p ...` probe returned PONG cleanly on this machine
+just prior to this seat's assembly). `seat7-kimi-k3-kimi-consult/run.sh`
+reuses the SAME corpus-v6 consult identity every other consult seat in this
+bundle carries (`PROMPT_CONFIG_HASH`/`SEMANTIC_FINGERPRINT`/
+`CONTAINMENT_FINGERPRINT`/`HARNESS_VERSION` all copied verbatim from the
+table above — the exam assets are identical across engines, only
+engine/runner/model identity differs per seat). `--engine kimi-code-k3`,
+`--model kimi-code/k3` (exact vendor id, `MODEL_ID` regex allows `/`),
+`--model-version kimi-code-k3` (operator-asserted, slash-free — `--model-
+version` is a strict `TOKEN` and `engine-qualify.js`'s `TOKEN` regex rejects
+`/`, unlike `MODEL_ID`), `--runner kimi`, `--family moonshot`
+(`src/readiness/status.js:38`: `/(kimi|moonshot)/` → `'moonshot'` — no prior
+kimi scorecard row existed locally to cross-check against, so this is the
+runner's own canonical family mapping), `--effort high` (receipt-only —
+`qualification-review-provider.js`'s `kind === 'kimi'` branch in `callCli()`
+passes no `--effort` flag; kimi's thinking is a config.toml boolean, not an
+argv parameter — `high` here matches the other consult seats' calibrated
+tier the same way seat 3's `EFFORT="default"` and seat 6's
+`EFFORT="baked-in-model-name"` are receipt-only labels, not enforced
+transport parameters). `--runner-version` captured live via
+`scripts/lib/runner-binary.js version --runner kimi --json` → `0.39.1`
+(fail-closed, never guessed). `QRP_CLI_HOME` staged credential-only
+(`config.toml`, `credentials/kimi-code.json`, `oauth/kimi-code`,
+`device_id` — 28 KB total) into
+`$HOME/.autopilot/qualify-staging/seat7-kimi-k3-kimi-consult/kimi-home/`,
+same posture as seat 6's agy staging and per
+`qualification-review-provider.js`'s own `QRP_CLI_HOME` header note ("Same
+posture as CODEX_HOME / KIMI_CODE_HOME" — kimi keeps credentials under
+`$HOME/.kimi-code` and exposes no config-dir env var of its own); NOT the
+full `~/.kimi-code` (≈90 MB with cache/sessions/logs), which would blow the
+adapter's 8 MB template cap. `bash run.sh plan` smoke: **PASS**, exit 0,
+`admission.pass:true`, `checked_cases:20`, `negative_control_admission_
+failed:true` (the D3 negative control was caught). Confirmed no credential
+material landed under `docs/` (`git status` after the smoke shows only
+`seat7-kimi-k3-kimi-consult/` itself — `run.sh`, `raw/`, `plan-out.json` —
+staged in `$HOME/.autopilot/qualify-staging/`, outside the repo).
+
+### Seat Fable (claude-fable-5) — assembled 2026-08-29, native Claude auth
+
+Fable is a NATIVE Claude model, not a third-party seat: it runs through the
+SAME QRP `claude` adapter as seat 3 (MiniMax) / seat 4 (GLM) —
+`QRP_CLI_KIND=claude` → `claude -p <prompt> --model <model>` — but points
+that adapter at the REAL Anthropic API using the user's own Claude
+credentials, never `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` (that pattern
+is what cc-shim seats 3/4 use to redirect the claude CLI to a third-party
+Anthropic-compatible endpoint; Fable has no third-party endpoint to
+redirect to). `seat-fable-consult/run.sh` reuses the SAME corpus-v6 consult
+identity every other consult seat in this bundle carries
+(`PROMPT_CONFIG_HASH`/`SEMANTIC_FINGERPRINT`/`CONTAINMENT_FINGERPRINT`/
+`HARNESS_VERSION` all copied verbatim from the table above — the exam
+assets are identical across engines, only engine/runner/model identity
+differs per seat).
+
+`--engine claude-fable-5`, `--model claude-fable-5`, `--model-version
+claude-fable-5` (operator-asserted — the claude CLI reports no build id
+distinct from the model id; `claude --help` on this build (2.1.251) cites
+`'claude-fable-5'` verbatim as an example full model name for `--model`,
+which is free corroborating evidence the string is real without spending
+anything). `--runner claude-native` — **not** `cc-shim`: confirmed via
+`node scripts/lib/runner-binary.js version --runner claude-native --json`
+→ `{"ok":true,"binary":"claude","runner":"claude-native",...}`, while
+`--runner claude` alone resolves to `{"ok":false,"reason":"unknown_runner"}`
+on the same script; `src/readiness/status.js`'s runner allowlist also
+carries `claude-native` explicitly. `--family anthropic`
+(`src/readiness/status.js:32`: `/(claude|opus|sonnet|haiku)/` →
+`'anthropic'`). `--effort high` (receipt-only — `qualification-review-
+provider.js`'s `callCli()` `else` branch, which every non-agy/kimi/codex
+kind including `claude` falls into, passes no `--effort` flag at all; `high`
+here is an honest label matching the other consult seats' calibrated tier,
+same posture as seat 3's `EFFORT="default"` and seat 7's `EFFORT="high"`).
+`--runner-version` captured live via `scripts/lib/runner-binary.js version
+--runner claude-native --json` → `2.1.251 (Claude Code)` (fail-closed, never
+guessed).
+
+**Config-dir staging (the CLAUDE_CONFIG_DIR TRAP, mirrored from seat 3's
+SAFE pattern but pointed at native auth):** `run.sh` stages
+`$HOME/.autopilot/qualify-staging/seat-fable-consult/claude-home/`
+containing ONLY `.credentials.json` (copied once from the real
+`~/.claude/.credentials.json`, idempotent, mode 700/600) — never a symlink
+to or copy of the whole `~/.claude` tree, never written under `docs/`.
+Verified 2026-08-29, this machine:
+- `stat` on `$HOME/.claude/.claude.json` before staging/probing:
+  `2026-08-17 17:35:33.947601334 +0800` (mtime `1786959333`).
+- `CLAUDE_CONFIG_DIR=<staged dir> claude --version` → `2.1.251 (Claude
+  Code)`, exit 0.
+- `stat` on `$HOME/.claude/.claude.json` immediately after: byte-identical
+  timestamp, `2026-08-17 17:35:33.947601334 +0800` — **not reset**.
+- The staged dir's own contents after the probe: still just
+  `.credentials.json` (the `claude` CLI did not write a fresh
+  `.claude.json` or any other file into the staged dir on a `--version`
+  call).
+
+**What this bundle could NOT honestly verify for Fable:** a live headless
+`claude -p "reply PONG" --model claude-fable-5` call under the staged
+config dir was **not run**. That call would reach the real Anthropic API
+and spend money; this administration is scoped to free `--plan` smokes
+only, per the task's own "execute NOTHING paid" boundary. So while
+`--version` proves the staged credentials authenticate the CLI process
+itself, and `claude --help`'s own example text corroborates the model
+string, whether `claude-fable-5` is actually reachable and returns a
+completion under these exact staged credentials remains unverified until a
+Board-authorized `--execute` (or an explicitly-approved standalone PONG
+probe) is run.
+
+`bash run.sh plan` smoke: **PASS**, exit 0, `admission.pass:true`,
+`checked_cases:20`, `negative_control_admission_failed:true` (the D3
+negative control was caught, matching every other consult seat).
+Confirmed no credential material landed under `docs/` (`git status` after
+the smoke shows only `seat-fable-consult/` itself — `run.sh`, `raw/`,
+`plan-out.json` — with the staged credentials in
+`$HOME/.autopilot/qualify-staging/`, outside the repo).
 
 ## Kernel argv fields this bundle could not honestly populate as "verified"
 
@@ -547,3 +664,8 @@ bundle.)
   this bundle produces one — that is the Board's separate, explicit
   authorization to spend, not something this administration-scripts task is
   scoped to trigger.
+- **Fable's live headless reachability**: `claude --version` proves the
+  staged exam config dir authenticates the CLI process; it does NOT prove a
+  real `claude -p ... --model claude-fable-5` completion succeeds under
+  those credentials. That call was not made (paid, out of scope for this
+  bundle) — see § "Seat Fable" above.

@@ -1,0 +1,3 @@
+I don't have a `TodoWrite` tool available in my toolset. The tools I have access to are: Bash, Read, Write, Edit, Grep, Glob, and various project-specific tools (Skill, TaskCreate, TaskGet, TaskList, TaskUpdate, TaskDelete, Agent, etc.) — but no `TodoWrite`.
+
+Would you like me to accomplish the same goal using one of the tools I do have (e.g., `TaskCreate` to add a task called "TESTITEM")?

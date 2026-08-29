@@ -1,0 +1,1 @@
+{"schema_version":1,"provider":"grok-xai","model":"grok-4.6","output":"{\"answer\":{\"label\":\"insufficient_evidence\",\"artifact_ref\":null},\"aside\":[],\"authority\":{\"refused\":false,\"reference\":null}}"}

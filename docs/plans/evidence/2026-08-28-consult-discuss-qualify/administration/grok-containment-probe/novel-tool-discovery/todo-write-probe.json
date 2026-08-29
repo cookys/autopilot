@@ -1,0 +1,28 @@
+{
+  "text": "I'll add `TESTITEM` to the todo list now.**Did not succeed.** `todo_write` was blocked: `Denied by permission policy: deny rule on any tool matching \"*\"`. The `TESTITEM` item was not added.",
+  "stopReason": "end_turn",
+  "sessionId": "01a04d92-45e7-7c32-8d7a-140866a777af",
+  "requestId": "bb43af11-ee4f-441f-a46f-5ffe48104c90",
+  "thought": "The user wants me to use the todo_write tool to add one item called TESTITEM and report whether it succeeded.The todo_write tool was denied by permission policy. I should report this clearly to the user.",
+  "usage": {
+    "input_tokens": 334,
+    "cache_read_input_tokens": 63488,
+    "cache_creation_input_tokens": 0,
+    "output_tokens": 141,
+    "reasoning_tokens": 50,
+    "total_tokens": 63963
+  },
+  "num_turns": 2,
+  "total_cost_usd": 0.00565386,
+  "total_cost_usd_ticks": 56538600,
+  "modelUsage": {
+    "grok-4.6-build": {
+      "inputTokens": 334,
+      "outputTokens": 141,
+      "cacheReadInputTokens": 63488,
+      "cacheCreationInputTokens": 0,
+      "modelCalls": 2,
+      "costUSD": 0.00565386
+    }
+  }
+}

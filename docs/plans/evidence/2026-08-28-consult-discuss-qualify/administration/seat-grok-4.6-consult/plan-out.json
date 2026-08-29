@@ -1,0 +1,119 @@
+{
+ "schema_version": 1,
+ "role": "consult",
+ "mode": "plan",
+ "identities": {
+  "generator": "26e253b02adb197697bcaf04c9879954e681f69ec76a244284074e46c7652e8c",
+  "grader": "7852cf337890a1de1544865465bd0e16c0cbe9c7f4a57cec70835977524bab90",
+  "corpus": "4087482c93d72e595e5076f296136460cfac3c538ac94958b36df1d0378b1510",
+  "rubric": "8c303e33074d97065bf011c33f89a6dddd642837184834ea578ad31c2c0402cc",
+  "seal": "3eecb968cdeaa760382203852c8906fd5c31ce8547c959497fb08bd2a280487d"
+ },
+ "case_plan": {
+  "budget": {
+   "trials_per_administration": 2,
+   "families": 5,
+   "cases_per_family_per_trial": 2,
+   "cases_per_trial": 10,
+   "cases_per_administration": 20
+  },
+  "trials": [
+   {
+    "trial": 0,
+    "cases": [
+     {
+      "case_id": "C1_grounded_answer-t0-c0",
+      "family": "C1_grounded_answer"
+     },
+     {
+      "case_id": "C1_grounded_answer-t0-c1",
+      "family": "C1_grounded_answer"
+     },
+     {
+      "case_id": "C2_insufficient_evidence-t0-c0",
+      "family": "C2_insufficient_evidence"
+     },
+     {
+      "case_id": "C2_insufficient_evidence-t0-c1",
+      "family": "C2_insufficient_evidence"
+     },
+     {
+      "case_id": "C3_contradictory_primary_artifacts-t0-c0",
+      "family": "C3_contradictory_primary_artifacts"
+     },
+     {
+      "case_id": "C3_contradictory_primary_artifacts-t0-c1",
+      "family": "C3_contradictory_primary_artifacts"
+     },
+     {
+      "case_id": "C4_scope_discipline-t0-c0",
+      "family": "C4_scope_discipline"
+     },
+     {
+      "case_id": "C4_scope_discipline-t0-c1",
+      "family": "C4_scope_discipline"
+     },
+     {
+      "case_id": "C5_authority_trap-t0-c0",
+      "family": "C5_authority_trap"
+     },
+     {
+      "case_id": "C5_authority_trap-t0-c1",
+      "family": "C5_authority_trap"
+     }
+    ]
+   },
+   {
+    "trial": 1,
+    "cases": [
+     {
+      "case_id": "C1_grounded_answer-t1-c0",
+      "family": "C1_grounded_answer"
+     },
+     {
+      "case_id": "C1_grounded_answer-t1-c1",
+      "family": "C1_grounded_answer"
+     },
+     {
+      "case_id": "C2_insufficient_evidence-t1-c0",
+      "family": "C2_insufficient_evidence"
+     },
+     {
+      "case_id": "C2_insufficient_evidence-t1-c1",
+      "family": "C2_insufficient_evidence"
+     },
+     {
+      "case_id": "C3_contradictory_primary_artifacts-t1-c0",
+      "family": "C3_contradictory_primary_artifacts"
+     },
+     {
+      "case_id": "C3_contradictory_primary_artifacts-t1-c1",
+      "family": "C3_contradictory_primary_artifacts"
+     },
+     {
+      "case_id": "C4_scope_discipline-t1-c0",
+      "family": "C4_scope_discipline"
+     },
+     {
+      "case_id": "C4_scope_discipline-t1-c1",
+      "family": "C4_scope_discipline"
+     },
+     {
+      "case_id": "C5_authority_trap-t1-c0",
+      "family": "C5_authority_trap"
+     },
+     {
+      "case_id": "C5_authority_trap-t1-c1",
+      "family": "C5_authority_trap"
+     }
+    ]
+   }
+  ],
+  "admission": {
+   "pass": true,
+   "checked_cases": 20,
+   "overfitter_checked": true,
+   "negative_control_admission_failed": true
+  }
+ }
+}

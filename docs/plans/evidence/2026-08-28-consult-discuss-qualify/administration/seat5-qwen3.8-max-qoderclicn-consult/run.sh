@@ -1,31 +1,30 @@
 #!/usr/bin/env bash
 # run.sh — Seat 5: Qwen3.8-Max / qoderclicn — consult role administration.
 #
-# STATUS: NOT-READY. This is NOT a credential/token problem — it is a kernel
-# adapter gap discovered while assembling this bundle (2026-08-29):
-# scripts/qualification-review-provider.js's CLI transport only recognizes
-#   QRP_CLI_KIND in {codex, claude, agy, kimi}   (see CLI_KINDS, ~line 120)
-# `qoderclicn` is a real, working runner token (scripts/lib/runner-binary.js
-# maps it, and `qoderclicn --version` succeeds on this box: 1.1.28) but it is
-# ONLY wired into the LIVE-RAIL transport (scripts/dispatch-hetero.sh, used by
-# the `implementer` role) — never into the case-broker/QRP transport that
-# `consult`/`discuss` require. There is no honest way to populate
-# `--remote-provider-cmd` for this seat today: an `--execute` run would abort
-# every case with "QRP_TRANSPORT=cli requires QRP_CLI_KIND to be one of:
-# codex, claude, agy, kimi" before any real dispatch happened.
+# STATUS: READY (2026-08-29). The prior NOT-READY blocker (no QRP_CLI_KIND for
+# qoderclicn) is fixed: scripts/qualification-review-provider.js's callCli() now
+# carries a qoderclicn branch (see CLI_KINDS + the `kind === 'qoderclicn'` arm).
+# qoderclicn 1.1.35 is present on this box and Qwen3.8-Max is already a
+# qualified `implementer` via this same binary (scorecard event 148) — this
+# seat only exercises the NEW consult QRP path, not new credentials/transport.
 #
-# This script still assembles a believed-correct argv (for when/if a
-# `qoderclicn` QRP_CLI_KIND lands) and PROVES the --plan smoke passes (the
-# five frozen identities + case-plan construction never touch the transport).
-# `execute` mode refuses itself LOUD before spending anything — see the guard
-# below — rather than attempting a call the kernel cannot honor.
+# CONTAINMENT (see qualification-review-provider.js's qoderclicn branch for the
+# full live-probe evidence): `--tools ""` reliably blocked real tool execution
+# across three live probes (no real hostname/file content ever leaked); the
+# OTHER deny mechanism (--disallowed-tools) was separately found to be
+# defeated by --dangerously-skip-permissions in a live probe (real hostname
+# DID leak) — so this adapter, and this seat, NEVER passes
+# --dangerously-skip-permissions. See:
+#   docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/qoderclicn-containment-probe/
 #
 # Board authorization: docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md
+#   "Board decision — 2026-08-28 (authorization)". `--execute` (real, paid)
+#   requires the explicit CLI flag below.
 #
 # Usage:
-#   ./run.sh            # = ./run.sh plan   (free; proves argv/identity are valid)
+#   ./run.sh            # = ./run.sh plan   (free)
 #   ./run.sh plan        # free dry-run smoke
-#   ./run.sh execute      # REFUSES — see STATUS above; no qoderclicn CLI kind exists
+#   ./run.sh execute      # REAL PAID administration (Board go-ahead only)
 
 set -euo pipefail
 
@@ -36,15 +35,12 @@ REPO_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 
 MODE="${1:-plan}"
 case "$MODE" in
-  plan) ;;
-  execute)
-    echo "run.sh: REFUSING execute for seat 5 — qualification-review-provider.js has" >&2
-    echo "  no QRP_CLI_KIND for 'qoderclicn' (only codex|claude|agy|kimi exist)." >&2
-    echo "  See the STATUS comment at the top of this file / ../DERIVATION.md." >&2
-    exit 2
-    ;;
+  plan|execute) ;;
   *) echo "run.sh: usage: $0 [plan|execute]" >&2; exit 2 ;;
 esac
+
+command -v qoderclicn >/dev/null 2>&1 \
+  || { echo "run.sh: qoderclicn binary not found on PATH" >&2; exit 2; }
 
 # --- identity (operator-asserted; qoderclicn CLI transport reports no runtime model id) ---
 ENGINE="Qwen3.8-Max"
@@ -54,9 +50,7 @@ RUNNER="qoderclicn"
 FAMILY="alibaba"
 EFFORT="high"   # matches the existing qoderclicn `implementer` qualification's tier
 
-# --- live runner identity probe (fail closed — never guess). The binary IS
-# present and DOES answer --version — the gap is purely in QRP's CLI_KIND
-# allowlist, not here. ---
+# --- live runner identity probe (fail closed — never guess) ---
 RUNNER_PROBE_JSON="$(node "$REPO_ROOT/scripts/lib/runner-binary.js" version --runner qoderclicn --json)" || true
 RUNNER_PROBE_OK="$(node -e "process.stdout.write(String(JSON.parse(process.argv[1]).ok))" "$RUNNER_PROBE_JSON")"
 if [ "$RUNNER_PROBE_OK" != "true" ]; then
@@ -68,14 +62,37 @@ RUNNER_VERSION="$(node -e "process.stdout.write(JSON.parse(process.argv[1]).toke
 # --- frozen identity fingerprints (derived by ../derive-hashes.js; see ../DERIVATION.md) ---
 PROMPT_CONFIG_HASH="1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635"
 SEMANTIC_FINGERPRINT="00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"
-CONTAINMENT_FINGERPRINT="d6c560be45e9cdda0aaef54aab48f9f32cb910d33b4c1514ab940435574b93d8"
-HARNESS_VERSION="qrp:d6c560be"
+CONTAINMENT_FINGERPRINT="cdc4859912eb74352bf3f1d38a7c8e9e3d0c6769314e12e95aa3111983e37d62"
+HARNESS_VERSION="qrp:cdc48599"   # sha256(qualification-review-provider.js) short blob, see DERIVATION.md
 
-# --- transport env: BELIEVED shape only — QRP_CLI_KIND=qoderclicn does not
-# exist in qualification-review-provider.js today (see STATUS above). Set
-# anyway so the --plan argv is complete and self-documenting. ---
+# --- dedicated exam config-dir, credential files only. qoderclicn reads
+# ~/.qoder-cn/.auth/{dynamic-error-codes.json,machine_id,user,.credential-
+# transaction} for auth; --config-dir <dir> replaces the qoder-cn root wholesale
+# (verified live: pointing it at an empty dir reports "Not logged in"), so the
+# staged dir must mirror that layout: <staging>/.auth/<same files>. ---
+STAGING_HOME="$HOME/.autopilot/qualify-staging/seat5-qwen3.8-max-qoderclicn-consult/qoder-config-dir"
+STAGING_AUTH_DIR="$STAGING_HOME/.auth"
+mkdir -p "$STAGING_AUTH_DIR"
+chmod 700 "$STAGING_HOME" "$HOME/.autopilot/qualify-staging/seat5-qwen3.8-max-qoderclicn-consult" 2>/dev/null || true
+REAL_AUTH_DIR="$HOME/.qoder-cn/.auth"
+for f in dynamic-error-codes.json machine_id user .credential-transaction; do
+  if [ ! -f "$STAGING_AUTH_DIR/$f" ] && [ -f "$REAL_AUTH_DIR/$f" ]; then
+    cp "$REAL_AUTH_DIR/$f" "$STAGING_AUTH_DIR/$f"
+  fi
+done
+if [ ! -f "$STAGING_AUTH_DIR/user" ]; then
+  echo "run.sh: no user credential seeded into $STAGING_AUTH_DIR — --execute will fail to authenticate" >&2
+fi
+STAGING_BYTES="$(du -sk "$STAGING_HOME" 2>/dev/null | awk '{print $1*1024}')"
+if [ -n "$STAGING_BYTES" ] && [ "$STAGING_BYTES" -gt $((8*1024*1024)) ]; then
+  echo "run.sh: staged qoder config-dir is ${STAGING_BYTES} bytes, over the 8MB QRP_CLI_HOME cap — re-seed credential-only" >&2
+  exit 2
+fi
+export QRP_CLI_HOME="$STAGING_HOME"
+
 export QRP_TRANSPORT=cli
 export QRP_CLI_KIND=qoderclicn
+export QRP_CLI_EFFORT="$EFFORT"
 export QRP_MODEL="$MODEL"
 export QRP_PROVIDER="qoderclicn-qwen"
 export QRP_PROMPT_MODE=consult
@@ -94,8 +111,9 @@ ARGS=(
   --containment-fingerprint "$CONTAINMENT_FINGERPRINT"
   --remote-provider-cmd "node $REPO_ROOT/scripts/qualification-review-provider.js"
   --remote-provider qoderclicn-qwen
-  --provider-env QRP_TRANSPORT --provider-env QRP_CLI_KIND --provider-env QRP_MODEL
-  --provider-env QRP_PROVIDER --provider-env QRP_PROMPT_MODE
+  --provider-env QRP_TRANSPORT --provider-env QRP_CLI_KIND --provider-env QRP_CLI_EFFORT
+  --provider-env QRP_MODEL --provider-env QRP_PROVIDER --provider-env QRP_PROMPT_MODE
+  --provider-env QRP_CLI_HOME
   --remote-timeout-ms 300000
   --task-class consult --domain cross-cutting --language en --tool read_only
   --store "$STORE"
@@ -104,6 +122,9 @@ ARGS=(
   --emit-row
 )
 
-# Only --plan is ever reachable here — the execute branch above exits 2 first.
-node "${ARGS[@]}" --plan | tee "$SELF_DIR/plan-out.json"
-exit "${PIPESTATUS[0]}"
+if [ "$MODE" = "plan" ]; then
+  node "${ARGS[@]}" --plan | tee "$SELF_DIR/plan-out.json"
+  exit "${PIPESTATUS[0]}"
+fi
+
+exec node "${ARGS[@]}" --execute

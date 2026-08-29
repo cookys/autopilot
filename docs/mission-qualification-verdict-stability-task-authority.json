@@ -1,0 +1,93 @@
+{
+  "acceptance": {
+    "contract_hash": "63de0af71b9285d7c5674abd9d7bbbf567674a21327715222a023ba80fcba4b8",
+    "criteria_hash": "f8b6c32ff5ff07cc79a1d7aedfc45af52d55ed75f03900d597353807f86a6fd2",
+    "required_evidence": [
+      "mirror-parity",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": []
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "project-default",
+    "data_egress": "local-only",
+    "data_egress_source": "project-default",
+    "guidance_profile": "guided",
+    "guidance_source": "project-default",
+    "topology_preference": "auto",
+    "topology_source": "project-default"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Land the APPROVED qualification-verdict-stability plan: replace the single-administration 100%-bar consult/discuss verdict with a two-tier bar (zero-tolerance Tier-1 trust, full-N pooled Wilson lower-bound Tier-2 competence) across deliverables D1-D8, without changing the sealed instrument under evals/.",
+    "requirements_hash": "0582263ace5e34637742d2c93ba667c466a046ae0c0e4e73eb1057c6e3c2eeec",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        "docs",
+        "hooks",
+        "platforms",
+        "schemas",
+        "scripts",
+        "src"
+      ],
+      "domains": [
+        "autopilot",
+        "qualification"
+      ],
+      "languages": [
+        "javascript",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "e93861aceecaf584be32719dbbe06ac7aef139c0a5f362e24c89778b4737ed36",
+  "mission_lineage_id": "lineage-v1-2e784929cba35bd337c5c5b750b939d50f4470752c3e4cd31140c4dcb322e763",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_authority_id": "b050f801c7edd4ab3ba37385460d821845c58526499564012fddc3c688ae1876",
+  "task_id": "qualification-verdict-stability"
+}

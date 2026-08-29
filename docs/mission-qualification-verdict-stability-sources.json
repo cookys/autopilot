@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-29-qualification-verdict-stability.md",
+      "rubric_path": "plans/2026-08-29-qualification-verdict-stability.rubric.md",
+      "plan_sha256": "63de0af71b9285d7c5674abd9d7bbbf567674a21327715222a023ba80fcba4b8",
+      "rubric_sha256": "f8b6c32ff5ff07cc79a1d7aedfc45af52d55ed75f03900d597353807f86a6fd2"
+    }
+  ]
+}

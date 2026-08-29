@@ -1,0 +1,123 @@
+{
+  "artifact_type": "mission_execution_graph",
+  "calculated_batches": 1,
+  "calculated_depth": 1,
+  "graph_digest": "e93861aceecaf584be32719dbbe06ac7aef139c0a5f362e24c89778b4737ed36",
+  "nodes": [
+    {
+      "acceptance_ids": [
+        "d1-supersession-markers-appended-backups-sha256-verified",
+        "d2-wilson-lower-exported-pinned-table-fail-closed",
+        "d3-tier-map-exhaustive-trust-scan-first-default-deny",
+        "d4-pooled-two-tier-verdict-every-stopping-path",
+        "d5-additive-schema-consumer-matrix-a-through-h",
+        "d6-exact-oc-oracle-with-simulation-cross-check",
+        "d7-readministration-protocol-designed-no-spend",
+        "d8-mirror-parity-sealed-grader-invariant-release"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          ".claude-plugin/plugin.json",
+          "CHANGELOG.md",
+          "docs",
+          "hooks/tests",
+          "platforms/codex/plugin",
+          "schemas",
+          "scripts",
+          "src"
+        ],
+        "authorized_creates": [
+          "docs/plans/evidence/2026-08-29-verdict-stability/OC-CHARACTERIZATION.md",
+          "hooks/tests/engine-qualify-verdict-stability.test.sh",
+          "hooks/tests/qualification-tier-mapping.test.sh"
+        ],
+        "baseline_churn": 4000,
+        "max_changed_files": 64,
+        "max_extra_churn": 2000,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "output_paths": [
+          ".claude-plugin/plugin.json",
+          "CHANGELOG.md",
+          "docs/BACKLOG.md",
+          "docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md",
+          "docs/plans/evidence/2026-08-29-verdict-stability/OC-CHARACTERIZATION.md",
+          "hooks/tests/capability-evidence.test.sh",
+          "hooks/tests/engine-qualify-verdict-stability.test.sh",
+          "hooks/tests/qualification-tier-mapping.test.sh",
+          "platforms/codex/plugin/schemas/capability-evidence.schema.json",
+          "platforms/codex/plugin/scripts/engine-qualify.js",
+          "platforms/codex/plugin/scripts/engine-scorecard.js",
+          "platforms/codex/plugin/src/engine/capability-evidence.js",
+          "platforms/codex/plugin/src/engine/verification-strength.js",
+          "schemas/capability-evidence.schema.json",
+          "scripts/engine-qualify.js",
+          "scripts/engine-scorecard.js",
+          "src/engine/capability-evidence.js",
+          "src/engine/verification-strength.js"
+        ],
+        "profile": "high",
+        "required_paths": [
+          ".claude-plugin/plugin.json",
+          "CHANGELOG.md",
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-29-qualification-verdict-stability.md",
+          "docs/plans/2026-08-29-qualification-verdict-stability.rubric.md",
+          "docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md",
+          "hooks/tests/capability-evidence.test.sh",
+          "platforms/codex/plugin/schemas/capability-evidence.schema.json",
+          "platforms/codex/plugin/scripts/engine-qualify.js",
+          "platforms/codex/plugin/scripts/engine-scorecard.js",
+          "platforms/codex/plugin/src/engine/capability-evidence.js",
+          "platforms/codex/plugin/src/engine/verification-strength.js",
+          "schemas/capability-evidence.schema.json",
+          "scripts/engine-qualify.js",
+          "scripts/engine-scorecard.js",
+          "src/engine/capability-evidence.js",
+          "src/engine/verification-strength.js"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-08-29-qualification-verdict-stability.md",
+          "section": "4. Deliverables — a frozen bounded DAG"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 3,
+      "id": "qualification-verdict-stability",
+      "reservation": {
+        "campaigns": 1,
+        "canonical_changed_files": 500,
+        "engine_attempts": 3,
+        "external_wait_seconds": 14400,
+        "output_bytes": 50000000,
+        "tool_calls": 1500,
+        "wall_seconds": 36000
+      },
+      "source_plan_ids": [
+        "plan-63de0af71b9285d7c5674abd9d7bbbf567674a21327715222a023ba80fcba4b8"
+      ],
+      "source_rubric_ids": [
+        "R31076353994594474433054297508564481851226021839249814767581811847045201698212",
+        "R33650156264137046894596828642244705570247222969128438369776064887811943655004",
+        "R50160253001086001642140647334470461907845895453695268472851173077430996344310",
+        "R53749507324843153813372420972839568166267733428531332503887956644596826084388",
+        "R63071496799793423850344966718468615436510644458659773827052612559100011126255",
+        "R76856974042516946934123129995226791514218728415822404540391547238718541086249",
+        "R84750163838024784909314633100581083779732556156192904309887795296824369699480",
+        "R8720990212183808807699459405863023586717180205953581306331849859631707903609",
+        "R88440550601382869687783789591852826024455316321556638433434152701948532356836",
+        "R98728915946555373509119046173121210468512921540571111141045714038943431868675"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/run.sh",
+        "bash scripts/validate.sh",
+        "bash scripts/check-canonical-invariants.sh",
+        "bash scripts/sync-codex-plugin-skills.sh --check",
+        "node scripts/doc-drift-gate.js .",
+        "git diff --check"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

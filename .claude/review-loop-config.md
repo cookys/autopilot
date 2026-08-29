@@ -34,8 +34,8 @@
 - implementer_effort: high
 - implementer_runner: grok
 - verification_author_present: true
-- verification_author_engine: GLM-5.2
-- verification_author_runner: cc-shim
+- verification_author_engine: GLM-5.3
+- verification_author_runner: anthropic-compatible
 - verification_author_effort: high
 - verification_author_endpoint: glm
 <!-- 2026-08-14 使用者裁定：qc 的 codex 席 `gpt-5.5 @ xhigh` → `gpt-5.6-sol @ max`。

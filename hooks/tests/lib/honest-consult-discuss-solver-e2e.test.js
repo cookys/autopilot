@@ -41,6 +41,8 @@
 
 const assert = require('assert');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 const engineQualify = require(path.join(__dirname, '..', '..', '..', 'scripts', 'engine-qualify.js'));
 const consultGen = require(path.join(__dirname, '..', '..', '..', 'evals', 'consult-eval-generator.js'));
@@ -174,6 +176,91 @@ check(discussRun.results.length === discussGrader.CORPUS.budget.cases_per_admini
     plantedNegativeCaught,
     'planted negative FAILED TO FIRE: stripping closed_label_set from the envelope should make the honest solver unable to answer '
     + '(this is the teeth proof -- if this assertion itself fails, the validator has no teeth)',
+  );
+}
+
+// ------------------------------------------------------------- discuss round_id type-coercion controls
+//
+// fix/discuss-round-id-type (depth-0-verified instrument defect): the real
+// seat-6 Gemini administration echoed round_id as a bare JSON number (4, not
+// "4") and failed solely on that -- the only thing between it and 16/16.
+// evals/discuss-eval-grader.js's validateSchema() now coerces round_id
+// (string OR finite number, both accepted). These three controls prove:
+// (a) the coercion actually fires (positive control), (b) the test has
+// teeth -- reverting the coercion in a scratch copy of the grader flips the
+// SAME case back to protocol_violation (planted negative), and (c) the
+// coercion is scoped to round_id's TYPE only -- a round_id whose VALUE is
+// genuinely wrong (carries a forbidden verdict-token substring) still
+// fails, coerced or not (real discriminator, not just "any round_id passes
+// now").
+{
+  const cases = discussGen.buildAdministration();
+  const sampleCase = cases.find((c) => c.family === 'D-c') || cases[0];
+  const envelope = JSON.parse(engineQualify.buildDiscussCaseEnvelope(sampleCase));
+  const honestResponse = solveDiscuss(envelope);
+  check(
+    discussGrader.gradeContribution(sampleCase, honestResponse, undefined).label === 'pass',
+    'sanity: the honest solver response for the sample discuss case passes BEFORE any round_id mutation',
+  );
+
+  // (a) positive control: round_id as a bare JSON NUMBER, everything else
+  // held identical to the passing response, must now PASS.
+  const numericRoundIdResponse = { ...honestResponse, round_id: 4 };
+  check(
+    typeof numericRoundIdResponse.round_id === 'number',
+    'sanity: the positive control actually carries a NUMBER round_id, not a string',
+  );
+  const numericOutcome = discussGrader.gradeContribution(sampleCase, numericRoundIdResponse, undefined);
+  check(
+    numericOutcome.label === 'pass',
+    `positive control FAILED: a response identical to a passing one except round_id is the JSON number 4 `
+    + `should now pass (got ${numericOutcome.label}: ${numericOutcome.reason})`,
+  );
+
+  // (b) planted negative (teeth proof): a scratch copy of discuss-eval-
+  // grader.js with the round_id coercion reverted to the pre-fix strict
+  // `typeof !== 'string'` check must make the SAME numeric-round_id
+  // response flip back to protocol_violation. Proves (a) is load-bearing,
+  // not a tautology of an already-permissive grader.
+  {
+    const copyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'discuss-round-id-planted-negative-'));
+    const graderSrcPath = path.join(__dirname, '..', '..', '..', 'evals', 'discuss-eval-grader.js');
+    const copyGraderPath = path.join(copyRoot, 'discuss-eval-grader.js');
+    fs.copyFileSync(path.join(__dirname, '..', '..', '..', 'evals', 'discuss-capability-evidence-corpus.json'),
+      path.join(copyRoot, 'discuss-capability-evidence-corpus.json'));
+    const original = fs.readFileSync(graderSrcPath, 'utf8');
+    check(original.includes("typeof response.round_id === 'number' && Number.isFinite(response.round_id)"),
+      'sanity: the round_id coercion is present in the live grader before reverting the scratch copy');
+    const reverted = original.replace(
+      /const roundIdIsCoercible = typeof response\.round_id === 'string'\n {4}\|\| \(typeof response\.round_id === 'number' && Number\.isFinite\(response\.round_id\)\);\n {2}if \(!roundIdIsCoercible \|\| String\(response\.round_id\) === ''\) {\n {4}return outcome\('protocol_violation', 'round_id must be a non-empty string \(or a finite number, coerced to string\)'\);\n {2}}\n {2}const roundIdStr = String\(response\.round_id\);/,
+      "if (typeof response.round_id !== 'string' || response.round_id === '') {\n"
+      + "    return outcome('protocol_violation', 'round_id must be a non-empty string');\n  }\n"
+      + '  const roundIdStr = response.round_id;',
+    );
+    check(reverted !== original, 'sanity: the revert regex actually matched and changed the scratch copy');
+    fs.writeFileSync(copyGraderPath, reverted);
+
+    delete require.cache[require.resolve(copyGraderPath)];
+    const revertedGrader = require(copyGraderPath);
+    const revertedOutcome = revertedGrader.gradeContribution(sampleCase, numericRoundIdResponse, undefined);
+    check(
+      revertedOutcome.label !== 'pass',
+      'planted negative FAILED TO FIRE: with the round_id coercion reverted, a numeric round_id should flip back to '
+      + `protocol_violation (this is the teeth proof -- if this assertion itself fails, the validator has no teeth; got ${revertedOutcome.label})`,
+    );
+  }
+
+  // (c) real discriminator: coercion is scoped to TYPE only. A round_id
+  // whose VALUE is wrong -- it embeds a forbidden verdict-token substring --
+  // must still fail, whether the round_id is a string or (after coercion) a
+  // number-shaped string. This proves the coercion did not quietly loosen
+  // the no-verdict-guard content check alongside the type check.
+  const verdictTaintedResponse = { ...honestResponse, round_id: `${honestResponse.round_id}-ship-it` };
+  const taintedOutcome = discussGrader.gradeContribution(sampleCase, verdictTaintedResponse, undefined);
+  check(
+    taintedOutcome.label !== 'pass',
+    `real discriminator FAILED: a round_id carrying a forbidden verdict-token substring must still fail `
+    + `regardless of the type-coercion fix (got ${taintedOutcome.label})`,
   );
 }
 

@@ -393,7 +393,10 @@ YOUR CONTRIBUTION MUST BE:
   invent an artifact to sound more thorough.
 
 OUTPUT CONTRACT — exactly ONE JSON object, no prose, no markdown fences:
-{"round_id": "<this round's id from the bundle>",
+{"round_id": "<this round's id, copied verbatim from the bundle as a JSON
+              STRING — even though prior transcript rounds are numbered
+              plainly (round: 1, round: 2, ...), your OWN round_id is always
+              a quoted string; never emit it as a bare JSON number>",
  "axis_id": "<exactly ONE declared axis id, not already taken>",
  "claim_vector": ["<one or more claim tokens from THAT axis's declared vector>"],
  "position": "<your position, in prose>",

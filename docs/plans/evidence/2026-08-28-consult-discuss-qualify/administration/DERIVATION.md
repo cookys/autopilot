@@ -55,15 +55,64 @@ lines 60-66, adapted to consult/discuss's own corpus/generator/transport):
 node docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/derive-hashes.js
 ```
 
-### Values (re-derived 2026-08-29, after the aside-channel-coherence fix — see below)
+### Values (re-derived 2026-08-29, after the aside-channel-coherence hetero-review round 2 fix — see below)
 
 | Role | `prompt_config_hash` | `semantic_fingerprint` |
 |---|---|---|
-| consult | `1e76fc6bbb90fb75db3a476fe68f5a5f5b5c9430e61fbf56ee8a933ff1a259ae` | `eee00cfb5318d325f1a2de29c74493aa8d7ee30acc113147e9e13d9964503500` |
+| consult | `1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635` | `00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122` |
 | discuss | `0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f` | `30c32f0d21cf9c4ca9c7e5341217d6e643b3557f9fb019dce5f6a44f764cce08` |
 
-`containment_fingerprint` (shared, both roles — same transport file):
+`containment_fingerprint` (shared, both roles — same transport file, UNCHANGED this round --
+`scripts/qualification-review-provider.js` was not touched by the round-2 hetero-review repair,
+only `evals/consult-eval-grader.js`/`evals/consult-eval-generator.js`):
 `d6c560be45e9cdda0aaef54aab48f9f32cb910d33b4c1514ab940435574b93d8`
+
+**Values changed AGAIN (2026-08-29, `fix/consult-aside-channel-coherent`, hetero review round 2 —
+sol, FIX-THEN-SHIP, 2 🟠 findings)**, on the SAME branch as the aside-channel-coherence fix above,
+before merge:
+
+1. 🟠 `aside-alt-label-laundering`: `legitimateUnrelatedAside` only rejected the case's OWN
+   submitted/expected label and decisive value, so an aside could launder a DIFFERENT
+   `closed_label_set` value as a covert second answer and still pass (e.g. a correct `answer:alpha`
+   response with an aside claiming "artifactX instead indicates bravo" — `bravo` being another legal
+   label on the SAME case — was never checked against). Fixed: a new `forbiddenLaunderedValueTokens()`
+   rejects ANY `closed_label_set` member's decisive value, not just the submitted one — the entire
+   closed label space is off-limits to the aside channel. New misuse deviant
+   `aside_alt_label_laundering` on C1/C5 (expects `protocol_violation`), plus a matching control in
+   `hooks/tests/lib/honest-consult-discuss-solver-e2e.test.js` with its own planted negative
+   (reverting `forbiddenLaunderedValueTokens` to submitted-label-only flips the laundering case back
+   to `'pass'`).
+2. 🟠 `aside-value-substring-false-positive`: the raw case-insensitive substring check on the decisive
+   value false-positived on prompt-compliant, genuinely unrelated prose whenever the value occurred as
+   part of a LONGER word (the pinned `DISTRACTOR_VALUES` are common English words — e.g. an
+   `answer:echo` case's legitimate note mentioning something merely "echoes" placeholder text would
+   have wrongly failed — the exact false-negative class this whole fix exists to kill). Fixed: a new
+   `tokenize()` helper splits on non-alphanumeric boundaries; `legitimateUnrelatedAside` now compares
+   whole word tokens, never raw substrings (chosen over aligning the prompt to a literal-token
+   prohibition, since word-boundary matching keeps the rule mechanically honest without adding a new
+   disclosed vocabulary constraint). New positive control
+   `legitimate_aside_value_substring_collision` on C1/C5 (expects `pass` — a note containing
+   `<value>xyz`-style text, the value only as a substring of a longer different word), plus a matching
+   e2e control with its own planted negative (reverting to raw substring matching flips the collision
+   case back to a failure).
+
+`evals/consult-eval-generator.js`/`evals/consult-eval-grader.js` bytes changed again ⇒
+`prompt_config_hash`/`semantic_fingerprint` moved to the values in the table above (were
+`1e76fc6bbb90fb75db3a476fe68f5a5f5b5c9430e61fbf56ee8a933ff1a259ae` /
+`eee00cfb5318d325f1a2de29c74493aa8d7ee30acc113147e9e13d9964503500`, the prior section's consult row).
+`evals/consult-capability-evidence-corpus.json`'s `corpus_version` moved `consult-v5` → `consult-v6`
+(discuss is untouched). `scripts/qualification-review-provider.js` was NOT touched this round (the
+fix is entirely inside `consult-eval-grader.js`/`consult-eval-generator.js`) ⇒
+`containment_fingerprint`/`HARNESS_VERSION` are UNCHANGED for every seat.
+`scripts/lib/qualification-asset-seals.js`'s `EXPECTED_CONSULT_GENERATOR_HASH` /
+`EXPECTED_CONSULT_GRADER_HASH` / `EXPECTED_CONSULT_CORPUS_HASH` / `EXPECTED_CONSULT_SEAL_HASH` were
+re-sealed to match (corpus manifest re-frozen via `rubric-freeze.js seal`; rubric.md itself is
+byte-unchanged, so `EXPECTED_CONSULT_RUBRIC_HASH` is unchanged). All 5 consult seats' `run.sh`
+(`PROMPT_CONFIG_HASH`/`SEMANTIC_FINGERPRINT` only — `CONTAINMENT_FINGERPRINT`/`HARNESS_VERSION`
+untouched this round) and their `plan-out.json` were refreshed to match; discuss seats are entirely
+untouched this round. `hooks/tests/lib/honest-consult-discuss-solver-e2e.test.js` confirms consult
+stays fully answerable (35 assertions, up from 26) after this round-2 repair, incl. both new
+misuse/positive controls and both new planted negatives.
 
 `--harness-version qrp:d6c560be` used in every run.sh is this same
 `containment_fingerprint`'s first 8 hex chars, prefixed `qrp:` (the transport

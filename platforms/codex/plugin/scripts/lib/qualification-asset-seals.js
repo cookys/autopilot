@@ -151,8 +151,23 @@ function combinedSealHash(rubricSealFileHash, corpusSealFileHash) {
 // and does not restate/justify the primary answer -- C4's own span-token
 // discipline (scopeDrift()) is untouched. corpus_version bumped
 // consult-v4 -> consult-v5 (byte change from the version bump only).
-const EXPECTED_CONSULT_GENERATOR_HASH = 'ea21d9ad86bc18b6df52b8c8d8b03e2bfcb0860074848fc9f4563d552bda2d6b'
-const EXPECTED_CONSULT_GRADER_HASH = '1107496afaaf015a23b1ebe5b68c9b7c061d1c21cddc82d31af04485656c94dd'
+//
+// 2026-08-29 re-seal (hetero review round 2 on the same branch, sol
+// FIX-THEN-SHIP, 2 findings): (1) aside-alt-label-laundering --
+// legitimateUnrelatedAside only rejected the case's OWN submitted/expected
+// label + decisive value, so an aside could launder a DIFFERENT
+// closed_label_set value as a covert second answer and still pass. Fixed:
+// the check now rejects ANY closed_label_set member's decisive value, not
+// just the submitted one. (2) aside-value-substring-false-positive -- a
+// raw case-insensitive substring scan on the decisive value false-
+// positived on prompt-compliant unrelated prose whenever the value
+// occurred inside a longer word (e.g. "echo" inside "echoes"). Fixed:
+// word-boundary/whole-token matching (tokenize() in grader.js), not a
+// substring scan -- a collision positive control (a legitimate aside whose
+// prose contains the value as a substring-but-not-token) now proves this.
+// corpus_version bumped consult-v5 -> consult-v6.
+const EXPECTED_CONSULT_GENERATOR_HASH = '26e253b02adb197697bcaf04c9879954e681f69ec76a244284074e46c7652e8c'
+const EXPECTED_CONSULT_GRADER_HASH = '7852cf337890a1de1544865465bd0e16c0cbe9c7f4a57cec70835977524bab90'
 // D7 re-seal (plan 2026-08-28-consult-discuss-qualification.md D7): the
 // applicability_scope field was added to both corpus manifests, changing
 // their bytes — a deliberate re-seal, per the comment above, not silent
@@ -167,9 +182,9 @@ const EXPECTED_CONSULT_GRADER_HASH = '1107496afaaf015a23b1ebe5b68c9b7c061d1c21cd
 // including a re-seal that touches only the corpus seal (as this same
 // change does below: the consult corpus_version bumped to consult-v3
 // alongside the C4/C5 distractor redesign, requiring a corpus reseal).
-const EXPECTED_CONSULT_CORPUS_HASH = 'cb232d2164a5f1ccc02a707f4971d1e27da1f1950a9ca49012f34958db10bf27'
+const EXPECTED_CONSULT_CORPUS_HASH = '4087482c93d72e595e5076f296136460cfac3c538ac94958b36df1d0378b1510'
 const EXPECTED_CONSULT_RUBRIC_HASH = '8c303e33074d97065bf011c33f89a6dddd642837184834ea578ad31c2c0402cc'
-const EXPECTED_CONSULT_SEAL_HASH = 'd227d082d92549159199bcdb36f8c1c78c5fd80ba8994ba23ff7eaa6d46e0c66'
+const EXPECTED_CONSULT_SEAL_HASH = '3eecb968cdeaa760382203852c8906fd5c31ce8547c959497fb08bd2a280487d'
 
 const EXPECTED_DISCUSS_GENERATOR_HASH = 'c95ed1f514a39eca6d03ea3bb0298bbab95ddea32550bd12551bd8be7e056b0f'
 // 2026-08-29 re-seal (fix/discuss-round-id-type): the discuss round_id

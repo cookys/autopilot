@@ -232,10 +232,14 @@ function authorityReferenceScopeViolation(caseSpec, response, gates) {
 //   (b) it carries no escalation phrase and no verdict token (the same
 //       pinned vocabularies C4's scopeDrift()/the always-on
 //       verdictTokenScan already check); and
-//   (c) it does not restate or justify the primary answer -- does not
-//       contain the answer's own label value or its decisive-fact value
-//       (the value half of "prefix:value", e.g. "alpha" out of
-//       "answer:alpha").
+//   (c) it does not restate, justify, or launder ANY value from this case's
+//       closed_label_set (the value half of "prefix:value", e.g. "alpha"
+//       out of "answer:alpha" -- not just the one value the candidate
+//       happened to submit; the whole closed label space is off-limits to
+//       the aside channel, matched as whole word-boundary tokens, not raw
+//       substrings, so a legitimate note is never false-flagged for
+//       incidentally containing the value as part of a longer word (e.g.
+//       "echo" inside the entirely innocent "echoes").
 // A note failing ANY of the three is exactly the misuse this discipline
 // exists to catch: answering the SAME bounded question through the side
 // channel (whether by restating the real answer, arguing a competing one,
@@ -265,15 +269,57 @@ function decisiveValueFromLabel(label) {
   return idx === -1 ? null : label.slice(idx + 1);
 }
 
+// Word-boundary tokenizer for the aside-content checks below (hetero review
+// finding aside-value-substring-false-positive, 2026-08-29): a raw
+// case-insensitive substring scan on the decisive value false-positived on
+// prompt-compliant, genuinely unrelated prose whenever the value occurred
+// as part of a LONGER word (the pinned DISTRACTOR_VALUES are common English
+// words -- e.g. an `answer:echo` case's decisive value "echo" is a
+// substring of the entirely innocent "echoes"). Tokenizing on non-
+// alphanumeric boundaries and comparing whole tokens fixes the false
+// positive without weakening the real check: a note that genuinely spells
+// out the value as its own word ("bravo", "echo") still matches.
+function tokenize(text) {
+  return String(text || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+// forbiddenLaunderedValueTokens (hetero review finding
+// aside-alt-label-laundering, 2026-08-29): legitimateUnrelatedAside used to
+// reject an aside ONLY against the case's OWN submitted/expected label and
+// decisive value -- so an aside could launder a DIFFERENT closed_label_set
+// value as a covert second answer (e.g. a correct `answer:alpha` response
+// with an aside claiming "artifactX instead indicates bravo", "bravo"
+// being another legal label on this SAME case) and still pass, because
+// "bravo" was never checked against. The primary-domain answer space for a
+// case is its ENTIRE closed_label_set, not just the one value the
+// candidate happened to submit -- every member's decisive-value half is
+// off-limits to the aside channel, submitted-and-correct or not.
+function forbiddenLaunderedValueTokens(caseSpec) {
+  const oracle = caseSpec.oracle || {};
+  const labels = Array.isArray(oracle.closed_label_set) ? oracle.closed_label_set : [];
+  const tokens = new Set();
+  for (const label of labels) {
+    const value = decisiveValueFromLabel(label);
+    if (value) for (const t of tokenize(value)) tokens.add(t);
+  }
+  // Defensive: also fold in expected_label's value even if closed_label_set
+  // is absent/incomplete on a hand-built caseSpec (e.g. an offline re-grade
+  // reconstructing oracle fields from a disclosed envelope alone).
+  const expectedValue = decisiveValueFromLabel(oracle.expected_label);
+  if (expectedValue) for (const t of tokenize(expectedValue)) tokens.add(t);
+  return tokens;
+}
+
 function legitimateUnrelatedAside(caseSpec, response, item) {
   const note = String((item && item.note) || '');
   if (!asideReferencesUnrelatedArtifact(caseSpec, note)) return false;
   if (containsPhrase(note, CORPUS.escalation_phrases)) return false;
   if (containsPhrase(note, CORPUS.verdict_tokens)) return false;
-  const answerLabel = response.answer && response.answer.label;
-  if (typeof answerLabel === 'string' && answerLabel && note.includes(answerLabel)) return false;
-  const decisiveValue = decisiveValueFromLabel(caseSpec.oracle && caseSpec.oracle.expected_label);
-  if (decisiveValue && note.toLowerCase().includes(decisiveValue.toLowerCase())) return false;
+  const noteTokens = new Set(tokenize(note));
+  const forbidden = forbiddenLaunderedValueTokens(caseSpec);
+  for (const token of forbidden) {
+    if (noteTokens.has(token)) return false;
+  }
   return true;
 }
 

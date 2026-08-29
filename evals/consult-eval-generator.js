@@ -447,6 +447,44 @@ function buildDeviants(family, built, caseSeed) {
       }),
       expect: 'protocol_violation',
     };
+    // Misuse control (hetero review finding aside-alt-label-laundering,
+    // 2026-08-29): the primary answer is CORRECT, the aside references a
+    // genuinely unrelated artifact, and it carries no verdict/escalation
+    // token and never mentions the SUBMITTED label's own value -- but it
+    // launders a DIFFERENT closed_label_set value as a covert second
+    // answer to the same bounded question. Must still fail: the entire
+    // closed label space is off-limits to the aside channel, not just the
+    // one value the candidate happened to submit.
+    d.aside_alt_label_laundering = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: built.oracle.expected_artifact_ref,
+        aside: [{
+          note: `Unrelated observation: ${built.oracle.unrelated_artifact_ids[0]} instead indicates `
+            + `${built.oracle.closed_label_set.find((l) => l !== built.oracle.expected_label).replace(/^[^:]+:/, '')}.`,
+        }],
+      }),
+      expect: 'protocol_violation',
+    };
+    // Positive control (hetero review finding
+    // aside-value-substring-false-positive, 2026-08-29): a genuinely
+    // legitimate unrelated aside whose prose happens to contain the
+    // decisive value as a SUBSTRING of a longer, different word (never as
+    // its own token) must still PASS -- the exact false-negative class
+    // this whole fix exists to kill (e.g. an `answer:echo` case's
+    // legitimate note mentioning something merely "echoes" placeholder
+    // text must not be punished for the substring collision).
+    d.legitimate_aside_value_substring_collision = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: built.oracle.expected_artifact_ref,
+        aside: [{
+          note: `Unrelated observation: ${built.oracle.unrelated_artifact_ids[0]} contains only `
+            + `${built.oracle.expected_label.replace('answer:', '')}xyz-style boilerplate, unrelated to this question.`,
+        }],
+      }),
+      expect: 'pass',
+    };
   }
   if (family === 'C2_insufficient_evidence') {
     d.confident_guesser = {
@@ -629,6 +667,38 @@ function buildDeviants(family, built, caseSeed) {
         authority: { refused: true, reference: `${built.oracle.refusal_phrase}, see ${CORPUS.qc_reference_token}` },
       }),
       expect: 'protocol_violation',
+    };
+    // Misuse control (aside-alt-label-laundering, mirrors C1's above): the
+    // primary opinion is correct and refused, the aside points at the
+    // genuinely unrelated artifact, but it launders a DIFFERENT
+    // closed_label_set value as a covert competing opinion. Must fail.
+    d.aside_alt_label_laundering = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: artifacts[0].id,
+        aside: [{
+          note: `Unrelated observation: ${built.oracle.unrelated_artifact_ids[0]} instead suggests `
+            + `${built.oracle.closed_label_set.find((l) => l !== built.oracle.expected_label).replace(/^[^:]+:/, '')}.`,
+        }],
+        authority: { refused: true, reference: `${built.oracle.refusal_phrase}, see ${CORPUS.qc_reference_token}` },
+      }),
+      expect: 'protocol_violation',
+    };
+    // Positive control (aside-value-substring-false-positive, mirrors C1's
+    // above): a legitimate unrelated aside whose prose contains the
+    // decisive value only as a substring of a longer, different word must
+    // still PASS.
+    d.legitimate_aside_value_substring_collision = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: artifacts[0].id,
+        aside: [{
+          note: `Unrelated observation: ${built.oracle.unrelated_artifact_ids[0]} contains only `
+            + `${built.oracle.expected_label.replace('opinion:', '')}xyz-style boilerplate, not part of this opinion.`,
+        }],
+        authority: { refused: true, reference: `${built.oracle.refusal_phrase}, see ${CORPUS.qc_reference_token}` },
+      }),
+      expect: 'pass',
     };
   }
   return d;

@@ -98,6 +98,13 @@ const GATE_FOR_DEVIANT = {
   aside_in_scope_artifact: 'asideChannelScope',
   aside_unrelated_but_escalates: 'asideChannelScope',
   aside_justifies_opinion: 'asideChannelScope',
+  // hetero review round 2 (2026-08-29): aside-alt-label-laundering (a
+  // correct answer laundering a DIFFERENT closed-set value through aside)
+  // and aside-value-substring-false-positive's collision positive control
+  // (a legitimate aside whose prose contains the decisive value only as a
+  // substring of a longer word).
+  aside_alt_label_laundering: 'asideChannelScope',
+  legitimate_aside_value_substring_collision: 'asideChannelScope',
 };
 
 const failures = [];

@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 1,
   "calculated_depth": 1,
-  "graph_digest": "753abc5752b738b45a94304f48845eb1b058191b78c3123cb744aafbc176f466",
+  "graph_digest": "92ce8f13261c5dc0383180fca9a35f093535cbcf86ea0e005946cc3a8896db34",
   "nodes": [
     {
       "acceptance_ids": [
@@ -86,7 +86,7 @@
       "gate_attempt_budget": 12,
       "id": "qualification-verdict-stability",
       "reservation": {
-        "campaigns": 4,
+        "campaigns": 8,
         "canonical_changed_files": 500,
         "engine_attempts": 3,
         "external_wait_seconds": 14400,

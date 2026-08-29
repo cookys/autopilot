@@ -42,7 +42,7 @@
   },
   "intent": {
     "objective": "Land the APPROVED qualification-verdict-stability plan: replace the single-administration 100%-bar consult/discuss verdict with a two-tier bar (zero-tolerance Tier-1 trust, full-N pooled Wilson lower-bound Tier-2 competence) across deliverables D1-D8, without changing the sealed instrument under evals/.",
-    "requirements_hash": "59eb6d889decb42245c35aa634ec28cf4937bed2321f0c657ced61d5f40b4698",
+    "requirements_hash": "cb719caa083d7cfd85582dbe8f878627b3b5c0f4093f4480d3f09dc106491908",
     "scope": {
       "allowed_tools": [
         "bash",
@@ -71,8 +71,8 @@
       ]
     }
   },
-  "mission_graph_digest": "753abc5752b738b45a94304f48845eb1b058191b78c3123cb744aafbc176f466",
-  "mission_lineage_id": "lineage-v1-83828e5e60c1eb49c53452d96b5d14212ae38a99bdb1dc64a0605db95f41f16e",
+  "mission_graph_digest": "92ce8f13261c5dc0383180fca9a35f093535cbcf86ea0e005946cc3a8896db34",
+  "mission_lineage_id": "lineage-v1-420ac26112ac7975bf5696e95f615b8d28a40af4c194e28312e5a8ca2af6eabe",
   "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
   "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
   "red_lines": [
@@ -88,6 +88,6 @@
     "max_wall_seconds": 36000
   },
   "schema_version": 1,
-  "task_authority_id": "8521298c2631c0dcf21939a15c2e4a91f57ce5dd78ef4fed6f9a0b4cae5dd4a1",
+  "task_authority_id": "8124dd138ed76ba1197bb9148e2b6c0815c2a1c0ed3f1f4b7cc01d6af6e8e0ea",
   "task_id": "qualification-verdict-stability"
 }

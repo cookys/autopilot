@@ -42,8 +42,12 @@ MODEL="MiniMax-M3"
 MODEL_VERSION="MiniMax-M3"
 RUNNER="cc-shim"
 FAMILY="minimax"
-EFFORT="default"    # cc-shim/claude does not take an --effort flag through QRP;
-                     # this is a receipt-only classification, not enforced.
+EFFORT="high"    # receipt-only classification, matching engine-scorecard.js's
+                  # closed enum (none|low|medium|high|xhigh|max) — same pattern
+                  # as kimi/grok/GLM/Qwen on this same batch. cc-shim/claude
+                  # does not take an --effort flag through QRP; the CLI never
+                  # sees this value (no QRP_CLI_EFFORT export below), it is not
+                  # enforced.
 
 # --- live runner identity probe (fail closed — never guess) ---
 RUNNER_PROBE_JSON="$(node "$REPO_ROOT/scripts/lib/runner-binary.js" version --runner cc-shim --json)" || true

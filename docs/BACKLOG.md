@@ -635,3 +635,15 @@ Split:
 
 Reference impl to absorb: revival.3d `scripts/lab/reap-run.mjs` + `docs/governance/dispatch.md`
 "派遣殘留物治理".
+
+## 2026-08-29 qualification run.sh templates baked an invalid effort enum
+
+Evidence: `docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/`
+seat6 (agy) and seat3 (cc-shim) `run.sh` scripts set `EFFORT` to a free-text placeholder
+(`"baked-in-model-name"`, `"default"`) instead of a value in `engine-scorecard.js record`'s closed
+enum (`none|low|medium|high|xhigh|max`), which blocked scorecard recording until corrected to
+`"high"` (receipt-only — matches kimi/grok's convention for the same transport class; the CLI
+never receives this value). Future qualification `run.sh` templates for effort-less transports
+(agy, cc-shim/QRP, and any other transport whose CLI takes no `--effort`) should default straight
+to a valid enum value (`"high"` or `"none"` per `engine-scorecard.js`'s own documented convention),
+never an ad hoc descriptive string.

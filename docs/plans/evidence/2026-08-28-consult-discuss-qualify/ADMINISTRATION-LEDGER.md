@@ -59,30 +59,27 @@ exposed.
 
 ## (b) Results
 
-9 seats administered. **5 recorded QUALIFIED, 2 recorded FAILED, 2 genuine results BLOCKED from the
-scorecard by a validator gap (evidence intact, not lost — see below).**
+All 9 administered seats are now recorded. **5 QUALIFIED, 4 FAILED.**
 
-| Seat | Engine / runner | Role | Score | Verdict | corpus_version | Scorecard |
+| Seat | Engine / runner | Role | Score | Verdict | corpus_version | Scorecard event_id |
 |---|---|---|---|---|---|---|
-| seat1 | `gpt-5.6-sol` / `codex` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v4` (see flag below) | event_id 158 |
-| seat7 | `kimi-code/k3` / `kimi` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v6` | event_id 157 |
-| seat-fable | `claude-fable-5` / `claude-native` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v6` | event_id 159 |
-| seat-grok | `grok-4.6` / `grok` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v6` | event_id 160 |
-| seat6 | `gemini-3.7-flash-high` / `agy` | discuss | 16/16, 0 violations | **QUALIFIED** (evidence only) | `discuss-v3` | **not recorded — see note** |
-| seat3 | `MiniMax-M3` / `cc-shim` | consult | 19/20, 1 `oracle_miss` | **FAILED** (evidence only) | `consult-v6` | **not recorded — see note** |
-| seat5 | `Qwen3.8-Max` / `qoderclicn` | consult | 19/20, 1 `protocol_violation` | **FAILED** | `consult-v6` | event_id 161 |
-| seat4 | `GLM-5.3` / `cc-shim` | consult | 18/20, 1 `precedence_miss` + 1 `oracle_miss` | **FAILED** | `consult-v6` | event_id 162 |
-| seat2 | `gpt-5.6-sol` / `codex` | discuss | 9/16, 7 `zero_information` | **FAILED** | `discuss-v3` | event_id 163 |
+| seat1 | `gpt-5.6-sol` / `codex` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v4` (see flag below) | 158 |
+| seat7 | `kimi-code/k3` / `kimi` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v6` | 157 |
+| seat-fable | `claude-fable-5` / `claude-native` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v6` | 159 |
+| seat-grok | `grok-4.6` / `grok` | consult | 20/20, 0 violations | **QUALIFIED** | `consult-v6` | 160 |
+| seat3 | `MiniMax-M3` / `cc-shim` | consult | 20/20, 0 violations (re-run — see note) | **QUALIFIED** | `consult-v6` | 165 |
+| seat6 | `gemini-3.7-flash-high` / `agy` | discuss | 15/16, 1 `zero_information` (re-run — see note) | **FAILED** | `discuss-v3` | 164 |
+| seat5 | `Qwen3.8-Max` / `qoderclicn` | consult | 19/20, 1 `protocol_violation` | **FAILED** | `consult-v6` | 161 |
+| seat4 | `GLM-5.3` / `cc-shim` | consult | 18/20, 1 `precedence_miss` + 1 `oracle_miss` | **FAILED** | `consult-v6` | 162 |
+| seat2 | `gpt-5.6-sol` / `codex` | discuss | 9/16, 7 `zero_information` | **FAILED** | `discuss-v3` | 163 |
 
 **Decorrelation finding**: `gpt-5.6-sol` is strong on `consult` (20/20 clean) but weak on `discuss`
 (9/16, majority failure mode `zero_information` — restating the prompt without adding evidence).
-`gemini-3.7-flash-high` shows the inverse shape: strong on `discuss` (16/16 clean) with no `consult`
-administration to compare against. The two roles measure genuinely different failure surfaces on the
-same engine family, not a shared "is this engine good" axis.
+The two roles measure genuinely different failure surfaces on the same engine family, not a shared
+"is this engine good" axis. `gemini-3.7-flash-high`'s single `discuss` administration failed
+(15/16) rather than confirming the earlier decorrelation story — see the re-run note below.
 
-**Near-miss detail** (the 3 recorded fails, plus seat3's evidence-only fail):
-- **MiniMax-M3** 19/20 — 1 `oracle_miss` (a single case where the independent owner-host oracle
-  rejected its artifact). Genuinely near a pass; not a pattern.
+**Near-miss detail**:
 - **Qwen3.8-Max** 19/20 — 1 `protocol_violation` (trial-0 dropped one case: 9/10 vs 10/10 on
   trial-1).
 - **GLM-5.3** 18/20 — 1 `precedence_miss` + 1 `oracle_miss`, two distinct failure classes on two
@@ -90,6 +87,8 @@ same engine family, not a shared "is this engine good" axis.
 - **gpt-5.6-sol discuss** 9/16 — not a near miss. 7 of 16 cases hit `zero_information`: a genuine
   weak-role result, not instrument noise (its own `consult` run on the same round's instrument
   cleared 20/20 clean).
+- **gemini-3.7-flash-high discuss** 15/16 — 1 `zero_information` on trial-2 (7/8 vs 8/8 on
+  trial-1). A near-miss, not a clean fail, but a fail.
 
 ### Instrument-version flag — seat1 (`gpt-5.6-sol` consult)
 
@@ -101,27 +100,48 @@ all 0 — is stable across an aside-rule change; a near-miss would not be), this
 authoritative. Flagged here rather than recorded silently, per the operator's instruction. Every
 other recorded seat ran under the current final instrument (`consult-v6` / `discuss-v3`) directly.
 
-### Scorecard-recording gap — seat6 (Gemini discuss) and seat3 (MiniMax consult)
+### Effort-enum bug and re-run — seat6 (Gemini discuss) and seat3 (MiniMax consult)
 
-Both administrations are **genuine, real, paid results** — the evidence receipts are honest and are
-anchored in the canonical `~/.autopilot/engine-capability/qualification-evidence.jsonl`
-(event_id 277 for seat6, event_id 278 for seat3), produced by the same `engine-qualify-v2` production
-path as every other seat. They could **not** be turned into scorecard rows via
-`engine-scorecard.js record`, because `run.sh` for both seats set `--effort` to a receipt-only
-placeholder string (`baked-in-model-name` for agy, `default` for cc-shim/QRP — both transports that,
-per each seat's own `run.sh` comment, do not expose an effort dimension to QRP at all) rather than the
-scorecard schema's `none|low|medium|high|xhigh|max` enum. `engine-scorecard.js record`'s row-level
-enum check rejects the literal string; substituting `none` in the *scorecard* row instead fails a
-separate, stricter check (`record` requires `row.effort === evidence.identity.effort` exactly for any
-`internal_eval` row) — because the sealed evidence itself (hash-bound, cannot be edited without
-invalidating it) carries the original placeholder string. Neither engine's real exam result, engine
-identity, or verdict is in question; this is a schema/tooling gap between `engine-qualify.js` (accepts
-free-text `--effort`) and `engine-scorecard.js record` (enforces a closed enum), surfaced for the
-first time by these two transports. Recommend either (a) extending the `record` effort enum to accept
-a documented "no-effort-dimension" placeholder distinct from `none`, or (b) re-running these two
-seats' `run.sh` with `--effort none` (the documented convention for exactly this transport class,
-per `engine-scorecard.js`'s own code comment) to produce evidence that anchors cleanly — both require
-an owner decision, not something this recording pass should force through.
+The first administration of both seats produced genuine, real, paid results that could not be
+turned into scorecard rows via `engine-scorecard.js record`: `run.sh` for both seats set `--effort`
+to a receipt-only placeholder string (`baked-in-model-name` for agy, `default` for cc-shim/QRP —
+both transports that, per each seat's own `run.sh` comment, do not expose an effort dimension to
+QRP at all) instead of a value in the scorecard schema's closed enum
+(`none|low|medium|high|xhigh|max`). Substituting a compliant value into the scorecard row alone
+(without an evidence re-seal) fails a separate check — `record` requires
+`row.effort === evidence.identity.effort` exactly for any `internal_eval` row, and the sealed
+evidence's `identity.effort` still carries the original placeholder. Filed as a backlog entry
+(`docs/BACKLOG.md`, "qualification run.sh templates baked an invalid effort enum").
+
+**Fix applied**: both `run.sh` scripts were corrected to `EFFORT="high"` — a receipt-only
+classification identical in kind to kimi's/grok's convention for the same transport class; neither
+transport takes `--effort` as a real CLI flag (confirmed: no `QRP_CLI_EFFORT` export in either
+script), so this changes only the recorded label, never the exam transport. Both seats were then
+**re-administered for real** (Board-authorized, 2026-08-29) rather than having their original,
+mislabeled evidence force-recorded.
+
+**The re-run results are materially different from the first (mislabeled) administration — reported
+here rather than assumed to reproduce:**
+
+- **seat6 Gemini discuss**: first administration scored 16/16 clean (would have been QUALIFIED).
+  The re-run scored **15/16, FAILED** — 1 `zero_information` miss on trial-2. Recorded honestly as
+  **FAILED** (authoritative file `execute4-out.json`; scorecard event_id 164, capability evidence event_id 282). `seat-status` confirms
+  `admission_status: no_record`.
+- **seat3 MiniMax consult**: first administration scored 19/20 (would have been the FAILED
+  near-miss). The re-run scored **20/20, QUALIFIED**, zero violations across every counter.
+  Recorded honestly as **QUALIFIED** (authoritative file `execute5-out.json`; scorecard event_id 165, capability evidence event_id 283).
+  `seat-status` confirms `admission_status: qualified`, `baseline_event_id: 165`.
+
+Both flips land within the two-role batch's existing "borderline near-miss / near-clean" band (19/20
+and 16/16 are both one failing case away from the other outcome), consistent with normal
+administration-to-administration LLM variance rather than a sign either transport or exam is broken.
+The overall QUALIFIED/FAILED split for the 9-seat batch is unchanged at 5/4 — only which two seats
+occupy which side of it changed. The mislabeled-effort evidence from the first administration of
+both seats remains genuinely anchored (unreferenced by any scorecard row) at capability evidence
+event_id 277 (seat6, first run) and 278 (seat3, first run) — real evidence, simply superseded by the
+corrected re-run as the seat's authoritative record.
+
+## (c) Did not participate
 
 ## (c) Did not participate
 

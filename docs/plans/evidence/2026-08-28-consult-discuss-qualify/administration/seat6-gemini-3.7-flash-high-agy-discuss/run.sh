@@ -47,8 +47,12 @@ MODEL="Gemini 3.7 Flash (High)"          # exact vendor model id (MODEL_ID chars
 MODEL_VERSION="gemini-3.7-flash-high-20260829"   # --model-version is also a strict TOKEN
 RUNNER="agy"
 FAMILY="google"
-EFFORT="baked-in-model-name"   # agy rejects --effort entirely; the tier is part
-                                # of the model id above (identity, not enforced).
+EFFORT="high"   # receipt-only classification, matching engine-scorecard.js's
+                 # closed enum (none|low|medium|high|xhigh|max) — same pattern
+                 # as kimi/grok. agy rejects --effort entirely; the CLI never
+                 # sees this value (no QRP_CLI_EFFORT export below) — it only
+                 # labels the tier already named in the model id above
+                 # ("Gemini 3.7 Flash (High)"), it does not enforce it.
 
 # --- live runner identity probe (fail closed — never guess) ---
 RUNNER_PROBE_JSON="$(node "$REPO_ROOT/scripts/lib/runner-binary.js" version --runner agy --json)" || true

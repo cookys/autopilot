@@ -4616,56 +4616,54 @@ function collectStringsDeep(value, out, seen) {
 }
 
 function findJsonObjectSpans(text) {
-  // Top-level objects only: after a successful parse, skip past its end so
-  // nested `{...}` values are never counted as a second smuggled answer.
+  // Single forward pass, O(n): a candidate span starts only at a `{`
+  // encountered at depth 0 and ends when depth returns to 0. An outer
+  // object still open at EOF (never returns to depth 0) yields NO span —
+  // not for itself, not for anything nested inside it — so a truncated
+  // outer object containing complete nested objects is never miscounted
+  // as multiple top-level objects (was: retrying from the next `{` after
+  // any failed parse re-scanned nested braces as fresh top-level starts,
+  // quadratic on provider-controlled input and false-positive on mere
+  // truncation). Braces inside strings are ignored throughout.
   const spans = [];
-  let i = 0;
-  while (i < text.length) {
-    if (text[i] !== '{') {
-      i += 1;
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
       continue;
     }
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    let end = -1;
-    for (let j = i; j < text.length; j += 1) {
-      const ch = text[j];
-      if (inString) {
-        if (escaped) escaped = false;
-        else if (ch === '\\') escaped = true;
-        else if (ch === '"') inString = false;
-        continue;
-      }
-      if (ch === '"') {
-        inString = true;
-        continue;
-      }
-      if (ch === '{') depth += 1;
-      else if (ch === '}') {
-        depth -= 1;
-        if (depth === 0) {
-          end = j + 1;
-          break;
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+      continue;
+    }
+    if (ch === '}') {
+      if (depth === 0) continue; // stray close outside any object; ignore
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        const end = i + 1;
+        const candidate = text.slice(start, end);
+        try {
+          const parsed = JSON.parse(candidate);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            spans.push({ start, end, text: candidate });
+          }
+        } catch {
+          // not valid JSON at this top-level span
         }
+        start = -1;
       }
     }
-    if (end === -1) {
-      i += 1;
-      continue;
-    }
-    const candidate = text.slice(i, end);
-    try {
-      const parsed = JSON.parse(candidate);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        spans.push({ start: i, end, text: candidate });
-        i = end;
-        continue;
-      }
-    } catch {
-      // not a complete object at this brace
-    }
-    i += 1;
   }
   return spans;
 }

@@ -757,4 +757,77 @@ D3_REGRESS_RC=$?
 assert_exit_code "$D3_REGRESS_RC" "0" "D3.regress non-JSON consult response recovers grader reason via real run-loop (STEP-2 tier2, not STEP-3 default-deny): $D3_REGRESS_OUT"
 assert_contains "$D3_REGRESS_OUT" "OK exchanges=" "D3.regress suite reports OK exchanges"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# D3.regress2 — findJsonObjectSpans single-pass top-level scan: a truncated
+# outer object containing complete nested objects must NOT be miscounted as
+# multiple top-level JSON objects (was: quadratic re-scan from every failed
+# brace, retrying INTO nested braces of a truncated outer object as fresh
+# top-level starts). Exercises trustScanChecks.multiple_json_objects
+# directly (unit) and classifyQualificationOutcome (integration), plus a
+# bounded-input performance check.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D3_REGRESS2_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const { classifyQualificationOutcome, trustScanChecks } = require(path.join(root, 'scripts/engine-qualify.js'));
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+const multipleCheck = trustScanChecks.multiple_json_objects;
+assert(typeof multipleCheck === 'function', 'trustScanChecks.multiple_json_objects is exported');
+
+// (a) truncated outer object containing two complete nested objects → 0
+// spans, multiple_json_objects does not fire, classifier does not tier1 it.
+{
+  const truncated = '{"outer":{"a":1},"b":{"c":2}';
+  assert(multipleCheck({ bounded: truncated }) === false,
+    `(a) truncated outer with nested complete objects must NOT fire multiple_json_objects; text=${truncated}`);
+  const result = classifyQualificationOutcome({
+    role: 'consult', graderLabel: 'protocol_violation', graderReason: 'response is not a JSON object',
+    rawStdout: truncated, parsedObject: null, extractionMeta: null, caseSpec: null,
+  });
+  assert(!(result.tier === 'tier1' && result.step === 1 && result.signal === 'multiple_json_objects'),
+    `(a) classifier must not tier1/multiple_json_objects a merely-truncated outer object; got ${JSON.stringify(result)}`);
+}
+
+// (b) two genuine top-level objects → 2 spans, fires.
+{
+  const twoTop = '{"a":1} {"b":2}';
+  assert(multipleCheck({ bounded: twoTop }) === true,
+    `(b) two genuine top-level objects must fire multiple_json_objects; text=${twoTop}`);
+}
+
+// (c) one object followed by prose whose string values contain { / } → 1
+// span (the object), no false fire.
+{
+  const oneObjPlusProse = '{"a":1}\nSure, "note: the value looks like {bogus} to me" but nothing else.';
+  assert(multipleCheck({ bounded: oneObjPlusProse }) === false,
+    `(c) one object + prose with braces inside a quoted string must NOT fire; text=${oneObjPlusProse}`);
+}
+
+// (d) a 65536-byte adversarial input completes in well under 1s (was:
+// quadratic — every failed brace re-scanned forward).
+{
+  const adversarial = '{'.repeat(65536);
+  const t0 = Date.now();
+  const fired = multipleCheck({ bounded: adversarial });
+  const elapsedMs = Date.now() - t0;
+  assert(elapsedMs < 1000, `(d) 65536-byte adversarial input must complete in well under 1s; took ${elapsedMs}ms`);
+  assert(fired === false, `(d) an all-unbalanced-brace input must not fire multiple_json_objects (no top-level span ever closes); got ${fired}`);
+}
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write('OK d3-regress2\n');
+NODE
+)"
+D3_REGRESS2_RC=$?
+assert_exit_code "$D3_REGRESS2_RC" "0" "D3.regress2 findJsonObjectSpans single-pass scan (truncated outer is not multiple_json_objects): $D3_REGRESS2_OUT"
+assert_contains "$D3_REGRESS2_OUT" "OK d3-regress2" "D3.regress2 suite reports OK"
+
 finalize_test

@@ -71,7 +71,7 @@
       ]
     }
   },
-  "mission_graph_digest": "e93861aceecaf584be32719dbbe06ac7aef139c0a5f362e24c89778b4737ed36",
+  "mission_graph_digest": "753abc5752b738b45a94304f48845eb1b058191b78c3123cb744aafbc176f466",
   "mission_lineage_id": "lineage-v1-2e784929cba35bd337c5c5b750b939d50f4470752c3e4cd31140c4dcb322e763",
   "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
   "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
@@ -88,6 +88,6 @@
     "max_wall_seconds": 36000
   },
   "schema_version": 1,
-  "task_authority_id": "b050f801c7edd4ab3ba37385460d821845c58526499564012fddc3c688ae1876",
+  "task_authority_id": "724c025bd1a85c10097d649272f82b96d73d36b9ccc69e5387fb30b01a3c5cf4",
   "task_id": "qualification-verdict-stability"
 }

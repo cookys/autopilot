@@ -179,6 +179,292 @@ check(discussRun.results.length === discussGrader.CORPUS.budget.cases_per_admini
   );
 }
 
+// ------------------------------------------------------------- consult aside-channel coherence controls
+//
+// fix/consult-aside-channel-coherent (depth-0-verified instrument defect):
+// CONSULT_SYSTEM_PROMPT (scripts/qualification-review-provider.js) tells
+// every candidate a genuine unrelated observation may go in `aside` on ANY
+// family, but evals/consult-eval-grader.js's asideChannelScopeViolation
+// used to auto-fail ANY non-empty aside outside C4 regardless of content --
+// prompt and grader directly contradicted each other. Two real engines
+// (MiniMax-M3, GLM-5.3) followed the prompt's own instruction and were
+// auto-failed for it (docs/plans/evidence/2026-08-28-consult-discuss-
+// qualify/administration/seat3-minimax-m3-ccshim-consult/ and
+// seat4-glm-5.3-ccshim-consult/ raw/consult-exchanges.jsonl). The grader
+// now accepts a non-empty aside on any family ONLY when it (a) references a
+// bundle artifact this case's oracle marks unrelated to the primary answer,
+// (b) carries no verdict/escalation token, and (c) does not restate or
+// justify the primary answer. These controls close the exact blind spot a
+// reference-echoing stub can never surface: legitimate use must PASS,
+// misuse must still FAIL, and C4's own pre-existing span-token discipline
+// stays untouched.
+{
+  const adminSeed = 'honest-e2e-consult-aside-admin-seed';
+  const oracleKey = 'honest-e2e-consult-aside-oracle-key';
+  const administration = consultGen.generateAdministration(adminSeed, oracleKey);
+  const c1Case = administration.trials[0].cases.find((c) => c.family === 'C1_grounded_answer');
+  check(!!c1Case, 'aside-coherence: no C1 case available to exercise the controls');
+  const envelope = JSON.parse(engineQualify.buildConsultCaseEnvelope(c1Case));
+  const honestResponse = solveConsult(envelope);
+  check(
+    consultGrader.classify(c1Case, honestResponse, undefined) === 'pass',
+    'sanity: the honest C1 solver response passes BEFORE any aside is added',
+  );
+  const unrelatedArtifact = (envelope.bundle.artifacts || []).find(
+    (a) => a.id !== honestResponse.answer.artifact_ref,
+  );
+  check(!!unrelatedArtifact, 'aside-coherence: no non-answer artifact disclosed to build an unrelated aside around');
+
+  // (a) thoughtful-candidate variant: correct answer plus a genuine
+  // unrelated observation about the OTHER disclosed (non-answer) artifact.
+  // Must PASS -- proves the coherent rule actually accepts what the prompt
+  // invites.
+  const thoughtfulResponse = {
+    ...honestResponse,
+    aside: [{ note: `Unrelated observation: ${unrelatedArtifact.id} carries content this question never asked about.` }],
+  };
+  const thoughtfulOutcome = consultGrader.classify(c1Case, thoughtfulResponse, undefined);
+  check(
+    thoughtfulOutcome === 'pass',
+    `thoughtful-candidate aside FAILED: a correct answer plus a genuine unrelated observation about a `
+    + `disclosed non-answer artifact should pass (got ${thoughtfulOutcome}) -- INSTRUMENT BUG`,
+  );
+
+  // (b) misuse variant: the aside points at the unrelated artifact but ALSO
+  // restates/justifies the primary answer's own decisive value -- exactly
+  // what the real seat evidence showed (MiniMax-M3/GLM-5.3 justifying their
+  // own answer through the aside channel). Must still FAIL.
+  const decisiveValue = honestResponse.answer.label.replace(/^answer:/, '');
+  const restatesResponse = {
+    ...honestResponse,
+    aside: [{ note: `Confirming via ${unrelatedArtifact.id}: the deciding fact is still ${decisiveValue}.` }],
+  };
+  const restatesOutcome = consultGrader.classify(c1Case, restatesResponse, undefined);
+  check(
+    restatesOutcome !== 'pass',
+    `misuse control FAILED: an aside that restates/justifies the primary answer must not pass (got ${restatesOutcome})`,
+  );
+
+  // (c) misuse variant: the aside references the unrelated artifact but
+  // escalates it. Must FAIL.
+  const escalatingResponse = {
+    ...honestResponse,
+    aside: [{ note: `${unrelatedArtifact.id}: this is blocking, must fix immediately.` }],
+  };
+  const escalatingOutcome = consultGrader.classify(c1Case, escalatingResponse, undefined);
+  check(
+    escalatingOutcome !== 'pass',
+    `misuse control FAILED: an aside that escalates must not pass (got ${escalatingOutcome})`,
+  );
+
+  // (d) C4's own span-token discipline is UNCHANGED by this fix: a C4 aside
+  // missing the required span marker must still fail.
+  const c4Case = administration.trials[0].cases.find((c) => c.family === 'C4_scope_discipline');
+  check(!!c4Case, 'aside-coherence: no C4 case available to exercise the span-token control');
+  const c4Envelope = JSON.parse(engineQualify.buildConsultCaseEnvelope(c4Case));
+  const c4HonestResponse = solveConsult(c4Envelope);
+  const c4UnrelatedArtifact = (c4Envelope.bundle.artifacts || []).find(
+    (a) => a.id !== c4HonestResponse.answer.artifact_ref,
+  );
+  check(!!c4UnrelatedArtifact, 'aside-coherence: no non-bounded artifact disclosed in the C4 bundle');
+  const c4MissingSpanResponse = {
+    ...c4HonestResponse,
+    aside: [{ note: `noted an unrelated defect in ${c4UnrelatedArtifact.id}; parked, not evaluated here.` }],
+  };
+  const c4MissingSpanOutcome = consultGrader.classify(c4Case, c4MissingSpanResponse, undefined);
+  check(
+    c4MissingSpanOutcome !== 'pass',
+    `misuse control FAILED: a C4 aside missing the required span marker must still fail (got ${c4MissingSpanOutcome})`,
+  );
+
+  // (e) misuse variant (hetero review round 2, finding
+  // aside-alt-label-laundering): the aside references the unrelated
+  // artifact and stays silent on the SUBMITTED label's own value, but
+  // launders a DIFFERENT closed_label_set value as a covert competing
+  // answer to the same bounded question. Must still FAIL -- the entire
+  // closed label space is off-limits to the aside channel, not just the
+  // one value the candidate happened to submit.
+  const altLabel = (envelope.closed_label_set || []).find((l) => l !== honestResponse.answer.label);
+  check(!!altLabel, 'aside-coherence: no alternate closed-set label disclosed to build the laundering control');
+  const altValue = altLabel.replace(/^[^:]+:/, '');
+  const launderingResponse = {
+    ...honestResponse,
+    aside: [{ note: `Unrelated observation: ${unrelatedArtifact.id} instead indicates ${altValue}.` }],
+  };
+  const launderingOutcome = consultGrader.classify(c1Case, launderingResponse, undefined);
+  check(
+    launderingOutcome !== 'pass',
+    `misuse control FAILED: an aside laundering a DIFFERENT closed-set label as a covert second answer must not `
+    + `pass (got ${launderingOutcome})`,
+  );
+
+  // (f) positive control (hetero review round 2, finding
+  // aside-value-substring-false-positive): a legitimate unrelated aside
+  // whose prose contains the decisive value only as a SUBSTRING of a
+  // longer, different word (never as its own token) must still PASS -- the
+  // exact false-negative class this whole fix exists to kill.
+  const collisionResponse = {
+    ...honestResponse,
+    aside: [{ note: `Unrelated observation: ${unrelatedArtifact.id} contains only ${decisiveValue}xyz-style boilerplate, unrelated to this question.` }],
+  };
+  const collisionOutcome = consultGrader.classify(c1Case, collisionResponse, undefined);
+  check(
+    collisionOutcome === 'pass',
+    `substring-collision control FAILED: a legitimate aside whose prose contains the decisive value only as a `
+    + `substring of a longer word must still pass (got ${collisionOutcome}) -- INSTRUMENT BUG`,
+  );
+
+  // ----------------------------------------------------- planted negative (teeth proof)
+  //
+  // Revert the grader's legitimate-aside acceptance in a scratch copy back
+  // to the pre-fix rule ("any non-empty aside outside C4 is automatically a
+  // protocol_violation"). The thoughtful-candidate case above MUST flip
+  // back to protocol_violation -- proving this validator would have caught
+  // a regression back to the old, prompt-contradicting rule.
+  {
+    const copyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'consult-aside-planted-negative-'));
+    const graderSrcPath = path.join(__dirname, '..', '..', '..', 'evals', 'consult-eval-grader.js');
+    const copyGraderPath = path.join(copyRoot, 'consult-eval-grader.js');
+    fs.copyFileSync(path.join(__dirname, '..', '..', '..', 'evals', 'consult-capability-evidence-corpus.json'),
+      path.join(copyRoot, 'consult-capability-evidence-corpus.json'));
+    const original = fs.readFileSync(graderSrcPath, 'utf8');
+    check(original.includes('function legitimateUnrelatedAside('),
+      'sanity: the legitimate-aside acceptance is present in the live grader before reverting the scratch copy');
+    const functionRegex = /function asideChannelScopeViolation\(caseSpec, response, gates\) \{[\s\S]*?\n\}/;
+    check(functionRegex.test(original), 'sanity: the revert regex matches asideChannelScopeViolation in the live grader');
+    const reverted = original.replace(
+      functionRegex,
+      "function asideChannelScopeViolation(caseSpec, response, gates) {\n"
+      + "  if (!gates.asideChannelScope) return null;\n"
+      + "  if (caseSpec.family === 'C4_scope_discipline') return null;\n"
+      + "  if ((response.aside || []).length > 0) {\n"
+      + "    return 'aside is reserved for the C4 scope-discipline family; other families must leave it empty';\n"
+      + "  }\n"
+      + "  return null;\n}",
+    );
+    check(reverted !== original, 'sanity: the revert regex actually matched and changed the scratch copy');
+    fs.writeFileSync(copyGraderPath, reverted);
+
+    delete require.cache[require.resolve(copyGraderPath)];
+    const revertedGrader = require(copyGraderPath);
+    const revertedOutcome = revertedGrader.classify(c1Case, thoughtfulResponse, undefined);
+    check(
+      revertedOutcome !== 'pass',
+      'planted negative FAILED TO FIRE: with the legitimate-aside acceptance reverted, the thoughtful-candidate '
+      + `case should flip back to protocol_violation (this is the teeth proof -- if this assertion itself fails, `
+      + `the validator has no teeth; got ${revertedOutcome})`,
+    );
+  }
+
+  // ------------------------------------------- planted negative #2 (aside-alt-label-laundering)
+  //
+  // Revert forbiddenLaunderedValueTokens in a scratch copy to the round-1
+  // bug: only the case's OWN expected_label value is forbidden, not every
+  // closed_label_set member. The laundering case above MUST flip back to
+  // 'pass' -- proving this validator would have caught a regression back to
+  // "only checks the submitted label".
+  {
+    const copyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'consult-aside-laundering-planted-negative-'));
+    const graderSrcPath = path.join(__dirname, '..', '..', '..', 'evals', 'consult-eval-grader.js');
+    const copyGraderPath = path.join(copyRoot, 'consult-eval-grader.js');
+    fs.copyFileSync(path.join(__dirname, '..', '..', '..', 'evals', 'consult-capability-evidence-corpus.json'),
+      path.join(copyRoot, 'consult-capability-evidence-corpus.json'));
+    const original = fs.readFileSync(graderSrcPath, 'utf8');
+    const originalFn = "function forbiddenLaunderedValueTokens(caseSpec) {\n"
+      + "  const oracle = caseSpec.oracle || {};\n"
+      + "  const labels = Array.isArray(oracle.closed_label_set) ? oracle.closed_label_set : [];\n"
+      + "  const tokens = new Set();\n"
+      + "  for (const label of labels) {\n"
+      + "    const value = decisiveValueFromLabel(label);\n"
+      + "    if (value) for (const t of tokenize(value)) tokens.add(t);\n"
+      + "  }\n"
+      + "  // Defensive: also fold in expected_label's value even if closed_label_set\n"
+      + "  // is absent/incomplete on a hand-built caseSpec (e.g. an offline re-grade\n"
+      + "  // reconstructing oracle fields from a disclosed envelope alone).\n"
+      + "  const expectedValue = decisiveValueFromLabel(oracle.expected_label);\n"
+      + "  if (expectedValue) for (const t of tokenize(expectedValue)) tokens.add(t);\n"
+      + "  return tokens;\n"
+      + "}";
+    check(original.includes(originalFn),
+      'sanity: forbiddenLaunderedValueTokens is present verbatim in the live grader before reverting the scratch copy');
+    const revertedFn = "function forbiddenLaunderedValueTokens(caseSpec) {\n"
+      + "  const oracle = caseSpec.oracle || {};\n"
+      + "  const expectedValue = decisiveValueFromLabel(oracle.expected_label);\n"
+      + "  const tokens = new Set();\n"
+      + "  if (expectedValue) for (const t of tokenize(expectedValue)) tokens.add(t);\n"
+      + "  return tokens;\n"
+      + "}";
+    const reverted = original.replace(originalFn, revertedFn);
+    check(reverted !== original, 'sanity: the laundering revert actually matched and changed the scratch copy');
+    fs.writeFileSync(copyGraderPath, reverted);
+
+    delete require.cache[require.resolve(copyGraderPath)];
+    const revertedGrader = require(copyGraderPath);
+    const revertedOutcome = revertedGrader.classify(c1Case, launderingResponse, undefined);
+    check(
+      revertedOutcome === 'pass',
+      'planted negative FAILED TO FIRE: with forbiddenLaunderedValueTokens reverted to submitted-label-only, the '
+      + `label-laundering case should flip back to 'pass' (teeth proof -- if this assertion itself fails, the `
+      + `validator has no teeth; got ${revertedOutcome})`,
+    );
+  }
+
+  // ------------------------------------------- planted negative #3 (aside-value-substring-false-positive)
+  //
+  // Revert legitimateUnrelatedAside in a scratch copy to a raw
+  // case-insensitive substring scan (drop the tokenize()-based word-
+  // boundary matching). The collision positive control above MUST flip
+  // back to a non-'pass' outcome -- proving this validator would have
+  // caught a regression back to the substring false positive.
+  {
+    const copyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'consult-aside-substring-planted-negative-'));
+    const graderSrcPath = path.join(__dirname, '..', '..', '..', 'evals', 'consult-eval-grader.js');
+    const copyGraderPath = path.join(copyRoot, 'consult-eval-grader.js');
+    fs.copyFileSync(path.join(__dirname, '..', '..', '..', 'evals', 'consult-capability-evidence-corpus.json'),
+      path.join(copyRoot, 'consult-capability-evidence-corpus.json'));
+    const original = fs.readFileSync(graderSrcPath, 'utf8');
+    const originalFn = "function legitimateUnrelatedAside(caseSpec, response, item) {\n"
+      + "  const note = String((item && item.note) || '');\n"
+      + "  if (!asideReferencesUnrelatedArtifact(caseSpec, note)) return false;\n"
+      + "  if (containsPhrase(note, CORPUS.escalation_phrases)) return false;\n"
+      + "  if (containsPhrase(note, CORPUS.verdict_tokens)) return false;\n"
+      + "  const noteTokens = new Set(tokenize(note));\n"
+      + "  const forbidden = forbiddenLaunderedValueTokens(caseSpec);\n"
+      + "  for (const token of forbidden) {\n"
+      + "    if (noteTokens.has(token)) return false;\n"
+      + "  }\n"
+      + "  return true;\n"
+      + "}";
+    check(original.includes(originalFn),
+      'sanity: legitimateUnrelatedAside is present verbatim in the live grader before reverting the scratch copy');
+    const revertedFn = "function legitimateUnrelatedAside(caseSpec, response, item) {\n"
+      + "  const note = String((item && item.note) || '');\n"
+      + "  if (!asideReferencesUnrelatedArtifact(caseSpec, note)) return false;\n"
+      + "  if (containsPhrase(note, CORPUS.escalation_phrases)) return false;\n"
+      + "  if (containsPhrase(note, CORPUS.verdict_tokens)) return false;\n"
+      + "  const lowerNote = note.toLowerCase();\n"
+      + "  const forbidden = forbiddenLaunderedValueTokens(caseSpec);\n"
+      + "  for (const token of forbidden) {\n"
+      + "    if (lowerNote.includes(token)) return false;\n"
+      + "  }\n"
+      + "  return true;\n"
+      + "}";
+    const reverted = original.replace(originalFn, revertedFn);
+    check(reverted !== original, 'sanity: the substring revert actually matched and changed the scratch copy');
+    fs.writeFileSync(copyGraderPath, reverted);
+
+    delete require.cache[require.resolve(copyGraderPath)];
+    const revertedGrader = require(copyGraderPath);
+    const revertedOutcome = revertedGrader.classify(c1Case, collisionResponse, undefined);
+    check(
+      revertedOutcome !== 'pass',
+      'planted negative FAILED TO FIRE: with legitimateUnrelatedAside reverted to raw substring matching, the '
+      + `value-substring-collision control should flip back to a failure (teeth proof -- if this assertion itself `
+      + `fails, the validator has no teeth; got ${revertedOutcome})`,
+    );
+  }
+}
+
 // ------------------------------------------------------------- discuss round_id type-coercion controls
 //
 // fix/discuss-round-id-type (depth-0-verified instrument defect): the real

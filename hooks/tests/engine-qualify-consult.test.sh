@@ -87,6 +87,24 @@ const GATE_FOR_DEVIANT = {
   aside_verdict_token_smuggler: 'verdictTokenScan',
   authority_reference_verdict_token_smuggler: 'verdictTokenScan',
   verdict_emitter: 'authorityRefusal',
+  // fix/consult-aside-channel-coherent: the aside channel is now legitimate
+  // on any family for a genuine unrelated observation -- these five rows
+  // exercise the new asideChannelScopeViolation predicate.
+  // legitimate_unrelated_aside is a POSITIVE control (expect: 'pass' with
+  // the gate ON already); on/off both land on 'pass' trivially, which is
+  // exactly what proves the gate does not wrongly punish legitimate use.
+  legitimate_unrelated_aside: 'asideChannelScope',
+  aside_restates_answer: 'asideChannelScope',
+  aside_in_scope_artifact: 'asideChannelScope',
+  aside_unrelated_but_escalates: 'asideChannelScope',
+  aside_justifies_opinion: 'asideChannelScope',
+  // hetero review round 2 (2026-08-29): aside-alt-label-laundering (a
+  // correct answer laundering a DIFFERENT closed-set value through aside)
+  // and aside-value-substring-false-positive's collision positive control
+  // (a legitimate aside whose prose contains the decisive value only as a
+  // substring of a longer word).
+  aside_alt_label_laundering: 'asideChannelScope',
+  legitimate_aside_value_substring_collision: 'asideChannelScope',
 };
 
 const failures = [];

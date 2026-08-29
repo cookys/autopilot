@@ -136,8 +136,38 @@ function combinedSealHash(rubricSealFileHash, corpusSealFileHash) {
 // phrase) -- deliberate re-seals, not drift. corpus_version bumped
 // consult-v3 -> consult-v4 (byte change from the version bump only;
 // discuss is untouched).
-const EXPECTED_CONSULT_GENERATOR_HASH = 'f995d91357498b69ef9c30dcf5bbfb95f192d96e1890e633e17a37ae4f6d3218'
-const EXPECTED_CONSULT_GRADER_HASH = '82616d4c17459839882653c898e9479128a175697fbbcc18b0bca1af9325dac0'
+// 2026-08-29 re-seal (fix/consult-aside-channel-coherent): the aside-
+// channel-scope defect -- CONSULT_SYSTEM_PROMPT (scripts/qualification-
+// review-provider.js) invited a genuine unrelated observation into `aside`
+// on ANY family, but the grader auto-failed ANY non-empty aside outside C4,
+// contradicting the prompt outright. Two real engines (MiniMax-M3,
+// GLM-5.3) followed the prompt and were auto-failed for it. Fixed:
+// generator.js gained a per-family `oracle.unrelated_artifact_ids` field
+// (empty for C2/C3, which have no artifact genuinely unrelated to their
+// primary question, by construction) plus legitimate-aside/misuse
+// mutation-control deviants on C1/C5; grader.js's asideChannelScopeViolation
+// now accepts a non-empty aside on any non-C4 family only when it
+// references an unrelated artifact, carries no verdict/escalation token,
+// and does not restate/justify the primary answer -- C4's own span-token
+// discipline (scopeDrift()) is untouched. corpus_version bumped
+// consult-v4 -> consult-v5 (byte change from the version bump only).
+//
+// 2026-08-29 re-seal (hetero review round 2 on the same branch, sol
+// FIX-THEN-SHIP, 2 findings): (1) aside-alt-label-laundering --
+// legitimateUnrelatedAside only rejected the case's OWN submitted/expected
+// label + decisive value, so an aside could launder a DIFFERENT
+// closed_label_set value as a covert second answer and still pass. Fixed:
+// the check now rejects ANY closed_label_set member's decisive value, not
+// just the submitted one. (2) aside-value-substring-false-positive -- a
+// raw case-insensitive substring scan on the decisive value false-
+// positived on prompt-compliant unrelated prose whenever the value
+// occurred inside a longer word (e.g. "echo" inside "echoes"). Fixed:
+// word-boundary/whole-token matching (tokenize() in grader.js), not a
+// substring scan -- a collision positive control (a legitimate aside whose
+// prose contains the value as a substring-but-not-token) now proves this.
+// corpus_version bumped consult-v5 -> consult-v6.
+const EXPECTED_CONSULT_GENERATOR_HASH = '26e253b02adb197697bcaf04c9879954e681f69ec76a244284074e46c7652e8c'
+const EXPECTED_CONSULT_GRADER_HASH = '7852cf337890a1de1544865465bd0e16c0cbe9c7f4a57cec70835977524bab90'
 // D7 re-seal (plan 2026-08-28-consult-discuss-qualification.md D7): the
 // applicability_scope field was added to both corpus manifests, changing
 // their bytes — a deliberate re-seal, per the comment above, not silent
@@ -152,9 +182,9 @@ const EXPECTED_CONSULT_GRADER_HASH = '82616d4c17459839882653c898e9479128a175697f
 // including a re-seal that touches only the corpus seal (as this same
 // change does below: the consult corpus_version bumped to consult-v3
 // alongside the C4/C5 distractor redesign, requiring a corpus reseal).
-const EXPECTED_CONSULT_CORPUS_HASH = 'b3dd42888c0ad5d128f41d40a4754573135152229bd84a54b0d93d7346ea292c'
+const EXPECTED_CONSULT_CORPUS_HASH = '4087482c93d72e595e5076f296136460cfac3c538ac94958b36df1d0378b1510'
 const EXPECTED_CONSULT_RUBRIC_HASH = '8c303e33074d97065bf011c33f89a6dddd642837184834ea578ad31c2c0402cc'
-const EXPECTED_CONSULT_SEAL_HASH = 'd6e391d10dbc44bcf5b5a8c98eb0f30c0c80749bcead318a44eda2feaceeff03'
+const EXPECTED_CONSULT_SEAL_HASH = '3eecb968cdeaa760382203852c8906fd5c31ce8547c959497fb08bd2a280487d'
 
 const EXPECTED_DISCUSS_GENERATOR_HASH = 'c95ed1f514a39eca6d03ea3bb0298bbab95ddea32550bd12551bd8be7e056b0f'
 // 2026-08-29 re-seal (fix/discuss-round-id-type): the discuss round_id

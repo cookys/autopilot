@@ -1,3 +1,15 @@
+> **PROVISIONAL — superseded pending re-administration.** The 5 QUALIFIED / 4 FAILED
+> verdicts recorded below (scorecard events 157–165) were computed under the
+> **single-administration 100%-correct bar**. That bar is **noise-sensitive**: under the
+> identical final instrument, two of these verdicts are known flips —
+> `gemini-3.7-flash-high` / `agy` discuss went `16/16` → `15/16`, and `MiniMax-M3` /
+> `cc-shim` consult went `19/20` → `20/20`. These verdicts are therefore **superseded
+> pending re-administration** under the two-tier (zero-tolerance trust) + pooled
+> (Wilson lower bound) bar introduced by
+> [`docs/plans/2026-08-29-qualification-verdict-stability.md`](../../2026-08-29-qualification-verdict-stability.md).
+> The result rows below are **unchanged** (append-only history). Machine suppression of
+> these baselines lands with that plan's D5 projection change.
+
 # Administration ledger — consult / discuss qualification (2026-08-28 → 2026-08-29)
 
 Board authorization: `PROPOSAL.md` § "Board decision — 2026-08-28 (authorization)". This ledger

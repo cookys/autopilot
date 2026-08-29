@@ -33,6 +33,16 @@ function wilsonUpper(successes, n, z = 1.6448536269514722) {
   return (centre + margin) / denom;
 }
 
+function wilsonLower(successes, n, z = 1.6448536269514722) {
+  if (n <= 0) return 0;                     // fail-closed: no samples => lower bound 0
+  const p = successes / n;
+  const z2 = z * z;
+  const denom = 1 + z2 / n;
+  const centre = p + z2 / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n);
+  return (centre - margin) / denom;
+}
+
 function scoreSignals(signals = {}) {
   if (!signals || typeof signals !== 'object') {
     return { strength: 'weak', reason: 'missing signals', score: 0 };
@@ -188,4 +198,5 @@ module.exports = {
   normalizeStrength,
   loadCorpus,
   wilsonUpper,
+  wilsonLower,
 };

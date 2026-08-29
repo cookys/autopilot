@@ -115,15 +115,23 @@ const CONFIGURED_IDENTITY_FIELDS = [
   'prompt_config_hash',
 ];
 
+const SUPERSESSION_FORBIDDEN_FIELDS = ['quality', 'capability_score', 'evidence', 'status'];
+const SUPERSESSION_BODY_ALLOWED = new Set(['engine', 'runner', 'role']);
+const SUPERSESSION_STATE_VALUES = new Set(['superseded']);
+
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
+  node scripts/engine-scorecard.js record --supersede-provisional --supersedes-event-id <N> --reason <string> [--file <path>]\n\
   node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--identity-file <path>]\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
   node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--now <ISO-date>]\n\
     [--require-evidence --scope-file <path> [--identity-file <path>]]\n\
-\n  --file <path>  Read one JSON row from this file.\n\
+\n  --file <path>  Read one JSON row from this file (optional with --supersede-provisional).\n\
+  --supersede-provisional  Append a record_kind=supersession marker for a prior event.\n\
+  --supersedes-event-id <N>  Target event_id that must exist and match engine/runner/role.\n\
+  --reason <string>  Supersession reason (required with --supersede-provisional).\n\
   --role is required for current/report/ladder/seat-status.\n\
   --key accepts capability (default) or cost.\n\
   --now accepts ISO date; used by current/report/ladder/seat-status for deterministic TTL checks.\n\
@@ -414,6 +422,49 @@ function validateRecordRow(row) {
   }
 }
 
+// Supersession markers (plan 2026-08-29-qualification-verdict-stability.md D1):
+// closed field set, separate from ordinary REQUIRED_FIELDS validation.
+function validateSupersessionMarker(row) {
+  const required = [
+    'record_kind', 'engine', 'runner', 'role',
+    'supersedes_event_id', 'supersession_state', 'reason',
+  ];
+  const missing = required.filter((field) => row[field] === undefined);
+  if (missing.length > 0) {
+    failValidation(`supersession marker missing required field(s): ${missing.join(', ')}`);
+  }
+  if (row.record_kind !== 'supersession') {
+    failValidation(`supersession marker record_kind must be 'supersession'`);
+  }
+  if (typeof row.engine !== 'string' || row.engine.trim().length === 0) {
+    failValidation('engine must be a non-empty string');
+  }
+  if (typeof row.runner !== 'string' || row.runner.trim().length === 0) {
+    failValidation('runner must be a non-empty string');
+  }
+  const canonicalRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
+  if (!canonicalRole) {
+    failValidation(`invalid role '${row.role}'`);
+  }
+  row.role = canonicalRole;
+  const sid = toEventId(row.supersedes_event_id);
+  if (sid === null || sid <= 0) {
+    failValidation('supersedes_event_id must be a positive integer');
+  }
+  row.supersedes_event_id = sid;
+  if (!SUPERSESSION_STATE_VALUES.has(row.supersession_state)) {
+    failValidation(`invalid supersession_state '${row.supersession_state}'`);
+  }
+  if (typeof row.reason !== 'string' || row.reason.trim().length === 0) {
+    failValidation('reason must be a non-empty string');
+  }
+  for (const field of SUPERSESSION_FORBIDDEN_FIELDS) {
+    if (row[field] !== undefined) {
+      failValidation(`supersession marker forbids field '${field}'`);
+    }
+  }
+}
+
 function readCapabilityEvidenceRows() {
   const lines = readTextLines(CAPABILITY_EVIDENCE_FILE);
   return lines.map((line, index) => {
@@ -675,6 +726,9 @@ function parseLadderArgs(args) {
 
 function parseRecordArgs(args) {
   let file = null;
+  let supersedeProvisional = false;
+  let supersedesEventId = null;
+  let reason = null;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -685,11 +739,32 @@ function parseRecordArgs(args) {
       file = args[++i];
       continue;
     }
+    if (arg === '--supersede-provisional') {
+      supersedeProvisional = true;
+      continue;
+    }
+    if (arg === '--supersedes-event-id') {
+      if (i + 1 >= args.length) failUsage('--supersedes-event-id requires a value');
+      supersedesEventId = args[++i];
+      continue;
+    }
+    if (arg === '--reason') {
+      if (i + 1 >= args.length) failUsage('--reason requires a value');
+      reason = args[++i];
+      continue;
+    }
 
     failUsage(`unknown option: ${arg}`);
   }
 
-  return { file };
+  if (supersedeProvisional) {
+    if (supersedesEventId === null) failUsage('--supersede-provisional requires --supersedes-event-id');
+    if (reason === null) failUsage('--supersede-provisional requires --reason');
+  } else if (supersedesEventId !== null || reason !== null) {
+    failUsage('--supersedes-event-id/--reason require --supersede-provisional');
+  }
+
+  return { file, supersedeProvisional, supersedesEventId, reason };
 }
 
 function physicalPathWithMissingTail(target) {
@@ -1806,8 +1881,126 @@ function rankCost(a, b) {
   return sortByCapability(a, b); // tie (incl. both unmeasured) → capability desc
 }
 
+function readOptionalRecordBody(file) {
+  // With --supersede-provisional a JSON body is optional. When --file is set we
+  // always read it; when absent, only read stdin if it is a non-TTY pipe with
+  // content (so interactive `record --supersede-provisional ...` needs no body).
+  if (file) {
+    return parseJsonObject(fs.readFileSync(file, 'utf8'), 'record input');
+  }
+  if (process.stdin.isTTY) return null;
+  const raw = fs.readFileSync(0, 'utf8');
+  if (!raw || !raw.trim()) return null;
+  return parseJsonObject(raw, 'record input');
+}
+
+function cmdRecordSupersession({ file, supersedesEventId, reason }) {
+  const body = readOptionalRecordBody(file);
+  if (body) {
+    for (const field of SUPERSESSION_FORBIDDEN_FIELDS) {
+      if (body[field] !== undefined) {
+        failValidation(`supersession marker forbids field '${field}'`);
+      }
+    }
+    for (const key of Object.keys(body)) {
+      if (!SUPERSESSION_BODY_ALLOWED.has(key)) {
+        failValidation(`supersession body may only carry engine/runner/role (got '${key}')`);
+      }
+    }
+  }
+
+  const targetId = toEventId(supersedesEventId);
+  if (targetId === null || targetId <= 0) {
+    failValidation('supersedes_event_id must be a positive integer');
+  }
+  if (typeof reason !== 'string' || reason.trim().length === 0) {
+    failValidation('reason must be a non-empty string');
+  }
+
+  // Never call failValidation (process.exit) inside the lock — release first.
+  let lockError = null;
+  const writtenRow = withWriteLock({ storeDir: SCORECARD_DIR, lockFile: LOCK_FILE, name: 'scorecard' }, () => {
+    const rows = readStoreRows(true);
+    const target = rows.find((row) => toEventId(row.event_id) === targetId);
+    if (!target) {
+      lockError = `supersedes_event_id ${targetId} does not exist in the store`;
+      return null;
+    }
+    if (target.record_kind === 'supersession') {
+      lockError = `supersedes_event_id ${targetId} is itself a supersession marker`;
+      return null;
+    }
+
+    const engine = body && body.engine !== undefined ? body.engine : target.engine;
+    const runner = body && body.runner !== undefined ? body.runner : target.runner;
+    const role = body && body.role !== undefined ? body.role : target.role;
+
+    if (engine !== target.engine) {
+      lockError = `supersession engine '${engine}' does not match target event ${targetId}`;
+      return null;
+    }
+    if (runner !== target.runner) {
+      lockError = `supersession runner '${runner}' does not match target event ${targetId}`;
+      return null;
+    }
+    const targetRole = normalizeCapabilityRole(target.role, { allowLegacy: true });
+    const markerRole = normalizeCapabilityRole(role, { allowLegacy: true });
+    if (!markerRole || markerRole !== targetRole) {
+      lockError = `supersession role '${role}' does not match target event ${targetId}`;
+      return null;
+    }
+
+    const marker = {
+      record_kind: 'supersession',
+      engine: target.engine,
+      runner: target.runner,
+      role: targetRole,
+      supersedes_event_id: targetId,
+      supersession_state: 'superseded',
+      reason: reason.trim(),
+      date: new Date().toISOString().slice(0, 10),
+    };
+    // Closed-set check before write (throws via failValidation only after unlock
+    // would be ideal; validate here is safe — fields are constructed above).
+    const required = [
+      'record_kind', 'engine', 'runner', 'role',
+      'supersedes_event_id', 'supersession_state', 'reason',
+    ];
+    for (const field of required) {
+      if (marker[field] === undefined) {
+        lockError = `supersession marker missing required field(s): ${field}`;
+        return null;
+      }
+    }
+    for (const field of SUPERSESSION_FORBIDDEN_FIELDS) {
+      if (marker[field] !== undefined) {
+        lockError = `supersession marker forbids field '${field}'`;
+        return null;
+      }
+    }
+    if (!SUPERSESSION_STATE_VALUES.has(marker.supersession_state)) {
+      lockError = `invalid supersession_state '${marker.supersession_state}'`;
+      return null;
+    }
+
+    const assigned = maxEventId(rows) + 1;
+    const row = { ...marker, event_id: assigned };
+    appendRow(SCORECARD_FILE, row);
+    return row;
+  });
+
+  if (lockError) failValidation(lockError);
+  process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
+}
+
 function cmdRecord(args) {
-  const { file } = parseRecordArgs(args);
+  const { file, supersedeProvisional, supersedesEventId, reason } = parseRecordArgs(args);
+
+  if (supersedeProvisional) {
+    cmdRecordSupersession({ file, supersedesEventId, reason });
+    return;
+  }
+
   const raw = file
     ? fs.readFileSync(file, 'utf8')
     : fs.readFileSync(0, 'utf8');

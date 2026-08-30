@@ -54,4 +54,27 @@ if ! node "$script_dir/doc-drift-gate.js" "$fixture/vendor" --repo-root "$fixtur
 fi
 rm -rf "$fixture/vendor"
 
+# --- byte-frozen fixture exclusion: hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md
+# is a digest-pinned byte-copy whose relative links intentionally dangle from its
+# fixture location; DEFAULT_EXCLUDES must skip it by path, not just by directory.
+mkdir -p "$fixture/hooks/tests/fixtures"
+printf '%s\n' '# Frozen fixture' '' 'See [x](../scripts/resolve-review-loop.sh) and [y](../references/blind-dispatch.md).' \
+  >"$fixture/hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md"
+
+if ! node "$script_dir/doc-drift-gate.js" "$fixture/hooks" --repo-root "$fixture" >/dev/null; then
+  echo "test-doc-drift-gate: FAIL — byte-frozen review-loop-config fixture should have been excluded" >&2
+  exit 1
+fi
+
+# Control: a differently-named fixture file with the same dangling-link shape in the
+# same directory must still fail the gate — the exclusion must not eat real drift.
+printf '%s\n' '# Not frozen' '' 'See [x](../scripts/resolve-review-loop.sh).' \
+  >"$fixture/hooks/tests/fixtures/some-other-config.md"
+
+if node "$script_dir/doc-drift-gate.js" "$fixture/hooks" --repo-root "$fixture" >/dev/null; then
+  echo "test-doc-drift-gate: FAIL — real broken ref in a sibling fixture should still fail the gate" >&2
+  exit 1
+fi
+rm -rf "$fixture/hooks"
+
 printf '%s\n' 'test-doc-drift-gate: PASS'

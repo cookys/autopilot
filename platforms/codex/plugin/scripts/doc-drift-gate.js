@@ -30,6 +30,10 @@ const DEFAULT_EXCLUDES = [
   // links intentionally dangle from the pack location — rewriting them would break the
   // byte-identity the skill-onoff arm-parity tests assert).
   "evals/skill-onoff/packs",
+  // Digest-pinned byte-copy fixture (frozen 2026-08-28) of .claude/review-loop-config.md;
+  // its relative links intentionally dangle from hooks/tests/fixtures/ — rewriting them
+  // would break the byte identity that hooks/tests/*.sh pin against.
+  "hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md",
   // Fast path in front of the general nested-git-root rule below (isNestedGitRoot):
   // live background-agent worktrees under .claude/worktrees/ are separate git repos
   // whose scripts/... references resolve against THEIR OWN root, not this scan's

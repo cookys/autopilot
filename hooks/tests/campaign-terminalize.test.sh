@@ -310,13 +310,15 @@ function buildLedger({ ledgerPath, pid, manifest, extraWorktree }) {
     event_type: CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
     campaign_id: campaignId,
     contract_digest: contractDigest,
-    generation: 1,
+    generation: initialState.generation,
     idempotency_key: `impl-start:${campaignId}`,
     input_artifact_digest: initialState.last_output_artifact_digest,
     output_artifact_digest: initialState.last_output_artifact_digest,
     timestamp: '2026-08-29T00:00:01.000Z',
     stage_identity: 'impl-1',
-    usage: { repair_generations: 1, elapsed_wall_seconds: 1, changed_files: 0, churn: 0 },
+    usage: {
+      repair_generations: initialState.generation, elapsed_wall_seconds: 1, changed_files: 0, churn: 0,
+    },
     payload: { sealed_contract: true },
   };
   const startWrapper = {
@@ -329,7 +331,7 @@ function buildLedger({ ledgerPath, pid, manifest, extraWorktree }) {
       ? {
         kind: 'git_candidate',
         campaign_contract_sha256: contractDigest,
-        writer_fence: { campaign_id: campaignId, stage_identity: 'impl-1', generation: 1 },
+        writer_fence: { campaign_id: campaignId, stage_identity: 'impl-1', generation: initialState.generation },
         branch: 'impl/e2e-terminalize',
         base_sha: '0'.repeat(40),
         commit_sha: '1'.repeat(40),
@@ -444,6 +446,7 @@ aliveChild.kill();
 
 // --- mission withdraw: refused before terminalize, succeeds after. ---
 const mission = require(path.join(root, 'src', 'engine', 'mission-convergence'));
+const { buildReservation } = require(path.join(root, 'src', 'mission', 'cli'));
 const missionContract = {
   schema_version: 1,
   artifact_type: 'mission_convergence_contract',
@@ -491,7 +494,7 @@ const grantEvent = {
     campaign_contract_digest: contractDigest,
     base_sha: '0'.repeat(40),
     acceptance_ids: ['acc-1'],
-    reservation: { tool_calls: 1 },
+    reservation: buildReservation(missionState0, 1),
     issued_at: '2026-08-29T00:00:00.000Z',
     expires_at: '2026-08-31T01:00:00.000Z',
   },

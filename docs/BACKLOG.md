@@ -717,6 +717,7 @@ never an ad hoc descriptive string.
 - **Context**: add a bounded, evidence-gated terminalization for a campaign whose leaf run is provably dead (leaf manifest ended, pid gone, worktree reaped) that appends `MUTATION_FAILED` with the live lease identity and releases the Mission claim; never a silent no-op.
 - **Effort**: S–M
 - **Source**: l6-verdict-stability-p1 campaigns 2/3 + salvage, 2026-08-29/30.
+- **Status**: shipped in U1 (branch `u1-terminalize-withdraw-20260831`) — `node bin/autopilot.js campaign terminalize --campaign-id <id> --leaf-manifest <file> [--ledger <file>]`.
 
 ### `mission grant` silently replays a stale claim when the node holds an open `active_claim_id`
 - **Trigger**: already fired 2026-08-30 (lineage 420ac261, node `qualification-verdict-stability`): with attempt 1's claim still open, `mission grant` returned `status:"replay"` with attempt 1's contract — a `base_sha` two merges behind `develop` and an already-consumed branch — instead of refusing.
@@ -729,6 +730,7 @@ never an ad hoc descriptive string.
 - **Context**: pairs with the existing "Killed/dead managed campaign stuck at IMPLEMENTING" row: the fix must release BOTH the campaign lease (MUTATION_FAILED with the live lease identity) and the Mission claim, gated on provable leaf death, and be reachable from `mission`/`campaign` CLI without raw state plumbing.
 - **Effort**: S–M
 - **Source**: phase-2 foreman escalation + depth-0 operator action, 2026-08-30.
+- **Status**: shipped in U1 (branch `u1-terminalize-withdraw-20260831`) — `node bin/autopilot.js mission withdraw --state <file> --out <file> --claim-id <id> --campaign-ledger <file>`, refuses `mission_withdraw_campaign_not_terminal` until the bound campaign is terminal.
 
 ### A managed campaign whose wall expires leaves no terminal summary and no journal disposition
 - **Trigger**: already fired twice 2026-08-30 (campaigns attempt-3 `d240ef14…` and `…a3` D5): the leaf committed, `max_wall_seconds` (3600, schema max) elapsed before the review round, the `engine implement-review` process ended with a 0-byte stdout, and the campaign sits at `phase=IMPLEMENTING, activity=dead, wall_seconds_remaining=0` with a held lease and a live Mission claim.

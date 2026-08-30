@@ -402,7 +402,7 @@ function cmdWithdraw(flags) {
   try {
     const campaignLedger = requireFlag(flags, 'campaign-ledger');
     const rows = loadRows(campaignLedger);
-    projection = projectCampaign(rows, claim.campaign_id, { coerceEventGeneration: true });
+    projection = projectCampaign(rows, claim.campaign_id);
     if (!projection) {
       throw new Error('campaign not found');
     }

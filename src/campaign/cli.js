@@ -299,7 +299,7 @@ function validateCampaignJournalLease(row, currentLease) {
   }
 }
 
-function projectCampaign(rows, campaignId, options = {}) {
+function projectCampaign(rows, campaignId) {
   const rotationRootFor = (row) => Buffer.from(JSON.stringify(
     Object.fromEntries(Object.entries(row).filter(
       ([key]) => key !== '_rotation_carry' && key !== '_rotation_root',
@@ -405,25 +405,7 @@ function projectCampaign(rows, campaignId, options = {}) {
       throw new Error('campaign ledger contains an invalid event wrapper binding');
     }
     validateCampaignJournalLease(row, currentLease);
-    let event = payload.event;
-    if (options.coerceEventGeneration && event
-        && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED
-        && Number.isFinite(state.generation)
-        && Number.isInteger(state.generation)
-        && state.generation >= 0
-        && (event.generation !== state.generation
-            || !event.usage
-            || event.usage.repair_generations !== state.generation)) {
-      event = {
-        ...event,
-        generation: state.generation,
-        usage: {
-          ...event.usage,
-          repair_generations: state.generation,
-        },
-      };
-    }
-    state = reduceCampaignState(state, event);
+    state = reduceCampaignState(state, payload.event);
     if (TERMINAL.has(state.phase)) {
       const reference = Object.prototype.hasOwnProperty.call(
         payload.event.payload,
@@ -834,9 +816,7 @@ function runCampaignCli(argv, options = {}) {
   let rows;
   try {
     rows = loadRows(parsed.ledger);
-    projection = projectCampaign(rows, parsed.campaignId, {
-      coerceEventGeneration: parsed.command === 'terminalize',
-    });
+    projection = projectCampaign(rows, parsed.campaignId);
   } catch (error) {
     process.stderr.write(`campaign: ${error.message}\n`);
     return 1;

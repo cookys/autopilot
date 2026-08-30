@@ -3209,6 +3209,23 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
     try { fs.unlinkSync(parityPath); } catch { /* already gone */ }
   };
   process.on('exit', cleanup);
+  // Guard the hardcoded pin (coordinator fold-in, same depth-0 principal):
+  // prove `baseSha` is provably ON origin/develop rather than trusting the
+  // literal — an unreachable/rewritten pin would otherwise silently parity
+  // against a base nobody can independently reproduce. If origin/develop is
+  // not fetchable in this sandbox, SKIP the ancestry check (print SKIP, do
+  // NOT fail the run on a network/remote limitation unrelated to the code
+  // under test) rather than asserting either way.
+  try {
+    execSync('git rev-parse --verify origin/develop', { cwd: root, stdio: 'ignore' });
+    try {
+      execSync('git merge-base --is-ancestor ' + baseSha + ' origin/develop', { cwd: root, stdio: 'ignore' });
+    } catch {
+      assert(false, `KR7 base pin ${baseSha} is NOT an ancestor of origin/develop`);
+    }
+  } catch {
+    process.stdout.write('SKIP KR7 base-pin ancestry check: origin/develop not fetchable in this sandbox\n');
+  }
   try {
     execSync('git show ' + baseSha + ':scripts/engine-qualify.js', {
       cwd: root,

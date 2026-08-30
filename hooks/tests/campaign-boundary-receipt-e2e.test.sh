@@ -145,7 +145,38 @@ function fixture(name) {
     campaignControl,
     ledger: opened.ledger,
     campaignId: opened.campaignId,
+    commonDir,
   };
+}
+
+// Every persistControllerWorkOrder() call writes a NEW generation directory
+// (g<N>-<controller_digest>) under controller-authority/<id>/ before any
+// external effect. controller-durable.json is a pruned projection (no
+// audit_events); controller-checkpoint.json{.controller} is the full
+// persisted controller object, including audit_events. Reading the
+// checkpoints back in generation order gives an ordering trace of every
+// controller write this run performed, independent of source text — the
+// seam the ordering assertions below use.
+function readControllerGenerations(commonDir) {
+  const root = path.join(commonDir, 'autopilot', 'controller-authority');
+  if (!fs.existsSync(root)) return [];
+  const records = [];
+  for (const authorityId of fs.readdirSync(root)) {
+    const authorityDir = path.join(root, authorityId);
+    for (const genDir of fs.readdirSync(authorityDir)) {
+      const match = /^g(\d+)-/.exec(genDir);
+      if (!match) continue;
+      const checkpointPath = path.join(authorityDir, genDir, 'controller-checkpoint.json');
+      if (!fs.existsSync(checkpointPath)) continue;
+      const checkpoint = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+      records.push({
+        generation: Number(match[1]),
+        controller: checkpoint.controller || {},
+      });
+    }
+  }
+  records.sort((a, b) => a.generation - b.generation);
+  return records;
 }
 
 // The exact JSON scripts/dispatch-hetero.sh emit_outcome writes for an
@@ -318,6 +349,34 @@ assert.deepStrictEqual(receiptBody.offending_paths, [fxA.offendingPath]);
 assert.ok(/^[0-9a-f]{64}$/.test(receiptBody.dispatch_result_digest));
 console.log('a_receipt_verifiable=true');
 
+// Ordering: the receipt must be durably persisted (audit_events, phase still
+// prior) in a generation that precedes the generation where phase first
+// becomes BOUNDARY_REJECTED. If the receipt and the phase advance ever landed
+// in the SAME persistController call (the pre-fix shape), these two indices
+// would collide instead of being strictly ordered.
+// controller.phase (composition/controller-execution state machine) uses the
+// LOWERCASE 'boundary_rejected' value -- distinct from the durable journal's
+// uppercase icc.CAMPAIGN_STATES.BOUNDARY_REJECTED used above for `projection`.
+const CONTROLLER_BOUNDARY_REJECTED = 'boundary_rejected';
+const generationsA = readControllerGenerations(fxA.commonDir);
+const receiptGenIndexA = generationsA.findIndex((g) => (g.controller.audit_events || [])
+  .some((e) => e && e.artifact_type === 'campaign_boundary_receipt'));
+assert.ok(receiptGenIndexA >= 0, 'no generation ever persisted the boundary receipt');
+assert.notStrictEqual(
+  generationsA[receiptGenIndexA].controller.phase,
+  CONTROLLER_BOUNDARY_REJECTED,
+  'the receipt-persisting generation must not already carry the phase advance',
+);
+const phaseGenIndexA = generationsA.findIndex(
+  (g) => g.controller.phase === CONTROLLER_BOUNDARY_REJECTED,
+);
+assert.ok(phaseGenIndexA >= 0, 'phase never durably advanced to BOUNDARY_REJECTED');
+assert.ok(
+  receiptGenIndexA < phaseGenIndexA,
+  `receipt generation ${receiptGenIndexA} must durably precede phase-advance generation ${phaseGenIndexA}`,
+);
+console.log(`a_receipt_before_phase=${receiptGenIndexA < phaseGenIndexA}`);
+
 // Negative control: the reducer's demand is real, not decoration. Replay the
 // same event with the digest binding broken and the journal must refuse.
 const preBoundaryState = icc.replayCampaignEvents(
@@ -395,6 +454,29 @@ assert.strictEqual(resultB.commit, fxB.candidate);
 console.log(`b_dispatcher_called=${resultB.dispatcher_called}`);
 console.log(`b_model_calls=${resultB.model_calls}`);
 console.log(`b_commit=${resultB.commit === fxB.candidate}`);
+
+// The fix's core claim: even when the durable reducer REJECTS the journal call
+// (BOUNDARY_EVIDENCE_REQUIRED thrown above), the receipt was already persisted
+// into audit_events beforehand -- it is an orphaned audit record referencing no
+// accepted event, left in place rather than deleted -- and phase never advanced.
+const generationsB = readControllerGenerations(fxB.commonDir);
+const receiptGenB = generationsB.find((g) => (g.controller.audit_events || [])
+  .some((e) => e && e.artifact_type === 'campaign_boundary_receipt'));
+assert.ok(receiptGenB, 'the boundary receipt must be persisted even when journaling then fails');
+assert.notStrictEqual(
+  receiptGenB.controller.phase,
+  CONTROLLER_BOUNDARY_REJECTED,
+  'phase must not advance when the journal throws',
+);
+const phaseAdvancedB = generationsB.some(
+  (g) => g.controller.phase === CONTROLLER_BOUNDARY_REJECTED,
+);
+assert.strictEqual(
+  phaseAdvancedB,
+  false,
+  'BOUNDARY_REJECTED phase must never be durably persisted when the journal call fails',
+);
+console.log('b_receipt_persisted_phase_unchanged=true');
 NODE
 )"
 E2E_EXIT=$?
@@ -416,9 +498,13 @@ assert_contains "$E2E_OUT" "a_receipt_verifiable=true" \
   "the persisted boundary receipt re-derives its own digest"
 assert_contains "$E2E_OUT" "a_negative_control=BOUNDARY_EVIDENCE_REQUIRED" \
   "the reducer still refuses an unbound boundary event"
+assert_contains "$E2E_OUT" "a_receipt_before_phase=true" \
+  "the boundary receipt is durably persisted before the phase advances to BOUNDARY_REJECTED"
 assert_contains "$E2E_OUT" "b_dispatcher_called=true" \
   "a controller block after a real dispatch does not claim the dispatcher was never called"
 assert_contains "$E2E_OUT" "b_commit=true" \
   "a controller block surfaces the real candidate commit"
+assert_contains "$E2E_OUT" "b_receipt_persisted_phase_unchanged=true" \
+  "the receipt survives durably even when the journal call itself throws, and phase never advances"
 
 finalize_test

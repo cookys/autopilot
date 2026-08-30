@@ -1146,10 +1146,19 @@ function runCampaignComposition(input = {}, adapters = {}) {
         projected: projectedDelta,
         generation: repairGeneration,
       };
-      const next = {
+      const budgetReceiptDigest = canonicalDigest({
+        usage: controller.repair_budget_usage,
+        limits: controller.repair_budget_limits,
+        exceeded: budgetCheck.exceeded,
+        projected: projectedDelta,
+      });
+      // Persist the wait-audit event BEFORE journaling: budget_receipt_digest
+      // below is derived from `exceeded`/`projected`, which live only in this
+      // audit event. Touches only audit_events, not phase/next_action, so the
+      // rail-fix ordering rule (phase must not advance before the reducer
+      // accepts) still holds below.
+      persistController({
         ...controller,
-        phase: AWAITING_CONVERGENCE,
-        next_action: 'await_convergence_adjudication',
         audit_events: [
           ...(controller.audit_events || []),
           {
@@ -1158,14 +1167,8 @@ function runCampaignComposition(input = {}, adapters = {}) {
             digest: canonicalDigest(waitAuditBody),
           },
         ],
-      };
-      const budgetReceiptDigest = canonicalDigest({
-        usage: controller.repair_budget_usage,
-        limits: controller.repair_budget_limits,
-        exceeded: budgetCheck.exceeded,
-        projected: projectedDelta,
       });
-      // Journal first: the durable reducer is the authority on the phase. If it
+      // Journal: the durable reducer is the authority on the phase. If it
       // rejects, emitCampaignEvent throws and the controller keeps its prior
       // phase, so controller-durable.json can never claim a phase the campaign
       // journal refused. (Same ordering as AWAITING_DISPOSITION below.)
@@ -1174,8 +1177,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
         exceeded_axes: budgetCheck.exceeded,
         budget_receipt_digest: budgetReceiptDigest,
       });
-      persistController(next);
       appendRoundProgress(AWAITING_CONVERGENCE, budgetCheck.reason);
+      persistController({
+        ...controller,
+        phase: AWAITING_CONVERGENCE,
+        next_action: 'await_convergence_adjudication',
+      });
       return {
         stop: {
           status: AWAITING_CONVERGENCE,
@@ -1562,10 +1569,29 @@ function runCampaignComposition(input = {}, adapters = {}) {
       const boundaryReasonText = offendingPaths.length > 0
         ? `${bound.boundary_code}: ${offendingPaths[0]}`
         : `${bound.boundary_code}: ${bound.boundary_reason}`;
-      // Journal first: the durable reducer is the authority on the phase. If it
+      const boundaryReceipt = {
+        ...boundaryReceiptBody,
+        at: new Date().toISOString(),
+        digest: boundaryReceiptDigest,
+      };
+      // Persist the receipt BEFORE journaling: the journal event below carries
+      // boundary_receipt_digest, and a digest is only auditable if the body it
+      // was derived from is durable somewhere. This call touches only
+      // audit_events -- not phase/next_action -- so the rail-fix ordering rule
+      // (phase must not advance before the reducer accepts) still holds below.
+      persistController({
+        ...controller,
+        audit_events: [
+          ...(controller.audit_events || []),
+          boundaryReceipt,
+        ],
+      });
+      // Journal: the durable reducer is the authority on the phase. If it
       // rejects, emitCampaignEvent throws and neither the progress receipt nor
       // the controller phase advances, so controller-durable.json can never
-      // claim BOUNDARY_REJECTED while the journal is still IMPLEMENTING.
+      // claim BOUNDARY_REJECTED while the journal is still IMPLEMENTING. The
+      // receipt persisted above then simply references no accepted event --
+      // an orphaned audit record, acceptable and left in place, not deleted.
       emitCampaignEvent('BOUNDARY_REJECTED', {
         reason: bound.reason,
         boundary_reason: boundaryReasonText,
@@ -1576,21 +1602,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
         digest: boundaryReceiptDigest,
       });
       appendRoundProgress(BOUNDARY_REJECTED, bound.reason);
-      const boundaryReceipt = {
-        ...boundaryReceiptBody,
-        at: new Date().toISOString(),
-        digest: boundaryReceiptDigest,
-      };
       persistController({
         ...controller,
         phase: BOUNDARY_REJECTED,
         next_action: 'await_boundary_disposition',
-        // Auditable alongside the other campaign receipts the controller carries
-        // (AWAITING_CONVERGENCE's budget wait audit uses the same list).
-        audit_events: [
-          ...(controller.audit_events || []),
-          boundaryReceipt,
-        ],
       });
       return {
         stop: {
@@ -2429,6 +2444,23 @@ function runCampaignComposition(input = {}, adapters = {}) {
             controller,
           },
         );
+        // Persist the findings/verification/review content BEFORE journaling:
+        // findings_digest below is derived from wait.findings, which otherwise
+        // lives only in this call's unresolved_findings/findings_snapshot.
+        // Touches only content fields, not phase/next_action, so the rail-fix
+        // ordering rule (phase must not advance before the reducer accepts)
+        // still holds below.
+        persistController({
+          ...controller,
+          unresolved_findings: wait.findings || [],
+          verification_receipt: verification || null,
+          review_payload: lastReview || null,
+          findings_snapshot: wait.findings || [],
+          full_diff_barriers: fullDiffBarriers,
+          // Exact candidate lineage for production one-shot disposition resume.
+          candidate: candidate || null,
+          accepted_commit: candidate && (candidate.commit || null),
+        });
         emitCampaignEvent('AWAITING_DISPOSITION', {
           reason: wait.reason,
           findings_digest: canonicalDigest(wait.findings || []),
@@ -2439,14 +2471,6 @@ function runCampaignComposition(input = {}, adapters = {}) {
           ...controller,
           phase: AWAITING_DISPOSITION,
           next_action: 'await_disposition_authority',
-          unresolved_findings: wait.findings || [],
-          verification_receipt: verification || null,
-          review_payload: lastReview || null,
-          findings_snapshot: wait.findings || [],
-          full_diff_barriers: fullDiffBarriers,
-          // Exact candidate lineage for production one-shot disposition resume.
-          candidate: candidate || null,
-          accepted_commit: candidate && (candidate.commit || null),
         });
         return wait;
       }

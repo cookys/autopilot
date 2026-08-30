@@ -264,6 +264,37 @@ assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e
 assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' \
   "strict L5 executable fixture records canonical claim provenance"
 
+# L6 twin (BACKLOG "L6 managed campaigns can never satisfy reviewer_qualification",
+# 2026-08-30): the same strict provider-readiness bootstrap must compile for an
+# /l6 managed invocation — the CLI must build it, inject
+# providerReadinessAuthority/qualificationProvider exactly as for l5, and the
+# receipt must carry the actual level rather than the l5 literal. This fixture
+# deliberately stays off the session-mode/Mission-routing admission path (a
+# campaign contract without mission_runtime/campaign_projection never triggers
+# validateManagedDevFlowAdmission, per campaignCarriesMissionProjection) so it
+# is isolated from the pre-existing, unrelated Mission execution-graph source
+# digest drift on this repo (BACKLOG "hooks/tests/run.sh is red on develop").
+D6_REPO="$TEST_TMP/d6-repo"
+git clone -q --no-local "$REPO_ROOT" "$D6_REPO"
+
+OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+  NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+  AUTOPILOT_LEVEL=l6 \
+  node "$CLI" engine implement-review \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" --cwd "$D6_REPO" \
+    --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "strict L6 executable fixture reaches the engine after fresh readiness"
+assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
+  "strict L6 executable fixture consumes a fresh host-owned readiness bundle"
+assert_contains "$OUT" '"strict_level":"l6"' \
+  "strict L6 executable fixture receipt carries the actual level, not the l5 literal"
+assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' \
+  "strict L6 executable fixture records the frozen policy digest"
+assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' \
+  "strict L6 executable fixture records canonical claim provenance"
+
 # Advisory semantics (2026-08-16 retirement plan P4): a non-canonical roster is
 # no longer a pre-spend rejection. Derivation proceeds with a loud stderr
 # POLICY OVERRIDE warning (reason advisory_default), the uncertified seat runs
@@ -289,12 +320,14 @@ assert_not_contains "$OUT" '"rejection_code":"strict_l5_provider_unknown_tuple"'
 assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L5 CLI proceeds to readiness under advisory policy"
 
-OUT="$(AUTOPILOT_LEVEL=l4 node "$CLI" engine implement-review \
-  --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
-  --branch loop-branch --base "$BASE_SHA" --allow-unqualified-reviewer \
-  --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
-assert_not_contains "$OUT" '"strict_l5_provider_readiness"' \
-  "lower-level managed flow is explicit and never labelled strict L5"
+for lower_level in l3 l4 ''; do
+  OUT="$(AUTOPILOT_LEVEL="$lower_level" node "$CLI" engine implement-review \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" --allow-unqualified-reviewer \
+    --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+  assert_not_contains "$OUT" '"strict_l5_provider_readiness"' \
+    "lower-level (AUTOPILOT_LEVEL='${lower_level}') managed flow is explicit and never labelled strict L5"
+done
 
 OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_contains "$OUT" "--resume" "autopilot help documents the --resume flag"

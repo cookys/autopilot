@@ -55,7 +55,7 @@ Commands:
                     Non-empty review findings require a separately supplied
                     depth-0 disposition authority; reviewer output cannot
                     self-authorize.
-                    AUTOPILOT_LEVEL=l5 additionally requires the compiled,
+                    AUTOPILOT_LEVEL=l5|l6 additionally requires the compiled,
                     host-owned exact-roster provider-readiness trust root.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
@@ -393,10 +393,11 @@ if (args[0] === 'engine') {
         }
       }
       let strictL5Bootstrap = null;
-      if (level === 'l5') {
+      if (level === 'l5' || level === 'l6') {
         try {
           strictL5Bootstrap = createStrictL5ProviderBootstrap({
             cwd: parsed.cwd || process.cwd(),
+            level,
           });
         } catch (error) {
           process.stdout.write(`${JSON.stringify({

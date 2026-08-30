@@ -742,6 +742,46 @@ assert.strictEqual(consumed.status, 'ready');
 assert.strictEqual(consumed.strict_level, 'l5');
 assert.strictEqual(consumed.policy_digest, STRICT_L5_PROVIDER_POLICY_DIGEST);
 assert.deepStrictEqual(consumed.claim_ids, STRICT_L5_CLAIM_IDS);
+
+// L6 twin: the same strict provider-readiness bootstrap must compile for l6,
+// and every receipt/claim field carries the actual level instead of the l5
+// literal (BACKLOG "L6 managed campaigns can never satisfy
+// reviewer_qualification", 2026-08-30).
+const l6Bootstrap = createStrictL5ProviderBootstrap({ cwd: root, level: 'l6' }, {
+  resolvedRoster: clone(resolved),
+  collectReadiness: readyCollector,
+  now: () => NOW,
+});
+assert.strictEqual(l6Bootstrap.strict_level, 'l6');
+const l6Bundle = l6Bootstrap.providerReadinessAuthority({ roster: l6Bootstrap.roster });
+assert.strictEqual(l6Bundle.strict_level, 'l6');
+const l6Consumed = consumeStrictL5ProviderReadiness(
+  l6Bootstrap.providerReadinessAuthority,
+  l6Bundle,
+  { roster: l6Bootstrap.roster, now: NOW },
+);
+assert.strictEqual(l6Consumed.status, 'ready');
+assert.strictEqual(l6Consumed.strict_level, 'l6');
+assert.strictEqual(l6Consumed.policy_digest, STRICT_L5_PROVIDER_POLICY_DIGEST);
+assert.deepStrictEqual(l6Consumed.claim_ids, STRICT_L5_CLAIM_IDS);
+// An l5-issued bundle must never be consumable through an l6 authority (and
+// vice versa) — the level is now part of the coherence check, not decor.
+assert.throws(
+  () => consumeStrictL5ProviderReadiness(
+    l6Bootstrap.providerReadinessAuthority,
+    bundle,
+    { roster: l6Bootstrap.roster, now: NOW },
+  ),
+  (error) => error && error.code === 'strict_l5_provider_serialized_replay',
+);
+assert.throws(
+  () => createStrictL5ProviderBootstrap({ cwd: root, level: 'l7' }, {
+    resolvedRoster: clone(resolved),
+    collectReadiness: readyCollector,
+    now: () => NOW,
+  }),
+  (error) => error && error.code === 'strict_l5_provider_bootstrap_invalid',
+);
 assert.strictEqual(consumed.selections.length, 6);
 assert.strictEqual(bundle.observation_digest, bundle.receipt.observation_digest);
 

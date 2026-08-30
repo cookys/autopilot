@@ -488,10 +488,15 @@ function validateCollectedBundle(bundle, matched) {
 
 function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
   if (!isRecord(options)
-      || Object.keys(options).some((key) => key !== 'cwd')
-      || (options.cwd !== undefined && typeof options.cwd !== 'string')) {
-    fail('strict_l5_provider_bootstrap_invalid', 'strict /l5 bootstrap accepts only a host cwd');
+      || Object.keys(options).some((key) => key !== 'cwd' && key !== 'level')
+      || (options.cwd !== undefined && typeof options.cwd !== 'string')
+      || (options.level !== undefined && options.level !== 'l5' && options.level !== 'l6')) {
+    fail(
+      'strict_l5_provider_bootstrap_invalid',
+      'strict /l5|l6 bootstrap accepts only a host cwd and level (l5 or l6)',
+    );
   }
+  const strictLevel = options.level || 'l5';
   if (!isRecord(hostDependencies)
       || Object.keys(hostDependencies).some((key) => !new Set([
         'collectReadiness',
@@ -556,7 +561,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     cachedBundle = deepFreeze({
       schema_version: 1,
       artifact_type: 'strict_l5_provider_readiness_bundle',
-      strict_level: 'l5',
+      strict_level: strictLevel,
       invoked_at: invokedAt,
       policy_digest: matched.policy_digest,
       claim_ids: [...matched.claim_ids],
@@ -573,6 +578,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     issuedBundles,
     qualificationProvider,
     matched,
+    strictLevel,
   });
   return deepFreeze({
     roster: resolved,
@@ -581,6 +587,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     policy_digest: matched.policy_digest,
     claim_ids: [...matched.claim_ids],
     roster_digest: matched.roster_digest,
+    strict_level: strictLevel,
   });
 }
 
@@ -608,6 +615,9 @@ function consumeStrictL5ProviderReadiness(authority, bundle, context = {}) {
   if (bundle.observation_digest !== bundle.receipt.observation_digest) {
     fail('strict_l5_provider_observation_drift', 'strict /l5 readiness observation digest drifted');
   }
+  if (bundle.strict_level !== state.strictLevel) {
+    fail('strict_l5_provider_level_drift', 'strict /l5|l6 readiness bundle level drifted');
+  }
   const requested = deriveStrictL5InvocationPolicy(context.roster);
   if (requested.roster_digest !== state.matched.roster_digest) {
     fail('strict_l5_provider_roster_drift', 'strict /l5 consume roster drifted');
@@ -623,7 +633,7 @@ function consumeStrictL5ProviderReadiness(authority, bundle, context = {}) {
   }
   return deepFreeze({
     ...result,
-    strict_level: 'l5',
+    strict_level: state.strictLevel,
     invoked_at: bundle.invoked_at,
     policy_digest: bundle.policy_digest,
     claim_ids: [...bundle.claim_ids],

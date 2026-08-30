@@ -20,6 +20,8 @@ Success = all four fixtures green + `hooks/tests/run.sh` full suite green + pref
 
 `mission-routing-admission.js --level l4` → READY, but the admitted graph is the previous plan's (`docs/mission-qualification-verdict-stability-execution-graph.json`, 1 deliverable). This work repairs the Mission-managed `engine implement-review` rail itself — running it through that rail would recurse into (a)/(d). Topology therefore: `/l4`-style sonnet foremen in native worktrees driving `dispatch-hetero.sh --runner codex --model gpt-5.3-codex-spark`; merge authority = depth-0 qc panel (`resolve-review-loop.sh` qc seats) + independent re-run, per ADR-0001 and the 2026-08-30 EXECUTION-LOG precedent.
 
+**Board decision 2026-08-31 (option B)**: `dispatch-hetero.sh` hard-refuses any non-projection-bound dispatch while `mission_convergence.enforcement_mode` is `enforce` (BACKLOG "Engine and CLI have no session-mode fallback for bounded non-Mission campaigns"); all three foremen hit `precondition_failed` with `dispatcher_called:false`. The Board chose to set `enforcement_mode` to `shadow` **on this branch only** for the duration of the repair. Exit condition: the mode is restored to `enforce` in the same branch BEFORE merge to develop (finish-flow L-5 checklist item), and the full suite + qc panel run against the restored value. This is a temporarily switched-off gate and is recorded here so it cannot pass as normal.
+
 ## Batches
 
 - Batch 1 (parallel, worktrees): U1, U2, U3.

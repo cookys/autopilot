@@ -3786,6 +3786,31 @@ function computeConsultDiscussWallSecondsCap({ administrationCap, wallSeconds, t
   );
 }
 
+// Recovers the sealed consult grader's own reason string for a
+// 'protocol_violation' outcome, using the SAME merged gates
+// grader.classify() itself used internally (mergeGates(gates) runs before
+// classify() ever calls checkProtocol() — see evals/consult-eval-grader.js
+// classify()/checkProtocol()). checkProtocol() does NOT merge gates on its
+// own (it takes the already-resolved gates as a parameter), so calling it a
+// second time here with a bare `undefined` gates argument made every
+// gate-dependent check (exclusivityViolation, artifactRefViolation,
+// authorityReferenceScopeViolation, asideChannelScopeViolation) dereference
+// `undefined.exclusivity` etc. and throw — the 2026-08-30 D7 real-money
+// incident. Extracted as its own function (rather than inlined at the one
+// call site) so the verdict-stability suite can drive this EXACT recovery
+// path directly for a broad sweep, without re-deriving/duplicating it in a
+// test and without needing the full broker/administration loop for every
+// fixture (hooks/tests/engine-qualify-verdict-stability.test.sh D7(c)).
+// Throws on any grader exception — callers MUST treat that as an
+// INSTRUMENT failure (abort fail-closed), never swallow it into a lost
+// reason.
+function recoverConsultProtocolReason(grader, caseSpec, response) {
+  const gates = typeof grader.mergeGates === 'function'
+    ? grader.mergeGates(undefined)
+    : grader.DEFAULT_GATES;
+  return grader.checkProtocol(caseSpec, response, gates) || null;
+}
+
 function runConsultDiscussQualification(options) {
   const role = options.role;
   if (role !== 'consult' && role !== 'discuss') {
@@ -3872,6 +3897,15 @@ function runConsultDiscussQualification(options) {
 
   let wallTruncated = false;
   let startedCases = 0;
+  // A grader exception is an INSTRUMENT failure, never engine capability
+  // (2026-08-30 D7 real-money incident: a bare-`undefined` gates argument to
+  // checkProtocol() made every gate-dependent check dereference
+  // `undefined.exclusivity` etc., the catch swallowed the TypeError to
+  // `graderReason = null`, and classifyQualificationOutcome's STEP-3
+  // default-deny turned every structural Tier-2 breach into a Tier-1 trust
+  // violation). Once set, the run aborts fail-closed below — no verdict, no
+  // scorecard row, the exception message recorded in the receipt.
+  let instrumentError = null;
   const pooledAdministrations = []; // case-record arrays for foldPooledVerdict
   const administrationRows = [];
   const allRawExchanges = [];
@@ -3943,13 +3977,25 @@ function runConsultDiscussQualification(options) {
         } else {
           responseParsed = parseConsultDiscussCaseResponse(execution.stdout);
           if (role === 'consult') {
+            // grader.classify() merges gates internally (mergeGates(gates)
+            // before checkProtocol) — undefined here is safe.
             outcome = grader.classify(caseSpec, responseParsed, undefined);
             if (outcome === 'protocol_violation'
                 && typeof grader.checkProtocol === 'function') {
               try {
-                graderReason = grader.checkProtocol(caseSpec, responseParsed, undefined) || null;
-              } catch {
-                graderReason = null;
+                graderReason = recoverConsultProtocolReason(grader, caseSpec, responseParsed);
+              } catch (err) {
+                // Do NOT swallow: a grader exception here is an instrument
+                // failure, not an engine capability signal. Abort this
+                // administration and the whole run fail-closed instead of
+                // letting classifyQualificationOutcome fall through to its
+                // STEP-3 default-deny with a lost reason.
+                instrumentError = {
+                  stage: 'checkProtocol',
+                  role,
+                  case_id: caseSpec.case_id,
+                  message: err && err.message ? String(err.message) : String(err),
+                };
               }
             }
           } else {
@@ -3957,6 +4003,10 @@ function runConsultDiscussQualification(options) {
             outcome = graded.label;
             graderReason = graded.reason == null ? null : graded.reason;
           }
+        }
+        if (instrumentError) {
+          stopAdministration = true;
+          break;
         }
         const tierClassification = classifyQualificationOutcome({
           role,
@@ -4017,6 +4067,11 @@ function runConsultDiscussQualification(options) {
       if (stopAdministration || wallTruncated) break;
     }
 
+    // Instrument failure: abandon this administration's pool bookkeeping
+    // entirely and fall through to the fail-closed abort below — the
+    // aborted case must never be scored, folded, or pooled.
+    if (instrumentError) break;
+
     pooledAdministrations.push(caseRecords);
     allRawExchanges.push(...rawExchanges);
     const scoredTrials = trialResults.filter((trial) => trial.cases.length > 0);
@@ -4054,6 +4109,49 @@ function runConsultDiscussQualification(options) {
     });
     if (pooledVerdict.stop_reason !== 'continue') break;
     if (wallTruncated) break;
+  }
+
+  if (instrumentError) {
+    // Fail-closed abort (2026-08-30 D7 incident, see instrumentError
+    // declaration above): no verdict, no scorecard row — the grader threw,
+    // so nothing it emitted about this run can be trusted. Never mirror the
+    // qualified/failed/no_verdict statuses; this is a distinct terminal
+    // status so a caller can never mistake an instrument crash for a graded
+    // outcome.
+    return deepFreeze({
+      schema_version: 1,
+      run_nonce: runNonce,
+      oracle: {
+        methodology_version: `${CORPUS.corpus_version}.${generator.GENERATOR_VERSION}`,
+        corpus_manifest_hash: staticAssets.corpus_hash,
+        generator_hash: staticAssets.generator_hash,
+        grader_hash: staticAssets.grader_hash,
+        transport: panelConfig.transport,
+      },
+      qualified: false,
+      wall_truncated: wallTruncated,
+      started_cases: startedCases,
+      stop_reason: 'instrument_error',
+      tier1_terminated: false,
+      evidence: null,
+      instrument_error: instrumentError,
+      row: {
+        status: 'instrument_error',
+        administration_outcome: 'instrument_error',
+        evidence: null,
+        instrument_error: instrumentError,
+      },
+      verdict: {
+        engine: options.engine,
+        model: options.model,
+        runner: options.runner,
+        role,
+        qualified: false,
+        administration_outcome: 'instrument_error',
+        reason: `grader instrument failure at ${instrumentError.stage} on case `
+          + `${instrumentError.case_id}: ${instrumentError.message}`,
+      },
+    });
   }
 
   if (options.rawDir) {
@@ -5277,6 +5375,7 @@ module.exports = {
   qualificationReasonPrefixTiers,
   runBrainQualification,
   runConsultDiscussQualification,
+  recoverConsultProtocolReason,
   runConsultQualification,
   runDiscussQualification,
   runImplQualification,

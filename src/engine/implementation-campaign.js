@@ -55,6 +55,18 @@ const MUTATION_START_EVENTS = new Set([
   CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
   CAMPAIGN_EVENTS.REPAIR_STARTED,
 ]);
+// Events the reducer evaluates against the durable mutation lease: each one is
+// fenced by `requireLease` (or, for AWAITING_CONVERGENCE, by lease ownership)
+// and its reduction RELEASES the lease. A writer that invents its own stage
+// identity is rejected LEASE_FENCED and the journal strands mid-mutation with
+// the lease held — so every emitter must take the identity from the live lease.
+const LEASE_BOUND_EVENTS = new Set([
+  CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED,
+  CAMPAIGN_EVENTS.REPAIR_COMPLETED,
+  CAMPAIGN_EVENTS.MUTATION_FAILED,
+  CAMPAIGN_EVENTS.BOUNDARY_REJECTED,
+  CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
+]);
 const EVENT_KEYS = new Set([
   'schema_version',
   'event_type',
@@ -743,6 +755,47 @@ function requireLease(state, event) {
   }
 }
 
+function isLeaseBoundCampaignEvent(eventType) {
+  return LEASE_BOUND_EVENTS.has(eventType);
+}
+
+// Single owner for "which stage identity may write this event". Emitters of a
+// lease-bound event MUST use the live lease's identity/generation; everything
+// else keeps its own stage identity. Callers: the composition-event bridge and
+// the mutation-completion / terminal-failure paths in autopilot-engine.js.
+function resolveCampaignEventLeaseIdentity(state, eventType, fallback = {}) {
+  const lease = isPlainObject(state) && isPlainObject(state.live_lease)
+    ? state.live_lease
+    : null;
+  const stateGeneration = isPlainObject(state) && Number.isSafeInteger(state.generation)
+    ? state.generation
+    : 0;
+  const leaseBound = isLeaseBoundCampaignEvent(eventType)
+    && lease !== null
+    && typeof lease.stage_identity === 'string'
+    && lease.stage_identity.length > 0
+    && Number.isSafeInteger(lease.generation);
+  if (leaseBound) {
+    return {
+      stage_identity: lease.stage_identity,
+      generation: lease.generation,
+      lease_bound: true,
+    };
+  }
+  const generation = Number.isSafeInteger(fallback.generation)
+    ? fallback.generation
+    : stateGeneration;
+  const stageIdentity = typeof fallback.stageIdentity === 'string'
+    && fallback.stageIdentity.length > 0
+    ? fallback.stageIdentity
+    : `campaign-${String(eventType).toLowerCase()}:${generation}`;
+  return {
+    stage_identity: stageIdentity,
+    generation,
+    lease_bound: false,
+  };
+}
+
 function acquireLease(state, event) {
   if (state.live_lease) fail('LIVE_LEASE_CONFLICT', 'campaign generation already has a live lease');
   if (event.payload.sealed_contract !== true) {
@@ -997,8 +1050,12 @@ function reduceCampaignState(currentState, event) {
     }
     next.phase = CAMPAIGN_STATES.TERMINAL_FOLLOW_UP;
   } else if (event.event_type === CAMPAIGN_EVENTS.AWAITING_CONVERGENCE
-      && currentState.live_lease === null
       && !TERMINAL_STATES.has(currentState.phase)) {
+    // A convergence wait may be declared while a mutation lease is live (budget
+    // exhaustion inside a mutation round). The lease OWNER releases its own
+    // lease; any other writer is still fenced. Without a live lease the wait is
+    // declared between rounds, exactly as before.
+    if (currentState.live_lease !== null) requireLease(currentState, event);
     if (typeof event.payload.reason !== 'string' || event.payload.reason.trim() === ''
         || !Array.isArray(event.payload.exceeded_axes)
         || event.payload.exceeded_axes.length === 0
@@ -1008,6 +1065,7 @@ function reduceCampaignState(currentState, event) {
         'awaiting_convergence_adjudication requires exceeded axes and budget receipt',
       );
     }
+    next.live_lease = null;
     next.phase = CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION;
     next.convergence_budget = {
       exceeded_axes: [...event.payload.exceeded_axes].sort(),
@@ -1065,6 +1123,8 @@ module.exports = {
   campaignIdFor,
   canonicalDigest,
   createCampaignState,
+  isLeaseBoundCampaignEvent,
+  resolveCampaignEventLeaseIdentity,
   normalizeCampaignArtifactReference,
   repairLineageCleanupId,
   reduceCampaignState,

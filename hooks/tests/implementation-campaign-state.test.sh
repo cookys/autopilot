@@ -4713,4 +4713,343 @@ assert_contains "$DISP_OUT" '"disposition_resume_zero_verify":true' "disposition
 assert_contains "$DISP_OUT" '"disposition_resume_zero_review":true' "disposition resume zero review"
 assert_contains "$DISP_OUT" '"disposition_event_emitted":true' "DISPOSITION_RESUMED emitted"
 
+
+# --- Lease-fenced bridge events must carry the live lease identity ------------
+# Regression: the composition-event bridge (autopilot-engine.js onCampaignEvent)
+# synthesized `controller-<event>:<gen>` stage identities for EVERY event, so a
+# real boundary rejection during IMPLEMENTING was rejected LEASE_FENCED and the
+# journal stranded at IMPLEMENTING with the mutation lease held.
+LEASE_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const {
+  CAMPAIGN_EVENTS: E,
+  CAMPAIGN_STATES: S,
+  CampaignStateError,
+  campaignIdFor,
+  canonicalDigest,
+  createCampaignState,
+  reduceCampaignState,
+  replayCampaignEvents,
+  resolveCampaignEventLeaseIdentity,
+} = require(path.join(root, 'src', 'engine'));
+
+const D = 'a'.repeat(64);
+const REPO = 'git-common-dir:/fixture';
+const STARTED = '2026-08-30T00:00:00.000Z';
+const contract = {
+  ticket: 'lease-fence',
+  profile: 'poc',
+  max_repair_generations: 2,
+  max_wall_seconds: 120,
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_extra_churn: 5,
+};
+const campaignId = campaignIdFor(REPO, contract.ticket, D);
+const prepared = () => createCampaignState({
+  contract,
+  contractDigest: D,
+  repoIdentity: REPO,
+  startedAt: STARTED,
+});
+function mkEvent(o) {
+  return {
+    schema_version: 1,
+    event_type: o.type,
+    campaign_id: campaignId,
+    contract_digest: D,
+    generation: o.generation,
+    idempotency_key: o.key,
+    input_artifact_digest: o.input,
+    output_artifact_digest: o.output,
+    timestamp: new Date(Date.parse(STARTED) + o.seconds * 1000).toISOString(),
+    stage_identity: o.stage,
+    usage: {
+      repair_generations: o.generation,
+      elapsed_wall_seconds: o.seconds,
+      changed_files: 0,
+      churn: 0,
+    },
+    payload: o.payload,
+  };
+}
+function expectCode(code, fn) {
+  try {
+    fn();
+  } catch (error) {
+    assert.ok(error instanceof CampaignStateError, String(error));
+    assert.strictEqual(error.code, code, `expected ${code}, got ${error.code}`);
+    return;
+  }
+  assert.fail(`expected ${code}`);
+}
+
+// Producer shape: autopilot-engine.js records mutation start as
+// `campaign-mutation:${repairGeneration}` — this is the real journal's first row.
+const IMPL_STARTED = mkEvent({
+  type: E.IMPLEMENTATION_STARTED,
+  generation: 0,
+  stage: 'campaign-mutation:0',
+  key: 'impl-started-0',
+  input: D,
+  output: 'b'.repeat(64),
+  seconds: 1,
+  payload: { sealed_contract: true },
+});
+const implementing = reduceCampaignState(prepared(), IMPL_STARTED);
+assert.strictEqual(implementing.phase, S.IMPLEMENTING);
+assert.strictEqual(implementing.live_lease.stage_identity, 'campaign-mutation:0');
+
+// The bridge's pre-fix fallback identity, kept verbatim as the reverse pin.
+const synthesized = (type) => `controller-${String(type).toLowerCase()}:0`;
+
+// (a) IMPLEMENTING + boundary rejection.
+const boundaryReceipt = 'c'.repeat(64);
+const boundaryPayload = {
+  reason: 'implementer commit touched an unauthorized output path',
+  boundary_reason: 'unauthorized output path',
+  candidate_ref: 'd'.repeat(40),
+  boundary_receipt_digest: boundaryReceipt,
+};
+const boundaryOutput = canonicalDigest({
+  kind: 'campaign_boundary_rejected',
+  digest: boundaryReceipt,
+});
+const boundaryIdentity = resolveCampaignEventLeaseIdentity(
+  implementing,
+  E.BOUNDARY_REJECTED,
+  { generation: 0, stageIdentity: synthesized(E.BOUNDARY_REJECTED) },
+);
+assert.strictEqual(boundaryIdentity.lease_bound, true);
+assert.strictEqual(boundaryIdentity.stage_identity, 'campaign-mutation:0');
+assert.strictEqual(boundaryIdentity.generation, 0);
+const BOUNDARY = mkEvent({
+  type: E.BOUNDARY_REJECTED,
+  generation: boundaryIdentity.generation,
+  stage: boundaryIdentity.stage_identity,
+  key: 'boundary-0',
+  input: implementing.last_output_artifact_digest,
+  output: boundaryOutput,
+  seconds: 2,
+  payload: boundaryPayload,
+});
+const rejectedState = reduceCampaignState(implementing, BOUNDARY);
+assert.strictEqual(rejectedState.phase, S.BOUNDARY_REJECTED);
+assert.strictEqual(rejectedState.live_lease, null);
+assert.strictEqual(rejectedState.boundary_rejected.candidate_ref, boundaryPayload.candidate_ref);
+
+// Reverse pin: the synthesized controller identity is still fenced — the fence
+// was not weakened, the emitter was corrected.
+expectCode('LEASE_FENCED', () => reduceCampaignState(implementing, mkEvent({
+  type: E.BOUNDARY_REJECTED,
+  generation: 0,
+  stage: synthesized(E.BOUNDARY_REJECTED),
+  key: 'boundary-synth',
+  input: implementing.last_output_artifact_digest,
+  output: boundaryOutput,
+  seconds: 2,
+  payload: boundaryPayload,
+})));
+
+// (b) Same for AWAITING_CONVERGENCE declared while the mutation lease is live.
+const convergencePayload = {
+  reason: 'joint repair budget exhausted mid-mutation',
+  exceeded_axes: ['model_calls'],
+  budget_receipt_digest: 'e'.repeat(64),
+};
+const convergenceIdentity = resolveCampaignEventLeaseIdentity(
+  implementing,
+  E.AWAITING_CONVERGENCE,
+  { generation: 0, stageIdentity: synthesized(E.AWAITING_CONVERGENCE) },
+);
+assert.strictEqual(convergenceIdentity.lease_bound, true);
+assert.strictEqual(convergenceIdentity.stage_identity, 'campaign-mutation:0');
+const convergedState = reduceCampaignState(implementing, mkEvent({
+  type: E.AWAITING_CONVERGENCE,
+  generation: convergenceIdentity.generation,
+  stage: convergenceIdentity.stage_identity,
+  key: 'converge-0',
+  input: implementing.last_output_artifact_digest,
+  output: 'f'.repeat(64),
+  seconds: 3,
+  payload: convergencePayload,
+}));
+assert.strictEqual(convergedState.phase, S.AWAITING_CONVERGENCE_ADJUDICATION);
+assert.strictEqual(convergedState.live_lease, null);
+expectCode('LEASE_FENCED', () => reduceCampaignState(implementing, mkEvent({
+  type: E.AWAITING_CONVERGENCE,
+  generation: 0,
+  stage: synthesized(E.AWAITING_CONVERGENCE),
+  key: 'converge-synth',
+  input: implementing.last_output_artifact_digest,
+  output: 'f'.repeat(64),
+  seconds: 3,
+  payload: convergencePayload,
+})));
+
+// Unchanged: with no live lease the wait keeps its own (non-lease) identity.
+const leaseless = resolveCampaignEventLeaseIdentity(
+  prepared(),
+  E.AWAITING_CONVERGENCE,
+  { generation: 0, stageIdentity: synthesized(E.AWAITING_CONVERGENCE) },
+);
+assert.strictEqual(leaseless.lease_bound, false);
+assert.strictEqual(leaseless.stage_identity, synthesized(E.AWAITING_CONVERGENCE));
+const leaselessState = reduceCampaignState(prepared(), mkEvent({
+  type: E.AWAITING_CONVERGENCE,
+  generation: 0,
+  stage: leaseless.stage_identity,
+  key: 'converge-leaseless',
+  input: D,
+  output: 'f'.repeat(64),
+  seconds: 4,
+  payload: convergencePayload,
+}));
+assert.strictEqual(leaselessState.phase, S.AWAITING_CONVERGENCE_ADJUDICATION);
+assert.strictEqual(leaselessState.live_lease, null);
+
+// Non-lease-bound events are never re-stamped with the lease identity.
+const dispositionIdentity = resolveCampaignEventLeaseIdentity(
+  implementing,
+  E.AWAITING_DISPOSITION,
+  { generation: 0, stageIdentity: synthesized(E.AWAITING_DISPOSITION) },
+);
+assert.strictEqual(dispositionIdentity.lease_bound, false);
+assert.strictEqual(dispositionIdentity.stage_identity, synthesized(E.AWAITING_DISPOSITION));
+
+// (c) Replay of the exact real journal shape: one implementation_started at
+// generation 0 / stage campaign-mutation:0, then the boundary rejection.
+const replayed = replayCampaignEvents(prepared(), [IMPL_STARTED, BOUNDARY]);
+assert.strictEqual(replayed.phase, S.BOUNDARY_REJECTED);
+assert.strictEqual(replayed.live_lease, null);
+assert.strictEqual(replayed.event_count, 2);
+assert.strictEqual(BOUNDARY.stage_identity, IMPL_STARTED.stage_identity);
+
+console.log(JSON.stringify({
+  boundary_reduces_from_implementing: true,
+  boundary_releases_lease: true,
+  boundary_synthesized_identity_still_fenced: true,
+  convergence_reduces_with_live_lease: true,
+  convergence_releases_lease: true,
+  convergence_synthesized_identity_still_fenced: true,
+  leaseless_convergence_unchanged: true,
+  non_lease_event_identity_unchanged: true,
+  real_journal_replay_boundary_rejected: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "lease-bound campaign event identity suite exits zero"
+assert_contains "$LEASE_OUT" '"boundary_reduces_from_implementing":true' "IMPLEMENTING boundary reduces"
+assert_contains "$LEASE_OUT" '"boundary_releases_lease":true' "boundary releases the mutation lease"
+assert_contains "$LEASE_OUT" '"boundary_synthesized_identity_still_fenced":true' "requireLease not weakened"
+assert_contains "$LEASE_OUT" '"convergence_reduces_with_live_lease":true' "convergence wait under live lease"
+assert_contains "$LEASE_OUT" '"convergence_releases_lease":true' "convergence releases the lease"
+assert_contains "$LEASE_OUT" '"convergence_synthesized_identity_still_fenced":true' "convergence fence intact"
+assert_contains "$LEASE_OUT" '"leaseless_convergence_unchanged":true' "leaseless convergence unchanged"
+assert_contains "$LEASE_OUT" '"non_lease_event_identity_unchanged":true' "non-lease events keep identity"
+assert_contains "$LEASE_OUT" '"real_journal_replay_boundary_rejected":true' "real journal replay lands BOUNDARY_REJECTED"
+
+# Wiring: the production bridge must consume the resolver (a resolver whose only
+# caller is this test would prove nothing — references/evidence-discipline.md §1).
+BRIDGE_SRC="$(sed -n '/onCampaignEvent: ({ event_type: eventType/,/^      preEffectAdmit/p' \
+  "$REPO_ROOT/src/engine/autopilot-engine.js")"
+assert_contains "$BRIDGE_SRC" "resolveCampaignEventLeaseIdentity(" "bridge calls the lease resolver"
+assert_contains "$BRIDGE_SRC" "stageIdentity: identity.stage_identity" "bridge emits the resolved identity"
+
+# Controller durable phase must never advance past a reducer the journal rejected.
+ORDER_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+const ctrl = require(path.join(root, 'src/engine/controller-execution'));
+
+// A frozen denominator is required for appendRoundProgress to actually persist a
+// progress receipt — without it the phase write is a no-op and the ordering
+// defect is invisible (references/evidence-discipline.md §13, production shape).
+const frozenDenominator = ctrl.buildFrozenDenominator({
+  projectId: 'lease-fence',
+  graphDigest: 'a'.repeat(64),
+  deliverableIds: ['n1'],
+});
+
+function run(onCampaignEvent, order) {
+  return runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptBytes: 0,
+    frozenDenominator,
+  }, {
+    preflight: () => ({ passed: true }),
+    implement: () => ({
+      status: 'boundary_rejected',
+      commit: 'a'.repeat(40),
+      error: 'unauthorized output path',
+    }),
+    scopeCheck: () => ({ passed: true }),
+    verify: () => ({ passed: true, receipt_digest: 'c'.repeat(64) }),
+    review: () => ({
+      reviewed: true,
+      review_input_mode: 'full_diff_generation',
+      review_digest: 'd'.repeat(64),
+      findings: '[]',
+      verdict: 'SHIP-AS-IS',
+    }),
+    adjudicate: () => ({
+      registry_complete: true,
+      repair_gate_passed: true,
+      registry_digest: '1'.repeat(64),
+      must_fix_now: [],
+      follow_up: [],
+      rejected: [],
+    }),
+    convergence: () => ({ passed: true }),
+    finalPanel: () => ({ reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]' }),
+    onControllerUpdate: (c) => order.push(`controller:${c.phase}`),
+    onCampaignEvent,
+  });
+}
+
+// Reducer rejects the boundary event: nothing downstream may advance.
+const rejectedOrder = [];
+let rejectedThrew = false;
+try {
+  run(() => {
+    rejectedOrder.push('event:BOUNDARY_REJECTED');
+    const err = new Error('mutation writer does not own the durable campaign lease');
+    err.code = 'LEASE_FENCED';
+    throw err;
+  }, rejectedOrder);
+} catch (error) {
+  rejectedThrew = true;
+}
+assert.ok(rejectedOrder.includes('event:BOUNDARY_REJECTED'), rejectedOrder.join(','));
+assert.ok(
+  !rejectedOrder.includes('controller:boundary_rejected'),
+  `controller advanced past a rejected reducer event: ${rejectedOrder.join(',')}`,
+);
+
+// Accepted: the journal event is emitted BEFORE the controller phase advances.
+const acceptedOrder = [];
+run(() => { acceptedOrder.push('event:BOUNDARY_REJECTED'); }, acceptedOrder);
+const eventAt = acceptedOrder.indexOf('event:BOUNDARY_REJECTED');
+const controllerAt = acceptedOrder.indexOf('controller:boundary_rejected');
+assert.ok(eventAt >= 0 && controllerAt >= 0, acceptedOrder.join(','));
+assert.ok(eventAt < controllerAt, `order=${acceptedOrder.join(',')}`);
+
+console.log(JSON.stringify({
+  boundary_reject_stops_controller_advance: true,
+  boundary_reject_threw: rejectedThrew,
+  boundary_journal_precedes_controller: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "controller/journal ordering suite exits zero"
+assert_contains "$ORDER_OUT" '"boundary_reject_stops_controller_advance":true' "rejected event does not advance controller"
+assert_contains "$ORDER_OUT" '"boundary_journal_precedes_controller":true' "journal event precedes controller phase"
+
 finalize_test

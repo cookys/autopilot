@@ -62,6 +62,7 @@ const {
   CAMPAIGN_STATES,
   campaignIdFor,
   repairLineageCleanupId,
+  resolveCampaignEventLeaseIdentity,
 } = require('./implementation-campaign');
 const repairLadder = require('./repair-ladder');
 const {
@@ -2743,19 +2744,26 @@ class AutopilotEngine {
     };
     const receiptDigest = campaignCanonicalDigest(receiptBody);
     const hasLiveLease = state.live_lease !== null;
+    const terminalEventType = hasLiveLease
+      ? CAMPAIGN_EVENTS.MUTATION_FAILED
+      : CAMPAIGN_EVENTS.TERMINAL_STOP;
+    const terminalIdentity = resolveCampaignEventLeaseIdentity(
+      state,
+      terminalEventType,
+      {
+        generation: state.generation,
+        stageIdentity: `campaign-terminal-stop:${state.generation}`,
+      },
+    );
     let appended;
     try {
       appended = this.campaignEventAppender({
         repo: cwd,
         campaignControl,
         observedAt: terminalAt,
-        eventType: hasLiveLease
-          ? CAMPAIGN_EVENTS.MUTATION_FAILED
-          : CAMPAIGN_EVENTS.TERMINAL_STOP,
-        generation: state.generation,
-        stageIdentity: hasLiveLease
-          ? state.live_lease.stage_identity
-          : `campaign-terminal-stop:${state.generation}`,
+        eventType: terminalEventType,
+        generation: terminalIdentity.generation,
+        stageIdentity: terminalIdentity.stage_identity,
         payload: hasLiveLease
           ? {
             reason: terminalReason,
@@ -6470,11 +6478,25 @@ class AutopilotEngine {
           AWAITING_CONVERGENCE: CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
         };
         const mapped = typeMap[eventType] || eventType;
+        // Lease-bound events (BOUNDARY_REJECTED, AWAITING_CONVERGENCE, …) are
+        // fenced against the live mutation lease and RELEASE it on reduction. A
+        // synthesized `controller-<event>:<gen>` identity is not the lease owner,
+        // so the reducer answers LEASE_FENCED and the journal strands mid-mutation
+        // with the lease held. Take the identity from the durable lease, exactly
+        // as the terminal-failure path does.
+        const identity = resolveCampaignEventLeaseIdentity(
+          campaignControl.initial_state,
+          mapped,
+          {
+            generation: Number.isSafeInteger(generation) ? generation : 0,
+            stageIdentity: `controller-${String(mapped).toLowerCase()}:${generation || 0}`,
+          },
+        );
         try {
           recordCampaignEvent({
             eventType: mapped,
-            generation: Number.isSafeInteger(generation) ? generation : 0,
-            stageIdentity: `controller-${String(mapped).toLowerCase()}:${generation || 0}`,
+            generation: identity.generation,
+            stageIdentity: identity.stage_identity,
             payload: payload || {},
           });
         } catch (error) {
@@ -7059,10 +7081,15 @@ class AutopilotEngine {
             const eventType = state.phase === CAMPAIGN_STATES.IMPLEMENTING
               ? CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED
               : CAMPAIGN_EVENTS.REPAIR_COMPLETED;
+            const completionIdentity = resolveCampaignEventLeaseIdentity(
+              state,
+              eventType,
+              { generation: state.generation },
+            );
             recordCampaignEvent({
               eventType,
-              generation: state.generation,
-              stageIdentity: state.live_lease.stage_identity,
+              generation: completionIdentity.generation,
+              stageIdentity: completionIdentity.stage_identity,
               usage: {
                 changed_files: Array.isArray(receipt.changed_files)
                   ? receipt.changed_files.length

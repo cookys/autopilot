@@ -5,8 +5,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   CAMPAIGN_STATES,
+  CAMPAIGN_EVENTS,
   NON_SUCCESS_DURABLE_STATES,
   canonicalDigest,
+  resolveCampaignEventLeaseIdentity,
   normalizeCampaignArtifactReference,
   reduceCampaignState,
   validateInitialCampaignState,
@@ -104,13 +106,15 @@ function defaultCampaignLedgerPath(cwd) {
 
 function parseArgs(argv, cwd) {
   const command = argv[0];
-  if (!new Set(['inspect', 'resume', 'status']).has(command)) {
+  if (!new Set(['inspect', 'resume', 'status', 'terminalize']).has(command)) {
     return { error: `unknown campaign subcommand: ${command || '<missing>'}` };
   }
   const output = {
     command,
     campaignId: null,
     ledger: null,
+    leafManifest: null,
+    now: null,
   };
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -122,7 +126,22 @@ function parseArgs(argv, cwd) {
       index += 1;
       continue;
     }
+    if (flag === '--leaf-manifest') {
+      if (!value) return { error: `${flag} requires a value` };
+      output.leafManifest = path.resolve(cwd, value);
+      index += 1;
+      continue;
+    }
+    if (flag === '--now') {
+      if (!value) return { error: `${flag} requires a value` };
+      output.now = value;
+      index += 1;
+      continue;
+    }
     return { error: `unknown campaign option: ${flag}` };
+  }
+  if (output.command === 'terminalize' && !output.leafManifest) {
+    return { error: '--leaf-manifest is required' };
   }
   if (!output.campaignId) return { error: '--campaign-id is required' };
   if (!output.ledger) {
@@ -280,7 +299,7 @@ function validateCampaignJournalLease(row, currentLease) {
   }
 }
 
-function projectCampaign(rows, campaignId) {
+function projectCampaign(rows, campaignId, options = {}) {
   const rotationRootFor = (row) => Buffer.from(JSON.stringify(
     Object.fromEntries(Object.entries(row).filter(
       ([key]) => key !== '_rotation_carry' && key !== '_rotation_root',
@@ -386,7 +405,25 @@ function projectCampaign(rows, campaignId) {
       throw new Error('campaign ledger contains an invalid event wrapper binding');
     }
     validateCampaignJournalLease(row, currentLease);
-    state = reduceCampaignState(state, payload.event);
+    let event = payload.event;
+    if (options.coerceEventGeneration && event
+        && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED
+        && Number.isFinite(state.generation)
+        && Number.isInteger(state.generation)
+        && state.generation >= 0
+        && (event.generation !== state.generation
+            || !event.usage
+            || event.usage.repair_generations !== state.generation)) {
+      event = {
+        ...event,
+        generation: state.generation,
+        usage: {
+          ...event.usage,
+          repair_generations: state.generation,
+        },
+      };
+    }
+    state = reduceCampaignState(state, event);
     if (TERMINAL.has(state.phase)) {
       const reference = Object.prototype.hasOwnProperty.call(
         payload.event.payload,
@@ -410,11 +447,11 @@ function projectCampaign(rows, campaignId) {
       }
       lifecycleReceiptRef = reference;
     }
-    if (Object.prototype.hasOwnProperty.call(payload, 'artifact_reference')) {
-      const reference = payload.artifact_reference;
-      if (reference !== null) {
-        try {
-          normalizeCampaignArtifactReference(reference);
+      if (Object.prototype.hasOwnProperty.call(payload, 'artifact_reference')) {
+        const reference = payload.artifact_reference;
+        if (reference !== null) {
+          try {
+            normalizeCampaignArtifactReference(reference);
         } catch (error) {
           throw new Error(`campaign ledger event artifact reference is invalid: ${error.message}`);
         }
@@ -498,6 +535,214 @@ function processLiveness(lease) {
   const currentStart = processStartTime(lease.pid);
   if (currentStart === null) return 'unknown';
   return currentStart === lease.start_time ? 'alive' : 'dead';
+}
+
+function campaignTerminalizeEligibility(projection, evidence, _now) {
+  const manifest = evidence && evidence.manifest;
+  const phase = projection && projection.state ? projection.state.phase : null;
+  if (TERMINAL.has(phase)) {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_already_terminal',
+      reason: 'campaign is already terminal',
+    };
+  }
+  const liveness = processLiveness(projection && projection.latest_lease);
+  if (liveness === 'alive') {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_lease_live',
+      reason: 'campaign lease is still alive',
+    };
+  }
+  if (liveness === 'unknown') {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_lease_unknown',
+      reason: 'campaign lease liveness is unknown',
+    };
+  }
+  const manifestEnds = manifest
+    && typeof manifest === 'object'
+    && !Array.isArray(manifest)
+    && typeof manifest.ended_at === 'string'
+    && manifest.ended_at.length > 0;
+  if (!manifestEnds) {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_leaf_manifest_open',
+      reason: 'leaf manifest missing or malformed',
+    };
+  }
+  const repairLineage = projection && projection.candidate_reference && projection.candidate_reference.repair_lineage;
+  const worktree = repairLineage && repairLineage.worktree;
+  if (typeof worktree === 'string' && worktree.length > 0 && fs.existsSync(worktree)) {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_worktree_present',
+      reason: 'campaign candidate worktree is still present',
+    };
+  }
+  return {
+    status: 'eligible',
+    reason_code: null,
+    reason: null,
+  };
+}
+
+function buildTerminalizeMutationFailedEvent(projection, now, reason) {
+  const state = projection.state;
+  const observedAt = typeof now === 'string' && now.length > 0 ? now : new Date().toISOString();
+  const reasonText = typeof reason === 'string' && reason.length > 0 ? reason : 'campaign dead leaf terminalization';
+  const leaseIdentity = resolveCampaignEventLeaseIdentity(state, CAMPAIGN_EVENTS.MUTATION_FAILED);
+  const elapsedWallSeconds = Number.isFinite(Date.parse(state.started_at))
+    && Number.isFinite(Date.parse(observedAt))
+      ? Math.floor((Date.parse(observedAt) - Date.parse(state.started_at)) / 1000)
+      : 0;
+  const base = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_failure',
+    campaign_id: projection.campaign_id,
+    contract_digest: state.contract_digest,
+    generation: state.generation,
+    phase: state.phase,
+    reason: reasonText,
+      possibly_effectful: true,
+      observed_at: observedAt,
+  };
+  const receiptDigest = canonicalDigest(base);
+  const generationCandidates = Array.from(new Set([
+    leaseIdentity.generation,
+    state.generation,
+  ].filter((value) => Number.isSafeInteger(value))));
+  let candidateNextState = null;
+  let event = null;
+  let lastError = null;
+  for (const generation of generationCandidates) {
+    const candidate = {
+      schema_version: 1,
+      event_type: CAMPAIGN_EVENTS.MUTATION_FAILED,
+      campaign_id: projection.campaign_id,
+      contract_digest: state.contract_digest,
+      generation,
+      stage_identity: leaseIdentity.stage_identity,
+      idempotency_key: `terminalize:${projection.campaign_id}`,
+      input_artifact_digest: state.last_output_artifact_digest,
+      output_artifact_digest: canonicalDigest({
+        kind: 'campaign_terminal',
+        digest: receiptDigest,
+      }),
+      timestamp: observedAt,
+      payload: {
+        reason: reasonText,
+        failure_receipt_digest: receiptDigest,
+        possibly_effectful: true,
+      },
+      usage: {
+        repair_generations: generation,
+        elapsed_wall_seconds: elapsedWallSeconds > 0 ? elapsedWallSeconds : 0,
+        changed_files: state.usage && Number.isFinite(state.usage.changed_files)
+          ? state.usage.changed_files
+          : 0,
+        churn: state.usage && Number.isFinite(state.usage.churn)
+          ? state.usage.churn
+          : 0,
+      },
+    };
+    try {
+      candidateNextState = reduceCampaignState(state, candidate);
+      event = candidate;
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (!(error && error.code === 'GENERATION_MISMATCH')) {
+        throw error;
+      }
+    }
+  }
+  if (!event || !candidateNextState) {
+    throw lastError || new Error('terminalize event was rejected by campaign reducer');
+  }
+  const nextState = candidateNextState;
+  if (nextState.phase !== CAMPAIGN_STATES.TERMINAL_STOP || nextState.live_lease !== null) {
+    throw new Error('terminalize event did not reduce to terminal stop with lease released');
+  }
+  return {
+    event,
+    nextState,
+    receiptBody: base,
+    receiptDigest,
+  };
+}
+
+function writeCampaignTerminalizeSummary(ledgerPath, projection, built) {
+  const summaryPath = path.join(
+    path.dirname(path.resolve(ledgerPath)),
+    `${projection.campaign_id}.terminalize-summary.json`,
+  );
+  if (fs.existsSync(summaryPath)) {
+    return { path: summaryPath, written: false };
+  }
+  const summary = {
+    artifact_type: 'campaign_terminalize_summary',
+    campaign_id: projection.campaign_id,
+    receipt: built.receiptBody,
+    event: built.event,
+    phase: built.nextState.phase,
+    generation: built.nextState.generation,
+  };
+  fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
+  fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+  return { path: summaryPath, written: true };
+}
+
+function persistTerminalizeMutationFailedEvent(ledger, projection, built, commandNow) {
+  const generation = projection.latest_lease && projection.latest_lease.generation;
+  const nonce = projection.latest_lease && projection.latest_lease.nonce;
+  if (!Number.isSafeInteger(generation) || typeof nonce !== 'string') {
+    throw new Error('campaign terminalize requires a live lease generation identity');
+  }
+  const payload = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_event',
+    campaign_id: projection.campaign_id,
+    contract_digest: projection.state.contract_digest,
+    event: built.event,
+    artifact_reference: null,
+  };
+  if (!hasExactKeys(payload, DURABLE_EVENT_ARTIFACT_KEYS) && !hasExactKeys(payload, EVENT_ARTIFACT_KEYS)) {
+    throw new Error('internal terminalize event wrapper validation failed');
+  }
+  const result = spawnSync('bash', [
+    RUN_LEDGER,
+    'journal-add',
+    '--ledger', path.resolve(ledger),
+    '--run-id', projection.campaign_id,
+    '--stage', 'campaign',
+    '--generation', String(generation),
+    '--nonce', nonce,
+    '--idempotency-key', `terminalize:${projection.campaign_id}:${commandNow}`,
+    '--op', 'campaign_event',
+    '--payload', JSON.stringify(payload),
+  ], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: (64 * 1024 * 1024) + (1024 * 1024),
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error(`campaign terminalize journal append failed: ${
+      result.error
+        ? result.error.message
+        : Buffer.from(result.stderr || '').toString('utf8').trim()
+    }`);
+  }
+  return {
+    id: built.event.idempotency_key,
+    generation,
+    nonce,
+    status: 'applied',
+  };
 }
 
 function campaignResumeEligibility(projection, observedAt) {
@@ -589,7 +834,9 @@ function runCampaignCli(argv, options = {}) {
   let rows;
   try {
     rows = loadRows(parsed.ledger);
-    projection = projectCampaign(rows, parsed.campaignId);
+    projection = projectCampaign(rows, parsed.campaignId, {
+      coerceEventGeneration: parsed.command === 'terminalize',
+    });
   } catch (error) {
     process.stderr.write(`campaign: ${error.message}\n`);
     return 1;
@@ -618,6 +865,46 @@ function runCampaignCli(argv, options = {}) {
     })}\n`);
     return EXIT_SUCCESS;
   }
+  if (parsed.command === 'terminalize') {
+    let manifest = null;
+    try {
+      const rawManifest = fs.readFileSync(parsed.leafManifest, 'utf8');
+      manifest = JSON.parse(rawManifest);
+    } catch (_error) {
+      manifest = null;
+    }
+    const evidence = { manifest };
+    const eligibility = campaignTerminalizeEligibility(projection, evidence, now);
+    if (eligibility.status === 'blocked') {
+      process.stdout.write(`${JSON.stringify({
+        status: 'rejected',
+        reason_code: eligibility.reason_code,
+        reason: eligibility.reason,
+        campaign_id: parsed.campaignId,
+        phase: projection.state.phase,
+      })}\n`);
+      return 1;
+    }
+    const built = buildTerminalizeMutationFailedEvent(projection, now, 'campaign dead leaf terminalization');
+    try {
+      const journal = persistTerminalizeMutationFailedEvent(parsed.ledger, projection, built, now);
+      const summary = writeCampaignTerminalizeSummary(parsed.ledger, projection, built);
+      process.stdout.write(`${JSON.stringify({
+        status: 'terminalized',
+        campaign_id: parsed.campaignId,
+        phase: built.nextState.phase,
+        generation: built.nextState.generation,
+        lease_released: built.nextState.live_lease === null,
+        journal,
+        summary_path: summary.path,
+        summary_written: summary.written,
+      })}\n`);
+      return EXIT_SUCCESS;
+    } catch (error) {
+      process.stderr.write(`campaign: ${error.message}\n`);
+      return 1;
+    }
+  }
   const eligibility = campaignResumeEligibility(projection, now);
   process.stdout.write(`${JSON.stringify({
     status: eligibility.status,
@@ -644,11 +931,15 @@ function runCampaignCli(argv, options = {}) {
 
 module.exports = {
   campaignResumeEligibility,
+  campaignTerminalizeEligibility,
+  buildTerminalizeMutationFailedEvent,
+  writeCampaignTerminalizeSummary,
   DURABLE_WAIT,
   defaultCampaignLedgerPath,
   ledgerScanFiles,
   loadRows,
   parseArgs,
+  TERMINAL,
   processLiveness,
   projectCampaign,
   runCampaignCli,

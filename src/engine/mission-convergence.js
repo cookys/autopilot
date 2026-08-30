@@ -1405,6 +1405,38 @@ function bindingDigest(payload) {
   });
 }
 
+function normalizeLegacyGrantReservation(state, reservation) {
+  if (!state || !isPlainObject(state.axes)
+      || !isPlainObject(reservation)
+      || reservation.per_axis !== undefined) {
+    return null;
+  }
+  const requested = new Map();
+  for (const [axisName, reservedActive] of Object.entries(reservation)) {
+    if (reservedActive === undefined || reservedActive === null) continue;
+    if (!AXIS_SET.has(axisName)) return null;
+    const value = Number(reservedActive);
+    if (!Number.isSafeInteger(value) || value < 0) return null;
+    requested.set(axisName, value);
+  }
+  const normalized = [];
+  for (const axisName of SUPPORTED_AXES) {
+    const reservedActive = requested.has(axisName)
+      ? requested.get(axisName)
+      : (axisName === 'campaigns' ? 1 : 0);
+    const axisState = state.axes[axisName];
+    if (!axisState) return null;
+    normalized.push({
+      axis: axisName,
+      authorized_ceiling: axisState.authorized_ceiling,
+      reserved_active: reservedActive,
+      durable_consumed: axisState.durable_consumed,
+      known: axisState.known,
+    });
+  }
+  return { per_axis: normalized };
+}
+
 function findClaimByBinding(state, bindingHash) {
   for (const claim of Object.values(state.claims)) {
     if (claim.binding_digest === bindingHash) return claim;
@@ -1504,7 +1536,13 @@ function handleGrantClaimed(state, event, payload) {
   try {
     reservation = reservationFor(payload, 'payload');
   } catch (error) {
-    return rejection(state, event, 'binding_mismatch');
+    const normalized = normalizeLegacyGrantReservation(state, payload && payload.reservation);
+    if (!normalized) return rejection(state, event, 'binding_mismatch');
+    try {
+      reservation = reservationFor({ ...payload, reservation: normalized }, 'payload');
+    } catch (_error) {
+      return rejection(state, event, 'binding_mismatch');
+    }
   }
   const bindingHash = bindingDigest(payload);
   // Single-use admission: a different idempotency_key for the same

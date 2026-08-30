@@ -26,6 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const mission = require('../engine/mission-convergence');
 const runtime = require('./runtime');
+const { loadRows, projectCampaign, TERMINAL: CAMPAIGN_TERMINAL } = require('../campaign/cli');
 
 const DEFAULT_NOW = '2026-07-27T00:00:00.000Z';
 const DEFAULT_EXPIRY = '2026-07-27T01:00:00.000Z';
@@ -360,6 +361,101 @@ function cmdConsume(flags) {
   return rejected ? 1 : 0;
 }
 
+function cmdWithdraw(flags) {
+  rejectUnknownFlags(
+    flags,
+    new Set(['state', 'out', 'claim-id', 'campaign-ledger']),
+    'withdraw Mission withdraw',
+  );
+  const state = loadState(requireFlag(flags, 'state'));
+  const claimId = requireFlag(flags, 'claim-id');
+  const outPath = requireFlag(flags, 'out');
+  const claim = state.claims[claimId];
+  if (!claim) {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_claim_not_found',
+      reason: `withdraw: no such claim ${claimId}`,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  if (claim.released) {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_claim_already_released',
+      reason: `withdraw: claim ${claimId} was already released`,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  if (claim.reconciled) {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_claim_reconciled',
+      reason: `withdraw: claim ${claimId} was already reconciled`,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  let projection = null;
+  try {
+    const campaignLedger = requireFlag(flags, 'campaign-ledger');
+    const rows = loadRows(campaignLedger);
+    projection = projectCampaign(rows, claim.campaign_id, { coerceEventGeneration: true });
+    if (!projection) {
+      throw new Error('campaign not found');
+    }
+  } catch (error) {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_campaign_unreadable',
+      reason: `withdraw: campaign ledger unreadable: ${error.message || String(error)}`,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  if (!CAMPAIGN_TERMINAL.has(projection.state.phase)) {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_campaign_not_terminal',
+      reason: `withdraw: campaign ${projection.campaign_id} is not terminal`,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  const event = {
+    event_type: 'no_effect_release',
+    sequence: state.events.length + 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: { claim_id: claimId },
+  };
+  const result = reduceOrReject(state, event, 'withdraw');
+  const rejected = !result
+    || !result.receipt
+    || result.receipt.artifact_type === 'mission_grant_rejected';
+  if (rejected) {
+    emit({
+      status: 'rejected',
+      code: result && result.receipt && result.receipt.reason ? result.receipt.reason : 'mission_withdraw_rejected',
+      reason: result && result.receipt && result.receipt.reason ? result.receipt.reason : 'withdraw rejected',
+      state_hash: mission.stateHash(state),
+      receipt: result && result.receipt,
+    });
+    return 1;
+  }
+  writeState(outPath, result.state);
+  emit({
+    status: 'withdrawn',
+    claim_id: claimId,
+    campaign_id: claim.campaign_id,
+    graph_node_id: claim.graph_node_id || null,
+    state_hash: mission.stateHash(result.state),
+    receipt: result.receipt,
+  });
+  return 0;
+}
+
 function cmdControl(flags, options = {}) {
   const state = loadState(requireFlag(flags, 'state'));
   if (state.terminal || mission.TERMINAL_STATES.has(state.state)) {
@@ -584,6 +680,7 @@ const COMMANDS = {
   init: cmdInit,
   grant: cmdGrant,
   consume: cmdConsume,
+  withdraw: cmdWithdraw,
   control: cmdControl,
   'finalize-abort': cmdFinalizeAbort,
   check: cmdCheck,
@@ -596,7 +693,7 @@ function runMissionCli(argv, options = {}) {
   const command = argv[0];
   if (!command || command === '-h' || command === '--help' || command === 'help') {
     stdout.write(`${[
-      'usage: mission <prepare|successor|init|grant|consume|control|finalize-abort|check|receipt> [flags]',
+      'usage: mission <prepare|successor|init|grant|consume|withdraw|control|finalize-abort|check|receipt> [flags]',
       '  prepare --repo <git-repo> --authority <file> --graph <file> --out <receipt>',
       '  successor --repo <git-repo> --prepared <receipt> --generation <n> --out <receipt>',
       '  grant   --repo <git-repo> --prepared <receipt> --node <graph-node> [--now <iso>]',
@@ -604,6 +701,7 @@ function runMissionCli(argv, options = {}) {
       '  grant   --state <file> --out <file> --idempotency-key <k> --campaign-id <id>',
       '          --contract-digest <sha256> --base-sha <sha> --acceptance-ids <a,b> [--reserved <n>] [--now <iso>]',
       '  consume --state <file> --out <file> --claim-id <id> [--reserved <n>]',
+      '  withdraw --state <file> --out <file> --claim-id <id> --campaign-ledger <file>',
       '  control --state <file> --out <file> --action <a> --sequence <n> [--authority <auth>] [--now <iso>]',
       '  finalize-abort --state <file> --out <file>',
       '  check   --state <file>',

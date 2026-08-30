@@ -3466,7 +3466,30 @@ function buildDiscussCasePlan(discussGenerator) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const CONSULT_DISCUSS_RESPONSE_MAX_BYTES = 65_536;
+// Sized for ONE administration: 20 consult / 16 discuss remote cases with
+// --remote-timeout-ms up to 400_000 each. fix/pooled-wall-budget
+// (2026-08-30): the pooled protocol (plan 2026-08-29-qualification-verdict-
+// stability.md §4 D4) now runs up to CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS
+// administrations, so a flat 1800s cap for the WHOLE run made a healthy pool
+// hit wall_truncated => no_verdict after real spend. Read this as a
+// PER-ADMINISTRATION budget; see CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER
+// below for how the total default cap is derived from it.
 const CONSULT_DISCUSS_DEFAULT_WALL_SECONDS = 1800;
+// Total default wall cap = CONSULT_DISCUSS_DEFAULT_WALL_SECONDS *
+// administrationCap * CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER — one
+// full per-administration budget for every administration in the cap
+// (administrationCap, itself <= CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS),
+// doubled to give headroom for harness-attributed re-administrations. The
+// outer backstop on re-administration attempts is the existing
+// `administrationCap * 4` maxAttempts cap in runConsultDiscussQualification;
+// this x2 wall multiplier is deliberately HALF of that x4 attempt multiplier
+// so the wall can never be the FIRST thing to trip on a healthy pool (the
+// attempt cap trips first if retries truly run away), while still being a
+// real ceiling rather than no ceiling at all. `options.wallSeconds` /
+// `options.testWallSecondsOverride` remain shrink-only overrides of this
+// computed default (see runConsultDiscussQualification below) — parseArgs
+// never sets either.
+const CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER = 2;
 const CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS = 3;
 const CONSULT_DISCUSS_FULL_N = Object.freeze({ consult: 60, discuss: 48 });
 
@@ -3745,6 +3768,24 @@ function foldDiscussAdministration(trials, corpus) {
   };
 }
 
+// Exported (and unit-tested directly) so the wall-budget arithmetic is
+// independently re-derivable rather than only observable through a full
+// run's wall_truncated behaviour. `administrationCap` is the ALREADY-clamped
+// per-run cap (<= CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS); see the
+// CONSULT_DISCUSS_DEFAULT_WALL_SECONDS / CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER
+// comments above for the arithmetic this mirrors.
+function computeConsultDiscussWallSecondsCap({ administrationCap, wallSeconds, testWallSecondsOverride }) {
+  const defaultTotalWallSeconds = CONSULT_DISCUSS_DEFAULT_WALL_SECONDS
+    * administrationCap
+    * CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER;
+  return Math.min(
+    Number.isFinite(wallSeconds) && wallSeconds > 0
+      ? wallSeconds : defaultTotalWallSeconds,
+    Number.isFinite(testWallSecondsOverride)
+      ? testWallSecondsOverride : Infinity,
+  );
+}
+
 function runConsultDiscussQualification(options) {
   const role = options.role;
   if (role !== 'consult' && role !== 'discuss') {
@@ -3808,16 +3849,6 @@ function runConsultDiscussQualification(options) {
   // Shrink-only test seams (same family as runImplQualification's): reachable
   // ONLY via the exported function (parseArgs never sets them), and Math.min
   // guarantees they can never widen the corpus budget / administration cap.
-  const wallSecondsCap = Math.min(
-    Number.isFinite(options.wallSeconds) && options.wallSeconds > 0
-      ? options.wallSeconds : CONSULT_DISCUSS_DEFAULT_WALL_SECONDS,
-    Number.isFinite(options.testWallSecondsOverride)
-      ? options.testWallSecondsOverride : Infinity,
-  );
-  const truncateAfterCases = Number.isInteger(options.testTruncateAfterCases)
-    && options.testTruncateAfterCases >= 0
-    ? options.testTruncateAfterCases
-    : null;
   const administrationCap = Math.min(
     CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS,
     Number.isInteger(options.testAdministrationsOverride)
@@ -3825,6 +3856,17 @@ function runConsultDiscussQualification(options) {
       ? options.testAdministrationsOverride
       : CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS,
   );
+  // Wall budget scales with administrationCap (fix/pooled-wall-budget) — see
+  // computeConsultDiscussWallSecondsCap above for the arithmetic.
+  const wallSecondsCap = computeConsultDiscussWallSecondsCap({
+    administrationCap,
+    wallSeconds: options.wallSeconds,
+    testWallSecondsOverride: options.testWallSecondsOverride,
+  });
+  const truncateAfterCases = Number.isInteger(options.testTruncateAfterCases)
+    && options.testTruncateAfterCases >= 0
+    ? options.testTruncateAfterCases
+    : null;
   const fullN = CONSULT_DISCUSS_FULL_N[role];
   const wallDeadline = started + wallSecondsCap * 1000;
 
@@ -5227,6 +5269,7 @@ module.exports = {
   buildConsultCaseEnvelope,
   buildDiscussCaseEnvelope,
   classifyQualificationOutcome,
+  computeConsultDiscussWallSecondsCap,
   createSessionRoleCapabilityVerifier,
   foldPooledVerdict,
   ownerRuleViolations,
@@ -5252,4 +5295,6 @@ module.exports = {
   VERDICT_TAU,
   CONSULT_DISCUSS_FULL_N,
   CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS,
+  CONSULT_DISCUSS_DEFAULT_WALL_SECONDS,
+  CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER,
 };

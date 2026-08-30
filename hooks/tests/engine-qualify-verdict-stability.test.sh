@@ -865,6 +865,89 @@ const tauHits = src.split('0.85').length - 1;
 assert(zHits === 1, `VERDICT_Z literal must appear exactly once in engine-qualify.js, got ${zHits}`);
 assert(tauHits === 1, `VERDICT_TAU literal 0.85 must appear exactly once in engine-qualify.js, got ${tauHits}`);
 
+// ─────────────────────────────────────────────────────────────────────────
+// D4 wall-budget scaling (fix/pooled-wall-budget): the pooled protocol runs
+// up to CONSULT_DISCUSS_PRODUCTION_ADMINISTRATIONS administrations, so the
+// DEFAULT total wall cap must scale with the (already-clamped)
+// administrationCap, not stay pinned at one administration's budget
+// (CONSULT_DISCUSS_DEFAULT_WALL_SECONDS = 1800s, sized for one run of 20
+// consult / 16 discuss remote cases). Assert against the exported,
+// independently-computed cap — never against real sleeping.
+// ─────────────────────────────────────────────────────────────────────────
+assert(typeof eq.computeConsultDiscussWallSecondsCap === 'function',
+  'computeConsultDiscussWallSecondsCap must be exported');
+assert(eq.CONSULT_DISCUSS_DEFAULT_WALL_SECONDS === 1800,
+  `CONSULT_DISCUSS_DEFAULT_WALL_SECONDS pinned at 1800, got ${eq.CONSULT_DISCUSS_DEFAULT_WALL_SECONDS}`);
+assert(Number.isInteger(eq.CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER)
+  && eq.CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER >= 1,
+  `CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER must be a positive integer, got `
+    + eq.CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER);
+
+// Full production pool (administrationCap = 3), no overrides: the computed
+// cap for both consult and discuss must equal
+// 1800 * 3 * CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER — one full
+// per-administration budget for every administration in the pool, times
+// the documented multiplier. Same formula applies to both roles since the
+// wall cap is role-independent (it does not vary with CONSULT_DISCUSS_FULL_N).
+{
+  const expectedFullPoolCap = 1800 * 3 * eq.CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER;
+  const consultCap = eq.computeConsultDiscussWallSecondsCap({ administrationCap: 3 });
+  const discussCap = eq.computeConsultDiscussWallSecondsCap({ administrationCap: 3 });
+  assert(consultCap === expectedFullPoolCap,
+    `consult full-pool wall cap must equal 1800*3*multiplier=${expectedFullPoolCap}, got ${consultCap}`);
+  assert(discussCap === expectedFullPoolCap,
+    `discuss full-pool wall cap must equal 1800*3*multiplier=${expectedFullPoolCap}, got ${discussCap}`);
+  // Sanity: under the OLD flat-1800s-for-the-whole-run defect, a 3-admin pool
+  // would have been given only 1800s total — i.e. 600s/administration
+  // equivalent. The fixed cap must be strictly greater than that old total,
+  // proving the pooled run is no longer starved relative to the pre-pooling
+  // behaviour.
+  assert(consultCap > 1800,
+    `fixed full-pool cap (${consultCap}) must exceed the old flat single-administration total (1800)`);
+}
+
+// administrationCap scaling: a 1-admin cap (e.g. a shrunk test run) must get
+// exactly one per-administration budget times the multiplier — proves the
+// scaling is per-administration, not a fixed pooled constant.
+{
+  const oneAdminCap = eq.computeConsultDiscussWallSecondsCap({ administrationCap: 1 });
+  assert(oneAdminCap === 1800 * eq.CONSULT_DISCUSS_WALL_ADMINISTRATION_MULTIPLIER,
+    `administrationCap=1 wall cap must equal 1800*multiplier, got ${oneAdminCap}`);
+}
+
+// testWallSecondsOverride must still SHRINK the computed cap (existing
+// shrink-only-seam semantics preserved) even though the default itself is
+// now much larger.
+{
+  const shrunk = eq.computeConsultDiscussWallSecondsCap({
+    administrationCap: 3,
+    testWallSecondsOverride: 5,
+  });
+  assert(shrunk === 5,
+    `testWallSecondsOverride must shrink the pooled default cap to 5, got ${shrunk}`);
+  const unshrunk = eq.computeConsultDiscussWallSecondsCap({ administrationCap: 3 });
+  assert(unshrunk > 5,
+    `without an override the pooled cap must stay large (>5), got ${unshrunk}`);
+}
+
+// options.wallSeconds (a shrink-only absolute override of the DEFAULT) must
+// still be honoured, and testWallSecondsOverride must still be able to
+// shrink even a caller-supplied wallSeconds (Math.min composition preserved).
+{
+  const overridden = eq.computeConsultDiscussWallSecondsCap({
+    administrationCap: 3,
+    wallSeconds: 42,
+  });
+  assert(overridden === 42, `options.wallSeconds override must be honoured, got ${overridden}`);
+  const bothShrink = eq.computeConsultDiscussWallSecondsCap({
+    administrationCap: 3,
+    wallSeconds: 42,
+    testWallSecondsOverride: 3,
+  });
+  assert(bothShrink === 3,
+    `testWallSecondsOverride must still shrink a caller-supplied wallSeconds, got ${bothShrink}`);
+}
+
 function passCases(n, prefix) {
   return Array.from({ length: n }, (_, i) => ({
     case_id: `${prefix || 'p'}-${i}`,
@@ -1091,6 +1174,12 @@ assert(!/administrations/i.test(parseBlock[0]),
   `parseArgs must not mention administrations; got hit in parseArgs`);
 assert(!/testFullNOverride/.test(parseBlock[0]),
   `parseArgs must not mention testFullNOverride; got hit in parseArgs`);
+// fix/pooled-wall-budget: wallSeconds / testWallSecondsOverride are the same
+// shrink-only-seam family — parseArgs must never expose either, so a
+// production run can never widen (or narrow, via a hidden CLI flag) the
+// computed pooled wall cap.
+assert(!/wallSeconds/i.test(parseBlock[0]),
+  `parseArgs must not mention wallSeconds/testWallSecondsOverride; got hit in parseArgs`);
 
 function mulberry32(seed) {
   let a = seed >>> 0;

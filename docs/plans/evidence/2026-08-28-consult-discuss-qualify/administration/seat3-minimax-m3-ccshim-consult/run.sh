@@ -29,6 +29,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/scripts/engine-qualify.js" ] \
   || { echo "run.sh: could not resolve repo root from $SELF_DIR" >&2; exit 2; }
+source "$REPO_ROOT/scripts/lib/qualify-stage-credentials.sh"
 
 MODE="${1:-plan}"
 case "$MODE" in
@@ -91,13 +92,9 @@ unset EP_JSON EP_URL EP_TOKENV EP_RC
 STAGING_DIR="$HOME/.autopilot/qualify-staging/seat3-minimax-m3-ccshim-consult/claude-config"
 mkdir -p "$STAGING_DIR"
 chmod 700 "$STAGING_DIR"
+qualify_stage_credential "$STAGING_DIR/.credentials.json" "$HOME/.claude/.credentials.json" "$MODE"
 if [ ! -f "$STAGING_DIR/.credentials.json" ]; then
-  if [ -f "$HOME/.claude/.credentials.json" ]; then
-    cp "$HOME/.claude/.credentials.json" "$STAGING_DIR/.credentials.json"
-    chmod 600 "$STAGING_DIR/.credentials.json"
-  else
-    echo "run.sh: no $HOME/.claude/.credentials.json to seed $STAGING_DIR — --execute will likely fail to authenticate" >&2
-  fi
+  echo "run.sh: no $HOME/.claude/.credentials.json to seed $STAGING_DIR — --execute will likely fail to authenticate" >&2
 fi
 export CLAUDE_CONFIG_DIR="$STAGING_DIR"
 

@@ -632,7 +632,7 @@ Two items:
 Evidence: revival.3d 2026-08-28 — 40 dispatches left 35 `.vite-<tag>` caches, 625 root-owned Chrome
 udd dirs (238 MB+), 118 `/tmp/rw3d-*`, and 5 live Chromes holding 5.7 GB on GPU1 that killed the next
 line's WebGPU context. Owner: "治理你自己每一輪生產的垃圾要系統化". The project shipped
-`scripts/lab/reap-run.mjs` (`--tag/--check/--all-stale/--self-test` + hourly user timer) as a stopgap
+revival.3d's `lab/reap-run.mjs` (under its own `scripts/`; `--tag/--check/--all-stale/--self-test` + hourly user timer) as a stopgap
 adapter; ruling: the **mechanism belongs in autopilot**, the project only declares what counts as residue.
 
 Split:
@@ -649,7 +649,7 @@ Split:
   `whitelist[]`; plus `resource_check[]` (e.g. `nvidia-smi` GPU index + mem threshold).
 - Leaves are not trusted to clean up ("已收" was false 3× on 2026-08-28); they only owe correct naming.
 
-Reference impl to absorb: revival.3d `scripts/lab/reap-run.mjs` + `docs/governance/dispatch.md`
+Reference impl to absorb: revival.3d's `lab/reap-run.mjs` (under its own `scripts/`) + `docs/governance/dispatch.md`
 "派遣殘留物治理".
 
 ## 2026-08-29 qualification run.sh templates baked an invalid effort enum

@@ -1,52 +1,49 @@
 ## 目標
 
-實作已核准的「資格判定穩定性重設計」plan(`docs/plans/2026-08-29-qualification-verdict-stability.md`,D0–D8),再收尾 consult/discuss qualification campaign。
+「資格判定穩定性重設計」plan(`docs/plans/2026-08-29-qualification-verdict-stability.md`,D0–D8)**已全部落地並 release v2.35.3**。剩下的是 Board 權限的 D7 真金重跑(plan §8 Q3)與 rail 的殘餘缺陷。
 
-## 現況(2026-08-30)
+## 現況(2026-08-30 結案)
 
-- Branch `develop` @ `09485468`,乾淨,與 origin 同步。版本 v2.35.2(D8 才 bump 2.35.3)。
-- **Phase 1 = D0+D1+D2+D3 已 merge**:`1d91a6f4`(grok-4.5 實作)+ `365ee37c`、`6a3620a1`(qc 驅動的兩個修復)。sealed grader 位元組不變(consult `7852cf33…` / discuss `39b5ba15…`)。
-- **D1 store 操作已執行**:兩份 `.bak-verdict-redesign-2026-08-30` 備份 sha256 已驗;events 157–165 各一個 `record_kind:"supersession"` 標記已 append(9/9);原始行位元組不變。reader 尊重標記是 D5。
-- **depth-0 qc panel 三席裁決**與所有 finding 處置寫在 `docs/plans/evidence/2026-08-29-verdict-stability/EXECUTION-LOG.md`。
-- **Mission lineage**:`420ac261…`(單節點、campaigns=8、gate budget 12)已 prepare,campaign 1 已用(未能 terminal),2–8 未用。舊 lineage `83828e5e…`(有一個永遠 live 的 claim)與 `2e784929…` 是 inert 殘留。
-- 殘留分支(可刪,已無用途,留作 salvage 歷史):`mission/420ac26112ac/…-a1`(=1d91a6f4)、`mission/83828e5e60c1/…-a2`(102fd0ed)、`…-a3`(367d41c7)。
-- session marker 目前是 **l5**(不是 l6,見陷阱)。
-- 盲測 VA harness(Qwen)在 scratchpad:`qualification-tier-mapping.test.sh` sha256 `c01b1be6…`,五個 harness 側錯誤待修後才能進樹(D6)。scratchpad 是 session 專屬,下個 session 拿不到——要用就從 plan 記錄的期望重生成。
+- `develop` 與 origin 同步(release commit `85cd84a0` + doc-drift 修正 merge `7804c387` + 結案紀錄 `3e6b0527`);版本 **v2.35.3**;preflight 8/8;全套 `hooks/tests/run.sh` 綠(見 EXECUTION-LOG 最後一行)。
+- D1–D8 全部 merge:D1–D3(`6a3620a1`)、D4(`e6b5f171`)、D5(`1a7e42f4`)、D6(`8a8a5bd2`)、D7/D8 文件(`80693f7e`/`0af7b5f5`)。每段的 qc 裁決、修復 sha、獨立重跑結果都在 `docs/plans/evidence/2026-08-29-verdict-stability/EXECUTION-LOG.md`。
+- **D1 閘門在真店生效**:九席 consult/discuss(events 157–165)`seat-status` 全 `no_record`;備份在 `~/.autopilot/engine-scorecard/*.bak-verdict-redesign-2026-08-30`。
+- OC 特徵:`OC-CHARACTERIZATION.md`——精確二項 oracle(p* 0.922585 consult / 0.924032 discuss)、n=3000 模擬 power 表、rejected calibration、D7 協定(**未授權花費**)。
+- Mission lineage `420ac261…`:gate attempts 用 4/12、campaigns 4/8,claim 全已釋放;`2e784929…`、`83828e5e…` 為 inert 殘留。session marker 為 l6(今天修好 bootstrap 後可用)。
+- 殘留分支:`mission/420ac26112ac/…-a1..a4`、`mission/83828e5e60c1/…-a2/a3`(歷史,可刪)。
 
 ## 已決事項(不重議)
 
-- 上個 handoff 的全部裁決仍有效(雙層/Wilson/z=1.645/τ=0.85/不動 grader/supersession 契約/PATCH)。
-- **codex 🔴「STEP-1 不遞迴/C5 繞過/lure id」降為 🟡**:C5 免掃是 seam 與 plan 明文;consult 無 lures;discuss grader 本身接受 lure id;嵌套假 artifact_ref 在未宣告欄位是 plan 表的 tier2。不重審。
-- **VA harness 五個殘紅是 harness 側**:caseSpec 真形狀 `bundle.artifacts[]`;多訊號取 seam 列表第一個(verdict_token_present 先於 tokens_outside);bound 只掃不拒。
-- **Phase 1 走「depth-0 qc + 獨立重跑」而非 Mission terminal receipt**——使用者選 B(2026-08-30),偏差已記在 plan 與 BACKLOG。
+- 上兩份 handoff 的裁決全部有效。
+- Mission campaign **一次都沒靠自己的 terminal receipt 收尾**:merge 權威 = depth-0 三席 hetero qc panel + 獨立重跑(ADR-0001),偏差逐段記錄。
+- qc 裁決紀錄:codex 對 D3 的 🔴 降 🟡;D6 的角色 parity 用 kernel 原始碼位元相等視為足夠;D4 harness 的 `discuss-44p4t` 標籤放寬(completion 與 locked_fail 重合)。
+- 執行紀錄**不得**寫進 plan 檔(sources manifest 綁 plan 內容)。
 
 ## 下一步
 
-1. **先修 rail 或先做 D4?** Mission-managed rail 在本 repo 有六個缺陷(BACKLOG 2026-08-30 列),其中「`hooks/tests/run.sh` 在 develop 紅(≥7 套件)→ sealed verify_cmd 不可滿足」會讓**任何** campaign acceptance_failed。不修它,D4–D8 每段都得重演 salvage 舞步。建議:先派一個 Fix 單位三角那 7 個紅套件 + 修 `autopilot-engine.js:6477` lease fence + `bin/autopilot.js:396` 接受 l6;再回來跑 D4。
-2. D4(verdict 引擎,fail-only sequential + `(Z,TAU)` 一處釘)→ D5(supersession reader 尊重 + 額外 schema)→ D6(精確二項 OC oracle + 盲 harness 進樹)→ D7 文件(**不花錢**)→ D8(mirror/CHANGELOG/2.35.3)。
-3. D7 真金重跑前**停下問使用者**。
+1. **D7 真金重跑**:等使用者/Board 授權;協定在 `OC-CHARACTERIZATION.md` D7 段(passing 席約 3× 單次成本)。cursor 席不考。
+2. Rail 殘餘缺陷(`docs/BACKLOG.md` 2026-08-30 列):wall cap 3600s 是 schema 上限、dead campaign 無法 terminalize/釋放 claim、`mission grant` replay 假綠、VA rail 非空即 authored、agy/cc-shim VA 席過不了精確 tuple 閘、`mission withdraw` 缺席。下次 /l5 或 /l6 前先看這些有沒有出貨。
+3. 可選:把 `qualification-tier-mapping.test.sh`(盲測 D4 harness)的名字改成反映內容(D3 tier-map 盲測已被它取代)。
 
 ## 驗證方式
 
 ```bash
-git status --short                                       # 乾淨
-bash hooks/tests/engine-qualify-verdict-stability.test.sh # D1–D3 套件 PASS
-bash hooks/tests/engine-qualify-consult.test.sh           # PASS
-bash hooks/tests/honest-consult-discuss-solver.test.sh    # 16 PASS
+git status --short                                             # 乾淨
+grep '"version"' .claude-plugin/plugin.json                    # 2.35.3
+bash hooks/tests/engine-qualify-verdict-stability.test.sh      # 44 PASS(約 100s)
+bash hooks/tests/qualification-tier-mapping.test.sh            # 11 PASS
+bash hooks/tests/capability-evidence.test.sh                   # PASS
 sha256sum evals/consult-eval-grader.js evals/discuss-eval-grader.js   # 7852cf33… / 39b5ba15…
-grep -c '"record_kind":"supersession"' ~/.autopilot/engine-scorecard/scorecard.jsonl   # 9
-node scripts/session-mode.js status | head -8            # level l5
+for e in MiniMax-M3:cc-shim kimi-code-k3:kimi; do node scripts/engine-scorecard.js seat-status --engine ${e%%:*} --runner ${e##*:} --role consult; done   # no_record
+AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh # 8/8
 ```
 
 ## Read-order
 
-1. `docs/plans/evidence/2026-08-29-verdict-stability/EXECUTION-LOG.md`(Phase 1 執行紀錄;不要寫進 plan 檔——sources manifest 綁 plan 內容,改一字就 digest 漂移)。
-2. `docs/BACKLOG.md` 2026-08-30 的六列(rail 缺陷)。
-3. memory `l6-managed-campaign-gotchas.md`。
+1. `docs/plans/evidence/2026-08-29-verdict-stability/EXECUTION-LOG.md`
+2. `docs/plans/evidence/2026-08-29-verdict-stability/OC-CHARACTERIZATION.md`
+3. `docs/BACKLOG.md` 2026-08-30 列;memory `l6-managed-campaign-gotchas.md`
 
 ## 陷阱
 
-- 見 memory `l6-managed-campaign-gotchas.md`:marker 與 `AUTOPILOT_LEVEL` 都要 l5;`AUTOPILOT_ROOT_RUN_ID` = contract 的 `mission_runtime.root_run_id`;implementer 測試只能落 `strict_dispatch.output_paths`;campaign ≤ 1 小時;每次 grant 燒一個 gate attempt。
-- 圖改一次就鑄一條新 lineage(requirements_hash 含 graph digest),舊的無法 withdraw。
-- sonnet 子 agent 會把 SendMessage 的追加指令當注入拒絕——追加工作用清楚的主體聲明重送。
-- 推 develop 觸及 protected path 需要 `QC-Verdict:` trailer 與 Co-Authored-By 同末段。
+- 見 memory `l6-managed-campaign-gotchas.md`(含 addendum):grant 對 open claim 是 replay;plan 檔綁 digest;worktree 共用 stash;MiniMax `no_verdict` 重跑一次;Qwen 授權 rail 55-byte 假綠。
+- 推 develop 觸及 protected path 需 `QC-Verdict:` trailer 與 Co-Authored-By 同末段。

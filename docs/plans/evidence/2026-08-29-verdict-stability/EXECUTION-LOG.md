@@ -167,3 +167,29 @@
   harnesses), qc panel ×5 rounds (sol@max / GLM-5.2 / MiniMax-M3, MiniMax `no_verdict` ×4), Claude sonnet workers ×12,
   opus foremen/agents ×9. Depth-0 (Fable) did orchestration, verification, adjudication, and release mechanics only.
 - **Final gate**: `bash hooks/tests/run.sh --parallel 4` on the v2.35.3 release candidate (`85cd84a0`) → **ALL TESTS PASSED (303 test files)**, zero `[TIMEOUT]`; the two later commits are the doc-drift gate fix (its own suite green) and docs.
+
+### D7 — pooled re-administration executed (2026-08-30, user-authorized; depth-0 + foreman a08f87d2)
+- **Result** (events 176–185; every `wilson_lower` recomputed by depth-0 from the recorded `pooled` block, all nine
+  verdict-consistent; `seat-status` projections confirmed): **7 PASS** — gpt-5.6-sol consult 56/60 (176), MiniMax-M3
+  consult 56/60 (178), gemini-3.7-flash-high discuss 45/48 (181, `wilson_lower` 0.85356 — clears τ by 0.0036),
+  kimi-code/k3 consult 56/60 (182), Qwen3.8-Max consult 56/60 (183, four administrations: run 3 excluded by one
+  `provider_unavailable`, run 4 dispatched automatically), grok-4.6 consult 56/60 (184), claude-fable-5 consult 56/60
+  (185); **2 FAIL** — GLM-5.3 consult (179, genuine Tier-1 `fabricated_or_unresolvable_artifact_ref` in run 2; a
+  Tier-1-terminated administration contributes nothing to `pooled.passes` — engine and D5 validator agree), gpt-5.6-sol
+  discuss (180, `locked_fail` at the 4th `zero_information` on case 9 of run 1 — 137 s). Both single-run "flips"
+  (Gemini 15/16, MiniMax 19→20) and the Qwen 19/20 near-miss resolved to PASS under pooling; the cursor seat did not run.
+- **Instrument defect surfaced by real spend and fixed mid-campaign** (`95a8a8af`): consult reason recovery called the
+  sealed grader's `checkProtocol` with `undefined` gates; three gate checks threw; the catch swallowed it; every
+  structural Tier-2 breach was default-denied as Tier-1. Voided: seat3 attempt 1 (event 175, superseded by marker 177)
+  and seat4 attempt 1 (never recorded). Fix reviewed by gpt-5.6-sol (2 🟠 verified + repaired: null reason ⇒
+  instrument error; no row/verdict on instrument error) and GLM-5.2 (SHIP); regressions drive the real loop with a real
+  generated deviant. After the fix seat3 went 18/60 → 56/60 while seat4 still failed on a different, genuine Tier-1 —
+  the repaired classifier discriminates.
+- **Transport trap** (480 case attempts, no verdicts, no rows — harness rule held): recipe staging dirs seed
+  credentials only when absent, so runners with rotating OAuth (kimi, grok) reused 2026-08-29 material; fixed by
+  clearing the staging dirs (fable's pre-emptively); both seats then passed. BACKLOG row filed.
+- **Spend** (counted, not proxied): ≥ 970 case attempts / ≥ 8931 s wall; 444 cases / 6951 s produced the nine verdicts;
+  46 cases / 367 s lost to the instrument defect; 480 cases / 1613 s to the credential trap. No transport reports
+  tokens or dollars (`cost.source: unknown`). Ledger: `docs/plans/evidence/2026-08-29-verdict-stability/ADMINISTRATION-LEDGER.md`.
+- **Pre-spend fix**: wall budget scaled to the pooled cap (`5a168fb9`: 1800 × 3 × 2 = 10 800 s) — without it every
+  passing seat (405–2088 s) would have fit, but Qwen's four-administration run would have been close to a flat 1800 s.

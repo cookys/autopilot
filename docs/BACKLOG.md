@@ -741,3 +741,15 @@ never an ad hoc descriptive string.
 - **Context**: `schemas/mission-execution-graph.schema.json` caps `campaign.max_wall_seconds` at 3600 and `max_engine_attempts` at 3. Either raise the schema ceiling (with governance `max_wall_seconds` still the aggregate bound) or make the wall cover implementation only and give review rounds their own budget. Until then every real campaign closes through the depth-0 salvage path.
 - **Effort**: S (schema + one test) — but a governance decision.
 - **Source**: phases 1–2, 2026-08-29/30.
+
+### Qualification recipes seed staged credentials only when the staged file is absent — rotating OAuth runners reuse stale material
+- **Trigger**: already fired 2026-08-30 (D7): kimi and grok seats returned 240/240 `provider_process_failed` each (480 case attempts, ~1600 s) because the `if [ ! -f <staged> ]` guard kept 2026-08-29 credentials while the live ones had rotated; codex/cc-shim/agy were spared only because they do not rotate.
+- **Context**: every `run.sh` under `docs/plans/evidence/*/administration/*/` copies this block. Seed unconditionally (or stamp the staging dir with the source file's sha256 and reseed on mismatch), and make `plan` mode compare staged vs live hashes and refuse when they differ. The harness rule correctly refused a verdict, so no capability row was polluted.
+- **Effort**: S
+- **Source**: D7 administration ledger 2026-08-30.
+
+### `engine-scorecard.js current/seat-status --require-evidence` cannot be run standalone
+- **Trigger**: next time an operator wants the strict admission projection for a live seat (it exits 2: `--require-evidence or --identity-file requires --scope-file`).
+- **Context**: the strict path needs a caller-supplied applicability scope file; there is no helper that derives the canonical scope for a role, so foremen fall back to the non-strict `seat-status`. Add a `--role-default-scope` (or print the expected scope JSON) so the strict path is one command.
+- **Effort**: S
+- **Source**: D7 foreman 2026-08-30.

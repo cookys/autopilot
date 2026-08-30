@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.35.4 — pooled verdict hardening + D7 re-administration
+
+Two shipped-code fixes surfaced by the first real-money run of the pooled consult/discuss verdict
+(D7 of `docs/plans/2026-08-29-qualification-verdict-stability.md`, user-authorized 2026-08-30), plus
+the administration itself. **Wall budget** (`5a168fb9`): `runConsultDiscussQualification` capped the
+whole run at a flat 1800 s sized for one administration; the pooled protocol runs up to three plus
+harness re-runs, so the cap is now `1800 × administrationCap × 2` (10 800 s at the production cap;
+shrink seams unchanged and still unreachable from `parseArgs`). **Reason recovery** (`95a8a8af`): the
+consult grader-reason recovery called the sealed grader's `checkProtocol` with `undefined` gates,
+three gate checks threw, the `catch` swallowed it, and `classifyQualificationOutcome` default-denied
+every structural Tier-2 breach as a Tier-1 trust violation — two paid seats were voided before the
+foreman stopped the campaign. Recovery now uses `grader.mergeGates(undefined)` exactly as `classify`
+does; a thrown grader exception, or a `protocol_violation` with no recoverable reason, aborts the run
+as `status: instrument_error` with `row: null`, no verdict fields and no evidence — never a Tier-1.
+Regressions drive the real administration loop with a real generated exclusivity deviant (RED on the
+old code: `tier1/step3/unknown_reason`, the incident fingerprint). Reviewed by gpt-5.6-sol (two 🟠
+verified and repaired) and GLM-5.2. **D7 outcome**: nine seats re-administered under the pooled bar
+(events 176–185): 7 PASS (gpt-5.6-sol, MiniMax-M3, kimi-code/k3, Qwen3.8-Max, grok-4.6,
+claude-fable-5 consult; gemini-3.7-flash-high discuss), 2 FAIL (GLM-5.3 consult on a genuine
+fabricated `artifact_ref`; gpt-5.6-sol discuss `locked_fail`); the three single-run noise flips all
+resolved to PASS. Voided attempts and a stale-credential transport trap (BACKLOG) are recorded
+honestly in `docs/plans/evidence/2026-08-29-verdict-stability/ADMINISTRATION-LEDGER.md`. Semver PATCH.
+
 ## v2.35.3 — qualification verdict stability: two-tier bar + pooled multi-administration
 
 Completes `docs/plans/2026-08-29-qualification-verdict-stability.md`'s frozen eight-deliverable DAG.

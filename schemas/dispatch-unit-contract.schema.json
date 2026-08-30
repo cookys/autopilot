@@ -208,7 +208,7 @@
       "type": "object",
       "required": ["wall_seconds", "max_attempts", "max_context_files"],
       "properties": {
-        "wall_seconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
+        "wall_seconds": { "type": "integer", "minimum": 10, "maximum": 14400 },
         "max_attempts": { "type": "integer", "minimum": 1, "maximum": 3 },
         "max_context_files": { "type": "integer", "minimum": 1, "maximum": 20 }
       },

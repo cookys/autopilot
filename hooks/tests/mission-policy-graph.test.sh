@@ -27,7 +27,7 @@ function policySection(overrides = {}) {
     schema_version: 1,
     enforcement_mode: 'enforce',
     max_campaigns: 8,
-    max_wall_seconds: 10000,
+    max_wall_seconds: 20000,
     max_tool_calls: 1000,
     max_engine_attempts: 100,
     max_external_wait_seconds: 500,
@@ -344,6 +344,13 @@ function projectionReject(mutate, pattern) {
     pattern,
   );
 }
+function projectionAccept(mutate) {
+  const candidate = clone(graph);
+  mutate(candidate.nodes[0]);
+  assert.doesNotThrow(
+    () => graphApi.freezeMissionExecutionGraph(candidate, resolvedMission),
+  );
+}
 projectionReject(
   (selected) => { selected.source_rubric_ids = ['r-invalid-hash']; },
   /ICC rubric ID contract/,
@@ -398,8 +405,26 @@ projectionReject(
   /0\.\.2/,
 );
 projectionReject(
-  (selected) => { selected.campaign.max_wall_seconds = 3601; },
-  /1\.\.3600/,
+  (selected) => { selected.campaign.max_wall_seconds = 14401; },
+  /1\.\.14400/,
+);
+projectionAccept(
+  (selected) => {
+    selected.reservation = { ...selected.reservation, wall_seconds: 14400 };
+    selected.campaign.max_wall_seconds = 14400;
+  },
+);
+projectionAccept(
+  (selected) => {
+    selected.reservation = { ...selected.reservation, wall_seconds: 3600 };
+    selected.campaign.max_wall_seconds = 3600;
+  },
+);
+// The per-node reservation ceiling (the aggregate governance bound) still rejects
+// a campaign wall request above what was reserved, even though the schema max rose.
+projectionReject(
+  (selected) => { selected.campaign.max_wall_seconds = 14400; },
+  /campaign wall ceiling exceeds its reservation/,
 );
 projectionReject(
   (selected) => {
@@ -605,7 +630,7 @@ assert.equal(graphSchema.$defs.campaign.properties.max_changed_files.maximum, 40
 assert.equal(graphSchema.$defs.campaign.properties.baseline_churn.minimum, 1);
 assert.equal(graphSchema.$defs.campaign.properties.max_growth_ratio.maximum, 1.5);
 assert.equal(graphSchema.$defs.campaign.properties.max_extra_churn.maximum, 5000000);
-assert.equal(graphSchema.$defs.campaign.properties.max_wall_seconds.maximum, 3600);
+assert.equal(graphSchema.$defs.campaign.properties.max_wall_seconds.maximum, 14400);
 assert.equal(graphSchema.$defs.reservation.properties.engine_attempts.maximum, 3);
 const authoritySchema = JSON.parse(fs.readFileSync(
   path.join(root, 'schemas/task-authority-envelope.schema.json'),

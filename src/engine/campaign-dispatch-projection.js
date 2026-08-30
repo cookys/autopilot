@@ -244,8 +244,8 @@ function normalizeCampaignAuthority(contract) {
     'strict_dispatch.budget.max_wall_seconds',
     1,
   );
-  if (maxWallSeconds < 10 || maxWallSeconds > 3600) {
-    throw new TypeError('strict_dispatch.budget.max_wall_seconds must be in 10..3600');
+  if (maxWallSeconds < 10 || maxWallSeconds > 14400) {
+    throw new TypeError('strict_dispatch.budget.max_wall_seconds must be in 10..14400');
   }
   requireInteger(budget.max_output_bytes, 'strict_dispatch.budget.max_output_bytes', 1);
   requireInteger(budget.max_tool_calls, 'strict_dispatch.budget.max_tool_calls', 1);

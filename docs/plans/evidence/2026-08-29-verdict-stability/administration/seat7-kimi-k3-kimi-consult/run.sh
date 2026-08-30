@@ -104,7 +104,6 @@ chmod 700 "$STAGING_ROOT" "$STAGING_HOME" "$STAGING_KIMI_DIR" \
   "$STAGING_KIMI_DIR/credentials" "$STAGING_KIMI_DIR/oauth" 2>/dev/null || true
 REAL_KIMI_DIR="$HOME/.kimi-code"
 for f in config.toml device_id; do
-for f in config.toml device_id; do
   qualify_stage_identity "$STAGING_KIMI_DIR/$f" "$REAL_KIMI_DIR/$f"
   [ -f "$STAGING_KIMI_DIR/$f" ] && chmod 600 "$STAGING_KIMI_DIR/$f" 2>/dev/null || true
 done

@@ -33,4 +33,14 @@ Out of scope, stays in BACKLOG: wall-expiry journal disposition + always-write s
 
 ## Ledger
 
-(filled at phase boundaries)
+### Batch 1 (U1/U2/U3) — merged to feat @ `6065aec2`, qc-repaired through `12893a79` (2026-08-31)
+
+- **Foremen**: sonnet ×3, worktree-isolated. Implementer codex `gpt-5.3-codex-spark` via `dispatch-hetero.sh` (U1: 1 effective dispatch, `f997b435`, +415 substance LOC — two out-of-scope hunks in `mission-convergence.js` reverted by the foreman; U2: 3 dispatches r1b/r2/r3 after a first hand-authored attempt was rejected and redone; U3: 1 dispatch `48d37a74`). Each unit's fixture shown RED before implementation.
+- **Rail incident**: all three first dispatches died at `precondition_failed: Mission enforce mode requires a sealed campaign strict projection` (`dispatch-hetero.sh` `check_mission_enforcement_gate`, BACKLOG "Engine and CLI have no session-mode fallback"). Board option B → `4c842a92` (shadow, branch-only, restore before merge).
+- **Depth-0 qc panel** (`resolve-review-loop.sh` seats, union-on-verified-critical) on `103f0d31..6065aec2` (mirror excluded):
+  - MiniMax-M3 FIX-THEN-SHIP — 🟠 withdraw refusal lacks claim_id/phase (**verified**, `7cd8ba46`); 🔵 indent churn (open).
+  - gpt-5.6-sol@max FIX-THEN-SHIP — 🟠 terminalize manifest unbound to campaign + worktree only from projection (**verified**, `7ff25507`: `campaign_leaf_manifest_mismatch`, manifest `worktree` must be absent); 🟠 summary written after journal append, retry cannot backfill (**verified**, `7ff25507`: `summary_backfilled`); 🟠 plan mode passes unstamped legacy staged credential (**verified**, `7ff25507`); 🟡 = MiniMax's.
+  - GLM-5.2 FIX-THEN-SHIP — 🟡 `--now` parsed never read (**verified**, `e2a712a8`); 🟡 = MiniMax's; 🔵 build outside try/catch + dead test branch (fixed `e2a712a8`); 🔵 last-reference-only worktree proof (mitigated by manifest binding); 🔵 recipe `set -e` propagation of plan refusal untested (open, follow-up); 🔵 indent churn (open).
+  - Delta re-review (sol, `6065aec2..e2a712a8`): 🟠 `campaign_unreadable` refusal lacks phase (**verified**, `12893a79`: `phase: null`). Delta-2 (sol, `e2a712a8..12893a79`): **SHIP-AS-IS**.
+- **Depth-0 hand repairs** (disclosed): all qc fixes above were applied at depth 0 by the CEO session (codex-spark quota exhausted until 07:37; fix-before-integrate is the depth-0 qc contract). Hunks: `src/mission/cli.js` withdraw refusals (+claim_id/campaign_id/phase), `src/campaign/cli.js` eligibility binding + `backfillCampaignTerminalizeSummary` + `--now` wiring + try/catch move, `scripts/lib/qualify-stage-credentials.sh` plan-mode unstamped drift, fixtures.
+- **Open follow-ups** (BACKLOG candidates, not blocking): indent churn in `src/campaign/cli.js` ~412-437/598; e2e assertion that a recipe `run.sh` exits non-zero when the lib refuses in plan mode.

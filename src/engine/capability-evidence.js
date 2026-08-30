@@ -131,6 +131,20 @@ const POOLED_STOP_REASONS = new Set([
   'continue',
 ]);
 const WILSON_RECOMPUTE_EPS = 1e-12;
+// The role's FIXED full pool (plan 2026-08-29-qualification-verdict-stability.md
+// D4/D5; CEO-frozen 2026-08-30). `pooled.eligible_full_N` on a stored receipt must
+// equal this — a receipt cannot report a smaller denominator than the role's real
+// three-administration pool and thereby inflate its Wilson lower bound (the
+// "laundered denominator" defect: 54/56 recomputes >= tau while the truthful
+// 54/60 does not). scripts/engine-qualify.js defines the SAME two numbers as its
+// own canonical `CONSULT_DISCUSS_FULL_N`; `hooks/tests/capability-evidence.test.sh`
+// pins that the two definitions agree (src/engine must not require scripts/ — see
+// the circular-dependency note at the top of this file's D5 section).
+const CONSULT_DISCUSS_FULL_N = Object.freeze({ consult: 60, discuss: 48 });
+// The locked-qualify pass floor (plan §4 D4 step 5): the minimum pooled passes at
+// which the full-N bound already clears tau with every remaining case assumed
+// FAILED. A `stop_reason: 'locked_qualify'` receipt must have cleared this floor.
+const LOCKED_QUALIFY_MIN = Object.freeze({ consult: 56, discuss: 45 });
 
 class CapabilityEvidenceError extends Error {
   constructor(message, code = 'INVALID_CAPABILITY_EVIDENCE') {
@@ -1202,17 +1216,76 @@ function normalizePooledReceipt(rawFields, methodologyKind) {
   const tier1Terminated = boolean(rawFields.tier1_terminated, 'tier1_terminated');
   const stopReason = enumValue(rawFields.stop_reason, POOLED_STOP_REASONS, 'stop_reason');
 
-  // Pooled totals must equal Σ administration pass totals (harness-contaminated
-  // administrations are excluded from the pool, matching engine-qualify.js).
+  // The role's FIXED full pool (R4 fix, plan 2026-08-29 D5). `methodologyKind` is
+  // already pinned to exactly one of the two pooled kinds above, so the role is
+  // unambiguous here without needing the (not-yet-normalized) top-level `role`
+  // field. A receipt cannot report a smaller-than-canonical `eligible_full_N` and
+  // thereby shrink the Wilson denominator.
+  const pooledRole = methodologyKind === CONSULT_METHODOLOGY_KIND ? 'consult' : 'discuss';
+  const canonicalFullN = CONSULT_DISCUSS_FULL_N[pooledRole];
+  if (pooled.eligible_full_N !== canonicalFullN) {
+    evidenceError(
+      `pooled.eligible_full_N (${pooled.eligible_full_N}) must equal the ${pooledRole} role's `
+      + `fixed full pool (${canonicalFullN})`,
+    );
+  }
+
+  // Walk the administrations once, tying every pooled aggregate to what the
+  // administrations actually contain — a receipt cannot report totals its own
+  // per-case evidence does not back.
   let summedPasses = 0;
+  let summedTier2 = 0;
+  let cleanCaseTotal = 0;
+  // engine-qualify.js's harness_excluded is a CASE count, not an administration
+  // count: a single harness occurrence anywhere in an administration excludes
+  // every case that administration scheduled (`harnessExcluded += admin.length`,
+  // scripts/engine-qualify.js's row assembly). Mirror that exactly.
+  let harnessCaseTotal = 0;
   for (const admin of administrations) {
     const contaminated = admin.per_case_outcomes.some((c) => c.tier === 'harness');
-    if (contaminated) continue;
+    if (contaminated) {
+      harnessCaseTotal += admin.per_case_outcomes.length;
+      continue;
+    }
+    cleanCaseTotal += admin.per_case_outcomes.length;
     summedPasses += admin.per_case_outcomes.filter((c) => c.tier === 'pass').length;
+    summedTier2 += admin.per_case_outcomes.filter((c) => c.tier === 'tier2').length;
   }
   if (summedPasses !== pooled.passes) {
     evidenceError(
       `pooled.passes (${pooled.passes}) does not equal Σ administration passes (${summedPasses})`,
+    );
+  }
+  if (pooled.harness_excluded !== harnessCaseTotal) {
+    evidenceError(
+      `pooled.harness_excluded (${pooled.harness_excluded}) does not equal Σ per_case_outcomes `
+      + `over harness-contaminated administrations (${harnessCaseTotal})`,
+    );
+  }
+  const summedTier2ByClass = Object.values(tier2MissesByClass)
+    .reduce((total, count) => total + count, 0);
+  if (summedTier2ByClass !== summedTier2) {
+    evidenceError(
+      `Σ pooled.tier2_misses_by_class (${summedTier2ByClass}) does not equal Σ administration `
+      + `tier-2 outcomes over clean administrations (${summedTier2})`,
+    );
+  }
+  if (cleanCaseTotal > pooled.eligible_full_N) {
+    evidenceError(
+      `Σ per_case_outcomes over clean administrations (${cleanCaseTotal}) exceeds `
+      + `pooled.eligible_full_N (${pooled.eligible_full_N})`,
+    );
+  }
+  if (stopReason === 'complete' && cleanCaseTotal !== pooled.eligible_full_N) {
+    evidenceError(
+      `stop_reason 'complete' requires Σ per_case_outcomes over clean administrations `
+      + `(${cleanCaseTotal}) to equal pooled.eligible_full_N (${pooled.eligible_full_N})`,
+    );
+  }
+  if (stopReason === 'locked_qualify' && pooled.passes < LOCKED_QUALIFY_MIN[pooledRole]) {
+    evidenceError(
+      `stop_reason 'locked_qualify' requires pooled.passes (${pooled.passes}) to clear the `
+      + `${pooledRole} locked threshold (${LOCKED_QUALIFY_MIN[pooledRole]})`,
     );
   }
   if (competence.n !== pooled.eligible_full_N) {
@@ -2197,6 +2270,8 @@ module.exports = {
   CapabilityEvidenceError,
   BRAIN_CONSTRUCT_SCOPE,
   BRAIN_METHODOLOGY_KIND,
+  CONSULT_DISCUSS_FULL_N,
+  LOCKED_QUALIFY_MIN,
   MAX_QUALIFIED_TTL_DAYS,
   METHODOLOGY_KINDS,
   REVOCATION_REASONS,

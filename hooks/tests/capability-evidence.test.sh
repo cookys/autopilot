@@ -1380,8 +1380,10 @@ const { spawnSync } = require('child_process');
 const root = process.argv[2];
 const {
   compileCapabilityEvidence,
+  CONSULT_DISCUSS_FULL_N,
 } = require(path.join(root, 'src/engine/capability-evidence.js'));
 const { wilsonLower } = require(path.join(root, 'src/engine/verification-strength.js'));
+const engineQualify = require(path.join(root, 'scripts/engine-qualify.js'));
 const { validateJsonSchema } = require(path.join(root, 'scripts/validate-json-schema.js'));
 const crypto = require('crypto');
 const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -1544,6 +1546,146 @@ const pooledCompiled = compileCapabilityEvidence(pooledInput);
 check(pooledCompiled.pooled.passes === 60, 'D5-vs new validator accepts pooled consult row');
 check(validateJsonSchema(schema, pooledCompiled).valid === true,
   'D5-vs pooled consult matches additive schema branch');
+
+// R4: pooled.eligible_full_N is pinned to the role's canonical fixed N, and the
+// module's own definition must agree with scripts/engine-qualify.js's canonical
+// export — the two are independent statements of the same constant.
+check(
+  CONSULT_DISCUSS_FULL_N.consult === engineQualify.CONSULT_DISCUSS_FULL_N.consult
+  && CONSULT_DISCUSS_FULL_N.discuss === engineQualify.CONSULT_DISCUSS_FULL_N.discuss,
+  'R4 capability-evidence.js CONSULT_DISCUSS_FULL_N agrees with engine-qualify.js\'s canonical export',
+);
+
+// R4: the exact 54/56 laundering receipt (verified defect on 0f642584) — a
+// receipt that shrinks eligible_full_N below the role's real fixed pool so the
+// Wilson bound recomputes above tau while the truthful full-N bound does not.
+{
+  const launderedWilson = wilsonLower(54, 56, Z);
+  check(launderedWilson >= TAU, 'sanity: the laundered 54/56 bound clears tau (that is the defect)');
+  const truthfulWilson = wilsonLower(54, 60, Z);
+  check(truthfulWilson < TAU, 'sanity: the truthful 54/60 bound does NOT clear tau');
+  const launderedAdmins = [makeAdmin(1, 20), makeAdmin(2, 20), makeAdmin(3, 14)];
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: launderedAdmins,
+      pooled: { passes: 54, eligible_full_N: 56, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: launderedWilson, z: Z, tau: TAU, n: 56 },
+    });
+  } catch (err) {
+    rejected = /fixed full pool/.test(err.message);
+  }
+  check(rejected, 'R4 the exact 54/56 laundered-denominator receipt is REJECTED');
+}
+
+// R4: eligible_full_N 59 for consult (any non-canonical value) is rejected.
+{
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      pooled: { passes: 59, eligible_full_N: 59, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(59, 59, Z), z: Z, tau: TAU, n: 59 },
+    });
+  } catch (err) {
+    rejected = /fixed full pool/.test(err.message);
+  }
+  check(rejected, 'R4 eligible_full_N 59 for consult is rejected (must be exactly 60)');
+}
+
+// R4: pooled.harness_excluded (a CASE count — scripts/engine-qualify.js sums
+// `admin.length` for every harness-contaminated administration, not the count
+// of contaminated administrations) mismatching Σ per_case_outcomes over
+// contaminated administrations is rejected.
+{
+  const contaminatedAdmin = {
+    run: 2,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 0 }, { trial: 2, cases_total: 10, cases_passed: 0 }],
+    per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({
+      case_id: `h${i}`, outcome: 'infra_fail', tier: 'harness',
+    })),
+  };
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [makeAdmin(1, 20), contaminatedAdmin, makeAdmin(3, 20)],
+      pooled: { passes: 40, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 1 },
+      competence: { wilson_lower: wilsonLower(40, 60, Z), z: Z, tau: TAU, n: 60 },
+      stop_reason: 'continue',
+    });
+  } catch (err) {
+    rejected = /harness_excluded/.test(err.message);
+  }
+  check(rejected,
+    'R4 pooled.harness_excluded mismatch (1, an administration count, vs the true 20 case count) is rejected');
+
+  // The correct CASE-count value (20, not 1) is accepted. state is downgraded
+  // to provisional (not the pooledInput default 'qualified') since a 40/60
+  // pooled receipt does not clear tau — this fixture proves the structural
+  // harness_excluded check alone, not the promotion biconditional.
+  const acceptedHarness = compileCapabilityEvidence({
+    ...pooledInput,
+    state: 'provisional',
+    administrations: [makeAdmin(1, 20), contaminatedAdmin, makeAdmin(3, 20)],
+    pooled: { passes: 40, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 20 },
+    competence: { wilson_lower: wilsonLower(40, 60, Z), z: Z, tau: TAU, n: 60 },
+    stop_reason: 'continue',
+  });
+  check(acceptedHarness.pooled.harness_excluded === 20,
+    'R4 the true case-count harness_excluded (20) is accepted');
+}
+
+// R4: pooled.tier2_misses_by_class sum mismatching Σ per-case tier2 outcomes
+// over clean administrations is rejected.
+{
+  const withTier2Admin = {
+    run: 3,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 8 }, { trial: 2, cases_total: 10, cases_passed: 8 }],
+    per_case_outcomes: [
+      ...Array.from({ length: 16 }, (_, i) => ({ case_id: `p${i}`, outcome: 'pass', tier: 'pass' })),
+      ...Array.from({ length: 4 }, (_, i) => ({ case_id: `t${i}`, outcome: 'fail', tier: 'tier2' })),
+    ],
+  };
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [makeAdmin(1, 20), makeAdmin(2, 20), withTier2Admin],
+      pooled: { passes: 56, eligible_full_N: 60, tier2_misses_by_class: { oracle_miss: 1 }, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(56, 60, Z), z: Z, tau: TAU, n: 60 },
+      stop_reason: 'continue',
+    });
+  } catch (err) {
+    rejected = /tier2_misses_by_class/.test(err.message);
+  }
+  check(rejected, 'R4 Σ tier2_misses_by_class (1) mismatching Σ per-case tier2 outcomes (4) is rejected');
+}
+
+// R4: a truthful 56/60 pooled row still promotes (the locked-qualify floor).
+{
+  const truthfulLockedAdmins = [
+    makeAdmin(1, 20), makeAdmin(2, 20),
+    {
+      run: 3,
+      per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 6, cases_passed: 6 }],
+      per_case_outcomes: Array.from({ length: 16 }, (_, i) => ({
+        case_id: `l${i}`, outcome: 'pass', tier: 'pass',
+      })),
+    },
+  ];
+  const truthfulWilson56 = wilsonLower(56, 60, Z);
+  check(truthfulWilson56 >= TAU, 'sanity: the truthful 56/60 bound clears tau');
+  const truthfulCompiled = compileCapabilityEvidence({
+    ...pooledInput,
+    administrations: truthfulLockedAdmins,
+    pooled: { passes: 56, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+    competence: { wilson_lower: truthfulWilson56, z: Z, tau: TAU, n: 60 },
+    stop_reason: 'locked_qualify',
+  });
+  check(truthfulCompiled.state === 'qualified', 'R4 a truthful 56/60 pooled row still promotes to qualified');
+}
 
 // (b) reverse pin — frozen pre-D5 validator REJECTS a pooled row
 {

@@ -1,6 +1,12 @@
 'use strict';
 
 const { canonicalDigest } = require('./campaign-verification');
+// The durable reducer recomputes output_artifact_digest with ITS canonicalDigest.
+// Any digest this module hands the journal as an artifact reference must be built
+// with the same helper — never a second implementation that merely looks alike.
+const {
+  canonicalDigest: reducerCanonicalDigest,
+} = require('./implementation-campaign');
 const {
   AWAITING_DISPOSITION,
   AWAITING_CONVERGENCE,
@@ -232,6 +238,25 @@ function awaitingDisposition(reason, trace, detail = {}) {
     campaign_event: 'AWAITING_DISPOSITION',
     ...detail,
   };
+}
+
+// The dispatch rail reports the offending path INSIDE the boundary sentence —
+// `boundary_rejected: changed path 'docs/x.md' is outside sealed output surface`
+// (scripts/dispatch-hetero.sh emit_outcome). There is no separate array field on
+// the result JSON, so the exact paths are quarried from the single-quoted spans
+// of the rail's own sentence. Unquoted (aggregate) sentences yield [], which is
+// honest: the receipt then binds the code and the dispatcher result, not a path
+// the rail never named.
+function boundaryOffendingPaths(reason) {
+  if (!isStr(reason)) return [];
+  const found = [];
+  const pattern = /'([^']+)'/g;
+  let match = pattern.exec(reason);
+  while (match !== null) {
+    if (!found.includes(match[1])) found.push(match[1]);
+    match = pattern.exec(reason);
+  }
+  return found;
 }
 
 function boundaryRejected(boundary, trace, detail = {}) {
@@ -581,12 +606,17 @@ function runCampaignComposition(input = {}, adapters = {}) {
   }
 
   // Durable campaign reducer events (production emission site).
-  const emitCampaignEvent = (eventType, payload = {}) => {
+  // `artifactReference` is the durable reducer's output-artifact binding. Events
+  // whose reducer branch compares output_artifact_digest against a digest carried
+  // in their own payload (BOUNDARY_REJECTED, MUTATION_FAILED) are unjournalable
+  // without it; the bridge forwards it verbatim to appendCampaignEvent.
+  const emitCampaignEvent = (eventType, payload = {}, artifactReference = null) => {
     if (typeof adapters.onCampaignEvent === 'function') {
       adapters.onCampaignEvent({
         event_type: eventType,
         generation: repairGeneration,
         payload,
+        artifact_reference: artifactReference,
         controller,
         candidate,
       });
@@ -1498,27 +1528,78 @@ function runCampaignComposition(input = {}, adapters = {}) {
         durable_wait: true,
         terminalize: false,
       });
+      // The reducer demands digest-bound boundary evidence: a non-empty
+      // boundary_reason, a sha256 boundary_receipt_digest, and an
+      // output_artifact_digest equal to canonicalDigest({kind:
+      // 'campaign_boundary_rejected', digest}). Build the receipt the digest
+      // stands for — otherwise the digest binds nothing an auditor can re-derive.
+      const offendingPaths = boundaryOffendingPaths(bound.boundary_reason);
+      const boundaryReceiptBody = {
+        schema_version: 1,
+        artifact_type: 'campaign_boundary_receipt',
+        campaign_id: input.rootRunId || null,
+        base: input.baseSha || null,
+        candidate_ref: bound.candidate_ref,
+        boundary_code: bound.boundary_code,
+        offending_paths: offendingPaths,
+        // The dispatcher outcome this rejection was derived from, projected onto
+        // its stable decision fields (the raw result carries clocks and paths).
+        dispatch_result_digest: reducerCanonicalDigest({
+          status: isStr(mutation.status) ? mutation.status : null,
+          phase: isStr(mutation.phase) ? mutation.phase : null,
+          reason: isStr(mutation.reason) ? mutation.reason : null,
+          boundary_code: bound.boundary_code,
+          boundary_reason: bound.boundary_reason,
+          candidate_ref: bound.candidate_ref,
+          possibly_effectful: bound.possibly_effectful === true,
+          dispatcher_called: mutation.dispatcher_called === true,
+          model_calls: Number.isSafeInteger(mutation.model_calls)
+            ? mutation.model_calls : null,
+        }),
+      };
+      const boundaryReceiptDigest = reducerCanonicalDigest(boundaryReceiptBody);
+      // Exact code + first offending path; the raw rail sentence stays on `reason`.
+      const boundaryReasonText = offendingPaths.length > 0
+        ? `${bound.boundary_code}: ${offendingPaths[0]}`
+        : `${bound.boundary_code}: ${bound.boundary_reason}`;
       // Journal first: the durable reducer is the authority on the phase. If it
       // rejects, emitCampaignEvent throws and neither the progress receipt nor
       // the controller phase advances, so controller-durable.json can never
       // claim BOUNDARY_REJECTED while the journal is still IMPLEMENTING.
       emitCampaignEvent('BOUNDARY_REJECTED', {
         reason: bound.reason,
-        boundary_reason: bound.boundary_reason,
+        boundary_reason: boundaryReasonText,
         candidate_ref: bound.candidate_ref,
-        boundary_receipt_digest: canonicalDigest({
-          candidate_ref: bound.candidate_ref,
-          boundary_reason: bound.boundary_reason,
-          boundary_code: bound.boundary_code,
-        }),
+        boundary_receipt_digest: boundaryReceiptDigest,
+      }, {
+        kind: 'campaign_boundary_rejected',
+        digest: boundaryReceiptDigest,
       });
       appendRoundProgress(BOUNDARY_REJECTED, bound.reason);
+      const boundaryReceipt = {
+        ...boundaryReceiptBody,
+        at: new Date().toISOString(),
+        digest: boundaryReceiptDigest,
+      };
       persistController({
         ...controller,
         phase: BOUNDARY_REJECTED,
         next_action: 'await_boundary_disposition',
+        // Auditable alongside the other campaign receipts the controller carries
+        // (AWAITING_CONVERGENCE's budget wait audit uses the same list).
+        audit_events: [
+          ...(controller.audit_events || []),
+          boundaryReceipt,
+        ],
       });
-      return { stop: { ...bound, controller } };
+      return {
+        stop: {
+          ...bound,
+          boundary_reason: boundaryReasonText,
+          boundary_receipt: boundaryReceipt,
+          controller,
+        },
+      };
     }
     if (mutation.committed !== true) {
       return {
@@ -2276,8 +2357,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
       disposition_only: dispositionOnlyResume === true,
     }), 'adjudicate');
     if (dispositionOnlyResume && !dispositionResumedEmitted) {
+      // isStr is weaker than the reducer's isSha256: a non-canonical digest would
+      // pass here and then be refused by the journal, stranding the campaign in
+      // AWAITING_DISPOSITION with no readable cause. Match the consumer exactly.
       if (adjudication.registry_complete !== true
-          || !isStr(adjudication.registry_digest)) {
+          || !isCanonicalSha256(adjudication.registry_digest)) {
         return blocked(
           'disposition_resume',
           'DISPOSITION_RESUMED requires a complete registry and real registry_digest',

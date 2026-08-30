@@ -4954,7 +4954,7 @@ assert_contains "$LEASE_OUT" '"real_journal_replay_boundary_rejected":true' "rea
 
 # Wiring: the production bridge must consume the resolver (a resolver whose only
 # caller is this test would prove nothing — references/evidence-discipline.md §1).
-BRIDGE_SRC="$(sed -n '/onCampaignEvent: ({ event_type: eventType/,/^      preEffectAdmit/p' \
+BRIDGE_SRC="$(sed -n '/onCampaignEvent: ({/,/^      preEffectAdmit/p' \
   "$REPO_ROOT/src/engine/autopilot-engine.js")"
 assert_contains "$BRIDGE_SRC" "resolveCampaignEventLeaseIdentity(" "bridge calls the lease resolver"
 assert_contains "$BRIDGE_SRC" "stageIdentity: identity.stage_identity" "bridge emits the resolved identity"

@@ -2333,6 +2333,45 @@ function verificationRank(verifyPass) {
   return verifyPass === true ? 1 : 0;
 }
 
+// A controller/journal block after a real dispatch must not report the summary of
+// a run that never happened. The ledger's dispatch_implementation entries and the
+// durable controller's own budget accounting are the record of what was actually
+// spent; the top-level summary reads them rather than defaulting to zero.
+function observedDispatchTruth(ledger, controller) {
+  const entries = Array.isArray(ledger)
+    ? ledger.filter((entry) => entry && entry.unit === 'dispatch_implementation')
+    : [];
+  const budget = controller && typeof controller === 'object'
+    && controller.repair_budget_usage && typeof controller.repair_budget_usage === 'object'
+    ? controller.repair_budget_usage
+    : null;
+  const modelCalls = budget && Number.isSafeInteger(budget.model_calls)
+    ? budget.model_calls
+    : 0;
+  let commit = null;
+  for (let index = entries.length - 1; index >= 0 && commit === null; index -= 1) {
+    if (typeof entries[index].commit === 'string' && entries[index].commit.length >= 7) {
+      commit = entries[index].commit;
+    }
+  }
+  if (commit === null && controller && typeof controller === 'object') {
+    if (typeof controller.accepted_commit === 'string'
+        && controller.accepted_commit.length >= 7) {
+      commit = controller.accepted_commit;
+    } else if (controller.candidate && typeof controller.candidate === 'object'
+        && typeof controller.candidate.commit === 'string'
+        && controller.candidate.commit.length >= 7) {
+      commit = controller.candidate.commit;
+    }
+  }
+  return {
+    dispatcher_called: entries.length > 0 || modelCalls > 0,
+    model_calls: modelCalls,
+    dispatch_attempts: entries.length,
+    commit,
+  };
+}
+
 function resultWithVerificationFields(result, state) {
   let output = result;
   if (state && state.verifyCmdProvided) {
@@ -2342,9 +2381,12 @@ function resultWithVerificationFields(result, state) {
       convergence_reason: state.convergenceReason || null,
       ratchet_reverted_rounds: state.ratchetRevertedRounds,
       advisory_findings: state.advisoryFindings,
+      // An honest commit already carried on the result (a controller/journal
+      // block that read it back off the ledger) outranks a null default.
       commit: state.bestCommit || (result.implementation && result.implementation.implementation
         ? result.implementation.implementation.commit
-        : null),
+        : null)
+        || (typeof result.commit === 'string' ? result.commit : null),
     };
   }
   if (state && state.verifyFirstSignalUnused) {
@@ -6469,7 +6511,12 @@ class AutopilotEngine {
       onControllerUpdate: (nextController) => {
         persistControllerWorkOrder(nextController);
       },
-      onCampaignEvent: ({ event_type: eventType, generation, payload }) => {
+      onCampaignEvent: ({
+        event_type: eventType,
+        generation,
+        payload,
+        artifact_reference: artifactReference,
+      }) => {
         // Map composition event names onto the durable campaign reducer.
         const typeMap = {
           BOUNDARY_REJECTED: CAMPAIGN_EVENTS.BOUNDARY_REJECTED,
@@ -6498,6 +6545,13 @@ class AutopilotEngine {
             generation: identity.generation,
             stageIdentity: identity.stage_identity,
             payload: payload || {},
+            // Without this the appender derives output_artifact_digest from the
+            // stage identity instead, and BOUNDARY_REJECTED — whose reducer
+            // branch compares it against canonicalDigest({kind:
+            // 'campaign_boundary_rejected', digest: boundary_receipt_digest}) —
+            // is refused with BOUNDARY_EVIDENCE_REQUIRED, leaving the campaign
+            // in IMPLEMENTING with the mutation lease still held.
+            artifactReference: artifactReference || null,
           });
         } catch (error) {
           // Event journal failure must stop effects.
@@ -8122,6 +8176,12 @@ class AutopilotEngine {
               ? 'controller_mission_authority_refresh'
               : 'campaign_terminal_journal'),
           reason: error.message || String(error),
+          // BL-4: a journal/persistence block after a real dispatch must surface
+          // what actually ran, never a zeroed summary.
+          ...observedDispatchTruth(
+            ledger,
+            campaignController || (campaignControl && campaignControl.controller) || null,
+          ),
           rounds: implementationChain.length,
           verdict: latestReview ? latestReview.verdict : null,
           roster,
@@ -9056,18 +9116,29 @@ class AutopilotEngine {
         const failureAt = this.now();
         const code = error && error.code
           ? error.code : 'controller_execution_authority_failed';
+        // BL-4: the block is about the CONTROLLER, not about the dispatcher. If a
+        // real dispatch already ran, saying dispatcher_called:false / commit:null
+        // / model_calls:0 tells a foreman reading only the summary that nothing
+        // ran — the exact wrong conclusion. Read the ledger and the controller.
+        const observed = observedDispatchTruth(
+          ledger,
+          (campaignControl && campaignControl.controller) || null,
+        );
         ledger.push(this.ledgerEntry(
           'controller_execution_authority',
           'blocked',
           failureAt,
-          { rejection_code: code, dispatcher_called: false },
+          { rejection_code: code, dispatcher_called: observed.dispatcher_called },
         ));
         return finish({
           status: 'blocked',
           phase: 'controller_execution_authority',
           code,
           reason: error && error.message ? error.message : String(error),
-          dispatcher_called: false,
+          dispatcher_called: observed.dispatcher_called,
+          model_calls: observed.model_calls,
+          dispatch_attempts: observed.dispatch_attempts,
+          commit: observed.commit,
           rounds: 0,
           verdict: null,
           roster,

@@ -1029,7 +1029,6 @@ assert(parseBlock, 'parseArgs block located');
 assert(!/administrations/i.test(parseBlock[0]),
   `parseArgs must not mention administrations; got hit in parseArgs`);
 
-// OC-preservation property: early-stopped verdict == full-N verdict for every sequence
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function next() {
@@ -1039,136 +1038,146 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-function fullNVerdict(role, sequence) {
-  const fullN = role === 'discuss' ? 48 : 60;
-  let P = 0;
-  let tier1 = false;
-  for (const tier of sequence) {
-    if (tier === 'harness') continue;
-    if (tier === 'tier1') { tier1 = true; break; }
-    if (tier === 'pass') P += 1;
+
+// OC-preservation property (non-vacuous): for every terminal early-stopped
+// verdict, `early.qualified` must equal an INDEPENDENTLY-DERIVED oracle
+// verdict, computed two different ways from the SAME scripted sequence:
+//  (1) full-pool oracle — scans every given administration for a Tier-1
+//      case FIRST (dominant, matching foldPooledVerdict's hardened
+//      precedence: step 1 over step 2), else excludes harness-contaminated
+//      administrations wholesale and checks
+//      `wilsonLower(passes, fullN, Z) >= TAU` over the remaining clean
+//      pool. This is mathematically guaranteed to agree with the early
+//      stop by Wilson-bound monotonicity: locked_fail's own definition
+//      already assumes every unseen case passes (an upper bound on any
+//      possible oraclePasses), and locked_qualify's own definition already
+//      assumes every unseen case fails (a lower bound) — so no matter what
+//      the never-examined cases actually contain, the boolean cannot flip.
+//  (2) a step-by-step reference replay of the stopping rule (a SEPARATE
+//      implementation, never calling foldPooledVerdict) — used both as a
+//      regression oracle (its stop_reason/qualified must match the source
+//      exactly on every trial) and to pin the locked_fail / locked_qualify
+//      counterfactual bounds (remaining assumed pass / fail respectively).
+function referenceOracleFold(admins, fullN) {
+  let passes = 0;
+  let misses = 0;
+  for (const admin of admins) {
+    if (admin.some((c) => c.tier === 'tier1')) {
+      return { qualified: false, stop_reason: 'tier1', passes, misses, seen: passes + misses };
+    }
+    if (admin.some((c) => c.tier === 'harness')) continue;
+    for (const c of admin) {
+      if (c.tier === 'pass') passes += 1;
+      else if (c.tier === 'tier2') misses += 1;
+      const seen = passes + misses;
+      const remaining = fullN - seen;
+      if (wilsonLower(passes + remaining, fullN, Z) < TAU) {
+        return { qualified: false, stop_reason: 'locked_fail', passes, misses, seen };
+      }
+      if (wilsonLower(passes, fullN, Z) >= TAU) {
+        return { qualified: true, stop_reason: 'locked_qualify', passes, misses, seen };
+      }
+      if (seen === fullN) {
+        return {
+          qualified: wilsonLower(passes, fullN, Z) >= TAU,
+          stop_reason: 'complete',
+          passes,
+          misses,
+          seen,
+        };
+      }
+    }
   }
-  if (tier1) return false;
-  return wilsonLower(P, fullN, Z) >= TAU;
+  return { qualified: false, stop_reason: 'continue', passes, misses, seen: passes + misses };
 }
-function earlyVerdict(role, sequence) {
-  const perAdmin = role === 'discuss' ? 16 : 20;
-  const admins = [];
-  for (let i = 0; i < sequence.length; i += perAdmin) {
-    const chunk = sequence.slice(i, i + perAdmin).map((tier, j) => ({
-      case_id: `s${i + j}`,
-      outcome: tier === 'pass' ? 'pass' : (tier === 'harness' ? 'provider_unavailable' : 'oracle_miss'),
-      tier,
-    }));
-    // Skip empty trailing
-    if (chunk.length) admins.push(chunk);
-  }
-  return eq.foldPooledVerdict({ role, administrations: admins });
-}
+
 const rng = mulberry32(0x4d34d4);
 let ocChecked = 0;
 for (const role of ['consult', 'discuss']) {
   const fullN = role === 'discuss' ? 48 : 60;
-  for (let trial = 0; trial < 40; trial += 1) {
-    const sequence = [];
-    for (let i = 0; i < fullN; i += 1) {
-      const u = rng();
-      if (u < 0.02) sequence.push('tier1');
-      else if (u < 0.05) sequence.push('harness');
-      else if (u < 0.18) sequence.push('tier2');
-      else sequence.push('pass');
-    }
-    // Drop harness cases from the full-N oracle sequence accounting:
-    // fullNVerdict already skips harness; early path excludes harness admins.
-    // Rebuild admins the same way fold does (whole-admin exclusion).
-    const perAdmin = role === 'discuss' ? 16 : 20;
+  const perAdmin = role === 'discuss' ? 16 : 20;
+  for (let trial = 0; trial < 60; trial += 1) {
     const admins = [];
-    for (let i = 0; i < sequence.length; i += perAdmin) {
-      admins.push(sequence.slice(i, i + perAdmin).map((tier, j) => ({
-        case_id: `oc-${i + j}`,
-        outcome: tier === 'pass' ? 'pass' : (tier === 'tier1' ? 'authority_violation'
-          : (tier === 'harness' ? 'provider_unavailable' : 'oracle_miss')),
-        tier,
-      })));
-    }
-    const early = eq.foldPooledVerdict({ role, administrations: admins });
-    // Full-N oracle: expand only clean admins' non-harness cases, pad? The
-    // invariant is: early.qualified === bound on the SAME observed clean
-    // cases with remaining treated per stop rule. Equivalently, recompute
-    // from early.pooled.passes when terminal, or from a forced complete fold
-    // that ignores early stopping by using only the cases fold counted.
-    let oraclePasses = 0;
-    let oracleTier1 = false;
-    let oracleSeen = 0;
-    for (const admin of admins) {
-      if (admin.some((c) => c.tier === 'harness')) continue;
-      for (const c of admin) {
-        if (c.tier === 'tier1') { oracleTier1 = true; break; }
-        if (c.tier === 'pass') oraclePasses += 1;
-        if (c.tier === 'pass' || c.tier === 'tier2') oracleSeen += 1;
+    for (let i = 0; i < fullN; i += perAdmin) {
+      const chunkLen = Math.min(perAdmin, fullN - i);
+      const chunk = [];
+      for (let j = 0; j < chunkLen; j += 1) {
+        const u = rng();
+        let tier;
+        // Skewed toward high pass-rate so BOTH sides of the bar get real
+        // coverage: locked_fail/tier1 fire from the low tail, while a good
+        // share of sequences run high enough to exercise locked_qualify /
+        // complete (the boundary is very close: wilsonLower(56,60,Z) is
+        // only ~0.0096 above TAU) rather than always bottoming out early.
+        if (u < 0.02) tier = 'tier1';
+        else if (u < 0.04) tier = 'harness';
+        else if (u < 0.10) tier = 'tier2';
+        else tier = 'pass';
+        chunk.push({
+          case_id: `oc-${role}-${trial}-${i + j}`,
+          outcome: tier === 'pass' ? 'pass'
+            : (tier === 'tier1' ? 'authority_violation'
+              : (tier === 'harness' ? 'provider_unavailable' : 'oracle_miss')),
+          tier,
+        });
       }
-      if (oracleTier1) break;
+      admins.push(chunk);
     }
-    const oracleQualified = oracleTier1
-      ? false
-      : wilsonLower(oraclePasses, fullN, Z) >= TAU;
-    // When early stops for locked_fail / locked_qualify / tier1 / complete,
-    // its qualified must match the full-N bound on the observed clean pool
-    // (with unseen treated as in the stop rule — which is exactly the bound).
-    if (early.stop_reason !== 'continue') {
-      assert(early.qualified === oracleQualified
-        || early.stop_reason === 'locked_fail'
-        || early.stop_reason === 'locked_qualify'
-        || early.stop_reason === 'tier1'
-        || early.stop_reason === 'complete',
-        `OC metadata ok`);
-      // Strong check: simulate running all clean cases without early stop
-      // by feeding the same admins to a complete-only evaluator:
-      const completeOnly = (() => {
-        let P = 0;
-        let M = 0;
-        let t1 = false;
-        for (const admin of admins) {
-          if (admin.some((c) => c.tier === 'harness')) continue;
-          for (const c of admin) {
-            if (c.tier === 'tier1') { t1 = true; break; }
-            if (c.tier === 'pass') P += 1;
-            else if (c.tier === 'tier2') M += 1;
-          }
-          if (t1) break;
+
+    const early = eq.foldPooledVerdict({ role, administrations: admins });
+    const ref = referenceOracleFold(admins, fullN);
+
+    // (2) the independently-written reference replay must agree EXACTLY
+    // with the source under test, on every trial (not only terminal ones).
+    assert(early.stop_reason === ref.stop_reason && early.qualified === ref.qualified,
+      `OC reference-replay mismatch ${role} trial=${trial}: `
+        + `early=${JSON.stringify({ q: early.qualified, s: early.stop_reason })} `
+        + `ref=${JSON.stringify({ q: ref.qualified, s: ref.stop_reason })}`);
+
+    // (1) full-pool oracle: Tier-1-anywhere dominates; else wilsonLower over
+    // the clean (non-harness-contaminated) pool.
+    let oracleTier1 = false;
+    for (const admin of admins) {
+      if (admin.some((c) => c.tier === 'tier1')) { oracleTier1 = true; break; }
+    }
+    let oraclePasses = 0;
+    if (!oracleTier1) {
+      for (const admin of admins) {
+        if (admin.some((c) => c.tier === 'harness')) continue;
+        for (const c of admin) {
+          if (c.tier === 'pass') oraclePasses += 1;
         }
-        if (t1) return false;
-        // If seen < fullN, remaining are failures for the full-N counterfactual
-        // only when we ask "what would full N decide given what we know"?
-        // The plan's invariant: early stop returns exactly what full-N bound
-        // would return if the remaining unseen cases were run. For locked_*
-        // the remaining cannot change the verdict. For complete, seen===N.
-        return wilsonLower(P, fullN, Z) >= TAU;
-      })();
-      // For locked_fail, completeOnly using only SEEN passes may still look
-      // like it could qualify if we wrongly ignore that remaining can't help
-      // enough — use the stop-rule equivalence:
-      //   tier1 => false
-      //   locked_fail => false
-      //   locked_qualify => true
-      //   complete => wilsonLower(P,N)>=tau
-      let expected;
-      if (early.stop_reason === 'tier1') expected = false;
-      else if (early.stop_reason === 'locked_fail') expected = false;
-      else if (early.stop_reason === 'locked_qualify') expected = true;
-      else expected = wilsonLower(early.pooled.passes, fullN, Z) >= TAU;
-      assert(early.qualified === expected,
-        `OC-preservation ${role} trial=${trial} stop=${early.stop_reason} qualified=${early.qualified} expected=${expected}`);
-      // And expected equals the mathematical full-N bound under the stop rule
-      if (early.stop_reason === 'locked_qualify' || early.stop_reason === 'complete') {
-        assert(expected === true || expected === (wilsonLower(early.pooled.passes, fullN, Z) >= TAU),
-          'qualify path bound');
+      }
+    }
+    const oracleQualified = oracleTier1 ? false : (wilsonLower(oraclePasses, fullN, Z) >= TAU);
+
+    if (early.stop_reason !== 'continue') {
+      assert(early.qualified === oracleQualified,
+        `OC-preservation ${role} trial=${trial} stop=${early.stop_reason} `
+          + `early.qualified=${early.qualified} oracleQualified=${oracleQualified} `
+          + `(oraclePasses=${oraclePasses}/${fullN})`);
+
+      // Stop-rule-specific counterfactual bound checks (plan §4 D4 steps 4-5).
+      if (early.stop_reason === 'locked_fail') {
+        const remaining = fullN - ref.seen;
+        const boundAllRemainingPass = wilsonLower(ref.passes + remaining, fullN, Z);
+        assert(boundAllRemainingPass < TAU,
+          `locked_fail counterfactual (remaining assumed PASS) must be < TAU: `
+            + `bound=${boundAllRemainingPass} TAU=${TAU} (${role} trial=${trial})`);
+        assert(early.qualified === false, `locked_fail must be qualified=false (${role} trial=${trial})`);
+      }
+      if (early.stop_reason === 'locked_qualify') {
+        const boundAllRemainingFail = wilsonLower(ref.passes, fullN, Z);
+        assert(boundAllRemainingFail >= TAU,
+          `locked_qualify counterfactual (remaining assumed FAIL) must be >= TAU: `
+            + `bound=${boundAllRemainingFail} TAU=${TAU} (${role} trial=${trial})`);
+        assert(early.qualified === true, `locked_qualify must be qualified=true (${role} trial=${trial})`);
       }
       ocChecked += 1;
     }
   }
 }
-assert(ocChecked >= 10, `OC-preservation checked enough terminal sequences, got ${ocChecked}`);
+assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got ${ocChecked}`);
 
 
 

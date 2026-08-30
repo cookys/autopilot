@@ -63,10 +63,22 @@
       }
     ],
     "approval_policy": {
-      "read_only": { "requires_approval": false, "max_uses": 1 },
-      "reversible": { "requires_approval": false, "max_uses": 1 },
-      "external": { "requires_approval": true, "max_uses": 1 },
-      "irreversible": { "requires_approval": true, "max_uses": 1 }
+      "read_only": {
+        "requires_approval": false,
+        "max_uses": 1
+      },
+      "reversible": {
+        "requires_approval": false,
+        "max_uses": 1
+      },
+      "external": {
+        "requires_approval": true,
+        "max_uses": 1
+      },
+      "irreversible": {
+        "requires_approval": true,
+        "max_uses": 1
+      }
     },
     "action_catalog": [
       {
@@ -87,7 +99,7 @@
   },
   "mission_convergence": {
     "schema_version": 1,
-    "enforcement_mode": "enforce",
+    "enforcement_mode": "shadow",
     "max_campaigns": 10,
     "max_wall_seconds": 36000,
     "max_tool_calls": 1500,

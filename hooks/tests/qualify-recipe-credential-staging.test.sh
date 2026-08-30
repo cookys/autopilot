@@ -121,6 +121,29 @@ else
   bad "plan mode: refused even though staged matches live (false positive)"
 fi
 
+# ------------------------------------ (4b) plan-mode: legacy unstamped staged copy
+# qc 2026-08-31 (gpt-5.6-sol 🟠 verified): a staged credential with no stamp
+# must be treated as drift in plan mode, not silently passed.
+rm -f "$STAGED.source.sha256"
+PLAN_OUT="$(qualify_stage_credential "$STAGED" "$REAL" plan 2>&1)"
+PLAN_RC=$?
+if [ "$PLAN_RC" -ne 0 ] && printf '%s' "$PLAN_OUT" | grep -q "staged credential drift: $STAGED"; then
+  ok "plan mode: unstamped legacy staged copy => refused as drift"
+else
+  bad "plan mode: unstamped legacy staged copy passed (rc=$PLAN_RC, output: $PLAN_OUT)"
+fi
+if [ ! -f "$STAGED.source.sha256" ]; then
+  ok "plan mode: did not stamp the unstamped copy"
+else
+  bad "plan mode: wrote a stamp for an unverified copy"
+fi
+qualify_stage_credential "$STAGED" "$REAL" execute >/dev/null 2>&1 || true
+if [ -f "$STAGED.source.sha256" ] && qualify_stage_credential "$STAGED" "$REAL" plan; then
+  ok "execute mode: reseeds + stamps the legacy copy, plan then passes"
+else
+  bad "execute mode: did not repair the unstamped legacy copy"
+fi
+
 # -------------------------------------------------- identity (absence-only)
 IDSTAGED="$WORK/staged/identity.txt"
 IDREAL="$WORK/identity-real.txt"

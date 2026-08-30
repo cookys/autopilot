@@ -22,7 +22,10 @@ qualify_stage_credential() {
   fi
 
   if [ "$mode" = "plan" ]; then
-    if [ -f "$staged_file" ] && [ -f "${staged_file}.source.sha256" ] && [ "$staged_sha" != "$real_sha" ]; then
+    # A staged credential with no stamp has no proven match to the live source
+    # (legacy copies from before stamping — the exact D7 stale-material case):
+    # treat it as drift, not as a pass.
+    if [ -f "$staged_file" ] && { [ ! -f "${staged_file}.source.sha256" ] || [ "$staged_sha" != "$real_sha" ]; }; then
       echo "run.sh: staged credential drift: $staged_file" >&2
       return 1
     fi

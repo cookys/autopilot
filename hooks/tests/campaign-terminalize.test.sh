@@ -130,6 +130,9 @@ function deadPid() {
 const DEAD_PID = deadPid();
 const deadLeaseRow = { state: 'leased', pid: DEAD_PID, start_time: 1 };
 
+// qc 2026-08-31: manifests must name the campaign and carry the worktree path.
+const endedManifest = { ended_at: NOW, root_run_id: campaignId, worktree: path.join(tmp, 'manifest-gone-worktree') };
+
 // 3. Missing/absent manifest ended_at is refused.
 {
   const projection = projectionFor({ leaseRow: deadLeaseRow });
@@ -144,12 +147,37 @@ const deadLeaseRow = { state: 'leased', pid: DEAD_PID, start_time: 1 };
   assert.strictEqual(eligibility.reason_code, 'campaign_leaf_manifest_open');
 }
 
+// 3b. A manifest that names another campaign is refused (evidence binding).
+{
+  const projection = projectionFor({ leaseRow: deadLeaseRow });
+  const eligibility = campaignTerminalizeEligibility(projection, { manifest: { ...endedManifest, root_run_id: 'campaign-someone-else', run_id: 'run-someone-else' } }, NOW);
+  assert.strictEqual(eligibility.status, 'blocked');
+  assert.strictEqual(eligibility.reason_code, 'campaign_leaf_manifest_mismatch');
+}
+// 3c. A manifest without an authoritative worktree path is refused.
+{
+  const projection = projectionFor({ leaseRow: deadLeaseRow });
+  const eligibility = campaignTerminalizeEligibility(projection, { manifest: { ended_at: NOW, root_run_id: campaignId } }, NOW);
+  assert.strictEqual(eligibility.status, 'blocked');
+  assert.strictEqual(eligibility.reason_code, 'campaign_leaf_manifest_open');
+}
+// 3d. The manifest's own worktree still on disk is refused even when the
+//     projection recorded no worktree.
+{
+  const stillHere = path.join(tmp, 'manifest-still-here-worktree');
+  fs.mkdirSync(stillHere, { recursive: true });
+  const projection = projectionFor({ leaseRow: deadLeaseRow });
+  const eligibility = campaignTerminalizeEligibility(projection, { manifest: { ...endedManifest, worktree: stillHere } }, NOW);
+  assert.strictEqual(eligibility.status, 'blocked');
+  assert.strictEqual(eligibility.reason_code, 'campaign_worktree_present');
+}
+
 // 4. Worktree still present is refused.
 {
   const worktreeDir = path.join(tmp, 'still-here-worktree');
   fs.mkdirSync(worktreeDir, { recursive: true });
   const projection = projectionFor({ leaseRow: deadLeaseRow, worktree: worktreeDir });
-  const eligibility = campaignTerminalizeEligibility(projection, { manifest: { ended_at: NOW } }, NOW);
+  const eligibility = campaignTerminalizeEligibility(projection, { manifest: endedManifest }, NOW);
   assert.strictEqual(eligibility.status, 'blocked');
   assert.strictEqual(eligibility.reason_code, 'campaign_worktree_present');
 }
@@ -162,7 +190,7 @@ let successProjection;
 {
   const worktreeDir = path.join(tmp, 'gone-worktree');
   successProjection = projectionFor({ leaseRow: deadLeaseRow, worktree: worktreeDir });
-  const eligibility = campaignTerminalizeEligibility(successProjection, { manifest: { ended_at: NOW } }, NOW);
+  const eligibility = campaignTerminalizeEligibility(successProjection, { manifest: endedManifest }, NOW);
   assert.strictEqual(eligibility.status, 'eligible');
   successBuilt = buildTerminalizeMutationFailedEvent(successProjection, NOW, 'fixture terminalize');
   assert.strictEqual(successBuilt.event.stage_identity, successProjection.state.live_lease.stage_identity);
@@ -175,7 +203,7 @@ let successProjection;
 //    never a silent no-op on a second call.
 {
   const projection = projectionFor({ statePhase: CAMPAIGN_STATES.TERMINAL_STOP, liveLease: null, leaseRow: deadLeaseRow });
-  const eligibility = campaignTerminalizeEligibility(projection, { manifest: { ended_at: NOW } }, NOW);
+  const eligibility = campaignTerminalizeEligibility(projection, { manifest: endedManifest }, NOW);
   assert.strictEqual(eligibility.status, 'blocked');
   assert.strictEqual(eligibility.reason_code, 'campaign_already_terminal');
 }
@@ -374,7 +402,7 @@ const leafPid = leafChild.pid;
 
 const ledgerPath = path.join(tmp, 'e2e-campaign.jsonl');
 const manifestPath = buildLedger({
-  ledgerPath, pid: leafPid, manifest: { ended_at: '2026-08-31T00:00:00.000Z' },
+  ledgerPath, pid: leafPid, manifest: { ended_at: '2026-08-31T00:00:00.000Z', root_run_id: campaignId, worktree: path.join(tmp, 'e2e-gone-worktree') },
 });
 await killAndWait(leafPid);
 
@@ -400,6 +428,24 @@ assert.strictEqual(second.status, 1);
 const secondBody = JSON.parse(second.stdout);
 assert.strictEqual(secondBody.status, 'rejected');
 assert.strictEqual(secondBody.reason_code, 'campaign_already_terminal');
+assert.strictEqual(secondBody.summary_backfilled, false, 'summary present => no backfill');
+
+// qc 2026-08-31 (gpt-5.6-sol 🟠 verified): a lost summary is backfilled on
+// retry while the named rejection is still returned.
+fs.unlinkSync(firstBody.summary_path);
+const third = runCli([
+  'campaign', 'terminalize', '--campaign-id', campaignId, '--ledger', ledgerPath,
+  '--leaf-manifest', manifestPath, '--now', '2026-08-31T00:07:00.000Z',
+]);
+assert.strictEqual(third.status, 1);
+const thirdBody = JSON.parse(third.stdout);
+assert.strictEqual(thirdBody.reason_code, 'campaign_already_terminal');
+assert.strictEqual(thirdBody.summary_backfilled, true, `retry must backfill summary: ${third.stdout}`);
+assert.ok(fs.existsSync(thirdBody.summary_path));
+const backfilled = JSON.parse(fs.readFileSync(thirdBody.summary_path, 'utf8'));
+assert.strictEqual(backfilled.backfilled, true);
+assert.strictEqual(backfilled.campaign_id, campaignId);
+assert.ok(backfilled.event && backfilled.event.event_type, 'backfilled summary carries the terminal event');
 
 // --- Alive lease: refused with campaign_lease_live. ---
 const aliveChild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 5000)']);
@@ -434,7 +480,7 @@ function buildAliveLedger(pid) {
 }
 const aliveCampaignId = buildAliveLedger(aliveChild.pid);
 const aliveManifestPath = path.join(tmp, 'alive-leaf-manifest.json');
-fs.writeFileSync(aliveManifestPath, JSON.stringify({ ended_at: '2026-08-31T00:00:00.000Z' }));
+fs.writeFileSync(aliveManifestPath, JSON.stringify({ ended_at: '2026-08-31T00:00:00.000Z', root_run_id: aliveCampaignId, worktree: path.join(tmp, 'alive-gone-worktree') }));
 const aliveResult = runCli([
   'campaign', 'terminalize', '--campaign-id', aliveCampaignId, '--ledger', aliveLedgerPath,
   '--leaf-manifest', aliveManifestPath, '--now', '2026-08-31T00:05:00.000Z',

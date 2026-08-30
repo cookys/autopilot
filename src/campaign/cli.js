@@ -556,6 +556,34 @@ function campaignTerminalizeEligibility(projection, evidence, _now) {
       reason: 'leaf manifest missing or malformed',
     };
   }
+  // qc 2026-08-31 (gpt-5.6-sol 🟠 verified): the manifest is caller-selected,
+  // so it must name THIS campaign and carry the authoritative worktree path —
+  // otherwise any ended manifest could terminalize an unrelated campaign whose
+  // (unrecorded) worktree still exists.
+  const manifestIdentities = [manifest.root_run_id, manifest.run_id]
+    .filter((value) => typeof value === 'string' && value.length > 0);
+  if (!manifestIdentities.includes(projection && projection.campaign_id)) {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_leaf_manifest_mismatch',
+      reason: 'leaf manifest does not name this campaign (root_run_id / run_id)',
+    };
+  }
+  const manifestWorktree = manifest.worktree;
+  if (typeof manifestWorktree !== 'string' || manifestWorktree.length === 0) {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_leaf_manifest_open',
+      reason: 'leaf manifest lacks an authoritative worktree path',
+    };
+  }
+  if (fs.existsSync(manifestWorktree)) {
+    return {
+      status: 'blocked',
+      reason_code: 'campaign_worktree_present',
+      reason: 'leaf manifest worktree is still present',
+    };
+  }
   const repairLineage = projection && projection.candidate_reference && projection.candidate_reference.repair_lineage;
   const worktree = repairLineage && repairLineage.worktree;
   if (typeof worktree === 'string' && worktree.length > 0 && fs.existsSync(worktree)) {
@@ -673,6 +701,38 @@ function writeCampaignTerminalizeSummary(ledgerPath, projection, built) {
     event: built.event,
     phase: built.nextState.phase,
     generation: built.nextState.generation,
+  };
+  fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
+  fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+  return { path: summaryPath, written: true };
+}
+
+// qc 2026-08-31 (gpt-5.6-sol 🟠 verified): the terminal event is journaled
+// BEFORE the summary is written, so a crash between the two leaves a terminal
+// campaign with no summary and every retry answers campaign_already_terminal.
+// Retry therefore backfills an absent summary from the durable journal.
+function backfillCampaignTerminalizeSummary(ledgerPath, projection, rows) {
+  const summaryPath = path.join(
+    path.dirname(path.resolve(ledgerPath)),
+    `${projection.campaign_id}.terminalize-summary.json`,
+  );
+  if (fs.existsSync(summaryPath)) {
+    return { path: summaryPath, written: false };
+  }
+  let lastEvent = null;
+  for (const row of (rows || []).filter((entry) => entry && entry.run_id === projection.campaign_id)) {
+    let payload = null;
+    try { payload = parsePayload(row); } catch (_error) { payload = null; }
+    if (payload && payload.event) lastEvent = payload.event;
+  }
+  const summary = {
+    artifact_type: 'campaign_terminalize_summary',
+    campaign_id: projection.campaign_id,
+    receipt: null,
+    event: lastEvent,
+    phase: projection.state.phase,
+    generation: projection.state.generation,
+    backfilled: true,
   };
   fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
   fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
@@ -856,13 +916,23 @@ function runCampaignCli(argv, options = {}) {
     const evidence = { manifest };
     const eligibility = campaignTerminalizeEligibility(projection, evidence, now);
     if (eligibility.status === 'blocked') {
-      process.stdout.write(`${JSON.stringify({
+      const rejection = {
         status: 'rejected',
         reason_code: eligibility.reason_code,
         reason: eligibility.reason,
         campaign_id: parsed.campaignId,
         phase: projection.state.phase,
-      })}\n`);
+      };
+      if (eligibility.reason_code === 'campaign_already_terminal') {
+        try {
+          const backfill = backfillCampaignTerminalizeSummary(parsed.ledger, projection, rows);
+          rejection.summary_path = backfill.path;
+          rejection.summary_backfilled = backfill.written;
+        } catch (error) {
+          rejection.summary_backfill_error = error.message;
+        }
+      }
+      process.stdout.write(`${JSON.stringify(rejection)}\n`);
       return 1;
     }
     const built = buildTerminalizeMutationFailedEvent(projection, now, 'campaign dead leaf terminalization');
@@ -912,6 +982,7 @@ function runCampaignCli(argv, options = {}) {
 module.exports = {
   campaignResumeEligibility,
   campaignTerminalizeEligibility,
+  backfillCampaignTerminalizeSummary,
   buildTerminalizeMutationFailedEvent,
   writeCampaignTerminalizeSummary,
   DURABLE_WAIT,

@@ -257,7 +257,7 @@ function normalizeCampaign(raw, label) {
     max_growth_ratio: value.max_growth_ratio,
     max_extra_churn: maxExtraChurn,
     max_repair_generations: maxRepairGenerations,
-    max_wall_seconds: int(value.max_wall_seconds, `${label}.max_wall_seconds`, 1, 3600),
+    max_wall_seconds: int(value.max_wall_seconds, `${label}.max_wall_seconds`, 1, 14400),
   };
   // Optional path-role fields: only emit when present so legacy graph digests stay stable
   // when graphs omit them.

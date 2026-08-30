@@ -419,7 +419,10 @@ function cmdWithdraw(flags) {
     emit({
       status: 'rejected',
       code: 'mission_withdraw_campaign_not_terminal',
-      reason: `withdraw: campaign ${projection.campaign_id} is not terminal`,
+      reason: `withdraw: claim ${claimId} bound to campaign ${projection.campaign_id} phase ${projection.state.phase} is not terminal`,
+      claim_id: claimId,
+      campaign_id: projection.campaign_id,
+      phase: projection.state.phase,
       state_hash: mission.stateHash(state),
     });
     return 1;

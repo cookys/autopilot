@@ -540,6 +540,11 @@ const withdrawBefore = runCli([
 assert.strictEqual(withdrawBefore.status, 1, `withdraw-before-terminal should refuse: ${withdrawBefore.stdout}`);
 const withdrawBeforeBody = JSON.parse(withdrawBefore.stdout);
 assert.strictEqual(withdrawBeforeBody.code, 'mission_withdraw_campaign_not_terminal');
+// qc 2026-08-31 (MiniMax-M3 🟠 verified): the refusal must carry the claim id and
+// the campaign phase so an operator can correlate it without reloading the ledger.
+assert.strictEqual(withdrawBeforeBody.claim_id, claimId, `refusal must carry claim_id: ${withdrawBefore.stdout}`);
+assert.strictEqual(typeof withdrawBeforeBody.phase, 'string', `refusal must carry campaign phase: ${withdrawBefore.stdout}`);
+assert.ok(withdrawBeforeBody.reason.includes(claimId) && withdrawBeforeBody.reason.includes(withdrawBeforeBody.phase), `reason must name claim + phase: ${withdrawBeforeBody.reason}`);
 
 // Now use the ALREADY-terminalized ledger from above (`ledgerPath`) — its
 // campaign_id is the SAME campaignId the claim is bound to.

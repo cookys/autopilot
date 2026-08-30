@@ -72,3 +72,18 @@
   retained" semantics) and wrote the reduced state atomically. Result: node `pending`, attempts 1, campaigns axis freed.
   Attempt 2 granted: claim `fdcc6c30…`, branch `…-a2`, base `a645d818`. Filed as two BACKLOG rows (grant replay is a false
   green; no operator release path).
+
+### Rail fix #2 — boundary receipt producer (2026-08-30, depth-0)
+- Campaign 2 (D4) reached a real boundary rejection (four test files outside the sealed `output_paths`) but the bridge could not
+  journal `BOUNDARY_REJECTED`: it passed no artifact reference, so the reducer's
+  `output_artifact_digest === canonicalDigest({kind:'campaign_boundary_rejected', digest})` binding could never hold and the
+  campaign stranded at IMPLEMENTING again. Fixed (`b0778bd9`): the bridge builds a persisted `campaign_boundary_receipt`
+  (campaign id, base, candidate ref, boundary code, offending paths, dispatch-result digest) digested with the reducer's own
+  helper; `DISPOSITION_RESUMED` pre-check tightened to canonical sha256; summary JSON no longer reports
+  `dispatcher_called:false`/`commit:null` after a real dispatch. qc panel: gpt-5.6-sol 🟠 receipt journaled before it was
+  persisted (**verified**, fixed `e0fbef4e` for all three digest-carrying bridge events: persist content → journal → phase);
+  GLM-5.2 SHIP-AS-IS (3 🔵); MiniMax-M3 `no_verdict` ×2 (NO-FINDING-PROOF format) — recorded, not counted.
+  End-to-end suite `campaign-boundary-receipt-e2e` (12 assertions) drives the production bridge + reducer. Independently
+  re-executed by depth-0 before merge.
+- Still open (BACKLOG): a `boundary_rejected` campaign is a durable resumable wait; releasing its Mission claim without a resume
+  still needs the operator path (depth-0 used `reduceMissionState` + `no_effect_release` twice this session).

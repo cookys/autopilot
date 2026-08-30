@@ -63,3 +63,12 @@
   (`821f2b45`); the git stash stack is shared across worktrees (two workers collided; recovered, no loss) — workers are told never
   to stash.
 - **Not done here**: dead-campaign terminalization (BACKLOG); PATCH release (folded into D8 or a separate release commit).
+
+### Phase 2 start — operator release of the dead attempt-1 claim (2026-08-30, depth-0)
+- `mission grant` replayed attempt 1 (open `active_claim_id` from the salvage campaign `e9bcae52…`, whose leaf ran but produced
+  no accepted mutation). No CLI release exists; depth-0 backed up
+  `.git/autopilot/mission/states/420ac261….json` to `/tmp/autopilot-dispatch-runs/mission-state-420ac261.bak.json`, then applied
+  a `no_effect_release` event through `reduceMissionState` (the reducer's own "failed attempt, budget freed, attempt count
+  retained" semantics) and wrote the reduced state atomically. Result: node `pending`, attempts 1, campaigns axis freed.
+  Attempt 2 granted: claim `fdcc6c30…`, branch `…-a2`, base `a645d818`. Filed as two BACKLOG rows (grant replay is a false
+  green; no operator release path).

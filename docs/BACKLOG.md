@@ -701,3 +701,15 @@ never an ad hoc descriptive string.
 - **Context**: add a bounded, evidence-gated terminalization for a campaign whose leaf run is provably dead (leaf manifest ended, pid gone, worktree reaped) that appends `MUTATION_FAILED` with the live lease identity and releases the Mission claim; never a silent no-op.
 - **Effort**: S–M
 - **Source**: l6-verdict-stability-p1 campaigns 2/3 + salvage, 2026-08-29/30.
+
+### `mission grant` silently replays a stale claim when the node holds an open `active_claim_id`
+- **Trigger**: already fired 2026-08-30 (lineage 420ac261, node `qualification-verdict-stability`): with attempt 1's claim still open, `mission grant` returned `status:"replay"` with attempt 1's contract — a `base_sha` two merges behind `develop` and an already-consumed branch — instead of refusing.
+- **Context**: the idempotency key resolves to `graph-node:<id>:attempt:<n>` while `active_claim_id` is set; nothing tells the caller the attempt cannot advance. Surface `attempt_blocked_by_open_claim` (with the claim id and its campaign state) or refuse outright — a replayed stale contract is a false green in the evidence-discipline sense.
+- **Effort**: S
+- **Source**: phase-2 foreman escalation, 2026-08-30.
+
+### No operator-level release for a claim whose campaign died without a terminal receipt (second instance)
+- **Trigger**: already fired again 2026-08-30 — depth-0 had to emit `no_effect_release` through the reducer module API (`reduceMissionState`) on the local state file (backup taken) because `mission control` exposes only `finish_requested|abort_requested|scope_frozen|ceiling_adjust` and intake's automatic `pre_spend_no_effect` path is unreachable once a leaf ran.
+- **Context**: pairs with the existing "Killed/dead managed campaign stuck at IMPLEMENTING" row: the fix must release BOTH the campaign lease (MUTATION_FAILED with the live lease identity) and the Mission claim, gated on provable leaf death, and be reachable from `mission`/`campaign` CLI without raw state plumbing.
+- **Effort**: S–M
+- **Source**: phase-2 foreman escalation + depth-0 operator action, 2026-08-30.

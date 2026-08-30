@@ -105,7 +105,11 @@
             }
           }
         },
-        "administrations": { "type": "array", "maxItems": 0 }
+        "administrations": { "type": "array", "maxItems": 0 },
+        "pooled": { "type": "null" },
+        "competence": { "type": "null" },
+        "tier1_terminated": { "type": "null" },
+        "stop_reason": { "type": "null" }
       }
     },
     {
@@ -123,7 +127,7 @@
             "kind": { "enum": ["consult_panel", "discuss_rounds"] }
           }
         },
-        "administrations": { "$ref": "#/$defs/pooled_administrations" },
+        "administrations": { "$ref": "#/$defs/pooled_administrations", "minItems": 1 },
         "pooled": { "$ref": "#/$defs/pooled_totals" },
         "competence": { "$ref": "#/$defs/pooled_competence" },
         "tier1_terminated": { "type": "boolean" },

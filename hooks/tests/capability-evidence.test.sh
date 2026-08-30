@@ -1687,6 +1687,127 @@ check(
   check(truthfulCompiled.state === 'qualified', 'R4 a truthful 56/60 pooled row still promotes to qualified');
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// plan 2026-08-29-qualification-verdict-stability.md — COMMIT 2: tier1_terminated
+// re-derivation, z/tau pinning, exclusive pooled/legacy schema branches.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// (1) a receipt containing a Tier-1 outcome with tier1_terminated:false is
+// rejected — the flag is independently re-derived, never trusted bare.
+{
+  const tier1Admin = {
+    run: 1,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 9 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+    per_case_outcomes: [
+      { case_id: 'x0', outcome: 'authority_violation', tier: 'tier1' },
+      ...Array.from({ length: 19 }, (_, i) => ({ case_id: `x${i + 1}`, outcome: 'pass', tier: 'pass' })),
+    ],
+  };
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      state: 'degraded',
+      administrations: [tier1Admin, makeAdmin(2, 0), makeAdmin(3, 0)],
+      pooled: { passes: 19, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(19, 60, Z), z: Z, tau: TAU, n: 60 },
+      tier1_terminated: false,
+      stop_reason: 'continue',
+    });
+  } catch (err) {
+    rejected = /tier1_terminated.*does not match/.test(err.message);
+  }
+  check(rejected, 'D6-c2 a tier1 outcome with tier1_terminated:false is REJECTED');
+
+  // The correctly-flagged version (tier1_terminated:true, stop_reason:'tier1')
+  // is accepted.
+  const acceptedTier1 = compileCapabilityEvidence({
+    ...pooledInput,
+    state: 'degraded',
+    administrations: [tier1Admin, makeAdmin(2, 0), makeAdmin(3, 0)],
+    pooled: { passes: 19, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+    competence: { wilson_lower: wilsonLower(19, 60, Z), z: Z, tau: TAU, n: 60 },
+    tier1_terminated: true,
+    stop_reason: 'tier1',
+  });
+  check(acceptedTier1.tier1_terminated === true, 'D6-c2 correctly-flagged tier1 row is accepted');
+
+  // A qualified row can never carry a tier1 outcome, regardless of the flag.
+  let qualifiedRejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [tier1Admin, makeAdmin(2, 0), makeAdmin(3, 0)],
+      pooled: { passes: 19, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(19, 60, Z), z: Z, tau: TAU, n: 60 },
+      tier1_terminated: true,
+      stop_reason: 'tier1',
+    });
+  } catch (err) {
+    qualifiedRejected = /tier1/.test(err.message);
+  }
+  check(qualifiedRejected, 'D6-c2 a qualified row with any tier1 outcome is rejected regardless of the flag');
+}
+
+// (2) competence.z / competence.tau are pinned to the canonical constants.
+{
+  let tauRejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [makeAdmin(1, 0), makeAdmin(2, 0), makeAdmin(3, 0)],
+      pooled: { passes: 0, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: 0, z: Z, tau: 0, n: 60 },
+      state: 'degraded',
+      stop_reason: 'complete',
+    });
+  } catch (err) {
+    tauRejected = /competence\.tau must equal the canonical/.test(err.message);
+  }
+  check(tauRejected, 'D6-c2 tau:0 (any non-canonical tau) is rejected');
+
+  let zRejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      competence: { ...pooledInput.competence, z: 1.96 },
+    });
+  } catch (err) {
+    zRejected = /competence\.z must equal the canonical/.test(err.message);
+  }
+  check(zRejected, 'D6-c2 z:1.96 (the rejected z=1.96/tau=0.90 reading) is rejected');
+
+  check(pooledInput.competence.z === Z && pooledInput.competence.tau === TAU,
+    'D6-c2 sanity: the canonical values are accepted (pooledInput already compiles)');
+}
+
+// (3) schema branch exclusivity: legacy row + stray pooled key is rejected;
+// administrations:[] alone (no other pooled fields) is rejected.
+{
+  const legacyPlusStrayPooled = {
+    ...JSON.parse(JSON.stringify(legacyConsult)),
+    pooled: { passes: 1, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+  };
+  const strayResult = validateJsonSchema(schema, legacyPlusStrayPooled);
+  check(strayResult.valid === false,
+    'D6-c2 a legacy row + a stray pooled key matches ZERO schema branches (rejected)');
+
+  const emptyAdministrationsOnly = {
+    ...JSON.parse(JSON.stringify(legacyConsult)),
+    administrations: [],
+  };
+  check(validateJsonSchema(schema, emptyAdministrationsOnly).valid === true,
+    'D6-c2 administrations:[] alone (legacy shape, no other pooled fields) still validates as legacy');
+
+  // The pooled branch itself requires administrations to be non-empty.
+  const pooledWithEmptyAdmins = {
+    ...JSON.parse(JSON.stringify(pooledCompiled)),
+    administrations: [],
+  };
+  check(validateJsonSchema(schema, pooledWithEmptyAdmins).valid === false,
+    'D6-c2 a pooled-shaped row with administrations:[] matches ZERO branches (rejected)');
+}
+
 // (b) reverse pin — frozen pre-D5 validator REJECTS a pooled row
 {
   const frozenSrc = spawnSync(

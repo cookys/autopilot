@@ -145,6 +145,19 @@ const CONSULT_DISCUSS_FULL_N = Object.freeze({ consult: 60, discuss: 48 });
 // which the full-N bound already clears tau with every remaining case assumed
 // FAILED. A `stop_reason: 'locked_qualify'` receipt must have cleared this floor.
 const LOCKED_QUALIFY_MIN = Object.freeze({ consult: 56, discuss: 45 });
+// Verdict-stability calibration (plan 2026-08-29, CEO-frozen 2026-08-30). The
+// SAME two named constants scripts/engine-qualify.js pins as VERDICT_Z /
+// VERDICT_TAU — `hooks/tests/capability-evidence.test.sh` asserts the two
+// definitions agree. A stored receipt's competence.z/competence.tau must equal
+// these EXACTLY: accepting any positive z / any tau in [0,1] let a zero-pass
+// receipt with tau:0 satisfy the qualified biconditional trivially.
+const VERDICT_Z = 1.6448536269514722;
+const VERDICT_TAU = 0.85;
+// The minimum number of CLEAN (non-harness-contaminated) administrations a
+// qualified, non-Tier-1-terminated pooled row must show (plan: production N is
+// three runs) — a row cannot promote on fewer administrations than the
+// protocol requires to reach the full pool.
+const MIN_CLEAN_ADMINISTRATIONS_FOR_QUALIFY = 3;
 
 class CapabilityEvidenceError extends Error {
   constructor(message, code = 'INVALID_CAPABILITY_EVIDENCE') {
@@ -1114,7 +1127,7 @@ function enforceImplPromotion(record) {
 
 // Additive pooled receipt (plan 2026-08-29 D5). All-or-nothing: any one of the
 // five fields requires the rest. Shapes match engine-qualify.js's emitted row.
-function normalizePooledReceipt(rawFields, methodologyKind) {
+function normalizePooledReceipt(rawFields, methodologyKind, state) {
   const present = POOLED_RECEIPT_FIELDS.filter((field) => rawFields[field] !== undefined);
   if (present.length === 0) return null;
   if (present.length !== POOLED_RECEIPT_FIELDS.length) {
@@ -1199,12 +1212,14 @@ function normalizePooledReceipt(rawFields, methodologyKind) {
   if (typeof competenceRaw.wilson_lower !== 'number' || !Number.isFinite(competenceRaw.wilson_lower)) {
     evidenceError('competence.wilson_lower must be a finite number');
   }
-  if (typeof competenceRaw.z !== 'number' || !Number.isFinite(competenceRaw.z) || competenceRaw.z <= 0) {
-    evidenceError('competence.z must be a positive finite number');
+  // R4/[2]: z/tau are pinned to the single canonical calibration, not merely
+  // range-checked — a zero-pass receipt with tau:0 (or any other caller-chosen
+  // pair) previously satisfied the qualified biconditional trivially.
+  if (competenceRaw.z !== VERDICT_Z) {
+    evidenceError(`competence.z must equal the canonical VERDICT_Z (${VERDICT_Z})`);
   }
-  if (typeof competenceRaw.tau !== 'number' || !Number.isFinite(competenceRaw.tau)
-      || competenceRaw.tau < 0 || competenceRaw.tau > 1) {
-    evidenceError('competence.tau must be a finite number in [0, 1]');
+  if (competenceRaw.tau !== VERDICT_TAU) {
+    evidenceError(`competence.tau must equal the canonical VERDICT_TAU (${VERDICT_TAU})`);
   }
   const competence = {
     wilson_lower: competenceRaw.wilson_lower,
@@ -1213,8 +1228,30 @@ function normalizePooledReceipt(rawFields, methodologyKind) {
     n: integer(competenceRaw.n, 'competence.n', 1),
   };
 
+  // R4/[1]: tier1_terminated is INDEPENDENTLY RE-DERIVED from the per-case
+  // outcomes, never trusted as a bare stored boolean — a receipt containing a
+  // Tier-1 outcome with the flag set false must be rejected regardless. The
+  // scan covers ALL administrations, including harness-contaminated ones:
+  // Tier-1 fail-fast dominates harness exclusion (plan §4 D4 step 1 over step
+  // 2; scripts/engine-qualify.js's foldPooledVerdict scans for tier1 before
+  // ever checking harness contamination).
+  const derivedTier1 = administrations.some(
+    (admin) => admin.per_case_outcomes.some((c) => c.tier === 'tier1'),
+  );
   const tier1Terminated = boolean(rawFields.tier1_terminated, 'tier1_terminated');
+  if (tier1Terminated !== derivedTier1) {
+    evidenceError(
+      `tier1_terminated (${tier1Terminated}) does not match the per-case outcomes `
+      + `(a tier1 outcome is present: ${derivedTier1})`,
+    );
+  }
   const stopReason = enumValue(rawFields.stop_reason, POOLED_STOP_REASONS, 'stop_reason');
+  if (derivedTier1 !== (stopReason === 'tier1')) {
+    evidenceError(
+      `stop_reason must be 'tier1' iff a per-case tier1 outcome is present `
+      + `(present: ${derivedTier1}, stop_reason: '${stopReason}')`,
+    );
+  }
 
   // The role's FIXED full pool (R4 fix, plan 2026-08-29 D5). `methodologyKind` is
   // already pinned to exactly one of the two pooled kinds above, so the role is
@@ -1241,12 +1278,14 @@ function normalizePooledReceipt(rawFields, methodologyKind) {
   // every case that administration scheduled (`harnessExcluded += admin.length`,
   // scripts/engine-qualify.js's row assembly). Mirror that exactly.
   let harnessCaseTotal = 0;
+  let cleanAdminCount = 0;
   for (const admin of administrations) {
     const contaminated = admin.per_case_outcomes.some((c) => c.tier === 'harness');
     if (contaminated) {
       harnessCaseTotal += admin.per_case_outcomes.length;
       continue;
     }
+    cleanAdminCount += 1;
     cleanCaseTotal += admin.per_case_outcomes.length;
     summedPasses += admin.per_case_outcomes.filter((c) => c.tier === 'pass').length;
     summedTier2 += admin.per_case_outcomes.filter((c) => c.tier === 'tier2').length;
@@ -1298,6 +1337,27 @@ function normalizePooledReceipt(rawFields, methodologyKind) {
     evidenceError(
       `competence.wilson_lower (${competence.wilson_lower}) does not recompute from `
       + `pooled (${recomputed})`,
+    );
+  }
+
+  // R4/[1]: a qualified row can never carry a Tier-1 outcome, regardless of
+  // the (already-verified-consistent) flag — belt-and-suspenders alongside
+  // enforcePooledPromotionInvariants' own tier1_terminated check below.
+  if (state === 'qualified' && derivedTier1) {
+    evidenceError(
+      'a qualified pooled row cannot contain a per-case tier1 outcome',
+      'EVIDENCE_PROMOTION_DENIED',
+    );
+  }
+  // R4/[3]: a qualified, non-terminated row must show at least the production
+  // administration count of clean administrations — it cannot promote on
+  // fewer runs than the protocol requires to reach the full pool.
+  if (state === 'qualified' && !derivedTier1
+      && cleanAdminCount < MIN_CLEAN_ADMINISTRATIONS_FOR_QUALIFY) {
+    evidenceError(
+      `a qualified pooled row requires at least ${MIN_CLEAN_ADMINISTRATIONS_FOR_QUALIFY} clean `
+      + `administrations, got ${cleanAdminCount}`,
+      'EVIDENCE_PROMOTION_DENIED',
     );
   }
 
@@ -1519,7 +1579,7 @@ function compileCapabilityEvidence(raw) {
     );
   }
   const trials = normalizeTrials(value.trials, methodology);
-  const pooledReceipt = normalizePooledReceipt(value, methodology.kind);
+  const pooledReceipt = normalizePooledReceipt(value, methodology.kind, state);
   const issuedAt = timestamp(value.issued_at, 'capability evidence.issued_at');
   const observedAt = timestamp(value.observed_at, 'capability evidence.observed_at');
   const expiresAt = timestamp(value.expires_at, 'capability evidence.expires_at');
@@ -2272,6 +2332,8 @@ module.exports = {
   BRAIN_METHODOLOGY_KIND,
   CONSULT_DISCUSS_FULL_N,
   LOCKED_QUALIFY_MIN,
+  VERDICT_Z,
+  VERDICT_TAU,
   MAX_QUALIFIED_TTL_DAYS,
   METHODOLOGY_KINDS,
   REVOCATION_REASONS,

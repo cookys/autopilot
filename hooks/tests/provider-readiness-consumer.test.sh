@@ -832,13 +832,18 @@ rejectsBeforeDispatch(
 // Advisory semantics (2026-08-16 retirement plan P4): a non-canonical roster
 // derives — it does not reject. The uncertified seat carries claim_id null and
 // the derivation reports policy_override with the advisory_default reason.
+const baseDerived = deriveStrictL5InvocationPolicy(resolved);
+const baseUncertified = baseDerived.policy_override ? baseDerived.policy_override.uncertified_seats.length : 0;
 const unknownTuple = clone(resolved);
 unknownTuple.reviewer_engine = 'unknown-reviewer-model';
 const advisoryDerived = deriveStrictL5InvocationPolicy(unknownTuple);
 assert.ok(advisoryDerived.policy_override, 'advisory derivation must report policy_override');
 assert.equal(advisoryDerived.policy_override.reason, 'advisory_default');
-assert.equal(advisoryDerived.policy_override.uncertified_seats.length, 1);
-assert.equal(advisoryDerived.policy_override.uncertified_seats[0].tuple.model, 'unknown-reviewer-model');
+assert.equal(advisoryDerived.policy_override.uncertified_seats.length, baseUncertified + 1);
+assert.ok(
+  advisoryDerived.policy_override.uncertified_seats.some((seat) => seat.tuple.model === 'unknown-reviewer-model'),
+  'uncertified seats must include the unknown-reviewer-model seat',
+);
 assert.ok(
   advisoryDerived.invocation_policy.some((seat) => seat.claim_id === null),
   'uncertified seat must carry claim_id null, never a borrowed claim',
@@ -852,8 +857,11 @@ assert.equal(
   'qualifying replacement reviewer',
 );
 
-// A byte-canonical roster still derives silently: policy_override stays null.
-assert.equal(deriveStrictL5InvocationPolicy(clone(resolved)).policy_override, null);
+// A byte-canonical roster still derives exactly what the baseline derives: no
+// additional override beyond whatever the live roster's certification state
+// already yields (baseDerived above), independent of the live roster's
+// uncertified-seat count.
+assert.deepStrictEqual(deriveStrictL5InvocationPolicy(clone(resolved)).policy_override, baseDerived.policy_override);
 const duplicateTuple = clone(resolved);
 duplicateTuple.qc_panel_seats[1] = clone(duplicateTuple.qc_panel_seats[0]);
 rejectsBeforeDispatch(

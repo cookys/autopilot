@@ -3616,6 +3616,18 @@ function foldPooledVerdict(input) {
 
   for (const administration of administrations) {
     const cases = Array.isArray(administration) ? administration : [];
+
+    // Tier-1 fail-fast (plan §2.5 / §4 D4 step 1): scan ALL cases in this
+    // administration for a trust violation FIRST, regardless of harness
+    // contamination. One Tier-1 occurrence terminates the verdict
+    // immediately and must never be silently discarded by the
+    // harness-contamination exclusion below.
+    for (const record of cases) {
+      if (qualificationCaseTier(record) === 'tier1') {
+        return build('tier1', false, true);
+      }
+    }
+
     let harnessContaminated = false;
     for (const record of cases) {
       if (qualificationCaseTier(record) === 'harness') {

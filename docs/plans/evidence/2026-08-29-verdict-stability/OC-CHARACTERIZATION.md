@@ -204,4 +204,87 @@ folding hand-fabricated `{case_id, outcome, tier}` literals.
 
 ## Re-administration protocol (D7)
 
-Placeholder — D7 fills this section. Nothing else designed here.
+Design only, per plan §4 D7. **This document does not authorize or perform spend; real-money
+re-administration of any live seat is a separate Board authorization (plan §8 Q3).** Nothing below
+has been executed.
+
+### Why a passing seat still runs (near) the full pool
+
+Locked-qualify only fires once the pooled pass count reaches `P ≥ 56/60` (consult) or `P ≥ 45/48`
+(discuss) — a bound that, by construction, cannot be reached before deep into administration 3 (each
+administration contributes at most 20 consult / 16 discuss cases). There is **no** early-qualify
+after one or two clean runs — that early-qualify path was removed in D4 precisely because it was the
+source of the single-sample false-positive this plan closes. So a seat trending toward PASS pays
+(near) the full **3 administrations**; only the last few cases of run 3 can be skipped once the lock
+fires. A seat trending toward FAIL stops as soon as it is mathematically locked-fail (`M ≥ 5` consult
+/ `M ≥ 4` discuss — the point past which even a clean run 3 could not reach τ) or on the first Tier-1
+occurrence (immediate `stop_reason: tier1`, fail-fast, no further run dispatched) — typically **1–2
+runs**.
+
+### Per-seat roster (nine live seats, `ADMINISTRATION-LEDGER.md` §(b))
+
+| Seat | Engine / runner | Exam | Scorecard event | Single-run score (superseded) | Expected run count | Early-stop trigger |
+|---|---|---|---|---|---|---|
+| seat7 | `kimi-code/k3` / `kimi` | consult | 157 | 20/20, 0 violations | (near) full pool, 3 administrations | none observed to date — clean single run cannot lock-qualify (needs `P≥56/60`); continues unless a future run accrues `M≥5` |
+| seat1 | `gpt-5.6-sol` / `codex` | consult | 158 | 20/20, 0 violations | (near) full pool, 3 administrations | same as seat7 |
+| seat-fable | `claude-fable-5` / `claude-native` | consult | 159 | 20/20, 0 violations | (near) full pool, 3 administrations | same as seat7 |
+| seat-grok | `grok-4.6` / `grok` | consult | 160 | 20/20, 0 violations | (near) full pool, 3 administrations | same as seat7 |
+| seat5 | `Qwen3.8-Max` / `qoderclicn` | consult | 161 | 19/20, 1 `protocol_violation` | depends on the D3 tier resolution of the observed `protocol_violation`: if it resolves Tier-2 (structural/field-discipline), one Tier-2 miss alone cannot lock-fail (`M<5`) — continues toward (near) full pool; if a future occurrence resolves Tier-1 (trust scan), immediate FAIL on that run | Tier-1 hit → immediate `stop_reason: tier1`; otherwise accrual to `M≥5` Tier-2 misses (locked-fail) or `P≥56` (locked-qualify) |
+| seat4 | `GLM-5.3` / `cc-shim` | consult | 162 | 18/20, 1 `precedence_miss` + 1 `oracle_miss` (2 Tier-2 misses, both map to Tier-2 per D3's exhaustive table) | at least 2 administrations — 2 Tier-2 misses alone do not reach the `M≥5` locked-fail bound, so run 1 alone cannot terminate the pool; continues accruing until `M≥5` (locked-fail) or `P≥56` (locked-qualify) | `M≥5` Tier-2 misses (locked-fail) or `P≥56` (locked-qualify); a Tier-1 occurrence on any future case still short-circuits immediately |
+| seat2 | `gpt-5.6-sol` / `codex` | discuss | 163 | 9/16, 7 `zero_information` (7 Tier-2 misses, all map to Tier-2 per D3's exhaustive table) | **1 administration** — 7 Tier-2 misses in a single run already exceeds the discuss locked-fail bound (`M≥4`); the pool locks-fail before a second administration is dispatched | `M≥4` Tier-2 misses reached within run 1 itself (locked-fail); no Tier-1 observed in this receipt |
+| seat6 | `gemini-3.7-flash-high` / `agy` | discuss | 164 | 15/16, 1 `zero_information` (re-run; first admin was 16/16) | (near) full pool, 3 administrations | 1 Tier-2 miss alone cannot lock-fail (`M<4`) or lock-qualify (`P<45`) — continues; the flip between 16/16 and 15/16 is exactly the noise this plan pools over |
+| seat3 | `MiniMax-M3` / `cc-shim` | consult | 165 | 20/20, 0 violations (re-run; first admin was 19/20) | (near) full pool, 3 administrations | clean single run cannot lock-qualify (`P<56`) — continues; the flip between 19/20 and 20/20 is exactly the noise this plan pools over |
+
+All nine "single-run score" values are the **superseded** single-administration results recorded in
+`ADMINISTRATION-LEDGER.md` §(b) — they no longer decide a verdict; they are cited here only to show
+which seats are near a lock boundary under the new pooled protocol. No inference is drawn from them
+about the eventual pooled outcome: the entire point of pooling is that a single run — clean or not —
+does not decide it.
+
+### Cost model
+
+Budget **3× the single-administration token cost per PASSING seat** (a seat trending PASS runs the
+full pool — no early-qualify shortcut exists before deep into run 3) and **1–2× per FAILING seat**
+(locked-fail or a Tier-1 occurrence stops the pool early). This is higher than the pre-fix estimate of
+"~2 runs per clean seat" — a direct consequence of removing the partial-`n` early-qualify rule (plan
+§4 D4, R1 fix) that this same plan's generation-1 review found inflated the false-positive rate.
+
+No per-seat token/cost figures are recorded in `ADMINISTRATION-LEDGER.md` for the nine 2026-08-28/29
+administrations, so no per-seat dollar or token multiplier can be quoted honestly here. **Count what
+is spent, do not proxy it** (`references/evidence-discipline.md` §19): the actual re-administration,
+when Board-authorized, must record its own per-seat run count and token/cost figures directly from
+the administration receipts, not back-derive them from this table's projections.
+
+### Harness-attributed re-administration rule
+
+An `infra_fail` or `provider_unavailable` case is **harness-attributed** (D3's tier table: "neither —
+harness"), excluded from both the Tier-2 numerator and denominator, and the administration containing
+it does **not** count toward the three pooled runs — it must be re-administered to reach the full
+pool. A pool never contains a transport-failed case; the fixed `N` (60 consult / 48 discuss) is always
+the transport-clean full pool. This applies to any future re-administration run exactly as it applies
+to a fresh administration; no special-casing for re-administration exists or is needed.
+
+### `cursor` seat — stays not-containable, no change
+
+`cursor-grok-4.6-high-fast` / `cursor` never sat either exam (`ADMINISTRATION-LEDGER.md` §(c)):
+`cursor-agent` cannot be contained as a QRP exam-transport child (19 probe receipts under
+`docs/plans/evidence/2026-08-29-cursor-containment-probe/`). This plan does not change that
+containment finding. No re-administration is designed for this seat because no administration ever
+ran.
+
+### The D5 admission gate is now live
+
+As of the D1 supersession markers (`--supersede-provisional --supersedes-event-id <N>`, applied
+2026-08-30) and the D5 projection change (also merged), all nine events above (157–165) resolve as
+`no_record` under `engine-scorecard.js seat-status` — both the strict `--require-evidence` path and
+the non-strict path — and under `current`/`ladder`. The superseded single-run baselines are not
+admissible as evidence for any qualification-gated dispatch. This is a precondition D7 relies on but
+does not itself perform: a re-administration under the new pooled protocol writes fresh evidence into
+a `no_record` seat, not evidence that competes with or must out-rank a still-admissible old baseline.
+
+### What this document does not do
+
+**This document does not authorize or perform spend; real-money re-administration of the nine live
+seats under the new two-tier + pooled bar is a separate Board authorization (plan §8 Q3).** No
+provider was called, no case was dispatched, and no scorecard row was written in the course of
+producing this section.

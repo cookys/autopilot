@@ -267,3 +267,20 @@ Total up to **152 cases**.
 - **grok CLI rail** — event-149 rail-attributed failure unrepaired.
 - **Claude-family seats** — a native path already exists; heterogeneity is the roster's point.
 - **All discuss seats beyond sol + Gemini** — consumer demand doesn't justify them yet.
+
+## Board decision — 2026-08-30 (D7 re-administration authorization)
+
+**Decision**: pooled re-administration under the two-tier + pooled bar
+(`docs/plans/2026-08-29-qualification-verdict-stability.md` §4 D7; protocol recorded in
+`docs/plans/evidence/2026-08-29-verdict-stability/OC-CHARACTERIZATION.md` "Re-administration protocol")
+**AUTHORIZED** by the user on 2026-08-30 ("D7 授權,跑"), for the nine live seats whose single-run
+verdicts (events 157–165) were superseded on 2026-08-30 (D1 markers). `cursor` stays out (not
+containable). Each seat runs the production pool: up to 3 clean administrations (consult 60 / discuss 48
+transport-clean cases), Tier-1 fail-fast, locked-fail / locked-qualify early stops, harness-attributed
+runs re-administered, verdict = full-N Wilson lower bound at the CEO-frozen `z=1.6448536269514722`,
+`τ=0.85`. Budget rule: ≈3× a single administration per passing seat, 1–2× per failing seat — **count
+what is spent** (per-seat run counts and token/usage figures go into the new administration ledger).
+Per-seat abort rule and the "transport failure is never capability evidence" rule from the 2026-08-28
+decision carry over unchanged. Rows are recorded through the production `engine-qualify.js … --execute`
+path (`record_kind` ordinary rows with the additive pooled block, D5), never hand-written; the nine
+supersession markers stay in place — a new pooled row is the only thing that can become a baseline.

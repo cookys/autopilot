@@ -40,6 +40,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/scripts/engine-qualify.js" ] \
   || { echo "run.sh: could not resolve repo root from $SELF_DIR" >&2; exit 2; }
+source "$REPO_ROOT/scripts/lib/qualify-stage-credentials.sh"
 
 MODE="${1:-plan}"
 case "$MODE" in
@@ -83,10 +84,11 @@ STAGING_AUTH_DIR="$STAGING_HOME/.auth"
 mkdir -p "$STAGING_AUTH_DIR"
 chmod 700 "$STAGING_HOME" "$HOME/.autopilot/qualify-staging/seat5-qwen3.8-max-qoderclicn-consult" 2>/dev/null || true
 REAL_AUTH_DIR="$HOME/.qoder-cn/.auth"
-for f in dynamic-error-codes.json machine_id user .credential-transaction; do
-  if [ ! -f "$STAGING_AUTH_DIR/$f" ] && [ -f "$REAL_AUTH_DIR/$f" ]; then
-    cp "$REAL_AUTH_DIR/$f" "$STAGING_AUTH_DIR/$f"
-  fi
+for f in dynamic-error-codes.json machine_id; do
+  qualify_stage_identity "$STAGING_AUTH_DIR/$f" "$REAL_AUTH_DIR/$f"
+done
+for f in user .credential-transaction; do
+  qualify_stage_credential "$STAGING_AUTH_DIR/$f" "$REAL_AUTH_DIR/$f" "$MODE"
 done
 if [ ! -f "$STAGING_AUTH_DIR/user" ]; then
   echo "run.sh: no user credential seeded into $STAGING_AUTH_DIR — --execute will fail to authenticate" >&2

@@ -35,6 +35,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/scripts/engine-qualify.js" ] \
   || { echo "run.sh: could not resolve repo root from $SELF_DIR" >&2; exit 2; }
+source "$REPO_ROOT/scripts/lib/qualify-stage-credentials.sh"
 
 MODE="${1:-plan}"
 case "$MODE" in
@@ -79,11 +80,10 @@ STAGING_HOME="$HOME/.autopilot/qualify-staging/seat-grok-4.6-consult/grok-home"
 mkdir -p "$STAGING_HOME"
 chmod 700 "$STAGING_HOME" "$HOME/.autopilot/qualify-staging/seat-grok-4.6-consult" 2>/dev/null || true
 REAL_GROK_HOME="$HOME/.grok"
-for f in auth.json agent_id .metadata_version; do
-  if [ ! -f "$STAGING_HOME/$f" ] && [ -f "$REAL_GROK_HOME/$f" ]; then
-    cp "$REAL_GROK_HOME/$f" "$STAGING_HOME/$f"
-  fi
+for f in agent_id .metadata_version; do
+  qualify_stage_identity "$STAGING_HOME/$f" "$REAL_GROK_HOME/$f"
 done
+qualify_stage_credential "$STAGING_HOME/auth.json" "$REAL_GROK_HOME/auth.json" "$MODE"
 if [ ! -f "$STAGING_HOME/auth.json" ]; then
   echo "run.sh: no auth.json seeded into $STAGING_HOME — --execute will fail to authenticate" >&2
 fi

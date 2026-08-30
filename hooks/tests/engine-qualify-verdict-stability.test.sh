@@ -1803,6 +1803,103 @@ echo "$(row d5-t1 r1 openai consult c@1 0.0 manual 0 failed 2099-01-01)" \
 SEAT_D_FAIL="$(node "$CLI" seat-status --engine d5-t1 --runner r1 --role consult --now 2026-08-29)"
 assert_contains "$SEAT_D_FAIL" '"admission_status":"no_record"' "D5 (d) tier1_terminated row is not an admitted baseline"
 
+# COMMIT 3 (d): the same pin, but on the STRICT --require-evidence path
+# (computeSeatProjectionStrict / deriveStatus), which reads `row.evidence`'s
+# OWN compiled `state` — never the outer row's bare status/tier1_terminated
+# fields. So this fixture builds a genuinely EVIDENCE-BACKED row whose
+# `evidence` is itself a POOLED receipt (administrations/pooled/competence/
+# tier1_terminated/stop_reason) with a real Tier-1 outcome, compiled through
+# compileCapabilityEvidence (state forced to 'degraded' by D6-c2's own
+# invariant) and anchored via a real qualifier-store evidence_store pointer
+# (appendEvidenceRecord — the same anchor FIXTURE_JS itself writes), so it is
+# not just schema-plausible but genuinely qualifier-anchored. FIXTURE_JS runs
+# against a THROWAWAY capability-evidence store (only to harvest a realistic
+# identity/scope/methodology/trials template) — the row it produces is never
+# itself recorded, so the real store below carries exactly one evidence
+# record and needs no supersedes lineage.
+reset_store
+rm -f "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+touch "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+THROWAWAY_ECD="$(mktemp -d "$TEST_TMP/throwaway-ecd.XXXXXX")"
+touch "$THROWAWAY_ECD/qualification-evidence.jsonl"
+QUAL_ROW_T1="$(ENGINE_CAPABILITY_DIR="$THROWAWAY_ECD" node "$FIXTURE_JS" consult --engine d5-t1-strict --runner cc-shim)" \
+  || fail "D5 (d) strict tier1 fixture failed"
+POOLED_T1="$(QUAL_ROW="$QUAL_ROW_T1" node - <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.cwd();
+const { compileCapabilityEvidence } = require(path.join(root, 'src/engine/capability-evidence.js'));
+const { wilsonLower } = require(path.join(root, 'src/engine/verification-strength.js'));
+const {
+  appendEvidenceRecord, resolveStoreConfig,
+} = require(path.join(root, 'scripts/engine-capability-state.js'));
+
+const baseRow = JSON.parse(process.env.QUAL_ROW);
+const baseEvidence = baseRow.evidence;
+const Z = 1.6448536269514722;
+
+const tier1Admin = {
+  run: 1,
+  per_trial: [{ trial: 1, cases_total: 1, cases_passed: 0 }],
+  per_case_outcomes: [{ case_id: 'x0', outcome: 'authority_violation', tier: 'tier1' }],
+};
+const admin2 = {
+  run: 2,
+  per_trial: [{ trial: 1, cases_total: 20, cases_passed: 20 }],
+  per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `d${i}`, outcome: 'pass', tier: 'pass' })),
+};
+const admin3 = {
+  run: 3,
+  per_trial: [{ trial: 1, cases_total: 20, cases_passed: 20 }],
+  per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `e${i}`, outcome: 'pass', tier: 'pass' })),
+};
+const compiledEvidence = compileCapabilityEvidence({
+  schema_version: 1,
+  source: 'internal_eval',
+  source_ref: baseEvidence.source_ref,
+  state: 'degraded',
+  role: baseEvidence.role,
+  scope: baseEvidence.scope,
+  identity: baseEvidence.identity,
+  issued_at: baseEvidence.issued_at,
+  observed_at: baseEvidence.observed_at,
+  expires_at: baseEvidence.expires_at,
+  methodology: baseEvidence.methodology,
+  trials: baseEvidence.trials,
+  revocation: null,
+  supersedes: null,
+  administrations: [tier1Admin, admin2, admin3],
+  pooled: { passes: 40, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+  competence: { wilson_lower: wilsonLower(40, 60, Z), z: Z, tau: 0.85, n: 60 },
+  tier1_terminated: true,
+  stop_reason: 'tier1',
+});
+
+const storeConfig = resolveStoreConfig({});
+const written = appendEvidenceRecord(storeConfig, compiledEvidence, 'engine-qualify-v2');
+
+const row = {
+  ...baseRow,
+  status: 'failed',
+  quality: { ...(baseRow.quality || {}), corpus_pass: '40/60' },
+  evidence: compiledEvidence,
+  evidence_store: {
+    event_id: written.event_id,
+    producer: written.producer,
+    transcript_hash: written.transcript_hash,
+  },
+};
+process.stdout.write(JSON.stringify(row));
+NODE
+)"
+printf '%s\n' "$POOLED_T1" | node "$CLI" record >/dev/null
+SCOPE_D_T1="$(mktemp "$TEST_TMP/scope-d-t1.XXXXXX.json")"
+node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_D_T1" >/dev/null
+SEAT_D_T1_STRICT="$(node "$CLI" seat-status --engine d5-t1-strict --runner cc-shim --role consult \
+  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_D_T1")"
+assert_contains "$SEAT_D_T1_STRICT" '"admission_status":"no_record"' \
+  "D5 (d) an evidence-backed tier1_terminated pooled receipt is admission_status:no_record under strict --require-evidence (computeSeatProjectionStrict's deriveStatus reads the compiled evidence.state, forced to 'degraded' by the qualified+tier1 invariant, never 'qualified')"
+
 # (f) record → current → seat-status end-to-end on pooled row, both roles
 for ROLE_F in consult discuss; do
   reset_store
@@ -1972,6 +2069,103 @@ CUR_LAD_AFTER="$(node "$CLI" current --role reviewer --now 2026-08-29)"
 LAD_AFTER="$(node "$CLI" ladder --role reviewer --now 2026-08-29)"
 assert_eq "[]" "$CUR_LAD_AFTER" "D5 (g) ladder input path WITH marker drops the baseline from current"
 assert_eq "[]" "$LAD_AFTER" "D5 (g) ladder WITH marker returns no rung"
+
+# COMMIT 3 (g): make the "ladder is empty even without a marker" claim above
+# airtight by proving it with a GENUINELY evidence-backed, internal_eval,
+# qualified reviewer row (not a manual/telemetry stand-in) — ruling out
+# "the telemetry row just wasn't good enough evidence" as an alternative
+# explanation. currentRowsForRole (shared by `current` and `ladder`)
+# UNCONDITIONALLY downgrades a 'qualified' evidenceBackedStatus to
+# 'provisional' before it ever reaches ladder's `status === 'qualified'`
+# filter (scripts/engine-scorecard.js ~:1482, ~:1487: "rowStatus =
+# evidenceBackedStatus === 'qualified' ? 'provisional' : ...") — verified
+# empirically here, and independently confirmed by every OTHER ladder
+# assertion in this repo (hooks/tests/engine-scorecard.test.sh #8/#16: "ladder
+# len=0" is the universal outcome for disk-recorded rows, evidence-backed or
+# not; only a live in-process qualifier run, never a serialized store replay,
+# can produce a ladder rung — the CLI's own help text: "Only a live in-process
+# host-observed run can create a session-local role-capability verifier;
+# serializing the run destroys that capability"). So a genuinely non-empty
+# BEFORE-marker ladder result is not constructible from ANY recorded row —
+# asserting one would misrepresent the system, not strengthen the pin. This
+# fixture instead nails the honest version: even a real evidence-backed
+# qualified reviewer row shows current.status:'provisional' (never
+# 'qualified') and an empty ladder, BEFORE any marker exists at all — proving
+# the (g) supersession projection change is not what keeps this row off the
+# ladder; the marker assertions above remain the actual load-bearing D5(g)
+# pin (current/ladder DROP the superseded event).
+reset_store
+LADREAL_ROW="$(node - <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.cwd();
+const { compileCapabilityEvidence } = require(path.join(root, 'src/engine/capability-evidence.js'));
+const { appendEvidenceRecord, resolveStoreConfig } = require(path.join(root, 'scripts/engine-capability-state.js'));
+const digest = (s) => require('crypto').createHash('sha256').update(s).digest('hex');
+const scope = { task_classes: ['code_review'], domains: ['shell'], languages: ['en'], tool_surface: ['diff_read'] };
+const identity = {
+  identity: 'ladder-admissible-reviewer-v1', model_alias: 'ladder-admissible-reviewer',
+  model_version: '2026-08-28', family: 'test-family', runner: 'test-runner', runner_version: '1.2.3',
+  harness_version: 'review-harness-v2', effort: 'high', prompt_config_hash: digest('prompt-lad'),
+  semantic_fingerprint: digest('semantic-lad'), containment_fingerprint: digest('containment-lad'),
+  identity_resolved: true,
+};
+const methodology = {
+  kind: 'role_eval', name: 'reviewer-known-bad-clean', version: '2.0.0',
+  corpus_version: 'known-bad-clean-v2', corpus_manifest_hash: digest('corpus-lad'),
+  thresholds: {
+    min_trials: 2, min_known_bad_cases: 10, min_critical_cases: 5,
+    max_false_pass_critical: 0, min_clean_cases: 5, max_clean_false_positives: 0,
+  }, basis: null,
+};
+function trial(id, observedAt) {
+  return {
+    trial_id: id, observed_at: observedAt, known_bad_total: 13, known_bad_caught: 13,
+    critical_total: 9, false_pass_critical: 0, clean_total: 11, clean_false_positives: 0,
+    corpus_manifest_hash: methodology.corpus_manifest_hash,
+    artifact_oracle: {
+      kind: 'fixture_manifest', oracle_hash: digest(`oracle-${id}`), result_set_hash: digest(`results-${id}`),
+      independent: true, passed: true,
+    },
+    mutation_validation: {
+      target_id: '01-dropped-error-check', original_hash: digest(`original-${id}`), mutated_hash: digest(`mutated-${id}`),
+      original_verdict: 'fail', mutated_verdict: 'pass', oracle_rejected: true,
+    },
+  };
+}
+const evidence = compileCapabilityEvidence({
+  schema_version: 1, source: 'internal_eval', source_ref: 'test:ladder-admissible',
+  state: 'qualified', role: 'reviewer', scope, identity,
+  issued_at: '2026-08-20T02:00:00.000Z', observed_at: '2026-08-20T01:30:00.000Z',
+  expires_at: '2026-09-18T02:00:00.000Z', methodology,
+  trials: [trial('trial-1', '2026-08-18T01:00:00.000Z'), trial('trial-2', '2026-08-19T01:00:00.000Z')],
+  revocation: null, supersedes: null,
+});
+const storeConfig = resolveStoreConfig({});
+const written = appendEvidenceRecord(storeConfig, evidence, 'engine-qualify-v2');
+const row = {
+  engine: identity.model_alias, model: identity.identity, runner: identity.runner, family: identity.family,
+  role: 'reviewer', model_version: identity.model_version, version_source: 'operator-asserted',
+  corpus_version: methodology.corpus_version, harness_version: identity.harness_version,
+  runner_version: identity.runner_version, prompt_config_hash: identity.prompt_config_hash,
+  effort: identity.effort, date: '2026-08-20', quality: { corpus_pass: '13/13' }, capability_score: 1,
+  cost: { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0, sample_tokens: 0 },
+  latency: { sample_wall_time_s: 0 }, status: 'qualified', qualified_at: '2026-08-20', expires: '2026-09-18',
+  evidence_store: { event_id: written.event_id, producer: written.producer, transcript_hash: written.transcript_hash },
+  evidence,
+};
+process.stdout.write(JSON.stringify(row));
+NODE
+)"
+printf '%s\n' "$LADREAL_ROW" | node "$CLI" record >/dev/null
+CUR_LADREAL="$(node "$CLI" current --role reviewer --now 2026-08-29)"
+LAD_REAL="$(node "$CLI" ladder --role reviewer --now 2026-08-29)"
+assert_contains "$CUR_LADREAL" '"observed_status":"qualified"' \
+  "D5 (g) genuinely evidence-backed reviewer row IS observed as qualified"
+assert_contains "$CUR_LADREAL" '"status":"provisional"' \
+  "D5 (g) but current's OWN projected status is always 'provisional' — never 'qualified' — for any disk-recorded row"
+assert_eq "[]" "$LAD_REAL" \
+  "D5 (g) so ladder is [] even for a genuine evidence-backed qualified row with NO marker present — proving the marker assertions above are the real load-bearing D5(g) pin, not this structural telemetry ceiling"
 
 # Dangling / mismatched rejected at record (never written) — already D1.2/D1.3;
 # re-pin here for the (g) contract.

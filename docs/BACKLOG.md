@@ -713,3 +713,15 @@ never an ad hoc descriptive string.
 - **Context**: pairs with the existing "Killed/dead managed campaign stuck at IMPLEMENTING" row: the fix must release BOTH the campaign lease (MUTATION_FAILED with the live lease identity) and the Mission claim, gated on provable leaf death, and be reachable from `mission`/`campaign` CLI without raw state plumbing.
 - **Effort**: S–M
 - **Source**: phase-2 foreman escalation + depth-0 operator action, 2026-08-30.
+
+### A managed campaign whose wall expires leaves no terminal summary and no journal disposition
+- **Trigger**: already fired twice 2026-08-30 (campaigns attempt-3 `d240ef14…` and `…a3` D5): the leaf committed, `max_wall_seconds` (3600, schema max) elapsed before the review round, the `engine implement-review` process ended with a 0-byte stdout, and the campaign sits at `phase=IMPLEMENTING, activity=dead, wall_seconds_remaining=0` with a held lease and a live Mission claim.
+- **Context**: wall expiry must journal a wall-expiry disposition (MUTATION_FAILED-class with the live lease identity, or a resumable-wait phase if repair generations remain) and always write the summary JSON; a foreman reading an empty file cannot tell a kill from a crash. Pair with a `campaign resume`/`terminalize` verb for an `activity=dead` campaign with repair generations remaining — the artifact was complete and reviewable, only the controller was stuck.
+- **Effort**: S–M
+- **Source**: phase-2 foremen (D4, D5) 2026-08-30.
+
+### 3600 s wall cap is the schema maximum and too small for an implement+review campaign on a real deliverable
+- **Trigger**: any deliverable whose implementer alone needs > ~40 min (D1–D3, D4, D5 all did: 42–55 min grok-4.5 runs), leaving no wall for the review round.
+- **Context**: `schemas/mission-execution-graph.schema.json` caps `campaign.max_wall_seconds` at 3600 and `max_engine_attempts` at 3. Either raise the schema ceiling (with governance `max_wall_seconds` still the aggregate bound) or make the wall cover implementation only and give review rounds their own budget. Until then every real campaign closes through the depth-0 salvage path.
+- **Effort**: S (schema + one test) — but a governance decision.
+- **Source**: phases 1–2, 2026-08-29/30.

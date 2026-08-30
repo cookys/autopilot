@@ -107,3 +107,23 @@
   `7852cf33…`/`39b5ba15…`.
 - **Rail**: the campaign again could not close (BOUNDARY_RECEIPT defect → rail fix #2 above); Mission attempt-2 claim released
   by operator `no_effect_release` before merge. Merge authority = qc panel + re-execution, per phase-1 ruling.
+
+### Phase 2b — D5 merged (2026-08-30, depth-0)
+- **Implementation**: grok-4.5 via Mission campaign `420ac261…` attempt 3 (`0f642584`), 5 files inside `output_paths`; the campaign
+  died at the 3600 s wall five minutes after the commit with a 0-byte summary and zero review rounds (third consecutive
+  campaign lost to wall/closure; BACKLOG rows filed). Attempt-3 claim released by operator `no_effect_release`.
+- **qc panel**: MiniMax-M3 SHIP-AS-IS; GLM-5.2 🟠 pooled denominator untethered (**verified**); gpt-5.6-sol 🔴 `tier1_terminated`
+  trusted not re-derived, 🟠 z/tau unpinned, 🟠 denominator, 🟠 schema branches overlap, 🟠 consumer pins on stand-ins — all
+  **verified** by depth-0 reading the code. Repairs (Claude sonnet, each RED→GREEN): `2bed9cc9` denominator = role's fixed N,
+  Σ clean-administration cases, `harness_excluded` (a CASE count — matches `engine-qualify.js`), tier2 sums; `898c011b`
+  tier1 re-derived across all administrations, z/tau exact-equality to the canonical constants (parity test), exclusive
+  legacy/pooled schema branches (validator has no `not`/`anyOf`, so `{"type":"null"}` on pooled keys), ≥3 clean
+  administrations for a non-terminated qualified row; `fb53f77e` matrix (a) on the REAL twelve rows (157–165 + one per
+  other role, byte-copied from the 2026-08-30 backups), (d) strict-path Tier-1 ⇒ `no_record`, (g) honest pin: `ladder`
+  can never admit disk-recorded rows by design (`currentRowsForRole` downgrades to provisional), so the load-bearing (g)
+  proof is the `current`/`seat-status` before/after pair — recorded as a plan-wording gap, not a defect.
+- **Depth-0 re-execution** on `fb53f77e`: capability-evidence, engine-scorecard, verdict-stability, tier-mapping (blind),
+  consult, discuss, honest-solver, validate, sync parity, canonical invariants, contract schema, diff-check — all green;
+  `evals/` zero diff; grader hashes unchanged.
+- **D1's machine gate now closes**: with the nine markers on the live store, `current`/`seat-status` (both paths) return
+  no admissible baseline for the nine consult/discuss seats — D5's acceptance (g), which the plan orders before any D7 spend.

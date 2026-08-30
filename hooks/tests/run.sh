@@ -223,6 +223,28 @@ if [ "$PARALLEL" -eq 1 ]; then
   fi
 fi
 
+# Per-suite wall-clock ceiling: a hung suite (deadlock, a runaway dispatch
+# stub, ...) must show up as a distinguishable TIMEOUT rather than silently
+# eating the run's entire budget or (worse) reading as an ordinary red. 600s
+# default; override with AUTOPILOT_TEST_SUITE_TIMEOUT_SECS for a slower box or
+# a deliberately long suite. `timeout` sends TERM at the deadline and
+# escalates to KILL 10s later (--kill-after) so a suite that ignores TERM
+# still cannot hang the runner forever.
+AUTOPILOT_TEST_SUITE_TIMEOUT_SECS="${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS:-600}"
+if ! [[ "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "run.sh: AUTOPILOT_TEST_SUITE_TIMEOUT_SECS must be a positive integer number of seconds; got '$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS' — using 600" >&2
+  AUTOPILOT_TEST_SUITE_TIMEOUT_SECS=600
+fi
+readonly AUTOPILOT_TEST_SUITE_TIMEOUT_SECS
+
+# timeout(1) exit codes (GNU coreutils / uutils): 124 = the command was still
+# running at the deadline and was sent TERM; 137 = it ignored TERM and was
+# escalated to KILL 10s later (128+9). Both mean TIMEOUT, not "the suite
+# itself failed" — everything else is the suite's own exit code, unchanged.
+is_suite_timeout_ec() {
+  [ "$1" = "124" ] || [ "$1" = "137" ]
+}
+
 TOTAL=0
 FAILED=0
 declare -a FAILED_TESTS=()
@@ -230,6 +252,7 @@ declare -a FAILED_TESTS=()
 run_one() {
   local file="$1"
   local rel="${file#$REPO_ROOT/}"
+  local ec
   TOTAL=$((TOTAL + 1))
   if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then
     TOTAL=$((TOTAL - 1))
@@ -237,8 +260,14 @@ run_one() {
   fi
   echo ""
   echo "──────── $rel ────────"
-  if bash "$file"; then
+  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file"
+  ec=$?
+  if [ "$ec" -eq 0 ]; then
     : # PASS line printed by finalize_test
+  elif is_suite_timeout_ec "$ec"; then
+    echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
+    FAILED=$((FAILED + 1))
+    FAILED_TESTS+=("$rel [TIMEOUT]")
   else
     FAILED=$((FAILED + 1))
     FAILED_TESTS+=("$rel")
@@ -389,7 +418,7 @@ else
         if [ -n "${SUITE_ORACLE_LOCK_FD:-}" ]; then
           { exec {SUITE_ORACLE_LOCK_FD}>&-; } 2>/dev/null || true
         fi
-        bash "$file" >"$out" 2>&1
+        timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$out" 2>&1
         echo $? >"$ecf"
         # Done marker last so readers only see complete buffers.
         touch "$donef"
@@ -417,7 +446,13 @@ else
       if [ -f "$out" ]; then
         cat "$out"
       fi
-      if [ "$ec" -ne 0 ]; then
+      if [ "$ec" -eq 0 ]; then
+        : # PASS
+      elif is_suite_timeout_ec "$ec"; then
+        echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
+        FAILED=$((FAILED + 1))
+        FAILED_TESTS+=("$rel [TIMEOUT]")
+      else
         FAILED=$((FAILED + 1))
         FAILED_TESTS+=("$rel")
       fi
@@ -490,8 +525,14 @@ else
     rel="${file#$REPO_ROOT/}"
     echo ""
     echo "──────── $rel (serial tail) ────────"
-    if AUTOPILOT_TEST_TIMING_FACTOR=1 bash "$file"; then
+    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file"
+    serial_tail_ec=$?
+    if [ "$serial_tail_ec" -eq 0 ]; then
       :
+    elif is_suite_timeout_ec "$serial_tail_ec"; then
+      echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
+      FAILED=$((FAILED + 1))
+      FAILED_TESTS+=("$rel [TIMEOUT]")
     else
       FAILED=$((FAILED + 1))
       FAILED_TESTS+=("$rel")

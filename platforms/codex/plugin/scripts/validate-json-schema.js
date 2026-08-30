@@ -69,12 +69,10 @@ function assertJsonValue(value, path, active = new Set()) {
   if (typeof value === 'number') {
     // A finite JS double round-trips losslessly through JSON.stringify/JSON.parse
     // by spec (ECMA-262 Number::toString is the unique shortest decimal that
-    // reparses to the exact same double) — that guarantee does not depend on
-    // the value being a "safe integer". The precision-loss risk lives entirely
-    // at the *source-text* boundary (a decimal literal parsed into a double
-    // for the first time), which `parseNumber` below gates before any value
-    // ever reaches this function via `readJson`. NaN/Infinity are the only
-    // finite-JSON-incompatible doubles, so they're what's rejected here.
+    // reparses to the exact same double) — that guarantee holds for ANY finite
+    // double, integer-valued or not, which is why a lossless NON-integer
+    // literal (0.5, 1e-3, ...) is accepted regardless of magnitude. NaN/Infinity
+    // are the only finite-JSON-incompatible doubles, so they're rejected here.
     if (!Number.isFinite(value)) {
       numberError(`${path} contains a number that is not finite (NaN/Infinity are not valid JSON)`);
     }
@@ -88,6 +86,22 @@ function assertJsonValue(value, path, active = new Set()) {
     // check.
     if (Object.is(value, -0)) {
       numberError(`${path} contains -0, whose canonical JSON serialization ("0") loses the sign`);
+    }
+    // An INTEGER-valued double beyond Number.MAX_SAFE_INTEGER is a different
+    // hazard than a fractional one: round-tripping the double back through
+    // JSON is still byte-lossless (per the note above), but the double no
+    // longer distinguishably represents ITS OWN adjacent integers (e.g.
+    // 2**53 and 2**53+1 collapse to the same double), so the JSON-integer
+    // VALUE the caller intended is ambiguous even though the JS number isn't
+    // corrupted. Fail closed with the same UNSUPPORTED_JSON_NUMBER code
+    // `parseNumber` uses for an unsafe integer LITERAL, so an in-memory value
+    // built directly (bypassing `parseNumber`/`readJson`, e.g. a caller that
+    // hands validateJsonSchema a JS value instead of a JSON string) cannot
+    // slip past this check and surface as a misleading "must have type
+    // integer" schema-validation failure instead. Fractional doubles are
+    // exempt: Number.isInteger(0.5) is false, so they fall through untouched.
+    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+      numberError(`${path} contains an integer magnitude beyond Number.MAX_SAFE_INTEGER (${value}); adjacent integers are not distinguishably representable`);
     }
     return;
   }

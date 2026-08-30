@@ -350,39 +350,50 @@ for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_sh
   cp "$SYNC_SANDBOX/$rel/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/$rel/payload.txt"
 done
 mkdir -p "$SYNC_SANDBOX/evals" "$SYNC_SANDBOX/platforms/codex/plugin/evals"
-printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/capability-evidence-corpus.json"
-cp "$SYNC_SANDBOX/evals/capability-evidence-corpus.json" \
-  "$SYNC_SANDBOX/platforms/codex/plugin/evals/capability-evidence-corpus.json"
-printf "'use strict';\n" > "$SYNC_SANDBOX/evals/reviewer-eval-generator.js"
-cp "$SYNC_SANDBOX/evals/reviewer-eval-generator.js" \
-  "$SYNC_SANDBOX/platforms/codex/plugin/evals/reviewer-eval-generator.js"
-printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json"
-cp "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json" \
-  "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-capability-evidence-corpus.json"
-printf "'use strict';\n" > "$SYNC_SANDBOX/evals/owner-eval-generator.js"
-cp "$SYNC_SANDBOX/evals/owner-eval-generator.js" \
-  "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-eval-generator.js"
-# brain + va eval assets joined the sync list in v2.34.17 (the packaged
-# engine-qualify.js requires them at load time — they were the missing half
-# of the mirror).
-for extra in brain-eval-generator.js brain-eval-grader.js va-eval-generator.js va-eval-grader.js; do
-  printf "'use strict';\n" > "$SYNC_SANDBOX/evals/$extra"
-  cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
-done
-for extra in brain-capability-evidence-corpus.json va-capability-evidence-corpus.json; do
-  printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/$extra"
-  cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
-done
-# implementer live-rail suite joined the sync list in v2.34.34 (the packaged
-# engine-qualify.js requires the generator/grader/corpus at load time and the
-# grader spawns the oracle driver .cjs).
-for extra in impl-eval-generator.js impl-eval-grader.js impl-oracle-driver.cjs; do
-  printf "'use strict';\n" > "$SYNC_SANDBOX/evals/$extra"
-  cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
-done
-printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/impl-capability-evidence-corpus.json"
-cp "$SYNC_SANDBOX/evals/impl-capability-evidence-corpus.json" \
-  "$SYNC_SANDBOX/platforms/codex/plugin/evals/impl-capability-evidence-corpus.json"
+# Derive the eval/support asset fixture list FROM the sync script's own
+# SUPPORT_FILES array (scripts/sync-codex-plugin-skills.sh) instead of
+# hand-listing it a second time here — a hand-list silently rots every time a
+# new asset group (e.g. the D4 consult/discuss twelve) joins the manifest.
+SUPPORT_FILES_LIST="$(node - "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" <<'NODE'
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[2], 'utf8');
+const m = src.match(/\nSUPPORT_FILES=\(\n([\s\S]*?)\n\)\n/);
+if (!m) { console.error('SUPPORT_FILES array not found'); process.exit(1); }
+const files = m[1]
+  .split('\n')
+  .map((line) => line.trim())
+  .filter((line) => line && !line.startsWith('#'))
+  .map((line) => {
+    const mm = line.match(/^"([^"]+)"$/);
+    if (!mm) { console.error(`unparsable SUPPORT_FILES entry: ${line}`); process.exit(1); }
+    return mm[1];
+  });
+process.stdout.write(files.join('\n'));
+NODE
+)"
+[ -n "$SUPPORT_FILES_LIST" ] || fail "SUPPORT_FILES_LIST derivation produced no assets"
+
+seed_support_asset() {
+  local rel="$1"
+  mkdir -p "$SYNC_SANDBOX/$(dirname "$rel")" "$SYNC_SANDBOX/platforms/codex/plugin/$(dirname "$rel")"
+  case "$rel" in
+    *.json) printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/$rel" ;;
+    *.md) printf '# fixture\n' > "$SYNC_SANDBOX/$rel" ;;
+    *) printf "'use strict';\n" > "$SYNC_SANDBOX/$rel" ;;
+  esac
+  cp "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
+}
+
+while IFS= read -r support_rel; do
+  [ -n "$support_rel" ] || continue
+  seed_support_asset "$support_rel"
+done <<< "$SUPPORT_FILES_LIST"
+
+NEGATIVE_CONTROL_ASSET="evals/consult-eval-rubric.seal.json"
+if ! grep -qxF "$NEGATIVE_CONTROL_ASSET" <<< "$SUPPORT_FILES_LIST"; then
+  fail "negative control asset $NEGATIVE_CONTROL_ASSET is not in the derived SUPPORT_FILES list"
+fi
+
 mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example" \
   "$SYNC_SANDBOX/platforms/codex/skill-adapters"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"
@@ -429,6 +440,19 @@ bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 in sandbox"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check sandbox clean report"
+
+# Negative control: remove one manifest-listed asset (from D4's consult/discuss
+# twelve) from the sandbox's GENERATED copy and confirm --check goes red
+# naming exactly that asset — proves this fixture is actually manifest-driven
+# rather than a second hand-list that merely happens to be long enough today.
+rm "$SYNC_SANDBOX/platforms/codex/plugin/$NEGATIVE_CONTROL_ASSET"
+NEGATIVE_CONTROL_OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"
+NEGATIVE_CONTROL_EXIT=$?
+assert_eq "$NEGATIVE_CONTROL_EXIT" "1" "sync-codex-plugin-skills --check rejects a manifest asset removed from the generated copy"
+assert_contains "$NEGATIVE_CONTROL_OUT" "$NEGATIVE_CONTROL_ASSET" "sync-codex-plugin-skills --check names the missing manifest asset"
+cp "$SYNC_SANDBOX/$NEGATIVE_CONTROL_ASSET" "$SYNC_SANDBOX/platforms/codex/plugin/$NEGATIVE_CONTROL_ASSET"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 after negative-control asset is restored"
 
 rm "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js" \

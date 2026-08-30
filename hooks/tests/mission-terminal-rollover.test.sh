@@ -14,33 +14,75 @@
 # cannot be replayed. If that ancestry check ever softens, the exemption becomes
 # unsound. Most of this harness exists to keep that one argument honest.
 #
-# Why it runs against the REAL repository rather than a synthetic fixture: a Mission
-# state must satisfy ~20 validator predicates and `repo_identity` is bound to the git
-# common dir, so a fixture is neither cheap nor more faithful. Every case below either
-# makes no writes or restores what it touched.
+# Why it runs against a clone of the REAL repository rather than a synthetic
+# fixture: a Mission state must satisfy ~20 validator predicates and
+# `repo_identity` is bound to the git common dir, so a hand-fabricated JSON
+# fixture is neither cheap nor more faithful. Every case below either makes no
+# writes or restores what it touched — but "restores" is not enough on its
+# own: mission-terminal-reconcile.js and mission-routing-admission.js derive
+# their common dir purely from `git -C <repo-root>`, so pointing --repo-root at
+# a SCRATCH CLONE (full history, its own independent .git) instead of the live
+# worktree gets the same real-Mission-state faithfulness while making it
+# structurally impossible for this harness to touch the live host's
+# .git/autopilot/mission — no restore-on-failure race, no live-store mutation
+# window at all. A live-store byte-identity check at the end is a belt-and-
+# braces regression guard on top of that isolation.
 #
 # NOTE: hooks/tests/mission-routing-admission.test.sh is RED on develop independently
 # of this work (scripts/verify-preexisting.sh: head=fail, base=fail), so it cannot
 # serve as the oracle here.
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-RECONCILE="$ROOT/scripts/mission-terminal-reconcile.js"
-ADMISSION="$ROOT/scripts/mission-routing-admission.js"
+LIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RECONCILE="$LIVE_ROOT/scripts/mission-terminal-reconcile.js"
+ADMISSION="$LIVE_ROOT/scripts/mission-routing-admission.js"
 PASS=0; FAIL=0
 
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
 skip() { printf 'SKIP: %s\n' "$1"; }
 
+LIVE_COMMON="$(git -C "$LIVE_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+LIVE_MROOT="$LIVE_COMMON/autopilot/mission"
+LIVE_STORE="$LIVE_MROOT/terminal-rollovers.json"
+
+if [ ! -f "$LIVE_MROOT/registry.json" ]; then
+  skip "no Mission registry in this clone — rollover has nothing to act on"
+  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"; exit 0
+fi
+
+# Byte-identity baseline on the LIVE store, taken before any scratch-clone
+# work begins.
+LIVE_STORE_HASH_BEFORE="$( [ -f "$LIVE_STORE" ] && sha256sum "$LIVE_STORE" | awk '{print $1}' || echo "absent" )"
+
+SCRATCH_HOME="$(mktemp -d "${TMPDIR:-/tmp}/mission-terminal-rollover-scratch.XXXXXX")"
+cleanup_scratch() { rm -rf "$SCRATCH_HOME"; }
+trap cleanup_scratch EXIT
+
+if ! git clone --quiet --no-hardlinks -- "$LIVE_ROOT" "$SCRATCH_HOME/repo" >/dev/null 2>&1; then
+  skip "could not clone the repo into a scratch dir — rollover has nothing safe to act on"
+  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"; exit 0
+fi
+ROOT="$SCRATCH_HOME/repo"
+
 COMMON="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
 MROOT="$COMMON/autopilot/mission"
 STORE="$MROOT/terminal-rollovers.json"
 
-if [ ! -f "$MROOT/registry.json" ]; then
-  skip "no Mission registry in this clone — rollover has nothing to act on"
-  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"; exit 0
-fi
+# .git/autopilot/mission is untracked runtime state, not part of git history,
+# so a fresh clone's .git does not carry it — copy the live snapshot into the
+# scratch clone's own (isolated) common dir. terminal-rollovers.json is
+# excluded: it is the TOOL'S OWN OUTPUT (not mission/evidence input), each
+# record's repo_identity is bound to the git-common-dir it was written under
+# (by design — see the header above), and the live copy's records are bound
+# to the live common dir. Carrying a stale record into the scratch clone
+# would make every fresh rollover computed under the scratch common dir look
+# like a conflicting "different rollover" for the same graph (ROLLOVER_REPLAY)
+# even though nothing is actually wrong — so rollover.json starts clean here,
+# same as it does the first time this ever runs on a fresh repo.
+mkdir -p "$(dirname "$MROOT")"
+cp -R "$LIVE_MROOT" "$MROOT"
+rm -f "$MROOT/terminal-rollovers.json"
 
 # Find a graph that has MORE THAN ONE COMPLETE adoption — the exact condition that
 # produces the ambiguity. Without one, there is nothing for rollover to resolve.
@@ -180,6 +222,13 @@ if [ -f "$STORE" ]; then
 else
   skip "no rollover store to tamper with"
 fi
+
+# Byte-identity proof: the entire harness ran against the scratch clone's own
+# common dir, so the LIVE host's store must be untouched.
+LIVE_STORE_HASH_AFTER="$( [ -f "$LIVE_STORE" ] && sha256sum "$LIVE_STORE" | awk '{print $1}' || echo "absent" )"
+[ "$LIVE_STORE_HASH_BEFORE" = "$LIVE_STORE_HASH_AFTER" ] \
+  && ok "live host mission-terminal-rollovers.json is byte-identical before/after (scratch clone never touched it)" \
+  || bad "live host mission-terminal-rollovers.json CHANGED (before=$LIVE_STORE_HASH_BEFORE after=$LIVE_STORE_HASH_AFTER)"
 
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

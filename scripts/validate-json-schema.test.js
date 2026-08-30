@@ -59,6 +59,7 @@ assertRejected('1.50', 'trailing zero lost on canonical re-serialize ("1.5")');
 assertRejected('0.1000000000000000000000001', 'rounds to the same double as 0.1, byte-mismatch');
 assertRejected('1e999', 'overflows to Infinity, not finite JSON');
 assertRejected('9007199254740993', 'unsafe integer — reparses to a different double (9007199254740992)');
+assertRejected('9007199254740992', '2**53 — exactly representable but adjacent integers collapse (Number.isSafeInteger is false)');
 
 // --- Required planted positives (must still be accepted) --------------------
 assertAccepted('0.75');
@@ -66,6 +67,7 @@ assertAccepted('0.9166666666666666');
 assertAccepted('100');
 assertAccepted('-42');
 assertAccepted('1.5');
+assertAccepted('0.5');
 
 // --- assertJsonValue: the in-memory-value boundary (no source literal at all,
 // e.g. validateJsonSchema() called directly on a constructed object) --------
@@ -101,6 +103,40 @@ test('assertJsonValue REJECTED: Infinity as an in-memory value', () => {
 
 test('assertJsonValue ACCEPTED: a finite non-integer in-memory value', () => {
   assert.doesNotThrow(() => assertJsonValue(0.9166666666666666, '$'));
+});
+
+// Regression case: a caller that hands validateJsonSchema a JS value directly
+// (not a JSON string through readJson/preflightJsonSource) used to bypass the
+// unsafe-integer check entirely — 2**53 slipped through assertJsonValue as a
+// "finite double" and only failed later as a misleading "must have type
+// integer" schema error instead of the explicit UNSUPPORTED_JSON_NUMBER this
+// magnitude deserves. See hooks/tests/execution-profile.test.sh's
+// `validateJsonSchema({ type: 'integer' }, Number.MAX_SAFE_INTEGER + 1)` case.
+test('assertJsonValue REJECTED: 2**53 as an in-memory integer value (unsafe magnitude)', () => {
+  assert.throws(
+    () => assertJsonValue(2 ** 53, '$'),
+    (error) => {
+      assert.equal(error.code, 'UNSUPPORTED_JSON_NUMBER');
+      return true;
+    },
+  );
+});
+
+test('assertJsonValue REJECTED: Number.MAX_SAFE_INTEGER + 1 as an in-memory integer value', () => {
+  assert.throws(
+    () => assertJsonValue(Number.MAX_SAFE_INTEGER + 1, '$'),
+    (error) => {
+      assert.equal(error.code, 'UNSUPPORTED_JSON_NUMBER');
+      return true;
+    },
+  );
+});
+
+// A lossless NON-integer in-memory value must keep being accepted regardless
+// of the integer-magnitude guard above — Number.isInteger(0.5) is false, so
+// it must fall through untouched.
+test('assertJsonValue ACCEPTED: 0.5 as an in-memory value', () => {
+  assert.doesNotThrow(() => assertJsonValue(0.5, '$'));
 });
 
 test('assertJsonValue ACCEPTED: 0 (positive zero) is not confused with -0', () => {

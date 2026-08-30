@@ -3716,17 +3716,23 @@ const failures = [];
 function assert(cond, msg) { if (!cond) failures.push(msg); }
 
 assert(result.qualified === false, 'instrument-error run must not qualify');
-assert(result.row && result.row.status === 'instrument_error',
-  `row.status must be instrument_error, got ${result.row && result.row.status}`);
+assert(result.status === 'instrument_error',
+  `top-level status must be instrument_error, got ${result.status}`);
+assert(result.row === null,
+  `row MUST be null on instrument failure (fail-closed, never row-shaped), got ${JSON.stringify(result.row)}`);
 assert(result.evidence === null, 'no evidence/scorecard row may be emitted on instrument failure');
-assert(result.row && result.row.evidence === null, 'row.evidence must be null on instrument failure');
 assert(result.instrument_error && typeof result.instrument_error.message === 'string'
   && result.instrument_error.message.includes('stubbed instrument failure'),
   `the exception message must be recorded in the receipt, got ${JSON.stringify(result.instrument_error)}`);
 assert(result.verdict && typeof result.verdict.reason === 'string'
   && result.verdict.reason.includes('stubbed instrument failure'),
   `verdict.reason must carry the exception message, got ${result.verdict && result.verdict.reason}`);
-assert(result.verdict && result.verdict.qualified === false, 'verdict.qualified must be false');
+assert(result.verdict && result.verdict.status === 'instrument_error',
+  `verdict.status must be instrument_error, got ${result.verdict && result.verdict.status}`);
+assert(result.verdict && !('qualified' in result.verdict),
+  `verdict must not carry a qualified field, got ${JSON.stringify(result.verdict)}`);
+assert(result.verdict && Object.keys(result.verdict).sort().join(',') === 'reason,status',
+  `verdict must be limited to {status, reason} only, got ${JSON.stringify(result.verdict)}`);
 
 fs.rmSync(shortTmpBase, { recursive: true, force: true });
 
@@ -3857,6 +3863,275 @@ NODE
 D7C_RC=$?
 assert_exit_code "$D7C_RC" "0" "D7(c) reason-recovery sweep: no protocol_violation ever falls to STEP-3 default-deny: $D7C_OUT"
 assert_contains "$D7C_OUT" "OK d7c" "D7(c) suite reports OK"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D7(d) — 2026-08-30 D7 incident 2ND fix: a 'protocol_violation' label with NO
+# recoverable reason string (checkProtocol() returns null, does NOT throw)
+# must ALSO abort fail-closed as instrument_error. Before this fix,
+# graderReason stayed null and classifyQualificationOutcome fell through to
+# its STEP-3 default-deny — the exact laundering into Tier-1 the D7 incident
+# already burned real seats over, just via a different (non-throwing) door.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D7D_RAWDIR="$TEST_TMP/d7d-raw"
+mkdir -p "$D7D_RAWDIR"
+D7D_OUT="$(node - "$REPO_ROOT" "$D7D_RAWDIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const root = process.argv[2];
+const rawDir = process.argv[3];
+const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
+
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7d-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7d-'));
+const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');
+
+// Stub the sealed grader's checkProtocol() to return null/empty (NOT throw)
+// -- the exact instrument inconsistency this fix guards: classify() labels
+// the case protocol_violation, but no recoverable reason string comes back.
+const grader = require(path.join(root, 'evals/consult-eval-grader.js'));
+const originalCheckProtocol = grader.checkProtocol;
+grader.checkProtocol = function nullReasonCheckProtocol() {
+  return null;
+};
+
+fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output: 'plain prose, not JSON, so classify() returns protocol_violation and the stubbed checkProtocol() returns null',
+}));
+`);
+
+const digest = (ch) => ch.repeat(64);
+const seed = 'd7d-instrument-error-no-reason-seed';
+process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+process.env.AUTOPILOT_QUALIFY_SEED = seed;
+
+const result = runConsultQualification({
+  role: 'consult',
+  trials: 2,
+  expiresDays: 30,
+  emitRow: false,
+  execute: true,
+  taskClasses: ['consult'],
+  domains: ['cross-cutting'],
+  languages: ['en'],
+  tools: ['read_only'],
+  engine: 'consult-engine',
+  model: 'consult-model-exact',
+  modelVersion: '2026-08-28',
+  versionSource: 'operator-asserted',
+  runner: 'consult-harness',
+  runnerVersion: '1.0.0',
+  family: 'test-family',
+  harnessVersion: 'consult-harness-v1',
+  effort: 'high',
+  promptConfigHash: digest('a'),
+  semanticFingerprint: digest('b'),
+  containmentFingerprint: digest('c'),
+  panelReadOnlyBinds: [],
+  panelEnvironment: [],
+  providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+  remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+  remoteProvider: 'fake-consult-provider',
+  remoteTimeoutMs: 60_000,
+  store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+  rawDir,
+  testAdministrationsOverride: 1,
+});
+
+grader.checkProtocol = originalCheckProtocol;
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+assert(result.qualified === false, 'instrument-error run must not qualify');
+assert(result.status === 'instrument_error',
+  `top-level status must be instrument_error, got ${result.status}`);
+assert(result.row === null, `row must be null, got ${JSON.stringify(result.row)}`);
+assert(result.evidence === null, 'no scorecard row may be emitted on instrument failure');
+assert(result.instrument_error && typeof result.instrument_error.message === 'string'
+  && result.instrument_error.message.includes('protocol_violation')
+  && result.instrument_error.message.includes('no recoverable'),
+  `the receipt must name the no-recoverable-reason inconsistency, got ${JSON.stringify(result.instrument_error)}`);
+assert(typeof result.instrument_error.case_id === 'string' && result.instrument_error.case_id.length > 0,
+  `instrument_error must name the case id, got ${JSON.stringify(result.instrument_error)}`);
+// The D7 fingerprint this fix closes: the case must NEVER land as a graded
+// tier1/step3/unknown_reason row -- there must be no row / verdict.reason
+// carrying that signature at all, because there is no row.
+assert(!(result.verdict && result.verdict.reason && result.verdict.reason.includes('unknown_reason')),
+  `must never carry the tier1/step3/unknown_reason fingerprint, got ${result.verdict && result.verdict.reason}`);
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write('OK d7d instrument_error_no_reason\n');
+NODE
+)"
+D7D_RC=$?
+assert_exit_code "$D7D_RC" "0" "D7(d) protocol_violation with no recoverable reason aborts fail-closed as instrument_error (no Tier-1, no row): $D7D_OUT"
+assert_contains "$D7D_OUT" "OK d7d" "D7(d) suite reports OK"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D7(e) — CLI-style path (emitRow: true), the exact seam main() drives
+# (`--emit-row` prints `JSON.stringify(runResult.row)` to stdout): on an
+# instrument_error receipt the printed row must contain no row-shaped JSON
+# (row is null, so the print is the bare token "null"), and neither the
+# scorecard store nor the capability store may be touched -- the aborted
+# case must never be recorded or promoted.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D7E_SCORECARD_DIR="$(mktemp -d)"
+D7E_CAPABILITY_DIR="$(mktemp -d)"
+D7E_RAWDIR="$TEST_TMP/d7e-raw"
+mkdir -p "$D7E_RAWDIR"
+D7E_OUT="$(ENGINE_SCORECARD_DIR="$D7E_SCORECARD_DIR" ENGINE_CAPABILITY_DIR="$D7E_CAPABILITY_DIR" \
+  node - "$REPO_ROOT" "$D7E_RAWDIR" "$D7E_SCORECARD_DIR" "$D7E_CAPABILITY_DIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const root = process.argv[2];
+const rawDir = process.argv[3];
+const scorecardDir = process.argv[4];
+const capabilityDir = process.argv[5];
+const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
+
+function snapshotDir(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).sort().map((name) => {
+    const full = path.join(dir, name);
+    const stat = fs.statSync(full);
+    return `${name}:${stat.isDirectory() ? 'dir' : stat.size}`;
+  });
+}
+
+const scorecardBefore = snapshotDir(scorecardDir);
+const capabilityBefore = snapshotDir(capabilityDir);
+
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7e-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7e-'));
+const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');
+
+const grader = require(path.join(root, 'evals/consult-eval-grader.js'));
+const originalCheckProtocol = grader.checkProtocol;
+grader.checkProtocol = function throwingCheckProtocol() {
+  throw new Error('stubbed CLI-path instrument failure');
+};
+
+fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output: 'plain prose, not JSON, so classify() returns protocol_violation and the stubbed checkProtocol() throws',
+}));
+`);
+
+const digest = (ch) => ch.repeat(64);
+process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+process.env.AUTOPILOT_QUALIFY_SEED = 'd7e-cli-emit-row-seed';
+
+// emitRow: true drives the exact runResult shape main() prints under
+// `--emit-row`: this test then reproduces main()'s print logic verbatim
+// (`JSON.stringify(runResult.row)` to "stdout", `JSON.stringify(verdict)`
+// built from `{...runResult.verdict, evaluation_passed, admitted,
+// authority_status}` to "stderr") to prove that exact seam never leaks a
+// row-shaped payload.
+const result = runConsultQualification({
+  role: 'consult',
+  trials: 2,
+  expiresDays: 30,
+  emitRow: true,
+  execute: true,
+  taskClasses: ['consult'],
+  domains: ['cross-cutting'],
+  languages: ['en'],
+  tools: ['read_only'],
+  engine: 'consult-engine',
+  model: 'consult-model-exact',
+  modelVersion: '2026-08-28',
+  versionSource: 'operator-asserted',
+  runner: 'consult-harness',
+  runnerVersion: '1.0.0',
+  family: 'test-family',
+  harnessVersion: 'consult-harness-v1',
+  effort: 'high',
+  promptConfigHash: digest('a'),
+  semanticFingerprint: digest('b'),
+  containmentFingerprint: digest('c'),
+  panelReadOnlyBinds: [],
+  panelEnvironment: [],
+  providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+  remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+  remoteProvider: 'fake-consult-provider',
+  remoteTimeoutMs: 60_000,
+  store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+  rawDir,
+  testAdministrationsOverride: 1,
+});
+
+grader.checkProtocol = originalCheckProtocol;
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+assert(result.status === 'instrument_error', `top-level status must be instrument_error, got ${result.status}`);
+assert(result.row === null, `row must be null, got ${JSON.stringify(result.row)}`);
+
+// Reproduce main()'s exact CLI print (scripts/engine-qualify.js main()):
+// with --emit-row, stdout gets JSON.stringify(runResult.row), stderr gets
+// the trimmed verdict.
+const stdoutPrint = JSON.stringify(result.row);
+const cliVerdict = {
+  ...result.verdict,
+  evaluation_passed: result.qualified,
+  admitted: false,
+  authority_status: 'untrusted_telemetry',
+};
+delete cliVerdict.qualified;
+
+assert(stdoutPrint === 'null', `--emit-row stdout must be the bare token "null", got ${stdoutPrint}`);
+assert(!stdoutPrint.includes('administration_outcome') && !stdoutPrint.includes('evidence'),
+  `--emit-row stdout must contain no row-shaped JSON, got ${stdoutPrint}`);
+assert(cliVerdict.status === 'instrument_error', `CLI verdict status must survive the spread, got ${JSON.stringify(cliVerdict)}`);
+assert(!('qualified' in cliVerdict), `CLI verdict must never carry a qualified field, got ${JSON.stringify(cliVerdict)}`);
+
+const scorecardAfter = snapshotDir(scorecardDir);
+const capabilityAfter = snapshotDir(capabilityDir);
+assert(JSON.stringify(scorecardAfter) === JSON.stringify(scorecardBefore),
+  `ENGINE_SCORECARD_DIR must be untouched on instrument_error, before=${JSON.stringify(scorecardBefore)} after=${JSON.stringify(scorecardAfter)}`);
+assert(JSON.stringify(capabilityAfter) === JSON.stringify(capabilityBefore),
+  `ENGINE_CAPABILITY_DIR must be untouched on instrument_error, before=${JSON.stringify(capabilityBefore)} after=${JSON.stringify(capabilityAfter)}`);
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write('OK d7e cli_emit_row_no_leak\n');
+NODE
+)"
+D7E_RC=$?
+assert_exit_code "$D7E_RC" "0" "D7(e) CLI-style --emit-row path leaks no row JSON and leaves both temp stores untouched on instrument_error: $D7E_OUT"
+assert_contains "$D7E_OUT" "OK d7e" "D7(e) suite reports OK"
+rm -rf "$D7E_SCORECARD_DIR" "$D7E_CAPABILITY_DIR"
 
 
 finalize_test

@@ -3980,21 +3980,43 @@ function runConsultDiscussQualification(options) {
             // grader.classify() merges gates internally (mergeGates(gates)
             // before checkProtocol) — undefined here is safe.
             outcome = grader.classify(caseSpec, responseParsed, undefined);
-            if (outcome === 'protocol_violation'
-                && typeof grader.checkProtocol === 'function') {
-              try {
-                graderReason = recoverConsultProtocolReason(grader, caseSpec, responseParsed);
-              } catch (err) {
-                // Do NOT swallow: a grader exception here is an instrument
-                // failure, not an engine capability signal. Abort this
-                // administration and the whole run fail-closed instead of
-                // letting classifyQualificationOutcome fall through to its
-                // STEP-3 default-deny with a lost reason.
+            if (outcome === 'protocol_violation') {
+              if (typeof grader.checkProtocol === 'function') {
+                try {
+                  graderReason = recoverConsultProtocolReason(grader, caseSpec, responseParsed);
+                } catch (err) {
+                  // Do NOT swallow: a grader exception here is an instrument
+                  // failure, not an engine capability signal. Abort this
+                  // administration and the whole run fail-closed instead of
+                  // letting classifyQualificationOutcome fall through to its
+                  // STEP-3 default-deny with a lost reason.
+                  instrumentError = {
+                    stage: 'checkProtocol',
+                    role,
+                    administration: runIndex,
+                    case_id: caseSpec.case_id,
+                    message: err && err.message ? String(err.message) : String(err),
+                  };
+                }
+              }
+              // A 'protocol_violation' label with no recoverable non-empty
+              // reason string is ALSO an instrument inconsistency — not just
+              // a thrown exception. Left unguarded, graderReason stays null
+              // (checkProtocol returned null/empty, or isn't a function),
+              // classifyQualificationOutcome falls through to its STEP-3
+              // default-deny, and the case is silently laundered into
+              // Tier-1 — the exact 2026-08-30 D7 incident shape. Treat it
+              // the same as a thrown exception: abort fail-closed.
+              if (!instrumentError
+                  && !(typeof graderReason === 'string' && graderReason.length > 0)) {
                 instrumentError = {
                   stage: 'checkProtocol',
                   role,
+                  administration: runIndex,
                   case_id: caseSpec.case_id,
-                  message: err && err.message ? String(err.message) : String(err),
+                  message: `grader.classify() labeled case '${caseSpec.case_id}' `
+                    + `'protocol_violation' but no recoverable non-empty reason `
+                    + `string was returned`,
                 };
               }
             }
@@ -4128,6 +4150,7 @@ function runConsultDiscussQualification(options) {
         grader_hash: staticAssets.grader_hash,
         transport: panelConfig.transport,
       },
+      status: 'instrument_error',
       qualified: false,
       wall_truncated: wallTruncated,
       started_cases: startedCases,
@@ -4135,19 +4158,20 @@ function runConsultDiscussQualification(options) {
       tier1_terminated: false,
       evidence: null,
       instrument_error: instrumentError,
-      row: {
-        status: 'instrument_error',
-        administration_outcome: 'instrument_error',
-        evidence: null,
-        instrument_error: instrumentError,
-      },
+      // Fail-closed (2026-08-30 D7 incident, 2nd fix): row MUST be null,
+      // never row-shaped. A row-shaped instrument_error object here
+      // previously let `--emit-row` print it and could tempt a caller into
+      // recording/promoting it as evidence — the exact laundering this
+      // status exists to prevent. Every consumer on the CLI path
+      // (main()'s `--emit-row` print, evidence append, promotion) MUST
+      // treat `row: null` as "nothing to record", not dereference it.
+      row: null,
+      // verdict is deliberately trimmed to {status, reason} only — no
+      // `qualified`, no competence/administration fields. An
+      // instrument_error verdict must never carry anything that looks
+      // like a graded engine-capability signal.
       verdict: {
-        engine: options.engine,
-        model: options.model,
-        runner: options.runner,
-        role,
-        qualified: false,
-        administration_outcome: 'instrument_error',
+        status: 'instrument_error',
         reason: `grader instrument failure at ${instrumentError.stage} on case `
           + `${instrumentError.case_id}: ${instrumentError.message}`,
       },

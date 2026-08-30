@@ -2208,8 +2208,21 @@ function approx(a, b, eps, msg) {
 
 const Z = eq.VERDICT_Z;
 const TAU = eq.VERDICT_TAU;
+// CEO-frozen calibration (coordinator fold-in): a drifted Z that still
+// happens to yield K=56/45 (e.g. rounding-adjacent) must not pass silently —
+// pin the exact frozen constants, not just their derived consequence.
+assert(eq.VERDICT_Z === 1.6448536269514722 && eq.VERDICT_TAU === 0.85,
+  `CEO-frozen constants drifted: VERDICT_Z=${eq.VERDICT_Z} VERDICT_TAU=${eq.VERDICT_TAU}`);
 
-// Independent re-derivation of K (ADR-0001): do NOT call foldPooledVerdict;
+// The bars are FROZEN CONSTANTS (the plan's published K=56/60 consult,
+// K=45/48 discuss) — they do not float with whatever `deriveK` happens to
+// compute this run. Every OC number below is computed from these literals.
+const K_CONSULT = 56;
+const K_DISCUSS = 45;
+
+// Independent re-derivation of K (ADR-0001), kept ONLY as a separate
+// agreement assertion against the frozen constants above — it must never be
+// the value the OC table/p* are computed from. Do NOT call foldPooledVerdict;
 // do NOT import any OC helper from production. K = smallest k with
 // wilsonLower(k, N, VERDICT_Z) >= VERDICT_TAU.
 function deriveK(N, z, tau) {
@@ -2218,11 +2231,10 @@ function deriveK(N, z, tau) {
   }
   return null;
 }
-
-const K_CONSULT = deriveK(60, Z, TAU);
-const K_DISCUSS = deriveK(48, Z, TAU);
-assert(K_CONSULT === 56, `consult K derived ${K_CONSULT}, expected 56`);
-assert(K_DISCUSS === 45, `discuss K derived ${K_DISCUSS}, expected 45`);
+assert(deriveK(60, Z, TAU) === K_CONSULT,
+  `deriveK(60) agrees with frozen K_CONSULT: got ${deriveK(60, Z, TAU)}, expected ${K_CONSULT}`);
+assert(deriveK(48, Z, TAU) === K_DISCUSS,
+  `deriveK(48) agrees with frozen K_DISCUSS: got ${deriveK(48, Z, TAU)}, expected ${K_DISCUSS}`);
 
 assert(wilsonLower(56, 60, Z) >= 0.85, 'wilsonLower(56,60,Z) >= 0.85');
 assert(wilsonLower(55, 60, Z) < 0.85, 'wilsonLower(55,60,Z) < 0.85');
@@ -2261,6 +2273,14 @@ function exactPQualify(p, N, K) {
   return Math.exp(m) * s;
 }
 
+// Purity check (R1/[2]): the exact-binomial tail must be a SEPARATE
+// implementation from wilsonLower — assert by grepping the oracle
+// functions' own source text, not by trusting the import list above.
+for (const fn of [lngamma, logBinom, exactPQualify]) {
+  assert(!fn.toString().includes('wilsonLower'),
+    `${fn.name} source must not reference wilsonLower (exact tail is independent of the Wilson helper)`);
+}
+
 const OC_TABLE = [
   [0.85, 0.042372, 0.057168],
   [0.90, 0.270958, 0.279862],
@@ -2272,8 +2292,8 @@ const OC_TABLE = [
 for (const [p, ec, ed] of OC_TABLE) {
   const c = exactPQualify(p, 60, K_CONSULT);
   const d = exactPQualify(p, 48, K_DISCUSS);
-  approx(c, ec, 5e-4, `exact OC consult p=${p}`);
-  approx(d, ed, 5e-4, `exact OC discuss p=${p}`);
+  approx(c, ec, 1e-6, `exact OC consult p=${p}`);
+  approx(d, ed, 1e-6, `exact OC discuss p=${p}`);
 }
 
 function solvePStar(N, K) {
@@ -2288,10 +2308,12 @@ function solvePStar(N, K) {
 }
 const pStarConsult = solvePStar(60, K_CONSULT);
 const pStarDiscuss = solvePStar(48, K_DISCUSS);
-approx(pStarConsult, 0.92259, 5e-5, 'p*(consult)');
-approx(pStarDiscuss, 0.92403, 5e-5, 'p*(discuss)');
+approx(pStarConsult, 0.922585, 5e-6, 'p*(consult)');
+approx(pStarDiscuss, 0.924032, 5e-6, 'p*(discuss)');
 assert(Number(pStarConsult.toFixed(4)) === 0.9226, `p* consult to 4dp: ${pStarConsult.toFixed(4)}`);
 assert(Number(pStarDiscuss.toFixed(4)) === 0.9240, `p* discuss to 4dp: ${pStarDiscuss.toFixed(4)}`);
+assert(Number(pStarConsult.toFixed(5)) === 0.92259, `p* consult to 5dp: ${pStarConsult.toFixed(5)}`);
+assert(Number(pStarDiscuss.toFixed(5)) === 0.92403, `p* discuss to 5dp: ${pStarDiscuss.toFixed(5)}`);
 assert(pStarConsult > 0.92 && pStarConsult < 0.93, 'p*(consult) in (0.92, 0.93)');
 assert(pStarDiscuss > 0.92 && pStarDiscuss < 0.93, 'p*(discuss) in (0.92, 0.93)');
 assert(Math.abs(pStarConsult - 0.90) > 0.01 && Math.abs(pStarDiscuss - 0.90) > 0.01,

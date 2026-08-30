@@ -127,3 +127,25 @@
   `evals/` zero diff; grader hashes unchanged.
 - **D1's machine gate now closes**: with the nine markers on the live store, `current`/`seat-status` (both paths) return
   no admissible baseline for the nine consult/discuss seats — D5's acceptance (g), which the plan orders before any D7 spend.
+
+### Phase 3a — D6 merged (2026-08-30, depth-0)
+- **Implementation**: grok-4.5 via Mission campaign `420ac261…` attempt 4 (`286c6b46`): the D6 test section (+817) and
+  `OC-CHARACTERIZATION.md` (+161). The foreman independently re-derived every oracle number before dispatch. The campaign's
+  sealed `verify_cmd` (`hooks/tests/run.sh`) failed on ONE pre-existing pin unrelated to D6
+  (`resolve-review-loop-consult-discuss-switch` Population-B file count 27→28, moved by the rail-fix e2e suite; repinned
+  `ef1b7a36`), so the campaign again could not journal a terminal receipt; attempt-4 claim released by operator.
+- **qc panel**: MiniMax-M3 SHIP-AS-IS (second administration; first was a NO-FINDING-PROOF format `no_verdict`); GLM-5.2
+  🟠 isolation half of the independence test vacuous (**verified**) + 🔵 Z/TAU literal pin, ancestry guard; gpt-5.6-sol 🟠
+  oracle bars derived through production `wilsonLower` and loose tolerances (**verified**), 🟠 simulation under-powered at
+  both binding margins (**verified**: 0.24–0.39 SE gaps at n=400), 🟠 independence vacuous (**verified**), 🟠 other-role
+  parity not a verdict comparison — **ruled 🟡**: the test byte-compares the role kernels' function source
+  (`runImplQualification`, `runVaQualification`, `runBrainQualification`, `ownerRuleViolations`, `runQualification`) plus the
+  owner verdict against the pinned base, which is a stronger guarantee than a fixture verdict comparison.
+- **Repairs** (Claude sonnet, RED→GREEN): `e581a942` K=56/45 as literals, oracle source never references `wilsonLower`, OC to
+  ±1e-6, p* to ±5e-6, Z/TAU literal pin; `c921bfe3` binding margins asserted on the exact oracle, per-cell tolerance
+  `max(0.01, 3·SE)`, n=3000 (smallest n with ≥0.9 power at all four binding-margin cases; n=2000 gives ≈0.77 at
+  discuss@0.85), SplitMix32 seed expansion rule, doc regenerated; `6e70acc4` independence drives the real per-case loop
+  through the scripted-adapter seam in natural / shuffled / one-case-administration order with a negative control
+  (position-keyed adapter ⇒ RED); `a25d7d17` KR7 base pin guarded by `merge-base --is-ancestor origin/develop`.
+- **Depth-0 re-execution** on `a25d7d17`: verdict-stability 44 (100 s), tier-mapping 11, consult 59, honest-solver 16,
+  capability-evidence 11, `check-test-integrity` ok, diff-check clean, `evals/` zero diff.

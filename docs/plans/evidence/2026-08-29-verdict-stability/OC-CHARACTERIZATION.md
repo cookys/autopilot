@@ -70,92 +70,100 @@ The honest boundary is **≈0.923**, explicitly **not 0.90**.
 
 ## Simulation record (secondary cross-check)
 
-- **PRNG**: Mulberry32 (Tommy Ettinger) — same algorithm as the D4 section's
-  `mulberry32`, re-declared by name in the D6 node.
-- **n = 400** sequences per `(role, p)` over
-  `p ∈ {0.85, 0.90, 0.95, 0.97, 0.99, 1.0}`.
-- **Tolerance**: `0.05` absolute. Worst-case binomial SE at `n=400` is
-  `sqrt(0.25/400) = 0.025`, so a 0.05 band is `2·SE` — sized to detect a real
-  deviation ≥0.05 from the exact curve with high probability while remaining
-  stable across the frozen seeds. On disagreement, the **exact oracle wins**
-  and the run fails.
-- **Binding margins** (asserted): `p=0.85` ⇒ emp ≤ 0.06; `p=0.97` ⇒ emp ≥ 0.94;
-  `p=1.0` ⇒ emp = 1.0; empirical rates non-decreasing across the grid.
+- **PRNG (per-case outcomes)**: Mulberry32 (Tommy Ettinger) — same algorithm
+  as the D4 section's `mulberry32`, re-declared by name in the D6 node.
+- **n = 3000** sequences per `(role, p)` over
+  `p ∈ {0.85, 0.90, 0.95, 0.97, 0.99, 1.0}` (24 `(role,p)` cells total).
+  Measured runtime for the simulation loop itself: **290 ms** (well inside
+  the ~60s budget; the whole `engine-qualify-verdict-stability.test.sh` file,
+  covering D1–D8, runs in ≈99s total).
+- **Why n=3000, not n=2000**: n=2000 was tried first and its power at the
+  tightest binding margin (discuss, p=0.85) is only **≈0.77**, below the
+  ≥0.9 bar (see power table below). n=3000 is the smallest round n at which
+  ALL FOUR binding-margin cases clear ≥0.9 power. Measured cost is
+  negligible (290ms), so no runtime-driven downgrade was needed.
+- **Tolerance formula (per `(role,p)` cell, not a single fixed band)**:
+  `tol = max(0.01, 3·SE)` where `SE = sqrt(exact·(1−exact)/n)` is the
+  binomial SE of the measured rate under the null that it equals the exact
+  oracle value; `3·SE` is a ~99.7%-band threshold; the `0.01` floor keeps the
+  band from collapsing near-zero at the near-degenerate `p∈{0.99,1.0}`
+  cells. On disagreement beyond `tol`, the **exact oracle wins** and the run
+  fails.
+- **Binding margins are asserted on the EXACT oracle** (deterministic, not
+  on the stochastic measured rate): `EXACT[p=0.85] ≤ 0.06`;
+  `EXACT[p=0.97] ≥ 0.94`; `EXACT[p=1.0] = 1`. The simulation is separately
+  checked to track that same exact value within `tol` at every grid point
+  (see the per-cell tolerance table below); empirical rates are also
+  asserted non-decreasing across the grid (monotonicity).
 
-### Predeclared seed list (400 uint32)
+### Power statement (binding margins, n=3000)
 
-Literal array pinned in the D6 test node (`D6_SIM_SEEDS`), expanded offline
-from master `0xA11CE001` via SplitMix32:
+Detecting a TRUE deviation of `delta=0.02` from the exact curve at the
+binding margins, under the `3·SE` threshold above, with power
+`Φ((delta − tol)/SE₁)` where `SE₁ = sqrt(q1·(1−q1)/n)` and `q1 = exact ± delta`
+is the harder-to-detect direction (toward 0.5, i.e. away from the extreme):
 
+| case | exact | tol (n=3000) | q1 (shifted) | power |
+|---|---|---|---|---|
+| consult p=0.85 | 0.042372 | 0.011033 | 0.062372 | **0.9491** |
+| discuss p=0.85 | 0.057168 | 0.012716 | 0.077168 | **0.9325** (binding) |
+| consult p=0.97 | 0.966004 | 0.010000 | 0.946004 | **0.9783** |
+| discuss p=0.97 | 0.944474 | 0.012543 | 0.924474 | **0.9389** |
+
+All four ≥0.9. At n=2000 the same arithmetic gives discuss@0.85 power
+≈0.7709 (below 0.9) — the reason n was raised to 3000.
+
+### Per-cell tolerance table (n=3000)
+
+| true `p` | consult tol | discuss tol |
+|---|---|---|
+| 0.85 | 0.011033 | 0.012716 |
+| 0.90 | 0.024344 | 0.024589 |
+| 0.95 | 0.021058 | 0.022613 |
+| 0.97 | 0.010000 | 0.012543 |
+| 0.99 | 0.010000 | 0.010000 |
+| 1.00 | 0.010000 | 0.010000 |
+
+### Predeclared seed EXPANSION RULE (not a hand-picked list)
+
+`D6_SIM_SEEDS` (3000 uint32) is generated **deterministically** from the
+recorded master seed `0xA11CE001` by iterating a SplitMix32 generator
+`D6_SIM_N` (3000) times, in index order, implemented directly in the D6 test
+node (`splitmix32()` + a loop — no literal array to maintain). This
+supersedes the earlier frozen 400-entry literal, which was itself a strict
+prefix of the same rule at a smaller n. It is "predeclared" in the sense
+that matters: the rule (master seed + generator + iteration count) is fixed
+BEFORE any run, identical on every invocation, and no seed is selected after
+looking at outcomes.
+
+```js
+function splitmix32(seed) {
+  let s = seed >>> 0;
+  return function next() {
+    s = (s + 0x9e3779b9) >>> 0;
+    let z = s;
+    z = Math.imul(z ^ (z >>> 16), 0x21f0aaad) >>> 0;
+    z = Math.imul(z ^ (z >>> 15), 0x735a2d97) >>> 0;
+    z = (z ^ (z >>> 15)) >>> 0;
+    return z;
+  };
+}
+// seeds[i] = the i-th value pulled from splitmix32(0xA11CE001), i = 0..2999
 ```
-1826191413,2631077304,241853559,749647278,519950848,3775227326,1283830519,2489000026,
-2595964532,2977446420,1168581363,2562456736,2444286090,240151822,600953683,512095458,
-3114321033,3397801815,4028357518,804996873,2225643294,1170936882,294280810,825283296,
-195147187,3756880225,1912732133,4012904008,2334172807,323630439,1174639985,4111220518,
-3463616468,3286275301,3868194049,3759300907,830357279,61069820,1037351891,2650436674,
-2527897642,418011375,3375905030,260177432,1759094340,2259066567,4062264137,2614887830,
-954209411,1744592283,3405156806,2785319238,915497093,186671498,3497330381,757431869,
-4223176520,3164396718,3337964161,3343722574,492595060,3906194515,16770395,2152560246,
-488340121,3089916582,1693957211,1319465123,4096862901,3220193509,3893443044,3302361134,
-2971092573,1747858371,713917267,2262954896,2084510396,316938232,3241236070,1717450461,
-868348166,2542343283,2456789929,3628553508,912009803,3270858002,4074384440,1432697832,
-3805351961,34193269,1604400693,2074563485,3508354428,3485508893,2523993698,2749869107,
-201179682,617158679,250277412,781536236,1339270977,2345065203,4080256202,1640939813,
-1438752338,2724645249,3613281616,1712544679,2532437746,249837865,2174772449,3521402099,
-4041318851,829145336,3088712214,2739989321,2402626378,2061714281,1533775385,3282090433,
-448431657,4178476025,2954487470,3251657600,512297815,1327477598,4252474715,3339318069,
-629154457,3747300544,2827726002,1518507733,2676948696,1989180993,2495698320,3762623746,
-2049225027,2732943781,1406392463,1437158985,437899796,1026965243,2576688288,2504310838,
-365011375,2701454057,1805858708,617399875,1562298921,1001092095,464853705,866668780,
-579321031,1586476260,2161282337,2093099124,454748870,1709436997,930002842,2933893334,
-1313551872,1580044375,2187324140,2637136534,86032445,2494641830,3394733777,1010075806,
-2511710262,2111287190,1522610329,1394202335,2066579033,596417669,1626632673,800575282,
-3033164479,3726830060,2639141624,2533919290,2509633237,430548217,2891748172,1624790946,
-3295529156,363386330,1785973881,3571969650,654172971,1702013188,1751001543,1532204250,
-1896251073,1876284423,722297734,2848685046,318504622,2458486053,2748119141,2817929188,
-3492435418,1678871755,2936045423,2472251726,859552222,4278110602,4153817761,711005391,
-3100994023,1879452900,1054013644,1852618979,3329872712,3718634861,706892377,435156406,
-3691518301,239285418,1007642325,2644944174,4279267261,2878715919,944924576,1087430007,
-3551337099,3630120154,192704395,580162797,3994391742,2081353538,1465346842,1264055305,
-2909671345,3003980411,2912503000,1846175562,529079538,4097668331,2491647879,2039981806,
-2465470194,551556443,909763044,4040817237,3949688496,2516007510,1001329418,1291283616,
-2426954798,227553516,4238049165,486420897,1657871948,3307409226,1926063549,2438424866,
-1220878117,273254105,2767919732,3614966772,2838401413,1186364629,1228422554,583074347,
-459303641,2389998007,743275740,3510606311,2905910546,1896712077,1043590415,258639751,
-1330080224,1407718470,2709013426,3137887491,1858602119,3487434683,3813059067,2287120280,
-1698253796,548085454,1508372404,1681645279,4227641581,4156991345,3165302879,311826771,
-2406555131,2921829665,142243990,469336893,3827363649,2421947129,49112994,4261358281,
-749710622,2467392926,1567918319,3515957272,4007782590,2996430056,467982919,3301643016,
-694290933,1068180986,469705478,726555550,1342376982,2639852975,3602305651,493897827,
-779644343,426602254,844939679,1439659310,3905845853,1858302738,2220840007,2880257968,
-732810650,1074911785,3321053311,1904386295,2990874555,878100219,268120404,482294792,
-3566192027,161458906,2420801717,2854198236,40509475,3787460306,3109474920,466633316,
-1226896366,559727645,1770944550,2143087539,3913841206,2067881435,90670851,3065294699,
-2053626506,1604595310,2285540543,862295922,3187699004,1103894424,3673805516,4014680699,
-3946730073,4115797716,2369256957,1906060783,3062743474,2718857025,1840454634,1453453438,
-914983494,2630344681,3877797271,573048284,2796454981,3000532950,3207073218,105029833,
-2636667731,237870601,2354167949,2206930196,1864027695,2699651255,967484004,165133855,
-2054152598,3593882568,2937388197,4012705099,2613891349,3392654033,3973312347,1032451932,
-846431828,888474782,35924627,1278474636,2434163293,381462888,1447595734,3811546663,
-874503135,3932498355,951499862,2342308126,2371234857,1253338828,2971579582,1482198979
-```
 
-### Measured empirical qualify-rates
+### Measured empirical qualify-rates (n=3000)
 
-Printed by the D6 simulation node (`OK d6-sim …`) on the run that landed this
-doc:
+Printed by the D6 simulation node (`OK d6-sim n=3000 runtime_ms=290 …`) on
+the run that landed this doc:
 
 | true `p` | consult emp | discuss emp |
 |---|---|---|
-| 0.85 | 0.0325 | 0.05 |
-| 0.90 | 0.2575 | 0.2875 |
-| 0.95 | 0.8175 | 0.7525 |
-| 0.97 | 0.965 | 0.94 |
-| 0.99 | 1 | 1 |
-| 1.0 | 1 | 1 |
+| 0.85 | 0.045667 | 0.059667 |
+| 0.90 | 0.274333 | 0.281667 |
+| 0.95 | 0.817667 | 0.784667 |
+| 0.97 | 0.972667 | 0.952333 |
+| 0.99 | 0.999667 | 0.999000 |
+| 1.00 | 1.000000 | 1.000000 |
 
-All cells satisfy `|emp − exact| ≤ 0.05` and the binding margins above.
-
-## Re-administration protocol (D7)
-
-Placeholder — D7 fills this section. Nothing else designed here.
+All cells satisfy `|emp − exact| ≤ tol` (per-cell table above) and the
+EXACT-oracle binding margins.

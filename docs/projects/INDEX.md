@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-31 | managed-campaign rail debt — (a) terminalize/withdraw, (b) grant replay refusal, (c) recipe credential staging, (d) wall cap (`docs/projects/2026-08-31-managed-campaign-rail-debt/README.md`) | 2.35.5 | `feat/managed-campaign-rail-debt` |
 | 2026-08-28 | consult/discuss qualification — paid administration wave (Board-authorized batch A, 2026-08-28; see `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md` decision section and `docs/plans/2026-08-28-consult-discuss-qualification.md`) | 2.35.2 | `docs/administration-authorization` |
 
 ## 已完成 (Completed)

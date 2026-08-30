@@ -683,3 +683,21 @@ never an ad hoc descriptive string.
 - **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so any campaign on this base fails acceptance regardless of the candidate. Triage the seven (environmental vs real regression), then either fix `develop` or make the graph's `verification_commands` name the suites the node actually touches.
 - **Effort**: L (triage) — blocks every managed campaign on this repo until done.
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
+
+### Campaign bridge resolves lease identity from `campaignControl.initial_state` — correct today only because every append refreshes it
+- **Trigger**: any change to `recordCampaignEvent` / the campaign event appender that stops assigning `campaignControl.initial_state = appended.state` (`src/engine/autopilot-engine.js:~4557`), or a second appender path that bypasses it.
+- **Context**: `onCampaignEvent` (`autopilot-engine.js:~6487`) calls `resolveCampaignEventLeaseIdentity(campaignControl.initial_state, …)`; the field name says "initial" but it is the live journal-replayed state because the closure refreshes it on every append. Two reviewer seats flagged the naming as a latent no-op risk (rail-fix qc, 2026-08-30). Rename to `live_state` (or read from the journal replay) and add one end-to-end fixture that drives BOUNDARY_REJECTED through the real bridge after IMPLEMENTATION_STARTED.
+- **Effort**: S
+- **Source**: rail-fix qc panel 2026-08-30 (gpt-5.6-sol 🟠 downgraded after verification; GLM-5.2 🔵).
+
+### `hooks/tests/run.sh` TIMEOUT marker collides with a suite that self-exits 124/137
+- **Trigger**: a suite observed to exit 124/137 on its own (e.g. propagating a child's SIGKILL) shows as `[TIMEOUT]` in the summary.
+- **Context**: `is_suite_timeout_ec` treats any 124/137 as the wrapper's timeout. Still counted FAILED (fail-closed), so cosmetic; distinguish by checking elapsed ≥ the ceiling, or by having `timeout` write a sentinel.
+- **Effort**: XS
+- **Source**: rail-fix qc panel 2026-08-30 (GLM-5.2 🔵).
+
+### Killed/dead managed campaign stuck at IMPLEMENTING with a held lease has no operator remedy
+- **Trigger**: already fired three times 2026-08-29/30 (campaigns `3b6a9770…`, `d240ef14…`, `e9bcae52…`): leaf died (wall cap / host kill / acceptance failure before terminal journal), journal holds `live_lease`, `--resume` refuses with `campaign_state_lease_open` (`src/engine/campaign-intake.js:780`), `IMPLEMENTING` is not a resumable phase, and the Mission claim stays live forever (three such claims now sit in the registry).
+- **Context**: add a bounded, evidence-gated terminalization for a campaign whose leaf run is provably dead (leaf manifest ended, pid gone, worktree reaped) that appends `MUTATION_FAILED` with the live lease identity and releases the Mission claim; never a silent no-op.
+- **Effort**: S–M
+- **Source**: l6-verdict-stability-p1 campaigns 2/3 + salvage, 2026-08-29/30.

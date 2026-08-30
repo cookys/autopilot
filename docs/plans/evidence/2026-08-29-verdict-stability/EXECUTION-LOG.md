@@ -40,3 +40,26 @@
   `status task` `can_merge` receipt exists for this lineage. Mission lineage `420ac261…` remains prepared with
   campaigns 2–8 unspent; lineage `83828e5e…` (attempt-3 claim) is inert residue.
 - **Semver**: no bump at phase 1 (release is D8).
+
+### Rail-fix unit — merged (2026-08-30, depth-0, /l4-shaped Claude workers)
+
+- **Why**: the Mission-managed campaign rail could not close phase 1 (see BACKLOG 2026-08-30 rows). User ruled `fix-rail then cont`.
+- **Landed** (integration branch `fix/rail-2026-08-30`, 13 commits, all fast-forward): controller lease fence — the five lease-bound
+  campaign events now resolve identity through one `resolveCampaignEventLeaseIdentity()` and the controller writes the journal
+  before advancing durable phase (`35cda9ff`); strict provider-readiness bootstrap compiles for `l6` as well as `l5` with a
+  cross-level replay rejection (`8dbc8f51`); `validate-json-schema` rejects unsafe-magnitude integers again while keeping
+  lossless non-integers (`4862b0d7`); `hooks/tests/run.sh` per-suite timeout with a distinct `[TIMEOUT]` marker (`065078cc`);
+  five test-side repairs whose root causes were roster rotation `83d993a5`, mirror manifest `cbef7e52`, and live-state coupling
+  (`41f549b6`, `c8436861`, `25041c0a`, `b1db4465`, `13f01913`, `f3fa6f16`). Triage (read-only debugger) attributed **none** of the
+  reds to the D1–D3 commits.
+- **Verification**: `bash hooks/tests/run.sh --parallel 4` on the integration head → **ALL TESTS PASSED (301 test files)**, zero
+  `[TIMEOUT]`; each fix branch independently re-executed by depth-0 before integration; `sync-codex-plugin-skills.sh --check`,
+  `validate.sh`, `check-canonical-invariants.sh`, `git diff --check` green.
+- **qc panel** (`union-on-verified-critical`) on the combined diff: MiniMax-M3 SHIP-AS-IS; GLM-5.2 SHIP-AS-IS (5 🔵 follow-ups);
+  gpt-5.6-sol@max FIX-THEN-SHIP — 🟠 "bridge reads a stale `initial_state`" **downgraded after verification** (every journal append
+  refreshes it, `autopilot-engine.js:~4557`; filed as a naming/e2e follow-up), 🟠 rollover scratch-clone identity mixing
+  **fixed** (`f3fa6f16`: identity rebound to the clone's common dir, disposition re-derived through `mission-terminal-reconcile.js`).
+- **Also learned**: the Mission sources manifest content-binds the plan file — execution records live here, never in the plan
+  (`821f2b45`); the git stash stack is shared across worktrees (two workers collided; recovered, no loss) — workers are told never
+  to stash.
+- **Not done here**: dead-campaign terminalization (BACKLOG); PATCH release (folded into D8 or a separate release commit).

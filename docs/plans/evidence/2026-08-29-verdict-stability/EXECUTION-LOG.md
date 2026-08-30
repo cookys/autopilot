@@ -166,3 +166,4 @@
 - **Spend (approximate)**: grok-4.5 implementer ×6 campaigns (~40–85 min each), Qwen VA ×5 administrations (2 usable
   harnesses), qc panel ×5 rounds (sol@max / GLM-5.2 / MiniMax-M3, MiniMax `no_verdict` ×4), Claude sonnet workers ×12,
   opus foremen/agents ×9. Depth-0 (Fable) did orchestration, verification, adjudication, and release mechanics only.
+- **Final gate**: `bash hooks/tests/run.sh --parallel 4` on the v2.35.3 release candidate (`85cd84a0`) → **ALL TESTS PASSED (303 test files)**, zero `[TIMEOUT]`; the two later commits are the doc-drift gate fix (its own suite green) and docs.

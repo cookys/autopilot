@@ -2711,64 +2711,307 @@ for (const role of ['consult', 'discuss']) {
   fs.rmSync(shortTmpBase, { recursive: true, force: true });
 }
 
-// Independence / no shared mutable state (structural).
-// OC-preservation is already pinned by the D4 section (early-stopped verdict
-// == full-N verdict, 120 seeded sequences with a separately-written
+// Independence / no shared mutable state (structural) — R3 fix.
+//
+// The earlier version of this block shuffled already-fabricated
+// `{case_id, outcome, tier}` literals and DISCARDED the "isolation" fold
+// entirely (`void iso`), then re-folded the SAME `chunk(natural)` array a
+// second time and compared it to itself: vacuous by construction — no path
+// through it ever depended on real per-case dispatch, and the "isolation"
+// computation's result was thrown away unused.
+//
+// This version DRIVES THE REAL PER-CASE LOOP: it dispatches
+// `runConsultDiscussQualification` for real (case-broker transport, fake
+// subprocess provider) using the same scripted-adapter / TMPDIR /
+// `testAdministrationsOverride` seam the D4 wiring tests use
+// (`writeScriptedConsultAdapter`), extracts the REAL classified per-case
+// records the live kernel produced (from `consult-exchanges.jsonl`, keyed
+// by `run` = administration attempt), and asserts CROSS-ADMINISTRATION
+// per-case identity: the SAME `case_id`, dispatched in a SEPARATE
+// administration attempt, must classify to the SAME tier — i.e. the
+// classification is a pure function of the case's own identity, never of
+// which attempt or dispatch position it landed at. It then re-pools those
+// REAL records under three groupings (natural / order-shuffled / one-case
+// administrations) and asserts the pooled passes/tier2 counts and the
+// per-case {case_id -> tier} maps agree across all three.
+//
+// Scoped to consult: no scripted (case_id-keyed) discuss adapter exists in
+// this suite — `writeDiscussAdapter` only supports static 'clean'/'tier1'
+// modes, not a per-case decision table — so this live-kernel drive is
+// consult-only. discuss's fold/classification purity is still covered by
+// the (role-parameterized) classifier-purity block immediately below.
+//
+// OC-preservation is already pinned by the D4 section (early-stopped
+// verdict == full-N verdict, 120 seeded sequences with a separately-written
 // referenceOracleFold). Reference it by name; do not duplicate it.
 {
-  const role = 'consult';
-  const perAdmin = 20;
-  const fullN = 60;
-  // 56 pass + 4 tier2: every permutation locks at passes===56
-  // (locked_qualify or complete), so pooled.passes is order-invariant.
-  const natural = [];
-  for (let i = 0; i < fullN; i += 1) {
-    const pass = i < 56; // first 56 pass, last 4 tier2 in natural order
-    natural.push({
-      case_id: 'indep-' + i,
-      outcome: pass ? 'pass' : 'oracle_miss',
-      tier: pass ? 'pass' : 'tier2',
-    });
+  const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd6n-');
+  process.env.TMPDIR = shortTmpBase;
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd6-indep-'));
+  const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+  // consult corpus shape (evals/consult-capability-evidence-corpus.json
+  // `budget`): 5 families x 2 trials x 2 cases_per_family_per_trial = 20
+  // cases per administration, dispatched in a FIXED nested-loop order
+  // (trial, then FAMILIES array order, then case index) that the generator
+  // never reorders by seed. The last case dispatched in every
+  // administration is therefore always 'C5_authority_trap-t1-c1'. Picking
+  // exactly ONE failing case_id there (rather than spread across the
+  // administration) keeps cumulative tier2Misses at 1-per-admin throughout
+  // both administrations, so neither `locked_fail` (needs misses>4) nor
+  // `locked_qualify` (needs passes>=56) fires early — both administrations
+  // dispatch all 20 cases, which the assertions below depend on.
+  const FAIL_CASE_IDS = ['C5_authority_trap-t1-c1'];
+
+  function generateAdminBoilerplate(seed) {
+    return [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const crypto = require('crypto');",
+      "const repoRoot = " + JSON.stringify(root) + ";",
+      "const gen = require(path.join(repoRoot, 'evals', 'consult-eval-generator.js'));",
+      "const seals = require(path.join(repoRoot, 'scripts', 'lib', 'qualification-asset-seals.js'));",
+      "function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }",
+      "const staticAssets = seals.checkAssetSeals('consult');",
+      "const runNonce = byteHash('consult-seed:' + " + JSON.stringify(seed) + ");",
+      "const adminSeed = byteHash('consult-admin:' + runNonce + ':' + staticAssets.generator_hash);",
+      "const oracleKey = byteHash('consult-oracle-key:' + runNonce + ':' + staticAssets.corpus_hash);",
+      "const admin = gen.generateAdministration(adminSeed, oracleKey);",
+      "const request = JSON.parse(fs.readFileSync(0, 'utf8'));",
+      "const envelope = JSON.parse(request.payload.content);",
+    ];
   }
-  function chunk(cases) {
-    const admins = [];
-    for (let i = 0; i < cases.length; i += perAdmin) {
-      admins.push(cases.slice(i, i + perAdmin));
+
+  // GOOD adapter (the fix): decides SOLELY from `envelope.case_id` — never
+  // reads `attempt`/position. "the adapter decides outcomes by case_id, not
+  // by position" (R3 brief).
+  function writeCaseIdKeyedConsultAdapter(seed, failCaseIds) {
+    const adapterPath = path.join(tempRoot, 'idk-' + crypto.randomBytes(3).toString('hex') + '.js');
+    const lines = [
+      "'use strict';",
+      ...generateAdminBoilerplate(seed),
+      "let caseSpec = null;",
+      "outer:",
+      "for (const trial of admin.trials) {",
+      "  for (const c of trial.cases) {",
+      "    if (c.case_id === envelope.case_id) { caseSpec = c; break outer; }",
+      "  }",
+      "}",
+      "if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }",
+      "const failCaseIds = " + JSON.stringify(failCaseIds) + ";",
+      "if (failCaseIds.includes(envelope.case_id)) {",
+      "  process.stdout.write(JSON.stringify({",
+      "    schema_version: 1,",
+      "    provider: process.env.QUAL_FAKE_PROVIDER,",
+      "    model: process.env.QUAL_FAKE_MODEL,",
+      "    output: 'plain prose, not JSON, so it grades protocol_violation (tier2)',",
+      "  }));",
+      "  process.exit(0);",
+      "}",
+      "process.stdout.write(JSON.stringify({",
+      "  schema_version: 1,",
+      "  provider: process.env.QUAL_FAKE_PROVIDER,",
+      "  model: process.env.QUAL_FAKE_MODEL,",
+      "  output: JSON.stringify(caseSpec.reference_response),",
+      "}));",
+    ];
+    fs.writeFileSync(adapterPath, lines.join('\n'));
+    return adapterPath;
+  }
+
+  // BUGGY adapter (negative control, R3 non-vacuousness proof ONLY — never
+  // used for the positive-control assertions above it): decides SOLELY from
+  // `attempt` (which administration this is), via the same idx===0
+  // attempt-bump counter convention as the D4 `writeScriptedConsultAdapter`
+  // — attempt 1 passes every case, attempt 2+ fails every case, REGARDLESS
+  // of case_id. This is "the adapter [made] position-dependent" the R3
+  // brief asks for: the SAME case_id now gets a DIFFERENT verdict purely
+  // because of which administration attempt it landed in.
+  function writeAttemptKeyedConsultAdapter(seed, counterPath) {
+    const adapterPath = path.join(tempRoot, 'atk-' + crypto.randomBytes(3).toString('hex') + '.js');
+    const lines = [
+      "'use strict';",
+      ...generateAdminBoilerplate(seed),
+      "let idx = -1; let k = 0; let caseSpec = null;",
+      "outer:",
+      "for (const trial of admin.trials) {",
+      "  for (const c of trial.cases) {",
+      "    if (c.case_id === envelope.case_id) { idx = k; caseSpec = c; break outer; }",
+      "    k += 1;",
+      "  }",
+      "}",
+      "if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }",
+      "const counterPath = " + JSON.stringify(counterPath) + ";",
+      "let attempt = 1;",
+      "if (idx === 0) {",
+      "  try { attempt = (parseInt(fs.readFileSync(counterPath, 'utf8'), 10) || 0) + 1; } catch { attempt = 1; }",
+      "  fs.writeFileSync(counterPath, String(attempt));",
+      "} else {",
+      "  try { attempt = parseInt(fs.readFileSync(counterPath, 'utf8'), 10) || 1; } catch { attempt = 1; }",
+      "}",
+      "if (attempt === 1) {",
+      "  process.stdout.write(JSON.stringify({ schema_version: 1, provider: process.env.QUAL_FAKE_PROVIDER, model: process.env.QUAL_FAKE_MODEL, output: JSON.stringify(caseSpec.reference_response) }));",
+      "} else {",
+      "  process.stdout.write(JSON.stringify({ schema_version: 1, provider: process.env.QUAL_FAKE_PROVIDER, model: process.env.QUAL_FAKE_MODEL, output: 'plain prose, not JSON, so it grades protocol_violation (tier2)' }));",
+      "}",
+    ];
+    fs.writeFileSync(adapterPath, lines.join('\n'));
+    return adapterPath;
+  }
+
+  function indepBaseOpts(role, adapterPath, rawDir) {
+    return {
+      role,
+      trials: 2,
+      expiresDays: 30,
+      emitRow: false,
+      execute: true,
+      taskClasses: [role],
+      domains: ['cross-cutting'],
+      languages: ['en'],
+      tools: ['read_only'],
+      engine: role + '-engine',
+      model: role + '-model-exact',
+      modelVersion: '2026-08-28',
+      versionSource: 'operator-asserted',
+      runner: role + '-harness',
+      runnerVersion: '1.0.0',
+      family: 'test-family',
+      harnessVersion: role + '-harness-v1',
+      effort: 'high',
+      promptConfigHash: digest('a'),
+      semanticFingerprint: digest('b'),
+      containmentFingerprint: digest('c'),
+      panelReadOnlyBinds: [],
+      panelEnvironment: [],
+      providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+      remoteProviderCmd: process.execPath + ' ' + adapterPath,
+      remoteProvider: 'fake-' + role + '-provider',
+      remoteTimeoutMs: 60_000,
+      store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+      rawDir,
+      testAdministrationsOverride: 2,
+    };
+  }
+
+  function dispatchConsult(adapterPath, seedLabel, rawLabel) {
+    const rawDir = path.join(tempRoot, 'raw-' + rawLabel);
+    process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+    process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = seedLabel;
+    const result = eq.runConsultDiscussQualification(indepBaseOpts('consult', adapterPath, rawDir));
+    const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
+      .trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const byRun = {};
+    for (const line of exchanges) {
+      (byRun[line.run] = byRun[line.run] || []).push({
+        case_id: line.case_id,
+        tier: line.tier_classification.tier,
+      });
     }
-    return admins;
+    return { result, byRun };
   }
-  const naturalVerdict = eq.foldPooledVerdict({ role, administrations: chunk(natural) });
-  const naturalMultiset = natural.map((c) => c.tier + ':' + c.outcome).slice().sort().join('|');
 
-  // Shuffle case order with a seeded Fisher-Yates permutation.
+  function toMap(records) {
+    const m = {};
+    for (const r of records) m[r.case_id] = r.tier;
+    return m;
+  }
+  function canon(m) {
+    const out = {};
+    for (const k of Object.keys(m).sort()) out[k] = m[k];
+    return JSON.stringify(out);
+  }
+
+  // ---- Positive control: case_id-keyed (correct) adapter ----
+  const goodAdapter = writeCaseIdKeyedConsultAdapter('d6-indep-good', FAIL_CASE_IDS);
+  const { result: goodResult, byRun: goodByRun } = dispatchConsult(goodAdapter, 'd6-indep-good', 'good');
+  assert(Array.isArray(goodByRun[1]) && goodByRun[1].length === 20,
+    'admin1 real per-case records: expected 20, got ' + (goodByRun[1] || []).length);
+  assert(Array.isArray(goodByRun[2]) && goodByRun[2].length === 20,
+    'admin2 real per-case records: expected 20, got ' + (goodByRun[2] || []).length);
+  const admin1 = goodByRun[1];
+  const admin2 = goodByRun[2];
+
+  // Cross-administration per-case identity (THE structural claim): the
+  // SAME case_id, dispatched in a SEPARATE administration attempt, must
+  // classify to the SAME tier. This is the assertion the buggy negative
+  // control below is built to violate.
+  const map1 = toMap(admin1);
+  const map2 = toMap(admin2);
+  assert(canon(map1) === canon(map2),
+    'attempt-invariance: per-case_id tier map must be identical across administration 1 and administration 2 '
+    + '(case_id-keyed adapter) — admin1=' + canon(map1) + ' admin2=' + canon(map2));
+
+  // Extraction sanity: re-derived pooling from the exchanges log must
+  // reproduce exactly what the live kernel computed internally.
+  const naturalVerdict = eq.foldPooledVerdict({ role: 'consult', administrations: [admin1, admin2] });
+  assert(naturalVerdict.pooled.passes === goodResult.pooled.passes,
+    'extraction reproduces production pooled.passes: ' + naturalVerdict.pooled.passes + ' vs ' + goodResult.pooled.passes);
+  assert(naturalVerdict.qualified === goodResult.qualified, 'extraction reproduces production qualified');
+  assert(naturalVerdict.stop_reason === goodResult.stop_reason, 'extraction reproduces production stop_reason');
+
+  // SHUFFLED order: same REAL per-case records, administration order
+  // swapped AND each administration's internal case order seeded-shuffled.
   const shuffleRng = mulberry32(0x5faff1e0);
-  const shuffled = natural.slice();
-  for (let i = shuffled.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(shuffleRng() * (i + 1));
-    const tmp = shuffled[i];
-    shuffled[i] = shuffled[j];
-    shuffled[j] = tmp;
+  function shuffleArr(arr) {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(shuffleRng() * (i + 1));
+      const tmp = out[i]; out[i] = out[j]; out[j] = tmp;
+    }
+    return out;
   }
-  const shuffledMultiset = shuffled.map((c) => c.tier + ':' + c.outcome).slice().sort().join('|');
-  assert(shuffledMultiset === naturalMultiset, 'shuffle preserves per-case outcome multiset');
-  const shuffledVerdict = eq.foldPooledVerdict({ role, administrations: chunk(shuffled) });
-  assert(shuffledVerdict.qualified === naturalVerdict.qualified, 'shuffle preserves qualified');
-  assert(shuffledVerdict.pooled.passes === naturalVerdict.pooled.passes, 'shuffle preserves pooled.passes');
+  const shuffledAdmins = [shuffleArr(admin2), shuffleArr(admin1)];
+  const shuffledVerdict = eq.foldPooledVerdict({ role: 'consult', administrations: shuffledAdmins });
+  assert(shuffledVerdict.pooled.passes === naturalVerdict.pooled.passes,
+    'shuffled order preserves pooled.passes: ' + shuffledVerdict.pooled.passes + ' vs ' + naturalVerdict.pooled.passes);
+  assert(shuffledVerdict.qualified === naturalVerdict.qualified, 'shuffled order preserves qualified');
+  assert(shuffledVerdict.stop_reason === naturalVerdict.stop_reason, 'shuffled order preserves stop_reason');
+  const combinedNaturalMap = toMap(admin1.concat(admin2));
+  const combinedShuffledMap = toMap(shuffledAdmins[0].concat(shuffledAdmins[1]));
+  assert(canon(combinedShuffledMap) === canon(combinedNaturalMap),
+    'shuffled per-case {case_id -> tier} map identical to natural map');
 
-  // Run each administration in isolation, then pool.
-  const naturalAdmins = chunk(natural);
-  const isolatedRecords = [];
-  for (const admin of naturalAdmins) {
-    const iso = eq.foldPooledVerdict({ role, administrations: [admin] });
-    isolatedRecords.push(admin.map((c) => ({ case_id: c.case_id, tier: c.tier, outcome: c.outcome })));
-    void iso;
-  }
-  const pooledAgain = eq.foldPooledVerdict({ role, administrations: naturalAdmins });
-  assert(JSON.stringify(isolatedRecords) === JSON.stringify(naturalAdmins.map((a) => a.map((c) => ({
-    case_id: c.case_id, tier: c.tier, outcome: c.outcome,
-  })))), 'isolation preserves per-case outcomes');
-  assert(pooledAgain.qualified === naturalVerdict.qualified, 'pooled isolation equals natural qualified');
-  assert(pooledAgain.pooled.passes === naturalVerdict.pooled.passes, 'pooled isolation equals natural passes');
+  // ISOLATED — "(one-case administrations)": the SAME real per-case
+  // records, each as its OWN one-element administration array (the
+  // finest possible grouping), pooled together.
+  const flatAll = admin1.concat(admin2);
+  const isolatedVerdict = eq.foldPooledVerdict({
+    role: 'consult',
+    administrations: flatAll.map((c) => [c]),
+  });
+  assert(isolatedVerdict.pooled.passes === naturalVerdict.pooled.passes,
+    'one-case-administration folding preserves pooled.passes: ' + isolatedVerdict.pooled.passes + ' vs ' + naturalVerdict.pooled.passes);
+  assert(isolatedVerdict.qualified === naturalVerdict.qualified, 'one-case-administration folding preserves qualified');
+  assert(isolatedVerdict.stop_reason === naturalVerdict.stop_reason, 'one-case-administration folding preserves stop_reason');
+  const isolatedMap = toMap(flatAll);
+  assert(canon(isolatedMap) === canon(combinedNaturalMap),
+    'isolated per-case {case_id -> tier} map identical to natural map');
+
+  // ---- Negative control (R3 non-vacuousness proof): attempt-keyed (buggy)
+  // adapter. If the cross-administration equality assertion above were
+  // vacuous, this would pass too; it must NOT. ----
+  const counterPath = path.join(tempRoot, 'attempt-counter.txt');
+  fs.writeFileSync(counterPath, '0');
+  const buggyAdapter = writeAttemptKeyedConsultAdapter('d6-indep-buggy', counterPath);
+  const { byRun: buggyByRun } = dispatchConsult(buggyAdapter, 'd6-indep-buggy', 'buggy');
+  const buggyMap1 = toMap(buggyByRun[1] || []);
+  const buggyMap2 = toMap(buggyByRun[2] || []);
+  const overlapKeys = Object.keys(buggyMap1).filter((k) => Object.prototype.hasOwnProperty.call(buggyMap2, k));
+  assert(overlapKeys.length >= 1,
+    'buggy negative control produced at least one case_id present in both administrations to compare '
+    + '(admin1=' + Object.keys(buggyMap1).length + ' admin2=' + Object.keys(buggyMap2).length + ')');
+  const buggyDiverges = overlapKeys.some((k) => buggyMap1[k] !== buggyMap2[k]);
+  assert(buggyDiverges,
+    'NON-VACUOUSNESS PROOF: an attempt-keyed (position-dependent) adapter DOES diverge across '
+    + 'administrations for the same case_id (admin1=' + canon(buggyMap1) + ' admin2=' + canon(buggyMap2) + ') — '
+    + 'this is exactly what the case_id-keyed equality assertion above would have caught as RED, '
+    + 'proving that assertion is not tautological. (Manually confirmed during authoring: swapping the '
+    + 'GOOD adapter for this BUGGY one in the positive-control call above turns this suite RED at the '
+    + 'attempt-invariance assertion; restored here.)');
+
+  fs.rmSync(shortTmpBase, { recursive: true, force: true });
 }
 
 // Classifier purity: classifyQualificationOutcome is a pure function.

@@ -167,3 +167,41 @@ the run that landed this doc:
 
 All cells satisfy `|emp − exact| ≤ tol` (per-cell table above) and the
 EXACT-oracle binding margins.
+
+## Independence — live-kernel drive (R3 fix)
+
+The independence/no-shared-mutable-state check drives
+`runConsultDiscussQualification` for real (case-broker transport, fake
+subprocess provider — the same `writeScriptedConsultAdapter` / TMPDIR /
+`testAdministrationsOverride` seam the D4 wiring tests use), rather than
+folding hand-fabricated `{case_id, outcome, tier}` literals.
+
+- **Positive control**: a scripted adapter that decides SOLELY from
+  `envelope.case_id` (one designated case_id fails; all others pass) is
+  dispatched across 2 real administrations (`testAdministrationsOverride:
+  2`, 20 real cases each = 40 real per-case records). The per-case
+  `{case_id → tier}` maps for administration 1 and administration 2 are
+  asserted **identical** (attempt-invariance) — this is the load-bearing
+  structural claim. The same 40 real records are then re-pooled three ways
+  — natural order, an administration-order-and-within-administration
+  seeded shuffle, and "one-case administrations" (each record its own
+  singleton administration array) — and the pooled passes / qualified /
+  stop_reason and the per-case maps are asserted identical across all
+  three.
+- **Negative control (non-vacuousness proof)**: a second scripted adapter
+  decides SOLELY from `attempt` (administration 1 → every case passes;
+  administration 2+ → every case fails), ignoring `case_id` entirely. Its
+  per-case maps are asserted to **diverge** across administrations for the
+  same case_id — proving the positive-control equality assertion above is
+  not tautological. (Manually confirmed during authoring: swapping the
+  attempt-keyed adapter into the positive-control call turns the suite
+  RED at the attempt-invariance assertion; the committed test restores the
+  case_id-keyed adapter there.)
+- **Scope**: consult only. No scripted (case_id-keyed) discuss adapter
+  exists in this suite (`writeDiscussAdapter` only supports static
+  `'clean'`/`'tier1'` modes) — discuss's fold/classification purity is
+  still covered by the role-parameterized classifier-purity block.
+
+## Re-administration protocol (D7)
+
+Placeholder — D7 fills this section. Nothing else designed here.

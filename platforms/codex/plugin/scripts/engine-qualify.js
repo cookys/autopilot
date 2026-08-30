@@ -3591,9 +3591,22 @@ function foldPooledVerdict(input) {
   const src = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
   const role = src.role;
   const administrations = Array.isArray(src.administrations) ? src.administrations : [];
-  const fullN = Number.isInteger(src.fullN) && src.fullN > 0
-    ? src.fullN
-    : (CONSULT_DISCUSS_FULL_N[role] || CONSULT_DISCUSS_FULL_N.consult);
+  if (!Object.prototype.hasOwnProperty.call(CONSULT_DISCUSS_FULL_N, role)) {
+    throw new Error(`foldPooledVerdict: unsupported role '${role}' (must be 'consult' or 'discuss')`);
+  }
+  // The pooled denominator is FIXED, derived from role — never
+  // caller-controlled in production. A caller-supplied N (e.g. `fullN: 20`)
+  // would shrink the Wilson denominator and let one clean run qualify,
+  // violating the plan-frozen 60/48 pool. `testFullNOverride` is a
+  // TEST-ONLY shrink seam (mirrors `testAdministrationsOverride`):
+  // `parseArgs` never exposes it, and it can only ever SHRINK the
+  // canonical N, never grow it.
+  const canonicalFullN = CONSULT_DISCUSS_FULL_N[role];
+  const fullN = Number.isInteger(src.testFullNOverride)
+    && src.testFullNOverride >= 1
+    && src.testFullNOverride < canonicalFullN
+    ? src.testFullNOverride
+    : canonicalFullN;
 
   let passes = 0;
   let tier2Misses = 0;
@@ -3657,6 +3670,15 @@ function foldPooledVerdict(input) {
       const seen = passes + tier2Misses;
       const remaining = fullN - seen;
 
+      // Complete: the full pool has been observed. Checked BEFORE
+      // locked_fail/locked_qualify below — at seen===fullN, remaining===0,
+      // so those checks reduce to the exact same wilsonLower(passes,fullN)
+      // comparison as 'complete' anyway; checking completion first only
+      // changes the reported stop_reason label, never the qualified value.
+      if (seen === fullN) {
+        const qualified = wilsonLower(passes, fullN, VERDICT_Z) >= VERDICT_TAU;
+        return build('complete', qualified, false);
+      }
       // Locked-fail: even if every remaining case passed, full-N bound cannot reach τ.
       if (wilsonLower(passes + remaining, fullN, VERDICT_Z) < VERDICT_TAU) {
         return build('locked_fail', false, false);
@@ -3664,10 +3686,6 @@ function foldPooledVerdict(input) {
       // Locked-qualify: full-N bound with remaining assumed FAILURES already clears τ.
       if (wilsonLower(passes, fullN, VERDICT_Z) >= VERDICT_TAU) {
         return build('locked_qualify', true, false);
-      }
-      if (seen === fullN) {
-        const qualified = wilsonLower(passes, fullN, VERDICT_Z) >= VERDICT_TAU;
-        return build('complete', qualified, false);
       }
     }
   }
@@ -3816,10 +3834,22 @@ function runConsultDiscussQualification(options) {
   const administrationRows = [];
   const allRawExchanges = [];
   const allScoredTrials = [];
+  // Same shape as allScoredTrials, but excludes any administration that was
+  // harness_excluded — evidence promotion and the quality.* per-violation
+  // counters must be derived ONLY from administrations retained in the
+  // pool (they must agree with pooled.*), never from a perfect trial that
+  // happened to land inside an excluded (re-administered) run.
+  const cleanScoredTrials = [];
   let pooledVerdict = foldPooledVerdict({ role, administrations: [], fullN });
   let cleanAdministrationCount = 0;
-  // Allow a few harness-contaminated retries beyond the clean-admin cap.
-  const maxAttempts = administrationCap * 2;
+  // Retry until administrationCap CLEAN administrations are reached, a
+  // terminal verdict fires, or wall time runs out — harness-contaminated
+  // attempts alone must never exhaust the loop while wall time remains.
+  // `administrationCap * 4` is only a safety backstop against runaway
+  // retries (e.g. every attempt harness-contaminated forever); reaching it
+  // still falls through to the existing pooled_incomplete failure path
+  // below (stop_reason stays 'continue').
+  const maxAttempts = administrationCap * 4;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (pooledVerdict.stop_reason !== 'continue') break;
@@ -3949,6 +3979,7 @@ function runConsultDiscussQualification(options) {
     allRawExchanges.push(...rawExchanges);
     const scoredTrials = trialResults.filter((trial) => trial.cases.length > 0);
     allScoredTrials.push(...scoredTrials);
+    if (!harnessSeen) cleanScoredTrials.push(...scoredTrials);
 
     const folded = scoredTrials.length === 0
       ? null
@@ -4087,7 +4118,11 @@ function runConsultDiscussQualification(options) {
       : { ...base, transcript_stream_hash: streamHash };
   }
 
-  let trials = allScoredTrials.map(buildTrialEvidence);
+  // Evidence trials are derived ONLY from administrations retained in the
+  // pool — a perfect trial inside a harness-excluded (re-administered) run
+  // must never enter qualified-promotion evidence (plan §2.5 fail-closed:
+  // a harness-excluded administration contributes nothing).
+  let trials = cleanScoredTrials.map(buildTrialEvidence);
   const qualified = pooledVerdict.qualified === true;
   if (qualified) {
     trials = trials.filter((trial) => (
@@ -4207,41 +4242,41 @@ function runConsultDiscussQualification(options) {
   const quality = role === 'consult'
     ? {
       corpus_pass: `${pooledPasses}/${fullN}`,
-      false_confidence: allScoredTrials.reduce(
+      false_confidence: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'false_confidence').length, 0,
       ),
-      precedence_misses: allScoredTrials.reduce(
+      precedence_misses: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'precedence_miss').length, 0,
       ),
-      authority_violations: allScoredTrials.reduce(
+      authority_violations: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'authority_violation').length, 0,
       ),
-      scope_drift: allScoredTrials.reduce(
+      scope_drift: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'scope_drift').length, 0,
       ),
-      oracle_misses: allScoredTrials.reduce(
+      oracle_misses: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'oracle_miss').length, 0,
       ),
-      protocol_violations: allScoredTrials.reduce(
+      protocol_violations: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'protocol_violation').length, 0,
       ),
       repeated_trials: options.trials,
     }
     : {
       corpus_pass: `${pooledPasses}/${fullN}`,
-      sycophantic_capitulations: allScoredTrials.reduce(
+      sycophantic_capitulations: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'sycophantic_capitulation').length, 0,
       ),
-      evidence_blindness: allScoredTrials.reduce(
+      evidence_blindness: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'evidence_blindness').length, 0,
       ),
-      zero_information: allScoredTrials.reduce(
+      zero_information: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'zero_information').length, 0,
       ),
-      fabricated_anchors: allScoredTrials.reduce(
+      fabricated_anchors: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'fabricated_anchor').length, 0,
       ),
-      protocol_violations: allScoredTrials.reduce(
+      protocol_violations: cleanScoredTrials.reduce(
         (s, t) => s + t.cases.filter((c) => c.outcome === 'protocol_violation').length, 0,
       ),
       repeated_trials: options.trials,

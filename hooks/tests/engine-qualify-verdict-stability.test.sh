@@ -999,6 +999,41 @@ r = eq.foldPooledVerdict({
 });
 assert(r.qualified === true, `discuss 45/48 must QUALIFY, got ${JSON.stringify(r)}`);
 
+// Stopping-rule order: 'complete' (seen===fullN) is checked BEFORE
+// locked_fail/locked_qualify, so a fully-observed pool is labelled
+// 'complete' — pinning both orderings. Verdict values (qualified) must
+// stay identical to the pre-reorder behaviour either way.
+
+// (a) misses trail passes: the 5th tier2 miss and seen===fullN land on the
+// SAME (last) case — 'complete' must win the label, not 'locked_fail'.
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [[...passCases(55), ...tier2Cases(5)]],
+});
+assert(r.stop_reason === 'complete' && r.qualified === false,
+  `consult 55pass+5tier2 (misses trailing) fully observed => complete/false, got ${JSON.stringify(r)}`);
+
+// (b) misses precede passes: the 5th tier2 miss triggers locked_fail long
+// before seen reaches fullN — reordering must NOT delay this to 'complete'.
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [[...tier2Cases(5), ...passCases(55)]],
+});
+assert(r.stop_reason === 'locked_fail' && r.qualified === false,
+  `consult 5tier2+55pass (misses leading) => locked_fail before completion, got ${JSON.stringify(r)}`);
+
+// (c) discuss 45pass+3tier2 fully observed (48 total). Misses lead here —
+// 45/48 already crosses TAU (wilsonLower(45,48,Z)=0.85356), so with misses
+// TRAILING the lock would fire mid-administration at case 45 instead of at
+// completion; leading the 3 misses defers reaching 45 passes to the very
+// last case, where seen===fullN and the (reordered) complete-check wins.
+r = eq.foldPooledVerdict({
+  role: 'discuss',
+  administrations: [[...tier2Cases(3), ...passCases(45)]],
+});
+assert(r.stop_reason === 'complete' && r.qualified === true,
+  `discuss 3tier2+45pass fully observed => complete/true, got ${JSON.stringify(r)}`);
+
 // locked-qualify mid-run-3 (56th pass) equals full-N bound verdict
 r = eq.foldPooledVerdict({
   role: 'consult',
@@ -1016,18 +1051,41 @@ r = eq.foldPooledVerdict({
 });
 assert(r.pooled.passes === 1, 'nested tier_classification.tier accepted');
 
-// parseArgs must not expose testAdministrationsOverride
+// foldPooledVerdict: fullN is derived from role, never caller-controlled.
+// A plain {role, administrations, fullN: 20} call must be REFUSED for the
+// 20 — it still uses the canonical 60/48 denominator, so one clean 20/20
+// consult run must NOT qualify (it would if the caller-supplied 20 were
+// honored as the pool size).
+r = eq.foldPooledVerdict({ role: 'consult', administrations: [passCases(20)], fullN: 20 });
+assert(r.stop_reason === 'continue' && r.qualified === false && r.competence.n === 60,
+  `caller-supplied fullN:20 must be ignored (denominator stays 60), got ${JSON.stringify(r)}`);
+
+// Unknown role must throw rather than silently falling back to consult's N.
+{
+  let threw = false;
+  try {
+    eq.foldPooledVerdict({ role: 'nonsense-role', administrations: [] });
+  } catch {
+    threw = true;
+  }
+  assert(threw, 'foldPooledVerdict must throw on an unsupported role');
+}
+
+// parseArgs must not expose testAdministrationsOverride or testFullNOverride
 assert(!/\['--administrations'|--administrations/.test(src)
-  && !/testAdministrationsOverride/.test(src.split('function parseArgs')[1].split('function ')[0] || ''),
-  'parseArgs must not expose testAdministrationsOverride / --administrations');
+  && !/testAdministrationsOverride/.test(src.split('function parseArgs')[1].split('function ')[0] || '')
+  && !/testFullNOverride/.test(src.split('function parseArgs')[1].split('function ')[0] || ''),
+  'parseArgs must not expose testAdministrationsOverride / testFullNOverride / --administrations');
 const parseArgsSlice = src.slice(src.indexOf('function parseArgs'), src.indexOf('function runConsultDiscussQualification') > 0
   ? src.indexOf('function usage') // fallback
   : src.length);
-// Stronger: scalar map in parseArgs lacks administrations keys
+// Stronger: scalar map in parseArgs lacks administrations/fullN keys
 const parseBlock = src.match(/function parseArgs\(argv\) \{[\s\S]*?\n\}/);
 assert(parseBlock, 'parseArgs block located');
 assert(!/administrations/i.test(parseBlock[0]),
   `parseArgs must not mention administrations; got hit in parseArgs`);
+assert(!/testFullNOverride/.test(parseBlock[0]),
+  `parseArgs must not mention testFullNOverride; got hit in parseArgs`);
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -1071,12 +1129,10 @@ function referenceOracleFold(admins, fullN) {
       else if (c.tier === 'tier2') misses += 1;
       const seen = passes + misses;
       const remaining = fullN - seen;
-      if (wilsonLower(passes + remaining, fullN, Z) < TAU) {
-        return { qualified: false, stop_reason: 'locked_fail', passes, misses, seen };
-      }
-      if (wilsonLower(passes, fullN, Z) >= TAU) {
-        return { qualified: true, stop_reason: 'locked_qualify', passes, misses, seen };
-      }
+      // Complete is checked BEFORE locked_fail/locked_qualify (matches the
+      // hardened source order): at seen===fullN the two lock checks would
+      // reduce to the exact same wilsonLower(passes,fullN) comparison
+      // anyway, so only the stop_reason label — never qualified — changes.
       if (seen === fullN) {
         return {
           qualified: wilsonLower(passes, fullN, Z) >= TAU,
@@ -1085,6 +1141,12 @@ function referenceOracleFold(admins, fullN) {
           misses,
           seen,
         };
+      }
+      if (wilsonLower(passes + remaining, fullN, Z) < TAU) {
+        return { qualified: false, stop_reason: 'locked_fail', passes, misses, seen };
+      }
+      if (wilsonLower(passes, fullN, Z) >= TAU) {
+        return { qualified: true, stop_reason: 'locked_qualify', passes, misses, seen };
       }
     }
   }
@@ -1312,6 +1374,75 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
     return adapterPath;
   }
 
+  // Consult adapter whose behaviour depends on which ADMINISTRATION
+  // ATTEMPT is currently running (tracked via a counter file, bumped once
+  // per administration by detecting the first flattened case index). Used
+  // to drive the retry-cap and evidence/counter-exclusion regression tests
+  // below, which need per-attempt control that writeConsultAdapter's
+  // static `mode` can't express.
+  function writeScriptedConsultAdapter(seed, counterPath, decide) {
+    const adapterPath = path.join(tempRoot, 'sc-' + crypto.randomBytes(3).toString('hex') + '.js');
+    const lines = [
+      "'use strict';",
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const crypto = require('crypto');",
+      "const repoRoot = " + JSON.stringify(root) + ";",
+      "const gen = require(path.join(repoRoot, 'evals', 'consult-eval-generator.js'));",
+      "const seals = require(path.join(repoRoot, 'scripts', 'lib', 'qualification-asset-seals.js'));",
+      "function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }",
+      "const staticAssets = seals.checkAssetSeals('consult');",
+      "const runNonce = byteHash('consult-seed:' + " + JSON.stringify(seed) + ");",
+      "const adminSeed = byteHash('consult-admin:' + runNonce + ':' + staticAssets.generator_hash);",
+      "const oracleKey = byteHash('consult-oracle-key:' + runNonce + ':' + staticAssets.corpus_hash);",
+      "const admin = gen.generateAdministration(adminSeed, oracleKey);",
+      "const request = JSON.parse(fs.readFileSync(0, 'utf8'));",
+      "const envelope = JSON.parse(request.payload.content);",
+      "let idx = -1;",
+      "let k = 0;",
+      "let caseSpec = null;",
+      "outer:",
+      "for (const trial of admin.trials) {",
+      "  for (const c of trial.cases) {",
+      "    if (c.case_id === envelope.case_id) { idx = k; caseSpec = c; break outer; }",
+      "    k += 1;",
+      "  }",
+      "}",
+      "const counterPath = " + JSON.stringify(counterPath) + ";",
+      "let attempt = 1;",
+      "if (idx === 0) {",
+      "  try { attempt = (parseInt(fs.readFileSync(counterPath, 'utf8'), 10) || 0) + 1; } catch { attempt = 1; }",
+      "  fs.writeFileSync(counterPath, String(attempt));",
+      "} else {",
+      "  try { attempt = parseInt(fs.readFileSync(counterPath, 'utf8'), 10) || 1; } catch { attempt = 1; }",
+      "}",
+      "const action = (" + decide.toString() + ")(attempt, idx);",
+      "if (action === 'harness') {",
+      "  process.stderr.write('scripted harness failure attempt=' + attempt + ' idx=' + idx);",
+      "  process.exit(1);",
+      "}",
+      "if (action === 'tier2') {",
+      "  process.stdout.write(JSON.stringify({",
+      "    schema_version: 1,",
+      "    provider: process.env.QUAL_FAKE_PROVIDER,",
+      "    model: process.env.QUAL_FAKE_MODEL,",
+      "    output: 'plain prose, not JSON, so it grades protocol_violation (tier2)',",
+      "  }));",
+      "  process.exit(0);",
+      "}",
+      "if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }",
+      "process.stdout.write(JSON.stringify({",
+      "  schema_version: 1,",
+      "  provider: process.env.QUAL_FAKE_PROVIDER,",
+      "  model: process.env.QUAL_FAKE_MODEL,",
+      "  output: JSON.stringify(caseSpec.reference_response),",
+      "}));",
+      "",
+    ];
+    fs.writeFileSync(adapterPath, lines.join('\n'));
+    return adapterPath;
+  }
+
   function baseOpts(role, adapterPath, rawDir) {
     return {
       role,
@@ -1444,6 +1575,90 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
     assert(admin1 && admin1.per_case_outcomes.length >= 3,
       'administrations[0].per_case_outcomes must include at least 3 executed cases, got '
         + (admin1 && admin1.per_case_outcomes.length));
+  }
+
+  // Retry cap: 3 harness-contaminated attempts followed by 2 clean ones
+  // needs 5 total attempts to reach administrationCap=2 clean administrations.
+  // The OLD `administrationCap * 2` = 4 would exhaust before ever reaching
+  // attempt 5 (returning stop_reason 'continue' with wall time left, never
+  // dispatching the clean attempts that would have produced a verdict).
+  // The fixed `administrationCap * 4` = 8 must retry through it.
+  {
+    const rawDir = path.join(tempRoot, 'raw-consult-retry-cap');
+    const counterPath = path.join(tempRoot, 'retry-cap-counter.txt');
+    fs.writeFileSync(counterPath, '0');
+    const decide = (attempt, idx) => (attempt <= 3 ? 'harness' : 'pass');
+    const adapterPath = writeScriptedConsultAdapter('d4-wire-retry', counterPath, decide);
+    process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+    process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = 'd4-wire-retry';
+    const result = eq.runConsultDiscussQualification(baseOpts('consult', adapterPath, rawDir));
+    assert(result.administrations_dispatched === 5,
+      'retry cap: exactly 5 attempts (3 harness + 2 clean), got '
+        + result.administrations_dispatched);
+    const runs = result.row.administrations.map((a) => ({ run: a.run, harness: undefined }));
+    assert(runs.length === 5, 'retry cap: 5 administration rows emitted, got ' + runs.length);
+    // The two CLEAN administrations (attempts 4 and 5) must have actually
+    // been dispatched and reached a real (non-'continue') pooled outcome —
+    // proof the loop did not exhaust before reaching them.
+    assert(result.stop_reason !== 'continue' || result.pooled.passes > 0,
+      'retry cap: clean administrations must have been dispatched and counted, got '
+        + JSON.stringify({ stop_reason: result.stop_reason, pooled: result.pooled }));
+    assert(result.pooled.passes === 40,
+      'retry cap: only the 2 clean administrations (20 each) contribute passes, got '
+        + result.pooled.passes);
+  }
+
+  // Evidence + quality counters: administrations retained in the pool only.
+  // run1 clean (20/20); run2's FIRST trial is perfect (10/10 pass), then a
+  // provider_unavailable case starts its SECOND trial (harness-excludes the
+  // whole administration), and the rest of that second trial is scripted
+  // to grade protocol_violation (tier2) — cases that must never be counted
+  // since the entire administration is excluded; run3 clean (20/20) closes
+  // out administrationCap=2 clean administrations. Evidence trials and the
+  // quality.* counters must reflect ONLY run1 + run3.
+  {
+    const rawDir = path.join(tempRoot, 'raw-consult-pool-only-evidence');
+    const counterPath = path.join(tempRoot, 'pool-only-counter.txt');
+    fs.writeFileSync(counterPath, '0');
+    const decide = (attempt, idx) => {
+      if (attempt === 2) {
+        if (idx === 10) return 'harness'; // 1st case of the 2nd trial
+        if (idx > 10) return 'tier2'; // rest of the 2nd trial: never counted
+      }
+      return 'pass';
+    };
+    const adapterPath = writeScriptedConsultAdapter('d4-wire-pool-only', counterPath, decide);
+    process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+    process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = 'd4-wire-pool-only';
+    const result = eq.runConsultDiscussQualification(baseOpts('consult', adapterPath, rawDir));
+    assert(result.administrations_dispatched === 3,
+      'pool-only: exactly 3 attempts (clean, harness-excluded, clean), got '
+        + result.administrations_dispatched);
+    const run2 = result.row.administrations.find((a) => a.run === 2);
+    assert(run2, 'run=2 administration row present');
+    const run2HarnessExcluded = result.pooled.harness_excluded;
+    assert(run2HarnessExcluded === 20,
+      'pool-only: run2 (20 cases) must be reported harness_excluded, got ' + run2HarnessExcluded);
+    assert(result.pooled.passes === 40,
+      'pool-only: pooled.passes counts only run1+run3 (20 each), got ' + result.pooled.passes);
+    // Evidence trials: run2's perfect trial-0 must NOT appear, even though
+    // it was itself flawless — the WHOLE administration is excluded.
+    assert(result.evidence.trials.length === 4,
+      'pool-only: evidence.trials must be exactly run1+run3\'s 4 trials, got '
+        + result.evidence.trials.length);
+    assert(!result.evidence.trials.some((t) => t.trial_id.startsWith('a2-')),
+      'pool-only: no run=2 trial may appear in evidence.trials, got '
+        + JSON.stringify(result.evidence.trials.map((t) => t.trial_id)));
+    // quality.* counters: run2's scripted protocol_violation (tier2) cases
+    // must not leak into the pooled counter — run1/run3 are perfectly clean.
+    assert(result.row.quality.protocol_violations === 0,
+      'pool-only: quality.protocol_violations must exclude run2\'s tier2 cases, got '
+        + result.row.quality.protocol_violations);
+    assert(result.row.quality.corpus_pass === '40/60',
+      'pool-only: quality.corpus_pass must be 40/60 (pool-only), got '
+        + result.row.quality.corpus_pass);
   }
 
   fs.rmSync(shortTmpBase, { recursive: true, force: true });

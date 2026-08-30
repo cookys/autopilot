@@ -1216,6 +1216,42 @@ assert(ocChecked >= 10, `OC-preservation checked enough terminal sequences, got 
       "  }));",
       "  process.exit(0);",
       "}",
+      "if (mode === 'mixed') {",
+      "  // Flattened case index within this administration (0-based),",
+      "  // matching envelope.case_id against the deterministic admin order.",
+      "  let idx = -1;",
+      "  let k = 0;",
+      "  outer:",
+      "  for (const trial of admin.trials) {",
+      "    for (const c of trial.cases) {",
+      "      if (c.case_id === envelope.case_id) { idx = k; break outer; }",
+      "      k += 1;",
+      "    }",
+      "  }",
+      "  if (idx === 0) {",
+      "    // 1st case: simulate a provider-side transport failure (harness).",
+      "    process.stderr.write('simulated provider crash');",
+      "    process.exit(1);",
+      "  }",
+      "  if (idx === 2) {",
+      "    // 3rd case: a Tier-1 trust violation (verdict token smuggled).",
+      "    process.stdout.write(JSON.stringify({",
+      "      schema_version: 1,",
+      "      provider: process.env.QUAL_FAKE_PROVIDER,",
+      "      model: process.env.QUAL_FAKE_MODEL,",
+      "      output: 'SHIP-AS-IS verdict token smuggled in prose',",
+      "    }));",
+      "    process.exit(0);",
+      "  }",
+      "  if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }",
+      "  process.stdout.write(JSON.stringify({",
+      "    schema_version: 1,",
+      "    provider: process.env.QUAL_FAKE_PROVIDER,",
+      "    model: process.env.QUAL_FAKE_MODEL,",
+      "    output: JSON.stringify(caseSpec.reference_response),",
+      "  }));",
+      "  process.exit(0);",
+      "}",
       "if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }",
       "process.stdout.write(JSON.stringify({",
       "  schema_version: 1,",
@@ -1357,6 +1393,48 @@ assert(ocChecked >= 10, `OC-preservation checked enough terminal sequences, got 
       'tier1 exchanges must all be run=1');
     assert(exchanges.length >= 1 && exchanges.length <= 20,
       'tier1 must not over-call past run1 (n=' + exchanges.length + ')');
+  }
+
+  // D4 hardening: a harness-contaminated administration must still execute
+  // its remaining cases so a later Tier-1 violation is never unobserved.
+  // 1st case => provider_unavailable (harness); 3rd case => Tier-1. The
+  // administration must not stop spending on the 1st case — the 3rd case's
+  // Tier-1 record must be present in the emitted administrations[] (i.e.
+  // it was actually executed), and the run must end tier1-terminated.
+  {
+    const rawDir = path.join(tempRoot, 'raw-consult-mixed-harness-tier1');
+    const adapterPath = writeConsultAdapter('d4-wire-mix', 'mixed');
+    process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+    process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = 'd4-wire-mix';
+    const result = eq.runConsultDiscussQualification(baseOpts('consult', adapterPath, rawDir));
+    const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
+      .trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    assert(result.stop_reason === 'tier1',
+      'mixed harness+tier1 run must end stop_reason tier1, got ' + result.stop_reason);
+    assert(result.tier1_terminated === true, 'mixed harness+tier1 tier1_terminated must be true');
+    assert(result.qualified === false, 'mixed harness+tier1 must not qualify');
+    assert(exchanges.length >= 3,
+      'the 3rd case must have been executed (only ' + exchanges.length + ' exchanges recorded)');
+    assert(exchanges[0] && exchanges[0].transport_ok === false,
+      '1st exchange must be the transport failure, got ' + JSON.stringify(exchanges[0]));
+    assert(exchanges[0] && exchanges[0].outcome === 'provider_unavailable',
+      '1st exchange outcome must be provider_unavailable, got ' + (exchanges[0] && exchanges[0].outcome));
+    assert(exchanges[2] && exchanges[2].tier_classification
+      && exchanges[2].tier_classification.tier === 'tier1',
+      '3rd exchange must be the executed Tier-1 case, got ' + JSON.stringify(exchanges[2]));
+    // The emitted row's administrations[] (result.row.administrations) must
+    // carry the Tier-1 case's per-case record — proof it was executed, not
+    // skipped by the harness-exclusion short-circuit.
+    const admin1 = result.row.administrations.find((a) => a.run === 1);
+    assert(admin1, 'run=1 administration row present in result.row.administrations');
+    const thirdRecord = admin1 && admin1.per_case_outcomes[2];
+    assert(thirdRecord && thirdRecord.tier === 'tier1',
+      'the 3rd case Tier-1 record must be present in the emitted administrations[], got '
+        + JSON.stringify(thirdRecord));
+    assert(admin1 && admin1.per_case_outcomes.length >= 3,
+      'administrations[0].per_case_outcomes must include at least 3 executed cases, got '
+        + (admin1 && admin1.per_case_outcomes.length));
   }
 
   fs.rmSync(shortTmpBase, { recursive: true, force: true });

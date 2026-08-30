@@ -3931,11 +3931,15 @@ function runConsultDiscussQualification(options) {
           stopAdministration = true;
           break;
         }
-        // Harness contamination excludes the whole administration — stop spending.
-        if (harnessSeen) {
-          stopAdministration = true;
-          break;
-        }
+        // Harness contamination excludes the whole administration from the
+        // pool (harness_excluded stays true below), but a Tier-1 violation
+        // in a LATER case of this same administration must still be
+        // observed — plan §2.5/§4 D4 step 1 (Tier-1 fail-fast, zero
+        // tolerance) dominates step 2 (harness exclusion). So keep
+        // executing the administration's remaining cases; every executed
+        // case still runs through classifyQualificationOutcome and the
+        // provisional foldPooledVerdict above, whose Tier-1 scan terminates
+        // on any tier1 regardless of contamination.
       }
       trialResults.push({ trial: trial.trial, cases, run: runIndex });
       if (stopAdministration || wallTruncated) break;

@@ -87,3 +87,23 @@
   re-executed by depth-0 before merge.
 - Still open (BACKLOG): a `boundary_rejected` campaign is a durable resumable wait; releasing its Mission claim without a resume
   still needs the operator path (depth-0 used `reduceMissionState` + `no_effect_release` twice this session).
+
+### Phase 2a — D4 merged (2026-08-30, depth-0)
+- **Implementation**: grok-4.5 via Mission campaign `420ac261…` attempt 2 (`c2642336`; the campaign itself boundary-rejected on
+  four test files outside `strict_dispatch.output_paths` — `scripts/engine-qualify-{consult,discuss}.test.js` + mirrors —
+  adjudicated a plan scope gap, not overreach: D4 mechanically invalidates their single-administration expectations).
+- **Repairs** (Claude sonnet workers, each RED→GREEN): `c4f82cbc` Tier-1 fail-fast precedes harness exclusion (foreman-caught
+  🔴); `b8d470ed` a contaminated administration still executes its remaining cases (MiniMax 🟠, downgraded to 🟡 hardening —
+  no observed Tier-1 was ever discarded); `23624cb5` OC-preservation property made non-vacuous (GLM + sol 🟠, verified);
+  `405a3d1f` fixed-N derived from role (sol 🟠, verified), complete-before-lock ordering (sol 🟡, label-only), retry until
+  three clean administrations (sol 🟠), pool-only evidence + `quality.*` counters (sol 🟠, GLM/MiniMax 🔵).
+- **Blind harness** `hooks/tests/qualification-tier-mapping.test.sh` (`da351138`; Qwen3.8-Max-Preview@qoderclicn, raw-artifact
+  rail, second administration — the first returned a 55-byte preamble, the known false-green): SHAPE/CONTINUE/TIER1 (incl.
+  harness+tier1)/HARNESS/LOCKED_FAIL/LOCKED_QUALIFY/COMPLETE/OC_PRESERVATION (200 seeded sequences ×2 roles)/INPUT_SHAPE all
+  green on `c4f82cbc`; one label expectation relaxed on `405a3d1f` (discuss 44/48 trailing misses: the 4th miss is the 48th
+  case, so `complete` and `locked_fail` coincide; verdict false either way).
+- **Depth-0 re-execution** on `405a3d1f`: verdict-stability 17, consult 59, honest-solver 16, capability-evidence 9, node
+  consult/discuss 111 assertions, sync parity, `check-test-integrity` warn/no block, `evals/` zero diff, grader hashes
+  `7852cf33…`/`39b5ba15…`.
+- **Rail**: the campaign again could not close (BOUNDARY_RECEIPT defect → rail fix #2 above); Mission attempt-2 claim released
+  by operator `no_effect_release` before merge. Merge authority = qc panel + re-execution, per phase-1 ruling.

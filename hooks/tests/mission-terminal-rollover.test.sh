@@ -79,10 +79,49 @@ STORE="$MROOT/terminal-rollovers.json"
 # would make every fresh rollover computed under the scratch common dir look
 # like a conflicting "different rollover" for the same graph (ROLLOVER_REPLAY)
 # even though nothing is actually wrong — so rollover.json starts clean here,
-# same as it does the first time this ever runs on a fresh repo.
+# same as it does the first time this ever runs on a fresh repo. The same
+# reasoning applies to legacy-terminal-dispositions.json: it is also the
+# tool's own output, its repo_identity and current_graph_digest are bound to
+# whatever common dir/graph it was last reconciled under on the LIVE host,
+# and that binding cannot possibly match the scratch clone's own common dir —
+# so it starts clean here too and gets re-derived inside the clone below.
 mkdir -p "$(dirname "$MROOT")"
 cp -R "$LIVE_MROOT" "$MROOT"
 rm -f "$MROOT/terminal-rollovers.json"
+rm -f "$MROOT/legacy-terminal-dispositions.json"
+
+# mission-routing-admission.js additionally requires (unconditionally, not just
+# for the graph under test) that registry.json's repo_identity, EVERY mission
+# entry's repo_identity, and every mission state's repo_identity equal
+# `git-common-dir:<the repo-root passed to it>` exactly — a single foreign
+# entry fails admission outright with MISSION_EVIDENCE_CORRUPT before any
+# graph-specific logic runs. The copied snapshot is entirely stamped with the
+# LIVE host's common dir, which can never equal the scratch clone's own
+# (freshly cloned) common dir. Content digests (adoption_key, policy_hash,
+# receipt_digest, config_digest, …) are computed over hashes/other content and
+# do not incorporate this string, and validateMissionState() does not
+# recompute config_digest from config — confirmed empirically before relying
+# on it here — so rebinding every occurrence of the literal live identity
+# string to the scratch identity is a faithful re-identification of the same
+# evidence, not a fabrication of new evidence.
+node -e '
+const fs = require("fs");
+const path = require("path");
+const root = process.argv[1];
+const oldId = process.argv[2];
+const newId = process.argv[3];
+function walk(dir) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) { walk(p); continue; }
+    if (!ent.isFile()) continue;
+    let buf;
+    try { buf = fs.readFileSync(p, "utf8"); } catch { continue; }
+    if (buf.includes(oldId)) fs.writeFileSync(p, buf.split(oldId).join(newId));
+  }
+}
+walk(root);
+' "$MROOT" "git-common-dir:$LIVE_COMMON" "git-common-dir:$COMMON"
 
 # Find a graph that has MORE THAN ONE COMPLETE adoption — the exact condition that
 # produces the ambiguity. Without one, there is nothing for rollover to resolve.
@@ -200,6 +239,39 @@ printf '%s' "$OUT" | grep -q '"synthesized_work_orders":0' \
 # ---- idempotent
 printf '%s' "$(roll "$INTEGRATED")" | grep -q '"writes":0' \
   && ok "re-running writes nothing (idempotent)" || bad "not idempotent"
+
+# ---- bind the clone's routing config to the graph the rollover fixtures
+# actually belong to, before letting admission read $STORE.
+#
+# The rollover records seeded above (and the $GRAPH digest discovered from the
+# copied registry) belong to docs/mission-next-touch-debt-retirement-*.json —
+# the historical graph mission-terminal-reconcile.js's own header names
+# (c1c6f577…). The LIVE repo's .claude/mission-routing-config.json — which the
+# clone inherited via `git clone` — now points at a different, unrelated
+# graph (docs/mission-qualification-verdict-stability-*.json) with no legacy
+# terminal-rollover records at all, so admission never consults $STORE and the
+# tamper below would go undetected for the wrong reason (nothing read the
+# file), not because detection works. Point the CLONE's config back at the
+# graph these fixtures were minted under so admission's graph digest lines up
+# with $GRAPH and it actually loads $STORE.
+cat > "$ROOT/.claude/mission-routing-config.json" <<CONFIGJSON
+{
+  "schema_version": 1,
+  "graph_path": "docs/mission-next-touch-debt-retirement-execution-graph.json",
+  "sources_path": "docs/mission-next-touch-debt-retirement-sources.json"
+}
+CONFIGJSON
+
+# requireExactLegacyTerminalDisposition() (mission-routing-admission.js) also
+# checks a legacy-terminal-dispositions.json artifact whose current_graph_digest
+# field must match the CONFIG's graph digest exactly. The copied snapshot's
+# disposition file was stamped against whatever graph the LIVE repo's config
+# pointed at when it was last reconciled there — not necessarily $GRAPH — so
+# re-derive it inside the clone for $GRAPH before calling admission.
+legacy_out="$(node "$RECONCILE" legacy --repo-root "$ROOT" --graph-digest "$GRAPH" 2>&1)"
+printf '%s' "$legacy_out" | grep -q '"status":"RECONCILED"' \
+  && ok "legacy B/C disposition reconciled for the clone's bound graph" \
+  || bad "could not reconcile legacy disposition for \$GRAPH: ${legacy_out:0:160}"
 
 # ---- admission ignores a TAMPERED rollover rather than trusting it
 if [ -f "$STORE" ]; then

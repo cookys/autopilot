@@ -149,3 +149,20 @@
   (position-keyed adapter ⇒ RED); `a25d7d17` KR7 base pin guarded by `merge-base --is-ancestor origin/develop`.
 - **Depth-0 re-execution** on `a25d7d17`: verdict-stability 44 (100 s), tier-mapping 11, consult 59, honest-solver 16,
   capability-evidence 11, `check-test-integrity` ok, diff-check clean, `evals/` zero diff.
+
+### Phase 3b — D7 + D8 closeout, release v2.35.3 (2026-08-30, depth-0)
+- **D7** (`80693f7e`, Claude sonnet, docs only): re-administration protocol section in `OC-CHARACTERIZATION.md` — per-seat
+  expected runs / early-stop triggers for the nine live seats, cost model, harness re-administration rule, cursor unchanged,
+  D5 gate live; **no spend authorized or performed** (plan §8 Q3 remains Board-only).
+- **D8**: mirror parity green; sealed graders byte-identical to the plan base `5402cbd5` (`7852cf33…`/`39b5ba15…`);
+  `check-test-integrity validate --range 5402cbd5..HEAD` ok; generalization seam recorded + BACKLOG row (`0af7b5f5`);
+  CHANGELOG `## v2.35.3` + INDEX row; `sync-version.js --version 2.35.3 --hook-count 26 --skill-count 29` (`85cd84a0`);
+  `preflight-release.sh` 8/8; doc-drift gate green after two pre-existing fixes (`3f45c1b7`); full `hooks/tests/run.sh` on
+  the release candidate — see the final line below.
+- **Campaign accounting**: Mission lineage `420ac261…` grants used 4 of 12 gate attempts / 8 campaigns; every campaign's
+  claim released by operator `no_effect_release` (state backups in `/tmp/autopilot-dispatch-runs/`); lineages `2e784929…`
+  and `83828e5e…` are inert residue. Not one managed campaign closed through its own terminal receipt — the wall cap
+  (schema max 3600 s) and the pre-existing base reds are the two remaining rail blockers (BACKLOG).
+- **Spend (approximate)**: grok-4.5 implementer ×6 campaigns (~40–85 min each), Qwen VA ×5 administrations (2 usable
+  harnesses), qc panel ×5 rounds (sol@max / GLM-5.2 / MiniMax-M3, MiniMax `no_verdict` ×4), Claude sonnet workers ×12,
+  opus foremen/agents ×9. Depth-0 (Fable) did orchestration, verification, adjudication, and release mechanics only.

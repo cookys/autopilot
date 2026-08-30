@@ -3438,4 +3438,700 @@ assert_exit_code "$D6_HONEST_RC" "0" "D6 honest solver + other-role parity: $D6_
 assert_contains "$D6_HONEST_OUT" "OK d6-honest-parity" "D6 honest/parity reports OK"
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# D7 — consult reason recovery uses the grader's merged gates; a grader
+# exception aborts the run fail-closed (2026-08-30 D7 re-administration
+# real-money incident, two seats voided):
+# scripts/engine-qualify.js's checkProtocol() reason-recovery call passed a
+# bare `undefined` as the gates argument instead of grader.mergeGates(undefined)
+# (the SAME merged gates classify() itself uses before calling checkProtocol).
+# With a shape-clean response, the gate-dependent checks inside checkProtocol
+# (exclusivityViolation, artifactRefViolation, authorityReferenceScopeViolation,
+# asideChannelScopeViolation) dereference `undefined.exclusivity` etc. and
+# throw a TypeError; the old `catch { graderReason = null; }` silently
+# swallowed it, so classifyQualificationOutcome saw a `protocol_violation`
+# label with no reason, fell to STEP-3 default-deny, and graded every
+# structural Tier-2 breach as a Tier-1 trust violation.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# D7(a) — real generated consult case + a shape-clean response that breaches
+# exclusivity (answer.label: 'insufficient_evidence' with a confident
+# artifact_ref) run through the real per-case run-loop (runConsultQualification
+# -> runConsultDiscussQualification, same seam the D4 live-wiring tests
+# drive) must record tier_classification tier2/step2 with the grader's OWN
+# reason string -- not tier1/step3/unknown_reason (the two D7 fingerprints).
+D7A_RAWDIR="$TEST_TMP/d7a-raw"
+mkdir -p "$D7A_RAWDIR"
+D7A_OUT="$(node - "$REPO_ROOT" "$D7A_RAWDIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+const root = process.argv[2];
+const rawDir = process.argv[3];
+const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
+const grader = require(path.join(root, 'evals/consult-eval-grader.js'));
+const gen = require(path.join(root, 'evals/consult-eval-generator.js'));
+const seals = require(path.join(root, 'scripts/lib/qualification-asset-seals.js'));
+
+// Same short-TMPDIR seam as D3.regress/D4 (unix socket UNIX_PATH_MAX).
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7a-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7a-'));
+const adapterPath = path.join(tempRoot, 'exclusivity-adapter.js');
+
+function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }
+const seed = 'd7a-exclusivity-seed';
+const staticAssets = seals.checkAssetSeals('consult');
+const runNonce = byteHash('consult-seed:' + seed);
+const adminSeed = byteHash('consult-admin:' + runNonce + ':' + staticAssets.generator_hash);
+const oracleKey = byteHash('consult-oracle-key:' + runNonce + ':' + staticAssets.corpus_hash);
+const admin = gen.generateAdministration(adminSeed, oracleKey);
+
+// Find a REAL C2_insufficient_evidence case that ships the generator's own
+// exclusivity-breach deviant (both_sides_answerer: insufficient_evidence
+// label + the oracle's confident_wrong_artifact_ref -- shape-clean JSON,
+// exactly the response class that hit the D7 incident).
+let targetCase = null;
+for (const trial of admin.trials) {
+  for (const c of trial.cases) {
+    if (!targetCase && c.family === 'C2_insufficient_evidence'
+        && c.deviants && c.deviants.both_sides_answerer) {
+      targetCase = c;
+    }
+  }
+}
+if (!targetCase) throw new Error('no C2_insufficient_evidence/both_sides_answerer case for this seed');
+const targetCaseId = targetCase.case_id;
+const targetResponse = targetCase.deviants.both_sides_answerer.response;
+
+// The grader's OWN reason string for this exact (caseSpec, response) pair,
+// computed the SAME way classify() does internally (mergeGates then
+// checkProtocol) -- the record under test must match this, not a hardcoded
+// literal that could silently drift from the real grader.
+const expectedReason = grader.checkProtocol(targetCase, targetResponse, grader.mergeGates(undefined));
+if (!expectedReason) throw new Error('fixture is not actually an exclusivity violation');
+
+// Adapter regenerates the SAME administration deterministically (mirrors
+// hooks/tests' own writeConsultAdapter pattern) and serves the exclusivity
+// deviant for the target case, a clean reference_response for every other
+// case -- so the administration otherwise resolves normally and the one
+// case under test is graded through the real broker/grader/classify chain.
+fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const repoRoot = ${JSON.stringify(root)};
+const gen = require(path.join(repoRoot, 'evals', 'consult-eval-generator.js'));
+const seals = require(path.join(repoRoot, 'scripts', 'lib', 'qualification-asset-seals.js'));
+function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }
+const staticAssets = seals.checkAssetSeals('consult');
+const runNonce = byteHash('consult-seed:' + ${JSON.stringify(seed)});
+const adminSeed = byteHash('consult-admin:' + runNonce + ':' + staticAssets.generator_hash);
+const oracleKey = byteHash('consult-oracle-key:' + runNonce + ':' + staticAssets.corpus_hash);
+const admin = gen.generateAdministration(adminSeed, oracleKey);
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+const envelope = JSON.parse(request.payload.content);
+let caseSpec = null;
+for (const trial of admin.trials) {
+  for (const c of trial.cases) { if (c.case_id === envelope.case_id) caseSpec = c; }
+}
+if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }
+const targetCaseId = ${JSON.stringify(targetCaseId)};
+const output = envelope.case_id === targetCaseId
+  ? JSON.stringify(caseSpec.deviants.both_sides_answerer.response)
+  : JSON.stringify(caseSpec.reference_response);
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output,
+}));
+`);
+
+const digest = (ch) => ch.repeat(64);
+process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+process.env.AUTOPILOT_QUALIFY_SEED = seed;
+
+const result = runConsultQualification({
+  role: 'consult',
+  trials: 2,
+  expiresDays: 30,
+  emitRow: false,
+  execute: true,
+  taskClasses: ['consult'],
+  domains: ['cross-cutting'],
+  languages: ['en'],
+  tools: ['read_only'],
+  engine: 'consult-engine',
+  model: 'consult-model-exact',
+  modelVersion: '2026-08-28',
+  versionSource: 'operator-asserted',
+  runner: 'consult-harness',
+  runnerVersion: '1.0.0',
+  family: 'test-family',
+  harnessVersion: 'consult-harness-v1',
+  effort: 'high',
+  promptConfigHash: digest('a'),
+  semanticFingerprint: digest('b'),
+  containmentFingerprint: digest('c'),
+  panelReadOnlyBinds: [],
+  panelEnvironment: [],
+  providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+  remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+  remoteProvider: 'fake-consult-provider',
+  remoteTimeoutMs: 60_000,
+  store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+  rawDir,
+  testAdministrationsOverride: 1,
+});
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
+  .trim().split('\n').map((line) => JSON.parse(line));
+const targetRow = exchanges.find((row) => row.case_id === targetCaseId);
+assert(targetRow, `target case ${targetCaseId} present in exchanges`);
+assert(targetRow && targetRow.outcome === 'protocol_violation',
+  `target case outcome should be protocol_violation, got ${targetRow && targetRow.outcome}`);
+const tc = targetRow && targetRow.tier_classification;
+assert(tc && tc.tier === 'tier2', `target case tier should be tier2, got ${JSON.stringify(tc)}`);
+assert(tc && tc.step === 2, `target case step should be 2, got ${JSON.stringify(tc)}`);
+assert(tc && tc.signal === expectedReason,
+  `target case signal should be the grader's own reason "${expectedReason}", got ${JSON.stringify(tc)}`);
+// The two D7 fingerprints: this exact breach must never land as tier1/step3
+// (STEP-3 default-deny) or carry the swallowed-exception signal.
+assert(!(tc && tc.tier === 'tier1'), `must NOT be graded tier1, got ${JSON.stringify(tc)}`);
+assert(!(tc && tc.step === 3), `must NOT fall to STEP-3 default-deny, got ${JSON.stringify(tc)}`);
+assert(!(tc && tc.signal === 'unknown_reason'),
+  `must NOT carry the swallowed-exception signal 'unknown_reason', got ${JSON.stringify(tc)}`);
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write(`OK d7a case=${targetCaseId} reason="${expectedReason}"\n`);
+NODE
+)"
+D7A_RC=$?
+assert_exit_code "$D7A_RC" "0" "D7(a) exclusivity breach recovers the grader's own reason via the real run-loop (tier2/step2, not tier1/step3/unknown_reason): $D7A_OUT"
+assert_contains "$D7A_OUT" "OK d7a" "D7(a) suite reports OK"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D7(b) — a stubbed grader whose checkProtocol() throws: the run must abort
+# with status 'instrument_error' -- no verdict, no scorecard row -- and the
+# exception message must be recorded in the run receipt (result.instrument_error
+# / result.row.instrument_error), never silently swallowed into a graded
+# tier1/step3/unknown_reason outcome.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D7B_RAWDIR="$TEST_TMP/d7b-raw"
+mkdir -p "$D7B_RAWDIR"
+D7B_OUT="$(node - "$REPO_ROOT" "$D7B_RAWDIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const root = process.argv[2];
+const rawDir = process.argv[3];
+const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
+
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7b-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7b-'));
+const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');
+
+// Any shape-clean response with a closed-label answer that is NOT an
+// exclusivity/reference breach still routes through checkProtocol()'s
+// gate-dependent checks once classify() has already returned
+// protocol_violation for some other reason on the SAME response shape is
+// awkward to stub honestly, so this test stubs the grader module itself
+// (module cache override) rather than crafting a response -- the point is
+// "checkProtocol throws", regardless of why, and the engine must never
+// depend on WHY it threw to decide to abort.
+const grader = require(path.join(root, 'evals/consult-eval-grader.js'));
+const originalCheckProtocol = grader.checkProtocol;
+grader.checkProtocol = function throwingCheckProtocol() {
+  throw new Error('stubbed instrument failure: checkProtocol exploded');
+};
+
+fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output: 'plain prose, not JSON, so classify() returns protocol_violation and the stubbed checkProtocol() throws',
+}));
+`);
+
+const digest = (ch) => ch.repeat(64);
+const seed = 'd7b-instrument-error-seed';
+process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+process.env.AUTOPILOT_QUALIFY_SEED = seed;
+
+const result = runConsultQualification({
+  role: 'consult',
+  trials: 2,
+  expiresDays: 30,
+  emitRow: false,
+  execute: true,
+  taskClasses: ['consult'],
+  domains: ['cross-cutting'],
+  languages: ['en'],
+  tools: ['read_only'],
+  engine: 'consult-engine',
+  model: 'consult-model-exact',
+  modelVersion: '2026-08-28',
+  versionSource: 'operator-asserted',
+  runner: 'consult-harness',
+  runnerVersion: '1.0.0',
+  family: 'test-family',
+  harnessVersion: 'consult-harness-v1',
+  effort: 'high',
+  promptConfigHash: digest('a'),
+  semanticFingerprint: digest('b'),
+  containmentFingerprint: digest('c'),
+  panelReadOnlyBinds: [],
+  panelEnvironment: [],
+  providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+  remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+  remoteProvider: 'fake-consult-provider',
+  remoteTimeoutMs: 60_000,
+  store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+  rawDir,
+  testAdministrationsOverride: 1,
+});
+
+grader.checkProtocol = originalCheckProtocol;
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+assert(result.qualified === false, 'instrument-error run must not qualify');
+assert(result.status === 'instrument_error',
+  `top-level status must be instrument_error, got ${result.status}`);
+assert(result.row === null,
+  `row MUST be null on instrument failure (fail-closed, never row-shaped), got ${JSON.stringify(result.row)}`);
+assert(result.evidence === null, 'no evidence/scorecard row may be emitted on instrument failure');
+assert(result.instrument_error && typeof result.instrument_error.message === 'string'
+  && result.instrument_error.message.includes('stubbed instrument failure'),
+  `the exception message must be recorded in the receipt, got ${JSON.stringify(result.instrument_error)}`);
+assert(result.verdict && typeof result.verdict.reason === 'string'
+  && result.verdict.reason.includes('stubbed instrument failure'),
+  `verdict.reason must carry the exception message, got ${result.verdict && result.verdict.reason}`);
+assert(result.verdict && result.verdict.status === 'instrument_error',
+  `verdict.status must be instrument_error, got ${result.verdict && result.verdict.status}`);
+assert(result.verdict && !('qualified' in result.verdict),
+  `verdict must not carry a qualified field, got ${JSON.stringify(result.verdict)}`);
+assert(result.verdict && Object.keys(result.verdict).sort().join(',') === 'reason,status',
+  `verdict must be limited to {status, reason} only, got ${JSON.stringify(result.verdict)}`);
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write('OK d7b instrument_error\n');
+NODE
+)"
+D7B_RC=$?
+assert_exit_code "$D7B_RC" "0" "D7(b) grader exception aborts fail-closed with status instrument_error (no verdict, no row): $D7B_OUT"
+assert_contains "$D7B_OUT" "OK d7b instrument_error" "D7(b) suite reports OK"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D7(c) — D3's "no current-grader reason reaches STEP 3" sweep, re-driven
+# through the ACTUAL production reason-recovery function
+# (recoverConsultProtocolReason, exported by scripts/engine-qualify.js and
+# called from the ONE call site inside runConsultDiscussQualification's
+# per-case loop -- the exact seam the D7 incident broke) instead of a
+# hand-picked graderReason string handed straight to
+# classifyQualificationOutcome. A full-broker E2E sweep across every
+# generated deviant is not viable here: a single Tier-1 hit fail-fasts the
+# whole administration (by design -- see the D4 hardening test above), so a
+# 20-case sweep inside one live administration only ever observes the
+# FIRST protocol_violation before the run stops. D7(a) above already proves
+# the fix wires correctly end-to-end for one concrete fingerprint case
+# through the real broker/administration loop; this sweep instead calls the
+# exact same production function directly across every protocol_violation
+# deviant the real generator/grader ship, for breadth, without needing N
+# separate live administrations.
+#
+# No consult case with a parseable (shape-valid-enough-to-not-crash) object
+# response can ever reach tier1/step3/signal='unknown_reason' while the
+# grader emitted protocol_violation on it -- the two real D7 fingerprints.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D7C_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const {
+  classifyQualificationOutcome,
+  recoverConsultProtocolReason,
+} = require(path.join(root, 'scripts/engine-qualify.js'));
+const grader = require(path.join(root, 'evals/consult-eval-grader.js'));
+const gen = require(path.join(root, 'evals/consult-eval-generator.js'));
+
+function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+let protocolViolationSeen = 0;
+let step3UnknownReasonSeen = 0;
+
+// Sweep several seeds (several independent generated administrations) so
+// the sweep exercises many different concrete cases/oracles, not just one
+// administration's worth.
+const seeds = ['d7c-sweep-seed-1', 'd7c-sweep-seed-2', 'd7c-sweep-seed-3'];
+for (const seed of seeds) {
+  const runNonce = byteHash('consult-seed:' + seed);
+  const adminSeed = byteHash('consult-admin:' + runNonce + ':generator-fixture');
+  const oracleKey = byteHash('consult-oracle-key:' + runNonce + ':corpus-fixture');
+  const admin = gen.generateAdministration(adminSeed, oracleKey);
+
+  for (const trial of admin.trials) {
+    for (const caseSpec of trial.cases) {
+      if (!caseSpec.deviants) continue;
+      for (const [devName, dev] of Object.entries(caseSpec.deviants)) {
+        const response = dev.response;
+        const graderLabel = grader.classify(caseSpec, response, undefined);
+        if (graderLabel !== 'protocol_violation') continue;
+        protocolViolationSeen += 1;
+
+        // The EXACT production call: recovers the reason through the same
+        // function runConsultDiscussQualification calls at its one call
+        // site. A grader exception here (this fixture set is all
+        // shape-clean-enough JSON, so none should throw) would be an
+        // instrument failure, not something this sweep should swallow.
+        const graderReason = recoverConsultProtocolReason(grader, caseSpec, response);
+        assert(graderReason && typeof graderReason === 'string' && graderReason.length > 0,
+          `${seed}/${caseSpec.case_id}/${devName}: recoverConsultProtocolReason must return the grader's real reason string, got ${JSON.stringify(graderReason)}`);
+
+        const tc = classifyQualificationOutcome({
+          role: 'consult',
+          graderLabel,
+          graderReason,
+          rawStdout: '',
+          parsedObject: response,
+          extractionMeta: null,
+          caseSpec,
+        });
+
+        const isStep3Unknown = tc.step === 3 && tc.signal === 'unknown_reason';
+        if (isStep3Unknown) step3UnknownReasonSeen += 1;
+        assert(!isStep3Unknown,
+          `${seed}/${caseSpec.case_id}/${devName}: protocol_violation with a real grader reason `
+            + `("${graderReason}") must never fall to STEP-3 default-deny (tier1/step3/unknown_reason); `
+            + `got ${JSON.stringify(tc)}`);
+        // STEP 1 (the unconditional trust scan) may legitimately preempt
+        // STEP 2 for some deviants (e.g. a smuggled authority token is
+        // itself a Tier-1 trust-scan hit, independent of the
+        // protocol_violation reason) -- that is correct existing behavior,
+        // not the D7 bug. The D7 fingerprint is specifically STEP 3 with
+        // signal 'unknown_reason', asserted above; here just confirm the
+        // outcome resolved at STEP 1 or STEP 2, never fell through to
+        // STEP 3's default-deny.
+        assert((tc.step === 1 || tc.step === 2) && (tc.tier === 'tier1' || tc.tier === 'tier2'),
+          `${seed}/${caseSpec.case_id}/${devName}: protocol_violation must resolve at STEP 1 or STEP 2, got ${JSON.stringify(tc)}`);
+      }
+    }
+  }
+}
+
+assert(protocolViolationSeen > 0, 'sweep must exercise at least one protocol_violation deviant');
+assert(step3UnknownReasonSeen === 0,
+  `${step3UnknownReasonSeen} case(s) fell to STEP-3 default-deny (the D7 incident signature)`);
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.slice(0, 20).join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write(`OK d7c protocol_violations=${protocolViolationSeen}\n`);
+NODE
+)"
+D7C_RC=$?
+assert_exit_code "$D7C_RC" "0" "D7(c) reason-recovery sweep: no protocol_violation ever falls to STEP-3 default-deny: $D7C_OUT"
+assert_contains "$D7C_OUT" "OK d7c" "D7(c) suite reports OK"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D7(d) — 2026-08-30 D7 incident 2ND fix: a 'protocol_violation' label with NO
+# recoverable reason string (checkProtocol() returns null, does NOT throw)
+# must ALSO abort fail-closed as instrument_error. Before this fix,
+# graderReason stayed null and classifyQualificationOutcome fell through to
+# its STEP-3 default-deny — the exact laundering into Tier-1 the D7 incident
+# already burned real seats over, just via a different (non-throwing) door.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D7D_RAWDIR="$TEST_TMP/d7d-raw"
+mkdir -p "$D7D_RAWDIR"
+D7D_OUT="$(node - "$REPO_ROOT" "$D7D_RAWDIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const root = process.argv[2];
+const rawDir = process.argv[3];
+const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
+
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7d-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7d-'));
+const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');
+
+// Stub the sealed grader's checkProtocol() to return null/empty (NOT throw)
+// -- the exact instrument inconsistency this fix guards: classify() labels
+// the case protocol_violation, but no recoverable reason string comes back.
+const grader = require(path.join(root, 'evals/consult-eval-grader.js'));
+const originalCheckProtocol = grader.checkProtocol;
+grader.checkProtocol = function nullReasonCheckProtocol() {
+  return null;
+};
+
+fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output: 'plain prose, not JSON, so classify() returns protocol_violation and the stubbed checkProtocol() returns null',
+}));
+`);
+
+const digest = (ch) => ch.repeat(64);
+const seed = 'd7d-instrument-error-no-reason-seed';
+process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+process.env.AUTOPILOT_QUALIFY_SEED = seed;
+
+const result = runConsultQualification({
+  role: 'consult',
+  trials: 2,
+  expiresDays: 30,
+  emitRow: false,
+  execute: true,
+  taskClasses: ['consult'],
+  domains: ['cross-cutting'],
+  languages: ['en'],
+  tools: ['read_only'],
+  engine: 'consult-engine',
+  model: 'consult-model-exact',
+  modelVersion: '2026-08-28',
+  versionSource: 'operator-asserted',
+  runner: 'consult-harness',
+  runnerVersion: '1.0.0',
+  family: 'test-family',
+  harnessVersion: 'consult-harness-v1',
+  effort: 'high',
+  promptConfigHash: digest('a'),
+  semanticFingerprint: digest('b'),
+  containmentFingerprint: digest('c'),
+  panelReadOnlyBinds: [],
+  panelEnvironment: [],
+  providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+  remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+  remoteProvider: 'fake-consult-provider',
+  remoteTimeoutMs: 60_000,
+  store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+  rawDir,
+  testAdministrationsOverride: 1,
+});
+
+grader.checkProtocol = originalCheckProtocol;
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+assert(result.qualified === false, 'instrument-error run must not qualify');
+assert(result.status === 'instrument_error',
+  `top-level status must be instrument_error, got ${result.status}`);
+assert(result.row === null, `row must be null, got ${JSON.stringify(result.row)}`);
+assert(result.evidence === null, 'no scorecard row may be emitted on instrument failure');
+assert(result.instrument_error && typeof result.instrument_error.message === 'string'
+  && result.instrument_error.message.includes('protocol_violation')
+  && result.instrument_error.message.includes('no recoverable'),
+  `the receipt must name the no-recoverable-reason inconsistency, got ${JSON.stringify(result.instrument_error)}`);
+assert(typeof result.instrument_error.case_id === 'string' && result.instrument_error.case_id.length > 0,
+  `instrument_error must name the case id, got ${JSON.stringify(result.instrument_error)}`);
+// The D7 fingerprint this fix closes: the case must NEVER land as a graded
+// tier1/step3/unknown_reason row -- there must be no row / verdict.reason
+// carrying that signature at all, because there is no row.
+assert(!(result.verdict && result.verdict.reason && result.verdict.reason.includes('unknown_reason')),
+  `must never carry the tier1/step3/unknown_reason fingerprint, got ${result.verdict && result.verdict.reason}`);
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write('OK d7d instrument_error_no_reason\n');
+NODE
+)"
+D7D_RC=$?
+assert_exit_code "$D7D_RC" "0" "D7(d) protocol_violation with no recoverable reason aborts fail-closed as instrument_error (no Tier-1, no row): $D7D_OUT"
+assert_contains "$D7D_OUT" "OK d7d" "D7(d) suite reports OK"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D7(e) — CLI-style path (emitRow: true), the exact seam main() drives
+# (`--emit-row` prints `JSON.stringify(runResult.row)` to stdout): on an
+# instrument_error receipt the printed row must contain no row-shaped JSON
+# (row is null, so the print is the bare token "null"), and neither the
+# scorecard store nor the capability store may be touched -- the aborted
+# case must never be recorded or promoted.
+# ═══════════════════════════════════════════════════════════════════════════
+
+D7E_SCORECARD_DIR="$(mktemp -d)"
+D7E_CAPABILITY_DIR="$(mktemp -d)"
+D7E_RAWDIR="$TEST_TMP/d7e-raw"
+mkdir -p "$D7E_RAWDIR"
+D7E_OUT="$(ENGINE_SCORECARD_DIR="$D7E_SCORECARD_DIR" ENGINE_CAPABILITY_DIR="$D7E_CAPABILITY_DIR" \
+  node - "$REPO_ROOT" "$D7E_RAWDIR" "$D7E_SCORECARD_DIR" "$D7E_CAPABILITY_DIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const root = process.argv[2];
+const rawDir = process.argv[3];
+const scorecardDir = process.argv[4];
+const capabilityDir = process.argv[5];
+const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
+
+function snapshotDir(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).sort().map((name) => {
+    const full = path.join(dir, name);
+    const stat = fs.statSync(full);
+    return `${name}:${stat.isDirectory() ? 'dir' : stat.size}`;
+  });
+}
+
+const scorecardBefore = snapshotDir(scorecardDir);
+const capabilityBefore = snapshotDir(capabilityDir);
+
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7e-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7e-'));
+const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');
+
+const grader = require(path.join(root, 'evals/consult-eval-grader.js'));
+const originalCheckProtocol = grader.checkProtocol;
+grader.checkProtocol = function throwingCheckProtocol() {
+  throw new Error('stubbed CLI-path instrument failure');
+};
+
+fs.writeFileSync(adapterPath, `'use strict';
+const fs = require('fs');
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output: 'plain prose, not JSON, so classify() returns protocol_violation and the stubbed checkProtocol() throws',
+}));
+`);
+
+const digest = (ch) => ch.repeat(64);
+process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+process.env.AUTOPILOT_QUALIFY_SEED = 'd7e-cli-emit-row-seed';
+
+// emitRow: true drives the exact runResult shape main() prints under
+// `--emit-row`: this test then reproduces main()'s print logic verbatim
+// (`JSON.stringify(runResult.row)` to "stdout", `JSON.stringify(verdict)`
+// built from `{...runResult.verdict, evaluation_passed, admitted,
+// authority_status}` to "stderr") to prove that exact seam never leaks a
+// row-shaped payload.
+const result = runConsultQualification({
+  role: 'consult',
+  trials: 2,
+  expiresDays: 30,
+  emitRow: true,
+  execute: true,
+  taskClasses: ['consult'],
+  domains: ['cross-cutting'],
+  languages: ['en'],
+  tools: ['read_only'],
+  engine: 'consult-engine',
+  model: 'consult-model-exact',
+  modelVersion: '2026-08-28',
+  versionSource: 'operator-asserted',
+  runner: 'consult-harness',
+  runnerVersion: '1.0.0',
+  family: 'test-family',
+  harnessVersion: 'consult-harness-v1',
+  effort: 'high',
+  promptConfigHash: digest('a'),
+  semanticFingerprint: digest('b'),
+  containmentFingerprint: digest('c'),
+  panelReadOnlyBinds: [],
+  panelEnvironment: [],
+  providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+  remoteProviderCmd: `${process.execPath} ${adapterPath}`,
+  remoteProvider: 'fake-consult-provider',
+  remoteTimeoutMs: 60_000,
+  store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+  rawDir,
+  testAdministrationsOverride: 1,
+});
+
+grader.checkProtocol = originalCheckProtocol;
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+assert(result.status === 'instrument_error', `top-level status must be instrument_error, got ${result.status}`);
+assert(result.row === null, `row must be null, got ${JSON.stringify(result.row)}`);
+
+// Reproduce main()'s exact CLI print (scripts/engine-qualify.js main()):
+// with --emit-row, stdout gets JSON.stringify(runResult.row), stderr gets
+// the trimmed verdict.
+const stdoutPrint = JSON.stringify(result.row);
+const cliVerdict = {
+  ...result.verdict,
+  evaluation_passed: result.qualified,
+  admitted: false,
+  authority_status: 'untrusted_telemetry',
+};
+delete cliVerdict.qualified;
+
+assert(stdoutPrint === 'null', `--emit-row stdout must be the bare token "null", got ${stdoutPrint}`);
+assert(!stdoutPrint.includes('administration_outcome') && !stdoutPrint.includes('evidence'),
+  `--emit-row stdout must contain no row-shaped JSON, got ${stdoutPrint}`);
+assert(cliVerdict.status === 'instrument_error', `CLI verdict status must survive the spread, got ${JSON.stringify(cliVerdict)}`);
+assert(!('qualified' in cliVerdict), `CLI verdict must never carry a qualified field, got ${JSON.stringify(cliVerdict)}`);
+
+const scorecardAfter = snapshotDir(scorecardDir);
+const capabilityAfter = snapshotDir(capabilityDir);
+assert(JSON.stringify(scorecardAfter) === JSON.stringify(scorecardBefore),
+  `ENGINE_SCORECARD_DIR must be untouched on instrument_error, before=${JSON.stringify(scorecardBefore)} after=${JSON.stringify(scorecardAfter)}`);
+assert(JSON.stringify(capabilityAfter) === JSON.stringify(capabilityBefore),
+  `ENGINE_CAPABILITY_DIR must be untouched on instrument_error, before=${JSON.stringify(capabilityBefore)} after=${JSON.stringify(capabilityAfter)}`);
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write('OK d7e cli_emit_row_no_leak\n');
+NODE
+)"
+D7E_RC=$?
+assert_exit_code "$D7E_RC" "0" "D7(e) CLI-style --emit-row path leaks no row JSON and leaves both temp stores untouched on instrument_error: $D7E_OUT"
+assert_contains "$D7E_OUT" "OK d7e" "D7(e) suite reports OK"
+rm -rf "$D7E_SCORECARD_DIR" "$D7E_CAPABILITY_DIR"
+
+
 finalize_test

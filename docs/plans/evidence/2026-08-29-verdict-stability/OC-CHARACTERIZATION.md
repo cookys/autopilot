@@ -288,3 +288,26 @@ a `no_record` seat, not evidence that competes with or must out-rank a still-adm
 seats under the new two-tier + pooled bar is a separate Board authorization (plan §8 Q3).** No
 provider was called, no case was dispatched, and no scorecard row was written in the course of
 producing this section.
+
+## Generalization seam (deferred)
+
+`foldPooledVerdict` (`scripts/engine-qualify.js`), the `(VERDICT_Z, VERDICT_TAU)` constants, and the
+D3 error-class → tier map are written **role-agnostic**: the fold consumes only per-case outcomes and
+a role's own tier map, and the Wilson-lower-bound competence gate has no consult/discuss-specific
+assumption baked into its arithmetic. A later plan could in principle point another role's verdict at
+the same machinery.
+
+**This plan does not do that.** `reviewer`, `implementer`, `owner`, `verification_author`, and `brain`
+keep their existing single-administration verdicts, untouched (KR7: their verdicts are byte-identical
+to `origin/develop` on the same inputs — asserted in D6). The reason is not implementation cost — the
+engine is already shaped to take another role's tier map — it is that **switching a role's bar without
+that role's own eval evidence would be exactly the mistake this plan corrects for consult/discuss**:
+this project only earned the right to change the bar because
+`docs/plans/2026-08-28-consult-discuss-qualification.md` had already produced a frozen, sealed,
+scorecard-first exam corpus for consult/discuss, and this plan's D6 produced the OC characterization
+against *that* corpus. No other role currently has an equivalent frozen corpus + OC characterization,
+so applying `foldPooledVerdict`/`(VERDICT_Z, VERDICT_TAU)` to any of them now would be an unevidenced
+rewrite (per CLAUDE.md's 成績單前置 rule: "rewriting or deleting any skill requires prior eval ON/OFF
+evidence"). The seam is documented here so a future plan does not have to reconstruct why it exists or
+re-derive the fold's shape — only produce that role's own corpus and OC evidence first. Filed as a
+`docs/BACKLOG.md` follow-up (see below).

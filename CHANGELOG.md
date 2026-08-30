@@ -1,5 +1,90 @@
 # Changelog
 
+## v2.35.3 — qualification verdict stability: two-tier bar + pooled multi-administration
+
+Completes `docs/plans/2026-08-29-qualification-verdict-stability.md`'s frozen eight-deliverable DAG.
+The consult/discuss qualification verdict was a **single-administration, 100%-correct-bar** decision
+(`engine-qualify.js` `foldAdministration`/`foldDiscussAdministration`), proven noise-sensitive live:
+under the identical final instrument, `gemini-3.7-flash-high`/`agy` discuss flipped `16/16`→`15/16`
+QUALIFY→FAIL and `MiniMax-M3`/`cc-shim` consult flipped `19/20`→`20/20` FAIL→QUALIFY
+(`docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md`). This ships a
+**two-tier bar** (trust vs. competence) plus **pooled multi-administration** competence scoring so
+noise no longer flips the verdict, without weakening the trust bar or touching the frozen instrument.
+
+**D1 — provisional downgrade of the nine live single-run rows** (merged with D0–D3, head `6a3620a1`,
+grok-4.5 implementation `1d91a6f4`, reviewer repairs `365ee37c`/`6a3620a1`). Backed up
+`scorecard.jsonl`/`qualification-evidence.jsonl` (sha256-verified byte-identical), appended nine
+`record_kind:"supersession"` markers for scorecard events 157–165 (`--supersede-provisional
+--supersedes-event-id`), rejected a dangling-id negative control, and banner-marked
+`ADMINISTRATION-LEDGER.md` as superseded-pending-re-administration. Append-only — the nine result rows
+are unchanged on disk.
+
+**D2 — `wilsonLower(successes, n, z)`** added to `src/engine/verification-strength.js`, sibling to
+`wilsonUpper`, `n≤0 → 0` fail-closed. Pinned at the CEO-frozen one-sided `Z=1.6448536269514722`.
+
+**D3 — the frozen error-class → tier map + `protocol_violation` split predicate**, computed entirely
+in the verdict engine, outside the sealed grader (zero grader byte change, `evals/` diff empty
+throughout — asserted pre/post at D3 and again at D8). A STEP-1 trust scan runs first and
+unconditionally over the bounded raw stdout (extra/nested fields, trailing prose, a second JSON
+object, fenced wrappers); only a trust-clean response reaches the exhaustive STEP-2 structural map;
+STEP-3 default-deny is reserved for a future unrecognised reason and is never reached by a current
+grader receipt.
+
+**D4 — the pooled two-tier verdict engine** (`405a3d1f` final; repairs `c4f82cbc` Tier-1 fail-fast
+precedes harness exclusion, `b8d470ed` a contaminated run still executes its remaining cases,
+`23624cb5` non-vacuous OC-preservation property, `405a3d1f` fixed-N-from-role + pool-only evidence).
+`foldPooledVerdict` replaces the single-run `qualified` source: Tier-1 is zero-tolerance fail-fast; the
+verdict is **always the full-N Wilson lower bound** (`VERDICT_Z=1.6448536269514722`,
+`VERDICT_TAU=0.85`) — early stopping is fail-only (locked-fail once the bound can no longer reach τ)
+or mathematically-locked-qualify (the bound already clears τ with all remaining cases assumed
+failures), never a partial-`n` early-qualify. Effective bars: consult `≥56/60`, discuss `≥45/48`.
+
+**D5 — capability-evidence/scorecard schema (additive) + the supersession admission gate** (`fb53f77e`
+final; repairs `2bed9cc9` denominator = role's fixed N, `898c011b` tier1 re-derived + z/tau exact-pin
++ exclusive legacy/pooled schema branches). `computeSeatProjection`, `current`, `ladder`, and both
+`seat-status` paths now honor the D1 supersession markers before baseline selection — this is what
+makes D1's downgrade a real admission gate. As of this landing, all nine events (157–165) resolve
+`no_record` under both `seat-status` paths.
+
+**D6 — the exact-binomial OC oracle + seeded cross-check** (`a25d7d17` final; repairs `e581a942`
+literal K/N pins, `c921bfe3` n=3000/SplitMix32 seed rule sized for ≥0.9 power at all binding margins,
+`6e70acc4` independence driven through the live per-case dispatch loop with a non-vacuous negative
+control). `docs/plans/evidence/2026-08-29-verdict-stability/OC-CHARACTERIZATION.md` records the
+measured OC: `p=0.85` → qualify-rate 0.042 consult / 0.057 discuss; `p=0.97` → 0.966 / 0.944; exact
+50%-crossing boundary **`p*≈0.923`** (0.92259 consult / 0.92403 discuss) — honestly relabelled from an
+earlier ≈0.90 draft claim, not retuned to hit it.
+
+**D7 — re-administration protocol** (`80693f7e`), design only: per-seat expected run counts and
+early-stop triggers for the nine live seats, the 3×/1–2× cost model, the harness-attributed
+re-administration rule, and confirmation the `cursor` seat stays not-containable (unchanged). **Does
+not authorize or perform spend** — real-money re-administration under the new bar is a separate Board
+authorization (plan §8 Q3).
+
+**D8 — wiring, generalization note, release.** `foldPooledVerdict` + `(VERDICT_Z, VERDICT_TAU)` + the
+tier map are written role-agnostic but **not** switched for `reviewer/implementer/owner/
+verification_author/brain` — each needs its own scorecard-first eval evidence first (`docs/BACKLOG.md`
+follow-up). Sealed consult/discuss grader hashes re-asserted byte-identical to `origin/develop`.
+
+**Rail fixes that shipped alongside** (surfaced because the Mission-managed campaign rail could not
+close this project's phases — see the honest deviations below): lease-bound campaign identity now
+resolves through one `resolveCampaignEventLeaseIdentity()` (`35cda9ff`); strict provider-readiness
+bootstrap compiles for `l6` as well as `l5` (`8dbc8f51`); the campaign boundary-rejection path now
+journals a real `campaign_boundary_receipt` instead of stranding at IMPLEMENTING
+(`b0778bd9`/`e0fbef4e`); `validate-json-schema.js` rejects unsafe-magnitude integers again while
+keeping lossless non-integers (`4862b0d7`); `hooks/tests/run.sh` gained a per-suite timeout with a
+distinct `[TIMEOUT]` marker (`065078cc`).
+
+**Honest deviations.** Every Mission campaign dispatched for this project's implementation waves
+(D0–D3, D4, D5, D6) either boundary-rejected on test files outside `strict_dispatch.output_paths`,
+hit the 3600s wall, or otherwise could not journal a terminal receipt — three consecutive campaigns
+lost to wall/closure, filed as BACKLOG rows. Merge authority for every wave therefore rests on the
+depth-0 qc panel plus independent re-execution (per ADR-0001: verification is independent
+re-derivation), not on a Mission `can_merge` receipt. Stranded/dead Mission claims (attempt-1's
+salvage campaign, and attempts 2 and 3 of campaign `420ac261…`) were released by depth-0 applying
+`no_effect_release` directly through `reduceMissionState` — there is no CLI release path for this
+case, filed as a BACKLOG row. No corpus, generator, grader, rubric, or seal changed; `evals/` diff is
+empty across every wave; consult/discuss grader hashes stayed `7852cf33…`/`39b5ba15…` throughout.
+
 ## v2.35.2 — consult grader C4/C5 overstrict fix
 
 Fixes two exam-design defects in `evals/consult-eval-grader.js`, both instrument disclosure bugs

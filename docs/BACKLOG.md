@@ -23,6 +23,22 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ---
 
+### Apply two-tier + pooled verdict to reviewer/implementer/owner/verification_author/brain
+- **Trigger**: a role's own eval corpus + scorecard-first ON/OFF evidence exists — a frozen, sealed
+  case corpus for that role plus an OC characterization against it, produced the same way
+  `docs/plans/2026-08-28-consult-discuss-qualification.md` + `docs/plans/2026-08-29-qualification-verdict-stability.md`
+  D6 produced one for consult/discuss.
+- **Context**: `foldPooledVerdict`, `(VERDICT_Z, VERDICT_TAU)`, and the D3 error-class → tier map
+  (`scripts/engine-qualify.js`) are already written role-agnostic — they consume only per-case
+  outcomes and a role's tier map — but `reviewer`/`implementer`/`owner`/`verification_author`/`brain`
+  keep their existing single-administration verdicts (KR7, `docs/plans/2026-08-29-qualification-verdict-stability.md`).
+  Switching any of them without that role's own eval evidence first would repeat exactly the mistake
+  this plan corrected for consult/discuss (成績單前置 — CLAUDE.md). See
+  `docs/plans/evidence/2026-08-29-verdict-stability/OC-CHARACTERIZATION.md` § "Generalization seam
+  (deferred)" for the full reasoning.
+- **Effort**: L
+- **Source**: `docs/plans/2026-08-29-qualification-verdict-stability.md` D8
+
 ### Codex payload install-time generation（2026-08-02 residual spike：NO-GO）
 - **Trigger**: Codex 提供受支援的 native plugin lifecycle：在 plugin install **與** Git marketplace upgrade/refetch 兩條適用路徑上，都能於 payload discovery 前自動執行 deterministic generator，且 generator 非零退出會讓外層 install/upgrade fail-loud；或官方提供具同等順序與失敗語意、可由 live CLI 驗證的機制。
 - **Context**: codex-cli 0.146.0 的 logged-in `codex exec` 已實證 installed Autopilot cache payload 與 linked support reference 可被讀取，且 audit 結果正確。殘餘 probe 同時反證把 local source 當 Git refresh：generation A 安裝後即使 local fixture 改為 B，`plugin list` 仍為 0.1.0、loader 仍讀 cache generation A，`marketplace upgrade <local>` 以「not configured as a Git marketplace」exit 1；未發布外部 Git fixture，故 Git snapshot refresh 語意維持 `unproven`。帶 `scripts`/`lifecycle` 的 disposable manifest 雖被接受並複製，install 仍成功、exit-17 generator 未執行，四份 installed curated manifests 也無這兩個欄位；native install/upgrade generation lifecycle 為 `fail`。結論維持 committed Codex payload mirrors 與所有 sync/drift gates，不做遷移。

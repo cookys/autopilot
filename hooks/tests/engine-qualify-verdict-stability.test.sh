@@ -154,25 +154,30 @@ after_prefix=$(head -n "$before_lines" "$STORE")
   && assert_eq "0" "0" "D1.5 prior store lines byte-identical after marker append" \
   || fail "D1.5: prior bytes changed"
 
-# D1.6: ordinary record path unchanged; readers ignore marker (D1 — no projection change)
+# D1.6 (updated by D5 projection): ordinary record path still works; a marker
+# for a seat REMOVES that seat's baseline from current/seat-status (the D5
+# admission-gate behaviour). A fresh ordinary row for a different engine still
+# records with a monotonic event_id.
 reset_store
 echo "$(row ordeng ordrun openai reviewer c@1 0.9 manual 0 qualified 2099-01-01)" \
   | node "$CLI" record >"$TEST_TMP/d1-ord.json" 2>/dev/null
 ord_id=$(jq_get event_id <"$TEST_TMP/d1-ord.json")
-current_before=$(node "$CLI" current --role reviewer --now 2026-06-30)
 seat_before=$(node "$CLI" seat-status --engine ordeng --runner ordrun --role reviewer --now 2026-06-30)
 node "$CLI" record --supersede-provisional --supersedes-event-id "$ord_id" \
-  --reason 'reader-noop' </dev/null >/dev/null 2>&1
-current_after=$(node "$CLI" current --role reviewer --now 2026-06-30)
+  --reason 'reader-filter' </dev/null >/dev/null 2>&1
 seat_after=$(node "$CLI" seat-status --engine ordeng --runner ordrun --role reviewer --now 2026-06-30)
+current_after=$(node "$CLI" current --role reviewer --now 2026-06-30)
 echo "$(row ordeng2 ordrun openai reviewer c@1 0.8 manual 0 qualified 2099-01-01)" \
   | node "$CLI" record >"$TEST_TMP/d1-ord2.json" 2>/dev/null
 ord2_ec=$?
 ord2_id=$(jq_get event_id <"$TEST_TMP/d1-ord2.json")
-[ "$current_before" = "$current_after" ] && [ "$seat_before" = "$seat_after" ] \
+seat_before_status=$(printf '%s' "$seat_before" | jq_get admission_status)
+seat_after_status=$(printf '%s' "$seat_after" | jq_get admission_status)
+[ "$seat_before_status" = "qualified" ] && [ "$seat_after_status" = "no_record" ] \
+  && [ "$current_after" = "[]" ] \
   && [ "$ord2_ec" = "0" ] && [ "$ord2_id" = "3" ] \
-  && assert_eq "0" "0" "D1.6 ordinary record + current/seat-status unchanged by marker presence" \
-  || fail "D1.6: readers drifted or ordinary record broke (ord2_ec=$ord2_ec id=$ord2_id)"
+  && assert_eq "0" "0" "D1.6 marker filters baseline; ordinary record still appends" \
+  || fail "D1.6: before=$seat_before_status after=$seat_after_status current=$current_after ord2_ec=$ord2_ec id=$ord2_id"
 
 # ENGINE_SCORECARD_DIR is under TEST_TMP via lib.sh — never the operator store.
 case "$ENGINE_SCORECARD_DIR" in
@@ -1674,5 +1679,317 @@ NODE
 D4_RC=$?
 assert_exit_code "$D4_RC" "0" "D4 foldPooledVerdict + wiring suite: $D4_OUT"
 assert_contains "$D4_OUT" "OK d4" "D4 suite reports OK"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D5 consumer matrix (c)/(d)/(f)/(g)/(h-marker)
+# plan 2026-08-29-qualification-verdict-stability.md §4 D5
+# ═══════════════════════════════════════════════════════════════════════════
+
+FIXTURE_JS="$REPO_ROOT/hooks/tests/lib/consult-discuss-genuine-row-fixture.js"
+SCOPE_HELPER="$REPO_ROOT/scripts/lib/qualification-applicability-scope.js"
+
+# (c) engine-scorecard.js reads the pooled quality / competence block
+reset_store
+D5_C_OUT="$(node - "$REPO_ROOT" "$CLI" "$ENGINE_SCORECARD_DIR" <<'NODE'
+'use strict';
+const { spawnSync } = require('child_process');
+const path = require('path');
+const { wilsonLower } = require(path.join(process.argv[2], 'src/engine/verification-strength.js'));
+const Z = 1.6448536269514722;
+const wilson = wilsonLower(60, 60, Z);
+const row = {
+  engine: 'pool-c', runner: 'r1', family: 'f', role: 'consult',
+  model_version: 'v1', version_source: 'manual', corpus_version: 'c',
+  harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: 'sha256:x',
+  date: '2026-08-28',
+  quality: { corpus_pass: '60/60', protocol_violations: 0 },
+  capability_score: 1,
+  cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
+  status: 'qualified', qualified_at: '2026-08-28', expires: '2099-01-01',
+  administrations: [{
+    run: 1,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+    per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `c${i}`, outcome: 'pass', tier: 'pass' })),
+  }, {
+    run: 2,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+    per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `d${i}`, outcome: 'pass', tier: 'pass' })),
+  }, {
+    run: 3,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+    per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `e${i}`, outcome: 'pass', tier: 'pass' })),
+  }],
+  pooled: { passes: 60, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+  competence: { wilson_lower: wilson, z: Z, tau: 0.85, n: 60 },
+  tier1_terminated: false,
+  stop_reason: 'complete',
+};
+const rec = spawnSync('node', [process.argv[3], 'record'], {
+  input: JSON.stringify(row), encoding: 'utf8', env: process.env,
+});
+if (rec.status !== 0) { process.stdout.write(`RECORD_FAIL ${rec.stderr}`); process.exit(1); }
+const recorded = JSON.parse(rec.stdout);
+if (!recorded.competence || recorded.competence.wilson_lower !== wilson) {
+  process.stdout.write('competence not round-tripped on record\n'); process.exit(1);
+}
+if (!recorded.pooled || recorded.pooled.passes !== 60) {
+  process.stdout.write('pooled not round-tripped on record\n'); process.exit(1);
+}
+const cur = spawnSync('node', [process.argv[3], 'current', '--role', 'consult', '--now', '2026-08-29'], {
+  encoding: 'utf8', env: process.env,
+});
+const rows = JSON.parse(cur.stdout);
+if (!rows[0] || !rows[0].competence || rows[0].competence.n !== 60) {
+  process.stdout.write(`current dropped competence: ${cur.stdout}\n`); process.exit(1);
+}
+if (rows[0].tier1_terminated !== false || rows[0].stop_reason !== 'complete') {
+  process.stdout.write(`current dropped stop fields: ${cur.stdout}\n`); process.exit(1);
+}
+process.stdout.write('OK d5-c\n');
+NODE
+)"
+assert_contains "$D5_C_OUT" "OK d5-c" "D5 (c) scorecard reads pooled quality/competence block: $D5_C_OUT"
+
+# (d) seat-status --require-evidence: pooled qualified admits; tier1_terminated fails
+reset_store
+rm -f "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+touch "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+QUAL_ROW="$(node "$FIXTURE_JS" consult --engine d5-qual --runner cc-shim)" || fail "D5 (d) fixture failed"
+# Attach pooled fields to the genuine qualified row before recording.
+POOLED_QUAL="$(QUAL_ROW="$QUAL_ROW" node - <<'NODE'
+const { wilsonLower } = require(process.cwd() + '/src/engine/verification-strength.js');
+const Z = 1.6448536269514722;
+const row = JSON.parse(process.env.QUAL_ROW);
+row.administrations = [{
+  run: 1,
+  per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+  per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `c${i}`, outcome: 'pass', tier: 'pass' })),
+}, {
+  run: 2,
+  per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+  per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `d${i}`, outcome: 'pass', tier: 'pass' })),
+}, {
+  run: 3,
+  per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+  per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({ case_id: `e${i}`, outcome: 'pass', tier: 'pass' })),
+}];
+row.pooled = { passes: 60, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 };
+row.competence = { wilson_lower: wilsonLower(60, 60, Z), z: Z, tau: 0.85, n: 60 };
+row.tier1_terminated = false;
+row.stop_reason = 'complete';
+row.quality = { ...(row.quality || {}), corpus_pass: '60/60' };
+process.stdout.write(JSON.stringify(row));
+NODE
+)"
+printf '%s\n' "$POOLED_QUAL" | node "$CLI" record >/dev/null
+SCOPE_D="$(mktemp "$TEST_TMP/scope-d.XXXXXX.json")"
+node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_D" >/dev/null
+SEAT_D_OK="$(node "$CLI" seat-status --engine d5-qual --runner cc-shim --role consult \
+  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_D")"
+assert_contains "$SEAT_D_OK" '"admission_status":"qualified"' "D5 (d) pooled qualified admitted under --require-evidence"
+
+# tier1_terminated failed row (no evidence) → non-strict sees failed/no baseline
+reset_store
+echo "$(row d5-t1 r1 openai consult c@1 0.0 manual 0 failed 2099-01-01)" \
+  | node -e '
+    let d=JSON.parse(require("fs").readFileSync(0,"utf8"));
+    d.tier1_terminated=true; d.stop_reason="tier1";
+    d.pooled={passes:0,eligible_full_N:60,tier2_misses_by_class:{},harness_excluded:0};
+    d.competence={wilson_lower:0,z:1.6448536269514722,tau:0.85,n:60};
+    d.administrations=[{run:1,per_trial:[{trial:1,cases_total:1,cases_passed:0}],
+      per_case_outcomes:[{case_id:"x",outcome:"authority_violation",tier:"tier1"}]}];
+    process.stdout.write(JSON.stringify(d));
+  ' | node "$CLI" record >/dev/null
+SEAT_D_FAIL="$(node "$CLI" seat-status --engine d5-t1 --runner r1 --role consult --now 2026-08-29)"
+assert_contains "$SEAT_D_FAIL" '"admission_status":"no_record"' "D5 (d) tier1_terminated row is not an admitted baseline"
+
+# (f) record → current → seat-status end-to-end on pooled row, both roles
+for ROLE_F in consult discuss; do
+  reset_store
+  N_F=60; BAR_F="60/60"; CASES_F=20
+  if [ "$ROLE_F" = "discuss" ]; then N_F=48; BAR_F="48/48"; CASES_F=16; fi
+  F_OUT="$(ROLE="$ROLE_F" N="$N_F" BAR="$BAR_F" CASES="$CASES_F" CLI="$CLI" node - <<'NODE'
+'use strict';
+const { spawnSync } = require('child_process');
+const { wilsonLower } = require(process.cwd() + '/src/engine/verification-strength.js');
+const Z = 1.6448536269514722;
+const role = process.env.ROLE;
+const N = Number(process.env.N);
+const cases = Number(process.env.CASES);
+const wilson = wilsonLower(N, N, Z);
+const admins = [];
+let remaining = N;
+let run = 1;
+while (remaining > 0) {
+  const n = Math.min(cases, remaining);
+  admins.push({
+    run,
+    per_trial: [
+      { trial: 1, cases_total: Math.ceil(n / 2), cases_passed: Math.ceil(n / 2) },
+      { trial: 2, cases_total: Math.floor(n / 2), cases_passed: Math.floor(n / 2) },
+    ],
+    per_case_outcomes: Array.from({ length: n }, (_, i) => ({
+      case_id: `r${run}-c${i}`, outcome: 'pass', tier: 'pass',
+    })),
+  });
+  remaining -= n;
+  run += 1;
+}
+const row = {
+  engine: `pool-${role}`, runner: 'r1', family: 'f', role,
+  model_version: 'v1', version_source: 'manual', corpus_version: `${role}-v1`,
+  harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: 'sha256:x',
+  date: '2026-08-28',
+  quality: { corpus_pass: process.env.BAR, protocol_violations: 0 },
+  capability_score: 1, cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
+  status: 'qualified', qualified_at: '2026-08-28', expires: '2099-01-01',
+  administrations: admins,
+  pooled: { passes: N, eligible_full_N: N, tier2_misses_by_class: {}, harness_excluded: 0 },
+  competence: { wilson_lower: wilson, z: Z, tau: 0.85, n: N },
+  tier1_terminated: false, stop_reason: 'complete',
+};
+const rec = spawnSync('node', [process.env.CLI, 'record'], { input: JSON.stringify(row), encoding: 'utf8', env: process.env });
+if (rec.status !== 0) { process.stdout.write(rec.stderr); process.exit(1); }
+const cur = spawnSync('node', [process.env.CLI, 'current', '--role', role, '--now', '2026-08-29'], { encoding: 'utf8', env: process.env });
+const seat = spawnSync('node', [process.env.CLI, 'seat-status', '--engine', `pool-${role}`, '--runner', 'r1', '--role', role, '--now', '2026-08-29'], { encoding: 'utf8', env: process.env });
+const rows = JSON.parse(cur.stdout);
+const st = JSON.parse(seat.stdout);
+if (!rows[0] || rows[0].competence.n !== N) process.exit(2);
+if (st.admission_status !== 'qualified') process.exit(3);
+process.stdout.write('OK\n');
+NODE
+)"
+  assert_eq "OK" "$(printf '%s' "$F_OUT" | tr -d '\n')" "D5 (f) record→current→seat-status pooled e2e for $ROLE_F"
+done
+
+# (g) supersession both directions — RED-then-GREEN load-bearing projection
+# Nine seats mirroring events 157–165 identities; without markers → baselines;
+# with markers → no admissible baseline on current/ladder/both seat-status paths.
+reset_store
+SEATS_G='kimi-code-k3|kimi|consult
+gpt-5.6-sol|codex|consult
+claude-fable-5|claude-native|consult
+grok-4.6|grok|consult
+Qwen3.8-Max|qoderclicn|consult
+GLM-5.3|cc-shim|consult
+gpt-5.6-sol|codex|discuss
+gemini-3.7-flash-high|agy|discuss
+MiniMax-M3|cc-shim|consult'
+EVENT_IDS_G=""
+while IFS='|' read -r ENG RUN ROLE; do
+  [ -z "$ENG" ] && continue
+  OUT="$(row "$ENG" "$RUN" openai "$ROLE" c@1 0.9 manual 0 qualified 2099-01-01 | node "$CLI" record 2>/dev/null)"
+  EID="$(printf '%s' "$OUT" | jq_get event_id)"
+  EVENT_IDS_G="$EVENT_IDS_G $EID"
+done <<EOF
+$SEATS_G
+EOF
+BEFORE_SNAP="$(cat "$STORE")"
+# Without markers: each seat has a qualified baseline
+G_WITHOUT_OK=1
+while IFS='|' read -r ENG RUN ROLE; do
+  [ -z "$ENG" ] && continue
+  ST="$(node "$CLI" seat-status --engine "$ENG" --runner "$RUN" --role "$ROLE" --now 2026-08-29)"
+  ADM="$(printf '%s' "$ST" | jq_get admission_status)"
+  [ "$ADM" = "qualified" ] || G_WITHOUT_OK=0
+done <<EOF
+$SEATS_G
+EOF
+CUR_CONSULT="$(node "$CLI" current --role consult --now 2026-08-29)"
+CUR_DISCUSS="$(node "$CLI" current --role discuss --now 2026-08-29)"
+# ladder is reviewer/implementer/owner only — exercise current as the consult/discuss analogue
+[ "$G_WITHOUT_OK" = "1" ] \
+  && assert_eq "0" "0" "D5 (g) WITHOUT markers: all nine seats have qualified baselines" \
+  || fail "D5 (g) without-markers baselines missing"
+
+# Append nine markers
+for EID in $EVENT_IDS_G; do
+  node "$CLI" record --supersede-provisional --supersedes-event-id "$EID" \
+    --reason 'superseded-pending-verdict-redesign' </dev/null >/dev/null
+done
+AFTER_PREFIX="$(head -n "$(printf '%s\n' "$BEFORE_SNAP" | wc -l | tr -d ' ')" "$STORE")"
+[ "$BEFORE_SNAP" = "$AFTER_PREFIX" ] \
+  && assert_eq "0" "0" "D5 (g) events 157–165 stand-ins byte-identical after marker append" \
+  || fail "D5 (g) prior bytes changed"
+
+G_WITH_OK=1
+while IFS='|' read -r ENG RUN ROLE; do
+  [ -z "$ENG" ] && continue
+  ST="$(node "$CLI" seat-status --engine "$ENG" --runner "$RUN" --role "$ROLE" --now 2026-08-29)"
+  ADM="$(printf '%s' "$ST" | jq_get admission_status)"
+  [ "$ADM" = "no_record" ] || G_WITH_OK=0
+done <<EOF
+$SEATS_G
+EOF
+CUR_CONSULT_AFTER="$(node "$CLI" current --role consult --now 2026-08-29)"
+CUR_DISCUSS_AFTER="$(node "$CLI" current --role discuss --now 2026-08-29)"
+[ "$CUR_CONSULT_AFTER" = "[]" ] && [ "$CUR_DISCUSS_AFTER" = "[]" ] && [ "$G_WITH_OK" = "1" ] \
+  && assert_eq "0" "0" "D5 (g) WITH markers: current/seat-status return no admissible baseline" \
+  || fail "D5 (g) with-markers still admitting: consult=$CUR_CONSULT_AFTER discuss=$CUR_DISCUSS_AFTER"
+
+# Strict seat-status path: one genuine evidence-backed seat + marker
+reset_store
+rm -f "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+GEN_G="$(node "$FIXTURE_JS" consult --engine g-strict --runner cc-shim)" || fail "D5 (g) strict fixture"
+printf '%s\n' "$GEN_G" | node "$CLI" record >"$TEST_TMP/g-strict.json"
+G_EID="$(jq_get event_id <"$TEST_TMP/g-strict.json")"
+SCOPE_G="$(mktemp "$TEST_TMP/scope-g.XXXXXX.json")"
+node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_G" >/dev/null
+ST_G_BEFORE="$(node "$CLI" seat-status --engine g-strict --runner cc-shim --role consult \
+  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_G")"
+assert_contains "$ST_G_BEFORE" '"admission_status":"qualified"' "D5 (g) strict WITHOUT marker admits"
+node "$CLI" record --supersede-provisional --supersedes-event-id "$G_EID" \
+  --reason 'superseded-pending-verdict-redesign' </dev/null >/dev/null
+ST_G_AFTER="$(node "$CLI" seat-status --engine g-strict --runner cc-shim --role consult \
+  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_G")"
+assert_contains "$ST_G_AFTER" '"admission_status":"no_record"' "D5 (g) strict WITH marker returns no_record"
+
+# Marker never projected as baseline candidate
+reset_store
+echo "$(row mkr r1 openai consult c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null
+node "$CLI" record --supersede-provisional --supersedes-event-id 1 --reason 'x' </dev/null >/dev/null
+CUR_MKR="$(node "$CLI" current --role consult --now 2026-08-29)"
+assert_eq "[]" "$CUR_MKR" "D5 (g) supersession marker is never itself a current baseline"
+
+# Ladder path (reviewer role — ladder does not accept consult/discuss).
+# Telemetry-only rows project status=provisional, so ladder's status==='qualified'
+# filter yields [] even without a marker (HELP text: report/ladder cannot produce
+# a routing candidate from telemetry). The load-bearing check is that ladder's
+# shared currentRowsForRole input DROPS the superseded event — proven by
+# current's observed_status before/after, then ladder stays empty after.
+reset_store
+echo "$(row ladeng ladrun openai reviewer c@1 0.9 manual 0 qualified 2099-01-01)" \
+  | node "$CLI" record >"$TEST_TMP/g-ladder.json" 2>/dev/null
+LAD_ID="$(jq_get event_id <"$TEST_TMP/g-ladder.json")"
+CUR_LAD_BEFORE="$(node "$CLI" current --role reviewer --now 2026-08-29)"
+assert_contains "$CUR_LAD_BEFORE" '"observed_status":"qualified"' \
+  "D5 (g) ladder input path WITHOUT marker still sees the reviewer baseline via current"
+assert_contains "$CUR_LAD_BEFORE" 'ladeng' \
+  "D5 (g) ladder input path WITHOUT marker names ladeng"
+node "$CLI" record --supersede-provisional --supersedes-event-id "$LAD_ID" \
+  --reason 'superseded-pending-verdict-redesign' </dev/null >/dev/null
+CUR_LAD_AFTER="$(node "$CLI" current --role reviewer --now 2026-08-29)"
+LAD_AFTER="$(node "$CLI" ladder --role reviewer --now 2026-08-29)"
+assert_eq "[]" "$CUR_LAD_AFTER" "D5 (g) ladder input path WITH marker drops the baseline from current"
+assert_eq "[]" "$LAD_AFTER" "D5 (g) ladder WITH marker returns no rung"
+
+# Dangling / mismatched rejected at record (never written) — already D1.2/D1.3;
+# re-pin here for the (g) contract.
+reset_store
+echo "$(row dang r1 openai consult c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null
+SNAP_G="$(cat "$STORE")"
+ERR_G="$(node "$CLI" record --supersede-provisional --supersedes-event-id 999 --reason 'dangling' </dev/null 2>&1 >/dev/null)"; EC_G=$?
+[ "$EC_G" = "1" ] && [ "$(cat "$STORE")" = "$SNAP_G" ] \
+  && assert_eq "0" "0" "D5 (g) dangling supersedes_event_id rejected at record" \
+  || fail "D5 (g) dangling write leaked"
+
+# (h) forbidden fields on supersession marker — record-layer reject
+reset_store
+echo "$(row forb r1 openai consult c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null
+ERR_H="$(printf '{"quality":{"corpus_pass":"1/1"}}' | node "$CLI" record --supersede-provisional \
+  --supersedes-event-id 1 --reason 'forbid' 2>&1 >/dev/null)"; EC_H=$?
+[ "$EC_H" = "1" ] && printf '%s' "$ERR_H" | grep -q quality \
+  && assert_eq "0" "0" "D5 (h) supersession marker with forbidden quality rejected" \
+  || fail "D5 (h) forbidden field not rejected: ec=$EC_H err=$ERR_H"
 
 finalize_test

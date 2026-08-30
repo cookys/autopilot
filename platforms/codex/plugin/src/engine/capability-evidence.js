@@ -15,6 +15,8 @@ const {
 // and `discuss` in addition to the execution roles. Kept under the name
 // `ROLES` locally so every call site below is unchanged.
 const { CAPABILITY_ROLES: ROLES } = require('./roles');
+// Reuse D2's wilsonLower — do not reimplement (plan 2026-08-29 D5 / ADR-0001).
+const { wilsonLower } = require('./verification-strength');
 
 const CAPABILITY_EVIDENCE_SCHEMA_VERSION = 1;
 const SOURCES = new Set([
@@ -112,6 +114,23 @@ const CONSULT_CASES_PER_TRIAL = 10;
 const DISCUSS_CASES_PER_TRIAL = 8;
 const BRAIN_CONSTRUCT_SCOPE = 'per-round-exam.long-horizon-production-audit';
 const BRAIN_STOP_REASONS = new Set(['completed', 'early_end', 'malformed', 'insufficient_budget']);
+// Additive pooled-receipt fields (plan 2026-08-29-qualification-verdict-stability.md D5).
+// Field names/shapes match scripts/engine-qualify.js's emitted row exactly.
+const POOLED_RECEIPT_FIELDS = Object.freeze([
+  'administrations',
+  'pooled',
+  'competence',
+  'tier1_terminated',
+  'stop_reason',
+]);
+const POOLED_STOP_REASONS = new Set([
+  'tier1',
+  'locked_fail',
+  'locked_qualify',
+  'complete',
+  'continue',
+]);
+const WILSON_RECOMPUTE_EPS = 1e-12;
 
 class CapabilityEvidenceError extends Error {
   constructor(message, code = 'INVALID_CAPABILITY_EVIDENCE') {
@@ -1079,6 +1098,160 @@ function enforceImplPromotion(record) {
   }
 }
 
+// Additive pooled receipt (plan 2026-08-29 D5). All-or-nothing: any one of the
+// five fields requires the rest. Shapes match engine-qualify.js's emitted row.
+function normalizePooledReceipt(rawFields, methodologyKind) {
+  const present = POOLED_RECEIPT_FIELDS.filter((field) => rawFields[field] !== undefined);
+  if (present.length === 0) return null;
+  if (present.length !== POOLED_RECEIPT_FIELDS.length) {
+    evidenceError(
+      `pooled evidence requires all of ${POOLED_RECEIPT_FIELDS.join(', ')} `
+      + `(got ${present.join(', ') || 'none'})`,
+    );
+  }
+  if (methodologyKind !== CONSULT_METHODOLOGY_KIND
+      && methodologyKind !== DISCUSS_METHODOLOGY_KIND) {
+    evidenceError('pooled evidence is only valid on consult_panel or discuss_rounds methodology');
+  }
+
+  if (!Array.isArray(rawFields.administrations)) {
+    evidenceError('administrations must be an array');
+  }
+  const administrations = rawFields.administrations.map((raw, index) => {
+    const label = `administrations[${index}]`;
+    const value = plainObject(raw, label);
+    onlyKeys(value, new Set(['run', 'per_trial', 'per_case_outcomes']), label);
+    requiredKeys(value, ['run', 'per_trial', 'per_case_outcomes'], label);
+    if (!Array.isArray(value.per_trial)) evidenceError(`${label}.per_trial must be an array`);
+    if (!Array.isArray(value.per_case_outcomes)) {
+      evidenceError(`${label}.per_case_outcomes must be an array`);
+    }
+    const perTrial = value.per_trial.map((trial, tIndex) => {
+      const tLabel = `${label}.per_trial[${tIndex}]`;
+      const tValue = plainObject(trial, tLabel);
+      onlyKeys(tValue, new Set(['trial', 'cases_total', 'cases_passed']), tLabel);
+      requiredKeys(tValue, ['trial', 'cases_total', 'cases_passed'], tLabel);
+      return {
+        trial: integer(tValue.trial, `${tLabel}.trial`, 1),
+        cases_total: integer(tValue.cases_total, `${tLabel}.cases_total`),
+        cases_passed: integer(tValue.cases_passed, `${tLabel}.cases_passed`),
+      };
+    });
+    const perCaseOutcomes = value.per_case_outcomes.map((outcome, oIndex) => {
+      const oLabel = `${label}.per_case_outcomes[${oIndex}]`;
+      const oValue = plainObject(outcome, oLabel);
+      onlyKeys(oValue, new Set(['case_id', 'outcome', 'tier']), oLabel);
+      requiredKeys(oValue, ['case_id', 'outcome', 'tier'], oLabel);
+      return {
+        case_id: token(oValue.case_id, `${oLabel}.case_id`),
+        outcome: token(oValue.outcome, `${oLabel}.outcome`),
+        tier: token(oValue.tier, `${oLabel}.tier`),
+      };
+    });
+    return {
+      run: integer(value.run, `${label}.run`, 1),
+      per_trial: perTrial,
+      per_case_outcomes: perCaseOutcomes,
+    };
+  });
+
+  const pooledRaw = plainObject(rawFields.pooled, 'pooled');
+  onlyKeys(
+    pooledRaw,
+    new Set(['passes', 'eligible_full_N', 'tier2_misses_by_class', 'harness_excluded']),
+    'pooled',
+  );
+  requiredKeys(
+    pooledRaw,
+    ['passes', 'eligible_full_N', 'tier2_misses_by_class', 'harness_excluded'],
+    'pooled',
+  );
+  const tier2Raw = plainObject(pooledRaw.tier2_misses_by_class, 'pooled.tier2_misses_by_class');
+  const tier2MissesByClass = {};
+  for (const [key, count] of Object.entries(tier2Raw)) {
+    token(key, `pooled.tier2_misses_by_class key`);
+    tier2MissesByClass[key] = integer(count, `pooled.tier2_misses_by_class.${key}`);
+  }
+  const pooled = {
+    passes: integer(pooledRaw.passes, 'pooled.passes'),
+    eligible_full_N: integer(pooledRaw.eligible_full_N, 'pooled.eligible_full_N', 1),
+    tier2_misses_by_class: tier2MissesByClass,
+    harness_excluded: integer(pooledRaw.harness_excluded, 'pooled.harness_excluded'),
+  };
+
+  const competenceRaw = plainObject(rawFields.competence, 'competence');
+  onlyKeys(competenceRaw, new Set(['wilson_lower', 'z', 'tau', 'n']), 'competence');
+  requiredKeys(competenceRaw, ['wilson_lower', 'z', 'tau', 'n'], 'competence');
+  if (typeof competenceRaw.wilson_lower !== 'number' || !Number.isFinite(competenceRaw.wilson_lower)) {
+    evidenceError('competence.wilson_lower must be a finite number');
+  }
+  if (typeof competenceRaw.z !== 'number' || !Number.isFinite(competenceRaw.z) || competenceRaw.z <= 0) {
+    evidenceError('competence.z must be a positive finite number');
+  }
+  if (typeof competenceRaw.tau !== 'number' || !Number.isFinite(competenceRaw.tau)
+      || competenceRaw.tau < 0 || competenceRaw.tau > 1) {
+    evidenceError('competence.tau must be a finite number in [0, 1]');
+  }
+  const competence = {
+    wilson_lower: competenceRaw.wilson_lower,
+    z: competenceRaw.z,
+    tau: competenceRaw.tau,
+    n: integer(competenceRaw.n, 'competence.n', 1),
+  };
+
+  const tier1Terminated = boolean(rawFields.tier1_terminated, 'tier1_terminated');
+  const stopReason = enumValue(rawFields.stop_reason, POOLED_STOP_REASONS, 'stop_reason');
+
+  // Pooled totals must equal Σ administration pass totals (harness-contaminated
+  // administrations are excluded from the pool, matching engine-qualify.js).
+  let summedPasses = 0;
+  for (const admin of administrations) {
+    const contaminated = admin.per_case_outcomes.some((c) => c.tier === 'harness');
+    if (contaminated) continue;
+    summedPasses += admin.per_case_outcomes.filter((c) => c.tier === 'pass').length;
+  }
+  if (summedPasses !== pooled.passes) {
+    evidenceError(
+      `pooled.passes (${pooled.passes}) does not equal Σ administration passes (${summedPasses})`,
+    );
+  }
+  if (competence.n !== pooled.eligible_full_N) {
+    evidenceError('competence.n must equal pooled.eligible_full_N');
+  }
+
+  // Independent re-derivation (ADR-0001): stored wilson_lower must recompute.
+  const recomputed = wilsonLower(pooled.passes, pooled.eligible_full_N, competence.z);
+  if (Math.abs(recomputed - competence.wilson_lower) > WILSON_RECOMPUTE_EPS) {
+    evidenceError(
+      `competence.wilson_lower (${competence.wilson_lower}) does not recompute from `
+      + `pooled (${recomputed})`,
+    );
+  }
+
+  return {
+    administrations,
+    pooled,
+    competence,
+    tier1_terminated: tier1Terminated,
+    stop_reason: stopReason,
+  };
+}
+
+function enforcePooledPromotionInvariants(record) {
+  if (!record.administrations) return;
+  const derivedQualified = record.competence.wilson_lower >= record.competence.tau
+    && record.tier1_terminated === false;
+  if ((record.state === 'qualified') !== derivedQualified) {
+    evidenceError(
+      'qualified flag must equal wilson_lower >= tau && !tier1_terminated',
+      'EVIDENCE_PROMOTION_DENIED',
+    );
+  }
+  if (record.state === 'qualified' && record.tier1_terminated !== false) {
+    evidenceError('qualified row requires tier1_terminated === false', 'EVIDENCE_PROMOTION_DENIED');
+  }
+}
+
 // Namespace ruling (plan 2026-08-28-consult-discuss-qualification.md §2.6/§8):
 // consult/discuss are qualification-seat roles, never execution roles. Promotion
 // enforcement pins that here too — a consult_panel row can only ever qualify the
@@ -1086,6 +1259,11 @@ function enforceImplPromotion(record) {
 function enforceConsultPromotion(record) {
   if (record.role !== 'consult') {
     evidenceError('consult_panel evidence must ride the consult role', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  // Pooled shape is authoritative when present (plan 2026-08-29 D5).
+  if (record.administrations) {
+    enforcePooledPromotionInvariants(record);
+    return;
   }
   const thresholds = record.methodology.thresholds;
   if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
@@ -1122,6 +1300,10 @@ function enforceConsultPromotion(record) {
 function enforceDiscussPromotion(record) {
   if (record.role !== 'discuss') {
     evidenceError('discuss_rounds evidence must ride the discuss role', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  if (record.administrations) {
+    enforcePooledPromotionInvariants(record);
+    return;
   }
   const thresholds = record.methodology.thresholds;
   if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
@@ -1218,6 +1400,12 @@ function compileCapabilityEvidence(raw) {
     'trial_set_hash',
     'revocation',
     'supersedes',
+    // Additive pooled-receipt fields (plan 2026-08-29 D5); optional, all-or-nothing.
+    'administrations',
+    'pooled',
+    'competence',
+    'tier1_terminated',
+    'stop_reason',
   ];
   onlyKeys(value, new Set(fields), 'capability evidence');
   requiredKeys(
@@ -1258,6 +1446,7 @@ function compileCapabilityEvidence(raw) {
     );
   }
   const trials = normalizeTrials(value.trials, methodology);
+  const pooledReceipt = normalizePooledReceipt(value, methodology.kind);
   const issuedAt = timestamp(value.issued_at, 'capability evidence.issued_at');
   const observedAt = timestamp(value.observed_at, 'capability evidence.observed_at');
   const expiresAt = timestamp(value.expires_at, 'capability evidence.expires_at');
@@ -1306,7 +1495,11 @@ function compileCapabilityEvidence(raw) {
     trial_set_hash: trialSetHash,
     revocation,
     supersedes,
+    ...(pooledReceipt || {}),
   };
+  // Pooled biconditional runs for every state (not only qualified) so a
+  // degraded row whose Wilson bound clears cannot silently disagree.
+  if (pooledReceipt) enforcePooledPromotionInvariants(body);
   enforcePromotion(body);
   const evidenceHash = sha256(canonicalJson(body));
 

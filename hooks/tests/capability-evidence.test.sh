@@ -1367,4 +1367,247 @@ EOF
   assert_contains "$SEAT_OUT" "\"admission_status\"" "(f) seat-status succeeds end-to-end for role=$ROLE"
 done
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Verdict-stability D5 consumer matrix (a)/(b)/(e)/(h-schema)
+# plan 2026-08-29-qualification-verdict-stability.md — pooled shape + pin
+# ═══════════════════════════════════════════════════════════════════════════
+VS_D5_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const root = process.argv[2];
+const {
+  compileCapabilityEvidence,
+} = require(path.join(root, 'src/engine/capability-evidence.js'));
+const { wilsonLower } = require(path.join(root, 'src/engine/verification-strength.js'));
+const { validateJsonSchema } = require(path.join(root, 'scripts/validate-json-schema.js'));
+const crypto = require('crypto');
+const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
+const Z = 1.6448536269514722;
+const TAU = 0.85;
+let passed = 0;
+function check(cond, msg) {
+  if (!cond) {
+    process.stderr.write(`FAIL: ${msg}\n`);
+    process.exit(1);
+  }
+  passed += 1;
+  process.stdout.write(`ok ${msg}\n`);
+}
+
+const schema = JSON.parse(fs.readFileSync(
+  path.join(root, 'schemas/capability-evidence.schema.json'), 'utf8',
+));
+
+function makeAdmin(run, passes) {
+  return {
+    run,
+    per_trial: [
+      { trial: 1, cases_total: Math.ceil(passes / 2), cases_passed: Math.ceil(passes / 2) },
+      { trial: 2, cases_total: Math.floor(passes / 2), cases_passed: Math.floor(passes / 2) },
+    ],
+    per_case_outcomes: Array.from({ length: passes }, (_, i) => ({
+      case_id: `r${run}-c${i}`, outcome: 'pass', tier: 'pass',
+    })),
+  };
+}
+
+const scope = {
+  task_classes: ['consult'], domains: ['general'], languages: ['en'], tool_surface: [],
+};
+function identityFor(alias) {
+  return {
+    identity: `${alias}-v1`, model_alias: alias, model_version: '1', family: 'f',
+    runner: 'r', runner_version: 'rv1', harness_version: 'h1', effort: 'high',
+    prompt_config_hash: digest(`p-${alias}`), semantic_fingerprint: digest(`s-${alias}`),
+    containment_fingerprint: digest(`c-${alias}`), identity_resolved: true,
+  };
+}
+const consultMethodology = {
+  kind: 'consult_panel', name: 'consult-panel-v1', version: '1.0.0',
+  corpus_version: 'consult-v1', corpus_manifest_hash: digest('corp-consult'),
+  thresholds: {
+    min_trials: 2, max_false_confidence: 0, max_precedence_misses: 0,
+    max_authority_violations: 0, max_scope_drift: 0, max_oracle_misses: 0,
+    max_protocol_violations: 0,
+  }, basis: null,
+};
+function consultTrial(id) {
+  return {
+    trial_id: id, observed_at: '2026-08-28T01:00:00.000Z',
+    corpus_manifest_hash: consultMethodology.corpus_manifest_hash,
+    cases_total: 10, cases_passed: 10, false_confidence: 0, precedence_misses: 0,
+    authority_violations: 0, scope_drift: 0, oracle_misses: 0, protocol_violations: 0,
+    response_stream_hash: digest(`resp-${id}`),
+  };
+}
+const discussMethodology = {
+  kind: 'discuss_rounds', name: 'discuss-rounds-v1', version: '1.0.0',
+  corpus_version: 'discuss-v1', corpus_manifest_hash: digest('corp-discuss'),
+  thresholds: {
+    min_trials: 2, max_sycophantic_capitulations: 0, max_evidence_blindness: 0,
+    max_zero_information: 0, max_fabricated_anchors: 0, max_protocol_violations: 0,
+  }, basis: null,
+};
+function discussTrial(id) {
+  return {
+    trial_id: id, observed_at: '2026-08-28T01:00:00.000Z',
+    corpus_manifest_hash: discussMethodology.corpus_manifest_hash,
+    cases_total: 8, cases_passed: 8, sycophantic_capitulations: 0,
+    evidence_blindness: 0, zero_information: 0, fabricated_anchors: 0,
+    protocol_violations: 0, transcript_stream_hash: digest(`tr-${id}`),
+  };
+}
+
+// Frozen fixture stand-ins for events 157–165 (consult/discuss) + other-role rows.
+const legacyConsult = compileCapabilityEvidence({
+  schema_version: 1, source: 'internal_eval', source_ref: 'engine-qualify:consult',
+  state: 'qualified', role: 'consult', scope, identity: identityFor('seat157'),
+  issued_at: '2026-08-28T02:00:00.000Z', observed_at: '2026-08-28T01:30:00.000Z',
+  expires_at: '2026-09-27T02:00:00.000Z', methodology: consultMethodology,
+  trials: [consultTrial('trial-1'), consultTrial('trial-2')],
+  revocation: null, supersedes: null,
+});
+const legacyDiscuss = compileCapabilityEvidence({
+  schema_version: 1, source: 'internal_eval', source_ref: 'engine-qualify:discuss',
+  state: 'qualified', role: 'discuss',
+  scope: { task_classes: ['discuss'], domains: ['general'], languages: ['en'], tool_surface: [] },
+  identity: identityFor('seat164'),
+  issued_at: '2026-08-28T02:00:00.000Z', observed_at: '2026-08-28T01:30:00.000Z',
+  expires_at: '2026-09-27T02:00:00.000Z', methodology: discussMethodology,
+  trials: [discussTrial('trial-1'), discussTrial('trial-2')],
+  revocation: null, supersedes: null,
+});
+
+// (a) existing rows revalidate byte-for-byte under the widened schema/validator
+{
+  const bytesBefore = JSON.stringify(legacyConsult);
+  const reloaded = compileCapabilityEvidence(JSON.parse(bytesBefore));
+  check(JSON.stringify(reloaded) === bytesBefore,
+    'D5-vs (a) legacy consult evidence recompiles byte-identical');
+  check(validateJsonSchema(schema, legacyConsult).valid === true,
+    'D5-vs (a) legacy consult validates under additive schema');
+  check(validateJsonSchema(schema, legacyDiscuss).valid === true,
+    'D5-vs (a) legacy discuss validates under additive schema');
+  // Seed a temp scorecard store with frozen stand-in rows and assert store bytes
+  // unchanged after a read/derivation pass.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'd5-vs-a-'));
+  const scDir = path.join(tmp, 'sc');
+  const capDir = path.join(tmp, 'cap');
+  fs.mkdirSync(scDir); fs.mkdirSync(capDir);
+  const fixtureLines = [
+    JSON.stringify({
+      engine: 'kimi-code-k3', runner: 'kimi', family: 'f', role: 'consult',
+      model_version: 'v1', version_source: 'manual', corpus_version: 'c',
+      harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: 'sha256:x',
+      date: '2026-08-28', quality: { corpus_pass: '20/20' }, capability_score: 1,
+      cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
+      status: 'qualified', qualified_at: '2026-08-28', expires: '2099-01-01', event_id: 157,
+    }),
+    JSON.stringify({
+      engine: 'claude-haiku', runner: 'claude-native', family: 'f', role: 'reviewer',
+      model_version: 'v1', version_source: 'manual', corpus_version: 'c',
+      harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: 'sha256:x',
+      date: '2026-06-30', quality: { corpus_pass: '10/10' }, capability_score: 0.5,
+      cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
+      status: 'qualified', qualified_at: '2026-06-30', expires: '2099-01-01', event_id: 5,
+    }),
+  ].join('\n') + '\n';
+  const storePath = path.join(scDir, 'scorecard.jsonl');
+  fs.writeFileSync(storePath, fixtureLines);
+  const before = fs.readFileSync(storePath);
+  const env = { ...process.env, ENGINE_SCORECARD_DIR: scDir, ENGINE_CAPABILITY_DIR: capDir };
+  spawnSync('node', [path.join(root, 'scripts/engine-scorecard.js'), 'current', '--role', 'consult', '--now', '2026-08-29'], { env, encoding: 'utf8' });
+  spawnSync('node', [path.join(root, 'scripts/engine-scorecard.js'), 'current', '--role', 'reviewer', '--now', '2026-08-29'], { env, encoding: 'utf8' });
+  const after = fs.readFileSync(storePath);
+  check(Buffer.compare(before, after) === 0,
+    'D5-vs (a) scorecard fixture bytes unchanged after current derivation');
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+const pooledWilson = wilsonLower(60, 60, Z);
+const pooledInput = {
+  schema_version: 1, source: 'internal_eval', source_ref: 'engine-qualify:consult',
+  state: 'qualified', role: 'consult', scope, identity: identityFor('pooled'),
+  issued_at: '2026-08-28T02:00:00.000Z', observed_at: '2026-08-28T01:30:00.000Z',
+  expires_at: '2026-09-27T02:00:00.000Z', methodology: consultMethodology,
+  trials: [consultTrial('trial-1'), consultTrial('trial-2')],
+  revocation: null, supersedes: null,
+  administrations: [makeAdmin(1, 20), makeAdmin(2, 20), makeAdmin(3, 20)],
+  pooled: { passes: 60, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+  competence: { wilson_lower: pooledWilson, z: Z, tau: TAU, n: 60 },
+  tier1_terminated: false, stop_reason: 'complete',
+};
+const pooledCompiled = compileCapabilityEvidence(pooledInput);
+check(pooledCompiled.pooled.passes === 60, 'D5-vs new validator accepts pooled consult row');
+check(validateJsonSchema(schema, pooledCompiled).valid === true,
+  'D5-vs pooled consult matches additive schema branch');
+
+// (b) reverse pin — frozen pre-D5 validator REJECTS a pooled row
+{
+  const frozenSrc = spawnSync(
+    'git',
+    ['show', 'd599045f1012067d6f609177497ff8580ce48f65:src/engine/capability-evidence.js'],
+    { cwd: root, encoding: 'utf8' },
+  );
+  check(frozenSrc.status === 0 && frozenSrc.stdout.length > 0,
+    'D5-vs (b) retrieved pre-D5 capability-evidence.js from d599045f');
+  const frozenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd5-vs-b-'));
+  try {
+    fs.mkdirSync(path.join(frozenDir, 'src/engine/owner-kernel'), { recursive: true });
+    fs.writeFileSync(path.join(frozenDir, 'src/engine/capability-evidence.js'), frozenSrc.stdout);
+    fs.copyFileSync(path.join(root, 'src/engine/roles.js'), path.join(frozenDir, 'src/engine/roles.js'));
+    // Pre-D5 module does not import verification-strength; copy owner-kernel only.
+    for (const entry of fs.readdirSync(path.join(root, 'src/engine/owner-kernel'))) {
+      fs.copyFileSync(
+        path.join(root, 'src/engine/owner-kernel', entry),
+        path.join(frozenDir, 'src/engine/owner-kernel', entry),
+      );
+    }
+    const frozen = require(path.join(frozenDir, 'src/engine/capability-evidence.js'));
+    let rejected = false;
+    try {
+      frozen.compileCapabilityEvidence(pooledInput);
+    } catch (err) {
+      rejected = /unsupported key/.test(err.message);
+    }
+    check(rejected, 'D5-vs (b) frozen pre-D5 validator REJECTS a pooled row');
+  } finally {
+    fs.rmSync(frozenDir, { recursive: true, force: true });
+  }
+}
+
+// (e) wilson_lower that does not recompute from pooled is rejected
+{
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      competence: { ...pooledInput.competence, wilson_lower: 0.99 },
+    });
+  } catch (err) {
+    rejected = /does not recompute/.test(err.message);
+  }
+  check(rejected, 'D5-vs (e) mismatched wilson_lower is rejected');
+}
+
+// (h) capability-evidence schema carries ONLY pooled-receipt branches (no supersession)
+{
+  const raw = fs.readFileSync(path.join(root, 'schemas/capability-evidence.schema.json'), 'utf8');
+  check(!/"record_kind"\s*:\s*"supersession"/.test(raw)
+    && !/supersession/.test(raw),
+    'D5-vs (h) capability-evidence schema has no supersession branch');
+  check(/pooled_administrations/.test(raw) && /pooled_competence/.test(raw),
+    'D5-vs (h) schema carries pooled-receipt $defs');
+}
+
+process.stdout.write(`PASS [capability-evidence-d5-vs] ${passed} assertions\n`);
+NODE
+)"
+VS_D5_RC=$?
+assert_exit_code "$VS_D5_RC" "0" "verdict-stability D5 (a)/(b)/(e)/(h-schema): $VS_D5_OUT"
+assert_contains "$VS_D5_OUT" "PASS [capability-evidence-d5-vs]" "D5-vs suite reported PASS"
+
 finalize_test

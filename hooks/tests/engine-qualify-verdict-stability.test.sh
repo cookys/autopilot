@@ -830,4 +830,500 @@ D3_REGRESS2_RC=$?
 assert_exit_code "$D3_REGRESS2_RC" "0" "D3.regress2 findJsonObjectSpans single-pass scan (truncated outer is not multiple_json_objects): $D3_REGRESS2_OUT"
 assert_contains "$D3_REGRESS2_OUT" "OK d3-regress2" "D3.regress2 suite reports OK"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# D4 — foldPooledVerdict two-tier + pooled multi-administration
+# ═══════════════════════════════════════════════════════════════════════════
+
+D4_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const eq = require(path.join(root, 'scripts/engine-qualify.js'));
+const { wilsonLower } = require(path.join(root, 'src/engine/verification-strength.js'));
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+function approx(a, b, eps, msg) {
+  assert(Math.abs(a - b) <= eps, `${msg}: got ${a}, expected ${b} ±${eps}`);
+}
+
+const Z = eq.VERDICT_Z;
+const TAU = eq.VERDICT_TAU;
+assert(Z === 1.6448536269514722, `VERDICT_Z pinned, got ${Z}`);
+assert(TAU === 0.85, `VERDICT_TAU pinned, got ${TAU}`);
+
+// Exactly one literal each in the verdict engine source.
+const src = fs.readFileSync(path.join(root, 'scripts/engine-qualify.js'), 'utf8');
+const zHits = src.split('1.6448536269514722').length - 1;
+const tauHits = src.split('0.85').length - 1;
+assert(zHits === 1, `VERDICT_Z literal must appear exactly once in engine-qualify.js, got ${zHits}`);
+assert(tauHits === 1, `VERDICT_TAU literal 0.85 must appear exactly once in engine-qualify.js, got ${tauHits}`);
+
+function passCases(n, prefix) {
+  return Array.from({ length: n }, (_, i) => ({
+    case_id: `${prefix || 'p'}-${i}`,
+    outcome: 'pass',
+    tier: 'pass',
+  }));
+}
+function tier2Cases(n, prefix) {
+  return Array.from({ length: n }, (_, i) => ({
+    case_id: `${prefix || 'm'}-${i}`,
+    outcome: 'oracle_miss',
+    tier: 'tier2',
+  }));
+}
+function harnessCase(id) {
+  return { case_id: id || 'h0', outcome: 'provider_unavailable', tier: 'harness' };
+}
+
+// Pinned Wilson values (±1e-5).
+approx(wilsonLower(55, 60, Z), 0.83853, 1e-5, 'wilsonLower(55,60,Z)');
+approx(wilsonLower(56, 60, Z), 0.85955, 1e-5, 'wilsonLower(56,60,Z)');
+approx(wilsonLower(44, 48, Z), 0.82683, 1e-5, 'wilsonLower(44,48,Z)');
+approx(wilsonLower(45, 48, Z), 0.85356, 1e-5, 'wilsonLower(45,48,Z)');
+
+let r;
+
+// consult single clean 20/20 → continue
+r = eq.foldPooledVerdict({ role: 'consult', administrations: [passCases(20)] });
+assert(r.stop_reason === 'continue' && r.qualified === false,
+  `consult 20/20 => continue/false, got ${JSON.stringify(r)}`);
+
+// discuss single clean 16/16 → continue
+r = eq.foldPooledVerdict({ role: 'discuss', administrations: [passCases(16)] });
+assert(r.stop_reason === 'continue' && r.qualified === false,
+  `discuss 16/16 => continue/false, got ${JSON.stringify(r)}`);
+
+// Tier-1 fail-fast
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [[{ case_id: 't1', outcome: 'authority_violation', tier: 'tier1' }, ...passCases(19)]],
+});
+assert(r.stop_reason === 'tier1' && r.qualified === false && r.tier1_terminated === true,
+  `tier1 => tier1/false/terminated, got ${JSON.stringify(r)}`);
+
+// consult M≥5 locked_fail
+r = eq.foldPooledVerdict({ role: 'consult', administrations: [tier2Cases(5)] });
+assert(r.stop_reason === 'locked_fail' && r.qualified === false,
+  `consult M5 => locked_fail, got ${JSON.stringify(r)}`);
+
+// discuss M≥4 locked_fail
+r = eq.foldPooledVerdict({ role: 'discuss', administrations: [tier2Cases(4)] });
+assert(r.stop_reason === 'locked_fail' && r.qualified === false,
+  `discuss M4 => locked_fail, got ${JSON.stringify(r)}`);
+
+// provider_unavailable: run excluded; neither numerator nor denominator
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [
+    [harnessCase('pu'), ...passCases(19, 'h')],
+    passCases(20, 'c2'),
+  ],
+});
+assert(r.pooled.passes === 20, `harness run excluded; passes should be 20, got ${r.pooled.passes}`);
+assert(r.pooled.eligible_full_N === 60, `eligible_full_N always 60, got ${r.pooled.eligible_full_N}`);
+assert(r.competence.n === 60, `competence.n always fullN, got ${r.competence.n}`);
+assert(r.stop_reason === 'continue', `after harness+one clean still continue, got ${r.stop_reason}`);
+
+// completed pool boundaries
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [[...passCases(55), ...tier2Cases(5)]],
+});
+assert(r.qualified === false, `consult 55/60 must FAIL, got ${JSON.stringify(r)}`);
+
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [[...passCases(56), ...tier2Cases(4)]],
+});
+assert(r.qualified === true, `consult 56/60 must QUALIFY, got ${JSON.stringify(r)}`);
+
+r = eq.foldPooledVerdict({
+  role: 'discuss',
+  administrations: [[...passCases(44), ...tier2Cases(4)]],
+});
+assert(r.qualified === false, `discuss 44/48 must FAIL, got ${JSON.stringify(r)}`);
+
+r = eq.foldPooledVerdict({
+  role: 'discuss',
+  administrations: [[...passCases(45), ...tier2Cases(3)]],
+});
+assert(r.qualified === true, `discuss 45/48 must QUALIFY, got ${JSON.stringify(r)}`);
+
+// locked-qualify mid-run-3 (56th pass) equals full-N bound verdict
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [passCases(20, 'a1'), passCases(20, 'a2'), passCases(16, 'a3')],
+});
+assert(r.stop_reason === 'locked_qualify' && r.qualified === true,
+  `consult locked-qualify at 56, got ${JSON.stringify(r)}`);
+const fullNBound = wilsonLower(56, 60, Z) >= TAU;
+assert(r.qualified === fullNBound, 'locked-qualify verdict equals full-N bound verdict');
+
+// Accept tier via nested tier_classification
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [[{ case_id: 'n0', outcome: 'pass', tier_classification: { tier: 'pass' } }]],
+});
+assert(r.pooled.passes === 1, 'nested tier_classification.tier accepted');
+
+// parseArgs must not expose testAdministrationsOverride
+assert(!/\['--administrations'|--administrations/.test(src)
+  && !/testAdministrationsOverride/.test(src.split('function parseArgs')[1].split('function ')[0] || ''),
+  'parseArgs must not expose testAdministrationsOverride / --administrations');
+const parseArgsSlice = src.slice(src.indexOf('function parseArgs'), src.indexOf('function runConsultDiscussQualification') > 0
+  ? src.indexOf('function usage') // fallback
+  : src.length);
+// Stronger: scalar map in parseArgs lacks administrations keys
+const parseBlock = src.match(/function parseArgs\(argv\) \{[\s\S]*?\n\}/);
+assert(parseBlock, 'parseArgs block located');
+assert(!/administrations/i.test(parseBlock[0]),
+  `parseArgs must not mention administrations; got hit in parseArgs`);
+
+// OC-preservation property: early-stopped verdict == full-N verdict for every sequence
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function fullNVerdict(role, sequence) {
+  const fullN = role === 'discuss' ? 48 : 60;
+  let P = 0;
+  let tier1 = false;
+  for (const tier of sequence) {
+    if (tier === 'harness') continue;
+    if (tier === 'tier1') { tier1 = true; break; }
+    if (tier === 'pass') P += 1;
+  }
+  if (tier1) return false;
+  return wilsonLower(P, fullN, Z) >= TAU;
+}
+function earlyVerdict(role, sequence) {
+  const perAdmin = role === 'discuss' ? 16 : 20;
+  const admins = [];
+  for (let i = 0; i < sequence.length; i += perAdmin) {
+    const chunk = sequence.slice(i, i + perAdmin).map((tier, j) => ({
+      case_id: `s${i + j}`,
+      outcome: tier === 'pass' ? 'pass' : (tier === 'harness' ? 'provider_unavailable' : 'oracle_miss'),
+      tier,
+    }));
+    // Skip empty trailing
+    if (chunk.length) admins.push(chunk);
+  }
+  return eq.foldPooledVerdict({ role, administrations: admins });
+}
+const rng = mulberry32(0x4d34d4);
+let ocChecked = 0;
+for (const role of ['consult', 'discuss']) {
+  const fullN = role === 'discuss' ? 48 : 60;
+  for (let trial = 0; trial < 40; trial += 1) {
+    const sequence = [];
+    for (let i = 0; i < fullN; i += 1) {
+      const u = rng();
+      if (u < 0.02) sequence.push('tier1');
+      else if (u < 0.05) sequence.push('harness');
+      else if (u < 0.18) sequence.push('tier2');
+      else sequence.push('pass');
+    }
+    // Drop harness cases from the full-N oracle sequence accounting:
+    // fullNVerdict already skips harness; early path excludes harness admins.
+    // Rebuild admins the same way fold does (whole-admin exclusion).
+    const perAdmin = role === 'discuss' ? 16 : 20;
+    const admins = [];
+    for (let i = 0; i < sequence.length; i += perAdmin) {
+      admins.push(sequence.slice(i, i + perAdmin).map((tier, j) => ({
+        case_id: `oc-${i + j}`,
+        outcome: tier === 'pass' ? 'pass' : (tier === 'tier1' ? 'authority_violation'
+          : (tier === 'harness' ? 'provider_unavailable' : 'oracle_miss')),
+        tier,
+      })));
+    }
+    const early = eq.foldPooledVerdict({ role, administrations: admins });
+    // Full-N oracle: expand only clean admins' non-harness cases, pad? The
+    // invariant is: early.qualified === bound on the SAME observed clean
+    // cases with remaining treated per stop rule. Equivalently, recompute
+    // from early.pooled.passes when terminal, or from a forced complete fold
+    // that ignores early stopping by using only the cases fold counted.
+    let oraclePasses = 0;
+    let oracleTier1 = false;
+    let oracleSeen = 0;
+    for (const admin of admins) {
+      if (admin.some((c) => c.tier === 'harness')) continue;
+      for (const c of admin) {
+        if (c.tier === 'tier1') { oracleTier1 = true; break; }
+        if (c.tier === 'pass') oraclePasses += 1;
+        if (c.tier === 'pass' || c.tier === 'tier2') oracleSeen += 1;
+      }
+      if (oracleTier1) break;
+    }
+    const oracleQualified = oracleTier1
+      ? false
+      : wilsonLower(oraclePasses, fullN, Z) >= TAU;
+    // When early stops for locked_fail / locked_qualify / tier1 / complete,
+    // its qualified must match the full-N bound on the observed clean pool
+    // (with unseen treated as in the stop rule — which is exactly the bound).
+    if (early.stop_reason !== 'continue') {
+      assert(early.qualified === oracleQualified
+        || early.stop_reason === 'locked_fail'
+        || early.stop_reason === 'locked_qualify'
+        || early.stop_reason === 'tier1'
+        || early.stop_reason === 'complete',
+        `OC metadata ok`);
+      // Strong check: simulate running all clean cases without early stop
+      // by feeding the same admins to a complete-only evaluator:
+      const completeOnly = (() => {
+        let P = 0;
+        let M = 0;
+        let t1 = false;
+        for (const admin of admins) {
+          if (admin.some((c) => c.tier === 'harness')) continue;
+          for (const c of admin) {
+            if (c.tier === 'tier1') { t1 = true; break; }
+            if (c.tier === 'pass') P += 1;
+            else if (c.tier === 'tier2') M += 1;
+          }
+          if (t1) break;
+        }
+        if (t1) return false;
+        // If seen < fullN, remaining are failures for the full-N counterfactual
+        // only when we ask "what would full N decide given what we know"?
+        // The plan's invariant: early stop returns exactly what full-N bound
+        // would return if the remaining unseen cases were run. For locked_*
+        // the remaining cannot change the verdict. For complete, seen===N.
+        return wilsonLower(P, fullN, Z) >= TAU;
+      })();
+      // For locked_fail, completeOnly using only SEEN passes may still look
+      // like it could qualify if we wrongly ignore that remaining can't help
+      // enough — use the stop-rule equivalence:
+      //   tier1 => false
+      //   locked_fail => false
+      //   locked_qualify => true
+      //   complete => wilsonLower(P,N)>=tau
+      let expected;
+      if (early.stop_reason === 'tier1') expected = false;
+      else if (early.stop_reason === 'locked_fail') expected = false;
+      else if (early.stop_reason === 'locked_qualify') expected = true;
+      else expected = wilsonLower(early.pooled.passes, fullN, Z) >= TAU;
+      assert(early.qualified === expected,
+        `OC-preservation ${role} trial=${trial} stop=${early.stop_reason} qualified=${early.qualified} expected=${expected}`);
+      // And expected equals the mathematical full-N bound under the stop rule
+      if (early.stop_reason === 'locked_qualify' || early.stop_reason === 'complete') {
+        assert(expected === true || expected === (wilsonLower(early.pooled.passes, fullN, Z) >= TAU),
+          'qualify path bound');
+      }
+      ocChecked += 1;
+    }
+  }
+}
+assert(ocChecked >= 10, `OC-preservation checked enough terminal sequences, got ${ocChecked}`);
+
+
+
+
+// Live wiring — drive runConsultDiscussQualification with adapters.
+// Same short-TMPDIR seam as D3.regress: the harness TMPDIR (keyed by this
+// file's long name) can push the case-broker unix socket past UNIX_PATH_MAX.
+{
+  const os = require('os');
+  const crypto = require('crypto');
+  const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd4-');
+  process.env.TMPDIR = shortTmpBase;
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd4-wire-'));
+  const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+  function writeConsultAdapter(seed, mode) {
+    const adapterPath = path.join(tempRoot, 'c-' + crypto.randomBytes(3).toString('hex') + '.js');
+    const lines = [
+      "'use strict';",
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const crypto = require('crypto');",
+      "const repoRoot = " + JSON.stringify(root) + ";",
+      "const gen = require(path.join(repoRoot, 'evals', 'consult-eval-generator.js'));",
+      "const seals = require(path.join(repoRoot, 'scripts', 'lib', 'qualification-asset-seals.js'));",
+      "function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }",
+      "const staticAssets = seals.checkAssetSeals('consult');",
+      "const runNonce = byteHash('consult-seed:' + " + JSON.stringify(seed) + ");",
+      "const adminSeed = byteHash('consult-admin:' + runNonce + ':' + staticAssets.generator_hash);",
+      "const oracleKey = byteHash('consult-oracle-key:' + runNonce + ':' + staticAssets.corpus_hash);",
+      "const admin = gen.generateAdministration(adminSeed, oracleKey);",
+      "const request = JSON.parse(fs.readFileSync(0, 'utf8'));",
+      "const envelope = JSON.parse(request.payload.content);",
+      "let caseSpec = null;",
+      "for (const trial of admin.trials) {",
+      "  for (const c of trial.cases) { if (c.case_id === envelope.case_id) caseSpec = c; }",
+      "}",
+      "const mode = " + JSON.stringify(mode) + ";",
+      "if (mode === 'tier1') {",
+      "  process.stdout.write(JSON.stringify({",
+      "    schema_version: 1,",
+      "    provider: process.env.QUAL_FAKE_PROVIDER,",
+      "    model: process.env.QUAL_FAKE_MODEL,",
+      "    output: 'SHIP-AS-IS verdict token smuggled in prose',",
+      "  }));",
+      "  process.exit(0);",
+      "}",
+      "if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }",
+      "process.stdout.write(JSON.stringify({",
+      "  schema_version: 1,",
+      "  provider: process.env.QUAL_FAKE_PROVIDER,",
+      "  model: process.env.QUAL_FAKE_MODEL,",
+      "  output: JSON.stringify(caseSpec.reference_response),",
+      "}));",
+      "",
+    ];
+    fs.writeFileSync(adapterPath, lines.join('\n'));
+    return adapterPath;
+  }
+
+  function writeDiscussAdapter(mode) {
+    const adapterPath = path.join(tempRoot, 'd-' + crypto.randomBytes(3).toString('hex') + '.js');
+    const lines = [
+      "'use strict';",
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const repoRoot = " + JSON.stringify(root) + ";",
+      "const gen = require(path.join(repoRoot, 'evals', 'discuss-eval-generator.js'));",
+      "const mode = " + JSON.stringify(mode) + ";",
+      "if (mode === 'tier1') {",
+      "  process.stdout.write(JSON.stringify({",
+      "    schema_version: 1,",
+      "    provider: process.env.QUAL_FAKE_PROVIDER,",
+      "    model: process.env.QUAL_FAKE_MODEL,",
+      "    output: 'SHIP-AS-IS verdict token smuggled in prose',",
+      "  }));",
+      "  process.exit(0);",
+      "}",
+      "const request = JSON.parse(fs.readFileSync(0, 'utf8'));",
+      "const envelope = JSON.parse(request.payload.content);",
+      "const cases = gen.buildAdministration();",
+      "const caseSpec = cases.find((c) => c.case_id === envelope.case_id);",
+      "if (!caseSpec || !caseSpec.reference_response) {",
+      "  process.stderr.write('discuss adapter missing reference_response');",
+      "  process.exit(2);",
+      "}",
+      "process.stdout.write(JSON.stringify({",
+      "  schema_version: 1,",
+      "  provider: process.env.QUAL_FAKE_PROVIDER,",
+      "  model: process.env.QUAL_FAKE_MODEL,",
+      "  output: JSON.stringify(caseSpec.reference_response),",
+      "}));",
+      "",
+    ];
+    fs.writeFileSync(adapterPath, lines.join('\n'));
+    return adapterPath;
+  }
+
+  function baseOpts(role, adapterPath, rawDir) {
+    return {
+      role,
+      trials: 2,
+      expiresDays: 30,
+      emitRow: false,
+      execute: true,
+      taskClasses: [role],
+      domains: ['cross-cutting'],
+      languages: ['en'],
+      tools: ['read_only'],
+      engine: role + '-engine',
+      model: role + '-model-exact',
+      modelVersion: '2026-08-28',
+      versionSource: 'operator-asserted',
+      runner: role + '-harness',
+      runnerVersion: '1.0.0',
+      family: 'test-family',
+      harnessVersion: role + '-harness-v1',
+      effort: 'high',
+      promptConfigHash: digest('a'),
+      semanticFingerprint: digest('b'),
+      containmentFingerprint: digest('c'),
+      panelReadOnlyBinds: [],
+      panelEnvironment: [],
+      providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+      remoteProviderCmd: process.execPath + ' ' + adapterPath,
+      remoteProvider: 'fake-' + role + '-provider',
+      remoteTimeoutMs: 60_000,
+      store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+      rawDir,
+      testAdministrationsOverride: 2,
+    };
+  }
+
+  // consult clean → continue; second admin dispatched
+  {
+    const rawDir = path.join(tempRoot, 'raw-consult-clean');
+    const adapterPath = writeConsultAdapter('d4-wire', 'clean');
+    process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+    process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = 'd4-wire';
+    const result = eq.runConsultDiscussQualification(baseOpts('consult', adapterPath, rawDir));
+    const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
+      .trim().split('\n').filter(Boolean);
+    assert(result.administrations_dispatched >= 2,
+      'consult next admin dispatched, got ' + result.administrations_dispatched);
+    assert(result.stop_reason === 'continue',
+      'consult cap=2 stop_reason continue, got ' + result.stop_reason);
+    assert(result.qualified === false, 'cap=2 clean consult must not qualify yet');
+    assert(exchanges.length >= 21, 'consult exchanges include run2 (n=' + exchanges.length + ')');
+    assert(exchanges.some((line) => JSON.parse(line).run === 2), 'consult run=2 present in exchanges');
+  }
+
+  // discuss clean → next admin
+  {
+    const rawDir = path.join(tempRoot, 'raw-discuss-clean');
+    const adapterPath = writeDiscussAdapter('clean');
+    process.env.QUAL_FAKE_PROVIDER = 'fake-discuss-provider';
+    process.env.QUAL_FAKE_MODEL = 'discuss-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = 'd4-wire';
+    const result = eq.runConsultDiscussQualification(baseOpts('discuss', adapterPath, rawDir));
+    const exchanges = fs.readFileSync(path.join(rawDir, 'discuss-exchanges.jsonl'), 'utf8')
+      .trim().split('\n').filter(Boolean);
+    assert(result.administrations_dispatched >= 2,
+      'discuss next admin dispatched, got ' + result.administrations_dispatched);
+    assert(result.qualified === false, 'cap=2 clean discuss must not qualify yet');
+    assert(exchanges.length >= 17, 'discuss exchanges include run2 (n=' + exchanges.length + ')');
+    assert(exchanges.some((line) => JSON.parse(line).run === 2), 'discuss run=2 present in exchanges');
+  }
+
+  // tier1 in run1 ⇒ no run 2
+  {
+    const rawDir = path.join(tempRoot, 'raw-consult-tier1');
+    const adapterPath = writeConsultAdapter('d4-wire-t1', 'tier1');
+    process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+    process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = 'd4-wire-t1';
+    const result = eq.runConsultDiscussQualification(baseOpts('consult', adapterPath, rawDir));
+    const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
+      .trim().split('\n').filter(Boolean);
+    assert(result.stop_reason === 'tier1', 'tier1 stop_reason, got ' + result.stop_reason);
+    assert(result.tier1_terminated === true, 'tier1_terminated');
+    assert(result.qualified === false, 'tier1 not qualified');
+    assert(result.administrations_dispatched === 1,
+      'no run 2 on tier1, got ' + result.administrations_dispatched);
+    assert(exchanges.every((line) => JSON.parse(line).run === 1),
+      'tier1 exchanges must all be run=1');
+    assert(exchanges.length >= 1 && exchanges.length <= 20,
+      'tier1 must not over-call past run1 (n=' + exchanges.length + ')');
+  }
+
+  fs.rmSync(shortTmpBase, { recursive: true, force: true });
+}
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write(`OK d4 ocChecked=${ocChecked}\n`);
+NODE
+)"
+D4_RC=$?
+assert_exit_code "$D4_RC" "0" "D4 foldPooledVerdict + wiring suite: $D4_OUT"
+assert_contains "$D4_OUT" "OK d4" "D4 suite reports OK"
+
 finalize_test

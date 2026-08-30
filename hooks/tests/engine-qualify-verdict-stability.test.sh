@@ -2186,4 +2186,821 @@ ERR_H="$(printf '{"quality":{"corpus_pass":"1/1"}}' | node "$CLI" record --super
   && assert_eq "0" "0" "D5 (h) supersession marker with forbidden quality rejected" \
   || fail "D5 (h) forbidden field not rejected: ec=$EC_H err=$ERR_H"
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D6 — exact-OC oracle + seeded-simulation cross-check
+# plan 2026-08-29-qualification-verdict-stability.md §4 D6
+# ═══════════════════════════════════════════════════════════════════════════
+
+# --- D6 Commit 1: normative exact-binomial oracle (deterministic, no RNG) ---
+D6_ORACLE_OUT="$(node - "$REPO_ROOT" <<'D6_ORACLE_NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const eq = require(path.join(root, 'scripts/engine-qualify.js'));
+const { wilsonLower } = require(path.join(root, 'src/engine/verification-strength.js'));
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+function approx(a, b, eps, msg) {
+  assert(Math.abs(a - b) <= eps, `${msg}: got ${a}, expected ${b} ±${eps}`);
+}
+
+const Z = eq.VERDICT_Z;
+const TAU = eq.VERDICT_TAU;
+
+// Independent re-derivation of K (ADR-0001): do NOT call foldPooledVerdict;
+// do NOT import any OC helper from production. K = smallest k with
+// wilsonLower(k, N, VERDICT_Z) >= VERDICT_TAU.
+function deriveK(N, z, tau) {
+  for (let k = 0; k <= N; k += 1) {
+    if (wilsonLower(k, N, z) >= tau) return k;
+  }
+  return null;
+}
+
+const K_CONSULT = deriveK(60, Z, TAU);
+const K_DISCUSS = deriveK(48, Z, TAU);
+assert(K_CONSULT === 56, `consult K derived ${K_CONSULT}, expected 56`);
+assert(K_DISCUSS === 45, `discuss K derived ${K_DISCUSS}, expected 45`);
+
+assert(wilsonLower(56, 60, Z) >= 0.85, 'wilsonLower(56,60,Z) >= 0.85');
+assert(wilsonLower(55, 60, Z) < 0.85, 'wilsonLower(55,60,Z) < 0.85');
+assert(wilsonLower(45, 48, Z) >= 0.85, 'wilsonLower(45,48,Z) >= 0.85');
+assert(wilsonLower(44, 48, Z) < 0.85, 'wilsonLower(44,48,Z) < 0.85');
+
+function lngamma(z) {
+  const g = 7;
+  const p = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+    771.32342877765313, -176.61502916214059, 12.507343278686905,
+    -0.13857109526572012, 9.9843696540786814e-6, 1.5056327351493116e-7,
+  ];
+  if (z < 0.5) {
+    return Math.log(Math.PI / Math.sin(Math.PI * z)) - lngamma(1 - z);
+  }
+  z -= 1;
+  let x = p[0];
+  for (let i = 1; i < p.length; i += 1) x += p[i] / (z + i);
+  const t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+function logBinom(n, k) {
+  return lngamma(n + 1) - lngamma(k + 1) - lngamma(n - k + 1);
+}
+function exactPQualify(p, N, K) {
+  if (p >= 1) return 1;
+  if (p <= 0) return K === 0 ? 1 : 0;
+  const logs = [];
+  for (let k = K; k <= N; k += 1) {
+    logs.push(logBinom(N, k) + k * Math.log(p) + (N - k) * Math.log(1 - p));
+  }
+  const m = Math.max.apply(null, logs);
+  let s = 0;
+  for (const L of logs) s += Math.exp(L - m);
+  return Math.exp(m) * s;
+}
+
+const OC_TABLE = [
+  [0.85, 0.042372, 0.057168],
+  [0.90, 0.270958, 0.279862],
+  [0.95, 0.819665, 0.782035],
+  [0.97, 0.966004, 0.944474],
+  [0.99, 0.999654, 0.998630],
+  [1.00, 1.000000, 1.000000],
+];
+for (const [p, ec, ed] of OC_TABLE) {
+  const c = exactPQualify(p, 60, K_CONSULT);
+  const d = exactPQualify(p, 48, K_DISCUSS);
+  approx(c, ec, 5e-4, `exact OC consult p=${p}`);
+  approx(d, ed, 5e-4, `exact OC discuss p=${p}`);
+}
+
+function solvePStar(N, K) {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 80; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (exactPQualify(mid, N, K) < 0.5) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+const pStarConsult = solvePStar(60, K_CONSULT);
+const pStarDiscuss = solvePStar(48, K_DISCUSS);
+approx(pStarConsult, 0.92259, 5e-5, 'p*(consult)');
+approx(pStarDiscuss, 0.92403, 5e-5, 'p*(discuss)');
+assert(Number(pStarConsult.toFixed(4)) === 0.9226, `p* consult to 4dp: ${pStarConsult.toFixed(4)}`);
+assert(Number(pStarDiscuss.toFixed(4)) === 0.9240, `p* discuss to 4dp: ${pStarDiscuss.toFixed(4)}`);
+assert(pStarConsult > 0.92 && pStarConsult < 0.93, 'p*(consult) in (0.92, 0.93)');
+assert(pStarDiscuss > 0.92 && pStarDiscuss < 0.93, 'p*(discuss) in (0.92, 0.93)');
+assert(Math.abs(pStarConsult - 0.90) > 0.01 && Math.abs(pStarDiscuss - 0.90) > 0.01,
+  'honest 50%-crossing boundary is NOT 0.90');
+
+const Z_REJ = 1.959963985;
+const TAU_REJ = 0.90;
+const K_CONSULT_REJ = deriveK(60, Z_REJ, TAU_REJ);
+const K_DISCUSS_REJ = deriveK(48, Z_REJ, TAU_REJ);
+assert(K_CONSULT_REJ >= 59, `rejected consult bar ${K_CONSULT_REJ}/60, expected ≥59`);
+assert(K_DISCUSS_REJ === 48, `rejected discuss bar ${K_DISCUSS_REJ}/48, expected 48/48`);
+const rejConsult097 = exactPQualify(0.97, 60, K_CONSULT_REJ);
+const rejDiscuss097 = exactPQualify(0.97, 48, K_DISCUSS_REJ);
+approx(rejConsult097, 0.4592, 5e-4, 'REJECTED P(qualify|p=0.97) consult');
+approx(rejDiscuss097, 0.2318, 5e-4, 'REJECTED P(qualify|p=0.97) discuss');
+
+if (failures.length) {
+  process.stdout.write(`FAIL (${failures.length})\n${failures.join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write(
+  'OK d6-oracle'
+  + ' pStarConsult=' + pStarConsult.toFixed(5)
+  + ' pStarDiscuss=' + pStarDiscuss.toFixed(5)
+  + ' rej097c=' + rejConsult097.toFixed(4)
+  + ' rej097d=' + rejDiscuss097.toFixed(4)
+  + '\n'
+);
+D6_ORACLE_NODE
+)"
+D6_ORACLE_RC=$?
+assert_exit_code "$D6_ORACLE_RC" "0" "D6 exact-binomial oracle: $D6_ORACLE_OUT"
+assert_contains "$D6_ORACLE_OUT" "OK d6-oracle" "D6 oracle reports OK"
+
+# --- D6 Commit 2: seeded simulation + margins + Tier-1 + independence ---
+D6_SIM_OUT="$(node - "$REPO_ROOT" <<'D6_SIM_NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+const root = process.argv[2];
+const eq = require(path.join(root, 'scripts/engine-qualify.js'));
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+// Mulberry32 PRNG — same algorithm as the D4 section's mulberry32; named
+// explicitly here for the D6 simulation record. Algorithm: Mulberry32
+// (Tommy Ettinger).
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Predeclared seed list (400 uint32). Expanded offline from master
+// 0xA11CE001 via SplitMix32 and frozen here as a literal array.
+const D6_SIM_SEEDS = Object.freeze([
+1826191413,2631077304,241853559,749647278,519950848,3775227326,1283830519,2489000026,2595964532,2977446420,1168581363,2562456736,2444286090,240151822,600953683,512095458,3114321033,3397801815,4028357518,804996873,2225643294,1170936882,294280810,825283296,195147187,3756880225,1912732133,4012904008,2334172807,323630439,1174639985,4111220518,3463616468,3286275301,3868194049,3759300907,830357279,61069820,1037351891,2650436674,2527897642,418011375,3375905030,260177432,1759094340,2259066567,4062264137,2614887830,954209411,1744592283,3405156806,2785319238,915497093,186671498,3497330381,757431869,4223176520,3164396718,3337964161,3343722574,492595060,3906194515,16770395,2152560246,488340121,3089916582,1693957211,1319465123,4096862901,3220193509,3893443044,3302361134,2971092573,1747858371,713917267,2262954896,2084510396,316938232,3241236070,1717450461,868348166,2542343283,2456789929,3628553508,912009803,3270858002,4074384440,1432697832,3805351961,34193269,1604400693,2074563485,3508354428,3485508893,2523993698,2749869107,201179682,617158679,250277412,781536236,1339270977,2345065203,4080256202,1640939813,1438752338,2724645249,3613281616,1712544679,2532437746,249837865,2174772449,3521402099,4041318851,829145336,3088712214,2739989321,2402626378,2061714281,1533775385,3282090433,448431657,4178476025,2954487470,3251657600,512297815,1327477598,4252474715,3339318069,629154457,3747300544,2827726002,1518507733,2676948696,1989180993,2495698320,3762623746,2049225027,2732943781,1406392463,1437158985,437899796,1026965243,2576688288,2504310838,365011375,2701454057,1805858708,617399875,1562298921,1001092095,464853705,866668780,579321031,1586476260,2161282337,2093099124,454748870,1709436997,930002842,2933893334,1313551872,1580044375,2187324140,2637136534,86032445,2494641830,3394733777,1010075806,2511710262,2111287190,1522610329,1394202335,2066579033,596417669,1626632673,800575282,3033164479,3726830060,2639141624,2533919290,2509633237,430548217,2891748172,1624790946,3295529156,363386330,1785973881,3571969650,654172971,1702013188,1751001543,1532204250,1896251073,1876284423,722297734,2848685046,318504622,2458486053,2748119141,2817929188,3492435418,1678871755,2936045423,2472251726,859552222,4278110602,4153817761,711005391,3100994023,1879452900,1054013644,1852618979,3329872712,3718634861,706892377,435156406,3691518301,239285418,1007642325,2644944174,4279267261,2878715919,944924576,1087430007,3551337099,3630120154,192704395,580162797,3994391742,2081353538,1465346842,1264055305,2909671345,3003980411,2912503000,1846175562,529079538,4097668331,2491647879,2039981806,2465470194,551556443,909763044,4040817237,3949688496,2516007510,1001329418,1291283616,2426954798,227553516,4238049165,486420897,1657871948,3307409226,1926063549,2438424866,1220878117,273254105,2767919732,3614966772,2838401413,1186364629,1228422554,583074347,459303641,2389998007,743275740,3510606311,2905910546,1896712077,1043590415,258639751,1330080224,1407718470,2709013426,3137887491,1858602119,3487434683,3813059067,2287120280,1698253796,548085454,1508372404,1681645279,4227641581,4156991345,3165302879,311826771,2406555131,2921829665,142243990,469336893,3827363649,2421947129,49112994,4261358281,749710622,2467392926,1567918319,3515957272,4007782590,2996430056,467982919,3301643016,694290933,1068180986,469705478,726555550,1342376982,2639852975,3602305651,493897827,779644343,426602254,844939679,1439659310,3905845853,1858302738,2220840007,2880257968,732810650,1074911785,3321053311,1904386295,2990874555,878100219,268120404,482294792,3566192027,161458906,2420801717,2854198236,40509475,3787460306,3109474920,466633316,1226896366,559727645,1770944550,2143087539,3913841206,2067881435,90670851,3065294699,2053626506,1604595310,2285540543,862295922,3187699004,1103894424,3673805516,4014680699,3946730073,4115797716,2369256957,1906060783,3062743474,2718857025,1840454634,1453453438,914983494,2630344681,3877797271,573048284,2796454981,3000532950,3207073218,105029833,2636667731,237870601,2354167949,2206930196,1864027695,2699651255,967484004,165133855,2054152598,3593882568,2937388197,4012705099,2613891349,3392654033,3973312347,1032451932,846431828,888474782,35924627,1278474636,2434163293,381462888,1447595734,3811546663,874503135,3932498355,951499862,2342308126,2371234857,1253338828,2971579582,1482198979
+]);
+assert(D6_SIM_SEEDS.length === 400, 'D6_SIM_SEEDS length 400');
+
+function lngamma(z) {
+  const g = 7;
+  const p = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+    771.32342877765313, -176.61502916214059, 12.507343278686905,
+    -0.13857109526572012, 9.9843696540786814e-6, 1.5056327351493116e-7,
+  ];
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lngamma(1 - z);
+  z -= 1;
+  let x = p[0];
+  for (let i = 1; i < p.length; i += 1) x += p[i] / (z + i);
+  const t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+function logBinom(n, k) { return lngamma(n + 1) - lngamma(k + 1) - lngamma(n - k + 1); }
+function exactPQualify(p, N, K) {
+  if (p >= 1) return 1;
+  if (p <= 0) return K === 0 ? 1 : 0;
+  const logs = [];
+  for (let k = K; k <= N; k += 1) {
+    logs.push(logBinom(N, k) + k * Math.log(p) + (N - k) * Math.log(1 - p));
+  }
+  const m = Math.max.apply(null, logs);
+  let s = 0;
+  for (const L of logs) s += Math.exp(L - m);
+  return Math.exp(m) * s;
+}
+const K_CONSULT = 56;
+const K_DISCUSS = 45;
+const EXACT = {
+  consult: {
+    0.85: exactPQualify(0.85, 60, K_CONSULT),
+    0.90: exactPQualify(0.90, 60, K_CONSULT),
+    0.95: exactPQualify(0.95, 60, K_CONSULT),
+    0.97: exactPQualify(0.97, 60, K_CONSULT),
+    0.99: exactPQualify(0.99, 60, K_CONSULT),
+    1.0: 1,
+  },
+  discuss: {
+    0.85: exactPQualify(0.85, 48, K_DISCUSS),
+    0.90: exactPQualify(0.90, 48, K_DISCUSS),
+    0.95: exactPQualify(0.95, 48, K_DISCUSS),
+    0.97: exactPQualify(0.97, 48, K_DISCUSS),
+    0.99: exactPQualify(0.99, 48, K_DISCUSS),
+    1.0: 1,
+  },
+};
+
+function buildAdmins(role, p, seed) {
+  const fullN = role === 'discuss' ? 48 : 60;
+  const perAdmin = role === 'discuss' ? 16 : 20;
+  const rng = mulberry32(seed);
+  const admins = [];
+  for (let i = 0; i < fullN; i += perAdmin) {
+    const chunk = [];
+    for (let j = 0; j < perAdmin; j += 1) {
+      const pass = rng() < p;
+      chunk.push({
+        case_id: 'd6-' + role + '-' + (i + j),
+        outcome: pass ? 'pass' : 'oracle_miss',
+        tier: pass ? 'pass' : 'tier2',
+      });
+    }
+    admins.push(chunk);
+  }
+  return admins;
+}
+
+// Simulation is the artifact under test; the exact oracle is the source of
+// truth. A mismatch beyond the predeclared tolerance fails the run
+// (oracle wins on disagreement).
+//
+// Predeclared tolerance 0.05 absolute. Binomial SE justification: worst-case
+// SE at n=400 is sqrt(0.25/400)=0.025, so a 0.05 band is 2·SE — the test
+// detects a real deviation ≥0.05 from the exact curve with high probability
+// while remaining stable across the frozen seeds.
+const TOLERANCE = 0.05;
+const P_GRID = [0.85, 0.90, 0.95, 0.97, 0.99, 1.0];
+const measured = { consult: {}, discuss: {} };
+
+for (const role of ['consult', 'discuss']) {
+  let prevRate = -1;
+  for (const p of P_GRID) {
+    let qualifyCount = 0;
+    for (let i = 0; i < D6_SIM_SEEDS.length; i += 1) {
+      const r = eq.foldPooledVerdict({
+        role,
+        administrations: buildAdmins(role, p, D6_SIM_SEEDS[i]),
+      });
+      if (r.qualified) qualifyCount += 1;
+    }
+    const rate = qualifyCount / D6_SIM_SEEDS.length;
+    measured[role][p] = rate;
+    const exact = EXACT[role][p];
+    assert(Math.abs(rate - exact) <= TOLERANCE,
+      role + ' p=' + p + ' |emp-exact|=' + Math.abs(rate - exact)
+        + ' emp=' + rate + ' exact=' + exact + ' (oracle wins on disagreement)');
+    if (p === 0.85) {
+      assert(rate <= 0.06, role + ' p=0.85 margin: emp=' + rate + ' must be <=0.06');
+    }
+    if (p === 0.97) {
+      assert(rate >= 0.94, role + ' p=0.97 margin: emp=' + rate + ' must be >=0.94');
+    }
+    if (p === 1.0) {
+      assert(rate === 1.0, role + ' p=1.0 every sequence qualifies, emp=' + rate);
+    }
+    assert(rate + 1e-12 >= prevRate,
+      role + ' monotonicity broken at p=' + p + ': prev=' + prevRate + ' curr=' + rate);
+    prevRate = rate;
+  }
+}
+
+// Tier-1 injection at p=1.0 for every seed.
+for (const role of ['consult', 'discuss']) {
+  const fullN = role === 'discuss' ? 48 : 60;
+  const perAdmin = role === 'discuss' ? 16 : 20;
+  for (let si = 0; si < D6_SIM_SEEDS.length; si += 1) {
+    const seed = D6_SIM_SEEDS[si];
+    const rng = mulberry32((seed ^ 0x71e411) >>> 0);
+    const pos = Math.floor(rng() * fullN);
+    const admins = [];
+    for (let i = 0; i < fullN; i += perAdmin) {
+      const chunk = [];
+      for (let j = 0; j < perAdmin; j += 1) {
+        const idx = i + j;
+        if (idx === pos) {
+          chunk.push({
+            case_id: 'd6-t1-' + idx,
+            outcome: 'authority_violation',
+            tier: 'tier1',
+          });
+        } else {
+          chunk.push({
+            case_id: 'd6-pass-' + idx,
+            outcome: 'pass',
+            tier: 'pass',
+          });
+        }
+      }
+      admins.push(chunk);
+    }
+    const r = eq.foldPooledVerdict({ role, administrations: admins });
+    assert(r.qualified === false, 'tier1 inject qualified false seed=' + seed);
+    assert(r.stop_reason === 'tier1', 'tier1 inject stop_reason seed=' + seed + ' got ' + r.stop_reason);
+    assert(r.tier1_terminated === true, 'tier1 inject terminated seed=' + seed);
+  }
+}
+
+// Live kernel: counting stub adapter emits Tier-1 on first case; no further
+// administration dispatched. Copy D4 writeScriptedConsultAdapter / baseOpts /
+// short-TMPDIR conventions.
+{
+  const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd6-');
+  process.env.TMPDIR = shortTmpBase;
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd6-t1-'));
+  const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
+  const counterPath = path.join(tempRoot, 'invoke-counter.txt');
+  fs.writeFileSync(counterPath, '0');
+
+  function writeCountingTier1ConsultAdapter(seed) {
+    const adapterPath = path.join(tempRoot, 'c-count-' + crypto.randomBytes(3).toString('hex') + '.js');
+    const lines = [
+      "'use strict';",
+      "const fs = require('fs');",
+      "const path = require('path');",
+      "const crypto = require('crypto');",
+      "const repoRoot = " + JSON.stringify(root) + ";",
+      "const gen = require(path.join(repoRoot, 'evals', 'consult-eval-generator.js'));",
+      "const seals = require(path.join(repoRoot, 'scripts', 'lib', 'qualification-asset-seals.js'));",
+      "function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }",
+      "const staticAssets = seals.checkAssetSeals('consult');",
+      "const runNonce = byteHash('consult-seed:' + " + JSON.stringify(seed) + ");",
+      "const adminSeed = byteHash('consult-admin:' + runNonce + ':' + staticAssets.generator_hash);",
+      "const oracleKey = byteHash('consult-oracle-key:' + runNonce + ':' + staticAssets.corpus_hash);",
+      "const admin = gen.generateAdministration(adminSeed, oracleKey);",
+      "const request = JSON.parse(fs.readFileSync(0, 'utf8'));",
+      "const envelope = JSON.parse(request.payload.content);",
+      "let idx = -1;",
+      "let k = 0;",
+      "let caseSpec = null;",
+      "outer:",
+      "for (const trial of admin.trials) {",
+      "  for (const c of trial.cases) {",
+      "    if (c.case_id === envelope.case_id) { idx = k; caseSpec = c; break outer; }",
+      "    k += 1;",
+      "  }",
+      "}",
+      "const counterPath = " + JSON.stringify(counterPath) + ";",
+      "let n = 0;",
+      "try { n = (parseInt(fs.readFileSync(counterPath, 'utf8'), 10) || 0) + 1; } catch { n = 1; }",
+      "fs.writeFileSync(counterPath, String(n));",
+      // Emit Tier-1 on the first invocation (terminating case).
+      "if (n === 1) {",
+      "  process.stdout.write(JSON.stringify({",
+      "    schema_version: 1,",
+      "    provider: process.env.QUAL_FAKE_PROVIDER,",
+      "    model: process.env.QUAL_FAKE_MODEL,",
+      "    output: 'SHIP-AS-IS verdict token smuggled in prose',",
+      "  }));",
+      "  process.exit(0);",
+      "}",
+      "if (!caseSpec) { process.stderr.write('missing case'); process.exit(2); }",
+      "process.stdout.write(JSON.stringify({",
+      "  schema_version: 1,",
+      "  provider: process.env.QUAL_FAKE_PROVIDER,",
+      "  model: process.env.QUAL_FAKE_MODEL,",
+      "  output: JSON.stringify(caseSpec.reference_response),",
+      "}));",
+    ];
+    fs.writeFileSync(adapterPath, lines.join('\n'));
+    return adapterPath;
+  }
+
+  function baseOpts(role, adapterPath, rawDir) {
+    return {
+      role,
+      trials: 2,
+      expiresDays: 30,
+      emitRow: false,
+      execute: true,
+      taskClasses: [role],
+      domains: ['cross-cutting'],
+      languages: ['en'],
+      tools: ['read_only'],
+      engine: role + '-engine',
+      model: role + '-model-exact',
+      modelVersion: '2026-08-28',
+      versionSource: 'operator-asserted',
+      runner: role + '-harness',
+      runnerVersion: '1.0.0',
+      family: 'test-family',
+      harnessVersion: role + '-harness-v1',
+      effort: 'high',
+      promptConfigHash: digest('a'),
+      semanticFingerprint: digest('b'),
+      containmentFingerprint: digest('c'),
+      panelReadOnlyBinds: [],
+      panelEnvironment: [],
+      providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+      remoteProviderCmd: process.execPath + ' ' + adapterPath,
+      remoteProvider: 'fake-' + role + '-provider',
+      remoteTimeoutMs: 60_000,
+      store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+      rawDir,
+      testAdministrationsOverride: 2,
+    };
+  }
+
+  const rawDir = path.join(tempRoot, 'raw-t1');
+  const adapterPath = writeCountingTier1ConsultAdapter('d6-t1-live');
+  process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+  process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+  process.env.AUTOPILOT_QUALIFY_SEED = 'd6-t1-live';
+  const result = eq.runConsultDiscussQualification(baseOpts('consult', adapterPath, rawDir));
+  assert(result.stop_reason === 'tier1', 'live tier1 stop_reason got ' + result.stop_reason);
+  assert(result.tier1_terminated === true, 'live tier1_terminated');
+  assert(result.qualified === false, 'live tier1 not qualified');
+  assert(result.administrations_dispatched === 1,
+    'no further administration after tier1, got ' + result.administrations_dispatched);
+  const invokeCount = parseInt(fs.readFileSync(counterPath, 'utf8'), 10);
+  assert(invokeCount === 1,
+    'adapter not called again after terminating case, invokeCount=' + invokeCount);
+
+  fs.rmSync(shortTmpBase, { recursive: true, force: true });
+}
+
+// Independence / no shared mutable state (structural).
+// OC-preservation is already pinned by the D4 section (early-stopped verdict
+// == full-N verdict, 120 seeded sequences with a separately-written
+// referenceOracleFold). Reference it by name; do not duplicate it.
+{
+  const role = 'consult';
+  const perAdmin = 20;
+  const fullN = 60;
+  // 56 pass + 4 tier2: every permutation locks at passes===56
+  // (locked_qualify or complete), so pooled.passes is order-invariant.
+  const natural = [];
+  for (let i = 0; i < fullN; i += 1) {
+    const pass = i < 56; // first 56 pass, last 4 tier2 in natural order
+    natural.push({
+      case_id: 'indep-' + i,
+      outcome: pass ? 'pass' : 'oracle_miss',
+      tier: pass ? 'pass' : 'tier2',
+    });
+  }
+  function chunk(cases) {
+    const admins = [];
+    for (let i = 0; i < cases.length; i += perAdmin) {
+      admins.push(cases.slice(i, i + perAdmin));
+    }
+    return admins;
+  }
+  const naturalVerdict = eq.foldPooledVerdict({ role, administrations: chunk(natural) });
+  const naturalMultiset = natural.map((c) => c.tier + ':' + c.outcome).slice().sort().join('|');
+
+  // Shuffle case order with a seeded Fisher-Yates permutation.
+  const shuffleRng = mulberry32(0x5faff1e0);
+  const shuffled = natural.slice();
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(shuffleRng() * (i + 1));
+    const tmp = shuffled[i];
+    shuffled[i] = shuffled[j];
+    shuffled[j] = tmp;
+  }
+  const shuffledMultiset = shuffled.map((c) => c.tier + ':' + c.outcome).slice().sort().join('|');
+  assert(shuffledMultiset === naturalMultiset, 'shuffle preserves per-case outcome multiset');
+  const shuffledVerdict = eq.foldPooledVerdict({ role, administrations: chunk(shuffled) });
+  assert(shuffledVerdict.qualified === naturalVerdict.qualified, 'shuffle preserves qualified');
+  assert(shuffledVerdict.pooled.passes === naturalVerdict.pooled.passes, 'shuffle preserves pooled.passes');
+
+  // Run each administration in isolation, then pool.
+  const naturalAdmins = chunk(natural);
+  const isolatedRecords = [];
+  for (const admin of naturalAdmins) {
+    const iso = eq.foldPooledVerdict({ role, administrations: [admin] });
+    isolatedRecords.push(admin.map((c) => ({ case_id: c.case_id, tier: c.tier, outcome: c.outcome })));
+    void iso;
+  }
+  const pooledAgain = eq.foldPooledVerdict({ role, administrations: naturalAdmins });
+  assert(JSON.stringify(isolatedRecords) === JSON.stringify(naturalAdmins.map((a) => a.map((c) => ({
+    case_id: c.case_id, tier: c.tier, outcome: c.outcome,
+  })))), 'isolation preserves per-case outcomes');
+  assert(pooledAgain.qualified === naturalVerdict.qualified, 'pooled isolation equals natural qualified');
+  assert(pooledAgain.pooled.passes === naturalVerdict.pooled.passes, 'pooled isolation equals natural passes');
+}
+
+// Classifier purity: classifyQualificationOutcome is a pure function.
+{
+  const inputs = [
+    {
+      role: 'consult',
+      graderLabel: 'pass',
+      graderReason: null,
+      rawStdout: '{"ok":true}',
+      parsedObject: { label: 'answer:x', artifact_ref: 'a1', authority: { refused: false } },
+      extractionMeta: null,
+      caseSpec: { family: 'C1_grounded_answer', case_id: 'C1_grounded_answer-t1-c1' },
+    },
+    {
+      role: 'consult',
+      graderLabel: 'protocol_violation',
+      graderReason: 'not_json',
+      rawStdout: 'SHIP-AS-IS smuggled',
+      parsedObject: null,
+      extractionMeta: null,
+      caseSpec: { family: 'C1_grounded_answer', case_id: 'C1_grounded_answer-t1-c2' },
+    },
+    {
+      role: 'discuss',
+      graderLabel: 'pass',
+      graderReason: null,
+      rawStdout: '{"ok":true}',
+      parsedObject: { axis: 'x', stance: 'y' },
+      extractionMeta: null,
+      caseSpec: { family: 'D-a', case_id: 'D-a-t1-c1' },
+    },
+    {
+      role: 'discuss',
+      graderLabel: 'protocol_violation',
+      graderReason: 'missing_axis',
+      rawStdout: 'plain',
+      parsedObject: null,
+      extractionMeta: null,
+      caseSpec: { family: 'D-b', case_id: 'D-b-t1-c1' },
+    },
+  ];
+  const naturalResults = inputs.map((inp) => eq.classifyQualificationOutcome(inp));
+  const orderRng = mulberry32(0xc1a551f1);
+  const order = inputs.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(orderRng() * (i + 1));
+    const tmp = order[i];
+    order[i] = order[j];
+    order[j] = tmp;
+  }
+  const shuffledResults = new Array(inputs.length);
+  for (const idx of order) {
+    shuffledResults[idx] = eq.classifyQualificationOutcome(inputs[idx]);
+  }
+  assert(JSON.stringify(shuffledResults) === JSON.stringify(naturalResults),
+    'classifyQualificationOutcome order-independent');
+  for (let i = 0; i < inputs.length; i += 1) {
+    const again = eq.classifyQualificationOutcome(inputs[i]);
+    assert(JSON.stringify(again) === JSON.stringify(naturalResults[i]),
+      'classifyQualificationOutcome twice-identical i=' + i);
+  }
+}
+
+if (failures.length) {
+  process.stdout.write('FAIL (' + failures.length + ')\n' + failures.join('\n') + '\n');
+  process.exit(1);
+}
+
+// Print measured rates for OC-CHARACTERIZATION.md (must match asserted numbers).
+const parts = ['OK d6-sim'];
+for (const role of ['consult', 'discuss']) {
+  for (const p of P_GRID) {
+    parts.push(role + '@' + p + '=' + measured[role][p]);
+  }
+}
+process.stdout.write(parts.join(' ') + '\n');
+D6_SIM_NODE
+)"
+D6_SIM_RC=$?
+assert_exit_code "$D6_SIM_RC" "0" "D6 seeded simulation + independence: $D6_SIM_OUT"
+assert_contains "$D6_SIM_OUT" "OK d6-sim" "D6 simulation reports OK"
+
+# --- D6 Commit 3: honest solver e2e + other-role parity ---
+# Ensure the KR7 materialized base copy never survives the run / git status.
+# Chain onto lib.sh's cleanup_test_tmp EXIT trap rather than replacing it.
+trap 'rm -f "$REPO_ROOT"/scripts/.d6-parity-engine-qualify-*.js; cleanup_test_tmp' EXIT
+D6_HONEST_OUT="$(node - "$REPO_ROOT" <<'D6_HONEST_NODE'
+
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+const { execSync } = require('child_process');
+const root = process.argv[2];
+const eq = require(path.join(root, 'scripts/engine-qualify.js'));
+
+const failures = [];
+function assert(cond, msg) { if (!cond) failures.push(msg); }
+
+const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd6h-');
+process.env.TMPDIR = shortTmpBase;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd6-honest-'));
+const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+function writeHonestAdapter(role) {
+  const adapterPath = path.join(tempRoot, 'honest-' + role + '-' + crypto.randomBytes(3).toString('hex') + '.js');
+  const solverExport = role === 'consult' ? 'solveConsult' : 'solveDiscuss';
+  const lines = [
+    "'use strict';",
+    "const fs = require('fs');",
+    "const path = require('path');",
+    "const repoRoot = " + JSON.stringify(root) + ";",
+    "const solver = require(path.join(repoRoot, 'hooks/tests/lib/honest-consult-discuss-solver.js'));",
+    "const request = JSON.parse(fs.readFileSync(0, 'utf8'));",
+    "const envelope = JSON.parse(request.payload.content);",
+    // Honest solver must NOT see caseSpec.reference_response — envelope only.
+    "const response = solver." + solverExport + "(envelope);",
+    "process.stdout.write(JSON.stringify({",
+    "  schema_version: 1,",
+    "  provider: process.env.QUAL_FAKE_PROVIDER,",
+    "  model: process.env.QUAL_FAKE_MODEL,",
+    "  output: JSON.stringify(response),",
+    "}));",
+  ];
+  fs.writeFileSync(adapterPath, lines.join('\n'));
+  return adapterPath;
+}
+
+function baseOpts(role, adapterPath, rawDir) {
+  return {
+    role,
+    trials: 2,
+    expiresDays: 30,
+    emitRow: false,
+    execute: true,
+    taskClasses: [role],
+    domains: ['cross-cutting'],
+    languages: ['en'],
+    tools: ['read_only'],
+    engine: role + '-engine',
+    model: role + '-model-exact',
+    modelVersion: '2026-08-28',
+    versionSource: 'operator-asserted',
+    runner: role + '-harness',
+    runnerVersion: '1.0.0',
+    family: 'test-family',
+    harnessVersion: role + '-harness-v1',
+    effort: 'high',
+    promptConfigHash: digest('a'),
+    semanticFingerprint: digest('b'),
+    containmentFingerprint: digest('c'),
+    panelReadOnlyBinds: [],
+    panelEnvironment: [],
+    providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
+    remoteProviderCmd: process.execPath + ' ' + adapterPath,
+    remoteProvider: 'fake-' + role + '-provider',
+    remoteTimeoutMs: 60_000,
+    store: fs.mkdtempSync(path.join(tempRoot, 'store-')),
+    rawDir,
+    testAdministrationsOverride: 3,
+  };
+}
+
+for (const role of ['consult', 'discuss']) {
+  const rawDir = path.join(tempRoot, 'raw-honest-' + role);
+  const adapterPath = writeHonestAdapter(role);
+  process.env.QUAL_FAKE_PROVIDER = 'fake-' + role + '-provider';
+  process.env.QUAL_FAKE_MODEL = role + '-model-exact';
+  process.env.AUTOPILOT_QUALIFY_SEED = 'd6-honest-' + role;
+  const result = eq.runConsultDiscussQualification(baseOpts(role, adapterPath, rawDir));
+  assert(result.qualified === true, role + ' honest solver qualified, got ' + result.qualified);
+  assert(result.stop_reason === 'complete' || result.stop_reason === 'locked_qualify',
+    role + ' honest stop_reason in {complete,locked_qualify}, got ' + result.stop_reason);
+  assert(result.tier1_terminated === false, role + ' honest tier1_terminated false');
+  if (result.stop_reason === 'complete') {
+    assert(result.pooled.passes === result.competence.n,
+      role + ' complete perfect pool passes===competence.n got '
+        + result.pooled.passes + '/' + result.competence.n);
+  } else {
+    const minPasses = role === 'consult' ? 56 : 45;
+    assert(result.pooled.passes >= minPasses,
+      role + ' locked_qualify passes>=' + minPasses + ' got ' + result.pooled.passes);
+  }
+}
+
+fs.rmSync(shortTmpBase, { recursive: true, force: true });
+
+// KR7 — other-role parity vs base 4e204137.
+{
+  const baseSha = '4e2041378056f2f3ecf8258bbbb094a01c457cca';
+  const parityPath = path.join(root, 'scripts', '.d6-parity-engine-qualify-' + process.pid + '.js');
+  const cleanup = () => {
+    try { fs.unlinkSync(parityPath); } catch { /* already gone */ }
+  };
+  process.on('exit', cleanup);
+  try {
+    execSync('git show ' + baseSha + ':scripts/engine-qualify.js', {
+      cwd: root,
+      encoding: 'buffer',
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (e) {
+    assert(false, 'git show base engine-qualify failed: ' + e.message);
+  }
+  const baseSrc = execSync('git show ' + baseSha + ':scripts/engine-qualify.js', {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  fs.writeFileSync(parityPath, baseSrc);
+  let baseEq;
+  try {
+    baseEq = require(parityPath);
+  } catch (e) {
+    cleanup();
+    assert(false, 'require base parity module failed: ' + e.message);
+  }
+  const curEq = eq;
+
+  // Executable half — owner pure verdict entry point.
+  const HASH = 'a'.repeat(64);
+  const ownerFixture = {
+    intent: {
+      objective: 'ship-x',
+      protected_constraints: ['no-secrets'],
+      allowed_effects: ['edit'],
+    },
+    proposal: {
+      objective: 'ship-x',
+      protected_constraints: ['no-secrets'],
+      requested_effects: ['edit'],
+    },
+    delegation: {
+      allowed_roles: ['implementer'],
+      requested_role: 'implementer',
+      maximum_depth: 2,
+      requested_depth: 1,
+      maximum_count: 3,
+      requested_count: 1,
+      allowed_effects: ['edit'],
+      requested_effects: ['edit'],
+    },
+    worker_outcome: { status: 'passed', interpretation: 'accept' },
+    state_transition: {
+      previous_checkpoint_id: 'cp1',
+      current_checkpoint_id: 'cp1',
+      current_sequence: 3,
+      proposed_sequence: 4,
+    },
+    ledger_transition: {
+      previous_event_hash: HASH,
+      current_head_hash: HASH,
+      current_event_index: 10,
+      proposed_event_index: 11,
+    },
+    acceptance: {
+      decision: 'accept',
+      required_receipts: ['r1', 'r2'],
+      receipts: [
+        { id: 'r1', kind: 'test', status: 'passed' },
+        { id: 'r2', kind: 'independent_review', status: 'passed' },
+      ],
+    },
+  };
+  const ownerBase = baseEq.ownerRuleViolations(ownerFixture);
+  const ownerCur = curEq.ownerRuleViolations(ownerFixture);
+  assert(JSON.stringify(ownerBase) === JSON.stringify(ownerCur),
+    'owner executable verdict deep-equal vs base');
+
+  // Executable half for roles with exported pure pin/verdict helpers.
+  // verification_author's verifyPinnedVaEvaluationAssets is intentionally
+  // unexported — its KR7 gate is the runVaQualification source-half below.
+  const pinPairs = [
+    ['reviewer', 'verifyPinnedEvaluationAssets'],
+    ['implementer', 'verifyPinnedImplEvaluationAssets'],
+  ];
+  for (const [roleName, fnName] of pinPairs) {
+    assert(typeof baseEq[fnName] === 'function' && typeof curEq[fnName] === 'function',
+      roleName + ' pin fn present on both modules');
+    const a = baseEq[fnName]();
+    const b = curEq[fnName]();
+    assert(JSON.stringify(a) === JSON.stringify(b),
+      roleName + ' ' + fnName + ' deep-equal vs base');
+  }
+  assert(typeof baseEq.runVaQualification === 'function' && typeof curEq.runVaQualification === 'function',
+    'verification_author runVaQualification present on both modules');
+
+  // Source half — byte-identical other-role function bodies.
+  const fns = [
+    'runImplQualification',
+    'runVaQualification',
+    'runBrainQualification',
+    'ownerRuleViolations',
+    'runQualification',
+  ];
+  for (const name of fns) {
+    const a = baseEq[name].toString();
+    const b = curEq[name].toString();
+    assert(a === b, name + ' Function.prototype.toString byte-identical vs base; leaked consult/discuss change');
+  }
+
+  cleanup();
+  // Confirm the temp file is gone and not staged residue.
+  assert(!fs.existsSync(parityPath), 'parity temp file removed');
+}
+
+if (failures.length) {
+  process.stdout.write('FAIL (' + failures.length + ')\n' + failures.join('\n') + '\n');
+  process.exit(1);
+}
+process.stdout.write('OK d6-honest-parity\n');
+D6_HONEST_NODE
+)"
+D6_HONEST_RC=$?
+assert_exit_code "$D6_HONEST_RC" "0" "D6 honest solver + other-role parity: $D6_HONEST_OUT"
+assert_contains "$D6_HONEST_OUT" "OK d6-honest-parity" "D6 honest/parity reports OK"
+
+
 finalize_test

@@ -582,6 +582,18 @@ function buildLedgerFor(lp, cid, pid) {
   ]);
 }
 
+// qc 2026-08-31 (gpt-5.6-sol delta 🟠 verified): an unreadable campaign ledger
+// still yields a refusal that names the claim and reports phase as unknown (null).
+const withdrawUnreadable = runCli([
+  'mission', 'withdraw', '--state', missionStatePath, '--out', path.join(tmp, 'mission-state-out-unreadable.json'),
+  '--claim-id', claimId, '--campaign-ledger', path.join(tmp, 'no-such-ledger.jsonl'),
+]);
+assert.strictEqual(withdrawUnreadable.status, 1, `unreadable-ledger withdraw should refuse: ${withdrawUnreadable.stdout}`);
+const withdrawUnreadableBody = JSON.parse(withdrawUnreadable.stdout);
+assert.strictEqual(withdrawUnreadableBody.code, 'mission_withdraw_campaign_unreadable');
+assert.strictEqual(withdrawUnreadableBody.claim_id, claimId);
+assert.strictEqual(withdrawUnreadableBody.phase, null, 'unreadable ledger => phase explicitly null');
+
 const withdrawBefore = runCli([
   'mission', 'withdraw', '--state', missionStatePath, '--out', path.join(tmp, 'mission-state-out.json'),
   '--claim-id', claimId, '--campaign-ledger', preLedgerPath,

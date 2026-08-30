@@ -413,6 +413,7 @@ function cmdWithdraw(flags) {
       reason: `withdraw: claim ${claimId} campaign ${claim.campaign_id} ledger unreadable: ${error.message || String(error)}`,
       claim_id: claimId,
       campaign_id: claim.campaign_id,
+      phase: null,
       state_hash: mission.stateHash(state),
     });
     return 1;

@@ -1,10 +1,11 @@
 ## 目標
 
-「資格判定穩定性重設計」plan(`docs/plans/2026-08-29-qualification-verdict-stability.md`,D0–D8)**已全部落地並 release v2.35.3**。剩下的是 Board 權限的 D7 真金重跑(plan §8 Q3)與 rail 的殘餘缺陷。
+「資格判定穩定性重設計」plan(`docs/plans/2026-08-29-qualification-verdict-stability.md`,D0–D8)**已全部落地(v2.35.3),D7 真金重跑亦已執行完畢(v2.35.4)**。剩下的只有 rail 與 recipe 的殘餘缺陷(BACKLOG)。
 
-## 現況(2026-08-30 結案)
+## 現況(2026-08-30 結案,含 D7)
 
-- `develop` 與 origin 同步(release commit `85cd84a0` + doc-drift 修正 merge `7804c387` + 結案紀錄 `3e6b0527`);版本 **v2.35.3**;preflight 8/8;全套 `hooks/tests/run.sh` 綠(見 EXECUTION-LOG 最後一行)。
+- `develop` 與 origin 同步;版本 **v2.35.4**(`4ca5c9c4`);preflight 8/8;全套 `hooks/tests/run.sh` 綠。
+- **D7 已執行**(user 授權 2026-08-30):九席匯總施測 **7 PASS / 2 FAIL**(events 176–185;GLM-5.3 consult 真 Tier-1、gpt-5.6-sol discuss `locked_fail`),三個單次翻盤席(Gemini、MiniMax、Qwen)全部平反;每列 `wilson_lower` 由 depth-0 重算一致;ledger 在 `docs/plans/evidence/2026-08-29-verdict-stability/ADMINISTRATION-LEDGER.md`。真錢施測抓出並修掉 reason-recovery 的 undefined-gates 缺陷(`95a8a8af`,event 175 superseded by 177);wall 預算改為 ×施測次數(`5a168fb9`)。
 - D1–D8 全部 merge:D1–D3(`6a3620a1`)、D4(`e6b5f171`)、D5(`1a7e42f4`)、D6(`8a8a5bd2`)、D7/D8 文件(`80693f7e`/`0af7b5f5`)。每段的 qc 裁決、修復 sha、獨立重跑結果都在 `docs/plans/evidence/2026-08-29-verdict-stability/EXECUTION-LOG.md`。
 - **D1 閘門在真店生效**:九席 consult/discuss(events 157–165)`seat-status` 全 `no_record`;備份在 `~/.autopilot/engine-scorecard/*.bak-verdict-redesign-2026-08-30`。
 - OC 特徵:`OC-CHARACTERIZATION.md`——精確二項 oracle(p* 0.922585 consult / 0.924032 discuss)、n=3000 模擬 power 表、rejected calibration、D7 協定(**未授權花費**)。
@@ -20,7 +21,7 @@
 
 ## 下一步
 
-1. **D7 真金重跑**:等使用者/Board 授權;協定在 `OC-CHARACTERIZATION.md` D7 段(passing 席約 3× 單次成本)。cursor 席不考。
+1. D7 已完成;若要再施測任何席,先修 recipe 的 staging credentials 陷阱(BACKLOG 2026-08-30)。cursor 席不考。
 2. Rail 殘餘缺陷(`docs/BACKLOG.md` 2026-08-30 列):wall cap 3600s 是 schema 上限、dead campaign 無法 terminalize/釋放 claim、`mission grant` replay 假綠、VA rail 非空即 authored、agy/cc-shim VA 席過不了精確 tuple 閘、`mission withdraw` 缺席。下次 /l5 或 /l6 前先看這些有沒有出貨。
 3. 可選:把 `qualification-tier-mapping.test.sh`(盲測 D4 harness)的名字改成反映內容(D3 tier-map 盲測已被它取代)。
 
@@ -28,12 +29,12 @@
 
 ```bash
 git status --short                                             # 乾淨
-grep '"version"' .claude-plugin/plugin.json                    # 2.35.3
+grep '"version"' .claude-plugin/plugin.json                    # 2.35.4
 bash hooks/tests/engine-qualify-verdict-stability.test.sh      # 44 PASS(約 100s)
 bash hooks/tests/qualification-tier-mapping.test.sh            # 11 PASS
 bash hooks/tests/capability-evidence.test.sh                   # PASS
 sha256sum evals/consult-eval-grader.js evals/discuss-eval-grader.js   # 7852cf33… / 39b5ba15…
-for e in MiniMax-M3:cc-shim kimi-code-k3:kimi; do node scripts/engine-scorecard.js seat-status --engine ${e%%:*} --runner ${e##*:} --role consult; done   # no_record
+for e in MiniMax-M3:cc-shim kimi-code-k3:kimi; do node scripts/engine-scorecard.js seat-status --engine ${e%%:*} --runner ${e##*:} --role consult; done   # qualified, baselines 178 / 182 (pooled rows)
 AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh # 8/8
 ```
 

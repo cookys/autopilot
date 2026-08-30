@@ -7,7 +7,7 @@
 - Branch `develop` @ `09485468`,乾淨,與 origin 同步。版本 v2.35.2(D8 才 bump 2.35.3)。
 - **Phase 1 = D0+D1+D2+D3 已 merge**:`1d91a6f4`(grok-4.5 實作)+ `365ee37c`、`6a3620a1`(qc 驅動的兩個修復)。sealed grader 位元組不變(consult `7852cf33…` / discuss `39b5ba15…`)。
 - **D1 store 操作已執行**:兩份 `.bak-verdict-redesign-2026-08-30` 備份 sha256 已驗;events 157–165 各一個 `record_kind:"supersession"` 標記已 append(9/9);原始行位元組不變。reader 尊重標記是 D5。
-- **depth-0 qc panel 三席裁決**與所有 finding 處置寫在 plan 檔尾「Phase 1 execution record」。
+- **depth-0 qc panel 三席裁決**與所有 finding 處置寫在 `docs/plans/evidence/2026-08-29-verdict-stability/EXECUTION-LOG.md`。
 - **Mission lineage**:`420ac261…`(單節點、campaigns=8、gate budget 12)已 prepare,campaign 1 已用(未能 terminal),2–8 未用。舊 lineage `83828e5e…`(有一個永遠 live 的 claim)與 `2e784929…` 是 inert 殘留。
 - 殘留分支(可刪,已無用途,留作 salvage 歷史):`mission/420ac26112ac/…-a1`(=1d91a6f4)、`mission/83828e5e60c1/…-a2`(102fd0ed)、`…-a3`(367d41c7)。
 - session marker 目前是 **l5**(不是 l6,見陷阱)。
@@ -40,7 +40,7 @@ node scripts/session-mode.js status | head -8            # level l5
 
 ## Read-order
 
-1. plan 檔尾「Phase 1 execution record」段。
+1. `docs/plans/evidence/2026-08-29-verdict-stability/EXECUTION-LOG.md`(Phase 1 執行紀錄;不要寫進 plan 檔——sources manifest 綁 plan 內容,改一字就 digest 漂移)。
 2. `docs/BACKLOG.md` 2026-08-30 的六列(rail 缺陷)。
 3. memory `l6-managed-campaign-gotchas.md`。
 

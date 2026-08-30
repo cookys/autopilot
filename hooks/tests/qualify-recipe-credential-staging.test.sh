@@ -103,9 +103,6 @@ else
   bad "plan mode: did not refuse on drift (rc=$PLAN_RC, output: $PLAN_OUT)"
 fi
 # plan mode must never have written despite the drift
-if [ "$(cat "$STAGED.source.sha256")" = "$(sha256sum "$WORK/real-source.json" 2>/dev/null | cut -d' ' -f1)" ] 2>/dev/null; then
-  : # fallthrough handled below by direct compare
-fi
 STAMP_AFTER_PLAN="$(cat "$STAGED.source.sha256")"
 if [ "$STAMP_AFTER_PLAN" != "$(sha256sum "$REAL" | cut -d' ' -f1)" ]; then
   ok "plan mode: did not silently reseed the drifted credential"

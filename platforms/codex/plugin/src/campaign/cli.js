@@ -895,9 +895,9 @@ function runCampaignCli(argv, options = {}) {
     })}\n`);
     return EXIT_SUCCESS;
   }
-  const now = typeof options.now === 'function'
-    ? options.now()
-    : new Date().toISOString();
+  // qc 2026-08-31 (GLM-5.2 🟡 verified): `--now` was parsed but never read.
+  const now = parsed.now
+    || (typeof options.now === 'function' ? options.now() : new Date().toISOString());
   if (parsed.command === 'status') {
     process.stdout.write(`${JSON.stringify({
       status: 'found',
@@ -935,8 +935,8 @@ function runCampaignCli(argv, options = {}) {
       process.stdout.write(`${JSON.stringify(rejection)}\n`);
       return 1;
     }
-    const built = buildTerminalizeMutationFailedEvent(projection, now, 'campaign dead leaf terminalization');
     try {
+      const built = buildTerminalizeMutationFailedEvent(projection, now, 'campaign dead leaf terminalization');
       const journal = persistTerminalizeMutationFailedEvent(parsed.ledger, projection, built, now);
       const summary = writeCampaignTerminalizeSummary(parsed.ledger, projection, built);
       process.stdout.write(`${JSON.stringify({

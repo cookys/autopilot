@@ -417,6 +417,9 @@ assert.strictEqual(firstBody.status, 'terminalized');
 assert.strictEqual(firstBody.lease_released, true);
 assert.strictEqual(firstBody.summary_written, true);
 assert.ok(fs.existsSync(firstBody.summary_path));
+// qc 2026-08-31 (GLM-5.2 🟡 verified): --now must pin the terminalize timestamp.
+assert.ok(fs.readFileSync(firstBody.summary_path, 'utf8').includes('2026-08-31T00:05:00.000Z'),
+  'summary must carry the --now timestamp');
 
 // Second call on the same (now terminal) campaign: refused, never a silent
 // no-op.

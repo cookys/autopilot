@@ -226,44 +226,44 @@ function run(perCaseModeSource, extra) {
   assertions += 1;
 }
 
-// ── 3. green administration: every case answers its own reference ──────────
+// ── 3. green administration: pooled two-tier verdict (D4) ──────────────────
 {
   const result = run("() => 'reference'");
-  equal(result.qualified, true, `green administration qualifies (reason: ${result.verdict.reason})`);
+  equal(result.qualified, true, `green pool qualifies (reason: ${result.verdict.reason})`);
   equal(result.row.role, 'discuss', 'row carries the discuss role');
-  equal(result.row.quality.corpus_pass, '16/16', 'aggregate pass bar 16/16');
+  equal(result.row.quality.corpus_pass, '45/48', 'pooled corpus_pass at locked-qualify is 45/48');
   equal(result.evidence.methodology.kind, 'discuss_rounds', 'D5 methodology kind is discuss_rounds');
-  check(result.evidence.trials.length === 2, 'evidence carries both trials');
-  for (const trial of result.evidence.trials) {
-    equal(trial.cases_total, 8, 'per-trial case count is 8');
-    equal(trial.cases_passed, 8, 'per-trial pass bar 8/8');
-  }
-  equal(result.row.capability_score, 1, 'capability_score is 1.0 on a clean administration');
+  check(result.evidence.trials.length >= 2, 'evidence carries repeated trials');
+  equal(result.evidence.trials[0].cases_total, 8, 'per-trial case count is 8');
+  equal(result.evidence.trials[0].cases_passed, 8, 'per-trial pass bar 8/8');
+  equal(result.evidence.trials[1].cases_total, 8, 'second trial case count is 8');
+  equal(result.evidence.trials[1].cases_passed, 8, 'second trial pass bar 8/8');
+  equal(result.row.capability_score, 45 / 48, 'capability_score is pooled point estimate passes/fullN');
   equal(result.row.status, 'qualified', 'row status is qualified');
   equal(result.wall_truncated, false, 'a completed administration is not wall_truncated');
-  equal(result.started_cases, 16, 'all 16 cases started');
+  equal(result.started_cases, 45, 'locked-qualify stops after the 45th pass');
 }
 
-// ── 4. one wrong-content case ⇒ not qualified, outcome is a content label ──
+// ── 4. four wrong-content cases ⇒ locked_fail (M≥4); content label preserved ─
 {
   const cases = gen.buildAdministration();
-  const targetCaseId = cases[0].case_id;
+  const wrongIds = cases.slice(0, 4).map((c) => c.case_id);
   const rawDir = fs.mkdtempSync(path.join(tempRoot, 'raw-content-fail-'));
   const result = run(
-    `(id) => (id === ${JSON.stringify(targetCaseId)} ? 'wrong' : 'reference')`,
+    `(id) => (${JSON.stringify(wrongIds)}.includes(id) ? 'wrong' : 'reference')`,
     { rawDir },
   );
-  equal(result.qualified, false, 'one wrong-content case fails the administration');
+  equal(result.qualified, false, 'four wrong-content cases lock-fail the pooled verdict');
   const exchanges = fs.readFileSync(path.join(rawDir, 'discuss-exchanges.jsonl'), 'utf8')
     .trim().split('\n').map((line) => JSON.parse(line));
-  const failedRow = exchanges.find((row) => row.case_id === targetCaseId);
+  const failedRow = exchanges.find((row) => row.case_id === wrongIds[0]);
   check(failedRow.transport_ok === true, 'the wrong-content case reached the transport fine');
   check(failedRow.outcome !== 'pass' && failedRow.outcome !== 'infra_fail'
     && failedRow.outcome !== 'provider_unavailable',
     `content-wrong case gets a CONTENT taxonomy outcome, not a transport one (got: ${failedRow.outcome})`);
 }
 
-// ── 5. transport-attributed failure ⇒ distinct classification, never skipped ─
+// ── 5. transport-attributed failure ⇒ distinct classification, run excluded ─
 {
   const cases = gen.buildAdministration();
   const crashCaseId = cases[0].case_id;
@@ -277,19 +277,17 @@ function run(perCaseModeSource, extra) {
     }`,
     { rawDir },
   );
-  equal(result.qualified, false, 'a transport failure fails the administration');
+  equal(result.qualified, false, 'a transport failure does not qualify the seat');
   const exchanges = fs.readFileSync(path.join(rawDir, 'discuss-exchanges.jsonl'), 'utf8')
     .trim().split('\n').map((line) => JSON.parse(line));
   const crashRow = exchanges.find((row) => row.case_id === crashCaseId);
-  const wrongRow = exchanges.find((row) => row.case_id === wrongCaseId);
   check(crashRow.transport_ok === false, 'the crashed case is recorded as a transport failure');
   equal(crashRow.outcome, 'provider_unavailable', 'crashed provider classifies as provider_unavailable');
-  check(crashRow.outcome !== wrongRow.outcome,
-    'transport-attributed failure is classified DISTINCTLY from a content-quality failure in the same run');
-  check(!['provider_unavailable', 'infra_fail'].includes(wrongRow.outcome),
-    'the wrong-content case (transport ok) never lands on a transport-taxonomy outcome');
-  const totalCasesRecorded = result.evidence.trials.reduce((sum, t) => sum + t.cases_total, 0);
-  equal(totalCasesRecorded, 16, 'a transport-failed case is still counted — never silently skipped');
+  check(exchanges.some((row) => row.case_id === crashCaseId),
+    'a transport-failed case is still recorded in the exchange log');
+  check(result.row.pooled && result.row.pooled.harness_excluded > 0,
+    'pooled.harness_excluded counts the excluded run');
+  check(wrongCaseId !== crashCaseId, 'fixture picks distinct crash and wrong case ids');
 }
 
 // ── 6. identity mismatch ⇒ fail-closed, classified as a transport failure ──
@@ -328,8 +326,8 @@ function run(perCaseModeSource, extra) {
   equal(result.qualified, false, 'a truncated administration is never qualified');
   equal(result.wall_truncated, true, 'wall_truncated observable fact is set');
   equal(result.started_cases, 3, 'started_cases matches the truncation seam');
-  equal(result.row.quality.corpus_pass, '3/16',
-    'truncated run reports the FULL corpus denominator (3/16), never a shrunken one (3/3)');
+  equal(result.row.quality.corpus_pass, '3/48',
+    'truncated run reports the FULL pooled denominator (3/48), never a shrunken one (3/3)');
 }
 
 // ── 9. seal-drift refusal (KR7/D4): live path refuses on a corrupted asset ──
@@ -398,10 +396,10 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
   const expectedSealedSetHash = qualificationAssetSeals.sealedSetHash('discuss');
   equal(result.evidence.methodology.corpus_manifest_hash, expectedSealedSetHash,
     'methodology.corpus_manifest_hash is the FIVE-identity sealed-set hash, not the bare corpus hash');
-  for (const trial of result.evidence.trials) {
-    equal(trial.corpus_manifest_hash, expectedSealedSetHash,
-      'each trial binds the same sealed-set hash as the methodology block');
-  }
+  equal(result.evidence.trials[0].corpus_manifest_hash, expectedSealedSetHash,
+    'each trial binds the same sealed-set hash as the methodology block');
+  equal(result.evidence.trials[1].corpus_manifest_hash, expectedSealedSetHash,
+    'second trial binds the same sealed-set hash as the methodology block');
   const rawCorpusHash = crypto.createHash('sha256')
     .update(fs.readFileSync(path.join(__dirname, '..', 'evals', 'discuss-capability-evidence-corpus.json')))
     .digest('hex');

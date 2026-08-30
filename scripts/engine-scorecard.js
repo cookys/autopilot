@@ -212,29 +212,77 @@ function parseJsonObject(raw, context) {
   return parsed;
 }
 
-function readStoreRows(silentWarn = false, strict = false) {
+// Partition the scorecard store (plan 2026-08-29 D5 supersession projection):
+// - record_kind:"supersession" markers are ALWAYS validated (strict and
+//   non-strict) — a malformed marker is a hard error, never a silent skip;
+// - markers are EXCLUDED from ordinary-row derivation (never baseline
+//   candidates themselves);
+// - their supersedes_event_id targets are collected so every baseline path
+//   can filter them out before selection.
+function readStorePartition(silentWarn = false, strict = false) {
   const lines = readTextLines(SCORECARD_FILE);
-  const rows = [];
+  const allRows = [];
+  const ordinaryRows = [];
+  const supersededEventIds = new Set();
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
+    let row;
     try {
-      const row = JSON.parse(line);
+      row = JSON.parse(line);
       if (!row || typeof row !== 'object' || Array.isArray(row)) {
         if (strict) throw new Error('not an object');
         if (!silentWarn) warnMalformedLine(i + 1, 'not an object');
         continue;
       }
-      rows.push(row);
     } catch (err) {
       if (strict) {
         failValidation(`malformed evidence-required scorecard line ${i + 1}: ${err.message}`);
       }
       if (!silentWarn) warnMalformedLine(i + 1, err.message);
+      continue;
     }
+
+    if (row.record_kind === 'supersession') {
+      // Both readers validate; malformed marker = hard error (not a skip).
+      validateSupersessionMarker(row);
+      supersededEventIds.add(row.supersedes_event_id);
+      allRows.push(row);
+      continue;
+    }
+
+    allRows.push(row);
+    ordinaryRows.push(row);
   }
 
-  return rows;
+  return { allRows, ordinaryRows, supersededEventIds };
+}
+
+function readStoreRows(silentWarn = false, strict = false) {
+  return readStorePartition(silentWarn, strict).ordinaryRows;
+}
+
+function isSupersededEvent(eventId, supersededEventIds) {
+  const id = toEventId(eventId);
+  return id !== null && supersededEventIds.has(id);
+}
+
+// Additive pooled-verdict fields (plan 2026-08-29 D5) — carried through
+// current / seat-status projections without dropping them.
+const POOLED_PROJECTION_FIELDS = [
+  'administrations',
+  'pooled',
+  'competence',
+  'tier1_terminated',
+  'stop_reason',
+];
+
+function projectPooledFields(row) {
+  const out = {};
+  for (const field of POOLED_PROJECTION_FIELDS) {
+    if (row[field] !== undefined) out[field] = row[field];
+  }
+  return out;
 }
 
 function toDateMs(value) {
@@ -1326,13 +1374,17 @@ function cmdImportTranscripts(args) {
 }
 
 function currentRowsForRole(role, nowMs, options = {}) {
-  const rows = readStoreRows(false, options.requireEvidence === true);
+  const partition = readStorePartition(false, options.requireEvidence === true);
+  const rows = partition.ordinaryRows;
+  const supersededEventIds = partition.supersededEventIds;
   const capabilityRows = options.requireEvidence ? readCapabilityEvidenceRows() : null;
   const evidenceReceipts = new WeakMap();
   const latest = new Map();
 
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
+    // Superseded events are filtered before every baseline-selection path.
+    if (isSupersededEvent(row.event_id, supersededEventIds)) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     row.role = storedRole;
@@ -1479,6 +1531,8 @@ function currentRowsForRole(role, nowMs, options = {}) {
       // optional invocation-tuple fields (v2.32.25) — carried so ladder can project them
       ...(row.effort !== undefined ? { effort: row.effort } : {}),
       ...(row.model !== undefined ? { model: row.model } : {}),
+      // Additive pooled-verdict fields (plan 2026-08-29 D5).
+      ...projectPooledFields(row),
       ...(outputEvidenceReceipt ? {
         evidence_receipt: outputEvidenceReceipt,
         evidence_observed_state: evidenceReceipt.state,
@@ -1620,10 +1674,11 @@ function baselineInstantMs(row, evidence) {
 // identity collapse) because a seat's true qualification history spans every
 // configured-identity variant (corpus/harness/runner_version churn) that ever
 // passed under this engine+runner+role.
-function findSeatBaseline(engine, runner, role, nowMs, allRows) {
+function findSeatBaseline(engine, runner, role, nowMs, allRows, supersededEventIds = new Set()) {
   let best = null;
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
+    if (isSupersededEvent(row.event_id, supersededEventIds)) continue;
     if (row.engine !== engine || row.runner !== runner) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
@@ -1801,8 +1856,10 @@ function strikeEnforcementMode() {
 // read time from the append-only stores — never mutates a stored row.
 function computeSeatProjection(engine, runner, role, nowMs) {
   const seatHashValue = seatIdentityHash(engine, runner, role);
-  const allRows = readStoreRows(true);
-  const baseline = findSeatBaseline(engine, runner, role, nowMs, allRows);
+  const partition = readStorePartition(true);
+  const baseline = findSeatBaseline(
+    engine, runner, role, nowMs, partition.ordinaryRows, partition.supersededEventIds,
+  );
 
   const projection = {
     admission_status: baseline ? 'qualified' : 'no_record',
@@ -1920,8 +1977,9 @@ function cmdRecordSupersession({ file, supersedesEventId, reason }) {
   // Never call failValidation (process.exit) inside the lock — release first.
   let lockError = null;
   const writtenRow = withWriteLock({ storeDir: SCORECARD_DIR, lockFile: LOCK_FILE, name: 'scorecard' }, () => {
-    const rows = readStoreRows(true);
-    const target = rows.find((row) => toEventId(row.event_id) === targetId);
+    // allRows includes markers so maxEventId stays monotonic after supersessions.
+    const { allRows } = readStorePartition(true);
+    const target = allRows.find((row) => toEventId(row.event_id) === targetId);
     if (!target) {
       lockError = `supersedes_event_id ${targetId} does not exist in the store`;
       return null;
@@ -1983,7 +2041,7 @@ function cmdRecordSupersession({ file, supersedesEventId, reason }) {
       return null;
     }
 
-    const assigned = maxEventId(rows) + 1;
+    const assigned = maxEventId(allRows) + 1;
     const row = { ...marker, event_id: assigned };
     appendRow(SCORECARD_FILE, row);
     return row;
@@ -2012,8 +2070,8 @@ function cmdRecord(args) {
   delete stored.event_id;
 
   const writtenRow = withWriteLock({ storeDir: SCORECARD_DIR, lockFile: LOCK_FILE, name: 'scorecard' }, () => {
-    const rows = readStoreRows(true);
-    const assigned = maxEventId(rows) + 1;
+    const { allRows } = readStorePartition(true);
+    const assigned = maxEventId(allRows) + 1;
     const row = { ...stored, event_id: assigned };
     appendRow(SCORECARD_FILE, row);
     return row;
@@ -2137,7 +2195,11 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
 
   const seatHashValue = seatIdentityHash(engine, runner, role);
   // Strict parse: throws hard on ANY malformed line, not just this seat's own.
-  const allRows = readStoreRows(false, true);
+  // Supersession markers are validated inside readStorePartition and excluded
+  // from ordinaryRows; their targets are filtered before baseline selection.
+  const partition = readStorePartition(false, true);
+  const allRows = partition.ordinaryRows;
+  const supersededEventIds = partition.supersededEventIds;
   // readCapabilityEvidenceRows() is unconditionally fail-closed on malformed
   // lines / bad wrapper shape / producer mismatch already (no strict flag to
   // pass) — it is the strict path for that store by construction.
@@ -2146,6 +2208,7 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
   let best = null;
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
+    if (isSupersededEvent(row.event_id, supersededEventIds)) continue;
     if (row.engine !== engine || row.runner !== runner) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;

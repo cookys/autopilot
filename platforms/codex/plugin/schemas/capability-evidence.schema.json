@@ -80,6 +80,13 @@
     "supersedes": {
       "type": ["string", "null"],
       "pattern": "^[a-f0-9]{64}$"
+    },
+    "administrations": { "$ref": "#/$defs/pooled_administrations" },
+    "pooled": { "$ref": "#/$defs/pooled_totals" },
+    "competence": { "$ref": "#/$defs/pooled_competence" },
+    "tier1_terminated": { "type": "boolean" },
+    "stop_reason": {
+      "enum": ["tier1", "locked_fail", "locked_qualify", "complete", "continue"]
     }
   },
   "oneOf": [
@@ -97,6 +104,35 @@
               ]
             }
           }
+        },
+        "administrations": { "type": "array", "maxItems": 0 },
+        "pooled": { "type": "null" },
+        "competence": { "type": "null" },
+        "tier1_terminated": { "type": "null" },
+        "stop_reason": { "type": "null" }
+      }
+    },
+    {
+      "required": [
+        "administrations",
+        "pooled",
+        "competence",
+        "tier1_terminated",
+        "stop_reason"
+      ],
+      "properties": {
+        "source": { "const": "internal_eval" },
+        "methodology": {
+          "properties": {
+            "kind": { "enum": ["consult_panel", "discuss_rounds"] }
+          }
+        },
+        "administrations": { "$ref": "#/$defs/pooled_administrations", "minItems": 1 },
+        "pooled": { "$ref": "#/$defs/pooled_totals" },
+        "competence": { "$ref": "#/$defs/pooled_competence" },
+        "tier1_terminated": { "type": "boolean" },
+        "stop_reason": {
+          "enum": ["tier1", "locked_fail", "locked_qualify", "complete", "continue"]
         }
       }
     },
@@ -613,6 +649,73 @@
         "fabricated_anchors": { "type": "integer", "minimum": 0 },
         "protocol_violations": { "type": "integer", "minimum": 0 },
         "transcript_stream_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "pooled_administrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run", "per_trial", "per_case_outcomes"],
+        "properties": {
+          "run": { "type": "integer", "minimum": 1 },
+          "per_trial": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["trial", "cases_total", "cases_passed"],
+              "properties": {
+                "trial": { "type": "integer", "minimum": 1 },
+                "cases_total": { "type": "integer", "minimum": 0 },
+                "cases_passed": { "type": "integer", "minimum": 0 }
+              }
+            }
+          },
+          "per_case_outcomes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["case_id", "outcome", "tier"],
+              "properties": {
+                "case_id": { "$ref": "#/$defs/token" },
+                "outcome": { "$ref": "#/$defs/token" },
+                "tier": { "$ref": "#/$defs/token" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "pooled_totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passes",
+        "eligible_full_N",
+        "tier2_misses_by_class",
+        "harness_excluded"
+      ],
+      "properties": {
+        "passes": { "type": "integer", "minimum": 0 },
+        "eligible_full_N": { "type": "integer", "minimum": 1 },
+        "tier2_misses_by_class": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "harness_excluded": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "pooled_competence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wilson_lower", "z", "tau", "n"],
+      "properties": {
+        "wilson_lower": { "type": "number" },
+        "z": { "type": "number", "minimum": 0 },
+        "tau": { "type": "number", "minimum": 0 },
+        "n": { "type": "integer", "minimum": 1 }
       }
     }
   }

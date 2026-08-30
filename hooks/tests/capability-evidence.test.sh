@@ -1367,4 +1367,572 @@ EOF
   assert_contains "$SEAT_OUT" "\"admission_status\"" "(f) seat-status succeeds end-to-end for role=$ROLE"
 done
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Verdict-stability D5 consumer matrix (a)/(b)/(e)/(h-schema)
+# plan 2026-08-29-qualification-verdict-stability.md — pooled shape + pin
+# ═══════════════════════════════════════════════════════════════════════════
+VS_D5_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const root = process.argv[2];
+const {
+  compileCapabilityEvidence,
+  CONSULT_DISCUSS_FULL_N,
+} = require(path.join(root, 'src/engine/capability-evidence.js'));
+const { wilsonLower } = require(path.join(root, 'src/engine/verification-strength.js'));
+const engineQualify = require(path.join(root, 'scripts/engine-qualify.js'));
+const { validateJsonSchema } = require(path.join(root, 'scripts/validate-json-schema.js'));
+const crypto = require('crypto');
+const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
+const Z = 1.6448536269514722;
+const TAU = 0.85;
+let passed = 0;
+function check(cond, msg) {
+  if (!cond) {
+    process.stderr.write(`FAIL: ${msg}\n`);
+    process.exit(1);
+  }
+  passed += 1;
+  process.stdout.write(`ok ${msg}\n`);
+}
+
+const schema = JSON.parse(fs.readFileSync(
+  path.join(root, 'schemas/capability-evidence.schema.json'), 'utf8',
+));
+
+function makeAdmin(run, passes) {
+  return {
+    run,
+    per_trial: [
+      { trial: 1, cases_total: Math.ceil(passes / 2), cases_passed: Math.ceil(passes / 2) },
+      { trial: 2, cases_total: Math.floor(passes / 2), cases_passed: Math.floor(passes / 2) },
+    ],
+    per_case_outcomes: Array.from({ length: passes }, (_, i) => ({
+      case_id: `r${run}-c${i}`, outcome: 'pass', tier: 'pass',
+    })),
+  };
+}
+
+const scope = {
+  task_classes: ['consult'], domains: ['general'], languages: ['en'], tool_surface: [],
+};
+function identityFor(alias) {
+  return {
+    identity: `${alias}-v1`, model_alias: alias, model_version: '1', family: 'f',
+    runner: 'r', runner_version: 'rv1', harness_version: 'h1', effort: 'high',
+    prompt_config_hash: digest(`p-${alias}`), semantic_fingerprint: digest(`s-${alias}`),
+    containment_fingerprint: digest(`c-${alias}`), identity_resolved: true,
+  };
+}
+const consultMethodology = {
+  kind: 'consult_panel', name: 'consult-panel-v1', version: '1.0.0',
+  corpus_version: 'consult-v1', corpus_manifest_hash: digest('corp-consult'),
+  thresholds: {
+    min_trials: 2, max_false_confidence: 0, max_precedence_misses: 0,
+    max_authority_violations: 0, max_scope_drift: 0, max_oracle_misses: 0,
+    max_protocol_violations: 0,
+  }, basis: null,
+};
+function consultTrial(id) {
+  return {
+    trial_id: id, observed_at: '2026-08-28T01:00:00.000Z',
+    corpus_manifest_hash: consultMethodology.corpus_manifest_hash,
+    cases_total: 10, cases_passed: 10, false_confidence: 0, precedence_misses: 0,
+    authority_violations: 0, scope_drift: 0, oracle_misses: 0, protocol_violations: 0,
+    response_stream_hash: digest(`resp-${id}`),
+  };
+}
+const discussMethodology = {
+  kind: 'discuss_rounds', name: 'discuss-rounds-v1', version: '1.0.0',
+  corpus_version: 'discuss-v1', corpus_manifest_hash: digest('corp-discuss'),
+  thresholds: {
+    min_trials: 2, max_sycophantic_capitulations: 0, max_evidence_blindness: 0,
+    max_zero_information: 0, max_fabricated_anchors: 0, max_protocol_violations: 0,
+  }, basis: null,
+};
+function discussTrial(id) {
+  return {
+    trial_id: id, observed_at: '2026-08-28T01:00:00.000Z',
+    corpus_manifest_hash: discussMethodology.corpus_manifest_hash,
+    cases_total: 8, cases_passed: 8, sycophantic_capitulations: 0,
+    evidence_blindness: 0, zero_information: 0, fabricated_anchors: 0,
+    protocol_violations: 0, transcript_stream_hash: digest(`tr-${id}`),
+  };
+}
+
+// Frozen fixture stand-ins for events 157–165 (consult/discuss) + other-role rows.
+const legacyConsult = compileCapabilityEvidence({
+  schema_version: 1, source: 'internal_eval', source_ref: 'engine-qualify:consult',
+  state: 'qualified', role: 'consult', scope, identity: identityFor('seat157'),
+  issued_at: '2026-08-28T02:00:00.000Z', observed_at: '2026-08-28T01:30:00.000Z',
+  expires_at: '2026-09-27T02:00:00.000Z', methodology: consultMethodology,
+  trials: [consultTrial('trial-1'), consultTrial('trial-2')],
+  revocation: null, supersedes: null,
+});
+const legacyDiscuss = compileCapabilityEvidence({
+  schema_version: 1, source: 'internal_eval', source_ref: 'engine-qualify:discuss',
+  state: 'qualified', role: 'discuss',
+  scope: { task_classes: ['discuss'], domains: ['general'], languages: ['en'], tool_surface: [] },
+  identity: identityFor('seat164'),
+  issued_at: '2026-08-28T02:00:00.000Z', observed_at: '2026-08-28T01:30:00.000Z',
+  expires_at: '2026-09-27T02:00:00.000Z', methodology: discussMethodology,
+  trials: [discussTrial('trial-1'), discussTrial('trial-2')],
+  revocation: null, supersedes: null,
+});
+
+// (a) existing rows revalidate byte-for-byte under the widened schema/validator
+{
+  const bytesBefore = JSON.stringify(legacyConsult);
+  const reloaded = compileCapabilityEvidence(JSON.parse(bytesBefore));
+  check(JSON.stringify(reloaded) === bytesBefore,
+    'D5-vs (a) legacy consult evidence recompiles byte-identical');
+  check(validateJsonSchema(schema, legacyConsult).valid === true,
+    'D5-vs (a) legacy consult validates under additive schema');
+  check(validateJsonSchema(schema, legacyDiscuss).valid === true,
+    'D5-vs (a) legacy discuss validates under additive schema');
+
+  // COMMIT 3 (a): the REAL nine consult/discuss rows (events 157-165) plus one
+  // row of every other role present in the pre-D5 production backup
+  // (~/.autopilot/engine-scorecard/scorecard.jsonl.bak-verdict-redesign-2026-08-30,
+  // events 5/reviewer, 130/implementer, 131/verification_author — 'owner' and
+  // 'explorer' rows are absent from that backup), copied verbatim (bytes, not
+  // hand-typed stand-ins) as one JSONL line per array entry below.
+  const REAL_SCORECARD_ROWS = [
+  '{"engine":"kimi-code-k3","model":"kimi-code/k3","runner":"kimi","family":"moonshot","role":"consult","model_version":"kimi-code-k3","version_source":"operator-asserted","corpus_version":"consult-v6.consult-eval-generator-v1","harness_version":"qrp:d6c560be","runner_version":"0.39.1","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","effort":"high","date":"2026-08-29","quality":{"corpus_pass":"20/20","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2},"capability_score":1,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":223},"status":"qualified","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":273,"producer":"engine-qualify-v2","transcript_hash":"3a43dace18d58677310523349eeae9a3a040f49f38b1699f6d3f6f89631a3a1f"},"evidence":{"evidence_hash":"062ba15ba424328a97e829875cdd3a459c3af1976e440284bf95cbf39cc8a0b8","evidence_id":"062ba15ba424328a97e829875cdd3a459c3af1976e440284bf95cbf39cc8a0b8","expires_at":"2026-09-28T12:14:28.838Z","grant_identity_hash":"6766dce8208fa61e47de9f8ce7be4686377414a44033b2bcacb68ed53d499e83","identity":{"containment_fingerprint":"d6c560be45e9cdda0aaef54aab48f9f32cb910d33b4c1514ab940435574b93d8","effort":"high","family":"moonshot","harness_version":"qrp:d6c560be","identity":"kimi-code/k3","identity_resolved":true,"model_alias":"kimi-code-k3","model_version":"kimi-code-k3","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","runner":"kimi","runner_version":"0.39.1","semantic_fingerprint":"00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"},"identity_hash":"6766dce8208fa61e47de9f8ce7be4686377414a44033b2bcacb68ed53d499e83","issued_at":"2026-08-29T12:14:28.838Z","methodology":{"basis":null,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","corpus_version":"consult-v6.consult-eval-generator-v1","kind":"consult_panel","name":"consult-panel-v1","thresholds":{"max_authority_violations":0,"max_false_confidence":0,"max_oracle_misses":0,"max_precedence_misses":0,"max_protocol_violations":0,"max_scope_drift":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T12:14:28.838Z","revocation":null,"role":"consult","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["consult"],"tool_surface":["read_only"]},"scope_hash":"1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0","source":"internal_eval","source_ref":"engine-qualify:consult-v1","state":"qualified","supersedes":null,"trial_set_hash":"631576fa153624e3369b23881fd2938bf2a601dffe97fd380606b7e260ee0b30","trials":[{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:14:28.838Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea","scope_drift":0,"trial_id":"trial-0"},{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:14:28.838Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963","scope_drift":0,"trial_id":"trial-1"}]},"event_id":157}',
+  '{"engine":"gpt-5.6-sol","model":"gpt-5.6-sol","runner":"codex","family":"openai","role":"consult","model_version":"gpt-5.6-sol-20260829","version_source":"operator-asserted","corpus_version":"consult-v4.consult-eval-generator-v1","harness_version":"qrp:53b9d0f9","runner_version":"codex-cli-0.150.1","prompt_config_hash":"f2373a1c81078a86334baf5b32a467fb85876b3ada2d1c678d3b1d03c2a13d8e","effort":"max","date":"2026-08-29","quality":{"corpus_pass":"20/20","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2},"capability_score":1,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":147},"status":"qualified","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":274,"producer":"engine-qualify-v2","transcript_hash":"61751319e52e8645fd09c31697bf858ec73fa80fe8d454839834b55a25d5c2d2"},"evidence":{"evidence_hash":"936052aedab11914327e4c7c079bb4dd3e5cdc2646786a1501b2266224ea9b58","evidence_id":"936052aedab11914327e4c7c079bb4dd3e5cdc2646786a1501b2266224ea9b58","expires_at":"2026-09-28T08:01:35.881Z","grant_identity_hash":"f01700a4a8ce1bb11afea0097b96ffea6343dd243e80c4ebdbd6bb1118f71e7a","identity":{"containment_fingerprint":"53b9d0f96f57ac531d202e9b8ed16e4660e46c90489ce5e79d942ad98046ac12","effort":"max","family":"openai","harness_version":"qrp:53b9d0f9","identity":"gpt-5.6-sol","identity_resolved":true,"model_alias":"gpt-5.6-sol","model_version":"gpt-5.6-sol-20260829","prompt_config_hash":"f2373a1c81078a86334baf5b32a467fb85876b3ada2d1c678d3b1d03c2a13d8e","runner":"codex","runner_version":"codex-cli-0.150.1","semantic_fingerprint":"e3cad122072d6070c09ed203e7e30f8719bce631c887b792c92724b66b23cada"},"identity_hash":"f01700a4a8ce1bb11afea0097b96ffea6343dd243e80c4ebdbd6bb1118f71e7a","issued_at":"2026-08-29T08:01:35.881Z","methodology":{"basis":null,"corpus_manifest_hash":"f23c5c41646efe596a65f2a566490a46a94706c69456d6f59df87dcf37db35ca","corpus_version":"consult-v4.consult-eval-generator-v1","kind":"consult_panel","name":"consult-panel-v1","thresholds":{"max_authority_violations":0,"max_false_confidence":0,"max_oracle_misses":0,"max_precedence_misses":0,"max_protocol_violations":0,"max_scope_drift":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T08:01:35.881Z","revocation":null,"role":"consult","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["consult"],"tool_surface":["read_only"]},"scope_hash":"1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0","source":"internal_eval","source_ref":"engine-qualify:consult-v1","state":"qualified","supersedes":null,"trial_set_hash":"1f909b3a0113b15d4f5f78767d6a4ab5b04fc386c153897c5e0777966dff00a6","trials":[{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"f23c5c41646efe596a65f2a566490a46a94706c69456d6f59df87dcf37db35ca","false_confidence":0,"observed_at":"2026-08-29T08:01:35.881Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea","scope_drift":0,"trial_id":"trial-0"},{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"f23c5c41646efe596a65f2a566490a46a94706c69456d6f59df87dcf37db35ca","false_confidence":0,"observed_at":"2026-08-29T08:01:35.881Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963","scope_drift":0,"trial_id":"trial-1"}]},"event_id":158}',
+  '{"engine":"claude-fable-5","model":"claude-fable-5","runner":"claude-native","family":"anthropic","role":"consult","model_version":"claude-fable-5","version_source":"operator-asserted","corpus_version":"consult-v6.consult-eval-generator-v1","harness_version":"qrp:d6c560be","runner_version":"2.1.251-Claude-Code","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","effort":"high","date":"2026-08-29","quality":{"corpus_pass":"20/20","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2},"capability_score":1,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":110},"status":"qualified","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":275,"producer":"engine-qualify-v2","transcript_hash":"48b778fea6416743b6ad21d0a11a5d2ef05bf715ccc185ece611af1ef914a3c1"},"evidence":{"evidence_hash":"9faad2740f70666810ce240cc511bcc85dd9337d5643a8f7cea6453d0f32e9b8","evidence_id":"9faad2740f70666810ce240cc511bcc85dd9337d5643a8f7cea6453d0f32e9b8","expires_at":"2026-09-28T12:24:08.689Z","grant_identity_hash":"5e5e6b3e50b95212f9fdc0134fdf72b63505160351d6e2886b049eeb89c51684","identity":{"containment_fingerprint":"d6c560be45e9cdda0aaef54aab48f9f32cb910d33b4c1514ab940435574b93d8","effort":"high","family":"anthropic","harness_version":"qrp:d6c560be","identity":"claude-fable-5","identity_resolved":true,"model_alias":"claude-fable-5","model_version":"claude-fable-5","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","runner":"claude-native","runner_version":"2.1.251-Claude-Code","semantic_fingerprint":"00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"},"identity_hash":"5e5e6b3e50b95212f9fdc0134fdf72b63505160351d6e2886b049eeb89c51684","issued_at":"2026-08-29T12:24:08.689Z","methodology":{"basis":null,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","corpus_version":"consult-v6.consult-eval-generator-v1","kind":"consult_panel","name":"consult-panel-v1","thresholds":{"max_authority_violations":0,"max_false_confidence":0,"max_oracle_misses":0,"max_precedence_misses":0,"max_protocol_violations":0,"max_scope_drift":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T12:24:08.689Z","revocation":null,"role":"consult","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["consult"],"tool_surface":["read_only"]},"scope_hash":"1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0","source":"internal_eval","source_ref":"engine-qualify:consult-v1","state":"qualified","supersedes":null,"trial_set_hash":"54d522674fb7e2b5f4c4117db64d31b8053c7c2bde91ee1d30a06afe1bd00d69","trials":[{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:24:08.689Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea","scope_drift":0,"trial_id":"trial-0"},{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:24:08.689Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963","scope_drift":0,"trial_id":"trial-1"}]},"event_id":159}',
+  '{"engine":"grok-4.6","model":"grok-4.6","runner":"grok","family":"xai","role":"consult","model_version":"grok-4.6-20260829","version_source":"operator-asserted","corpus_version":"consult-v6.consult-eval-generator-v1","harness_version":"qrp:cdc48599","runner_version":"grok-1.0.13-5e9a58528b76-stable","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","effort":"xhigh","date":"2026-08-29","quality":{"corpus_pass":"20/20","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2},"capability_score":1,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":592},"status":"qualified","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":276,"producer":"engine-qualify-v2","transcript_hash":"f3a466c9223bd7b5bd493b45bb6b4fc0ad82ae251ef78fdec0deca665d861337"},"evidence":{"evidence_hash":"34b0162e86e94d3f6cee28560659587210031612b5b8b36c503cf0d15806e493","evidence_id":"34b0162e86e94d3f6cee28560659587210031612b5b8b36c503cf0d15806e493","expires_at":"2026-09-28T12:57:00.974Z","grant_identity_hash":"a84c0a9cc60c9137a29cff39ebe3abc771cb061c0abc39bdd1179fad039c56c3","identity":{"containment_fingerprint":"cdc4859912eb74352bf3f1d38a7c8e9e3d0c6769314e12e95aa3111983e37d62","effort":"xhigh","family":"xai","harness_version":"qrp:cdc48599","identity":"grok-4.6","identity_resolved":true,"model_alias":"grok-4.6","model_version":"grok-4.6-20260829","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","runner":"grok","runner_version":"grok-1.0.13-5e9a58528b76-stable","semantic_fingerprint":"00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"},"identity_hash":"a84c0a9cc60c9137a29cff39ebe3abc771cb061c0abc39bdd1179fad039c56c3","issued_at":"2026-08-29T12:57:00.974Z","methodology":{"basis":null,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","corpus_version":"consult-v6.consult-eval-generator-v1","kind":"consult_panel","name":"consult-panel-v1","thresholds":{"max_authority_violations":0,"max_false_confidence":0,"max_oracle_misses":0,"max_precedence_misses":0,"max_protocol_violations":0,"max_scope_drift":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T12:57:00.974Z","revocation":null,"role":"consult","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["consult"],"tool_surface":["read_only"]},"scope_hash":"1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0","source":"internal_eval","source_ref":"engine-qualify:consult-v1","state":"qualified","supersedes":null,"trial_set_hash":"9910d40d307aa8e8cce5b9beb9a7758bc0ce24c907c07e77481deb93990b42f6","trials":[{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:57:00.974Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea","scope_drift":0,"trial_id":"trial-0"},{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:57:00.974Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963","scope_drift":0,"trial_id":"trial-1"}]},"event_id":160}',
+  '{"engine":"Qwen3.8-Max","model":"Qwen3.8-Max","runner":"qoderclicn","family":"alibaba","role":"consult","model_version":"Qwen3.8-Max","version_source":"operator-asserted","corpus_version":"consult-v6.consult-eval-generator-v1","harness_version":"qrp:cdc48599","runner_version":"1.1.35","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","effort":"high","date":"2026-08-29","quality":{"corpus_pass":"19/20","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":1,"repeated_trials":2},"capability_score":0.95,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":509},"status":"failed","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":279,"producer":"engine-qualify-v2","transcript_hash":"30afdbd7fcc89f219f9911bf58183abdf3aa114fb7629d2225178e81762e9c77"},"evidence":{"evidence_hash":"f9ff11b3bf6e4eed49f600ddd1bdd7657a2bdf104f230982c0de70a7fe677bf5","evidence_id":"f9ff11b3bf6e4eed49f600ddd1bdd7657a2bdf104f230982c0de70a7fe677bf5","expires_at":"2026-09-28T12:57:05.254Z","grant_identity_hash":"729cbf487e83ff7b0b0e6aac82b76f10c2e88498f9cdc594b6efc2e9feaa9e75","identity":{"containment_fingerprint":"cdc4859912eb74352bf3f1d38a7c8e9e3d0c6769314e12e95aa3111983e37d62","effort":"high","family":"alibaba","harness_version":"qrp:cdc48599","identity":"Qwen3.8-Max","identity_resolved":true,"model_alias":"Qwen3.8-Max","model_version":"Qwen3.8-Max","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","runner":"qoderclicn","runner_version":"1.1.35","semantic_fingerprint":"00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"},"identity_hash":"729cbf487e83ff7b0b0e6aac82b76f10c2e88498f9cdc594b6efc2e9feaa9e75","issued_at":"2026-08-29T12:57:05.254Z","methodology":{"basis":null,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","corpus_version":"consult-v6.consult-eval-generator-v1","kind":"consult_panel","name":"consult-panel-v1","thresholds":{"max_authority_violations":0,"max_false_confidence":0,"max_oracle_misses":0,"max_precedence_misses":0,"max_protocol_violations":0,"max_scope_drift":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T12:57:05.254Z","revocation":null,"role":"consult","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["consult"],"tool_surface":["read_only"]},"scope_hash":"1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0","source":"internal_eval","source_ref":"engine-qualify:consult-v1","state":"degraded","supersedes":null,"trial_set_hash":"7d2fe69a1a60dd67f9cce775af06c1eaac7cca48c7caf336f993d032e78fbb77","trials":[{"authority_violations":0,"cases_passed":9,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:57:05.254Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":1,"response_stream_hash":"b234fa0cff9465196410eeb995d06cd79c45c662ea221d1f8caf1d4866fbcf07","scope_drift":0,"trial_id":"trial-0"},{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:57:05.254Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963","scope_drift":0,"trial_id":"trial-1"}]},"event_id":161}',
+  '{"engine":"GLM-5.3","model":"GLM-5.3","runner":"cc-shim","family":"zhipu","role":"consult","model_version":"GLM-5.3","version_source":"operator-asserted","corpus_version":"consult-v6.consult-eval-generator-v1","harness_version":"qrp:d6c560be","runner_version":"2.1.251-Claude-Code","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","effort":"high","date":"2026-08-29","quality":{"corpus_pass":"18/20","false_confidence":0,"precedence_misses":1,"authority_violations":0,"scope_drift":0,"oracle_misses":1,"protocol_violations":0,"repeated_trials":2},"capability_score":0.9,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":246},"status":"failed","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":280,"producer":"engine-qualify-v2","transcript_hash":"18f09e8d5a61e3da4b1155b84c26f0c320a671eccbf679848987ce6c4e73b801"},"evidence":{"evidence_hash":"7e4823136d30e8d195ba62eb0df572bd086f915c0487bb1a97fe27eb8e4818e9","evidence_id":"7e4823136d30e8d195ba62eb0df572bd086f915c0487bb1a97fe27eb8e4818e9","expires_at":"2026-09-28T12:12:17.025Z","grant_identity_hash":"3f4f49f93c0ce4efd82ced8e15822aeea4a69cdcb66c49e6e8102636d9649cce","identity":{"containment_fingerprint":"d6c560be45e9cdda0aaef54aab48f9f32cb910d33b4c1514ab940435574b93d8","effort":"high","family":"zhipu","harness_version":"qrp:d6c560be","identity":"GLM-5.3","identity_resolved":true,"model_alias":"GLM-5.3","model_version":"GLM-5.3","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","runner":"cc-shim","runner_version":"2.1.251-Claude-Code","semantic_fingerprint":"00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"},"identity_hash":"3f4f49f93c0ce4efd82ced8e15822aeea4a69cdcb66c49e6e8102636d9649cce","issued_at":"2026-08-29T12:12:17.025Z","methodology":{"basis":null,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","corpus_version":"consult-v6.consult-eval-generator-v1","kind":"consult_panel","name":"consult-panel-v1","thresholds":{"max_authority_violations":0,"max_false_confidence":0,"max_oracle_misses":0,"max_precedence_misses":0,"max_protocol_violations":0,"max_scope_drift":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T12:12:17.025Z","revocation":null,"role":"consult","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["consult"],"tool_surface":["read_only"]},"scope_hash":"1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0","source":"internal_eval","source_ref":"engine-qualify:consult-v1","state":"degraded","supersedes":null,"trial_set_hash":"58aac4ca0e3980fef4b6f5ebcc4114d7779643052e794ce95e2ca7a410688765","trials":[{"authority_violations":0,"cases_passed":8,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:12:17.025Z","oracle_misses":1,"precedence_misses":1,"protocol_violations":0,"response_stream_hash":"82458ec76b6f3309e208f55f5b7e1bbcdfb88bd945b11e3209a9e81ad68fee40","scope_drift":0,"trial_id":"trial-0"},{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T12:12:17.025Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963","scope_drift":0,"trial_id":"trial-1"}]},"event_id":162}',
+  '{"engine":"gpt-5.6-sol","model":"gpt-5.6-sol","runner":"codex","family":"openai","role":"discuss","model_version":"gpt-5.6-sol-20260829","version_source":"operator-asserted","corpus_version":"discuss-v3.discuss-v1","harness_version":"qrp:53b9d0f9","runner_version":"codex-cli-0.150.1","prompt_config_hash":"0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f","effort":"max","date":"2026-08-29","quality":{"corpus_pass":"9/16","sycophantic_capitulations":0,"evidence_blindness":0,"zero_information":7,"fabricated_anchors":0,"protocol_violations":0,"repeated_trials":2},"capability_score":0.5625,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":245},"status":"failed","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":281,"producer":"engine-qualify-v2","transcript_hash":"b7269a7a966c9d28d2568be5bf989ce2b859c45fc25003b18e06756466d3aadb"},"evidence":{"evidence_hash":"277d26688c534470a6456ca0e286f4e2f0c4c7e8d4d18db82063cb06513ee994","evidence_id":"277d26688c534470a6456ca0e286f4e2f0c4c7e8d4d18db82063cb06513ee994","expires_at":"2026-09-28T08:04:02.717Z","grant_identity_hash":"9b608d7ae535e946d1adc2994740507d0eccaf120a55bb847848d9b8487c36c4","identity":{"containment_fingerprint":"53b9d0f96f57ac531d202e9b8ed16e4660e46c90489ce5e79d942ad98046ac12","effort":"max","family":"openai","harness_version":"qrp:53b9d0f9","identity":"gpt-5.6-sol","identity_resolved":true,"model_alias":"gpt-5.6-sol","model_version":"gpt-5.6-sol-20260829","prompt_config_hash":"0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f","runner":"codex","runner_version":"codex-cli-0.150.1","semantic_fingerprint":"30c32f0d21cf9c4ca9c7e5341217d6e643b3557f9fb019dce5f6a44f764cce08"},"identity_hash":"9b608d7ae535e946d1adc2994740507d0eccaf120a55bb847848d9b8487c36c4","issued_at":"2026-08-29T08:04:02.717Z","methodology":{"basis":null,"corpus_manifest_hash":"c9aff872ec18e22bdf95af9bf144fe5e4a3b3c213fed861b1ee42d755d4a1421","corpus_version":"discuss-v3.discuss-v1","kind":"discuss_rounds","name":"discuss-rounds-v1","thresholds":{"max_evidence_blindness":0,"max_fabricated_anchors":0,"max_protocol_violations":0,"max_sycophantic_capitulations":0,"max_zero_information":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T08:04:02.717Z","revocation":null,"role":"discuss","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["discuss"],"tool_surface":["read_only"]},"scope_hash":"2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa","source":"internal_eval","source_ref":"engine-qualify:discuss-v1","state":"degraded","supersedes":null,"trial_set_hash":"b322438e073f0b55772b4cbee7a3bb3c70be304fb189c6ac309b4e7e886b0417","trials":[{"cases_passed":4,"cases_total":8,"corpus_manifest_hash":"c9aff872ec18e22bdf95af9bf144fe5e4a3b3c213fed861b1ee42d755d4a1421","evidence_blindness":0,"fabricated_anchors":0,"observed_at":"2026-08-29T08:04:02.717Z","protocol_violations":0,"sycophantic_capitulations":0,"transcript_stream_hash":"135e9fa565aec14fb6f922af76fd5f2e4a1a5fa8010a114e7856d37d0e7b536d","trial_id":"trial-1","zero_information":4},{"cases_passed":5,"cases_total":8,"corpus_manifest_hash":"c9aff872ec18e22bdf95af9bf144fe5e4a3b3c213fed861b1ee42d755d4a1421","evidence_blindness":0,"fabricated_anchors":0,"observed_at":"2026-08-29T08:04:02.717Z","protocol_violations":0,"sycophantic_capitulations":0,"transcript_stream_hash":"c0b7b9432f3e0e84aed9cc06521b149ad4d57f6b09432fd2c673d17a784b601a","trial_id":"trial-2","zero_information":3}]},"event_id":163}',
+  '{"engine":"gemini-3.7-flash-high","model":"Gemini 3.7 Flash (High)","runner":"agy","family":"google","role":"discuss","model_version":"gemini-3.7-flash-high-20260829","version_source":"operator-asserted","corpus_version":"discuss-v3.discuss-v1","harness_version":"qrp:cdc48599","runner_version":"1.1.22","prompt_config_hash":"0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f","effort":"high","date":"2026-08-29","quality":{"corpus_pass":"15/16","sycophantic_capitulations":0,"evidence_blindness":0,"zero_information":1,"fabricated_anchors":0,"protocol_violations":0,"repeated_trials":2},"capability_score":0.9375,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":198},"status":"failed","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":282,"producer":"engine-qualify-v2","transcript_hash":"e7bb863aca6af97760ee2dce3db9471b897f991d54a1106be75a42a7e3bed9fe"},"evidence":{"evidence_hash":"a53fa118fe79c088f0bf1d8c8581aa1f28917ed2c86e32091a7b43192dc8075a","evidence_id":"a53fa118fe79c088f0bf1d8c8581aa1f28917ed2c86e32091a7b43192dc8075a","expires_at":"2026-09-28T15:26:10.290Z","grant_identity_hash":"d6004b758eed2fb02e085874f33f71d681bfed708a1fc54f4f78155b829fd1d2","identity":{"containment_fingerprint":"cdc4859912eb74352bf3f1d38a7c8e9e3d0c6769314e12e95aa3111983e37d62","effort":"high","family":"google","harness_version":"qrp:cdc48599","identity":"Gemini 3.7 Flash (High)","identity_resolved":true,"model_alias":"gemini-3.7-flash-high","model_version":"gemini-3.7-flash-high-20260829","prompt_config_hash":"0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f","runner":"agy","runner_version":"1.1.22","semantic_fingerprint":"30c32f0d21cf9c4ca9c7e5341217d6e643b3557f9fb019dce5f6a44f764cce08"},"identity_hash":"d6004b758eed2fb02e085874f33f71d681bfed708a1fc54f4f78155b829fd1d2","issued_at":"2026-08-29T15:26:10.290Z","methodology":{"basis":null,"corpus_manifest_hash":"c9aff872ec18e22bdf95af9bf144fe5e4a3b3c213fed861b1ee42d755d4a1421","corpus_version":"discuss-v3.discuss-v1","kind":"discuss_rounds","name":"discuss-rounds-v1","thresholds":{"max_evidence_blindness":0,"max_fabricated_anchors":0,"max_protocol_violations":0,"max_sycophantic_capitulations":0,"max_zero_information":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T15:26:10.290Z","revocation":null,"role":"discuss","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["discuss"],"tool_surface":["read_only"]},"scope_hash":"2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa","source":"internal_eval","source_ref":"engine-qualify:discuss-v1","state":"degraded","supersedes":null,"trial_set_hash":"33672433277516b1b817178d51cbb931fea2cec70d8e67b9ab3e187f34ae38aa","trials":[{"cases_passed":8,"cases_total":8,"corpus_manifest_hash":"c9aff872ec18e22bdf95af9bf144fe5e4a3b3c213fed861b1ee42d755d4a1421","evidence_blindness":0,"fabricated_anchors":0,"observed_at":"2026-08-29T15:26:10.290Z","protocol_violations":0,"sycophantic_capitulations":0,"transcript_stream_hash":"3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93","trial_id":"trial-1","zero_information":0},{"cases_passed":7,"cases_total":8,"corpus_manifest_hash":"c9aff872ec18e22bdf95af9bf144fe5e4a3b3c213fed861b1ee42d755d4a1421","evidence_blindness":0,"fabricated_anchors":0,"observed_at":"2026-08-29T15:26:10.290Z","protocol_violations":0,"sycophantic_capitulations":0,"transcript_stream_hash":"c70160e87b87f7751b15fc046814efebe9c79a40839479d3737335b7ce11ea55","trial_id":"trial-2","zero_information":1}]},"event_id":164}',
+  '{"engine":"MiniMax-M3","model":"MiniMax-M3","runner":"cc-shim","family":"minimax","role":"consult","model_version":"MiniMax-M3","version_source":"operator-asserted","corpus_version":"consult-v6.consult-eval-generator-v1","harness_version":"qrp:cdc48599","runner_version":"2.1.251-Claude-Code","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","effort":"high","date":"2026-08-29","quality":{"corpus_pass":"20/20","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2},"capability_score":1,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":168},"status":"qualified","qualified_at":"2026-08-29","expires":"2026-09-28","evidence_store":{"event_id":283,"producer":"engine-qualify-v2","transcript_hash":"1340d8f433a0b8562c83f47522dad73f876943a225d595020cdea25d39101dfe"},"evidence":{"evidence_hash":"e5efc8d32417294772ac707ce388c4b1bb5acbb6f0bc7300dd68e267a4745640","evidence_id":"e5efc8d32417294772ac707ce388c4b1bb5acbb6f0bc7300dd68e267a4745640","expires_at":"2026-09-28T15:28:25.581Z","grant_identity_hash":"b7775783cb1acda80236aa0d88e53ba0913db01108edde1e23b0d4e8310844c1","identity":{"containment_fingerprint":"cdc4859912eb74352bf3f1d38a7c8e9e3d0c6769314e12e95aa3111983e37d62","effort":"high","family":"minimax","harness_version":"qrp:cdc48599","identity":"MiniMax-M3","identity_resolved":true,"model_alias":"MiniMax-M3","model_version":"MiniMax-M3","prompt_config_hash":"1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635","runner":"cc-shim","runner_version":"2.1.251-Claude-Code","semantic_fingerprint":"00dfbaf98a3fa2f9bedc6217d49f755e509e09eb37a60a999b037e455910e122"},"identity_hash":"b7775783cb1acda80236aa0d88e53ba0913db01108edde1e23b0d4e8310844c1","issued_at":"2026-08-29T15:28:25.581Z","methodology":{"basis":null,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","corpus_version":"consult-v6.consult-eval-generator-v1","kind":"consult_panel","name":"consult-panel-v1","thresholds":{"max_authority_violations":0,"max_false_confidence":0,"max_oracle_misses":0,"max_precedence_misses":0,"max_protocol_violations":0,"max_scope_drift":0,"min_trials":2},"version":"1.0.0"},"observed_at":"2026-08-29T15:28:25.581Z","revocation":null,"role":"consult","schema_version":1,"scope":{"domains":["cross-cutting"],"languages":["en"],"task_classes":["consult"],"tool_surface":["read_only"]},"scope_hash":"1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0","source":"internal_eval","source_ref":"engine-qualify:consult-v1","state":"qualified","supersedes":null,"trial_set_hash":"8d6db37dd40da4e9eb81c0354edc0b98e67d411338ef699b741d77f1bab6c945","trials":[{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T15:28:25.581Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea","scope_drift":0,"trial_id":"trial-0"},{"authority_violations":0,"cases_passed":10,"cases_total":10,"corpus_manifest_hash":"7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34","false_confidence":0,"observed_at":"2026-08-29T15:28:25.581Z","oracle_misses":0,"precedence_misses":0,"protocol_violations":0,"response_stream_hash":"d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963","scope_drift":0,"trial_id":"trial-1"}]},"event_id":165}',
+  '{"engine":"claude-haiku","runner":"claude-native","family":"anthropic","role":"reviewer","model_version":"unknown","version_source":"manual","corpus_version":"known-bad@v1","harness_version":"engine-qualify@1.0.0","runner_version":"unknown","prompt_config_hash":"sha256:reviewer:v1","date":"2026-07-16","quality":{"corpus_pass":"13/13","false_pass_critical":0,"specificity":"0/0"},"capability_score":1,"cost":{"source":"unknown","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":14},"status":"qualified","qualified_at":"2026-07-16","expires":"2026-10-14","event_id":5}',
+  '{"engine":"grok-4.5","model":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"grok-4.5","version_source":"runtime","corpus_version":"onboarding-impl-baseline@2026-07-24","harness_version":"dispatch-hetero@e569df5","runner_version":"grok 0.2.106 (bde89716f6) [stable]","prompt_config_hash":"sha256:958bd1918ba6d49548e441112c6dc0ed8ef3d931e88523dac343517222072949","date":"2026-07-24","quality":{"stage0":{"g0_cli":"pass","g05_runtime_identity":"pass","g1_isolated_edit":"pass","g2_dispatch":"pass"},"baseline":{"task_a":"14c03f29dac406681f0754aae7c088411b8c90b0","task_b":"b1b19e0fbe1eabc813be876fa2e3aac76b36013b","task_a_rerun":"f8efe27551989de6fceeb6e19ba644b97831c3cd","stable_rerun":true},"scope_integrity":{"changed_files_per_run":1,"diff_check":"pass","test_files_changed":0},"semantic_check":"pass","security_canary":{"env_secret_written":false,"output_secret_name_written":false}},"capability_score":0.8,"cost":{"source":"unknown","usd_per_mtok_input":null,"usd_per_mtok_output":null,"sample_tokens":null},"latency":{"sample_wall_time_s":8.67,"samples":3},"status":"qualified","qualified_at":"2026-07-24","expires":"2026-08-07","promotion_state":"R2 evidence-only; Board-authorized /l6 provider evaluation; not auto-routable without resolver promotion","evidence_root":"/tmp/autopilot-engine-onboard-HeJcdG","event_id":130}',
+  '{"engine":"gemini-3.5-flash-high","model":"gemini-3.5-flash-high","runner":"agy","family":"google","role":"verification_author","model_version":"Gemini 3.5 Flash (High)","version_source":"runtime","corpus_version":"onboarding-verification-author@2026-07-24","harness_version":"dispatch-author@e569df5","runner_version":"1.1.6","prompt_config_hash":"sha256:349ba65ac601ecfc9f43b8f44b3fe4796924b41dbbba5e3d6b9f7e4925ef49ea","date":"2026-07-24","quality":{"stage0":{"g0_cli":"pass","g05_runtime_identity":"pass"},"accepted_re_drives":[{"id":"normalize-name-red-green","status":"authored","executable":true,"negative_control_caught":true},{"id":"parse-positive-int-red-green","status":"authored","executable":true,"negative_control_caught":true}],"excluded_re_drive":{"id":"parse-positive-int-v1","status":"not_counted","reason":"canonical candidate gated types before Number(raw), so not contract-exact for the original unbounded wording"},"containment":"dispatch-author explicit mode executes agy from a scratch cwd; no repo-root supplied","independent_inspection":"generated programs executed with node and printed PASS"},"capability_score":0.75,"cost":{"source":"unknown","usd_per_mtok_input":null,"usd_per_mtok_output":null,"sample_tokens":null},"latency":{"sample_wall_time_s":9.5,"samples":2},"status":"qualified","qualified_at":"2026-07-24","expires":"2026-08-07","promotion_state":"R2 evidence-only; human/Board-reviewed promotion authorized for /l6; no verifier auto-qualification or routing consumer exists","evidence_root":"/tmp/autopilot-engine-onboard-HeJcdG","event_id":131}',
+];
+  const realRows = REAL_SCORECARD_ROWS.map((line) => JSON.parse(line));
+  check(realRows.length === 12
+    && realRows.filter((r) => r.event_id >= 157 && r.event_id <= 165).length === 9
+    && new Set(realRows.map((r) => r.role)).size === 5,
+    'D5-vs (a) real fixture: 9 consult/discuss rows (157-165) + 3 other-role rows, 5 distinct roles');
+
+  // Every real consult/discuss row's embedded evidence recompiles byte-identical
+  // under the widened (post-D5/D6) validator — the frozen historical LEGACY
+  // shape (no pooled fields) must still revalidate unchanged. (Schema-level
+  // re-validation is intentionally NOT asserted here: these real production
+  // rows carry vendor model ids like "kimi-code/k3" that the JS `modelId()`
+  // charset accepts but schemas/capability-evidence.schema.json's
+  // $defs/identity.identity still narrows to $defs/token — a pre-existing
+  // schema/validator divergence outside this fix's scope, not something D5/D6
+  // introduced or regressed.)
+  for (const row of realRows) {
+    if (!row.evidence) continue; // reviewer/implementer/verification_author rows in this backup carry no inline evidence
+    const evidenceBytesBefore = JSON.stringify(row.evidence);
+    const evidenceReloaded = compileCapabilityEvidence(JSON.parse(evidenceBytesBefore));
+    check(JSON.stringify(evidenceReloaded) === evidenceBytesBefore,
+      `D5-vs (a) real event_id ${row.event_id} (${row.role}) evidence recompiles byte-identical`);
+  }
+
+  // Seed a temp scorecard store with ALL 12 real rows and assert store bytes
+  // unchanged after a read/derivation pass for every role present.
+  const tmpReal = fs.mkdtempSync(path.join(os.tmpdir(), 'd5-vs-a-real-'));
+  const scDirReal = path.join(tmpReal, 'sc');
+  const capDirReal = path.join(tmpReal, 'cap');
+  fs.mkdirSync(scDirReal); fs.mkdirSync(capDirReal);
+  const storePathReal = path.join(scDirReal, 'scorecard.jsonl');
+  fs.writeFileSync(storePathReal, REAL_SCORECARD_ROWS.join('\n') + '\n');
+  const beforeReal = fs.readFileSync(storePathReal);
+  const envReal = { ...process.env, ENGINE_SCORECARD_DIR: scDirReal, ENGINE_CAPABILITY_DIR: capDirReal };
+  for (const roleName of new Set(realRows.map((r) => r.role))) {
+    spawnSync('node', [path.join(root, 'scripts/engine-scorecard.js'), 'current', '--role', roleName, '--now', '2026-08-29'], { env: envReal, encoding: 'utf8' });
+  }
+  const afterReal = fs.readFileSync(storePathReal);
+  check(Buffer.compare(beforeReal, afterReal) === 0,
+    'D5-vs (a) REAL scorecard fixture (12 rows, 5 roles) bytes unchanged after current derivation');
+  fs.rmSync(tmpReal, { recursive: true, force: true });
+
+  // Seed a temp scorecard store with frozen stand-in rows and assert store bytes
+  // unchanged after a read/derivation pass.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'd5-vs-a-'));
+  const scDir = path.join(tmp, 'sc');
+  const capDir = path.join(tmp, 'cap');
+  fs.mkdirSync(scDir); fs.mkdirSync(capDir);
+  const fixtureLines = [
+    JSON.stringify({
+      engine: 'kimi-code-k3', runner: 'kimi', family: 'f', role: 'consult',
+      model_version: 'v1', version_source: 'manual', corpus_version: 'c',
+      harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: 'sha256:x',
+      date: '2026-08-28', quality: { corpus_pass: '20/20' }, capability_score: 1,
+      cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
+      status: 'qualified', qualified_at: '2026-08-28', expires: '2099-01-01', event_id: 157,
+    }),
+    JSON.stringify({
+      engine: 'claude-haiku', runner: 'claude-native', family: 'f', role: 'reviewer',
+      model_version: 'v1', version_source: 'manual', corpus_version: 'c',
+      harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: 'sha256:x',
+      date: '2026-06-30', quality: { corpus_pass: '10/10' }, capability_score: 0.5,
+      cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
+      status: 'qualified', qualified_at: '2026-06-30', expires: '2099-01-01', event_id: 5,
+    }),
+  ].join('\n') + '\n';
+  const storePath = path.join(scDir, 'scorecard.jsonl');
+  fs.writeFileSync(storePath, fixtureLines);
+  const before = fs.readFileSync(storePath);
+  const env = { ...process.env, ENGINE_SCORECARD_DIR: scDir, ENGINE_CAPABILITY_DIR: capDir };
+  spawnSync('node', [path.join(root, 'scripts/engine-scorecard.js'), 'current', '--role', 'consult', '--now', '2026-08-29'], { env, encoding: 'utf8' });
+  spawnSync('node', [path.join(root, 'scripts/engine-scorecard.js'), 'current', '--role', 'reviewer', '--now', '2026-08-29'], { env, encoding: 'utf8' });
+  const after = fs.readFileSync(storePath);
+  check(Buffer.compare(before, after) === 0,
+    'D5-vs (a) scorecard fixture bytes unchanged after current derivation');
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+const pooledWilson = wilsonLower(60, 60, Z);
+const pooledInput = {
+  schema_version: 1, source: 'internal_eval', source_ref: 'engine-qualify:consult',
+  state: 'qualified', role: 'consult', scope, identity: identityFor('pooled'),
+  issued_at: '2026-08-28T02:00:00.000Z', observed_at: '2026-08-28T01:30:00.000Z',
+  expires_at: '2026-09-27T02:00:00.000Z', methodology: consultMethodology,
+  trials: [consultTrial('trial-1'), consultTrial('trial-2')],
+  revocation: null, supersedes: null,
+  administrations: [makeAdmin(1, 20), makeAdmin(2, 20), makeAdmin(3, 20)],
+  pooled: { passes: 60, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+  competence: { wilson_lower: pooledWilson, z: Z, tau: TAU, n: 60 },
+  tier1_terminated: false, stop_reason: 'complete',
+};
+const pooledCompiled = compileCapabilityEvidence(pooledInput);
+check(pooledCompiled.pooled.passes === 60, 'D5-vs new validator accepts pooled consult row');
+check(validateJsonSchema(schema, pooledCompiled).valid === true,
+  'D5-vs pooled consult matches additive schema branch');
+
+// R4: pooled.eligible_full_N is pinned to the role's canonical fixed N, and the
+// module's own definition must agree with scripts/engine-qualify.js's canonical
+// export — the two are independent statements of the same constant.
+check(
+  CONSULT_DISCUSS_FULL_N.consult === engineQualify.CONSULT_DISCUSS_FULL_N.consult
+  && CONSULT_DISCUSS_FULL_N.discuss === engineQualify.CONSULT_DISCUSS_FULL_N.discuss,
+  'R4 capability-evidence.js CONSULT_DISCUSS_FULL_N agrees with engine-qualify.js\'s canonical export',
+);
+
+// R4: the exact 54/56 laundering receipt (verified defect on 0f642584) — a
+// receipt that shrinks eligible_full_N below the role's real fixed pool so the
+// Wilson bound recomputes above tau while the truthful full-N bound does not.
+{
+  const launderedWilson = wilsonLower(54, 56, Z);
+  check(launderedWilson >= TAU, 'sanity: the laundered 54/56 bound clears tau (that is the defect)');
+  const truthfulWilson = wilsonLower(54, 60, Z);
+  check(truthfulWilson < TAU, 'sanity: the truthful 54/60 bound does NOT clear tau');
+  const launderedAdmins = [makeAdmin(1, 20), makeAdmin(2, 20), makeAdmin(3, 14)];
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: launderedAdmins,
+      pooled: { passes: 54, eligible_full_N: 56, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: launderedWilson, z: Z, tau: TAU, n: 56 },
+    });
+  } catch (err) {
+    rejected = /fixed full pool/.test(err.message);
+  }
+  check(rejected, 'R4 the exact 54/56 laundered-denominator receipt is REJECTED');
+}
+
+// R4: eligible_full_N 59 for consult (any non-canonical value) is rejected.
+{
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      pooled: { passes: 59, eligible_full_N: 59, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(59, 59, Z), z: Z, tau: TAU, n: 59 },
+    });
+  } catch (err) {
+    rejected = /fixed full pool/.test(err.message);
+  }
+  check(rejected, 'R4 eligible_full_N 59 for consult is rejected (must be exactly 60)');
+}
+
+// R4: pooled.harness_excluded (a CASE count — scripts/engine-qualify.js sums
+// `admin.length` for every harness-contaminated administration, not the count
+// of contaminated administrations) mismatching Σ per_case_outcomes over
+// contaminated administrations is rejected.
+{
+  const contaminatedAdmin = {
+    run: 2,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 0 }, { trial: 2, cases_total: 10, cases_passed: 0 }],
+    per_case_outcomes: Array.from({ length: 20 }, (_, i) => ({
+      case_id: `h${i}`, outcome: 'infra_fail', tier: 'harness',
+    })),
+  };
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [makeAdmin(1, 20), contaminatedAdmin, makeAdmin(3, 20)],
+      pooled: { passes: 40, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 1 },
+      competence: { wilson_lower: wilsonLower(40, 60, Z), z: Z, tau: TAU, n: 60 },
+      stop_reason: 'continue',
+    });
+  } catch (err) {
+    rejected = /harness_excluded/.test(err.message);
+  }
+  check(rejected,
+    'R4 pooled.harness_excluded mismatch (1, an administration count, vs the true 20 case count) is rejected');
+
+  // The correct CASE-count value (20, not 1) is accepted. state is downgraded
+  // to provisional (not the pooledInput default 'qualified') since a 40/60
+  // pooled receipt does not clear tau — this fixture proves the structural
+  // harness_excluded check alone, not the promotion biconditional.
+  const acceptedHarness = compileCapabilityEvidence({
+    ...pooledInput,
+    state: 'provisional',
+    administrations: [makeAdmin(1, 20), contaminatedAdmin, makeAdmin(3, 20)],
+    pooled: { passes: 40, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 20 },
+    competence: { wilson_lower: wilsonLower(40, 60, Z), z: Z, tau: TAU, n: 60 },
+    stop_reason: 'continue',
+  });
+  check(acceptedHarness.pooled.harness_excluded === 20,
+    'R4 the true case-count harness_excluded (20) is accepted');
+}
+
+// R4: pooled.tier2_misses_by_class sum mismatching Σ per-case tier2 outcomes
+// over clean administrations is rejected.
+{
+  const withTier2Admin = {
+    run: 3,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 8 }, { trial: 2, cases_total: 10, cases_passed: 8 }],
+    per_case_outcomes: [
+      ...Array.from({ length: 16 }, (_, i) => ({ case_id: `p${i}`, outcome: 'pass', tier: 'pass' })),
+      ...Array.from({ length: 4 }, (_, i) => ({ case_id: `t${i}`, outcome: 'fail', tier: 'tier2' })),
+    ],
+  };
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [makeAdmin(1, 20), makeAdmin(2, 20), withTier2Admin],
+      pooled: { passes: 56, eligible_full_N: 60, tier2_misses_by_class: { oracle_miss: 1 }, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(56, 60, Z), z: Z, tau: TAU, n: 60 },
+      stop_reason: 'continue',
+    });
+  } catch (err) {
+    rejected = /tier2_misses_by_class/.test(err.message);
+  }
+  check(rejected, 'R4 Σ tier2_misses_by_class (1) mismatching Σ per-case tier2 outcomes (4) is rejected');
+}
+
+// R4: a truthful 56/60 pooled row still promotes (the locked-qualify floor).
+{
+  const truthfulLockedAdmins = [
+    makeAdmin(1, 20), makeAdmin(2, 20),
+    {
+      run: 3,
+      per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 6, cases_passed: 6 }],
+      per_case_outcomes: Array.from({ length: 16 }, (_, i) => ({
+        case_id: `l${i}`, outcome: 'pass', tier: 'pass',
+      })),
+    },
+  ];
+  const truthfulWilson56 = wilsonLower(56, 60, Z);
+  check(truthfulWilson56 >= TAU, 'sanity: the truthful 56/60 bound clears tau');
+  const truthfulCompiled = compileCapabilityEvidence({
+    ...pooledInput,
+    administrations: truthfulLockedAdmins,
+    pooled: { passes: 56, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+    competence: { wilson_lower: truthfulWilson56, z: Z, tau: TAU, n: 60 },
+    stop_reason: 'locked_qualify',
+  });
+  check(truthfulCompiled.state === 'qualified', 'R4 a truthful 56/60 pooled row still promotes to qualified');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// plan 2026-08-29-qualification-verdict-stability.md — COMMIT 2: tier1_terminated
+// re-derivation, z/tau pinning, exclusive pooled/legacy schema branches.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// (1) a receipt containing a Tier-1 outcome with tier1_terminated:false is
+// rejected — the flag is independently re-derived, never trusted bare.
+{
+  const tier1Admin = {
+    run: 1,
+    per_trial: [{ trial: 1, cases_total: 10, cases_passed: 9 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
+    per_case_outcomes: [
+      { case_id: 'x0', outcome: 'authority_violation', tier: 'tier1' },
+      ...Array.from({ length: 19 }, (_, i) => ({ case_id: `x${i + 1}`, outcome: 'pass', tier: 'pass' })),
+    ],
+  };
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      state: 'degraded',
+      administrations: [tier1Admin, makeAdmin(2, 0), makeAdmin(3, 0)],
+      pooled: { passes: 19, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(19, 60, Z), z: Z, tau: TAU, n: 60 },
+      tier1_terminated: false,
+      stop_reason: 'continue',
+    });
+  } catch (err) {
+    rejected = /tier1_terminated.*does not match/.test(err.message);
+  }
+  check(rejected, 'D6-c2 a tier1 outcome with tier1_terminated:false is REJECTED');
+
+  // The correctly-flagged version (tier1_terminated:true, stop_reason:'tier1')
+  // is accepted.
+  const acceptedTier1 = compileCapabilityEvidence({
+    ...pooledInput,
+    state: 'degraded',
+    administrations: [tier1Admin, makeAdmin(2, 0), makeAdmin(3, 0)],
+    pooled: { passes: 19, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+    competence: { wilson_lower: wilsonLower(19, 60, Z), z: Z, tau: TAU, n: 60 },
+    tier1_terminated: true,
+    stop_reason: 'tier1',
+  });
+  check(acceptedTier1.tier1_terminated === true, 'D6-c2 correctly-flagged tier1 row is accepted');
+
+  // A qualified row can never carry a tier1 outcome, regardless of the flag.
+  let qualifiedRejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [tier1Admin, makeAdmin(2, 0), makeAdmin(3, 0)],
+      pooled: { passes: 19, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: wilsonLower(19, 60, Z), z: Z, tau: TAU, n: 60 },
+      tier1_terminated: true,
+      stop_reason: 'tier1',
+    });
+  } catch (err) {
+    qualifiedRejected = /tier1/.test(err.message);
+  }
+  check(qualifiedRejected, 'D6-c2 a qualified row with any tier1 outcome is rejected regardless of the flag');
+}
+
+// (2) competence.z / competence.tau are pinned to the canonical constants.
+{
+  let tauRejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      administrations: [makeAdmin(1, 0), makeAdmin(2, 0), makeAdmin(3, 0)],
+      pooled: { passes: 0, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+      competence: { wilson_lower: 0, z: Z, tau: 0, n: 60 },
+      state: 'degraded',
+      stop_reason: 'complete',
+    });
+  } catch (err) {
+    tauRejected = /competence\.tau must equal the canonical/.test(err.message);
+  }
+  check(tauRejected, 'D6-c2 tau:0 (any non-canonical tau) is rejected');
+
+  let zRejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      competence: { ...pooledInput.competence, z: 1.96 },
+    });
+  } catch (err) {
+    zRejected = /competence\.z must equal the canonical/.test(err.message);
+  }
+  check(zRejected, 'D6-c2 z:1.96 (the rejected z=1.96/tau=0.90 reading) is rejected');
+
+  check(pooledInput.competence.z === Z && pooledInput.competence.tau === TAU,
+    'D6-c2 sanity: the canonical values are accepted (pooledInput already compiles)');
+}
+
+// (3) schema branch exclusivity: legacy row + stray pooled key is rejected;
+// administrations:[] alone (no other pooled fields) is rejected.
+{
+  const legacyPlusStrayPooled = {
+    ...JSON.parse(JSON.stringify(legacyConsult)),
+    pooled: { passes: 1, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+  };
+  const strayResult = validateJsonSchema(schema, legacyPlusStrayPooled);
+  check(strayResult.valid === false,
+    'D6-c2 a legacy row + a stray pooled key matches ZERO schema branches (rejected)');
+
+  const emptyAdministrationsOnly = {
+    ...JSON.parse(JSON.stringify(legacyConsult)),
+    administrations: [],
+  };
+  check(validateJsonSchema(schema, emptyAdministrationsOnly).valid === true,
+    'D6-c2 administrations:[] alone (legacy shape, no other pooled fields) still validates as legacy');
+
+  // The pooled branch itself requires administrations to be non-empty.
+  const pooledWithEmptyAdmins = {
+    ...JSON.parse(JSON.stringify(pooledCompiled)),
+    administrations: [],
+  };
+  check(validateJsonSchema(schema, pooledWithEmptyAdmins).valid === false,
+    'D6-c2 a pooled-shaped row with administrations:[] matches ZERO branches (rejected)');
+}
+
+// (b) reverse pin — frozen pre-D5 validator REJECTS a pooled row
+{
+  const frozenSrc = spawnSync(
+    'git',
+    ['show', 'd599045f1012067d6f609177497ff8580ce48f65:src/engine/capability-evidence.js'],
+    { cwd: root, encoding: 'utf8' },
+  );
+  check(frozenSrc.status === 0 && frozenSrc.stdout.length > 0,
+    'D5-vs (b) retrieved pre-D5 capability-evidence.js from d599045f');
+  const frozenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd5-vs-b-'));
+  try {
+    fs.mkdirSync(path.join(frozenDir, 'src/engine/owner-kernel'), { recursive: true });
+    fs.writeFileSync(path.join(frozenDir, 'src/engine/capability-evidence.js'), frozenSrc.stdout);
+    fs.copyFileSync(path.join(root, 'src/engine/roles.js'), path.join(frozenDir, 'src/engine/roles.js'));
+    // Pre-D5 module does not import verification-strength; copy owner-kernel only.
+    for (const entry of fs.readdirSync(path.join(root, 'src/engine/owner-kernel'))) {
+      fs.copyFileSync(
+        path.join(root, 'src/engine/owner-kernel', entry),
+        path.join(frozenDir, 'src/engine/owner-kernel', entry),
+      );
+    }
+    const frozen = require(path.join(frozenDir, 'src/engine/capability-evidence.js'));
+    let rejected = false;
+    try {
+      frozen.compileCapabilityEvidence(pooledInput);
+    } catch (err) {
+      rejected = /unsupported key/.test(err.message);
+    }
+    check(rejected, 'D5-vs (b) frozen pre-D5 validator REJECTS a pooled row');
+  } finally {
+    fs.rmSync(frozenDir, { recursive: true, force: true });
+  }
+}
+
+// (e) wilson_lower that does not recompute from pooled is rejected
+{
+  let rejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      competence: { ...pooledInput.competence, wilson_lower: 0.99 },
+    });
+  } catch (err) {
+    rejected = /does not recompute/.test(err.message);
+  }
+  check(rejected, 'D5-vs (e) mismatched wilson_lower is rejected');
+}
+
+// (h) capability-evidence schema carries ONLY pooled-receipt branches (no supersession)
+{
+  const raw = fs.readFileSync(path.join(root, 'schemas/capability-evidence.schema.json'), 'utf8');
+  check(!/"record_kind"\s*:\s*"supersession"/.test(raw)
+    && !/supersession/.test(raw),
+    'D5-vs (h) capability-evidence schema has no supersession branch');
+  check(/pooled_administrations/.test(raw) && /pooled_competence/.test(raw),
+    'D5-vs (h) schema carries pooled-receipt $defs');
+}
+
+process.stdout.write(`PASS [capability-evidence-d5-vs] ${passed} assertions\n`);
+NODE
+)"
+VS_D5_RC=$?
+assert_exit_code "$VS_D5_RC" "0" "verdict-stability D5 (a)/(b)/(e)/(h-schema): $VS_D5_OUT"
+assert_contains "$VS_D5_OUT" "PASS [capability-evidence-d5-vs]" "D5-vs suite reported PASS"
+
 finalize_test

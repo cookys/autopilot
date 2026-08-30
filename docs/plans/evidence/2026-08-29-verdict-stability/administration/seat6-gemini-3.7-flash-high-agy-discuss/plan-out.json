@@ -1,0 +1,104 @@
+{
+ "schema_version": 1,
+ "role": "discuss",
+ "mode": "plan",
+ "identities": {
+  "generator": "c95ed1f514a39eca6d03ea3bb0298bbab95ddea32550bd12551bd8be7e056b0f",
+  "grader": "39b5ba15b49f1377b6e01d66727f2863ebc854dca8e80c20071c84a7b8af6b1a",
+  "corpus": "1525bb71a1dbf7c022d09ce3ac1115401b81504dc7f72e8e08a077faa88babf2",
+  "rubric": "6a60a549626eeeab1f49974f020a059db6e24ac9e1834f44b5a442c4b9b86104",
+  "seal": "6e2943238215f0f0f45099621f5c6628fc3af93111630128c1f676ad53c1ba94"
+ },
+ "case_plan": {
+  "budget": {
+   "trials_per_administration": 2,
+   "families": 4,
+   "cases_per_family_per_trial": 2,
+   "cases_per_trial": 8,
+   "cases_per_administration": 16
+  },
+  "trials": [
+   {
+    "trial": 1,
+    "cases": [
+     {
+      "case_id": "D-a-t1-c1",
+      "family": "D-a"
+     },
+     {
+      "case_id": "D-b-t1-c1",
+      "family": "D-b"
+     },
+     {
+      "case_id": "D-c-t1-c1",
+      "family": "D-c"
+     },
+     {
+      "case_id": "D-d-t1-c1",
+      "family": "D-d"
+     },
+     {
+      "case_id": "D-a-t1-c2",
+      "family": "D-a"
+     },
+     {
+      "case_id": "D-b-t1-c2",
+      "family": "D-b"
+     },
+     {
+      "case_id": "D-c-t1-c2",
+      "family": "D-c"
+     },
+     {
+      "case_id": "D-d-t1-c2",
+      "family": "D-d"
+     }
+    ]
+   },
+   {
+    "trial": 2,
+    "cases": [
+     {
+      "case_id": "D-a-t2-c1",
+      "family": "D-a"
+     },
+     {
+      "case_id": "D-b-t2-c1",
+      "family": "D-b"
+     },
+     {
+      "case_id": "D-c-t2-c1",
+      "family": "D-c"
+     },
+     {
+      "case_id": "D-d-t2-c1",
+      "family": "D-d"
+     },
+     {
+      "case_id": "D-a-t2-c2",
+      "family": "D-a"
+     },
+     {
+      "case_id": "D-b-t2-c2",
+      "family": "D-b"
+     },
+     {
+      "case_id": "D-c-t2-c2",
+      "family": "D-c"
+     },
+     {
+      "case_id": "D-d-t2-c2",
+      "family": "D-d"
+     }
+    ]
+   }
+  ],
+  "admission": {
+   "pass": true,
+   "solvability": true,
+   "trap_discrimination": true,
+   "overfitter_discrimination": true,
+   "negative_control": true
+  }
+ }
+}

@@ -1129,19 +1129,23 @@ function runCampaignComposition(input = {}, adapters = {}) {
           },
         ],
       };
-      persistController(next);
-      appendRoundProgress(AWAITING_CONVERGENCE, budgetCheck.reason);
       const budgetReceiptDigest = canonicalDigest({
         usage: controller.repair_budget_usage,
         limits: controller.repair_budget_limits,
         exceeded: budgetCheck.exceeded,
         projected: projectedDelta,
       });
+      // Journal first: the durable reducer is the authority on the phase. If it
+      // rejects, emitCampaignEvent throws and the controller keeps its prior
+      // phase, so controller-durable.json can never claim a phase the campaign
+      // journal refused. (Same ordering as AWAITING_DISPOSITION below.)
       emitCampaignEvent('AWAITING_CONVERGENCE', {
         reason: budgetCheck.reason,
         exceeded_axes: budgetCheck.exceeded,
         budget_receipt_digest: budgetReceiptDigest,
       });
+      persistController(next);
+      appendRoundProgress(AWAITING_CONVERGENCE, budgetCheck.reason);
       return {
         stop: {
           status: AWAITING_CONVERGENCE,
@@ -1494,7 +1498,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
         durable_wait: true,
         terminalize: false,
       });
-      appendRoundProgress(BOUNDARY_REJECTED, bound.reason);
+      // Journal first: the durable reducer is the authority on the phase. If it
+      // rejects, emitCampaignEvent throws and neither the progress receipt nor
+      // the controller phase advances, so controller-durable.json can never
+      // claim BOUNDARY_REJECTED while the journal is still IMPLEMENTING.
       emitCampaignEvent('BOUNDARY_REJECTED', {
         reason: bound.reason,
         boundary_reason: bound.boundary_reason,
@@ -1505,6 +1512,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           boundary_code: bound.boundary_code,
         }),
       });
+      appendRoundProgress(BOUNDARY_REJECTED, bound.reason);
       persistController({
         ...controller,
         phase: BOUNDARY_REJECTED,

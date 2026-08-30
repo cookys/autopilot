@@ -239,8 +239,14 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # frozen pre-D6 shipped-template copy whose `- reviewer_engine: ...` line
 # matches this same grep — same frozen-fixture false-positive class as above.
 # Bound moves 26 -> 27.
+# RECOUNTED 2026-08-30 (rail-fix unit): commit b0778bd9 ("fix(campaign): bridge
+# builds the digest-bound boundary receipt the reducer requires") added
+# hooks/tests/campaign-boundary-receipt-e2e.test.sh, whose bridge-fixture
+# roster literal carries a genuine `reviewer_engine: 'fixture-reviewer',` line
+# — a real Population B member (not a frozen-fixture false positive). Bound
+# moves 27 -> 28.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "27" "$POP_B_COUNT" "Population B file bound is pinned at 27 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture)"
+assert_eq "28" "$POP_B_COUNT" "Population B file bound is pinned at 28 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture and campaign-boundary-receipt-e2e.test.sh added 2026-08-30)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the

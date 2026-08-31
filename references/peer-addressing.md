@@ -19,9 +19,16 @@ sending peer traffic.
 
 `fleet_wide` is not decoration. A relay running with the broadcast gate in
 `enforce` refuses an unqualified `@team` — no subject, no `to_filter`, no
-`fleet_wide` — with a 400 that names the alternatives. The flag is advisory by
-construction (any client that can set it can always set it), so what actually
-holds the line is the audit event and the recipient count returned to you.
+`fleet_wide` — with a 400 that names the alternatives.
+
+**And once you set it, nothing is watching.** The flag is advisory by
+construction — any client that can set it can always set it — and the relay's
+audit event fires only on the path it refuses, so a send that carries
+`fleet_wide: true` is not recorded. Nor is it counted: the recipient count comes
+back only for a `to_filter` send, and an unfiltered `@team` returns the bare
+envelope. So there is no after-the-fact trace of a fleet-wide broadcast and no
+number telling you how many sessions you just woke. Deciding to send one is the
+whole control.
 
 **An unqualified `@team` is not a message, it is a fan-out.** Every session under
 every *other* handle receives it **at the relay**; whether one then *reads* it

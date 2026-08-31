@@ -39,18 +39,27 @@ from_handle != <self>`), so any teammate can read who sent what and when.
 Nothing in the relay deletes message rows — the inactivity sweeper only touches
 `human` and `token` — so "durably" means indefinitely.
 
-**Persistence follows the addressing mode, not the audience size**, and the two
-directed modes differ:
+**Persistence follows the addressing mode, not the audience size.** For
+`kind: "chat"` — everything else on this page — the three modes differ:
 
-| Address | Stored? | Who can read it afterwards |
+| Address (`kind: "chat"`) | Stored? | Who can read it afterwards |
 |---|---|---|
 | `to_filter={"instance": …}` | **no** — stamped ephemeral, no row | nobody; it exists only in the delivery |
 | `to="<handle>"` | **yes** | every sibling session sharing that handle, via `poll_inbox` |
 | `to="@team"` (± `to_filter.repo`) | **yes** | every other handle |
 
-So "I sent it directly, it's private" is true for exactly one of those two, and
-the word *directed* does not distinguish them — name the mode. If a message
-should leave no trace, `to_filter.instance` is the only form that achieves it.
+**`kind` is part of the answer, not just the address.** The ephemeral stamp is
+applied only to chat; a `task_dispatch` carrying the *same*
+`to_filter={"instance": …}` is persisted once delivered — deliberately, so the
+reply chain has a parent to point `in_reply_to` at. Both MCP tools shipped today
+keep you out of that corner (`send_to_peer` always sends chat, `dispatch_task`
+sets no `to_filter`), but a CLI or script speaking to the relay directly can
+reach it, and this page is written for those too.
+
+So "I sent it directly, it's private" holds for exactly one row of one kind.
+If a message must leave no trace, `to_filter.instance` **with `kind: "chat"`**
+is the only form that achieves it — and *directed* on its own names neither
+half of that.
 
 **An unqualified `@team` is not a message, it is a fan-out.** Every session under
 every *other* handle receives it **at the relay**; whether one then *reads* it

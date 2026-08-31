@@ -772,3 +772,10 @@ never an ad hoc descriptive string.
 - **Context**: four Suggestion-tier items from the three-seat panels, all excluded from the ship with rationale: (1) whitespace re-indent churn in `src/campaign/cli.js` ~412-437/598 pollutes blame in the projection path — revert cosmetically; (2) the staging lib's plan-mode refusal (`scripts/lib/qualify-stage-credentials.sh`) is unit-tested but no e2e asserts a recipe `run.sh` exits non-zero under `set -e` when it fires — add one drift e2e; (3) `src/mission/cli.js` mixes module-local `emit()` (cmdWithdraw) and injectable `emitTo()` (cmdGrantV2) — the withdraw-interplay fixture had to monkey-patch `process.stdout.write`; funnel every cmdX through one emission helper; (4) `scripts/run-ledger.sh` non-init subcommands' `--help` prints the whole script source instead of usage (U2 foreman, 2026-08-31).
 - **Effort**: XS–S each.
 - **Source**: v2.35.5 qc panels + foremen, 2026-08-31.
+
+### `peer-addressing.md` says message rows live forever; a spec says 7 days
+- **Trigger**: hangar-bridge implements message-row retention. Today it has not — `packages/relay/src/purge.ts` deletes only `token` and `human` rows, `message` has no trigger or CASCADE, and a repo-wide search finds no `DELETE FROM message` — so the doc's "durably means indefinitely" is currently accurate.
+- **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built. If it ships, `references/peer-addressing.md`'s persistence paragraph goes stale in the direction that matters — it would be promising permanence that no longer exists.
+- **Effort**: XS (one clause), but only correct after the code lands.
+- **Source**: `autopilot:reviewer` round 4 on `0d3554e3`, 2026-09-01.
+

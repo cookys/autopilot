@@ -335,6 +335,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 
 ### Engine and CLI have no session-mode fallback for bounded non-Mission campaigns
+- **Second live reproduction (2026-08-31)**: all three v2.35.5 rail-debt foremen hit `precondition_failed: Mission enforce mode requires a sealed campaign strict projection` on bare `dispatch-hetero.sh` dispatches (`dispatcher_called:false`); unblocked only by a Board-approved branch-local `enforcement_mode: shadow` flip, restored before merge. The asymmetry is now a hard blocker for any raw-rail repair work under enforce governance.
 - **Trigger**: 要把 session-marker 紀律擴到非 Mission 的 managed campaign 時；或 threat model 升級為「同一 host 上未經 /l3–/l6 進入的呼叫端不得驅動 managed loop」。單純誠實使用者不觸發。
 - **Context**: 三條路徑對「contract 不帶 Mission projection」的處置不一致。`dispatch-hetero.sh:1710` 在 `CAMPAIGN_PROJECTION_BOUND != 1` 時仍跑 `check_session_mode_gate` + `check_mission_enforcement_gate`；`src/engine/autopilot-engine.js` 與 `bin/autopilot.js` 則**沒有任何等價 fallback**——v2.34.8 收窄 admission 後，bounded campaign 在這兩條路徑上不經任何 session 檢查。此不對稱**早於** c3e2647d（2026-08-05 之前 Engine 根本沒有 admission），v2.34.8 只是讓它重新成為現行行為，**不是新退步**；而 c3e2647d 造成的中間狀態也不是可用的控制，是 100% 拒絕。真要補，得先決定一個沒有 Mission 身分的 campaign 該把 marker 綁到什麼上——不要為了對稱而發明一個假的綁定。
 - **Effort**: M。
@@ -765,3 +766,9 @@ never an ad hoc descriptive string.
 - **Discovered**: while building the U4 fixture (`hooks/tests/mission-convergence.test.sh`'s `withdraw-interplay-*` block) for BACKLOG "`mission grant` silently replays a stale claim…" — worked around there by using a legacy (non-v2) identity claim, which is orthogonal to and unaffected by the v1/v2 mismatch. Not verified whether real managed-campaign production traffic has actually hit this (U1's own withdraw usage in the 2026-08-30/31 rail-debt campaign also used non-v2 claims), but it is reachable from the documented CLI contract as written.
 - **Effort**: S–M (either mint an ICC-side v2 alias, or teach `projectCampaign`/`validateInitialCampaignState` to accept both id shapes, or have mission's withdraw path translate identity schemes before the ledger lookup).
 - **Source**: U4 foreman, 2026-08-31.
+
+### v2.35.5 qc-panel 🔵 follow-ups (managed-campaign rail debt, 2026-08-31)
+- **Trigger**: next touch of the named files.
+- **Context**: four Suggestion-tier items from the three-seat panels, all excluded from the ship with rationale: (1) whitespace re-indent churn in `src/campaign/cli.js` ~412-437/598 pollutes blame in the projection path — revert cosmetically; (2) the staging lib's plan-mode refusal (`scripts/lib/qualify-stage-credentials.sh`) is unit-tested but no e2e asserts a recipe `run.sh` exits non-zero under `set -e` when it fires — add one drift e2e; (3) `src/mission/cli.js` mixes module-local `emit()` (cmdWithdraw) and injectable `emitTo()` (cmdGrantV2) — the withdraw-interplay fixture had to monkey-patch `process.stdout.write`; funnel every cmdX through one emission helper; (4) `scripts/run-ledger.sh` non-init subcommands' `--help` prints the whole script source instead of usage (U2 foreman, 2026-08-31).
+- **Effort**: XS–S each.
+- **Source**: v2.35.5 qc panels + foremen, 2026-08-31.

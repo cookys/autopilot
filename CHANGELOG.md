@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.35.5 — managed-campaign rail debt: terminalize/withdraw, grant replay refusal, credential staging, wall cap
+
+Closes the four rail-debt rows the verdict-stability campaign filed (BACKLOG 2026-08-30), implemented
+by codex `gpt-5.3-codex-spark` leaves under sonnet foremen with depth-0 three-seat hetero qc
+(gpt-5.6-sol / GLM-5.2 / MiniMax-M3; per-batch verdicts SHIP-AS-IS after verified repairs).
+**U1 — dead-campaign remedy**: `campaign terminalize --campaign-id --leaf-manifest` appends a
+MUTATION_FAILED-class journal event carrying the live lease identity for a PROVABLY dead leaf
+(lease liveness `dead` + manifest ended + worktree absent; manifest must name the campaign via
+`root_run_id`/`run_id` and carry its own worktree path), writes/backfills the summary JSON, and
+`mission withdraw` releases the node's open claim through the reducer release path only once the
+bound campaign is terminal — every refusal is named and carries claim id + campaign phase
+(`campaign_lease_live|campaign_lease_unknown|campaign_leaf_manifest_open|campaign_leaf_manifest_mismatch|campaign_worktree_present|campaign_already_terminal`).
+**U4 — grant replay false green**: `src/mission/runtime.js` `grantMissionCampaign` no longer replays
+an open claim unconditionally — exact replay only while repo HEAD equals the claim's `base_sha`;
+a moved HEAD refuses with structured `attempt_blocked_by_open_claim` (claim id + campaign binding,
+CLI exit 1); refuse → `mission withdraw` → next attempt succeeds is fixture-proven.
+**U2 — qualification recipe staging**: new `scripts/lib/qualify-stage-credentials.sh` reseeds staged
+credentials by sha256 source stamp (rotation-safe; the D7 kimi/grok 480-attempt burn shape) and
+`plan` mode refuses on drift or on an unstamped legacy copy; all 14 administration `run.sh` recipes
+migrated identically. **U3 — wall cap**: `campaign.max_wall_seconds` schema ceiling 3600 → 14400
+(4 h; governance aggregate 36000 unchanged) with the JS mirrors
+(`dispatch-unit-contract` schema, `mission-execution-graph.js`, `campaign-dispatch-projection.js`,
+`dispatch-contract.js`) moved in lockstep and boundary tests at 14400/14401. Test hardening from the
+final gate: dispatch-contract Case 4.3 fixture moved out of the raised range (+ message assertion);
+engine-qualify D5 strict cases track the record stamp's UTC date (pinned `--now` was a day-rollover
+time bomb, and the pinned negatives were vacuous). Governance note: `enforcement_mode` was `shadow`
+on the feature branch only (Board decision, `dispatch-hetero.sh` enforce-gate has no unmanaged path
+— pre-existing BACKLOG row) and is restored byte-identical to `enforce` before this release.
+
 ## v2.35.4 — pooled verdict hardening + D7 re-administration
 
 Two shipped-code fixes surfaced by the first real-money run of the pooled consult/discuss verdict

@@ -63,22 +63,10 @@
       }
     ],
     "approval_policy": {
-      "read_only": {
-        "requires_approval": false,
-        "max_uses": 1
-      },
-      "reversible": {
-        "requires_approval": false,
-        "max_uses": 1
-      },
-      "external": {
-        "requires_approval": true,
-        "max_uses": 1
-      },
-      "irreversible": {
-        "requires_approval": true,
-        "max_uses": 1
-      }
+      "read_only": { "requires_approval": false, "max_uses": 1 },
+      "reversible": { "requires_approval": false, "max_uses": 1 },
+      "external": { "requires_approval": true, "max_uses": 1 },
+      "irreversible": { "requires_approval": true, "max_uses": 1 }
     },
     "action_catalog": [
       {

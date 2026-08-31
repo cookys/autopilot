@@ -253,6 +253,199 @@ if (createMissionState && reduceMissionState && stateHash) {
         ? 'PASS' : 'FAIL'}`);
   }
   {
+    // U4 interplay: a node holding an open active_claim_id blocks a new
+    // attempt (already proved above as `grant_already_claimed`). This block
+    // proves the full recovery loop BACKLOG "`mission grant` silently
+    // replays a stale claim when the node holds an open `active_claim_id`"
+    // requires: refuse -> `mission withdraw` (U1's verb, a real campaign
+    // ledger) releases the claim -> the next attempt is grantable. Uses the
+    // legacy (non mission-subject-v2) identity scheme so the claim's
+    // campaign_id is a real ICC `campaign-v1-...` id `mission withdraw` can
+    // actually bind against (mission-subject-v2 claims mint `campaign-v2-...`
+    // ids that cannot resolve against a real ICC ledger today — a pre-
+    // existing, orthogonal gap in `mission withdraw`, out of scope here and
+    // filed to BACKLOG separately).
+    const { execFileSync: execFileSyncLocal, spawnSync: spawnSyncLocal } = require('child_process');
+    const fsLocal = require('fs');
+    const osLocal = require('os');
+    const cryptoLocal = require('crypto');
+    const {
+      campaignIdFor, createCampaignState, canonicalDigest,
+    } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+    const { runMissionCli } = require(path.join(root, 'src', 'mission', 'cli'));
+
+    const graphNode = {
+      id: 'withdraw-interplay',
+      dependencies: [],
+      acceptance_ids: ['acc-1'],
+      verification_commands: ['node fixture.js'],
+      // Attempt 1 (opened, then withdrawn) + attempt 2 (post-withdraw).
+      gate_attempt_budget: 2,
+      reservation: {
+        campaigns: 1, wall_seconds: 10, tool_calls: 3, engine_attempts: 1,
+        external_wait_seconds: 0, canonical_changed_files: 1, output_bytes: 128,
+      },
+      campaign: {
+        spec: { path: 'src/value.js', section: 'Withdraw interplay' },
+        required_paths: ['src/value.js'],
+        output_paths: ['src/value.js'],
+        allowed_path_prefixes: ['src/'],
+        max_changed_files: 1,
+        max_wall_seconds: 10,
+      },
+    };
+    const executionGraph = {
+      schema_version: 1,
+      artifact_type: 'mission_execution_graph',
+      nodes: [graphNode],
+    };
+    const graphContract = {
+      ...makeContract(),
+      enforcement_mode: 'enforce',
+      mission_policy_digest: m.sha256('mission-policy-withdraw'),
+      mission_graph_digest: m.sha256(m.canonicalJson(executionGraph)),
+      execution_graph: executionGraph,
+    };
+    const repoIdentity = 'git-common-dir:/fixture-grant-open-claim-interplay';
+    const contractDigest = cryptoLocal.createHash('sha256').update('withdraw-interplay-contract').digest('hex');
+    const iccCampaignId = campaignIdFor(repoIdentity, 'icc-withdraw-interplay', contractDigest);
+
+    const s0 = createMissionState(graphContract);
+    const attempt1 = reduceMissionState(
+      s0,
+      graphClaimEvent(s0, { idempotency_key: 'withdraw-attempt-1', campaign_id: iccCampaignId }),
+    );
+    console.log(`withdraw-interplay-attempt1-claimed\t${
+      attempt1.receipt.artifact_type === 'mission_campaign_grant_claimed' ? 'PASS' : 'FAIL'}`);
+    const claimId = attempt1.receipt.claim_id;
+    console.log(`withdraw-interplay-open-claim-recorded\t${
+      attempt1.state.graph_progress['withdraw-interplay'].active_claim_id === claimId ? 'PASS' : 'FAIL'}`);
+
+    const tmp = fsLocal.mkdtempSync(path.join(osLocal.tmpdir(), 'mission-grant-open-claim-'));
+    const stateBefore = path.join(tmp, 'state-before.json');
+    fsLocal.writeFileSync(stateBefore, JSON.stringify(attempt1.state));
+
+    // Build a REAL ICC campaign ledger and drive it straight to TERMINAL_STOP
+    // (no lease/mutation round required — `createCampaignState` starts with
+    // `live_lease: null`, and the reducer accepts `terminal_stop` from any
+    // non-terminal phase while the lease is clear) so `mission withdraw`'s
+    // `CAMPAIGN_TERMINAL.has(projection.state.phase)` gate is satisfiable.
+    const RUN_LEDGER = path.join(root, 'scripts', 'run-ledger.sh');
+    function runLedgerLocal(args) {
+      const result = spawnSyncLocal('bash', [RUN_LEDGER, ...args], { encoding: 'utf8' });
+      if (result.status !== 0) throw new Error(`run-ledger.sh ${args.join(' ')} failed: ${result.stderr}`);
+      return JSON.parse(result.stdout);
+    }
+    const ledgerPath = path.join(tmp, 'icc-ledger.jsonl');
+    runLedgerLocal(['init', '--ledger', ledgerPath]);
+    const acquire = runLedgerLocal([
+      'stage-acquire', '--ledger', ledgerPath, '--run-id', iccCampaignId, '--stage', 'campaign',
+      '--pid', String(process.pid), '--resources', `campaign:${iccCampaignId}`,
+    ]);
+    const initialState = createCampaignState({
+      contract: { ticket: 'icc-withdraw-interplay', profile: 'poc', max_repair_generations: 1, max_wall_seconds: 100, max_changed_files: 2, baseline_churn: 10, max_extra_churn: 5 },
+      contractDigest,
+      repoIdentity,
+      startedAt: '2026-08-31T00:00:00.000Z',
+    });
+    const initialStateDigest = canonicalDigest(initialState);
+    runLedgerLocal([
+      'journal-add', '--ledger', ledgerPath, '--run-id', iccCampaignId, '--stage', 'campaign',
+      '--generation', String(acquire.generation), '--nonce', acquire.nonce,
+      '--idempotency-key', `intake:${iccCampaignId}`, '--op', 'campaign_intake',
+      '--payload', JSON.stringify({
+        schema_version: 1,
+        artifact_type: 'implementation_campaign_intake',
+        campaign_id: iccCampaignId,
+        contract_digest: contractDigest,
+        initial_state: initialState,
+        initial_state_digest: initialStateDigest,
+      }),
+    ]);
+    const stopEvent = {
+      schema_version: 1,
+      event_type: 'terminal_stop',
+      campaign_id: iccCampaignId,
+      contract_digest: contractDigest,
+      generation: 0,
+      idempotency_key: `stop:${iccCampaignId}`,
+      input_artifact_digest: contractDigest,
+      output_artifact_digest: cryptoLocal.createHash('sha256').update('withdraw-interplay-stop').digest('hex'),
+      timestamp: '2026-08-31T00:00:01.000Z',
+      stage_identity: 'withdraw-interplay-stop',
+      usage: { repair_generations: 0, elapsed_wall_seconds: 1, changed_files: 0, churn: 0 },
+      payload: {
+        reason: 'fixture: campaign already terminal before withdraw',
+        stop_receipt_digest: cryptoLocal.createHash('sha256').update('withdraw-interplay-stop-receipt').digest('hex'),
+      },
+    };
+    runLedgerLocal([
+      'journal-add', '--ledger', ledgerPath, '--run-id', iccCampaignId, '--stage', 'campaign',
+      '--generation', String(acquire.generation), '--nonce', acquire.nonce,
+      '--idempotency-key', stopEvent.idempotency_key, '--op', 'campaign_event',
+      '--payload', JSON.stringify({
+        schema_version: 1,
+        artifact_type: 'implementation_campaign_event',
+        campaign_id: iccCampaignId,
+        contract_digest: contractDigest,
+        event: stopEvent,
+        artifact_reference: null,
+      }),
+    ]);
+
+    function runCliLocal(args) {
+      // `cmdWithdraw` (like several mission cli.js commands) writes success
+      // output through the module-local `emit()` helper, which targets the
+      // real `process.stdout` directly rather than the injected
+      // `options.stdout` — unlike `emitTo()`, which the graph grant path
+      // uses. Capture the real stream so this fixture sees the JSON body.
+      let stdout = ''; let stderr = '';
+      const realWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = (chunk, ...rest) => {
+        stdout += chunk;
+        return realWrite(chunk, ...rest);
+      };
+      let code;
+      try {
+        code = runMissionCli(args, {
+          stdout: { write: (v) => { stdout += v; } },
+          stderr: { write: (v) => { stderr += v; } },
+        });
+      } finally {
+        process.stdout.write = realWrite;
+      }
+      let payload = null;
+      try { payload = JSON.parse(stdout); } catch (_error) { payload = null; }
+      return { code, stdout, stderr, payload };
+    }
+    const stateAfterWithdraw = path.join(tmp, 'state-after-withdraw.json');
+    const withdrawResult = runCliLocal([
+      'withdraw', '--state', stateBefore, '--out', stateAfterWithdraw,
+      '--claim-id', claimId, '--campaign-ledger', ledgerPath,
+    ]);
+    console.log(`withdraw-interplay-withdraw-succeeds\t${
+      withdrawResult.code === 0 && withdrawResult.payload && withdrawResult.payload.status === 'withdrawn'
+        ? 'PASS' : 'FAIL'}`);
+    const stateAfter = JSON.parse(fsLocal.readFileSync(stateAfterWithdraw, 'utf8'));
+    console.log(`withdraw-interplay-claim-released\t${
+      stateAfter.claims[claimId] && stateAfter.claims[claimId].released === true ? 'PASS' : 'FAIL'}`);
+    console.log(`withdraw-interplay-active-claim-cleared\t${
+      stateAfter.graph_progress['withdraw-interplay'].active_claim_id === null ? 'PASS' : 'FAIL'}`);
+
+    const attempt2 = reduceMissionState(
+      stateAfter,
+      graphClaimEvent(stateAfter, {
+        idempotency_key: 'withdraw-attempt-2',
+        campaign_id: iccCampaignId,
+        graph_attempt: 2,
+        base_sha: '3333333333333333333333333333333333333333',
+      }),
+    );
+    console.log(`withdraw-interplay-next-attempt-succeeds\t${
+      attempt2.receipt.artifact_type === 'mission_campaign_grant_claimed'
+      && attempt2.receipt.claim_id !== claimId ? 'PASS' : 'FAIL'}`);
+  }
+  {
     // Replay idempotency: a re-submitted claim with the same idempotency_key
     // returns the same claim_id and does not double-reserve the budget.
     const s0 = createMissionState(makeContract());
@@ -2146,6 +2339,9 @@ for id in \
   graph-budget-one-changed-binding-rejects \
   graph-budget-one-changed-reservation-rejects \
   graph-budget-one-different-idempotency-rejects \
+  withdraw-interplay-attempt1-claimed withdraw-interplay-open-claim-recorded \
+  withdraw-interplay-withdraw-succeeds withdraw-interplay-claim-released \
+  withdraw-interplay-active-claim-cleared withdraw-interplay-next-attempt-succeeds \
   replay-same-claim-id-direct replay-no-double-reserve-direct \
   double-release-rejected-direct \
   binding-mismatch-direct projection-roundtrip-hash-equal \

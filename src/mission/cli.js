@@ -210,12 +210,36 @@ function cmdGrantV2(flags, options = {}) {
   );
   const repo = path.resolve(flags.repo || options.cwd || process.cwd());
   const preparedReceipt = readJson(requireFlag(flags, 'prepared'), 'Mission prepare receipt');
-  const granted = runtime.grantMissionCampaign({
-    repo,
-    preparedReceipt,
-    nodeId: requireFlag(flags, 'node'),
-    now: flags.now,
-  });
+  let granted;
+  try {
+    granted = runtime.grantMissionCampaign({
+      repo,
+      preparedReceipt,
+      nodeId: requireFlag(flags, 'node'),
+      now: flags.now,
+    });
+  } catch (error) {
+    if (
+      error
+      && error.code === 'MISSION_GRANT_ATTEMPT_BLOCKED'
+      && error.details
+      && typeof error.details === 'object'
+    ) {
+      emitTo({
+        status: 'rejected',
+        code: error.details.code,
+        reason: error.message,
+        claim_id: error.details.claim_id,
+        campaign_id: error.details.campaign_id,
+        graph_node_id: error.details.graph_node_id,
+        graph_attempt: error.details.graph_attempt,
+        base_sha: error.details.base_sha,
+        head_sha: error.details.head_sha,
+      }, options);
+      return 1;
+    }
+    throw error;
+  }
   emitTo(granted, options);
   return 0;
 }

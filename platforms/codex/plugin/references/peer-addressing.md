@@ -39,27 +39,46 @@ from_handle != <self>`), so any teammate can read who sent what and when.
 Nothing in the relay deletes message rows — the inactivity sweeper only touches
 `human` and `token` — so "durably" means indefinitely.
 
-**Persistence follows the addressing mode, not the audience size.** For
-`kind: "chat"` — everything else on this page — the three modes differ:
+### What survives, and who can read it
 
-| Address (`kind: "chat"`) | Stored? | Who can read it afterwards |
+The rule that matters is one sentence, and it is deliberately conservative:
+
+> **Assume every message you send is persisted and readable by other sessions,
+> unless it is a `kind: "chat"` narrowed with `to_filter.instance`.**
+
+That is the only form you can *rely* on leaving no row. A few other
+combinations also happen to leave none — but relying on that is how this
+paragraph got written wrong four times, and being wrong in the "I thought it
+was private" direction is the expensive one.
+
+Concretely, "readable" means: a stored row is returned by `poll_inbox` /
+`GET /v1/messages` to the **recipient handle**, which is every sibling session
+sharing it — and for `@team`, to every handle. Nothing deletes those rows today
+(the relay's sweeper only touches `token` and `human`), so this is indefinite.
+
+What the shipped paths do:
+
+| Sent via | Lands as | Stored? |
 |---|---|---|
-| `to_filter={"instance": …}` | **no** — stamped ephemeral, no row | nobody; it exists only in the delivery |
-| `to="<handle>"` | **yes** | every sibling session sharing that handle, via `poll_inbox` |
-| `to="@team"` (± `to_filter.repo`) | **yes** | every other handle |
+| `fleet send "…"` / `send_to_peer` with no recipient | `@team` + `to_filter.repo` (the client rewrites it) | yes |
+| `fleet send --to <handle> "…"` | `to="<handle>"`, no filter | yes |
+| `fleet send --instance <id> "…"` | `to_filter.instance` | no |
+| `fleet send --fleet-wide "…"` | bare `@team` | yes |
 
-**`kind` is part of the answer, not just the address.** The ephemeral stamp is
-applied only to chat; a `task_dispatch` carrying the *same*
-`to_filter={"instance": …}` is persisted once delivered — deliberately, so the
-reply chain has a parent to point `in_reply_to` at. Both MCP tools shipped today
-keep you out of that corner (`send_to_peer` always sends chat, `dispatch_task`
-sets no `to_filter`), but a CLI or script speaking to the relay directly can
-reach it, and this page is written for those too.
+**Do not extrapolate that table by combining flags.** Persistence is decided by
+`(to, to_filter, kind, delivered)` together, and the combinations are not
+compositional: `--to <handle>` **plus** `--repo` is a directed chat *with* a
+filter, which is ephemeral — the opposite of what row 2 alone suggests. A
+`task_dispatch` narrowed by `to_filter.instance` is persisted (when it reaches
+at least one live instance), the opposite of row 3. And the project default is durable only because the **client** rewrote
+it to `@team` + `{repo}`; the relay applies no such rewrite to a caller that
+speaks to it directly.
 
-So "I sent it directly, it's private" holds for exactly one row of one kind.
-If a message must leave no trace, `to_filter.instance` **with `kind: "chat"`**
-is the only form that achieves it — and *directed* on its own names neither
-half of that.
+The authoritative matrix is the `to_filter` block in
+`hangar-bridge/packages/relay/src/routes/messages.ts` — the branch conditions
+and their reasoning are written out there. Read it rather than a copy: a prose
+table cannot track a four-variable branch space, and every stale copy of it
+reads as authoritative.
 
 **An unqualified `@team` is not a message, it is a fan-out.** Every session under
 every *other* handle receives it **at the relay**; whether one then *reads* it

@@ -35,11 +35,22 @@ it does **not** get you:
 
 What you *do* leave behind is the message. An unfiltered `@team` is persisted
 durably, and every other handle's inbox poll selects it (`to_handle='@team' AND
-from_handle != <self>`), so any teammate can read who sent what and when, for as
-long as the row lives. Note the inversion: a **directed** send is marked
-ephemeral and leaves no row, so the broadcast you should think hardest about
-before sending is also the one most visible afterwards. Deciding to send it is
-the control; the record is only ever read by someone who already went looking.
+from_handle != <self>`), so any teammate can read who sent what and when.
+Nothing in the relay deletes message rows — the inactivity sweeper only touches
+`human` and `token` — so "durably" means indefinitely.
+
+**Persistence follows the addressing mode, not the audience size**, and the two
+directed modes differ:
+
+| Address | Stored? | Who can read it afterwards |
+|---|---|---|
+| `to_filter={"instance": …}` | **no** — stamped ephemeral, no row | nobody; it exists only in the delivery |
+| `to="<handle>"` | **yes** | every sibling session sharing that handle, via `poll_inbox` |
+| `to="@team"` (± `to_filter.repo`) | **yes** | every other handle |
+
+So "I sent it directly, it's private" is true for exactly one of those two, and
+the word *directed* does not distinguish them — name the mode. If a message
+should leave no trace, `to_filter.instance` is the only form that achieves it.
 
 **An unqualified `@team` is not a message, it is a fan-out.** Every session under
 every *other* handle receives it **at the relay**; whether one then *reads* it

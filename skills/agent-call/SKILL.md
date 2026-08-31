@@ -26,3 +26,11 @@ Use this skill only when the intended recipient is an **already-running persiste
 - Do not reproduce tmux attach, paste, wake-up, or shell-guard recipes in project skills. Session registration and harness adapters belong to Agent Call.
 
 For long evidence, send a concise summary plus a path or commit SHA rather than a transcript.
+
+## Addressing
+
+Choosing *who* receives a message — one session, one handle, one repo, or the
+whole fleet — is [`references/peer-addressing.md`](../../references/peer-addressing.md).
+Read it before any broadcast: the unqualified fleet-wide send is the expensive
+default, your own handle is excluded from it, and a narrowed send can match zero
+sessions without erroring.

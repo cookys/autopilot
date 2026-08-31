@@ -2,6 +2,14 @@
 
 ## v2.35.5 — managed-campaign rail debt: terminalize/withdraw, grant replay refusal, credential staging, wall cap
 
+prose-justification: +61 prose lines for `references/peer-addressing.md` (53) and the pointer that
+routes to it from `skills/agent-call` (8). Peer addressing had no documented rule anywhere in the
+repo, and its absence was measured, not theorised: on 2026-08-31 a fleet peer took ~116 injected
+messages into one bridged session in 12 hours, 91 of them unqualified `@team` fan-outs. The rule is
+prose because it is judgment (who *could act* on this?), and it lives in `references/` behind a
+pointer rather than in a SKILL body per `references/skill-contract-card.md`. The enforcement half is
+mechanical and ships outside this repo.
+
 Closes the four rail-debt rows the verdict-stability campaign filed (BACKLOG 2026-08-30), implemented
 by codex `gpt-5.3-codex-spark` leaves under sonnet foremen with depth-0 three-seat hetero qc
 (gpt-5.6-sol / GLM-5.2 / MiniMax-M3; per-batch verdicts SHIP-AS-IS after verified repairs).

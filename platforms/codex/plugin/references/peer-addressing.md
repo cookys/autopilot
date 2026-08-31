@@ -10,15 +10,26 @@ sending peer traffic.
 
 | Intent | Address |
 |--------|--------|
+| Everyone working on this project (the default) | omit `to` — the sender fills `to_filter={"repo": …}` from its own checkout |
 | One specific session | `to_filter={"instance": "<id>"}` — ids come from `list_peers` |
 | Everyone sharing one handle (in practice, one machine) | `to="<handle>"` |
+| A non-Claude harness reached by a courier | `to="<courier-handle>"` — a courier publishes no repo, so the project default never reaches one |
 | Everyone working on one repo | `to="@team"` + `to_filter={"repo": "<repo>"}` |
-| The whole fleet | `to="@team"` alone — **ask the operator first** |
+| The whole fleet | `to="@team"` **plus `fleet_wide: true`** — and **ask the operator first** |
+
+`fleet_wide` is not decoration. A relay running with the broadcast gate in
+`enforce` refuses an unqualified `@team` — no subject, no `to_filter`, no
+`fleet_wide` — with a 400 that names the alternatives. The flag is advisory by
+construction (any client that can set it can always set it), so what actually
+holds the line is the audit event and the recipient count returned to you.
 
 **An unqualified `@team` is not a message, it is a fan-out.** Every session under
-every *other* handle receives it, reads it, decides whether it is addressed, and
-usually answers, so one broadcast costs the fleet many times what it cost to
-write — and a discussion held on that channel multiplies across every machine.
+every *other* handle receives it **at the relay**; whether one then *reads* it
+depends on its final mile — an agent-call-bridged peer declines an unqualified
+broadcast outright and leaves it pullable, which is also exactly why a
+*narrowed* `@team` still lands there. For the sessions that do read it, each
+decides whether it is addressed and usually answers, so one broadcast costs the
+fleet many times what it cost to write — and a discussion held on that channel multiplies across every machine.
 Ask "who could act on this?" before sending: usually one session, sometimes one
 repo, rarely everyone.
 

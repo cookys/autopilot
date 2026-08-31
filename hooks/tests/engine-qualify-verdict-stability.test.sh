@@ -1874,7 +1874,7 @@ printf '%s\n' "$POOLED_QUAL" | node "$CLI" record >/dev/null
 SCOPE_D="$(mktemp "$TEST_TMP/scope-d.XXXXXX.json")"
 node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_D" >/dev/null
 SEAT_D_OK="$(node "$CLI" seat-status --engine d5-qual --runner cc-shim --role consult \
-  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_D")"
+  --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_D")"
 assert_contains "$SEAT_D_OK" '"admission_status":"qualified"' "D5 (d) pooled qualified admitted under --require-evidence"
 
 # tier1_terminated failed row (no evidence) → non-strict sees failed/no baseline
@@ -1985,7 +1985,7 @@ printf '%s\n' "$POOLED_T1" | node "$CLI" record >/dev/null
 SCOPE_D_T1="$(mktemp "$TEST_TMP/scope-d-t1.XXXXXX.json")"
 node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_D_T1" >/dev/null
 SEAT_D_T1_STRICT="$(node "$CLI" seat-status --engine d5-t1-strict --runner cc-shim --role consult \
-  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_D_T1")"
+  --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_D_T1")"
 assert_contains "$SEAT_D_T1_STRICT" '"admission_status":"no_record"' \
   "D5 (d) an evidence-backed tier1_terminated pooled receipt is admission_status:no_record under strict --require-evidence (computeSeatProjectionStrict's deriveStatus reads the compiled evidence.state, forced to 'degraded' by the qualified+tier1 invariant, never 'qualified')"
 
@@ -2122,12 +2122,12 @@ G_EID="$(jq_get event_id <"$TEST_TMP/g-strict.json")"
 SCOPE_G="$(mktemp "$TEST_TMP/scope-g.XXXXXX.json")"
 node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_G" >/dev/null
 ST_G_BEFORE="$(node "$CLI" seat-status --engine g-strict --runner cc-shim --role consult \
-  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_G")"
+  --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_G")"
 assert_contains "$ST_G_BEFORE" '"admission_status":"qualified"' "D5 (g) strict WITHOUT marker admits"
 node "$CLI" record --supersede-provisional --supersedes-event-id "$G_EID" \
   --reason 'superseded-pending-verdict-redesign' </dev/null >/dev/null
 ST_G_AFTER="$(node "$CLI" seat-status --engine g-strict --runner cc-shim --role consult \
-  --now 2026-08-29 --require-evidence --scope-file "$SCOPE_G")"
+  --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_G")"
 assert_contains "$ST_G_AFTER" '"admission_status":"no_record"' "D5 (g) strict WITH marker returns no_record"
 
 # Marker never projected as baseline candidate

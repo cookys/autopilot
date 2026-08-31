@@ -624,9 +624,12 @@ assert_eq "$rc" "2"
 assert_contains "$out" "mirror"
 
 echo "--- Case 4.3: Out-of-range budget ---"
-sed 's/"wall_seconds": 60/"wall_seconds": 5000/' "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/bad_budget.json"
+sed 's/"wall_seconds": 60/"wall_seconds": 15000/' "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/bad_budget.json"
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/bad_budget.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "2"
+# Message assertion so the next ceiling change fails loudly instead of rotting
+# the way 5000 did when the cap moved 3600 -> 14400 (2026-08-31).
+assert_contains "$out" "wall_seconds"
 
 echo "--- Case 4.4: Shell-string acceptance entry ---"
 cat > "$CONTRACT_DIR/shell_accept.json" <<EOF

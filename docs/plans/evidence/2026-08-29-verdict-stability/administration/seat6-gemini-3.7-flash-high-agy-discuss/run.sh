@@ -40,6 +40,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/scripts/engine-qualify.js" ] \
   || { echo "run.sh: could not resolve repo root from $SELF_DIR" >&2; exit 2; }
+source "$REPO_ROOT/scripts/lib/qualify-stage-credentials.sh"
 
 MODE="${1:-plan}"
 case "$MODE" in
@@ -83,11 +84,10 @@ STAGING_AGY_DIR="$STAGING_HOME/.gemini/antigravity-cli"
 mkdir -p "$STAGING_AGY_DIR"
 chmod 700 "$STAGING_HOME" "$HOME/.autopilot/qualify-staging/seat6-gemini-3.7-flash-high-agy-discuss" 2>/dev/null || true
 REAL_AGY_DIR="$HOME/.gemini/antigravity-cli"
-for f in antigravity-oauth-token installation_id settings.json; do
-  if [ ! -f "$STAGING_AGY_DIR/$f" ] && [ -f "$REAL_AGY_DIR/$f" ]; then
-    cp "$REAL_AGY_DIR/$f" "$STAGING_AGY_DIR/$f"
-  fi
+for f in installation_id settings.json; do
+  qualify_stage_identity "$STAGING_AGY_DIR/$f" "$REAL_AGY_DIR/$f"
 done
+qualify_stage_credential "$STAGING_AGY_DIR/antigravity-oauth-token" "$REAL_AGY_DIR/antigravity-oauth-token" "$MODE"
 if [ ! -f "$STAGING_AGY_DIR/antigravity-oauth-token" ]; then
   echo "run.sh: no antigravity-oauth-token seeded into $STAGING_AGY_DIR — --execute will fail to authenticate" >&2
 fi

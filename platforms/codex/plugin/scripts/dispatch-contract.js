@@ -671,8 +671,8 @@ function validateSchema(contract, errors, repoPath = '') {
     if (!hasKey(contract.budget, 'max_attempts')) errors.push('budget: missing max_attempts');
     if (!hasKey(contract.budget, 'max_context_files')) errors.push('budget: missing max_context_files');
 
-    if (!Number.isInteger(contract.budget.wall_seconds) || contract.budget.wall_seconds < 10 || contract.budget.wall_seconds > 3600) {
-      errors.push('budget.wall_seconds: must be integer 10..3600');
+    if (!Number.isInteger(contract.budget.wall_seconds) || contract.budget.wall_seconds < 10 || contract.budget.wall_seconds > 14400) {
+      errors.push('budget.wall_seconds: must be integer 10..14400');
     }
     if (!Number.isInteger(contract.budget.max_attempts) || contract.budget.max_attempts < 1 || contract.budget.max_attempts > 3) {
       errors.push('budget.max_attempts: must be integer 1..3');

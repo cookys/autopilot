@@ -717,10 +717,13 @@ never an ad hoc descriptive string.
 - **Context**: add a bounded, evidence-gated terminalization for a campaign whose leaf run is provably dead (leaf manifest ended, pid gone, worktree reaped) that appends `MUTATION_FAILED` with the live lease identity and releases the Mission claim; never a silent no-op.
 - **Effort**: S–M
 - **Source**: l6-verdict-stability-p1 campaigns 2/3 + salvage, 2026-08-29/30.
+- **Status**: shipped in U1 (branch `u1-terminalize-withdraw-20260831`) — `node bin/autopilot.js campaign terminalize --campaign-id <id> --leaf-manifest <file> [--ledger <file>]`.
 
-### `mission grant` silently replays a stale claim when the node holds an open `active_claim_id`
+### `mission grant` silently replays a stale claim when the node holds an open `active_claim_id` — SHIPPED in U4 (branch `u4-grantblock-20260831`)
 - **Trigger**: already fired 2026-08-30 (lineage 420ac261, node `qualification-verdict-stability`): with attempt 1's claim still open, `mission grant` returned `status:"replay"` with attempt 1's contract — a `base_sha` two merges behind `develop` and an already-consumed branch — instead of refusing.
 - **Context**: the idempotency key resolves to `graph-node:<id>:attempt:<n>` while `active_claim_id` is set; nothing tells the caller the attempt cannot advance. Surface `attempt_blocked_by_open_claim` (with the claim id and its campaign state) or refuse outright — a replayed stale contract is a false green in the evidence-discipline sense.
+- **Resolution**: the bug was not in the reducer (`src/engine/mission-convergence.js`'s `graphGrantContext` already refuses a *new* attempt correctly — `graph-budget-one-different-idempotency-rejects` in `hooks/tests/mission-convergence.test.sh` proves it) — it was `src/mission/runtime.js`'s `grantMissionCampaign`, which short-circuited to a silent replay of any open claim BEFORE ever calling the reducer. Fixed by comparing the open claim's `base_sha` to the current repo HEAD: unchanged HEAD still replays (preserves `cli-grant-exact-replay`, `hooks/tests/mission-runtime-v2.test.sh:539`); a moved HEAD refuses with a structured `attempt_blocked_by_open_claim` payload (claim_id + campaign_id) surfaced as JSON on stdout with a non-zero exit via `mission grant`'s CLI (`src/mission/cli.js` `cmdGrantV2`). The reducer's own `rejection()` path was deliberately left untouched — it terminalizes the whole Mission lineage, wrong blast radius for a routine "attempt already open, please withdraw" refusal. Covered by `hooks/tests/mission-grant-open-claim.test.sh` (new) and a `withdraw-interplay-*` block in `hooks/tests/mission-convergence.test.sh` proving refuse → `mission withdraw` (U1's verb) → next attempt succeeds.
+- **Follow-up filed** (not blocking, orthogonal): `mission withdraw`'s campaign-ledger binding assumes an ICC `campaign-v1-...` id; a `mission-subject-v2` claim's `campaign_id` is `campaign-v2-...` and cannot resolve against a real ICC ledger under the current `projectCampaign`/`validateInitialCampaignState` contract, so `mission withdraw` cannot release a v2-identity claim (the kind `grantMissionCampaign` always mints) against a real campaign today. Discovered while building this fix's withdraw-interplay fixture, worked around there by using a legacy (non-v2) identity claim; the mismatch itself needs its own fix.
 - **Effort**: S
 - **Source**: phase-2 foreman escalation, 2026-08-30.
 
@@ -729,6 +732,7 @@ never an ad hoc descriptive string.
 - **Context**: pairs with the existing "Killed/dead managed campaign stuck at IMPLEMENTING" row: the fix must release BOTH the campaign lease (MUTATION_FAILED with the live lease identity) and the Mission claim, gated on provable leaf death, and be reachable from `mission`/`campaign` CLI without raw state plumbing.
 - **Effort**: S–M
 - **Source**: phase-2 foreman escalation + depth-0 operator action, 2026-08-30.
+- **Status**: shipped in U1 (branch `u1-terminalize-withdraw-20260831`) — `node bin/autopilot.js mission withdraw --state <file> --out <file> --claim-id <id> --campaign-ledger <file>`, refuses `mission_withdraw_campaign_not_terminal` until the bound campaign is terminal.
 
 ### A managed campaign whose wall expires leaves no terminal summary and no journal disposition
 - **Trigger**: already fired twice 2026-08-30 (campaigns attempt-3 `d240ef14…` and `…a3` D5): the leaf committed, `max_wall_seconds` (3600, schema max) elapsed before the review round, the `engine implement-review` process ended with a 0-byte stdout, and the campaign sits at `phase=IMPLEMENTING, activity=dead, wall_seconds_remaining=0` with a held lease and a live Mission claim.
@@ -736,13 +740,14 @@ never an ad hoc descriptive string.
 - **Effort**: S–M
 - **Source**: phase-2 foremen (D4, D5) 2026-08-30.
 
-### 3600 s wall cap is the schema maximum and too small for an implement+review campaign on a real deliverable
+### 3600 s wall cap is the schema maximum and too small for an implement+review campaign on a real deliverable — SHIPPED in U3 (branch `u3-wallcap-20260831`), ceiling 14400 by CEO decision 2026-08-31
 - **Trigger**: any deliverable whose implementer alone needs > ~40 min (D1–D3, D4, D5 all did: 42–55 min grok-4.5 runs), leaving no wall for the review round.
 - **Context**: `schemas/mission-execution-graph.schema.json` caps `campaign.max_wall_seconds` at 3600 and `max_engine_attempts` at 3. Either raise the schema ceiling (with governance `max_wall_seconds` still the aggregate bound) or make the wall cover implementation only and give review rounds their own budget. Until then every real campaign closes through the depth-0 salvage path.
 - **Effort**: S (schema + one test) — but a governance decision.
 - **Source**: phases 1–2, 2026-08-29/30.
 
 ### Qualification recipes seed staged credentials only when the staged file is absent — rotating OAuth runners reuse stale material
+- **Status**: shipped in U2 (branch `u2-staging-20260831`) — `scripts/lib/qualify-stage-credentials.sh` reseeds credential files by sha256 stamp (mismatch => reseed) and `plan` mode refuses on drift; all 14 `docs/plans/evidence/*/administration/*/run.sh` recipes migrated identically; covered by `hooks/tests/qualify-recipe-credential-staging.test.sh`.
 - **Trigger**: already fired 2026-08-30 (D7): kimi and grok seats returned 240/240 `provider_process_failed` each (480 case attempts, ~1600 s) because the `if [ ! -f <staged> ]` guard kept 2026-08-29 credentials while the live ones had rotated; codex/cc-shim/agy were spared only because they do not rotate.
 - **Context**: every `run.sh` under `docs/plans/evidence/*/administration/*/` copies this block. Seed unconditionally (or stamp the staging dir with the source file's sha256 and reseed on mismatch), and make `plan` mode compare staged vs live hashes and refuse when they differ. The harness rule correctly refused a verdict, so no capability row was polluted.
 - **Effort**: S
@@ -753,3 +758,10 @@ never an ad hoc descriptive string.
 - **Context**: the strict path needs a caller-supplied applicability scope file; there is no helper that derives the canonical scope for a role, so foremen fall back to the non-strict `seat-status`. Add a `--role-default-scope` (or print the expected scope JSON) so the strict path is one command.
 - **Effort**: S
 - **Source**: D7 foreman 2026-08-30.
+
+### `mission withdraw` cannot release a `mission-subject-v2` claim against a real ICC campaign ledger
+- **Trigger**: any operator calling `mission withdraw --campaign-ledger <real ICC ledger>` on a claim minted by `grantMissionCampaign` (the production `mission grant --repo --prepared --node` CLI path, which always uses `identity_scheme: 'mission-subject-v2'`).
+- **Context**: `missionCampaignIdFor` (`src/engine/mission-campaign-identity.js`) mints `campaign-v2-<sha256>` ids for every mission-managed claim. `mission withdraw`'s ledger lookup (`cmdWithdraw` → `projectCampaign(rows, claim.campaign_id)` in `src/campaign/cli.js`) requires the ledger's intake `initial_state.campaign_id` to equal that exact string, but `validateInitialCampaignState` (`src/engine/implementation-campaign.js`) hard-requires ICC's own `campaign_id` to match `^campaign-v1-[0-9a-f]{64}$` — a real ICC campaign can never carry a `campaign-v2-...` id. The two id spaces are mutually exclusive, so no real ICC-ledger-backed campaign can ever satisfy `mission withdraw`'s lookup for a v2-identity claim today.
+- **Discovered**: while building the U4 fixture (`hooks/tests/mission-convergence.test.sh`'s `withdraw-interplay-*` block) for BACKLOG "`mission grant` silently replays a stale claim…" — worked around there by using a legacy (non-v2) identity claim, which is orthogonal to and unaffected by the v1/v2 mismatch. Not verified whether real managed-campaign production traffic has actually hit this (U1's own withdraw usage in the 2026-08-30/31 rail-debt campaign also used non-v2 claims), but it is reachable from the documented CLI contract as written.
+- **Effort**: S–M (either mint an ICC-side v2 alias, or teach `projectCampaign`/`validateInitialCampaignState` to accept both id shapes, or have mission's withdraw path translate identity schemes before the ledger lookup).
+- **Source**: U4 foreman, 2026-08-31.

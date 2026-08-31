@@ -44,6 +44,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/scripts/engine-qualify.js" ] \
   || { echo "run.sh: could not resolve repo root from $SELF_DIR" >&2; exit 2; }
+source "$REPO_ROOT/scripts/lib/qualify-stage-credentials.sh"
 
 MODE="${1:-plan}"
 case "$MODE" in
@@ -95,19 +96,11 @@ chmod 700 "$STAGING_ROOT" "$STAGING_HOME" "$STAGING_KIMI_DIR" \
   "$STAGING_KIMI_DIR/credentials" "$STAGING_KIMI_DIR/oauth" 2>/dev/null || true
 REAL_KIMI_DIR="$HOME/.kimi-code"
 for f in config.toml device_id; do
-  if [ ! -f "$STAGING_KIMI_DIR/$f" ] && [ -f "$REAL_KIMI_DIR/$f" ]; then
-    cp "$REAL_KIMI_DIR/$f" "$STAGING_KIMI_DIR/$f"
-    chmod 600 "$STAGING_KIMI_DIR/$f"
-  fi
+  qualify_stage_identity "$STAGING_KIMI_DIR/$f" "$REAL_KIMI_DIR/$f"
+  [ -f "$STAGING_KIMI_DIR/$f" ] && chmod 600 "$STAGING_KIMI_DIR/$f" 2>/dev/null || true
 done
-if [ ! -f "$STAGING_KIMI_DIR/credentials/kimi-code.json" ] && [ -f "$REAL_KIMI_DIR/credentials/kimi-code.json" ]; then
-  cp "$REAL_KIMI_DIR/credentials/kimi-code.json" "$STAGING_KIMI_DIR/credentials/kimi-code.json"
-  chmod 600 "$STAGING_KIMI_DIR/credentials/kimi-code.json"
-fi
-if [ ! -f "$STAGING_KIMI_DIR/oauth/kimi-code" ] && [ -f "$REAL_KIMI_DIR/oauth/kimi-code" ]; then
-  cp "$REAL_KIMI_DIR/oauth/kimi-code" "$STAGING_KIMI_DIR/oauth/kimi-code"
-  chmod 600 "$STAGING_KIMI_DIR/oauth/kimi-code"
-fi
+qualify_stage_credential "$STAGING_KIMI_DIR/credentials/kimi-code.json" "$REAL_KIMI_DIR/credentials/kimi-code.json" "$MODE"
+qualify_stage_credential "$STAGING_KIMI_DIR/oauth/kimi-code" "$REAL_KIMI_DIR/oauth/kimi-code" "$MODE"
 if [ ! -f "$STAGING_KIMI_DIR/credentials/kimi-code.json" ]; then
   echo "run.sh: no credentials/kimi-code.json seeded into $STAGING_KIMI_DIR — --execute will likely fail to authenticate" >&2
 fi

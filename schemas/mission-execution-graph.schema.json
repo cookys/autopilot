@@ -144,7 +144,7 @@
         "max_growth_ratio": { "type": "number", "minimum": 1, "maximum": 1.5 },
         "max_extra_churn": { "type": "integer", "minimum": 0, "maximum": 5000000 },
         "max_repair_generations": { "type": "integer", "minimum": 0, "maximum": 5 },
-        "max_wall_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+        "max_wall_seconds": { "type": "integer", "minimum": 1, "maximum": 14400 }
       }
     },
     "relative_path": {

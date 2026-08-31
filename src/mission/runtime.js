@@ -61,15 +61,16 @@ const PREPARE_RECEIPT_KEYS = new Set([
 ]);
 
 class MissionRuntimeError extends Error {
-  constructor(code, message) {
+  constructor(code, message, details) {
     super(message);
     this.name = 'MissionRuntimeError';
     this.code = code;
+    if (details && isPlainObject(details)) this.details = details;
   }
 }
 
-function fail(code, message) {
-  throw new MissionRuntimeError(code, message);
+function fail(code, message, details) {
+  throw new MissionRuntimeError(code, message, details);
 }
 
 function isPlainObject(value) {
@@ -1434,6 +1435,22 @@ function grantMissionCampaign(input = {}) {
     }
     const live = activeClaimForNode(state, nodeId);
     if (live) {
+      const headSha = git(repoInfo.repo, ['rev-parse', 'HEAD']);
+      if (live.base_sha !== headSha) {
+        fail(
+          'MISSION_GRANT_ATTEMPT_BLOCKED',
+          `mission grant blocked for graph node ${nodeId}: live claim ${live.claim_id} on attempt ${live.graph_attempt} is stale for head ${headSha} (claim base ${live.base_sha})`,
+          {
+            code: 'attempt_blocked_by_open_claim',
+            claim_id: live.claim_id,
+            campaign_id: live.campaign_id,
+            graph_node_id: nodeId,
+            graph_attempt: live.graph_attempt,
+            base_sha: live.base_sha,
+            head_sha: headSha,
+          },
+        );
+      }
       const draft = live.campaign_contract_draft;
       return writeGrantArtifacts({
         paths: verified.paths,

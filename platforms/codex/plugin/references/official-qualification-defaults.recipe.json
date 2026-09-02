@@ -1,21 +1,36 @@
 {
   "schema_version": 1,
   "artifact_type": "official_qualification_defaults_recipe",
-  "recipe_version": "2026-08-23",
+  "recipe_version": "2026-09-02",
   "note": "GENERATION INPUT — not the artifact. This file names WHICH official administrations are in scope and where each one's evidence bundle lives. scripts/build-qualification-defaults.js reads it, pulls the matching rows verbatim out of a scorecard store, and derives references/official-qualification-defaults.json. Editing this file changes the selection; it can never change a row's contents. Every entry is cross-checked against its bundle's qualify-out.json (engine/runner/role/status/date/corpus_version/prompt_config_hash must all match the store row) and the build fails closed on any mismatch.",
   "excluded": [
     {
-      "event_ids": [5, 6, 9],
+      "event_ids": [
+        5,
+        6,
+        9
+      ],
       "role": "reviewer",
       "reason": "Legacy pre-schema rows (claude-haiku, claude-opus, MiniMax-M3). skills/engine-onboarding/SKILL.md: legacy scorecard rows are compatibility-only and were never produced by the v2 metamorphic corpus that the shipped reviewer defaults come from. Shipping them would mix corpora under one 'official' label."
     },
     {
-      "event_ids": [130, 137, 138],
+      "event_ids": [
+        130,
+        137,
+        138
+      ],
       "role": "implementer",
       "reason": "Pre-suite grok-4.5 administrations over the onboarding-impl-baseline corpus (events 130 @2026-07-24, 137/138 @2026-08-17), superseded on the same seat by event 143 over impl-live-rail-v1 — the shipped implementer suite. Different corpus, so not comparable; one current row per seat and the live-rail administration is the one that ships."
     },
     {
-      "event_ids": [131, 132, 133, 134, 135, 136],
+      "event_ids": [
+        131,
+        132,
+        133,
+        134,
+        135,
+        136
+      ],
       "role": "verification_author",
       "reason": "2026-07-24 onboarding-era corpora (onboarding-verification-author*), superseded by the va-declared-plan-v1 suite that shipped in v2.34.17. Different corpus, not comparable to event 142."
     },
@@ -26,22 +41,90 @@
     }
   ],
   "entries": [
-    { "event_id": 139, "role": "reviewer", "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm-qualify" },
-    { "event_id": 140, "role": "reviewer", "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm53-qualify" },
-    { "event_id": 141, "role": "reviewer", "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/sol-codex-qualify" },
-    { "event_id": 142, "role": "verification_author", "evidence_bundle": "docs/plans/evidence/2026-08-18-verification-author-suite/dogfood" },
-    { "event_id": 143, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok-qualify" },
-    { "event_id": 144, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify" },
-    { "event_id": 145, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/codex-spark-qualify" },
-    { "event_id": 146, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/sol-qualify" },
-    { "event_id": 147, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-pro-qualify" },
-    { "event_id": 148, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/qoder-qualify" },
-    { "event_id": 149, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok46-qualify" },
-    { "event_id": 150, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/glm-qualify" },
-    { "event_id": 151, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/minimax-qualify" },
-    { "event_id": 152, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/flash-medium-qualify" },
-    { "event_id": 153, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/luna-qualify" },
-    { "event_id": 154, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/sonnet5-qualify" },
-    { "event_id": 155, "role": "implementer", "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/opus5-qualify" }
+    {
+      "event_id": 139,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm-qualify"
+    },
+    {
+      "event_id": 140,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm53-qualify"
+    },
+    {
+      "event_id": 141,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/sol-codex-qualify"
+    },
+    {
+      "event_id": 142,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-08-18-verification-author-suite/dogfood"
+    },
+    {
+      "event_id": 143,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok-qualify"
+    },
+    {
+      "event_id": 144,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify"
+    },
+    {
+      "event_id": 145,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/codex-spark-qualify"
+    },
+    {
+      "event_id": 146,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/sol-qualify"
+    },
+    {
+      "event_id": 147,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-pro-qualify"
+    },
+    {
+      "event_id": 148,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/qoder-qualify"
+    },
+    {
+      "event_id": 149,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok46-qualify"
+    },
+    {
+      "event_id": 150,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/glm-qualify"
+    },
+    {
+      "event_id": 151,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/minimax-qualify"
+    },
+    {
+      "event_id": 152,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/flash-medium-qualify"
+    },
+    {
+      "event_id": 153,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/luna-qualify"
+    },
+    {
+      "event_id": 154,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/sonnet5-qualify"
+    },
+    {
+      "event_id": 155,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/opus5-qualify"
+    }
   ]
 }

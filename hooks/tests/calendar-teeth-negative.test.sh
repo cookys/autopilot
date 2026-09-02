@@ -673,8 +673,12 @@ try {
   process.exit(0);
 }
 // NO --now: this is the production default clock.
+// The seat is (engine, runner, role, effort) since v2.35.9 — query the seat this fixture
+// actually created. Omitting --effort would select the LEGACY partition, which is a different
+// seat, and the row would correctly not be found.
 const out = execFileSync('node', [ESC, 'seat-status',
-  '--engine', row.engine, '--runner', row.runner, '--role', row.role], { env, encoding: 'utf8' });
+  '--engine', row.engine, '--runner', row.runner, '--role', row.role,
+  ...(row.effort === undefined ? [] : ['--effort', row.effort])], { env, encoding: 'utf8' });
 const projection = JSON.parse(out);
 process.stdout.write(`${projection.admission_status}:${projection.baseline_event_id}`);
 NODE

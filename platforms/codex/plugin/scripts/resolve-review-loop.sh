@@ -1600,13 +1600,20 @@ SAME_RUNNER_DUAL_SEAT="false"
 _seat_roles=()
 _seat_runners=()
 _seat_engines=()
-_add_seat() { _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); }
+# Effort is part of the seat identity (v2.35.9): a seat qualified at one effort must not answer
+# for another. Real data — grok-4.6@high FAILED, grok-4.6@low QUALIFIED — collapsed to one seat
+# under the old three-field identity. An EMPTY effort here means the legacy partition (rows
+# recorded before effort partitioning), which is a distinct seat, not a wildcard.
+_seat_efforts=()
+_add_seat() {
+  _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); _seat_efforts+=("${4:-}")
+}
 
 # EVERY SELECTABLE ENGINE gets a seat row. "Selectable" means the resolver can
 # hand this engine to a dispatcher on some code path — not merely "is the primary
 # tuple". Ruling 1 is per exact engine + runner + ROLE, so an override for one
 # engine must never admit a sibling engine that happens to share the runner.
-_add_seat "reviewer" "$REV_ENGINE" "$REV_RUNNER"
+_add_seat "reviewer" "$REV_ENGINE" "$REV_RUNNER" "$REV_EFFORT"
 # depth-0 panel 🔴 #1: the risk-tiered overlay is a SECOND selectable reviewer
 # engine on the same runner, and it was never gated. A roster could carry an
 # override for the primary reviewer engine and put a completely unqualified,
@@ -1614,13 +1621,13 @@ _add_seat "reviewer" "$REV_ENGINE" "$REV_RUNNER"
 # emits for every low-risk round. It is the reviewer ROLE (wantRole normalizes
 # the _low_risk suffix away), so the operator writes role "reviewer" and must
 # list EACH engine separately. That is the point: per exact engine.
-[[ -n "$REV_ENGINE_LOW_RISK" ]] && _add_seat "reviewer_low_risk" "$REV_ENGINE_LOW_RISK" "$REV_RUNNER"
-_add_seat "implementer" "$IMPL_ENGINE" "$IMPL_RUNNER"
-[[ "$VER_AUTH_PRESENT" == "true" ]] && _add_seat "verification_author" "$VER_AUTH_ENGINE" "$VER_AUTH_RUNNER"
-[[ -n "$PLAN_REV_RUNNER" ]] && _add_seat "plan_reviewer" "$PLAN_REV_ENGINE" "$PLAN_REV_RUNNER"
-[[ -n "$PLAN_DEEP_RUNNER" ]] && _add_seat "plan_deep_reviewer" "$PLAN_DEEP_ENGINE" "$PLAN_DEEP_RUNNER"
-[[ -n "$CONSULT_RUNNER" ]] && _add_seat "consult" "$CONSULT_ENGINE" "$CONSULT_RUNNER"
-[[ -n "$DISCUSS_RUNNER" ]] && _add_seat "discuss" "$DISCUSS_ENGINE" "$DISCUSS_RUNNER"
+[[ -n "$REV_ENGINE_LOW_RISK" ]] && _add_seat "reviewer_low_risk" "$REV_ENGINE_LOW_RISK" "$REV_RUNNER" "$REV_EFFORT_LOW_RISK"
+_add_seat "implementer" "$IMPL_ENGINE" "$IMPL_RUNNER" "$IMPL_EFFORT"
+[[ "$VER_AUTH_PRESENT" == "true" ]] && _add_seat "verification_author" "$VER_AUTH_ENGINE" "$VER_AUTH_RUNNER" "$VER_AUTH_EFFORT"
+[[ -n "$PLAN_REV_RUNNER" ]] && _add_seat "plan_reviewer" "$PLAN_REV_ENGINE" "$PLAN_REV_RUNNER" "$PLAN_REV_EFFORT"
+[[ -n "$PLAN_DEEP_RUNNER" ]] && _add_seat "plan_deep_reviewer" "$PLAN_DEEP_ENGINE" "$PLAN_DEEP_RUNNER" "$PLAN_DEEP_EFFORT"
+[[ -n "$CONSULT_RUNNER" ]] && _add_seat "consult" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT"
+[[ -n "$DISCUSS_RUNNER" ]] && _add_seat "discuss" "$DISCUSS_ENGINE" "$DISCUSS_RUNNER" "$DISCUSS_EFFORT"
 # depth-0 panel 🔴 #2: panel seats used to be gated only when
 # QC_PANEL_SEATS_COMPLETE was true, so a cursor seat sitting next to ONE ragged
 # or invalid sibling was skipped entirely and resolved clean. An aggregate
@@ -1645,7 +1652,7 @@ for (( _i = 0; _i < _qc_max; _i++ )); do
   _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
   [[ -n "$_qc_run" ]] || continue
   _qc_eng="${QC_PANEL[$_i]:-}"
-  _add_seat "qc_panel[$_i]" "${_qc_eng:-<unspecified>}" "$_qc_run"
+  _add_seat "qc_panel[$_i]" "${_qc_eng:-<unspecified>}" "$_qc_run" "${QC_PANEL_EFFORTS[$_i]:-}"
   [[ -n "$_qc_eng" ]] && _panel_div_runners="$_panel_div_runners $_qc_run"
 done
 
@@ -1687,7 +1694,10 @@ _consult_discuss_switch_on() {
 # could not be derived — and is never treated as "no row found": the gate
 # never silently skips the scope check (plan D7, case xix).
 _try_qualification_row() {
-  local role="$1" eng="$2" run="$3"
+  # $4 is the seat's effort partition. EMPTY means the legacy partition (rows recorded before
+  # effort was part of the seat identity) — it is a distinct seat, never a wildcard, so an empty
+  # effort must not be passed to --effort at all.
+  local role="$1" eng="$2" run="$3" eff="${4:-}"
   _QUALROW_RESULT="no-row"
   _QUALROW_JSON=""
   local scope_file err_file
@@ -1704,8 +1714,10 @@ _try_qualification_row() {
     return
   fi
   local seat_json rc err_text
+  local -a effort_args=()
+  [[ -n "$eff" ]] && effort_args=(--effort "$eff")
   seat_json="$(node "$SCRIPT_DIR/engine-scorecard.js" seat-status \
-    --engine "$eng" --runner "$run" --role "$role" \
+    --engine "$eng" --runner "$run" --role "$role" "${effort_args[@]}" \
     --require-evidence --scope-file "$scope_file" 2>"$err_file")"
   rc=$?
   err_text="$(cat "$err_file" 2>/dev/null)"
@@ -1756,9 +1768,10 @@ QUALROW_ADMITTED_JSON="[]"
 
 for _i in "${!_seat_roles[@]}"; do
   _role="${_seat_roles[$_i]}"; _eng="${_seat_engines[$_i]}"; _run="${_seat_runners[$_i]}"
+  _eff="${_seat_efforts[$_i]:-}"
   _cd_switch_role="${_role%%[*}"
   if _consult_discuss_switch_on "$_cd_switch_role"; then
-    _try_qualification_row "$_cd_switch_role" "$_eng" "$_run"
+    _try_qualification_row "$_cd_switch_role" "$_eng" "$_run" "$_eff"
     if [[ "$_QUALROW_RESULT" == "scope-fail" ]]; then
       # Fail-closed, not skip (plan D7): a manifest that cannot be derived
       # refuses the whole gate — even an operator override cannot rescue a

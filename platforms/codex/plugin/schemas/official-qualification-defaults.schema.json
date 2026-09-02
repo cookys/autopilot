@@ -25,7 +25,10 @@
       "const": "official_qualification_defaults"
     },
     "recipe_version": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "generated_by": {
       "type": "string",
@@ -81,12 +84,20 @@
         },
         "status": {
           "type": "string",
-          "enum": ["qualified", "failed", "expired"]
+          "enum": [
+            "qualified",
+            "failed",
+            "expired"
+          ]
         },
         "seat": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["engine", "runner", "role"],
+          "required": [
+            "engine",
+            "runner",
+            "role"
+          ],
           "properties": {
             "engine": {
               "type": "string",
@@ -98,6 +109,17 @@
             },
             "role": {
               "$ref": "#/$defs/role"
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
             }
           }
         },
@@ -109,7 +131,10 @@
           "$ref": "#/$defs/administration"
         },
         "quality": {
-          "type": ["object", "null"]
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "capability_score": {
           "type": "number"
@@ -121,13 +146,24 @@
           "type": "object"
         },
         "capability_evidence": {
-          "type": ["object", "null"]
+          "type": [
+            "object",
+            "null"
+          ]
         }
       }
     },
     "role": {
       "type": "string",
-      "enum": ["implementer", "reviewer", "verification_author", "owner", "explorer", "consult", "discuss"]
+      "enum": [
+        "implementer",
+        "reviewer",
+        "verification_author",
+        "owner",
+        "explorer",
+        "consult",
+        "discuss"
+      ]
     },
     "administration": {
       "type": "object",
@@ -149,26 +185,101 @@
         "expires"
       ],
       "properties": {
-        "engine": { "type": ["string", "null"] },
-        "model": { "type": ["string", "null"] },
-        "model_version": { "type": ["string", "null"] },
-        "version_source": { "type": ["string", "null"] },
-        "runner": { "type": ["string", "null"] },
-        "runner_version": { "type": ["string", "null"] },
-        "family": { "type": ["string", "null"] },
-        "harness_version": { "type": ["string", "null"] },
-        "corpus_version": { "type": ["string", "null"] },
-        "prompt_config_hash": { "type": ["string", "null"] },
-        "effort": { "type": ["string", "null"] },
-        "date": { "type": ["string", "null"] },
-        "qualified_at": { "type": ["string", "null"] },
-        "expires": { "type": ["string", "null"] }
+        "engine": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runner_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "harness_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "corpus_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_config_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "qualified_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expires": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "evidence_pointers": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["official_event_id", "evidence_bundle", "evidence_store", "evidence_id"],
+      "required": [
+        "official_event_id",
+        "evidence_bundle",
+        "evidence_store",
+        "evidence_id"
+      ],
       "properties": {
         "official_event_id": {
           "type": "integer"
@@ -178,10 +289,16 @@
           "minLength": 1
         },
         "evidence_store": {
-          "type": ["object", "null"]
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "evidence_id": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     }

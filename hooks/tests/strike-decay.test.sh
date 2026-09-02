@@ -55,6 +55,42 @@ invalidate_strike() {
   node "$CLI" "${args[@]}"
 }
 
+# ── 0: the two mirrored seat_hash implementations agree, at every effort ──────
+# engine-scorecard.js's seatIdentityHash and engine-capability-state.js's
+# normalizeSeatIdentity/seatHashOf are deliberate duplicates of one two-line algorithm (the
+# scripts must not shell out to each other). A divergence silently orphans every strike from the
+# seat it was recorded against, and each script's own tests would stay green. This is the only
+# assertion that sees both sides.
+SCORECARD_CLI="$ROOT/scripts/engine-scorecard.js"
+for EFFORT_CASE in "" low high none; do
+  if [ -z "$EFFORT_CASE" ]; then
+    STATE_H="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer | jq_get seat_hash)"
+    CARD_H="$(node "$SCORECARD_CLI" seat-status --engine gpt-5 --runner codex --role implementer | jq_get seat_hash)"
+    LABEL="legacy (no effort)"
+  else
+    STATE_H="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer --effort "$EFFORT_CASE" | jq_get seat_hash)"
+    CARD_H="$(node "$SCORECARD_CLI" seat-status --engine gpt-5 --runner codex --role implementer --effort "$EFFORT_CASE" | jq_get seat_hash)"
+    LABEL="effort=$EFFORT_CASE"
+  fi
+  if [ "$STATE_H" = "$CARD_H" ] && [ -n "$STATE_H" ]; then
+    ok "0: seat_hash parity across both scripts — $LABEL"
+  else
+    bad "0: seat_hash parity across both scripts — $LABEL (state=$STATE_H card=$CARD_H)"
+  fi
+done
+
+# Every named effort must be its OWN seat, and none of them may collide with the legacy
+# partition — that collision is exactly the grok-4.6 high/low incident this partitioning fixes.
+LEGACY_H="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer | jq_get seat_hash)"
+LOW_H="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer --effort low | jq_get seat_hash)"
+HIGH_H="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer --effort high | jq_get seat_hash)"
+NONE_H="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer --effort none | jq_get seat_hash)"
+if [ "$LEGACY_H" != "$LOW_H" ] && [ "$LOW_H" != "$HIGH_H" ] && [ "$LEGACY_H" != "$NONE_H" ]; then
+  ok "0: legacy, low, high and none are four distinct seats"
+else
+  bad "0: effort partitions collided (legacy=$LEGACY_H low=$LOW_H high=$HIGH_H none=$NONE_H)"
+fi
+
 # ── 1: seat-hash is stable and order-independent ─────────────────────────────
 H1="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer | jq_get seat_hash)"
 H2="$(node "$CLI" seat-hash --role implementer --engine gpt-5 --runner codex | jq_get seat_hash)"

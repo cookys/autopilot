@@ -1873,7 +1873,7 @@ NODE
 printf '%s\n' "$POOLED_QUAL" | node "$CLI" record >/dev/null
 SCOPE_D="$(mktemp "$TEST_TMP/scope-d.XXXXXX.json")"
 node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_D" >/dev/null
-SEAT_D_OK="$(node "$CLI" seat-status --engine d5-qual --runner cc-shim --role consult \
+SEAT_D_OK="$(node "$CLI" seat-status --engine d5-qual --runner cc-shim --role consult --effort high \
   --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_D")"
 assert_contains "$SEAT_D_OK" '"admission_status":"qualified"' "D5 (d) pooled qualified admitted under --require-evidence"
 
@@ -2121,13 +2121,15 @@ printf '%s\n' "$GEN_G" | node "$CLI" record >"$TEST_TMP/g-strict.json"
 G_EID="$(jq_get event_id <"$TEST_TMP/g-strict.json")"
 SCOPE_G="$(mktemp "$TEST_TMP/scope-g.XXXXXX.json")"
 node "$SCOPE_HELPER" write-scope --role consult --out "$SCOPE_G" >/dev/null
+# The genuine-row fixture records effort=high, and effort is part of the seat identity since
+# v2.35.9 — omitting --effort would query the LEGACY partition, a different seat.
 ST_G_BEFORE="$(node "$CLI" seat-status --engine g-strict --runner cc-shim --role consult \
-  --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_G")"
+  --effort high --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_G")"
 assert_contains "$ST_G_BEFORE" '"admission_status":"qualified"' "D5 (g) strict WITHOUT marker admits"
 node "$CLI" record --supersede-provisional --supersedes-event-id "$G_EID" \
   --reason 'superseded-pending-verdict-redesign' </dev/null >/dev/null
 ST_G_AFTER="$(node "$CLI" seat-status --engine g-strict --runner cc-shim --role consult \
-  --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_G")"
+  --effort high --now "$(date -u +%F)" --require-evidence --scope-file "$SCOPE_G")"
 assert_contains "$ST_G_AFTER" '"admission_status":"no_record"' "D5 (g) strict WITH marker returns no_record"
 
 # Marker never projected as baseline candidate

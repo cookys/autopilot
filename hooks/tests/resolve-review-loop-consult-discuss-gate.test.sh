@@ -78,9 +78,12 @@ scope_file() { # role -> path (frozen production scope)
 
 now_iso() { date -u +%Y-%m-%dT%H:%M:%S.000Z; }
 
-strike() { # engine runner role class [predicate] dedup
-  local engine="$1" runner="$2" role="$3" class="$4" predicate="$5" dedup="$6"
-  local args=(--engine "$engine" --runner "$runner" --role "$role" --class "$class" \
+strike() { # engine runner role class [predicate] dedup [effort]
+  local engine="$1" runner="$2" role="$3" class="$4" predicate="$5" dedup="$6" effort="${7:-high}"
+  # Effort is part of the seat identity since v2.35.9. The resolver reads these seats at the
+  # roster's effort, so a strike written without it would land on the LEGACY seat and be
+  # recorded-but-never-counted — the exact orphaning this partitioning has to avoid.
+  local args=(--engine "$engine" --runner "$runner" --role "$role" --effort "$effort" --class "$class" \
     --cause-class engine_output --writer conformance_audit --dedup-key "$dedup" \
     --detector-id test-detector --detector-version v1 \
     --artifact-sha256 "$(printf '%s' "$dedup" | sha256sum | cut -d' ' -f1)" \

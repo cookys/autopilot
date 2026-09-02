@@ -176,8 +176,16 @@ function sha256(text) {
 // live from {engine, runner, role} at read time, so strike accrual on an
 // adopted row does not depend on this value being right — a drift ships a
 // wrong ADVERTISED hash, not a broken fold.
-function seatHash(engine, runner, role) {
-  return sha256(canonicalJson({ engine: String(engine), runner: String(runner), role: String(role) }));
+// Effort joins the seat WHEN PRESENT (v2.35.9), mirroring engine-scorecard.js's seatIdentityHash
+// and engine-capability-state.js's normalizeSeatIdentity. Only-when-present keeps every
+// effort-less seat's advertised hash byte-identical to what shipped before.
+function seatHash(engine, runner, role, effort) {
+  return sha256(canonicalJson({
+    engine: String(engine),
+    runner: String(runner),
+    role: String(role),
+    ...(effort === undefined || effort === null ? {} : { effort: String(effort) }),
+  }));
 }
 
 function readJson(file, label) {
@@ -317,8 +325,15 @@ function buildEntry(row, recipeEntry, repoRoot, capabilityRows) {
     default_id: `official:${row.role}:${row.engine}:${row.runner}:${eventId}`,
     role: row.role,
     status: row.status,
-    seat: { engine: row.engine, runner: row.runner, role: row.role },
-    seat_hash: seatHash(row.engine, row.runner, row.role),
+    seat: {
+      engine: row.engine,
+      runner: row.runner,
+      role: row.role,
+      // Advertised so a consumer can see WHICH partition it is adopting. Absent when the source
+      // administration recorded none — that is the legacy partition, a real and distinct seat.
+      ...(row.effort === undefined || row.effort === null ? {} : { effort: row.effort }),
+    },
+    seat_hash: seatHash(row.engine, row.runner, row.role, row.effort),
     administration: disclosure,
     quality: row.quality === undefined ? null : row.quality,
     capability_score: losslessNumber(row.capability_score, `event ${eventId} capability_score`),

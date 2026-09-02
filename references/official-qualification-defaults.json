@@ -267,11 +267,12 @@
         "version_source": "runtime"
       },
       "seat": {
+        "effort": "high",
         "engine": "grok-4.5",
         "role": "implementer",
         "runner": "grok"
       },
-      "seat_hash": "b05b46081075e3fcebf71b030c3d12774ab2e06490be11dec29d7cb7005e3107",
+      "seat_hash": "d873bf567c6d1d16f068d85e9c79910f9f7ac129890f117235c4ffa4a82028fc",
       "status": "qualified"
     },
     {
@@ -539,11 +540,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "gemini-3.7-flash-high",
         "role": "implementer",
         "runner": "agy"
       },
-      "seat_hash": "f21f1674a8a3ee9406b8467fe0b101fe428c78bc93faaf7ec28a062cae7da82b",
+      "seat_hash": "9f1a00edb73601764f2cb05aafad305450cadb9993d0ac828af32fd0edd8f899",
       "status": "failed"
     },
     {
@@ -811,11 +813,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "gpt-5.3-codex-spark",
         "role": "implementer",
         "runner": "codex"
       },
-      "seat_hash": "54703db67ae4b4501aeaa776d77750a45d5e9d4ae6f0dacaebc93756a6361411",
+      "seat_hash": "f907c3e3fa3790f84a0925c774078010ea1d05e5cbb843f05786b5d7cc955cc6",
       "status": "qualified"
     },
     {
@@ -1083,11 +1086,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "gpt-5.6-sol",
         "role": "implementer",
         "runner": "codex"
       },
-      "seat_hash": "cfead4395065c09767dab9c1106d2ea2bd59f57ed59bbe09141428c75a3464ea",
+      "seat_hash": "b04636f87d16fa807f712a4b63398233672f507fd19b46fd2720fa5cbb515fdc",
       "status": "qualified"
     },
     {
@@ -1355,11 +1359,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "gemini-3.1-pro-high",
         "role": "implementer",
         "runner": "agy"
       },
-      "seat_hash": "432d3bafd3ed7c937ae6b04b3432f667413e77e753b2e8bc80439c45903d7dfe",
+      "seat_hash": "29d68e7efb0c9cbc0a96b974af5033adb831759274c19e8e411af0140402801c",
       "status": "failed"
     },
     {
@@ -1627,11 +1632,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "Qwen3.8-Max",
         "role": "implementer",
         "runner": "qoderclicn"
       },
-      "seat_hash": "efaf0a7bd5f1caf5fc477a837039c50eaba9d2838eb46bb0e69c5e4722166a65",
+      "seat_hash": "ca5dcf739333f0fbfcf7c408ace7fe45dcd78e2f8d902c841ff60be7844ecee9",
       "status": "qualified"
     },
     {
@@ -1899,11 +1905,12 @@
         "version_source": "runtime"
       },
       "seat": {
+        "effort": "high",
         "engine": "grok-4.6",
         "role": "implementer",
         "runner": "grok"
       },
-      "seat_hash": "813cee55afb3e633de84f89856399033f20c554594e838c86013c6059c0dde24",
+      "seat_hash": "f85d689b76059d43b51a37b723ad29d481bf9bca00c3d2e7e2c76e0d4d41eb55",
       "status": "failed"
     },
     {
@@ -2171,11 +2178,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "GLM-5.3",
         "role": "implementer",
         "runner": "cc-shim"
       },
-      "seat_hash": "f2a68a3c2147060917ee616f1b034c5348d59ebe0aebbf07eb41c89f765b3f38",
+      "seat_hash": "476ca052e58057c253e0fdbdac2ff810d4ce49998188f4c56faa548b6ca7048d",
       "status": "qualified"
     },
     {
@@ -2443,11 +2451,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "MiniMax-M3",
         "role": "implementer",
         "runner": "cc-shim"
       },
-      "seat_hash": "1af1b5ddaa6a321d8932ddd3ac80815209f1ed375d1cd94fb5d1775f00ed71d1",
+      "seat_hash": "d681ba855dea693c62ec2d9eb2c7cb55146c6515b5c9c69e436cf52a2d096105",
       "status": "qualified"
     },
     {
@@ -2715,11 +2724,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "gemini-3.7-flash-medium",
         "role": "implementer",
         "runner": "agy"
       },
-      "seat_hash": "1e602cec12cb7e5d472782d62d3a03e6e89288b6af879f38a89d115e2a857037",
+      "seat_hash": "42ba6b5c3beef64750c0d0c2c5c10a82a87556da2ea8f9550d743f9a94fa5283",
       "status": "failed"
     },
     {
@@ -2987,11 +2997,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "medium",
         "engine": "gpt-5.6-luna",
         "role": "implementer",
         "runner": "codex"
       },
-      "seat_hash": "9ca6b9f21d794e88b9b2c3efba9d525e51f07a0877c003a17daf3267ad74fc73",
+      "seat_hash": "c4d9e902d62687ae2bd4111137bc5cf46fc545bcbd1c16f8f29360910a75d29c",
       "status": "qualified"
     },
     {
@@ -3259,11 +3270,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "claude-sonnet-5",
         "role": "implementer",
         "runner": "cc-shim"
       },
-      "seat_hash": "95cb6a022398b8198a121c113be37fed23e3944b77e1bdb6fc2977edecfb6d7a",
+      "seat_hash": "168a77cd3e1237cc74a4fb649300ef025a07572a3d1558e2d72d8303b5f7706e",
       "status": "qualified"
     },
     {
@@ -3531,11 +3543,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
+        "effort": "high",
         "engine": "claude-opus-5",
         "role": "implementer",
         "runner": "cc-shim"
       },
-      "seat_hash": "66857b1f030882d4c607f3e8392797e99f0877ae955dc1071c8202da158ca197",
+      "seat_hash": "c62e4a38df9cfb6a0b264d8f78ce08906f2a2270da82f0fc348852d9465492d8",
       "status": "qualified"
     },
     {
@@ -3851,11 +3864,12 @@
         "version_source": "runtime"
       },
       "seat": {
+        "effort": "high",
         "engine": "GLM-5.2",
         "role": "reviewer",
         "runner": "anthropic-compatible"
       },
-      "seat_hash": "81e3170c2b6eb03c00a2dbe5e2ed1a6f0f4227c6675b311ce6ee8b68a8216fd8",
+      "seat_hash": "12d9909d2804e501a7e683246ccd192a845c823b1226054b21bab2ea6b126fca",
       "status": "failed"
     },
     {
@@ -4171,11 +4185,12 @@
         "version_source": "runtime"
       },
       "seat": {
+        "effort": "high",
         "engine": "GLM-5.3",
         "role": "reviewer",
         "runner": "anthropic-compatible"
       },
-      "seat_hash": "18e2258e9c83fa89d856abd80551f0d10948ec3f65eded21ff814736e2924c58",
+      "seat_hash": "302f673325a8aaaee80cc3abb67e6763d86dd4179d6bf95caecfa333ab128310",
       "status": "failed"
     },
     {
@@ -4491,11 +4506,12 @@
         "version_source": "runtime"
       },
       "seat": {
+        "effort": "max",
         "engine": "gpt-5.6-sol",
         "role": "reviewer",
         "runner": "codex-cli"
       },
-      "seat_hash": "d6efeff8722782f53df83df4e0046b56948a9c3ee1123efbdd4d3db7694ebdbb",
+      "seat_hash": "a8a754f16c655b4c499fb8a29062abfa45da4ad934322e43fa320bfcdc05ef0c",
       "status": "qualified"
     },
     {
@@ -4771,18 +4787,19 @@
         "version_source": "runtime"
       },
       "seat": {
+        "effort": "high",
         "engine": "GLM-5.3",
         "role": "verification_author",
         "runner": "anthropic-compatible"
       },
-      "seat_hash": "01168464c1645e71bb0bf867df2923f031c1be335f3d14029e08a7f268f41bb8",
+      "seat_hash": "16479128c149973e6b43c9090476e3fb888661e70ef9eb21525294be67fd0ec6",
       "status": "qualified"
     }
   ],
   "disclosure_notice": "These rows record administrations run in the autopilot maintainer's environment, not yours. Every entry carries the full administration environment (engine/runner/CLI versions, transport harness, prompt_config_hash, effort, corpus_version, date) precisely because official environment != user environment. FAILED rows ship alongside QUALIFIED ones: a FAILED administration is routing information, not an embarrassment to hide.",
   "downgrade_notice": "An adopted default is a seat-scoped strike target exactly like a self-qualified row (references/strike-decay.md). Authority is withdrawn by accumulated mechanical no-confidence, never because a date passed: `expires` is advisory here too.",
   "generated_by": "scripts/build-qualification-defaults.js",
-  "recipe_version": "2026-08-23",
+  "recipe_version": "2026-09-02",
   "role_summary": {
     "implementer": {
       "failed": 4,

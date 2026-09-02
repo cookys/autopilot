@@ -298,8 +298,16 @@ function canon(value) {
   }
   return JSON.stringify(value);
 }
-function seatHash(engine, runner, role) {
-  const canonical = canon({ engine: String(engine), runner: String(runner), role: String(role) });
+// Effort joins the seat WHEN PRESENT (v2.35.9) — only-when-present so every effort-less seat's
+// hash is byte-identical to what shipped before. Kept independent of both implementations on
+// purpose: this is the assertion that catches either of them drifting.
+function seatHash(engine, runner, role, effort) {
+  const canonical = canon({
+    engine: String(engine),
+    runner: String(runner),
+    role: String(role),
+    ...(effort === undefined || effort === null ? {} : { effort: String(effort) }),
+  });
   return crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 
@@ -308,12 +316,15 @@ const results = [];
 for (const officialEventId of checkOfficialEventIds) {
   const entry = artifact.defaults.find((d) => d.evidence_pointers.official_event_id === officialEventId);
   if (!entry) throw new Error(`no default entry for official_event_id ${officialEventId}`);
-  const independent = seatHash(entry.seat.engine, entry.seat.runner, entry.seat.role);
+  const independent = seatHash(
+    entry.seat.engine, entry.seat.runner, entry.seat.role, entry.seat.effort,
+  );
   const cliOut = execFileSync(process.execPath, [
     scorecardScript, 'seat-status',
     '--engine', entry.seat.engine,
     '--runner', entry.seat.runner,
     '--role', entry.seat.role,
+    ...(entry.seat.effort === undefined ? [] : ['--effort', entry.seat.effort]),
   ], {
     env: { ...process.env, ENGINE_SCORECARD_DIR: storeDir },
     encoding: 'utf8',

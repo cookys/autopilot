@@ -40,6 +40,10 @@ assert_file_exists "$ARTIFACT" "the shipped defaults artifact is committed"
 SEAT_ENGINE="grok-4.5"
 SEAT_RUNNER="grok"
 SEAT_ROLE="implementer"
+# Effort is part of the seat identity (v2.35.9). This fixture adopts the grok-4.5 implementer
+# default, whose administration was recorded at effort=high; omitting --effort would select the
+# LEGACY partition, which is a different seat and correctly has no row.
+SEAT_EFFORT="high"
 NOW="2026-09-01"
 
 STORE="$TEST_TMP/consumer-store"
@@ -119,7 +123,7 @@ assert_eq "$ADMISSIBLE" "GO" "adopted default is admissible with no change to th
 
 # --- 5. seat identity parity: adopted seat_hash == the artifact's ------------
 SEAT_STATUS=$(ENGINE_SCORECARD_DIR="$STORE" node "$SCORECARD" seat-status \
-  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --now "$NOW")
+  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --effort "$SEAT_EFFORT" --now "$NOW")
 LIVE_HASH=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).seat_hash)' "$SEAT_STATUS")
 ARTIFACT_HASH=$(node -e '
   const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
@@ -136,7 +140,7 @@ assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).ba
 # --- 6. an adopted default is strike-able exactly like a self-qualified row --
 strike_seat() {
   node "$CAPSTATE" strike-seat \
-    --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" \
+    --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --effort "$SEAT_EFFORT" \
     --class ordinary_strike --cause-class engine_output \
     --writer dispatch_hetero_failclosed \
     --dedup-key "$1" --detector-id adoption-test --detector-version 1 \
@@ -148,7 +152,7 @@ strike_seat incident-b 2
 strike_seat incident-c 3
 
 STRUCK=$(ENGINE_SCORECARD_DIR="$STORE" node "$SCORECARD" seat-status \
-  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --now "$NOW")
+  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --effort "$SEAT_EFFORT" --now "$NOW")
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).strikes_since_pass))' "$STRUCK")" \
   "3" "three strikes accrued against the ADOPTED seat's seat_hash"
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).would_requalify))' "$STRUCK")" \
@@ -156,7 +160,7 @@ assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).wo
 
 # --- 7. under enforcement, requalify_required carries the self-qualify remedy -
 ENFORCED=$(ENGINE_SCORECARD_DIR="$STORE" AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$SCORECARD" seat-status \
-  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --now "$NOW")
+  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --effort "$SEAT_EFFORT" --now "$NOW")
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).admission_status)' "$ENFORCED")" \
   "requalify_required" "enforcement mode blocks the struck adopted seat"
 assert_contains "$ENFORCED" "ADOPTED OFFICIAL DEFAULT" "the verdict says the seat routes on an adopted default"
@@ -184,7 +188,7 @@ node -e '
   fs.writeFileSync(process.argv[2], JSON.stringify(row) + "\n");
 ' "$ARTIFACT" "$SELF_STORE/scorecard.jsonl" "$SEAT_ENGINE" "$SEAT_RUNNER"
 SELF_ENFORCED=$(ENGINE_SCORECARD_DIR="$SELF_STORE" AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$SCORECARD" seat-status \
-  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --now "$NOW")
+  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --effort "$SEAT_EFFORT" --now "$NOW")
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).admission_status)' "$SELF_ENFORCED")" \
   "requalify_required" "the same strikes block the self-qualified seat identically (same seat_hash)"
 assert_not_contains "$SELF_ENFORCED" "ADOPTED OFFICIAL DEFAULT" \
@@ -208,7 +212,7 @@ node -e '
   fs.writeFileSync(process.argv[2], JSON.stringify(row) + "\n");
 ' "$ARTIFACT" "$OTHER_STORE/scorecard.jsonl" "$SEAT_ENGINE" "$SEAT_RUNNER"
 OTHER_ENFORCED=$(ENGINE_SCORECARD_DIR="$OTHER_STORE" AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$SCORECARD" seat-status \
-  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --now "$NOW")
+  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --effort "$SEAT_EFFORT" --now "$NOW")
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).admission_status)' "$OTHER_ENFORCED")" \
   "requalify_required" "a non-official-default provenance seat is blocked identically"
 assert_not_contains "$OTHER_ENFORCED" "ADOPTED OFFICIAL DEFAULT" \

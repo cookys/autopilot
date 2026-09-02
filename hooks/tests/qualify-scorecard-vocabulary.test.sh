@@ -48,8 +48,17 @@ fi
 # Anchor on `includes(row.effort)`, NOT on any particular value: anchoring on
 # 'none' made a REGRESSION of the vocabulary look like a parser failure, which
 # points the reader at the wrong file.
-SCORECARD_EFFORTS="$(sed -n "s/.*!\[\(.*\)\]\.includes(row\.effort).*/\1/p" "$SCORECARD" \
+# v2.35.9: the vocabulary moved out of an inline array literal into the named EFFORT_VALUES
+# const (it now has several consumers — record validation, seat-status --effort, the seat
+# partition). Parse the const, and separately assert the row guard still consults it, so
+# "the const exists" cannot pass while the guard reads something else.
+SCORECARD_EFFORTS="$(sed -n "s/^const EFFORT_VALUES = \[\(.*\)\];/\1/p" "$SCORECARD" \
   | tr -d " '" | tr ',' ' ')"
+if grep -q '!EFFORT_VALUES.includes(row.effort)' "$SCORECARD"; then
+  ok "the record-time effort guard consults EFFORT_VALUES"
+else
+  bad "the record-time effort guard no longer consults EFFORT_VALUES — the vocabulary has a second source"
+fi
 if [ -z "$SCORECARD_EFFORTS" ]; then
   bad "could not parse the scorecard effort vocabulary — parser drifted"
 else

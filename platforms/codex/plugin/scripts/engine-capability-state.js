@@ -41,7 +41,7 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js brain-status --identity-file <path> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js strike-seat --engine <token> --runner <token> --role <token> --class ordinary_strike|critical_reexam_trigger [--predicate-id <id>] --cause-class engine_output|runner_delivery|ambiguous --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
-  node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token>
+  node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token> [--effort <effort>]
 
 Options:
   --file <path>        Read event JSON from file (for record) or classify error from file.
@@ -61,6 +61,10 @@ Options:
   --string <text>      String to classify for classify-error.
   --exit-code <code>   Exit code to classify for classify-error.
   --engine <token>     Seat identity engine token (strike-seat / invalidate-strike / seat-hash).
+                       Seat identity is engine+runner+role+effort; omit --effort ONLY for legacy
+                       rows recorded before effort partitioning — omitting is not a wildcard, and a
+                       strike written without it lands on a different seat than an effort-bearing
+                       projection reads.
   --class <name>       ordinary_strike | critical_reexam_trigger (strike-seat).
   --predicate-id <id>  Required iff --class critical_reexam_trigger; must be a registered predicate.
   --cause-class <name> engine_output | runner_delivery | ambiguous (strike-seat).
@@ -774,12 +778,28 @@ function normalizeEngineToken(raw, label) {
   return trimmed;
 }
 
-// Seat identity §2.7.1: engine+runner+role, NOT effort/model_version/endpoint.
-function normalizeSeatIdentity({ engine, runner, role }) {
+// Seat identity: engine+runner+role, plus `effort` WHEN PRESENT. NOT model_version/endpoint.
+//
+// Effort joins the seat because it is a different qualification, not a different setting: real
+// data — grok-4.6@high FAILED (23/24, one integrity violation, 2026-08-21) and grok-4.6@low
+// QUALIFIED (24/24, 2026-08-24) — collapsed to ONE seat under a 3-field identity, latest-wins,
+// so a failed high seat could inherit a passing low seat's standing.
+//
+// It is included ONLY when present, and that is load-bearing, not tidiness: an absent effort
+// produces byte-identically the old three-key object, so every seat_hash already recorded stays
+// valid and no strike is orphaned from its projection. Legacy rows are their own partition —
+// the same "omit only for legacy rows" rule `current --effort` already uses, not a second rule.
+//
+// engine-scorecard.js's seatIdentityHash MUST stay identical to this; a divergence silently
+// detaches every strike from the seat it was recorded against.
+function normalizeSeatIdentity({ engine, runner, role, effort }) {
   return {
     engine: normalizeEngineToken(engine, 'engine'),
     runner: normalizeSeatToken(runner, 'runner'),
     role: normalizeSeatToken(role, 'role'),
+    ...(effort === undefined || effort === null
+      ? {}
+      : { effort: normalizeSeatToken(effort, 'effort') }),
   };
 }
 
@@ -1652,17 +1672,17 @@ function parseCommandLineArgs(argv) {
     ['strike', new Set(['identity-file', 'source', 'receipt-ref', 'now', 'store'])],
     ['brain-status', new Set(['identity-file', 'now', 'store'])],
     ['strike-seat', new Set([
-      'engine', 'runner', 'role', 'class', 'predicate-id', 'cause-class', 'writer',
+      'engine', 'runner', 'role', 'effort', 'class', 'predicate-id', 'cause-class', 'writer',
       'dedup-key', 'detector-id', 'detector-version', 'artifact-sha256', 'receipt-ref',
       'now', 'store',
     ])],
     ['invalidate-strike', new Set([
-      'engine', 'runner', 'role', 'invalidates-event-id',
+      'engine', 'runner', 'role', 'effort', 'invalidates-event-id',
       'proof-artifact-sha256', 'proof-detector-id',
       'writer', 'dedup-key', 'detector-id', 'detector-version',
       'artifact-sha256', 'receipt-ref', 'now', 'store',
     ])],
-    ['seat-hash', new Set(['engine', 'runner', 'role'])],
+    ['seat-hash', new Set(['engine', 'runner', 'role', 'effort'])],
   ]);
   const allowed = commandOptions.get(command);
   if (!allowed) return { command, options: {} };
@@ -1911,6 +1931,9 @@ function main() {
         engine: options.engine,
         runner: options.runner,
         role: options.role,
+        // Without this a strike lands on the LEGACY seat hash while an effort-partitioned seat's
+        // projection reads a different one — the strike would be recorded and never counted.
+        effort: options.effort,
         klass: options.class,
         predicateId: Object.prototype.hasOwnProperty.call(options, 'predicate-id') ? options['predicate-id'] : null,
         causeClass: options['cause-class'],
@@ -1966,7 +1989,14 @@ function main() {
     }
     let hash;
     try {
-      hash = seatHashOf({ engine: options.engine, runner: options.runner, role: options.role });
+      hash = seatHashOf({
+        engine: options.engine,
+        runner: options.runner,
+        role: options.role,
+        // Omitted --effort is the legacy partition, not a default — passing undefined
+        // reproduces the pre-effort hash byte-for-byte.
+        effort: options.effort,
+      });
     } catch (error) {
       failValidation(`seat-hash: ${error.message}`);
     }

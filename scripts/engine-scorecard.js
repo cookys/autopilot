@@ -105,6 +105,11 @@ const REQUIRED_FIELDS = [
   'expires',
 ];
 
+// The effort vocabulary, owned once. `none` is a real, distinct state (the transport has no
+// effort dimension at all) and is NOT the same as an absent effort, which means the row
+// predates effort partitioning.
+const EFFORT_VALUES = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+
 const CONFIGURED_IDENTITY_FIELDS = [
   'engine',
   'runner',
@@ -126,13 +131,15 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
-  node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--now <ISO-date>]\n\
+  node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--effort <effort>] [--now <ISO-date>]\n\
     [--require-evidence --scope-file <path> [--identity-file <path>]]\n\
 \n  --file <path>  Read one JSON row from this file (optional with --supersede-provisional).\n\
   --supersede-provisional  Append a record_kind=supersession marker for a prior event.\n\
   --supersedes-event-id <N>  Target event_id that must exist and match engine/runner/role.\n\
   --reason <string>  Supersession reason (required with --supersede-provisional).\n\
   --role is required for current/report/ladder/seat-status.\n\
+  --effort selects ONE seat partition for seat-status. Omit it only for legacy rows recorded\n\
+    before effort partitioning — omitting does NOT mean "any effort".\n\
   --key accepts capability (default) or cost.\n\
   --now accepts ISO date; used by current/report/ladder/seat-status for deterministic TTL checks.\n\
   All disk-backed views are untrusted telemetry: stored qualified rows are projected\n\
@@ -394,7 +401,7 @@ function validateRecordRow(row) {
   // omitting the field, which means "unknown/unrecorded". Collapsing the two
   // would lose the fact that the tuple was checked and found effort-less.
   if (row.effort !== undefined
-      && !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(row.effort)) {
+      && !EFFORT_VALUES.includes(row.effort)) {
     failValidation(`invalid effort '${row.effort}' (none|low|medium|high|xhigh|max or omit)`);
   }
 
@@ -1513,7 +1520,9 @@ function currentRowsForRole(role, nowMs, options = {}) {
 
     // Strike-decay projection (frozen contract §2.7.5): pair-scoped to this
     // row's own engine+runner+role seat — the only admission authority.
-    const seatProjection = computeSeatProjection(row.engine, row.runner, row.role, nowMs).projection;
+    const seatProjection = computeSeatProjection(
+      row.engine, row.runner, row.role, nowMs, seatEffortOf(row),
+    ).projection;
 
     output.push({
       engine: row.engine,
@@ -1607,8 +1616,25 @@ function engineToken(value) {
 // from the identical two-line algorithm and the identical canonicalJson/sha256
 // primitives — never by shelling out cross-script. A seat_hash mismatch
 // between the two would silently orphan every strike from its projection.
-function seatIdentityHash(engine, runner, role) {
-  return sha256(canonicalJson({ engine: String(engine), runner: String(runner), role: String(role) }));
+// `effort` joins the seat WHEN PRESENT — a different effort is a different qualification, not a
+// different setting. Real data: grok-4.6@high FAILED (23/24, one integrity violation, 2026-08-21)
+// and grok-4.6@low QUALIFIED (24/24, 2026-08-24) collapsed to ONE seat under the old three-field
+// identity, latest-wins — so the failed high seat inherited the passing low seat's standing.
+//
+// Including it only when present is load-bearing: an absent effort yields byte-identically the old
+// three-key object, so every seat_hash already recorded stays valid and no strike is orphaned.
+// Legacy rows are their own partition — the same rule `current --effort` already uses.
+//
+// This MUST stay identical to engine-capability-state.js's normalizeSeatIdentity/seatHashOf. The
+// two are deliberate duplicates of one two-line algorithm; a divergence silently detaches every
+// strike from the seat it was recorded against, and no test that looks at only one side sees it.
+function seatIdentityHash(engine, runner, role, effort) {
+  return sha256(canonicalJson({
+    engine: String(engine),
+    runner: String(runner),
+    role: String(role),
+    ...(effort === undefined || effort === null ? {} : { effort: String(effort) }),
+  }));
 }
 
 // `expires` is a DATE, not an instant — so this stays a date-vs-date comparison.
@@ -1674,7 +1700,15 @@ function baselineInstantMs(row, evidence) {
 // identity collapse) because a seat's true qualification history spans every
 // configured-identity variant (corpus/harness/runner_version churn) that ever
 // passed under this engine+runner+role.
-function findSeatBaseline(engine, runner, role, nowMs, allRows, supersededEventIds = new Set()) {
+// A row's seat effort. `undefined` (the legacy partition) and the literal `none` (a transport with
+// no effort dimension) are DIFFERENT answers and must not be folded together.
+function seatEffortOf(row) {
+  return row && row.effort !== undefined ? String(row.effort) : undefined;
+}
+
+function findSeatBaseline(
+  engine, runner, role, nowMs, allRows, supersededEventIds = new Set(), effort = undefined,
+) {
   let best = null;
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
@@ -1682,6 +1716,11 @@ function findSeatBaseline(engine, runner, role, nowMs, allRows, supersededEventI
     if (row.engine !== engine || row.runner !== runner) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
+    // Effort partitions the seat. An UNDEFINED requested effort selects rows that also have no
+    // effort — the legacy partition — and NOT "any effort": grok-4.6@low (24/24, qualified) and
+    // grok-4.6@high (23/24, one integrity violation, failed) are two seats, and latest-wins across
+    // them let the failed one inherit the passing one's standing.
+    if (seatEffortOf(row) !== effort) continue;
     let evidence = row.evidence;
     if (evidence !== undefined) {
       try {
@@ -1854,11 +1893,11 @@ function strikeEnforcementMode() {
 
 // The ONLY admission authority (frozen contract §2.7.5). Computed fresh at
 // read time from the append-only stores — never mutates a stored row.
-function computeSeatProjection(engine, runner, role, nowMs) {
-  const seatHashValue = seatIdentityHash(engine, runner, role);
+function computeSeatProjection(engine, runner, role, nowMs, effort = undefined) {
+  const seatHashValue = seatIdentityHash(engine, runner, role, effort);
   const partition = readStorePartition(true);
   const baseline = findSeatBaseline(
-    engine, runner, role, nowMs, partition.ordinaryRows, partition.supersededEventIds,
+    engine, runner, role, nowMs, partition.ordinaryRows, partition.supersededEventIds, effort,
   );
 
   const projection = {
@@ -2084,6 +2123,7 @@ function parseSeatStatusArgs(args) {
   let engine = null;
   let runner = null;
   let role = null;
+  let effort;
   let now;
   let requireEvidence = false;
   let scope = null;
@@ -2106,6 +2146,11 @@ function parseSeatStatusArgs(args) {
     if (arg === '--role') {
       if (i + 1 >= args.length) failUsage('--role requires a value');
       role = args[++i];
+      continue;
+    }
+    if (arg === '--effort') {
+      if (i + 1 >= args.length) failUsage('--effort requires a value');
+      effort = args[++i];
       continue;
     }
     if (arg === '--now') {
@@ -2136,6 +2181,17 @@ function parseSeatStatusArgs(args) {
   if (!runner) failUsage('--runner is required');
   if (!role) failUsage('--role is required');
 
+  // Omitting --effort selects the LEGACY partition (rows recorded with no effort), it does not
+  // mean "any effort". Same rule as `engine-capability-state.js current --effort`; a seat that
+  // qualified at one effort must never answer for another.
+  let effortToken;
+  if (effort !== undefined) {
+    if (!EFFORT_VALUES.includes(effort)) {
+      failUsage(`invalid --effort '${effort}' (${EFFORT_VALUES.join('|')} or omit for legacy rows)`);
+    }
+    effortToken = effort;
+  }
+
   const engineTok = engineToken(engine);
   if (!engineTok) failUsage(`invalid --engine token '${engine}'`);
   const runnerToken = seatToken(runner);
@@ -2154,7 +2210,14 @@ function parseSeatStatusArgs(args) {
   const nowMs = nowArgToMs(now);
 
   return {
-    engine: engineTok, runner: runnerToken, role: roleToken, nowMs, requireEvidence, scope, identity,
+    engine: engineTok,
+    runner: runnerToken,
+    role: roleToken,
+    effort: effortToken,
+    nowMs,
+    requireEvidence,
+    scope,
+    identity,
   };
 }
 
@@ -2189,11 +2252,11 @@ function requireReadableFile(filePath, label) {
   }
 }
 
-function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identity) {
+function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identity, effort) {
   requireReadableFile(SCORECARD_FILE, 'scorecard store');
   requireReadableFile(CAPABILITY_EVIDENCE_FILE, 'qualification-evidence store');
 
-  const seatHashValue = seatIdentityHash(engine, runner, role);
+  const seatHashValue = seatIdentityHash(engine, runner, role, effort);
   // Strict parse: throws hard on ANY malformed line, not just this seat's own.
   // Supersession markers are validated inside readStorePartition and excluded
   // from ordinaryRows; their targets are filtered before baseline selection.
@@ -2212,6 +2275,7 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
     if (row.engine !== engine || row.runner !== runner) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
+    if (seatEffortOf(row) !== effort) continue;   // same effort partitioning as the read path
 
     // validateRecordRow is the forgery/anchor gate: a hand-authored,
     // schema-plausible row that fails field validation, evidence binding, or
@@ -2296,13 +2360,16 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
 
 function cmdSeatStatus(args) {
   const {
-    engine, runner, role, nowMs, requireEvidence, scope, identity,
+    engine, runner, role, effort, nowMs, requireEvidence, scope, identity,
   } = parseSeatStatusArgs(args);
   const result = requireEvidence
-    ? computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identity)
-    : computeSeatProjection(engine, runner, role, nowMs);
+    ? computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identity, effort)
+    : computeSeatProjection(engine, runner, role, nowMs, effort);
   process.stdout.write(`${JSON.stringify({
     ...result.projection,
+    // Which partition answered. `null` is the legacy partition (rows with no effort), which is a
+    // different seat from any named effort — printing it stops a reader assuming "any effort".
+    effort: effort === undefined ? null : effort,
     seat_hash: result.seat_hash,
     baseline_event_id: result.baseline_event_id,
     baseline_qualified_at: result.baseline_qualified_at,

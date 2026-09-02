@@ -495,14 +495,43 @@ const wrongRole = evaluateCapabilityEvidence([qualified], {
 });
 check(wrongRole.state === 'unknown', 'role mismatch does not qualify');
 
-const wrongIdentity = evaluateCapabilityEvidence([qualified], {
+// Exam identity vs ENVIRONMENT (Board 2026-09-02). A different runner_version is an environment
+// difference, not a different exam: it must stay applicable and say so, because gating on it made
+// every adopted row silently inapplicable to any consumer on a later plugin build.
+const newerEnvironment = evaluateCapabilityEvidence([qualified], {
   role: 'reviewer',
   scope,
   identity: { ...identity, runner_version: '1.2.4' },
   evaluation_time: '2026-07-27T00:00:00.000Z',
 });
-check(wrongIdentity.state === 'unknown', 'identity mismatch does not qualify');
+check(newerEnvironment.state === 'qualified', 'a newer runner_version still qualifies');
+check(newerEnvironment.applicability.applicable === true, 'environment drift stays applicable');
+check(newerEnvironment.environment_warning === true, 'environment drift is disclosed as a warning');
+check(
+  newerEnvironment.applicability.reasons.length === 0,
+  'environment drift is not an inapplicability reason',
+);
+
+const newerHarness = evaluateCapabilityEvidence([qualified], {
+  role: 'reviewer',
+  scope,
+  identity: { ...identity, harness_version: 'dispatch-hetero:ffffffff' },
+  evaluation_time: '2026-07-27T00:00:00.000Z',
+});
+check(newerHarness.state === 'qualified', 'a newer harness_version still qualifies');
+check(newerHarness.environment_warning === true, 'harness drift is disclosed as a warning');
+
+// An EXAM-identity difference still gates, and this is the half that must never soften: a
+// different model is a different exam, no matter how similar the environment.
+const wrongIdentity = evaluateCapabilityEvidence([qualified], {
+  role: 'reviewer',
+  scope,
+  identity: { ...identity, model_version: 'some-other-model-build' },
+  evaluation_time: '2026-07-27T00:00:00.000Z',
+});
+check(wrongIdentity.state === 'unknown', 'exam identity mismatch does not qualify');
 check(wrongIdentity.applicability.reasons.includes('identity_mismatch'), 'identity mismatch is disclosed');
+check(wrongIdentity.environment_warning === false, 'an inapplicable receipt carries no environment warning');
 
 const expired = evaluateCapabilityEvidence([qualified], {
   role: 'reviewer',

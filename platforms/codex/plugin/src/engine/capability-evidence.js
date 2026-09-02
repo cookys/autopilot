@@ -320,6 +320,32 @@ function normalizeIdentity(raw) {
   };
 }
 
+// EXAM identity vs ENVIRONMENT (Board, 2026-09-02: "the exam tests the model, it should not be
+// pinned to the autopilot version").
+//
+// The exam identity is what an administration actually measured: the model, the runner, the role,
+// the effort, the corpus and the prompt contract. `harness_version` and `runner_version` describe
+// the ENVIRONMENT it happened to run in. Matching on those made every adopted row silently
+// inapplicable to any consumer on a later plugin — the shipped defaults are all
+// `dispatch-hetero:003d7975`, and a consumer on any later build simply never matched them, with no
+// error to notice: the row just never applied.
+//
+// Environment is still RECORDED and still reported (as a warning), never gating. There is no
+// migration and no new stored field: both hashes are derived on the fly from the `identity` object
+// that every record already carries. That is deliberate — `evidence_hash`/`evidence_id` is
+// sha256(canonicalJson(body)), so adding a field to the body would invalidate every recorded row.
+const ENVIRONMENT_IDENTITY_FIELDS = ['harness_version', 'runner_version'];
+
+function examIdentityProjection(identity) {
+  const projection = { ...identity };
+  for (const field of ENVIRONMENT_IDENTITY_FIELDS) delete projection[field];
+  return projection;
+}
+
+function examIdentityHashOf(identity) {
+  return sha256(canonicalJson(examIdentityProjection(identity)));
+}
+
 function grantIdentityProjection(identity) {
   return { ...identity };
 }
@@ -1741,6 +1767,7 @@ function emptyEvaluation(query, reasons) {
       requested_scope_hash: query.scope_hash,
       requested_identity_hash: query.identity_hash,
     },
+    environment_warning: false,
     issued_at: null,
     observed_at: null,
     expires_at: null,
@@ -1825,8 +1852,11 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery) {
   }
   const scopeRecords = roleRecords.filter((record) => record.scope_hash === query.scope_hash);
   if (scopeRecords.length === 0) return emptyEvaluation(query, ['scope_mismatch']);
+  // Exam identity must match exactly. Environment (harness/runner version) is compared separately
+  // below and only ever produces a warning — a consumer on a newer plugin is not a different exam.
+  const queryExamHash = examIdentityHashOf(query.identity);
   const exactRecords = scopeRecords.filter(
-    (record) => record.identity_hash === query.identity_hash,
+    (record) => examIdentityHashOf(record.identity) === queryExamHash,
   );
   if (exactRecords.length === 0) return emptyEvaluation(query, ['identity_mismatch']);
   const evaluationMs = Date.parse(query.evaluation_time);
@@ -1907,10 +1937,16 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery) {
     },
     applicability: {
       applicable: true,
+      // A record whose EXAM identity matched but whose environment did not is applicable, and
+      // says so out loud. This is the whole point of the split: never gating, always visible.
+      // `reasons` means "why this is NOT applicable" (the normalizer rejects an applicable receipt
+      // that carries any). An environment drift is applicable-with-a-warning, so it rides
+      // `environment_warning` below, never here.
       reasons: [],
       requested_scope_hash: query.scope_hash,
       requested_identity_hash: query.identity_hash,
     },
+    environment_warning: record.identity_hash !== query.identity_hash,
     issued_at: record.issued_at,
     observed_at: record.observed_at,
     expires_at: record.expires_at,
@@ -1944,7 +1980,9 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
     'trial_set_hash',
     'revocation_reason',
   ];
-  onlyKeys(value, new Set(fields), 'capability evidence receipt');
+  // `environment_warning` is OPTIONAL on input so receipts serialized before the exam/environment
+  // split still normalize. Absent means "not evaluated", which reads as no warning.
+  onlyKeys(value, new Set([...fields, 'environment_warning']), 'capability evidence receipt');
   requiredKeys(value, fields, 'capability evidence receipt');
   if (value.schema_version !== CAPABILITY_EVIDENCE_SCHEMA_VERSION) {
     evidenceError('capability evidence receipt schema_version must be 1');
@@ -2040,9 +2078,16 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
   }
   const scopeHash = digest(value.scope_hash, 'capability evidence receipt.scope_hash');
   const identityHash = digest(value.identity_hash, 'capability evidence receipt.identity_hash');
-  if (normalizedApplicability.requested_scope_hash !== scopeHash
-      || normalizedApplicability.requested_identity_hash !== identityHash) {
+  // Scope must still match exactly. IDENTITY may legitimately differ now: the exam identity
+  // matched while the environment (harness/runner version) did not, which is precisely the case
+  // `environment_warning` exists to record. Requiring equality here would re-impose the gate the
+  // split removed — one layer down, where it would be much harder to find.
+  if (normalizedApplicability.requested_scope_hash !== scopeHash) {
     evidenceError('capability evidence receipt applicability hashes do not match its evidence');
+  }
+  if (normalizedApplicability.requested_identity_hash !== identityHash
+      && value.environment_warning !== true) {
+    evidenceError('capability evidence receipt identity differs from its evidence without an environment warning');
   }
   const issuedAt = timestamp(value.issued_at, 'capability evidence receipt.issued_at');
   const observedAt = timestamp(value.observed_at, 'capability evidence receipt.observed_at');
@@ -2089,6 +2134,9 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
       methodology_version: provenanceVersion,
     },
     applicability: normalizedApplicability,
+    // Advisory only, and preserved through normalization so a consumer that stores a receipt and
+    // re-reads it still sees that the environment differed. Absent on input reads as false.
+    environment_warning: value.environment_warning === true,
     issued_at: issuedAt,
     observed_at: observedAt,
     expires_at: expiresAt,

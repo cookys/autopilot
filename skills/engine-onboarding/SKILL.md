@@ -232,7 +232,8 @@ No routing exception for phase/domain is allowed in this stage.
 
 - Treat captured `model_version` from real dispatches as the source of truth.
 - Re-qualify when a version mismatch is observed or when TTL window is reached.
-- On version, prompt, semantic, containment, runner, or harness mismatch, the prior evidence is inapplicable; rerun Stage 1+2.
+- On **exam-identity** mismatch — model/version, prompt contract, semantic or containment fingerprint, runner, role, effort, corpus — the prior evidence is inapplicable; rerun Stage 1+2.
+- **`harness_version` and `runner_version` are ENVIRONMENT, not exam identity** (Board 2026-09-02: "the exam tests the model, it should not be pinned to the autopilot version"). A mismatch there is recorded and surfaced as `environment_warning`, and **never** makes evidence inapplicable. Gating on them meant every adopted default silently stopped applying the moment a consumer moved to a newer plugin build — with no error, because the row simply never matched.
 - A Critical miss or probe regression revokes the active qualification view immediately.
 - Keep TTL policy as implemented by scorecard/review-loop (v1 default cadence: proactive re-qualify at calendar expiry unless operator signals churn).
 - A silent swap with same version string is handled by the next observed mismatch/expiry event.

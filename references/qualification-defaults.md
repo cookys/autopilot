@@ -67,9 +67,23 @@ verdict was measured against:
 - a specific reasoning effort (`effort`),
 - on a specific date.
 
-Any one of those differing in your environment can invalidate the transfer, and none of them is
-something the artifact can check for you. Read them. If your runner is three minor versions ahead,
-that is a reason to self-qualify, not a reason to shrug.
+Those divide into two kinds, and the distinction decides what the machinery does with them
+(Board 2026-09-02: "the exam tests the model, it should not be pinned to the autopilot version"):
+
+- **Exam identity** — `corpus_version`, `prompt_config_hash`, `effort`, plus engine/runner/role and
+  the model's own version and fingerprints. These are what the administration measured. A mismatch
+  makes the evidence **inapplicable**; the machinery enforces it.
+- **Environment** — `runner_version` and `harness_version`. These describe where the exam happened
+  to run. A mismatch is **recorded and warned about (`environment_warning`), never gating.**
+
+That second line changed in v2.35.9, and it was a real defect being fixed rather than a relaxation:
+every shipped default carries `harness_version: dispatch-hetero:003d7975`, so under the old rule a
+consumer on any later plugin build matched none of them — silently, with no error, because the row
+simply never applied.
+
+None of this is something the artifact can check for you, and a warning is not an all-clear. If
+your runner is three minor versions ahead, that is still a reason to consider self-qualifying — the
+machinery now tells you rather than deciding for you.
 
 ## FAILED rows ship too
 

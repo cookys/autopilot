@@ -51,6 +51,17 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: L
 - **Source**: health-roadmap P6 Decision Brief（2026-07-17）
 
+### 🔵 suite oracle lock: a killed full-suite run leaves the next one refused (observed 2026-09-02)
+
+`hooks/tests/run.sh --parallel` refused with `action lock held by run_id=…-2994178-…` while pid
+2994178 no longer existed and `/proc/*/fd` showed **no process holding
+`/tmp/.autopilot-suite-oracle.lock`**. A later re-run succeeded, so this was contention with a run
+that was still finishing rather than a permanently stuck lock — but the refusal message names a dead
+pid from the `.owner` sidecar, which is exactly the shape a genuinely stale lock would take, and a
+reader cannot tell the two apart from the message. Worth either cross-checking holder liveness
+before printing the pid, or saying explicitly that the pid comes from a sidecar that can outlive its
+process. Not urgent: the lock itself is flock-based and does release on death.
+
 ## Format example
 
 ```markdown

@@ -47,7 +47,7 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 | [`scripts/dispatch-local-openai.js`](../../scripts/dispatch-local-openai.js) | Local raw transport | Runs an allowlisted author/reviewer call only after exact egress, identity, one-slot lease, capacity, and assurance gates; hot swap or ambiguous cancellation quarantines the deployment. |
 | [`scripts/evaluate-profile-cutover.js`](../../scripts/evaluate-profile-cutover.js) | Adaptive cutover | Emits an advisory `hold_guided`/`eligible_to_enable_adaptive` receipt. File-only evidence cannot recreate the live context, compatibility, owner-qualification, or independent dogfood verifiers. |
 | [`scripts/import-aa-capabilities.js`](../../scripts/import-aa-capabilities.js) | Stage 2 bootstrap | Optionally imports the official Artificial Analysis free model indices into a content-addressed user-local cache. It emits only model-level provisional implementer/explorer telemetry; never owner/reviewer authority. |
-| [`scripts/adopt-qualification-defaults.js`](../../scripts/adopt-qualification-defaults.js) | Stage 0.5 | Consumer side of the shipped defaults: `list` prints each official administration WITH its environment disclosure; `adopt` copies chosen rows into the local stores through `engine-scorecard.js record`. Refuses to shadow a newer local row. |
+| [`scripts/adopt-qualification-defaults.js`](../../scripts/adopt-qualification-defaults.js) | Stage 0.5 | Consumer side of the shipped defaults: `list` prints each official administration WITH its environment disclosure; `adopt` copies chosen rows into the local stores through `engine-scorecard.js record`. Refuses to shadow a newer local row. `--from <url|path>` reads a qualification FEED instead of the shipped artifact (bounded https fetch, content-addressed cache, every seat_hash re-derived locally, `--priors` for the feed's provisional priors). Never auto-adopts. |
 | [`scripts/build-qualification-defaults.js`](../../scripts/build-qualification-defaults.js) | Maintainer | Derives the shipped defaults artifact from a scorecard + capability store and a selection recipe. `--check` re-derives and byte-compares — run it after any re-administration. |
 | [`scripts/qualification-sweep.sh`](../../scripts/qualification-sweep.sh) | Administration | Roster-driven sweep: Stage-0 probe receipts → administration → scorecard record → evidence bundle, per seat. `--plan` is free and deterministic (and names the version binary each seat will probe); `--execute` spends real dispatches. |
 | [`scripts/lib/runner-binary.js`](../../scripts/lib/runner-binary.js) | Deployment identity | The one owner of runner → version-binary (`cursor` → `cursor-agent`, never `cursor`) and of the fail-closed `--runner-version` token. An unknown runner, missing binary, failing/empty/non-version-shaped `--version` REFUSES the seat uncharged instead of minting a `runner_version` that can never match at Stage 4. |
@@ -67,6 +67,12 @@ A consuming repo enabling a role does not always have to run Stage 1 itself. Aut
 officially-administered rows as defaults (`references/official-qualification-defaults.json`).
 Ask once, per role, then take one of two paths:
 
+- **Adopt from a feed** — `node scripts/adopt-qualification-defaults.js list --from <url> --role <role>`
+  reads a published qualification feed rather than the artifact baked into this release. Same
+  disclosure, same collision rules, same strike targets — a feed entry is not privileged. The feed's
+  own `digest` and `seat_hash` are REPORTED and then re-derived locally: a hash you did not compute is
+  a claim (ADR-0001). Optional `~/.autopilot/config.json` `qualification_feed.url` so `--from` can be
+  omitted; there is no refresh timer and no auto-adopt.
 - **Adopt** — `node scripts/adopt-qualification-defaults.js list --role <role>` shows every shipped
   administration with the environment it was measured in; `… adopt --role <role>` copies the rows
   into the local scorecard + capability stores as ordinary rows. Cheap, and honest about being

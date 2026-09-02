@@ -27,10 +27,30 @@
 // it is NOT protected. See references/qualification-defaults.md.
 //
 // Usage:
-//   node scripts/adopt-qualification-defaults.js list [--role <role>] [--json]
+//   node scripts/adopt-qualification-defaults.js list [--role <role>] [--json] [--from <url|path>]
 //   node scripts/adopt-qualification-defaults.js adopt (--all | --role <role> | --seat <engine>:<runner>)
 //                                                      [--role <role>] [--dry-run] [--force]
 //                                                      [--store <dir>] [--artifact <path>]
+//                                                      [--from <url|path>] [--priors]
+//
+//   --from      read the defaults from a qualification FEED instead of the shipped artifact.
+//               An https URL or a local path. The body is bounded, redirects are refused, and
+//               the document is cached content-addressed under
+//               ~/.autopilot/qualification-feeds/<sha256-of-what-we-received>/ with a `current`
+//               manifest. Cache dir override: --feed-cache-dir.
+//
+//               A feed is a REMOTE DOCUMENT WRITTEN BY SOMEONE ELSE. Nothing about it is
+//               trusted: its `digest` is reported, never believed (our cache key is always our
+//               own hash of the bytes we received), and every seat_hash is RE-DERIVED locally
+//               from (engine, runner, role, effort) rather than adopted from the feed. A hash
+//               you did not compute is a claim (ADR-0001).
+//
+//               There is no timer and no auto-adopt. `--from` on `list` fetches and prints;
+//               adoption is always a separate, explicit command.
+//   --priors    with `adopt --from`: also append the feed's `priors[]` as provisional
+//               `external_prior` evidence via the existing record-evidence path. Priors are
+//               NEVER qualifications — nothing in a feed can produce a `qualified` row that was
+//               not `internal_eval` upstream.
 //
 //   list        print every shipped default with its full administration
 //               environment. The disclosure block is ALWAYS printed with the
@@ -138,6 +158,105 @@ function readArtifact(file) {
   return { artifact: parsed };
 }
 
+// ~/.autopilot/config.json `qualification_feed.url`, so an operator who has settled on a feed
+// need not retype it. OPT-IN ONLY: absence changes nothing, a malformed config is ignored rather
+// than fatal (it must never break the shipped-artifact path), and this still only supplies the
+// URL — it never triggers a fetch or an adoption on its own.
+function readConfiguredFeedUrl() {
+  const file = path.join(os.homedir(), '.autopilot', 'config.json');
+  try {
+    const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const url = cfg && cfg.qualification_feed && cfg.qualification_feed.url;
+    return typeof url === 'string' && url.length > 0 ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+// RE-DERIVED locally, never read from the feed. Must stay identical to
+// engine-scorecard.js seatIdentityHash / engine-capability-state.js normalizeSeatIdentity:
+// effort only when present, so a legacy (effort-less) seat keeps its original hash.
+function localSeatHash(engine, runner, role, effort) {
+  const obj = {
+    engine: String(engine),
+    runner: String(runner),
+    role: String(role),
+    ...(effort === undefined || effort === null ? {} : { effort: String(effort) }),
+  };
+  const canonical = JSON.stringify(obj, Object.keys(obj).sort());
+  return crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
+// What this consumer's environment actually is, for the environment (never gating) comparison.
+// The runner version costs a `--version` call and is best-effort: a probe failure is reported as
+// unknown, not as a mismatch, because "I could not look" and "it differs" are different facts.
+function localEnvironment(runner) {
+  const out = { runner_version: null, runner_version_source: 'unprobed' };
+  try {
+    const res = spawnSync(process.execPath, [
+      path.join(SCRIPT_DIR, 'lib', 'runner-binary.js'), 'version', '--runner', runner, '--json',
+    ], { encoding: 'utf8', timeout: 20_000 });
+    if (res.status === 0) {
+      const parsed = JSON.parse(res.stdout);
+      if (parsed && parsed.ok && typeof parsed.token === 'string') {
+        out.runner_version = parsed.token;
+        out.runner_version_source = 'probe';
+      } else {
+        out.runner_version_source = 'probe_failed';
+      }
+    } else {
+      out.runner_version_source = 'probe_failed';
+    }
+  } catch {
+    out.runner_version_source = 'probe_failed';
+  }
+  return out;
+}
+
+// Per-entry applicability, split the way the identity itself is split (Board 2026-09-02).
+// EXAM identity is what gates; ENVIRONMENT only ever warns. This function REPORTS both and
+// decides nothing — `adopt` still applies its own seat-collision rule.
+function feedEntryApplicability(entry) {
+  const a = entry.administration || {};
+  const seat = entry.seat || {};
+  const effort = seat.effort === undefined ? a.effort : seat.effort;
+  const derived = localSeatHash(seat.engine, seat.runner, seat.role, effort);
+  const env = localEnvironment(seat.runner);
+  return {
+    effort: effort === undefined ? null : effort,
+    seat_hash_derived: derived,
+    seat_hash_advertised: entry.seat_hash || null,
+    // A mismatch means the producer's seat-identity algorithm and ours disagree. That is worth
+    // shouting about — it is exactly how a strike gets attached to a seat nobody reads — but it
+    // is a DIFF, not an admission decision, so it warns.
+    seat_hash_matches: entry.seat_hash ? entry.seat_hash === derived : null,
+    // Distinguishing WHY it differs is the difference between an actionable message and noise.
+    // A feed built before effort joined the seat identity advertises the three-field hash, which
+    // we can reproduce exactly — so we can say "your feed predates effort partitioning" instead
+    // of "our algorithms disagree", and the producer knows precisely what to regenerate.
+    seat_hash_basis: entry.seat_hash
+      ? (entry.seat_hash === derived
+        ? 'agrees'
+        : (entry.seat_hash === localSeatHash(seat.engine, seat.runner, seat.role, undefined)
+          ? 'legacy_three_field'
+          : 'unknown'))
+      : 'absent',
+    environment: {
+      feed_runner_version: a.runner_version === undefined ? null : a.runner_version,
+      local_runner_version: env.runner_version,
+      local_runner_version_source: env.runner_version_source,
+      runner_version_matches: env.runner_version === null
+        ? null
+        : env.runner_version === a.runner_version,
+      feed_harness_version: a.harness_version === undefined ? null : a.harness_version,
+      // harness_version names the PRODUCER's dispatch harness commit. There is no honest local
+      // equivalent to compare it against here, so it is disclosed, not diffed.
+      harness_version_comparable: false,
+    },
+    gating: 'exam identity only — environment differences never make a row inapplicable',
+  };
+}
+
 function readStoreRows(storeDir) {
   const file = path.join(storeDir, 'scorecard.jsonl');
   let raw;
@@ -201,6 +320,143 @@ function formatDisclosure(entry) {
   return lines.join('\n');
 }
 
+// `list --from`: fetch, cache, and print. Never adopts, never writes to a store.
+async function cmdListFeed(opts) {
+  const { loadFeed } = require('./lib/qualification-feed.js');
+  let feed;
+  try {
+    feed = await loadFeed(opts.from, {
+      ...(opts.feedCacheDir ? { cacheDir: expandTilde(opts.feedCacheDir) } : {}),
+    });
+  } catch (err) {
+    fail(err.message);
+  }
+  const entries = selectEntries({ defaults: feed.defaults }, opts);
+  const rows = entries.map((e) => ({ entry: e, applicability: feedEntryApplicability(e) }));
+
+  if (opts.json) {
+    process.stdout.write(`${JSON.stringify({
+      from: opts.from,
+      origin: feed.origin,
+      source_kind: feed.source_kind,
+      feed_schema: feed.feed_schema,
+      digest: feed.digest,
+      advertised_digest: feed.advertised_digest,
+      digest_matches_advertised: feed.digest_matches_advertised,
+      previous_digest: feed.previous_digest,
+      changed: feed.changed,
+      counts: { defaults: feed.defaults.length, strikes: feed.strikes.length, priors: feed.priors.length },
+      defaults: rows.map(({ entry, applicability }) => ({
+        default_id: entry.default_id,
+        role: entry.role,
+        status: entry.status,
+        seat: entry.seat,
+        administration: entry.administration,
+        feed: entry.feed || null,
+        board: entry.board || null,
+        applicability,
+        self_qualify_command: selfQualifyCommand(entry),
+      })),
+      strikes: feed.strikes.map((strike) => describeFeedStrike(strike)),
+      priors: feed.priors.length,
+    }, null, 2)}\n`);
+    return;
+  }
+
+  // The disclosure block is printed VERBATIM and FIRST, exactly as the shipped-artifact path
+  // does: there is deliberately no way to read a verdict without reading the environment it was
+  // measured in.
+  const doc = feed.doc;
+  for (const notice of ['disclosure_notice', 'adr_0001_notice', 'downgrade_notice']) {
+    if (typeof doc[notice] === 'string' && doc[notice].length > 0) {
+      process.stdout.write(`${doc[notice]}\n\n`);
+    }
+  }
+  if (doc.semantics && typeof doc.semantics === 'object') {
+    process.stdout.write('FEED SEMANTICS (the producer\'s own statement):\n');
+    for (const [k, v] of Object.entries(doc.semantics)) {
+      process.stdout.write(`  ${k}: ${v}\n`);
+    }
+    process.stdout.write('\n');
+  }
+  process.stdout.write(`feed        ${feed.origin}\n`);
+  process.stdout.write(`owner       ${doc.owner === undefined ? '(unstated)' : doc.owner}\n`);
+  process.stdout.write(`digest      ${feed.digest}  (OUR hash of the bytes we received)\n`);
+  if (feed.advertised_digest) {
+    process.stdout.write(`            advertised ${feed.advertised_digest}`
+      + `${feed.digest_matches_advertised ? ' — matches' : ' — DOES NOT match ours; reported, not trusted'}\n`);
+  }
+  if (feed.changed !== null) {
+    process.stdout.write(`            ${feed.changed ? 'CHANGED' : 'unchanged'} since the last fetch `
+      + `(${feed.previous_digest ? feed.previous_digest.slice(0, 12) : 'none'})\n`);
+  }
+  process.stdout.write('\n');
+
+  if (rows.length === 0) {
+    process.stdout.write('No feed defaults match that filter.\n');
+  }
+  for (const { entry, applicability } of rows) {
+    process.stdout.write(`${formatDisclosure(entry)}\n`);
+    const ap = applicability;
+    process.stdout.write(`  effort          ${ap.effort === null ? '(legacy partition — no effort recorded)' : ap.effort}\n`);
+    process.stdout.write(`  seat_hash       ${ap.seat_hash_derived}  (RE-DERIVED here)\n`);
+    if (ap.seat_hash_matches === false) {
+      const why = ap.seat_hash_basis === 'legacy_three_field'
+        ? 'that is the pre-effort THREE-FIELD hash — this feed predates effort partitioning, so regenerate it'
+        : 'basis unknown — the producer computed it from something we cannot reproduce';
+      process.stdout.write(`                  ⚠ feed advertises ${ap.seat_hash_advertised}\n`);
+      process.stdout.write(`                    ${why}. Adoption uses OUR derivation either way.\n`);
+    }
+    const env = ap.environment;
+    const localRv = env.local_runner_version === null
+      ? `(${env.local_runner_version_source})`
+      : env.local_runner_version;
+    process.stdout.write(`  environment     runner ${env.feed_runner_version} → local ${localRv}`
+      + `${env.runner_version_matches === false ? '  ⚠ differs — WARNING ONLY, never gates' : ''}\n`);
+    if (entry.board) {
+      process.stdout.write(`  board           ${JSON.stringify(entry.board)}\n`);
+    }
+    if (entry.feed && entry.feed.evidence_url) {
+      process.stdout.write(`  evidence url    ${entry.feed.evidence_url}\n`);
+    }
+    process.stdout.write('\n');
+  }
+
+  process.stdout.write(`${rows.length} default(s), ${feed.strikes.length} strike(s), ${feed.priors.length} prior(s).\n`);
+  for (const described of feed.strikes.map(describeFeedStrike)) {
+    process.stdout.write(`  strike  ${described.engine}/${described.runner}/${described.role}`
+      + `  effort=${described.effort === null ? '(legacy partition)' : described.effort}`
+      + `  class=${described.class}\n`);
+    process.stdout.write(`          seat_hash ${described.seat_hash_derived} (RE-DERIVED)`
+      + `${described.seat_hash_matches === false ? `  ⚠ feed advertises ${described.seat_hash_advertised}` : ''}\n`);
+  }
+  process.stdout.write('\nNothing was adopted. Adopt with:  node scripts/adopt-qualification-defaults.js adopt --from <url|path> --role <role>\n');
+}
+
+// A feed strike, with its seat_hash RE-DERIVED locally. The feed's own value is kept only for the
+// diff: believing it would let the producer decide which local seat a strike attaches to.
+function describeFeedStrike(strike) {
+  const effort = strike.effort === undefined ? null : strike.effort;
+  const derived = localSeatHash(strike.engine, strike.runner, strike.role, effort === null ? undefined : effort);
+  return {
+    engine: strike.engine,
+    runner: strike.runner,
+    role: strike.role,
+    effort,
+    class: strike.class,
+    seat_hash_derived: derived,
+    seat_hash_advertised: strike.seat_hash || null,
+    seat_hash_matches: strike.seat_hash ? strike.seat_hash === derived : null,
+    seat_hash_basis: strike.seat_hash
+      ? (strike.seat_hash === derived
+        ? 'agrees'
+        : (strike.seat_hash === localSeatHash(strike.engine, strike.runner, strike.role, undefined)
+          ? 'legacy_three_field'
+          : 'unknown'))
+      : 'absent',
+  };
+}
+
 function cmdList(opts) {
   const { artifact } = readArtifact(opts.artifact);
   const entries = selectEntries(artifact, opts);
@@ -239,6 +495,58 @@ function cmdList(opts) {
 // and the scorecard row's `evidence_store.event_id` is renumbered WITH it, in
 // the same step, so the triple still resolves. Nothing else in either record is
 // altered.
+// `--priors`: append the feed's priors[] as PROVISIONAL external_prior evidence, through the
+// existing `record-evidence` path — the same path an operator uses by hand, with the same
+// producer (`operator-record-v1`) and the same validation.
+//
+// A prior is NOT a qualification and can never become one here. The record-evidence path is what
+// enforces that: a `qualified` state requires `internal_eval` provenance, which an
+// `external_prior` row does not have and cannot claim. So the ceiling is structural, not a rule
+// this function remembers to apply.
+//
+// Failures are per-prior and reported, not fatal: 53 priors where one is malformed should land 52
+// and name the one it refused, not abandon the batch.
+function adoptPriors(opts, feed) {
+  if (!feed || !Array.isArray(feed.priors) || feed.priors.length === 0) {
+    process.stdout.write(`${JSON.stringify({ status: 'no_priors', appended: 0 })}\n`);
+    return;
+  }
+  const cli = path.join(SCRIPT_DIR, 'engine-capability-state.js');
+  const appended = [];
+  const refused = [];
+  for (const prior of feed.priors) {
+    if (opts.dryRun) {
+      appended.push({ role: prior.role, source_ref: prior.source_ref, would_write: true });
+      continue;
+    }
+    const res = spawnSync(process.execPath, [cli, 'record-evidence', '--store', opts.capabilityDir], {
+      input: `${JSON.stringify(prior)}\n`,
+      encoding: 'utf8',
+    });
+    if (res.status === 0) {
+      appended.push({
+        role: prior.role,
+        source_ref: prior.source_ref,
+        identity: prior.identity && prior.identity.identity,
+      });
+    } else {
+      refused.push({
+        role: prior.role,
+        source_ref: prior.source_ref,
+        identity: prior.identity && prior.identity.identity,
+        reason: `${(res.stdout || '').trim()} ${(res.stderr || '').trim()}`.trim(),
+      });
+    }
+  }
+  process.stdout.write(`${JSON.stringify({
+    status: opts.dryRun ? 'priors_dry_run' : 'priors_appended',
+    appended: appended.length,
+    refused: refused.length,
+    refusals: refused,
+    ceiling: 'external_prior evidence is provisional by construction — nothing in a feed can produce a qualified row that was not internal_eval upstream',
+  }, null, 2)}\n`);
+}
+
 function adoptCapabilityEvidence(capabilityDir, wrapper) {
   const file = path.join(capabilityDir, 'qualification-evidence.jsonl');
   let existingRaw = '';
@@ -296,8 +604,13 @@ function recordRow(storeDir, capabilityDir, row) {
   }
 }
 
-function cmdAdopt(opts) {
-  const { artifact } = readArtifact(opts.artifact);
+// `source` is either the shipped artifact or a loaded feed. Everything downstream — the
+// local-evidence collision rule, the row write, the strike-target reminder — is deliberately
+// IDENTICAL for both: a feed entry is not privileged and gets no shortcut a shipped default
+// does not have.
+function cmdAdopt(opts, source) {
+  const artifact = source.artifact;
+  const feed = source.feed || null;
   if (!opts.all && !opts.role && !opts.seat) {
     failUsage('adopt requires one of --all, --role <role>, or --seat <engine>:<runner>');
   }
@@ -392,6 +705,19 @@ function cmdAdopt(opts) {
       defaults_recipe_version: artifact.recipe_version,
       evidence_bundle: entry.evidence_pointers.evidence_bundle,
       adopted_at: new Date().toISOString(),
+      // Where this came from, when, and WHICH BYTES. `digest` is our own hash of what we
+      // received, never the feed's advertised value — so this records what we actually read,
+      // which is the only thing a later reader can check us on.
+      ...(feed ? {
+        adopted_from: {
+          url: feed.origin,
+          digest: feed.digest,
+          fetched_at: feed.fetched_at,
+          feed_schema: feed.feed_schema,
+          advertised_digest: feed.advertised_digest,
+          advertised_digest_matches: feed.digest_matches_advertised,
+        },
+      } : {}),
       self_qualify_command: selfQualifyCommand(entry),
       note: 'Administered in the autopilot maintainer environment disclosed in this row, not in this one. Verification path is re-derivation: self-qualify.',
     };
@@ -436,6 +762,9 @@ function parseArgs(argv) {
     storeDir: null,
     capabilityDir: null,
     artifact: null,
+    from: null,
+    feedCacheDir: null,
+    priors: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -472,10 +801,25 @@ function parseArgs(argv) {
     if (arg === '--store') { opts.storeDir = argv[++i]; continue; }
     if (arg === '--capability-store') { opts.capabilityDir = argv[++i]; continue; }
     if (arg === '--artifact') { opts.artifact = argv[++i]; continue; }
+    if (arg === '--from') {
+      opts.from = argv[++i];
+      if (!opts.from) failUsage('--from requires an https URL or a file path');
+      continue;
+    }
+    if (arg === '--feed-cache-dir') { opts.feedCacheDir = argv[++i]; continue; }
+    if (arg === '--priors') { opts.priors = true; continue; }
     failUsage(`unknown argument '${arg}'`);
   }
 
   if (!opts.command) failUsage('a command is required: list | adopt');
+  if (opts.priors && opts.command !== 'adopt') failUsage('--priors applies to adopt');
+  if (opts.priors && !opts.from) failUsage('--priors requires --from (priors ride in a feed)');
+  // An optional convenience so an operator who has settled on a feed need not retype it. Opt-in
+  // only: absence changes nothing, and there is still no automatic refresh.
+  if (!opts.from) {
+    const configured = readConfiguredFeedUrl();
+    if (configured) opts.from = configured;
+  }
   opts.storeDir = path.resolve(expandTilde(
     opts.storeDir || process.env.ENGINE_SCORECARD_DIR || path.join('~', '.autopilot', 'engine-scorecard'),
   ));
@@ -488,10 +832,49 @@ function parseArgs(argv) {
   return opts;
 }
 
+async function loadFeedSource(opts) {
+  const { loadFeed } = require('./lib/qualification-feed.js');
+  let feed;
+  try {
+    feed = await loadFeed(opts.from, {
+      ...(opts.feedCacheDir ? { cacheDir: expandTilde(opts.feedCacheDir) } : {}),
+    });
+  } catch (err) {
+    fail(err.message);
+  }
+  // A feed carries no recipe_version of its own; its identity is its digest, which is what the
+  // provenance records. Saying `null` here rather than inventing a value keeps the two sources
+  // distinguishable in an adopted row.
+  return {
+    artifact: {
+      defaults: feed.defaults,
+      schema_version: feed.doc.schema_version === undefined ? null : feed.doc.schema_version,
+      recipe_version: null,
+    },
+    feed,
+  };
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (opts.command === 'list') cmdList(opts);
-  else cmdAdopt(opts);
+  if (opts.command === 'list') {
+    if (opts.from) {
+      cmdListFeed(opts).catch((err) => fail(err.message));
+      return;
+    }
+    cmdList(opts);
+    return;
+  }
+  if (opts.from) {
+    loadFeedSource(opts)
+      .then((source) => {
+        cmdAdopt(opts, source);
+        if (opts.priors) adoptPriors(opts, source.feed);
+      })
+      .catch((err) => fail(err.message));
+    return;
+  }
+  cmdAdopt(opts, { artifact: readArtifact(opts.artifact).artifact, feed: null });
 }
 
 if (require.main === module) main();

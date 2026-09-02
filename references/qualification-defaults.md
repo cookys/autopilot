@@ -227,6 +227,37 @@ run rather than about the administration. Administration dates live per-entry, w
 Administering a *new* sweep is a separate tool: [`../scripts/qualification-sweep.sh`](../scripts/qualification-sweep.sh)
 (`--plan` is deterministic and free; `--execute` spends real dispatches).
 
+## Adopting from a feed (`--from`)
+
+The shipped artifact is baked into a release: static, and unable to carry an administration run
+after that release or a strike recorded later. A **feed** is the same disclosure, refreshable:
+
+```bash
+node scripts/adopt-qualification-defaults.js list  --from <https-url|path> --role implementer
+node scripts/adopt-qualification-defaults.js adopt --from <https-url|path> --seat <engine>:<runner> [--priors]
+```
+
+A feed is a remote document written by someone else, and is treated that way end to end:
+
+- **https only**, redirects refused, body and time bounded; the cache may not live inside a git
+  work tree.
+- **Its `digest` is reported, never trusted.** The cache key is always our own sha256 of the bytes
+  we received, and that is what `provenance.adopted_from.digest` records — the only value a later
+  reader can hold us to.
+- **Every `seat_hash` is re-derived locally** from (engine, runner, role, effort). A hash you did
+  not compute is a claim. When a feed's value differs, the output says which basis it used: a feed
+  built before effort partitioning advertises the three-field hash and is named as such, so the
+  producer knows exactly what to regenerate rather than being told "we disagree".
+- **The collision rules are the shipped ones.** Local evidence always wins; re-adoption refuses
+  without `--force`. A feed entry gets no easier path than a shipped default.
+- **`--priors` can never manufacture a qualification.** Priors are appended as provisional
+  `external_prior` evidence through the ordinary `record-evidence` path, and a `qualified` state
+  there requires `internal_eval` provenance a prior does not have. The ceiling is structural, not
+  a rule this tool remembers to apply.
+- **No timer, no auto-adopt.** `list --from` fetches and prints; adopting is always a separate,
+  explicit command. `~/.autopilot/config.json` `qualification_feed.url` only saves retyping the URL.
+
+
 ## What this does NOT do
 
 - It does not make a default trustworthy. It makes it **legible**.

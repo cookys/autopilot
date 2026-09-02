@@ -97,4 +97,47 @@ assert_contains "$OUT" "CONDITION run=deadrun implement dead gen=1 reason=owner_
 assert_contains "$OUT" "note=pid_liveness_unreliable_for_cc_native" \
   "dead/owner_absent CONDITION line carries the CC-native false-positive note"
 
+# --- 10. on-disk worktree facts override the uninformative PID (v2.35.7) -------
+# The PID is a known false-positive for a CC-native foreman, so when a lease records a
+# WORKTREE the condition is decided by what is on disk there. These three cases pin all
+# three outcomes; without them the new branch could be deleted and case 9 would stay green.
+
+# 10a. worktree with a FRESH write -> `dead` downgrades to `unknown`, never to `working`
+FRESH_WT="$W/wt-fresh"
+mkdir -p "$FRESH_WT" && : > "$FRESH_WT/touched-now"
+FRESHLEDGER="$W/fresh-wt-ledger.jsonl"
+bash "$RL" stage-acquire --ledger "$FRESHLEDGER" --run-id freshwt --stage implement \
+  --pid "$DEADPID" --start-time "$(date +%s)" --worktree "$FRESH_WT" >/dev/null 2>&1
+OUT="$(node "$WF" --ledger "$FRESHLEDGER" --runs-dir "$W/runs" --quiet-secs 600 --once 2>&1)"
+assert_contains "$OUT" "CONDITION run=freshwt implement unknown gen=1 reason=owner_absent_worktree_active" \
+  "an active worktree downgrades dead/owner_absent to unknown"
+assert_not_contains "$OUT" "run=freshwt implement working" \
+  "on-disk activity never claims working (files cannot prove a live process)"
+
+# 10b. worktree GONE -> stays `dead`, with the stronger reason. Absence is the one on-disk
+# fact that genuinely evidences death, so this must NOT be softened to unknown.
+GONE_WT="$W/wt-gone"
+mkdir -p "$GONE_WT"
+GONELEDGER="$W/gone-wt-ledger.jsonl"
+bash "$RL" stage-acquire --ledger "$GONELEDGER" --run-id gonewt --stage implement \
+  --pid "$DEADPID" --start-time "$(date +%s)" --worktree "$GONE_WT" >/dev/null 2>&1
+rm -rf "$GONE_WT"
+OUT="$(node "$WF" --ledger "$GONELEDGER" --runs-dir "$W/runs" --quiet-secs 600 --once 2>&1)"
+assert_contains "$OUT" "CONDITION run=gonewt implement dead gen=1 reason=owner_absent_worktree_absent" \
+  "a vanished worktree keeps the dead verdict with the stronger reason"
+
+# 10c. worktree present but IDLE past the quiet window -> the pre-existing dead/owner_absent
+# line, caveat note intact. Nothing recent on disk is not evidence of life.
+IDLE_WT="$W/wt-idle"
+mkdir -p "$IDLE_WT" && : > "$IDLE_WT/old-file"
+touch -d "1 hour ago" "$IDLE_WT/old-file" "$IDLE_WT"
+IDLELEDGER="$W/idle-wt-ledger.jsonl"
+bash "$RL" stage-acquire --ledger "$IDLELEDGER" --run-id idlewt --stage implement \
+  --pid "$DEADPID" --start-time "$(date +%s)" --worktree "$IDLE_WT" >/dev/null 2>&1
+OUT="$(node "$WF" --ledger "$IDLELEDGER" --runs-dir "$W/runs" --quiet-secs 60 --once 2>&1)"
+assert_contains "$OUT" "CONDITION run=idlewt implement dead gen=1 reason=owner_absent" \
+  "an idle worktree falls back to the plain dead/owner_absent condition"
+assert_contains "$OUT" "note=pid_liveness_unreliable_for_cc_native" \
+  "the idle-worktree fallback still carries the CC-native caveat"
+
 finalize_test

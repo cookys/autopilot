@@ -1,5 +1,70 @@
 # Changelog
 
+## v2.35.7 — agy 死路三修：預設 model 死字串、alias 比對從未對過真 CLI、argv 天花板無聲失敗；watcher 改看磁碟事實
+
+Fleet peer（PEACE / twgs-revival）回報的三項 upstream 請求（#2/#3/#4），加上追修時發現的一個更嚴重的
+既有缺陷。
+
+**agy alias 解析從未對真的 `agy models` 生效（🔴，追修時實測發現）。** `agy models` 印的是
+`<id><TAB><Display Name>` 兩欄，但三條 rail（`dispatch-hetero.sh`／`dispatch-review.sh`／
+`dispatch-author.sh`）各自帶一份 resolver，都拿 `^gemini-…-flash-<tier>$` 去比**整行**，`$` 錨點
+因此永遠不匹配，每次 alias 解析都 fail-closed 成「no current canonical model」。它看起來健康，
+只因為測試 stub 印的是單欄 id——一個與現實不符的 fixture，於是綠燈什麼也沒證明。
+新 `scripts/lib/agy-model-alias.sh` 成為唯一擁有者（比對**第一欄**，`sort -Vr` 版本序），三條 rail
+全部改為 consume；resolver 刻意不在 `$( )` 內 die（那會把 die_precondition 的 JSON 塞進 `MODEL`
+而不是結束腳本——同一批修掉的第二個缺陷），改為回傳非零＋理由，由 caller 在**父層** `|| die`。
+`hooks/tests/lib.sh` 的共用 agy stub 現在回答 `models`，且印**兩欄**；`AGY_STUB_MODELS` 讓需要別的
+inventory 的測試明確覆寫。
+
+**#3 預設 model 是已不存在的字串。** `dispatch-hetero.sh:125` 的 `MODEL="Gemini 3.5 Flash (High)"`
+在 agy 的 inventory 裡早已不存在（現存 `gemini-3.7-flash-*` / `gemini-3.6-flash-*`），所以任何不帶
+`--model` 的派工必爆。預設改為 agy **alias** `gemini-flash-high`——走上述 resolver 對**活的**
+inventory 解析、無對應即 fail closed，不會再腐爛成字面值。alias 是 agy 專屬，因此非 agy runner 在
+沒有 `--model` 時**明確拒絕**並點名 runner，而不是把一個 Gemini id 丟給 grok。`scripts/qc-panel.js`
+的 judge B 預設（`Gemini 3.5 Flash (Medium)`，同樣已死）一併改為 alias + 內建解析（版本序比較，
+memo 以 alias 為 key）。
+
+**#4 agy 的 ARG_MAX 天花板。** agy 沒有 `--prompt-file`（對 `agy --help` 實測，1.1.x：只有
+`-p/--print/--prompt` 吃單一 argv 字串，以及需要 stream-json 輸出的 `--input-format stream-json`），
+所以整份 prompt 是**一個 argv 字串**；Linux 的 `MAX_ARG_STRLEN` = 32 × PAGE_SIZE = 131072 bytes
+（含 NUL），與大得多的 `ARG_MAX`（本機 2097152）無關。超過就在 agy 啟動**之前** execve 失敗：沒有
+vendor 錯誤、沒有部分輸出、沒有 verdict，只剩一個裸的 shell status（126/127 都實測過），看起來像
+卡住的座位而不是被拒絕的座位。本機實測 131071 可 exec、131072 與 131073 失敗。新
+`scripts/lib/agy-argv-ceiling.sh` 由**活的** PAGE_SIZE 導出上限（64K page 主機是 2 MB，不可寫死），
+兩條 rail 先拒後派：`dispatch-review.sh` 走 `no_verdict`（review 已完全就緒，且 caller 的 fail-closed
+契約本就把 no_verdict 當「不可出貨」），`dispatch-hetero.sh` 走 `precondition_failed` 且**落在
+worktree／branch 建立之前**——否則那句「nothing was created」就是謊話（測試釘住了這點）。
+
+**#2 磁碟事實取代不可信的 PID。** `run-ledger.sh stage-acquire` 記的是呼叫它的 shell 的 PID，而那個
+shell 記完就退出；CC-native 工頭是另一個 agent turn，不是它的子行程——所以 `watch-foreman.js` 對健康
+工頭一律報 `dead/owner_absent`。watcher 現在改看 lease 的 **worktree**：quiet 窗內有寫入 → 降級為
+`unknown reason=owner_absent_worktree_active`（附 mtime 秒數）；worktree **消失** → 維持 `dead`，
+理由升級為 `owner_absent_worktree_absent`（那是磁碟上唯一夠強的死亡證據）；存在但閒置 → 回退到原本
+帶 caveat 的 `dead reason=owner_absent`。磁碟事實只能讓判斷更保守，**永遠不會**報 `working`——檔案
+證明不了行程活著。新 `scripts/agent-liveness-check.js`（repo-agnostic，JSON）補上完整畫面：base head
+＋ age、每個 worktree 的 dirty/ahead/behind、最新寫入、flock 持有者、可選的 container/volume 區段
+（要給 prefix 才出現，沒有專案慣例寫死）、磁碟餘量。它只給事實，不給裁決。共用的
+`scripts/lib/worktree-activity.js` 讓 watcher 與這支腳本不可能對「什麼算活動」有不同看法。
+
+**QC panel 收到的兩個 MUST-FIX（GLM-5.2 席，已獨立複驗後修）**：(1) `dispatch-author.sh` 是**第三條**
+agy rail——它產生的 run.sh 內嵌 `-p "$(cat <prompt>)"`，同樣是單一 argv 字串，但只 source 了 alias lib
+沒有 source ceiling lib，於是那條路徑仍保有本次要消滅的無聲失敗；已補上 guard（`precondition_failed`）
+與釘死測試。(2) `AGY_ARGV_BYTES` 用 `${#var}` 算長度——那是**字元**數不是位元組數，而 directive 裡有
+一個 3 bytes 的 em-dash，實測 1248 chars vs 1256 bytes，舊算式少算 6 bytes，正好會放行 131072–131073
+這個必爆區間（原註解宣稱「over-count 是安全方向」，被字元計數推翻）；改為 `agy_edit_only_directive "$WT" | wc -c`
+（管線保留結尾空行，因此連 `+2` 一起拿掉）。另收兩個 🔵 follow-up：dispatch-review 的 ceiling 路徑補上
+釘死測試（exit 1 + no_verdict + 理由字串），`qc-panel.js` 的 judge-B agy 座位補上同一道 JS 版檢查。
+sol 席 rc=124 逾時（no_verdict，不計為判決），MiniMax-M3 席 SHIP-AS-IS 附逐項 no_finding_proof。
+
+驗證：全套件 306/306 綠；修完 MUST-FIX 後 `dispatch-hetero` 228 / `dispatch-review` 356 /
+`dispatch-author` 92 / `watch-foreman` 27 / `qc-panel` 49 / `strike-writer-wiring` 44。兩次植入負控制
+在 tip 翻紅並逐位元組還原——(1) 把 alias 的第一欄擷取換回整行比對 → 四個 alias 斷言轉紅；(2) 移除 argv
+天花板 guard → 四個斷言轉紅，其中「refusal created no branch」證明 guard 的**位置**（在建立之前）才是
+被釘住的性質。
+
+prose-justification: no `skills/*/SKILL.md` grew this release — the two skill-side edits are in
+`references/` (`level-front-door.md`, `hetero-impl-loop.md`), where the operational caveat belongs.
+
 ## v2.35.6 — 死人開關：禁止把 task-notification 當唯一喚醒路徑
 
 Claude Code 的 subagent task-completion notification 是 best-effort，實測會整批漏送。外部回報

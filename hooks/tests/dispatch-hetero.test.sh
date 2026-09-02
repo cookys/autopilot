@@ -1965,6 +1965,52 @@ assert_contains "$REQ_MATRIX_OUT" '"sealed_noop_substitutions_rejected":true' \
 assert_contains "$REQ_MATRIX_OUT" '"engine_caller_zero_diff_forbidden":true' \
   "Engine rejects caller-minted zero-diff authority before dispatch"
 
+# --- agy model-alias resolution against a REAL-SHAPED inventory (v2.35.7) -----
+# `agy models` prints "<id><TAB><Display Name>", and the old per-rail resolvers matched
+# `^gemini-...-flash-<tier>$` against the WHOLE LINE, so the anchor never matched and every
+# alias failed closed. It looked healthy only because the stub emitted id-only lines. The stub
+# now emits both columns (hooks/tests/lib.sh make_agy_stub_versioned), so this case fails if the
+# first-field extraction in lib/agy-model-alias.sh is reverted.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/alias-resolve --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --model gemini-flash-high --runner agy 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "gemini-flash alias dispatch exit code"
+assert_contains "$OUT" '"model": "gemini-3.7-flash-high"' \
+  "alias resolves against the two-column agy models inventory"
+assert_not_contains "$OUT" '"model": "gemini-flash-high"' \
+  "the unresolved alias never reaches the vendor as a literal model name"
+
+# The built-in default is that same alias, so a --model-less agy dispatch resolves too.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/alias-default --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --runner agy 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "default-model dispatch exit code"
+assert_contains "$OUT" '"model": "gemini-3.7-flash-high"' \
+  "the built-in default resolves to a live id instead of a rotted literal"
+
+# --- the default is agy-only: any other runner must be told, not guessed at ---
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/nomodel-grok --prompt-file "$PROMPT" \
+  --runner grok 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "non-agy runner without --model exit code"
+assert_contains "$OUT" '"status": "precondition_failed"' "non-agy default refusal is a precondition"
+assert_contains "$OUT" "--model is required for runner 'grok'" \
+  "the refusal names the runner and says --model is required"
+
+# --- agy argv-payload ceiling: refuse loudly, and create nothing (v2.35.7) ----
+# agy has no --prompt-file, so the prompt is ONE argv string and execve rejects it over
+# MAX_ARG_STRLEN before agy starts — no vendor error, no verdict, just a bare shell status.
+# The refusal must land BEFORE the worktree/branch exist, or `precondition_failed` would be
+# lying about "nothing was created".
+BIG_PROMPT="$TEST_TMP/big-prompt.txt"
+node -e 'process.stdout.write("y".repeat(200000))' > "$BIG_PROMPT"
+# A resolved id, not the alias, so this case fails only on the ceiling guard and never on
+# alias resolution — a mutation in either place must be distinguishable.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/argv-ceiling --prompt-file "$BIG_PROMPT" \
+  --agy-bin "$STUB_OK" --model gemini-3.7-flash-high --runner agy 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "oversized agy payload exit code"
+assert_contains "$OUT" 'single-argv ceiling' "the refusal names the argv ceiling"
+assert_contains "$OUT" 'has no --prompt-file' "the refusal says why it cannot be streamed"
+assert_eq "" "$(cd "$SBX" && git rev-parse --verify --quiet refs/heads/feat/argv-ceiling || true)" \
+  "the ceiling refusal created no branch"
+
 # --- landing assertion: the operator's real strike store was NOT written ------
 # The §9 lesson: isolation you never assert is isolation you cannot trust. This
 # suite runs REAL fail-closed dispatches, which are exactly the outcomes that

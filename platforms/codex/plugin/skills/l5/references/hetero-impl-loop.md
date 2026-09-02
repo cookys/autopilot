@@ -56,7 +56,15 @@ path, the foreman heartbeats it, and depth-0 watches
 `node scripts/watch-foreman.js --ledger <path>` (background + task-notification
 on CC; `--once` snapshot **only at a stage boundary** elsewhere). Ritual +
 report-only discipline: front-door § "Live sensing". Foreman wait on leaves is
-notification-only — see `/l5` Hard rules and `scripts/check-foreman-polling.js`.
+notification-only — see `/l5` Hard rules and `scripts/check-foreman-polling.js`,
+and pair every background wait with a dead-man timer (task notifications drop).
+
+When a CONDITION line disagrees with what you expect, get the on-disk picture
+before acting: `node scripts/agent-liveness-check.js --repo-root <repo>` reports
+base head + age, per-worktree dirty/ahead/behind, newest write, lock holders and
+disk headroom as facts, never a verdict. The watcher already consults the
+lease's worktree, so `dead reason=owner_absent` now means the tree was idle too
+— but only `owner_absent_worktree_absent` is real death evidence.
 
 ## Capability-state surface rule
 

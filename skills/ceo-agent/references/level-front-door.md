@@ -202,6 +202,18 @@ REACTING too fast, not from seeing too little):
    resident for the stage (a long-lived CLI/daemon runner), and for a
    CC-native foreman fall back to git activity / `dispatch-status.js` before
    escalating to `run-ledger.sh resume`.
+
+   Since v2.35.7 the watcher consults the lease's WORKTREE before judging, so
+   the PID is no longer the only input: a tree written to inside the quiet
+   window downgrades the line to `unknown reason=owner_absent_worktree_active`
+   (with the mtime age), a VANISHED tree keeps `dead` under the stronger
+   `owner_absent_worktree_absent`, and an idle-but-present tree falls back to
+   the caveated `dead reason=owner_absent` above. On-disk facts can only make
+   the verdict more cautious — the watcher never reports `working` from files,
+   because files cannot prove a process is running. For the full picture (base
+   head age, per-worktree dirty/ahead/behind, lock holders, disk headroom) run
+   [`scripts/agent-liveness-check.js`](../../../scripts/agent-liveness-check.js);
+   it is repo-agnostic and emits facts, not a verdict.
 5. **Advisory directive channel (Phase 2 — nudge, never seize).** Depth-0 may
    queue a one-way *advisory* nudge to a running stage's lease holder — it does
    NOT auto-kill, does NOT grab the lease, and never overrides the holder's

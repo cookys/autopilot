@@ -111,6 +111,22 @@ if [ "${1:-}" = "--version" ]; then
   printf '1.1.10\n'
   exit 0
 fi
+if [ "${1:-}" = "models" ]; then
+  # Model inventory is part of the minimum contract: the built-in --model default is an agy
+  # *alias*, so every --model-less dispatch resolves it here. A fixture that answers `models`
+  # needs a different inventory sets AGY_STUB_MODELS (delegating to the implementation is NOT an
+  # option: these stubs commit files and print fixture JSON for every argv shape).
+  # Two columns on purpose — real `agy models` prints "<id><TAB><Display Name>", and an id-only
+  # fixture is exactly what hid the whole-line alias-matching bug until 2026-09-02.
+  if [ -n "${AGY_STUB_MODELS:-}" ]; then
+    printf '%s\n' "$AGY_STUB_MODELS"
+    exit 0
+  fi
+  printf 'gemini-3.7-flash-high\tGemini 3.7 Flash (High)\n'
+  printf 'gemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)\n'
+  printf 'gemini-3.7-flash-low\tGemini 3.7 Flash (Low)\n'
+  exit 0
+fi
 exec "${0}.agy-implementation" "$@"
 STUB
   chmod +x "$stub"

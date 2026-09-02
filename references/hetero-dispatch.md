@@ -85,6 +85,48 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
+### agy argv-payload ceiling — a second, harder wall
+
+The context-window gate is about what the *model* can hold. `agy` has a lower wall the *kernel*
+enforces, and it is reached first.
+
+`agy` has **no `--prompt-file`** (checked against `agy --help`, agy 1.1.x, 2026-09-02: only
+`-p`/`--print`/`--prompt`, which take the prompt as one argv string, plus `--input-format
+stream-json` on stdin — that one requires `--output-format stream-json` and a different parser, so
+no rail uses it). Every other runner here feeds the prompt through `--prompt-file` (codex, grok) or
+STDIN (cc-shim, qoderclicn, cursor) and is unaffected.
+
+Linux caps a **single argv string** at `MAX_ARG_STRLEN` = 32 × PAGE_SIZE — **131072 bytes including
+the NUL**, so 131071 is the largest string that execs. This is per-string and has nothing to do with
+the far larger total `ARG_MAX` (2097152 on this host), which is why `getconf ARG_MAX` looks like
+plenty of headroom right up until the dispatch dies. Measured 2026-09-02 (Linux 7.0.0, PAGE_SIZE
+4096): 131071 → exec ok, 131072 → fail, 131073 → fail.
+
+The failure is **silent by construction**: `execve` fails before agy starts, so there is no vendor
+error, no partial output, and nothing for the verdict parser to read — the caller sees only a bare
+shell status (126 and 127 have both been observed in the field). A reviewer seat that "returned
+nothing" looks the same as a stalled one.
+
+[`scripts/lib/agy-argv-ceiling.sh`](../scripts/lib/agy-argv-ceiling.sh) derives the ceiling from the
+live PAGE_SIZE (a 64K-page host has a 2 MB limit — never hardcode 131071) and **all three** agy
+rails refuse over it with a named reason instead of letting the exec fail:
+
+- `dispatch-review.sh` → `no_verdict` carrying the byte count, the ceiling, and the remedy. The
+  review was fully set up, and the caller's fail-closed contract already treats `no_verdict` as "do
+  not ship", so this is not a `precondition_failed`.
+- `dispatch-hetero.sh` → `precondition_failed`, raised **before** the worktree and branch exist, so
+  that status's "nothing was created" claim stays true.
+- `dispatch-author.sh` → `precondition_failed` (its generated `run.sh` embeds `-p "$(cat …)"`, the
+  same single-argv shape).
+
+`scripts/qc-panel.js` carries the same check in JS for its judge-B agy seats. Measure **bytes**,
+never `${#var}`: that counts characters, and one multibyte character in the prompt makes the guard
+under-report — the unsafe direction.
+
+Remedy when you hit it: narrow `--diff` (fewer files, smaller range), split the unit, or send that
+seat to a runner that reads a prompt file or STDIN. Splitting is the caller's decision — neither rail
+silently reviews half a diff and reports a verdict for the whole thing.
+
 ## Reviewer output-token budget
 
 `dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through
@@ -547,7 +589,7 @@ The engine records the dispatched tuple plus `implementer_ladder_rung` on the
 | Runner | Engine / models | Implementer | Reviewer | How to invoke / notes |
 |--------|-----------------|:-:|:-:|------|
 | `codex` | OpenAI `gpt-*`/`*codex*` | ✅ self-commits, can run build/test mid-turn | ✅ | default; `--effort` reasoning. Auto-selected for `*gpt*`/`*codex*` models. |
-| `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. |
+| `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. **No `--prompt-file`** — the prompt goes as one argv string, so a payload over ~131 KB is refused by the rails before exec (see § agy argv-payload ceiling); every other runner here reads a file or STDIN and has no such wall. |
 | `grok` | xAI `grok-4.5` (upstream renamed from `grok-build`, verified 2026-07-14), `grok-composer-2.5-fast` | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd) | needs `grok login`. HONORS `--cwd` (no anchor). Composer 2.5 lives in the grok CLI on the Grok Build plan. Auto-selected for `*grok*`/`*composer*`. |
 | `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3:** baseline reviewer calibration is 10/10 known-bad, 0 false-pass-on-critical, 3/3 clean, but its diff-only seat later produced false central claims in 5/6 observations. The exact `MiniMax-M3` + `cc-shim` + `minimax` tuple requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; independently verify its findings. **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
 | `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |

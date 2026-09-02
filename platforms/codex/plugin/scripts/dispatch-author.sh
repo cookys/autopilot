@@ -110,6 +110,12 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/grok-effort.sh"
 # shellcheck source=lib/cursor-model.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/cursor-model.sh"
+# shellcheck source=lib/agy-model-alias.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-model-alias.sh"
+# shellcheck source=lib/agy-argv-ceiling.sh
+# The agy branch below hands the prompt to agy as ONE argv string (agy has no --prompt-file),
+# so this rail has the same MAX_ARG_STRLEN wall as dispatch-hetero.sh and dispatch-review.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-argv-ceiling.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -705,27 +711,24 @@ fi
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
-normalize_agy_model() {
-  local requested="$1" agy_bin="$2" tier="high" models resolved
-  case "$EFFORT" in low) tier="low" ;; medium) tier="medium" ;; esac
-  case "$requested" in
-    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
-      models="$(timeout 20 "$agy_bin" models 2>/dev/null)" \
-        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
-      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
-      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
-      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
-      printf '%s' "$resolved" ;;
-    *) printf '%s' "$requested" ;;
-  esac
-}
 
 if [ "$RUNNER" = "agy" ]; then
   AGY_BIN="${BIN:-agy}"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
-  MODEL="$(normalize_agy_model "$MODEL" "$AGY_BIN")"
+  # `|| die` in the PARENT — the resolver never dies inside `$( )` (a die there would be
+  # captured into MODEL instead of exiting).
+  MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
+    || die_precondition "$MODEL"
   command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
+  # Refuse an unexec'able payload by name. The generated run.sh embeds `-p "$(cat <prompt>)"`,
+  # so the whole prompt becomes one argv string and execve rejects it over MAX_ARG_STRLEN before
+  # agy starts — a bare 126/127 with no vendor text, which reads as a stalled seat. `wc -c` on the
+  # file slightly over-counts (command substitution strips trailing newlines): the safe direction.
+  if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$(wc -c < "$PROMPT_FILE")" "the authoring prompt" \
+      "narrow the authoring task, or use a runner that reads a prompt file (codex, grok, qoderclicn)")"; then
+    die_precondition "$AGY_CEILING_REASON"
+  fi
 fi
 
 if [ "$RUNNER" = "kimi" ]; then

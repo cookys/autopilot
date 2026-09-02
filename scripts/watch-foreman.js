@@ -33,6 +33,9 @@
 
 const fs = require('fs');
 const path = require('path');
+// On-disk activity facts, shared with agent-liveness-check.js so the two cannot disagree about
+// what counts as a live worktree.
+const { classifyWorktree } = require('./lib/worktree-activity.js');
 
 function parseArgs(argv) {
   const args = {
@@ -133,9 +136,27 @@ function stageCondition(record, event, nowMs, quietSecs) {
     // runner) — the `note` field below flags that unreliability inline so a
     // reader of the CONDITION line meets the caveat at the liveness
     // judgement itself, not only in reference docs.
-    return record.resources
-      ? { condition: 'unknown', reason: 'owner_absent_resource_holder' }
-      : { condition: 'dead', reason: 'owner_absent', note: 'pid_liveness_unreliable_for_cc_native' };
+    if (record.resources) return { condition: 'unknown', reason: 'owner_absent_resource_holder' };
+    // The PID is uninformative here, so fall back to the durable evidence: the stage's WORKTREE.
+    // This can only move the verdict toward caution — an active tree downgrades `dead` to
+    // `unknown`, and a MISSING tree is the one on-disk fact strong enough to keep `dead`. It never
+    // reports `working`: files on disk cannot prove a process is running.
+    const disk = classifyWorktree(record.worktree, { freshSeconds: quietSecs > 0 ? quietSecs : 600, nowMs });
+    if (disk.state === 'absent' && record.worktree) {
+      return { condition: 'dead', reason: 'owner_absent_worktree_absent' };
+    }
+    if (disk.state === 'active') {
+      return {
+        condition: 'unknown',
+        reason: 'owner_absent_worktree_active',
+        note: `worktree_mtime_age_s=${disk.ageSeconds}`,
+      };
+    }
+    if (disk.truncated) {
+      // A truncated walk under-reports freshness, so an `idle` answer from one is not evidence.
+      return { condition: 'unknown', reason: 'owner_absent_worktree_scan_truncated' };
+    }
+    return { condition: 'dead', reason: 'owner_absent', note: 'pid_liveness_unreliable_for_cc_native' };
   }
   const eventGeneration = Number(event?.generation);
   const eventPid = Number(event?.pid);

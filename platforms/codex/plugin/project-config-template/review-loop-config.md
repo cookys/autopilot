@@ -285,6 +285,16 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   it can't run build/test mid-turn; the harness commits, the panel verifies), and Docker
   headless auth is still broken (#223/#479) so run agy on an interactively-authed host. `codex`/
   `gpt-5.3-codex-spark` remains the default for tasks where the agent must run build/test itself.
+- **`agy` has a ~131 KB payload ceiling that is NOT the context-window gate.** agy has no
+  `--prompt-file`, so the whole prompt goes to it as one argv string, and Linux caps a single argv
+  string at `MAX_ARG_STRLEN` = 131072 bytes (32 × PAGE_SIZE) — separate from, and far below, the
+  total `ARG_MAX`. Past that, `execve` fails before agy starts: no vendor error, no partial output,
+  just a bare shell status (126/127 both observed), which reads as a stalled seat rather than a
+  refused one. Both rails now refuse first with a named reason (`dispatch-review.sh` →
+  `no_verdict`, `dispatch-hetero.sh` → `precondition_failed`), so a big-diff agy seat tells you to
+  narrow `--diff` or move that seat to a runner that reads a file/STDIN (codex, grok, qoderclicn,
+  cursor) instead of going quiet. Details + the measurement:
+  `references/hetero-dispatch.md` § agy argv-payload ceiling.
 - **`grok` as implementer or reviewer (v2.26.6/2.26.7).** xAI Grok Build CLI; models
   `grok-build` and `grok-composer-2.5-fast` (Composer 2.5 ships inside the grok CLI on the
   Grok Build plan). Unlike agy, grok `-p` HONORS `--cwd` so no anchor hack is needed. To use:

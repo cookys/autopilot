@@ -10,13 +10,15 @@ SCRIPT="$REPO_ROOT/scripts/dispatch-review.sh"
 DIFF="$TEST_TMP/d.diff"
 printf '+def f(): return x[::1]\n' > "$DIFF"
 
+# Real `agy models` prints "<id><TAB><Display Name>". This fixture used to print bare ids, and
+# that mismatch is precisely what let the whole-line alias matcher pass here while failing against
+# every real inventory (fixed 2026-09-02, lib/agy-model-alias.sh). Consumed by the shared stub
+# wrapper in hooks/tests/lib.sh; 3.6 is the newest entry so the alias assertions below stay pinned.
+export AGY_STUB_MODELS="$(printf '%s\n' 'gemini-3.6-flash-high	Gemini 3.6 Flash (High)' 'gemini-3.5-flash-high	Gemini 3.5 Flash (High)')"
+
 STUB_MARKER="$TEST_TMP/eng-marker"
 cat > "$STUB_MARKER" <<'EOF'
 #!/usr/bin/env bash
-if [ "${1:-}" = models ]; then
-  printf '%s\n' 'Gemini 3.5 Flash (High)' 'gemini-3.6-flash-high'
-  exit 0
-fi
 if [ -n "${AGY_CONTAINMENT_PROBE:-}" ]; then
   printf '%s\n' mutated 2>/dev/null > "$AGY_CONTAINMENT_PROBE" && exit 88
   touch ./agy-scratch-write || exit 89
@@ -826,6 +828,19 @@ if command -v bwrap >/dev/null 2>&1; then
   assert_eq "0" "$EXIT" "agy reviewer generic alias exits 0"
   assert_contains "$OUT" '"model": "gemini-3.6-flash-high"' "agy reviewer generic alias resolves before spend"
   assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy reviewer alias path preserves the verdict"
+
+  # agy argv-payload ceiling (v2.35.7): agy has no --prompt-file, so an oversized review prompt
+  # is rejected by execve BEFORE agy runs — a bare 126/127 with no vendor text, indistinguishable
+  # from a stalled seat. The rail must refuse first, by name, as no_verdict (the review was fully
+  # set up, and no_verdict already means "do not ship" to every caller).
+  BIG_DIFF="$TEST_TMP/big.diff"
+  node -e 'process.stdout.write("+y".repeat(100000))' > "$BIG_DIFF"
+  OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash-high --diff-file "$BIG_DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+  assert_eq "1" "$EXIT" "oversized agy review payload fails closed"
+  assert_contains "$OUT" '"status": "no_verdict"' "oversized agy payload emits no_verdict, not a stall"
+  assert_contains "$OUT" 'single-argv ceiling' "the no_verdict reason names the argv ceiling"
+  assert_contains "$OUT" 'has no --prompt-file' "the reason says why it cannot be streamed"
+  assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "an unexecable payload can never authorize shipping"
 
   for ENVELOPE_MODE in malformed duplicate negative trailing; do
     OUT="$(AGY_ENVELOPE_MODE="$ENVELOPE_MODE" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?

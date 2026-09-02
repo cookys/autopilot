@@ -17,7 +17,9 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
-#       [--model "Gemini 3.5 Flash (High)"]   # default; names: `agy models` / `grok models`
+#       [--model gemini-flash-high]          # default (agy alias, resolved against the LIVE
+#                                             # `agy models` inventory); names: `agy models` /
+#                                             # `grok models`. Required for any non-agy runner.
 #       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, *qwen*/*qwq*→qoderclicn, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
@@ -122,7 +124,13 @@
 
 set -uo pipefail
 
-MODEL="Gemini 3.5 Flash (High)"
+# Default is the agy *alias*, never a literal vendor id: agy_resolve_model_alias() resolves it
+# against the live `agy models` inventory and fails closed when no tier match exists. A literal
+# id rots silently — "Gemini 3.5 Flash (High)" outlived its own model and every --model-less
+# dispatch died at the vendor. The alias is agy-only, so a non-agy runner without --model is
+# refused rather than handed a Gemini id (see MODEL_IS_DEFAULT below).
+MODEL="gemini-flash-high"
+MODEL_IS_DEFAULT=1
 BASE="develop"
 TIMEOUT="9m"
 MODEL_SUPPLIED=0
@@ -485,6 +493,41 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/grok-effort.sh"
 # shellcheck source=lib/cursor-model.sh
 . "$SELF_DIR/lib/cursor-model.sh"
+# shellcheck source=lib/agy-argv-ceiling.sh
+# agy has no --prompt-file: the agy branch below passes the whole prompt as ONE argv string,
+# which execve refuses over MAX_ARG_STRLEN before agy ever starts. Unconditional source (same
+# hard-fail posture as the libs above) so the guard can never be silently absent.
+. "$SELF_DIR/lib/agy-argv-ceiling.sh"
+# shellcheck source=lib/agy-model-alias.sh
+. "$SELF_DIR/lib/agy-model-alias.sh"
+
+# agy_edit_only_directive <worktree> — the harness directive prepended to every agy task
+# prompt. A FUNCTION, not an inline string, because the argv-ceiling guard has to measure the
+# exact bytes that will be exec'd and it runs before the worktree exists; a second copy of
+# this text would let the guard measure something the dispatch does not actually send.
+agy_edit_only_directive() {
+  local WT="$1"
+  printf '%s' "=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Your ABSOLUTE working directory is: $WT
+Every file path in the task below resolves UNDER this directory. Convert every relative
+path to absolute by prefixing it with '$WT/', and read/write ONLY absolute paths under
+'$WT'. The files to edit ALREADY EXIST there. NEVER create a project, NEVER use a scratch
+directory, NEVER use ~/.gemini, NEVER initialise a new git repo — edit the existing files
+in place at '$WT'. (agy -p does not honor the process cwd, so this absolute anchor is the
+only thing that points your edits at the real worktree instead of an invented scratch dir.)
+
+You run in ONE non-interactive turn and you CANNOT wait for any background task. Therefore
+do NOT use run_command / the shell AT ALL — no search, grep, find, ls, cat, install, build,
+test, lint, or git. ANY shell command is moved to the background and your turn ends before
+your edits are saved (that is the #1 cause of lost work here). Use ONLY your file read/edit
+tools, on the exact paths named in the task. Make all file edits, then stop. The harness
+commits your edits and a separate review verifies them — ignore any instruction below to
+run build/test or to commit.
+===
+
+"
+}
+
 # Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
 _flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 
@@ -992,6 +1035,7 @@ run_strict_contract_preflight() {
 
   if [ "$MODEL_SUPPLIED" -eq 0 ]; then
     MODEL="$strict_model"
+    MODEL_IS_DEFAULT=0   # the contract named it; the built-in default is no longer in play
   elif [ "$MODEL" != "$strict_model" ]; then
     die_precondition "caller --model ($MODEL) disagrees with checker resolved_engine.model ($strict_model)"
   fi
@@ -1562,7 +1606,7 @@ while [ $# -gt 0 ]; do
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
-    --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
+    --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
@@ -1875,24 +1919,18 @@ if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
   validate_d2_agy_claims
 fi
 
-normalize_agy_model() {
-  local requested="$1" tier="high" models resolved
-  case "$EFFORT" in low) tier=low ;; medium) tier=medium ;; esac
-  case "$requested" in
-    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
-      models="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
-        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
-      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
-      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
-      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
-      printf '%s' "$resolved" ;;
-    *) printf '%s' "$requested" ;;
-  esac
-}
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
-  MODEL="$(normalize_agy_model "$MODEL")"
+  # `|| die` in the PARENT: agy_resolve_model_alias deliberately never dies inside `$( )`,
+  # where die_precondition's JSON would be captured into MODEL instead of exiting.
+  MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
+    || die_precondition "$MODEL"
+elif [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+  # The built-in default is an agy alias and means nothing to any other vendor. Refusing
+  # here is the loud half of the fix: silently forwarding it produced a vendor-side error
+  # whose text named a model the caller never chose.
+  die_precondition "--model is required for runner '$RUNNER' — the built-in default ('$MODEL') is an agy-only alias"
 fi
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
@@ -2666,6 +2704,27 @@ _wt_lock_fail() {
   die_precondition "$1"
 }
 
+# agy argv-payload ceiling — refuse BEFORE anything is created, so the `precondition_failed`
+# contract ("nothing was created") holds. agy has no --prompt-file, so the directive plus the task
+# prompt travel as ONE argv string and execve rejects it over MAX_ARG_STRLEN, before agy starts and
+# with no vendor error to report. Measured against the same directive the dispatch will send (the
+# WT path is already resolved here; only the worktree itself does not exist yet). `wc -c` on the
+# prompt file slightly OVER-counts, which errs toward refusing a payload that would just barely
+# have fit — the safe direction. Only the agy rail has this wall; every other runner reads a file
+# or STDIN.
+if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
+  # `wc -c` on a PIPE, not ${#var}: ${#} counts CHARACTERS, and the directive contains a
+  # multibyte em-dash (and $WT may add more), so a character count UNDER-reports the argv size —
+  # the unsafe direction, and exactly the payload band (131072-131073 bytes) the guard exists to
+  # catch. The pipe also preserves the directive's trailing blank line, so no manual +2.
+  AGY_ARGV_BYTES=$(( $(agy_edit_only_directive "$WT" | wc -c) + $(wc -c < "$PROMPT_FILE") ))
+  if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_ARGV_BYTES" "the agy task prompt" \
+      "split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, qoderclicn)")"; then
+    die_precondition "$AGY_CEILING_REASON"
+  fi
+fi
+
 if [ "$WORKTREE_REUSED" -eq 0 ] && [ "$WORKTREE_MANAGED" -eq 1 ]; then
   # Admission must precede the first pending record, branch, or worktree. Once
   # active, evidence loss cannot be reinterpreted as an empty lifecycle root.
@@ -3084,25 +3143,9 @@ else
   # backgrounded task, before a follow-up commit runs → silent no_op/hallucination.
   # So we run agy EDIT-ONLY and the wrapper commits its edits below; verify by
   # artifact. (gotcha: agy-headless-dispatch-unreliable.)
-  AGY_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
-Your ABSOLUTE working directory is: $WT
-Every file path in the task below resolves UNDER this directory. Convert every relative
-path to absolute by prefixing it with '$WT/', and read/write ONLY absolute paths under
-'$WT'. The files to edit ALREADY EXIST there. NEVER create a project, NEVER use a scratch
-directory, NEVER use ~/.gemini, NEVER initialise a new git repo — edit the existing files
-in place at '$WT'. (agy -p does not honor the process cwd, so this absolute anchor is the
-only thing that points your edits at the real worktree instead of an invented scratch dir.)
-
-You run in ONE non-interactive turn and you CANNOT wait for any background task. Therefore
-do NOT use run_command / the shell AT ALL — no search, grep, find, ls, cat, install, build,
-test, lint, or git. ANY shell command is moved to the background and your turn ends before
-your edits are saved (that is the #1 cause of lost work here). Use ONLY your file read/edit
-tools, on the exact paths named in the task. Make all file edits, then stop. The harness
-commits your edits and a separate review verifies them — ignore any instruction below to
-run build/test or to commit.
-===
-
-"
+  # $(...) strips trailing newlines, so the directive's terminating blank line is re-appended
+  # here: it is what separates the directive from the task prompt in the bytes agy receives.
+  AGY_EDIT_ONLY="$(agy_edit_only_directive "$WT")"$'\n\n'
   AGY_ENVELOPE="$(mktemp -t dispatch-hetero-agy-envelope-XXXXXX)"
   AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
   AGY_PARSED="$(mktemp -t dispatch-hetero-agy-parsed-XXXXXX)"

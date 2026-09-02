@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn, execFileSync } = require('child_process');
+const { spawn, spawnSync, execFileSync } = require('child_process');
 
 const SCOPE_RULE = "Scope rule: judge ONLY the node whose report appears in the context — the deliverables implied by its 'node'/'question' fields and the claims the report itself makes. Project-level lifecycle steps (merging branches, release/quality gates, archiving, project status updates, and work belonging to OTHER nodes) are OUT OF SCOPE: do not list them as goals, extras, or misses.";
 const Q1 = "What goals were achieved? Cite specific evidence from the report and artifacts. List each achieved goal on its own line prefixed 'ACHIEVED:'.";
@@ -24,7 +24,64 @@ const agyBin = process.env.QC_AGY_BIN || 'agy';
 
 // Model seams
 const judgeAModel = process.env.QC_JUDGE_A_MODEL || 'claude-haiku-4-5';
-const judgeBModel = process.env.QC_JUDGE_B_MODEL || 'Gemini 3.5 Flash (Medium)';
+// Judge B's default is an agy *alias*, not a literal vendor id. A literal id rots silently:
+// 'Gemini 3.5 Flash (Medium)' outlived its own model, so every default-configured judge-B seat
+// died at the vendor while the panel still reported a seat. resolveAgyAlias() re-derives the id
+// from the live `agy models` inventory at first use and fails closed when no tier matches.
+const judgeBModelRequested = process.env.QC_JUDGE_B_MODEL || 'gemini-flash-medium';
+const AGY_ALIAS_RE = /^gemini-flash(-(low|medium|high))?$/;
+const agyAliasCache = new Map();  // keyed by alias: one alias per run today, but an
+                                  // unkeyed memo would hand a second alias the first one's id
+function resolveAgyAlias(requested) {
+  if (!AGY_ALIAS_RE.test(requested)) return requested;
+  if (agyAliasCache.has(requested)) return agyAliasCache.get(requested);
+  const tier = requested.split('-')[2] || 'high';
+  const listed = spawnSync(agyBin, ['models'], { encoding: 'utf8', timeout: 20000 });
+  if (listed.status !== 0) {
+    throw new Error(`agy model inventory unavailable; alias '${requested}' fails closed`);
+  }
+  const ids = String(listed.stdout || '')
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/)[0])
+    .filter((id) => new RegExp(`^gemini-\\d+(\\.\\d+)*-flash-${tier}$`).test(id))
+    // Version-aware descending, matching `sort -Vr` in the shell rails: a plain lexicographic
+    // sort would rank gemini-3.7 above gemini-3.10.
+    .sort((a, b) => {
+      const va = a.split('-')[1].split('.').map(Number);
+      const vb = b.split('-')[1].split('.').map(Number);
+      for (let i = 0; i < Math.max(va.length, vb.length); i += 1) {
+        const d = (vb[i] || 0) - (va[i] || 0);
+        if (d !== 0) return d;
+      }
+      return 0;
+    });
+  if (!ids.length) throw new Error(`agy alias '${requested}' has no current canonical model`);
+  agyAliasCache.set(requested, ids[0]);
+  return ids[0];
+}
+// agy has no --prompt-file: judge-B's prompt travels as ONE argv string, and Linux caps a single
+// argv string at MAX_ARG_STRLEN = 32 x PAGE_SIZE. Past that, spawn fails before agy starts. Node
+// surfaces that as an errored child rather than a silent stall, so this is a clarity guard, not a
+// correctness one — but every agy caller in the repo should name the same wall the same way
+// (scripts/lib/agy-argv-ceiling.sh is the shell owner of this constant).
+function agyArgvCeilingBytes() {
+  let page = 4096;
+  try {
+    const out = spawnSync('getconf', ['PAGESIZE'], { encoding: 'utf8', timeout: 5000 });
+    const parsed = Number(String(out.stdout || '').trim());
+    if (Number.isInteger(parsed) && parsed > 0) page = parsed;
+  } catch (_e) { /* keep the 4K default */ }
+  return 32 * page - 1;   // -1 for the NUL execve appends
+}
+
+function assertAgyArgvFits(prompt, what) {
+  const bytes = Buffer.byteLength(prompt, 'utf8');
+  const ceiling = agyArgvCeilingBytes();
+  if (bytes > ceiling) {
+    throw new Error(`${what} is ${bytes} bytes, over the ${ceiling}-byte single-argv ceiling agy can be exec'd with (Linux MAX_ARG_STRLEN); agy has no --prompt-file, so this cannot be streamed — shrink the node report or artifact set`);
+  }
+}
+
 const synthModel = process.env.QC_SYNTH_MODEL || 'claude-haiku-4-5';
 
 const scriptDir = __dirname;
@@ -314,7 +371,7 @@ async function main() {
       tokenTotal += promptTokens + ctxTokens;
 
       const agyBaseName = path.basename(agyBin);
-      const isCodex = (agyBaseName === 'codex') || judgeBModel.includes('gpt-5.5');
+      const isCodex = (agyBaseName === 'codex') || judgeBModelRequested.includes('gpt-5.5');
 
       let childBin = agyBin;
       let childArgs = [];
@@ -323,7 +380,7 @@ async function main() {
         childBin = agyBaseName === 'codex' ? agyBin : 'codex';
         childArgs = [
           'exec',
-          '--model', judgeBModel,
+          '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-bypass-approvals-and-sandbox',
           '--dangerously-bypass-hook-trust',
           '-c', 'thinking="xhigh"',
@@ -331,9 +388,10 @@ async function main() {
         ];
       } else {
         childBin = agyBin;
+        assertAgyArgvFits(prompt, 'the judge-B prompt');
         childArgs = [
           '-p', prompt,
-          '--model', judgeBModel,
+          '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-skip-permissions',
           '--print-timeout', '8m'
         ];
@@ -466,7 +524,7 @@ async function main() {
       tokenTotal += promptTokens + ctxTokens;
 
       const agyBaseName = path.basename(agyBin);
-      const isCodex = (agyBaseName === 'codex') || judgeBModel.includes('gpt-5.5');
+      const isCodex = (agyBaseName === 'codex') || judgeBModelRequested.includes('gpt-5.5');
 
       let childBin = agyBin;
       let childArgs = [];
@@ -475,7 +533,7 @@ async function main() {
         childBin = agyBaseName === 'codex' ? agyBin : 'codex';
         childArgs = [
           'exec',
-          '--model', judgeBModel,
+          '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-bypass-approvals-and-sandbox',
           '--dangerously-bypass-hook-trust',
           '-c', 'thinking="xhigh"',
@@ -483,9 +541,10 @@ async function main() {
         ];
       } else {
         childBin = agyBin;
+        assertAgyArgvFits(prompt, 'the judge-B prompt');
         childArgs = [
           '-p', prompt,
-          '--model', judgeBModel,
+          '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-skip-permissions',
           '--print-timeout', '8m'
         ];

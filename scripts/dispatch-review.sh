@@ -169,6 +169,38 @@ else
   _review_die_cursor_lib
 fi
 
+# agy_argv_ceiling_assert — the agy rail hands the whole prompt to agy as ONE argv string
+# (agy has no --prompt-file), so an oversized diff makes execve fail before agy runs and the
+# rail sees a bare shell status with no vendor text. FAIL-CLOSED for the same reason as the
+# lib above: a fail-open source would silently restore the silent-failure mode this guard
+# exists to remove.
+_REVIEW_AGY_CEILING_LIB="$_REVIEW_SELF_DIR/lib/agy-argv-ceiling.sh"
+_review_die_agy_ceiling_lib() {
+  echo "dispatch-review.sh: required lib unreadable: $_REVIEW_AGY_CEILING_LIB (cannot enforce the agy argv-payload ceiling)" >&2
+  exit 2
+}
+if [ -r "$_REVIEW_AGY_CEILING_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$_REVIEW_AGY_CEILING_LIB" || _review_die_agy_ceiling_lib
+else
+  _review_die_agy_ceiling_lib
+fi
+
+# agy_resolve_model_alias — single owner for `gemini-flash[-tier]` -> live model id (the three
+# dispatch rails used to carry three copies of the same broken matcher). FAIL-CLOSED like the two
+# libs above: without it a bare alias would be sent to the vendor as a literal model name.
+_REVIEW_AGY_ALIAS_LIB="$_REVIEW_SELF_DIR/lib/agy-model-alias.sh"
+_review_die_agy_alias_lib() {
+  echo "dispatch-review.sh: required lib unreadable: $_REVIEW_AGY_ALIAS_LIB (cannot resolve agy model aliases)" >&2
+  exit 2
+}
+if [ -r "$_REVIEW_AGY_ALIAS_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$_REVIEW_AGY_ALIAS_LIB" || _review_die_agy_alias_lib
+else
+  _review_die_agy_alias_lib
+fi
+
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 REVIEW_USAGE_JSON="null"
 MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
@@ -1211,15 +1243,10 @@ else
   command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy reviewer requires bwrap filesystem/process isolation"
   validate_d2_agy_claims
-  case "$MODEL" in
-    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
-      AGY_MODELS="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
-        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
-      AGY_TIER=high
-      case "$MODEL" in *-low) AGY_TIER=low ;; *-medium) AGY_TIER=medium ;; esac
-      MODEL="$(printf '%s\n' "$AGY_MODELS" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${AGY_TIER}$" | sort -Vr | head -n 1)"
-      [ -n "$MODEL" ] || die_precondition "agy alias has no current canonical model" ;;
-  esac
+  # `|| die` in the PARENT — the resolver never dies inside `$( )`, where die_precondition's JSON
+  # would be captured into MODEL instead of exiting the script.
+  MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
+    || die_precondition "$MODEL"
   # Capture the native JSON envelope privately. It is never the verdict parser's
   # input and never becomes raw_log: dispatch-status validates it once, then the
   # derived response and usage become separate typed channels.
@@ -1227,6 +1254,16 @@ else
   AGY_OUT="$(mktemp -t dispatch-review-agy-out-XXXXXX)"
   AGY_ERR="$(mktemp -t dispatch-review-agy-err-XXXXXX)"
   AGY_PARSED="$(mktemp -t dispatch-review-agy-parsed-XXXXXX)"
+  # Refuse an unexec'able payload with a NAMED reason instead of letting execve fail.
+  # This is the only rail that passes the prompt as an argv string; every other runner uses
+  # --prompt-file or stdin. Emitted as no_verdict (not die_precondition) because the review
+  # was fully set up and the caller's fail-closed contract already treats no_verdict as
+  # "do not ship" — a precondition exit would be indistinguishable from a bad invocation.
+  AGY_PROMPT_BYTES=$(wc -c < "$PROMPT_FILE")
+  if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_PROMPT_BYTES" "the review prompt" \
+      "narrow --diff (fewer files / smaller range) or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor)")"; then
+    emit_no_verdict "$AGY_CEILING_REASON"
+  fi
   AGY_BWRAP_ARGS=(--ro-bind / / --dev /dev --proc /proc)
   for AGY_APP_SUBDIR in log crashes; do
     AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"

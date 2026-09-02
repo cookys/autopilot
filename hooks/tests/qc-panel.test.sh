@@ -62,6 +62,14 @@ export QC_CLAUDE_BIN="$STUB_CLAUDE"
 STUB_AGY="$TEST_TMP/agy"
 cat > "$STUB_AGY" <<'STUB'
 #!/usr/bin/env bash
+# The judge-B default is an agy ALIAS, so qc-panel.js resolves it against `agy models` before
+# dispatching. Two columns, like the real CLI ("<id><TAB><Display Name>") — an id-only fixture is
+# what hid the whole-line alias-matching bug until 2026-09-02.
+if [ "${1:-}" = "models" ]; then
+  printf 'gemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)\n'
+  printf 'gemini-3.7-flash-high\tGemini 3.7 Flash (High)\n'
+  exit 0
+fi
 # agy -p <prompt> --model ... --dangerously-skip-permissions --print-timeout 8m
 # cwd = throwaway dir; writes verdict.txt then prints DONE
 PROMPT="${2:-}"
@@ -267,6 +275,14 @@ EOF
 AGREE_AGY="$TEST_TMP/agy-agree"
 cat > "$AGREE_AGY" <<'STUB'
 #!/usr/bin/env bash
+# The judge-B default is an agy ALIAS, so qc-panel.js resolves it against `agy models` before
+# dispatching. Two columns, like the real CLI ("<id><TAB><Display Name>") — an id-only fixture is
+# what hid the whole-line alias-matching bug until 2026-09-02.
+if [ "${1:-}" = "models" ]; then
+  printf 'gemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)\n'
+  printf 'gemini-3.7-flash-high\tGemini 3.7 Flash (High)\n'
+  exit 0
+fi
 # For Q3 (NOT achieved) — says nothing missed
 if printf '%s' "${2:-}" | grep -q "NOT achieved"; then
   printf '' > ./verdict.txt
@@ -479,6 +495,12 @@ chmod +x "$REFUTE_CLAUDE"
 REFUTE_AGY="$TEST_TMP/agy-refute"
 cat > "$REFUTE_AGY" <<'STUB'
 #!/usr/bin/env bash
+# See the STUB_AGY note: the judge-B default alias is resolved against `agy models` first.
+if [ "${1:-}" = "models" ]; then
+  printf 'gemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)\n'
+  printf 'gemini-3.7-flash-high\tGemini 3.7 Flash (High)\n'
+  exit 0
+fi
 PROMPT="${2:-}"
 if printf '%s' "$PROMPT" | grep -q "REFUTE this claim"; then
   printf 'REFUTED: the claimed miss is out of scope (agy)\n' > ./verdict.txt

@@ -122,7 +122,7 @@ scripts/ladder-run.sh \
   --base-sha "$BASE" --head-sha "$HEAD" \
   --diff-file /tmp/change.diff \
   --state-file "$HOME/projects/fuchikoma/docs/ladder/state.json" \
-  --reviewer-runner codex --reviewer-model gpt-5.5 \
+  --reviewer-runner codex --reviewer-model gpt-5.6-sol \
   --lenses "doc-accuracy,version-sync"
 
 # or dispatch the implementer first (l5-style leaf dispatch):

@@ -51,7 +51,7 @@ RUN artifact (exactly one — providing both is rejected):
   --diff-file <path>                              already-produced change diff (verifier reads this only)
   --impl-prompt-file <f> --branch <name> [--impl-runner codex] [--impl-model M]
 RUN verify/measure:
-  --reviewer-runner <r> (codex)   --reviewer-model <m> (gpt-5.5)   --lenses a,b (doc-accuracy,link-integrity)
+  --reviewer-runner <r> (codex)   --reviewer-model <m> (gpt-5.6-sol)   --lenses a,b (doc-accuracy,link-integrity)
   --mock-verdict SHIP-AS-IS|FIX-THEN-SHIP   TEST SEAM only (never a real datapoint)
   --store <path> ($QC_METRIC_STORE)   --qc-metric-py <path>   --sample-rate <f>   --dry-run
 
@@ -257,7 +257,7 @@ fi
 # ------------------------------------------------------------------ RUN subcommand
 TASK_CLASS=""; CHANGE_ID=""; REPO=""; STATE_FILE=""; BASE_SHA=""; HEAD_SHA=""
 DIFF_FILE=""; IMPL_PROMPT=""; BRANCH=""; IMPL_RUNNER="codex"; IMPL_MODEL=""
-REVIEWER_RUNNER="codex"; REVIEWER_MODEL="gpt-5.5"; LENSES="doc-accuracy,link-integrity"
+REVIEWER_RUNNER="codex"; REVIEWER_MODEL="gpt-5.6-sol"; LENSES="doc-accuracy,link-integrity"
 MOCK_VERDICT=""; STORE=""; QC_PY=""; SAMPLE_RATE=""; DRY_RUN=0
 while [ $# -gt 0 ]; do case "$1" in
   --task-class) TASK_CLASS="$2"; shift 2;;

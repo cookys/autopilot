@@ -24,6 +24,24 @@ PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
 
+# ── Store isolation (REQUIRED — this file writes) ────────────────────────────
+# This test does not source hooks/tests/lib.sh, so it did not inherit lib.sh's
+# per-file store redirection, and it invokes the REAL engine-qualify.sh. For the
+# model ids that are legitimately ACCEPTED, the qualifier runs far enough to
+# APPEND a real evidence row — so every run of this file added rows to the
+# operator's own ~/.autopilot/engine-capability/qualification-evidence.jsonl.
+# Measured on this host 2026-09-02: 356 of 404 rows in that store came from here.
+#
+# The rejected-id cases wrote nothing (they die at argv validation), which is why
+# the leak was small per run and invisible: two rows, no failure, suite green.
+# hooks/tests/run.sh's real-store fingerprint guard is what found it — a static
+# grep for the store env vars did not, because this file never names them.
+VOCAB_TMP="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-test-qualify-vocab-XXXXXX")"
+trap 'rm -rf "$VOCAB_TMP"' EXIT
+export ENGINE_CAPABILITY_DIR="$VOCAB_TMP/engine-capability"
+export ENGINE_SCORECARD_DIR="$VOCAB_TMP/engine-scorecard"
+mkdir -p "$ENGINE_CAPABILITY_DIR" "$ENGINE_SCORECARD_DIR"
+
 # ---------------------------------------------------------------- vocabulary
 # Both sides enumerated FROM SOURCE. A hand-written expectation here would drift
 # exactly the way the two validators drifted from each other.

@@ -358,7 +358,16 @@ QUALIFY_REMOTE_ARGS=("${QUALIFY_ARGS[@]}")
 QUALIFY_ARGS+=("${PANEL_BINDS[@]}")
 export AUTOPILOT_QUALIFY_NOW="2026-07-26T00:00:00.000Z"
 export AUTOPILOT_QUALIFY_SEED="engine-qualify-test-seed"
+# Belt-and-braces over lib.sh's per-file isolation. This is the test that appended 100 fixture
+# rows (engine=eng-review, runner=cc-shim, role=reviewer) into the MAINTAINER'S OWN
+# ~/.autopilot/engine-scorecard/scorecard.jsonl between 2026-06-30 and 2026-07-24 — 100 of its 146
+# rows — while staying green the whole time, because nothing looked at the real store. lib.sh now
+# exports both dirs for every test that sources it, and hooks/tests/run.sh hashes the real stores
+# around the whole run; this restates the two the qualifier writes so the isolation is visible in
+# the file that caused the incident, not only in a shared helper two directories away.
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"
+export ENGINE_SCORECARD_DIR="$TEST_TMP/engine-scorecard"
+mkdir -p "$ENGINE_CAPABILITY_DIR" "$ENGINE_SCORECARD_DIR"
 
 # 2) Correct panel verdicts -> evaluation passes, but serialized output has no authority.
 PASS_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" 2>&1)"

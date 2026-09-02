@@ -249,6 +249,44 @@ TOTAL=0
 FAILED=0
 declare -a FAILED_TESTS=()
 
+# ── Real-store pollution guard ───────────────────────────────────────────────
+# Incident: hooks/tests/engine-qualify.test.sh appended 100 fixture rows
+# (engine=eng-review, runner=cc-shim, role=reviewer) into the MAINTAINER'S OWN
+# ~/.autopilot/engine-scorecard/scorecard.jsonl between 2026-06-30 and 2026-07-24
+# — 100 of its 146 rows. The suite was green throughout; nothing looked at the
+# real store, so nothing could notice. hooks/tests/lib.sh has since pointed
+# ENGINE_SCORECARD_DIR / ENGINE_CAPABILITY_DIR at per-file temp dirs, but that
+# only protects tests that SOURCE it, and it is a convention, not a check.
+#
+# This is the check: hash the operator's real stores before and after the whole
+# run and fail if any changed. It is deliberately at suite level rather than
+# per-test — a per-test assertion is another thing to remember to write, and the
+# rows above were written by a test whose author believed it was isolated.
+#
+# Hashing (not size/mtime): a test that appends one row and removes another
+# leaves the size identical, and mtime granularity can hide a fast write.
+AUTOPILOT_REAL_STORE_FILES=(
+  "$HOME/.autopilot/engine-scorecard/scorecard.jsonl"
+  "$HOME/.autopilot/engine-capability/capability.jsonl"
+  "$HOME/.autopilot/engine-capability/strikes.jsonl"
+  "$HOME/.autopilot/engine-capability/qualification-evidence.jsonl"
+)
+__real_store_fingerprint() {
+  local f out=""
+  for f in "${AUTOPILOT_REAL_STORE_FILES[@]}"; do
+    if [ -f "$f" ]; then
+      out="$out$f:$(sha256sum "$f" 2>/dev/null | cut -d' ' -f1)"$'\n'
+    else
+      # ABSENT is a state worth pinning too: a suite that CREATES a real store on
+      # a host that had none is the same defect, and a size check would miss it.
+      out="$out$f:absent"$'\n'
+    fi
+  done
+  printf '%s' "$out"
+}
+REAL_STORE_BEFORE="$(__real_store_fingerprint)"
+
+
 run_one() {
   local file="$1"
   local rel="${file#$REPO_ROOT/}"
@@ -538,6 +576,19 @@ else
       FAILED_TESTS+=("$rel")
     fi
   done
+fi
+
+# ── Real-store pollution guard: after ────────────────────────────────────────
+REAL_STORE_AFTER="$(__real_store_fingerprint)"
+if [ "$REAL_STORE_BEFORE" != "$REAL_STORE_AFTER" ]; then
+  echo "" >&2
+  echo "❌ REAL-STORE POLLUTION: a test wrote into the operator's ~/.autopilot stores." >&2
+  echo "   A test must isolate with ENGINE_SCORECARD_DIR / ENGINE_CAPABILITY_DIR or --store." >&2
+  echo "   Changed:" >&2
+  diff <(printf '%s' "$REAL_STORE_BEFORE") <(printf '%s' "$REAL_STORE_AFTER") \
+    | sed -n 's/^[<>] /   /p' >&2
+  FAILED=$((FAILED + 1))
+  FAILED_TESTS+=("REAL-STORE POLLUTION (see above)")
 fi
 
 # ── Summary ──

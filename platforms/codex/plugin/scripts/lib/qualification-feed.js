@@ -227,10 +227,21 @@ function parseFeed(body, origin, bytes) {
   // Hash the BYTES we received, not the decoded string: decode/re-encode is not guaranteed to be
   // byte-preserving, and this digest is what an adopted row records as its provenance.
   const digest = sha256(bytes === undefined ? Buffer.from(body, 'utf8') : bytes);
-  // The feed may advertise its own digest. It is compared and REPORTED, never trusted: a producer
-  // that computed it over different bytes is worth knowing about, but our cache key is always the
-  // hash of what we actually received.
+  // The feed may advertise its own digest. It is REPORTED, never trusted — our cache key is always
+  // the hash of what we actually received.
+  //
+  // `digest_basis`, when the producer states one, says what their digest is computed over. That
+  // turns a difference from a possible discrepancy into a stated fact: the model-dyno feed's value
+  // is a producer-internal change-detection fingerprint over a SUBSET of the document (defaults +
+  // strikes + priors, with per-prior timestamps stripped), not a hash of the wire bytes, and is
+  // not meant to be independently recomputed. Without this field we could only observe "it differs
+  // from ours" and had to warn; with it we can say which it is, and stop alarming every reader
+  // about something that is working as designed. Absent basis keeps the old, louder wording —
+  // an unexplained difference still deserves a warning.
   const advertised = typeof doc.digest === 'string' ? doc.digest : null;
+  const advertisedBasis = typeof doc.digest_basis === 'string' && doc.digest_basis.length > 0
+    ? doc.digest_basis
+    : null;
   return {
     doc,
     feed_schema: isFeedSchema ? doc.schema : null,
@@ -239,7 +250,13 @@ function parseFeed(body, origin, bytes) {
     is_feed: isFeedSchema,
     digest,
     advertised_digest: advertised,
+    advertised_digest_basis: advertisedBasis,
     digest_matches_advertised: advertised === null ? null : advertised === digest,
+    // Whether a difference is EXPECTED. A producer that declares a basis has told us their digest
+    // is not a hash of the bytes we hold, so a difference carries no information about integrity.
+    // This never affects the cache key, the provenance record, or any admission decision — it only
+    // decides how loudly the difference is reported.
+    advertised_digest_is_producer_internal: advertisedBasis !== null,
     origin,
     defaults: doc.defaults || [],
     strikes: doc.strikes || [],

@@ -243,7 +243,12 @@ A feed is a remote document written by someone else, and is treated that way end
   work tree.
 - **Its `digest` is reported, never trusted.** The cache key is always our own sha256 of the bytes
   we received, and that is what `provenance.adopted_from.digest` records — the only value a later
-  reader can hold us to.
+  reader can hold us to. A feed may declare `digest_basis` to say what its own digest covers; the
+  model-dyno feed's, for instance, is a producer-internal change-detection fingerprint over a subset
+  of the document, not a hash of the wire bytes. When a basis is declared, a difference is reported
+  as expected rather than as a discrepancy — an unexplained difference still gets the louder
+  warning. Either way the basis is a REPORTING input only: it can never make us adopt the
+  producer's digest.
 - **Every `seat_hash` is re-derived locally** from (engine, runner, role, effort). A hash you did
   not compute is a claim. When a feed's value differs, the output says which basis it used: a feed
   built before effort partitioning advertises the three-field hash and is named as such, so the

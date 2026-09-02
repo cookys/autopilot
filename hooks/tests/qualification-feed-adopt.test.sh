@@ -40,6 +40,52 @@ assert_eq "$(printf '%s' "$OURS" | wc -c | tr -d ' ')" "64" "the digest is a sha
 assert_eq "$(jf "$OUT" digest_matches_advertised)" "false" \
   "the sample feed's advertised digest does NOT match ours — reported, not fatal"
 
+# ── 1b. a DECLARED digest basis turns a difference into a stated fact ────────
+# The model-dyno feed's `digest` is a producer-internal change-detection fingerprint over a subset
+# of the document, not a hash of the wire bytes. Before the producer declared that, we could only
+# observe "it differs from ours" and had to warn — which alarmed every reader about something
+# working as designed. With `digest_basis` present we say which it is.
+#
+# What must NOT change: the basis is a REPORTING input only. It can never make us adopt the
+# producer's digest, and our cache key stays our own hash of the received bytes.
+WITH_BASIS="$TEST_TMP/feed-with-basis.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+doc.digest_basis = "sha256 over defaults+strikes+priors with per-prior timestamps removed";
+fs.writeFileSync(process.argv[2], `${JSON.stringify(doc, null, 2)}\n`);
+' "$SAMPLE" "$WITH_BASIS"
+
+OUTB="$(node "$ADOPT" list --from "$WITH_BASIS" --feed-cache-dir "$CACHE" --json 2>&1)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "a feed declaring digest_basis is read"
+assert_eq "$(jf "$OUTB" advertised_digest_is_producer_internal)" "true" \
+  "a declared basis marks the advertised digest as producer-internal"
+assert_eq "$(jf "$OUTB" digest_matches_advertised)" "false" \
+  "the comparison is still performed and still reported honestly"
+BASIS_DIGEST="$(jf "$OUTB" digest)"
+# INDEPENDENTLY derived, not just self-consistent. Checking "it is 64 hex chars" and "the cache
+# directory is named after it" would both stay true if we adopted the producer's value — the check
+# would be a shadow of the answer it is meant to test (references/evidence-discipline.md). sha256sum
+# is the outside opinion.
+EXPECTED_DIGEST="$(sha256sum "$WITH_BASIS" | cut -d' ' -f1)"
+assert_eq "$BASIS_DIGEST" "$EXPECTED_DIGEST" \
+  "our digest is sha256 of the FILE BYTES — a declared basis never makes us adopt the producer's value"
+assert_file_exists "$CACHE/$BASIS_DIGEST/feed.json" \
+  "and the cache is addressed by that hash, never the advertised one"
+
+OUTB_TEXT="$(node "$ADOPT" list --from "$WITH_BASIS" --seat GLM-5.3:cc-shim --feed-cache-dir "$CACHE" 2>&1)"
+assert_contains "$OUTB_TEXT" 'producer-internal fingerprint' \
+  "the human output states what the advertised digest actually is"
+assert_not_contains "$OUTB_TEXT" 'DOES NOT match ours' \
+  "and stops reporting an expected difference as a discrepancy"
+
+# The louder wording must survive for a feed that explains nothing: an unexplained difference is
+# still worth a warning, and this is the assertion that stops the calmer branch swallowing both.
+assert_contains "$OUT" 'null' "the basis-less sample reports no basis"
+OUT_TEXT_NOBASIS="$(node "$ADOPT" list --from "$SAMPLE" --seat GLM-5.3:cc-shim --feed-cache-dir "$CACHE" 2>&1)"
+assert_contains "$OUT_TEXT_NOBASIS" 'DOES NOT match ours' \
+  "a feed with no declared basis still gets the loud warning"
+
 # ── 2. seat_hash is RE-DERIVED, and a stale basis is named precisely ─────────
 # The sample feed predates effort partitioning, so it advertises the three-field hash. Saying
 # WHICH basis it used is the difference between an actionable message and noise.

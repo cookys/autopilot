@@ -41,7 +41,8 @@
 //
 //               A feed is a REMOTE DOCUMENT WRITTEN BY SOMEONE ELSE. Nothing about it is
 //               trusted: its `digest` is reported, never believed (our cache key is always our
-//               own hash of the bytes we received), and every seat_hash is RE-DERIVED locally
+//               own hash of the bytes we received — a declared `digest_basis` only changes how
+//               loudly a difference is reported), and every seat_hash is RE-DERIVED locally
 //               from (engine, runner, role, effort) rather than adopted from the feed. A hash
 //               you did not compute is a claim (ADR-0001).
 //
@@ -342,6 +343,8 @@ async function cmdListFeed(opts) {
       feed_schema: feed.feed_schema,
       digest: feed.digest,
       advertised_digest: feed.advertised_digest,
+      advertised_digest_basis: feed.advertised_digest_basis,
+      advertised_digest_is_producer_internal: feed.advertised_digest_is_producer_internal,
       digest_matches_advertised: feed.digest_matches_advertised,
       previous_digest: feed.previous_digest,
       changed: feed.changed,
@@ -383,8 +386,21 @@ async function cmdListFeed(opts) {
   process.stdout.write(`owner       ${doc.owner === undefined ? '(unstated)' : doc.owner}\n`);
   process.stdout.write(`digest      ${feed.digest}  (OUR hash of the bytes we received)\n`);
   if (feed.advertised_digest) {
-    process.stdout.write(`            advertised ${feed.advertised_digest}`
-      + `${feed.digest_matches_advertised ? ' — matches' : ' — DOES NOT match ours; reported, not trusted'}\n`);
+    let note;
+    if (feed.digest_matches_advertised) {
+      note = ' — matches';
+    } else if (feed.advertised_digest_is_producer_internal) {
+      // The producer stated what their digest covers, so a difference is expected and says
+      // nothing about integrity. Reporting it as a discrepancy would alarm every reader about
+      // something working as designed.
+      note = ' — producer-internal fingerprint, not a hash of these bytes; a difference is expected';
+    } else {
+      note = ' — DOES NOT match ours; reported, not trusted';
+    }
+    process.stdout.write(`            advertised ${feed.advertised_digest}${note}\n`);
+    if (feed.advertised_digest_basis) {
+      process.stdout.write(`            basis      ${feed.advertised_digest_basis}\n`);
+    }
   }
   if (feed.changed !== null) {
     process.stdout.write(`            ${feed.changed ? 'CHANGED' : 'unchanged'} since the last fetch `
@@ -716,6 +732,9 @@ function cmdAdopt(opts, source) {
           feed_schema: feed.feed_schema,
           advertised_digest: feed.advertised_digest,
           advertised_digest_matches: feed.digest_matches_advertised,
+          // Recorded so a later reader of this row can tell an expected difference (the producer
+          // declared a basis) from an unexplained one, without re-fetching the feed.
+          advertised_digest_basis: feed.advertised_digest_basis,
         },
       } : {}),
       self_qualify_command: selfQualifyCommand(entry),

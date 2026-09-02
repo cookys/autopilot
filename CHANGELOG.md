@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.35.10 — feed 的 digest 不一致，可能只是它從來不是同一種東西
+
+v2.35.9 的 `list --from` 對線上 feed 印出：
+
+```
+advertised c707e94e… — DOES NOT match ours; reported, not trusted
+```
+
+那句話當時是誠實的——我算不出對方的值，試了五種基底都不是。但它把**設計如此**的東西報成了疑似異常，
+每個使用者都會被嚇一次。生產端（llm-playground，私有 repo）回覆說明：那是 **producer-internal
+change-detection fingerprint**，hash 對象是 `defaults+strikes+priors` 且 priors 的三個時間欄位先剝掉，
+不是 wire bytes 的 hash，本來就不打算被獨立重算。他們補了 `digest_basis` 欄位講清楚基底，並把
+`semantics.trust` 改成明講這一點。
+
+- feed 宣告 `digest_basis` 時，不一致報成「producer-internal fingerprint, not a hash of these bytes;
+  a difference is expected」並印出基底；**沒有**宣告基底的 feed 維持原本較大聲的警告——沒有解釋的
+  不一致仍然值得警告，這兩條分支都被釘住。
+- 基底是**純回報輸入**：它永遠不能讓我們改用生產端的 digest。cache key 與寫進採納列
+  `provenance.adopted_from.digest` 的值一律是我們自己對實收位元組算的 sha256。
+- `advertised_digest_basis` 一併記進 provenance，這樣事後讀那一列的人不必重抓 feed 就能分辨
+  「已解釋的差異」和「沒有解釋的差異」。
+
+寫測試時修掉自己的一個影子斷言：原本驗「我們的 digest 是 64 個十六進位字元」加「cache 目錄叫這個名字」
+——但如果我們改用生產端的值，這兩條**都還是會通過**，因為它們是從被測答案自己導出的
+（`references/evidence-discipline.md` 那一族）。改成用 `sha256sum` 獨立算出期望值再比對。植入負控制
+（宣告基底時就改用對方的 digest）在強化前**沒被抓到**，強化後精準轉紅。
+
+驗證：全套件 308/308。兩次植入負控制翻紅並還原：讓宣告基底改變 digest 來源、以及把所有不一致都當成
+已解釋（吞掉大聲分支）。
+
+prose-justification: 沒有 `skills/*/SKILL.md` 變更；文字都在 `references/` 與腳本 header。
+
 ## v2.35.9 — 座位有 effort、考試身分不綁 plugin 版本、可從 feed 採納（而且什麼都自己重算）
 
 llm-playground（7840hs）交接的四項，加上追查過程中發現的兩個真缺陷。

@@ -45,3 +45,6 @@ orch-eval-scratch-home-*/
 
 # transient orchestration calibration run outputs (depth-0 runs these)
 docs/projects/_archive/2026-07-09-m3-band-tasks/runs/
+
+# codeforge local capture (signals/L1 store) — local knowledge, not versioned
+.codeforge/

@@ -254,7 +254,7 @@ assert_contains "$MIRROR_CONTRACT_OUT" "three-way equality" "Codex plugin mirror
 PROFILE_CATALOG_OUT="$(node "$PLUGIN_DIR/scripts/build-profile-payload.js" catalog \
   --check --repo "$PLUGIN_DIR" 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "Codex package validates its profile catalog from its own root"
-assert_contains "$PROFILE_CATALOG_OUT" '"canonical_rules": 802' \
+assert_contains "$PROFILE_CATALOG_OUT" '"canonical_rules": 812' \
   "Codex package includes the immutable baseline needed by profile validation"
 
 STANDALONE_PLUGIN="$TEST_TMP/standalone-codex-plugin"
@@ -263,7 +263,7 @@ STANDALONE_CATALOG_OUT="$(GIT_CEILING_DIRECTORIES="$TEST_TMP" \
   node "$STANDALONE_PLUGIN/scripts/build-profile-payload.js" catalog \
   --check --repo "$STANDALONE_PLUGIN" 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "standalone Codex package validates without parent Git discovery"
-assert_contains "$STANDALONE_CATALOG_OUT" '"canonical_rules": 802' \
+assert_contains "$STANDALONE_CATALOG_OUT" '"canonical_rules": 812' \
   "standalone catalog uses packaged immutable baseline snapshots"
 STANDALONE_BUILD_OUT="$(GIT_CEILING_DIRECTORIES="$TEST_TMP" \
   node "$STANDALONE_PLUGIN/scripts/build-profile-payload.js" build \

@@ -137,6 +137,22 @@ If the config file does not exist, proceed normally without it.
 Stated at the step that runs it — S step 2 / Fix step 4 run the project-config gate (default lint + test; the
 optional finish-flow route runs the stricter `quality-pipeline --size S` at F.1); L / H run `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2. Enforcer: `documented-only`.
 
+### Background Wait Rule
+
+A turn must NEVER end waiting only on a background-task notification. Claude Code delivers
+subagent task-completion notifications best-effort, and they are dropped in practice
+(2026-09-02 field report: 29 of 63 never arrived, 1 arrived 38 min late — a foreman idled on a
+run that had already finished).
+
+| Expected wait | Do this |
+|---------------|---------|
+| ≤ 15 min | Foreground `Bash` with an explicit `timeout`, or the `Monitor` tool. Not `run_in_background`. |
+| > 15 min | `run_in_background` ONLY when paired with both: the leaf's output path written down in the same turn, AND a second background dead-man timer (`sleep <deadline>; echo WAKE`). |
+
+An orchestrator that hands off a long phase starts that phase's dead-man timer before ending its
+turn. Foreman sessions under `/l4`–`/l6` keep their stricter no-polling clause: there the dead-man
+timer must itself be a background task — never foreground `sleep`, never `Monitor`.
+
 ### Session End Rule
 
 When the user signals session end (or task completion for S-size):

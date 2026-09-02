@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.35.6 — 死人開關：禁止把 task-notification 當唯一喚醒路徑
+
+Claude Code 的 subagent task-completion notification 是 best-effort，實測會整批漏送。外部回報
+（2026-09-02，PEACE session via fleet）：一次 run 裡 63 次通知有 **29 次從未送達、1 次遲到 38 分鐘**，
+一個 sonnet 工頭因此呆等一個早已跑完的 clippy。既有的「Foreman 禁止輪詢」條款（ironlaw #6）本身
+*要求* 用 task-notification 喚醒並結束回合，等於把單一不可靠通道寫成唯一路徑。
+
+- `skills/{l4,l5,l6}/SKILL.md` 的禁輪詢條款加上配對要求：交辦背景 leaf 時必須同回合寫下 leaf 的
+  output path，並另起一個**背景**死人開關（`run_in_background` 的 `sleep <deadline>; echo WAKE`）。
+  背景 sleep 本來就在該條款允許範圍內（`check-foreman-polling.js` 只判前景輪詢），因此不與機械閘門
+  衝突。沒有配對死人開關就結束回合＝紅。depth-0 交辦長階段後同樣要自起計時器。
+- `skills/dev-flow/SKILL.md` Session Rules 新增 **Background Wait Rule**（非 foreman 的一般 session）：
+  預期等待 ≤15 分鐘走前景 `Bash` + 明確 `timeout` 或 `Monitor`，>15 分鐘才用 `run_in_background`
+  且必須配 output path + 死人開關。
+- `docs/ironlaw-to-gate-map.md` #6 標註死人開關是 brief-template forcing function，
+  `check-foreman-polling.js` **偵測不到**缺少死人開關——誠實標示未機械化的部分（ADR-0001）。
+- profiles hash 鏈依序重釘：`rule-inventory.json`（dev-flow sha256 + 新 segment
+  `dev.session-background-wait` 140–155 + 其後全部位移 +16 + duplicate_rule_sets 行號）→
+  `rule-migration.json` 重生 → `profile-catalog.json`（`guided` 407→417，canonical rules 802→812）
+  → codex mirror。`profile-context-isolation` / `codex-plugin-package` 的 drift-guard 釘值隨裁決過的
+  有意變更更新；guided-compatibility frozen baseline 不動。
+
+prose-justification: this release adds 16 lines to `skills/dev-flow/SKILL.md` (the Background Wait
+Rule table) and one clause extension to `skills/{l4,l5,l6}/SKILL.md`. Both encode a field-observed
+failure mode that no shipped gate detects — `check-foreman-polling.js` sees foreground polling but
+cannot see a *missing* dead-man timer — so the rule has nowhere mechanical to live and the ratchet
+growth buys real coverage. No new skill-teaching prose; the contract-card shape is unaffected.
+
 ## v2.35.5 — managed-campaign rail debt: terminalize/withdraw, grant replay refusal, credential staging, wall cap
 
 prose-justification: +61 prose lines for `references/peer-addressing.md` (53) and the pointer that

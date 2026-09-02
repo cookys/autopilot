@@ -70,7 +70,7 @@ Hard rules:
   foreman returns `precondition_failed`).
 - Only admitted graph nodes become implementation tasks. Plan phase headings, modules, tests,
   review seats, and retries stay inside the owning deliverable.
-- 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止前景 `sleep` 輪詢與把 leaf raw output 灌回 context（背景 `run_in_background` until-loop 等外部條件是允許的，一次通知；只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。
+- 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止前景 `sleep` 輪詢與把 leaf raw output 灌回 context（背景 `run_in_background` until-loop 等外部條件是允許的，一次通知；只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。task-notification 是 best-effort，實測會整批漏送（2026-09-02 PEACE 回報：63 次有 29 次從未送達、1 次遲到 38 分鐘，一個 sonnet 工頭就這樣呆等一個早已跑完的 clippy），因此**「等通知」不得是唯一喚醒路徑**：每次交辦背景 leaf 都必須同回合 (a) 把 leaf 的 output path 寫進 context，(b) 另起一個背景死人開關（`run_in_background` 的 `sleep <deadline>; echo WAKE`，仍是背景、不違反禁輪詢）；沒有配對死人開關就結束回合＝紅。depth-0 交辦長階段給工頭後，同樣要自起該階段的死人計時器。
 
 **Capability profile (shadow):** `/l4` fixes foreman topology only. When the host supplies a current
 verified envelope/grant/profile payload, forward it unchanged; never infer guidance density from

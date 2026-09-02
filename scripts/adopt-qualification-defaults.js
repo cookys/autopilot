@@ -163,6 +163,37 @@ function readArtifact(file) {
 // need not retype it. OPT-IN ONLY: absence changes nothing, a malformed config is ignored rather
 // than fatal (it must never break the shipped-artifact path), and this still only supplies the
 // URL — it never triggers a fetch or an adoption on its own.
+// EVERY string that reaches the terminal from a feed passes through one of these.
+//
+// A feed is untrusted by construction — that is the premise of the whole `--from` path — and its
+// text was being printed raw. A hostile `digest_basis` could embed a newline plus a forged
+// "advertised <hash> — matches" line, so the document could dictate what the tool appeared to say
+// about it, and an ANSI escape could repaint or hide the rest of the output. Reproduced before
+// fixing; pinned by a hostile-string case in hooks/tests/qualification-feed-adopt.test.sh.
+//
+// The original value is NEVER altered in structured output or in provenance: `--json` and the
+// adopted row keep the bytes as received, because that is the record. Only the human rendering is
+// sanitized, which is where the deception would land.
+const CONTROL_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
+
+// One line: newlines become a visible marker rather than real line breaks, so a value can never
+// manufacture output that looks like this tool's own.
+function safeLine(value, max = 300) {
+  const text = String(value === undefined || value === null ? '' : value)
+    .replace(/\r\n?|\n/g, '\\n')
+    .replace(CONTROL_CHARS, '\uFFFD');
+  return text.length > max ? `${text.slice(0, max)}… (truncated)` : text;
+}
+
+// Multi-line, for the disclosure notices that are printed verbatim by design: real newlines are
+// kept (they are the formatting), every other control character is not.
+function safeBlock(value, max = 8000) {
+  const text = String(value === undefined || value === null ? '' : value)
+    .replace(/\r\n?/g, '\n')
+    .replace(CONTROL_CHARS, '\uFFFD');
+  return text.length > max ? `${text.slice(0, max)}… (truncated)` : text;
+}
+
 function readConfiguredFeedUrl() {
   const file = path.join(os.homedir(), '.autopilot', 'config.json');
   try {
@@ -372,18 +403,18 @@ async function cmdListFeed(opts) {
   const doc = feed.doc;
   for (const notice of ['disclosure_notice', 'adr_0001_notice', 'downgrade_notice']) {
     if (typeof doc[notice] === 'string' && doc[notice].length > 0) {
-      process.stdout.write(`${doc[notice]}\n\n`);
+      process.stdout.write(`${safeBlock(doc[notice])}\n\n`);
     }
   }
   if (doc.semantics && typeof doc.semantics === 'object') {
     process.stdout.write('FEED SEMANTICS (the producer\'s own statement):\n');
     for (const [k, v] of Object.entries(doc.semantics)) {
-      process.stdout.write(`  ${k}: ${v}\n`);
+      process.stdout.write(`  ${safeLine(k, 64)}: ${safeLine(v, 600)}\n`);
     }
     process.stdout.write('\n');
   }
-  process.stdout.write(`feed        ${feed.origin}\n`);
-  process.stdout.write(`owner       ${doc.owner === undefined ? '(unstated)' : doc.owner}\n`);
+  process.stdout.write(`feed        ${safeLine(feed.origin)}\n`);
+  process.stdout.write(`owner       ${doc.owner === undefined ? '(unstated)' : safeLine(doc.owner, 128)}\n`);
   process.stdout.write(`digest      ${feed.digest}  (OUR hash of the bytes we received)\n`);
   if (feed.advertised_digest) {
     let note;
@@ -397,9 +428,9 @@ async function cmdListFeed(opts) {
     } else {
       note = ' — DOES NOT match ours; reported, not trusted';
     }
-    process.stdout.write(`            advertised ${feed.advertised_digest}${note}\n`);
+    process.stdout.write(`            advertised ${safeLine(feed.advertised_digest, 128)}${note}\n`);
     if (feed.advertised_digest_basis) {
-      process.stdout.write(`            basis      ${feed.advertised_digest_basis}\n`);
+      process.stdout.write(`            basis      ${safeLine(feed.advertised_digest_basis)}\n`);
     }
   }
   if (feed.changed !== null) {
@@ -430,10 +461,10 @@ async function cmdListFeed(opts) {
     process.stdout.write(`  environment     runner ${env.feed_runner_version} → local ${localRv}`
       + `${env.runner_version_matches === false ? '  ⚠ differs — WARNING ONLY, never gates' : ''}\n`);
     if (entry.board) {
-      process.stdout.write(`  board           ${JSON.stringify(entry.board)}\n`);
+      process.stdout.write(`  board           ${safeLine(JSON.stringify(entry.board), 600)}\n`);
     }
     if (entry.feed && entry.feed.evidence_url) {
-      process.stdout.write(`  evidence url    ${entry.feed.evidence_url}\n`);
+      process.stdout.write(`  evidence url    ${safeLine(entry.feed.evidence_url, 512)}\n`);
     }
     process.stdout.write('\n');
   }

@@ -86,6 +86,49 @@ OUT_TEXT_NOBASIS="$(node "$ADOPT" list --from "$SAMPLE" --seat GLM-5.3:cc-shim -
 assert_contains "$OUT_TEXT_NOBASIS" 'DOES NOT match ours' \
   "a feed with no declared basis still gets the loud warning"
 
+# ── 1c. a hostile feed cannot forge this tool's own output ──────────────────
+# Found by an adversarial reviewer, reproduced before fixing. Feed text is untrusted by
+# construction — that is the premise of the whole --from path — and it was being printed raw. A
+# `digest_basis` carrying a newline plus a forged "advertised <hash> — matches" line let the
+# DOCUMENT dictate what the tool appeared to say about it; an ANSI escape could repaint the rest.
+HOSTILE="$TEST_TMP/hostile-feed.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const ESC = String.fromCharCode(27);
+doc.digest_basis = [
+  "benign",
+  `            advertised ${"0".repeat(64)} — matches`,
+  `${ESC}[31mFORGED`,
+].join("\n");
+doc.owner = `evil${ESC}[2Kowner`;
+fs.writeFileSync(process.argv[2], `${JSON.stringify(doc, null, 2)}\n`);
+' "$SAMPLE" "$HOSTILE"
+
+HOSTILE_OUT="$(node "$ADOPT" list --from "$HOSTILE" --seat GLM-5.3:cc-shim --feed-cache-dir "$CACHE" 2>&1)"
+assert_exit_code "$?" "0" "a hostile feed still lists (sanitizing is not refusing)"
+# The forged line must not appear as its own line. `— matches` on a line of its own would mean the
+# document had successfully impersonated the tool's verdict about its own digest.
+FORGED_LINES="$(printf '%s\n' "$HOSTILE_OUT" | grep -c "^            advertised 0\{64\} — matches$" || true)"
+assert_eq "$FORGED_LINES" "0" "a newline in digest_basis cannot forge an 'advertised … — matches' line"
+assert_contains "$HOSTILE_OUT" 'basis      benign\n' \
+  "the newline is rendered as a visible escape, keeping the value on one line"
+ESC_COUNT="$(printf '%s' "$HOSTILE_OUT" | node -e '
+let s = ""; process.stdin.on("data", (d) => { s += d; }).on("end", () => {
+  process.stdout.write(String((s.match(/\u001b/g) || []).length));
+});')"
+assert_eq "$ESC_COUNT" "0" "no ESC control character from the feed reaches the terminal"
+
+# The record must keep the bytes as received: sanitizing is for the human rendering only, never
+# for the structured output or the provenance a later reader audits.
+HOSTILE_JSON="$(node "$ADOPT" list --from "$HOSTILE" --feed-cache-dir "$CACHE" --json 2>&1)"
+RAW_BASIS_HAS_NEWLINE="$(node -e '
+const doc = JSON.parse(process.argv[1]);
+process.stdout.write(String(doc.advertised_digest_basis.includes("\n")));
+' "$HOSTILE_JSON")"
+assert_eq "$RAW_BASIS_HAS_NEWLINE" "true" \
+  "--json preserves the original value verbatim — the record is not edited, only the display"
+
 # ── 2. seat_hash is RE-DERIVED, and a stale basis is named precisely ─────────
 # The sample feed predates effort partitioning, so it advertises the three-field hash. Saying
 # WHICH basis it used is the difference between an actionable message and noise.

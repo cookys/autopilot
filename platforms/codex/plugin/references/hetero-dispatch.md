@@ -127,6 +127,46 @@ Remedy when you hit it: narrow `--diff` (fewer files, smaller range), split the 
 seat to a runner that reads a prompt file or STDIN. Splitting is the caller's decision — neither rail
 silently reviews half a diff and reports a verdict for the whole thing.
 
+### Transport fallback for a frozen plan-review seat
+
+A seat in a `dispatch-plan-review.js` manifest may declare **`transport_fallback`** — a second pipe
+to the SAME logical reviewer:
+
+```json
+"transport_fallback": { "runner": "cursor", "model": "cursor-grok-4.6-xhigh",
+                        "endpoint": "default", "qualification_status": "qualified" }
+```
+
+It is not a seat and not a tuple. It carries no `id`, `family`, `role` or `effort` on purpose: the
+seat's identity does not change, `minimum_distinct_families` is computed from **logical** families
+only, and the effort is inherited. A transport event that could move the decorrelation math would be
+a semantic substitution wearing a transport costume — which is what the seat's separate
+`fallbacks[]` array already is, openly, and what this is deliberately not.
+
+Rules:
+
+- **Absent ⇒ nothing changes.** The key is optional and is never materialized when absent, so a
+  manifest that does not use it keeps its exact canonical bytes.
+- **Fires only on a transport-class failure** — the non-`success` runner-envelope outcomes
+  (`exit_failure`, `timeout`, `quota`, `unavailable`, `interrupted`). NOT on a parse or semantic
+  disagreement over a healthy pipe, and NOT on `identity_mismatch`/`raw_binding_mismatch`: those are
+  integrity failures, and retrying elsewhere would paper over exactly what they exist to surface.
+- **Costs an attempt, never a generation.** `max_attempts_per_seat: 2` is unchanged and still frozen.
+  It arms once; there is no third pipe.
+- **`qualification_status: "unqualified"` is never dispatched to.** A transport failure is not an
+  override for a manifest that says "do not route here".
+- Receipts carry both identities: `logical_identity` on every attempt, plus `actual_transport` only
+  on the attempt that used the fallback.
+
+**The freezing authority's obligation, which no code can check**: a transport fallback must actually
+reach the *same model*. `cursor-grok-4.6-xhigh` is a legitimate second pipe to Grok 4.6 for an
+xAI seat; a codex pipe is not, however "qualified" it is. The schema cannot verify that two vendor
+ids denote one model, so whoever freezes the manifest owns it.
+
+**Today no shipped roster names such a pair.** The mechanism is complete and tested; a manifest that
+uses it must name a runner+model that is separately qualified for the seat's role. `cursor` is not
+(see the § above) — the mechanism exists and is unrouted, which is the honest state.
+
 ## Reviewer output-token budget
 
 `dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through
@@ -594,7 +634,7 @@ The engine records the dispatched tuple plus `implementer_ladder_rung` on the
 | `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3:** baseline reviewer calibration is 10/10 known-bad, 0 false-pass-on-critical, 3/3 clean, but its diff-only seat later produced false central claims in 5/6 observations. The exact `MiniMax-M3` + `cc-shim` + `minimax` tuple requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; independently verify its findings. **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
 | `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |
 | `qoderclicn` | Qoder CLI CN → Alibaba `Qwen3.8-Max-Preview` (also gateways GLM-5.2 / DeepSeek-V4 / Kimi / MiniMax-M2.7) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--tools ""`) | needs Qoder CLI CN auth (`~/.qoder-cn`). HONORS `-w`/`--cwd` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; effort → `--reasoning-effort`; `--qoder-bin` test seam. Reviewer splits STDOUT/STDERR (a benign `fatal: not a git repository` on stderr from the non-git scratch cwd stays out of the parse). Auto-selected for `*qwen*`/`*qwq*`. Spike-verified 2026-07-24 (edit-only + `-w` honored, both paths e2e-passed on Qwen3.8-Max-Preview). |
-| `cursor` | Cursor CLI (`cursor-agent`) → ~60 models across five vendors on one OAuth login; this plan's effort mapping covers `cursor-grok-4.6-*` and `gpt-5.3-codex-*` only | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--mode ask`) | needs `cursor-agent` login. HONORS process cwd AND `--workspace <abs>` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; `--trust` MANDATORY headlessly (the run aborts on workspace trust without it). Effort is the **model-id suffix**, not a flag — there is no `--reasoning-effort` on this rail. `--cursor-bin`/`--cursor-fast` test seams (default lane is non-fast). **EXPLICIT-only — `auto` refuses cursor ids and fails closed, never selects cursor.** Reviewer/author rails are bound to `--output-format text`. Deliberately excluded from the blind-review allowlist. **NOT yet qualified — no roster admission** (`resolve-review-loop.sh` has no cursor entry; Stage-1 implementer qualification is a separate, deferred phase). |
+| `cursor` | Cursor CLI (`cursor-agent`) → ~60 models across five vendors on one OAuth login; this plan's effort mapping covers `cursor-grok-4.6-*` and `gpt-5.3-codex-*` only | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--mode ask`) | needs `cursor-agent` login. HONORS process cwd AND `--workspace <abs>` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; `--trust` MANDATORY headlessly (the run aborts on workspace trust without it). Effort is the **model-id suffix**, not a flag — there is no `--reasoning-effort` on this rail. `--cursor-bin`/`--cursor-fast` test seams (default lane is non-fast). **EXPLICIT-only — `auto` refuses cursor ids and fails closed, never selects cursor.** Reviewer/author rails are bound to `--output-format text`. Deliberately excluded from the blind-review allowlist. **Read-only here is COOPERATIVE, not enforced**: the 2026-08-29 adversarial probe (`docs/plans/evidence/2026-08-29-cursor-containment-probe/`, 18 probes on 2026.08.25-3e8eec8) found `--mode ask` is cooperative and overridden by `--force`, `permissions.deny: ["*"]` silently no-ops, enumerated deny is allow-by-omission (TodoWrite and WebSearch ran uncontained, WebSearch making a real outbound call), and `--sandbox` is AppArmor-gated. The scratch cwd is real containment for the working directory; the process is not otherwise prevented from reaching the host. That is why `qualification-review-provider.js` refuses cursor unconditionally as an exam transport. **NOT yet qualified — no roster admission** (`resolve-review-loop.sh` has no cursor entry; Stage-1 implementer qualification is a separate, deferred phase). |
 
 For AUTHORING flows, prefer `anthropic-compatible` when the request is a large single-shot payload where `cc-shim` (Claude Code CLI transport) can stall or fail with 529-style endpoint pathologies. This path runs the same direct `dispatch-anthropic-review.js --raw` transport with `MINIMAX_API_KEY`/`ANTHROPIC_COMPATIBLE_AUTH_TOKEN`, and it resolves credentials by endpoint name the same way as cc-shim when `--endpoint <name>` is supplied.
 

@@ -1,5 +1,74 @@
 # Changelog
 
+## v2.35.8 — plan-review seat 的 transport fallback：換管線，不換人
+
+TWGameProject 經 fleet 轉來的需求：frozen plan review 裡一個必要座位的 **transport** 掛掉，整輪就
+`transport_exhausted` 收場；能走的路只有重跑一輪（消耗 semantic generation，而 generation 上限是 2）
+或手改 frozen manifest（毀掉凍結）。當出問題的從來不是那個 model、只是通往它的管線時，這兩條都不對。
+
+**設計判斷（先讀 code 再動手，省掉一半工）**：`dispatch-plan-review.js` 本來就把 **transport attempt**
+（`max_attempts_per_seat: 2`，凍結欄位、硬性 `!== 2` 檢查）和 **semantic generation**（上限 2）分成兩層。
+Fallback 掛在 attempt 層，因此「不消耗 generation」是結構自然結果，不是額外規則。
+
+- **新的 frozen 欄位 `transport_fallback`**（每個 seat 可選）：只帶 `runner`／`model`／`endpoint`／
+  `qualification_status`。**刻意沒有** `id`／`family`／`role`／`effort`——座位身分不變、
+  `minimum_distinct_families` 只用**邏輯** family 計算、effort 繼承。一個能移動 decorrelation 數學的
+  transport 事件，就是穿著 transport 外衣的語意替換；那正是 seat 既有的 `fallbacks[]` 陣列在做的事
+  （而且它是公開這麼做的），這裡刻意不是。
+- **只在 transport-class 失敗時觸發**：runner-envelope 的非 success 結果
+  （`exit_failure`／`timeout`／`quota`／`unavailable`／`interrupted`）。健康管線上的 parse／語意分歧
+  **不會**觸發；`identity_mismatch`／`raw_binding_mismatch` 更不會——那是完整性失敗，換條管線重試等於
+  蓋掉它們存在的理由。
+- **欄位不存在 ⇒ 行為逐位元組不變**。`exactKeys` 新增 optional 集合，缺席的 key 也絕不被具現成 `null`，
+  所以沒用到這個欄位的 manifest 連 canonical digest 都不變（既有 266 個 assertion 原封通過即為證據）。
+- **雙身分 receipt**：每個 attempt 記 `logical_identity`（座位是誰），只有真正走了 fallback 的那次額外記
+  `actual_transport`（走了哪條管線、為什麼）。讀者永遠分得出「換了管線」和「換了人」。
+- `unqualified` 的 fallback 永遠不會被派工——transport 失敗不是「不要路由到這裡」的豁免。
+- 新 `hooks/tests/plan-review-transport-fallback.test.sh`（56 assertions）。兩次植入負控制翻紅：
+  (1) 把觸發條件放寬到任何 status → 「健康管線的 parse 失敗不觸發」轉紅；(2) 讓 transport 洩進 logical
+  identity → 五個 class × 兩個身分斷言全轉紅。
+
+**Phase 5（cursor 的 reviewer-class qualification）BLOCKED，因此 admission 沒有加。**
+擋住的不是錢也不是授權：`scripts/qualification-review-provider.js` 的 `kind === 'cursor'` 分支
+**在組 argv 之前就無條件拒絕**，因為考試 transport 必須能強制 tool-deny，而 cursor-agent 沒有。
+那個拒絕建立在一份已經跑過的 18 項對抗性實測上
+（`docs/plans/evidence/2026-08-29-cursor-containment-probe/`，對象是 **2026.08.25-3e8eec8，正是本機安裝的
+那一版**）：`permissions.deny: ["*"]` 靜默 no-op、列舉式 deny 是 allow-by-omission（TodoWrite 與 WebSearch
+在全 deny + `--force` 下未受限執行，WebSearch 還發了真實對外請求）、`--sandbox` 被 AppArmor 擋住、
+`--mode ask` 是合作式且被 headless `-p` 必需的 `--force`／`--trust` 蓋過。考題本質上就是對抗性提示，
+reviewer 座位又要讀不受信任的 diff，所以這個拒絕是對的，本次不重新爭論。
+`UNQUALIFIED_RUNNERS="cursor"` 原封不動。**機制通用且完整，但今天沒有任何 roster 指名可用的配對——
+它是「已出貨但未被路由」，這是誠實的狀態。**
+
+**順帶暴露的既有 caveat**：`dispatch-author.sh` 的 cursor 分支跑 `-p --trust --mode ask` 於 scratch cwd。
+依同一份實測，`--mode ask` 是合作式、`--trust` 本身屬於 bypass 類，所以那條 rail 的唯讀姿態是
+**合作式而非強制**；scratch cwd 對工作目錄是真的隔離，但行程並未被阻止觸及主機。已寫進
+`references/hetero-dispatch.md`。這不是 regression，但它先前很容易被讀得比實際更強。
+
+另：凍結 manifest 的人有一項**程式無法檢查**的義務——transport fallback 必須真的通往**同一個 model**。
+`cursor-grok-4.6-xhigh` 對一個 xAI 座位是合法的第二條管線；codex 管線不是，無論它多「qualified」。
+schema 無法驗證兩個 vendor id 指向同一個 model，所以這條責任在凍結者身上。
+
+**QC panel（gpt-5.6-sol / GLM-5.2 / MiniMax-M3）**：兩席 FIX-THEN-SHIP，MiniMax 逾時未回（不計判決）。
+- sol 的 🟠 MUST-FIX **成立且已修**：`logical_identity` 原本在**每個** attempt 無條件輸出，於是連沒有宣告
+  `transport_fallback` 的 manifest 產出的 artifact bytes 都變了——正是 KR1 禁止的漂移，而我原本的測試只斷言
+  `transport_retry`／`actual_transport` 不存在，剛好漏掉這個欄位。改為只在座位宣告了 fallback 時才輸出
+  （沒有 fallback 就沒有可消歧的東西），並補上直接釘住該 key 不存在的斷言；植入負控制（改回無條件輸出）
+  確認翻紅。
+- GLM 的 🟠 MUST-FIX **依其自述條件撤回**：它宣稱重寫後的 `exactKeys` 有一個未配對的 `});` 會讓
+  `node --check` 失敗。實測 `node --check` 通過、括號配對正確、`check-js-syntax.js` 與全套件皆綠——
+  它讀錯了 diff。該 finding 自己寫明「if it parses, this finding is withdrawn」。
+- GLM 的 🔵 #4 已採納為**文件修正**而非程式改動：plan §3.1 case 1 原本承諾 freeze 時拒絕未知 model **id**，
+  但這條 rail 上任何地方都沒有 freeze-time model 驗證（primary seat 沒有、`fallbacks[]` 也沒有），
+  只為這個欄位加一個等於製造假保證的不對稱；改為據實描述——未知 **runner** 在 freeze 時被拒，
+  未知 model id 則在派工時 fail closed 成 `transport_exhausted`，與 primary seat 同形狀。
+
+驗證：全套件 307/307 綠；修完 MUST-FIX 後 `plan-review-transport-fallback` 57 assertions。
+三次植入負控制翻紅並還原：放寬觸發條件、讓 transport 洩進 logical identity、把 `logical_identity`
+改回無條件輸出。
+
+prose-justification: no `skills/*/SKILL.md` changed this release.
+
 ## v2.35.7 — agy 死路三修：預設 model 死字串、alias 比對從未對過真 CLI、argv 天花板無聲失敗；watcher 改看磁碟事實
 
 Fleet peer（PEACE / twgs-revival）回報的三項 upstream 請求（#2/#3/#4），加上追修時發現的一個更嚴重的

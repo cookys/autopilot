@@ -1,6 +1,8 @@
 # Cursor Agent as a read-only transport fallback for reviewer-class seats
 
-> **Status**: draft — not yet reviewed. Authorized by operator 2026-09-02 (routed from
+> **Status**: Phases 1-4 shipped; **Phase 5 is BLOCKED and Phase 6's admission is
+> therefore not added** — see §6. The mechanism is generic and complete; the cursor seat is not
+> admitted and must not be described as available. Authorized by operator 2026-09-02 (routed from
 > TWGameProject via fleet peer `twgs-revival-twgs-dev`, msg `msg_01M1G1JA5ZTH45Y5R7D77ZVFKC`).
 > Peer transport is not authorization; the operator authorized this in the autopilot session
 > directly.
@@ -85,7 +87,11 @@ Phase 5 is the only phase that spends money. Phases 1–4 are free and independe
 
 Each is a case that must FAIL CLOSED, with a planted-negative control proving the assertion binds:
 
-1. fallback declared with a missing/unknown model id → manifest rejected at freeze time
+1. fallback declared with an unknown **runner** → manifest rejected at freeze time. (The model
+   **id** is deliberately NOT validated at freeze: no freeze-time model validation exists anywhere
+   on this rail — not for primary seats, not for `fallbacks[]` — and adding it for this field alone
+   would be an asymmetry pretending to be a guarantee. A bogus id fails closed at dispatch as
+   `transport_exhausted`, the same shape as a bogus primary-seat id.)
 2. fallback transport unauthenticated → attempt fails, seat records transport failure, no verdict
 3. fallback returns empty output → `no_verdict`, never a fabricated pass
 4. fallback returns a DIFFERENT model/family than the logical seat → refused, round fails closed
@@ -93,6 +99,42 @@ Each is a case that must FAIL CLOSED, with a planted-negative control proving th
 6. fallback attempts a mutation → refused; the probe file is unchanged
 7. workspace-trust prompt appears → non-interactive refusal, never an indefinite hang
 8. both transports exhausted → `transport_exhausted` exactly as today (no new terminal state)
+
+## 3.5 Phase 5 outcome: BLOCKED, on evidence that already existed
+
+Qualifying cursor for a reviewer-class role is **not possible today**, and the blocker is neither
+money nor authorization. `scripts/qualification-review-provider.js`'s `callCli()` has a
+`kind === 'cursor'` branch that refuses **unconditionally, before building argv or spawning**,
+because the exam transport must be able to force a tool-deny and cursor-agent offers none.
+
+That refusal rests on a live adversarial probe that was already run —
+[`docs/plans/evidence/2026-08-29-cursor-containment-probe/`](evidence/2026-08-29-cursor-containment-probe/),
+18 probes against **cursor-agent 2026.08.25-3e8eec8, the exact build installed on this host**:
+
+- enumerated `permissions.deny` beats `--force` for the five nameable categories, but the model has
+  more tools than any deny can name — **TodoWrite and WebSearch ran uncontained under full deny +
+  `--force`**, WebSearch making a real outbound call;
+- `permissions.deny: ["*"]` silently no-ops — worse than nothing, because it looks like protection;
+- `--sandbox enabled` is AppArmor-gated and unavailable here — fails closed on this host, but that
+  is not a portable guarantee;
+- `--mode ask` is cooperative only, and is overridden by `--force`; **`--force` or `--trust` is
+  MANDATORY for headless `-p`**, so the bypass flag cannot be avoided.
+
+An exam prompt is adversarial-shaped by construction (the model is graded and has every incentive
+to reach for a tool), and a **reviewer** seat is worse still: it reads an untrusted diff, which is a
+prompt-injection surface. So the refusal is correct and this plan does not re-litigate it.
+
+**Consequence, stated plainly**: `cursor` gains no roster admission from this plan.
+`UNQUALIFIED_RUNNERS="cursor"` is unchanged. Phase 6 ships the docs and the release, not the
+admission. Lifting this requires cursor-agent to ship a real catch-all deny or a portable sandbox
+that survives `--force`, and then a full re-run of all 18 probes — not a re-reading of this section.
+
+**A caveat this surfaced about the existing rail.** `dispatch-author.sh`'s cursor branch runs
+`-p --trust --mode ask` in a scratch cwd. Per the probe, `--mode ask` is *cooperative*, and `--trust`
+is itself in the bypass class. So that rail's read-only posture is **cooperative, not enforced** —
+the scratch cwd is real containment for the working directory, but the process is not prevented from
+reaching the host. This is now recorded in `references/hetero-dispatch.md`; it is not a regression,
+but it was previously easy to read as stronger than it is.
 
 ## 4. Out of scope
 

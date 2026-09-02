@@ -453,11 +453,39 @@ function releaseLock(handle) {
   fs.rmSync(released, { recursive: true, force: true });
 }
 
-function exactKeys(value, allowed, label) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).length !== allowed.size
-      || Object.keys(value).some((key) => !allowed.has(key))) {
+const EMPTY_KEY_SET = new Set();
+const SEAT_OPTIONAL_KEYS = new Set(['transport_fallback']);
+
+// A seat's `transport_fallback` fires ONLY when the pipe failed, never when the engine answered.
+// These are exactly the non-success outcomes of the runner transport envelope
+// (src/transport/runner-envelope.js OUTCOMES): the runner produced no review at all.
+//
+// Deliberately EXCLUDED, and this is the KR5 boundary:
+//   - `success` — there was an answer; a parse or semantic disagreement about it is not a
+//     transport problem and must never be retried on a different pipe.
+//   - `identity_mismatch` / `raw_binding_mismatch` — normalizer-produced INTEGRITY failures.
+//     Something answered as the wrong identity, or the bytes did not bind. Retrying elsewhere
+//     would paper over exactly the condition those statuses exist to surface.
+const TRANSPORT_CLASS_FAILURES = new Set([
+  'exit_failure', 'timeout', 'quota', 'unavailable', 'interrupted',
+]);
+
+function exactKeys(value, allowed, label, optional = EMPTY_KEY_SET) {
+  // `optional` exists so a field can be ADDED to a frozen shape without invalidating every
+  // manifest written before it: an absent optional key is not a shape error, and (see
+  // normalizeTuple) an absent key is never materialized as null either, so the canonical
+  // digest of a manifest that does not use the field is unchanged.
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new CliError(`${label} has an invalid shape`);
+  }
+  const keys = Object.keys(value);
+  if (keys.some((key) => !allowed.has(key) && !optional.has(key))) {
+    throw new CliError(`${label} has an invalid shape`);
+  }
+  for (const required of allowed) {
+    if (!Object.prototype.hasOwnProperty.call(value, required)) {
+      throw new CliError(`${label} has an invalid shape`);
+    }
   }
 }
 
@@ -467,6 +495,33 @@ function boundedString(value, label, maxLength, pattern = null) {
     throw new CliError(`${label} must be a 1-${maxLength} character string`);
   }
   return value;
+}
+
+// A TRANSPORT fallback is not a seat and not a tuple. It carries only the coordinates needed to
+// reach the SAME logical reviewer over a different pipe: runner, model id, endpoint. It has no
+// `id`, no `family`, no `role` and no `effort` on purpose —
+//   - no id/role, because the seat's identity does not change: receipts still name the seat;
+//   - no family, because `minimum_distinct_families` must be immune to transport events. A pipe
+//     swap that could move the decorrelation math would be a semantic substitution wearing a
+//     transport costume, which is the thing this feature exists to avoid;
+//   - no effort, because it inherits the seat's — a different effort is a different review.
+// `qualification_status` IS carried: the pair (runner, model) must be separately qualified for the
+// seat's role, and the freeze has to record what was true when the manifest was frozen.
+function normalizeTransportFallback(value, label) {
+  exactKeys(value, new Set(['runner', 'model', 'endpoint', 'qualification_status']), label);
+  boundedString(value.runner, `${label}.runner`, 64);
+  boundedString(value.model, `${label}.model`, 256);
+  boundedString(value.endpoint, `${label}.endpoint`, 128);
+  if (!RUNNERS.has(value.runner)
+      || !['qualified', 'unqualified'].includes(value.qualification_status)) {
+    throw new CliError(`${label} has an invalid transport fallback`);
+  }
+  return {
+    runner: value.runner,
+    model: value.model,
+    endpoint: value.endpoint,
+    qualification_status: value.qualification_status,
+  };
 }
 
 function normalizeTuple(value, label, includeSeatFields) {
@@ -479,7 +534,10 @@ function normalizeTuple(value, label, includeSeatFields) {
     keys.add('excluded_families');
     keys.add('fallbacks');
   }
-  exactKeys(value, keys, label);
+  // `transport_fallback` is optional so manifests frozen before it existed stay valid, and so a
+  // manifest that does not use it keeps its exact canonical bytes (the key is never materialized
+  // below when absent).
+  exactKeys(value, keys, label, includeSeatFields ? SEAT_OPTIONAL_KEYS : EMPTY_KEY_SET);
   boundedString(value.id, `${label}.id`, 64, /^[A-Za-z][A-Za-z0-9_-]*$/);
   boundedString(value.runner, `${label}.runner`, 64);
   boundedString(value.model, `${label}.model`, 256);
@@ -521,7 +579,7 @@ function normalizeTuple(value, label, includeSeatFields) {
   if (new Set(excludedFamilies).size !== excludedFamilies.length) {
     throw new CliError(`${label}.excluded_families must contain unique values`);
   }
-  return {
+  const seat = {
     ...tuple,
     required: value.required,
     excluded_families: excludedFamilies,
@@ -529,6 +587,13 @@ function normalizeTuple(value, label, includeSeatFields) {
       (fallback, index) => normalizeTuple(fallback, `${label}.fallbacks[${index}]`, false),
     ),
   };
+  if (Object.prototype.hasOwnProperty.call(value, 'transport_fallback')) {
+    seat.transport_fallback = normalizeTransportFallback(
+      value.transport_fallback,
+      `${label}.transport_fallback`,
+    );
+  }
+  return seat;
 }
 
 function validateManifest(value) {
@@ -1054,6 +1119,11 @@ function reviewSeat({
   const seenLocators = new Set();
   let selected = seat;
   let substitution = null;
+  // Set when the PREVIOUS attempt died at the pipe and this seat authorizes a second transport.
+  // It is not a substitution: `selected` (and therefore id/role/family/effort) is untouched, so
+  // nothing downstream — least of all fallbackEligible's family arithmetic — can observe it as a
+  // different reviewer.
+  let transportRetry = null;
   for (let attempt = 1; attempt <= manifest.max_attempts_per_seat; attempt += 1) {
     const remainingSeconds = Math.floor((deadlineMs - clockNow()) / 1000);
     if (remainingSeconds < 1) {
@@ -1085,6 +1155,10 @@ function reviewSeat({
         attempt,
         reason: 'primary_unavailable',
       };
+    } else if (attempt === 2 && transportRetry) {
+      // The pipe failed, not the reviewer. Retry the SAME seat over the authorized second
+      // transport and take no semantic substitution this attempt: swapping the engine here would
+      // answer a transport question with a different opinion.
     } else if (attempt === 2) {
       const fallback = seat.fallbacks.find(
         (candidate) => fallbackEligible(manifest, seat, candidate, selectedTargets),
@@ -1103,6 +1177,13 @@ function reviewSeat({
     }
     const bounded = {
       ...selected,
+      // The transport retry overrides ONLY the pipe. effort, role, family and id come from
+      // `selected` above and are deliberately not overridable here.
+      ...(transportRetry ? {
+        runner: transportRetry.runner,
+        model: transportRetry.model,
+        endpoint: transportRetry.endpoint,
+      } : {}),
       timeoutSeconds: Math.min(
         effortSeatTimeoutSeconds(selected.effort, timeoutExplicit ? timeoutSeconds : null),
         remainingSeconds,
@@ -1143,6 +1224,24 @@ function reviewSeat({
       seat_id: seat.id,
       target_id: selected.id,
       attempt,
+      // Dual identity (KR4), emitted ONLY for a seat that declares a transport fallback. There is
+      // nothing to disambiguate without one, and emitting it unconditionally would change the
+      // artifact bytes of every manifest written before this field existed — which KR1 forbids.
+      ...(seat.transport_fallback ? {
+        logical_identity: {
+          model: selected.model,
+          family: selected.family,
+          effort: selected.effort,
+        },
+      } : {}),
+      ...(transportRetry ? {
+        actual_transport: {
+          runner: bounded.runner,
+          model: bounded.model,
+          endpoint: bounded.endpoint,
+          reason: transportRetry.reason,
+        },
+      } : {}),
       transport_envelope: dispatched.envelope,
       transport_status: normalized.transport_status,
       parser_status: normalized.parser_status,
@@ -1164,6 +1263,8 @@ function reviewSeat({
       return {
         seat_id: seat.id,
         target_id: selected.id,
+        // The seat's logical identity, never the retry pipe: a verdict belongs to the reviewer
+        // that was asked, whichever transport carried it.
         runner: selected.runner,
         model: selected.model,
         family: selected.family,
@@ -1171,6 +1272,21 @@ function reviewSeat({
         findings: normalized.payload.findings,
         attempts,
         substitution,
+        ...(transportRetry ? { transport_retry: { ...transportRetry, attempt } } : {}),
+      };
+    }
+    // Arm the second transport for the next attempt, but only when the PIPE is what failed and
+    // this seat's frozen manifest authorized a specific alternative. Never inferred, never
+    // defaulted, and never re-armed: one authorized transport, one retry.
+    if (!transportRetry
+        && seat.transport_fallback
+        && seat.transport_fallback.qualification_status === 'qualified'
+        && TRANSPORT_CLASS_FAILURES.has(normalized.transport_status)) {
+      transportRetry = {
+        runner: seat.transport_fallback.runner,
+        model: seat.transport_fallback.model,
+        endpoint: seat.transport_fallback.endpoint,
+        reason: `transport_${normalized.transport_status}`,
       };
     }
   }
@@ -1198,6 +1314,7 @@ function reviewSeat({
     findings: [],
     attempts,
     substitution,
+    ...(transportRetry ? { transport_retry: transportRetry } : {}),
     exhausted: true,
     unratified: distinct.size === 1 ? [...distinct.values()][0] : null,
     unratified_conflict: distinct.size >= 2,

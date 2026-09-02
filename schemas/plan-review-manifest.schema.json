@@ -13,8 +13,14 @@
     "seats"
   ],
   "properties": {
-    "schema_version": { "type": "integer", "const": 1 },
-    "artifact_type": { "type": "string", "const": "plan_review_manifest" },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "artifact_type": {
+      "type": "string",
+      "const": "plan_review_manifest"
+    },
     "logical_plan_id": {
       "type": "string",
       "minLength": 1,
@@ -23,14 +29,24 @@
     },
     "minimum_distinct_families": {
       "type": "integer",
-      "enum": [1, 2, 3, 4]
+      "enum": [
+        1,
+        2,
+        3,
+        4
+      ]
     },
-    "max_attempts_per_seat": { "type": "integer", "const": 2 },
+    "max_attempts_per_seat": {
+      "type": "integer",
+      "const": 2
+    },
     "seats": {
       "type": "array",
       "minItems": 1,
       "maxItems": 4,
-      "items": { "$ref": "#/$defs/seat" }
+      "items": {
+        "$ref": "#/$defs/seat"
+      }
     }
   },
   "$defs": {
@@ -55,17 +71,55 @@
           "maxLength": 64,
           "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
         },
-        "runner": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "model": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "runner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
         "effort": {
           "type": "string",
-          "enum": ["low", "medium", "high", "xhigh", "max"]
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
         },
-        "endpoint": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "role": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "family": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "readiness_status": { "type": "string", "enum": ["ready", "unavailable"] },
-        "qualification_status": { "type": "string", "enum": ["qualified", "unqualified"] }
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "readiness_status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "unavailable"
+          ]
+        },
+        "qualification_status": {
+          "type": "string",
+          "enum": [
+            "qualified",
+            "unqualified"
+          ]
+        }
       }
     },
     "fallback": {
@@ -89,17 +143,55 @@
           "maxLength": 64,
           "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
         },
-        "runner": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "model": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "runner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
         "effort": {
           "type": "string",
-          "enum": ["low", "medium", "high", "xhigh", "max"]
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
         },
-        "endpoint": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "role": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "family": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "readiness_status": { "type": "string", "enum": ["ready", "unavailable"] },
-        "qualification_status": { "type": "string", "enum": ["qualified", "unqualified"] }
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "readiness_status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "unavailable"
+          ]
+        },
+        "qualification_status": {
+          "type": "string",
+          "enum": [
+            "qualified",
+            "unqualified"
+          ]
+        }
       }
     },
     "seat": {
@@ -126,28 +218,111 @@
           "maxLength": 64,
           "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
         },
-        "runner": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "model": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "runner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
         "effort": {
           "type": "string",
-          "enum": ["low", "medium", "high", "xhigh", "max"]
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
         },
-        "endpoint": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "role": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "family": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "readiness_status": { "type": "string", "enum": ["ready", "unavailable"] },
-        "qualification_status": { "type": "string", "enum": ["qualified", "unqualified"] },
-        "required": { "type": "boolean" },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "readiness_status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "unavailable"
+          ]
+        },
+        "qualification_status": {
+          "type": "string",
+          "enum": [
+            "qualified",
+            "unqualified"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
         "excluded_families": {
           "type": "array",
           "maxItems": 16,
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
         },
         "fallbacks": {
           "type": "array",
           "maxItems": 4,
-          "items": { "$ref": "#/$defs/fallback" }
+          "items": {
+            "$ref": "#/$defs/fallback"
+          }
+        },
+        "transport_fallback": {
+          "$ref": "#/$defs/transport_fallback"
+        }
+      }
+    },
+    "transport_fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runner",
+        "model",
+        "endpoint",
+        "qualification_status"
+      ],
+      "properties": {
+        "runner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "qualification_status": {
+          "type": "string",
+          "enum": [
+            "qualified",
+            "unqualified"
+          ]
         }
       }
     }

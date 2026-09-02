@@ -1766,6 +1766,8 @@ function emptyEvaluation(query, reasons) {
       reasons: [...new Set(reasons)].sort(),
       requested_scope_hash: query.scope_hash,
       requested_identity_hash: query.identity_hash,
+      exam_identity_hash: null,
+      requested_exam_identity_hash: examIdentityHashOf(query.identity),
     },
     environment_warning: false,
     issued_at: null,
@@ -1945,6 +1947,13 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery) {
       reasons: [],
       requested_scope_hash: query.scope_hash,
       requested_identity_hash: query.identity_hash,
+      // The EXAM-identity hashes of both sides. These are what the receipt is actually ABOUT under
+      // the exam/environment split, and the normalizer requires them to be equal when the full
+      // identity hashes differ. `environment_warning` alone must never be the permission: it is
+      // caller-supplied, so a receipt could otherwise be replayed onto an unrelated identity by
+      // setting one boolean.
+      exam_identity_hash: examIdentityHashOf(record.identity),
+      requested_exam_identity_hash: examIdentityHashOf(query.identity),
     },
     environment_warning: record.identity_hash !== query.identity_hash,
     issued_at: record.issued_at,
@@ -2021,6 +2030,10 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
       'reasons',
       'requested_scope_hash',
       'requested_identity_hash',
+      // Optional (see the identity check below): present on receipts produced since the
+      // exam/environment split, absent on ones written before it.
+      'exam_identity_hash',
+      'requested_exam_identity_hash',
     ]),
     'capability evidence receipt.applicability',
   );
@@ -2069,6 +2082,25 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
       applicability.requested_identity_hash,
       'capability evidence receipt.applicability.requested_identity_hash',
     ),
+    // Optional so receipts written before the exam/environment split still normalize; when the
+    // full identities differ, they are REQUIRED below — that is what closes the replay hole.
+    ...(applicability.exam_identity_hash === undefined || applicability.exam_identity_hash === null
+      ? {}
+      : {
+        exam_identity_hash: digest(
+          applicability.exam_identity_hash,
+          'capability evidence receipt.applicability.exam_identity_hash',
+        ),
+      }),
+    ...(applicability.requested_exam_identity_hash === undefined
+      || applicability.requested_exam_identity_hash === null
+      ? {}
+      : {
+        requested_exam_identity_hash: digest(
+          applicability.requested_exam_identity_hash,
+          'capability evidence receipt.applicability.requested_exam_identity_hash',
+        ),
+      }),
   };
   if (normalizedApplicability.applicable && normalizedApplicability.reasons.length > 0) {
     evidenceError('applicable capability evidence receipt cannot carry mismatch reasons');
@@ -2085,9 +2117,26 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
   if (normalizedApplicability.requested_scope_hash !== scopeHash) {
     evidenceError('capability evidence receipt applicability hashes do not match its evidence');
   }
-  if (normalizedApplicability.requested_identity_hash !== identityHash
-      && value.environment_warning !== true) {
-    evidenceError('capability evidence receipt identity differs from its evidence without an environment warning');
+  // The identity check under the exam/environment split.
+  //
+  // `environment_warning` is CALLER-SUPPLIED, so it can never be the sole permission for a
+  // differing identity — that would let any receipt be replayed against an unrelated identity by
+  // setting one boolean. What must match is the thing the receipt is actually about: the EXAM
+  // identity of both sides, carried explicitly. Those hashes are derived from the identity objects
+  // at evaluation time, so this is exactly as strong as the full-hash equality it replaces, and no
+  // weaker: a forger who can write both exam hashes could already have written both full hashes.
+  if (normalizedApplicability.requested_identity_hash !== identityHash) {
+    const examHash = normalizedApplicability.exam_identity_hash;
+    const requestedExamHash = normalizedApplicability.requested_exam_identity_hash;
+    if (value.environment_warning !== true) {
+      evidenceError('capability evidence receipt identity differs from its evidence without an environment warning');
+    }
+    if (examHash === undefined || requestedExamHash === undefined) {
+      evidenceError('capability evidence receipt claims an environment difference without exam-identity hashes to prove it');
+    }
+    if (examHash !== requestedExamHash) {
+      evidenceError('capability evidence receipt exam identity does not match the identity it was requested for');
+    }
   }
   const issuedAt = timestamp(value.issued_at, 'capability evidence receipt.issued_at');
   const observedAt = timestamp(value.observed_at, 'capability evidence receipt.observed_at');

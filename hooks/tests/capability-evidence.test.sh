@@ -533,6 +533,56 @@ check(wrongIdentity.state === 'unknown', 'exam identity mismatch does not qualif
 check(wrongIdentity.applicability.reasons.includes('identity_mismatch'), 'identity mismatch is disclosed');
 check(wrongIdentity.environment_warning === false, 'an inapplicable receipt carries no environment warning');
 
+// REPLAY REFUSAL (found by an adversarial reviewer on the exam/environment split, 2026-09-02).
+// `environment_warning` is CALLER-SUPPLIED. If it were the sole permission for a differing
+// identity, a receipt for one exam identity could be replayed as applicable to an unrelated one by
+// setting a single boolean. What must match is the EXAM identity of both sides, carried explicitly.
+const goodReceipt = newerEnvironment;
+check(
+  goodReceipt.applicability.exam_identity_hash
+    === goodReceipt.applicability.requested_exam_identity_hash,
+  'an environment-drift receipt carries matching exam-identity hashes',
+);
+check(
+  goodReceipt.applicability.exam_identity_hash !== goodReceipt.applicability.requested_identity_hash,
+  'and its exam hash is genuinely a different projection from the full identity hash',
+);
+
+function normalizeReceiptOrError(receipt) {
+  try {
+    normalizeCapabilityEvidenceReceipt(receipt, { verify: () => qualified });
+    return null;
+  } catch (error) {
+    return error.message;
+  }
+}
+
+// The forged receipt: a real, applicable receipt whose requested exam identity is someone else's,
+// with the warning flag set to try to wave it through.
+const replay = JSON.parse(JSON.stringify(goodReceipt));
+replay.applicability.requested_exam_identity_hash = 'f'.repeat(64);
+replay.applicability.requested_identity_hash = 'e'.repeat(64);
+replay.environment_warning = true;
+const replayError = normalizeReceiptOrError(replay);
+check(replayError !== null, 'a receipt replayed onto a different exam identity is refused');
+check(
+  /exam identity does not match/.test(String(replayError)),
+  `and the refusal names the exam identity (got: ${replayError})`,
+);
+
+// The other half: claiming an environment difference while supplying no exam hashes to prove it.
+const unproven = JSON.parse(JSON.stringify(goodReceipt));
+delete unproven.applicability.exam_identity_hash;
+delete unproven.applicability.requested_exam_identity_hash;
+unproven.applicability.requested_identity_hash = 'e'.repeat(64);
+unproven.environment_warning = true;
+const unprovenError = normalizeReceiptOrError(unproven);
+check(unprovenError !== null, 'an unproven environment claim is refused');
+check(
+  /without exam-identity hashes/.test(String(unprovenError)),
+  `and says the proof is missing (got: ${unprovenError})`,
+);
+
 const expired = evaluateCapabilityEvidence([qualified], {
   role: 'reviewer',
   scope,

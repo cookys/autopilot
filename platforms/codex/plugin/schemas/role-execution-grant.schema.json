@@ -572,6 +572,14 @@
             },
             "requested_identity_hash": {
               "$ref": "#/$defs/sha256"
+            },
+            "exam_identity_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "requested_exam_identity_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
             }
           }
         },

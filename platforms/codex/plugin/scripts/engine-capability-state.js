@@ -778,6 +778,19 @@ function normalizeEngineToken(raw, label) {
   return trimmed;
 }
 
+// Mirrors engine-scorecard.js's EFFORT_VALUES. `none` is a real, distinct state (a transport with
+// no effort dimension) and is NOT the same as an absent effort, which means "recorded before
+// effort partitioning".
+const SEAT_EFFORT_VALUES = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+function normalizeSeatEffort(effort) {
+  const token = normalizeSeatToken(effort, 'effort');
+  if (!SEAT_EFFORT_VALUES.includes(token)) {
+    throw new Error(`invalid effort '${token}' (${SEAT_EFFORT_VALUES.join('|')} or omit for legacy rows)`);
+  }
+  return token;
+}
+
 // Seat identity: engine+runner+role, plus `effort` WHEN PRESENT. NOT model_version/endpoint.
 //
 // Effort joins the seat because it is a different qualification, not a different setting: real
@@ -799,7 +812,12 @@ function normalizeSeatIdentity({ engine, runner, role, effort }) {
     role: normalizeSeatToken(role, 'role'),
     ...(effort === undefined || effort === null
       ? {}
-      : { effort: normalizeSeatToken(effort, 'effort') }),
+      // The SAME enum engine-scorecard.js enforces at record time. Without this, a typo
+      // ("higth") produced a shape-valid seat token and wrote a strike to a partition no reader
+      // can ever compute — recorded, inert, and invisible. Shape validity is not vocabulary
+      // validity, and the two sides of the seat must agree on the vocabulary or the seat is not
+      // one seat.
+      : { effort: normalizeSeatEffort(effort) }),
   };
 }
 
@@ -1965,6 +1983,10 @@ function main() {
         engine: options.engine,
         runner: options.runner,
         role: options.role,
+        // Must match the seat the strike was written against. Without it the invalidation
+        // computes the LEGACY hash, finds no target, and (before the end-to-end fixture existed)
+        // this looked like a working flag because the option was merely ACCEPTED.
+        effort: options.effort,
         invalidatesEventId: options['invalidates-event-id'],
         proofArtifactSha256: options['proof-artifact-sha256'],
         proofDetectorId: options['proof-detector-id'],

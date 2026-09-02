@@ -91,6 +91,61 @@ else
   bad "0: effort partitions collided (legacy=$LEGACY_H low=$LOW_H high=$HIGH_H none=$NONE_H)"
 fi
 
+# ── 0d: strike-seat --effort → invalidate-strike --effort is a closed loop ────
+# Raised by an adversarial reviewer: adding --effort to invalidate-strike's ACCEPTED options is
+# not the same as wiring it into the seat identity it builds. If it were not wired, an
+# invalidation would compute the LEGACY hash and target a seat no projection reads — the strike
+# would be "invalidated" and keep counting. Only an end-to-end run can tell those apart.
+reset_strikes
+EFF_ENG=efforteng; EFF_RUN=effortrun; EFF_ROLE=implementer
+node "$CLI" strike-seat --engine "$EFF_ENG" --runner "$EFF_RUN" --role "$EFF_ROLE" --effort high \
+  --class ordinary_strike --cause-class engine_output --writer conformance_audit \
+  --dedup-key eff-loop-1 --detector-id t --detector-version 1 \
+  --artifact-sha256 "$(sha_of eff-loop-1)" --receipt-ref r-eff-1 >/dev/null 2>&1
+EFF_SEAT_HASH="$(node "$CLI" seat-hash --engine "$EFF_ENG" --runner "$EFF_RUN" --role "$EFF_ROLE" --effort high | jq_get seat_hash)"
+EFF_ROWS="$(grep -c "$EFF_SEAT_HASH" "$TESTDIR/strikes.jsonl" 2>/dev/null || echo 0)"
+if [ "$EFF_ROWS" -ge 1 ]; then
+  ok "0d: a strike written with --effort lands on the EFFORT seat hash"
+else
+  bad "0d: strike-seat --effort did not write to the effort seat hash ($EFF_SEAT_HASH)"
+fi
+# And it must NOT have landed on the legacy seat, which is what an unwired --effort would do.
+LEGACY_SEAT_HASH="$(node "$CLI" seat-hash --engine "$EFF_ENG" --runner "$EFF_RUN" --role "$EFF_ROLE" | jq_get seat_hash)"
+if grep -q "$LEGACY_SEAT_HASH" "$TESTDIR/strikes.jsonl" 2>/dev/null; then
+  bad "0d: the strike also landed on the LEGACY seat hash — --effort is not reaching the identity"
+else
+  ok "0d: and NOT on the legacy seat hash"
+fi
+EFF_EVENT_ID="$(node -e '
+const fs = require("fs");
+const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
+const row = rows.filter((r) => r.seat_hash === process.argv[2] && r.kind === "strike").pop();
+process.stdout.write(row ? String(row.event_id) : "");
+' "$TESTDIR/strikes.jsonl" "$EFF_SEAT_HASH")"
+node "$CLI" invalidate-strike --engine "$EFF_ENG" --runner "$EFF_RUN" --role "$EFF_ROLE" --effort high \
+  --invalidates-event-id "$EFF_EVENT_ID" --proof-artifact-sha256 "$(sha_of eff-proof)" \
+  --proof-detector-id t --writer conformance_audit --dedup-key eff-loop-inv \
+  --detector-id t --detector-version 1 --artifact-sha256 "$(sha_of eff-loop-inv)" \
+  --receipt-ref r-eff-inv >/dev/null 2>&1
+INV_RC=$?
+if [ "$INV_RC" -eq 0 ]; then
+  ok "0d: invalidate-strike --effort accepts the effort-partitioned strike"
+else
+  bad "0d: invalidate-strike --effort failed (rc=$INV_RC) — the loop cannot close"
+fi
+INV_ON_EFFORT="$(node -e '
+const fs = require("fs");
+const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
+const inv = rows.filter((r) => r.kind === "strike_invalidated");
+process.stdout.write(String(inv.filter((r) => r.seat_hash === process.argv[2]).length));
+' "$TESTDIR/strikes.jsonl" "$EFF_SEAT_HASH")"
+if [ "$INV_ON_EFFORT" = "1" ]; then
+  ok "0d: the invalidation is recorded against the SAME seat hash as the strike"
+else
+  bad "0d: the invalidation landed on a different seat than the strike ($INV_ON_EFFORT on the effort seat)"
+fi
+reset_strikes
+
 # ── 1: seat-hash is stable and order-independent ─────────────────────────────
 H1="$(node "$CLI" seat-hash --engine gpt-5 --runner codex --role implementer | jq_get seat_hash)"
 H2="$(node "$CLI" seat-hash --role implementer --engine gpt-5 --runner codex | jq_get seat_hash)"

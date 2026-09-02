@@ -71,6 +71,32 @@ function defaultCacheDir() {
   return path.join(os.homedir(), '.autopilot', 'qualification-feeds');
 }
 
+// Bounded byte read. Streams where the runtime supports it (undici's Response.body is an async
+// iterable); falls back to arrayBuffer() only when there is no stream to read, and still enforces
+// the ceiling on the result.
+async function readBodyBounded(response, controller) {
+  const chunks = [];
+  let total = 0;
+  const body = response.body;
+  if (body && typeof body[Symbol.asyncIterator] === 'function') {
+    for await (const chunk of body) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buf.length;
+      if (total > MAX_FEED_BYTES) {
+        try { controller.abort(); } catch { /* already finished */ }
+        throw feedError(`qualification feed exceeds ${MAX_FEED_BYTES} bytes`);
+      }
+      chunks.push(buf);
+    }
+    return Buffer.concat(chunks, total);
+  }
+  const buf = Buffer.from(await response.arrayBuffer());
+  if (buf.length > MAX_FEED_BYTES) {
+    throw feedError(`qualification feed exceeds ${MAX_FEED_BYTES} bytes`);
+  }
+  return buf;
+}
+
 /**
  * Read a feed body from `--from`, which is either an https URL or a local path.
  * @returns {Promise<{ body: string, origin: string, kind: 'url'|'path' }>}
@@ -127,12 +153,16 @@ async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
       if (Number.isFinite(declared) && declared > MAX_FEED_BYTES) {
         throw feedError(`qualification feed exceeds ${MAX_FEED_BYTES} bytes`);
       }
-      const body = await response.text();
-      // The declared length is a hint from the server; this is the check that binds.
-      if (Buffer.byteLength(body, 'utf8') > MAX_FEED_BYTES) {
-        throw feedError(`qualification feed exceeds ${MAX_FEED_BYTES} bytes`);
-      }
-      return { body, origin: url.toString(), kind: 'url' };
+      // Read the body as a bounded BYTE stream, aborting as soon as the ceiling is crossed.
+      // `response.text()` would buffer the whole thing first, so a server lying about (or
+      // omitting) content-length could force unbounded buffering before we ever checked — the
+      // declared length is a hint from the server, and a hint is not a bound.
+      //
+      // Bytes, not decoded text, are also what we hash and cache: decoding and re-encoding can
+      // change them (a BOM, a lone surrogate), and the digest has to describe what actually
+      // arrived, since that is the value recorded in an adopted row's provenance.
+      const raw = await readBodyBounded(response, controller);
+      return { body: raw.toString('utf8'), bytes: raw, origin: url.toString(), kind: 'url' };
     } finally {
       clearTimeout(timer);
     }
@@ -148,7 +178,8 @@ async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
   if (stat.isSymbolicLink()) throw feedError(`qualification feed must not be a symlink: ${file}`);
   if (!stat.isFile()) throw feedError(`qualification feed is not a regular file: ${file}`);
   if (stat.size > MAX_FEED_BYTES) throw feedError(`qualification feed exceeds ${MAX_FEED_BYTES} bytes`);
-  return { body: fs.readFileSync(file, 'utf8'), origin: file, kind: 'path' };
+  const bytes = fs.readFileSync(file);
+  return { body: bytes.toString('utf8'), bytes, origin: file, kind: 'path' };
 }
 
 /**
@@ -156,7 +187,7 @@ async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
  * and that its collections are arrays. Every ENTRY is validated where it is consumed, against the
  * same rules a locally-produced row faces — a feed entry gets no easier path than a local one.
  */
-function parseFeed(body, origin) {
+function parseFeed(body, origin, bytes) {
   let doc;
   try {
     doc = JSON.parse(body);
@@ -175,7 +206,13 @@ function parseFeed(body, origin) {
   // Checked in that order because the feed is the more specific shape.
   const isFeedSchema = typeof doc.schema === 'string'
     && /^model-dyno\.qualification-feed\.v\d+$/.test(doc.schema);
-  const isDefaultsArtifact = doc.artifact_type === 'official-qualification-defaults';
+  // BOTH spellings, because the two producers genuinely use different ones and neither is wrong:
+  // the shipped artifact has always been `official_qualification_defaults` (underscores — see
+  // schemas/official-qualification-defaults.schema.json and readArtifact()), while the model-dyno
+  // feed reuses the hyphenated form. Accepting only the hyphenated one silently broke the
+  // documented `--from <path-to-the-shipped-artifact>` path.
+  const isDefaultsArtifact = doc.artifact_type === 'official_qualification_defaults'
+    || doc.artifact_type === 'official-qualification-defaults';
   if (!isFeedSchema && !isDefaultsArtifact) {
     throw feedError(
       'not a qualification feed or defaults artifact '
@@ -187,7 +224,9 @@ function parseFeed(body, origin) {
       throw feedError(`qualification feed ${key} must be an array`);
     }
   }
-  const digest = sha256(body);
+  // Hash the BYTES we received, not the decoded string: decode/re-encode is not guaranteed to be
+  // byte-preserving, and this digest is what an adopted row records as its provenance.
+  const digest = sha256(bytes === undefined ? Buffer.from(body, 'utf8') : bytes);
   // The feed may advertise its own digest. It is compared and REPORTED, never trusted: a producer
   // that computed it over different bytes is worth knowing about, but our cache key is always the
   // hash of what we actually received.
@@ -259,10 +298,10 @@ async function loadFeed(from, {
   now = new Date().toISOString(),
   noCache = false,
 } = {}) {
-  const { body, origin, kind } = await readFeedSource(from, { fetchImpl });
-  const parsed = parseFeed(body, origin);
+  const { body, bytes, origin, kind } = await readFeedSource(from, { fetchImpl });
+  const parsed = parseFeed(body, origin, bytes);
   const previous = noCache ? null : readCurrentManifest(cacheDir);
-  const cache = noCache ? null : writeCache(cacheDir, parsed, body, now);
+  const cache = noCache ? null : writeCache(cacheDir, parsed, bytes, now);
   return {
     ...parsed,
     source_kind: kind,

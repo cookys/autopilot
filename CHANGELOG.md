@@ -1,5 +1,100 @@
 # Changelog
 
+## v2.35.9 — 座位有 effort、考試身分不綁 plugin 版本、可從 feed 採納（而且什麼都自己重算）
+
+llm-playground（7840hs）交接的四項，加上追查過程中發現的兩個真缺陷。
+
+**effort 進 seat identity。** 座位原本是 (engine, runner, role)，所以同一個引擎在不同 effort 的兩次
+施測是**同一個座位**、latest-wins。真實資料不是假設：grok-4.6@high FAILED（23/24，一次 integrity
+violation，2026-08-21）與 grok-4.6@low QUALIFIED（24/24，2026-08-24）——失敗的那個繼承了通過的標準。
+effort **只在存在時**加入 hash，這個條件不是整潔而是承重：缺席時位元組等同舊的三鍵物件，所有已記錄的
+seat_hash 保持有效、沒有 strike 被孤兒化。legacy row 自成一個分區，沿用
+`engine-capability-state.js current --effort` 既有的規則（實查過：省略 `--effort` 解析成 key `legacy`，
+只配沒有 effort 的列），**省略不是萬用**。
+真正的發現是 **`strike-seat` / `invalidate-strike` 也必須吃 `--effort`**：否則寫入用 legacy hash、
+投影讀 effort hash，strike 會被記錄然後永遠不被計算。`strike-decay.test.sh` 新增跨腳本 parity 斷言
+（唯一同時看兩邊的斷言；任一邊自己的套件在分歧時都還是綠的）。
+
+**考試身分 vs 環境。** `harness_version`／`runner_version` 原本屬於必須完全相符的身分，於是所有出貨
+defaults（全都 `dispatch-hetero:003d7975`）在使用者升級 plugin 的那一刻起**靜默**失效——沒有錯誤、
+沒有警告，那一列就是不再匹配，而使用者無法把它和「本來就沒有那一列」區分開。Board 2026-09-02：
+「考試測的是模型，不該綁 autopilot 版本」。現在 exam identity（engine/runner/role/effort/corpus_version/
+prompt_config_hash 與模型自身版本與指紋）照舊必須相符；environment 只記錄並回報 `environment_warning`，
+永不擋。**沒有 migration、沒有新增儲存欄位**：兩個 hash 都從既有的 `identity` 物件當場導出，因為
+`evidence_hash`/`evidence_id` 蓋整個 body，加欄位會讓每一列既有 evidence 失效。
+兩個差點被破壞的不變式：`reasons` 的語意是「為何不適用」（normalizer 會拒絕帶 reasons 的 applicable
+receipt），所以環境漂移走 `environment_warning` 不進 reasons；normalizer 原本要求
+`requested_identity_hash === identity_hash`，那會把剛拆掉的閘門在下一層原地重建，改為只在有
+`environment_warning` 時才允許不同——差異必須**被聲明**，不是默許。
+
+**可從 feed 採納。** 新 `scripts/lib/qualification-feed.js` + `adopt-qualification-defaults.js --from
+<https-url|path>`。https only、拒絕 redirect、body 與時間有界、cache 拒絕落在 git work tree 內、以
+**我們自己的** hash 做 content-addressed 快取。貫穿的設計規則就是 ADR-0001 照字面執行：feed 是別人寫的
+遠端文件，它主張的東西一律重新導出或如實回報，不採信。
+- feed 自帶的 `digest` 只回報不採信；cache key 與 `provenance.adopted_from.digest` 永遠是我們對**實際
+  收到的位元組**算的 sha256。線上 feed 的 advertised digest 與我們算的不同，這件事被攤開、記在每一列
+  採納的 row 上，而不是當成錯誤。
+- 每一個 `seat_hash` 都從 (engine, runner, role, effort) 本地重算。**對 strike 最要緊**：採信 feed 的值
+  等於讓生產端決定一筆 strike 掛到你的哪個座位，而掛錯座位的 strike 會被記錄然後永遠不被計算。
+- hash 不一致時**指名是哪一種基底**：線上 feed 用的是 pre-effort 的三欄 hash，我們能完全重現，所以訊息
+  是「這份 feed 早於 effort 分區，請重新產生」而不是「我們的演算法不合」。生產端已確認並採納 (A)：
+  strikes[] 加 `effort`，消費端重算——同一個「重新導出優於採信」的理由。
+- 既有的碰撞規則原封不動：本地證據永遠勝出、重複採納沒有 `--force` 就拒絕。**feed 條目不享有任何
+  出貨 default 沒有的捷徑。**
+- `--priors` 走既有 `record-evidence` 路徑寫成 provisional `external_prior`。它**無法**製造出資格：
+  `qualified` 需要 `internal_eval` 出處，prior 沒有也宣稱不了——天花板是結構性的，不是這段程式記得要
+  套用的規則。
+- 可選 `~/.autopilot/config.json` `qualification_feed.url` 只是免得重打網址。**沒有計時器、沒有自動採納。**
+
+**測試污染真 store：找到第二個、而且更大的實例。** 交接文件回報的是另一台的 100 列。在**這台**找到的是
+`hooks/tests/qualify-scorecard-vocabulary.test.sh`：404 列 qualification-evidence 裡有 **356 列**是它寫的，
+每跑一次 suite 加兩列。那支測試沒 source `lib.sh`（因此沒繼承 store 隔離）又呼叫真的 `engine-qualify.sh`；
+被拒絕的 model id 在 argv 驗證就死了什麼都不寫，**被接受**的那幾個會一路跑到 append 一列真 evidence。
+兩列、不報錯、suite 全綠——設計上就看不見。值得記錄的是：**用 grep 掃那兩個 store 環境變數名掃不到它**
+（那個檔案從來沒提過），是 suite-level guard 第一次跑就抓到的。`run.sh` 現在對四個真 store 檔前後做
+sha256 比對（不是 size/mtime：一加一刪大小不變），檔案不存在也釘住（在原本沒有 store 的機器上**建立**
+一個是同一種缺陷）。那支測試與原始回報的 `engine-qualify.test.sh` 都補上隔離。其餘四個候選查證後無虞。
+
+驗證：全套件 308/308；連跑兩次完整 suite，四個真 store 檔位元組完全相同。植入負控制共五次全部翻紅並
+還原：拿掉 only-when-present 條件（跨腳本 parity 轉紅，並連帶讓 strike 計數的 18b 轉紅——孤兒化現場
+演示）、清空 `ENVIRONMENT_IDENTITY_FIELDS`（環境閘門復活）、往真 scorecard 追加一列（污染 guard 指名該檔）、
+拿掉 feed 本地重算的 effort（變成默默「同意」過時的 feed）、把 prior 標成 qualified（天花板破裂）。
+
+**QC panel（gpt-5.6-sol / GLM-5.2）**：GLM SHIP-AS-IS 附四個 🟢 follow-up，sol FIX-THEN-SHIP 附一個 🔴
+四個 🟠。逐項獨立複驗後，**五項成立已修、一項依凍結的計畫決策不做、一項是我自己的 diff 過濾造成的假陽性**：
+
+- 🔴 **environment-identity-replay（成立，已修）**：我把「`environment_warning` 為真」當成 identity
+  不同的唯一許可，但那個布林是**呼叫端提供的**——等於任何 receipt 只要設一個旗標就能被重放到不相干的
+  身分上。改為 receipt 明確攜帶雙方的 **exam-identity hash**，normalizer 要求那兩個相等；那兩個值在
+  evaluate 時從 identity 物件導出，所以強度與它取代的全 hash 相等、不更弱。植入負控制（把檢查改回只看
+  布林）確認翻紅。
+- 🟠 **feed-body-not-bounded（成立，已修；GLM 獨立同意）**：`response.text()` 會先把整個 body 讀進
+  記憶體才輪到我的長度檢查，而 content-length 只是伺服器的提示——提示不是界限。改為有界的**位元組**
+  串流讀取、超過即 abort；同時 digest 改成對**實際收到的位元組**計算而非 decode 後的字串（decode 再
+  encode 不保證位元組相同，而這個 digest 會被寫進採納列的 provenance）。
+- 🟠 **invalid-effort-orphans-strike（成立，已修；GLM 獨立同意）**：capstate 的寫入面對 `--effort` 只
+  檢查 token 形狀，scorecard 的 record 面卻強制列舉——打錯字（`higth`）會寫出一列「看起來有效」但**沒有
+  任何讀取端算得出來**的 strike。兩邊現在共用同一個列舉。
+- 🟠 **artifact-type-mismatch（成立，已修）**：我的文件宣稱 `--from <出貨 artifact 路徑>` 可用，實際
+  被拒——出貨 artifact 用底線 `official_qualification_defaults`，feed 用連字號。兩種都接受。
+- 🟢 **invalidate-strike-effort-wiring（GLM 提出，成立，已修）**：GLM 指出「把 `effort` 加進
+  invalidate-strike 的**接受清單**不等於把它接進它建的座位身分」，並要求一個端到端 fixture。寫了
+  fixture，**它真的紅了**——`effort` 只加進了接受清單，沒進 payload，所以 invalidation 算 legacy hash、
+  找不到目標。我先前的自我查證只 grep 了字串存在、沒確認它在正確的 handler，這比缺陷本身更值得記錄。
+- 🟠 **feed-strikes-not-adopted（不做，非缺陷）**：計畫 §3 明文凍結「refresh 只回報 upstream 的 strike，
+  本地撤銷仍由 seat-status／strikes 負責」。這是刻意的範圍決定，不是遺漏。
+- 🟠 **codex-release-mirrors-missing（假陽性，我造成的）**：送審的 diff 我加了 `':!platforms/codex'`
+  過濾，所以審查者看不到鏡像變更。實際已同步（重跑 sync 無新變更）。
+
+驗證：全套件 308/308；連跑兩次完整 suite，四個真 store 檔位元組完全相同。植入負控制共七次全部翻紅並
+還原：拿掉 only-when-present 條件（跨腳本 parity 轉紅，並連帶讓 strike 計數的 18b 轉紅——孤兒化現場
+演示）、清空 `ENVIRONMENT_IDENTITY_FIELDS`（環境閘門復活）、往真 scorecard 追加一列（污染 guard 指名該檔）、
+拿掉 feed 本地重算的 effort（變成默默「同意」過時的 feed）、把 prior 標成 qualified（天花板破裂）、
+把 identity 檢查改回只看呼叫端布林（重放被放行）、以及 invalidate-strike 的 effort 未接線（端到端迴圈斷開）。
+
+prose-justification: `skills/engine-onboarding/SKILL.md` 增加 6 行（Stage 0.5 的 feed 採納段落與
+scripts 表格一列），描述一個新的 user-facing 指令路徑；其餘文字都在 `references/`。
+
 ## v2.35.8 — plan-review seat 的 transport fallback：換管線，不換人
 
 TWGameProject 經 fleet 轉來的需求：frozen plan review 裡一個必要座位的 **transport** 掛掉，整輪就

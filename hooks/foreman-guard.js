@@ -25,6 +25,11 @@
  *     denied. `run_in_background: true` is the sanctioned wait (one notification).
  *   - Monitor from a subagent is denied (ironlaw #6: foremen must not hold a Monitor).
  *
+ * ACCOUNTING: every Bash attempt (allowed OR denied) is reserved against the cap under an
+ * exclusive-create lock, so a denied poll still spends a call and parallel invocations
+ * never lose an increment. Rules run on executable text (heredoc bodies and comments
+ * stripped); quoted strings are kept because `bash -c` executes them.
+ *
  * MODES: ~/.autopilot/config.json {"foreman_guard": {"mode": "block"|"warn"|"off",
  * "bash_cap": 40}} or AUTOPILOT_FOREMAN_GUARD_MODE / AUTOPILOT_FOREMAN_GUARD_BASH_CAP.
  * warn ⇒ stderr line, allow. Fail-open: any internal error ⇒ exit 0 silently.
@@ -40,13 +45,40 @@ const DEFAULT_BASH_CAP = 40;
 const FOREMAN_LEVELS = new Set(['l4', 'l5', 'l6']);
 
 // Foreground wait/poll shapes observed in the digest and the 5ca9b104 incident.
+// The rules run on EXECUTABLE text only: heredoc bodies and `#` comments are stripped
+// first (review round 1, gpt-5.6-sol: a `sleep` inside a heredoc being written to a
+// file is not a wait; `/bin/sleep 10` and `bash -c 'sleep 10'` are). Quoted strings are
+// kept — `bash -c '…'` and `sh -c "…"` execute them — so the sleep rule requires a
+// digit after `sleep` to stay off prose like `-m "sleep well"`.
 const POLL_RULES = [
   { id: 'noop-spin', re: /^\s*(?:true|:)\s*(?:;|&&|\|\|)?\s*$/, why: 'a no-op Bash call is a spin-wait' },
-  { id: 'sleep', re: /(?:^|[;&|(\s])sleep\s+\d/, why: 'foreground sleep is a poll' },
-  { id: 'while-wait', re: /\bwhile\b[^;]*?\b(?:sleep|grep|test|\[\[?|pgrep|kill\s+-0|ps\s+-p)\b/, why: 'a while-loop that waits is a poll' },
-  { id: 'liveness-poll', re: /\b(?:pgrep|ps\s+-p|kill\s+-0)\b/, why: 'liveness probing is a poll' },
+  { id: 'sleep', re: /(?:^|[;&|(`\s'"])(?:\/[\w./-]*\/)?sleep\s+\d/, why: 'foreground sleep is a poll' },
+  { id: 'while-wait', re: /\b(?:while|until)\b[\s\S]*?\bdo\b[\s\S]*?(?:(?:^|[;&|(`\s'"])(?:\/[\w./-]*\/)?sleep\s+\d|(?:^|[;\s])(?:true|:)(?:\s*;|\s*$|\s+done\b))/, why: 'a while/until loop whose body sleeps or spins is a poll' },
+  { id: 'liveness-poll', re: /(?:^|[;&|(`\s'"])(?:\/[\w./-]*\/)?(?:pgrep\b|ps\s+-p\b|kill\s+-0\b)/, why: 'liveness probing is a poll' },
   { id: 'leaf-output-read', re: /\b(?:cat|tail|head|sed\s+-n|less|more)\b[^|;&]*\/tasks\/[^\s'"]*\.output\b/, why: 'reading a leaf output file into the foreman context' },
 ];
+
+// Strip the parts of a Bash command that are DATA, not executed commands: heredoc
+// bodies (`<<TAG … TAG`, quoted or unquoted tag, optional `-`) and `#` comments to end
+// of line (a `#` not preceded by a quote/word char). Everything else — including quoted
+// strings, which `bash -c` / `sh -c` / `eval` execute — stays.
+function executableText(cmd) {
+  let out = '';
+  const lines = String(cmd).split('\n');
+  let heredocTag = null;
+  for (const line of lines) {
+    if (heredocTag !== null) {
+      if (line.replace(/^\t+/, '') === heredocTag) heredocTag = null;
+      continue; // heredoc body: data
+    }
+    const m = /<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][\w]*))/.exec(line);
+    let keep = line;
+    if (m) { heredocTag = m[1] || m[2] || m[3]; keep = line.slice(0, m.index); }
+    keep = keep.replace(/(^|[\s;&|(])#.*$/, '$1');
+    out += `${keep}\n`;
+  }
+  return out;
+}
 
 function isAffirmative(v) {
   if (v === true || v === 1) return true;
@@ -90,9 +122,32 @@ function loadState(file) {
 }
 function saveState(file, st) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp.${process.pid}`;
+  const tmp = `${file}.tmp.${process.pid}.${Math.random().toString(16).slice(2)}`;
   fs.writeFileSync(tmp, JSON.stringify(st));
   fs.renameSync(tmp, file);
+}
+// Exclusive-create lock around load→modify→save so parallel PreToolUse invocations
+// (a foreman fanning out, or a retry storm) never lose an increment (review round 1,
+// gpt-5.6-sol). Stale locks (>5 s) are broken — a guard must never wedge on its own state.
+function withLock(file, fn) {
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + 2000;
+  for (;;) {
+    let fd = null;
+    try {
+      fd = fs.openSync(lock, 'wx');
+      try { return fn(); } finally { fs.closeSync(fd); try { fs.unlinkSync(lock); } catch { /* gone */ } }
+    } catch (e) {
+      if (!e || e.code !== 'EEXIST') throw e;
+      try {
+        const age = Date.now() - fs.statSync(lock).mtimeMs;
+        if (age > 5000) { fs.unlinkSync(lock); continue; }
+      } catch { /* vanished */ }
+      if (Date.now() > deadline) return fn(); // fail-open: count without the lock rather than block
+      const until = Date.now() + 15;
+      while (Date.now() < until) { /* spin briefly */ }
+    }
+  }
 }
 
 function emit(decision, reason) {
@@ -115,18 +170,22 @@ function decide(payload, cfg, st) {
   if (tool !== 'Bash') return { deny: false };
   const cmd = typeof input.command === 'string' ? input.command : '';
   const background = isAffirmative(input.run_in_background);
-  if (!background) {
-    for (const r of POLL_RULES) {
-      if (r.re.test(cmd)) {
-        return { deny: true, rule: r.id, reason:
-          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict.` };
-      }
-    }
-  }
+  // Every Bash ATTEMPT is reserved against the cap before any rule runs — a denied
+  // poll still spent a model call, and a foreman that retries a denial must not get
+  // unlimited retries (review round 1).
   const n = st.bash_calls + 1;
   if (n > cfg.bashCap) {
     return { deny: true, rule: 'bash-cap', count: n, reason:
       `foreman-guard: Bash call ${n} exceeds the foreman cap of ${cfg.bashCap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.` };
+  }
+  if (!background) {
+    const text = executableText(cmd);
+    for (const r of POLL_RULES) {
+      if (r.re.test(text)) {
+        return { deny: true, rule: r.id, count: n, reason:
+          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cfg.bashCap} spent.)` };
+      }
+    }
   }
   return { deny: false, count: n };
 }
@@ -145,15 +204,15 @@ function decide(payload, cfg, st) {
     const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
       || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
     const file = stateFile(sessionId, payload.agent_id);
-    const st = loadState(file);
-    const d = decide(payload, cfg, st);
-    if (payload.tool_name === 'Bash' && !d.deny) st.bash_calls = d.count;
-    if (d.deny) {
-      st.denied += 1;
-      st.last_denied_rule = d.rule;
-      if (d.rule === 'bash-cap') st.bash_calls = d.count; // the attempt still counts
-    }
-    saveState(file, st);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const d = withLock(file, () => {
+      const st = loadState(file);
+      const r = decide(payload, cfg, st);
+      if (Number.isInteger(r.count)) st.bash_calls = r.count; // every Bash attempt is counted
+      if (r.deny) { st.denied += 1; st.last_denied_rule = r.rule; }
+      saveState(file, st);
+      return r;
+    });
     if (!d.deny) process.exit(0);
     if (cfg.mode === 'warn') {
       process.stderr.write(`${d.reason} [mode=warn: allowed]\n`);

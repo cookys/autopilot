@@ -58,6 +58,24 @@ assert_eq "" "$__RUN_STDOUT" "ordinary Bash allowed"
 run_hook foreman-guard.js "$(bash_payload agent-1 'cat README.md')"
 assert_eq "" "$__RUN_STDOUT" "reading a normal file allowed (only /tasks/*.output is a leaf read)"
 
+# ── 2b. executable-text rules (review round 1): heredoc/comment bodies are data; path
+#        prefixes and `bash -c` strings are executed; counting loops are not waits ──
+reset_state
+run_hook foreman-guard.js "$(bash_payload agent-1 $'cat > run.sh <<\'EOF\'\nsleep 10\nps -p 1\nEOF\nchmod +x run.sh')"
+assert_eq "" "$__RUN_STDOUT" "sleep/ps inside a heredoc body is data, allowed"
+run_hook foreman-guard.js "$(bash_payload agent-1 $'echo build # sleep 10 later\nnpm test')"
+assert_eq "" "$__RUN_STDOUT" "sleep in a comment is allowed"
+run_hook foreman-guard.js "$(bash_payload agent-1 'git commit -m "sleep well"')"
+assert_eq "" "$__RUN_STDOUT" "prose sleep without a count is allowed"
+run_hook foreman-guard.js "$(bash_payload agent-1 'for i in 1 2 3; do make step$i; done')"
+assert_eq "" "$__RUN_STDOUT" "a for-loop doing work is allowed"
+run_hook foreman-guard.js "$(bash_payload agent-1 'i=0; while [ $i -lt 5 ]; do make step$i; i=$((i+1)); done')"
+assert_eq "" "$__RUN_STDOUT" "a counting while-loop doing work is allowed (no sleep/spin body)"
+for cmd in '/bin/sleep 10' "bash -c 'sleep 10; echo x'" 'sh -c "sleep 5"' 'until grep -q DONE out.txt; do sleep 5; done' 'while true; do :; done' 'while ! test -f done; do sleep 1; done' '/usr/bin/pgrep agy'; do
+  run_hook foreman-guard.js "$(bash_payload agent-1 "$cmd")"
+  assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "executed wait '$cmd' denied"
+done
+
 # ── 3. Monitor denied for a subagent ──────────────────────────────────
 run_hook foreman-guard.js "$(monitor_payload agent-1)"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "Monitor denied for a foreman"
@@ -76,10 +94,26 @@ assert_contains "$__RUN_STDOUT" 'handoff' "cap deny carries the handoff directiv
 assert_contains "$__RUN_STDOUT" '一刀一命' "cap deny names the lifecycle rule"
 run_hook foreman-guard.js "$(bash_payload agent-3 'echo other agent')"
 assert_eq "" "$__RUN_STDOUT" "counter is per agent_id"
-# polling attempts do not consume cap, cap attempts are recorded
 STATE="$(cat "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-2.json)"
 assert_contains "$STATE" '"bash_calls":6' "state records the over-cap attempt"
 assert_contains "$STATE" '"last_denied_rule":"bash-cap"' "state records the rule"
+# a denied poll still SPENDS a call (review round 1): 5 denied polls exhaust a cap of 5
+reset_state
+for i in 1 2 3 4 5; do run_hook foreman-guard.js "$(bash_payload agent-5 'sleep 30')"; done
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "5th poll denied as a poll"
+assert_contains "$__RUN_STDOUT" 'Bash call 5/5 spent' "poll deny reports the spent count"
+run_hook foreman-guard.js "$(bash_payload agent-5 'echo honest work')"
+assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap' "after 5 denied polls the 6th (honest) call hits the cap"
+# concurrent invocations never lose an increment (exclusive-create lock)
+reset_state
+export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=100
+for i in $(seq 1 12); do
+  ( HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" node "$HOOKS_DIR/foreman-guard.js" >/dev/null 2>&1 <<< "$(bash_payload agent-6 "echo par $i")" ) &
+done
+wait
+STATE6="$(cat "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-6.json)"
+assert_contains "$STATE6" '"bash_calls":12' "12 parallel calls counted exactly 12 (lock, no lost increment)"
+[ -e "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-6.json.lock ] && fail "lock file leaked" || assert_eq ok ok "lock released"
 unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
 
 # ── 5. modes ───────────────────────────────────────────────────────────

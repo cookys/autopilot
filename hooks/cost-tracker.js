@@ -68,8 +68,17 @@ try {
   const cursorFile = path.join(cursorDir, `${sanitizeSession(session)}.json`);
 
   let processed = 0;
-  try { processed = Number(JSON.parse(fs.readFileSync(cursorFile, 'utf8')).turns) || 0; }
+  let cursor = {};
+  try { cursor = JSON.parse(fs.readFileSync(cursorFile, 'utf8')) || {}; processed = Number(cursor.turns) || 0; }
   catch { /* first run for this session → 0 */ }
+  // Cursor writes are tmp+rename and PRESERVE unrelated fields (cache_read_warned lives
+  // here too; the plain overwrite reset it every turn — review round 1, gpt-5.6-sol).
+  const writeCursor = (patch) => {
+    cursor = { ...cursor, ...patch };
+    const tmp = `${cursorFile}.tmp.${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(cursor));
+    fs.renameSync(tmp, cursorFile);
+  };
 
   const { totalTurns, deltas } = aggregateSince(turns, processed);
 
@@ -79,7 +88,7 @@ try {
   // session (it does — one Stop per assistant turn). Per-session cursor files
   // mean different sessions never contend.
   const ts = new Date().toISOString();
-  fs.writeFileSync(cursorFile, JSON.stringify({ turns: totalTurns, ts }));
+  writeCursor({ turns: totalTurns, ts });
 
   if (deltas.length === 0) process.exit(0); // nothing new since last Stop
 
@@ -118,13 +127,12 @@ try {
       if (!line.trim()) continue;
       try { const r = JSON.parse(line); if (r.session === session) cacheRead += Number(r.cache_read_tokens) || 0; } catch { /* skip */ }
     }
-    let warned = 0;
-    try { warned = Number(JSON.parse(fs.readFileSync(cursorFile, 'utf8')).cache_read_warned) || 0; } catch { /* none */ }
+    const warned = Number(cursor.cache_read_warned) || 0;
     let next = warned ? warned * 2 : threshold;
     if (cacheRead >= next) {
       while (cacheRead >= next * 2) next *= 2;
       process.stderr.write(`cost-tracker: session ${session} has read ${cacheRead.toLocaleString('en-US')} cache tokens cumulatively (threshold ${next.toLocaleString('en-US')}) — a long-lived context is being re-read on every call; write a handoff and /clear, or split the work (docs/ironlaw-to-gate-map.md #6).\n`);
-      fs.writeFileSync(cursorFile, JSON.stringify({ turns: totalTurns, ts, cache_read_warned: next }));
+      writeCursor({ cache_read_warned: next });
     }
   } catch { /* report is best-effort */ }
   process.exit(0);

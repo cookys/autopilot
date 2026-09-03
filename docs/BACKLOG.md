@@ -75,6 +75,12 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ---
 
 ## Active entries
+### `dispatch-model-guard` returns `ask` in headless (`-p`) sessions — an omitted `model:` could wedge a non-interactive run
+- **Trigger**: a headless autopilot run (foreman under `/l4`, `claude -p` rail) reports a hang at an `Agent`/`Task` call after v2.35.15, or CC documents a headless-detection signal for hooks.
+- **Context**: since v2.35.15 the guard is default-on and answers `permissionDecision: ask` when a dispatch omits `model:` or names a guarded engine. Interactive sessions get a prompt; a `-p` session has nobody to answer. Opt-outs exist (`AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off`, config `- mode: off`), and the rails that spawn subagents already name a model, so this is hardening: detect headless (a CC-provided signal, not a heuristic) and downgrade `ask` to `deny`-with-reason there, since a wedge is worse than a refusal.
+- **Effort**: S (once the signal exists)
+- **Source**: v2.35.15 review round 1 (MiniMax-M3 🔵)
+
 ### Foreman context is not measurable by hook — `context-budget` only sees the parent transcript
 - **Trigger**: Claude Code's hook payload carries the SUBAGENT's own `transcript_path` (or an equivalent per-agent usage field) — check the CC changelog / a SPIKE on the running version; or a second cost incident where a foreman's context (not its Bash count) is the driver.
 - **Context**: v2.35.15 put ironlaw #6 in the loop through `foreman-guard` (Bash cap, polling, Monitor), but the digest's second burn shape — waking after cache TTL and re-writing a ≈900K context — is a CONTEXT ceiling, and `context-budget` deliberately exits on `agent_id` because the payload's `transcript_path` is the parent's. Until the payload identifies the subagent transcript, the Bash cap + 一刀一命 are the foreman's only ceilings. Fix shape: when a per-agent transcript is available, apply T1/T2 to it and make T2 a `deny` for subagents (a foreman can be forced to hand off; depth-0 cannot).

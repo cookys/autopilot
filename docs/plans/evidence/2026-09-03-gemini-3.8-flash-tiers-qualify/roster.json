@@ -1,0 +1,16 @@
+{
+  "corpus": {
+    "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+    "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+    "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+    "harness_version": "dispatch-hetero:219de2a6",
+    "expires_days": 90
+  },
+  "evidence_root": "docs/plans/evidence/2026-09-03-gemini-3.8-flash-tiers-qualify",
+  "role": "implementer",
+  "seats": [
+    { "slug": "flash38-low",    "runner": "agy", "model": "gemini-3.8-flash-low",    "family": "google", "version_source": "operator-asserted", "endpoint": "-", "effort": "low" },
+    { "slug": "flash38-medium", "runner": "agy", "model": "gemini-3.8-flash-medium", "family": "google", "version_source": "operator-asserted", "endpoint": "-", "effort": "medium" },
+    { "slug": "flash38-high",   "runner": "agy", "model": "gemini-3.8-flash-high",   "family": "google", "version_source": "operator-asserted", "endpoint": "-", "effort": "high" }
+  ]
+}

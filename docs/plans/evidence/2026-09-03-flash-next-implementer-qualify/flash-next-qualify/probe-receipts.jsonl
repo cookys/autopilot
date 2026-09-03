@@ -1,0 +1,2 @@
+{"attempt":1,"runner":"cc-shim","model":"qwen3.8-flash-next","bin":"/home/cookys/.local/bin/claude","bin_version":"2.1.259 (Claude Code)","version_source":"operator-asserted","probe_rc":1,"note":"probe failed - uncharged infra abort","instrument_charged":false,"probed_at":"2026-09-03T04:47:14Z"}
+{"attempt":1,"runner":"cc-shim","model":"qwen3.8-flash-next","bin":"/home/cookys/.local/bin/claude","bin_version":"2.1.259 (Claude Code)","version_source":"operator-asserted","probe_rc":0,"note":"probe committed","instrument_charged":false,"probed_at":"2026-09-03T04:47:53Z"}

@@ -1,0 +1,6 @@
+qualification-sweep.sh --execute: about to run 1 seat(s) = 25 real, paid dispatches (1 Stage-0 probe + up to 24 administration dispatches per seat, sequential).
+QUALIFICATION-SWEEP START 04:47:14Z (1 seats)
+PROBE_OUT:{ "status": "precondition_failed", "runner": "unresolved", "model": "qwen3.8-flash-next", "branch": "probe-1", "base": "HEAD", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "--effort must be one of low|medium|high|xhigh|max (got: default)", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "off", "skills_injected": [], "run_id": "hetero-1788410834-1045951-f789", "duplex": null, "retention_lease": null, "usage": null }
+SEAT flash-next PROBE-FAIL (uncharged, skipped) - seat NOT administered
+QUALIFICATION-SWEEP INCOMPLETE 04:47:15Z - 1 of 1 seat(s) did not land a recorded administration (see PROBE-FAIL / QUALIFY-FAIL / RECORD-FAIL lines above)
+SWEEP_EXIT=1

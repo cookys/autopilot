@@ -1,0 +1,16 @@
+{
+  "corpus": {
+    "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+    "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+    "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+    "harness_version": "dispatch-hetero:fa9b4a64",
+    "expires_days": 90
+  },
+  "evidence_root": "docs/plans/evidence/2026-09-03-flash-next-implementer-qualify",
+  "role": "implementer",
+  "seats": [
+    { "slug": "flash-next", "runner": "cc-shim", "model": "qwen3.8-flash-next",
+      "family": "alibaba", "version_source": "operator-asserted",
+      "endpoint": "-", "effort": "high" }
+  ]
+}

@@ -92,7 +92,7 @@ re-verifying the same diff passed it too. So the cycle now takes an optional det
 gate and runs it **alongside** the verifier:
 
 ```sh
---gate-cmd 'bash scripts/version-sync-gate.sh'   # exit 0 = pass; anything else = fail
+--gate-cmd 'node scripts/check-hook-inventory.js --check'  # exit 0 = pass; anything else = fail
 --gate-dir <repo checkout>                        # cwd for the gate (default: caller's cwd)
 ```
 

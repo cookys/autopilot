@@ -1,6 +1,6 @@
 # Qualification feed: adopt `--from <url|path>`, effort in the seat, environment ≠ exam identity
 
-Status: **handoff — not started.** Owner: the autopilot session on aimax395. Board decisions and
+Status: **shipped — v2.35.9** (merge `28bc2c78`; project README archived under `docs/projects/_archive/2026-09-02-qualification-feed-adopt/`). Original handoff framing kept below for the record. Owner: the autopilot session on aimax395. Board decisions and
 the feed contract are fixed (llm-playground plan 065, private repo); this doc carries everything
 needed here. Report back over the fleet relay to the llm-playground session on cookys-7840hs with
 the commit sha.

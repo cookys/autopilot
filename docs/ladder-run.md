@@ -82,6 +82,31 @@ deterministic version-sync / whole-file `doc-drift` Layer-1 gate** as the real o
 P2.2 first cycle demonstrated this the hard way: a diff-only pass let an incomplete PORTFOLIO
 fix escape to cookys audit — recorded, class held at T0.)
 
+### Mechanical oracle in-cycle: `--gate-cmd` (2026-09-03)
+
+Five fuchikoma doc-sync cycles (2026-09-02) showed the two escape shapes have different
+oracles: a claim **inside** the diff that contradicts its cited evidence is caught by the LLM
+verifier (it saw both); a claim that points **outside** the diff (a version literal that moved
+after the diff was written, a count, a path) is structurally invisible to it — `gpt-5.6-sol`
+re-verifying the same diff passed it too. So the cycle now takes an optional deterministic
+gate and runs it **alongside** the verifier:
+
+```sh
+--gate-cmd 'bash scripts/version-sync-gate.sh'   # exit 0 = pass; anything else = fail
+--gate-dir <repo checkout>                        # cwd for the gate (default: caller's cwd)
+```
+
+- **Union of catches**: the panel passes only if the LLM verdict is SHIP-AS-IS **and** the
+  gate exits 0. Either failure is a `depth0_panel` catch (not an escape) and ships nothing.
+- **Findings are kept**: the cycle record and the QC event now carry `findings[]` with the
+  verifier's FINDINGS text (`verifier-flagged-onstage.detail`) and the gate's output tail +
+  rc (`mechanical-gate-failed.detail`). Before this, only the verdict survived and a `fail`
+  cost a second full `dispatch-review` to become actionable.
+- `gate_verdict` is `n/a` when no gate is given — the LLM-only behaviour is unchanged, and
+  a class whose cycles all say `n/a` is telling you its oracle is still the weak one.
+- The gate is the consumer repo's: fuchikoma's is a 4-line version/count comparison against
+  the sibling repos' sources of truth; a code class would pass its test command here.
+
 ### Sampling is not evadable (H1)
 
 The 30% cookys-sample flag is keyed on the **`head_sha`** (the artifact) plus an optional
@@ -147,5 +172,5 @@ and prints what would be emitted without writing the store or state.
 ## Tests
 
 ```sh
-bash scripts/ladder-run.test.sh    # sampling determinism + emit/report wiring + state persist (mock verifier)
+bash scripts/ladder-run.test.sh    # sampling determinism + emit/report wiring + state persist (mock verifier) + --gate-cmd union/findings
 ```

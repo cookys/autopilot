@@ -155,6 +155,33 @@ AUTON_FAIL=$(jq -r 'select(.change_id=="chg-fail").autonomous // false' "$STORE"
   && ok "L1: FAIL verdict not an autonomous ship (autonomous=${AUTON_FAIL}) — excluded from endorsement denom" \
   || bad "L1: FAIL wrongly recorded autonomous=true"
 
+# 4b. --gate-cmd: MECHANICAL oracle in-cycle, union with the LLM verdict (2026-09-03)
+#     (a) LLM pass + gate pass  → panel pass, gate_verdict recorded
+#     (b) LLM pass + gate FAIL  → panel FAIL with a `mechanical-gate-failed` finding carrying
+#         the gate's output tail — the diff-only verifier's blind spot (a claim outside the diff)
+#     (c) gate runs in --gate-dir (cwd), not wherever ladder-run was invoked from
+#     (d) no --gate-cmd → gate_verdict "n/a", behaviour unchanged
+run --change-id gate-ok --mock-verdict SHIP-AS-IS --gate-cmd 'true' >/dev/null 2>&1 || true
+[ "$(jq -r '.classes["doc-sync"].cycles[]|select(.change_id=="gate-ok")|.verdict+"/"+.gate_verdict' "$STATE")" = "pass/pass" ] \
+  && ok "gate: LLM pass + gate pass → panel pass, gate_verdict=pass persisted" || bad "gate pass not recorded"
+OUT=$(run --change-id gate-bad --mock-verdict SHIP-AS-IS --gate-cmd 'echo VERSION-DRIFT v2.35.5 vs 2.35.8; exit 7' 2>&1) || true
+[ "$(jq -r '.classes["doc-sync"].cycles[]|select(.change_id=="gate-bad")|.verdict+"/"+.gate_verdict' "$STATE")" = "fail/fail" ] \
+  && ok "gate: LLM pass + gate FAIL → panel FAIL (union of catches)" || bad "gate fail did not fail the panel: $OUT"
+F=$(jq -c 'select(.change_id=="gate-bad").findings' "$STORE" | tail -1)
+grep -q '"id":"mechanical-gate-failed"' <<<"$F" && grep -q 'VERSION-DRIFT' <<<"$F" && grep -q 'rc=7' <<<"$F" \
+  && ok "gate: finding carries gate output tail + rc (actionable without a re-run)" || bad "gate finding missing detail: $F"
+AUTON_G=$(jq -r 'select(.change_id=="gate-bad").autonomous // false' "$STORE" | tail -1)
+[ "$AUTON_G" != "true" ] && ok "gate: a gate-failed cycle is not an autonomous ship" || bad "gate fail recorded autonomous=true"
+GD="$TMP/gatedir"; mkdir -p "$GD"; echo marker > "$GD/here"
+run --change-id gate-cwd --mock-verdict SHIP-AS-IS --gate-dir "$GD" --gate-cmd 'test -f here' >/dev/null 2>&1 || true
+[ "$(jq -r '.classes["doc-sync"].cycles[]|select(.change_id=="gate-cwd")|.gate_verdict' "$STATE")" = "pass" ] \
+  && ok "gate: runs with cwd = --gate-dir" || bad "gate did not run in --gate-dir"
+[ "$(jq -r '.classes["doc-sync"].cycles[]|select(.change_id=="chg-1")|.gate_verdict' "$STATE")" = "n/a" ] \
+  && ok "gate: absent → gate_verdict n/a (no behaviour change)" || bad "gate_verdict default wrong"
+# findings text from a mock FIX-THEN-SHIP is empty (mock has no text) but the key must exist
+jq -e '.classes["doc-sync"].cycles[]|select(.change_id=="chg-fail")|.findings|type=="array"' "$STATE" >/dev/null \
+  && ok "cycle record carries findings[] (verifier reasons no longer discarded)" || bad "findings not on cycle record"
+
 # 5. codex-Minor: ambiguous artifact input rejected
 if run --change-id amb --impl-prompt-file "$DIFF" --mock-verdict SHIP-AS-IS >/dev/null 2>&1; then
   bad "ambiguous --diff-file + --impl-prompt-file should be rejected"; else ok "ambiguous artifact input rejected"; fi

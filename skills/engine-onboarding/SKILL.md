@@ -190,6 +190,15 @@ dispatch-hetero's contract JSON, which is not a new verdict transport — no
 salvage decision is owed here. A genuinely new verdict transport onboarded
 outside `dispatch-review.sh`/plan-review rails still owes one.
 
+### Serving a local model for a team (cc-shim over a named endpoint)
+
+No new adaptor: `cc-shim` is the implementer rail for anything speaking `/v1/messages`. What a
+local model needs is ONE named-endpoint definition shared by the exam and daily routing —
+shared server → TLS + api-key in front of it (autopilot unchanged); single operator on their
+own LAN → the disclosed `--transport plaintext-private` opt-in for a private-range IP literal;
+examine with `engine-qualify.sh implementer --endpoint <name>` so the row discloses the
+deployment. Recipe + non-goals: [local-model-team-recipe.md](references/local-model-team-recipe.md).
+
 ### Planner (deferred / experimental)
 
 No oracle grade in v1.

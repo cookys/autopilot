@@ -71,6 +71,18 @@ run_hook foreman-guard.js "$(bash_payload agent-1 'for i in 1 2 3; do make step$
 assert_eq "" "$__RUN_STDOUT" "a for-loop doing work is allowed"
 run_hook foreman-guard.js "$(bash_payload agent-1 'i=0; while [ $i -lt 5 ]; do make step$i; i=$((i+1)); done')"
 assert_eq "" "$__RUN_STDOUT" "a counting while-loop doing work is allowed (no sleep/spin body)"
+# quote-aware lexing (review round 2): a quoted `#` is not a comment, and the executable
+# text around a heredoc introducer is kept
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo "label # literal"; sleep 10')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "a quoted # does not hide a trailing sleep"
+run_hook foreman-guard.js "$(bash_payload agent-1 $'cat > x.txt <<EOF; sleep 10\nbody\nEOF')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "command after a heredoc introducer on the same line is executed text"
+run_hook foreman-guard.js "$(bash_payload agent-1 $'sleep 10; cat <<EOF\nbody\nEOF')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "command before a heredoc introducer is executed text"
+run_hook foreman-guard.js "$(bash_payload agent-1 "echo '#'; npm test")"
+assert_eq "" "$__RUN_STDOUT" "a quoted # alone is not a comment and not a poll"
+run_hook foreman-guard.js "$(bash_payload agent-1 "printf 'a<<b'; npm test")"
+assert_eq "" "$__RUN_STDOUT" "a quoted << is not a heredoc"
 for cmd in '/bin/sleep 10' "bash -c 'sleep 10; echo x'" 'sh -c "sleep 5"' 'until grep -q DONE out.txt; do sleep 5; done' 'while true; do :; done' 'while ! test -f done; do sleep 1; done' '/usr/bin/pgrep agy'; do
   run_hook foreman-guard.js "$(bash_payload agent-1 "$cmd")"
   assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "executed wait '$cmd' denied"

@@ -59,11 +59,13 @@ const POLL_RULES = [
 ];
 
 // Strip the parts of a Bash command that are DATA, not executed commands: heredoc
-// bodies (`<<TAG … TAG`, quoted or unquoted tag, optional `-`) and `#` comments to end
-// of line (a `#` not preceded by a quote/word char). Everything else — including quoted
-// strings, which `bash -c` / `sh -c` / `eval` execute — stays.
+// BODIES (`<<TAG … TAG`, quoted or unquoted tag, optional `-`) and `#` comments to end
+// of line. Quote-aware (review round 2, gpt-5.6-sol): a `#` or `<<` inside single/double
+// quotes is literal, and the executable text before AND after a heredoc introducer on
+// its own line (`cat <<EOF; sleep 10`) is kept — only the body lines are dropped.
+// Quoted strings themselves stay: `bash -c '…'` / `sh -c "…"` / `eval` execute them.
 function executableText(cmd) {
-  let out = '';
+  const out = [];
   const lines = String(cmd).split('\n');
   let heredocTag = null;
   for (const line of lines) {
@@ -71,13 +73,28 @@ function executableText(cmd) {
       if (line.replace(/^\t+/, '') === heredocTag) heredocTag = null;
       continue; // heredoc body: data
     }
-    const m = /<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][\w]*))/.exec(line);
-    let keep = line;
-    if (m) { heredocTag = m[1] || m[2] || m[3]; keep = line.slice(0, m.index); }
-    keep = keep.replace(/(^|[\s;&|(])#.*$/, '$1');
-    out += `${keep}\n`;
+    let keep = '';
+    let q = null; // active quote char
+    let i = 0;
+    while (i < line.length) {
+      const c = line[i];
+      if (q) {
+        if (c === '\\' && q === '"' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; continue; }
+        if (c === q) q = null;
+        keep += c; i += 1; continue;
+      }
+      if (c === '\\' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; continue; }
+      if (c === "'" || c === '"') { q = c; keep += c; i += 1; continue; }
+      if (c === '#' && (i === 0 || /[\s;&|(]/.test(line[i - 1]))) break; // comment to EOL
+      if (c === '<' && line[i + 1] === '<' && line[i + 2] !== '<') {
+        const m = /^<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][\w]*))/.exec(line.slice(i));
+        if (m) { heredocTag = m[1] || m[2] || m[3]; i += m[0].length; continue; } // drop the introducer only
+      }
+      keep += c; i += 1;
+    }
+    out.push(keep);
   }
-  return out;
+  return `${out.join('\n')}\n`;
 }
 
 function isAffirmative(v) {

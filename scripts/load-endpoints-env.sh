@@ -49,11 +49,12 @@ _autopilot_endpoints_key_allowed() {
     ANTHROPIC_COMPATIBLE_BASE_URL|ANTHROPIC_COMPATIBLE_AUTH_TOKEN) return 0 ;;
     MINIMAX_API_KEY|AUTOPILOT_MINIMAX_BASE_URL) return 0 ;;
   esac
-  # AUTOPILOT_ENDPOINT_<NAME>_URL / _TOKEN — NAME is [A-Za-z0-9_]+
+  # AUTOPILOT_ENDPOINT_<NAME>_URL / _TOKEN / _TRANSPORT — NAME is [A-Za-z0-9_]+
+  # (_TRANSPORT is the non-secret plaintext-private opt-in read by resolve-endpoint.sh)
   case "$1" in
-    AUTOPILOT_ENDPOINT_*_URL|AUTOPILOT_ENDPOINT_*_TOKEN)
+    AUTOPILOT_ENDPOINT_*_URL|AUTOPILOT_ENDPOINT_*_TOKEN|AUTOPILOT_ENDPOINT_*_TRANSPORT)
       local base="${1#AUTOPILOT_ENDPOINT_}"
-      base="${base%_URL}"; base="${base%_TOKEN}"
+      base="${base%_URL}"; base="${base%_TOKEN}"; base="${base%_TRANSPORT}"
       [[ "$base" =~ ^[A-Za-z0-9_]+$ ]] && return 0 ;;
   esac
   return 1

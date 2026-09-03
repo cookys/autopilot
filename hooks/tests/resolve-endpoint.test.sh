@@ -134,4 +134,54 @@ env -i PATH="$PATH" ANTHROPIC_COMPATIBLE_BASE_URL=https://x.invalid/anthropic AN
   bash "$STUBDIR/dispatch-review.sh" --runner anthropic-compatible --model x --diff-file "$NOOP" --timeout 2s >/dev/null 2>&1 || true
 assert_file_absent "$SENTINEL" "no-endpoint path never calls the sibling resolver"
 
+# ── transport policy: plaintext-private opt-in (v2.35.11) ───────────
+# private-range http WITHOUT the opt-in stays not-ready, and says why
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t bash "$R" q 2>/dev/null)"; ec=$?
+assert_exit_code "$ec" 1 "private http without opt-in → not-ready"
+assert_contains "$out" '"transport_optin_required"' "private http without opt-in names the marker"
+assert_contains "$out" '"transport_security":""' "not-ready row has empty transport_security"
+# WITH the opt-in: ready, disclosed, warned on stderr only
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
+assert_exit_code "$ec" 0 "private http with opt-in → ready"
+assert_contains "$out" '"transport_security":"plaintext_private"' "opt-in row discloses plaintext_private"
+jvalid "$out" && assert_eq ok ok "opt-in JSON valid" || fail "opt-in JSON invalid: $out"
+err="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>&1 >/dev/null)"
+assert_contains "$err" 'PLAINTEXT' "opt-in warns on stderr"
+assert_not_contains "$out" 'PLAINTEXT' "warning is not on stdout"
+# every other private range + IPv6 ULA/link-local
+for u in http://10.0.0.2 http://172.16.0.1:1 http://172.31.255.254/x http://169.254.1.1 'http://[fd12::1]:8001' 'http://[fe80::1]/'; do
+  out="$(env -i AUTOPILOT_ENDPOINT_Q_URL="$u" AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
+  assert_exit_code "$ec" 0 "opt-in accepts private literal $u"
+done
+# opt-in does NOT open hostnames, public IPs, 172 outside /12, malformed octets, userinfo tricks
+for u in http://cuda.local:8001 http://cuda:8001 http://8.8.8.8 http://172.32.0.1 http://172.15.0.1 http://999.168.1.1 'http://192.168.1.5@evil.example/' 'http://user@192.168.1.5/' 'http://[2001:db8::1]/'; do
+  out="$(env -i AUTOPILOT_ENDPOINT_Q_URL="$u" AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
+  assert_exit_code "$ec" 1 "opt-in rejects non-private $u"
+  assert_contains "$out" '"transport_private_range_required"' "rejection of $u names the private-range marker"
+done
+# bogus transport value fails closed even for https
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=https://glm.example AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=yolo bash "$R" q 2>/dev/null)"; ec=$?
+assert_exit_code "$ec" 1 "invalid transport value → not-ready"
+assert_contains "$out" '"transport_value_invalid"' "invalid transport value names the marker"
+# disclosure on the always-safe classes, and byte-compat: absent flag still resolves https/loopback
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=https://glm.example AUTOPILOT_ENDPOINT_Q_TOKEN=t bash "$R" q 2>/dev/null)"
+assert_contains "$out" '"transport_security":"tls"' "https discloses tls"
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://127.0.0.1:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t bash "$R" q 2>/dev/null)"
+assert_contains "$out" '"transport_security":"loopback"' "loopback http discloses loopback"
+# --list rows carry the field
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" --list 2>/dev/null)"
+assert_contains "$out" '"transport_security":"plaintext_private"' "--list discloses transport_security"
+# the opt-in is namespace-only: the generic-compatible candidate gets no plaintext story
+out="$(env -i ANTHROPIC_COMPATIBLE_BASE_URL=http://10.0.0.2 ANTHROPIC_COMPATIBLE_AUTH_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
+assert_exit_code "$ec" 1 "generic-compatible private http stays not-ready (opt-in is namespace-only)"
+# dispatch-hetero re-surfaces the disclosure on stderr at dispatch time (resolver stderr is
+# discarded there). Run the REAL rail from a throwaway repo with a PATH that has no `claude`:
+# the --endpoint block runs before the cc-shim binary precondition, so the notice is printed
+# and the run then fails closed uncharged (no engine is ever spawned).
+DHREPO="$(mktemp -d)"; git -C "$DHREPO" init -q; git -C "$DHREPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+dherr="$(cd "$DHREPO" && env -i PATH=/usr/bin:/bin HOME="$DHREPO" AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
+  bash "$DH" --runner cc-shim --model m --endpoint q --branch x --prompt-file /dev/null --base HEAD --timeout 1s --context-window off 2>&1 >/dev/null || true)"
+assert_contains "$dherr" 'PLAINTEXT to a private-range address' "dispatch-hetero --endpoint prints the plaintext notice on stderr"
+rm -rf "$DHREPO"
+
 finalize_test

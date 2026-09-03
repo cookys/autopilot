@@ -26,12 +26,35 @@ const NAME_RE = /^[A-Za-z0-9_]+$/;
 const CONTROL_RE = /[\x00-\x1f]/;
 
 // url grammar, mirrored from resolve-endpoint.sh is_url_safe: no whitespace/control/quote/
-// backslash, and https:// (or http:// only for loopback). Keeps `set` consistent with what
-// resolve-endpoint will accept as `ready`.
-function isUrlSafe(u) {
+// backslash, and https:// (or http:// only for loopback — or, with the explicit
+// `--transport plaintext-private` opt-in, http:// to a PRIVATE-RANGE IP LITERAL). Keeps
+// `set` consistent with what resolve-endpoint will accept as `ready`. The shell script is
+// the policy owner; this twin exists so `set` refuses at write time instead of at dispatch.
+const TRANSPORT_VALUES = new Set(['tls', 'plaintext-private']);
+function isPrivateIpLiteral(host) {
+  const h = host.toLowerCase();
+  if (h.startsWith('[') && h.endsWith(']')) {
+    const v6 = h.slice(1, -1);
+    return /^f[cd][0-9a-f]{2}:[0-9a-f:]*$/.test(v6) || /^fe[89ab][0-9a-f]:[0-9a-f:%]*$/.test(v6);
+  }
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (!m) return false;
+  const o = m.slice(1).map(Number);
+  if (o.some((n) => n > 255)) return false;
+  if (o[0] === 10) return true;
+  if (o[0] === 192 && o[1] === 168) return true;
+  if (o[0] === 169 && o[1] === 254) return true;
+  if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+  return false;
+}
+function isUrlSafe(u, transport) {
   if (!u || /[\s\x00-\x1f"\\]/.test(u)) return false;
   if (/^https:\/\//.test(u)) return true;
   if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/.test(u)) return true;
+  if (transport === 'plaintext-private') {
+    const m = /^http:\/\/(\[[^\]/]+\]|[^/:\[]+)(:\d+)?(\/|$)/.exec(u);
+    if (m && isPrivateIpLiteral(m[1])) return true;
+  }
   return false;
 }
 
@@ -65,13 +88,15 @@ function collectNames(layers) {
   const names = {};
   const add = (entries, layer) => {
     for (const k of Object.keys(entries)) {
-      const m = /^AUTOPILOT_ENDPOINT_([A-Za-z0-9_]+)_(URL|TOKEN)$/.exec(k);
+      const m = /^AUTOPILOT_ENDPOINT_([A-Za-z0-9_]+)_(URL|TOKEN|TRANSPORT)$/.exec(k);
       if (!m) continue;
       const name = m[1].toLowerCase();
-      if (!names[name]) names[name] = { name, url_present: false, token_present: false, url_layer: null, token_layer: null };
+      if (!names[name]) names[name] = { name, url_present: false, token_present: false, url_layer: null, token_layer: null, transport: 'tls' };
       const present = !!entries[k];
       if (m[2] === 'URL' && present) { names[name].url_present = true; names[name].url_layer = layer; }
       if (m[2] === 'TOKEN' && present) { names[name].token_present = true; names[name].token_layer = layer; }
+      // non-secret; shown so a plaintext opt-in is never invisible in list/which/doctor
+      if (m[2] === 'TRANSPORT' && present) { names[name].transport = String(entries[k]); }
     }
   };
   add(layers.base.entries, 'base');
@@ -110,6 +135,7 @@ function cmdList(io, jsonMode) {
     name: r.name,
     url_present: r.url_present,
     token_present: r.token_present,
+    transport: r.transport,
     layer: endpointLayer(r),
     ready: r.url_present && r.token_present,
   })).sort((a, b) => a.name.localeCompare(b.name));
@@ -119,7 +145,8 @@ function cmdList(io, jsonMode) {
     io.stdout.write('no endpoints defined (run: autopilot endpoints set <name> --url <url> --token-stdin)\n');
   } else {
     for (const r of rows) {
-      io.stdout.write(`${r.ready ? '✓' : '✗'} ${r.name}  url=${r.url_present ? 'yes' : 'MISSING'} token=${r.token_present ? 'yes' : 'MISSING'} [${r.layer}]\n`);
+      const tr = r.transport === 'plaintext-private' ? ' transport=PLAINTEXT-PRIVATE' : '';
+      io.stdout.write(`${r.ready ? '✓' : '✗'} ${r.name}  url=${r.url_present ? 'yes' : 'MISSING'} token=${r.token_present ? 'yes' : 'MISSING'}${tr} [${r.layer}]\n`);
     }
   }
   return { status: 0 };
@@ -136,7 +163,7 @@ function cmdWhich(io, jsonMode) {
     if (!rec) return { role, name, selected: true, defined: false, resolves: false, note: 'selected but no credential defined in base/overlay' };
     return {
       role, name, selected: true, defined: true,
-      url_present: rec.url_present, token_present: rec.token_present,
+      url_present: rec.url_present, token_present: rec.token_present, transport: rec.transport,
       layer: endpointLayer(rec), resolves: rec.url_present && rec.token_present,
     };
   });
@@ -155,7 +182,8 @@ function cmdWhich(io, jsonMode) {
     for (const o of out) {
       if (!o.selected) { io.stdout.write(`${o.role}: (unset)\n`); continue; }
       if (!o.defined) { io.stdout.write(`${o.role}: ${o.name} — ⚠ ${o.note}\n`); continue; }
-      io.stdout.write(`${o.role}: ${o.name}  ${o.resolves ? '✓ resolves' : '✗ ' + (o.url_present ? '' : 'url ') + (o.token_present ? '' : 'token ') + 'MISSING'} [${o.layer}]\n`);
+      const tr = o.transport === 'plaintext-private' ? ' transport=PLAINTEXT-PRIVATE' : '';
+      io.stdout.write(`${o.role}: ${o.name}  ${o.resolves ? '✓ resolves' : '✗ ' + (o.url_present ? '' : 'url ') + (o.token_present ? '' : 'token ') + 'MISSING'}${tr} [${o.layer}]\n`);
     }
     if (repoKeySource === 'path-fallback') {
       io.stdout.write('Warning: repo-key is path-fallback (moving the working tree changes the key)\n');
@@ -179,15 +207,29 @@ function upsertLine(content, key, value) {
 function cmdSet(io, rest) {
   const name = rest[0];
   if (!name || !NAME_RE.test(name)) { io.stderr.write('ERROR: endpoints set <name> — name must be [A-Za-z0-9_]\n'); return { status: 2 }; }
-  let url = null; let tokenStdin = false; let toRepo = false;
+  let url = null; let tokenStdin = false; let toRepo = false; let transport = null;
   for (let i = 1; i < rest.length; i++) {
     const a = rest[i];
-    if (a === '--url') { url = rest[++i]; if (!url) { io.stderr.write('ERROR: --url requires a value\n'); return { status: 2 }; } if (!isUrlSafe(url)) { io.stderr.write('ERROR: --url must be https:// (or http://localhost) with no whitespace/quotes\n'); return { status: 2 }; } }
+    if (a === '--url') { url = rest[++i]; if (!url) { io.stderr.write('ERROR: --url requires a value\n'); return { status: 2 }; } }
+    else if (a === '--transport') {
+      transport = rest[++i];
+      if (!transport || !TRANSPORT_VALUES.has(transport)) { io.stderr.write('ERROR: --transport must be tls or plaintext-private\n'); return { status: 2 }; }
+    }
     else if (a === '--token-stdin') { tokenStdin = true; }
     else if (a === '--repo') { toRepo = true; }
     else { io.stderr.write(`ERROR: unknown endpoints set option: ${a}\n`); return { status: 2 }; }
   }
-  if (!url && !tokenStdin) { io.stderr.write('ERROR: nothing to set (pass --url and/or --token-stdin)\n'); return { status: 2 }; }
+  // Validate the URL AFTER the whole argv is read so `--transport` may follow `--url`.
+  if (url && !isUrlSafe(url, transport)) {
+    io.stderr.write(transport === 'plaintext-private'
+      ? 'ERROR: --url with --transport plaintext-private must be http:// to a PRIVATE-RANGE IP LITERAL (10/8, 172.16/12, 192.168/16, 169.254/16, IPv6 fc00::/7 or fe80::/10) — no hostnames, no public addresses\n'
+      : 'ERROR: --url must be https:// (or http://localhost) with no whitespace/quotes; a private-LAN http:// endpoint needs --transport plaintext-private\n');
+    return { status: 2 };
+  }
+  if (!url && !tokenStdin && !transport) { io.stderr.write('ERROR: nothing to set (pass --url, --token-stdin and/or --transport)\n'); return { status: 2 }; }
+  if (transport === 'plaintext-private') {
+    io.stderr.write('Warning: plaintext-private sends the bearer AND every prompt (repository contents) unencrypted on this LAN. Single-operator LAN + local model only; put TLS + an api-key in front of a shared server instead.\n');
+  }
   // NEVER accept a token on argv — only via stdin.
   let token = null;
   if (tokenStdin) {
@@ -229,6 +271,7 @@ function cmdSet(io, rest) {
     const setKeys = [];
     if (url) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_URL`, url); setKeys.push(`${upper}_URL`); }
     if (token) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_TOKEN`, token); setKeys.push(`${upper}_TOKEN`); }
+    if (transport) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_TRANSPORT`, transport); setKeys.push(`${upper}_TRANSPORT`); }
     // ATOMIC write (tmp in the same dir + rename) so a crash mid-write can't leave the secret
     // file partial/corrupt — panel finding. tmp is created mode 600 under umask 077.
     const prevMask = process.umask(0o077);
@@ -259,9 +302,10 @@ function cmdDoctor(io, jsonMode) {
     const problems = [];
     if (!r.url_present) problems.push('url missing');
     if (!r.token_present) problems.push('token missing');
-    return { name: r.name, ok: problems.length === 0, problems };
+    return { name: r.name, ok: problems.length === 0, problems, transport: r.transport };
   });
   for (const e of eps) if (!e.ok) issues.push(`${e.name}: ${e.problems.join(', ')}`);
+  const plaintext = eps.filter((e) => e.transport === 'plaintext-private').map((e) => e.name);
   const healthy = issues.length === 0;
   if (jsonMode) {
     io.stdout.write(JSON.stringify({ healthy, base_file: layers.baseFile, overlay_file: layers.overlayFile, endpoints: eps, issues }) + '\n');
@@ -270,6 +314,7 @@ function cmdDoctor(io, jsonMode) {
     io.stdout.write(`overlay: ${layers.overlayFile || '(none for this repo)'}${layers.overlay.rejected ? ' — REJECTED (' + layers.overlay.reason + ')' : ''}\n`);
     if (healthy) io.stdout.write('✓ all defined endpoints resolve (url + token present)\n');
     else for (const i of issues) io.stdout.write(`✗ ${i}\n`);
+    for (const n of plaintext) io.stdout.write(`⚠ ${n}: transport=plaintext-private (unencrypted on the LAN — single-operator local model only)\n`);
   }
   return { status: healthy ? 0 : 1 };
 }
@@ -447,8 +492,10 @@ function printHelp(io) {
   init                          scaffold ~/.autopilot/endpoints.env from the template
   list [--json]                 list defined endpoints (name, url/token present, layer)
   which [--json]                for THIS repo: which endpoints reviewer/implementer select + resolve
-  set <name> --url <u> [--token-stdin] [--repo]
-                                write url (+ token via STDIN only) to base or the per-repo overlay
+  set <name> --url <u> [--token-stdin] [--repo] [--transport tls|plaintext-private]
+                                write url (+ token via STDIN only) to base or the per-repo overlay;
+                                plaintext-private permits http:// to a PRIVATE-RANGE IP literal
+                                (local model on your own LAN) and is disclosed in list/which/doctor
   test <name> [--json]          sends one tiny live request; costs tokens (verify auth + latency)
   doctor [--json]               diagnose file perms + unresolved endpoints (no network)
 Tokens are NEVER printed and NEVER read from argv.

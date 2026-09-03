@@ -242,4 +242,34 @@ assert_contains "$wj_noremote_json" '"repo_key_source":"path-fallback"' "which -
 set_warn_out="$(cd "$NOREMOTE" && printf 'noremote-token' | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints set mm --url https://m --token-stdin --repo 2>&1)"
 assert_contains "$set_warn_out" "Warning: repo has no git remote. Overlay is keyed to the checkout PATH" "set --repo prints warning when no remote"
 
+# ── 10. --transport plaintext-private (v2.35.11) ──
+# private http WITHOUT the flag is refused at write time, with a pointer to the flag
+pt_refused="$(run set lan --url http://192.168.101.7:8001 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "set private http without --transport exits 2"
+assert_contains "$pt_refused" 'plaintext-private' "refusal names the opt-in flag"
+# WITH the flag: written, warned, disclosed in list/which/doctor
+pt_out="$(printf 'placeholder' | run set lan --url http://192.168.101.7:8001 --token-stdin --transport plaintext-private 2>&1)"; ec=$?
+assert_exit_code "$ec" 0 "set --transport plaintext-private exits 0"
+assert_contains "$pt_out" 'Warning: plaintext-private' "set warns about plaintext"
+assert_contains "$pt_out" 'LAN_TRANSPORT' "set reports the _TRANSPORT key"
+grep -q '^AUTOPILOT_ENDPOINT_LAN_TRANSPORT=plaintext-private$' "$BASE" && assert_eq ok ok "_TRANSPORT line written" || fail "_TRANSPORT line missing in $BASE"
+pt_list="$(run list --json 2>&1)"
+assert_contains "$pt_list" '"name":"lan"' "list shows lan"
+assert_contains "$pt_list" '"transport":"plaintext-private"' "list --json discloses transport"
+pt_list_txt="$(run list 2>&1)"
+assert_contains "$pt_list_txt" 'transport=PLAINTEXT-PRIVATE' "list text discloses transport loudly"
+pt_doc="$(run doctor 2>&1)"
+assert_contains "$pt_doc" 'lan: transport=plaintext-private' "doctor surfaces the plaintext endpoint"
+# the flag does NOT open hostnames or public addresses at write time either
+for u in http://cuda.local:8001 http://8.8.8.8:1 http://172.32.0.1; do
+  bad="$(run set lan2 --url "$u" --transport plaintext-private 2>&1)"; ec=$?
+  assert_exit_code "$ec" 2 "set --transport plaintext-private refuses $u"
+  assert_contains "$bad" 'PRIVATE-RANGE IP LITERAL' "refusal of $u explains the literal rule"
+done
+bad="$(run set lan3 --url https://x.example --transport yolo 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "set rejects an unknown --transport value"
+# --transport may precede --url (validation runs after the whole argv is read)
+pt_order="$(run set lan4 --transport plaintext-private --url http://10.0.0.9 2>&1)"; ec=$?
+assert_exit_code "$ec" 0 "set accepts --transport before --url"
+
 finalize_test

@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-04 | foreman cost discipline — `foreman-guard` PreToolUse hook（工頭 Bash 上限、輪詢 deny、Monitor deny）、context-budget／dispatch-model-guard／cost-tracker 改 default-on、工頭一刀一命與接手 read-list 上限（`docs/projects/2026-09-04-foreman-cost-discipline/README.md`） | 2.35.15 | `feat/v2.35.15-foreman-cost-discipline` |
 | 2026-08-28 | consult/discuss qualification — paid administration wave (Board-authorized batch A, 2026-08-28; see `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md` decision section and `docs/plans/2026-08-28-consult-discuss-qualification.md`) | 2.35.2 | `docs/administration-authorization` |
 
 ## 已完成 (Completed)

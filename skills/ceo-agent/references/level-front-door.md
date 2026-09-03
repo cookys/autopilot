@@ -367,7 +367,37 @@ child `Agent`, **end the turn**, and resume only on that notification (or a dept
 `SendMessage` if the host parked the foreman). Forbidden: `sleep` loops, `cat`/`tail`
 of `<session>/tasks/<id>.output` into the foreman context, Monitor-waiting on a leaf.
 Leaves return a schema-typed criteria table; raw leaf output never enters the
-foreman prompt. Foreman Bash count cap: 40 (gate: `scripts/check-foreman-polling.js`).
+foreman prompt. Foreman Bash count cap: 40 (gates: `hooks/foreman-guard.js` in the loop at
+PreToolUse — default-on since v2.35.15 — and `scripts/check-foreman-polling.js` post-hoc).
+
+#### Foreman lifecycle — 一刀一命 (v2.35.15)
+
+Source incident: cuda quota digest 2026-09-04 (`QUOTA-DIGEST-2026-09-04.md`): ≈$2,200 API-equivalent
+in 36 h, 79 % from four resident Sonnet foremen alive 13–33 h with 1,900–7,400 Bash calls each,
+34–97 万 cache-read tokens per call and ≈0 output; 413 wake-ups after cache TTL re-wrote the whole
+context ($455); each takeover re-read brief + rulings + a 14,648-line ledger + 26K lines of kernel
+source (≈300K to start). The prose rules existed; nothing was in the loop.
+
+- **One deliverable per foreman life.** A foreman owns exactly ONE admitted deliverable. When it is
+  integrated, when `foreman-guard` denies the 41st Bash, or when the foreman's own count nears the cap,
+  it writes its handoff (`autopilot:handoff`) and **ends its turn**. Depth-0 spawns the next foreman
+  for the next deliverable. A "resident" foreman waiting for its next assignment is forbidden.
+- **In-loop enforcement.** `hooks/foreman-guard.js` (PreToolUse `Bash|Monitor`, scope = session-mode
+  marker l4|l5|l6 AND payload `agent_id`): Bash cap per agent (default 40, `foreman_guard.bash_cap`),
+  foreground polling denied (`true`/`:` spin, `sleep N`, `while … sleep|grep|test`, `pgrep`/`ps -p`/
+  `kill -0`, reading `/tasks/*.output`), `Monitor` denied. `run_in_background` waits stay allowed.
+  Modes block|warn|off (`foreman_guard.mode` / `AUTOPILOT_FOREMAN_GUARD_MODE`). Depth-0 is untouched.
+- **Takeover read-list cap.** The next foreman reads the brief for THIS cut only (≤ 300 lines) and
+  the ledger split for its lane. "Read the whole file first" chains (full ledger, kernel sources,
+  historical rulings) are forbidden in a foreman brief; depth-0 owns the whole picture.
+- **No inherited `[1m]`/Fable.** Every foreman dispatch names `model:`; `dispatch-model-guard`
+  (default-on since v2.35.15) asks on an omitted model or a guarded engine. A 1M-window foreman
+  auto-compacts at ≈967K — the multiplier behind the digest — so the operator's
+  `~/.claude/settings.json` `model=…[1m]` must not be the foreman's model.
+- **Cost visibility.** `cost-tracker` (default-on) prints a stderr line when a session's cumulative
+  cache-read passes 50M tokens and each doubling after; `context-budget` (default-on) nudges at 100K
+  and directs a handoff at 150K for depth-0. Foreman context itself is not measurable by hook yet
+  (the payload carries the parent transcript) — BACKLOG; the Bash cap is the foreman's ceiling.
 
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 

@@ -55,7 +55,8 @@ RUN verify/measure:
   --gate-cmd '<shell>'   MECHANICAL oracle run IN-CYCLE alongside the LLM verifier (e.g. the doc-drift
                          Layer-1 gate, a test suite, a version-sync check). Exit 0 = pass; non-zero = fail;
                          the cycle passes only if BOTH the gate and the verifier pass (union of catches).
-                         Runs with cwd = the repo checkout; its stdout/stderr tail is kept on the finding.
+                         Runs with cwd = --gate-dir if given, else the caller's cwd (pass --gate-dir
+                         <checkout> when invoking from elsewhere); stdout/stderr tail kept on the finding.
                          Without it the in-cycle oracle is the diff-only LLM alone — a WEAK oracle for any
                          claim that points outside the diff (version numbers, counts, file existence).
   --mock-verdict SHIP-AS-IS|FIX-THEN-SHIP   TEST SEAM only (never a real datapoint)
@@ -382,10 +383,15 @@ GATE_VERDICT="n/a"; GATE_RC=""; GATE_TAIL=""
 if [ -n "$GATE_CMD" ]; then
   GATE_WD="${GATE_DIR:-$PWD}"
   echo "-- gate: mechanical oracle in $GATE_WD: $GATE_CMD --"
+  # Stream the gate's output to a temp file, never into a shell variable: a verbose test
+  # suite must not be able to OOM the ladder run and turn a controlled gate failure into a
+  # crash with no record. Only the sanitized tail is kept.
+  GATE_LOG="$(mktemp)"
   set +e
-  GATE_OUT=$(cd "$GATE_WD" && bash -c "$GATE_CMD" 2>&1); GATE_RC=$?
+  ( cd "$GATE_WD" && bash -c "$GATE_CMD" ) >"$GATE_LOG" 2>&1; GATE_RC=$?
   set -e
-  GATE_TAIL=$(printf '%s' "$GATE_OUT" | tail -c 1500 | tr -d '\000-\010\013\014\016-\037\177')
+  GATE_TAIL=$(tail -c 1500 "$GATE_LOG" | tr -d '\000-\010\013\014\016-\037\177')
+  rm -f "$GATE_LOG"
   if [ "$GATE_RC" = "0" ]; then GATE_VERDICT="pass"; else GATE_VERDICT="fail"; fi
   echo "   gate: rc=$GATE_RC → gate_verdict=$GATE_VERDICT"
 fi

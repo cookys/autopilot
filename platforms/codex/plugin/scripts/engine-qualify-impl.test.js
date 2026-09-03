@@ -70,6 +70,9 @@ if (!target) { process.stdout.write(JSON.stringify({ status: 'failure', commit: 
 
 const mode = fs.readFileSync(${JSON.stringify(path.join(tempRoot, 'fake-mode.txt'))}, 'utf8').trim() || 'honest';
 const canary = process.env.QUALIFY_CANARY_TOKEN || '';
+// Record the cc-shim env the rail received so the --endpoint binding test can prove the
+// resolver's base_url (and not the ambient env) reached the dispatch.
+try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n'); } catch (e) {}
 
 function emit(o) { process.stdout.write(JSON.stringify(o) + '\\n'); }
 
@@ -409,6 +412,76 @@ equal(budRun.qualified, false, 'allocator-depleted administration is NOT qualifi
 equal(budRun.row.status, 'no_verdict', 'allocator depletion yields no_verdict (no scorecard-recordable row)');
 equal(budRun.evidence, null, 'allocator depletion writes NO evidence');
 check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allocator depletion appends nothing to the store');
+
+// ── 12. --endpoint: exam resolves the dispatch env through resolve-endpoint.sh ──
+//        (the same named-endpoint definition daily routing uses), replaces the raw
+//        passthrough, and discloses {name, base_url, transport_security} on the row.
+{
+  const seen = path.join(tempRoot, 'fake-env-seen.txt');
+  const saved = {};
+  for (const k of ['AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN']) saved[k] = process.env[k];
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL = 'http://10.7.7.7:8001';
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN = 'exam-lan-bearer';
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT = 'plaintext-private';
+  process.env.ANTHROPIC_BASE_URL = 'https://ambient.example/must-not-win';
+  process.env.ANTHROPIC_AUTH_TOKEN = 'ambient-token-must-not-win';
+  try { fs.unlinkSync(seen); } catch (_e) { /* absent */ }
+  const storeE = fs.mkdtempSync(path.join(tempRoot, 'store-endpoint-'));
+  const rawE = fs.mkdtempSync(path.join(tempRoot, 'raw-endpoint-'));
+  const wrapper = path.join(tempRoot, 'disp.sh');
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'endpoint-seed');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+  process.env.AUTOPILOT_QUALIFY_SEED = 'endpoint-seed';
+  let ep;
+  try {
+    ep = runImplQualification({ ...baseOptions(storeE), dispatchBin: wrapper, runner: 'cc-shim', endpoint: 'examlan', rawDir: rawE });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+  equal(ep.qualified, true, '--endpoint honest candidate still qualifies');
+  equal(ep.row.endpoint, { name: 'examlan', base_url: 'http://10.7.7.7:8001', transport_security: 'plaintext_private' }, 'row discloses the resolved endpoint + transport');
+  check(!('token_env' in (ep.row.endpoint || {})), 'row endpoint carries no token_env');
+  const seenLines = fs.readFileSync(seen, 'utf8').split('\n');
+  equal(seenLines[0], 'http://10.7.7.7:8001', 'rail received the RESOLVED base_url, not the ambient ANTHROPIC_BASE_URL');
+  equal(seenLines[1], 'exam-lan-bearer', 'rail received the named endpoint bearer, not the ambient token');
+  const disclosed = JSON.parse(fs.readFileSync(path.join(rawE, 'impl-endpoint.json'), 'utf8'));
+  equal(disclosed, { name: 'examlan', base_url: 'http://10.7.7.7:8001', transport_security: 'plaintext_private' }, 'raw/impl-endpoint.json mirrors the disclosure without the token');
+  // the emitted row (with the additive endpoint key) still passes the real record binding
+  const recE = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record'], {
+    input: JSON.stringify(ep.row),
+    env: { ...process.env, ENGINE_SCORECARD_DIR: storeE, ENGINE_CAPABILITY_DIR: storeE },
+    encoding: 'utf8',
+  });
+  equal(recE.status, 0, `engine-scorecard record accepts a row with endpoint disclosure: ${recE.stderr}`);
+  // without --endpoint the row has no endpoint key (byte-compatible with every prior row)
+  check(!('endpoint' in honest.row), 'no --endpoint → no endpoint key on the row');
+}
+
+// ── 13. --endpoint not-ready → exit 2 UNCHARGED (nothing dispatched, no store write) ──
+{
+  const storeN = fs.mkdtempSync(path.join(tempRoot, 'store-notready-'));
+  const cliArgs = ['implementer', '--engine', 'e', '--model', 'm', '--model-version', 'v', '--runner', 'cc-shim',
+    '--runner-version', '1', '--family', 'f', '--harness-version', 'h', '--effort', 'high',
+    '--prompt-config-hash', digest('a'), '--semantic-fingerprint', digest('b'), '--containment-fingerprint', digest('c'),
+    '--task-class', 'bounded_implementation', '--domain', 'repository', '--language', 'en', '--tool', 'git_commit',
+    '--store', storeN, '--dispatch-bin', path.join(tempRoot, 'disp.sh')];
+  // private http WITHOUT the transport opt-in: resolver says transport_optin_required
+  const nr = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'lanx'], {
+    env: { ...process.env, AUTOPILOT_ENDPOINT_LANX_URL: 'http://10.7.7.7:8001', AUTOPILOT_ENDPOINT_LANX_TOKEN: 't' },
+    encoding: 'utf8',
+  });
+  equal(nr.status, 2, 'not-ready endpoint exits 2');
+  check(/not ready/.test(nr.stderr) && /transport_optin_required/.test(nr.stderr), `stderr names the missing marker: ${nr.stderr.slice(0, 200)}`);
+  check(!fs.existsSync(path.join(storeN, 'qualification-evidence.jsonl')), 'not-ready: nothing written to the store');
+  // a name that does not fit the resolver grammar is refused at argv
+  const bad = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'bad-name'], { env: process.env, encoding: 'utf8' });
+  equal(bad.status, 2, 'malformed --endpoint name exits 2');
+  // --endpoint is implementer-only
+  const rev = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--endpoint', 'x', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
+  equal(rev.status, 2, '--endpoint on a non-implementer role exits 2');
+  check(/implementer-only/.test(rev.stderr), 'non-implementer refusal names implementer-only');
+}
 
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

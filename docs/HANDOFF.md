@@ -4,8 +4,8 @@
 
 ## 現況
 
-- **branch**: `develop`，與 `origin/develop` 同步在 `1b332f83`
-- **working tree**: 乾淨；`docs/projects/` 沒有進行中專案
+- **branch**: `develop`；本機比 origin 多三個 no-bump docs／comment commit（`62297210`、`1b85e47a` 與這份 handoff），**尚未 push**，`origin/develop` 在 `0ed8680f`
+- **working tree**: 乾淨；`docs/projects/` 沒有進行中專案（09-02 兩個已出貨專案已搬進 `_archive/`，INDEX 過期的 08-28 In-Progress 列已刪）
 - **version**: 2.35.15（27 hooks：14 default-on／13 opt-in）
 - **測試**: 最後一次全套在 `479552c0` 上 311 檔（310 綠 + `suite-oracle-lock` 因繞鎖 env 被繼承而單獨重跑 32 條綠）
 
@@ -35,23 +35,30 @@
 
 ## 下一步
 
-沒有被指派的下一步。已知、已評估、未動工的：
+沒有被指派的下一步。2026-09-04 本 session 已收掉的舊帳：
 
-1. **BACKLOG 新增九筆**（`docs/BACKLOG.md` Active entries 前段）：dispatch-model-guard 在 headless 的 `ask` 可能卡住、工頭 context 量不到、effort `minimal`、feed 列表兩個顯示瑕疵、opencode 用量解析、gate 測試改 scratch copy、`endpoints test --model`、`local-deployment.js` 政策對齊。每筆都有 Trigger。
-2. **suite oracle lock 殘留**（BACKLOG 🔵）今天第二次發生：`kill -9` 一次 suite 後 `.owner` 留著死 pid，下一次被拒。若又撞到：確認沒有活的 `run.sh` 後 `AUTOPILOT_SUITE_ORACLE_LOCK=0`，然後**不帶那個 env** 單跑 `hooks/tests/suite-oracle-lock.test.sh` 補證。
+- **`ladder --role implementer` 回 `[]` 不是 bug**：磁碟 view 一律把 qualified 投影成 provisional（ADR-0001，`engine-scorecard.js --help` 明寫），只有 `--require-evidence --scope-file --identity-file`（`resolve-review-loop.sh --check-scorecard` 才帶）能產出候選，而 `write-scope` 只凍結了 consult/discuss。看席位用 `seat-status`。記在 memory `engine-qualify-administration-gotchas`。
+- **evidence store 兩列 fixture（event 271/272）已隔離**：identity `e|r|f|m|0`、指紋全 a/b/c、consult、`degraded`、0/10，2026-08-28T09:26Z 寫入。現在與 08-28 當時的樹都沒有任何測試發這組參數，transcript 也找不到指令，最可能是當天 consult-discuss administration session 的手動 smoke。備份 `qualification-evidence.jsonl.bak-fixture-quarantine-2026-09-04`（55 列，sha 相符），隔離檔 `.test-residue-quarantined-20260904`，主檔 53 列；consult `current` 前後都 7 席、flash-next 仍 qualified。`run.sh` 自 09-02 起有 sha256 前後 guard，同類再犯會被抓。
+- **`~/.autopilot/engine-scorecard/qualification-evidence.jsonl`（19 列）是孤兒檔**：code 只讀 `engine-capability/` 那份；19 列中 11 列與正本重複、8 列（08-28／29 的 consult/discuss `degraded` 早期嘗試）不在正本。沒動它，也不用動。
+- **BACKLOG「dispatch-model-guard 在 headless 回 ask 會卡」已刪**：實測 CC 2.1.259 `-p` 下 ask 立即變 `is_error` tool_result 帶原因，兩種權限模式皆然。紀錄在 hook 檔頭、`references/multi-agent-portability.md` §5、memory `cc-headless-hook-ask-auto-denies`。
+
+仍在的、已評估未動工：
+
+1. **BACKLOG 其餘八筆**（`docs/BACKLOG.md` Active entries 前段）：工頭 context 量不到、effort `minimal`、feed 列表兩個顯示瑕疵、opencode 用量解析、gate 測試改 scratch copy、`endpoints test --model`、`local-deployment.js` 政策對齊。每筆都有 Trigger。
+2. **suite oracle lock 殘留**（BACKLOG 🔵）：`kill -9` 一次 suite 後 `.owner` 留著死 pid，下一次被拒。若又撞到：確認沒有活的 `run.sh` 後 `AUTOPILOT_SUITE_ORACLE_LOCK=0`，然後**不帶那個 env** 單跑 `hooks/tests/suite-oracle-lock.test.sh` 補證。訊息清晰度同一筆。
 3. 若要正式切 implementer 到 flash-next：改 `.claude/review-loop-config.md` 三欄加 `implementer_endpoint: qwen38`（endpoints.env 已有 `QWEN38` 三鍵，plaintext-private）。
-4. 舊 handoff 提到的三件仍在：`qualification-evidence.jsonl` 兩列可疑 fixture、`ladder --role implementer` 回 `[]`（`report` 也空，但 `seat-status` 正常）、oracle lock 訊息清晰度。
 
 ## 驗證方式
 
 ```bash
 cd /home/cookys/projects/autopilot
 git status --porcelain              # 應為空
-git log --oneline -1                # 1b332f83
+git log --oneline -3                # 62297210 → 1b85e47a → handoff commit
 node -p "require('./.claude-plugin/plugin.json').version"   # 2.35.15
 node scripts/check-hook-inventory.js --check   # in sync: 27 hooks (14 default-on, 13 opt-in)
 AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh   # ✅ 8/8 for v2.35.15
 node scripts/engine-scorecard.js seat-status --engine qwen3.8-flash-next --runner cc-shim --role implementer --effort high   # qualified, event 186
+wc -l ~/.autopilot/engine-capability/qualification-evidence.jsonl   # 53
 ```
 
 ## Read-order

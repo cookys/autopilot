@@ -75,6 +75,10 @@ function executableText(cmd) {
     }
     let keep = '';
     let q = null; // active quote char
+    // Lexical word-start state (review round 3, gpt-5.6-sol): `#` opens a comment only at
+    // the START of a word. `echo foo\ #bar` keeps `#bar` inside the word because the
+    // escaped space did not end it — inspecting the raw previous char got that wrong.
+    let wordStart = true;
     let i = 0;
     while (i < line.length) {
       const c = line[i];
@@ -83,13 +87,14 @@ function executableText(cmd) {
         if (c === q) q = null;
         keep += c; i += 1; continue;
       }
-      if (c === '\\' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; continue; }
-      if (c === "'" || c === '"') { q = c; keep += c; i += 1; continue; }
-      if (c === '#' && (i === 0 || /[\s;&|(]/.test(line[i - 1]))) break; // comment to EOL
+      if (c === '\\' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; wordStart = false; continue; }
+      if (c === "'" || c === '"') { q = c; keep += c; i += 1; wordStart = false; continue; }
+      if (c === '#' && wordStart) break; // comment to EOL
       if (c === '<' && line[i + 1] === '<' && line[i + 2] !== '<') {
         const m = /^<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][\w]*))/.exec(line.slice(i));
-        if (m) { heredocTag = m[1] || m[2] || m[3]; i += m[0].length; continue; } // drop the introducer only
+        if (m) { heredocTag = m[1] || m[2] || m[3]; i += m[0].length; wordStart = true; continue; } // drop the introducer only
       }
+      wordStart = /[\s;&|(]/.test(c);
       keep += c; i += 1;
     }
     out.push(keep);

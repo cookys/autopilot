@@ -1,0 +1,5 @@
+qualification-sweep.sh --execute: about to run 2 seat(s) = 50 real, paid dispatches (1 Stage-0 probe + up to 24 administration dispatches per seat, sequential).
+QUALIFICATION-SWEEP START 18:52:35Z (2 seats)
+SEAT muse13-low DONE: qualified 24/24 score=1.000 wall=620s event=191
+SEAT muse13-medium DONE: qualified 24/24 score=1.000 wall=587s event=192
+QUALIFICATION-SWEEP COMPLETE 19:13:26Z

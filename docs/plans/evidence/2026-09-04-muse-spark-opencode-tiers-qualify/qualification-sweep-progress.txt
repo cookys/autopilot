@@ -1,0 +1,4 @@
+QUALIFICATION-SWEEP START 18:52:35Z (2 seats)
+SEAT muse13-low DONE: qualified 24/24 score=1.000 wall=620s event=191
+SEAT muse13-medium DONE: qualified 24/24 score=1.000 wall=587s event=192
+QUALIFICATION-SWEEP COMPLETE 19:13:26Z

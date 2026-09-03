@@ -121,9 +121,13 @@ _ipv6_literal_ok() {
     # exactly one "::"
     local rest="${a/::/}"; case "$rest" in *::*) return 1 ;; esac
     [[ "$a" =~ ^(([0-9a-f]{1,4}:)*[0-9a-f]{1,4})?::(([0-9a-f]{1,4}:)*[0-9a-f]{1,4})?$ ]] || return 1
-    # explicit groups must be <= 7 (the :: stands for at least one group)
-    groups=$(printf '%s' "${a/::/:}" | tr -cd ':' | wc -c)
-    [ "$groups" -le 6 ] || return 1
+    # explicit (non-empty) hextets must be <= 7 — the :: stands for at least one group.
+    # Count hextets, not colons: `fd00:1:2:3:4:5:6::` has 7 hextets and 7 colons after
+    # collapsing, and a colon count rejected it (review round 2, gpt-5.6-sol).
+    local -a parts; local part; groups=0
+    IFS=: read -r -a parts <<< "$a"
+    for part in "${parts[@]}"; do [ -n "$part" ] && groups=$((groups + 1)); done
+    [ "$groups" -le 7 ] || return 1
   else
     [[ "$a" =~ ^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$ ]] || return 1
   fi

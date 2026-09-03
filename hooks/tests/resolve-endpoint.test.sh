@@ -149,7 +149,7 @@ err="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPO
 assert_contains "$err" 'PLAINTEXT' "opt-in warns on stderr"
 assert_not_contains "$out" 'PLAINTEXT' "warning is not on stdout"
 # every other private range + IPv6 ULA/link-local
-for u in http://10.0.0.2 http://172.16.0.1:1 http://172.31.255.254/x http://169.254.1.1 http://192.168.0.0 'http://[fd12::1]:8001' 'http://[fe80::1]/' 'http://[fc00:1:2:3:4:5:6:7]/' 'http://[fd00:0:0:0:0:0:0:1]/'; do
+for u in http://10.0.0.2 http://172.16.0.1:1 http://172.31.255.254/x http://169.254.1.1 http://192.168.0.0 'http://[fd12::1]:8001' 'http://[fe80::1]/' 'http://[fc00:1:2:3:4:5:6:7]/' 'http://[fd00:0:0:0:0:0:0:1]/' 'http://[fd00:1:2:3:4:5:6::]/' 'http://[fd00::]/' 'http://[fd00::1:2:3:4:5:6]/'; do
   out="$(env -i AUTOPILOT_ENDPOINT_Q_URL="$u" AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
   assert_exit_code "$ec" 0 "opt-in accepts private literal $u"
 done
@@ -157,7 +157,7 @@ done
 # (round-1 review: zero-padded octets are OCTAL to the URL parser — 172.016.0.1 dials public
 #  172.14.0.1 — and loose IPv6 prefixes accepted non-literals such as [fc00:])
 for u in http://cuda.local:8001 http://cuda:8001 http://8.8.8.8 http://172.32.0.1 http://172.15.0.1 http://999.168.1.1 'http://192.168.1.5@evil.example/' 'http://user@192.168.1.5/' 'http://[2001:db8::1]/' \
-         http://172.016.0.1 http://010.0.0.1 http://192.168.01.1 'http://[fc00:]/' 'http://[fd12:::1]/' 'http://[fd12::1::2]/' 'http://[fd12:1:2:3:4:5:6:7:8]/' 'http://[fd12::1%25eth0]/' 'http://[fdzz::1]/' 'http://[fd12:12345::1]/'; do
+         http://172.016.0.1 http://010.0.0.1 http://192.168.01.1 'http://[fc00:]/' 'http://[fd12:::1]/' 'http://[fd12::1::2]/' 'http://[fd12:1:2:3:4:5:6:7:8]/' 'http://[fd00:1:2:3:4:5:6:7::]/' 'http://[fd00::1:2:3:4:5:6:7]/' 'http://[fd12::1%25eth0]/' 'http://[fdzz::1]/' 'http://[fd12:12345::1]/'; do
   out="$(env -i AUTOPILOT_ENDPOINT_Q_URL="$u" AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
   assert_exit_code "$ec" 1 "opt-in rejects non-private $u"
   assert_contains "$out" '"transport_private_range_required"' "rejection of $u names the private-range marker"

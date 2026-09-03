@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.35.12 — `--runner opencode`：OpenCode 也能當 implementer 軌道，第一場考 muse-spark-1.3
+
+Board 要考 `muse-spark-1.3`（Meta，2026-09-02 出）當 implementer。這台機器唯一到得了它的路是
+OpenCode Go 方案的 contributor tier（`opencode-go/muse-spark-1.3-contributor`），而 `dispatch-hetero.sh`
+沒有 opencode runner，live-rail 考試到不了。
+
+- **`dispatch-hetero.sh --runner opencode`**（EXPLICIT only，`auto` 永不選它：id 是 provider/model，沒有
+  vendor family 可比對）：grok／qoderclicn 形狀的軌道——EDIT-ONLY 指令前置、prompt 走 STDIN、
+  `opencode run --dir <wt> --pure -m <model> --format json`、wrapper commit、判決只看 git artifact。
+  `--opencode-bin` 測試接縫。Stage-0 探針（opencode 1.18.25）：`--dir` 錨定編輯、無 positional 時
+  讀 STDIN、`--pure` 排除操作者的外部 plugin、JSON 事件的 `step_finish.tokens` 帶用量（解析留 BACKLOG，
+  `log_format: plain`）。這條路沒有 effort 旗標，席位的 effort 是名義標籤。
+- **登記面全補**：`lib/runner-binary.js`（`opencode` → `opencode`）、`engine-qualify.js`
+  `--opencode-bin` seam、`src/engine/implementer-ladder.js`、`resolve-review-loop.sh` 兩個 enum、
+  `schemas/review-loop-contract.schema.json` 兩處（`check-contract-schema.js` 三向同位守著）。
+- **ladder rung 的 engine 允許含 `/`**：`implementer_ladder` 原本用 `[^/]+/effort@runner` 解析，
+  provider/model id 一律被拒；改為在最後一個 `/` 切分。
+- 新測試 `hooks/tests/dispatch-opencode.test.sh`（stub binary：committed／no_op／question_suspected／
+  precondition／argv 與 STDIN 契約／auto 不路由）；runner-binary、resolve-review-loop 各加斷言。
+- 第一場施測：見 `docs/plans/evidence/2026-09-03-muse-spark-opencode-qualify/`。
+prose-justification: no `skills/*/SKILL.md` changed this release; `dev-flow`／`agent-call` 的成長是
+先前版本已 justify、baseline（v2.35.2）尚未刷新所致。
+
 ## v2.35.11 — 考過的部署要能照原樣上線：named endpoint 的傳輸政策與考試對齊
 
 `qwen3.8-flash-next`（cookys-cuda 上的本機 SGLang，`http://192.168.101.7:8001`）以 cc-shim 走

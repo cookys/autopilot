@@ -2,7 +2,7 @@
   "//": "Autopilot plugin settings — copy the autopilot.* block into your Claude Code settings.json if you want to override defaults.",
 
   "autopilot": {
-    "//costTracker": "Set to false to disable token cost tracking (privacy opt-out) — only relevant once the cost-tracker opt-in hook is enabled (see below).",
+    "//costTracker": "Set to false to disable token cost tracking (privacy opt-out) — cost-tracker is default-on since v2.35.15 (opt-out here or AUTOPILOT_COST_TRACKER=false).",
     "costTracker": true,
 
     "//protectedBranches": "Regex alternation of branch names to protect (anchored with ^...$) — used by the branch-protection opt-in hook.",
@@ -10,6 +10,6 @@
   },
 
   "//opt-in-hooks": "As of v2.26.2 opt-in hooks are NOT enabled by copying entries here. They are wired in the plugin's own hooks.json (the ONLY place ${CLAUDE_PLUGIN_ROOT} expands and where the path auto-tracks plugin updates) and stay default-OFF until you enable them. Enable via ~/.autopilot/config.json — NOT this file.",
-  "//opt-in-hooks-how": "Create/edit ~/.autopilot/config.json: {\"hooks\": {\"branch-protection\": true, \"commit-secret-scan\": true, \"dispatch-model-guard\": true}}. Per-hook env override also works: AUTOPILOT_HOOK_BRANCH_PROTECTION=1. See hooks/README.md (Tier B) + hooks/opt-in-manifest.json for the full list.",
-  "//opt-in-hooks-list": "Enable-able stems: accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, cost-tracker, design-quality, dispatch-model-guard, large-file-warner, mcp-health, session-summary, test-runner."
+  "//opt-in-hooks-how": "Create/edit ~/.autopilot/config.json: {\"hooks\": {\"branch-protection\": true, \"commit-secret-scan\": true}}. Per-hook env override also works: AUTOPILOT_HOOK_BRANCH_PROTECTION=1. See hooks/README.md (Tier B) + hooks/opt-in-manifest.json for the full list.",
+  "//opt-in-hooks-list": "Enable-able stems: accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, design-quality, exec-boundary, large-file-warner, mcp-health, orchestrator-edit-gate, session-summary, test-runner. Default-on cost hooks since v2.35.15 (opt-OUT knobs): foreman-guard (AUTOPILOT_FOREMAN_GUARD_MODE=off), context-budget (AUTOPILOT_CONTEXT_BUDGET_MODE=off), dispatch-model-guard (AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off), cost-tracker (AUTOPILOT_COST_TRACKER=false)."
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * context-budget — PostToolUse * (opt-in, default-off; v2.32.27)
+ * context-budget — PostToolUse * (default-on since v2.35.15; opt-in v2.32.27–v2.35.14)
  *
  * Measures the REAL context size (last assistant `message.usage` in the
  * transcript: input + cache_read + cache_creation) and nudges/directs session
@@ -35,7 +35,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isEnabled } = require('./_shared/opt-in');
 const {
   readContextTokens, budgetDecision, inferWindowTokens, scaleTiers,
 } = require('./context-budget-lib.js');
@@ -92,7 +91,8 @@ function saveState(file, st) {
 (function main() {
   let exitCode = 0;
   try {
-    if (!isEnabled('context-budget')) process.exit(0);
+    // default-on since v2.35.15 (was opt-in); opt out with context_budget.mode=off or
+    // AUTOPILOT_CONTEXT_BUDGET_MODE=off (loadConfig).
     const cfg = loadConfig();
     if (cfg.mode === 'off') process.exit(0);
 

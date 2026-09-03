@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-26 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A) + **16 opt-in** (Tier B) — zero disabled as of v2.25.2. As of v2.26.2 **all 26 are wired in `hooks.json`** (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 16 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+27 Claude Code hooks for runtime enforcement of development discipline: **14 default-on** (Tier A) + **13 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (27 as of v2.35.15) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 13 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -94,7 +94,7 @@ hooks/
   session-handoff.js       # Tier A (default-on wiring, inert unless handoff enabled) — SessionEnd, writes a machine handoff to ~/.autopilot on /clear (no repo writes)
   large-file-warner.js     # Tier B (opt-in)
   suggest-compact.js       # Tier A
-  cost-tracker.js          # Tier B (opt-in) — transcript-sum (v2.25.2)
+  cost-tracker.js          # Tier A (default-on since v2.35.15) — transcript-sum (v2.25.2)
   cost-tracker-lib.js      # pure usage/cost aggregation (lib, not a hook)
   audit-log.js             # Tier A
   session-summary.js       # Tier B (opt-in)
@@ -110,9 +110,9 @@ hooks/
   test-runner.js           # Tier B (opt-in)
   design-quality.js        # Tier B (opt-in)
   mcp-health.js            # Tier B (opt-in)
-  dispatch-model-guard.js  # Tier B (opt-in) — ask on guarded expensive engine / omitted model
+  dispatch-model-guard.js  # Tier A (default-on since v2.35.15) — ask on guarded expensive engine / omitted model
   version-drift-check.js   # Tier A (default-on, silent outside dev clone) — behind-upstream advisory (SessionStart)
-  context-budget.js        # Tier B (opt-in) — real context-size signal, T1/T2 session-split advisories (v2.32.27)
+  context-budget.js        # Tier A (default-on since v2.35.15) — real context-size signal, T1/T2 session-split advisories (v2.32.27)
   context-budget-lib.js    # pure backward usage scan + tier decision (lib, not a hook)
   orchestrator-edit-gate.js     # Tier B (opt-in) — depth-0 inline-edit gate for /l4-/l6 (v2.32.27)
   orchestrator-edit-gate-lib.js # pure gate decision (lib, not a hook)
@@ -126,7 +126,7 @@ hooks/
 | `1` | Warning (context injection) | branch-protection (mutations) |
 | `2` | Hard block | large-file-warner, branch-protection, commit-secret-scan, config-protection, mcp-health |
 
-## Tier A — Default-On (10 hooks)
+## Tier A — Default-On (14 hooks)
 
 Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project. (Two are wired here but **inert by default** — `session-handoff` no-ops unless handoff is enabled, `version-drift-check` is silent outside a behind-upstream dev clone — yet they MUST be wired in `hooks.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
 
@@ -142,6 +142,10 @@ Registered in `hooks.json`. Active for all autopilot users. All are non-destruct
 | suggest-compact | PostToolUse | Write\|Edit | Counter at `/tmp/claude-tool-count-{sid}`. Nudges at 50, then every 25 (**unbounded**: 50, 75, 100, 125, …). Opt-out: `AUTOPILOT_SUGGEST_COMPACT=false`. Re-enabled v2.8.1 |
 | session-handoff | SessionEnd | — | **Inert unless enabled** (`AUTOPILOT_HANDOFF_INJECT=1` or `~/.autopilot/config.json` `handoff_inject:true` — same switch as the reader). When enabled, on `/clear` or logout: auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript — ≥`AUTOPILOT_HANDOFF_MIN_USER_TURNS` (3) user turns or ≥`AUTOPILOT_HANDOFF_MIN_TOOL_CALLS` (12) tool calls) and, if so, writes a machine handoff snapshot to `~/.autopilot/handoff/<repo-hash>.md` (NEVER into the repo — `docs/HANDOFF.md` is untouched) via temp→atomic-rename. Fail-open; parses the transcript itself (no LLM). The **reader/inject** half (default-off gate) lives in `session-start.js`: injects the snapshot once (atomic consume-once, <10k cap) and suppresses the thin intent hint. Wired in `hooks.json` (not Tier B) so `${CLAUDE_PLUGIN_ROOT}` resolves |
 | version-drift-check | SessionStart | startup\|clear\|compact | **Dev-clone only** — warns if your autopilot clone is behind its git upstream (no network — uses last fetch). Silent no-op for release / marketplace / non-git installs. Wired in `hooks.json` (not Tier B) so `${CLAUDE_PLUGIN_ROOT}` resolves |
+| foreman-guard | PreToolUse | Bash\|Monitor | **v2.35.15.** Ironlaw #6 in the loop for l4/l5/l6 SUBAGENTS only (session-mode marker + payload `agent_id`; depth-0 and plain sessions are untouched): Bash cap 40 per agent (41st denied with the handoff directive — 一刀一命), foreground polling denied (`true`/`:` spin, `sleep N`, `while … sleep/grep`, `pgrep`/`ps -p`/`kill -0`, reading `/tasks/*.output`), `Monitor` denied. `run_in_background` waits are allowed. Modes `foreman_guard.mode` block\|warn\|off, `foreman_guard.bash_cap`; env `AUTOPILOT_FOREMAN_GUARD_MODE` / `_BASH_CAP`. State `~/.autopilot/foreman-guard/`. Fail-open. |
+| context-budget | PostToolUse | .* | **Default-on since v2.35.15** (opt-out `context_budget.mode: off` / `AUTOPILOT_CONTEXT_BUDGET_MODE=off`). Reads REAL context size (last assistant `usage` in transcript, backward scan 64KB→5MB). T1 (100k) stderr nudge; T2 (150k) escalated advisory via exit 2 (model-visible handoff directive). Thresholds/mode: `context_budget` in `~/.autopilot/config.json` or `AUTOPILOT_CONTEXT_BUDGET_T1/T2/MODE` |
+| dispatch-model-guard | PreToolUse | Task\|Agent | **Default-on since v2.35.15** (opt-out `AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off` or `- mode: off`). Asks when subagent dispatch names a guarded expensive engine (default `fable`) or omits `model:` (would inherit session model). Config: `guarded_models` / `on_missing_model` / `mode` via `.claude/dispatch-guard-config.md` |
+| cost-tracker | Stop | — | **Default-on since v2.35.15** (opt-out `AUTOPILOT_COST_TRACKER=false`); prints a stderr warning when the session's cumulative cache-read passes `cost_tracker.cache_read_warn_tokens` (env `AUTOPILOT_COST_TRACKER_CACHE_READ_WARN`; default 50M) and each doubling after. Sums per-turn `usage` from `transcript_path` → `~/.claude/metrics/costs.jsonl` (cache-aware cost; per-session cursor avoids per-turn double-count). Opt-out `AUTOPILOT_COST_TRACKER=false` |
 
 ### Hook order on PostToolUse
 
@@ -189,7 +193,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. The v2.7.1 bash version is retrievable from git history (`git log -- hooks/state-checkpoint.sh`), no in-tree copy.
 
-## Tier B — Opt-In (16 hooks)
+## Tier B — Opt-In (13 hooks)
 
 Wired in `hooks.json` but **default-OFF** — each self-gates via `_shared/opt-in.js` and no-ops until you opt in. **Enable** by adding the stem to `~/.autopilot/config.json`:
 
@@ -203,7 +207,6 @@ Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upp
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
-| cost-tracker | Stop | — | Sums per-turn `usage` from `transcript_path` → `~/.claude/metrics/costs.jsonl` (cache-aware cost; per-session cursor avoids per-turn double-count). Opt-out `AUTOPILOT_COST_TRACKER=false` |
 | branch-protection | PreToolUse | Bash | Hard-blocks commit/force-push on `^(main\|master)$`; override `AUTOPILOT_PROTECTED_BRANCHES` |
 | exec-boundary | PreToolUse | Bash | Non-LLM deny gate at the execution boundary (four-layer K2): protected-ref force-push (defense-in-depth with branch-protection), recursive `rm` outside sanctioned roots, raw `DROP TABLE`/`TRUNCATE`, `sudo rm`. Allow-by-default; per-project config `.claude/execution-boundary-config.md` |
 | commit-secret-scan | PreToolUse | Bash | Hard-blocks `git commit` when added staged hunk content contains secrets (`_shared/secret-patterns.js`); deletion-only cleanup passes, diff metadata is excluded, and diagnostics expose pattern names rather than secret values |
@@ -216,8 +219,6 @@ Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upp
 | test-runner | PostToolUse | Write\|Edit | Runs sibling vitest/jest test. Timeout: 60s |
 | design-quality | PostToolUse | Write\|Edit | Warns on generic UI patterns. Timeout: 10s |
 | mcp-health | PreToolUse + PostToolUseFailure | mcp__.* | Exponential backoff (30s base, 10min cap) |
-| dispatch-model-guard | PreToolUse | Task\|Agent | Asks when subagent dispatch names a guarded expensive engine (default `fable`) or omits `model:` (would inherit session model). Config: `guarded_models` / `on_missing_model` / `mode` via `.claude/dispatch-guard-config.md` |
-| context-budget | PostToolUse | .* | Reads REAL context size (last assistant `usage` in transcript, backward scan 64KB→5MB). T1 (100k) stderr nudge; T2 (150k) escalated advisory via exit 2 (model-visible handoff directive). Thresholds/mode: `context_budget` in `~/.autopilot/config.json` or `AUTOPILOT_CONTEXT_BUDGET_T1/T2/MODE` |
 | orchestrator-edit-gate | PreToolUse | Edit\|Write\|NotebookEdit | In /l4-/l6 sessions (marker via `scripts/session-mode.js`) depth-0 product edits are warned (default) or denied (`block`); subagents pass (payload `agent_id`, SPIKE-1). Allowlist: docs/projects, docs/plans, .claude, .autopilot. Mode: `orchestrator_edit_gate.mode` or `AUTOPILOT_ORCH_EDIT_GATE_MODE` |
 
 > The three PreToolUse blockers + `session-summary` were re-enabled (opt-in) once the `/dev/stdin`→fd-0 fix landed — they read `fs.readFileSync(0)` instead of opening the broken `/dev/stdin` path. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.

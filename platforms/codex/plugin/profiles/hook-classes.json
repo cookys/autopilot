@@ -13,6 +13,7 @@
     { "stem": "design-quality", "class": "guidance", "profiles": ["guided"] },
     { "stem": "dispatch-model-guard", "class": "invariant_effect" },
     { "stem": "failure-escalation", "class": "invariant_effect" },
+    { "stem": "foreman-guard", "class": "invariant_effect" },
     { "stem": "intent-capture", "class": "invariant_effect" },
     { "stem": "large-file-warner", "class": "invariant_effect" },
     { "stem": "log-error", "class": "invariant_effect" },

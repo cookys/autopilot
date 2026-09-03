@@ -2,14 +2,13 @@
 # Test for dispatch-model-guard.js hook
 . "$(dirname "$0")/lib.sh"
 
-# Case 1: Disabled default (env not set) - guarded model should be silent
+# Case 1: default-on since v2.35.15 — the opt-OUT env silences it; without it the guard fires
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
-run_hook dispatch-model-guard.js "$PAYLOAD"
+AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case1-exit"
-assert_eq "" "$__RUN_STDOUT" "case1-silent"
-
-# Enable the hook for remaining cases
-export AUTOPILOT_HOOK_DISPATCH_MODEL_GUARD=1
+assert_eq "" "$__RUN_STDOUT" "case1-silent (opt-out env)"
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case1b-default-on fires without any enable flag"
 
 # Case 2: Enabled, model fable → ask
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'

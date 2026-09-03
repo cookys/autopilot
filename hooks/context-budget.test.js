@@ -124,14 +124,18 @@ function freshEnv(extra = {}) {
   };
 }
 
-test('wrapper: disabled (no opt-in) ⇒ silent exit 0', () => {
+test('wrapper: opt-OUT (AUTOPILOT_CONTEXT_BUDGET_MODE=off) ⇒ silent exit 0', () => {
+  // default-on since v2.35.15: there is no enable flag any more, only the opt-out.
   const p = tmpFile([usageLine(999_999, 0, 0, 1)]);
-  // Build on freshEnv so HOME stays pinned: a developer whose real
-  // ~/.autopilot/config.json enables the hook would otherwise see the config
-  // beat this env opt-out and the hook fire. (Hermeticity, v2.32.56.)
-  const r = runHook({ transcript_path: p }, freshEnv({ AUTOPILOT_HOOK_CONTEXT_BUDGET: '' }));
+  const r = runHook({ transcript_path: p }, freshEnv({ AUTOPILOT_CONTEXT_BUDGET_MODE: 'off' }));
   assert.strictEqual(r.status, 0);
   assert.strictEqual(r.stderr.trim(), '');
+});
+
+test('wrapper: default-on — fires with NO enable flag at all', () => {
+  const p = tmpFile([usageLine(999_999, 0, 0, 1)]);
+  const r = runHook({ transcript_path: p }, freshEnv({ AUTOPILOT_HOOK_CONTEXT_BUDGET: '' }));
+  assert.notStrictEqual(r.stderr.trim(), '');
 });
 
 test('wrapper: garbage stdin ⇒ fail-open exit 0', () => {

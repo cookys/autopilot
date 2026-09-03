@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.35.15 — 工頭的鐵律終於進了迴圈：foreman-guard、三個成本 hook 改 default-on、一刀一命
+
+cuda 2026-09-04 的 quota digest（`cuda:~/projects/QUOTA-DIGEST-2026-09-04.md`，經 hangar-bridge 轉來、
+operator 在 aimax395 確認範圍）：36 小時燒掉約 $2,200 API 等值，79% 來自四個常駐 Sonnet 工頭——活 13–33
+小時、各 1,900–7,400 次 Bash、每次 call 拖 34–97 万 cache-read、輸出趨近零。燒法是前景輪詢（`true`×450、
+`while ! grep …; do sleep 10; done`、`tail -c 8000 …output; ps -p`）、cache TTL 到了醒來整份重寫、接手時整份讀
+brief＋rulings＋14,648 行 ledger＋2.6 萬行 kernel 原始碼。稽核（本 checkout 核過）：規則早就在 prose 裡（l4–l6
+的工頭條款、Bash ≤40），但唯一的執行器 `check-foreman-polling.js` 只在 depth-0 事後跑；`context-budget`／
+`cost-tracker`／`dispatch-model-guard` 三個為此而寫的 hook 全是 opt-in、從沒開過；沒有任何 skill 規定工頭壽命。
+**一個 script 存在不等於它在跑**（CLAUDE.md 的老教訓，這次是 hook 版）。
+
+- **新 default-on hook `hooks/foreman-guard.js`**（PreToolUse `Bash|Monitor`）：作用域是 session-mode marker
+  為 l4|l5|l6 **且** payload 帶 `agent_id`（SPIKE-1 子代理身分）——depth-0 與一般 session 完全不受影響。規則：
+  每個 agent 的 Bash 上限 40（第 41 次 deny，附 handoff 指令）、前景輪詢 deny（`true`／`:` 空轉、`sleep N`、
+  `while … sleep|grep|test`、`pgrep`／`ps -p`／`kill -0`、讀 `/tasks/*.output`）、`Monitor` deny；
+  `run_in_background` 的等待放行。模式 `foreman_guard.mode` block|warn|off、`foreman_guard.bash_cap`，env
+  `AUTOPILOT_FOREMAN_GUARD_MODE`／`_BASH_CAP`。fail-open。`docs/ironlaw-to-gate-map.md` #6 從「事後」升為在迴圈。
+- **行為改變：三個 hook 從 opt-in 改 default-on**（27 hooks：14 default-on／13 opt-in）。`context-budget`
+  （100K 提醒、150K 要 handoff；退出 `context_budget.mode: off`／`AUTOPILOT_CONTEXT_BUDGET_MODE=off`）、
+  `dispatch-model-guard`（沒帶 `model:` 或指到 fable 就問；退出 `AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off` 或
+  config `- mode: off`）、`cost-tracker`（退出 `AUTOPILOT_COST_TRACKER=false`）。三者離開 `opt-in-manifest.json`
+  與 multiplexer 表，直接接在 `hooks.json`。`settings.example.json` 列出所有退出旋鈕。
+- **cost-tracker 累計 cache-read 回報**：Stop 時加總本 session 的 `cache_read_tokens`，第一次跨過
+  `cost_tracker.cache_read_warn_tokens`（預設 5,000 萬）與之後每一次翻倍各印一行 stderr——錢在 cache-read，以前
+  沒有人看到它累積。
+- **工頭一刀一命**（`skills/l4|l5|l6/SKILL.md` 工頭條款、`level-front-door.md` 新節）：一個工頭只擁有一個已 admit
+  的 deliverable，整合完、Bash 上限到、或自數接近上限就寫 handoff 結束回合，由 depth-0 另派；禁常駐。接手
+  read-list 上限：只讀這一刀的 brief（≤300 行）與該線的 ledger 分檔，禁「先整份讀」連鎖。派工必帶 `model:`，
+  不繼承 `[1m]`／Fable（967K 才 auto-compact 就是乘數）。
+- **誠實限制**：`context-budget` 對子代理刻意跳過（它只讀得到父 transcript），所以工頭自己的 context 量不到；
+  工頭的天花板是 Bash 上限＋一刀一命。BACKLOG 記「等 CC 在 hook payload 提供子代理 transcript」。
+- 沒有 fleet-wide 廣播（operator 決定），只回報 cuda。
+prose-justification: `skills/l4|l5|l6/SKILL.md` 各加 2 行（工頭一刀一命與接手上限——這兩條是 digest
+的直接對策，不放在 skill 裡工頭就看不到）；`dev-flow`／`agent-call`／`engine-onboarding` 的成長是先前版本已
+justify、baseline（v2.35.2）尚未刷新所致。
+
 ## v2.35.14 — opencode rail：effort 真的送到 provider，`--variant`
 
 `opencode run --variant <tier>` 是 provider-specific 的 reasoning effort。2026-09-03 在

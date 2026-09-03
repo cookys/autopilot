@@ -29,7 +29,7 @@ No `.claude/skill-routing.md`; dev-flow invoked; areas N/A (CLAUDE.md language t
 
 | Phase | Status | Commit |
 |---|---|---|
-| P0 opencode rail in dispatch-hetero + stub test | pending | |
-| P1 runner registration (runner-binary, engine-qualify, implementer-ladder, resolve-review-loop) + tests | pending | |
-| P2 docs, CHANGELOG, version, real probe, administration | pending | |
+| P0 opencode rail in dispatch-hetero + stub test | done | `1eeb3cac` |
+| P1 runner registration + tests; ladder rung engine may contain `/` | done | `faf0a6cf`, `a12b532e` |
+| P2 docs, CHANGELOG, version, real probe (3 Stage-0 probes committed), administration (attempt 3: 24/24, event 187; attempt 2 charged 24 dispatches and produced no row — fixed `f2ce4e20`/`b107d936`) | done | `c76ca225`, `b107d936` |
 | L-5 finish-flow | pending | |

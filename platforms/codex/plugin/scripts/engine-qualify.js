@@ -448,9 +448,13 @@ function parseArgs(argv) {
     if (options[name].length === 0) usage(2, `${option} is required`);
     options[name] = [...new Set(options[name].map((value) => token(value, option)))].sort();
   }
-  options.engine = token(options.engine, '--engine');
+  // --engine / --model-version carry VENDOR ids too (the sweep passes the model id for all
+  // three; opencode ids are provider/model): same grammar as --model, matching
+  // engine-scorecard's ENGINE_TOKEN_RE and capability-evidence's modelId. Runner, family,
+  // harness, effort stay on the strict protocol TOKEN — they are OUR vocabulary.
+  options.engine = modelId(options.engine, '--engine');
   options.model = modelId(options.model, '--model');
-  options.modelVersion = token(options.modelVersion, '--model-version');
+  options.modelVersion = modelId(options.modelVersion, '--model-version');
   options.runner = token(options.runner, '--runner');
   options.runnerVersion = token(options.runnerVersion, '--runner-version');
   options.family = token(options.family, '--family');

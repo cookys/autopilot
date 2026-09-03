@@ -474,6 +474,14 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   equal(nr.status, 2, 'not-ready endpoint exits 2');
   check(/not ready/.test(nr.stderr) && /transport_optin_required/.test(nr.stderr), `stderr names the missing marker: ${nr.stderr.slice(0, 200)}`);
   check(!fs.existsSync(path.join(storeN, 'qualification-evidence.jsonl')), 'not-ready: nothing written to the store');
+  // --engine / --model-version accept vendor ids with '/' (opencode provider/model ids): the
+  // refusal below must be the ENDPOINT one, never 'must be a protocol token'
+  const slashEng = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs.map((a, i, arr) => (arr[i - 1] === '--engine' || arr[i - 1] === '--model-version' ? 'opencode-go/muse-spark-1.3-contributor' : a)), '--endpoint', 'lanx'], {
+    env: { ...process.env, AUTOPILOT_ENDPOINT_LANX_URL: 'http://10.7.7.7:8001', AUTOPILOT_ENDPOINT_LANX_TOKEN: 't' },
+    encoding: 'utf8',
+  });
+  equal(slashEng.status, 2, 'provider/model engine id: still exits 2 (endpoint not ready)');
+  check(!/protocol token/.test(slashEng.stderr) && /not ready/.test(slashEng.stderr), `engine id with / is accepted at argv: ${slashEng.stderr.slice(0, 160)}`);
   // a name that does not fit the resolver grammar is refused at argv
   const bad = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'bad-name'], { env: process.env, encoding: 'utf8' });
   equal(bad.status, 2, 'malformed --endpoint name exits 2');

@@ -405,7 +405,12 @@ else
       # that is partly noise stops being read: eleven REAL failures sat unnoticed behind it
       # for a day. Proper fix is to make codex-plugin-package work on a scratch copy the way
       # sync-all.test.sh already does; serializing is the right-sized fix until then.
-      codex-plugin-package.test.sh|dev-setup.test.sh|\
+      # resolve-review-loop-consult-discuss-gate case (xix) `chmod 000`s the CANONICAL
+      # evals/consult-capability-evidence-corpus.json for two script runs; any pooled test
+      # that requires the consult grader in that window (verdict-stability D7 did, 2026-09-03:
+      # 12 EACCES failures, green standalone) dies with EACCES. Proper fix is a scratch copy;
+      # serializing is the right-sized fix until then (BACKLOG).
+      codex-plugin-package.test.sh|dev-setup.test.sh|resolve-review-loop-consult-discuss-gate.test.sh|\
       dispatch-detach.test.sh|dispatch-hetero.test.sh|dispatch-lineage.test.sh|dispatch-pi.test.sh|sync-all.test.sh)
         SERIAL_L2_FILES+=("$file")
         ;;

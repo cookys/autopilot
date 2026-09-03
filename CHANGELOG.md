@@ -12,6 +12,10 @@ minimal ≈53 < low ≈103 < medium ≈171 ≈ high ≈174 < xhigh ≈201；**�
   無法從 roster 請求——擴詞彙要動 scorecard／evidence／schema 一整排驗證器，記 BACKLOG。
 - 誠實註記：v2.35.12 那張 `opencode-go/muse-spark-1.3-contributor` 的 row 標 effort `high`，實際上當時 rail
   沒轉送 variant，跑的是 provider 預設（依本次探針約 medium）。row 保留；本版起同席重考會真的送 high。
+- **日常路由的行為改變（review round 1 要求明講）**：`dispatch-hetero.sh` 的 `EFFORT` 預設是 `xhigh`，本版起
+  不帶 `--effort` 的 opencode 派工會送 `--variant xhigh`，從 provider 預設（約 medium）升到最高檔，延遲與
+  token 都會變多。要便宜就明說：roster／`review-loop-config.md` 的 `implementer_effort: low`（或 medium），
+  或手打 `--effort low`。這與 grok／codex 的預設行為一致（它們也轉送預設 effort），不是 opencode 獨有。
 - 測試：`dispatch-opencode.test.sh` 斷言 low／medium／high 逐一轉送、`max` → `xhigh`、預設 xhigh 轉送。
 prose-justification: no `skills/*/SKILL.md` changed this release.
 

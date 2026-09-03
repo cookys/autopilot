@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.35.11 — 考過的部署要能照原樣上線：named endpoint 的傳輸政策與考試對齊
+
+`qwen3.8-flash-next`（cookys-cuda 上的本機 SGLang，`http://192.168.101.7:8001`）以 cc-shim 走
+live-rail 考過 implementer 24/24（`docs/plans/evidence/2026-09-03-flash-next-implementer-qualify/`），
+但日常路由到不了它：`implementer_endpoint:` 經 `resolve-endpoint.sh` 只接受 https 或 loopback
+http，而考試是靠 `ANTHROPIC_BASE_URL` 原始 env 穿透打到 LAN。最強的證據路徑比路由路徑更寬鬆，
+考過的部署反而不能照原樣上線。
+
+- **傳輸政策單一擁有者仍是 `resolve-endpoint.sh`**，新增 per-endpoint 的
+  `AUTOPILOT_ENDPOINT_<NAME>_TRANSPORT=plaintext-private`：只對**私網 IP literal**
+  （10/8、172.16/12、192.168/16、169.254/16、fc00::/7、fe80::/10）放行明文 http，hostname 與公網位址
+  一律不放（DNS 可以指到任何地方）。JSON 多 `transport_security`（`tls|loopback|plaintext_private`），
+  `missing[]` 說明拒絕原因（`transport_optin_required`／`transport_private_range_required`／
+  `transport_value_invalid`），明文解析在 stderr 警告一行。opt-in 只屬 namespace candidate；
+  provider-native／generic-compatible 沒有明文故事。**沒設旗標時逐位元組同舊行為。**
+- 兩個 loader 允許 `_TRANSPORT` 鍵；`autopilot endpoints set --transport plaintext-private`
+  寫入並在寫入時就拒絕不合格的 URL（近似後綴 `_TRANSPORTX` 仍被擋）；`list`／`which`／`doctor`
+  都把明文 endpoint 標出來。`dispatch-hetero --endpoint` 因為把 resolver 的 stderr 丟掉，
+  改在派工時自己重印一次通知——揭露不能因為管線而消失。
+- **`engine-qualify.sh implementer --endpoint <name>`**：考試改經同一個 resolver 綁定派工 env，
+  not-ready 在任何 case 具現化之前 exit 2（零派工零計費），兩個 cc-shim 鍵只取自解析結果、不再
+  看 ambient env，row 與 `raw/impl-endpoint.json` 揭露 `endpoint {name, base_url,
+  transport_security}`（不含 token）。沒有 `--endpoint` 的 row 逐位元組不變。
+- engine-onboarding 新增「Serving a local model for a team」：多人共用 → 部署端 TLS + api-key，
+  autopilot 零改動；單人 LAN → 上述 opt-in 當過渡；考試走同一個定義；bundle 釘住 checkpoint。
+  明確說明不會重啟 `dispatch-local-openai.js` 當 implementer 路徑（沒有工具面），也不新增第三個
+  adaptor——cc-shim 已經是 Anthropic 協定的 adaptor。
+- 測試：`engine-qualify-verdict-stability` 的 D6 其他 role 原始碼同位檢查把 `runImplQualification`
+  移出逐位元組清單（釘值只能指向 origin/develop 上已存在的 commit，刻意的 implementer 改動在落地前
+  無法前移它）；consult/discuss 外漏守衛保留其餘四個函式與可執行半邊，implementer 由
+  `engine-qualify-impl.test.js` 端到端覆蓋。
+prose-justification: `skills/engine-onboarding/SKILL.md` 加 8 行（本機模型團隊食譜的指標段，正文在
+`references/local-model-team-recipe.md`）；`dev-flow`（v2.35.6 Background Wait Rule）與 `agent-call`
+的成長是先前版本已各自 justify 過、baseline 尚未刷新（v2.35.2）所致，本版未動它們。
+- 順帶收進這一版：ladder-run `--gate-cmd` 機械 oracle 進 cycle（與 LLM 判決取聯集）＋ verifier
+  findings 保留在紀錄上（`44c7181d`，codex/gpt-5.6-sol 兩輪 review），當時 merge 未 bump。
+
 ## v2.35.10 — feed 的 digest 不一致，可能只是它從來不是同一種東西
 
 v2.35.9 的 `list --from` 對線上 feed 印出：

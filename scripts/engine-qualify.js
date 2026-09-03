@@ -258,6 +258,10 @@ const HELP = `Usage:
       --grok-bin/--codex-bin/--agy-bin/... — so a smoke can substitute ONLY the
       paid engine while the real rail runs)
     [--dispatch-timeout <dur>]  (per-case rail timeout, default corpus 600s)
+    [--endpoint <name>]         (--runner cc-shim ONLY: resolve ANTHROPIC_BASE_URL/AUTH_TOKEN
+      through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
+      routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
+      the emitted row discloses endpoint {name, base_url, transport_security})
   implementer --expires-days caps at 90 (its schema ceiling); all other roles
   keep the flat 30-day cap.
 
@@ -382,6 +386,7 @@ function parseArgs(argv) {
     ['--dispatch-bin', 'dispatchBin'],
     ['--runner-bin', 'runnerBin'],
     ['--dispatch-timeout', 'dispatchTimeout'],
+    ['--endpoint', 'endpoint'],
   ]);
   const repeated = new Map([
     ['--task-class', 'taskClasses'],
@@ -526,11 +531,24 @@ function parseArgs(argv) {
         options.runnerBin = path.resolve(options.runnerBin);
       }
     }
+    if (options.endpoint !== undefined) {
+      // resolve-endpoint.sh's NAME grammar ([A-Za-z0-9_]+, case-insensitive) — narrower
+      // than TOKEN so a typo cannot become an env-var name with `.`/`:`/`-` in it.
+      if (typeof options.endpoint !== 'string' || !/^[A-Za-z0-9_]+$/.test(options.endpoint)) {
+        usage(2, '--endpoint must be an endpoint NAME ([A-Za-z0-9_]+) as defined in ~/.autopilot/endpoints.env');
+      }
+      // Only the cc-shim rail consumes ANTHROPIC_BASE_URL/AUTH_TOKEN. Any other runner would
+      // ignore the binding while the row still attested "examined via <endpoint>" — a false
+      // disclosure (review round 1, gpt-5.6-sol). Refuse at argv, before any case exists.
+      if (options.runner !== 'cc-shim') {
+        usage(2, `--endpoint applies only to --runner cc-shim (got runner: ${options.runner}) — other rails do not dial an Anthropic-compatible endpoint`);
+      }
+    }
     return options;
   }
   if (options.dispatchBin !== undefined || options.runnerBin !== undefined
-      || options.dispatchTimeout !== undefined) {
-    usage(2, '--dispatch-bin/--runner-bin/--dispatch-timeout are implementer-only');
+      || options.dispatchTimeout !== undefined || options.endpoint !== undefined) {
+    usage(2, '--dispatch-bin/--runner-bin/--dispatch-timeout/--endpoint are implementer-only');
   }
   const localTransport = Boolean(options.panelCmd);
   const remoteTransport = Boolean(options.remoteProviderCmd || options.remoteProvider);
@@ -2874,7 +2892,46 @@ function implRunnerBinFlag(runner) {
 // the frozen oracle over an exported tree in bwrap. Two derivation roots
 // (public adminSeed vs held-out oracleKey) and a budget allocator + append-only
 // attempt ledger are established BEFORE any dispatch.
+// --endpoint: bind the dispatch env through the SAME resolver daily routing uses
+// (scripts/resolve-endpoint.sh), so "the deployment the exam examined" and "the
+// deployment the roster routes to" are one definition. Returns the non-secret
+// binding; the bearer is read from the named env var at dispatch time and never
+// enters the returned record. Not-ready is a usage/precondition exit (2) —
+// uncharged, before the first case is materialized.
+function resolveImplEndpoint(name) {
+  const resolver = path.join(__dirname, 'resolve-endpoint.sh');
+  const run = spawnSync('bash', [resolver, name], { encoding: 'utf8', env: process.env });
+  let meta = null;
+  try { meta = JSON.parse(String(run.stdout || '').trim()); } catch (_e) { meta = null; }
+  if (!meta || typeof meta !== 'object') {
+    usage(2, `--endpoint '${name}': resolve-endpoint.sh produced no JSON (exit ${run.status})`);
+  }
+  if (run.status !== 0 || meta.ready !== true) {
+    const missing = Array.isArray(meta.missing) ? meta.missing.join(', ') : 'unknown';
+    usage(2, `--endpoint '${name}' is not ready (missing: ${missing}) — nothing dispatched, nothing charged`);
+  }
+  if (typeof meta.base_url !== 'string' || !meta.base_url
+      || typeof meta.token_env !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(meta.token_env)) {
+    usage(2, `--endpoint '${name}' resolved an empty base_url/token_env — refusing to fall through to ambient env`);
+  }
+  if (!process.env[meta.token_env]) {
+    usage(2, `--endpoint '${name}': token env ${meta.token_env} is empty in this process`);
+  }
+  return {
+    name: meta.name,
+    base_url: meta.base_url,
+    transport_security: typeof meta.transport_security === 'string' ? meta.transport_security : '',
+    token_env: meta.token_env,
+  };
+}
+
 function runImplQualification(options) {
+  if (options.endpoint) {
+    options = { ...options, endpointBinding: resolveImplEndpoint(options.endpoint) };
+    if (options.endpointBinding.transport_security === 'plaintext_private') {
+      process.stderr.write(`engine-qualify: --endpoint '${options.endpoint}' is PLAINTEXT to a private-range address (${options.endpointBinding.base_url}); the row will disclose transport_security=plaintext_private\n`);
+    }
+  }
   const staticAssets = verifyPinnedImplEvaluationAssets();
   const preflight = implGrader.oraclePreflight();
   if (!preflight.ok) {
@@ -3126,6 +3183,7 @@ function runImplQualification(options) {
     );
     fs.writeFileSync(
       path.join(options.rawDir, 'impl-seed-envelope.json'),
+      // (endpoint disclosure is written alongside, below)
       `${JSON.stringify({
         run_nonce: runNonce,
         admin_seed: adminSeed,
@@ -3135,6 +3193,14 @@ function runImplQualification(options) {
         corpus_hash: staticAssets.corpus_hash,
         driver_hash: staticAssets.driver_hash,
       }, null, 2)}\n`,
+    );
+  }
+
+  if (options.rawDir && options.endpointBinding) {
+    const { token_env: _omit, ...disclosed } = options.endpointBinding;
+    fs.writeFileSync(
+      path.join(options.rawDir, 'impl-endpoint.json'),
+      `${JSON.stringify(disclosed, null, 2)}\n`,
     );
   }
 
@@ -3188,6 +3254,16 @@ function runImplQualification(options) {
     },
     evidence,
   };
+  if (options.endpointBinding) {
+    // Disclosure, not identity: the seat identity/scope hashes are unchanged (the same
+    // model over the same rail is the same seat wherever it is served from); this says
+    // WHICH deployment and over WHAT transport the administration actually ran.
+    row.endpoint = {
+      name: options.endpointBinding.name,
+      base_url: options.endpointBinding.base_url,
+      transport_security: options.endpointBinding.transport_security,
+    };
+  }
   const failures = [];
   for (const trial of trialResults) {
     for (const c of trial.cases) {
@@ -3274,6 +3350,13 @@ function runImplCase(context) {
     };
     for (const passthrough of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'XAI_API_KEY', 'CODEX_HOME', 'GEMINI_API_KEY']) {
       if (process.env[passthrough] !== undefined) env[passthrough] = process.env[passthrough];
+    }
+    if (options.endpointBinding) {
+      // A named endpoint REPLACES the raw passthrough for the two cc-shim keys: the row
+      // says which deployment was examined, so the rail must not be able to reach a
+      // different one through ambient env.
+      env.ANTHROPIC_BASE_URL = options.endpointBinding.base_url;
+      env.ANTHROPIC_AUTH_TOKEN = process.env[options.endpointBinding.token_env];
     }
     budget.spent += 1;
     const run = spawnSync('bash', argv, {

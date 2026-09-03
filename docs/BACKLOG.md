@@ -75,6 +75,24 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ---
 
 ## Active entries
+### `resolve-review-loop-consult-discuss-gate` case (xix) mutates the canonical evals corpus — move it to a scratch copy and un-serialize
+- **Trigger**: the next time a pooled test dies with `EACCES` on `evals/consult-capability-evidence-corpus.json`, or when `hooks/tests/run.sh --parallel` wall time is being trimmed and the serial tail is on the table.
+- **Context**: case (xix) `chmod 000`s the REAL `evals/consult-capability-evidence-corpus.json` for two script runs; any pooled test that requires the consult grader in that window (verdict-stability D7, 2026-09-03: 12 EACCES failures, green standalone) dies. v2.35.11 serialized the file in `run.sh` as the right-sized fix; the proper fix is to point `resolve-review-loop.sh` at a scratch manifest (an env/flag override for the applicability-scope path) so the test never touches the tracked file.
+- **Effort**: S
+- **Source**: v2.35.11 pre-merge suite run (`d48b5235`); `hooks/tests/resolve-review-loop-consult-discuss-gate.test.sh:487-493`
+
+### `autopilot endpoints test` hardcodes `claude-3-haiku-20240307` — a local server that validates model ids returns 404 and the probe reads as broken auth
+- **Trigger**: the first time someone runs `autopilot endpoints test <name>` against a named local-model endpoint (SGLang/vLLM validate the model id) and gets a non-200 that is not an auth failure.
+- **Context**: the probe's model id is a compatibility choice for GLM/MiniMax gateways (they map claude-* ids). Local servers reject unknown ids. Fix shape: `--model <id>` on `endpoints test`, defaulting to the current id; the note in `src/endpoints/cli.js` says modernizing the default needs a live spike per gateway, so the default stays.
+- **Effort**: S
+- **Source**: v2.35.11 (`docs/plans/2026-09-03-endpoint-transport-optin.md` § Out of scope)
+
+### `src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller
+- **Trigger**: `dispatch-local-openai.js` / `probe-local-engine.js` gain a caller on a real rail, or a second transport-policy divergence between the two is reported.
+- **Context**: the named-endpoint resolver now owns the transport policy (loopback + disclosed `plaintext-private` for private-range IP literals). `local-deployment.js` still enforces "authenticated TLS outside loopback" with no opt-in and no `transport_security` disclosure; today it has no live callers so the divergence is dormant. Either make it consume `resolve-endpoint.sh` (credential_endpoint already references a named endpoint) or delete the duplicate rule.
+- **Effort**: Fix
+- **Source**: v2.35.11 (`docs/plans/2026-09-03-endpoint-transport-optin.md` § Out of scope)
+
 ### `ladder-run` keeps only the verdict — the verifier's findings are discarded, so a `fail` is unactionable without a second review
 - **Trigger**: next time a ladder cycle returns `fail` / FIX-THEN-SHIP and the operator has to re-run `dispatch-review.sh` by hand to learn why (happened 2× on 2026-09-02, fuchikoma doc-sync cycles #3–#4); or when ladder cycles start being fed by a sweep rather than by hand.
 - **Context**: `ladder-run.sh run` records `panel_verdict` + a placeholder finding (`verifier-flagged-onstage`, `verified: unverified`) into the qc store and state.json, but not the verifier's FINDINGS lines. The dispatch-review temp logs (`/tmp/dispatch-review-codex-out-*`) are gone by the time anyone looks. Result: a fail costs one more full review to become actionable, and the qc store cannot say *what* the verifier caught — which also blocks any later endorsement/audit of that finding. Fix shape: persist the parsed findings array (and the raw verdict block path) on the cycle record; `--allow-narrative` already exists on dispatch-review.sh.

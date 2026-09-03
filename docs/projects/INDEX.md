@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-03 | endpoint transport opt-in + exam/routing parity — `AUTOPILOT_ENDPOINT_<NAME>_TRANSPORT=plaintext-private`（私網 IP literal 限定、揭露 `transport_security`）、`engine-qualify.sh implementer --endpoint`、團隊本機模型食譜（`docs/projects/2026-09-03-endpoint-transport-optin/README.md`） | 2.35.11 | `feat/v2.35.11-endpoint-transport-optin` |
 | 2026-08-28 | consult/discuss qualification — paid administration wave (Board-authorized batch A, 2026-08-28; see `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md` decision section and `docs/plans/2026-08-28-consult-discuss-qualification.md`) | 2.35.2 | `docs/administration-authorization` |
 
 ## 已完成 (Completed)

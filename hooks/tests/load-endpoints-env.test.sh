@@ -250,4 +250,21 @@ assert_contains "$f2out" '"rejected":true' "js twin refuses when getuid is unava
 f2abs="$(node -e 'const m=require(process.argv[1]); process.getuid=undefined; const r=m.loadEndpointsEnv({path:"/nonexistent/xyz.env",env:{},cwd:"/tmp",warn:()=>{}}); console.log(JSON.stringify(r))' "$JS")"
 assert_contains "$f2abs" '"rejected":false' "absent base is a no-op even on no-getuid (not rejected)"
 
+# ── 12. _TRANSPORT is allowlisted (non-secret opt-in) in both twins ──
+f="$WORK/transport.env"
+printf 'AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2\nAUTOPILOT_ENDPOINT_Q_TOKEN=t\nAUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private\nAUTOPILOT_ENDPOINT_Q_TRANSPORTX=nope\n' >"$f"
+chmod 600 "$f"
+out="$(env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$f" bash -c '. "'"$SH"'" && autopilot_load_endpoints_env; echo "LOADED=[$AUTOPILOT_ENDPOINTS_LOADED]"; echo "TR=[${AUTOPILOT_ENDPOINT_Q_TRANSPORT:-}]"; echo "TRX=[${AUTOPILOT_ENDPOINT_Q_TRANSPORTX:-}]"' 2>&1)"
+assert_contains "$out" 'TR=[plaintext-private]' "bash loader allowlists _TRANSPORT"
+assert_contains "$out" 'TRX=[]' "bash loader still rejects near-miss suffixes"
+assert_contains "$out" 'LOADED=[AUTOPILOT_ENDPOINT_Q_URL AUTOPILOT_ENDPOINT_Q_TOKEN AUTOPILOT_ENDPOINT_Q_TRANSPORT]' "bash loader LOADED lists _TRANSPORT"
+jsout="$(node -e '
+  const { loadEndpointsEnv } = require(process.argv[1]);
+  const env = {};
+  const r = loadEndpointsEnv({ path: process.argv[2], env, warn: () => {} });
+  console.log(JSON.stringify({ tr: env.AUTOPILOT_ENDPOINT_Q_TRANSPORT||"", trx: env.AUTOPILOT_ENDPOINT_Q_TRANSPORTX||"" }));
+' "$JS" "$f")"
+assert_contains "$jsout" '"tr":"plaintext-private"' "js twin allowlists _TRANSPORT"
+assert_contains "$jsout" '"trx":""' "js twin rejects near-miss suffixes"
+
 echo "load-endpoints-env: all assertions passed"

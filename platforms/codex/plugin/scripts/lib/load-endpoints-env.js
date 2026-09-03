@@ -29,7 +29,8 @@ function keyAllowed(key) {
     default:
       break;
   }
-  return /^AUTOPILOT_ENDPOINT_([A-Za-z0-9_]+)_(URL|TOKEN)$/.test(key);
+  // _TRANSPORT: the non-secret plaintext-private opt-in read by resolve-endpoint.sh.
+  return /^AUTOPILOT_ENDPOINT_([A-Za-z0-9_]+)_(URL|TOKEN|TRANSPORT)$/.test(key);
 }
 
 function stripOneQuoteLayer(val) {

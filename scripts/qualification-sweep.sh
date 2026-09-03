@@ -251,6 +251,11 @@ seat_field() {
 plan_sweep() {
   for seat_line in "${SEAT_LINES[@]}"; do
     IFS=$'\t' read -r _tag slug runner model family vsrc endpoint effort <<< "$seat_line"
+    # model_version is a strict protocol TOKEN in capability-evidence; a provider/model id
+    # (opencode-go/…) carries "/" which that grammar rejects — derive the token by mapping
+    # "/" to ":" (2026-09-03: a charged 24-case opencode administration was refused at the
+    # evidence step for exactly this; now both --plan and --execute print/pass the token).
+    model_version="${model//\//:}"
     bundle="$EVROOT/$slug-qualify"
     echo "=== SEAT: $slug ==="
     echo "role=$ROLE runner=$runner model=$model family=$family effort=$effort version_source=$vsrc endpoint=$endpoint"
@@ -288,7 +293,7 @@ plan_sweep() {
     echo
     echo "[administration]"
     echo "  node scripts/engine-qualify.js $ROLE \\"
-    echo "    --engine $model --model $model --model-version $model \\"
+    echo "    --engine $model --model $model --model-version $model_version \\"
     echo "    --runner $runner --runner-version <resolved-at-execute-time> --family $family \\"
     echo "    --harness-version $HARNESS_VERSION --effort $effort \\"
     echo "    --prompt-config-hash $PROMPT_HASH --semantic-fingerprint $SEM_HASH \\"
@@ -400,6 +405,7 @@ EOF
 
 run_seat() { # slug runner model family vsrc endpoint effort
   local slug="$1" runner="$2" model="$3" family="$4" vsrc="$5" endpoint="$6" effort="$7"
+  local model_version="${model//\//:}"   # see plan_sweep: strict TOKEN, "/" -> ":"
   local bundle="$EVROOT/$slug-qualify"
   mkdir -p "$bundle"
   # VERSION IDENTITY FIRST — before any credential resolution, before the stage-0 probe.
@@ -457,7 +463,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
   # (resolve_runner_version); an unusable one already aborted uncharged. Nothing is
   # derived from the runner name here.
   node "$REPO_ROOT/scripts/engine-qualify.js" "$ROLE" \
-    --engine "$model" --model "$model" --model-version "$model" \
+    --engine "$model" --model "$model" --model-version "$model_version" \
     --runner "$runner" --runner-version "$RESOLVED_VERSION_TOKEN" --family "$family" \
     --harness-version "$HARNESS_VERSION" --effort "$effort" \
     --prompt-config-hash "$PROMPT_HASH" --semantic-fingerprint "$SEM_HASH" \

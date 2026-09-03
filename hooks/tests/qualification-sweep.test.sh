@@ -29,7 +29,10 @@ cat > "$ROSTER" <<'EOF'
       "endpoint": "anthropic-native", "effort": "high" },
     { "slug": "seat-beta", "runner": "codex", "model": "gpt-5.6-sol",
       "family": "openai", "version_source": "operator-asserted",
-      "endpoint": "-", "effort": "medium" }
+      "endpoint": "-", "effort": "medium" },
+    { "slug": "seat-gamma", "runner": "opencode", "model": "opencode-go/x-1.0",
+      "family": "meta", "version_source": "operator-asserted",
+      "endpoint": "-", "effort": "high" }
   ]
 }
 EOF
@@ -83,6 +86,12 @@ assert_contains "$PLAN_OUT" "--engine gpt-5.6-sol" "plan resolves seat-beta mode
 assert_contains "$PLAN_OUT" "--runner codex" "plan resolves seat-beta runner"
 assert_contains "$PLAN_OUT" "--family openai" "plan resolves seat-beta family"
 assert_contains "$PLAN_OUT" "--effort medium" "plan resolves seat-beta effort"
+
+# seat-gamma: a provider/model id — --engine keeps the "/", --model-version is the
+# strict-TOKEN derivation ("/" -> ":"), version binary is opencode
+assert_contains "$PLAN_OUT" "--engine opencode-go/x-1.0 --model opencode-go/x-1.0 --model-version opencode-go:x-1.0" "plan derives a TOKEN model-version for a provider/model id"
+assert_contains "$PLAN_OUT" "version_binary: opencode" "plan resolves the opencode version binary"
+assert_contains "$PLAN_OUT" "--engine gpt-5.6-sol --model gpt-5.6-sol --model-version gpt-5.6-sol" "a plain id is its own model-version (unchanged)"
 
 # corpus hashes (both seats share the roster's corpus)
 assert_contains "$PLAN_OUT" "--prompt-config-hash aaaa1111" "plan resolves prompt-config-hash"

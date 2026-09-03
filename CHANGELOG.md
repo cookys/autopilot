@@ -19,6 +19,10 @@ OpenCode Go 方案的 contributor tier（`opencode-go/muse-spark-1.3-contributor
   provider/model id 一律被拒；改為在最後一個 `/` 切分。
 - 新測試 `hooks/tests/dispatch-opencode.test.sh`（stub binary：committed／no_op／question_suspected／
   precondition／argv 與 STDIN 契約／auto 不路由）；runner-binary、resolve-review-loop 各加斷言。
+- **`engine-qualify.sh --engine` 接受 vendor id（含 `/`），`--model-version` 維持 strict TOKEN**，
+  `qualification-sweep.sh` 對 provider/model id 派生合法的 version token（`/`→`:`）並在 `--plan` 印出。
+  教訓寫在 code 註解裡：參數層的文法必須跟 evidence 編譯器一模一樣——第二次施測參數層放過
+  `--model-version` 的 `/`，24 題全跑完才在 evidence 步驟被拒、沒有 row（收據與 log 都留在 bundle）。
 - 第一場施測：見 `docs/plans/evidence/2026-09-03-muse-spark-opencode-qualify/`。
 prose-justification: no `skills/*/SKILL.md` changed this release; `dev-flow`／`agent-call` 的成長是
 先前版本已 justify、baseline（v2.35.2）尚未刷新所致。

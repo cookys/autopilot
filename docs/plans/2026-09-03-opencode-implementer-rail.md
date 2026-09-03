@@ -1,6 +1,7 @@
 # `--runner opencode` implementer rail (dispatch-hetero) + first administration: muse-spark-1.3 (OpenCode Go)
 
 **Date**: 2026-09-03 · **Target**: v2.35.12 · **Size**: L (new runner across 5 modules)
+**狀態**: ✅ Shipped in v2.35.12 — merged as `3949e2ab`
 **Trigger**: Board asked to examine `muse-spark-1.3` as implementer through OpenCode. The only
 route to that model on this box is the OpenCode Go plan (`opencode-go/muse-spark-1.3-contributor`);
 `dispatch-hetero.sh` has no opencode runner, so the live-rail exam cannot reach it.

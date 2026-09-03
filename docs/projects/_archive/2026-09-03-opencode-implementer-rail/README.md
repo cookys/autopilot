@@ -1,6 +1,6 @@
 # opencode implementer rail + muse-spark-1.3 administration (v2.35.12)
 
-**Branch**: `feat/v2.35.12-opencode-implementer-rail` · **Plan**: [`docs/plans/2026-09-03-opencode-implementer-rail.md`](../../plans/2026-09-03-opencode-implementer-rail.md) · **Status**: in progress
+**Branch**: `feat/v2.35.12-opencode-implementer-rail` · **Plan**: [`docs/plans/2026-09-03-opencode-implementer-rail.md`](../../../plans/2026-09-03-opencode-implementer-rail.md) · **Status**: ✅ Shipped in v2.35.12 — merged as `3949e2ab`
 
 ## Project Goal
 
@@ -32,4 +32,4 @@ No `.claude/skill-routing.md`; dev-flow invoked; areas N/A (CLAUDE.md language t
 | P0 opencode rail in dispatch-hetero + stub test | done | `1eeb3cac` |
 | P1 runner registration + tests; ladder rung engine may contain `/` | done | `faf0a6cf`, `a12b532e` |
 | P2 docs, CHANGELOG, version, real probe (3 Stage-0 probes committed), administration (attempt 3: 24/24, event 187; attempt 2 charged 24 dispatches and produced no row — fixed `f2ce4e20`/`b107d936`) | done | `c76ca225`, `b107d936` |
-| L-5 finish-flow | pending | |
+| L-5 finish-flow | done (gpt-5.6-sol + MiniMax-M3 SHIP-AS-IS; suite 309/309) | `3949e2ab` |

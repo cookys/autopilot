@@ -75,6 +75,18 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ---
 
 ## Active entries
+### `adopt-qualification-defaults.js list` prints `event undefined — null` for legacy feed rows
+- **Trigger**: the next time the feed listing is shown to a consumer (any `list --from` run reproduces it: 12 such lines on 2026-09-03 against the live feed), or when a second display defect lands in the same command.
+- **Context**: legacy (pre-effort, no event id / bundle path) scorecard rows reach the `evidence` line without a fallback, so the consumer prints `event undefined — null`. Producer side (llm-playground plan 065, P5 closed 2026-09-03) tracks the same item as XS display-layer; consumer fix is a fallback string when `event_id`/`bundle` are absent.
+- **Effort**: S
+- **Source**: 7840hs peer report 2026-09-03 (plan 065 P5); reproduced on aimax395 (exit 0, defaults 29 / strikes 1 / priors 57)
+
+### Feed listing prints the pre-effort `seat_hash` ⚠ once per row — consider one consolidated notice
+- **Trigger**: a consumer complains the listing is unreadable, or the producer moves to effort-bearing seat hashes (then the per-row ⚠ disappears on its own).
+- **Context**: by decision (A) the feed's advertised `seat_hash` is a diff key only and the consumer re-derives every hash; every current row is pre-effort three-key, so every row prints the ⚠. The producer's red line is "entries are reordered, never recomputed", so this is purely a consumer display choice: one summary line ("N of M rows advertise a pre-effort hash; all re-derived") instead of N blocks.
+- **Effort**: S
+- **Source**: 7840hs peer report 2026-09-03 (plan 065 P5 closeout)
+
 ### `--runner opencode` usage stays `null` — parse `step_finish.tokens` from the `--format json` event stream
 - **Trigger**: the first time an opencode seat's cost/efficiency is compared against another rail (scorecard `cost`/`usage` telemetry), or `dispatch-status.js` gains a second event-stream format anyway.
 - **Context**: the opencode rail declares `log_format: plain`, so `dispatch-status.js --usage-only` returns `null`. The observed stream (opencode 1.18.25, 2026-09-03) carries `{"type":"step_finish","part":{"tokens":{"total,input,output,reasoning,cache{read,write}}}}` per step; summing per-step tokens is the obvious parser. Declare a `jsonl-opencode` format rather than sniffing.

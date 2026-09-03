@@ -52,6 +52,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: health-roadmap P6 Decision Brief（2026-07-17）
 
 ### 🔵 suite oracle lock: a killed full-suite run leaves the next one refused (observed 2026-09-02)
+- **2026-09-04 second instance**: a `kill -9` of a running suite left `.owner` naming a dead pid; the next run was refused although `kill -0` on the holder failed. Workaround used: verify no live `run.sh` then `AUTOPILOT_SUITE_ORACLE_LOCK=0` — which the `suite-oracle-lock` test inherits and fails on, so that file had to be re-run standalone without the env. Trigger stands.
 
 `hooks/tests/run.sh --parallel` refused with `action lock held by run_id=…-2994178-…` while pid
 2994178 no longer existed and `/proc/*/fd` showed **no process holding

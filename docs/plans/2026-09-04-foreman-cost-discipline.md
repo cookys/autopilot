@@ -1,6 +1,7 @@
 # Foreman cost discipline — enforce the ironlaws that only existed as prose
 
 **Date**: 2026-09-04 · **Target**: v2.35.15 · **Size**: L (hooks defaults + new hook + skill prose + docs)
+**狀態**: ✅ Shipped in v2.35.15 — merged as `72dfa052`
 **Trigger**: cuda quota digest 2026-09-04 (`cuda:~/projects/QUOTA-DIGEST-2026-09-04.md`, relayed over
 hangar-bridge; operator-confirmed scope on aimax395 2026-09-04): ≈$2,200 API-equivalent in 36 h, 79 % from
 four resident Sonnet foremen (13–33 h alive, 1,900–7,400 Bash calls each, 34–97 万 cache-read per call,

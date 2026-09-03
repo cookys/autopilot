@@ -8,13 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-09-04 | foreman cost discipline — `foreman-guard` PreToolUse hook（工頭 Bash 上限、輪詢 deny、Monitor deny）、context-budget／dispatch-model-guard／cost-tracker 改 default-on、工頭一刀一命與接手 read-list 上限（`docs/projects/2026-09-04-foreman-cost-discipline/README.md`） | 2.35.15 | `feat/v2.35.15-foreman-cost-discipline` |
 | 2026-08-28 | consult/discuss qualification — paid administration wave (Board-authorized batch A, 2026-08-28; see `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md` decision section and `docs/plans/2026-08-28-consult-discuss-qualification.md`) | 2.35.2 | `docs/administration-authorization` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-09-04 | foreman cost discipline（`docs/projects/_archive/2026-09-04-foreman-cost-discipline/README.md`）— cuda quota digest：36 小時 ≈$2,200、79% 是四個常駐工頭輪詢。新 default-on hook `foreman-guard`（l4–l6 子代理：Bash 上限 40 原子計數、前景輪詢 deny、Monitor deny；規則跑在可執行文字上，heredoc／註解／引號感知）；`context-budget`／`dispatch-model-guard`／`cost-tracker` 改 default-on 附退出旋鈕（27 hooks：14/13）；cost-tracker 累計 cache-read 回報；l4–l6 與 front-door 加「一刀一命」與接手 read-list 上限。MiniMax 一輪 SHIP、sol 三輪收斂；全套 311 檔綠（oracle-lock 單跑補證）。不廣播，只回 cuda | v2.35.15 | `72dfa052` | [plan](../plans/2026-09-04-foreman-cost-discipline.md) |
 | 2026-09-04 | opencode rail effort → `--variant`（無 project dir — S-size）— 實測 `--variant` 會到 provider（推理 token minimal≈53 < low≈103 < medium≈171≈high≈174 < xhigh≈201），未知值與不帶值都退回 provider 預設（≈medium）；rail 轉送 effort、`max`→`xhigh`；`minimal` 不在 autopilot 詞彙（BACKLOG，L）。v2.35.12 的 muse-spark row 實際跑的是預設檔位，註記保留 | v2.35.14 | (direct on develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-03 | agy 信封格式錯降級為遙測遺失（無 project dir — S-size，Board 2026-09-03）— `dispatch-hetero.sh` agy 分支不再因信封過不了嚴格鍵比對就把已落地的 commit 判成 `failure`（8/22 gemini 三席全部建新檔題就是這樣被扣的）；usage 維持 `null`、信封原文前 64 KiB 留在 log 供重現、狀態交給 git artifact。8/22 的 row 不改，重考才翻案 | v2.35.13 | `219de2a6` | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-03 | opencode implementer rail + muse-spark-1.3 administration（`docs/projects/_archive/2026-09-03-opencode-implementer-rail/README.md`）— `dispatch-hetero.sh --runner opencode`（EXPLICIT only、EDIT-ONLY、STDIN prompt、`--dir/--pure/--format json`、wrapper commit），登記面全補（runner-binary、engine-qualify seam、implementer-ladder、review-loop 兩 enum、schema 兩處），ladder rung engine 允許含 `/`；`--engine` 收 vendor id、`--model-version` 維持 strict 由 sweep 派生（第二次施測 24 題跑完才在 evidence 層被拒的教訓）。`opencode-go/muse-spark-1.3-contributor` 考過 implementer 24/24（event 187，每 case 中位數 22 s）。兩家族 review SHIP-AS-IS，全套 309/309 | v2.35.12 | `3949e2ab` | [plan](../plans/2026-09-03-opencode-implementer-rail.md) |

@@ -1,6 +1,6 @@
 # Foreman cost discipline (v2.35.15)
 
-**Branch**: `feat/v2.35.15-foreman-cost-discipline` · **Plan**: [`docs/plans/2026-09-04-foreman-cost-discipline.md`](../../plans/2026-09-04-foreman-cost-discipline.md) · **Status**: in progress
+**Branch**: `feat/v2.35.15-foreman-cost-discipline` · **Plan**: [`docs/plans/2026-09-04-foreman-cost-discipline.md`](../../../plans/2026-09-04-foreman-cost-discipline.md) · **Status**: ✅ Shipped in v2.35.15 — merged as `72dfa052`
 
 ## Project Goal
 
@@ -29,7 +29,7 @@ No `.claude/skill-routing.md`; dev-flow invoked; `profiles-hash-repin` (personal
 
 | Phase | Status | Commit |
 |---|---|---|
-| P0 foreman-guard hook + three hooks default-on + tests | pending | |
-| P1 lifecycle + read-list prose (l4/l5/l6, front-door) + profiles hash repin | pending | |
-| P2 docs, CHANGELOG, version, cuda report | pending | |
-| L-5 finish-flow | pending | |
+| P0 foreman-guard hook + three hooks default-on + tests | done | `6d69ef24` + review rounds `f202bc91` `9e408d48` `32dcb36b` |
+| P1 lifecycle + read-list prose (l4/l5/l6, front-door); no hash repin needed (inventory pins only ceo-agent/dev-flow) | done | `5351f1c1` |
+| P2 docs, CHANGELOG, version 2.35.15, cuda report | done | `17712304`, report after push |
+| L-5 finish-flow | done (MiniMax SHIP; sol 3 rounds; suite 311 green) | `72dfa052` |

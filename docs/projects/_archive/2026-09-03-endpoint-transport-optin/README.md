@@ -1,6 +1,6 @@
 # Endpoint transport opt-in + exam/routing parity (v2.35.11)
 
-**Branch**: `feat/v2.35.11-endpoint-transport-optin` · **Plan**: [`docs/plans/2026-09-03-endpoint-transport-optin.md`](../../plans/2026-09-03-endpoint-transport-optin.md) · **Status**: in progress
+**Branch**: `feat/v2.35.11-endpoint-transport-optin` · **Plan**: [`docs/plans/2026-09-03-endpoint-transport-optin.md`](../../../plans/2026-09-03-endpoint-transport-optin.md) · **Status**: ✅ Shipped in v2.35.11 — merged as `a4d5d8f9`
 
 ## Project Goal
 
@@ -35,4 +35,4 @@ No `.claude/skill-routing.md` in this repo; dev-flow invoked. Areas: scripts (ba
 | P0 transport opt-in (resolver, loaders, CLI, hetero notice, tests) | done | `cceb4d8b` |
 | P1 engine-qualify `--endpoint` parity + row disclosure + tests | done | `6ada25f6` |
 | P2 docs, CHANGELOG, version, dogfood (qwen38 endpoint resolved `plaintext_private`, `dispatch-hetero --endpoint qwen38` committed in 14 s) | done | `5a8bb16b` |
-| L-5 finish-flow | pending | |
+| L-5 finish-flow | done (2 families: gpt-5.6-sol ×3 rounds, MiniMax-M3; suite 308/308) | `a4d5d8f9` |

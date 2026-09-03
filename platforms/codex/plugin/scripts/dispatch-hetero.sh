@@ -3214,10 +3214,21 @@ else
   fi
   if ! node "$SELF_DIR/dispatch-status.js" --log "$AGY_ENVELOPE" --agy-envelope \
       > "$AGY_PARSED" 2>/dev/null; then
+    # TELEMETRY LOSS, NOT A VERDICT (2026-09-03, Board). The envelope is the usage channel;
+    # when it does not parse, usage stays null and the run is classified from git
+    # artifacts exactly like every other rail (commit + clean tree + exit 0 → committed).
+    # Until v2.35.12 this set AGENT_EXIT=65 and turned a landed commit into `failure`:
+    # the 2026-08-22 gemini implementer seats lost 6/8, 2/8 and 6/8 create-a-new-file
+    # cases to a malformed envelope with the edits sitting in the tree (BACKLOG "agy
+    # output envelope invalid"). The envelope BODY is now kept in the log (bounded) so
+    # the next administration can see what agy actually sent — nothing was retained
+    # before, which is why that BACKLOG row still has no reproduction.
     cat "$AGY_STDERR" >> "$LOG"
-    printf '\n[dispatch-hetero: agy native JSON envelope invalid — response and usage NOT parsed]\n' \
+    printf '\n[dispatch-hetero: agy native JSON envelope invalid — usage NOT parsed (null); status decided from git artifacts. Raw envelope (first 64 KiB) follows]\n' \
       >> "$LOG"
-    AGENT_EXIT=65
+    head -c 65536 "$AGY_ENVELOPE" >> "$LOG" 2>/dev/null || true
+    printf '\n[dispatch-hetero: end of raw envelope]\n' >> "$LOG"
+    [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: agy native JSON envelope invalid — usage null; status from git artifacts (see $LOG)" >&2
     AGY_USAGE_JSON="null"
     return 0
   fi

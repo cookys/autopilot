@@ -372,25 +372,37 @@ assert_eq "0" "$EXIT" "controller Work Order does not block child runner admissi
 assert_contains "$OUT" '"status": "committed"' \
   "controller Work Order is excluded from implementer continuation scan"
 
-# A clean process exit is insufficient: malformed native JSON converts the run
-# to failure, even if a commit exists. A nonzero exit discards valid-looking usage.
+# A malformed native envelope is TELEMETRY LOSS, not a verdict (v2.35.13): usage stays
+# null, the status comes from git artifacts like every other rail, and the raw envelope
+# body is kept in the log so the defect can be reproduced. A nonzero exit still discards
+# valid-looking usage (next case).
 STUB_BAD_ENVELOPE="$TEST_TMP/agy-bad-envelope"
 cat > "$STUB_BAD_ENVELOPE" <<'EOF'
 #!/usr/bin/env bash
 echo bad > bad-envelope.txt
 git add bad-envelope.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: bad envelope"
-printf '%s' '{"response":'
+printf '%s' '{"response":"partial-envelope-marker-7f3a"'
 EOF
 chmod +x "$STUB_BAD_ENVELOPE"
 make_agy_stub_versioned "$STUB_BAD_ENVELOPE"
 OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
   --branch feat/bad-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "malformed agy envelope with a commit fails closed"
-assert_contains "$OUT" '"status": "failure"' "malformed agy envelope cannot become committed success"
-assert_contains "$OUT" '"usage": null' "malformed agy envelope cannot expose usage"
-BAD_ENVELOPE_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
-git -C "$SBX" worktree remove --force "$BAD_ENVELOPE_WT" >/dev/null 2>&1 || true
+assert_eq "0" "$EXIT" "malformed agy envelope with a clean commit exits 0 (status from artifacts)"
+assert_contains "$OUT" '"status": "committed"' "malformed agy envelope no longer converts a landed commit into failure"
+assert_contains "$OUT" '"usage": null' "malformed agy envelope still cannot expose usage"
+assert_contains "$OUT" 'agy native JSON envelope invalid' "malformed envelope is announced on stderr"
+BAD_ENVELOPE_LOG="$(printf '%s' "$OUT" | grep -o '"agent_log": "[^"]*"' | cut -d'"' -f4)"
+assert_contains "$(cat "$BAD_ENVELOPE_LOG")" 'partial-envelope-marker-7f3a' "raw envelope body is retained in the log for reproduction"
+assert_contains "$(cat "$BAD_ENVELOPE_LOG")" 'status decided from git artifacts' "log names the telemetry-loss posture"
+# ...and with NO edits the same malformed envelope is an ordinary no_op, not a failure
+STUB_BAD_ENVELOPE_NOEDIT="$TEST_TMP/agy-bad-envelope-noedit"
+printf '#!/usr/bin/env bash\nprintf %%s "{\"response\":"\n' > "$STUB_BAD_ENVELOPE_NOEDIT"
+chmod +x "$STUB_BAD_ENVELOPE_NOEDIT"
+make_agy_stub_versioned "$STUB_BAD_ENVELOPE_NOEDIT"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+  --branch feat/bad-envelope-noedit --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE_NOEDIT" 2>&1)"
+assert_contains "$OUT" '"status": "no_op"' "malformed envelope + no edits → no_op (artifact truth), not failure"
 
 STUB_NONZERO_ENVELOPE="$TEST_TMP/agy-nonzero-envelope"
 cat > "$STUB_NONZERO_ENVELOPE" <<'EOF'

@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.35.13 — agy 信封格式錯是遙測遺失，不是判決
+
+8/22 sweep 裡 gemini 三席被扣的題（flash-high 6/8、pro 2/8、flash-medium 6/8 的建新檔任務）全部同一個
+簽名：commit 已落地，`agy -p --output-format json` 回來的信封過不了嚴格鍵比對（頂層六鍵、`status`
+必須是 `SUCCESS`、`usage` 五鍵），rail 把 `AGENT_EXIT` 設 65、分類成 `failure`。判決本來就只看 git
+artifact，其他 rail 都是；agy 這條把「遙測解析錯」升級成「派工失敗」，用一個格式問題否決一個已存在的
+commit。Board 2026-09-03：降級。
+
+- `dispatch-hetero.sh` agy 分支：信封無效時 usage 維持 `null`、印一行 stderr 通知、**把信封原文（前
+  64 KiB）留在 log**，狀態交給 artifact 分類（commit + clean tree + exit 0 → `committed`；沒編輯 →
+  `no_op`）。不再設 65。非零 exit 的處理不變（仍丟棄看起來合法的 usage）。
+- 為什麼要留原文：那三席的 raw exchange 只記 `dispatch_status: failure`，信封本體沒存，BACKLOG「agy
+  output envelope invalid」至今沒有重現樣本。下次考 gemini 就看得到 agy 到底送了什麼。
+- 測試：`dispatch-hetero.test.sh` 的 bad-envelope 案改為斷言 `committed` + `usage: null` + log 含原文
+  標記；新增「信封無效且無編輯 → `no_op`」案。「worker 輸出不得自報遙測」的原則不變。
+- 8/22 三席 gemini 的 row 不改（row 是當時儀器的誠實紀錄）；要翻案得重考，BACKLOG 該列的 trigger 已改。
+prose-justification: no `skills/*/SKILL.md` changed this release.
+
 ## v2.35.12 — `--runner opencode`：OpenCode 也能當 implementer 軌道，第一場考 muse-spark-1.3
 
 Board 要考 `muse-spark-1.3`（Meta，2026-09-02 出）當 implementer。這台機器唯一到得了它的路是

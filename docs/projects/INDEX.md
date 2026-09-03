@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-03 | opencode implementer rail + muse-spark-1.3 administration（`docs/projects/2026-09-03-opencode-implementer-rail/README.md`） | 2.35.12 | `feat/v2.35.12-opencode-implementer-rail` |
 | 2026-08-28 | consult/discuss qualification — paid administration wave (Board-authorized batch A, 2026-08-28; see `docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md` decision section and `docs/plans/2026-08-28-consult-discuss-qualification.md`) | 2.35.2 | `docs/administration-authorization` |
 
 ## 已完成 (Completed)

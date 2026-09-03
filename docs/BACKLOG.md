@@ -75,6 +75,12 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ---
 
 ## Active entries
+### `--runner opencode` usage stays `null` — parse `step_finish.tokens` from the `--format json` event stream
+- **Trigger**: the first time an opencode seat's cost/efficiency is compared against another rail (scorecard `cost`/`usage` telemetry), or `dispatch-status.js` gains a second event-stream format anyway.
+- **Context**: the opencode rail declares `log_format: plain`, so `dispatch-status.js --usage-only` returns `null`. The observed stream (opencode 1.18.25, 2026-09-03) carries `{"type":"step_finish","part":{"tokens":{"total,input,output,reasoning,cache{read,write}}}}` per step; summing per-step tokens is the obvious parser. Declare a `jsonl-opencode` format rather than sniffing.
+- **Effort**: S
+- **Source**: v2.35.12 (`docs/plans/2026-09-03-opencode-implementer-rail.md` § Out of scope)
+
 ### `resolve-review-loop-consult-discuss-gate` case (xix) mutates the canonical evals corpus — move it to a scratch copy and un-serialize
 - **Trigger**: the next time a pooled test dies with `EACCES` on `evals/consult-capability-evidence-corpus.json`, or when `hooks/tests/run.sh --parallel` wall time is being trimmed and the serial tail is on the table.
 - **Context**: case (xix) `chmod 000`s the REAL `evals/consult-capability-evidence-corpus.json` for two script runs; any pooled test that requires the consult grader in that window (verdict-stability D7, 2026-09-03: 12 EACCES failures, green standalone) dies. v2.35.11 serialized the file in `run.sh` as the right-sized fix; the proper fix is to point `resolve-review-loop.sh` at a scratch manifest (an env/flag override for the applicability-scope path) so the test never touches the tracked file.

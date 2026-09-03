@@ -1,0 +1,67 @@
+engine-qualify: capability identity.model_version must be a bounded protocol token
+Usage:
+  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer|consult|discuss>
+    --engine <display-id> --model <exact-model-id> --model-version <version>
+    --runner <name> --runner-version <version> --family <family>
+    --harness-version <version> --effort <effort>
+    --prompt-config-hash <sha256> --semantic-fingerprint <sha256>
+    --containment-fingerprint <sha256>
+    (--panel-cmd '<trusted command>' |
+      --remote-provider-cmd '<trusted adapter>' --remote-provider <provider-id>)
+    [--panel-bind-ro <absolute-source>=</panel/or/auth/path>] [--panel-env <name>]
+    [--provider-env <name>] [--remote-timeout-ms <n>]
+    --task-class <class> --domain <domain> --language <language> --tool <tool>
+    [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
+    [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory)
+    [--version-source runtime|operator-asserted]   (CLI transports observe no
+      runtime model id — pass operator-asserted so the row says so)
+
+  implementer is LIVE-RAIL: no panel/remote broker transport — cases dispatch
+  through scripts/dispatch-hetero.sh (plan 2026-08-22-implementer-qualification-
+  suite). Implementer-only flags:
+    [--dispatch-bin <path>]     (default scripts/dispatch-hetero.sh; test seam)
+    [--runner-bin <path>]       (forwarded to the rail's per-runner bin seam —
+      --grok-bin/--codex-bin/--agy-bin/... — so a smoke can substitute ONLY the
+      paid engine while the real rail runs)
+    [--dispatch-timeout <dur>]  (per-case rail timeout, default corpus 600s)
+    [--endpoint <name>]         (--runner cc-shim ONLY: resolve ANTHROPIC_BASE_URL/AUTH_TOKEN
+      through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
+      routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
+      the emitted row discloses endpoint {name, base_url, transport_security})
+  implementer --expires-days caps at 90 (its schema ceiling); all other roles
+  keep the flat 30-day cap.
+
+  consult and discuss are QUALIFICATION-SEAT roles (never live-rail): they take
+  the same --panel-cmd / --remote-provider-cmd broker transport as reviewer/owner
+  and REJECT --dispatch-bin/--runner-bin/--dispatch-timeout with a usage error.
+  Both support [--plan]: a dry-run that verifies the five frozen identities
+  (generator, grader, corpus, rubric, seal), runs the corpus admission gates,
+  prints the case plan, and exits WITHOUT any provider/broker call. [--plan]
+  combined with an implementer-only flag exits 2 (the flags are rejected before
+  --plan is ever consulted).
+
+  A LIVE (non-plan) consult/discuss administration additionally requires
+  [--execute] — real money, real provider calls. Without it, the command
+  refuses loud, naming this flag and the Board authorization in
+  docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md
+  ("Board decision — 2026-08-28 (authorization)"). --execute requires the
+  --remote-provider-cmd/--remote-provider (case-broker) transport — the bare
+  --panel-cmd transport has no identity binding and is refused for these
+  two roles.
+
+The qualifier generates fresh role-specific known-bad, clean, and defect-reversal trials.
+Reviewer output uses {"verdict":"pass|fail","findings":[...]} with a structured
+behavioral-call-v1 witness. Owner output uses
+{"decision":"accept|reject","violations":[...]} against a distinct intent/control corpus.
+Local panels run in a fresh fail-closed bubblewrap sandbox. Remote panels cross a one-use Unix
+socket to a host broker; credentials and network access never enter the evaluator sandbox.
+The repository, corpus, oracle, host home, and previous cases are not mounted or disclosed.
+JSONL output is diagnostic telemetry, not admission authority. Only a live in-process
+host-observed run can create a session-local role-capability verifier; serializing the run
+destroys that capability.
+
+Exit codes:
+  0 = qualification passed
+  1 = qualification failed
+  2 = usage/precondition error
+QUALIFY_EXIT=2

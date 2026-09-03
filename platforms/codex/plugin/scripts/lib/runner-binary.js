@@ -52,6 +52,7 @@ const RUNNER_VERSION_BINARY = Object.freeze({
   qoderclicn: 'qoderclicn',          // dispatch-hetero.sh QODER_BIN="qoderclicn"
   pi: 'pi',                          // dispatch-hetero.sh PI_BIN="pi"
   cursor: 'cursor-agent',            // dispatch-hetero.sh CURSOR_BIN="cursor-agent" — NOT `cursor`
+  opencode: 'opencode',              // dispatch-hetero.sh OPENCODE_BIN="opencode" (`opencode run`)
   kimi: 'kimi',                      // dispatch-review.sh: PATH `kimi`, else ~/.kimi-code/bin/kimi
   'cc-shim': 'claude',               // a Claude Code CLI pointed at an arbitrary endpoint
   'claude-native': 'claude',         // the local Claude Code CLI on its own ambient auth
@@ -72,7 +73,7 @@ const RUNNER_BINARY_FALLBACK_PATHS = Object.freeze({
 // `anthropic-compatible` drives dispatch-anthropic-review.js over HTTP; there is no
 // runner binary at all. The map keeps `claude` for it only to preserve the historical
 // src/readiness/probe.js behavior byte-for-byte. It is NOT a sweep-viable runner
-// (dispatch-hetero.sh accepts codex|agy|grok|cc-shim|pi|qoderclicn|cursor only), so the
+// (dispatch-hetero.sh accepts codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode only), so the
 // sweep never reaches it. Flagged here rather than silently "fixed": changing it would
 // change probe.js's recorded readiness semantics, which is out of scope for this fix.
 

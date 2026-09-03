@@ -20,7 +20,7 @@
 #       [--model gemini-flash-high]          # default (agy alias, resolved against the LIVE
 #                                             # `agy models` inventory); names: `agy models` /
 #                                             # `grok models`. Required for any non-agy runner.
-#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, *qwen*/*qwq*→qoderclicn, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
@@ -28,6 +28,10 @@
 #                                              #   driving an Anthropic-compatible endpoint —
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
 #                                              #   in env (e.g. MiniMax-M3, GLM-*).
+#                                              #   opencode (EXPLICIT only): OpenCode CLI
+#                                              #   `opencode run` headless; --model is a
+#                                              #   provider/model id from `opencode models`
+#                                              #   (e.g. opencode-go/muse-spark-1.3-contributor).
 #                                              #   pi (EXPLICIT only): pi coding agent over RPC
 #                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
 #                                              #   provider default minimax via PI_RPC_PROVIDER).
@@ -60,6 +64,7 @@
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
 #       [--cursor-bin cursor-agent]            # alternate/pinned Cursor CLI (test seam)
+#       [--opencode-bin opencode]              # alternate/pinned OpenCode CLI (test seam)
 #       [--cursor-fast]                        # cursor: opt into the `-fast` model-id lane
 #                                              #   (default non-fast). Runner-scoped: any other
 #                                              #   --runner is a die_precondition, same posture as
@@ -90,7 +95,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn"|"cursor", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn"|"cursor"|"opencode", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -144,6 +149,7 @@ CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PA
 MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
 CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
+OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via --opencode-bin
 KEEP=0
 RETENTION_OWNER=""
 RETENTION_REASON=""
@@ -203,6 +209,7 @@ GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TE
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
 CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
+OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
 CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped, see usage above
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
@@ -770,6 +777,7 @@ emit() { # status commit files ins del worktree error
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
   # validates required-field presence, not a closed set). usage is parsed from the HARNESS
@@ -789,7 +797,8 @@ emit() { # status commit files ins del worktree error
     # the tail is worker-controlled → usage stays null (honest, not fabricated).
     if [ "${IS_CODEX:-0}" -eq 0 ] && [ "${IS_GROK:-0}" -eq 0 ] \
        && [ "${IS_CCSHIM:-0}" -eq 0 ] && [ "${IS_PI:-0}" -eq 0 ] \
-       && [ "${IS_QODER:-0}" -eq 0 ] && [ "${IS_CURSOR:-0}" -eq 0 ]; then
+       && [ "${IS_QODER:-0}" -eq 0 ] && [ "${IS_CURSOR:-0}" -eq 0 ] \
+       && [ "${IS_OPENCODE:-0}" -eq 0 ]; then
       usage_json="${AGY_USAGE_JSON:-null}"
     else
       local log_format="plain"
@@ -1451,6 +1460,7 @@ die_precondition() {
     [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
     [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
     [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   fi
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
@@ -1516,6 +1526,7 @@ die_resource_budget() {
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
@@ -1543,6 +1554,7 @@ write_manifest() {
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
   # grok --output-format json / agy response-only plain log with a separate private
   # native envelope / cc-shim plain).
@@ -1619,6 +1631,7 @@ while [ $# -gt 0 ]; do
     --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
     --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
     --cursor-bin) CURSOR_BIN="${2:-}"; shift 2 ;;
+    --opencode-bin) OPENCODE_BIN="${2:-}"; shift 2 ;;
     --cursor-fast) CURSOR_FAST=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
@@ -1742,6 +1755,7 @@ set_runner_flags() {
   IS_PI=0
   IS_QODER=0
   IS_CURSOR=0
+  IS_OPENCODE=0
   case "$RUNNER" in
     codex)   IS_CODEX=1 ;;
     agy)     ;;
@@ -1751,6 +1765,9 @@ set_runner_flags() {
     qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN (Qwen); honors -w/--cwd + edit-only (grok-shaped rail)
     cursor)  IS_CURSOR=1 ;;    # Cursor CLI (cursor-agent). EXPLICIT only, never auto — see the
                                # auto-branch fail-closed guard below (R-1).
+    opencode) IS_OPENCODE=1 ;; # OpenCode CLI (`opencode run`). EXPLICIT only, never auto: its
+                               # model ids are provider/model (opencode-go/…, opencode/…) with no
+                               # vendor family to match on; the provider prefix is the route.
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
       # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
@@ -1783,7 +1800,7 @@ set_runner_flags() {
         IS_QODER=1
       fi
       ;;
-    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor (got: $RUNNER)" ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode (got: $RUNNER)" ;;
   esac
   # Only reached if resolution actually completed (no die_precondition fired above,
   # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
@@ -1914,14 +1931,14 @@ if [ "$IS_CURSOR" -eq 1 ]; then
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ]; then
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   validate_d2_agy_claims
 fi
 
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ]; then
   # `|| die` in the PARENT: agy_resolve_model_alias deliberately never dies inside `$( )`,
   # where die_precondition's JSON would be captured into MODEL instead of exiting.
   MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
@@ -2028,6 +2045,8 @@ elif [ "$IS_QODER" -eq 1 ]; then
   command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (install Qoder CLI CN or pass --qoder-bin)"
 elif [ "$IS_CURSOR" -eq 1 ]; then
   command -v "$CURSOR_BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $CURSOR_BIN (install Cursor CLI or pass --cursor-bin)"
+elif [ "$IS_OPENCODE" -eq 1 ]; then
+  command -v "$OPENCODE_BIN" >/dev/null 2>&1 || die_precondition "opencode binary not found: $OPENCODE_BIN (install OpenCode CLI or pass --opencode-bin)"
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
@@ -2248,6 +2267,7 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   [ "${IS_PI:-0}" -eq 1 ] && local_runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && local_runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && local_runner="cursor"
+  [ "${IS_OPENCODE:-0}" -eq 1 ] && local_runner="opencode"
 
   if [[ "$SKILL_MODE" == "auto" ]]; then
     cap_state="$(node "$SELF_DIR/engine-capability-state.js" current --runner "$local_runner" --model "$MODEL" --role implementer 2>/dev/null)"
@@ -2721,14 +2741,14 @@ _wt_lock_fail() {
 # have fit — the safe direction. Only the agy rail has this wall; every other runner reads a file
 # or STDIN.
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ]; then
   # `wc -c` on a PIPE, not ${#var}: ${#} counts CHARACTERS, and the directive contains a
   # multibyte em-dash (and $WT may add more), so a character count UNDER-reports the argv size —
   # the unsafe direction, and exactly the payload band (131072-131073 bytes) the guard exists to
   # catch. The pipe also preserves the directive's trailing blank line, so no manual +2.
   AGY_ARGV_BYTES=$(( $(agy_edit_only_directive "$WT" | wc -c) + $(wc -c < "$PROMPT_FILE") ))
   if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_ARGV_BYTES" "the agy task prompt" \
-      "split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, qoderclicn)")"; then
+      "split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, qoderclicn, opencode)")"; then
     die_precondition "$AGY_CEILING_REASON"
   fi
 fi
@@ -2916,6 +2936,7 @@ abort_dispatch() {
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
   [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
+  [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
   [ -n "$AGY_STDERR" ] && rm -f "$AGY_STDERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
@@ -3106,6 +3127,28 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       --reasoning-effort "$5" --dangerously-skip-permissions --no-session-persistence < "$3"' \
       _ "$WT" "$QODER_BIN" "$QODER_PROMPT_FILE" "$MODEL" "$EFFORT"
   rm -f "$QODER_PROMPT_FILE"
+elif [ "$IS_OPENCODE" -eq 1 ]; then
+  # opencode (OpenCode CLI, `opencode run` headless). Spike-verified 2026-09-03 (opencode
+  # 1.18.25, docs/plans/2026-09-03-opencode-implementer-rail.md § Stage-0):
+  #   --dir anchors edits at the real worktree (no agy-style absolute-path anchor needed);
+  #   the prompt is read from STDIN when no positional message is given (no ARG_MAX wall);
+  #   --pure runs without the operator's external plugins (hermetic exam surface);
+  #   --format json streams events (step_finish carries token usage — parsing is a follow-up,
+  #   log_format stays plain and usage null); edit-only: it never commits → wrapper-commit
+  #   rail, same as grok/qoderclicn. No effort flag exists on this route — EFFORT is a seat
+  #   label only (as for cc-shim). --model is a provider/model id verbatim.
+  OPENCODE_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  OPENCODE_PROMPT_FILE="$(mktemp -t dispatch-hetero-opencode-prompt-XXXXXX)"
+  printf '%s' "${OPENCODE_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$OPENCODE_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$4" --format json < "$3"' \
+      _ "$WT" "$OPENCODE_BIN" "$OPENCODE_PROMPT_FILE" "$MODEL"
+  rm -f "$OPENCODE_PROMPT_FILE"
 elif [ "$IS_CURSOR" -eq 1 ]; then
   # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
   # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:
@@ -3208,7 +3251,7 @@ compute_artifacts() {
 # must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"
   git -C "$WT" add -A
   if ! run_strict_staged_precheck; then
     # Staged manifest violation: leave the worktree staged for in-place repair;
@@ -3591,7 +3634,7 @@ run_strict_contract_postchecks() {
 }
 
 # _hetero_runner_token — the single derivation of "which runner is this dispatch using"
-# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER/IS_CURSOR flags, shared by
+# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER/IS_CURSOR/IS_OPENCODE flags, shared by
 # passive_capture and seat_strike_capture (factored out rather than copy-pasted, per repo
 # convention).
 _hetero_runner_token() {
@@ -3602,6 +3645,7 @@ _hetero_runner_token() {
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   printf '%s' "$runner"
 }
 
@@ -4059,9 +4103,9 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \

@@ -705,9 +705,9 @@ esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
 case "$IMPL_RUNNER" in
-  auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor) ;;
+  auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode) ;;
   *)
-    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor): ${IMPL_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): ${IMPL_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
@@ -724,7 +724,9 @@ if [[ -n "$IMPL_LADDER_RAW" ]]; then
     _item="${_item#"${_item%%[![:space:]]*}"}"
     _item="${_item%"${_item##*[![:space:]]}"}"
     [[ -z "$_item" ]] && continue
-    if [[ ! "$_item" =~ ^([^/@[:space:]]+)/([^/@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
+    # engine may itself contain "/" (opencode provider/model ids such as
+    # opencode-go/muse-spark-1.3-contributor): the greedy first group splits at the LAST "/".
+    if [[ ! "$_item" =~ ^([^@[:space:]]+)/([^/@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
       echo "resolve-review-loop: invalid implementer_ladder item (expected engine/effort@runner): ${_item}" >&2
       exit 3
     fi
@@ -739,9 +741,9 @@ if [[ -n "$IMPL_LADDER_RAW" ]]; then
         ;;
     esac
     case "$_lr" in
-      auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor) ;;
+      auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode) ;;
       *)
-        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor): ${_item}" >&2
+        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): ${_item}" >&2
         exit 3
         ;;
     esac

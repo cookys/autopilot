@@ -448,7 +448,14 @@ function parseArgs(argv) {
     if (options[name].length === 0) usage(2, `${option} is required`);
     options[name] = [...new Set(options[name].map((value) => token(value, option)))].sort();
   }
-  options.engine = token(options.engine, '--engine');
+  // --engine carries a VENDOR id (opencode ids are provider/model): same grammar as --model,
+  // matching engine-scorecard's ENGINE_TOKEN_RE and capability-evidence's modelId.
+  // --model-version, runner, family, harness, effort stay on the strict protocol TOKEN —
+  // capability-evidence compiles identity.model_version with that exact grammar, and an
+  // argv grammar looser than the compiler's charges a full administration before the
+  // evidence step refuses it (2026-09-03: 24 opencode dispatches, no row). Argv must
+  // reject exactly what the compiler rejects.
+  options.engine = modelId(options.engine, '--engine');
   options.model = modelId(options.model, '--model');
   options.modelVersion = token(options.modelVersion, '--model-version');
   options.runner = token(options.runner, '--runner');
@@ -2882,6 +2889,7 @@ function implRunnerBinFlag(runner) {
     case 'pi': return '--pi-bin';
     case 'qoderclicn': return '--qoder-bin';
     case 'cursor': return '--cursor-bin';
+    case 'opencode': return '--opencode-bin';
     default: return null;
   }
 }

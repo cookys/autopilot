@@ -75,6 +75,12 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ---
 
 ## Active entries
+### autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting
+- **Trigger**: a Board request to examine or route a seat at `minimal` (asked 2026-09-03 for opencode-go/muse-spark-1.3-contributor), or a second provider whose cheapest reasoning tier is below `low`.
+- **Context**: `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate `low|medium|high|xhigh|max`. Adding `minimal` is a vocabulary change across every validator plus the seat-identity/effort partition (v2.35.9) — an L with its own parity gates, not a one-line enum edit. Probe evidence that the tier is real: reasoning ≈53 tokens vs low ≈103 on the same prompt.
+- **Effort**: L
+- **Source**: v2.35.14 probe (`CHANGELOG.md`); opencode models.dev `reasoning_options` for the model
+
 ### `adopt-qualification-defaults.js list` prints `event undefined — null` for legacy feed rows
 - **Trigger**: the next time the feed listing is shown to a consumer (any `list --from` run reproduces it: 12 such lines on 2026-09-03 against the live feed), or when a second display defect lands in the same command.
 - **Context**: legacy (pre-effort, no event id / bundle path) scorecard rows reach the `evidence` line without a fallback, so the consumer prints `event undefined — null`. Producer side (llm-playground plan 065, P5 closed 2026-09-03) tracks the same item as XS display-layer; consumer fix is a fallback string when `event_id`/`bundle` are absent.

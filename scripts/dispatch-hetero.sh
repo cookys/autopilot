@@ -3135,8 +3135,14 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
   #   --pure runs without the operator's external plugins (hermetic exam surface);
   #   --format json streams events (step_finish carries token usage — parsing is a follow-up,
   #   log_format stays plain and usage null); edit-only: it never commits → wrapper-commit
-  #   rail, same as grok/qoderclicn. No effort flag exists on this route — EFFORT is a seat
-  #   label only (as for cc-shim). --model is a provider/model id verbatim.
+  #   rail, same as grok/qoderclicn. --model is a provider/model id verbatim.
+  #   EFFORT → `--variant` (v2.35.14). Probe-verified 2026-09-03 on opencode-go/muse-spark-1.3-
+  #   contributor (3 samples per tier, same no-tool prompt, reasoning tokens from step_finish):
+  #   minimal ≈53 < low ≈103 < medium ≈171 ≈ high ≈174 < xhigh ≈201; the provider default and an
+  #   UNKNOWN variant both land ≈150 (≈medium) — opencode does not validate the value, it falls
+  #   through silently. So the value we send must be one the provider knows: autopilot's `max`
+  #   is clamped to `xhigh` (models.dev reasoning_options for this model: minimal|low|medium|
+  #   high|xhigh); `minimal` is not in autopilot's effort vocabulary and cannot be requested.
   OPENCODE_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
@@ -3146,8 +3152,9 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   OPENCODE_PROMPT_FILE="$(mktemp -t dispatch-hetero-opencode-prompt-XXXXXX)"
   printf '%s' "${OPENCODE_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$OPENCODE_PROMPT_FILE"
-  run_worker bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$4" --format json < "$3"' \
-      _ "$WT" "$OPENCODE_BIN" "$OPENCODE_PROMPT_FILE" "$MODEL"
+  OPENCODE_VARIANT="$EFFORT"; [ "$OPENCODE_VARIANT" = "max" ] && OPENCODE_VARIANT="xhigh"
+  run_worker bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$4" --variant "$5" --format json < "$3"' \
+      _ "$WT" "$OPENCODE_BIN" "$OPENCODE_PROMPT_FILE" "$MODEL" "$OPENCODE_VARIANT"
   rm -f "$OPENCODE_PROMPT_FILE"
 elif [ "$IS_CURSOR" -eq 1 ]; then
   # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see

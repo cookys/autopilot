@@ -69,6 +69,7 @@ assert_contains "$ARGV" 'run --dir ' "argv starts with run --dir"
 assert_contains "$ARGV" ' --pure ' "argv carries --pure (no external plugins)"
 assert_contains "$ARGV" ' -m opencode-go/muse-spark-1.3-contributor ' "argv carries -m <model>"
 assert_contains "$ARGV" ' --format json' "argv carries --format json"
+assert_contains "$ARGV" ' --variant xhigh ' "default effort (xhigh) is forwarded as --variant xhigh"
 # prompt via STDIN with the EDIT-ONLY directive prepended, task text intact
 STDIN="$(cat "$STDIN_LOG")"
 assert_contains "$STDIN" 'HARNESS DIRECTIVE' "STDIN prompt carries the EDIT-ONLY directive"
@@ -82,6 +83,15 @@ RUN_ID="$(printf '%s' "$OUT_JSON" | sed -n 's/.*"run_id": "\([^"]*\)".*/\1/p')"
 assert_file_exists "$RUNS_DIR/$RUN_ID.manifest.json" "opencode run manifest written"
 assert_contains "$(cat "$RUNS_DIR/$RUN_ID.manifest.json")" '"runner": "opencode"' "manifest runner provenance"
 assert_contains "$(cat "$RUNS_DIR/$RUN_ID.manifest.json")" '"log_format": "plain"' "manifest log_format plain (usage parsing is a follow-up)"
+
+# 1b) effort → --variant: pass-through for provider-known tiers, max clamped to xhigh
+for e in low medium high; do
+  OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort "$e" --branch "feat/oc-eff-$e" --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
+  assert_contains "$(cat "$ARGV_LOG")" " --variant $e " "--effort $e is forwarded as --variant $e"
+done
+OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort max --branch feat/oc-eff-max --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
+assert_contains "$(cat "$ARGV_LOG")" ' --variant xhigh ' "--effort max is clamped to --variant xhigh (provider has no max)"
+assert_not_contains "$(cat "$ARGV_LOG")" ' --variant max ' "max never reaches opencode (it would fall through to the provider default silently)"
 
 # 2) no_op path
 OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-noop --prompt-file "$PROMPT" --opencode-bin "$STUB_NOOP" --context-window off 2>&1)"

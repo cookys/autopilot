@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.35.14 — opencode rail：effort 真的送到 provider，`--variant`
+
+`opencode run --variant <tier>` 是 provider-specific 的 reasoning effort。2026-09-03 在
+`opencode-go/muse-spark-1.3-contributor` 上實測（同一道無工具題、每檔 3 次、看 `step_finish` 的推理 token）：
+minimal ≈53 < low ≈103 < medium ≈171 ≈ high ≈174 < xhigh ≈201；**不帶 variant 與帶未知值（`bogus`）都落在
+≈150**，即 opencode 不驗證這個值、未知值靜默退回 provider 預設（約 medium）。
+
+- `dispatch-hetero.sh --runner opencode` 把 `EFFORT` 轉成 `--variant`；autopilot 的 `max` 壓成 `xhigh`
+  （models.dev 對此模型宣告 `minimal|low|medium|high|xhigh`）。`minimal` 不在 autopilot 的 effort 詞彙裡，
+  無法從 roster 請求——擴詞彙要動 scorecard／evidence／schema 一整排驗證器，記 BACKLOG。
+- 誠實註記：v2.35.12 那張 `opencode-go/muse-spark-1.3-contributor` 的 row 標 effort `high`，實際上當時 rail
+  沒轉送 variant，跑的是 provider 預設（依本次探針約 medium）。row 保留；本版起同席重考會真的送 high。
+- 測試：`dispatch-opencode.test.sh` 斷言 low／medium／high 逐一轉送、`max` → `xhigh`、預設 xhigh 轉送。
+prose-justification: no `skills/*/SKILL.md` changed this release.
+
 ## v2.35.13 — agy 信封格式錯是遙測遺失，不是判決
 
 8/22 sweep 裡 gemini 三席被扣的題（flash-high 6/8、pro 2/8、flash-medium 6/8 的建新檔任務）全部同一個

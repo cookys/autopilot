@@ -258,7 +258,7 @@ const HELP = `Usage:
       --grok-bin/--codex-bin/--agy-bin/... — so a smoke can substitute ONLY the
       paid engine while the real rail runs)
     [--dispatch-timeout <dur>]  (per-case rail timeout, default corpus 600s)
-    [--endpoint <name>]         (cc-shim seats: resolve ANTHROPIC_BASE_URL/AUTH_TOKEN
+    [--endpoint <name>]         (--runner cc-shim ONLY: resolve ANTHROPIC_BASE_URL/AUTH_TOKEN
       through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
       routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
       the emitted row discloses endpoint {name, base_url, transport_security})
@@ -536,6 +536,12 @@ function parseArgs(argv) {
       // than TOKEN so a typo cannot become an env-var name with `.`/`:`/`-` in it.
       if (typeof options.endpoint !== 'string' || !/^[A-Za-z0-9_]+$/.test(options.endpoint)) {
         usage(2, '--endpoint must be an endpoint NAME ([A-Za-z0-9_]+) as defined in ~/.autopilot/endpoints.env');
+      }
+      // Only the cc-shim rail consumes ANTHROPIC_BASE_URL/AUTH_TOKEN. Any other runner would
+      // ignore the binding while the row still attested "examined via <endpoint>" — a false
+      // disclosure (review round 1, gpt-5.6-sol). Refuse at argv, before any case exists.
+      if (options.runner !== 'cc-shim') {
+        usage(2, `--endpoint applies only to --runner cc-shim (got runner: ${options.runner}) — other rails do not dial an Anthropic-compatible endpoint`);
       }
     }
     return options;

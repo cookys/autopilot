@@ -27,6 +27,10 @@ http，而考試是靠 `ANTHROPIC_BASE_URL` 原始 env 穿透打到 LAN。最強
   autopilot 零改動；單人 LAN → 上述 opt-in 當過渡；考試走同一個定義；bundle 釘住 checkpoint。
   明確說明不會重啟 `dispatch-local-openai.js` 當 implementer 路徑（沒有工具面），也不新增第三個
   adaptor——cc-shim 已經是 Anthropic 協定的 adaptor。
+- 測試：`engine-qualify-verdict-stability` 的 D6 其他 role 原始碼同位檢查把 `runImplQualification`
+  移出逐位元組清單（釘值只能指向 origin/develop 上已存在的 commit，刻意的 implementer 改動在落地前
+  無法前移它）；consult/discuss 外漏守衛保留其餘四個函式與可執行半邊，implementer 由
+  `engine-qualify-impl.test.js` 端到端覆蓋。
 prose-justification: `skills/engine-onboarding/SKILL.md` 加 8 行（本機模型團隊食譜的指標段，正文在
 `references/local-model-team-recipe.md`）；`dev-flow`（v2.35.6 Background Wait Rule）與 `agent-call`
 的成長是先前版本已各自 justify 過、baseline 尚未刷新（v2.35.2）所致，本版未動它們。

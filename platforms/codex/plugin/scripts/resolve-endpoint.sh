@@ -94,14 +94,39 @@ RESULT_NAME=""; RESULT_BASE_URL=""; RESULT_BASE_URL_SOURCE=""; RESULT_TOKEN_ENV=
 RESULT_TOKEN_PRESENT="false"; RESULT_URL_SAFE="false"; RESULT_READY="false"
 RESULT_SOURCE=""; RESULT_MISSING=(); RESULT_TRANSPORT=""
 
-# _ipv4_octets_ok <a.b.c.d> -> 0 iff every octet is 0..255 (the regexes below only bound
-# digit COUNT; 999.168.1.1 must not pass as private).
+# _ipv4_octets_ok <a.b.c.d> -> 0 iff every octet is CANONICAL decimal 0..255. Zero-padded
+# octets are REJECTED, not normalized: WHATWG URL parsing (Node, browsers, curl) reads a
+# leading zero as OCTAL, so `172.016.0.1` reaches public 172.14.0.1 while a decimal reading
+# says private 172.16.0.1 (review round 1, gpt-5.6-sol). The literal we validate must be the
+# literal the HTTP client dials.
 _ipv4_octets_ok() {
   local IFS=. o
   for o in $1; do
-    [[ "$o" =~ ^[0-9]{1,3}$ ]] || return 1
+    [[ "$o" =~ ^(0|[1-9][0-9]{0,2})$ ]] || return 1
     [ "$((10#$o))" -le 255 ] || return 1
   done
+  return 0
+}
+
+# _ipv6_literal_ok <addr-without-brackets> -> 0 iff <addr> is a syntactically valid IPv6
+# literal: hex groups of 1-4 digits, at most one `::`, exactly 8 groups without `::` and at
+# most 7 with it. No zone ids (`%eth0`), no embedded IPv4, no dotted forms — a private-LAN
+# model endpoint does not need them and every accepted shape must be one the client dials
+# unambiguously. Prefix admission is done by the caller on the FIRST group.
+_ipv6_literal_ok() {
+  local a="$1" groups
+  [[ "$a" =~ ^[0-9a-f:]+$ ]] || return 1
+  case "$a" in *:::*) return 1 ;; esac
+  if [[ "$a" == *::* ]]; then
+    # exactly one "::"
+    local rest="${a/::/}"; case "$rest" in *::*) return 1 ;; esac
+    [[ "$a" =~ ^(([0-9a-f]{1,4}:)*[0-9a-f]{1,4})?::(([0-9a-f]{1,4}:)*[0-9a-f]{1,4})?$ ]] || return 1
+    # explicit groups must be <= 7 (the :: stands for at least one group)
+    groups=$(printf '%s' "${a/::/:}" | tr -cd ':' | wc -c)
+    [ "$groups" -le 6 ] || return 1
+  else
+    [[ "$a" =~ ^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$ ]] || return 1
+  fi
   return 0
 }
 
@@ -114,8 +139,10 @@ _host_is_private_literal() {
   case "$host" in
     \[*\])
       host="${host#[}"; host="${host%]}"
-      [[ "$host" =~ ^f[cd][0-9a-f]{2}:[0-9a-f:]*$ ]] && return 0
-      [[ "$host" =~ ^fe[89ab][0-9a-f]:[0-9a-f:%]*$ ]] && return 0
+      _ipv6_literal_ok "$host" || return 1
+      local first="${host%%:*}"
+      [[ "$first" =~ ^f[cd][0-9a-f]{2}$ ]] && return 0
+      [[ "$first" =~ ^fe[89ab][0-9a-f]$ ]] && return 0
       return 1 ;;
   esac
   [[ "$host" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1

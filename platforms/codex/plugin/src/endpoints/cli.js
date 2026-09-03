@@ -8,6 +8,7 @@
 // writes it mode-600. Reuses the loader lib's parse + keying (single source of truth).
 
 const fs = require('fs');
+const net = require('net');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -34,10 +35,16 @@ const TRANSPORT_VALUES = new Set(['tls', 'plaintext-private']);
 function isPrivateIpLiteral(host) {
   const h = host.toLowerCase();
   if (h.startsWith('[') && h.endsWith(']')) {
+    // Strict syntax first (net.isIP is the same parser the client dials with), then the
+    // prefix on the first group. No zone ids, no embedded IPv4 (same rule as the resolver).
     const v6 = h.slice(1, -1);
-    return /^f[cd][0-9a-f]{2}:[0-9a-f:]*$/.test(v6) || /^fe[89ab][0-9a-f]:[0-9a-f:%]*$/.test(v6);
+    if (net.isIP(v6) !== 6 || !/^[0-9a-f:]+$/.test(v6)) return false;
+    const first = v6.split(':')[0];
+    return /^f[cd][0-9a-f]{2}$/.test(first) || /^fe[89ab][0-9a-f]$/.test(first);
   }
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  // Canonical decimal octets only: a zero-padded octet is OCTAL to WHATWG URL parsing
+  // (172.016.0.1 dials 172.14.0.1, public), so it is rejected, not normalized.
+  const m = /^(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})$/.exec(h);
   if (!m) return false;
   const o = m.slice(1).map(Number);
   if (o.some((n) => n > 255)) return false;

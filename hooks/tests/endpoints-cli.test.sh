@@ -261,7 +261,7 @@ assert_contains "$pt_list_txt" 'transport=PLAINTEXT-PRIVATE' "list text disclose
 pt_doc="$(run doctor 2>&1)"
 assert_contains "$pt_doc" 'lan: transport=plaintext-private' "doctor surfaces the plaintext endpoint"
 # the flag does NOT open hostnames or public addresses at write time either
-for u in http://cuda.local:8001 http://8.8.8.8:1 http://172.32.0.1; do
+for u in http://cuda.local:8001 http://8.8.8.8:1 http://172.32.0.1 http://172.016.0.1 http://010.0.0.1 'http://[fc00:]' 'http://[fd12:::1]' 'http://[fd12::1%25eth0]'; do
   bad="$(run set lan2 --url "$u" --transport plaintext-private 2>&1)"; ec=$?
   assert_exit_code "$ec" 2 "set --transport plaintext-private refuses $u"
   assert_contains "$bad" 'PRIVATE-RANGE IP LITERAL' "refusal of $u explains the literal rule"

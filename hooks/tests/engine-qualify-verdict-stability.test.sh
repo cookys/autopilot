@@ -3410,8 +3410,12 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
     'verification_author runVaQualification present on both modules');
 
   // Source half — byte-identical other-role function bodies.
+  // runImplQualification left this list in v2.35.11: the implementer role now evolves on
+  // its own (--endpoint binding + row disclosure), is covered end-to-end by
+  // scripts/engine-qualify-impl.test.js, and the pin below can only name a commit already
+  // on origin/develop — so an intentional implementer change cannot advance it before it
+  // lands. The consult/discuss leak guard keeps the other four bodies + the executable half.
   const fns = [
-    'runImplQualification',
     'runVaQualification',
     'runBrainQualification',
     'ownerRuleViolations',

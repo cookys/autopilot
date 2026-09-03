@@ -477,6 +477,14 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   // a name that does not fit the resolver grammar is refused at argv
   const bad = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'bad-name'], { env: process.env, encoding: 'utf8' });
   equal(bad.status, 2, 'malformed --endpoint name exits 2');
+  // --endpoint is cc-shim-only: any other rail ignores the binding, so the disclosure would lie
+  const notShim = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs.map((a, i, arr) => (arr[i - 1] === '--runner' ? 'grok' : a)), '--endpoint', 'lanx'], {
+    env: { ...process.env, AUTOPILOT_ENDPOINT_LANX_URL: 'http://10.7.7.7:8001', AUTOPILOT_ENDPOINT_LANX_TOKEN: 't', AUTOPILOT_ENDPOINT_LANX_TRANSPORT: 'plaintext-private' },
+    encoding: 'utf8',
+  });
+  equal(notShim.status, 2, '--endpoint with a non-cc-shim runner exits 2');
+  check(/applies only to --runner cc-shim/.test(notShim.stderr), 'non-cc-shim refusal names the rule');
+  check(!fs.existsSync(path.join(storeN, 'qualification-evidence.jsonl')), 'non-cc-shim refusal: nothing written to the store');
   // --endpoint is implementer-only
   const rev = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--endpoint', 'x', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
   equal(rev.status, 2, '--endpoint on a non-implementer role exits 2');

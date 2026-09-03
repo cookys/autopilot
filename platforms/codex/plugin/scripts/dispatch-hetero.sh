@@ -1965,10 +1965,12 @@ if [ -n "$ENDPOINT" ]; then
   export ANTHROPIC_BASE_URL="$_ep_url"
   export ANTHROPIC_AUTH_TOKEN="${!_ep_tokenv-}"
   # The resolver's own stderr was discarded above (2>/dev/null keeps stdout the JSON contract);
-  # re-surface the one disclosure that must never be silent at dispatch time.
+  # re-surface the one disclosure that must never be silent at dispatch time. NOT gated on
+  # DISPATCH_QUIET: that switch silences operational chatter (timeout heads-up), never a
+  # security disclosure (review round 1, gpt-5.6-sol).
   case "$_ep_json" in
     *'"transport_security":"plaintext_private"'*)
-      [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: --endpoint '$ENDPOINT' is PLAINTEXT to a private-range address ($_ep_url) — bearer and prompts travel unencrypted on this LAN (AUTOPILOT_ENDPOINT_*_TRANSPORT=plaintext-private)" >&2 ;;
+      echo "dispatch-hetero: --endpoint '$ENDPOINT' is PLAINTEXT to a private-range address ($_ep_url) — bearer and prompts travel unencrypted on this LAN (AUTOPILOT_ENDPOINT_*_TRANSPORT=plaintext-private)" >&2 ;;
   esac
   unset _ep_json _ep_url _ep_tokenv
 fi

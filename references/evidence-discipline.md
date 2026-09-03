@@ -33,8 +33,22 @@ session, diagnosed the identical failure in two other places.
 Prevention: `hooks/tests/status-task-shadow-wiring.test.sh` runs the real entry point and asserts the
 side effect lands. Remove the wiring and it fails.
 
+**A flag can be ACCEPTED without being WIRED, and grep will tell you it is fine.**
+`engine-capability-state.js` gained `--effort` on `invalidate-strike`: the option was added to the
+command's allowlist, but never to the payload passed to `appendStrikeInvalidation`. So the flag
+parsed, the command succeeded, and the invalidation computed the effort-less seat hash — targeting a
+seat no projection reads, while the strike it was meant to lift kept counting. Self-verification
+found nothing because it grepped for the string `effort: options.effort` and the string WAS present
+— twice, in the two *other* handlers. Presence in the file is not presence in the call.
+
+> **Grep proves a token exists somewhere in the file, not that it is on the path you care about.**
+> A reviewer asking "is it wired or merely accepted?" and demanding an end-to-end fixture is what
+> separated them; the fixture went red on the first run.
+
 **Check**: for anything you just claimed is wired, grep for its callers outside its own file and its
-tests. Empty output is the finding.
+tests. Empty output is the finding. If the grep DOES hit, read the hit — a match in an allowlist, a
+usage string, or a sibling handler is not the wiring you were looking for. The end-to-end run is the
+only answer that cannot be misread: drive the flag in at one end and assert the effect at the other.
 
 ---
 
@@ -64,8 +78,22 @@ carrying the authority of a measurement without being one.
 predicate it judges, and adds one obligation legacy lacks (`evidence-bound-to-artifact`) so a real
 divergence is reachable at all.
 
+**The same tautology fits inside a single assertion.** A test for
+`adopt-qualification-defaults.js --from` had to prove that a feed's own advertised digest never
+becomes ours. It asserted that our digest "is 64 hex characters" and that "the cache directory is
+named after it" — and both of those stay true if the code adopts the producer's value, because both
+are read back out of the value under test. The assertions looked like two independent checks and
+were two restatements. The planted negative (let a declared basis switch which digest we use) passed
+straight through them; only computing the expectation independently — `sha256sum` on the file, from
+outside the program — turned it red.
+
+> **An expectation derived from the answer cannot fail with it.** If your expected value comes out of
+> the same code path as the actual value, you have asserted that a thing equals itself.
+
 **Check**: can your second opinion ever disagree? If not, it is a mirror. A test that plants a
-"claims pass, evidence says otherwise" input and asserts the shadow is not dragged along is the proof.
+"claims pass, evidence says otherwise" input and asserts the shadow is not dragged along is the
+proof. For an assertion, ask where the expected value came from: if the answer is "from the program",
+compute it another way — by hand, with a different tool, or from a fixture written before the run.
 
 ---
 

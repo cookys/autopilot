@@ -53,7 +53,7 @@
 ```bash
 cd /home/cookys/projects/autopilot
 git status --porcelain              # 應為空
-git log --oneline -3                # 62297210 → 1b85e47a → handoff commit
+git log --oneline -3                # 最新在上：handoff commit → 1b85e47a → 62297210
 node -p "require('./.claude-plugin/plugin.json').version"   # 2.35.15
 node scripts/check-hook-inventory.js --check   # in sync: 27 hooks (14 default-on, 13 opt-in)
 AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh   # ✅ 8/8 for v2.35.15

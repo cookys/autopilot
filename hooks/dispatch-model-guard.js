@@ -8,7 +8,9 @@
  * Headless (`claude -p`) behavior — verified 2026-09-04 on CC 2.1.259, both with and
  * without --dangerously-skip-permissions: an "ask" from a PreToolUse hook does NOT wedge
  * the run; CC turns it into an immediate is_error tool_result carrying
- * permissionDecisionReason, so the model sees why and can re-dispatch with `model:`.
+ * permissionDecisionReason, so the model sees why and can re-dispatch with `model:`
+ * (reviewer repro: the model may retry the same denied call ~4 times first, so an
+ * omitted model: still costs a few turns — a refusal, not a wedge).
  * No headless downgrade to "deny" is needed (BACKLOG entry closed on that evidence).
  * Signal, if ever needed: CLAUDE_CODE_ENTRYPOINT is `sdk-cli` under -p vs `cli`
  * interactive (observed, undocumented).

@@ -52,6 +52,12 @@ RUN artifact (exactly one — providing both is rejected):
   --impl-prompt-file <f> --branch <name> [--impl-runner codex] [--impl-model M]
 RUN verify/measure:
   --reviewer-runner <r> (codex)   --reviewer-model <m> (gpt-5.6-sol)   --lenses a,b (doc-accuracy,link-integrity)
+  --gate-cmd '<shell>'   MECHANICAL oracle run IN-CYCLE alongside the LLM verifier (e.g. the doc-drift
+                         Layer-1 gate, a test suite, a version-sync check). Exit 0 = pass; non-zero = fail;
+                         the cycle passes only if BOTH the gate and the verifier pass (union of catches).
+                         Runs with cwd = the repo checkout; its stdout/stderr tail is kept on the finding.
+                         Without it the in-cycle oracle is the diff-only LLM alone — a WEAK oracle for any
+                         claim that points outside the diff (version numbers, counts, file existence).
   --mock-verdict SHIP-AS-IS|FIX-THEN-SHIP   TEST SEAM only (never a real datapoint)
   --store <path> ($QC_METRIC_STORE)   --qc-metric-py <path>   --sample-rate <f>   --dry-run
 
@@ -258,7 +264,7 @@ fi
 TASK_CLASS=""; CHANGE_ID=""; REPO=""; STATE_FILE=""; BASE_SHA=""; HEAD_SHA=""
 DIFF_FILE=""; IMPL_PROMPT=""; BRANCH=""; IMPL_RUNNER="codex"; IMPL_MODEL=""
 REVIEWER_RUNNER="codex"; REVIEWER_MODEL="gpt-5.6-sol"; LENSES="doc-accuracy,link-integrity"
-MOCK_VERDICT=""; STORE=""; QC_PY=""; SAMPLE_RATE=""; DRY_RUN=0
+MOCK_VERDICT=""; STORE=""; QC_PY=""; SAMPLE_RATE=""; DRY_RUN=0; GATE_CMD=""; GATE_DIR=""
 while [ $# -gt 0 ]; do case "$1" in
   --task-class) TASK_CLASS="$2"; shift 2;;
   --change-id) CHANGE_ID="$2"; shift 2;;
@@ -275,6 +281,8 @@ while [ $# -gt 0 ]; do case "$1" in
   --reviewer-model) REVIEWER_MODEL="$2"; shift 2;;
   --lenses) LENSES="$2"; shift 2;;
   --mock-verdict) MOCK_VERDICT="$2"; shift 2;;
+  --gate-cmd) GATE_CMD="$2"; shift 2;;
+  --gate-dir) GATE_DIR="$2"; shift 2;;
   --store) STORE="$2"; shift 2;;
   --qc-metric-py) QC_PY="$2"; shift 2;;
   --sample-rate) SAMPLE_RATE="$2"; shift 2;;
@@ -351,20 +359,54 @@ else
 fi
 NEEDS_HUMAN=0
 case "$VSTATUS/$VERDICT_RAW" in
-  reviewed/SHIP-AS-IS)    PANEL_VERDICT="pass";;
-  reviewed/FIX-THEN-SHIP) PANEL_VERDICT="fail";;
-  *)                      PANEL_VERDICT="fail"; NEEDS_HUMAN=1;;   # no_verdict/precondition — fail-closed
+  reviewed/SHIP-AS-IS)    LLM_VERDICT="pass";;
+  reviewed/FIX-THEN-SHIP) LLM_VERDICT="fail";;
+  *)                      LLM_VERDICT="fail"; NEEDS_HUMAN=1;;   # no_verdict/precondition — fail-closed
 esac
-echo "   verifier: status=$VSTATUS verdict=$VERDICT_RAW → panel_verdict=$PANEL_VERDICT needs_human=$NEEDS_HUMAN"
+# Keep WHAT the verifier said, not just that it said no. Before 2026-09-03 only the verdict
+# survived; a `fail` then cost a second full dispatch-review to become actionable (fuchikoma
+# doc-sync cycles #3–#4). Text is untrusted model output: cap it, strip control chars.
+VFINDINGS_TEXT=""
+if [ -z "$MOCK_VERDICT" ]; then
+  VFINDINGS_TEXT=$(printf '%s' "$VJSON" | jq -r '(.findings // "") | if type=="array" then join("") else tostring end' 2>/dev/null \
+    | tr -d '\000-\010\013\014\016-\037\177' | head -c 2000 || true)
+fi
+echo "   verifier: status=$VSTATUS verdict=$VERDICT_RAW → llm_verdict=$LLM_VERDICT needs_human=$NEEDS_HUMAN"
+
+# ---- 2b. MECHANICAL ORACLE (optional, --gate-cmd) — runs in-cycle, union with the LLM ----
+# The diff-only verifier is structurally blind to any claim that points OUTSIDE the diff
+# (a version literal that moved after the diff was written, a count, a path that does not
+# exist). A deterministic gate reads the repo, not the text. Both must pass; either catch is
+# a depth0_panel catch (not an escape). Gate output is kept on the finding for triage.
+GATE_VERDICT="n/a"; GATE_RC=""; GATE_TAIL=""
+if [ -n "$GATE_CMD" ]; then
+  GATE_WD="${GATE_DIR:-$PWD}"
+  echo "-- gate: mechanical oracle in $GATE_WD: $GATE_CMD --"
+  set +e
+  GATE_OUT=$(cd "$GATE_WD" && bash -c "$GATE_CMD" 2>&1); GATE_RC=$?
+  set -e
+  GATE_TAIL=$(printf '%s' "$GATE_OUT" | tail -c 1500 | tr -d '\000-\010\013\014\016-\037\177')
+  if [ "$GATE_RC" = "0" ]; then GATE_VERDICT="pass"; else GATE_VERDICT="fail"; fi
+  echo "   gate: rc=$GATE_RC → gate_verdict=$GATE_VERDICT"
+fi
+
+if [ "$LLM_VERDICT" = "pass" ] && [ "$GATE_VERDICT" != "fail" ]; then PANEL_VERDICT="pass"; else PANEL_VERDICT="fail"; fi
+echo "   panel: llm=$LLM_VERDICT gate=$GATE_VERDICT → panel_verdict=$PANEL_VERDICT"
 
 # Findings caught at THIS gate are caught_at_stage=depth0_panel = verdict stage ⇒ a CATCH,
 # NOT an escape. Escapes are recorded later via the `audit` subcommand. Clean pass ⇒ [].
-FINDINGS_JSON="[]"
-if [ "$NEEDS_HUMAN" = "1" ]; then
-  FINDINGS_JSON='[{"id":"verifier-no-verdict","severity":"high","lens":"verifier-isolation","verified":"unverified","caught_at_stage":"depth0_panel"}]'
-elif [ "$PANEL_VERDICT" = "fail" ]; then
-  FINDINGS_JSON='[{"id":"verifier-flagged-onstage","severity":"medium","lens":"doc-accuracy","verified":"unverified","caught_at_stage":"depth0_panel"}]'
-fi
+FINDINGS_JSON=$(jq -cn --arg nh "$NEEDS_HUMAN" --arg llm "$LLM_VERDICT" --arg gate "$GATE_VERDICT" \
+  --arg vtext "$VFINDINGS_TEXT" --arg gtail "$GATE_TAIL" --arg gcmd "$GATE_CMD" --arg grc "$GATE_RC" '
+  ( if $nh == "1" then
+      [{"id":"verifier-no-verdict","severity":"high","lens":"verifier-isolation","verified":"unverified","caught_at_stage":"depth0_panel"}]
+    elif $llm == "fail" then
+      [{"id":"verifier-flagged-onstage","severity":"medium","lens":"doc-accuracy","verified":"unverified","caught_at_stage":"depth0_panel",
+        "detail": $vtext}]
+    else [] end )
+  + ( if $gate == "fail" then
+      [{"id":"mechanical-gate-failed","severity":"medium","lens":"mechanical-gate","verified":"real","caught_at_stage":"depth0_panel",
+        "detail": ("gate `" + $gcmd + "` rc=" + $grc + "\n" + $gtail)}]
+    else [] end )')
 
 # ---- 4. SAMPLE (H1: keyed on head_sha + optional secret salt, NOT change_id) ----
 SALT="${LADDER_SAMPLE_SALT:-}"
@@ -399,7 +441,15 @@ if [ "${NEEDS_HUMAN_PROMO:-0}" = "1" ]; then NEEDS_HUMAN=1; fi
 rm -f "$TMP_METRIC"
 echo ""
 echo "== ladder report: class=$TASK_CLASS tier=$TIER =="
-echo "   verifier         : $VRUNNER/$VMODEL → $PANEL_VERDICT"
+echo "   verifier         : $VRUNNER/$VMODEL → $LLM_VERDICT"
+echo "   mechanical gate  : ${GATE_CMD:-(none)} → $GATE_VERDICT"
+echo "   panel verdict    : $PANEL_VERDICT"
+if [ "$LLM_VERDICT" = "fail" ] && [ -n "$VFINDINGS_TEXT" ]; then
+  echo "   verifier findings: $(printf '%s' "$VFINDINGS_TEXT" | head -c 400 | tr '\n' ' ')"
+fi
+if [ "$GATE_VERDICT" = "fail" ]; then
+  echo "   gate output tail : $(printf '%s' "$GATE_TAIL" | tail -c 400 | tr '\n' ' ')"
+fi
 echo "   cookys sample    : $SAMPLED (rate $SAMPLE_RATE)"
 echo "   class escape rate: ${CLASS_ESC_PCT:-n/a}%  (real defects: ${CLASS_REAL:-0}, cycles: ${VERIFIED_CYCLES:-0})  calc_ok=${CALC_OK}"
 echo "   endorsement rate : ${ENDORSE_PCT:-n/a}%"
@@ -414,8 +464,11 @@ CYCLE=$(jq -n --arg cid "$CHANGE_ID" --arg repo "$REPO" --arg ts "$TS" --arg ver
   --arg sampled "$SAMPLED" --arg reviewer "$VRUNNER/$VMODEL" --arg esc "${CLASS_ESC_PCT:-}" \
   --arg real "${CLASS_REAL:-0}" --arg cycles "${VERIFIED_CYCLES:-0}" --arg promo "$PROMO" \
   --arg reason "$REASON" --arg nh "$NEEDS_HUMAN" --arg auton "$AUTON_STATE" --arg calc "${CALC_OK:-0}" \
+  --arg llm "$LLM_VERDICT" --arg gate "$GATE_VERDICT" --arg gcmd "$GATE_CMD" --argjson findings "$FINDINGS_JSON" \
   '{type:"cycle", change_id:$cid, repo:$repo, timestamp:$ts, verdict:$verdict, autonomous:($auton=="true"),
-    cookys_sample:($sampled=="true"), reviewer:$reviewer, class_escape_rate_pct:($esc|tonumber? // null),
+    cookys_sample:($sampled=="true"), reviewer:$reviewer, llm_verdict:$llm, gate_verdict:$gate,
+    gate_cmd:(if $gcmd=="" then null else $gcmd end), findings:$findings,
+    class_escape_rate_pct:($esc|tonumber? // null),
     class_real_defects:($real|tonumber? // 0), class_verified_cycles:($cycles|tonumber? // 0),
     calc_ok:($calc=="1"), needs_human:($nh=="1"), promotion:$promo, reason:$reason}')
 STATE_BAK="$(mktemp)"; cat "$STATE_FILE" > "$STATE_BAK"

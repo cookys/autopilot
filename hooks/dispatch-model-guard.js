@@ -5,6 +5,14 @@
  * dispatch would land on a guarded expensive engine (default: fable) or when
  * model is omitted (would silently inherit the session model).
  *
+ * Headless (`claude -p`) behavior — verified 2026-09-04 on CC 2.1.259, both with and
+ * without --dangerously-skip-permissions: an "ask" from a PreToolUse hook does NOT wedge
+ * the run; CC turns it into an immediate is_error tool_result carrying
+ * permissionDecisionReason, so the model sees why and can re-dispatch with `model:`.
+ * No headless downgrade to "deny" is needed (BACKLOG entry closed on that evidence).
+ * Signal, if ever needed: CLAUDE_CODE_ENTRYPOINT is `sdk-cli` under -p vs `cli`
+ * interactive (observed, undocumented).
+ *
  * Fail-open on unreadable payloads / internal errors (spend control, not a
  * security boundary). Config: DISPATCH_GUARD_CONFIG_OVERRIDE or
  * <cwd>/.claude/dispatch-guard-config.md (see project-config-template/).

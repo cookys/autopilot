@@ -144,7 +144,8 @@
         "cc-shim",
         "pi",
         "qoderclicn",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "x-shell-validated": true,
       "x-shell-var": "IMPL_RUNNER"
@@ -172,7 +173,8 @@
               "cc-shim",
               "pi",
               "qoderclicn",
-              "cursor"
+              "cursor",
+              "opencode"
             ]
           }
         }

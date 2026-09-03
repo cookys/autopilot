@@ -13,6 +13,7 @@ const VALID_IMPL_RUNNERS = new Set([
   'pi',
   'qoderclicn',
   'cursor',
+  'opencode',
 ]);
 
 function isTuple(row) {

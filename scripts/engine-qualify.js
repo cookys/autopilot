@@ -2882,6 +2882,7 @@ function implRunnerBinFlag(runner) {
     case 'pi': return '--pi-bin';
     case 'qoderclicn': return '--qoder-bin';
     case 'cursor': return '--cursor-bin';
+    case 'opencode': return '--opencode-bin';
     default: return null;
   }
 }

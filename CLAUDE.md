@@ -6,8 +6,8 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 29 skills, 3 methodology agents, 26 hooks (10 default-on,
-16 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
+Standalone lifecycle orchestration plugin: 29 skills, 3 methodology agents, 27 hooks (14 default-on,
+13 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
 
 ## Scripts inventory (prefer over LLM judgment)
 

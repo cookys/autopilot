@@ -42,12 +42,31 @@
     ],
     "PreToolUse": [
       {
-        "//": "D6: single per-event opt-in multiplexer. Spawns only enabled opt-in handlers (branch-protection, exec-boundary, commit-secret-scan, large-file-warner, config-protection, mcp-health pre, dispatch-model-guard, orchestrator-edit-gate). Disabled stems start zero children.",
+        "//": "D6: single per-event opt-in multiplexer. Spawns only enabled opt-in handlers (branch-protection, exec-boundary, commit-secret-scan, large-file-warner, config-protection, mcp-health pre, orchestrator-edit-gate). Disabled stems start zero children.",
         "matcher": ".*",
         "hooks": [
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/opt-in-multiplexer.js PreToolUse"
+          }
+        ]
+      },
+      {
+        "//": "v2.35.15 default-on: foreman-guard (ironlaw #6 in the loop — Bash cap / polling deny / Monitor deny for l4-l6 subagents; inert elsewhere; AUTOPILOT_FOREMAN_GUARD_MODE=off to opt out) + dispatch-model-guard (was opt-in; AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off to opt out).",
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/foreman-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-model-guard.js"
           }
         ]
       }
@@ -77,9 +96,14 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
           },
           {
-            "//": "D6: PostToolUse opt-in multiplexer (context-budget, accumulator, test-runner, design-quality).",
+            "//": "D6: PostToolUse opt-in multiplexer (accumulator, test-runner, design-quality).",
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/opt-in-multiplexer.js PostToolUse"
+          },
+          {
+            "//": "v2.35.15 default-on (was opt-in): context-budget — real context size, T1 100k nudge / T2 150k handoff directive; AUTOPILOT_CONTEXT_BUDGET_MODE=off or config context_budget.mode=off to opt out.",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.js"
           }
         ]
       },
@@ -107,12 +131,22 @@
     ],
     "Stop": [
       {
-        "//": "D6: Stop opt-in multiplexer (cost-tracker, session-summary, check-console, batch-format).",
+        "//": "D6: Stop opt-in multiplexer (session-summary, check-console, batch-format).",
         "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/opt-in-multiplexer.js Stop"
+          }
+        ]
+      },
+      {
+        "//": "v2.35.15 default-on (was opt-in): cost-tracker — per-session cost rows + cumulative cache-read warning; AUTOPILOT_COST_TRACKER=false to opt out.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-tracker.js"
           }
         ]
       }

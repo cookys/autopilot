@@ -25,7 +25,9 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
 
 // Closed table: event → ordered [{stem, matcher, args[]}]
 // Matchers use the same strings as hooks.json. Keep membership in lockstep with
-// hooks/opt-in-manifest.json (16 unique stems; mcp-health on two events).
+// hooks/opt-in-manifest.json (13 unique stems; mcp-health on two events). context-budget,
+// dispatch-model-guard and cost-tracker became default-on in v2.35.15 and are wired
+// directly in hooks.json.
 const EVENT_TABLE = {
   PreToolUse: [
     { stem: 'branch-protection', matcher: 'Bash', args: [] },
@@ -34,11 +36,9 @@ const EVENT_TABLE = {
     { stem: 'large-file-warner', matcher: 'Read', args: [] },
     { stem: 'config-protection', matcher: 'Write|Edit', args: [] },
     { stem: 'mcp-health', matcher: 'mcp__.*', args: ['pre'] },
-    { stem: 'dispatch-model-guard', matcher: 'Task|Agent', args: [] },
     { stem: 'orchestrator-edit-gate', matcher: 'Edit|Write|NotebookEdit', args: [] },
   ],
   PostToolUse: [
-    { stem: 'context-budget', matcher: '.*', args: [] },
     { stem: 'accumulator', matcher: 'Write|Edit', args: [] },
     { stem: 'test-runner', matcher: 'Write|Edit', args: [] },
     { stem: 'design-quality', matcher: 'Write|Edit', args: [] },
@@ -47,7 +47,6 @@ const EVENT_TABLE = {
     { stem: 'mcp-health', matcher: 'mcp__.*', args: ['failure'] },
   ],
   Stop: [
-    { stem: 'cost-tracker', matcher: '', args: [] },
     { stem: 'session-summary', matcher: '', args: [] },
     { stem: 'check-console', matcher: '', args: [] },
     { stem: 'batch-format', matcher: '', args: [] },

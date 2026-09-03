@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * dispatch-model-guard — PreToolUse/Task|Agent [OPT-IN]
+ * dispatch-model-guard — PreToolUse/Task|Agent [default-on since v2.35.15; opt-in before]
  * Intercepts subagent dispatch and returns permissionDecision: "ask" when the
  * dispatch would land on a guarded expensive engine (default: fable) or when
  * model is omitted (would silently inherit the session model).
@@ -14,9 +14,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { isEnabled } = require('./_shared/opt-in');
-
-if (!isEnabled('dispatch-model-guard')) process.exit(0);
+// default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
+// (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
+// subagents inherited the session's [1m] Fable model because nothing asked.
+if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'off') process.exit(0);
 
 const DEFAULTS = {
   guarded_models: ['fable'],

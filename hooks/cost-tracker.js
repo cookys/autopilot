@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * cost-tracker — Stop
+ * cost-tracker — Stop (default-on since v2.35.15; opt-in before)
  * Logs per-session token usage + estimated cost to ~/.claude/metrics/costs.jsonl.
  * Opt-out: set AUTOPILOT_COST_TRACKER=false (or autopilot.costTracker=false in
  * settings.json, injected as that env var).
@@ -21,9 +21,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isEnabled } = require('./_shared/opt-in');
-
-if (!isEnabled('cost-tracker')) process.exit(0);
+// default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
 
 const { parseAssistantTurns, aggregateSince } = require('./cost-tracker-lib');
 const { resolveTranscriptPath } = require('./transcript-reader-lib');
@@ -99,7 +97,36 @@ try {
     cwd,
   })).join('\n') + '\n';
 
-  fs.appendFileSync(path.join(metricsDir, 'costs.jsonl'), rows);
+  const costsFile = path.join(metricsDir, 'costs.jsonl');
+  fs.appendFileSync(costsFile, rows);
+  // Cumulative cache-read report (v2.35.15, cuda digest #6): the money is in cache_read
+  // on long-lived sessions, and nobody saw it accumulate. Sum THIS session's rows and
+  // print one stderr line the first time the total crosses the threshold and at each
+  // doubling after. Threshold: ~/.autopilot/config.json cost_tracker.cache_read_warn_tokens
+  // or AUTOPILOT_COST_TRACKER_CACHE_READ_WARN (default 50M tokens). Fail-open.
+  try {
+    let threshold = 50000000;
+    try {
+      const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+      const t = cfg && cfg.cost_tracker && Number(cfg.cost_tracker.cache_read_warn_tokens);
+      if (Number.isFinite(t) && t > 0) threshold = t;
+    } catch { /* default */ }
+    const envT = Number(process.env.AUTOPILOT_COST_TRACKER_CACHE_READ_WARN);
+    if (Number.isFinite(envT) && envT > 0) threshold = envT;
+    let cacheRead = 0;
+    for (const line of fs.readFileSync(costsFile, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try { const r = JSON.parse(line); if (r.session === session) cacheRead += Number(r.cache_read_tokens) || 0; } catch { /* skip */ }
+    }
+    let warned = 0;
+    try { warned = Number(JSON.parse(fs.readFileSync(cursorFile, 'utf8')).cache_read_warned) || 0; } catch { /* none */ }
+    let next = warned ? warned * 2 : threshold;
+    if (cacheRead >= next) {
+      while (cacheRead >= next * 2) next *= 2;
+      process.stderr.write(`cost-tracker: session ${session} has read ${cacheRead.toLocaleString('en-US')} cache tokens cumulatively (threshold ${next.toLocaleString('en-US')}) — a long-lived context is being re-read on every call; write a handoff and /clear, or split the work (docs/ironlaw-to-gate-map.md #6).\n`);
+      fs.writeFileSync(cursorFile, JSON.stringify({ turns: totalTurns, ts, cache_read_warned: next }));
+    }
+  } catch { /* report is best-effort */ }
   process.exit(0);
 } catch (e) {
   process.stderr.write(`cost-tracker error: ${e.message}\n`);

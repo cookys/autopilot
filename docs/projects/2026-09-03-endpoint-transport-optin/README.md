@@ -32,7 +32,7 @@ No `.claude/skill-routing.md` in this repo; dev-flow invoked. Areas: scripts (ba
 
 | Phase | Status | Commit |
 |---|---|---|
-| P0 transport opt-in (resolver, loaders, CLI, hetero notice, tests) | pending | |
-| P1 engine-qualify `--endpoint` parity + row disclosure + tests | pending | |
-| P2 docs, CHANGELOG, version, dogfood | pending | |
+| P0 transport opt-in (resolver, loaders, CLI, hetero notice, tests) | done | `cceb4d8b` |
+| P1 engine-qualify `--endpoint` parity + row disclosure + tests | done | `6ada25f6` |
+| P2 docs, CHANGELOG, version, dogfood (qwen38 endpoint resolved `plaintext_private`, `dispatch-hetero --endpoint qwen38` committed in 14 s) | done | `5a8bb16b` |
 | L-5 finish-flow | pending | |

@@ -124,11 +124,16 @@ for (const [key, oldVal] of Object.entries(oldJson)) {
   }
 }
 
-// (3) the only added keys are exactly consult_dispatch and discuss_dispatch,
-// both "off".
+// (3) the only added keys are exactly consult_dispatch, discuss_dispatch, and
+// the D6/D5-integration provenance/switch fields that ride along with them.
 const oldKeys = new Set(Object.keys(oldJson));
 const addedKeys = Object.keys(newJson).filter((k) => !oldKeys.has(k)).sort();
-const expectedAdded = ['consult_dispatch', 'discuss_dispatch'];
+const expectedAdded = [
+  'consult_dispatch', 'consult_resolved_from',
+  'discuss_dispatch',
+  'hetero_review', 'hetero_review_resolved_from',
+  'plan_review_resolved_from',
+].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);
 }
@@ -205,14 +210,14 @@ assert_eq "9" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 
 # hooks/tests/autopilot-engine.test.sh additionally re-asserts this at runtime
 # via its own fixture_field_drift guard (REVIEW_LOOP_FIELDS vs literal keys).
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/autopilot-engine.test.sh")" \
-  $'  consult_dispatch: \'off\',\n  discuss_dispatch: \'off\',' \
-  "autopilot-engine.test.sh validPayload literal carries consult_dispatch/discuss_dispatch: off"
+  $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
+  "autopilot-engine.test.sh validPayload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/review-loop-runner.test.sh")" \
-  $'  consult_dispatch: \'off\',\n  discuss_dispatch: \'off\',' \
-  "review-loop-runner.test.sh payload literal carries consult_dispatch/discuss_dispatch: off"
+  $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
+  "review-loop-runner.test.sh payload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
-  '"discuss_endpoint":"consult_dispatch":"discuss_dispatch":"allow_same_runner_dual_seat"' \
-  "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/discuss_dispatch in schema order"
+  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"allow_same_runner_dual_seat"' \
+  "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/consult_resolved_from/discuss_dispatch in schema order"
 
 # contract-parity.test.sh and autopilot-cli.test.sh build their roster object
 # by calling the LIVE resolver/CLI (never a static literal), so they inherit
@@ -267,11 +272,16 @@ assert_eq "28" "$POP_B_COUNT" "Population B file bound is pinned at 28 (git grep
 # to prove D7 admits a role-qualified cursor consult seat while the SAME row
 # still leaves a different role list-gated — that file's own acceptance test
 # for the switch-on path, not a member of "Population B" either.
+# RECOUNTED (integration pass 1): three mini-repo fixtures were repinned to set
+# consult_dispatch/discuss_dispatch explicitly (hooks/tests/dispatch-author-
+# contract.test.sh, hooks/tests/dispatch-consult-hermetic.test.sh, hooks/tests/
+# dispatch-contract.test.sh) — everything else in Population B still resolves
+# through the default (now auto for consult_dispatch, off for discuss_dispatch).
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
 POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "0" "$POP_B_EXPLICIT_SWITCH" "none of Population B's 26 partial roster configs set consult_dispatch/discuss_dispatch explicitly — they all resolve via the off default"
+assert_eq "3" "$POP_B_EXPLICIT_SWITCH" "three of Population B's 28 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'

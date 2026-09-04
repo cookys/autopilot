@@ -57,8 +57,15 @@ mk_override() {
 }
 
 # ── 1. the two new seats default empty and are emitted ──────────────────────
-json="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE" bash "$SCRIPT")"
-assert_contains "$json" '"consult_engine": ""' "template consult_engine defaults empty"
+# consult_dispatch's own default is now "auto" (not off): with no topology file
+# (pinned to a nonexistent path so a real ~/.autopilot/topology.json on the
+# host can't leak into this assertion), the resolver expands the documented
+# native fallback tuple instead of leaving the consult seat empty.
+json="$(AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json" REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE" bash "$SCRIPT")"
+assert_contains "$json" '"consult_engine": "sonnet"' "template consult_engine resolves to the native-fallback tuple under consult_dispatch: auto"
+assert_contains "$json" '"consult_effort": "high"' "template consult_effort resolves to the native-fallback tuple under consult_dispatch: auto"
+assert_contains "$json" '"consult_runner": "claude-native"' "template consult_runner resolves to the native-fallback tuple under consult_dispatch: auto"
+assert_contains "$json" '"consult_resolved_from": "native-fallback"' "template consult_resolved_from names native-fallback with no topology file"
 assert_contains "$json" '"discuss_engine": ""' "template discuss_engine defaults empty"
 assert_contains "$json" '"allow_same_runner_dual_seat": "off"' "dual-seat switch defaults OFF"
 assert_contains "$json" '"same_runner_dual_seat": false' "no dual-seat on the shipped template"

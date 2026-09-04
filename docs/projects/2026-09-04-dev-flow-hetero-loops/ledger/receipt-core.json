@@ -1,0 +1,131 @@
+{
+  "kind": "review",
+  "phase": "core",
+  "branch": "review/core",
+  "phase_base_sha": "1e5c2841",
+  "chain": [
+    {
+      "generation": 1,
+      "base": "1e5c2841",
+      "head": "c1a16011f4f279e3441f9077213c51909552af74",
+      "seats": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "status": "finalized",
+      "dispositions_path": "review-core/g1/dispositions.json",
+      "dispositions_sha256": "8bd2c27e3c2680bde35df2ce5d3e1247da382fabd4ce1cfc451df7b5c3e06a0b"
+    }
+  ],
+  "verdict": "FIX-THEN-SHIP",
+  "open_findings": [
+    {
+      "id": "83debe7b5692908ad2fa2d9462b2148d5fc55dd421dae1bb97e1d1beeb42cccb",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [receipt-rederivation-fail-open] MUST-FIX the checker does not require `receipt.chain` to equal on-disk `chain.json`, and malformed/missing findings or disposition arrays are silently treated as empty with no ID, severity, disposition, rationale, or one-to-one checks. Enforce exact chain equality and the same strict artifact validation used by `finalize`, failing on every malformed, duplicate, missing, or extra record.",
+      "disposition": "verified"
+    },
+    {
+      "id": "c3f2203726854eb4771df327ad3434517956cb6e72b936cd6908949333922c5a",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [cross-generation-format-drift] MUST-FIX `finalize` marks earlier verified findings closed when absent from a later generation and can emit `SHIP-AS-IS`, while the checker accumulates every historical verified Critical/Major/Minor and ignores `closed_findings`; a repaired multi-generation receipt therefore cannot validate. Share one re-derivation routine and validate identical closure semantics in both scripts.",
+      "disposition": "verified"
+    },
+    {
+      "id": "c74bdc05f00a791fd289163fca5f64ed7a6fa887c4c9d6cde15f716cf3edd06a",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [generation-artifacts-mutable] MUST-FIX `collect` reuses aborted and `pending-with-gap` generations, can overwrite artifacts left by a failed gap run, and allows generation N+1 before N is finalized, contrary to immutable generation and no-reuse requirements. Reserve each generation with exclusive creation, reject any existing generation directory/entry regardless of status, and require the preceding generation finalized.",
+      "disposition": "verified"
+    },
+    {
+      "id": "c2ca07fe33b2e76ce8378aff7948b3cf4ed8d59c228f3a9df84f202142a66b29",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [finding-parser-fail-open] MUST-FIX non-empty unparseable findings fail only for `FIX-THEN-SHIP`; `SHIP-AS-IS` plus arbitrary unparseable text and any proof is accepted, while `reviewed` with a null verdict or `FIX-THEN-SHIP` with empty findings can also become a clean result. Enforce a strict status/verdict/findings/proof matrix and fail every non-placeholder unparseable finding.",
+      "disposition": "verified"
+    },
+    {
+      "id": "22814c72113973fc9c311e367e471b097f9c7429964a5030ed6d69c8cade977c",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [review-exclusion-bypass] MUST-FIX arbitrary `--exclude` pathspecs are copied into mutable `range.json` and blindly honored by the checker, allowing security-relevant source files—or the entire change—to be omitted while the filtered diff hash still validates. Remove exclusions from gating reviews or bind them to a frozen generated/mirror-only allowlist while also verifying the full-range digest.",
+      "disposition": "verified"
+    },
+    {
+      "id": "d3b4a27eef540eae1644847a7b434be8c4f76a9089d972835a95dd852fcb2457",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [auto-transition-not-expanded] MUST-FIX `hetero_review:auto` merely checks that `reviewer_ladder` is non-empty and never applies its seat; native fallback likewise leaves a configured non-native reviewer intact, and schema-invalid non-empty topology entries are labeled `topology` instead of falling back. Canonically validate complete normalized seats, populate the actual dispatched tuple/panel, clear stale seats, and overwrite with the documented native fallback when no valid seat remains.",
+      "disposition": "verified"
+    },
+    {
+      "id": "78976dc6645475350112619667af98e030d15e6f8d3cd7c479c09c6dcd8e67cf",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [plan-panel-family-chair] MUST-FIX topology construction ignores the scorecard’s authoritative family field and restricts the chair to reviewer rows whenever one exists; opaque engines from distinct families collapse to `unknown`, and a higher-effort consult seat cannot become chair. Use normalized scorecard family metadata and choose the highest-effort chair from the eligible reviewer-plus-consult union before enforcing distinct families.",
+      "disposition": "verified"
+    },
+    {
+      "id": "4ffd0544ff9ad766074f47917d18eb9f0ae6d8308b385b1da92492c0850b634c",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [phase-base-integration] MUST-FIX the new dev-flow and hetero-loop phase-gate commands omit mandatory `--phase-base`, so every non-opt-out review receipt invoked as documented fails validation. Persist the phase base and pass it in every review-mode checker invocation.",
+      "disposition": "verified"
+    },
+    {
+      "id": "42864072a0abc27ec1ab62c608f2e64acc2e76f4aaecf6a97713b5e78f6a13a8",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [consult-hermetic-test-gap] MUST-FIX `dispatch-consult-hermetic.test.sh` never invokes `dispatch-consult.sh`; it only exercises the resolver, so the named D4 acceptance test passes even if dispatch is deleted or broken. Invoke the real dispatch wrapper with PATH runner shims and assert its request/result while preserving the plugin-absent scratch HOME.",
+      "disposition": "verified"
+    },
+    {
+      "id": "88084fa9482b0ff98255a53bb5cea88d70c953c0ed4bc4d8cbe2bed322d9eab6",
+      "severity": "Major",
+      "seat": "s1",
+      "text": "🟠 [hetero-collect-null-verdict-fail-open] MUST-FIX — scripts/hetero-review-loop.js runSeatDispatch accepts `status:\"reviewed\"` with `verdict:null` (validVerdict explicitly allows null), and the fail-closed parse check only fires when verdict === 'FIX-THEN-SHIP' while the no_finding_proof requirement only fires when verdict === 'SHIP-AS-IS'; a seat returning `{\"status\":\"reviewed\",\"verdict\":null,\"findings\":\"<non-empty unparseable text>\"}` is counted as reviewed with zero findings, so a generation carrying a real defect report can collect→finalize→SHIP-AS-IS silently, violating the spec's fail-closed-on-non-empty-unparseable-findings requirement; smallest remediation: in handleCollect, abort with parse_failed whenever findingsStr is non-empty and extracted.length===0 regardless of verdict, and demote null-verdict seats to no_verdict (gap) unless findings parsed.",
+      "disposition": "verified"
+    },
+    {
+      "id": "97c05534e6de7a4ae82fb195c02350b26e35b9b81b2806b9efbf1363f09bc0ad",
+      "severity": "Major",
+      "seat": "s1",
+      "text": "🟠 [findings-json-no-integrity-binding] MUST-FIX — collect records only generation/base/head/seats/status in chain.json and finalize adds dispositions_path/dispositions_sha256; findings.json and seat-*.json are never hashed into the chain, so an implementer with ledger write access can strip a Critical finding from g<N>/findings.json between collect and finalize — depth-0 then sees an empty findings list, writes matching empty dispositions, finalize legitimately emits SHIP-AS-IS, and check-phase-review-receipt.js Mode A re-derives SHIP-AS-IS from the tampered file with no mismatch anywhere (its negative control only covers post-hoc verdict edits, exactly the \"forged passing receipt\" the spec asks about); smallest remediation: record findings_sha256 (and seat artifact shas) in the chain entry written by collect and verify them in check-phase-review-receipt.js before re-deriving the verdict.",
+      "disposition": "verified"
+    },
+    {
+      "id": "2ab20291252d7ee3ed1d31dddf2f8def06f19bc9744ad7db741f8b6c0e32a9f9",
+      "severity": "Minor",
+      "seat": "s1",
+      "text": "🟡 [receipt-chain-not-compared-to-disk] MUST-FIX — check-phase-review-receipt.js Mode A reads chain.json from disk but uses it only for the first-entry base check, then iterates receipt.chain; a receipt whose embedded chain diverges from the ledger's chain.json (different generations, dropped aborted entries) passes as long as the per-generation artifacts it references are self-consistent, weakening ADR-0001 re-derivation; smallest remediation: deep-compare receipt.chain against the on-disk chain.json (exit 1 on any divergence) and drive validation from the disk chain.",
+      "disposition": "verified"
+    },
+    {
+      "id": "bdfe1fa885210409f842384264a3b519504878395b07d731b6613523e837bdea",
+      "severity": "Minor",
+      "seat": "s1",
+      "text": "🟡 [open-findings-missing-silent-pass] MUST-FIX — in check-phase-review-receipt.js Mode A the open_findings cross-check is `if (Array.isArray(...)) ... else if (typeof === 'number') ...` with no else, so a receipt that omits open_findings entirely (or sets it to a string/null) skips validation even when recomputedOpenFindings is non-empty — a fail-open gap on malformed input; smallest remediation: add a final `else { console.error(...); process.exit(1); }` branch.",
+      "disposition": "verified"
+    },
+    {
+      "id": "13f01363092ed1689e48e8d7afd7ed8878f60796996c96f40b12aa81a8dca1d8",
+      "severity": "Minor",
+      "seat": "s1",
+      "text": "🟡 [readme-skills-badge-stale] MUST-FIX — README.md and README.zh-TW.md still render the `skills-29` badge while .claude-plugin/plugin.json, plugin.json, and marketplace.json all bump to \"30 skills\" in this same diff, shipping an internally inconsistent manifest/readme pair; smallest remediation: update both badge alt/URL tokens to 30 in the two READMEs.",
+      "disposition": "verified"
+    },
+    {
+      "id": "f61e6dec4521e24701b5da1e3fece33ed1f6d49990d3b9307858e864b5328cd6",
+      "severity": "Minor",
+      "seat": "s1",
+      "text": "🟡 [changelog-qc-placeholder-shipped] MUST-FIX — CHANGELOG.md v2.36.0 entry ships the literal placeholder `<<QC-PENDING>>` for the release's own QC section, i.e. the acceptance evidence the entry describes is not yet recorded in the shipped artifact; smallest remediation: run the three-seat union-on-verified-critical QC and replace the placeholder (or cut the QC sentence) before tagging 2.36.0.",
+      "disposition": "verified"
+    }
+  ],
+  "resolved_from": "topology",
+  "written_at": "2026-09-04T12:19:01.074Z"
+}

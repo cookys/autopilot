@@ -352,7 +352,7 @@ function seatMatchesExcluded(engine, effort, runner, excludeSet) {
   const normRunner = normalizeRunner(runner);
   const eff = effort || '';
   const tuple = eff ? `${engine}/${eff}@${normRunner}` : `${engine}@${normRunner}`;
-  return excludeSet.has(tuple);
+  return excludeSet.has(tuple) || (eff === 'high' && excludeSet.has(`${engine}@${normRunner}`));
 }
 
 function deriveTopology(repoRoot, options = {}) {
@@ -479,9 +479,9 @@ function deriveTopology(repoRoot, options = {}) {
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
     });
-    let ladder = seats.map((s) => ({ ...s.seatObj }));
+    let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
-      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
+      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet));
     }
     out.reviewer_ladder = ladder;
   }
@@ -505,9 +505,9 @@ function deriveTopology(repoRoot, options = {}) {
   if (roles.has('consult')) {
     const seats = [...getConsultQualified()];
     sortConsultDiscuss(seats);
-    let ladder = seats.map((s) => ({ ...s.seatObj }));
+    let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
-      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
+      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet));
     }
     out.consult_ladder = ladder;
   }
@@ -515,9 +515,9 @@ function deriveTopology(repoRoot, options = {}) {
   if (roles.has('discuss')) {
     const seats = [...getQualifiedSeatsForRole(repoRoot, 'discuss', runnersInstalled)];
     sortConsultDiscuss(seats);
-    let ladder = seats.map((s) => ({ ...s.seatObj }));
+    let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
-      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
+      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet));
     }
     out.discuss_ladder = ladder;
   }
@@ -526,7 +526,7 @@ function deriveTopology(repoRoot, options = {}) {
     // Chair candidates: qualified reviewer-role rows only, eligible runners only, not excluded
     const chairCandidates = getReviewerQualified().filter((s) => {
       if (!PANEL_RUNNERS_SET.has(s.runner)) return false;
-      if (seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet)) return false;
+      if (seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet)) return false;
       return true;
     });
 
@@ -548,14 +548,14 @@ function deriveTopology(repoRoot, options = {}) {
 
     if (chairCandidates.length > 0) {
       const chair = chairCandidates[0];
-      panel.push({ ...chair.seatObj, effort: chair.seatObj.effort || 'high', role_source: 'reviewer' });
+      panel.push({ ...chair.seatObj, effort: chair.emittedEffort, role_source: 'reviewer' });
       usedFamilies.add(chair.family);
     }
 
     // Non-chair candidate pool: union of reviewer-role and consult-role rows
     const nonChairCandidates = [...getReviewerQualified(), ...getConsultQualified()].filter((s) => {
       if (!PANEL_RUNNERS_SET.has(s.runner)) return false;
-      if (seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet)) return false;
+      if (seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet)) return false;
       return true;
     });
 
@@ -564,7 +564,7 @@ function deriveTopology(repoRoot, options = {}) {
     for (const cand of nonChairCandidates) {
       if (panel.length >= 3) break;
       if (usedFamilies.has(cand.family)) continue;
-      panel.push({ ...cand.seatObj, effort: cand.seatObj.effort || 'high' });
+      panel.push({ ...cand.seatObj, effort: cand.emittedEffort });
       usedFamilies.add(cand.family);
     }
 

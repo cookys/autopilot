@@ -950,20 +950,28 @@ assert_contains "$T2_CHAIN" '"status": "aborted"' "test 2: chain entry status is
 assert_contains "$T2_CHAIN" '"reason": "parse_failed"' "test 2: chain entry reason is parse_failed"
 
 # Test 2d (negative control): the aborted generation left real evidence on disk (range.json, diff.txt);
-# retrying without --retry must be refused and must NOT delete/recreate that directory.
-assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json exists before retry"
+# collecting the SAME generation number again must be refused (generation numbers are never
+# reused, including aborted ones) and must NOT delete/recreate that directory.
+assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json exists before re-collect"
 T2D_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2D_RC=$?
-assert_exit_code "$T2D_RC" "1" "test 2d: retry without --retry on an aborted generation with existing evidence is refused"
-assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json still present after refused retry (not deleted)"
+assert_exit_code "$T2D_RC" "1" "test 2d: re-collecting the same generation after an abort is refused"
+assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json still present after refused re-collect (not deleted)"
 
-# Test 2e: --retry reuses the generation number but preserves the aborted evidence directory
-# (renamed aside under g1.aborted-*, never deleted).
+# Test 2e (negative control, continued): collecting the NEXT generation number after an abort is
+# accepted, continues from the aborted generation's base, and leaves the aborted generation's
+# evidence directory (g1) completely untouched — never renamed, moved, or deleted — while the
+# aborted chain.json entry itself stays in place, referenced alongside the new generation's entry.
+T2E_G1_RANGE_BEFORE=$(cat "$LEDGER/review-p_test2/g1/range.json")
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-T2E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --retry 2>&1); T2E_RC=$?
-assert_exit_code "$T2E_RC" "0" "test 2e: --retry succeeds"
-assert_file_exists "$LEDGER/review-p_test2/g1/findings.json" "test 2e: fresh g1 directory has findings.json"
-T2E_PRESERVED_COUNT=$(find "$LEDGER/review-p_test2" -maxdepth 1 -name "g1.aborted-*" -type d | wc -l | tr -d ' ')
-assert_eq "$T2E_PRESERVED_COUNT" "1" "test 2e: aborted evidence directory preserved under g1.aborted-*, not deleted"
+T2E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 2 --branch work --seats "m1/low@codex" 2>&1); T2E_RC=$?
+assert_exit_code "$T2E_RC" "0" "test 2e: collecting the next generation number after an abort is accepted"
+assert_file_exists "$LEDGER/review-p_test2/g2/findings.json" "test 2e: fresh g2 directory has findings.json"
+T2E_G1_RANGE_AFTER=$(cat "$LEDGER/review-p_test2/g1/range.json")
+assert_eq "$T2E_G1_RANGE_BEFORE" "$T2E_G1_RANGE_AFTER" "test 2e: aborted g1 evidence directory is byte-for-byte untouched by the g2 collect"
+T2E_CHAIN_LEN=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).length);' "$LEDGER/review-p_test2/chain.json")
+assert_eq "$T2E_CHAIN_LEN" "2" "test 2e: chain.json has both the aborted g1 entry and the new g2 entry"
+T2E_G1_STATUS=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).find((c) => c.generation === 1).status);' "$LEDGER/review-p_test2/chain.json")
+assert_eq "$T2E_G1_STATUS" "aborted" "test 2e: g1 entry in chain.json is still status aborted, unmodified (referenced, not overwritten)"
 
 # Test 2b: SHIP-AS-IS with findings "none" and non-empty no_finding_proof succeeds with 0 findings and pending status
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
@@ -995,7 +1003,9 @@ assert_exit_code "$T3_RC2" "1" "test 3: second collect for same generation exits
 T3_CHAIN_AFTER=$(cat "$LEDGER/review-p_test3/chain.json")
 assert_eq "$T3_CHAIN_BEFORE" "$T3_CHAIN_AFTER" "test 3: chain.json unchanged on refused rerun"
 
-# Test 4: aborted entry replacement: chain entry with status aborted replaced in place (exactly 1 entry, not 2)
+# Test 4: an existing chain entry for a generation — of ANY status, including 'aborted' — is
+# never reused/replaced by a fresh collect on that same generation number. Only the next
+# generation number can proceed.
 mkdir -p "$LEDGER/review-p_test4"
 cat << 'EOF' > "$LEDGER/review-p_test4/chain.json"
 [
@@ -1009,11 +1019,11 @@ cat << 'EOF' > "$LEDGER/review-p_test4/chain.json"
 EOF
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T4_RC=$?
-assert_exit_code "$T4_RC" "0" "test 4: collect succeeds on replacing aborted entry"
+assert_exit_code "$T4_RC" "1" "test 4: collect refuses to reuse generation 1 while an aborted entry for it exists"
 T4_CHAIN_LEN=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).length);' "$LEDGER/review-p_test4/chain.json")
-assert_eq "$T4_CHAIN_LEN" "1" "test 4: chain has exactly 1 entry (replaced in place)"
+assert_eq "$T4_CHAIN_LEN" "1" "test 4: chain still has exactly 1 entry (untouched, not replaced)"
 T4_STATUS=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1]))[0].status);' "$LEDGER/review-p_test4/chain.json")
-assert_eq "$T4_STATUS" "pending" "test 4: replaced entry status reflects new run"
+assert_eq "$T4_STATUS" "aborted" "test 4: existing entry status is unchanged (still aborted)"
 
 # Test 5: malformed chain.json (not valid JSON or wrong top-level shape) exits 1 and file left unchanged
 mkdir -p "$LEDGER/review-p_test5a"

@@ -173,7 +173,15 @@ function main() {
   }
 
   const outputText = outLines.join('\n') + '\n';
-  fs.writeFileSync(outPath, outputText, 'utf8');
+  try {
+    fs.writeFileSync(outPath, outputText, { encoding: 'utf8', flag: 'wx' });
+  } catch (err) {
+    if (err && (err.code === 'EEXIST' || err.code === 'EISDIR')) {
+      console.error(`output file already exists: ${outPath}`);
+      process.exit(2);
+    }
+    throw err;
+  }
   process.exit(0);
 }
 

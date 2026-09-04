@@ -317,8 +317,8 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // git diff <base> <head> with maxBuffer 64MB and negative pathspecs if rangeObj.excluded exists
-      const diffArgs = ['diff', entry.base, entry.head];
+      // git diff <base>..<head> with maxBuffer 64MB and negative pathspecs if rangeObj.excluded exists
+      const diffArgs = ['diff', `${entry.base}..${entry.head}`];
       if (Array.isArray(rangeObj.excluded) && rangeObj.excluded.length > 0) {
         diffArgs.push('--');
         for (const pattern of rangeObj.excluded) {

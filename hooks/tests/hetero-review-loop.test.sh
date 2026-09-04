@@ -1030,7 +1030,7 @@ T7_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test7/g1/seat-s0.json")
 assert_contains "$T7_SEAT_OUTPUT" '"verdict": "no_verdict"' "test 7: recorded verdict is no_verdict on non-zero exit"
 assert_contains "$T7_SEAT_OUTPUT" '"status": "no_verdict"' "test 7: recorded status is no_verdict on non-zero exit"
 assert_not_contains "$T7_SEAT_OUTPUT" '"verdict": "SHIP-AS-IS"' "test 7: printed verdict SHIP-AS-IS is ignored"
-unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT
+export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh"
 
 # Test 8: --exclude removes matched pathspec from diff.txt and records in range.json
 EXCL_REPO="$TEST_TMP/excl_repo"

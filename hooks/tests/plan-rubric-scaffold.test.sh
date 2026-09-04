@@ -99,4 +99,20 @@ assert_exit_code "$RC4" "1" "case 4 exits 1 on missing section"
 assert_contains "$RUN4_OUT" "missing section: 6" "case 4 stderr/output mentions missing section 6"
 assert_file_absent "$CASE4_OUT" "case 4 writes no output file"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. Exclusive-create check: running twice against the same path exits 0 then 2
+# ─────────────────────────────────────────────────────────────────────────────
+mkdir -p "$TEST_TMP/case5"
+CASE5_OUT="$TEST_TMP/case5/out.rubric.md"
+
+RUN5A_OUT=$(node "$SCRIPT" --plan "$FIXTURE" --out "$CASE5_OUT" 2>&1); RC5A=$?
+assert_exit_code "$RC5A" "0" "case 5: first run exits 0"
+assert_file_exists "$CASE5_OUT" "case 5: file created on first run"
+CONTENT_AFTER_FIRST=$(cat "$CASE5_OUT")
+
+RUN5B_OUT=$(node "$SCRIPT" --plan "$FIXTURE" --out "$CASE5_OUT" 2>&1); RC5B=$?
+assert_exit_code "$RC5B" "2" "case 5: second run against same path exits 2"
+CONTENT_AFTER_SECOND=$(cat "$CASE5_OUT")
+assert_eq "$CONTENT_AFTER_SECOND" "$CONTENT_AFTER_FIRST" "case 5: file contents after second run are identical to first run"
+
 finalize_test

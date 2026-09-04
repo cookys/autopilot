@@ -350,9 +350,17 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
 
 function seatMatchesExcluded(engine, effort, runner, excludeSet) {
   const normRunner = normalizeRunner(runner);
-  const eff = effort || '';
-  const tuple = eff ? `${engine}/${eff}@${normRunner}` : `${engine}@${normRunner}`;
-  return excludeSet.has(tuple) || (eff === 'high' && excludeSet.has(`${engine}@${normRunner}`));
+  const defaultedEffort = effort || 'high';
+  const emittedTuple = `${engine}/${defaultedEffort}@${normRunner}`;
+  const rawTuple = `${engine}/${defaultedEffort}@${runner}`;
+  const legacyNormTuple = `${engine}@${normRunner}`;
+  const legacyRawTuple = `${engine}@${runner}`;
+  return (
+    excludeSet.has(emittedTuple) ||
+    excludeSet.has(rawTuple) ||
+    excludeSet.has(legacyNormTuple) ||
+    excludeSet.has(legacyRawTuple)
+  );
 }
 
 function deriveTopology(repoRoot, options = {}) {
@@ -415,8 +423,8 @@ function deriveTopology(repoRoot, options = {}) {
     }
 
     qualifiedSeats.sort((a, b) => {
-      const rankA = EFFORT_RANK[a.effort] || 99;
-      const rankB = EFFORT_RANK[b.effort] || 99;
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
@@ -481,7 +489,7 @@ function deriveTopology(repoRoot, options = {}) {
     });
     let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
-      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet));
+      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
     }
     out.reviewer_ladder = ladder;
   }
@@ -507,7 +515,7 @@ function deriveTopology(repoRoot, options = {}) {
     sortConsultDiscuss(seats);
     let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
-      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet));
+      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
     }
     out.consult_ladder = ladder;
   }
@@ -517,7 +525,7 @@ function deriveTopology(repoRoot, options = {}) {
     sortConsultDiscuss(seats);
     let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
-      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet));
+      ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
     }
     out.discuss_ladder = ladder;
   }
@@ -657,6 +665,12 @@ function main() {
     const parts = excludeSeatsArg.split(',').map((s) => s.trim()).filter(Boolean);
     for (const p of parts) {
       excludeSet.add(p);
+      const atIdx = p.indexOf('@');
+      if (atIdx !== -1) {
+        const prefix = p.slice(0, atIdx);
+        const normR = normalizeRunner(p.slice(atIdx + 1));
+        excludeSet.add(`${prefix}@${normR}`);
+      }
     }
   }
 

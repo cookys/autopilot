@@ -77,6 +77,12 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 
 ## Active entries
 
+### check-phase-review-receipt: a head moved only by commits touching allowlisted excluded paths should still validate
+- **Trigger**: every release closeout — CHANGELOG/ledger/archive commits land after the last review generation, so the receipt's head never equals the merge head
+- **Context**: the checker binds `review_head_sha` to the branch head; today the honest sequence is "checker exit 0 at the reviewed head, recorded in the ledger, then docs-only commits". Candidate: accept a moved head when `git diff <receipt_head>..<head>` touches only paths matched by the frozen exclusion allowlist (plus CHANGELOG.md / INDEX.md), and record that delta in the receipt check output
+- **Effort**: S
+- **Source**: v2.36.0 closeout, `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/`
+
 ### hetero-review-loop / check-phase-review-receipt: hoist EXCLUDE_ALLOWLIST and isPathspecAllowed into scripts/lib
 - **Trigger**: the next edit to either copy (they are byte-identical today)
 - **Context**: duplicated verbatim in both scripts; a one-sided edit would silently desynchronise the gate (GLM + MiniMax FOLLOW-UP, core review g2, 2026-09-04)

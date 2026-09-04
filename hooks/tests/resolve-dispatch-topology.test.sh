@@ -384,4 +384,38 @@ NODE
 )"
 assert_eq "empty_arrays_ok" "$EMPTY_CHECK" "Case 11: empty arrays for all roles when store is empty"
 
+# -----------------------------------------------------------------------------
+# Case 12: plan_review_panel: legacy empty-effort seats sort last, not first,
+# and emit effort: "high" instead of ""
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+# Write legacy empty-effort row (e.g. minimax-m3 with latency 5.0, lower latency than real effort)
+write_scorecard_row "minimax-m3" "agy" "" 5.0 "qualified" 901 "reviewer" "minimax"
+# Write real effort row (gpt-5.6-sol with max effort, higher latency 10.0)
+write_scorecard_row "gpt-5.6-sol" "agy" "max" 10.0 "qualified" 902 "reviewer" "openai"
+
+OUT="$(node "$SCRIPT" --json --role plan_reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 12: exit 0"
+
+CHAIR_ENGINE_12="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel[0].engine);
+NODE
+)"
+assert_eq "gpt-5.6-sol" "$CHAIR_ENGINE_12" "Case 12: chair is seat with real effort, not empty-effort legacy row"
+
+SECOND_ENGINE_12="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel[1].engine);
+NODE
+)"
+assert_eq "minimax-m3" "$SECOND_ENGINE_12" "Case 12: legacy seat placed second"
+
+SECOND_EFFORT_12="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel[1].effort);
+NODE
+)"
+assert_eq "high" "$SECOND_EFFORT_12" "Case 12: legacy seat emitted with effort 'high', never ''"
+
 finalize_test

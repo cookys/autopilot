@@ -523,8 +523,8 @@ function deriveTopology(repoRoot, options = {}) {
     });
 
     function comparePanelCandidates(a, b) {
-      const rankA = EFFORT_RANK[a.effort] || 99;
-      const rankB = EFFORT_RANK[b.effort] || 99;
+      const rankA = EFFORT_RANK[a.effort] || 0;
+      const rankB = EFFORT_RANK[b.effort] || 0;
       if (rankA !== rankB) return rankB - rankA; // highest effort rank first
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
@@ -537,7 +537,7 @@ function deriveTopology(repoRoot, options = {}) {
 
     if (chairCandidates.length > 0) {
       const chair = chairCandidates[0];
-      panel.push({ ...chair.seatObj, role_source: 'reviewer' });
+      panel.push({ ...chair.seatObj, effort: chair.seatObj.effort || 'high', role_source: 'reviewer' });
       usedFamilies.add(chair.family);
     }
 
@@ -553,7 +553,7 @@ function deriveTopology(repoRoot, options = {}) {
     for (const cand of nonChairCandidates) {
       if (panel.length >= 3) break;
       if (usedFamilies.has(cand.family)) continue;
-      panel.push({ ...cand.seatObj });
+      panel.push({ ...cand.seatObj, effort: cand.seatObj.effort || 'high' });
       usedFamilies.add(cand.family);
     }
 

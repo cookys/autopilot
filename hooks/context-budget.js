@@ -28,6 +28,14 @@
  * AUTOPILOT_HOOK_CONTEXT_BUDGET=1.
  * Fail-open: any error ⇒ exit 0. Separate state/script from
  * orchestrator-edit-gate (single-crash isolation, panel finding).
+ *
+ * v2.36.1 (P2): the statusline live file (scripts/lib/live-state-dir.js) publishes the
+ * REAL context window and total_input_tokens, so when it is present and fresh the window
+ * is READ, not inferred — inferWindowTokens/scaleTiers-by-ratchet stay as the fallback for
+ * when no usable live file exists (absent, stale >120s, wrong schema_version, malformed).
+ * State dir also moves under the resolved live base (`<base>/context-budget/`) unless
+ * AUTOPILOT_CONTEXT_BUDGET_DIR is set; with no RAM-backed base, resolveLiveDir()'s own SSD
+ * fallback IS ~/.autopilot, so the no-live-file path is byte-for-byte v2.36.0.
  */
 
 'use strict';
@@ -36,19 +44,20 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  readContextTokens, budgetDecision, inferWindowTokens, scaleTiers,
+  readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow,
 } = require('./context-budget-lib.js');
+const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 
 const PARSE_EVERY_BELOW_T1 = 5;
 
-function getSessionId() {
-  const raw = process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || process.cwd();
-  return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
-}
-
-function stateDir() {
-  return process.env.AUTOPILOT_CONTEXT_BUDGET_DIR
-    || path.join(os.homedir(), '.autopilot', 'context-budget');
+// Writer/reader parity (plan §2.5): session_id from the hook payload first, env second,
+// cwd last — the SAME sanitiser used by every live-file consumer.
+function getSessionId(payload) {
+  const raw = (payload && typeof payload.session_id === 'string' && payload.session_id)
+    || process.env.CLAUDE_CODE_SESSION_ID
+    || process.env.CLAUDE_SESSION_ID
+    || process.cwd();
+  return sanitizeSessionId(raw);
 }
 
 function loadConfig() {
@@ -107,38 +116,92 @@ function saveState(file, st) {
     const tpath = payload && payload.transcript_path;
     if (!tpath || typeof tpath !== 'string') process.exit(0);
 
-    fs.mkdirSync(stateDir(), { recursive: true });
-    const stateFile = path.join(stateDir(), `${getSessionId()}.json`);
+    const sid = getSessionId(payload);
+    const live = resolveLiveDir();
+    const stDir = process.env.AUTOPILOT_CONTEXT_BUDGET_DIR || path.join(live.base, 'context-budget');
+    fs.mkdirSync(stDir, { recursive: true });
+    const stateFile = path.join(stDir, `${sid}.json`);
     const st = loadState(stateFile);
     st.calls += 1;
 
-    // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
-    // window implied by the largest context this session has actually reached.
-    // Applied to the mustParse gate too, so the cheap path uses the same tiers.
-    const effCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+    const liveMain = readLive(live.base, sid, { kind: 'main' });
+    const liveWindow = liveMain && liveMain.context_window
+      && Number.isFinite(liveMain.context_window.context_window_size)
+      ? liveMain.context_window.context_window_size : null;
+    const liveTotal = liveMain && liveMain.context_window
+      && Number.isFinite(liveMain.context_window.total_input_tokens)
+      ? liveMain.context_window.total_input_tokens : null;
+    const liveUsable = liveWindow !== null && liveTotal !== null;
 
-    // Cheap path below T1: parse only every Nth call. Once T1 territory has
-    // been seen, parse every call (a burst can overshoot fast).
-    const mustParse = st.lastContext >= effCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
-    if (mustParse) {
-      const tokens = readContextTokens(tpath);
-      if (tokens !== null) {
-        st.lastContext = tokens;
-        // Ratchet: observing N tokens proves the window is > N. Monotonic, so
-        // auto-compaction (which lowers current context) cannot walk it back.
-        st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
-        const liveCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
-        const d = budgetDecision(
-          { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
-          liveCfg,
-        );
-        if (d.tier === 't1') {
-          st.lastT1Call = st.calls;
-          process.stderr.write(`${d.message}\n`);
-        } else if (d.tier === 't2') {
-          st.lastT2Call = st.calls;
-          process.stderr.write(`${d.message}\n`);
-          exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
+    if (liveUsable) {
+      // v2.36.1 (P2): the live file gives the EXACT window — skip inferWindowTokens.
+      // contextTokens defaults to the live total (free — the live file is already
+      // parsed); only on the periodic parse cadence do we also read the transcript,
+      // to guard against a live tick that lags a transcript row that already grew
+      // past it (contextTokens = max(transcript, live total) when the transcript
+      // row predates the live file's own written_at; otherwise the transcript row
+      // is at least as fresh, so it is trusted directly).
+      const liveCfg = tiersForKnownWindow(cfg, liveWindow);
+      const mustParse = st.lastContext >= liveCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
+      let contextTokens = liveTotal;
+      if (mustParse) {
+        const usage = readContextUsage(tpath);
+        if (usage !== null) {
+          const writtenMs = Date.parse(liveMain.written_at);
+          const rowMs = usage.timestamp ? Date.parse(usage.timestamp) : NaN;
+          if (Number.isFinite(writtenMs) && Number.isFinite(rowMs) && rowMs < writtenMs) {
+            contextTokens = Math.max(usage.tokens, liveTotal);
+          } else if (Number.isFinite(rowMs)) {
+            contextTokens = usage.tokens; // transcript is at least as fresh as the live tick
+          }
+        }
+      }
+      st.lastContext = contextTokens;
+      st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, contextTokens);
+      const d = budgetDecision(
+        { contextTokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
+        { ...liveCfg, windowSource: 'statusline' },
+      );
+      if (d.tier === 't1') {
+        st.lastT1Call = st.calls;
+        process.stderr.write(`${d.message}\n`);
+      } else if (d.tier === 't2') {
+        st.lastT2Call = st.calls;
+        process.stderr.write(`${d.message}\n`);
+        exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
+      }
+    } else {
+      // Unchanged inference path: no usable live file (absent, stale, wrong
+      // schema_version, or malformed) ⇒ v2.36.0 behaviour, byte-for-byte.
+      //
+      // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
+      // window implied by the largest context this session has actually reached.
+      // Applied to the mustParse gate too, so the cheap path uses the same tiers.
+      const effCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+
+      // Cheap path below T1: parse only every Nth call. Once T1 territory has
+      // been seen, parse every call (a burst can overshoot fast).
+      const mustParse = st.lastContext >= effCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
+      if (mustParse) {
+        const tokens = readContextTokens(tpath);
+        if (tokens !== null) {
+          st.lastContext = tokens;
+          // Ratchet: observing N tokens proves the window is > N. Monotonic, so
+          // auto-compaction (which lowers current context) cannot walk it back.
+          st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
+          const liveCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+          const d = budgetDecision(
+            { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
+            liveCfg,
+          );
+          if (d.tier === 't1') {
+            st.lastT1Call = st.calls;
+            process.stderr.write(`${d.message}\n`);
+          } else if (d.tier === 't2') {
+            st.lastT2Call = st.calls;
+            process.stderr.write(`${d.message}\n`);
+            exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
+          }
         }
       }
     }

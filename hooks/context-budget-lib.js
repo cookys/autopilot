@@ -75,6 +75,23 @@ function scaleTiers(cfg, inferredWindow) {
   };
 }
 
+/**
+ * v2.36.1: scale tiers to a window read EXACTLY from the statusline live file (not
+ * inferred). Same proportional formula as scaleTiers, but always tags the result with
+ * `inferredWindow` (even at ratio 1) so budgetDecision always states the proportion and
+ * attributes it to the statusline — scaleTiers' ratio<=1 short-circuit exists only to
+ * avoid noise on an UNEVIDENCED base-window guess, which does not apply to a real number.
+ */
+function tiersForKnownWindow(cfg, window) {
+  const ratio = Number.isFinite(window) && window > 0 ? window / BASE_WINDOW : 1;
+  return {
+    ...cfg,
+    t1: cfg.explicitT1 ? cfg.t1 : Math.round(cfg.t1 * ratio),
+    t2: cfg.explicitT2 ? cfg.t2 : Math.round(cfg.t2 * ratio),
+    inferredWindow: window,
+  };
+}
+
 // Extract {tokens, timestamp} from one parsed transcript line, or null.
 // `timestamp` is the row's own ISO string when present, else null — used by the
 // v2.36.1 live-file comparison (contextTokens = max(transcript, live total) when the
@@ -197,6 +214,7 @@ module.exports = {
   usageOf,
   inferWindowTokens,
   scaleTiers,
+  tiersForKnownWindow,
   START_WINDOW_BYTES,
   CAP_BYTES,
   T1_THROTTLE_CALLS,

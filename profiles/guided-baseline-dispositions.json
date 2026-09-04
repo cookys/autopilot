@@ -7,10 +7,9 @@
       "content_hash": "3d9c7a81859bdcbce40d21001106a4ddf2d4e06919811647172eecdaf91637d8",
       "disposition": "rewritten",
       "successor_hashes": [
-        "7d0337f1ae93ba31c2298b31b7ca4923123fb6f998841dbb6065264d400eee81",
-        "df8380fc73c2b0f56e976f6fc03f89e27ccc3a27f627079ea313365e1b948307"
+        "c4e18fe140c578b0d7aaf5c4bb5bbc75fb086d86e08907f6c3a616e12e584fdc"
       ],
-      "rationale": "P0 skills/dev-flow/SKILL.md:133 ('Before committing or merging, invoke autopilot:quality-pipeline'). The obligation to run a quality gate before committing/merging survives; the two successor lines (current :133-:134) are the size→gate INDEX, and the surviving imperative itself lives at the pre-existing step lines :241 (S step 2) and :275 (Fix step 4) for S/Fix and in finish-flow L-5.2 / H-9.2 for L/H. What changed is scope, not existence. v2.34.19, evidence docs/plans/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md."
+      "rationale": "P0 skills/dev-flow/SKILL.md:133 ('Before committing or merging, invoke autopilot:quality-pipeline'). The obligation to run a quality gate before committing/merging survives; the two successor lines (current :133-:134) are the size→gate INDEX, and the surviving imperative itself lives at the pre-existing step lines :241 (S step 2) and :275 (Fix step 4) for S/Fix and in finish-flow L-5.2 / H-9.2 for L/H. What changed is scope, not existence. v2.34.19, evidence docs/plans/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md. UPDATED D3 cut 4 (2026-09-04): the two-line successor (old :137-:138, hashes 7d0337f1.../df8380fc...) was merged into one line at current :137 and extended with the L-2.5/L-4 hetero-review-receipt dependency clause; successor_hashes repointed to the merged line, no separate disposition needed for the intermediate two-line form (never itself a P0 baseline hash)."
     },
     {
       "content_hash": "a5db6d6a76a989ce29934a93e902860ab1f3eed26a155eda28544d17911a6e41",
@@ -40,6 +39,206 @@
         "dc66dd5f6baecf0be537dd4c3599966fca8371ba220b9e3885476ef003baa2bb"
       ],
       "rationale": "P0 skills/dev-flow/SKILL.md:513 ('invoke autopilot:finish-flow for the same effect in TaskCreate form'). The alternative route survives at current :516; the false equivalence is corrected — finish-flow's Fix-size F.1 runs `quality-pipeline --size S`, a STRICTER gate than step 4's project-config gate, so 'the same effect' was untrue and was the second half of the same contradiction this release fixes (pre-merge review finding, v2.34.19)."
+    },
+    {
+      "content_hash": "14055e697a42d4391808b0d4139e9a8e88c5e748147a060daf7a409f63b2b5ec",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:273 ('**Note on merge as an \"irreversible op\"**: A `git merge --no-ff` into `develop` (or equivalent team-default branch) is considered **within CEO DOA**...'), a 9-line paragraph spelling out the merge-is-DOA rule plus the merged-branch-delete carve-out. The rule itself (merge into develop is within CEO DOA for L-size workflows) survives verbatim in spirit at current :273, condensed to one line that defers the mechanics (locally-reversible rationale, main/force-push exclusion, finish-flow L-5.3/H-9.3 treatment, merged-branch-delete carve-out) to references/level-front-door.md § 'Mid-run question discipline'. What moved is the level of detail carried inline vs. by reference, not the rule's existence. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "3f8cca50d96ba909466dc93b55cc913f9d5817c010b4a210f5074a409f6f458c",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:274 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "39ed5b8c5c22433effb82c3246f33f91c1896a6c923c73bf2f7c02b0b0ecd389",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:275 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "78c5aa33a65fe2024e02de5bc3ab1e75d34743d834bc838c2e46f6cb11621b34",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:276 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "add33ed318fc4c56daa6135e68d5813ac202b6539ad3994b9d1c2b42cbd52fb1",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:277 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "faa2623d3b3f191359501e5b38c81b0067141849b38217b333cd17fc9759c615",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:278 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "9337c11c39b2877556c7c1f4bd6bbc454c948809105ba5ac8584086bf5b48c5e",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:279 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "9b46819d1397724b8d31fe860a29da586129362fa2303afa80c242a863fa5c02",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:280 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "e01f58d6909548e5a03e0d6e24fbd01824ce11e283e608221ff86beb4f1e5c16",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "ef1deab03af30efcfd015afdde7895430d3d87df40ea62bd7879b17a51ce9490"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:282 (part of the 10-line 'Note on merge as an \"irreversible op\"' paragraph, old :273-:282). The whole paragraph — merge-into-develop is within CEO DOA, the reversibility rationale, the main/force-push exclusion, the finish-flow L-5.3/H-9.3 autonomous-subtask treatment, and the merged-branch-delete carve-out — is condensed to one line at current :273 that defers the mechanics to references/level-front-door.md § 'Mid-run question discipline'. The rule survives; only the inline-vs-by-reference level of detail changed. D3 cut 4 (dev-flow hetero loops as default), 2026-09-04."
+    },
+    {
+      "content_hash": "67f965ec56d48bc962149aaf72b7bfd77469650d0c06959c7ea52dfdd7ff2cf7",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "5522b3bb8d35d62323ad22960402295ee7ef3fdefc4dc08db40f095a8315dffd"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:168. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :167 (\"| Nature | Criteria | Workflow | Hetero Review Predicate |\"...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "e7ea1c0f530ff9ced9b81cb9f426a40d57356cfe22db8560346f5b46f3138c95",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "1bc4b59d44d66c72a205f97cee5ee2f496ec54bd2d5726bd8a8f86d7e6b4aebd"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:170. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :169 (\"| **Fix** | Bug fix — root cause known, solution clear. No design needed. | Fix (any module count) | qc only |\"...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "a597ff9d022e1249b8b1b90e70be94216d96f0f9f1bde8d81a2e647722a0be51",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "aa72f9856b828ecd42f1cbe759a051753ddb52d09031354aaac1f3874b4bf80e"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:171. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :170 (\"| **H** | Production broken — immediate fix needed. | Hotfix | plan loop + per-phase hetero review + qc |\"...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "e450b530e7783715e11bfad4e3e3719a58eeb5d02037503599ccf4e4ed799eac",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a917a8d23c2ec54945ecfff17430ee23eb65c12800085104e61fe82acac84802"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:175. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :174 (\"| Size | Criteria | Workflow | Hetero Review Predicate |\"...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "8ce7279e1b7934d33bcdee48ee6b68f915a77df6afaac2a7a74120c20446fbf7",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "123600eeefbca450f005b2d0e79a2aba403e9f4c486465212db66b0e88b262da"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:177. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :176 (\"| **S** | Single commit (single module, no interface change, self-contained) | Direct commit | no plan loop, one hetero seat + qc |\"...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "7a1287a4fa8d42a32b50b6c73f1e3a6769dd36b56bc4aac7f051befe7fe5b8fe",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "c4a23d6a0d43343e14df71207807d9769e103eb8d139112213b2682f3e1db65a"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:178. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :177 (\"| **L** | Multiple commits (3+ modules / public API / incompatible data / Feature Flag / user requests planning) | Plan + Project | plan lo...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "80f4fec35145178f080834d452b7aad83f2e79ce80b294b903a792b66f5222b3",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "4751ec91e456e4b20e0901050b42b776e104d1c3d2e56fdfc985fc7ebb0f9998"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:475. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :479 (\"- [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b>` exits 0 (SHIP-...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "e69e8b1b39e5d17531549e57e74d2b379955f0cd3c3a8fa845555e0fcaf39fd7",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:599. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "81fc291510f5eae7307ca81cac709e723ce21f6021ab7c07b200e72c140a2ebc",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:602. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "ba51cbb463f992728911c6eddae400daf40937037d576fbf835d3530a7a177ff",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:603. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "17535d84eb3d52235986ee4d29cd5d6e2b349b9b5351891b85ae2ad8de6ad745",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:605. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "3f3da3716981b3a543c397ef9859a8585572d8fcbbf8297c9a87fce48dafc328",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:606. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "048c69a0f048f2930f356f6a04c2d1fdfd6de0313c8a1fdb575f7090c22a0847",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:607. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "2cdf5f47447d6da1781d39e87b0b720044586a33a1176a9b14f6c6469e698ba4",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:608. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "69c1c90126419e9c9894f0241c59ff488686bf6ebb3380685a2d2160dd6bfece",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:610. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "987202934c1141f61018944d7540bd8a93bbbcd0414a80d886eb840cc0069e31",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:611. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
     }
   ]
 }

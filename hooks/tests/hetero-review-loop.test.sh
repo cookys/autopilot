@@ -966,7 +966,7 @@ cat << 'EOF' > "$LEDGER/review-p_test4/chain.json"
   }
 ]
 EOF
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T4_RC=$?
 assert_exit_code "$T4_RC" "0" "test 4: collect succeeds on replacing aborted entry"
 T4_CHAIN_LEN=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).length);' "$LEDGER/review-p_test4/chain.json")
@@ -1002,7 +1002,7 @@ mkdir -p "$TEST6_DRIVER_DIR"
 cp "$SCRIPT" "$TEST6_DRIVER_DIR/hetero-review-loop.js"
 cat << 'EOF' > "$TEST6_DRIVER_DIR/dispatch-review.sh"
 #!/usr/bin/env bash
-echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": true, "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": true, "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 exit 0
 EOF
 chmod +x "$TEST6_DRIVER_DIR/dispatch-review.sh"

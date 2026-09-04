@@ -60,6 +60,8 @@ fi
 echo '{"status": "reviewed", "findings": ""}'
 STUB_EOF
 chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
+cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+chmod +x "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
 
 # Stub resolve-review-loop.sh
 cat << 'RESOLVE_EOF' > "$TEST_TMP/bin/resolve-review-loop.sh"

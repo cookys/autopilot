@@ -258,8 +258,16 @@ read_explicit_field() {
     | sed -E 's/[[:space:]]+$//'
 }
 
-REV_ENGINE="$(read_field "$CONFIG" reviewer_engine "$DEF_REV_ENGINE")"
-REV_EFFORT="$(read_field "$CONFIG" reviewer_effort "$DEF_REV_EFFORT")"
+if config_has_field "$CONFIG" reviewer_engine; then
+  REV_ENGINE="$(read_explicit_field "$CONFIG" reviewer_engine)"
+else
+  REV_ENGINE="$DEF_REV_ENGINE"
+fi
+if config_has_field "$CONFIG" reviewer_effort; then
+  REV_EFFORT="$(read_explicit_field "$CONFIG" reviewer_effort)"
+else
+  REV_EFFORT="$DEF_REV_EFFORT"
+fi
 if config_has_field "$CONFIG" reviewer_runner; then
   REV_RUNNER="$(read_explicit_field "$CONFIG" reviewer_runner)"
 else

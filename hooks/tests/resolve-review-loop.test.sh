@@ -679,13 +679,13 @@ mkdir -p "$CAP_TEST_DIR"
 EMPTY_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
-assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
 
 # B. --capability-state off test
 OFF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
-assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
 
 # C. Record a fresh exhausted/high implementer event
 cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
@@ -718,7 +718,7 @@ assert_contains "$(json_get "$FRESH_OUT" capability_warnings)" "Demoted implemen
 # E. Query expired event (now is 2026-07-02T22:00:00Z -> past 3600s TTL)
 EXPIRED_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T22:00:00Z)"
 assert_eq "unknown" "$(json_get "$EXPIRED_OUT" quota_status)" "expired quota => quota_status is unknown"
-assert_eq "[]" "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
 
 # F. Record an unknown event and verify no demotion/warning.
 # Use an ISOLATED store — CAP_TEST_DIR already holds a fresh EXHAUSTED event for this same
@@ -745,7 +745,7 @@ JSON
 ENGINE_CAPABILITY_DIR="$UNK_STORE" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-unknown.json" > /dev/null
 UNK_OUT="$(ENGINE_CAPABILITY_DIR="$UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
 assert_eq "unknown" "$(json_get "$UNK_OUT" quota_status)" "quota status unknown => quota_status is unknown"
-assert_eq "[]" "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
 
 # G. Native skill warning tests
 cat <<'JSON' > "$TEST_TMP/event-skill-unsupported.json"
@@ -780,7 +780,7 @@ assert_contains "$(json_get "$SKILL_NATIVE_OUT" capability_warnings)" "does not 
 SKILL_AUTO_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "auto" "$(json_get "$SKILL_AUTO_OUT" skill_mode_requested)" "skill_mode_requested matches auto"
 assert_eq "prompt" "$(json_get "$SKILL_AUTO_OUT" skill_mode_effective)" "skill_mode_effective resolves to prompt"
-assert_eq "[]" "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
 
 # G3. Record skill support supported, request skill mode auto -> should resolve to native
 cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
@@ -806,7 +806,7 @@ JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-skill-supported.json" > /dev/null
 SKILL_AUTO_OK_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "native" "$(json_get "$SKILL_AUTO_OK_OUT" skill_mode_effective)" "native supported => skill_mode_effective resolves to native"
-assert_eq "[]" "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
 
 # H. L4 unchanged test
 L4_CFG="$TEST_TMP/l4-cfg.md"
@@ -829,7 +829,7 @@ cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
 JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-claude-exhausted.json" > /dev/null
 L4_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$L4_CFG" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
-assert_eq "[]" "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
 
 # 20. reviewer_endpoint / implementer_endpoint (declarative invoke infra)
 # ISOLATED: the repo dogfood config sets reviewer_endpoint=minimax (Board decision A),
@@ -1395,12 +1395,12 @@ printf -- '- consult_dispatch: auto\n' > "$CONSULT_AUTO_CFG"
 # 1. present-with-seats
 assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
   "consult_dispatch auto with present-with-seats resolves from topology"
-assert_eq "gpt-5.5" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_engine)" \
-  "consult_engine matches consult_ladder[0]"
-assert_eq "xhigh" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_effort)" \
-  "consult_effort matches consult_ladder[0]"
-assert_eq "codex" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_runner)" \
-  "consult_runner matches consult_ladder[0]"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_engine)" \
+  "consult_engine matches consult_ladder[1] (first non-colliding non-qc seat)"
+assert_eq "high" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_effort)" \
+  "consult_effort matches consult_ladder[1]"
+assert_eq "cc-shim" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_runner)" \
+  "consult_runner matches consult_ladder[1]"
 
 # 2. present-zero-seats
 CONSULT_ZERO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ZERO_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" 2>&1)"

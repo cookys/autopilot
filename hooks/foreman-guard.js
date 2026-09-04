@@ -24,6 +24,14 @@
  *   - Polling: a FOREGROUND Bash whose command is a wait loop or a liveness poll is
  *     denied. `run_in_background: true` is the sanctioned wait (one notification).
  *   - Monitor from a subagent is denied (ironlaw #6: foremen must not hold a Monitor).
+ *   - Context ceiling (v2.36.1, P2): the subagent status line publishes THIS agent's own
+ *     `tasks[].tokenCount`/`contextWindowSize` (matched by `tasks[].id === agent_id` — the
+ *     P0 spike ruling, `docs/projects/2026-09-05-statusline-live-context-feed/ledger/p0/`).
+ *     `tokenCount ≥ t2(contextWindowSize)` (same context_budget.{t1,t2} config/env as
+ *     context-budget.js, scaled to THIS row's window) denies the next Bash with the
+ *     handoff directive. 0 or ≥2 matching rows ⇒ ambiguous ⇒ never a gate — pass, plus one
+ *     stderr diagnostic naming the count. A stale (>120s) or absent tasks file is silence,
+ *     never a gate pass.
  *
  * ACCOUNTING: every Bash attempt (allowed OR denied) is reserved against the cap under an
  * exclusive-create lock, so a denied poll still spends a call and parallel invocations
@@ -40,6 +48,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { readMarker } = require('../scripts/session-mode.js');
+const { tiersForKnownWindow } = require('./context-budget-lib.js');
+const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 
 const DEFAULT_BASH_CAP = 40;
 const FOREMAN_LEVELS = new Set(['l4', 'l5', 'l6']);
@@ -128,6 +138,66 @@ function loadConfig() {
   return cfg;
 }
 
+// Same knob context-budget.js reads (context_budget.{t1,t2} / AUTOPILOT_CONTEXT_BUDGET_T1/T2)
+// — the context-ceiling rule below is the SAME T2 tier concept applied to a subagent's own
+// row instead of depth-0's transcript. Deliberately duplicated (not required) rather than
+// imported from hooks/context-budget.js: single-crash isolation between the two hooks
+// (header note, both files).
+function loadContextBudgetTiers() {
+  const cfg = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
+  try {
+    const file = path.join(os.homedir(), '.autopilot', 'config.json');
+    const user = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const cb = user && user.context_budget;
+    if (cb && typeof cb === 'object') {
+      if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
+      if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
+    }
+  } catch { /* absent/corrupt config ⇒ defaults */ }
+  const envT1 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T1);
+  const envT2 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T2);
+  if (Number.isFinite(envT1) && envT1 > 0) { cfg.t1 = envT1; cfg.explicitT1 = true; }
+  if (Number.isFinite(envT2) && envT2 > 0) { cfg.t2 = envT2; cfg.explicitT2 = true; }
+  return cfg;
+}
+
+// v2.36.1 (P2): read THIS agent's row off the subagent status line's tasks file and decide
+// whether its own context has crossed T2. Returns {} (no signal ⇒ never a gate — silence is
+// never a gate pass) unless:
+//   - {diagnostic} — 0 or ≥2 rows matched `agent_id` (ambiguous; P0 ruling: fail-open + name
+//     the count), or
+//   - {deny, reason} — exactly one row matched and its tokenCount ≥ t2(its own contextWindowSize).
+function checkContextCeiling(payload) {
+  let live;
+  try { live = resolveLiveDir(); } catch { return {}; }
+  const sid = sanitizeSessionId(payload.session_id || process.env.CLAUDE_CODE_SESSION_ID
+    || process.env.CLAUDE_SESSION_ID || process.cwd());
+  const tasksFile = readLive(live.base, sid, { kind: 'tasks' });
+  if (!tasksFile || !Array.isArray(tasksFile.tasks)) return {}; // absent/stale ⇒ no signal
+  const rows = tasksFile.tasks.filter((t) => t && t.id === payload.agent_id);
+  if (rows.length !== 1) {
+    return {
+      diagnostic: `foreman-guard: ${rows.length} tasks[] row(s) matched agent_id "${payload.agent_id}" `
+        + '(expected exactly 1) — context-ceiling check skipped this call (fail-open, never a gate on ambiguity).',
+    };
+  }
+  const row = rows[0];
+  const w = Number.isFinite(row.contextWindowSize) ? row.contextWindowSize : null;
+  const tokenCount = Number.isFinite(row.tokenCount) ? row.tokenCount : null;
+  if (w === null || tokenCount === null) return {};
+  const tiers = tiersForKnownWindow(loadContextBudgetTiers(), w);
+  if (tokenCount >= tiers.t2) {
+    return {
+      deny: true,
+      reason: `foreman-guard: this agent's own context is ${tokenCount} tokens, at or past T2 `
+        + `(${tiers.t2} of its ${w}-token window, subagent status line). Write your handoff `
+        + '(autopilot:handoff) NOW and end the turn (一刀一命); depth-0 spawns the next foreman/worker '
+        + 'for the remaining work.',
+    };
+  }
+  return {};
+}
+
 function stateDir() {
   return process.env.AUTOPILOT_FOREMAN_GUARD_DIR || path.join(os.homedir(), '.autopilot', 'foreman-guard');
 }
@@ -182,34 +252,42 @@ function emit(decision, reason) {
   })}\n`);
 }
 
-function decide(payload, cfg, st) {
+function decide(payload, cfg, st, ceiling = {}) {
   const tool = payload.tool_name || '';
   const input = payload.tool_input || {};
   if (tool === 'Monitor') {
     return { deny: true, rule: 'monitor', reason:
       'foreman-guard: Monitor is depth-0 only (ironlaw #6). A foreman waits with run_in_background + a paired dead-man `sleep <deadline>; echo WAKE`, then ENDS ITS TURN.' };
   }
-  if (tool !== 'Bash') return { deny: false };
+  if (tool !== 'Bash') return { deny: false, diagnostic: ceiling.diagnostic };
   const cmd = typeof input.command === 'string' ? input.command : '';
   const background = isAffirmative(input.run_in_background);
   // Every Bash ATTEMPT is reserved against the cap before any rule runs — a denied
   // poll still spent a model call, and a foreman that retries a denial must not get
   // unlimited retries (review round 1).
   const n = st.bash_calls + 1;
+  // v2.36.1 (P2): context-ceiling deny (this agent's OWN tokenCount ≥ its own T2, per the
+  // subagent status line) runs before the cap/poll rules — a denied ceiling attempt still
+  // spends a call, same accounting as every other rule here.
+  if (ceiling.deny) {
+    return { deny: true, rule: 'context-ceiling', count: n, reason: ceiling.reason, diagnostic: ceiling.diagnostic };
+  }
   if (n > cfg.bashCap) {
     return { deny: true, rule: 'bash-cap', count: n, reason:
-      `foreman-guard: Bash call ${n} exceeds the foreman cap of ${cfg.bashCap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.` };
+      `foreman-guard: Bash call ${n} exceeds the foreman cap of ${cfg.bashCap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`,
+      diagnostic: ceiling.diagnostic };
   }
   if (!background) {
     const text = executableText(cmd);
     for (const r of POLL_RULES) {
       if (r.re.test(text)) {
         return { deny: true, rule: r.id, count: n, reason:
-          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cfg.bashCap} spent.)` };
+          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cfg.bashCap} spent.)`,
+          diagnostic: ceiling.diagnostic };
       }
     }
   }
-  return { deny: false, count: n };
+  return { deny: false, count: n, diagnostic: ceiling.diagnostic };
 }
 
 (function main() {
@@ -225,16 +303,21 @@ function decide(payload, cfg, st) {
     if (!marker || !FOREMAN_LEVELS.has(marker.level)) process.exit(0); // not an orchestrated session
     const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
       || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
+    // v2.36.1 (P2): resolve this agent's own context-ceiling verdict BEFORE taking the
+    // state lock (it does its own I/O — a live-file read and a findmnt shell-out — that
+    // has no business holding the per-agent lock).
+    const ceiling = payload.tool_name === 'Bash' ? checkContextCeiling(payload) : {};
     const file = stateFile(sessionId, payload.agent_id);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const d = withLock(file, () => {
       const st = loadState(file);
-      const r = decide(payload, cfg, st);
+      const r = decide(payload, cfg, st, ceiling);
       if (Number.isInteger(r.count)) st.bash_calls = r.count; // every Bash attempt is counted
       if (r.deny) { st.denied += 1; st.last_denied_rule = r.rule; }
       saveState(file, st);
       return r;
     });
+    if (d.diagnostic) process.stderr.write(`${d.diagnostic}\n`); // ambiguous rows: never a gate
     if (!d.deny) process.exit(0);
     if (cfg.mode === 'warn') {
       process.stderr.write(`${d.reason} [mode=warn: allowed]\n`);

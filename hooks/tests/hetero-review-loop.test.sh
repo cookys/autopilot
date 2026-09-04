@@ -567,6 +567,140 @@ assert_contains "$HELP2_OUT" "finalize" "case 10 (help): mentions finalize"
 assert_contains "$HELP2_OUT" "opt-out" "case 10 (help): mentions opt-out"
 assert_contains "$HELP2_OUT" "--dispositions" "case 10 (help): mentions --dispositions"
 assert_contains "$HELP2_OUT" "--knob" "case 10 (help): mentions --knob"
+assert_contains "$HELP2_OUT" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT" "case 10 (help): mentions AUTOPILOT_DISPATCH_REVIEW_SCRIPT"
+
+# ─── New verification tests ───
+
+# Test 1: all four line shapes for all four severity words
+# Shapes:
+# 1) Severity glyph alone at the start of the line
+# 2) Severity glyph followed by the plain severity word
+# 3) Plain severity word alone with no glyph
+# 4) Severity glyph immediately followed by a bracketed id (glyph then whitespace then open bracket)
+T1_FINDINGS_TEXT=$(cat << 'EOF'
+🔴
+critical issue from glyph alone
+🟠 Major
+major issue from glyph plus word
+Minor
+minor issue from plain word alone
+🔵 [sugg-101]
+suggestion issue from glyph followed by bracket
+EOF
+)
+export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: process.argv[1]}));' "$T1_FINDINGS_TEXT")"
+T1_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T1_RC=$?
+assert_exit_code "$T1_RC" "0" "test 1: exits 0 when parsing all four line shapes"
+T1_FINDINGS_FILE="$LEDGER/review-p_test1/g1/findings.json"
+assert_file_exists "$T1_FINDINGS_FILE" "test 1: findings.json exists"
+T1_SEVS=$(node -e '
+  const f = JSON.parse(fs.readFileSync(process.argv[1])).findings;
+  console.log(f.map(x => x.severity).join(","));
+' "$T1_FINDINGS_FILE")
+assert_eq "$T1_SEVS" "Critical,Major,Minor,Suggestion" "test 1: extracted severities match Critical,Major,Minor,Suggestion"
+
+# Test 2: non-empty unparseable findings text must fail closed (status 1, aborted with parse_failed, no findings.json)
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Some unparseable free text that does not match any severity pattern at all."}'
+T2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2_RC=$?
+assert_exit_code "$T2_RC" "1" "test 2: exits 1 when findings text is unparseable"
+assert_file_absent "$LEDGER/review-p_test2/g1/findings.json" "test 2: findings.json must not be written"
+assert_file_exists "$LEDGER/review-p_test2/chain.json" "test 2: chain.json exists"
+T2_CHAIN=$(cat "$LEDGER/review-p_test2/chain.json")
+assert_contains "$T2_CHAIN" '"status": "aborted"' "test 2: chain entry status is aborted"
+assert_contains "$T2_CHAIN" '"reason": "parse_failed"' "test 2: chain entry reason is parse_failed"
+
+# Test 2b: fail closed also when verdict is SHIP-AS-IS with unparseable findings
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "Random text without severity markers"}'
+T2B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2B_RC=$?
+assert_exit_code "$T2B_RC" "1" "test 2b: exits 1 for SHIP-AS-IS seat with unparseable findings"
+assert_file_absent "$LEDGER/review-p_test2b/g1/findings.json" "test 2b: no findings.json written"
+assert_contains "$(cat "$LEDGER/review-p_test2b/chain.json")" '"reason": "parse_failed"' "test 2b: chain entry reason is parse_failed"
+
+# Test 3: chain immutability: run collect once (pending), run again for same generation -> exits 1 without modifying entry
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "No issues found."}'
+T3_OUT1=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC1=$?
+assert_exit_code "$T3_RC1" "0" "test 3: first collect exits 0"
+T3_CHAIN_BEFORE=$(cat "$LEDGER/review-p_test3/chain.json")
+T3_OUT2=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC2=$?
+assert_exit_code "$T3_RC2" "1" "test 3: second collect for same generation exits 1"
+T3_CHAIN_AFTER=$(cat "$LEDGER/review-p_test3/chain.json")
+assert_eq "$T3_CHAIN_BEFORE" "$T3_CHAIN_AFTER" "test 3: chain.json unchanged on refused rerun"
+
+# Test 4: aborted entry replacement: chain entry with status aborted replaced in place (exactly 1 entry, not 2)
+mkdir -p "$LEDGER/review-p_test4"
+cat << 'EOF' > "$LEDGER/review-p_test4/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "dummy_base",
+    "status": "aborted",
+    "reason": "parse_failed"
+  }
+]
+EOF
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+T4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T4_RC=$?
+assert_exit_code "$T4_RC" "0" "test 4: collect succeeds on replacing aborted entry"
+T4_CHAIN_LEN=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).length);' "$LEDGER/review-p_test4/chain.json")
+assert_eq "$T4_CHAIN_LEN" "1" "test 4: chain has exactly 1 entry (replaced in place)"
+T4_STATUS=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1]))[0].status);' "$LEDGER/review-p_test4/chain.json")
+assert_eq "$T4_STATUS" "pending" "test 4: replaced entry status reflects new run"
+
+# Test 5: malformed chain.json (not valid JSON or wrong top-level shape) exits 1 and file left unchanged
+mkdir -p "$LEDGER/review-p_test5a"
+echo "this is not json {[" > "$LEDGER/review-p_test5a/chain.json"
+T5A_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5a --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T5A_RC=$?
+assert_exit_code "$T5A_RC" "1" "test 5a: exits 1 on invalid JSON chain.json"
+assert_eq "$(cat "$LEDGER/review-p_test5a/chain.json")" "this is not json {[" "test 5a: malformed file left unchanged"
+
+mkdir -p "$LEDGER/review-p_test5b"
+echo '{"not": "an array"}' > "$LEDGER/review-p_test5b/chain.json"
+T5B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T5B_RC=$?
+assert_exit_code "$T5B_RC" "1" "test 5b: exits 1 on non-array chain.json"
+assert_eq "$(cat "$LEDGER/review-p_test5b/chain.json")" '{"not": "an array"}' "test 5b: non-array file left unchanged"
+
+# Test 6: rogue scripts/dispatch-review.sh in repo under test is ignored; driver script dir's dispatcher used
+# Put rogue script in SCRATCH_REPO/scripts/dispatch-review.sh that outputs rogue_marker
+cat << 'EOF' > "$SCRATCH_REPO/scripts/dispatch-review.sh"
+#!/usr/bin/env bash
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "rogue_marker": true, "findings": ""}'
+exit 0
+EOF
+chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
+unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT
+# We create an isolated driver script in a temp directory alongside a mock dispatch-review.sh
+TEST6_DRIVER_DIR="$TEST_TMP/driver-dir-test"
+mkdir -p "$TEST6_DRIVER_DIR"
+cp "$SCRIPT" "$TEST6_DRIVER_DIR/hetero-review-loop.js"
+cat << 'EOF' > "$TEST6_DRIVER_DIR/dispatch-review.sh"
+#!/usr/bin/env bash
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": true, "findings": ""}'
+exit 0
+EOF
+chmod +x "$TEST6_DRIVER_DIR/dispatch-review.sh"
+T6_OUT=$(node "$TEST6_DRIVER_DIR/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T6_RC=$?
+assert_exit_code "$T6_RC" "0" "test 6: collect exits 0 using driver-directory dispatcher"
+T6_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test6/g1/seat-s0.json")
+assert_contains "$T6_SEAT_OUTPUT" '"driver_dir_dispatcher": true' "test 6: executed dispatcher from driver script directory"
+assert_not_contains "$T6_SEAT_OUTPUT" "rogue_marker" "test 6: rogue dispatcher in target repository was NOT executed"
+
+# Test 7: stub dispatcher exits non-zero while printing valid JSON on stdout -> recorded with verdict no_verdict
+TEST7_STUB="$TEST_TMP/nonzero-exit-dispatcher.sh"
+cat << 'EOF' > "$TEST7_STUB"
+#!/usr/bin/env bash
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+exit 1
+EOF
+chmod +x "$TEST7_STUB"
+export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$TEST7_STUB"
+# Run with --allow-seat-gap so collect doesn't abort early due to gap, allowing us to inspect seat JSON
+T7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test7 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T7_RC=$?
+assert_exit_code "$T7_RC" "0" "test 7: collect exits 0 with --allow-seat-gap"
+T7_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test7/g1/seat-s0.json")
+assert_contains "$T7_SEAT_OUTPUT" '"verdict": "no_verdict"' "test 7: recorded verdict is no_verdict on non-zero exit"
+assert_contains "$T7_SEAT_OUTPUT" '"status": "no_verdict"' "test 7: recorded status is no_verdict on non-zero exit"
+assert_not_contains "$T7_SEAT_OUTPUT" '"verdict": "SHIP-AS-IS"' "test 7: printed verdict SHIP-AS-IS is ignored"
+unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT
 
 finalize_test
 

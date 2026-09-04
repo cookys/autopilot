@@ -7,6 +7,24 @@ const process = require('process');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 
+function writeFileSyncAtomic(targetPath, content) {
+  const dir = path.dirname(targetPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmpName = `.tmp-${Date.now()}-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
+  const tmpPath = path.join(dir, tmpName);
+  try {
+    fs.writeFileSync(tmpPath, content);
+    fs.renameSync(tmpPath, targetPath);
+  } catch (err) {
+    try {
+      if (fs.existsSync(tmpPath)) {
+        fs.unlinkSync(tmpPath);
+      }
+    } catch (_e) {}
+    throw err;
+  }
+}
+
 function showHelp() {
   console.log(`Usage: node scripts/hetero-review-loop.js <subcommand> [flags]
 
@@ -37,6 +55,9 @@ Finalize flags:
 
 Opt-out flags:
   --knob <knob>         Review knob to opt out (plan_review|hetero_review)
+
+Environment overrides:
+  AUTOPILOT_DISPATCH_REVIEW_SCRIPT  Path to reviewer dispatcher script (overrides default dispatch-review.sh)
 `);
 }
 
@@ -256,7 +277,12 @@ function extractFindings(seatId, findingsText) {
 
   function parseSeverityFromLine(line) {
     const trimmed = line.trim();
-    const match = trimmed.match(/^(?:[-*#>\s\d.)]*)(?:(🔴|🟠|🟡|🔵)\s*(Critical|Major|Minor|Suggestion)?|(Critical|Major|Minor|Suggestion))\b/i);
+    // Recognise four line shapes:
+    // 1. A severity glyph alone at start of line
+    // 2. A severity glyph followed by the plain severity word
+    // 3. The plain severity word alone with no glyph
+    // 4. A severity glyph immediately followed by a bracketed id (glyph then whitespace then open bracket)
+    const match = trimmed.match(/^(?:[-*#>\s\d.)]*)(?:(🔴|🟠|🟡|🔵)(?:\s*\[|\s+(Critical|Major|Minor|Suggestion)\b|\s*$|\s+)|(Critical|Major|Minor|Suggestion)\b)/i);
     if (!match) return null;
     if (match[1]) {
       const word = EMOJI_TO_WORD[match[1]];
@@ -335,9 +361,10 @@ function runGitDiff(base, head, repoRoot) {
 
 function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
   return new Promise((resolve) => {
-    const dispatchScript = repoRoot
-      ? path.join(repoRoot, 'scripts', 'dispatch-review.sh')
-      : path.join('scripts', 'dispatch-review.sh');
+    let dispatchScript = process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT;
+    if (!dispatchScript) {
+      dispatchScript = path.join(__dirname, 'dispatch-review.sh');
+    }
 
     const diffFile = path.join(ledgerPhaseGDir, 'diff.txt');
 
@@ -375,7 +402,7 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
       });
     });
 
-    child.on('close', () => {
+    child.on('close', (exitCode) => {
       let parsed = null;
       try {
         parsed = JSON.parse(stdout.trim());
@@ -383,8 +410,25 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
         parsed = null;
       }
 
-      if (!parsed || typeof parsed !== 'object') {
-        parsed = { status: 'no_verdict', error: 'Invalid JSON output from dispatch-review', raw: stdout };
+      const validVerdict = parsed && (parsed.verdict === 'SHIP-AS-IS' || parsed.verdict === 'FIX-THEN-SHIP' || parsed.verdict === null);
+      const validShape = parsed && typeof parsed === 'object' && typeof parsed.status === 'string' && validVerdict;
+
+      if (exitCode !== 0 || !validShape) {
+        const errorMsg = exitCode !== 0
+          ? `dispatch-review exited with status ${exitCode}`
+          : 'Invalid or non-matching output shape from dispatch-review';
+        const fallbackRaw = (parsed && typeof parsed === 'object') ? parsed : { raw: stdout };
+        resolve({
+          seat,
+          status: 'no_verdict',
+          rawOutput: {
+            ...fallbackRaw,
+            status: 'no_verdict',
+            verdict: 'no_verdict',
+            error: errorMsg,
+          },
+        });
+        return;
       }
 
       const status = parsed.status === 'reviewed' ? 'reviewed' : 'no_verdict';
@@ -422,6 +466,28 @@ async function handleCollect(flags) {
   const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
   const chainPath = path.join(reviewPhaseDir, 'chain.json');
 
+  let chain = [];
+  if (fs.existsSync(chainPath)) {
+    try {
+      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+    } catch (_e) {
+      console.error(`ERROR: Failed to parse chain.json at ${chainPath}`);
+      process.exit(1);
+    }
+    if (!Array.isArray(chain)) {
+      console.error(`ERROR: Malformed chain.json at ${chainPath}: expected array`);
+      process.exit(1);
+    }
+  }
+
+  const existingGenEntry = chain.find((c) => c && c.generation === generation);
+  if (existingGenEntry) {
+    if (existingGenEntry.status === 'pending' || existingGenEntry.status === 'finalized') {
+      console.error(`ERROR: Generation ${generation} already exists with status '${existingGenEntry.status}'`);
+      process.exit(1);
+    }
+  }
+
   let base = '';
   if (generation === 1) {
     if (!flags['phase-base']) {
@@ -431,18 +497,7 @@ async function handleCollect(flags) {
     base = flags['phase-base'].trim();
   } else {
     // generation > 1
-    if (!fs.existsSync(chainPath)) {
-      console.error(`ERROR: Contiguous chain broken: chain.json does not exist at ${chainPath}`);
-      process.exit(1);
-    }
-    let chain = [];
-    try {
-      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
-    } catch (_e) {
-      console.error(`ERROR: Failed to parse chain.json at ${chainPath}`);
-      process.exit(1);
-    }
-    const prevEntry = chain.find((c) => c.generation === generation - 1);
+    const prevEntry = chain.find((c) => c && c.generation === generation - 1);
     if (!prevEntry) {
       console.error(`ERROR: Contiguous chain broken: missing generation ${generation - 1} in ${chainPath}`);
       process.exit(1);
@@ -508,8 +563,8 @@ async function handleCollect(flags) {
     head,
     diff_sha256: diffSha256,
   };
-  fs.writeFileSync(path.join(gDir, 'range.json'), JSON.stringify(rangeJson, null, 2) + '\n');
-  fs.writeFileSync(path.join(gDir, 'diff.txt'), diffText);
+  writeFileSyncAtomic(path.join(gDir, 'range.json'), JSON.stringify(rangeJson, null, 2) + '\n');
+  writeFileSyncAtomic(path.join(gDir, 'diff.txt'), diffText);
 
   // Dispatch all seats concurrently
   const timeout = flags.timeout || '20m';
@@ -521,7 +576,28 @@ async function handleCollect(flags) {
   // Write per-seat JSON files
   for (const res of seatResults) {
     const seatPath = path.join(gDir, `seat-${res.seat.id}.json`);
-    fs.writeFileSync(seatPath, JSON.stringify(res.rawOutput, null, 2) + '\n');
+    writeFileSyncAtomic(seatPath, JSON.stringify(res.rawOutput, null, 2) + '\n');
+  }
+
+  function saveChainEntry(newEntry) {
+    let currentChain = [];
+    if (fs.existsSync(chainPath)) {
+      try {
+        currentChain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+      } catch (_e) {
+        currentChain = [];
+      }
+      if (!Array.isArray(currentChain)) {
+        currentChain = [];
+      }
+    }
+    const existingIdx = currentChain.findIndex((c) => c && c.generation === generation);
+    if (existingIdx !== -1) {
+      currentChain[existingIdx] = newEntry;
+    } else {
+      currentChain.push(newEntry);
+    }
+    writeFileSyncAtomic(chainPath, JSON.stringify(currentChain, null, 2) + '\n');
   }
 
   // Check head again
@@ -535,23 +611,31 @@ async function handleCollect(flags) {
 
   if (postHead !== head) {
     // Head moved during dispatch
-    let chain = [];
-    if (fs.existsSync(chainPath)) {
-      try {
-        chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
-      } catch (_e) {
-        chain = [];
-      }
-    }
-    chain.push({
+    saveChainEntry({
       generation,
       base,
       status: 'aborted',
     });
-    fs.mkdirSync(reviewPhaseDir, { recursive: true });
-    fs.writeFileSync(chainPath, JSON.stringify(chain, null, 2) + '\n');
     console.error(`ERROR: Branch '${branch}' moved from ${head} to ${postHead} during review collection`);
     process.exit(1);
+  }
+
+  // Check for parse failures across seats (Defect 2)
+  for (const res of seatResults) {
+    const findingsStr = (res.rawOutput && typeof res.rawOutput.findings === 'string') ? res.rawOutput.findings : '';
+    if (findingsStr.trim().length > 0) {
+      const extracted = extractFindings(res.seat.id, findingsStr);
+      if (extracted.length === 0) {
+        saveChainEntry({
+          generation,
+          base,
+          status: 'aborted',
+          reason: 'parse_failed',
+        });
+        console.error(`ERROR: Failed to parse non-empty findings for seat ${res.seat.id}`);
+        process.exit(1);
+      }
+    }
   }
 
   // Extract findings
@@ -580,28 +664,17 @@ async function handleCollect(flags) {
   const findingsJson = {
     findings: allFindings,
   };
-  fs.writeFileSync(path.join(gDir, 'findings.json'), JSON.stringify(findingsJson, null, 2) + '\n');
+  writeFileSyncAtomic(path.join(gDir, 'findings.json'), JSON.stringify(findingsJson, null, 2) + '\n');
 
   // Update chain.json
-  let chain = [];
-  if (fs.existsSync(chainPath)) {
-    try {
-      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
-    } catch (_e) {
-      chain = [];
-    }
-  }
-
   const genStatus = hasGap ? 'pending-with-gap' : 'pending';
-  chain.push({
+  saveChainEntry({
     generation,
     base,
     head,
     seats: seatIds,
     status: genStatus,
   });
-  fs.mkdirSync(reviewPhaseDir, { recursive: true });
-  fs.writeFileSync(chainPath, JSON.stringify(chain, null, 2) + '\n');
 
   // Output summary JSON
   const summary = {
@@ -840,7 +913,7 @@ async function handleFinalize(flags) {
       }
     }
 
-    fs.writeFileSync(briefPath, briefLines.join('\n').trim() + '\n');
+    writeFileSyncAtomic(briefPath, briefLines.join('\n').trim() + '\n');
 
     // Run scripts/check-redispatch-prompt.sh
     const checkScript = repoRoot
@@ -875,8 +948,7 @@ async function handleFinalize(flags) {
     currentGenEntry.dispositions_path = dispositionsFile;
   }
 
-  fs.mkdirSync(reviewPhaseDir, { recursive: true });
-  fs.writeFileSync(chainPath, JSON.stringify(chain, null, 2) + '\n');
+  writeFileSyncAtomic(chainPath, JSON.stringify(chain, null, 2) + '\n');
 
   // Receipt
   let phaseBaseSha = '';
@@ -910,7 +982,7 @@ async function handleFinalize(flags) {
   };
 
   const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
-  fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+  writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 
   const summary = {
     phase,
@@ -991,9 +1063,8 @@ async function handleOptOut(flags) {
     written_at: new Date().toISOString(),
   };
 
-  fs.mkdirSync(ledgerDir, { recursive: true });
   const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
-  fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+  writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 
   const summary = {
     phase,

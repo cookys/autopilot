@@ -29,6 +29,12 @@ Differences worth knowing:
 
 **Never guess from code alone.** Always collect evidence first.
 
+## Available Scripts
+
+| Script | Replaces LLM-judgment for | When invoked |
+|--------|---------------------------|--------------|
+| [`scripts/dispatch-consult.sh`](../../scripts/dispatch-consult.sh) | Ask the consult seat one bounded question, advice only | After two failed hypotheses |
+
 ## Relationship with Profiling
 
 | Skill | When to Use |
@@ -43,18 +49,12 @@ If unsure, start with `debug`. If evidence points to a performance root cause, s
 1. Reproduce the issue reliably
 2. Collect evidence with appropriate tools
 3. Form hypothesis based on evidence
-4. Verify hypothesis (don't assume)
+4. Verify hypothesis (don't assume); after the second failed hypothesis, write the question and relevant artifacts to files and call `scripts/dispatch-consult.sh` (advice only, never a verified fix)
 5. Fix root cause (not symptoms)
 6. Verify fix with same tool + same test
 7. Record in knowledge base if non-trivial (invoke learn skill)
 
-> **3-fix architecture gate.** If **3 fix attempts have failed**, STOP attempting fix #4 — the
-> repeated failure is itself evidence that the **mental model of the architecture is wrong**, not that
-> the next tweak is the right one. Step back and question the structure: is the bug where you think it
-> is? Is a component boundary / assumption (data shape, ordering, ownership, environment) violated
-> upstream of where you're patching? Re-collect evidence at the boundary above the suspected site
-> before any further fix. (Changing a flag/parameter is not a new attempt; changing the diagnostic
-> *angle* is.)
+> **3-fix architecture gate.** If **3 fix attempts have failed**, STOP attempting fix #4 — the repeated failure is itself evidence that the **mental model of the architecture is wrong**, not that the next tweak is the right one. Step back and question the structure: is the bug where you think it is? Is a component boundary / assumption (data shape, ordering, ownership, environment) violated upstream of where you're patching? Re-collect evidence at the boundary above the suspected site before any further fix. (Changing a flag/parameter is not a new attempt; changing the diagnostic *angle* is.)
 
 ## Evidence Collection Guide
 

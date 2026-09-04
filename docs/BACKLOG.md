@@ -76,6 +76,121 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ---
 
 ## Active entries
+
+### hetero-review-loop / checker: end-to-end aborted-chain case and explicit base-inheritance assertion
+- **Trigger**: next touch of the chain semantics (abort g1 → collect g2 → finalize → checker exit 0; g2.base equals the aborted g1 base)
+- **Context**: writer side is pinned (tests 2d/2e/4); the reader side and the base inheritance are only implicit (GLM + MiniMax FOLLOW-UP, core review g4)
+- **Effort**: S
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g4/`
+
+### check-phase-review-receipt: min-reviewed-seats enforcement test on a multi-seat fixture
+- **Trigger**: next touch of the seat-coverage rule
+- **Context**: case 14 proves the parse guard, not that a higher minimum is enforced on a 3-seat chain (MiniMax FOLLOW-UP, core review g4)
+- **Effort**: S
+- **Source**: same g4 dir
+
+### hetero-review-loop: confirm finalize always emits severity in open_findings (checker now requires deep equality on id/severity/disposition)
+- **Trigger**: the next FIX-THEN-SHIP receipt with verified Major/Minor findings — depth-0 saw severity present on the v2.36.0 receipts, so this is a confirmation row (GLM FOLLOW-UP, core review g3)
+- **Context**: shared-format drift surface between finalize and the checker
+- **Effort**: S
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g3/`
+
+### resolve-review-loop.sh: audit every remaining runner comparison for codex-cli/codex canonicalisation
+- **Trigger**: next touch of the reviewer_ladder / hetero_review extraction or any `entry.runner === implRunner` site
+- **Context**: normRunner was added at the plan-panel and consult sites; other comparisons may re-admit a dual seat (GLM FOLLOW-UP, core review g3)
+- **Effort**: S
+- **Source**: same g3 dir
+
+### hetero-review-loop: charset guard on seat ids before path.join
+- **Trigger**: any change that lets a seat id come from outside the driver
+- **Context**: `../` in an id could escape the generation directory; no capability gained today because the ledger is writer-controlled (GLM FOLLOW-UP, core review g3)
+- **Effort**: S
+- **Source**: same g3 dir
+
+### check-phase-review-receipt: a head moved only by commits touching allowlisted excluded paths should still validate
+- **Trigger**: every release closeout — CHANGELOG/ledger/archive commits land after the last review generation, so the receipt's head never equals the merge head
+- **Context**: the checker binds `review_head_sha` to the branch head; today the honest sequence is "checker exit 0 at the reviewed head, recorded in the ledger, then docs-only commits". Candidate: accept a moved head when `git diff <receipt_head>..<head>` touches only paths matched by the frozen exclusion allowlist (plus CHANGELOG.md / INDEX.md), and record that delta in the receipt check output
+- **Effort**: S
+- **Source**: v2.36.0 closeout, `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/`
+
+### hetero-review-loop / check-phase-review-receipt: hoist EXCLUDE_ALLOWLIST and isPathspecAllowed into scripts/lib
+- **Trigger**: the next edit to either copy (they are byte-identical today)
+- **Context**: duplicated verbatim in both scripts; a one-sided edit would silently desynchronise the gate (GLM + MiniMax FOLLOW-UP, core review g2, 2026-09-04)
+- **Effort**: S
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g2/`
+
+### review-chain-derive.js documents "no side effects" but mutates the chain entries it receives
+- **Trigger**: any caller that keeps a reference to the chain after derivation
+- **Context**: either copy on entry or drop the purity claim (GLM FOLLOW-UP, core review g2)
+- **Effort**: S
+- **Source**: same g2 dir
+
+### check-phase-review-receipt: open_findings comparison ignores severity; reviewed_seats/total_seats not cross-checked against seat artifacts
+- **Trigger**: verify after the g2 repairs land whether the deep-equality and seat-coverage fixes already cover both; close the row if so
+- **Context**: MiniMax + GLM FOLLOW-UP, core review g2
+- **Effort**: S
+- **Source**: same g2 dir
+
+### resolve-review-loop.test.sh capability-warning assertion messages still say "no warning" while expecting the topology fallback lines
+- **Trigger**: next touch of that test file
+- **Context**: wording only; the expectations are correct (GLM CUT, core review g2)
+- **Effort**: S
+- **Source**: same g2 dir
+
+### `normalize_agy_alias()` rewrites config-side seat names before the qc-exclusion match in `consult_dispatch: auto`
+- **Trigger**: a `qc_panel` entry written as an agy alias (e.g. `gemini-flash`) while the topology ladder carries the resolved name — the exclusion set never matches and a qc seat can be picked as the consult seat
+- **Context**: found by the D4 hermetic test's first fixture (2026-09-04); the fixture was changed to a non-aliased name, the resolver was not. Fix: normalise both sides (or compare on the resolved tuple) in the exclusion builder
+- **Effort**: S
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D4.md`
+
+### `resolve-review-loop.sh` `auto` knobs read a stale `~/.autopilot/topology.json` and fall back natively
+- **Trigger**: a host whose cached topology predates a plugin version that added roles (observed 2026-09-04: cache without `consult_ladder` ⇒ `consult_resolved_from: native-fallback` until `resolve-dispatch-topology.js` was re-run)
+- **Context**: the resolver never regenerates the cache; `sync-all.sh` runs `--check` only. Candidate: regenerate when the cache lacks a role key the resolver asks for, or emit a distinct warning naming the stale cache
+- **Effort**: S
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D1.md`
+
+### `hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename
+- **Trigger**: two collects for the same phase ever run concurrently (today callers serialise by generation)
+- **Context**: a lost chain entry would self-recover on retry, never forge a gate pass; MiniMax CUT/FOLLOW-UP on the D2 review 2026-09-04
+- **Effort**: S
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-D2-attempt1-parser-defect/`
+
+### `hetero-review-loop.js` opt-out knob parser character class parses `*->` as a range
+- **Trigger**: the next touch of the knob parser in handleOptOut
+- **Context**: a line such as "9plan_review: off" can set configured_value; harmless while the checker re-derives the value from the resolver (GLM CUT/FOLLOW-UP)
+- **Effort**: S
+- **Source**: same ledger dir as above
+
+### `hetero-review-loop.js` exports the STUB_SEAT_ID test seam into the real dispatch-review.sh environment
+- **Trigger**: reworking the seat-stub mechanism for any other reason
+- **Context**: cosmetic hardening; the real script ignores the variable (GLM CUT/FOLLOW-UP)
+- **Effort**: S
+- **Source**: same ledger dir as above
+
+### `finalize` closes an earlier verified finding by absence in a later generation
+- **Trigger**: a future review-policy deliverable, or evidence that a reviewer missed a still-open finding
+- **Context**: the plan defines closure as absence-in-later-findings; tightening to "explicitly re-verified" needs a policy decision (MiniMax CUT/FOLLOW-UP)
+- **Effort**: Fix
+- **Source**: same ledger dir as above
+
+### Opt-out receipt with a non-existent config path hashes the empty buffer
+- **Trigger**: D2-repair R2/R3 does not already require the config path to exist (it is in that brief; verify at closeout)
+- **Context**: sha256 of empty matches a receipt claiming the empty-file hash; the resolver's `off` re-derivation is the real boundary (MiniMax CUT/FOLLOW-UP)
+- **Effort**: S
+- **Source**: same ledger dir as above
+
+### `dispatch-plan-review.js` RUNNERS lacks `kimi` while `dispatch-review.sh` supports it
+- **Trigger**: an owner ruling that amends the frozen "reuse unchanged" invariant for the plan-review driver
+- **Context**: D0 of the dev-flow hetero loops plan had to seat GLM instead of kimi-code/k3 (consult-qualified, event 182); cut from that slice by plan-review R6
+- **Effort**: S
+- **Source**: `docs/plans/2026-09-04-dev-flow-hetero-loops-default.md` §3 "Not changed"
+
+### scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`
+- **Trigger**: any seat resolver that matches runner tokens exactly (topology `--role plan_reviewer` normalises it today)
+- **Context**: a qualified seat silently drops out of auto-derived panels when the recorded runner spelling differs from the dispatch runner enum
+- **Effort**: S
+- **Source**: `docs/plans/evidence/2026-09-04-dev-flow-hetero-loops-default/context.md`
+
 ### Foreman context is not measurable by hook — `context-budget` only sees the parent transcript
 - **Trigger**: Claude Code's hook payload carries the SUBAGENT's own `transcript_path` (or an equivalent per-agent usage field) — check the CC changelog / a SPIKE on the running version; or a second cost incident where a foreman's context (not its Bash count) is the driver.
 - **Context**: v2.35.15 put ironlaw #6 in the loop through `foreman-guard` (Bash cap, polling, Monitor), but the digest's second burn shape — waking after cache TTL and re-writing a ≈900K context — is a CONTEXT ceiling, and `context-budget` deliberately exits on `agent_id` because the payload's `transcript_path` is the parent's. Until the payload identifies the subagent transcript, the Bash cap + 一刀一命 are the foreman's only ceilings. Fix shape: when a per-agent transcript is available, apply T1/T2 to it and make T2 a `deny` for subagents (a foreman can be forced to hand off; depth-0 cannot).

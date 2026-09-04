@@ -1,0 +1,11 @@
+{
+  "runner": "codex",
+  "model": "gpt-5.6-sol",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [d2-generation-reuse] MUST-FIX `--retry` deliberately reuses an aborted generation number and replaces its chain slot, contrary to the frozen requirement that per-generation artifacts remain immutable and generation reuse be refused; the old directory becomes an unreferenced side artifact, and reuse even bypasses `--retry` when that directory is missing. Always refuse an existing generation entry and model another attempt under a distinct immutable identity or phase.\n🟠 [d2-nonblocker-rejection] MUST-FIX `blockerClassDispositions` incorrectly makes `rejected` exclusive to blocker candidates, so a valid `candidate_blocker:false` finding rejected during adjudication now fails validation. Reserve blocker exclusivity for `accepted_blocker`, validate rejection rationale separately, and add a false/rejected positive test.\n🟠 [d2-min-seat-validation] MUST-FIX configured minimum-seat values are parsed with `parseInt` without range or syntax validation, so `0`, negative values, and trailing-junk inputs are accepted; a non-positive value makes the reviewed-seat gate vacuous and permits a finalized generation with no reviewed seats. Require a canonical positive integer and reject invalid values before validating generations.",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-iYqjMJ",
+  "error": null,
+  "usage": null
+}

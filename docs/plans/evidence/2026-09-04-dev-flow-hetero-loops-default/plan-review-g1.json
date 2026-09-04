@@ -1,0 +1,710 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dev-flow-hetero-loops",
+  "logical_plan_id": "dev-flow-hetero-loops-default-2026-09-04",
+  "session_id": "d68cce50-3194-4529-a972-fff8f06cd92b",
+  "session_key": "4b492985beebc527886dabf68c8c4b69001ed073da07aeba3b5da14657390c22",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "79f951de2cc7d5d66020a4d88c07efcf047c18c5cf633b49f12636367d7a0dfc",
+  "manifest_sha256": "3bce8c5c6da9ba22121563422f5d5c9ff5df608d84871e8c24dc33922b83f11c",
+  "plan_sha256": "33bad6d1d236e5716a1bcb50dd50545c97e480242d6f90101fa9410eedeea194",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "09cf7f3e948307e4c30135b09bac6f5ad7f7518f69078026a9d0b193713dd9b1"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0e0f8ccc538e7fdc706e8ee87dc8d67bebc70565d9192baab122372d76fc392c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-gazi7A/stdout",
+          "digest": "0e0f8ccc538e7fdc706e8ee87dc8d67bebc70565d9192baab122372d76fc392c"
+        },
+        "receipt_digest": "4f1eae187730bf78a8e1aa21a4eb30c5d5de95696a7165f5b4f25a1e78b699b6"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "glm_operations_skeptic",
+      "target_id": "glm_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "operation": "plan-review",
+          "request_digest": "76197c13927d045ca7913707012b1991360925a0671a8afd592a43980f187651"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ddf3c23119003b2cc5871a334fc774d16b92af323b4deea959357b25b1af8764",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-rvavky",
+          "digest": "ddf3c23119003b2cc5871a334fc774d16b92af323b4deea959357b25b1af8764"
+        },
+        "receipt_digest": "a866f4ea54a05a168517bb331399e226f28665d5f67c6ba5ecd15b99d05d6461"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "b1861b742066faabc8f7ded90bc87361cf1bd72eb7b6f11f81674cb2cc320a67"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "14d3a87802dc4a8a14e0d393747766d7a50b6bebf8629a0bb47992509e2de7c5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ECAGkr",
+          "digest": "14d3a87802dc4a8a14e0d393747766d7a50b6bebf8629a0bb47992509e2de7c5"
+        },
+        "receipt_digest": "bd1964045a043035b43dfe6afc313a6db297893d2b93df0a8979afeca13ea14e"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "glm_operations_skeptic",
+      "target_id": "glm_operations_skeptic",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "L-4 phase gate, explicit opt-out ledger path, and check-phase-review-receipt.js",
+      "claim": "The phase gate has no satisfiable path when hetero_review is explicitly off.",
+      "evidence": "The checker accepts only a current SHIP receipt, while KR4 requires hetero_review: off to skip review and be logged. No conditional gate or distinct opt-out path is defined, so an honoured opt-out either blocks phase advance or requires weakening the checker ad hoc.",
+      "evidence_reference": "§2 KR3-KR4; §3 check-phase-review-receipt.js row; §4 D2 acceptance",
+      "repair": "Define a gate decision table: explicit off requires a typed opt-out ledger record and bypasses the SHIP-receipt checker; auto, on, and native fallback require a current SHIP receipt. Test S, Fix, L, and H execution plus every opt-out ledger path.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c0087e925d61accee3efb908d24537f26adaf79af09b769b6c355f1f1d354c2d"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "resolve-review-loop.sh auto resolution and all three stage callers",
+      "claim": "Unavailable or malformed inputs have three conflicting outcomes: off plus warning, native fallback plus warning, and exit 3.",
+      "evidence": "The global constraint and seat-down risk require native fallback plus warning; D1 says zero plan seats resolve plan_review to off; the resolver row says invalid values exit 3. Encoding fallback as off also makes an unavailable topology indistinguishable from an intentional opt-out.",
+      "evidence_reference": "§2.5 knob constraint; §3 resolver row; §4 D1 acceptance; §6 Hetero seats down",
+      "repair": "Freeze one transition table for each knob: explicit off skips and logs; explicit on with an incomplete or invalid tuple exits 3 using the existing message shape; auto with absent, malformed, or zero-seat topology invokes a named native fallback and warns; auto with seats expands a complete tuple. Define the hetero_review tuple fields explicitly and test every transition.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "51b62e4488c807cf1f1e8576ec2c1219e98cd7faf83fed3c07798a7fde9edb4d"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/dispatch-plan-review.js and plan-review runner selection",
+      "claim": "The plan changes a driver that R6 requires to be reused unchanged.",
+      "evidence": "The file map adds kimi to dispatch-plan-review.js RUNNERS, while the frozen requirement preserves that script unchanged so its rubric freeze, manifest seats, generation cap, and growth rails remain the existing protocol.",
+      "evidence_reference": "Frozen R6; §3 dispatch-plan-review.js row; §4 D0 seat description",
+      "repair": "Remove the dispatch-plan-review.js modification from this release and constrain generated manifests to runners already supported by the unchanged driver. Treat kimi enablement as a separately reviewed future change.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e0a03adf23a8dc758af0fd9f2a6d1bc48bacf65ec107da5bee49b61dc5eac96a"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "plan-rubric-scaffold.js ID algorithm and D2 acceptance fixture",
+      "claim": "The promised scaffold output cannot reproduce the supplied frozen rubric IDs under the stated one-item-per-ID algorithm.",
+      "evidence": "The plan contains 6 KRs, 5 §2.5 bullets, and 6 risks, so the specified algorithm emits 17 IDs. The frozen rubric has R1 through R10, yet D2 says the scaffold reproduces this plan's rubric IDs. No grouping map or persistent source-key scheme explains the mismatch or stability after edits.",
+      "evidence_reference": "§2; §2.5; §3 plan-rubric-scaffold.js row; §4 D2; §6",
+      "repair": "Choose and freeze one contract: either expect a golden R1-R17 scaffold for the 17 source items, or add explicit stable source annotations and a checked grouping manifest that produces R1-R10. Define how IDs remain stable when items are inserted or reordered.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5f2503b194bcccf754c01042f2b9c1adf38d69ada86853051b6ebe04e9deaa60"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hetero-review-loop.js receipt production, delta review binding, and phase receipt validation",
+      "claim": "A receipt can match the current head without proving that reviewers and depth-0 evaluated that exact diff.",
+      "evidence": "The loop writes a verdict using reviewer JSON and git rev-parse, and the checker validates only verdict plus diff_sha against branch head. The plan does not snapshot the reviewed base and head before dispatch, reject branch movement, bind --delta to an immutable range, or record depth-0 re-derivation before producing the gate receipt.",
+      "evidence_reference": "§2.5 ADR-0001; §3 hetero-review-loop.js and check-phase-review-receipt.js rows; §6 Receipt theater",
+      "repair": "Snapshot immutable review_base_sha and review_head_sha before dispatch, review exactly that range, reject head movement, and preserve raw seat artifacts separately. After depth-0 dispositions, write the final gate receipt with phase, branch, generation, base, head, source-artifact provenance, and a normalized aggregate SHIP verdict; have the checker validate those bindings.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "129f816cd8e3f940133ac5ea6518cfd9c6a0547484a6005790fc9bd48e2b2eb9"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "union-on-verified-critical aggregation and reviewer finding schema",
+      "claim": "The plan invokes verified-critical aggregation without defining how a raw seat finding becomes verified.",
+      "evidence": "The receipt schema mentions findings with seat provenance but no verification or disposition field. The negative fixture simply labels a critical as verified, and the phrase reuses adjudicate-findings.js where it already covers union leaves the uncovered behavior undefined.",
+      "evidence_reference": "§3 hetero-review-loop.js row; §5 union negative control; §2.5 ADR-0001",
+      "repair": "Define a single adjudication artifact and state transition from raw finding to depth-0 disposition, including the exact verified representation. Aggregate only adjudicated findings, specify behavior when existing adjudicate-findings.js lacks coverage, and add fixtures distinguishing raw, rejected, and verified critical findings.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "321db5e460836868f66232906987fd9a0022eb96c876efb702e5198689bd9afd"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "consult callers, plugin-independent validation, consult ladder, and QC seat exclusion",
+      "claim": "Consult is documented and resolvable but remains without executable hook points, and QC exclusion is not enforced by selection logic.",
+      "evidence": "The context says dispatch-consult.sh has zero callers. D4 adds documentation and a dry-run but no debug or think-tank skill changes; the dev-flow change only covers review loops. The consult ladder orders by family, latency, and cost but has no QC-roster exclusion input. A dry-run on this host also does not prove operation with the Codex plugin absent.",
+      "evidence_reference": "§0 existing-state inventory; §3 topology, hetero-dispatch, and D4 file rows; §4 D4 acceptance",
+      "repair": "Add concrete calls or routing pointers at debug after two failed hypotheses, think-tank 3.5, and the dev-flow L design decision. Add machine-enforced exclusion of the QC roster from consult selection and a hermetic test with plugin paths absent and the engine runner shimmed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "72d7f256c949e301e17c34d82e81f12cbad1026b64efcb3c2ca897ee78bf7487"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hetero-review discovery metadata and D3 uniqueness acceptance",
+      "claim": "The proposed grep does not prove exact owner-phrase uniqueness in YAML descriptions.",
+      "evidence": "The command scans whole SKILL.md files rather than description fields and checks only the contiguous text hetero review. It cannot count each KR2 phrase exactly once, and phrases such as hetero loop review do not contain that contiguous substring.",
+      "evidence_reference": "§2 KR2; §4 D3 acceptance",
+      "repair": "Replace the grep acceptance with a deterministic frontmatter parser test that extracts every skill description, asserts each of the four phrases occurs exactly once in hetero-review, and rejects any hetero review occurrence in every other description.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "721855f5b3b87b2b5791f7cd6353ea6adaa60eb21d7825ce342882bee81c1c06"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "plan-rubric-scaffold.js negative-control coverage",
+      "claim": "The plan does not specify a negative-control test for every new script.",
+      "evidence": "D2 gives plan-rubric-scaffold.js only the positive test of reproducing IDs. The §5 negative-control list covers the receipt checker, resolver inputs, and union behavior, but not the scaffold's required refusal to overwrite an existing rubric.",
+      "evidence_reference": "§3 plan-rubric-scaffold.js row; §4 D2 acceptance; §5 Negative controls",
+      "repair": "Add a scaffold negative control that pre-creates a rubric containing sentinel bytes, runs the scaffold, asserts exit 2, and verifies the file remains byte-identical. Include it in the named test file and release suite.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "416702b5f8c38823025ed74d831e4b8fdb0408df999c40bbe12b5b76d0899fad"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/dispatch-plan-review.js file-map row (RUNNERS gains kimi); plan §3 File-structure map and §4 phase acceptances",
+      "claim": "The plan edits dispatch-plan-review.js by adding kimi to RUNNERS, while frozen rubric R6 requires the plan loop to reuse dispatch-plan-review.js unchanged; the deviation has no owner ruling and the edit is assigned to no deliverable phase.",
+      "evidence": "Rubric R6 states the plan loop reuses dispatch-plan-review.js unchanged (rubric freeze, manifest seats, two-generation cap, growth rails). The plan file map instead lists scripts/dispatch-plan-review.js with 'RUNNERS gains kimi (already a dispatch-review.sh runner; its absence forced D0 to seat GLM instead of kimi)'. §0 separately says do not rebuild this script, no phase D1-D5 acceptance includes the edit (D1 topology/resolver, D2 three new scripts, D3 skills, D4 consult, D5 release), and §8 owner rulings do not cover it, so it is unowned scope that also changes future plan-review seat eligibility.",
+      "evidence_reference": "Plan §3 File-structure map row 'scripts/dispatch-plan-review.js'; §0 'What already exists (do not rebuild)'; §4 D1-D5 acceptance rows; §8 Owner rulings",
+      "repair": "Decide now: either cut the kimi RUNNERS addition from this slice so dispatch-plan-review.js stays byte-identical per R6, or record an explicit owner ruling amending R6 to 'protocol invariants unchanged; RUNNERS may gain kimi', then assign the edit to a named deliverable with tests showing the four frozen invariants (rubric freeze, manifest seats, two-generation cap, growth rails) behave identically.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "787eab8399627be1e155a641414c8819f7613f5b9e53a4175dcfbdf375b72c4d"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "skills/hetero-review/SKILL.md description; D3 acceptance probe",
+      "claim": "The D3 acceptance verifies only the bare substring 'hetero review' in exactly one file; it does not verify that each of the four KR2 owner phrases appears verbatim in the hetero-review description and in no other description.",
+      "evidence": "KR2 requires 'plan loop review hetero', '過 hetero loop review', 'hetero review', and 'engage hetero engine review' each verbatim in exactly one skill description. The D3 acceptance greps for 'hetero review' across skills/*/SKILL.md only; none of the three longer phrases contains the contiguous substring 'hetero review', so the grep cannot detect a missing phrase in hetero-review's description nor a duplicate long phrase in another skill's description.",
+      "evidence_reference": "Plan §2 KR2; §3 skills/hetero-review/SKILL.md row; §4 D3 acceptance",
+      "repair": "Extend the D3 acceptance with a probe that asserts each of the four phrases occurs in the hetero-review description and in no other skills/*/SKILL.md description.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "36e333edd537c7880077dcfe9de0abc5798c769e15a68b40ea97096c1ddccef1"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/check-phase-review-receipt.js verdict comparison; hetero-review-loop.js receipt writer",
+      "claim": "The receipt verdict token is under-specified: the enforcer exits 0 iff the verdict is SHIP while the code-review protocol's verdict vocabulary is SHIP-AS-IS / FIX-THEN-SHIP.",
+      "evidence": "§3 defines the checker as exit 0 iff the latest receipt's verdict is SHIP and its diff_sha equals the phase branch head, while the loop protocol emits SHIP-AS-IS / FIX-THEN-SHIP. A checker comparing the literal token SHIP against receipts written as SHIP-AS-IS would exit 1 on every good receipt, and §2.5 bars new verdict vocabulary, so the normalization must be pinned rather than improvised.",
+      "evidence_reference": "Plan §3 rows for check-phase-review-receipt.js and hetero-review-loop.js; §2.5 constraint on no new severity vocabulary",
+      "repair": "Pin the receipt verdict enum in D2 acceptance: either the driver normalizes SHIP-AS-IS to SHIP when writing the receipt, or the checker accepts SHIP-AS-IS; state the chosen rule in both the loop-driver and receipt-checker test fixtures.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8b01271e68fb39a96406aaa058243c6ef125ea226d5dec23683d0e3a0f5b16e6"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "dev-flow size table and ledger opt-out logging",
+      "claim": "No writer or enforcer is named for the ledger opt-out entries, and the S/Fix size predicates have no verification.",
+      "evidence": "KR4 requires every plan_review/hetero_review opt-out to be logged in the ledger, but §3 only adds the rule to the dev-flow size table as prose; no script or skill step is named as the ledger writer. §5 lists negative controls for receipts, topology, and the union fixture, but none for S skipping the plan loop, Fix running qc only, or an opt-out producing a ledger line.",
+      "evidence_reference": "Plan §2 KR4; §3 dev-flow row 'size table gains the KR4 rule'; §5 Test / validation and Negative controls",
+      "repair": "Name the writer of the opt-out ledger line (e.g., hetero-review-loop.js plus the L-2.5/L-4 gate prose record knob=value and resolved seats) and add a fixture or probe asserting an off opt-out yields a ledger entry and that the S and Fix rows match resolver output.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ea7603846f3202a559e8f7cffd186919b8d4855ca552c5b0a8af25921e99ed49"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "resolve-review-loop.sh auto resolution; D1 unit-test matrix",
+      "claim": "The auto/on/off test matrix covers present/absent topology but not a garbage or malformed topology value, which R5 and §2.5 explicitly call out.",
+      "evidence": "R5 and §2.5 require a garbage value to fail closed toward native fallback plus warning and never silently skip the stage. D1 acceptance lists unit tests for auto/on/off × present/absent topology, and §5 negative controls list an empty seat store and a bogus runner tuple, but no malformed topology.json fixture is named anywhere.",
+      "evidence_reference": "Plan §2.5 constraints; §4 D1 acceptance; §5 Negative controls",
+      "repair": "Add a D1 fixture with malformed JSON at the topology path asserting the knob resolves off or falls back natively with a capability warning, and never resolves on with an empty tuple.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b8a8fbd48ea120a57beba61df8452ea25ac13267a5fa04d189c8f29e089ab54e"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "dispatch-consult.sh under consult_dispatch: auto; D4 acceptance",
+      "claim": "Plugin-absent operation is claimed by KR5 but the only listed test runs on this host, which does not simulate a host without the codex plugin.",
+      "evidence": "KR5 and R8 require dispatch-consult.sh to resolve a seat under consult_dispatch: auto on a host with no codex plugin installed. D4 acceptance says 'dispatch-consult.sh dry-run resolves a seat with consult_dispatch: auto on this host', and §5 lists no fixture hiding the plugin.",
+      "evidence_reference": "Plan §2 KR5; §4 D4 acceptance; §5 Test / validation",
+      "repair": "Add a D4 negative control that runs the dry-run with the codex plugin hidden (for example a PATH shim without the plugin binary) and asserts a seat still resolves from topology with the family-different-from-asker preference order intact.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ec86f66cbfa20ff6720fe948161cd7f8d54155cd0d447163bad5d73ae51a7be6"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "plan-rubric-scaffold.js negative control; four-place wiring for the three new scripts",
+      "claim": "The scaffold's no-overwrite and stable-id behavior has no listed negative control, and the four required wiring places are not enumerated per new script.",
+      "evidence": "R10 requires every new script to have a negative-control test and wiring in all four places (reference doc, SKILL table, scripts inventory, CLAUDE.md group list). §5 negative controls cover the receipt checker, the resolver, and the union fixture but omit plan-rubric-scaffold.js (its exit-2 no-overwrite rule and id stability across re-runs). The wiring row names docs/scripts-inventory.md, CLAUDE.md group list, README, and mirrors, but names neither a reference-doc section nor a SKILL-table row for each script.",
+      "evidence_reference": "Plan §3 wiring row; §5 Negative controls; §4 D2 and D5 acceptance",
+      "repair": "Add a §5 negative control for the scaffold (existing rubric file present ⇒ exit 2; re-run keeps ids stable) and enumerate in the D-phase acceptance the four wiring places for each of the three scripts: reference section in skills/dev-flow/references/hetero-loops.md, dev-flow SKILL table row, docs/scripts-inventory.md entry, CLAUDE.md group list entry.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d50ee3b8812dcfde82372d1c01599b1e4922ddf2900b417ef48ab19811801b7e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "D1 acceptance row (plan_review auto resolution under zero-seat topology) vs §2.5 auto-fail-closed prose",
+      "claim": "Under auto with a topology that yields zero plan-review seats, the knob resolves to off and the plan-review stage is skipped",
+      "evidence": "Phase table D1 acceptance reads 'a topology with zero plan seats ⇒ plan_review resolves off + capability_warnings line'. §2.5 says a missing or garbage auto value fails closed to native fallback + warning, never toward silently skipping the stage. §6 hetero-seats-down risk says auto degrades to the native panel with a warning and the stage still runs. R5 requires all three failure modes (empty/absent topology, zero-seat role, garbage value) fail closed to native fallback + warning and never silently skip the stage.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §3 D1 acceptance row; §2.5 constraint paragraph; §6 hetero-seats-down risk; R5 rubric",
+      "repair": "Rewrite the D1 acceptance text from 'resolves off' to 'fails closed to native fallback plus capability_warnings line; stage still runs natively'. Confirm in the same row that the resolved state is recorded as auto-degraded in the ledger and the plan ships only after the native single-model review.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3a312ec65eb96be3d5c7f43b7ef3f3c6d5f475cd7f7de830591e6fb066901ab1"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "D3 acceptance test for owner-phrase verbatim coverage in hetero-review SKILL.md description",
+      "claim": "All four owner phrases named in KR2 appear verbatim in exactly one skill description (hetero-review) and no other skill description contains hetero review",
+      "evidence": "KR2 lists four phrases (plan loop review hetero, 過 hetero loop review, hetero review, engage hetero engine review). D3 acceptance only checks the single substring hetero review via grep -l. The Chinese phrase 過 hetero loop review and the longer engage hetero engine review are not caught by a single-substring grep; the multi-word plan loop review hetero also escapes a naive hetero review substring check because of intervening tokens. R2 demands verbatim presence of all four phrases.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 KR2 row; §3 D3 acceptance row; R2 rubric",
+      "repair": "Expand the D3 acceptance test to assert verbatim presence of each of the four owner phrases in skills/hetero-review/SKILL.md front matter (description field), and to assert that no other skill description contains any of them. Use four targeted greps or a small fixture-driven assertion script that records each phrase check.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6d43f37bb1fcd2bb9c083e6b078183d8efd6714801356f8fb317955f01eeea80"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "D2 acceptance and §5 negative controls for plan-rubric-scaffold.js",
+      "claim": "Every new script has a negative-control test wired to its invariant behaviour",
+      "evidence": "§5 negative controls enumerate checks for check-phase-review-receipt.js (delete receipt ⇒ exit 1), the resolver (empty seat store ⇒ off + warning, bogus runner ⇒ exit 3, union fixture ⇒ FIX-THEN-SHIP from one verified critical). plan-rubric-scaffold.js has two stated invariants in §3 (never overwrites an existing rubric, exit 2; ids stable across re-runs) but no §5 negative-control case exercises either. R10 requires every new script to have a negative-control test.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §5 Negative controls paragraph; §3 plan-rubric-scaffold.js row; R10 rubric",
+      "repair": "Add a hooks/tests/plan-rubric-scaffold.test.sh negative-control case: invoking scaffold against an existing rubric file ⇒ exit 2 with the rubric byte-equal to the input; re-running on the same plan file ⇒ identical id sequence (ordered-id list equality or sha equality).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c781a835014254472845ca9b4fc0897b98f4b0ee9c0d57664cac299c6cb7962e"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "D4 acceptance criterion for dispatch-consult.sh plugin decoupling",
+      "claim": "dispatch-consult.sh resolves a seat under consult_dispatch auto on a host without the codex plugin",
+      "evidence": "R8 requires the dry-run path to be exercised on a host without the plugin. D4 acceptance reads 'dispatch-consult.sh dry-run resolves a seat with consult_dispatch auto on this host' with no statement that the codex plugin is absent. §0 declares 'this host, direct' but does not say whether platforms/codex/plugin is installed; §3 hetero-dispatch.md edit downgrades peer consult to optional, which only proves the doc change, not the dry-run path on a plugin-less host.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §3 D4 acceptance row; §0 design statement; §3 hetero-dispatch.md row; R8 rubric",
+      "repair": "Rewrite D4 acceptance to state the host-side precondition: dispatch-consult.sh dry-run resolves a seat with consult_dispatch auto on this host with platforms/codex/plugin neutralised or absent. Add an explicit fixture step that records the plugin-absent precondition alongside the dry-run output.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b80b70585ed6c351a25ca78a97f3278df48eda37b2688dd01a4fd0121fb5f9a2"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "36e333edd537c7880077dcfe9de0abc5798c769e15a68b40ea97096c1ddccef1",
+      "rubric_id": "R2",
+      "affected_surface": "skills/hetero-review/SKILL.md description; D3 acceptance probe",
+      "claim": "The D3 acceptance verifies only the bare substring 'hetero review' in exactly one file; it does not verify that each of the four KR2 owner phrases appears verbatim in the hetero-review description and in no other description.",
+      "evidence_reference": "Plan §2 KR2; §3 skills/hetero-review/SKILL.md row; §4 D3 acceptance",
+      "disposition": null
+    },
+    {
+      "fingerprint": "8b01271e68fb39a96406aaa058243c6ef125ea226d5dec23683d0e3a0f5b16e6",
+      "rubric_id": "R3",
+      "affected_surface": "scripts/check-phase-review-receipt.js verdict comparison; hetero-review-loop.js receipt writer",
+      "claim": "The receipt verdict token is under-specified: the enforcer exits 0 iff the verdict is SHIP while the code-review protocol's verdict vocabulary is SHIP-AS-IS / FIX-THEN-SHIP.",
+      "evidence_reference": "Plan §3 rows for check-phase-review-receipt.js and hetero-review-loop.js; §2.5 constraint on no new severity vocabulary",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ea7603846f3202a559e8f7cffd186919b8d4855ca552c5b0a8af25921e99ed49",
+      "rubric_id": "R4",
+      "affected_surface": "dev-flow size table and ledger opt-out logging",
+      "claim": "No writer or enforcer is named for the ledger opt-out entries, and the S/Fix size predicates have no verification.",
+      "evidence_reference": "Plan §2 KR4; §3 dev-flow row 'size table gains the KR4 rule'; §5 Test / validation and Negative controls",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b8a8fbd48ea120a57beba61df8452ea25ac13267a5fa04d189c8f29e089ab54e",
+      "rubric_id": "R5",
+      "affected_surface": "resolve-review-loop.sh auto resolution; D1 unit-test matrix",
+      "claim": "The auto/on/off test matrix covers present/absent topology but not a garbage or malformed topology value, which R5 and §2.5 explicitly call out.",
+      "evidence_reference": "Plan §2.5 constraints; §4 D1 acceptance; §5 Negative controls",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ec86f66cbfa20ff6720fe948161cd7f8d54155cd0d447163bad5d73ae51a7be6",
+      "rubric_id": "R8",
+      "affected_surface": "dispatch-consult.sh under consult_dispatch: auto; D4 acceptance",
+      "claim": "Plugin-absent operation is claimed by KR5 but the only listed test runs on this host, which does not simulate a host without the codex plugin.",
+      "evidence_reference": "Plan §2 KR5; §4 D4 acceptance; §5 Test / validation",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d50ee3b8812dcfde82372d1c01599b1e4922ddf2900b417ef48ab19811801b7e",
+      "rubric_id": "R10",
+      "affected_surface": "plan-rubric-scaffold.js negative control; four-place wiring for the three new scripts",
+      "claim": "The scaffold's no-overwrite and stable-id behavior has no listed negative control, and the four required wiring places are not enumerated per new script.",
+      "evidence_reference": "Plan §3 wiring row; §5 Negative controls; §4 D2 and D5 acceptance",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6d43f37bb1fcd2bb9c083e6b078183d8efd6714801356f8fb317955f01eeea80",
+      "rubric_id": "R2",
+      "affected_surface": "D3 acceptance test for owner-phrase verbatim coverage in hetero-review SKILL.md description",
+      "claim": "All four owner phrases named in KR2 appear verbatim in exactly one skill description (hetero-review) and no other skill description contains hetero review",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 KR2 row; §3 D3 acceptance row; R2 rubric",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c781a835014254472845ca9b4fc0897b98f4b0ee9c0d57664cac299c6cb7962e",
+      "rubric_id": "R10",
+      "affected_surface": "D2 acceptance and §5 negative controls for plan-rubric-scaffold.js",
+      "claim": "Every new script has a negative-control test wired to its invariant behaviour",
+      "evidence_reference": "PLAN_UNDER_REVIEW §5 Negative controls paragraph; §3 plan-rubric-scaffold.js row; R10 rubric",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b80b70585ed6c351a25ca78a97f3278df48eda37b2688dd01a4fd0121fb5f9a2",
+      "rubric_id": "R8",
+      "affected_surface": "D4 acceptance criterion for dispatch-consult.sh plugin decoupling",
+      "claim": "dispatch-consult.sh resolves a seat under consult_dispatch auto on a host without the codex plugin",
+      "evidence_reference": "PLAN_UNDER_REVIEW §3 D4 acceptance row; §0 design statement; §3 hetero-dispatch.md row; R8 rubric",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-04T07:57:51.834Z"
+}

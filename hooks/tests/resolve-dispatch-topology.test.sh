@@ -34,15 +34,18 @@ write_scorecard_row() {
   local latency="$4"
   local status="$5"
   local event_id="${6:-100}"
+  local role="${7:-implementer}"
+  local family="${8:-test-family}"
+  local cost="${9:-null}"
 
-  node - "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$engine" "$runner" "$effort" "$latency" "$status" "$event_id" <<'NODE'
+  node - "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$engine" "$runner" "$effort" "$latency" "$status" "$event_id" "$role" "$family" "$cost" <<'NODE'
 const fs = require('fs');
-const [file, engine, runner, effort, latency, status, eventId] = process.argv.slice(2);
+const [file, engine, runner, effort, latency, status, eventId, role, family, costRaw] = process.argv.slice(2);
 const row = {
   engine,
   runner,
-  family: 'test-family',
-  role: 'implementer',
+  family,
+  role,
   model_version: '1.0',
   version_source: 'runtime',
   corpus_version: '1.0',
@@ -52,7 +55,6 @@ const row = {
   date: '2026-08-01',
   quality: 0.95,
   capability_score: 0.95,
-  effort,
   status,
   admission_status: status,
   latency: { sample_wall_time_s: Number(latency) },
@@ -60,6 +62,12 @@ const row = {
   baseline_event_id: Number(eventId),
   qualified_at: '2026-08-01T00:00:00.000Z',
 };
+if (effort && effort !== '') {
+  row.effort = effort;
+}
+if (costRaw && costRaw !== 'null') {
+  row.cost = Number(costRaw);
+}
 fs.appendFileSync(file, JSON.stringify(row) + '\n');
 NODE
 }
@@ -183,5 +191,252 @@ NODE
 )"
 assert_contains "$CANDIDATES_CASE4" "agy" "Case 4: agy is candidate"
 assert_not_contains "$CANDIDATES_CASE4" "codex" "Case 4: uninstalled codex not in candidates_to_qualify"
+
+# -----------------------------------------------------------------------------
+# Case 5: reviewer, consult, discuss ladders are produced and properly ordered
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "rev-high" "agy" "high" 10.0 "qualified" 301 "reviewer"
+write_scorecard_row "rev-low" "agy" "low" 15.0 "qualified" 302 "reviewer"
+write_scorecard_row "con-b" "agy" "medium" 20.0 "qualified" 303 "consult" "test-family" 10
+write_scorecard_row "con-a" "agy" "medium" 10.0 "qualified" 304 "consult" "other-family" 5
+write_scorecard_row "dis-b" "agy" "medium" 20.0 "qualified" 305 "discuss" "test-family" 10
+write_scorecard_row "dis-a" "agy" "medium" 10.0 "qualified" 306 "discuss" "other-family" 5
+
+OUT="$(node "$SCRIPT" --json --role reviewer,consult,discuss --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 5: exit 0"
+
+REV_FIRST="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.reviewer_ladder[0].engine + '/' + topo.reviewer_ladder[0].effort);
+NODE
+)"
+assert_eq "rev-low/low" "$REV_FIRST" "Case 5: reviewer ladder low effort first"
+
+CON_FIRST="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.consult_ladder[0].engine);
+NODE
+)"
+assert_eq "con-a" "$CON_FIRST" "Case 5: consult ladder sorted by different family first then latency/cost"
+
+DIS_FIRST="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.discuss_ladder[0].engine);
+NODE
+)"
+assert_eq "dis-a" "$DIS_FIRST" "Case 5: discuss ladder sorted by different family first then latency/cost"
+
+# -----------------------------------------------------------------------------
+# Case 6: plan_review_panel distinct families and max 3 seats
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+# 2 OpenAI engines, 1 Anthropic, 1 Google, 1 Alibaba
+write_scorecard_row "gpt-4o" "agy" "high" 10.0 "qualified" 401 "reviewer"
+write_scorecard_row "gpt-3.5" "agy" "low" 5.0 "qualified" 402 "reviewer"
+write_scorecard_row "claude-sonnet" "agy" "high" 12.0 "qualified" 403 "consult"
+write_scorecard_row "gemini-flash" "agy" "high" 15.0 "qualified" 404 "consult"
+write_scorecard_row "qwen-max" "agy" "high" 20.0 "qualified" 405 "consult"
+
+OUT="$(node "$SCRIPT" --json --role plan_reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 6: exit 0"
+
+PANEL_LEN="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(String(topo.plan_review_panel.length));
+NODE
+)"
+assert_eq "3" "$PANEL_LEN" "Case 6: panel never exceeds 3 seats"
+
+PANEL_FAMILIES="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+const families = topo.plan_review_panel.map(s => s.family);
+const distinct = new Set(families);
+process.stdout.write(families.length === distinct.size ? "distinct" : "duplicate");
+NODE
+)"
+assert_eq "distinct" "$PANEL_FAMILIES" "Case 6: panel never contains two seats from same family"
+
+CHAIR_ENGINE="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel[0].engine);
+NODE
+)"
+assert_eq "gpt-4o" "$CHAIR_ENGINE" "Case 6: chair is highest effort reviewer candidate"
+
+# -----------------------------------------------------------------------------
+# Case 7: runner codex-cli normalisation to codex
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+# Create fake codex binary so codex is installed
+cat > "$FAKE_BIN_DIR/codex" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf '0.1.0\n'
+  exit 0
+fi
+exit 0
+STUB
+chmod +x "$FAKE_BIN_DIR/codex"
+
+write_scorecard_row "gpt-4o-cli" "codex-cli" "high" 10.0 "qualified" 501 "reviewer"
+
+OUT="$(node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 7: exit 0"
+
+NORMALIZED_RUNNER="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.reviewer_ladder[0].runner);
+NODE
+)"
+assert_eq "codex" "$NORMALIZED_RUNNER" "Case 7: codex-cli normalized to codex in output"
+
+# -----------------------------------------------------------------------------
+# Case 8: runner kimi eligible for reviewer_ladder but NOT plan_review_panel
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+# Create fake kimi binary
+cat > "$FAKE_BIN_DIR/kimi" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf '1.0.0\n'
+  exit 0
+fi
+exit 0
+STUB
+chmod +x "$FAKE_BIN_DIR/kimi"
+
+write_scorecard_row "kimi-engine" "kimi" "high" 10.0 "qualified" 601 "reviewer"
+
+OUT="$(node "$SCRIPT" --json --role reviewer,plan_reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 8: exit 0"
+
+KIMI_IN_REV="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(String(topo.reviewer_ladder.length));
+NODE
+)"
+assert_eq "1" "$KIMI_IN_REV" "Case 8: kimi appears in reviewer_ladder"
+
+KIMI_IN_PANEL="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(String(topo.plan_review_panel.length));
+NODE
+)"
+assert_eq "0" "$KIMI_IN_PANEL" "Case 8: kimi is not in panel-eligible runner list so panel is empty"
+
+# -----------------------------------------------------------------------------
+# Case 9: --exclude-seats removes seat from every list and panel
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gemini-pro" "agy" "high" 10.0 "qualified" 701 "reviewer"
+write_scorecard_row "claude-sonnet" "agy" "high" 10.0 "qualified" 702 "reviewer"
+
+OUT="$(node "$SCRIPT" --json --role reviewer,plan_reviewer --exclude-seats "gemini-pro/high@agy" --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 9: exit 0"
+
+REV_SEATS="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.reviewer_ladder.map(s => s.engine).join(','));
+NODE
+)"
+assert_eq "claude-sonnet" "$REV_SEATS" "Case 9: excluded seat removed from reviewer_ladder"
+
+PANEL_SEATS="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel.map(s => s.engine).join(','));
+NODE
+)"
+assert_eq "claude-sonnet" "$PANEL_SEATS" "Case 9: excluded seat removed from plan_review_panel"
+
+# -----------------------------------------------------------------------------
+# Case 9b (negative control, d1-runner-alias-exclusion): a --exclude-seats entry spelled with
+# the canonical "codex" runner must still exclude a seat whose scorecard row is qualified under
+# the "codex-cli" alias — the two must be treated as the same rail for exclusion.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-4o-cli" "codex-cli" "high" 10.0 "qualified" 703 "reviewer"
+write_scorecard_row "claude-sonnet" "agy" "high" 10.0 "qualified" 704 "reviewer"
+
+OUT="$(node "$SCRIPT" --json --role reviewer --exclude-seats "gpt-4o-cli/high@codex" --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 9b: exit 0"
+
+REV_SEATS_ALIAS="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.reviewer_ladder.map(s => s.engine).join(','));
+NODE
+)"
+assert_eq "claude-sonnet" "$REV_SEATS_ALIAS" "Case 9b: codex-cli seat excluded by a codex exclusion (alias canonicalized before comparison)"
+
+# -----------------------------------------------------------------------------
+# Case 10: --asking-family openai sorts minimax before openai in consult_ladder
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-4o" "agy" "high" 10.0 "qualified" 801 "consult"
+write_scorecard_row "minimax-m3" "agy" "high" 20.0 "qualified" 802 "consult"
+
+OUT="$(node "$SCRIPT" --json --role consult --asking-family openai --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 10: exit 0"
+
+FIRST_CONSULT="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.consult_ladder[0].engine);
+NODE
+)"
+assert_eq "minimax-m3" "$FIRST_CONSULT" "Case 10: different family (minimax) sorts before asking family (openai)"
+
+# -----------------------------------------------------------------------------
+# Case 11: zero scorecard rows for a role produces empty array and exits 0
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+: > "$ENGINE_SCORECARD_DIR/scorecard.jsonl"
+
+OUT="$(node "$SCRIPT" --json --role reviewer,consult,discuss,plan_reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 11: exit 0 on empty store"
+
+EMPTY_CHECK="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+const ok = Array.isArray(topo.reviewer_ladder) && topo.reviewer_ladder.length === 0 &&
+           Array.isArray(topo.consult_ladder) && topo.consult_ladder.length === 0 &&
+           Array.isArray(topo.discuss_ladder) && topo.discuss_ladder.length === 0 &&
+           Array.isArray(topo.plan_review_panel) && topo.plan_review_panel.length === 0;
+process.stdout.write(ok ? "empty_arrays_ok" : "mismatch");
+NODE
+)"
+assert_eq "empty_arrays_ok" "$EMPTY_CHECK" "Case 11: empty arrays for all roles when store is empty"
+
+# -----------------------------------------------------------------------------
+# Case 12: plan_review_panel: legacy empty-effort seats sort last, not first,
+# and emit effort: "high" instead of ""
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+# Write legacy empty-effort row (e.g. minimax-m3 with latency 5.0, lower latency than real effort)
+write_scorecard_row "minimax-m3" "agy" "" 5.0 "qualified" 901 "reviewer" "minimax"
+# Write real effort row (gpt-5.6-sol with max effort, higher latency 10.0)
+write_scorecard_row "gpt-5.6-sol" "agy" "max" 10.0 "qualified" 902 "reviewer" "openai"
+
+OUT="$(node "$SCRIPT" --json --role plan_reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 12: exit 0"
+
+CHAIR_ENGINE_12="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel[0].engine);
+NODE
+)"
+assert_eq "gpt-5.6-sol" "$CHAIR_ENGINE_12" "Case 12: chair is seat with real effort, not empty-effort legacy row"
+
+SECOND_ENGINE_12="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel[1].engine);
+NODE
+)"
+assert_eq "minimax-m3" "$SECOND_ENGINE_12" "Case 12: legacy seat placed second"
+
+SECOND_EFFORT_12="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel[1].effort);
+NODE
+)"
+assert_eq "high" "$SECOND_EFFORT_12" "Case 12: legacy seat emitted with effort 'high', never ''"
 
 finalize_test

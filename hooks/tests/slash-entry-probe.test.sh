@@ -111,5 +111,9 @@ probe l6 "/autopilot:l6" \
   "ceo-agent/references/level-front-door.md"
 probe dialectic "/autopilot:think-tank-dialectic" \
   "think-tank/references/dialectic-mode.md"
+probe hetero-review "/autopilot:hetero-review" \
+  "skills/hetero-review/references/plan-loop.md" \
+  "skills/hetero-review/references/code-loop.md"
 
 finalize_test
+

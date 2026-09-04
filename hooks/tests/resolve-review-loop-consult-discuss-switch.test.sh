@@ -124,21 +124,26 @@ for (const [key, oldVal] of Object.entries(oldJson)) {
   }
 }
 
-// (3) the only added keys are exactly consult_dispatch and discuss_dispatch,
-// both "off".
+// (3) the only added keys are exactly consult_dispatch, discuss_dispatch, and
+// the D6/D5-integration provenance/switch fields that ride along with them.
 const oldKeys = new Set(Object.keys(oldJson));
 const addedKeys = Object.keys(newJson).filter((k) => !oldKeys.has(k)).sort();
-const expectedAdded = ['consult_dispatch', 'discuss_dispatch'];
+const expectedAdded = [
+  'consult_dispatch', 'consult_resolved_from',
+  'discuss_dispatch',
+  'hetero_review', 'hetero_review_resolved_from',
+  'plan_review_resolved_from',
+].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);
 }
-if (newJson.consult_dispatch !== 'off') problems.push('consult_dispatch-not-off');
+if (newJson.consult_dispatch !== 'auto') problems.push('consult_dispatch-not-auto');
 if (newJson.discuss_dispatch !== 'off') problems.push('discuss_dispatch-not-off');
 
 console.log(problems.length === 0 ? 'parity-ok' : problems.join('\n'));
 NODE
 )"
-assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-identical, only consult_dispatch/discuss_dispatch added (both off)"
+assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-identical, only consult_dispatch/discuss_dispatch added (consult_dispatch auto, discuss_dispatch off)"
 
 # ── 4. Per-fixture parity across Population A ───────────────────────────────
 # Population A — complete roster objects passed to validateReviewLoopConfig
@@ -168,6 +173,9 @@ assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-
 # "reviewer_engine" — never fed through validateReviewLoopConfig as a live
 # literal). Raw bound moves 7 -> 8.
 #
+# RECOUNTED AGAIN: hooks/tests/hetero-review-loop.test.sh was added and matches
+# the Population A extractor. Raw bound moves 8 -> 9.
+#
 # NOTE ON evals/clean/11-review-loop-tier-fields.diff: this file is a FROZEN
 # git-diff snapshot of a 2026 v2.32.23 commit (schema state that predates even
 # consult_engine/discuss_engine), consumed ONLY by scripts/calibration.sh's
@@ -192,7 +200,7 @@ POP_A_RAW_COUNT="$(
     git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" 2>/dev/null; } \
     | sort -u | wc -l | tr -d '[:space:]'
 )"
-assert_eq "8" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 8 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures)"
+assert_eq "9" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 9 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures and hetero-review-loop.test.sh)"
 
 # Per-object parity subset: files whose roster literal is genuinely fed through
 # validateReviewLoopConfig, either directly (JS payload) or via the live
@@ -202,14 +210,14 @@ assert_eq "8" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 
 # hooks/tests/autopilot-engine.test.sh additionally re-asserts this at runtime
 # via its own fixture_field_drift guard (REVIEW_LOOP_FIELDS vs literal keys).
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/autopilot-engine.test.sh")" \
-  $'  consult_dispatch: \'off\',\n  discuss_dispatch: \'off\',' \
-  "autopilot-engine.test.sh validPayload literal carries consult_dispatch/discuss_dispatch: off"
+  $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
+  "autopilot-engine.test.sh validPayload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/review-loop-runner.test.sh")" \
-  $'  consult_dispatch: \'off\',\n  discuss_dispatch: \'off\',' \
-  "review-loop-runner.test.sh payload literal carries consult_dispatch/discuss_dispatch: off"
+  $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
+  "review-loop-runner.test.sh payload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
-  '"discuss_endpoint":"consult_dispatch":"discuss_dispatch":"allow_same_runner_dual_seat"' \
-  "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/discuss_dispatch in schema order"
+  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"allow_same_runner_dual_seat"' \
+  "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/consult_resolved_from/discuss_dispatch in schema order"
 
 # contract-parity.test.sh and autopilot-cli.test.sh build their roster object
 # by calling the LIVE resolver/CLI (never a static literal), so they inherit
@@ -217,7 +225,7 @@ assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
 # review-log repair [2]: "D6 fixture enumeration + real call-site smoke").
 CLI_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" node "$REPO_ROOT/bin/autopilot.js" engine review-loop 2>&1)"; CLI_EXIT=$?
 assert_eq "0" "$CLI_EXIT" "engine review-loop CLI (autopilot-cli.test.sh's real call site) exits 0 on the shipped template"
-assert_contains "$CLI_OUT" '"consult_dispatch": "off"' "engine review-loop CLI surfaces consult_dispatch: off"
+assert_contains "$CLI_OUT" '"consult_dispatch": "auto"' "engine review-loop CLI surfaces consult_dispatch: auto"
 assert_contains "$CLI_OUT" '"discuss_dispatch": "off"' "engine review-loop CLI surfaces discuss_dispatch: off"
 CONTRACT_PARITY_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" bash "$SCRIPT")"
 export CONTRACT_PARITY_JSON
@@ -264,11 +272,16 @@ assert_eq "28" "$POP_B_COUNT" "Population B file bound is pinned at 28 (git grep
 # to prove D7 admits a role-qualified cursor consult seat while the SAME row
 # still leaves a different role list-gated — that file's own acceptance test
 # for the switch-on path, not a member of "Population B" either.
+# RECOUNTED (integration pass 1): three mini-repo fixtures were repinned to set
+# consult_dispatch/discuss_dispatch explicitly (hooks/tests/dispatch-author-
+# contract.test.sh, hooks/tests/dispatch-consult-hermetic.test.sh, hooks/tests/
+# dispatch-contract.test.sh) — everything else in Population B still resolves
+# through the default (now auto for consult_dispatch, off for discuss_dispatch).
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
 POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "0" "$POP_B_EXPLICIT_SWITCH" "none of Population B's 26 partial roster configs set consult_dispatch/discuss_dispatch explicitly — they all resolve via the off default"
+assert_eq "3" "$POP_B_EXPLICIT_SWITCH" "three of Population B's 28 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'
@@ -429,7 +442,7 @@ assert_eq "0" "$CODEX_MIRROR_3WAY_EXIT" "codex mirror check-contract-schema.js e
 
 CODEX_SHELL_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_TEMPLATE" bash "$CODEX_SHELL" 2>/dev/null)"; CODEX_SHELL_EXIT=$?
 assert_eq "0" "$CODEX_SHELL_EXIT" "codex mirror resolver exits 0 on its own shipped template"
-assert_eq "off" "$(json_get "$CODEX_SHELL_JSON" consult_dispatch)" "codex mirror resolver emits consult_dispatch: off on the shipped template"
+assert_eq "auto" "$(json_get "$CODEX_SHELL_JSON" consult_dispatch)" "codex mirror resolver emits consult_dispatch: auto on the shipped template"
 assert_eq "off" "$(json_get "$CODEX_SHELL_JSON" discuss_dispatch)" "codex mirror resolver emits discuss_dispatch: off on the shipped template"
 
 # ── 8. Switch-on requires a non-empty seat tuple (tuple integrity, not D7 ───

@@ -24,7 +24,7 @@ Claude Code on its own — even with `superpowers` if you've installed it — le
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 29 skills + 25 hooks?**
+**Why 30 skills + 25 hooks?**
 v2.0 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with `superpowers` skills, on the assumption that `superpowers` was always installed. v2.7.0 restores them as standalone fallbacks (with explicit `## Coexistence with Superpowers` sections in their bodies explaining the relationship) so autopilot works without `superpowers`. When `superpowers` IS installed, `.claude/dispatch-config.md` chains let orchestrators prefer the superpowers equivalent for runtime delegation; the autopilot skill stays in the catalog as the standalone fallback. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
 
 **Why `!`command`` injection, not config files?**
@@ -179,7 +179,7 @@ publishes no live local role or agentic runner.
 
 ## Recommended Companions
 
-Autopilot is **self-sufficient for methodology and lifecycle** — you get all 29 skills + 3 methodology agents when you install autopilot alone. The assumed ecosystem baseline is cookys's own `autopilot` + `codeforge` + `mnemos` trio (standalone from third-party plugins), not a third-party stack. For **role specialization**, autopilot is out of scope and expects you to bring your own role-agent plugin if you want one (a voltagent-style catalog works if installed).
+Autopilot is **self-sufficient for methodology and lifecycle** — you get all 30 skills + 3 methodology agents when you install autopilot alone. The assumed ecosystem baseline is cookys's own `autopilot` + `codeforge` + `mnemos` trio (standalone from third-party plugins), not a third-party stack. For **role specialization**, autopilot is out of scope and expects you to bring your own role-agent plugin if you want one (a voltagent-style catalog works if installed).
 
 Autopilot and role-specialist plugins are **orthogonal by design**:
 

@@ -1,0 +1,494 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dev-flow-hetero-loops",
+  "logical_plan_id": "dev-flow-hetero-loops-default-2026-09-04",
+  "session_id": "d68cce50-3194-4529-a972-fff8f06cd92b",
+  "session_key": "4b492985beebc527886dabf68c8c4b69001ed073da07aeba3b5da14657390c22",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "79f951de2cc7d5d66020a4d88c07efcf047c18c5cf633b49f12636367d7a0dfc",
+  "manifest_sha256": "3bce8c5c6da9ba22121563422f5d5c9ff5df608d84871e8c24dc33922b83f11c",
+  "plan_sha256": "db3df187414c77c8f1641ccca16a07c61646a4c1c879f99d952380b63da233b7",
+  "growth_ratio": {
+    "numerator": 4225,
+    "denominator": 3979
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "40ab883a2c4af75dc06d6886b7ce108963de2e94c3d893268d0a54445a06ea66"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5ed5d959028bac13a5030721d062f30af7ad4504312bbeed719bb6d93b7f60de",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-Fu43Ou/stdout",
+          "digest": "5ed5d959028bac13a5030721d062f30af7ad4504312bbeed719bb6d93b7f60de"
+        },
+        "receipt_digest": "7dd45715e934b9e82e61a9203517d27ee4587201e8eb7812ef778db546a66b00"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "glm_operations_skeptic",
+      "target_id": "glm_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "operation": "plan-review",
+          "request_digest": "1ccf31cbd8c59ea8c88f28cafd7ae7ac8201ae0d89e88bf8ea7aaa0f47e26380"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "83918e9f626829f78d33a82d10492687a96c423250f05fa94a8503479ce37445",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-DONPiW",
+          "digest": "83918e9f626829f78d33a82d10492687a96c423250f05fa94a8503479ce37445"
+        },
+        "receipt_digest": "7e4e50faced1a0a3296d65b08f577a0b943a2ee4fb594a9c2e05993c9f80e8e3"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "de5b06d10cbc149d1f73a55d7162918d73a6cdcfb4df50fb0935a07fdc40a335"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "31fcc79a930fb4d984da987121552eb8c19cc57fb7cf5bcd80bb036e3420e9be",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-wu82IH",
+          "digest": "31fcc79a930fb4d984da987121552eb8c19cc57fb7cf5bcd80bb036e3420e9be"
+        },
+        "receipt_digest": "41d270032e184f10d636f33bb6bf5199fabc59cb4b3a770129627ba0f35fccaf"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "glm_operations_skeptic",
+      "target_id": "glm_operations_skeptic",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/hetero-review-loop.js lifecycle and disposition contract",
+      "claim": "The code-loop contract lacks an executable handoff between collecting reviewer artifacts and depth-0 adjudication.",
+      "evidence": "The driver is described as dispatching seats, writing their JSON, consuming dispositions, aggregating, and writing a receipt, but no collect, resume, or finalize mode is defined. D2 requires an undispositioned Critical finding to exit 1 without a receipt, yet the plan does not explain how dispositions are then applied without redispatching or overwriting that generation.",
+      "evidence_reference": "Plan §3 hetero-review-loop.js row; §4 D2 acceptance",
+      "repair": "Define an explicit collect-and-finalize state machine. Collection must write immutable generation artifacts and return a pending result; finalization must consume a schema-versioned dispositions file for that exact generation without redispatch, require one disposition per stable finding ID, and exclusively write the verdict and receipt.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "adb60e99dc738fc62cc907b51228ecaf61511e4991731941a9757563ed98215e"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Delta review lineage and the phase gate receipt",
+      "claim": "A SHIP receipt for the final delta can satisfy the phase gate without proving closure of the complete phase review.",
+      "evidence": "The singular receipt contains only one review_base_sha, one review_head_sha, and that generation's artifact paths. The --delta contract permits reviewing prev_head through head, but defines no immutable parent-generation link, initial phase base, contiguous-range validation, or closure record for findings from earlier generations. The checker can therefore accept a small final delta while ignoring the evidence that caused an earlier FIX-THEN-SHIP.",
+      "evidence_reference": "Plan §3 receipt contract and --delta sentence; §4 D2 checker acceptance",
+      "repair": "Define a chained generation manifest rooted at the original phase base. Require contiguous base/head ranges, immutable links to every prior generation, closure evidence for all previously verified findings, and a final receipt referencing the complete chain. Add a multi-generation FIX, delta, SHIP test whose negative control removes or alters an earlier generation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c95196deb0b32f9cee80cd8bccda6d1e76ea5d769fab762f4f180bfbd61c32c1"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Opt-out receipt schema and check-phase-review-receipt.js",
+      "claim": "The specified receipt cannot deterministically distinguish an explicit off opt-out from an invalid auto degradation.",
+      "evidence": "The receipt field list has no knob name, configured value, or pinned resolver provenance beyond resolved_from. Nevertheless, D2 requires opt-out with explicit off to pass and opt-out with auto to fail. The --opt-out --knob option alone does not establish that the knob was actually configured off.",
+      "evidence_reference": "Plan §3 hetero-review-loop.js receipt fields; §4 D2 opt-out checker cases",
+      "repair": "Specify opt-out receipt fields for knob, configured_value, configuration source, and resolver provenance, and define how the checker independently validates those fields against the pinned resolution event. Add forged-auto and changed-config negative controls.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1569e0616b2062127cf0feb493ecb80a09cfce88cc497d17a522b30feac10f25"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Hands-repair brief production and validation",
+      "claim": "Responsibility for emitting and validating the hands repair brief is absent from the driver contract and acceptance tests.",
+      "evidence": "The router row only says hands repair via topology, and §2.5 generally says prompt hygiene applies. The hetero-review-loop.js contract defines no brief output, topology-selection input, validation step, or failure behavior, while D2 never asserts that check-redispatch-prompt.sh was invoked or that a failing brief blocks redispatch.",
+      "evidence_reference": "Plan §2.5 final constraint; §3 hetero-review skill and hetero-review-loop.js rows; §4 D2 acceptance",
+      "repair": "Assign brief generation to the code-loop driver, specify its artifact path and required finding and range fields, require check-redispatch-prompt.sh to pass before dispatching hands, and add a PATH-shimmed positive test plus a malformed-brief negative control.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "be22cd5022c51e9080ce786a8815d532524dfafe8ff4b3a10e5f5d8e9d7b6e93"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "resolve-review-loop.sh transition semantics and D1 fixtures",
+      "claim": "The transition contract is not total for garbage knob values, so the frozen fail-closed behavior is not guaranteed.",
+      "evidence": "The table defines only off, on, and auto. D1 tests malformed topology and a bogus plan_reviewer_runner under explicit on, but does not define or test plan_review, hetero_review, or consult_dispatch set to an unrecognized value. Schema participation is mentioned without specifying whether rejection occurs before stage selection or which non-silent result is required.",
+      "evidence_reference": "Plan §2.5 knob transition table; §4 D1 acceptance; §5 negative controls",
+      "repair": "Define invalid top-level knob values as a fail-closed error before stage selection, with a stable non-zero result and no opt-out or empty-on output. Separately define unsupported auto topology seats as filtered seats that lead to native fallback plus warning when none remain. Test all three knobs.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1f46335fdf63c9f3c929d0a8ffa7878895f24147a6a03c81db02040ba713a7d9"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan-loop freeze predicate and CONDITIONAL adjudication gate",
+      "claim": "The plan permits an adjudicated CONDITIONAL to advance without defining how that result satisfies the zero-construct-level-findings freeze criterion.",
+      "evidence": "KR1 allows READY or a depth-0-adjudicated CONDITIONAL, while §6 says freeze requires zero construct-level findings. The packet neither defines construct-level nor maps reviewer class, severity, and disposition to the gate, so a deferred decision-now blocker could be called adjudicated and still advance.",
+      "evidence_reference": "Plan §2 KR1; §3 hetero-review plan-loop route; §6 Chair over-production risk",
+      "repair": "State the freeze predicate explicitly: every blocker candidate must be repaired in a reviewed plan revision or refuted with rationale; none may remain deferred. Define which non-blocking implementation-spike and future findings may remain in a CONDITIONAL result, and add a gate fixture covering each disposition.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b5fcc1c5181bcf40a47072381d79568c4defeceee3f4020e558f69b3585e1b5f"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/resolve-review-loop.sh §2.5 knob transition table; project-config-template/review-loop-config.md; D1 acceptance fixtures",
+      "claim": "The plan never defines resolver behavior when a knob is absent from an existing project config, so the zero-config-edits four-stage default is unspecified for any config predating the template change, including the repo this plan dogfoods on.",
+      "evidence": "The §2.5 table enumerates only off, on, and auto as knob values with no absent-knob row; the §3 resolver row says only 'template defaults auto' with no merge rule for configs missing the knobs; D1 fixtures cover absent file, malformed JSON, zero-seat role, on with incomplete tuple, off, and a bogus runner, but never a config with the knob missing; §1 states plan_review is off by default today, so an absent-knob fallback of off would silently skip stages; the execution posture dogfoods on feat/dev-flow-hetero-loops in this repo, whose review-loop config predates the three new knobs.",
+      "evidence_reference": "PLAN §2.5 knob transition table; PLAN §3 row for scripts/resolve-review-loop.sh + schema + project-config-template/review-loop-config.md; PLAN §4 D1 acceptance; PLAN §1 item 2; PLAN Execution posture paragraph",
+      "repair": "Add one transition-table row: knob absent from config behaves as the template default auto (per owner ruling 1), and add a D1 fixture running the resolver against a pre-template config with all three knobs missing, asserting resolved_from topology or native-fallback with the stage still running and never a silent skip.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f3e4105735b197e17a58dee0402ec12c1c2658a732c6c516040ccb4b04e1bcfe"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 knob transition table; scripts/resolve-review-loop.sh; D1 acceptance fixtures",
+      "claim": "R5's garbage-value case has no row in the transition table and no fixture, so D1 could implement anything for an unrecognised knob value, including treating it as off and silently skipping the stage.",
+      "evidence": "Rubric R5 explicitly enumerates that a garbage value never yields on with an empty tuple and never silently skips the stage; the §2.5 table's value column contains only off, on, auto; D1's fixture list (absent file, malformed JSON, zero-seat role, on incomplete gives exit 3, off marker, plan_reviewer_runner bogus gives exit 3) covers garbage only inside an on tuple, never a garbage knob value such as a misspelled auto.",
+      "evidence_reference": "RUBRIC R5; PLAN §2.5 knob transition table; PLAN §4 D1 acceptance row",
+      "repair": "Add a table row for an unrecognised knob value that picks one fail-closed outcome, either exit 3 with the existing invalid-value message shape or native fallback plus a capability_warnings line with the stage still running, and add a D1 fixture setting hetero_review to a misspelled value asserting that chosen outcome.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "717abcc2dae76d3cdd51591c317decfeaf3cf9a3400df39cda566d1b61a179d3"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/hetero-review-loop.js aggregation contract; D2 acceptance fixtures",
+      "claim": "The code-loop aggregation contract contradicts the frozen rubric by unioning on verified Critical or Major, while R7 defines union-on-verified-critical as one verified critical from any seat forcing FIX-THEN-SHIP, and the same token already names the qc_panel_aggregation semantics this plan declares out of scope to change.",
+      "evidence": "The §3 hetero-review-loop.js row states aggregate = union-on-verified-critical over dispositioned findings only with any verified Critical or Major giving FIX-THEN-SHIP; RUBRIC R7 states union-on-verified-critical means one verified critical from any seat gives FIX-THEN-SHIP; PLAN §7 lists changing qc_panel_aggregation semantics as out of scope, so one token would carry two meanings; D2 acceptance tests a verified Critical and a refuted Critical but has no verified-Major-alone case, so the divergence is untested.",
+      "evidence_reference": "RUBRIC R7; PLAN §3 scripts/hetero-review-loop.js row; PLAN §4 D2 acceptance; PLAN §7 out-of-scope list",
+      "repair": "Decide now: either align the code loop to verified-Critical-only so the token keeps a single meaning, or keep Major in the union under a distinct name such as union-on-verified-critical-or-major with a one-line justification; either way add the missing D2 fixture for a verified Major alone and state the expected aggregate verdict.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c5ff3524870008e0ddb7e65ce80ae91867af160aef71ff867ead8eed1168a46e"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/hetero-review-loop.js; skills/hetero-review/references/code-loop.md; D2 acceptance",
+      "claim": "R7's requirement that the driver emits a hands brief passing check-redispatch-prompt.sh is covered only by a global hygiene sentence, with no driver contract line and no D2 acceptance check enforcing it.",
+      "evidence": "RUBRIC R7 requires that the driver emits a hands brief passing check-redispatch-prompt.sh; PLAN §2.5 says only that check-redispatch-prompt.sh hygiene applies to every implementer brief; the §3 hetero-review-loop.js row and the D2 acceptance list (three SHIP, verified Critical, undispositioned Critical, refuted Critical, moved head, opt-out shape) contain no brief-emission contract or check.",
+      "evidence_reference": "RUBRIC R7; PLAN §2.5 final bullet; PLAN §3 scripts/hetero-review-loop.js row; PLAN §4 D2 acceptance",
+      "repair": "Add one contract line stating that on FIX-THEN-SHIP the driver or the skill's documented handoff artifact emits the repair brief and that check-redispatch-prompt.sh must accept it, plus one D2 fixture asserting the emitted brief passes the checker in the PATH-shimmed run.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "013206c5fb832c545b8c426c608cfdf86470ff4d7430629d27055900d217aa39"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/dispatch-consult.sh integration path; §0 reuse list; §3 file map; D4 hermetic test",
+      "claim": "The plan requires dispatch-consult.sh to resolve a topology seat on a plugin-less host under consult_dispatch auto, yet lists it as reused unchanged and gives no §3 row naming who feeds the resolved seat, ladder, or asking-family into it, leaving the integration path implicit.",
+      "evidence": "PLAN §0 lists dispatch-consult.sh under existing reused unchanged with only its raw-prompt rail and blind-evidence preflight named; KR5 and D4 require dispatch-consult.sh --dry-run to resolve a seat with no codex plugin present; the §3 file-structure map has no dispatch-consult.sh row, and the resolver row only says the resolver passes the resolved qc_panel seats as --exclude-seats without stating how dispatch-consult.sh receives the consult ladder or asking family.",
+      "evidence_reference": "RUBRIC R8; PLAN §0 reuse paragraph; PLAN §2 KR5; PLAN §3 resolve-review-loop.sh row; PLAN §4 D4 acceptance",
+      "repair": "Add one sentence to §3 stating that dispatch-consult.sh stays byte-identical and that resolve-review-loop.sh --field output (consult seat plus asking-family) is its documented input, and commit to filing a plan delta before D4 if the hermetic test shows an edit is actually needed.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5ab3da11e566a5afbe58c332b30ddfee278f7181168ac75bb46cfc5e838cedd3"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/hetero-review-loop.js aggregation logic; D2 acceptance fixtures",
+      "claim": "Plan hetero-review-loop.js specifies 'any verified Critical/Major => FIX-THEN-SHIP', which widens R7's 'one verified critical from any seat => FIX-THEN-SHIP' trigger. The aggregation function name union-on-verified-critical is preserved but its trigger semantics no longer match the frozen rubric.",
+      "evidence": "PLAN_UNDER_REVIEW §3 hetero-review-loop.js: 'aggregate = union-on-verified-critical over dispositioned findings only (any `verified` Critical/Major => FIX-THEN-SHIP; an undispositioned blocking finding => no receipt, exit 1)' vs FROZEN_RUBRIC R7: 'synthesises union-on-verified-critical (one verified critical from any seat => FIX-THEN-SHIP)'.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §3 hetero-review-loop.js description; FROZEN_RUBRIC R7 sentence on aggregation semantics.",
+      "repair": "Either narrow the plan's trigger to 'verified Critical only' to match R7 verbatim, or obtain an owner ruling that widens the aggregation to Critical/Major and amend the frozen rubric. D2 cannot start until this is resolved because the driver's verdict rule is on its critical path and the D2 acceptance fixtures enumerate critical-seated SHIP/FIX-THEN-SHIP outcomes.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "86085e325c22d7237b805dd7928814bb2218e9a2238f33881a8d37ce97c70989"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/hetero-review-loop.js vs skills/hetero-review/SKILL.md routing",
+      "claim": "R7 requires the code loop driver to emit a hands brief that passes check-redispatch-prompt.sh; the plan places 'hands repair via topology' after the driver in the skill flow but does not name the emitter of the hands brief or assert the brief output passes check-redispatch-prompt.sh at the driver level.",
+      "evidence": "PLAN_UNDER_REVIEW §3 hetero-review-loop.js description enumerates snapshot, parallel run, depth-0 disposition, aggregate, gate receipt, --delta, --opt-out — no brief emission. The skill router flow places 'hands repair via topology' after the driver. §2.5 mentions check-redispatch-prompt.sh hygiene for implementer briefs in general but does not bind it to the hetero-review-loop.js output.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §3 hetero-review-loop.js and skills/hetero-review/SKILL.md rows; FROZEN_RUBRIC R7 sentence on hands brief.",
+      "repair": "No current change; follow-up only. In D2, name the brief emitter (driver or skill post-step) and add a fixture that pipes its output through check-redispatch-prompt.sh with rc 0.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0bf4678606ce559b832e9dd28874064cf05d25fd7ea385c07c8bed3ddb3bff85"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "013206c5fb832c545b8c426c608cfdf86470ff4d7430629d27055900d217aa39",
+      "rubric_id": "R7",
+      "affected_surface": "scripts/hetero-review-loop.js; skills/hetero-review/references/code-loop.md; D2 acceptance",
+      "claim": "R7's requirement that the driver emits a hands brief passing check-redispatch-prompt.sh is covered only by a global hygiene sentence, with no driver contract line and no D2 acceptance check enforcing it.",
+      "evidence_reference": "RUBRIC R7; PLAN §2.5 final bullet; PLAN §3 scripts/hetero-review-loop.js row; PLAN §4 D2 acceptance",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5ab3da11e566a5afbe58c332b30ddfee278f7181168ac75bb46cfc5e838cedd3",
+      "rubric_id": "R8",
+      "affected_surface": "scripts/dispatch-consult.sh integration path; §0 reuse list; §3 file map; D4 hermetic test",
+      "claim": "The plan requires dispatch-consult.sh to resolve a topology seat on a plugin-less host under consult_dispatch auto, yet lists it as reused unchanged and gives no §3 row naming who feeds the resolved seat, ladder, or asking-family into it, leaving the integration path implicit.",
+      "evidence_reference": "RUBRIC R8; PLAN §0 reuse paragraph; PLAN §2 KR5; PLAN §3 resolve-review-loop.sh row; PLAN §4 D4 acceptance",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0bf4678606ce559b832e9dd28874064cf05d25fd7ea385c07c8bed3ddb3bff85",
+      "rubric_id": "R7",
+      "affected_surface": "scripts/hetero-review-loop.js vs skills/hetero-review/SKILL.md routing",
+      "claim": "R7 requires the code loop driver to emit a hands brief that passes check-redispatch-prompt.sh; the plan places 'hands repair via topology' after the driver in the skill flow but does not name the emitter of the hands brief or assert the brief output passes check-redispatch-prompt.sh at the driver level.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §3 hetero-review-loop.js and skills/hetero-review/SKILL.md rows; FROZEN_RUBRIC R7 sentence on hands brief.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-04T08:15:57.172Z"
+}

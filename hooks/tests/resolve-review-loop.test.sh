@@ -8,6 +8,7 @@ SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 # Keep default-path assertions hermetic when the surrounding agent/session exports
 # resolver overrides or live engine-state paths.
 unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
+export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
 
 # Hermetic fixtures (roster-flip-proof). The autopilot repo ships a dogfood
 # .claude/review-loop-config.md that the resolver reads by default (precedence
@@ -521,7 +522,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"discuss_dispatch":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
@@ -678,13 +679,13 @@ mkdir -p "$CAP_TEST_DIR"
 EMPTY_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
-assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
 
 # B. --capability-state off test
 OFF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
-assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
 
 # C. Record a fresh exhausted/high implementer event
 cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
@@ -717,7 +718,7 @@ assert_contains "$(json_get "$FRESH_OUT" capability_warnings)" "Demoted implemen
 # E. Query expired event (now is 2026-07-02T22:00:00Z -> past 3600s TTL)
 EXPIRED_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T22:00:00Z)"
 assert_eq "unknown" "$(json_get "$EXPIRED_OUT" quota_status)" "expired quota => quota_status is unknown"
-assert_eq "[]" "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
 
 # F. Record an unknown event and verify no demotion/warning.
 # Use an ISOLATED store — CAP_TEST_DIR already holds a fresh EXHAUSTED event for this same
@@ -744,7 +745,7 @@ JSON
 ENGINE_CAPABILITY_DIR="$UNK_STORE" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-unknown.json" > /dev/null
 UNK_OUT="$(ENGINE_CAPABILITY_DIR="$UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
 assert_eq "unknown" "$(json_get "$UNK_OUT" quota_status)" "quota status unknown => quota_status is unknown"
-assert_eq "[]" "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
 
 # G. Native skill warning tests
 cat <<'JSON' > "$TEST_TMP/event-skill-unsupported.json"
@@ -779,7 +780,7 @@ assert_contains "$(json_get "$SKILL_NATIVE_OUT" capability_warnings)" "does not 
 SKILL_AUTO_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "auto" "$(json_get "$SKILL_AUTO_OUT" skill_mode_requested)" "skill_mode_requested matches auto"
 assert_eq "prompt" "$(json_get "$SKILL_AUTO_OUT" skill_mode_effective)" "skill_mode_effective resolves to prompt"
-assert_eq "[]" "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
 
 # G3. Record skill support supported, request skill mode auto -> should resolve to native
 cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
@@ -805,7 +806,7 @@ JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-skill-supported.json" > /dev/null
 SKILL_AUTO_OK_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "native" "$(json_get "$SKILL_AUTO_OK_OUT" skill_mode_effective)" "native supported => skill_mode_effective resolves to native"
-assert_eq "[]" "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
 
 # H. L4 unchanged test
 L4_CFG="$TEST_TMP/l4-cfg.md"
@@ -828,7 +829,7 @@ cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
 JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-claude-exhausted.json" > /dev/null
 L4_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$L4_CFG" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
-assert_eq "[]" "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
 
 # 20. reviewer_endpoint / implementer_endpoint (declarative invoke infra)
 # ISOLATED: the repo dogfood config sets reviewer_endpoint=minimax (Board decision A),
@@ -1075,6 +1076,7 @@ printf -- '- implementer_runner: not-a-runner\n' > "$RUN_CFG"
 assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid implementer_runner exits 3"
 printf -- '- verification_author_present: maybe\n' > "$RUN_CFG"
 assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid verification_author_present exits 3"
+# plan_review widened to auto|on|off per docs/plans/2026-09-04-dev-flow-hetero-loops-default.md; invalid value still exits 3
 printf -- '- plan_review: maybe\n' > "$RUN_CFG"
 assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid plan_review exits 3"
 assert_eq "$(bash "$SCRIPT" --domain invent >/dev/null 2>&1; echo $?)" "2" "invalid --domain exits 2"
@@ -1238,5 +1240,324 @@ assert_eq "3" "$?" "--enforce turns a refused brain seating into exit 3 (the shi
 REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
   bash "$SCRIPT" --enforce >/dev/null 2>&1
 assert_eq "0" "$?" "--enforce leaves the incumbent advisory path passing (annotate, never block)"
+
+# ==============================================================================
+# D1-2c — new test matrix for plan_review/hetero_review/consult_dispatch auto
+# ==============================================================================
+
+# Topology fixtures
+TOPO_PRESENT_SEATS="$TEST_TMP/topo-present-seats.json"
+cat > "$TOPO_PRESENT_SEATS" <<'JSON'
+{
+  "plan_review_panel": [
+    { "engine": "claude-fable-5", "effort": "high", "runner": "claude-native", "endpoint": "ep-fable" },
+    { "engine": "gpt-5.6-sol", "effort": "max", "runner": "codex", "endpoint": "ep-sol" }
+  ],
+  "reviewer_ladder": [
+    { "engine": "gpt-5.5", "effort": "xhigh", "runner": "codex", "endpoint": "" }
+  ],
+  "consult_ladder": [
+    { "engine": "gpt-5.5", "effort": "xhigh", "runner": "codex", "endpoint": "" },
+    { "engine": "MiniMax-M3", "effort": "high", "runner": "cc-shim", "endpoint": "" }
+  ]
+}
+JSON
+
+TOPO_ZERO_SEATS="$TEST_TMP/topo-zero-seats.json"
+cat > "$TOPO_ZERO_SEATS" <<'JSON'
+{
+  "plan_review_panel": [],
+  "reviewer_ladder": [],
+  "consult_ladder": []
+}
+JSON
+
+TOPO_MALFORMED="$TEST_TMP/topo-malformed.json"
+printf -- '{ not-valid-json ]' > "$TOPO_MALFORMED"
+
+TOPO_ABSENT="$TEST_TMP/topo-absent-file.json"
+
+# --- plan_review: auto × 4 topology states ---
+PLAN_AUTO_CFG="$TEST_TMP/rl-plan-auto.md"
+printf -- '- plan_review: auto\n' > "$PLAN_AUTO_CFG"
+
+# 1. present-with-seats
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto with present-with-seats resolves from topology"
+assert_eq "claude-fable-5" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_reviewer_engine)" \
+  "plan_reviewer_engine matches plan_review_panel[0]"
+assert_eq "high" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_reviewer_effort)" \
+  "plan_reviewer_effort matches plan_review_panel[0]"
+assert_eq "claude-native" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_reviewer_runner)" \
+  "plan_reviewer_runner matches plan_review_panel[0]"
+assert_eq "ep-fable" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_reviewer_endpoint)" \
+  "plan_reviewer_endpoint matches plan_review_panel[0]"
+assert_eq "gpt-5.6-sol" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_deep_reviewer_engine)" \
+  "plan_deep_reviewer_engine matches plan_review_panel[1]"
+assert_eq "max" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_deep_reviewer_effort)" \
+  "plan_deep_reviewer_effort matches plan_review_panel[1]"
+assert_eq "codex" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_deep_reviewer_runner)" \
+  "plan_deep_reviewer_runner matches plan_review_panel[1]"
+assert_eq "ep-sol" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_deep_reviewer_endpoint)" \
+  "plan_deep_reviewer_endpoint matches plan_review_panel[1]"
+
+# 2. present-zero-seats
+PLAN_ZERO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ZERO_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ZERO_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto with present-zero-seats resolves from native-fallback"
+assert_contains "$PLAN_ZERO_OUT" "plan_review" "plan_review native-fallback output names knob (zero-seats)"
+assert_contains "$PLAN_ZERO_OUT" "opus/high@claude-native" "plan_review native-fallback output contains fallback tuple (zero-seats)"
+
+# 3. malformed-json
+PLAN_MAL_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_MALFORMED" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_MALFORMED" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto with malformed-json resolves from native-fallback"
+assert_contains "$PLAN_MAL_OUT" "plan_review" "plan_review native-fallback output names knob (malformed-json)"
+assert_contains "$PLAN_MAL_OUT" "opus/high@claude-native" "plan_review native-fallback output contains fallback tuple (malformed-json)"
+
+# 4. absent
+PLAN_ABS_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_AUTO_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto with absent topology resolves from native-fallback"
+assert_contains "$PLAN_ABS_OUT" "plan_review" "plan_review native-fallback output names knob (absent)"
+assert_contains "$PLAN_ABS_OUT" "opus/high@claude-native" "plan_review native-fallback output contains fallback tuple (absent)"
+
+# 5. same-runner collision against the resolved implementer: the second panel
+# seat (codex) collides with implementer_runner — auto must skip it and pick
+# the surviving first seat (claude-native), never fail closed.
+PLAN_COLLIDE_FIRST_CFG="$TEST_TMP/rl-plan-auto-collide-first.md"
+printf -- '- plan_review: auto\n- implementer_runner: codex\n- implementer_engine: gpt-5.6-sol\n- reviewer_runner: agy\n- reviewer_engine: gemini-3.8-flash-low\n' > "$PLAN_COLLIDE_FIRST_CFG"
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_FIRST_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto skips the runner-colliding panel seat and still resolves from topology"
+assert_eq "claude-fable-5" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_FIRST_CFG" bash "$SCRIPT" --field plan_reviewer_engine)" \
+  "plan_reviewer_engine is the surviving non-colliding seat when plan_review_panel[1] collides with the implementer runner"
+assert_eq "claude-native" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_FIRST_CFG" bash "$SCRIPT" --field plan_reviewer_runner)" \
+  "plan_reviewer_runner is the surviving non-colliding seat, not the implementer's own runner"
+
+# 6. every panel seat collides with the implementer runner: auto falls back
+# to native with a capability warning, never fails closed with an empty tuple.
+TOPO_ALL_SAME_RUNNER="$TEST_TMP/topo-all-same-runner.json"
+cat > "$TOPO_ALL_SAME_RUNNER" <<'JSON'
+{
+  "plan_review_panel": [
+    { "engine": "claude-fable-5", "effort": "high", "runner": "codex", "endpoint": "ep-fable" },
+    { "engine": "gpt-5.6-sol", "effort": "max", "runner": "codex", "endpoint": "ep-sol" }
+  ],
+  "reviewer_ladder": [],
+  "consult_ladder": []
+}
+JSON
+PLAN_COLLIDE_ALL_CFG="$TEST_TMP/rl-plan-auto-collide-all.md"
+printf -- '- plan_review: auto\n- implementer_runner: codex\n- implementer_engine: gemini-3.8-flash-low\n- reviewer_runner: claude-native\n' > "$PLAN_COLLIDE_ALL_CFG"
+PLAN_COLLIDE_ALL_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALL_SAME_RUNNER" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_ALL_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALL_SAME_RUNNER" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_ALL_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto with every panel seat colliding falls back to native, never fails closed"
+assert_contains "$PLAN_COLLIDE_ALL_OUT" "plan_review" "plan_review all-collide native-fallback output names knob"
+assert_contains "$PLAN_COLLIDE_ALL_OUT" "opus/high@claude-native" "plan_review all-collide native-fallback output contains fallback tuple"
+
+# 7 (negative control, d1-runner-alias-exclusion): a panel seat spelled with the "codex-cli"
+# alias must still collide with an implementer_runner of "codex" under the same-runner-dual-seat
+# guard — the two are the same rail and must be canonicalized before comparison.
+TOPO_ALIAS_COLLIDE="$TEST_TMP/topo-alias-collide.json"
+cat > "$TOPO_ALIAS_COLLIDE" <<'JSON'
+{
+  "plan_review_panel": [
+    { "engine": "gpt-4o-cli", "effort": "high", "runner": "codex-cli", "endpoint": "" },
+    { "engine": "claude-fable-5", "effort": "high", "runner": "claude-native", "endpoint": "ep-fable" }
+  ],
+  "reviewer_ladder": [],
+  "consult_ladder": []
+}
+JSON
+PLAN_ALIAS_COLLIDE_CFG="$TEST_TMP/rl-plan-auto-alias-collide.md"
+printf -- '- plan_review: auto\n- implementer_runner: codex\n- implementer_engine: gpt-5.6-sol\n- reviewer_runner: agy\n- reviewer_engine: gemini-3.8-flash-low\n' > "$PLAN_ALIAS_COLLIDE_CFG"
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALIAS_COLLIDE" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_ALIAS_COLLIDE_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto skips the codex-cli panel seat (aliased collision with implementer_runner=codex) and still resolves from topology"
+assert_eq "claude-fable-5" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALIAS_COLLIDE" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_ALIAS_COLLIDE_CFG" bash "$SCRIPT" --field plan_reviewer_engine)" \
+  "plan_reviewer_engine is the surviving seat, not the codex-cli seat that aliases to the implementer's own runner"
+
+
+# --- hetero_review: auto × 4 topology states ---
+HETERO_AUTO_CFG="$TEST_TMP/rl-hetero-auto.md"
+printf -- '- hetero_review: auto\n- reviewer_engine: MiniMax-M3\n' > "$HETERO_AUTO_CFG"
+
+# 1. present-with-seats
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" --field hetero_review_resolved_from)" \
+  "hetero_review auto with present-with-seats resolves from topology"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" --field reviewer_engine)" \
+  "reviewer_engine is UNCHANGED when hetero_review resolves from topology"
+
+# 2. present-zero-seats
+HETERO_ZERO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ZERO_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ZERO_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" --field hetero_review_resolved_from)" \
+  "hetero_review auto with present-zero-seats resolves from native-fallback"
+assert_contains "$HETERO_ZERO_OUT" "hetero_review" "hetero_review native-fallback output names knob (zero-seats)"
+assert_contains "$HETERO_ZERO_OUT" "capability_warnings" "hetero_review native-fallback output contains capability_warnings (zero-seats)"
+
+# 3. malformed-json
+HETERO_MAL_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_MALFORMED" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_MALFORMED" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" --field hetero_review_resolved_from)" \
+  "hetero_review auto with malformed-json resolves from native-fallback"
+assert_contains "$HETERO_MAL_OUT" "hetero_review" "hetero_review native-fallback output names knob (malformed-json)"
+assert_contains "$HETERO_MAL_OUT" "capability_warnings" "hetero_review native-fallback output contains capability_warnings (malformed-json)"
+
+# 4. absent
+HETERO_ABS_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_AUTO_CFG" bash "$SCRIPT" --field hetero_review_resolved_from)" \
+  "hetero_review auto with absent topology resolves from native-fallback"
+assert_contains "$HETERO_ABS_OUT" "hetero_review" "hetero_review native-fallback output names knob (absent)"
+assert_contains "$HETERO_ABS_OUT" "capability_warnings" "hetero_review native-fallback output contains capability_warnings (absent)"
+
+
+# --- consult_dispatch: auto × 4 topology states ---
+CONSULT_AUTO_CFG="$TEST_TMP/rl-consult-auto.md"
+printf -- '- consult_dispatch: auto\n' > "$CONSULT_AUTO_CFG"
+
+# 1. present-with-seats
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
+  "consult_dispatch auto with present-with-seats resolves from topology"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_engine)" \
+  "consult_engine matches consult_ladder[1] (first non-colliding non-qc seat)"
+assert_eq "high" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_effort)" \
+  "consult_effort matches consult_ladder[1]"
+assert_eq "cc-shim" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_runner)" \
+  "consult_runner matches consult_ladder[1]"
+
+# 2. present-zero-seats
+CONSULT_ZERO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ZERO_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ZERO_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
+  "consult_dispatch auto with present-zero-seats resolves from native-fallback"
+assert_contains "$CONSULT_ZERO_OUT" "consult_dispatch" "consult_dispatch native-fallback output names knob (zero-seats)"
+assert_contains "$CONSULT_ZERO_OUT" "sonnet/high@claude-native" "consult_dispatch native-fallback output contains fallback tuple (zero-seats)"
+
+# 3. malformed-json
+CONSULT_MAL_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_MALFORMED" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_MALFORMED" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
+  "consult_dispatch auto with malformed-json resolves from native-fallback"
+assert_contains "$CONSULT_MAL_OUT" "consult_dispatch" "consult_dispatch native-fallback output names knob (malformed-json)"
+assert_contains "$CONSULT_MAL_OUT" "sonnet/high@claude-native" "consult_dispatch native-fallback output contains fallback tuple (malformed-json)"
+
+# 4. absent
+CONSULT_ABS_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_AUTO_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
+  "consult_dispatch auto with absent topology resolves from native-fallback"
+assert_contains "$CONSULT_ABS_OUT" "consult_dispatch" "consult_dispatch native-fallback output names knob (absent)"
+assert_contains "$CONSULT_ABS_OUT" "sonnet/high@claude-native" "consult_dispatch native-fallback output contains fallback tuple (absent)"
+
+
+# --- Incomplete tuple / on validation ---
+# hetero_review: on with DEF_REV_* defaults succeeds because defaults are non-empty; explicit empty reviewer_engine trips exit 3
+HETERO_INCOMPLETE_CFG="$TEST_TMP/rl-hetero-incomplete.md"
+printf -- '- hetero_review: on\n- reviewer_engine:\n' > "$HETERO_INCOMPLETE_CFG"
+HETERO_INCOMPLETE_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_INCOMPLETE_CFG" bash "$SCRIPT" 2>&1)"
+HETERO_INCOMPLETE_EXIT=$?
+assert_eq "3" "$HETERO_INCOMPLETE_EXIT" "hetero_review=on with empty reviewer_engine exits 3"
+assert_contains "$HETERO_INCOMPLETE_OUT" "hetero_review=on requires" "hetero_review=on missing tuple message diagnosed"
+
+# hetero_review: on with default reviewer tuple succeeds (exit 0) and resolved_from is explicit
+HETERO_ON_DEF_CFG="$TEST_TMP/rl-hetero-on-default.md"
+printf -- '- hetero_review: on\n' > "$HETERO_ON_DEF_CFG"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_ON_DEF_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "hetero_review=on with default reviewer tuple succeeds (exit 0)"
+assert_eq "explicit" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_ON_DEF_CFG" bash "$SCRIPT" --field hetero_review_resolved_from)" \
+  "hetero_review_resolved_from is explicit when hetero_review is on"
+
+# plan_reviewer_runner: bogus with plan_review: on exits 3
+PLAN_BOGUS_RUNNER_CFG="$TEST_TMP/rl-plan-bogus-runner.md"
+printf -- '- plan_review: on\n- plan_reviewer_engine: claude-fable-5\n- plan_reviewer_runner: bogus\n- plan_reviewer_effort: high\n' > "$PLAN_BOGUS_RUNNER_CFG"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_BOGUS_RUNNER_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "plan_reviewer_runner bogus exits 3"
+
+
+# --- Consult exclusion ---
+TOPO_CONSULT_EXCL="$TEST_TMP/topo-consult-excl.json"
+cat > "$TOPO_CONSULT_EXCL" <<'JSON'
+{
+  "consult_ladder": [
+    { "engine": "gpt-5.5", "effort": "xhigh", "runner": "codex", "endpoint": "" },
+    { "engine": "MiniMax-M3", "effort": "high", "runner": "cc-shim", "endpoint": "" }
+  ]
+}
+JSON
+CONSULT_EXCL_CFG="$TEST_TMP/rl-consult-excl.md"
+printf -- '- consult_dispatch: auto\n- qc_panel: gpt-5.5, claude-opus, gemini-flash\n- qc_panel_runners: codex, claude-native, agy\n- qc_panel_efforts: xhigh, high, high\n' > "$CONSULT_EXCL_CFG"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_CFG" bash "$SCRIPT" --field consult_engine)" \
+  "consult_engine picks consult_ladder[1] when [0] is in qc_panel"
+assert_eq "cc-shim" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_CFG" bash "$SCRIPT" --field consult_runner)" \
+  "consult_runner picks consult_ladder[1] when [0] is in qc_panel"
+assert_eq "high" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_CFG" bash "$SCRIPT" --field consult_effort)" \
+  "consult_effort picks consult_ladder[1] when [0] is in qc_panel"
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
+  "consult_resolved_from is topology after exclusion"
+
+# Negative control (d1-runner-alias-exclusion): qc_panel_runners spelled "codex" must still
+# exclude a consult_ladder[0] seat whose topology runner is the "codex-cli" alias — the two are
+# the same rail and the exclusion tuple-key must canonicalize before comparison.
+TOPO_CONSULT_EXCL_ALIAS="$TEST_TMP/topo-consult-excl-alias.json"
+cat > "$TOPO_CONSULT_EXCL_ALIAS" <<'JSON'
+{
+  "consult_ladder": [
+    { "engine": "gpt-5.5", "effort": "xhigh", "runner": "codex-cli", "endpoint": "" },
+    { "engine": "MiniMax-M3", "effort": "high", "runner": "cc-shim", "endpoint": "" }
+  ]
+}
+JSON
+CONSULT_EXCL_ALIAS_CFG="$TEST_TMP/rl-consult-excl-alias.md"
+printf -- '- consult_dispatch: auto\n- qc_panel: gpt-5.5, claude-opus, gemini-flash\n- qc_panel_runners: codex, claude-native, agy\n- qc_panel_efforts: xhigh, high, high\n' > "$CONSULT_EXCL_ALIAS_CFG"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_ALIAS_CFG" bash "$SCRIPT" --field consult_engine)" \
+  "consult_engine picks consult_ladder[1] when [0] (codex-cli) is excluded by a qc_panel_runners entry spelled codex"
+assert_eq "cc-shim" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_ALIAS_CFG" bash "$SCRIPT" --field consult_runner)" \
+  "consult_runner picks consult_ladder[1] when [0] is excluded via the codex/codex-cli alias"
+
+# Negative control (d1-runner-alias-exclusion): implementer_runner=codex must still collide with
+# a consult_ladder seat whose topology runner is the "codex-cli" alias under the
+# same-runner-dual-seat guard.
+TOPO_CONSULT_COLLIDE_ALIAS="$TEST_TMP/topo-consult-collide-alias.json"
+cat > "$TOPO_CONSULT_COLLIDE_ALIAS" <<'JSON'
+{
+  "consult_ladder": [
+    { "engine": "gpt-4o-cli", "effort": "high", "runner": "codex-cli", "endpoint": "" },
+    { "engine": "MiniMax-M3", "effort": "high", "runner": "cc-shim", "endpoint": "" }
+  ]
+}
+JSON
+CONSULT_COLLIDE_ALIAS_CFG="$TEST_TMP/rl-consult-collide-alias.md"
+printf -- '- consult_dispatch: auto\n- implementer_runner: codex\n- implementer_engine: gpt-5.6-sol\n- reviewer_runner: agy\n- reviewer_engine: gemini-3.8-flash-low\n' > "$CONSULT_COLLIDE_ALIAS_CFG"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_COLLIDE_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_COLLIDE_ALIAS_CFG" bash "$SCRIPT" --field consult_engine)" \
+  "consult_engine skips consult_ladder[0] (codex-cli, aliased collision with implementer_runner=codex) under the same-runner-dual-seat guard"
+
+
+# --- Absent-knob pre-template config ---
+PRE_TEMPLATE_CFG="$TEST_TMP/rl-pre-template.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- reviewer_engine: gpt-5.5\n- allow_same_runner_dual_seat: on\n' > "$PRE_TEMPLATE_CFG"
+assert_eq "auto" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PRE_TEMPLATE_CFG" bash "$SCRIPT" --field plan_review)" \
+  "absent-knob config defaults plan_review to auto"
+assert_eq "auto" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PRE_TEMPLATE_CFG" bash "$SCRIPT" --field hetero_review)" \
+  "absent-knob config defaults hetero_review to auto"
+assert_eq "auto" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PRE_TEMPLATE_CFG" bash "$SCRIPT" --field consult_dispatch)" \
+  "absent-knob config defaults consult_dispatch to auto"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PRE_TEMPLATE_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "absent-knob config plan_review_resolved_from is native-fallback"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PRE_TEMPLATE_CFG" bash "$SCRIPT" --field hetero_review_resolved_from)" \
+  "absent-knob config hetero_review_resolved_from is native-fallback"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOOP_CONFIG_OVERRIDE="$PRE_TEMPLATE_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
+  "absent-knob config consult_resolved_from is native-fallback"
+
+
+# --- Misspelled value per knob ---
+MISSPELL_PLAN_CFG="$TEST_TMP/rl-misspell-plan.md"
+printf -- '- plan_review: atuo\n' > "$MISSPELL_PLAN_CFG"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MISSPELL_PLAN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "misspelled plan_review: atuo exits 3"
+
+MISSPELL_HETERO_CFG="$TEST_TMP/rl-misspell-hetero.md"
+printf -- '- hetero_review: onn\n' > "$MISSPELL_HETERO_CFG"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MISSPELL_HETERO_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "misspelled hetero_review: onn exits 3"
+
+MISSPELL_CONSULT_CFG="$TEST_TMP/rl-misspell-consult.md"
+printf -- '- consult_dispatch: Auto\n' > "$MISSPELL_CONSULT_CFG"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MISSPELL_CONSULT_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "misspelled consult_dispatch: Auto (case-sensitive) exits 3"
 
 finalize_test

@@ -1,0 +1,337 @@
+{
+  "kind": "review",
+  "phase": "core",
+  "branch": "review/core",
+  "phase_base_sha": "1e5c2841",
+  "chain": [
+    {
+      "generation": 1,
+      "base": "1e5c2841",
+      "head": "c1a16011f4f279e3441f9077213c51909552af74",
+      "seats": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "status": "finalized",
+      "dispositions_path": "review-core/g1/dispositions.json",
+      "dispositions_sha256": "8bd2c27e3c2680bde35df2ce5d3e1247da382fabd4ce1cfc451df7b5c3e06a0b",
+      "closed_findings": [
+        {
+          "id": "ec8ba780e0fbd2e0f80e5446d2068f313165ffe30626abc5938e3f719b5d44a6",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "41cc56863b2ab2ec29e5cb2993a52c903f2d5ccadb0b3d938f164d2e4dc7537f",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "4249df82fbf1ce050f015ba4782335968ff1d70460d2fb4cd70c63c992362c25",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "fb472166752691eb261c679b6ff4f5956dea9dbeadc903c5a64094b5b952608a",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "83debe7b5692908ad2fa2d9462b2148d5fc55dd421dae1bb97e1d1beeb42cccb",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "c3f2203726854eb4771df327ad3434517956cb6e72b936cd6908949333922c5a",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "c74bdc05f00a791fd289163fca5f64ed7a6fa887c4c9d6cde15f716cf3edd06a",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "c2ca07fe33b2e76ce8378aff7948b3cf4ed8d59c228f3a9df84f202142a66b29",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "22814c72113973fc9c311e367e471b097f9c7429964a5030ed6d69c8cade977c",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "d3b4a27eef540eae1644847a7b434be8c4f76a9089d972835a95dd852fcb2457",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "78976dc6645475350112619667af98e030d15e6f8d3cd7c479c09c6dcd8e67cf",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "4ffd0544ff9ad766074f47917d18eb9f0ae6d8308b385b1da92492c0850b634c",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "42864072a0abc27ec1ab62c608f2e64acc2e76f4aaecf6a97713b5e78f6a13a8",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "88084fa9482b0ff98255a53bb5cea88d70c953c0ed4bc4d8cbe2bed322d9eab6",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "97c05534e6de7a4ae82fb195c02350b26e35b9b81b2806b9efbf1363f09bc0ad",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "2ab20291252d7ee3ed1d31dddf2f8def06f19bc9744ad7db741f8b6c0e32a9f9",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "bdfe1fa885210409f842384264a3b519504878395b07d731b6613523e837bdea",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "13f01363092ed1689e48e8d7afd7ed8878f60796996c96f40b12aa81a8dca1d8",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "f61e6dec4521e24701b5da1e3fece33ed1f6d49990d3b9307858e864b5328cd6",
+          "closed_by_generation": 2
+        },
+        {
+          "id": "fc90b70e0ffd9f337b3e2c1339995a28b978205fcdeb2dd7a2459493edfdce39",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "d2370f98c29571f6350306d3e8e7d921f3e5c61c38813b4c301823571112f1dd",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "387e0161aeb38e0f710b046f7290012e55272340a65a855c10e788733602c3ac",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "d9fa4ae46607b4edc99b35e6dcfc22ef5b41c4158381a3126a1fe59e2ca2da89",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "5020b2fea5a5006a7dab35abaafa21acaa50079f1c08839c86ff7ae47338adb6",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "c930b0b2276eaeeba412a5432b3850c7d0666b7e8e69a6fad98cfff5ec3a4c2f",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "5f1cc9e6f573c15f659f5b982f5bd034dccbe99437b9b3755cf0b6467c158adc",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "be1a7ed9d2a322c8f52dfa65a37068ea6c278450190ee9b5ef825b567946163e",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "399c9bdec64c757ff6fbcb35bb6601fb586d316fbdfe0410afef8018eb08eaa0",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "c9d9d6e86048eead6765695cbf7c15348f6d869ba106a5069c39c6519402158f",
+          "closed_by_generation": 4
+        },
+        {
+          "id": "33366d5ab05c6afc8a2ec0a066d4f2192c2e08440d37120da9edec675c79d257",
+          "closed_by_generation": 4
+        },
+        {
+          "id": "6019b1bd37a72f6df5111d841de3904ada42ef2e007da3944cbdee6f8b44c0e2",
+          "closed_by_generation": 4
+        }
+      ],
+      "findings_sha256": "e44f4137125ca78ba68f3d1454e8c355d64ecc8bbbf66fab8de79f301558c89c",
+      "seat_artifact_sha256": {
+        "s0": "3d0966ebb0f97d5f037e87109f10657aa77c2ae4f2d655599bf9815e550291d7",
+        "s1": "9995e67e36fdb303feaa9a43a0d480fb639ff14e074ec13bbc293e2d610634ca",
+        "s2": "de9f5e888afe2c5aeac6d3af8007056259aef7c59282a2e5ac4a196617c099e8"
+      },
+      "full_range_sha256": "df01a826c625cde2a5f56e0385e40e49238463c15d836cfa9681fecd0974f7b5",
+      "diff_sha256": "6fc9e7eb4e225fc5fbbe5995f174ae5303577d48da313aa34980904bdf184fca",
+      "reviewed_seats": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "total_seats": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "reviewed_seats_count": 3,
+      "total_seats_count": 3
+    },
+    {
+      "generation": 2,
+      "base": "c1a16011f4f279e3441f9077213c51909552af74",
+      "head": "2de14a0dcfb0b24fcacb7e5fd3a4f31c5ee4c89a",
+      "seats": [
+        {
+          "id": "s0",
+          "status": "reviewed"
+        },
+        {
+          "id": "s1",
+          "status": "reviewed"
+        },
+        {
+          "id": "s2",
+          "status": "reviewed"
+        }
+      ],
+      "reviewed_seats": 3,
+      "total_seats": 3,
+      "reviewed_seats_count": 3,
+      "total_seats_count": 3,
+      "status": "finalized",
+      "diff_sha256": "d1fd618541b0cc68b17ae20e3f6ae1aad6137c53201d034b3c6f307471ab876b",
+      "full_range_sha256": "c3c12a0e6e5e3904ba7f20e8735541e6db1ffefebc794d67177ee738da06f39c",
+      "findings_sha256": "6a1cdcc73115c4d6265635b40979145b9a3c8fc570194875a58d80ddfcb5ab92",
+      "seat_artifact_sha256": {
+        "s0": "2a8be1faed78b0a6654aaa3e7a0e341b1e0a4d6652220e9867a3f308be5992b0",
+        "s1": "7374c0c3964e93a93e4271417fa4bc40376175687e32cfade365cdd1ef822bf3",
+        "s2": "fa2ad735739e4071f3d6b6855a34a95746b84a3391a68c3c0dab7af8745c84ca"
+      },
+      "dispositions_path": "review-core/g2/dispositions.json",
+      "dispositions_sha256": "9ecdca205a0109ccaf07d682b1d8b27c4b6c816487693c161b21b597b777a2eb",
+      "closed_findings": [
+        {
+          "id": "fc90b70e0ffd9f337b3e2c1339995a28b978205fcdeb2dd7a2459493edfdce39",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "d2370f98c29571f6350306d3e8e7d921f3e5c61c38813b4c301823571112f1dd",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "387e0161aeb38e0f710b046f7290012e55272340a65a855c10e788733602c3ac",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "d9fa4ae46607b4edc99b35e6dcfc22ef5b41c4158381a3126a1fe59e2ca2da89",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "5020b2fea5a5006a7dab35abaafa21acaa50079f1c08839c86ff7ae47338adb6",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "c930b0b2276eaeeba412a5432b3850c7d0666b7e8e69a6fad98cfff5ec3a4c2f",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "5f1cc9e6f573c15f659f5b982f5bd034dccbe99437b9b3755cf0b6467c158adc",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "be1a7ed9d2a322c8f52dfa65a37068ea6c278450190ee9b5ef825b567946163e",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "399c9bdec64c757ff6fbcb35bb6601fb586d316fbdfe0410afef8018eb08eaa0",
+          "closed_by_generation": 3
+        },
+        {
+          "id": "c9d9d6e86048eead6765695cbf7c15348f6d869ba106a5069c39c6519402158f",
+          "closed_by_generation": 4
+        },
+        {
+          "id": "33366d5ab05c6afc8a2ec0a066d4f2192c2e08440d37120da9edec675c79d257",
+          "closed_by_generation": 4
+        },
+        {
+          "id": "6019b1bd37a72f6df5111d841de3904ada42ef2e007da3944cbdee6f8b44c0e2",
+          "closed_by_generation": 4
+        }
+      ]
+    },
+    {
+      "generation": 3,
+      "base": "2de14a0dcfb0b24fcacb7e5fd3a4f31c5ee4c89a",
+      "head": "7d0b0afee75ff2100e970dcf440d0667c1760947",
+      "seats": [
+        {
+          "id": "s0",
+          "status": "reviewed"
+        },
+        {
+          "id": "s1",
+          "status": "reviewed"
+        },
+        {
+          "id": "s2",
+          "status": "reviewed"
+        }
+      ],
+      "reviewed_seats": 3,
+      "total_seats": 3,
+      "reviewed_seats_count": 3,
+      "total_seats_count": 3,
+      "status": "finalized",
+      "diff_sha256": "62ee731f38758f061ead51fe3cd6bbee906dae7fcc784534cca63650d41423d3",
+      "full_range_sha256": "7a0f2580c1b9170cd71005505064ea6319697aade7b735553c93af0d9cebbcf5",
+      "findings_sha256": "1cd22c979611c2c84218f2a4c45a837e512268b51a9d5ff5655c23830f9ca497",
+      "seat_artifact_sha256": {
+        "s0": "5dce18b024731604a82f4b1eaa4b0ea162cccea1c9ea6e358bd43bb15612c10e",
+        "s1": "a68b21e4b38857d0291ae10c5661136483cdbe4191ee5459cd9aa18c1f3af011",
+        "s2": "18362c77ed08ea63e902c5ef25ec0104696af1e86c7de1746d2f4a571f015d6e"
+      },
+      "dispositions_path": "review-core/g3/dispositions.json",
+      "dispositions_sha256": "5a25b9a2bd15e08365731e3716d9837dc847858742735a77bc75e221db69e480",
+      "closed_findings": [
+        {
+          "id": "c9d9d6e86048eead6765695cbf7c15348f6d869ba106a5069c39c6519402158f",
+          "closed_by_generation": 4
+        },
+        {
+          "id": "33366d5ab05c6afc8a2ec0a066d4f2192c2e08440d37120da9edec675c79d257",
+          "closed_by_generation": 4
+        },
+        {
+          "id": "6019b1bd37a72f6df5111d841de3904ada42ef2e007da3944cbdee6f8b44c0e2",
+          "closed_by_generation": 4
+        }
+      ]
+    },
+    {
+      "generation": 4,
+      "base": "7d0b0afee75ff2100e970dcf440d0667c1760947",
+      "head": "286d1cf0c96a8e0266c69406db01b03ff283963d",
+      "seats": [
+        {
+          "id": "s0",
+          "status": "reviewed"
+        },
+        {
+          "id": "s1",
+          "status": "reviewed"
+        },
+        {
+          "id": "s2",
+          "status": "reviewed"
+        }
+      ],
+      "reviewed_seats": 3,
+      "total_seats": 3,
+      "reviewed_seats_count": 3,
+      "total_seats_count": 3,
+      "status": "finalized",
+      "diff_sha256": "55008caccad61e82e5ea9c3e57795dccbea93f088babf02f6b2bd99ecd7574dc",
+      "full_range_sha256": "1621b4438faca20adea5681983d6b60d2d566e122c53f94fa0b6f0d75942b32b",
+      "findings_sha256": "afabea926864447955cecfdcabb22b1716c544a7667543663a4a3c86fafcb84b",
+      "seat_artifact_sha256": {
+        "s0": "2526c488dd90a17c760a90db5ece946ca4e039a946bcbde706e1e9c8e1da104d",
+        "s1": "d729093c2a299e9eafc0f93236d51c252f7b86190b661aa03e11daf37f9bc85b",
+        "s2": "3c91b997588c9a2e8a5496f59e6313a0abb47082a83956fd38039b1c46d70d01"
+      },
+      "dispositions_path": "review-core/g4/dispositions.json",
+      "dispositions_sha256": "13c26f04041f15ec6d35eeb4902f7e8c80661c42e7d6ce1571af8f16ab677e65"
+    }
+  ],
+  "verdict": "SHIP-AS-IS",
+  "open_findings": [],
+  "resolved_from": "topology",
+  "written_at": "2026-09-04T14:45:38.163Z"
+}

@@ -1,5 +1,58 @@
 # Changelog
 
+## v2.36.0 — dev-flow 的 hetero 迴圈變預設：plan loop review → 派工 → per-phase hetero review → qc gate（owner 2026-09-04）
+
+owner 最常講的是「叫 autopilot plan loop review hetero」「coding 完成後過 hetero loop review」，但沒有任何 skill description
+含這些字：`dispatch-plan-review.js` 只有 research-to-ship 一個呼叫者，三席 qc panel 藏在 finish-flow，dev-flow L-4 的
+code review 只是一行 `documented-only` 文字。這一版把 owner 手動在跑的迴圈做成 **dev-flow L-size 的預設形狀（opt-out）**，
+並給 owner 原話一個入口。設計：`docs/plans/2026-09-04-dev-flow-hetero-loops-default.md`（R2，plan 自己先過兩代
+plan loop review：sol@max／GLM／MiniMax，21 個 blocker 全摺入後由 depth-0 凍結）。
+
+- **新 skill `hetero-review`**（MINOR）：薄路由。description 逐字含 owner 四句觸發語；輸入是 plan 檔 → plan loop
+  （`plan-rubric-scaffold.js` → topology 推 manifest → `dispatch-plan-review.js --timeout 20m` ≤2 代 → depth-0 逐條裁決 →
+  `check-phase-review-receipt.js --plan-artifact` 凍結謂詞），輸入是 branch／diff → code loop（`hetero-review-loop.js
+  collect` → depth-0 dispositions → `finalize` → FIX-THEN-SHIP 就派 hands 修 → delta 再 collect → SHIP-AS-IS → receipt）。
+  `hooks/tests/hetero-review-trigger.test.sh` 解析每個 skill 的 frontmatter description，斷言四句各恰出現一次且只在這裡。
+- **三個 knob 的轉移表**（`resolve-review-loop.sh`）：`plan_review`／`hetero_review`（新）／`consult_dispatch` 都收
+  `auto|on|off`，template 預設 `auto`；**缺席＝auto**、亂值＝exit 3（進入任何 stage 之前）、`on` 照舊要完整 tuple、
+  `auto` 從 `~/.autopilot/topology.json` 展開並輸出 `<knob>_resolved_from`（explicit|topology|native-fallback|off）；
+  topology 缺檔／壞 JSON／該角色零席／全被濾掉 ⇒ **native fallback＋capability warning，stage 照跑**，永不靜默跳過。
+  consult 的 `auto` 先排除已解析的 `qc_panel` 席、再依「與提問者不同家族」排序。
+- **`resolve-dispatch-topology.js --role implementer|plan_reviewer|reviewer|consult|discuss`**、`--exclude-seats`、
+  `--asking-family`：新增 `reviewer_ladder`／`consult_ladder`／`discuss_ladder`／`plan_review_panel`（≤3 席、家族互異、
+  chair＝最高 effort；scorecard 沒有 `plan_reviewer` 角色，plan 席由 reviewer 列＋consult 列推導；`codex-cli`≡`codex`；
+  legacy 空 effort 列進榜但排尾、輸出 effort `high`）。本機推出 chair `gpt-5.6-sol/max@codex`。
+- **三個新 script**（D2）：`plan-rubric-scaffold.js`（KR／§2.5／§6 逐條 ordinal `R<n>:`、重跑 byte-identical、`wx` 獨占建檔，
+  既存 ⇒ exit 2）；`hetero-review-loop.js`（collect／finalize／opt-out 狀態機：base..head 快照、head 移動即拒、每代 artifact
+  不可變、chain.json 連續鏈、四種 canonical finding 形式的 parser、FIX-THEN-SHIP 席文字解析不出即 fail closed、SHIP-AS-IS 席
+  零 finding 需有 no_finding_proof、dispatcher 一律取 plugin 自己的 scripts 目錄、dispositions 快照 hash 綁進 chain、
+  `union-on-verified-critical`＝任一 verified Critical ⇒ FIX-THEN-SHIP、verified Major/Minor 列 `open_findings`、
+  自動產出並用 `check-redispatch-prompt.sh` 檢查 hands brief、`--seats` 缺席時只信 `qc_panel_seats_complete`）；
+  `check-phase-review-receipt.js`（必帶 `--phase-base`、逐代從 findings＋dispositions 快照重推 verdict、opt-out 由
+  resolver 重推 `off` 並核 config sha、`--plan-artifact` 凍結謂詞、64 MB diff buffer）。
+- **consult 與 codex plugin 脫鉤**（D4）：`references/hetero-dispatch.md` 的「Peer consult — codex plugin channel」改成
+  「Codex-plugin consult (optional)」，seat rail 是問模型的預設路；hook points 進 debug（兩次假設失敗後）、think-tank 3.5、
+  dev-flow L 設計前、quality-pipeline（qc 席互斥）；`agent-call` description 加 owner 動詞與 hangar-bridge 觸發、Not-for
+  指向 hetero-review／consult／l4–l6；`evidence-discipline.md` 兩條（hetero implementer 的綠是主張不是閘；systemd／CLI leaf
+  收不到 SendMessage 只能再派）；`hooks/tests/dispatch-consult-hermetic.test.sh`（scratch HOME、無 plugins、shim runner）。
+- **dev-flow／ceo-agent／research-to-ship**（D3，line-neutral：dev-flow 733→727、ceo-agent 550→542）：L-2.5 列、L-4
+  advance gate 的 code-review 項改成 `check-phase-review-receipt.js` 退出碼、size 表加 KR4 謂詞（L/H 全走；S 跳 plan loop、
+  一席＋qc；Fix 只 qc）、Available Scripts 三列；判斷文字移到 `skills/dev-flow/references/hetero-loops.md`；research-to-ship
+  Phase 3 改為呼叫 `hetero-review`。profiles hash 鏈重釘（`canonical_rules` 812→801）。
+
+**本版自己照拓樸做，並且第一次真的用自己的迴圈審自己**：depth-0 只 brief／裁決／merge；六個 sonnet 工頭（D1×2、D2×3、
+D2-repair×2、D3、D4）、三十餘把 gemini-3.8-flash-low@agy 刀（rung 0；四把爬到 medium）。D2 落地後立刻用
+`hetero-review-loop.js` 對 D2 的 diff 跑三席 review——**driver 自己被抓出四個真缺陷**（讀錯 resolver 欄位、parser 掉
+所有 emoji 開頭的 finding、對 resolver 傳它不接受的旗標、把 SHIP-AS-IS 的 `none` 佔位符當 parse 失敗），加上三席回
+14 條 MUST-FIX（receipt 可偽造、malformed input fail-open、trusted dispatcher、artifact 不可變）——全部由 hands 修掉
+（D2-repair、fix1–fix2e）。兩個 cut 在 flash 階梯三次失敗後依拓樸退路改派 sonnet 原生 hands（profiles repin）。
+governance 本分支 shadow、merge 前還原 enforce；roster 派工期間暫切 gemini，已還原。詳見
+`docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/`（ledger/D0–D4、D2-repair、review-* 證據）。
+
+QC（union-on-verified-critical，三席 gpt-5.6-sol@max／GLM-5.2／MiniMax-M3，用本版的 driver 收集）：四代 delta，全部由 `hetero-review-loop.js collect/finalize` 收集、depth-0 逐條 disposition、`check-phase-review-receipt.js --phase-base 1e5c2841` 在 reviewed head 驗 receipt（exit 0）。g1（sol／GLM FIX、MiniMax SHIP）20 條、19 核實含 4 Critical：helper 從被審 repo 執行、receipt 只信 verdict 不重推、seat gap 可洗成空 SHIP、plan-artifact 無身分；g2 16 條、9 核實：測試用 `phase === 'p7'` 後門漏進 production（三席同抓）、seat 雜湊空表可偽造、phase-base 寫錯路徑、runner alias；g3 9 條、3 核實（`--retry` 重用代號、rejected 對非 blocker 誤拒、min-seat 未驗格式）、**3 條 refuted**（GLM 說 diff 裡看不到配套改動——它們在 g1/g2 已落地且測試綠：resolve-review-loop 406、topology 43、role-admission 84）；g4 三席 SHIP-AS-IS、4 條 follow-up 進 BACKLOG。修復全部由 hands 完成（D2-repair-2 工頭：gemini medium→high；enforce 還原後改 sonnet 原生 hands）。注意 g1 的 chain 條目是舊版 driver 寫的，缺後來加的 `findings_sha256`／seat 雜湊／`full_range_sha256`，closeout 時由 depth-0 從磁碟 artifact 與 git 重算補齊並同步 receipt.chain（可重推導；checker 仍全部重推），記在 ledger/D5.md。全套 suite（enforce＋grok roster 還原後）：276 檔綠含 serial 尾段；殘留 `contract-parity` 8 與 `resolve-review-loop-consult-discuss-switch` 3 在 develop 上同樣紅（既有，`implementer_ladder[17]` template fallback ladder），`slash-entry-probe` 負載下 0-byte、preflight 的 LLM probe 8/8 綠。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (dev-flow 733→727, ceo-agent 550→542, research-to-ship and agent-call line-neutral; the new `hetero-review` SKILL.md is 56 lines, under the 250 cap).
+
 ## v2.35.16 — 預設派遣拓樸：brain up, hands down（owner 2026-09-04 經 cuda 轉達）
 
 revival.3d 的實證（cuda memory `quota-opus-foreman-cost`、`standing-foremen-burn-quota`）：一天十幾把實作刀全跑在

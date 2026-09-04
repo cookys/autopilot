@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "phase": "core",
+  "generation": 1,
+  "findings": [
+    {
+      "id": "ec8ba780e0fbd2e0f80e5446d2068f313165ffe30626abc5938e3f719b5d44a6",
+      "disposition": "verified",
+      "rationale": "Confirmed: finalize spawns check-redispatch-prompt.sh from --repo-root and opt-out reads the target repo resolver by default; shipped helpers must resolve from the driver/checker __dirname with env overrides only for tests (same rule R1 applied to dispatch-review.sh)."
+    },
+    {
+      "id": "41cc56863b2ab2ec29e5cb2993a52c903f2d5ccadb0b3d938f164d2e4dc7537f",
+      "disposition": "verified",
+      "rationale": "Confirmed against the checker test: a verified-Critical receipt is expected to pass. Gate must require recorded AND re-derived verdict SHIP-AS-IS; invert that expectation."
+    },
+    {
+      "id": "4249df82fbf1ce050f015ba4782335968ff1d70460d2fb4cd70c63c992362c25",
+      "disposition": "verified",
+      "rationale": "Confirmed: --allow-seat-gap lets an all-gap generation finalize into an empty-findings SHIP-AS-IS receipt with no trace. Receipt must record per-seat gap status and the checker must reject any generation with fewer than the configured minimum reviewed seats (default: all seats)."
+    },
+    {
+      "id": "fb472166752691eb261c679b6ff4f5956dea9dbeadc903c5a64094b5b952608a",
+      "disposition": "verified",
+      "rationale": "Confirmed: --plan-artifact mode validates no identity. It must require the canonical plan_review_artifact shape (artifact_type, logical_plan_id, generation, plan_sha256, rubric_sha256) and the disposition file identity to match, and verify plan/rubric digests against the files."
+    },
+    {
+      "id": "83debe7b5692908ad2fa2d9462b2148d5fc55dd421dae1bb97e1d1beeb42cccb",
+      "disposition": "verified",
+      "rationale": "Confirmed: checker treats malformed/missing arrays as empty and does not compare receipt.chain to disk. Reuse the finalize validators (shared module) and fail on any malformed, duplicate, missing or extra record; exact chain equality."
+    },
+    {
+      "id": "c3f2203726854eb4771df327ad3434517956cb6e72b936cd6908949333922c5a",
+      "disposition": "verified",
+      "rationale": "Confirmed divergence: finalize closes-by-absence, checker accumulates all historical verified findings. One shared re-derivation routine used by both; closed_findings honoured identically."
+    },
+    {
+      "id": "c74bdc05f00a791fd289163fca5f64ed7a6fa887c4c9d6cde15f716cf3edd06a",
+      "disposition": "verified",
+      "rationale": "Accepted with scope: keep replacing an aborted generation (that is the retry path and is recorded), but reject pending/pending-with-gap/finalized reuse, create generation directories exclusively, and require generation N finalized before N+1 collects."
+    },
+    {
+      "id": "c2ca07fe33b2e76ce8378aff7948b3cf4ed8d59c228f3a9df84f202142a66b29",
+      "disposition": "verified",
+      "rationale": "Confirmed (with GLM finding on null verdicts): enforce a strict status/verdict/findings/proof matrix — SHIP-AS-IS accepts only the placeholder tokens none / n/a / no findings or parseable findings; any other non-empty unparseable text aborts; verdict null demotes to no_verdict; FIX-THEN-SHIP with empty findings is no_verdict."
+    },
+    {
+      "id": "22814c72113973fc9c311e367e471b097f9c7429964a5030ed6d69c8cade977c",
+      "disposition": "verified",
+      "rationale": "Confirmed: exclusions are caller-chosen and blindly honoured. Bind --exclude to a frozen allowlist in the driver (platforms/**, profiles/*.json, docs/projects/**, docs/plans/evidence/**, docs/BACKLOG.md, lockfiles), record full-range and filtered digests, and have the checker reject exclusions outside the allowlist."
+    },
+    {
+      "id": "d3b4a27eef540eae1644847a7b434be8c4f76a9089d972835a95dd852fcb2457",
+      "disposition": "verified",
+      "rationale": "Accepted with scope: the plan keeps reviewer_* as the explicit hetero_review tuple, so auto need not replace a configured reviewer; but native fallback must overwrite the tuple with the documented native seat and schema-invalid topology entries must fall back, not be labelled topology."
+    },
+    {
+      "id": "78976dc6645475350112619667af98e030d15e6f8d3cd7c479c09c6dcd8e67cf",
+      "disposition": "verified",
+      "rationale": "Accepted with scope: use the scorecard row family when present instead of name heuristics; the chair stays reviewer-qualified per the frozen plan (consult rows are non-chair) — that part is refuted by the plan, the family part is verified."
+    },
+    {
+      "id": "4ffd0544ff9ad766074f47917d18eb9f0ae6d8308b385b1da92492c0850b634c",
+      "disposition": "verified",
+      "rationale": "Confirmed: the D3 prose was written before --phase-base became mandatory. collect generation 1 must persist the phase base (phase-<p>.base in the ledger) and dev-flow, hetero-review references and the L-4 gate line must pass --phase-base from it."
+    },
+    {
+      "id": "42864072a0abc27ec1ab62c608f2e64acc2e76f4aaecf6a97713b5e78f6a13a8",
+      "disposition": "verified",
+      "rationale": "Confirmed: the hermetic test only drives the resolver. It must invoke scripts/dispatch-consult.sh with PATH-shimmed runners and assert the request/result while keeping the plugin-absent scratch HOME."
+    },
+    {
+      "id": "88084fa9482b0ff98255a53bb5cea88d70c953c0ed4bc4d8cbe2bed322d9eab6",
+      "disposition": "verified",
+      "rationale": "Confirmed; same repair as the parser matrix finding: null verdict is never reviewed; non-empty unparseable text aborts regardless of verdict except the placeholder tokens."
+    },
+    {
+      "id": "97c05534e6de7a4ae82fb195c02350b26e35b9b81b2806b9efbf1363f09bc0ad",
+      "disposition": "verified",
+      "rationale": "Confirmed: findings.json and seat artifacts are not hashed into the chain. collect records findings_sha256 and seat artifact shas; checker verifies before re-deriving."
+    },
+    {
+      "id": "2ab20291252d7ee3ed1d31dddf2f8def06f19bc9744ad7db741f8b6c0e32a9f9",
+      "disposition": "verified",
+      "rationale": "Confirmed: deep-compare receipt.chain with the on-disk chain.json and drive validation from disk."
+    },
+    {
+      "id": "bdfe1fa885210409f842384264a3b519504878395b07d731b6613523e837bdea",
+      "disposition": "verified",
+      "rationale": "Confirmed fail-open on malformed open_findings; add the else branch that exits 1."
+    },
+    {
+      "id": "13f01363092ed1689e48e8d7afd7ed8878f60796996c96f40b12aa81a8dca1d8",
+      "disposition": "verified",
+      "rationale": "Confirmed: sync-version.js does not own the skills badge; both README badges still say 29. Update to 30 (skill-count-metadata test pins it)."
+    },
+    {
+      "id": "f61e6dec4521e24701b5da1e3fece33ed1f6d49990d3b9307858e864b5328cd6",
+      "disposition": "verified",
+      "rationale": "Confirmed by design: the placeholder is replaced with this review chain result before merge; the checker gate and the pre-push qc-gate stand between here and develop."
+    },
+    {
+      "id": "d7921293efff87e4bc562294dd9dd2045ea8eb62ffd884d4ade3da94b119ba6f",
+      "disposition": "deferred",
+      "rationale": "CUT/FOLLOW-UP per the seat; alias normalisation in the consult picker is already a BACKLOG row (normalize_agy_alias exclusion mismatch)."
+    }
+  ]
+}

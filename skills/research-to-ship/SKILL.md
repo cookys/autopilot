@@ -51,16 +51,18 @@ open questions only the user can answer. Run the template's self-review (scope c
 scan / dependency map) before the gate. Use the **real current date** from the environment — never invent.
 **Gate**: "plan good to send to review, or revise first?"
 
-### Phase 3 — Bounded plan readiness  · run `scripts/dispatch-plan-review.js`  (PINNED)
+### Phase 3 — Bounded plan readiness  · delegate → `autopilot:hetero-review` (PINNED)
 
-Before dispatch, write a small rubric file and a `plan-review-manifest` beside the plan. Give every
-user requirement and next-slice readiness criterion a stable ID (`R1`, `R2`, ...). The manifest
-declares the `logical_plan_id`, 1–4 qualified seats, per-seat budgets, and any attempt-2 fallback.
-The Phase 2 human approval freezes both files; do not add criteria or silently substitute seats.
+Invoke `autopilot:hetero-review` with the plan file path (this is the plan loop), which internally
+runs `scripts/dispatch-plan-review.js`. Before dispatch, write a small rubric file and a
+`plan-review-manifest` beside the plan. Give every user requirement and next-slice readiness
+criterion a stable ID (`R1`, `R2`, ...). The manifest declares the `logical_plan_id`, 1–4 qualified
+seats, per-seat budgets, and any attempt-2 fallback. The Phase 2 human approval freezes both files;
+do not add criteria or silently substitute seats.
 
 Resolve the plan chair/deep seats and budgets from `.claude/review-loop-config.md` through
 `scripts/resolve-review-loop.sh`. Require `plan_review:on`; never reuse `spec_review` or the
-implementation reviewer tuple. Invoke `dispatch-plan-review.js` with repo, ticket, plan, rubric,
+implementation reviewer tuple. The review runs `dispatch-plan-review.js` with repo, ticket, plan, rubric,
 session, generation, and `--manifest-file`. Reuse the same `logical_plan_id` across retries; changing
 the repo/ticket/session tuple does not reset the review.
 

@@ -1,0 +1,28 @@
+{
+  "findings": [
+    {
+      "id": "7bb33333cf986f8fa299486622060c3fd30045e31f711354ecc67426b20578ea",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [d2-abort-chain-e2e-receipt-coverage] FOLLOW-UP — add one end-to-end case (abort g1 → collect g2 → finalize → run check-phase-review-receipt.js and assert exit 0) to pin the reader side of the new aborted-entry persistence; test 2e stops at collect and the checker suite adds no aborted-chain case. Excluded from this version: writer-side semantics are fully pinned (tests 2d/2e/4: refusal, byte-identical g1 evidence, chain length 2, aborted status unmodified), and since an abort never advances base, finalized-entry base..head contiguity and per-finalized-generation re-derivation are preserved by construction, so the residual risk is coverage hardening, not a demonstrable failure."
+    },
+    {
+      "id": "56c818abddd66d2ecad461951d9666fcafc29795f10ec209516e5595f7476f1c",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [d2-retry-flag-doc-sweep] CUT — mechanically grep the prose docs outside this diff (references/code-loop.md, plan-loop cross-references) for stale `--retry` mentions now that the flag and the g1.aborted-* rename-aside are removed; excluded because the diff updates the script's own help text, and any stale doc mention fails safe (collect refuses generation reuse with actionable \"collect the next generation number\" guidance), and files not in the diff cannot be verified here."
+    },
+    {
+      "id": "c49b568886b5d20d409086783b20dde236750a4ea92a0158d7f88c9337b72613",
+      "severity": "Suggestion",
+      "seat": "s2",
+      "text": "🔵 [min-seats-threshold-enforcement-test] CUT/FOLLOW-UP — case 14 positive control only asserts that '--min-reviewed-seats 1' is accepted on a 1-seat fixture; it does not prove the threshold actually enforces a higher minimum on a multi-seat fixture. Excluded because the regex/parse guard is the forge-vector in scope, and enforcement-level coverage is not in this diff's contract."
+    },
+    {
+      "id": "c8a1a3e506ab109c9951b2784bd3876d10fbabcb8c4ac069eab4eba6989f482e",
+      "severity": "Suggestion",
+      "seat": "s2",
+      "text": "🔵 [aborted-base-inheritance-explicit-assertion] CUT/FOLLOW-UP — test 2e asserts chain length and g1 byte-identity but not that g2's recorded base equals g1's aborted entry's base; the spec's 'contiguous base..head' is only implicitly verified. Excluded because collect-to-finalize-to-collect integration tests elsewhere exercise this path."
+    }
+  ]
+}

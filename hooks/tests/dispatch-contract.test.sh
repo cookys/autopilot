@@ -121,6 +121,10 @@ cat > .claude/review-loop-config.md <<'EOF'
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
 - verification_author_effort: high
+- plan_review: off
+- hetero_review: off
+- consult_dispatch: off
+- discuss_dispatch: off
 SECRET_FIXTURE_DO_NOT_LEAK
 EOF
 
@@ -1308,6 +1312,10 @@ EOF
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
 - verification_author_effort: high
+- plan_review: off
+- hetero_review: off
+- consult_dispatch: off
+- discuss_dispatch: off
 EOF
     git add .claude/review-loop-config.md >/dev/null 2>&1
     git commit -m "named endpoint fixture" >/dev/null 2>&1
@@ -1408,6 +1416,10 @@ EOF
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
 - verification_author_effort: high
+- plan_review: off
+- hetero_review: off
+- consult_dispatch: off
+- discuss_dispatch: off
 SECRET_FIXTURE_DO_NOT_LEAK
 EOF
     git add .claude/review-loop-config.md >/dev/null 2>&1
@@ -1517,6 +1529,10 @@ EOF
 - verification_author_engine: Gemini 3.5 Flash (High)
 - verification_author_runner: agy
 - verification_author_effort: high
+- plan_review: off
+- hetero_review: off
+- consult_dispatch: off
+- discuss_dispatch: off
 EOF
   # Scorecard/capability for the Gemini VA tuple only (strict author path).
   rm -rf "$STORE_BASE/va_l6_family"

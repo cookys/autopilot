@@ -28,12 +28,13 @@ function isTuple(row) {
   );
 }
 
-function startRung(unitClass, ladderLength) {
+function startRung(unitClass, ladderLength, startRungJudgment = 0) {
   if (!Number.isInteger(ladderLength) || ladderLength <= 1) return 0;
-  return unitClass === 'mechanical' ? 0 : 1;
+  if (unitClass === 'mechanical') return 0;
+  return startRungJudgment === 1 ? 1 : 0;
 }
 
-function selectImplementerRung({ ladder, unitClass, repairRound } = {}) {
+function selectImplementerRung({ ladder, unitClass, repairRound, startRungJudgment } = {}) {
   const rungs = Array.isArray(ladder) ? ladder.filter(isTuple) : [];
   if (rungs.length === 0) {
     return { applied: false, rung: null, tuple: null };
@@ -41,6 +42,7 @@ function selectImplementerRung({ ladder, unitClass, repairRound } = {}) {
   const start = startRung(
     unitClass === 'mechanical' ? 'mechanical' : 'judgment',
     rungs.length,
+    startRungJudgment,
   );
   const top = rungs.length - 1;
   const r = Number.isInteger(repairRound) && repairRound >= 0 ? repairRound : 0;
@@ -58,10 +60,12 @@ function implicitTuple(roster) {
 }
 
 function applyImplementerLadder(roster, { unitClass, repairRound } = {}) {
+  const startRungJudgment = roster && roster.ladder_start_rung_judgment === 1 ? 1 : 0;
   const selected = selectImplementerRung({
     ladder: roster && roster.implementer_ladder,
     unitClass,
     repairRound,
+    startRungJudgment,
   });
   if (!selected.applied) {
     return { roster, rung: null, tuple: implicitTuple(roster) };

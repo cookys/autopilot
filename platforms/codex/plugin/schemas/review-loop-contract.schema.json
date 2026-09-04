@@ -12,6 +12,7 @@
     "implementer_effort",
     "implementer_runner",
     "implementer_ladder",
+    "ladder_start_rung_judgment",
     "loop_max_rounds",
     "loop_convergence_verdict",
     "spec_review",
@@ -179,6 +180,13 @@
           }
         }
       }
+    },
+    "ladder_start_rung_judgment": {
+      "type": "integer",
+      "enum": [
+        0,
+        1
+      ]
     },
     "loop_max_rounds": {
       "type": "integer"
@@ -749,6 +757,7 @@
     "implementer_effort",
     "implementer_runner",
     "implementer_ladder",
+    "ladder_start_rung_judgment",
     "loop_max_rounds",
     "loop_convergence_verdict",
     "spec_review",

@@ -77,6 +77,24 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 
 ## Active entries
 
+### hetero-review-loop: confirm finalize always emits severity in open_findings (checker now requires deep equality on id/severity/disposition)
+- **Trigger**: the next FIX-THEN-SHIP receipt with verified Major/Minor findings — depth-0 saw severity present on the v2.36.0 receipts, so this is a confirmation row (GLM FOLLOW-UP, core review g3)
+- **Context**: shared-format drift surface between finalize and the checker
+- **Effort**: S
+- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g3/`
+
+### resolve-review-loop.sh: audit every remaining runner comparison for codex-cli/codex canonicalisation
+- **Trigger**: next touch of the reviewer_ladder / hetero_review extraction or any `entry.runner === implRunner` site
+- **Context**: normRunner was added at the plan-panel and consult sites; other comparisons may re-admit a dual seat (GLM FOLLOW-UP, core review g3)
+- **Effort**: S
+- **Source**: same g3 dir
+
+### hetero-review-loop: charset guard on seat ids before path.join
+- **Trigger**: any change that lets a seat id come from outside the driver
+- **Context**: `../` in an id could escape the generation directory; no capability gained today because the ledger is writer-controlled (GLM FOLLOW-UP, core review g3)
+- **Effort**: S
+- **Source**: same g3 dir
+
 ### check-phase-review-receipt: a head moved only by commits touching allowlisted excluded paths should still validate
 - **Trigger**: every release closeout — CHANGELOG/ledger/archive commits land after the last review generation, so the receipt's head never equals the merge head
 - **Context**: the checker binds `review_head_sha` to the branch head; today the honest sequence is "checker exit 0 at the reviewed head, recorded in the ledger, then docs-only commits". Candidate: accept a moved head when `git diff <receipt_head>..<head>` touches only paths matched by the frozen exclusion allowlist (plus CHANGELOG.md / INDEX.md), and record that delta in the receipt check output

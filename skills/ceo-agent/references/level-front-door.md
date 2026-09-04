@@ -139,8 +139,26 @@ CEO (depth 0, this session)
     `cc-shim`/`anthropic-compatible`). The dispatcher resolves creds via
     `resolve-endpoint.sh` from the canonical `~/.autopilot/endpoints.env`
     (`AUTOPILOT_ENDPOINT_<NAME>_*`); an empty field means no `--endpoint` (raw
-    `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before). This closes the
     old "type `--endpoint` by hand every run" gap — the project config owns it now.
+
+### Default dispatch topology — brain up, hands down (v2.35.16)
+
+| tier | who | may | may not |
+|------|-----|-----|---------|
+| **T0 brain** | depth-0 (Fable/opus session) | brief, adjudicate review findings, run qc, merge | hand-author implementation/prose content itself (except via `--solo` escape) |
+| **T1 hands** | hetero implementer ladder (cheapest qualified rung first, climb on red) or, when no hetero engine is qualified, `haiku` → `sonnet` | mechanical implementation/prose cuts | adjudicate its own work, merge, or skip the `Engine:` header |
+| **T2 judge** | cross-family qc reviewer(s) | review, find, block | implement or merge |
+
+Mechanical sources:
+- `implementer_ladder: auto` in `review-loop-config.md` expands the host topology written by `scripts/resolve-dispatch-topology.js` (cached at `~/.autopilot/topology.json`; `--check` detects drift).
+- Rung 0 is the first attempt for every unit class now (`ladder_start_rung_judgment` restores the old rung-1-first behavior for `judgment`-class units only).
+- `scripts/resolve-dispatch.sh` implementer default is `sonnet`; the new role `hands` resolves to `haiku`.
+- `dispatch-model-guard` (hook) asks for confirmation before dispatching `fable`/`opus` for any implementation-shaped dispatch (i.e. `mode` != `plan`), and denies any dispatch whose prompt's first line is not `Engine: <model>…` matching the dispatch's `model:` argument.
+- `hooks/cost-fuse.js` (PreToolUse, default-on, warn mode) trips when brain-tier spend crosses USD 150/host/day (configurable via `cost_fuse` in `~/.autopilot/config.json`); `scripts/cost-digest.js` is the ledger view for that spend.
+
+Owner rulings (2026-09-04):
+- An unqualified engine never enters the implementer ladder — it shows up only as a `candidates_to_qualify` entry until it passes qualification.
+- `/l3` is now brain-briefs-and-dispatches-sonnet-hands, executed inline on the CEO's thread; `--solo` is the only true "depth-0 implements it directly" escape hatch, and the cost fuse still applies even under `--solo`.
 
 ### Live sensing — no YOLO window after dispatch (S3-lite)
 
@@ -331,8 +349,9 @@ agentId = Agent(run_in_background: true, isolation: "worktree", subagent_type: "
   CEO silently runs its foreman on Fable, which violates Amendment 11 (the foreman is
   a `sub-orchestrator` → `opus`) and burns through Fable quota (real case 2026-07-09
   hangar `/l6`: the foreman died mid-run on an API limit). Rule: set `model` on every
-  dispatch — foreman / sub-orchestrator = `opus`; mechanical inventory / file work =
-  `sonnet` or `haiku`. Never rely on inheritance.
+  dispatch — foreman/sub-orchestrator defaults to `sonnet` (opus only when the dispatching brief
+  states why opus is needed); hands defaults to `haiku`/`sonnet` or the hetero implementer ladder.
+  Never rely on inheritance.
 - `Agent(run_in_background, isolation:"worktree")` returns an **`agentId`** that
   is usable as a `TaskStop` `task_id`.
 - The foreman's worktree is at a **deterministic** path:

@@ -33,7 +33,7 @@ Hard rules:
   Depth-0 freezes the unit contract first; the checker
   (`node scripts/dispatch-contract.js check --contract <unit.json> --repo <repo> --json`) must
   return GO before ANY runner spend — a prompt is task detail, not authorization. The
-  runner/model derive from the checker's resolved verification-author tuple; caller-supplied
+  runner/model derive from the checker's resolved verification-author tuple (implementer ladder rung 0 first); caller-supplied
   `--runner`/`--model`/`--timeout` that disagree are precondition-rejected. A GO with
   `assurance: "provisional"` admits only untrusted **raw-artifact** generation labor from an
   exact project-configured provisional verification-author row (`observed_status=qualified`);
@@ -97,7 +97,7 @@ Hard rules:
 - **Every depth-0 `Agent` dispatch MUST pass `model` explicitly** (foreman = `opus`; mechanical inventory / file work = `sonnet`/`haiku`) — a subagent with no `model` inherits the parent session's model, silently burning the expensive session engine (the exact spend the thrift rule guards) on a Fable-class CEO's foreman. See the model-inheritance warning in [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md) § "Dispatching the foreman".
 - 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止前景 `sleep` 輪詢與把 leaf raw output 灌回 context（背景 `run_in_background` until-loop 等外部條件是允許的，一次通知；只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。task-notification 是 best-effort，實測會整批漏送（2026-09-02 PEACE 回報：63 次有 29 次從未送達、1 次遲到 38 分鐘，一個 sonnet 工頭就這樣呆等一個早已跑完的 clippy），因此**「等通知」不得是唯一喚醒路徑**：每次交辦背景 leaf 都必須同回合 (a) 把 leaf 的 output path 寫進 context，(b) 另起一個背景死人開關（`run_in_background` 的 `sleep <deadline>; echo WAKE`，仍是背景、不違反禁輪詢）；沒有配對死人開關就結束回合＝紅。depth-0 交辦長階段給工頭後，同樣要自起該階段的死人計時器。
 - **工頭一刀一命**（v2.35.15，cuda 2026-09-04 quota digest：四個常駐 Sonnet 工頭活 13–33 小時、各 1,900–7,400 次 Bash、佔 79% 支出）：一個工頭只擁有**一個**已 admit 的 deliverable；該 deliverable 整合完、`foreman-guard` 的 Bash 上限（預設 40）到、或自己數到工具呼叫接近上限時，**寫 handoff（autopilot:handoff）並結束回合**，由 depth-0 為下一個 deliverable 另派工頭。禁止常駐等下一個指派。`hooks/foreman-guard.js`（default-on）在 PreToolUse 即時執行 ironlaw #6：l4–l6 session 內的子代理，第 41 次 Bash、前景輪詢（`true`／`sleep`／`while … sleep|grep`／`pgrep`／`ps -p`／讀 `/tasks/*.output`）、`Monitor` 一律 deny；depth-0 不受影響。
-- **接手 read-list 上限**：新工頭只讀「這一刀」的 brief（≤ 300 行）與該線的 ledger 分檔；禁止「先整份讀」的連鎖清單（整份 ledger、整套 kernel 原始碼、歷史 rulings）——一次接手開場 30 萬 token 就是這樣來的。工頭派工必帶 `model:`，不得繼承 depth-0 的 `[1m]`／Fable（`dispatch-model-guard` default-on 會擋沒帶 model 的派工）。
+- **接手 read-list 上限**：新工頭只讀「這一刀」的 brief（≤ 300 行）與該線的 ledger 分檔；禁止「先整份讀」的連鎖清單（整份 ledger、整套 kernel 原始碼、歷史 rulings）——一次接手開場 30 萬 token 就是這樣來的。工頭派工必帶 `model:`（工頭預設 `sonnet`、hands 走 `implementer_ladder: auto`，見 front-door § Default dispatch topology），不得繼承 depth-0 的 `[1m]`／Fable（`dispatch-model-guard` default-on 會擋沒帶 model 的派工）。
 
 **Capability profile (shadow):** `/l6` fixes heterogeneous implementation and verification-author
 topology only. When the host supplies a current verified envelope/grant/profile payload, forward it

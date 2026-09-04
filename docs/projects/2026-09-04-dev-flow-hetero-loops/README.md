@@ -3,7 +3,7 @@
 **Plan**: [`docs/plans/2026-09-04-dev-flow-hetero-loops-default.md`](../../plans/2026-09-04-dev-flow-hetero-loops-default.md)
 **Branch**: `feat/dev-flow-hetero-loops` · **Target**: v2.36.0 (MINOR: new skill `hetero-review`)
 **Requested**: owner, 2026-09-04, this host ("預設 dev-flow 就是走 plan hetero loop review → 派工 → hetero review → qc gate", go)
-**Status**: D0–D4 integrated; D2 driver repair chain (fix2e, rung 1) and the core hetero review in flight; D5 pending
+**Status**: D0–D4 integrated; driver `--exclude` cut (fix4c) and D5-integration (suite repin) in flight; core hetero review to re-run after fix4; D5 pending
 
 ## Topology of this project's own execution (dogfood)
 
@@ -30,6 +30,7 @@ cannot pass as normal.
 | D2 | `plan-rubric-scaffold.js`, `hetero-review-loop.js`, `check-phase-review-receipt.js` + tests; D2-repair after the first real three-seat review (14 MUST-FIX folded) | L | ✅ |
 | D3 | `hetero-review` skill + dev-flow (733→727) / ceo-agent (550→542) / research-to-ship / front-door edits + profiles repin (sonnet hands after 3 gemini fails) | M | ✅ |
 | D4 | Consult decoupling, agent-call description, evidence-discipline rows, hermetic consult test | M | ✅ |
+| D5-integration | Full-suite regressions after the D1 resolver contract change (25 red files: engine REVIEW_LOOP_FIELDS, contract parity, dispatch-contract checker, skill-count pins; precedent 68e142c0) | M | 🔄 |
 | D5 | Release v2.36.0: CHANGELOG, README/INDEX/mirrors, archive | S | ⏳ |
 
 ## Ledger

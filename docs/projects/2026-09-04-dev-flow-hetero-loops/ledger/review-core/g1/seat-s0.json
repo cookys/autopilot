@@ -1,0 +1,11 @@
+{
+  "runner": "codex",
+  "model": "gpt-5.6-sol",
+  "status": "no_verdict",
+  "verdict": "no_verdict",
+  "findings": "",
+  "no_finding_proof": null,
+  "raw_log": null,
+  "error": "dispatch-review exited with status 2",
+  "usage": null
+}

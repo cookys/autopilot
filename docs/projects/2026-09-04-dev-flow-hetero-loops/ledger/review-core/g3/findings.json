@@ -1,0 +1,58 @@
+{
+  "findings": [
+    {
+      "id": "c9d9d6e86048eead6765695cbf7c15348f6d869ba106a5069c39c6519402158f",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [d2-generation-reuse] MUST-FIX `--retry` deliberately reuses an aborted generation number and replaces its chain slot, contrary to the frozen requirement that per-generation artifacts remain immutable and generation reuse be refused; the old directory becomes an unreferenced side artifact, and reuse even bypasses `--retry` when that directory is missing. Always refuse an existing generation entry and model another attempt under a distinct immutable identity or phase."
+    },
+    {
+      "id": "33366d5ab05c6afc8a2ec0a066d4f2192c2e08440d37120da9edec675c79d257",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [d2-nonblocker-rejection] MUST-FIX `blockerClassDispositions` incorrectly makes `rejected` exclusive to blocker candidates, so a valid `candidate_blocker:false` finding rejected during adjudication now fails validation. Reserve blocker exclusivity for `accepted_blocker`, validate rejection rationale separately, and add a false/rejected positive test."
+    },
+    {
+      "id": "6019b1bd37a72f6df5111d841de3904ada42ef2e007da3944cbdee6f8b44c0e2",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [d2-min-seat-validation] MUST-FIX configured minimum-seat values are parsed with `parseInt` without range or syntax validation, so `0`, negative values, and trailing-junk inputs are accepted; a non-positive value makes the reviewed-seat gate vacuous and permits a finalized generation with no reviewed seats. Require a canonical positive integer and reject invalid values before validating generations."
+    },
+    {
+      "id": "a8eeb49f6cd634f4def5b6028207ee12530e9705d2acf533857cabd1f54c3af4",
+      "severity": "Major",
+      "seat": "s1",
+      "text": "🟠 [d2-crossfile-pin-drift] MUST-FIX: the switch test now pins `consult_resolved_from: 'off',` literals inside autopilot-engine.test.sh and review-loop-runner.test.sh, pins a consult_resolved_from-bearing EXPECTED_KEYS substring in resolve-review-loop.test.sh, and widens expectedAdded to six keys (adding hetero_review, hetero_review_resolved_from, plan_review_resolved_from) — but this diff edits none of those pinned files and contains no resolver hunk emitting the extra keys; the removed old pins prove those literals were absent at base, so the assert_contains/addedKeys checks fail at runtime (CI red on the D1 schema matrix). Smallest remediation: land the companion literal/EXPECTED_KEYS edits and the resolver's emission of the three provenance keys in this change, or revert the pins to the prior substrings."
+    },
+    {
+      "id": "b0f210b095eeb491091b8cd300c44a123945436a4d904105c111b6082b22ed2b",
+      "severity": "Major",
+      "seat": "s1",
+      "text": "🟠 [d1-consult-auto-native-fallback-gap] MUST-FIX: the role-admission test now requires an absent consult_dispatch knob to expand to engine \"sonnet\"/effort \"high\"/runner \"claude-native\" with consult_resolved_from \"native-fallback\" when no topology file exists, but resolve-review-loop.sh's only edits here are normRunner aliasing — no default→auto flip and no native-fallback tuple emission appear in the diff, so the four new assertions cannot pass and D1's \"absent knob = auto\" transition stays unimplemented as diffed. Smallest remediation: land the .sh change (absent knob ⇒ auto; absent/malformed topology ⇒ native-fallback tuple + consult_resolved_from) or revert the assertions to the empty-seat expectation."
+    },
+    {
+      "id": "21117e9b7d17770de9c5bbabf008d417564b7ffae6bbc599bba833b9c7061640",
+      "severity": "Major",
+      "seat": "s1",
+      "text": "🟠 [d1-resolver-js-alias-canonicalization] MUST-FIX: Case 9b requires resolve-dispatch-topology.js to exclude a seat whose scorecard runner is \"codex-cli\" from an `--exclude-seats …/high@codex` spec, but scripts/resolve-dispatch-topology.js is untouched here even though resolve-review-loop.sh needed exactly this normRunner patch for the same rail — without equivalent canonicalization on the resolver's exclusion/collision comparisons the seat survives (rail-exclusion bypass, the exact resolver/topology inconsistency the spec flags) and Case 9b fails. Smallest remediation: apply the same codex-cli⇒codex normalization to both sides of the resolver's runner comparisons."
+    },
+    {
+      "id": "f14a042d974681faaf94a6573da9ca89048a9efae85cdf318f1a1ad9d8072892",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [d2-open-findings-severity-drift] CUT/FOLLOW-UP: check-phase-review-receipt.js now requires receipt open_findings entries to match {id, severity, disposition} exactly, but the diff shows no finalize-side change and no non-empty receipt fixture, so whether hetero-review-loop.js finalize emits severity in open_findings is unverified — if it does not, every genuine FIX-THEN-SHIP receipt with findings fails; excluded from this version because no failing case is demonstrable from the diff alone, but confirm before merge since this is the shared-format drift surface the spec names."
+    },
+    {
+      "id": "35638bcce4e4579de5e0513a665d795705007e88f45a6e2b1feee7f1bb9eb457",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [d1-normrunner-site-coverage] CUT/FOLLOW-UP: normRunner was added only at the plan_review-panel and consult-ladder extraction sites in resolve-review-loop.sh; audit the reviewer_ladder/hetero_review extraction (and any other `entry.runner === implRunner` comparison) for the same canonicalization so an unpatched site cannot re-admit a codex-cli/codex dual seat; excluded because the two covered sites are tested and no unpatched comparison is visible in this diff."
+    },
+    {
+      "id": "f67feea4d6aa3ead6bfb38932f7f616107b313b670d7c34320a709f1dd738cac",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [d2-seat-id-path-hardening] CUT/FOLLOW-UP: seat ids from chain entries flow into path.join(gDir, `seat-${id}.json`) without a charset guard (../ traversal in an id can escape the generation directory); non-blocking because the ledger is already attacker-writable so no capability is gained, but a `[A-Za-z0-9_-]+` check is cheap hardening for a later pass."
+    }
+  ]
+}

@@ -87,6 +87,42 @@
       {
         "id": "f61e6dec4521e24701b5da1e3fece33ed1f6d49990d3b9307858e864b5328cd6",
         "closed_by_generation": 2
+      },
+      {
+        "id": "fc90b70e0ffd9f337b3e2c1339995a28b978205fcdeb2dd7a2459493edfdce39",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "d2370f98c29571f6350306d3e8e7d921f3e5c61c38813b4c301823571112f1dd",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "387e0161aeb38e0f710b046f7290012e55272340a65a855c10e788733602c3ac",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "d9fa4ae46607b4edc99b35e6dcfc22ef5b41c4158381a3126a1fe59e2ca2da89",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "5020b2fea5a5006a7dab35abaafa21acaa50079f1c08839c86ff7ae47338adb6",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "c930b0b2276eaeeba412a5432b3850c7d0666b7e8e69a6fad98cfff5ec3a4c2f",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "5f1cc9e6f573c15f659f5b982f5bd034dccbe99437b9b3755cf0b6467c158adc",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "be1a7ed9d2a322c8f52dfa65a37068ea6c278450190ee9b5ef825b567946163e",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "399c9bdec64c757ff6fbcb35bb6601fb586d316fbdfe0410afef8018eb08eaa0",
+        "closed_by_generation": 3
       }
     ]
   },
@@ -122,6 +158,78 @@
       "s2": "fa2ad735739e4071f3d6b6855a34a95746b84a3391a68c3c0dab7af8745c84ca"
     },
     "dispositions_path": "review-core/g2/dispositions.json",
-    "dispositions_sha256": "9ecdca205a0109ccaf07d682b1d8b27c4b6c816487693c161b21b597b777a2eb"
+    "dispositions_sha256": "9ecdca205a0109ccaf07d682b1d8b27c4b6c816487693c161b21b597b777a2eb",
+    "closed_findings": [
+      {
+        "id": "fc90b70e0ffd9f337b3e2c1339995a28b978205fcdeb2dd7a2459493edfdce39",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "d2370f98c29571f6350306d3e8e7d921f3e5c61c38813b4c301823571112f1dd",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "387e0161aeb38e0f710b046f7290012e55272340a65a855c10e788733602c3ac",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "d9fa4ae46607b4edc99b35e6dcfc22ef5b41c4158381a3126a1fe59e2ca2da89",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "5020b2fea5a5006a7dab35abaafa21acaa50079f1c08839c86ff7ae47338adb6",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "c930b0b2276eaeeba412a5432b3850c7d0666b7e8e69a6fad98cfff5ec3a4c2f",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "5f1cc9e6f573c15f659f5b982f5bd034dccbe99437b9b3755cf0b6467c158adc",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "be1a7ed9d2a322c8f52dfa65a37068ea6c278450190ee9b5ef825b567946163e",
+        "closed_by_generation": 3
+      },
+      {
+        "id": "399c9bdec64c757ff6fbcb35bb6601fb586d316fbdfe0410afef8018eb08eaa0",
+        "closed_by_generation": 3
+      }
+    ]
+  },
+  {
+    "generation": 3,
+    "base": "2de14a0dcfb0b24fcacb7e5fd3a4f31c5ee4c89a",
+    "head": "7d0b0afee75ff2100e970dcf440d0667c1760947",
+    "seats": [
+      {
+        "id": "s0",
+        "status": "reviewed"
+      },
+      {
+        "id": "s1",
+        "status": "reviewed"
+      },
+      {
+        "id": "s2",
+        "status": "reviewed"
+      }
+    ],
+    "reviewed_seats": 3,
+    "total_seats": 3,
+    "reviewed_seats_count": 3,
+    "total_seats_count": 3,
+    "status": "finalized",
+    "diff_sha256": "62ee731f38758f061ead51fe3cd6bbee906dae7fcc784534cca63650d41423d3",
+    "full_range_sha256": "7a0f2580c1b9170cd71005505064ea6319697aade7b735553c93af0d9cebbcf5",
+    "findings_sha256": "1cd22c979611c2c84218f2a4c45a837e512268b51a9d5ff5655c23830f9ca497",
+    "seat_artifact_sha256": {
+      "s0": "5dce18b024731604a82f4b1eaa4b0ea162cccea1c9ea6e358bd43bb15612c10e",
+      "s1": "a68b21e4b38857d0291ae10c5661136483cdbe4191ee5459cd9aa18c1f3af011",
+      "s2": "18362c77ed08ea63e902c5ef25ec0104696af1e86c7de1746d2f4a571f015d6e"
+    },
+    "dispositions_path": "review-core/g3/dispositions.json",
+    "dispositions_sha256": "5a25b9a2bd15e08365731e3716d9837dc847858742735a77bc75e221db69e480"
   }
 ]

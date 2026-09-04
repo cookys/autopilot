@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "phase": "core",
+  "generation": 3,
+  "findings": [
+    {
+      "id": "c9d9d6e86048eead6765695cbf7c15348f6d869ba106a5069c39c6519402158f",
+      "disposition": "verified",
+      "rationale": "Accepted: the frozen plan says generation reuse is refused and artifacts are immutable; drop --retry, an attempt after an aborted generation takes the next generation number and the aborted directory stays untouched and referenced from chain.json."
+    },
+    {
+      "id": "33366d5ab05c6afc8a2ec0a066d4f2192c2e08440d37120da9edec675c79d257",
+      "disposition": "verified",
+      "rationale": "Confirmed: rejected must be valid for non-blocker findings; blocker exclusivity applies to accepted_blocker only; add the false/rejected positive test."
+    },
+    {
+      "id": "6019b1bd37a72f6df5111d841de3904ada42ef2e007da3944cbdee6f8b44c0e2",
+      "disposition": "verified",
+      "rationale": "Confirmed: minimum reviewed-seat configuration must be a canonical positive integer; 0, negatives and trailing junk are rejected before generation validation."
+    },
+    {
+      "id": "a8eeb49f6cd634f4def5b6028207ee12530e9705d2acf533857cabd1f54c3af4",
+      "disposition": "refuted",
+      "rationale": "The companion edits are in generations 1 and 2 of this chain (engine payload fixture repin, resolver provenance keys, EXPECTED_KEYS), not in this delta; on the merged head the switch test reports 51 passed with only the three reds that already fail on develop, autopilot-engine is green (470) and resolve-review-loop is green (406). Evidence: ledger/D5-integration.md and this session log."
+    },
+    {
+      "id": "b0f210b095eeb491091b8cd300c44a123945436a4d904105c111b6082b22ed2b",
+      "disposition": "refuted",
+      "rationale": "The absent-knob=auto transition and the native-fallback tuple were implemented in generation 1 (D1 cut 2a) and hardened in generation 2 (integration pass 2); the role-admission test passes on the merged head (84 assertions). The delta only shows the alias hunk because the rest predates it."
+    },
+    {
+      "id": "21117e9b7d17770de9c5bbabf008d417564b7ffae6bbc599bba833b9c7061640",
+      "disposition": "refuted",
+      "rationale": "resolve-dispatch-topology.js already canonicalises codex-cli to codex on emit and in --exclude-seats matching (landed in generation 1, cut D1-2e4); the sonnet hands audited it during the g2 repair and added the confirming case; the topology test passes with 43 assertions on the merged head."
+    },
+    {
+      "id": "f14a042d974681faaf94a6573da9ca89048a9efae85cdf318f1a1ad9d8072892",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP: verify finalize emits severity in open_findings — depth-0 checked the current receipt entries and they carry id, severity and disposition; keep as a BACKLOG confirmation row."
+    },
+    {
+      "id": "35638bcce4e4579de5e0513a665d795705007e88f45a6e2b1feee7f1bb9eb457",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP: audit remaining runner comparisons for alias canonicalisation — BACKLOG."
+    },
+    {
+      "id": "f67feea4d6aa3ead6bfb38932f7f616107b313b670d7c34320a709f1dd738cac",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP: seat id charset guard — BACKLOG."
+    }
+  ]
+}

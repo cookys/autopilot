@@ -1,0 +1,1761 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 240ebbb9..f7537ced 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -41,7 +41,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built,
+ 
+ **Skills tooling, evals & measurement** — `cost-digest.js` `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh`
+ 
+-**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js`
++**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js` `lib/live-state-dir.js`
+ 
+ 
+ ## When adding a new script
+diff --git a/hooks/README.md b/hooks/README.md
+index f37c1469..7527178c 100644
+--- a/hooks/README.md
++++ b/hooks/README.md
+@@ -142,9 +142,9 @@ Registered in `hooks.json`. Active for all autopilot users. All are non-destruct
+ | suggest-compact | PostToolUse | Write\|Edit | Counter at `/tmp/claude-tool-count-{sid}`. Nudges at 50, then every 25 (**unbounded**: 50, 75, 100, 125, …). Opt-out: `AUTOPILOT_SUGGEST_COMPACT=false`. Re-enabled v2.8.1 |
+ | session-handoff | SessionEnd | — | **Inert unless enabled** (`AUTOPILOT_HANDOFF_INJECT=1` or `~/.autopilot/config.json` `handoff_inject:true` — same switch as the reader). When enabled, on `/clear` or logout: auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript — ≥`AUTOPILOT_HANDOFF_MIN_USER_TURNS` (3) user turns or ≥`AUTOPILOT_HANDOFF_MIN_TOOL_CALLS` (12) tool calls) and, if so, writes a machine handoff snapshot to `~/.autopilot/handoff/<repo-hash>.md` (NEVER into the repo — `docs/HANDOFF.md` is untouched) via temp→atomic-rename. Fail-open; parses the transcript itself (no LLM). The **reader/inject** half (default-off gate) lives in `session-start.js`: injects the snapshot once (atomic consume-once, <10k cap) and suppresses the thin intent hint. Wired in `hooks.json` (not Tier B) so `${CLAUDE_PLUGIN_ROOT}` resolves |
+ | version-drift-check | SessionStart | startup\|clear\|compact | **Dev-clone only** — warns if your autopilot clone is behind its git upstream (no network — uses last fetch). Silent no-op for release / marketplace / non-git installs. Wired in `hooks.json` (not Tier B) so `${CLAUDE_PLUGIN_ROOT}` resolves |
+-| foreman-guard | PreToolUse | Bash\|Monitor | **v2.35.15.** Ironlaw #6 in the loop for l4/l5/l6 SUBAGENTS only (session-mode marker + payload `agent_id`; depth-0 and plain sessions are untouched): Bash cap 40 per agent (41st denied with the handoff directive — 一刀一命), foreground polling denied (`true`/`:` spin, `sleep N`, `while … sleep/grep`, `pgrep`/`ps -p`/`kill -0`, reading `/tasks/*.output`), `Monitor` denied. `run_in_background` waits are allowed. Modes `foreman_guard.mode` block\|warn\|off, `foreman_guard.bash_cap`; env `AUTOPILOT_FOREMAN_GUARD_MODE` / `_BASH_CAP`. State `~/.autopilot/foreman-guard/`. Fail-open. |
++| foreman-guard | PreToolUse | Bash\|Monitor | **v2.35.15.** Ironlaw #6 in the loop for l4/l5/l6 SUBAGENTS only (session-mode marker + payload `agent_id`; depth-0 and plain sessions are untouched): Bash cap 40 per agent (41st denied with the handoff directive — 一刀一命), foreground polling denied (`true`/`:` spin, `sleep N`, `while … sleep/grep`, `pgrep`/`ps -p`/`kill -0`, reading `/tasks/*.output`), `Monitor` denied. `run_in_background` waits are allowed. Modes `foreman_guard.mode` block\|warn\|off, `foreman_guard.bash_cap`; env `AUTOPILOT_FOREMAN_GUARD_MODE` / `_BASH_CAP`. State `~/.autopilot/foreman-guard/`. Fail-open. **v2.36.1**: also denies the next Bash when the subagent status line's `tasks[]` row for THIS agent (`tasks[].id === agent_id`) shows `tokenCount` at or past its own T2 (same `context_budget.{t1,t2}` knobs as `context-budget`, scaled to the row's `contextWindowSize`); 0/≥2 matching rows or a stale (>120s) tasks file ⇒ pass + a stderr diagnostic, never a gate. |
+ | cost-fuse | PreToolUse | Bash\|Edit\|Write\|MultiEdit\|NotebookEdit | **v2.35.16.** Brain-tier (fable/opus) daily spend fuse; sums `costs.jsonl` by tier per UTC day; over threshold (`daily_usd_brain`, default $150) → warn (default) or block (never default); read-only Bash always allowed; modes `cost_fuse.mode`, `.daily_usd_brain`, `.tiers`; env `AUTOPILOT_COST_FUSE_MODE` / `_DAILY_USD`; state `~/.autopilot/cost-fuse/`; fail-open; never `ask`. |
+-| context-budget | PostToolUse | .* | **Default-on since v2.35.15** (opt-out `context_budget.mode: off` / `AUTOPILOT_CONTEXT_BUDGET_MODE=off`). Reads REAL context size (last assistant `usage` in transcript, backward scan 64KB→5MB). T1 (100k) stderr nudge; T2 (150k) escalated advisory via exit 2 (model-visible handoff directive). Thresholds/mode: `context_budget` in `~/.autopilot/config.json` or `AUTOPILOT_CONTEXT_BUDGET_T1/T2/MODE` |
++| context-budget | PostToolUse | .* | **Default-on since v2.35.15** (opt-out `context_budget.mode: off` / `AUTOPILOT_CONTEXT_BUDGET_MODE=off`). Reads REAL context size (last assistant `usage` in transcript, backward scan 64KB→5MB). T1 (100k) stderr nudge; T2 (150k) escalated advisory via exit 2 (model-visible handoff directive). Thresholds/mode: `context_budget` in `~/.autopilot/config.json` or `AUTOPILOT_CONTEXT_BUDGET_T1/T2/MODE`. **v2.36.1**: when the statusline live file (`scripts/lib/live-state-dir.js`, `<live-dir>/context/<sid>.json`) is present, schema-valid, and fresh (≤120s), the REAL `context_window_size` is used instead of the inference ratchet (message says "(statusline)"); state dir moves under the resolved live-dir base (`<base>/context-budget/`, `AUTOPILOT_CONTEXT_BUDGET_DIR` still wins) — with no usable live file the behaviour, including the SSD state path, is byte-for-byte v2.36.0. |
+ | dispatch-model-guard | PreToolUse | Task\|Agent | **Default-on since v2.35.15** (opt-out `AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off` or `- mode: off`). Asks when subagent dispatch names a guarded expensive engine (default `fable`) or omits `model:` (would inherit session model). Config: `guarded_models` / `on_missing_model` / `mode` via `.claude/dispatch-guard-config.md` |
+ | cost-tracker | Stop | — | **Default-on since v2.35.15** (opt-out `AUTOPILOT_COST_TRACKER=false`); prints a stderr warning when the session's cumulative cache-read passes `cost_tracker.cache_read_warn_tokens` (env `AUTOPILOT_COST_TRACKER_CACHE_READ_WARN`; default 50M) and each doubling after. Sums per-turn `usage` from `transcript_path` → `~/.claude/metrics/costs.jsonl` (cache-aware cost; per-session cursor avoids per-turn double-count). Opt-out `AUTOPILOT_COST_TRACKER=false` |
+ 
+diff --git a/hooks/context-budget-lib.js b/hooks/context-budget-lib.js
+index 06dcb020..1d688d27 100644
+--- a/hooks/context-budget-lib.js
++++ b/hooks/context-budget-lib.js
+@@ -75,23 +75,47 @@ function scaleTiers(cfg, inferredWindow) {
+   };
+ }
+ 
+-// Extract context tokens from one parsed transcript line, or null.
+-function usageOf(line) {
++/**
++ * v2.36.1: scale tiers to a window read EXACTLY from the statusline live file (not
++ * inferred). Same proportional formula as scaleTiers, but always tags the result with
++ * `inferredWindow` (even at ratio 1) so budgetDecision always states the proportion and
++ * attributes it to the statusline — scaleTiers' ratio<=1 short-circuit exists only to
++ * avoid noise on an UNEVIDENCED base-window guess, which does not apply to a real number.
++ */
++function tiersForKnownWindow(cfg, window) {
++  const ratio = Number.isFinite(window) && window > 0 ? window / BASE_WINDOW : 1;
++  return {
++    ...cfg,
++    t1: cfg.explicitT1 ? cfg.t1 : Math.round(cfg.t1 * ratio),
++    t2: cfg.explicitT2 ? cfg.t2 : Math.round(cfg.t2 * ratio),
++    inferredWindow: window,
++  };
++}
++
++// Extract {tokens, timestamp} from one parsed transcript line, or null.
++// `timestamp` is the row's own ISO string when present, else null — used by the
++// v2.36.1 live-file comparison (contextTokens = max(transcript, live total) when the
++// transcript row is OLDER than the live file's written_at).
++function usageRowOf(line) {
+   let obj;
+   try { obj = JSON.parse(line); } catch { return null; }
+   const u = obj && obj.message && obj.message.usage;
+   if (!u || typeof u !== 'object') return null;
+   const n = (v) => (Number.isFinite(v) ? v : 0);
+   const total = n(u.input_tokens) + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens);
+-  return total > 0 ? total : null;
++  if (total <= 0) return null;
++  return { tokens: total, timestamp: typeof obj.timestamp === 'string' ? obj.timestamp : null };
+ }
+ 
+-/**
+- * Read the current context-token size from a transcript file.
+- * Returns a positive number, or null (missing file / no usage row within cap /
+- * any error) — callers treat null as "no signal", never as zero.
+- */
+-function readContextTokens(tpath, opts = {}) {
++// Back-compat: tokens-only view of usageRowOf (pre-v2.36.1 callers/tests).
++function usageOf(line) {
++  const row = usageRowOf(line);
++  return row ? row.tokens : null;
++}
++
++// Backward scan shared by readContextTokens and readContextUsage: grow a tail window
++// (×4, capped) until the last usage row is found, or the cap is hit ⇒ null.
++function scanLastUsageRow(tpath, opts = {}) {
+   const capBytes = opts.capBytes || CAP_BYTES;
+   try {
+     const size = fs.statSync(tpath).size;
+@@ -108,8 +132,8 @@ function readContextTokens(tpath, opts = {}) {
+       for (let i = usable.length - 1; i >= 0; i--) {
+         const t = usable[i].trim();
+         if (!t) continue;
+-        const tokens = usageOf(t);
+-        if (tokens !== null) return tokens;
++        const row = usageRowOf(t);
++        if (row !== null) return row;
+       }
+       if (start === 0 || window >= capBytes) return null; // cap hit / whole file scanned
+       window = Math.min(window * 4, capBytes);
+@@ -119,6 +143,25 @@ function readContextTokens(tpath, opts = {}) {
+   }
+ }
+ 
++/**
++ * Read the current context-token size from a transcript file.
++ * Returns a positive number, or null (missing file / no usage row within cap /
++ * any error) — callers treat null as "no signal", never as zero.
++ */
++function readContextTokens(tpath, opts = {}) {
++  const row = scanLastUsageRow(tpath, opts);
++  return row ? row.tokens : null;
++}
++
++/**
++ * Read the current context-token size AND the timestamp of the transcript row it came
++ * from. Returns {tokens, timestamp} (timestamp may be null if the row carried none), or
++ * null under the same conditions as readContextTokens.
++ */
++function readContextUsage(tpath, opts = {}) {
++  return scanLastUsageRow(tpath, opts);
++}
++
+ /**
+  * Pure tier decision. state: {contextTokens, calls, lastT1Call, lastT2Call};
+  * cfg: {t1, t2}. Returns {tier: null|'t1'|'t2', message: string|null}.
+@@ -131,8 +174,13 @@ function budgetDecision(state, cfg) {
+   // reads as "nearly full" on a 200K window and as "barely started" on 1M; the
+   // hook's own reader cannot disambiguate without this. (2026-07-20 finding.)
+   const win = Number.isFinite(cfg.inferredWindow) ? cfg.inferredWindow : null;
++  // v2.36.1: when the window came from the statusline live file (exact, not inferred),
++  // say so — "inferred from observed usage" would be a false claim about a real number.
++  const windowClause = cfg.windowSource === 'statusline'
++    ? '(statusline)'
++    : 'inferred from observed usage';
+   const pct = win ? ` = ${Math.round((contextTokens / win) * 100)}% of the ` +
+-    `~${Math.round(win / 1000)}k window inferred from observed usage` : '';
++    `~${Math.round(win / 1000)}k window ${windowClause}` : '';
+   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {
+     // lastT2Call 0 = never fired ⇒ always eligible (first crossing must not be throttled)
+     if (lastT2Call > 0 && calls - lastT2Call < T2_THROTTLE_CALLS) return { tier: null, message: null };
+@@ -161,10 +209,12 @@ function budgetDecision(state, cfg) {
+ 
+ module.exports = {
+   readContextTokens,
++  readContextUsage,
+   budgetDecision,
+   usageOf,
+   inferWindowTokens,
+   scaleTiers,
++  tiersForKnownWindow,
+   START_WINDOW_BYTES,
+   CAP_BYTES,
+   T1_THROTTLE_CALLS,
+diff --git a/hooks/context-budget.js b/hooks/context-budget.js
+index f9746ebd..020ffb93 100644
+--- a/hooks/context-budget.js
++++ b/hooks/context-budget.js
+@@ -28,6 +28,14 @@
+  * AUTOPILOT_HOOK_CONTEXT_BUDGET=1.
+  * Fail-open: any error ⇒ exit 0. Separate state/script from
+  * orchestrator-edit-gate (single-crash isolation, panel finding).
++ *
++ * v2.36.1 (P2): the statusline live file (scripts/lib/live-state-dir.js) publishes the
++ * REAL context window and total_input_tokens, so when it is present and fresh the window
++ * is READ, not inferred — inferWindowTokens/scaleTiers-by-ratchet stay as the fallback for
++ * when no usable live file exists (absent, stale >120s, wrong schema_version, malformed).
++ * State dir also moves under the resolved live base (`<base>/context-budget/`) unless
++ * AUTOPILOT_CONTEXT_BUDGET_DIR is set; with no RAM-backed base, resolveLiveDir()'s own SSD
++ * fallback IS ~/.autopilot, so the no-live-file path is byte-for-byte v2.36.0.
+  */
+ 
+ 'use strict';
+@@ -36,19 +44,20 @@ const fs = require('fs');
+ const os = require('os');
+ const path = require('path');
+ const {
+-  readContextTokens, budgetDecision, inferWindowTokens, scaleTiers,
++  readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow,
+ } = require('./context-budget-lib.js');
++const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
+ 
+ const PARSE_EVERY_BELOW_T1 = 5;
+ 
+-function getSessionId() {
+-  const raw = process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || process.cwd();
+-  return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+-}
+-
+-function stateDir() {
+-  return process.env.AUTOPILOT_CONTEXT_BUDGET_DIR
+-    || path.join(os.homedir(), '.autopilot', 'context-budget');
++// Writer/reader parity (plan §2.5): session_id from the hook payload first, env second,
++// cwd last — the SAME sanitiser used by every live-file consumer.
++function getSessionId(payload) {
++  const raw = (payload && typeof payload.session_id === 'string' && payload.session_id)
++    || process.env.CLAUDE_CODE_SESSION_ID
++    || process.env.CLAUDE_SESSION_ID
++    || process.cwd();
++  return sanitizeSessionId(raw);
+ }
+ 
+ function loadConfig() {
+@@ -107,38 +116,92 @@ function saveState(file, st) {
+     const tpath = payload && payload.transcript_path;
+     if (!tpath || typeof tpath !== 'string') process.exit(0);
+ 
+-    fs.mkdirSync(stateDir(), { recursive: true });
+-    const stateFile = path.join(stateDir(), `${getSessionId()}.json`);
++    const sid = getSessionId(payload);
++    const live = resolveLiveDir();
++    const stDir = process.env.AUTOPILOT_CONTEXT_BUDGET_DIR || path.join(live.base, 'context-budget');
++    fs.mkdirSync(stDir, { recursive: true });
++    const stateFile = path.join(stDir, `${sid}.json`);
+     const st = loadState(stateFile);
+     st.calls += 1;
+ 
+-    // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
+-    // window implied by the largest context this session has actually reached.
+-    // Applied to the mustParse gate too, so the cheap path uses the same tiers.
+-    const effCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
++    const liveMain = readLive(live.base, sid, { kind: 'main' });
++    const liveWindow = liveMain && liveMain.context_window
++      && Number.isFinite(liveMain.context_window.context_window_size)
++      ? liveMain.context_window.context_window_size : null;
++    const liveTotal = liveMain && liveMain.context_window
++      && Number.isFinite(liveMain.context_window.total_input_tokens)
++      ? liveMain.context_window.total_input_tokens : null;
++    const liveUsable = liveWindow !== null && liveTotal !== null;
++
++    if (liveUsable) {
++      // v2.36.1 (P2): the live file gives the EXACT window — skip inferWindowTokens.
++      // contextTokens defaults to the live total (free — the live file is already
++      // parsed); only on the periodic parse cadence do we also read the transcript,
++      // to guard against a live tick that lags a transcript row that already grew
++      // past it (contextTokens = max(transcript, live total) when the transcript
++      // row predates the live file's own written_at; otherwise the transcript row
++      // is at least as fresh, so it is trusted directly).
++      const liveCfg = tiersForKnownWindow(cfg, liveWindow);
++      const mustParse = st.lastContext >= liveCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
++      let contextTokens = liveTotal;
++      if (mustParse) {
++        const usage = readContextUsage(tpath);
++        if (usage !== null) {
++          const writtenMs = Date.parse(liveMain.written_at);
++          const rowMs = usage.timestamp ? Date.parse(usage.timestamp) : NaN;
++          if (Number.isFinite(writtenMs) && Number.isFinite(rowMs) && rowMs < writtenMs) {
++            contextTokens = Math.max(usage.tokens, liveTotal);
++          } else if (Number.isFinite(rowMs)) {
++            contextTokens = usage.tokens; // transcript is at least as fresh as the live tick
++          }
++        }
++      }
++      st.lastContext = contextTokens;
++      st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, contextTokens);
++      const d = budgetDecision(
++        { contextTokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
++        { ...liveCfg, windowSource: 'statusline' },
++      );
++      if (d.tier === 't1') {
++        st.lastT1Call = st.calls;
++        process.stderr.write(`${d.message}\n`);
++      } else if (d.tier === 't2') {
++        st.lastT2Call = st.calls;
++        process.stderr.write(`${d.message}\n`);
++        exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
++      }
++    } else {
++      // Unchanged inference path: no usable live file (absent, stale, wrong
++      // schema_version, or malformed) ⇒ v2.36.0 behaviour, byte-for-byte.
++      //
++      // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
++      // window implied by the largest context this session has actually reached.
++      // Applied to the mustParse gate too, so the cheap path uses the same tiers.
++      const effCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+ 
+-    // Cheap path below T1: parse only every Nth call. Once T1 territory has
+-    // been seen, parse every call (a burst can overshoot fast).
+-    const mustParse = st.lastContext >= effCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
+-    if (mustParse) {
+-      const tokens = readContextTokens(tpath);
+-      if (tokens !== null) {
+-        st.lastContext = tokens;
+-        // Ratchet: observing N tokens proves the window is > N. Monotonic, so
+-        // auto-compaction (which lowers current context) cannot walk it back.
+-        st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
+-        const liveCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+-        const d = budgetDecision(
+-          { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
+-          liveCfg,
+-        );
+-        if (d.tier === 't1') {
+-          st.lastT1Call = st.calls;
+-          process.stderr.write(`${d.message}\n`);
+-        } else if (d.tier === 't2') {
+-          st.lastT2Call = st.calls;
+-          process.stderr.write(`${d.message}\n`);
+-          exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
++      // Cheap path below T1: parse only every Nth call. Once T1 territory has
++      // been seen, parse every call (a burst can overshoot fast).
++      const mustParse = st.lastContext >= effCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
++      if (mustParse) {
++        const tokens = readContextTokens(tpath);
++        if (tokens !== null) {
++          st.lastContext = tokens;
++          // Ratchet: observing N tokens proves the window is > N. Monotonic, so
++          // auto-compaction (which lowers current context) cannot walk it back.
++          st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
++          const liveCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
++          const d = budgetDecision(
++            { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
++            liveCfg,
++          );
++          if (d.tier === 't1') {
++            st.lastT1Call = st.calls;
++            process.stderr.write(`${d.message}\n`);
++          } else if (d.tier === 't2') {
++            st.lastT2Call = st.calls;
++            process.stderr.write(`${d.message}\n`);
++            exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
++          }
+         }
+       }
+     }
+diff --git a/hooks/context-budget.test.js b/hooks/context-budget.test.js
+index e20ed049..eb60c4e9 100644
+--- a/hooks/context-budget.test.js
++++ b/hooks/context-budget.test.js
+@@ -278,3 +278,179 @@ test('wrapper: 200K-window session still gets its T2 (no regression for small wi
+   assert.strictEqual(r.status, 2, '200K sessions must keep the escalated advisory');
+   assert.match(r.stderr, /Context budget T2/);
+ });
++
++// --- v2.36.1 (P2): consume the statusline live file instead of inferring the window ---
++//
++// Live-dir resolution (scripts/lib/live-state-dir.js) requires a RAM-backed directory to
++// ACCEPT AUTOPILOT_LIVE_DIR (findmnt -T must print tmpfs/ramfs — even the override is
++// checked). /dev/shm is tmpfs on every Linux host these hooks run on, so tests use a
++// mkdtemp under /dev/shm as the live-dir override rather than mocking findmnt (that mock
++// lives in scripts/lib/live-state-dir.test.js; here we exercise the real resolver).
++function shmTmp(prefix) {
++  const base = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
++  return fs.mkdtempSync(path.join(base, prefix));
++}
++
++function writeLiveMain(base, sid, obj) {
++  const dir = path.join(base, 'context');
++  fs.mkdirSync(dir, { recursive: true });
++  fs.writeFileSync(path.join(dir, `${sid}.json`), JSON.stringify(obj));
++}
++
++function liveMainFixture(overrides = {}) {
++  return {
++    schema_version: 1,
++    session_id: 'live-sid',
++    written_at: new Date().toISOString(),
++    cc_version: '2.1.260',
++    model: { id: 'claude-fable-5-1', display_name: 'Fable 5.1' },
++    context_window: {
++      context_window_size: 1_000_000,
++      used_percentage: 15.3,
++      total_input_tokens: 153_000,
++      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 152_068 },
++    },
++    ...overrides,
++  };
++}
++
++test('RED/GREEN: 1M live file at 153k ⇒ no T2 (fails on pre-P2 code, which only infers the window)', () => {
++  const liveDir = shmTmp('ctxbud-live-1m-');
++  const sid = 'live-sid-1m';
++  writeLiveMain(liveDir, sid, liveMainFixture());
++  // No transcript usage anywhere near 153k ⇒ the OLD code's inference path (which only
++  // trusts the transcript) would see nothing and stay silent for the wrong reason; give it
++  // a transcript that ALSO reports ~153k so the pre-fix code's inference-only path fires
++  // T2 (153k ≥ its 200K-calibrated 150k default) — proving this test actually discriminates
++  // pre-fix from post-fix, not just "no transcript ⇒ no signal".
++  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]); // 153k via transcript too
++  const r = runHook(
++    { transcript_path: p, session_id: sid },
++    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
++  );
++  assert.strictEqual(r.status, 0, 'a 1M-window session at 153k must not get the T2 escalated advisory');
++  assert.strictEqual(r.stderr.trim(), '', 'no nudge at 15% of a 1M window');
++});
++
++test('200K live file at 150k ⇒ T2 still fires (no regression for small windows)', () => {
++  const liveDir = shmTmp('ctxbud-live-200k-');
++  const sid = 'live-sid-200k';
++  writeLiveMain(liveDir, sid, liveMainFixture({
++    context_window: {
++      context_window_size: 200_000,
++      used_percentage: 75,
++      total_input_tokens: 150_000,
++      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 149_068 },
++    },
++  }));
++  const p = tmpFile([usageLine(1_000, 148_000, 1_000, 10)]);
++  const r = runHook(
++    { transcript_path: p, session_id: sid },
++    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
++  );
++  assert.strictEqual(r.status, 2, '200K live-window session at 150k must still get T2');
++  assert.match(r.stderr, /Context budget T2/);
++  assert.match(r.stderr, /\(statusline\)/, 'message must say the window came from the statusline, not inference');
++});
++
++test('stale live file (>120s) ⇒ falls back to the inference path', () => {
++  const liveDir = shmTmp('ctxbud-live-stale-');
++  const sid = 'live-sid-stale';
++  writeLiveMain(liveDir, sid, liveMainFixture({
++    written_at: new Date(Date.now() - 121_000).toISOString(),
++  }));
++  // 153k via transcript with NO live signal ⇒ inference treats it as a 200K session ⇒ T2 fires.
++  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
++  const r = runHook(
++    { transcript_path: p, session_id: sid },
++    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
++  );
++  assert.strictEqual(r.status, 2, 'a stale live file must not suppress the inference-path T2');
++  assert.doesNotMatch(r.stderr, /\(statusline\)/, 'a stale live file must not be attributed as the window source');
++});
++
++test('schema_version 2 ⇒ treated as absent, inference path used', () => {
++  const liveDir = shmTmp('ctxbud-live-schema2-');
++  const sid = 'live-sid-schema2';
++  writeLiveMain(liveDir, sid, liveMainFixture({ schema_version: 2 }));
++  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
++  const r = runHook(
++    { transcript_path: p, session_id: sid },
++    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
++  );
++  assert.strictEqual(r.status, 2, 'unusable schema_version ⇒ inference path fires its own T2');
++});
++
++test('missing live file ⇒ inference path used (no crash)', () => {
++  const liveDir = shmTmp('ctxbud-live-missing-');
++  const sid = 'live-sid-missing';
++  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
++  const r = runHook(
++    { transcript_path: p, session_id: sid },
++    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
++  );
++  assert.strictEqual(r.status, 2, 'no live file at all ⇒ old inference path still fires T2 for a 153k transcript');
++});
++
++test('malformed live file (invalid JSON) ⇒ inference path used', () => {
++  const liveDir = shmTmp('ctxbud-live-malformed-');
++  const sid = 'live-sid-malformed';
++  const dir = path.join(liveDir, 'context');
++  fs.mkdirSync(dir, { recursive: true });
++  fs.writeFileSync(path.join(dir, `${sid}.json`), '{{{not json');
++  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
++  const r = runHook(
++    { transcript_path: p, session_id: sid },
++    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
++  );
++  assert.strictEqual(r.status, 2, 'malformed live file ⇒ old inference path still fires T2');
++});
++
++test('state file lands under the tmpfs live base when no AUTOPILOT_CONTEXT_BUDGET_DIR override is set', () => {
++  const liveDir = shmTmp('ctxbud-live-statedir-');
++  const sid = 'live-sid-statedir';
++  const p = tmpFile([usageLine(1_000, 1_000, 100, 10)]);
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-state-nooverride-'));
++  const env = {
++    HOME: dir,
++    AUTOPILOT_HOOK_CONTEXT_BUDGET: '1',
++    AUTOPILOT_LIVE_DIR: liveDir,
++    CLAUDE_CODE_SESSION_ID: sid,
++    // Deliberately NOT setting AUTOPILOT_CONTEXT_BUDGET_DIR: the state dir must be derived
++    // from the resolved (tmpfs) live base, not the legacy ~/.autopilot path.
++  };
++  const r = runHook({ transcript_path: p, session_id: sid }, env);
++  assert.strictEqual(r.status, 0);
++  const expected = path.join(liveDir, 'context-budget', `${sid}.json`);
++  assert.ok(fs.existsSync(expected), `state file expected at ${expected}`);
++});
++
++test('absent live (no AUTOPILOT_LIVE_DIR override, no live file) ⇒ exit/stdout/stderr identical to the pre-P2 fixture', () => {
++  // The develop fixture: below-t1 silent, t1 nudge, t2 escalated-advisory — reproduced here
++  // against a repo build with NO live file present anywhere the resolver could find one for
++  // this fresh, never-used session id. This is the compatibility contract (plan §2.6): with
++  // no usable live file, behaviour is byte-for-byte v2.36.0.
++  const belowP = tmpFile([usageLine(10_000, 5_000, 100, 10)]);
++  const belowR = runHook({ transcript_path: belowP }, freshEnv());
++  assert.strictEqual(belowR.status, 0);
++  assert.strictEqual(belowR.stderr.trim(), '');
++
++  const t1P = tmpFile([usageLine(50_000, 60_000, 1_000, 10)]);
++  const t1R = runHook({ transcript_path: t1P }, freshEnv());
++  assert.strictEqual(t1R.status, 0);
++  assert.match(t1R.stderr, /Context budget T1/);
++  assert.doesNotMatch(t1R.stderr, /\(statusline\)/, 'no live file ⇒ never attributed to the statusline');
++
++  const t2P = tmpFile([usageLine(80_000, 80_000, 1_000, 10)]);
++  const t2R = runHook({ transcript_path: t2P }, freshEnv());
++  assert.strictEqual(t2R.status, 2);
++  assert.match(t2R.stderr, /Context budget T2/);
++  assert.match(t2R.stderr, /handoff/i);
++  assert.doesNotMatch(t2R.stderr, /\(statusline\)/, 'no live file ⇒ never attributed to the statusline');
++
++  // 216k on a genuinely 1M window (via the RATCHET, not a live file) must still say
++  // "inferred from observed usage" — that phrasing is reserved for the inference path.
++  const bigP = tmpFile([usageLine(6_000, 200_000, 10_000, 10)]);
++  const bigR = runHook({ transcript_path: bigP }, freshEnv());
++  assert.strictEqual(bigR.status, 0, 'must not exit 2 on a 1M-window session (ratchet inference)');
++});
+diff --git a/hooks/foreman-guard.js b/hooks/foreman-guard.js
+index 3912fb39..5563c6f4 100755
+--- a/hooks/foreman-guard.js
++++ b/hooks/foreman-guard.js
+@@ -24,6 +24,14 @@
+  *   - Polling: a FOREGROUND Bash whose command is a wait loop or a liveness poll is
+  *     denied. `run_in_background: true` is the sanctioned wait (one notification).
+  *   - Monitor from a subagent is denied (ironlaw #6: foremen must not hold a Monitor).
++ *   - Context ceiling (v2.36.1, P2): the subagent status line publishes THIS agent's own
++ *     `tasks[].tokenCount`/`contextWindowSize` (matched by `tasks[].id === agent_id` — the
++ *     P0 spike ruling, `docs/projects/2026-09-05-statusline-live-context-feed/ledger/p0/`).
++ *     `tokenCount ≥ t2(contextWindowSize)` (same context_budget.{t1,t2} config/env as
++ *     context-budget.js, scaled to THIS row's window) denies the next Bash with the
++ *     handoff directive. 0 or ≥2 matching rows ⇒ ambiguous ⇒ never a gate — pass, plus one
++ *     stderr diagnostic naming the count. A stale (>120s) or absent tasks file is silence,
++ *     never a gate pass.
+  *
+  * ACCOUNTING: every Bash attempt (allowed OR denied) is reserved against the cap under an
+  * exclusive-create lock, so a denied poll still spends a call and parallel invocations
+@@ -40,6 +48,8 @@ const fs = require('fs');
+ const os = require('os');
+ const path = require('path');
+ const { readMarker } = require('../scripts/session-mode.js');
++const { tiersForKnownWindow } = require('./context-budget-lib.js');
++const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
+ 
+ const DEFAULT_BASH_CAP = 40;
+ const FOREMAN_LEVELS = new Set(['l4', 'l5', 'l6']);
+@@ -128,6 +138,66 @@ function loadConfig() {
+   return cfg;
+ }
+ 
++// Same knob context-budget.js reads (context_budget.{t1,t2} / AUTOPILOT_CONTEXT_BUDGET_T1/T2)
++// — the context-ceiling rule below is the SAME T2 tier concept applied to a subagent's own
++// row instead of depth-0's transcript. Deliberately duplicated (not required) rather than
++// imported from hooks/context-budget.js: single-crash isolation between the two hooks
++// (header note, both files).
++function loadContextBudgetTiers() {
++  const cfg = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
++  try {
++    const file = path.join(os.homedir(), '.autopilot', 'config.json');
++    const user = JSON.parse(fs.readFileSync(file, 'utf8'));
++    const cb = user && user.context_budget;
++    if (cb && typeof cb === 'object') {
++      if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
++      if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
++    }
++  } catch { /* absent/corrupt config ⇒ defaults */ }
++  const envT1 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T1);
++  const envT2 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T2);
++  if (Number.isFinite(envT1) && envT1 > 0) { cfg.t1 = envT1; cfg.explicitT1 = true; }
++  if (Number.isFinite(envT2) && envT2 > 0) { cfg.t2 = envT2; cfg.explicitT2 = true; }
++  return cfg;
++}
++
++// v2.36.1 (P2): read THIS agent's row off the subagent status line's tasks file and decide
++// whether its own context has crossed T2. Returns {} (no signal ⇒ never a gate — silence is
++// never a gate pass) unless:
++//   - {diagnostic} — 0 or ≥2 rows matched `agent_id` (ambiguous; P0 ruling: fail-open + name
++//     the count), or
++//   - {deny, reason} — exactly one row matched and its tokenCount ≥ t2(its own contextWindowSize).
++function checkContextCeiling(payload) {
++  let live;
++  try { live = resolveLiveDir(); } catch { return {}; }
++  const sid = sanitizeSessionId(payload.session_id || process.env.CLAUDE_CODE_SESSION_ID
++    || process.env.CLAUDE_SESSION_ID || process.cwd());
++  const tasksFile = readLive(live.base, sid, { kind: 'tasks' });
++  if (!tasksFile || !Array.isArray(tasksFile.tasks)) return {}; // absent/stale ⇒ no signal
++  const rows = tasksFile.tasks.filter((t) => t && t.id === payload.agent_id);
++  if (rows.length !== 1) {
++    return {
++      diagnostic: `foreman-guard: ${rows.length} tasks[] row(s) matched agent_id "${payload.agent_id}" `
++        + '(expected exactly 1) — context-ceiling check skipped this call (fail-open, never a gate on ambiguity).',
++    };
++  }
++  const row = rows[0];
++  const w = Number.isFinite(row.contextWindowSize) ? row.contextWindowSize : null;
++  const tokenCount = Number.isFinite(row.tokenCount) ? row.tokenCount : null;
++  if (w === null || tokenCount === null) return {};
++  const tiers = tiersForKnownWindow(loadContextBudgetTiers(), w);
++  if (tokenCount >= tiers.t2) {
++    return {
++      deny: true,
++      reason: `foreman-guard: this agent's own context is ${tokenCount} tokens, at or past T2 `
++        + `(${tiers.t2} of its ${w}-token window, subagent status line). Write your handoff `
++        + '(autopilot:handoff) NOW and end the turn (一刀一命); depth-0 spawns the next foreman/worker '
++        + 'for the remaining work.',
++    };
++  }
++  return {};
++}
++
+ function stateDir() {
+   return process.env.AUTOPILOT_FOREMAN_GUARD_DIR || path.join(os.homedir(), '.autopilot', 'foreman-guard');
+ }
+@@ -182,34 +252,42 @@ function emit(decision, reason) {
+   })}\n`);
+ }
+ 
+-function decide(payload, cfg, st) {
++function decide(payload, cfg, st, ceiling = {}) {
+   const tool = payload.tool_name || '';
+   const input = payload.tool_input || {};
+   if (tool === 'Monitor') {
+     return { deny: true, rule: 'monitor', reason:
+       'foreman-guard: Monitor is depth-0 only (ironlaw #6). A foreman waits with run_in_background + a paired dead-man `sleep <deadline>; echo WAKE`, then ENDS ITS TURN.' };
+   }
+-  if (tool !== 'Bash') return { deny: false };
++  if (tool !== 'Bash') return { deny: false, diagnostic: ceiling.diagnostic };
+   const cmd = typeof input.command === 'string' ? input.command : '';
+   const background = isAffirmative(input.run_in_background);
+   // Every Bash ATTEMPT is reserved against the cap before any rule runs — a denied
+   // poll still spent a model call, and a foreman that retries a denial must not get
+   // unlimited retries (review round 1).
+   const n = st.bash_calls + 1;
++  // v2.36.1 (P2): context-ceiling deny (this agent's OWN tokenCount ≥ its own T2, per the
++  // subagent status line) runs before the cap/poll rules — a denied ceiling attempt still
++  // spends a call, same accounting as every other rule here.
++  if (ceiling.deny) {
++    return { deny: true, rule: 'context-ceiling', count: n, reason: ceiling.reason, diagnostic: ceiling.diagnostic };
++  }
+   if (n > cfg.bashCap) {
+     return { deny: true, rule: 'bash-cap', count: n, reason:
+-      `foreman-guard: Bash call ${n} exceeds the foreman cap of ${cfg.bashCap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.` };
++      `foreman-guard: Bash call ${n} exceeds the foreman cap of ${cfg.bashCap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`,
++      diagnostic: ceiling.diagnostic };
+   }
+   if (!background) {
+     const text = executableText(cmd);
+     for (const r of POLL_RULES) {
+       if (r.re.test(text)) {
+         return { deny: true, rule: r.id, count: n, reason:
+-          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cfg.bashCap} spent.)` };
++          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cfg.bashCap} spent.)`,
++          diagnostic: ceiling.diagnostic };
+       }
+     }
+   }
+-  return { deny: false, count: n };
++  return { deny: false, count: n, diagnostic: ceiling.diagnostic };
+ }
+ 
+ (function main() {
+@@ -225,16 +303,21 @@ function decide(payload, cfg, st) {
+     if (!marker || !FOREMAN_LEVELS.has(marker.level)) process.exit(0); // not an orchestrated session
+     const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
+       || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
++    // v2.36.1 (P2): resolve this agent's own context-ceiling verdict BEFORE taking the
++    // state lock (it does its own I/O — a live-file read and a findmnt shell-out — that
++    // has no business holding the per-agent lock).
++    const ceiling = payload.tool_name === 'Bash' ? checkContextCeiling(payload) : {};
+     const file = stateFile(sessionId, payload.agent_id);
+     fs.mkdirSync(path.dirname(file), { recursive: true });
+     const d = withLock(file, () => {
+       const st = loadState(file);
+-      const r = decide(payload, cfg, st);
++      const r = decide(payload, cfg, st, ceiling);
+       if (Number.isInteger(r.count)) st.bash_calls = r.count; // every Bash attempt is counted
+       if (r.deny) { st.denied += 1; st.last_denied_rule = r.rule; }
+       saveState(file, st);
+       return r;
+     });
++    if (d.diagnostic) process.stderr.write(`${d.diagnostic}\n`); // ambiguous rows: never a gate
+     if (!d.deny) process.exit(0);
+     if (cfg.mode === 'warn') {
+       process.stderr.write(`${d.reason} [mode=warn: allowed]\n`);
+diff --git a/hooks/tests/fixtures/session-id-vectors.json b/hooks/tests/fixtures/session-id-vectors.json
+new file mode 100644
+index 00000000..35f3704a
+--- /dev/null
++++ b/hooks/tests/fixtures/session-id-vectors.json
+@@ -0,0 +1,8 @@
++[
++  { "input": "93196c52-25cb-47ca-821c-cec391832eed", "expected": "93196c52-25cb-47ca-821c-cec391832eed" },
++  { "input": "a/b:c d", "expected": "a_b_c_d" },
++  { "input": "會議123", "expected": "__123" },
++  { "input": "😀🎉session", "expected": "__session" },
++  { "input": "", "expected": "unknown" },
++  { "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
++]
+diff --git a/hooks/tests/foreman-guard.test.sh b/hooks/tests/foreman-guard.test.sh
+index 053c843b..ace7d2b2 100755
+--- a/hooks/tests/foreman-guard.test.sh
++++ b/hooks/tests/foreman-guard.test.sh
+@@ -167,4 +167,65 @@ run_hook foreman-guard.js '{not json'
+ assert_eq 0 "$__RUN_EXIT" "garbage payload exit 0"
+ assert_eq "" "$__RUN_STDOUT" "garbage payload silent"
+ 
++# ── 8. context-ceiling (v2.36.1 P2): this agent's own tasks[] row vs its own T2 ────
++# AUTOPILOT_LIVE_DIR must be RAM-backed (resolveLiveDir checks findmnt even for the
++# override) — /dev/shm is tmpfs on every Linux host these hooks run on.
++LIVE_DIR="$(mktemp -d /dev/shm/fg-guard-live-XXXXXX 2>/dev/null || mktemp -d "$TEST_TMP/live-XXXXXX")"
++mkdir -p "$LIVE_DIR/context"
++export AUTOPILOT_LIVE_DIR="$LIVE_DIR"
++
++write_tasks() { # <sid> <tasks-json-array>
++  node -e '
++    const fs = require("fs");
++    const [, sid, tasksJson, dir] = process.argv;
++    const obj = { schema_version: 1, session_id: sid, written_at: new Date().toISOString(), tasks: JSON.parse(tasksJson) };
++    fs.writeFileSync(`${dir}/context/${sid}.tasks.json`, JSON.stringify(obj));
++  ' "$1" "$2" "$LIVE_DIR"
++}
++write_stale_tasks() { # <sid> <tasks-json-array>
++  node -e '
++    const fs = require("fs");
++    const [, sid, tasksJson, dir] = process.argv;
++    const obj = { schema_version: 1, session_id: sid, written_at: new Date(Date.now() - 121000).toISOString(), tasks: JSON.parse(tasksJson) };
++    fs.writeFileSync(`${dir}/context/${sid}.tasks.json`, JSON.stringify(obj));
++  ' "$1" "$2" "$LIVE_DIR"
++}
++
++set_marker l4; reset_state
++write_tasks fg-test-session '[{"id":"agent-1","tokenCount":160000,"contextWindowSize":200000}]'
++run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
++assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "context-ceiling: 160k/200k row denied"
++assert_contains "$__RUN_STDOUT" 'handoff' "context-ceiling deny carries the handoff directive"
++
++reset_state
++write_tasks fg-test-session '[{"id":"agent-1","tokenCount":90000,"contextWindowSize":200000}]'
++run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
++assert_eq "" "$__RUN_STDOUT" "context-ceiling: 90k/200k row allowed"
++
++reset_state
++write_tasks fg-test-session '[{"id":"other-agent","tokenCount":190000,"contextWindowSize":200000}]'
++run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
++assert_eq "" "$__RUN_STDOUT" "context-ceiling: no matching row ⇒ allowed"
++assert_contains "$__RUN_STDERR" '0 tasks[] row' "context-ceiling: diagnostic names the count (0)"
++
++reset_state
++write_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000},{"id":"agent-1","tokenCount":10000,"contextWindowSize":200000}]'
++run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
++assert_eq "" "$__RUN_STDOUT" "context-ceiling: two rows same id ⇒ allowed (ambiguous, never a gate)"
++assert_contains "$__RUN_STDERR" '2 tasks[] row' "context-ceiling: diagnostic names the count (2)"
++
++reset_state
++write_stale_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000}]'
++run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
++assert_eq "" "$__RUN_STDOUT" "context-ceiling: stale (>120s) tasks file ⇒ allowed (silence is never a gate)"
++
++# no marker ⇒ the whole hook (context-ceiling included) is untouched
++clear_marker; reset_state
++write_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000}]'
++run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
++assert_eq "" "$__RUN_STDOUT" "context-ceiling: no marker ⇒ untouched even with a denyable row"
++assert_eq "" "$__RUN_STDERR" "context-ceiling: no marker ⇒ no diagnostic either"
++
++unset AUTOPILOT_LIVE_DIR
++
+ finalize_test
+diff --git a/platforms/codex/plugin/scripts/lib/live-state-dir.js b/platforms/codex/plugin/scripts/lib/live-state-dir.js
+new file mode 100644
+index 00000000..18105b2b
+--- /dev/null
++++ b/platforms/codex/plugin/scripts/lib/live-state-dir.js
+@@ -0,0 +1,220 @@
++'use strict';
++
++// scripts/lib/live-state-dir.js — Node twin of codeforge's src/live.rs (P1). Resolves the
++// RAM-backed base directory the statusline live files live under, sanitises session ids the
++// same way the writer does, reads a live file with schema/freshness checks, and classifies a
++// model id into a "family" for guarded-model comparisons.
++//
++// Contract (plan §2.5, docs/plans/2026-09-05-statusline-live-context-feed.md):
++//   - resolveLiveDir() tries, in order: $AUTOPILOT_LIVE_DIR (override) → $XDG_RUNTIME_DIR/autopilot
++//     (xdg) → /dev/shm/autopilot-<uid> (shm) → /tmp/autopilot-<uid> (tmp). A candidate is accepted
++//     ONLY if `findmnt -T <dir> -o FSTYPE -n` prints tmpfs or ramfs; if findmnt is not on PATH,
++//     fall back to a longest-prefix match against /proc/mounts; if neither settles it the
++//     candidate is rejected. A rejected override is skipped, not fatal — later candidates are
++//     still tried. If every candidate is rejected, the base is ~/.autopilot (SSD) and exactly one
++//     warning line is printed. resolveLiveDir() returns a BASE only — every consumer appends its
++//     own purpose segment (`context/`, `context-budget/`, …).
++//   - sanitizeSessionId(s): replace every Unicode scalar not in [A-Za-z0-9_-] with one `_` (per
++//     scalar — a multi-byte character yields exactly one `_`), keep the first 64 scalars, empty
++//     input ⇒ 'unknown'. This is the writer/reader contract for the live-file name.
++//   - readLive(base, sid, {kind, nowMs, maxAgeMs}): returns the parsed live file (main or tasks)
++//     iff it exists, parses as JSON, carries integer schema_version 1, and its `written_at` is no
++//     older than maxAgeMs (default 120000ms). Anything else ⇒ null (treated as absent — silence
++//     is never a gate pass).
++//   - modelFamily(id): lowercase id must match ^claude-([a-z]+)-[0-9]+(-[0-9]+)*(\[[a-z0-9]+\])?$;
++//     group 1 is the family, else 'unknown' (unknown never blocks a guarded-model check).
++//
++// Exit semantics: this module never calls process.exit — it is a pure library. Callers (hooks)
++// own fail-open behaviour; every function here either returns a value or returns null/'unknown'
++// on any malformed input, never throws on expected-bad input (a thrown error means a caller bug).
++//
++// Node >= 20.10, built-ins only.
++
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { execSync: nodeExecSync } = require('child_process');
++
++const RAM_FSTYPES = new Set(['tmpfs', 'ramfs']);
++const DEFAULT_MAX_AGE_MS = 120000;
++const MODEL_ID_RE = /^claude-([a-z]+)-[0-9]+(?:-[0-9]+)*(?:\[[a-z0-9]+\])?$/;
++
++function uid() {
++  try {
++    if (typeof process.getuid === 'function') return process.getuid();
++  } catch { /* platform without getuid (e.g. Windows) */ }
++  return 0;
++}
++
++// Walk up to the nearest existing ancestor — `findmnt -T` needs a real path to stat, but the
++// purpose-suffixed candidate directory (e.g. /dev/shm/autopilot-1000) may not exist yet.
++function nearestExistingAncestor(dir) {
++  let d = path.resolve(dir);
++  for (;;) {
++    if (fs.existsSync(d)) return d;
++    const parent = path.dirname(d);
++    if (parent === d) return d;
++    d = parent;
++  }
++}
++
++function commandAvailable(execSyncFn, cmd) {
++  try {
++    execSyncFn(`command -v ${cmd}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++function fstypeViaFindmnt(dir, execSyncFn) {
++  const target = nearestExistingAncestor(dir);
++  try {
++    const out = execSyncFn(`findmnt -T ${JSON.stringify(target)} -o FSTYPE -n`, {
++      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
++    });
++    const line = out.trim().split('\n')[0] || '';
++    return line.trim() || null;
++  } catch {
++    return null; // findmnt ran but the candidate is not a resolvable mount point ⇒ reject
++  }
++}
++
++// /proc/mounts fallback: longest-prefix match of the candidate path against every mountpoint.
++// Text-based on purpose (a synthetic fixture in tests need not exist on real disk).
++function fstypeViaProcMounts(dir, procMountsPath) {
++  let content;
++  try {
++    content = fs.readFileSync(procMountsPath || '/proc/mounts', 'utf8');
++  } catch {
++    return null;
++  }
++  const target = path.resolve(dir);
++  let best = null;
++  let bestLen = -1;
++  for (const line of content.split('\n')) {
++    const parts = line.split(' ');
++    if (parts.length < 3) continue;
++    const mp = parts[1].replace(/\\040/g, ' ');
++    const isPrefix = mp === '/' || target === mp || target.startsWith(mp.endsWith('/') ? mp : `${mp}/`);
++    if (isPrefix && mp.length > bestLen) {
++      bestLen = mp.length;
++      best = parts[2];
++    }
++  }
++  return best;
++}
++
++function isRamBacked(dir, ctx) {
++  const fstype = ctx.findmntAvailable
++    ? fstypeViaFindmnt(dir, ctx.execSync)
++    : fstypeViaProcMounts(dir, ctx.procMountsPath);
++  return !!fstype && RAM_FSTYPES.has(fstype);
++}
++
++/**
++ * Resolve the live-state base directory. Returns {base, source} where source is one of
++ * 'override' | 'xdg' | 'shm' | 'tmp' | 'ssd-fallback'.
++ *
++ * @param {object} [opts]
++ * @param {NodeJS.ProcessEnv} [opts.env] — defaults to process.env
++ * @param {Function} [opts.execSync] — defaults to child_process.execSync (injectable for tests)
++ * @param {string} [opts.procMountsPath] — defaults to /proc/mounts (injectable for tests)
++ * @param {Function} [opts.warn] — defaults to a single process.stderr.write call
++ */
++function resolveLiveDir(opts = {}) {
++  const env = opts.env || process.env;
++  const execSync = opts.execSync || nodeExecSync;
++  const procMountsPath = opts.procMountsPath;
++  const warn = typeof opts.warn === 'function'
++    ? opts.warn
++    : (msg) => { try { process.stderr.write(`${msg}\n`); } catch { /* ignore */ } };
++
++  const ctx = { execSync, procMountsPath, findmntAvailable: commandAvailable(execSync, 'findmnt') };
++
++  const candidates = [];
++  if (env.AUTOPILOT_LIVE_DIR) candidates.push({ dir: env.AUTOPILOT_LIVE_DIR, source: 'override' });
++  if (env.XDG_RUNTIME_DIR) candidates.push({ dir: path.join(env.XDG_RUNTIME_DIR, 'autopilot'), source: 'xdg' });
++  candidates.push({ dir: `/dev/shm/autopilot-${uid()}`, source: 'shm' });
++  candidates.push({ dir: `/tmp/autopilot-${uid()}`, source: 'tmp' });
++
++  for (const c of candidates) {
++    if (isRamBacked(c.dir, ctx)) return { base: c.dir, source: c.source };
++  }
++
++  // Every candidate rejected (a rejected override is skipped, not fatal — we simply fall
++  // through to here like any other all-rejected run). Never assume a path is RAM.
++  warn('autopilot: no RAM-backed live-state directory found (findmnt/proc-mounts rejected every '
++    + 'candidate); falling back to ~/.autopilot (SSD). Set AUTOPILOT_LIVE_DIR to override.');
++  return { base: path.join(os.homedir(), '.autopilot'), source: 'ssd-fallback' };
++}
++
++/**
++ * Sanitise a raw session id the same way the writer (codeforge src/live.rs) does: replace
++ * every Unicode scalar value not in [A-Za-z0-9_-] with one '_', keep the first 64 scalars,
++ * empty input ⇒ 'unknown'.
++ */
++function sanitizeSessionId(raw) {
++  const str = typeof raw === 'string' ? raw : '';
++  if (str.length === 0) return 'unknown';
++  const scalars = Array.from(str); // one element per Unicode code point (handles surrogate pairs)
++  const kept = scalars.slice(0, 64).map((ch) => (/^[A-Za-z0-9_-]$/.test(ch) ? ch : '_')).join('');
++  return kept.length > 0 ? kept : 'unknown';
++}
++
++/**
++ * Read one live file (main or tasks) for a session, honouring the schema-version and
++ * freshness contract. Returns the parsed object, or null if absent/stale/malformed/wrong
++ * schema — callers treat null as "no live signal", falling back to their own inference path.
++ *
++ * @param {string} base — the resolved live-state BASE (from resolveLiveDir().base)
++ * @param {string} sid — sanitised session id
++ * @param {object} [opts]
++ * @param {'main'|'tasks'} [opts.kind='main']
++ * @param {number} [opts.nowMs] — defaults to Date.now()
++ * @param {number} [opts.maxAgeMs=120000]
++ */
++function readLive(base, sid, opts = {}) {
++  const kind = opts.kind === 'tasks' ? 'tasks' : 'main';
++  const nowMs = Number.isFinite(opts.nowMs) ? opts.nowMs : Date.now();
++  const maxAgeMs = Number.isFinite(opts.maxAgeMs) ? opts.maxAgeMs : DEFAULT_MAX_AGE_MS;
++  const fileName = kind === 'tasks' ? `${sid}.tasks.json` : `${sid}.json`;
++  const file = path.join(base, 'context', fileName);
++
++  let raw;
++  try {
++    raw = fs.readFileSync(file, 'utf8');
++  } catch {
++    return null; // absent
++  }
++  let obj;
++  try {
++    obj = JSON.parse(raw);
++  } catch {
++    return null; // malformed
++  }
++  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
++  if (!Number.isInteger(obj.schema_version) || obj.schema_version !== 1) return null;
++  const writtenMs = typeof obj.written_at === 'string' ? Date.parse(obj.written_at) : NaN;
++  if (!Number.isFinite(writtenMs)) return null;
++  if (nowMs - writtenMs > maxAgeMs) return null; // stale ⇒ absent, silence is never a gate pass
++  return obj;
++}
++
++/**
++ * Classify a model id into its family for guarded_models comparisons. Lowercases first;
++ * anything not matching the grammar ⇒ 'unknown' (never blocks).
++ */
++function modelFamily(id) {
++  if (typeof id !== 'string' || id.length === 0) return 'unknown';
++  const m = MODEL_ID_RE.exec(id.toLowerCase());
++  return m ? m[1] : 'unknown';
++}
++
++module.exports = {
++  resolveLiveDir,
++  sanitizeSessionId,
++  readLive,
++  modelFamily,
++  DEFAULT_MAX_AGE_MS,
++};
+diff --git a/platforms/codex/plugin/scripts/lib/live-state-dir.test.js b/platforms/codex/plugin/scripts/lib/live-state-dir.test.js
+new file mode 100644
+index 00000000..008e8872
+--- /dev/null
++++ b/platforms/codex/plugin/scripts/lib/live-state-dir.test.js
+@@ -0,0 +1,269 @@
++/**
++ * Tests for scripts/lib/live-state-dir.js — resolveLiveDir probe order/acceptance rule,
++ * sanitizeSessionId (shared writer/reader vector file), readLive schema+freshness gate,
++ * modelFamily grammar.
++ * Run: node --test scripts/lib/live-state-dir.test.js
++ */
++
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { execSync } = require('child_process');
++
++const LIB = path.join(__dirname, 'live-state-dir.js');
++const {
++  resolveLiveDir, sanitizeSessionId, readLive, modelFamily,
++} = require(LIB);
++
++function mkTmp(prefix) {
++  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
++}
++
++// Fake `findmnt` on PATH: a tiny node script reading FSTYPE decisions from an env var
++// (JSON map of substring→fstype, plus a "*" default) so different candidate directories
++// can resolve to different filesystem types within one process invocation.
++function makeFakeFindmnt(dir, rules) {
++  const bin = path.join(dir, 'findmnt');
++  fs.writeFileSync(bin, `#!/usr/bin/env node
++const rules = ${JSON.stringify(rules)};
++const target = process.argv[3] || '';
++let out = rules['*'] || '';
++for (const k of Object.keys(rules)) {
++  if (k !== '*' && target.includes(k)) { out = rules[k]; break; }
++}
++if (!out) { process.exit(1); }
++process.stdout.write(out + '\\n');
++`);
++  fs.chmodSync(bin, 0o755);
++  return bin;
++}
++
++function execSyncWithPath(fakeBinDir) {
++  const env = { ...process.env, PATH: `${fakeBinDir}:${process.env.PATH}` };
++  return (cmd, opts) => execSync(cmd, { ...opts, env });
++}
++
++function execSyncNoFindmnt() {
++  // A PATH with no findmnt binary anywhere on it.
++  const env = { ...process.env, PATH: '/nonexistent-bin-dir' };
++  return (cmd, opts) => execSync(cmd, { ...opts, env });
++}
++
++test('resolveLiveDir: tmpfs candidate is chosen (shm)', () => {
++  const bindir = mkTmp('findmnt-tmpfs-');
++  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: {}, // no override, no XDG_RUNTIME_DIR ⇒ falls to /dev/shm/autopilot-<uid>
++    execSync: execSyncWithPath(bindir),
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'shm');
++  assert.match(r.base, /^\/dev\/shm\/autopilot-/);
++  assert.strictEqual(warnings.length, 0);
++});
++
++test('resolveLiveDir: ext4 everywhere ⇒ ~/.autopilot fallback + exactly one warning', () => {
++  const bindir = mkTmp('findmnt-ext4-');
++  makeFakeFindmnt(bindir, { '*': 'ext4' });
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: {},
++    execSync: execSyncWithPath(bindir),
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'ssd-fallback');
++  assert.strictEqual(r.base, path.join(os.homedir(), '.autopilot'));
++  assert.strictEqual(warnings.length, 1, 'exactly one warning line');
++});
++
++test('resolveLiveDir: findmnt absent ⇒ falls back to /proc/mounts fixture (longest-prefix)', () => {
++  const fixtureDir = mkTmp('procmounts-');
++  const procMounts = path.join(fixtureDir, 'mounts');
++  // Longest-prefix match: /dev/shm is tmpfs, / is ext4. A candidate under /dev/shm/... must
++  // resolve to tmpfs via the /dev/shm row, not the root row.
++  fs.writeFileSync(procMounts, [
++    'rootfs / ext4 rw 0 0',
++    'tmpfs /dev/shm tmpfs rw 0 0',
++  ].join('\n'));
++  const r = resolveLiveDir({
++    env: {},
++    execSync: execSyncNoFindmnt(),
++    procMountsPath: procMounts,
++    warn: () => {},
++  });
++  assert.strictEqual(r.source, 'shm');
++  assert.match(r.base, /^\/dev\/shm\/autopilot-/);
++});
++
++test('resolveLiveDir: findmnt absent + /proc/mounts fixture with no RAM mounts ⇒ ssd-fallback', () => {
++  const fixtureDir = mkTmp('procmounts-none-');
++  const procMounts = path.join(fixtureDir, 'mounts');
++  fs.writeFileSync(procMounts, [
++    'rootfs / ext4 rw 0 0',
++  ].join('\n'));
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: {},
++    execSync: execSyncNoFindmnt(),
++    procMountsPath: procMounts,
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'ssd-fallback');
++  assert.strictEqual(warnings.length, 1);
++});
++
++test('resolveLiveDir: rejected ext4 override + tmpfs XDG ⇒ XDG chosen (override skipped, not fatal)', () => {
++  const bindir = mkTmp('findmnt-mixed-');
++  makeFakeFindmnt(bindir, { 'override-dir': 'ext4', 'xdg-dir': 'tmpfs', '*': 'ext4' });
++  const overrideDir = mkTmp('override-dir-');
++  const xdgParent = mkTmp('xdg-dir-');
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: xdgParent },
++    execSync: execSyncWithPath(bindir),
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'xdg');
++  assert.strictEqual(r.base, path.join(xdgParent, 'autopilot'));
++  assert.strictEqual(warnings.length, 0);
++});
++
++test('resolveLiveDir: accepted tmpfs override wins over everything else', () => {
++  const bindir = mkTmp('findmnt-override-ok-');
++  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
++  const overrideDir = mkTmp('override-ok-');
++  const r = resolveLiveDir({
++    env: { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: mkTmp('xdg-unused-') },
++    execSync: execSyncWithPath(bindir),
++    warn: () => {},
++  });
++  assert.strictEqual(r.source, 'override');
++  assert.strictEqual(r.base, overrideDir);
++});
++
++// ---- sanitizeSessionId: shared vector file ----
++
++test('sanitizeSessionId: shared vector file (writer/reader contract)', () => {
++  const vectors = JSON.parse(fs.readFileSync(
++    path.join(__dirname, '..', '..', 'hooks', 'tests', 'fixtures', 'session-id-vectors.json'), 'utf8',
++  ));
++  assert.ok(vectors.length >= 6, 'vector file should carry at least the 6 spec cases');
++  for (const v of vectors) {
++    assert.strictEqual(sanitizeSessionId(v.input), v.expected, `vector ${JSON.stringify(v.input)}`);
++  }
++});
++
++test('sanitizeSessionId: non-string input ⇒ unknown', () => {
++  assert.strictEqual(sanitizeSessionId(undefined), 'unknown');
++  assert.strictEqual(sanitizeSessionId(null), 'unknown');
++  assert.strictEqual(sanitizeSessionId(42), 'unknown');
++});
++
++// ---- readLive ----
++
++function writeLiveFile(base, sid, kind, obj) {
++  const dir = path.join(base, 'context');
++  fs.mkdirSync(dir, { recursive: true });
++  const name = kind === 'tasks' ? `${sid}.tasks.json` : `${sid}.json`;
++  fs.writeFileSync(path.join(dir, name), JSON.stringify(obj));
++}
++
++test('readLive: fresh main file ⇒ returned', () => {
++  const base = mkTmp('live-fresh-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sid1', 'main', {
++    schema_version: 1, session_id: 'sid1', written_at: new Date(now - 1000).toISOString(),
++    context_window: { context_window_size: 1000000 },
++  });
++  const r = readLive(base, 'sid1', { kind: 'main', nowMs: now });
++  assert.ok(r);
++  assert.strictEqual(r.context_window.context_window_size, 1000000);
++});
++
++test('readLive: stale (>120s) ⇒ null', () => {
++  const base = mkTmp('live-stale-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sid1', 'main', {
++    schema_version: 1, written_at: new Date(now - 121000).toISOString(),
++  });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main', nowMs: now }), null);
++});
++
++test('readLive: exactly at the 120s boundary is fresh, one ms past is stale', () => {
++  const base = mkTmp('live-boundary-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sidA', 'main', { schema_version: 1, written_at: new Date(now - 120000).toISOString() });
++  writeLiveFile(base, 'sidB', 'main', { schema_version: 1, written_at: new Date(now - 120001).toISOString() });
++  assert.notStrictEqual(readLive(base, 'sidA', { kind: 'main', nowMs: now }), null);
++  assert.strictEqual(readLive(base, 'sidB', { kind: 'main', nowMs: now }), null);
++});
++
++test('readLive: schema_version 2 ⇒ null', () => {
++  const base = mkTmp('live-schema2-');
++  writeLiveFile(base, 'sid1', 'main', { schema_version: 2, written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: missing schema_version ⇒ null', () => {
++  const base = mkTmp('live-noschema-');
++  writeLiveFile(base, 'sid1', 'main', { written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: non-integer schema_version ⇒ null', () => {
++  const base = mkTmp('live-floatschema-');
++  writeLiveFile(base, 'sid1', 'main', { schema_version: 1.5, written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: missing file ⇒ null', () => {
++  const base = mkTmp('live-missing-');
++  assert.strictEqual(readLive(base, 'no-such-sid', { kind: 'main' }), null);
++});
++
++test('readLive: malformed JSON ⇒ null', () => {
++  const base = mkTmp('live-malformed-');
++  const dir = path.join(base, 'context');
++  fs.mkdirSync(dir, { recursive: true });
++  fs.writeFileSync(path.join(dir, 'sid1.json'), '{{{not json');
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: wrong session id ⇒ null (no file at that path)', () => {
++  const base = mkTmp('live-wrongsid-');
++  writeLiveFile(base, 'sid-real', 'main', { schema_version: 1, written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid-other', { kind: 'main' }), null);
++});
++
++test('readLive: tasks kind reads the .tasks.json file, independent freshness', () => {
++  const base = mkTmp('live-tasks-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sid1', 'tasks', {
++    schema_version: 1, written_at: new Date(now - 1000).toISOString(),
++    tasks: [{ id: 'a1', tokenCount: 57490, contextWindowSize: 200000 }],
++  });
++  const r = readLive(base, 'sid1', { kind: 'tasks', nowMs: now });
++  assert.ok(r);
++  assert.strictEqual(r.tasks[0].id, 'a1');
++});
++
++// ---- modelFamily ----
++
++test('modelFamily: positive vectors', () => {
++  assert.strictEqual(modelFamily('claude-fable-5-1'), 'fable');
++  assert.strictEqual(modelFamily('CLAUDE-OPUS-4-8[1m]'), 'opus');
++  assert.strictEqual(modelFamily('claude-sonnet-5'), 'sonnet');
++});
++
++test('modelFamily: negative vectors ⇒ unknown', () => {
++  assert.strictEqual(modelFamily('fable-ish'), 'unknown');
++  assert.strictEqual(modelFamily('claude-fable'), 'unknown');
++  assert.strictEqual(modelFamily('fable'), 'unknown');
++  assert.strictEqual(modelFamily(''), 'unknown');
++  assert.strictEqual(modelFamily(undefined), 'unknown');
++});
+diff --git a/scripts/lib/live-state-dir.js b/scripts/lib/live-state-dir.js
+new file mode 100644
+index 00000000..18105b2b
+--- /dev/null
++++ b/scripts/lib/live-state-dir.js
+@@ -0,0 +1,220 @@
++'use strict';
++
++// scripts/lib/live-state-dir.js — Node twin of codeforge's src/live.rs (P1). Resolves the
++// RAM-backed base directory the statusline live files live under, sanitises session ids the
++// same way the writer does, reads a live file with schema/freshness checks, and classifies a
++// model id into a "family" for guarded-model comparisons.
++//
++// Contract (plan §2.5, docs/plans/2026-09-05-statusline-live-context-feed.md):
++//   - resolveLiveDir() tries, in order: $AUTOPILOT_LIVE_DIR (override) → $XDG_RUNTIME_DIR/autopilot
++//     (xdg) → /dev/shm/autopilot-<uid> (shm) → /tmp/autopilot-<uid> (tmp). A candidate is accepted
++//     ONLY if `findmnt -T <dir> -o FSTYPE -n` prints tmpfs or ramfs; if findmnt is not on PATH,
++//     fall back to a longest-prefix match against /proc/mounts; if neither settles it the
++//     candidate is rejected. A rejected override is skipped, not fatal — later candidates are
++//     still tried. If every candidate is rejected, the base is ~/.autopilot (SSD) and exactly one
++//     warning line is printed. resolveLiveDir() returns a BASE only — every consumer appends its
++//     own purpose segment (`context/`, `context-budget/`, …).
++//   - sanitizeSessionId(s): replace every Unicode scalar not in [A-Za-z0-9_-] with one `_` (per
++//     scalar — a multi-byte character yields exactly one `_`), keep the first 64 scalars, empty
++//     input ⇒ 'unknown'. This is the writer/reader contract for the live-file name.
++//   - readLive(base, sid, {kind, nowMs, maxAgeMs}): returns the parsed live file (main or tasks)
++//     iff it exists, parses as JSON, carries integer schema_version 1, and its `written_at` is no
++//     older than maxAgeMs (default 120000ms). Anything else ⇒ null (treated as absent — silence
++//     is never a gate pass).
++//   - modelFamily(id): lowercase id must match ^claude-([a-z]+)-[0-9]+(-[0-9]+)*(\[[a-z0-9]+\])?$;
++//     group 1 is the family, else 'unknown' (unknown never blocks a guarded-model check).
++//
++// Exit semantics: this module never calls process.exit — it is a pure library. Callers (hooks)
++// own fail-open behaviour; every function here either returns a value or returns null/'unknown'
++// on any malformed input, never throws on expected-bad input (a thrown error means a caller bug).
++//
++// Node >= 20.10, built-ins only.
++
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { execSync: nodeExecSync } = require('child_process');
++
++const RAM_FSTYPES = new Set(['tmpfs', 'ramfs']);
++const DEFAULT_MAX_AGE_MS = 120000;
++const MODEL_ID_RE = /^claude-([a-z]+)-[0-9]+(?:-[0-9]+)*(?:\[[a-z0-9]+\])?$/;
++
++function uid() {
++  try {
++    if (typeof process.getuid === 'function') return process.getuid();
++  } catch { /* platform without getuid (e.g. Windows) */ }
++  return 0;
++}
++
++// Walk up to the nearest existing ancestor — `findmnt -T` needs a real path to stat, but the
++// purpose-suffixed candidate directory (e.g. /dev/shm/autopilot-1000) may not exist yet.
++function nearestExistingAncestor(dir) {
++  let d = path.resolve(dir);
++  for (;;) {
++    if (fs.existsSync(d)) return d;
++    const parent = path.dirname(d);
++    if (parent === d) return d;
++    d = parent;
++  }
++}
++
++function commandAvailable(execSyncFn, cmd) {
++  try {
++    execSyncFn(`command -v ${cmd}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++function fstypeViaFindmnt(dir, execSyncFn) {
++  const target = nearestExistingAncestor(dir);
++  try {
++    const out = execSyncFn(`findmnt -T ${JSON.stringify(target)} -o FSTYPE -n`, {
++      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
++    });
++    const line = out.trim().split('\n')[0] || '';
++    return line.trim() || null;
++  } catch {
++    return null; // findmnt ran but the candidate is not a resolvable mount point ⇒ reject
++  }
++}
++
++// /proc/mounts fallback: longest-prefix match of the candidate path against every mountpoint.
++// Text-based on purpose (a synthetic fixture in tests need not exist on real disk).
++function fstypeViaProcMounts(dir, procMountsPath) {
++  let content;
++  try {
++    content = fs.readFileSync(procMountsPath || '/proc/mounts', 'utf8');
++  } catch {
++    return null;
++  }
++  const target = path.resolve(dir);
++  let best = null;
++  let bestLen = -1;
++  for (const line of content.split('\n')) {
++    const parts = line.split(' ');
++    if (parts.length < 3) continue;
++    const mp = parts[1].replace(/\\040/g, ' ');
++    const isPrefix = mp === '/' || target === mp || target.startsWith(mp.endsWith('/') ? mp : `${mp}/`);
++    if (isPrefix && mp.length > bestLen) {
++      bestLen = mp.length;
++      best = parts[2];
++    }
++  }
++  return best;
++}
++
++function isRamBacked(dir, ctx) {
++  const fstype = ctx.findmntAvailable
++    ? fstypeViaFindmnt(dir, ctx.execSync)
++    : fstypeViaProcMounts(dir, ctx.procMountsPath);
++  return !!fstype && RAM_FSTYPES.has(fstype);
++}
++
++/**
++ * Resolve the live-state base directory. Returns {base, source} where source is one of
++ * 'override' | 'xdg' | 'shm' | 'tmp' | 'ssd-fallback'.
++ *
++ * @param {object} [opts]
++ * @param {NodeJS.ProcessEnv} [opts.env] — defaults to process.env
++ * @param {Function} [opts.execSync] — defaults to child_process.execSync (injectable for tests)
++ * @param {string} [opts.procMountsPath] — defaults to /proc/mounts (injectable for tests)
++ * @param {Function} [opts.warn] — defaults to a single process.stderr.write call
++ */
++function resolveLiveDir(opts = {}) {
++  const env = opts.env || process.env;
++  const execSync = opts.execSync || nodeExecSync;
++  const procMountsPath = opts.procMountsPath;
++  const warn = typeof opts.warn === 'function'
++    ? opts.warn
++    : (msg) => { try { process.stderr.write(`${msg}\n`); } catch { /* ignore */ } };
++
++  const ctx = { execSync, procMountsPath, findmntAvailable: commandAvailable(execSync, 'findmnt') };
++
++  const candidates = [];
++  if (env.AUTOPILOT_LIVE_DIR) candidates.push({ dir: env.AUTOPILOT_LIVE_DIR, source: 'override' });
++  if (env.XDG_RUNTIME_DIR) candidates.push({ dir: path.join(env.XDG_RUNTIME_DIR, 'autopilot'), source: 'xdg' });
++  candidates.push({ dir: `/dev/shm/autopilot-${uid()}`, source: 'shm' });
++  candidates.push({ dir: `/tmp/autopilot-${uid()}`, source: 'tmp' });
++
++  for (const c of candidates) {
++    if (isRamBacked(c.dir, ctx)) return { base: c.dir, source: c.source };
++  }
++
++  // Every candidate rejected (a rejected override is skipped, not fatal — we simply fall
++  // through to here like any other all-rejected run). Never assume a path is RAM.
++  warn('autopilot: no RAM-backed live-state directory found (findmnt/proc-mounts rejected every '
++    + 'candidate); falling back to ~/.autopilot (SSD). Set AUTOPILOT_LIVE_DIR to override.');
++  return { base: path.join(os.homedir(), '.autopilot'), source: 'ssd-fallback' };
++}
++
++/**
++ * Sanitise a raw session id the same way the writer (codeforge src/live.rs) does: replace
++ * every Unicode scalar value not in [A-Za-z0-9_-] with one '_', keep the first 64 scalars,
++ * empty input ⇒ 'unknown'.
++ */
++function sanitizeSessionId(raw) {
++  const str = typeof raw === 'string' ? raw : '';
++  if (str.length === 0) return 'unknown';
++  const scalars = Array.from(str); // one element per Unicode code point (handles surrogate pairs)
++  const kept = scalars.slice(0, 64).map((ch) => (/^[A-Za-z0-9_-]$/.test(ch) ? ch : '_')).join('');
++  return kept.length > 0 ? kept : 'unknown';
++}
++
++/**
++ * Read one live file (main or tasks) for a session, honouring the schema-version and
++ * freshness contract. Returns the parsed object, or null if absent/stale/malformed/wrong
++ * schema — callers treat null as "no live signal", falling back to their own inference path.
++ *
++ * @param {string} base — the resolved live-state BASE (from resolveLiveDir().base)
++ * @param {string} sid — sanitised session id
++ * @param {object} [opts]
++ * @param {'main'|'tasks'} [opts.kind='main']
++ * @param {number} [opts.nowMs] — defaults to Date.now()
++ * @param {number} [opts.maxAgeMs=120000]
++ */
++function readLive(base, sid, opts = {}) {
++  const kind = opts.kind === 'tasks' ? 'tasks' : 'main';
++  const nowMs = Number.isFinite(opts.nowMs) ? opts.nowMs : Date.now();
++  const maxAgeMs = Number.isFinite(opts.maxAgeMs) ? opts.maxAgeMs : DEFAULT_MAX_AGE_MS;
++  const fileName = kind === 'tasks' ? `${sid}.tasks.json` : `${sid}.json`;
++  const file = path.join(base, 'context', fileName);
++
++  let raw;
++  try {
++    raw = fs.readFileSync(file, 'utf8');
++  } catch {
++    return null; // absent
++  }
++  let obj;
++  try {
++    obj = JSON.parse(raw);
++  } catch {
++    return null; // malformed
++  }
++  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
++  if (!Number.isInteger(obj.schema_version) || obj.schema_version !== 1) return null;
++  const writtenMs = typeof obj.written_at === 'string' ? Date.parse(obj.written_at) : NaN;
++  if (!Number.isFinite(writtenMs)) return null;
++  if (nowMs - writtenMs > maxAgeMs) return null; // stale ⇒ absent, silence is never a gate pass
++  return obj;
++}
++
++/**
++ * Classify a model id into its family for guarded_models comparisons. Lowercases first;
++ * anything not matching the grammar ⇒ 'unknown' (never blocks).
++ */
++function modelFamily(id) {
++  if (typeof id !== 'string' || id.length === 0) return 'unknown';
++  const m = MODEL_ID_RE.exec(id.toLowerCase());
++  return m ? m[1] : 'unknown';
++}
++
++module.exports = {
++  resolveLiveDir,
++  sanitizeSessionId,
++  readLive,
++  modelFamily,
++  DEFAULT_MAX_AGE_MS,
++};
+diff --git a/scripts/lib/live-state-dir.test.js b/scripts/lib/live-state-dir.test.js
+new file mode 100644
+index 00000000..008e8872
+--- /dev/null
++++ b/scripts/lib/live-state-dir.test.js
+@@ -0,0 +1,269 @@
++/**
++ * Tests for scripts/lib/live-state-dir.js — resolveLiveDir probe order/acceptance rule,
++ * sanitizeSessionId (shared writer/reader vector file), readLive schema+freshness gate,
++ * modelFamily grammar.
++ * Run: node --test scripts/lib/live-state-dir.test.js
++ */
++
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { execSync } = require('child_process');
++
++const LIB = path.join(__dirname, 'live-state-dir.js');
++const {
++  resolveLiveDir, sanitizeSessionId, readLive, modelFamily,
++} = require(LIB);
++
++function mkTmp(prefix) {
++  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
++}
++
++// Fake `findmnt` on PATH: a tiny node script reading FSTYPE decisions from an env var
++// (JSON map of substring→fstype, plus a "*" default) so different candidate directories
++// can resolve to different filesystem types within one process invocation.
++function makeFakeFindmnt(dir, rules) {
++  const bin = path.join(dir, 'findmnt');
++  fs.writeFileSync(bin, `#!/usr/bin/env node
++const rules = ${JSON.stringify(rules)};
++const target = process.argv[3] || '';
++let out = rules['*'] || '';
++for (const k of Object.keys(rules)) {
++  if (k !== '*' && target.includes(k)) { out = rules[k]; break; }
++}
++if (!out) { process.exit(1); }
++process.stdout.write(out + '\\n');
++`);
++  fs.chmodSync(bin, 0o755);
++  return bin;
++}
++
++function execSyncWithPath(fakeBinDir) {
++  const env = { ...process.env, PATH: `${fakeBinDir}:${process.env.PATH}` };
++  return (cmd, opts) => execSync(cmd, { ...opts, env });
++}
++
++function execSyncNoFindmnt() {
++  // A PATH with no findmnt binary anywhere on it.
++  const env = { ...process.env, PATH: '/nonexistent-bin-dir' };
++  return (cmd, opts) => execSync(cmd, { ...opts, env });
++}
++
++test('resolveLiveDir: tmpfs candidate is chosen (shm)', () => {
++  const bindir = mkTmp('findmnt-tmpfs-');
++  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: {}, // no override, no XDG_RUNTIME_DIR ⇒ falls to /dev/shm/autopilot-<uid>
++    execSync: execSyncWithPath(bindir),
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'shm');
++  assert.match(r.base, /^\/dev\/shm\/autopilot-/);
++  assert.strictEqual(warnings.length, 0);
++});
++
++test('resolveLiveDir: ext4 everywhere ⇒ ~/.autopilot fallback + exactly one warning', () => {
++  const bindir = mkTmp('findmnt-ext4-');
++  makeFakeFindmnt(bindir, { '*': 'ext4' });
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: {},
++    execSync: execSyncWithPath(bindir),
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'ssd-fallback');
++  assert.strictEqual(r.base, path.join(os.homedir(), '.autopilot'));
++  assert.strictEqual(warnings.length, 1, 'exactly one warning line');
++});
++
++test('resolveLiveDir: findmnt absent ⇒ falls back to /proc/mounts fixture (longest-prefix)', () => {
++  const fixtureDir = mkTmp('procmounts-');
++  const procMounts = path.join(fixtureDir, 'mounts');
++  // Longest-prefix match: /dev/shm is tmpfs, / is ext4. A candidate under /dev/shm/... must
++  // resolve to tmpfs via the /dev/shm row, not the root row.
++  fs.writeFileSync(procMounts, [
++    'rootfs / ext4 rw 0 0',
++    'tmpfs /dev/shm tmpfs rw 0 0',
++  ].join('\n'));
++  const r = resolveLiveDir({
++    env: {},
++    execSync: execSyncNoFindmnt(),
++    procMountsPath: procMounts,
++    warn: () => {},
++  });
++  assert.strictEqual(r.source, 'shm');
++  assert.match(r.base, /^\/dev\/shm\/autopilot-/);
++});
++
++test('resolveLiveDir: findmnt absent + /proc/mounts fixture with no RAM mounts ⇒ ssd-fallback', () => {
++  const fixtureDir = mkTmp('procmounts-none-');
++  const procMounts = path.join(fixtureDir, 'mounts');
++  fs.writeFileSync(procMounts, [
++    'rootfs / ext4 rw 0 0',
++  ].join('\n'));
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: {},
++    execSync: execSyncNoFindmnt(),
++    procMountsPath: procMounts,
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'ssd-fallback');
++  assert.strictEqual(warnings.length, 1);
++});
++
++test('resolveLiveDir: rejected ext4 override + tmpfs XDG ⇒ XDG chosen (override skipped, not fatal)', () => {
++  const bindir = mkTmp('findmnt-mixed-');
++  makeFakeFindmnt(bindir, { 'override-dir': 'ext4', 'xdg-dir': 'tmpfs', '*': 'ext4' });
++  const overrideDir = mkTmp('override-dir-');
++  const xdgParent = mkTmp('xdg-dir-');
++  const warnings = [];
++  const r = resolveLiveDir({
++    env: { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: xdgParent },
++    execSync: execSyncWithPath(bindir),
++    warn: (m) => warnings.push(m),
++  });
++  assert.strictEqual(r.source, 'xdg');
++  assert.strictEqual(r.base, path.join(xdgParent, 'autopilot'));
++  assert.strictEqual(warnings.length, 0);
++});
++
++test('resolveLiveDir: accepted tmpfs override wins over everything else', () => {
++  const bindir = mkTmp('findmnt-override-ok-');
++  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
++  const overrideDir = mkTmp('override-ok-');
++  const r = resolveLiveDir({
++    env: { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: mkTmp('xdg-unused-') },
++    execSync: execSyncWithPath(bindir),
++    warn: () => {},
++  });
++  assert.strictEqual(r.source, 'override');
++  assert.strictEqual(r.base, overrideDir);
++});
++
++// ---- sanitizeSessionId: shared vector file ----
++
++test('sanitizeSessionId: shared vector file (writer/reader contract)', () => {
++  const vectors = JSON.parse(fs.readFileSync(
++    path.join(__dirname, '..', '..', 'hooks', 'tests', 'fixtures', 'session-id-vectors.json'), 'utf8',
++  ));
++  assert.ok(vectors.length >= 6, 'vector file should carry at least the 6 spec cases');
++  for (const v of vectors) {
++    assert.strictEqual(sanitizeSessionId(v.input), v.expected, `vector ${JSON.stringify(v.input)}`);
++  }
++});
++
++test('sanitizeSessionId: non-string input ⇒ unknown', () => {
++  assert.strictEqual(sanitizeSessionId(undefined), 'unknown');
++  assert.strictEqual(sanitizeSessionId(null), 'unknown');
++  assert.strictEqual(sanitizeSessionId(42), 'unknown');
++});
++
++// ---- readLive ----
++
++function writeLiveFile(base, sid, kind, obj) {
++  const dir = path.join(base, 'context');
++  fs.mkdirSync(dir, { recursive: true });
++  const name = kind === 'tasks' ? `${sid}.tasks.json` : `${sid}.json`;
++  fs.writeFileSync(path.join(dir, name), JSON.stringify(obj));
++}
++
++test('readLive: fresh main file ⇒ returned', () => {
++  const base = mkTmp('live-fresh-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sid1', 'main', {
++    schema_version: 1, session_id: 'sid1', written_at: new Date(now - 1000).toISOString(),
++    context_window: { context_window_size: 1000000 },
++  });
++  const r = readLive(base, 'sid1', { kind: 'main', nowMs: now });
++  assert.ok(r);
++  assert.strictEqual(r.context_window.context_window_size, 1000000);
++});
++
++test('readLive: stale (>120s) ⇒ null', () => {
++  const base = mkTmp('live-stale-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sid1', 'main', {
++    schema_version: 1, written_at: new Date(now - 121000).toISOString(),
++  });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main', nowMs: now }), null);
++});
++
++test('readLive: exactly at the 120s boundary is fresh, one ms past is stale', () => {
++  const base = mkTmp('live-boundary-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sidA', 'main', { schema_version: 1, written_at: new Date(now - 120000).toISOString() });
++  writeLiveFile(base, 'sidB', 'main', { schema_version: 1, written_at: new Date(now - 120001).toISOString() });
++  assert.notStrictEqual(readLive(base, 'sidA', { kind: 'main', nowMs: now }), null);
++  assert.strictEqual(readLive(base, 'sidB', { kind: 'main', nowMs: now }), null);
++});
++
++test('readLive: schema_version 2 ⇒ null', () => {
++  const base = mkTmp('live-schema2-');
++  writeLiveFile(base, 'sid1', 'main', { schema_version: 2, written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: missing schema_version ⇒ null', () => {
++  const base = mkTmp('live-noschema-');
++  writeLiveFile(base, 'sid1', 'main', { written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: non-integer schema_version ⇒ null', () => {
++  const base = mkTmp('live-floatschema-');
++  writeLiveFile(base, 'sid1', 'main', { schema_version: 1.5, written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: missing file ⇒ null', () => {
++  const base = mkTmp('live-missing-');
++  assert.strictEqual(readLive(base, 'no-such-sid', { kind: 'main' }), null);
++});
++
++test('readLive: malformed JSON ⇒ null', () => {
++  const base = mkTmp('live-malformed-');
++  const dir = path.join(base, 'context');
++  fs.mkdirSync(dir, { recursive: true });
++  fs.writeFileSync(path.join(dir, 'sid1.json'), '{{{not json');
++  assert.strictEqual(readLive(base, 'sid1', { kind: 'main' }), null);
++});
++
++test('readLive: wrong session id ⇒ null (no file at that path)', () => {
++  const base = mkTmp('live-wrongsid-');
++  writeLiveFile(base, 'sid-real', 'main', { schema_version: 1, written_at: new Date().toISOString() });
++  assert.strictEqual(readLive(base, 'sid-other', { kind: 'main' }), null);
++});
++
++test('readLive: tasks kind reads the .tasks.json file, independent freshness', () => {
++  const base = mkTmp('live-tasks-');
++  const now = Date.parse('2026-09-05T12:00:00Z');
++  writeLiveFile(base, 'sid1', 'tasks', {
++    schema_version: 1, written_at: new Date(now - 1000).toISOString(),
++    tasks: [{ id: 'a1', tokenCount: 57490, contextWindowSize: 200000 }],
++  });
++  const r = readLive(base, 'sid1', { kind: 'tasks', nowMs: now });
++  assert.ok(r);
++  assert.strictEqual(r.tasks[0].id, 'a1');
++});
++
++// ---- modelFamily ----
++
++test('modelFamily: positive vectors', () => {
++  assert.strictEqual(modelFamily('claude-fable-5-1'), 'fable');
++  assert.strictEqual(modelFamily('CLAUDE-OPUS-4-8[1m]'), 'opus');
++  assert.strictEqual(modelFamily('claude-sonnet-5'), 'sonnet');
++});
++
++test('modelFamily: negative vectors ⇒ unknown', () => {
++  assert.strictEqual(modelFamily('fable-ish'), 'unknown');
++  assert.strictEqual(modelFamily('claude-fable'), 'unknown');
++  assert.strictEqual(modelFamily('fable'), 'unknown');
++  assert.strictEqual(modelFamily(''), 'unknown');
++  assert.strictEqual(modelFamily(undefined), 'unknown');
++});

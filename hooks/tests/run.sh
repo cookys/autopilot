@@ -318,7 +318,7 @@ echo "════════ L1 unit tests (node --test) ═══════
 # scripts/*.test.js rides the same node --test pass — scripts-side unit tests
 # used to live outside every scan glob and never ran in CI (found 2026-07-16).
 shopt -s nullglob
-UNIT_FILES=("$HOOKS_DIR"/*.test.js "$REPO_ROOT"/scripts/*.test.js)
+UNIT_FILES=("$HOOKS_DIR"/*.test.js "$REPO_ROOT"/scripts/*.test.js "$REPO_ROOT"/scripts/lib/*.test.js)
 shopt -u nullglob
 if [ "${#UNIT_FILES[@]}" -eq 0 ]; then
   echo "(no L1 unit tests yet)"

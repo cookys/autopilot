@@ -33,7 +33,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync: nodeExecSync } = require('child_process');
+const { execFileSync: nodeExecFileSync } = require('child_process');
 
 const RAM_FSTYPES = new Set(['tmpfs', 'ramfs']);
 const DEFAULT_MAX_AGE_MS = 120000;
@@ -58,25 +58,21 @@ function nearestExistingAncestor(dir) {
   }
 }
 
-function commandAvailable(execSyncFn, cmd) {
-  try {
-    execSyncFn(`command -v ${cmd}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function fstypeViaFindmnt(dir, execSyncFn) {
+// Runs `findmnt -T <target> -o FSTYPE -n` via argv (no shell), so a target path containing
+// shell metacharacters (`$(...)`, backticks, `;`, …) is passed to findmnt literally and can
+// never be interpreted as a command. Returns { fstype, notFound } — notFound distinguishes
+// "findmnt is not on PATH" (ENOENT ⇒ caller falls back to /proc/mounts) from "findmnt ran but
+// the candidate is not a resolvable mount point" (fstype: null ⇒ reject the candidate).
+function fstypeViaFindmnt(dir, execFileFn) {
   const target = nearestExistingAncestor(dir);
   try {
-    const out = execSyncFn(`findmnt -T ${JSON.stringify(target)} -o FSTYPE -n`, {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    const out = execFileFn('findmnt', ['-T', target, '-o', 'FSTYPE', '-n'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000,
     });
     const line = out.trim().split('\n')[0] || '';
-    return line.trim() || null;
-  } catch {
-    return null; // findmnt ran but the candidate is not a resolvable mount point ⇒ reject
+    return { fstype: line.trim() || null, notFound: false };
+  } catch (err) {
+    return { fstype: null, notFound: !!(err && err.code === 'ENOENT') };
   }
 }
 
@@ -106,9 +102,11 @@ function fstypeViaProcMounts(dir, procMountsPath) {
 }
 
 function isRamBacked(dir, ctx) {
-  const fstype = ctx.findmntAvailable
-    ? fstypeViaFindmnt(dir, ctx.execSync)
-    : fstypeViaProcMounts(dir, ctx.procMountsPath);
+  const { fstype, notFound } = fstypeViaFindmnt(dir, ctx.execFile);
+  if (notFound) {
+    const fallback = fstypeViaProcMounts(dir, ctx.procMountsPath);
+    return !!fallback && RAM_FSTYPES.has(fallback);
+  }
   return !!fstype && RAM_FSTYPES.has(fstype);
 }
 
@@ -118,19 +116,20 @@ function isRamBacked(dir, ctx) {
  *
  * @param {object} [opts]
  * @param {NodeJS.ProcessEnv} [opts.env] — defaults to process.env
- * @param {Function} [opts.execSync] — defaults to child_process.execSync (injectable for tests)
+ * @param {Function} [opts.execFile] — (file, args, options) => stdout string; defaults to
+ *   child_process.execFileSync (injectable for tests). Argv-based, never shell-interpolated.
  * @param {string} [opts.procMountsPath] — defaults to /proc/mounts (injectable for tests)
  * @param {Function} [opts.warn] — defaults to a single process.stderr.write call
  */
 function resolveLiveDir(opts = {}) {
   const env = opts.env || process.env;
-  const execSync = opts.execSync || nodeExecSync;
+  const execFile = opts.execFile || nodeExecFileSync;
   const procMountsPath = opts.procMountsPath;
   const warn = typeof opts.warn === 'function'
     ? opts.warn
     : (msg) => { try { process.stderr.write(`${msg}\n`); } catch { /* ignore */ } };
 
-  const ctx = { execSync, procMountsPath, findmntAvailable: commandAvailable(execSync, 'findmnt') };
+  const ctx = { execFile, procMountsPath };
 
   const candidates = [];
   if (env.AUTOPILOT_LIVE_DIR) candidates.push({ dir: env.AUTOPILOT_LIVE_DIR, source: 'override' });

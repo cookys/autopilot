@@ -88,15 +88,9 @@ function parseArgv(argv) {
   return { positional, flags };
 }
 
-function getResolverPath(repoRoot) {
+function getResolverPath(_repoRoot) {
   if (process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER) {
     return process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
-  }
-  if (repoRoot) {
-    const inRepo = path.join(repoRoot, 'scripts', 'resolve-review-loop.sh');
-    if (fs.existsSync(inRepo)) {
-      return inRepo;
-    }
   }
   return path.join(__dirname, 'resolve-review-loop.sh');
 }
@@ -179,7 +173,7 @@ function resolveSeats(seatsArg, repoRoot) {
   const qcComplete = fullJson && fullJson.qc_panel_seats_complete;
   const qcSeats = fullJson && fullJson.qc_panel_seats;
 
-  if (qcComplete === false || !Array.isArray(qcSeats) || qcSeats.length === 0) {
+  if (qcComplete !== true || !Array.isArray(qcSeats) || qcSeats.length === 0) {
     const cfgSource = (fullJson && (fullJson.config_source || fullJson.config_path)) || '';
     if (cfgSource) {
       console.error(`ERROR: Resolved qc panel is incomplete (${cfgSource})`);

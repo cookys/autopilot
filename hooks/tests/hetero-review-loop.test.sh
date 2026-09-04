@@ -61,7 +61,7 @@ if [ -n "$STUB_SEAT_RESPONSE" ]; then
   exit 0
 fi
 
-echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 STUB_EOF
 chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
 cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
@@ -102,7 +102,7 @@ C2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" -
 assert_exit_code "$C2_RC" "2" "case 2: gen 1 without --phase-base exits 2"
 
 # Case 3: generation 1 with three seats all reviewed exits 0, writes range.json, diff.txt, findings.json, chain.json
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 C3_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy,m3/high@grok" 2>&1); C3_RC=$?
 assert_exit_code "$C3_RC" "0" "case 3: exits 0 on 3 reviewed seats"
 assert_file_exists "$LEDGER/review-p1/g1/range.json" "case 3: range.json exists"
@@ -126,7 +126,7 @@ ID2=$(node -e 'const f = JSON.parse(fs.readFileSync(process.argv[1])).findings; 
 assert_exit_code "$ID_DIFF_RC" "0" "case 4: finding IDs are distinct"
 
 # Case 5: a seat returning {status: "no_verdict"} without --allow-seat-gap exits 1 and chain.json is not updated
-export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 export STUB_RESPONSE_s1='{"status": "no_verdict"}'
 unset STUB_SEAT_RESPONSE
 C5_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" 2>&1); C5_RC=$?
@@ -157,7 +157,7 @@ cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
   }
 ]
 SEED_EOF
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 unset STUB_RESPONSE_s0
 unset STUB_RESPONSE_s1
 C7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7_RC=$?
@@ -312,6 +312,7 @@ BASE_10D=$(git -C "$SCRATCH_10D" rev-parse HEAD~1)
 export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10d.log"
 rm -f "$LOG_DISPATCH_ARGS"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 C10D_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_10D" --ledger "$LEDGER" --phase p10d --generation 1 --branch work --phase-base "$BASE_10D" 2>&1); C10D_RC=$?
 assert_exit_code "$C10D_RC" "0" "case 10d: exits 0 with real resolver"
 assert_file_exists "$LEDGER/review-p10d/g1/seat-s0.json" "case 10d: seat-s0.json exists"
@@ -945,7 +946,7 @@ assert_contains "$(cat "$LEDGER/review-p_test2c/chain.json")" '"status": "pendin
 assert_contains "$T2C_OUT" '"proof_present": false' "test 2c: summary records proof_present false"
 
 # Test 3: chain immutability: run collect once (pending), run again for same generation -> exits 1 without modifying entry
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T3_OUT1=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC1=$?
 assert_exit_code "$T3_RC1" "0" "test 3: first collect exits 0"
 T3_CHAIN_BEFORE=$(cat "$LEDGER/review-p_test3/chain.json")

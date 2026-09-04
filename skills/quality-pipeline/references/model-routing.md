@@ -25,7 +25,8 @@ Before dispatching an Agent, determine the role and look up model + mode:
 | **planner** | sonnet | plan | Analysis tasks: sonnet ≥ opus accuracy, -34% cost |
 | **reviewer** | opus | plan | Safety-critical gate: headroom over cost (2026-04 parity benchmark is stale — see Evidence); matches agents/reviewer.md frontmatter |
 | **debugger** | opus | plan | Same headroom rationale as reviewer; matches agents/debugger.md frontmatter |
-| **implementer** | opus | default | Needs full tool access + deep reasoning |
+| **implementer** | sonnet | default | hands tier — brain (fable/opus) briefs and adjudicates, never implements (owner ruling 2026-09-04, plan 2026-09-04-default-dispatch-topology) |
+| **hands** | haiku | default | Mechanical implementation cuts: boilerplate, bulk edits, scaffolding — owner ruling 2026-09-04, plan 2026-09-04-default-dispatch-topology |
 | **deep-reasoner** | opus | plan | Reasoning-dense consults: architecture, complex debugging analysis, algorithm design — returns actionable conclusions to the orchestrator (capability-tier routing; 2026-07 orchestrator-economy absorption) |
 | **fast-worker** | sonnet | default | Mechanical sub-steps: boilerplate, bulk edits, formatting, test scaffolding — burns worker-tier tokens instead of the (possibly premium/capped) session model |
 | **test-runner** | haiku | default | Execution-focused, speed priority |

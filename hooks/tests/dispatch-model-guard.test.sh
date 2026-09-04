@@ -107,4 +107,78 @@ assert_eq 0 "$__RUN_EXIT" "case13-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case13-ask"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
+# Case 14: mode: "plan", model: "opus" → allowed (no ask/deny)
+# Plan-mode opus is a reviewer/debugger dispatch and must NOT be guarded by the new guarded_models_implementing default.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus@agy effort=low\nReview this code."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case14-exit"
+assert_eq "" "$__RUN_STDOUT" "case14-silent (plan-mode opus allowed)"
+
+# Case 15: mode absent (or mode: "default"), model: "opus" → asks
+# Implementation-shaped opus is guarded by the new default guarded_models_implementing: fable,opus; reason contains opus.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus@agy effort=low\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case15a-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case15a-ask"
+assert_contains "$__RUN_STDOUT" "opus" "case15a-reason"
+
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"default","prompt":"Engine: opus@agy effort=low\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case15b-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case15b-ask"
+assert_contains "$__RUN_STDOUT" "opus" "case15b-reason"
+
+# Case 16: mode: "plan", model: "fable" → still asks
+# Existing guarded_models: fable applies to ALL dispatches regardless of mode.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","mode":"plan","prompt":"Engine: fable@agy effort=low\nPlan this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case16-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case16-ask"
+assert_contains "$__RUN_STDOUT" "fable" "case16-reason"
+
+# Case 17: tool_input.prompt first line is "Engine: sonnet@agy effort=low" and model: "sonnet" → allowed
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case17-exit"
+assert_eq "" "$__RUN_STDOUT" "case17-silent (matching engine header allowed)"
+
+# Case 18: tool_input.prompt is missing entirely (or empty) → denied, reason contains prompt line 1
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case18a-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case18a-deny"
+assert_contains "$__RUN_STDOUT" "prompt line 1" "case18a-reason"
+
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":""},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case18b-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case18b-deny"
+assert_contains "$__RUN_STDOUT" "prompt line 1" "case18b-reason"
+
+# Case 19: prompt first line is "Engine: opus@agy effort=low" while model: "sonnet" → denied (mismatch), reason contains prompt line 1
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: opus@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case19-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case19-deny"
+assert_contains "$__RUN_STDOUT" "prompt line 1" "case19-reason"
+
+# Case 20: Config require_engine_header: off and a missing header → allowed (old behavior)
+printf '%s\n' "- require_engine_header: off" > "$TEST_TMP/config20.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config20.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case20-exit"
+assert_eq "" "$__RUN_STDOUT" "case20-silent (require_engine_header: off allows missing header)"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# Case 21: Config mode: warn and a missing header → allowed (exit 0), stderr carries warning
+printf '%s\n' "- mode: warn" > "$TEST_TMP/config21.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config21.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case21-exit"
+assert_eq "" "$__RUN_STDOUT" "case21-stdout-silent"
+assert_contains "$__RUN_STDERR" "dispatch-model-guard" "case21-stderr-carries-warn-advisory"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
 finalize_test

@@ -394,8 +394,20 @@ CHECK_BRIEF_OUT=$(bash "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$LEDGER/
 assert_exit_code "$CHECK_BRIEF_RC" "0" "case 2 (fin): check-redispatch-prompt.sh exits 0 on hands-brief.md"
 
 # Case 3 (finalize): same Critical finding disposed refuted instead -> verdict: SHIP-AS-IS
+# (own fresh pending chain entry — reusing p_fin2's chain.json would copy its post-finalize
+# 'finalized' status, which the pending-chain-entry requirement now correctly rejects)
 mkdir -p "$LEDGER/review-p_fin3/g1"
-cp "$LEDGER/review-p_fin2/chain.json" "$LEDGER/review-p_fin3/chain.json"
+cat << 'EOF' > "$LEDGER/review-p_fin3/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base222",
+    "head": "head222",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
 cp "$LEDGER/review-p_fin2/g1/range.json" "$LEDGER/review-p_fin3/g1/range.json"
 cp "$LEDGER/review-p_fin2/g1/findings.json" "$LEDGER/review-p_fin3/g1/findings.json"
 cat << 'EOF' > "$TEST_TMP/disp_fin3.json"

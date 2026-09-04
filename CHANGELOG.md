@@ -47,7 +47,7 @@ D2-repair×2、D3、D4）、三十餘把 gemini-3.8-flash-low@agy 刀（rung 0�
 14 條 MUST-FIX（receipt 可偽造、malformed input fail-open、trusted dispatcher、artifact 不可變）——全部由 hands 修掉
 （D2-repair、fix1–fix2e）。兩個 cut 在 flash 階梯三次失敗後依拓樸退路改派 sonnet 原生 hands（profiles repin）。
 governance 本分支 shadow、merge 前還原 enforce；roster 派工期間暫切 gemini，已還原。詳見
-`docs/projects/2026-09-04-dev-flow-hetero-loops/`（ledger/D0–D4、D2-repair、review-* 證據）。
+`docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/`（ledger/D0–D4、D2-repair、review-* 證據）。
 
 QC（union-on-verified-critical，三席 gpt-5.6-sol@max／GLM-5.2／MiniMax-M3，用本版的 driver 收集）：四代 delta，全部由 `hetero-review-loop.js collect/finalize` 收集、depth-0 逐條 disposition、`check-phase-review-receipt.js --phase-base 1e5c2841` 在 reviewed head 驗 receipt（exit 0）。g1（sol／GLM FIX、MiniMax SHIP）20 條、19 核實含 4 Critical：helper 從被審 repo 執行、receipt 只信 verdict 不重推、seat gap 可洗成空 SHIP、plan-artifact 無身分；g2 16 條、9 核實：測試用 `phase === 'p7'` 後門漏進 production（三席同抓）、seat 雜湊空表可偽造、phase-base 寫錯路徑、runner alias；g3 9 條、3 核實（`--retry` 重用代號、rejected 對非 blocker 誤拒、min-seat 未驗格式）、**3 條 refuted**（GLM 說 diff 裡看不到配套改動——它們在 g1/g2 已落地且測試綠：resolve-review-loop 406、topology 43、role-admission 84）；g4 三席 SHIP-AS-IS、4 條 follow-up 進 BACKLOG。修復全部由 hands 完成（D2-repair-2 工頭：gemini medium→high；enforce 還原後改 sonnet 原生 hands）。注意 g1 的 chain 條目是舊版 driver 寫的，缺後來加的 `findings_sha256`／seat 雜湊／`full_range_sha256`，closeout 時由 depth-0 從磁碟 artifact 與 git 重算補齊並同步 receipt.chain（可重推導；checker 仍全部重推），記在 ledger/D5.md。全套 suite（enforce＋grok roster 還原後）：276 檔綠含 serial 尾段；殘留 `contract-parity` 8 與 `resolve-review-loop-consult-discuss-switch` 3 在 develop 上同樣紅（既有，`implementer_ladder[17]` template fallback ladder），`slash-entry-probe` 負載下 0-byte、preflight 的 LLM probe 8/8 綠。
 

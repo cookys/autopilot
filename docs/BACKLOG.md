@@ -81,7 +81,7 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Trigger**: next touch of the chain semantics (abort g1 → collect g2 → finalize → checker exit 0; g2.base equals the aborted g1 base)
 - **Context**: writer side is pinned (tests 2d/2e/4); the reader side and the base inheritance are only implicit (GLM + MiniMax FOLLOW-UP, core review g4)
 - **Effort**: S
-- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g4/`
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g4/`
 
 ### check-phase-review-receipt: min-reviewed-seats enforcement test on a multi-seat fixture
 - **Trigger**: next touch of the seat-coverage rule
@@ -93,7 +93,7 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Trigger**: the next FIX-THEN-SHIP receipt with verified Major/Minor findings — depth-0 saw severity present on the v2.36.0 receipts, so this is a confirmation row (GLM FOLLOW-UP, core review g3)
 - **Context**: shared-format drift surface between finalize and the checker
 - **Effort**: S
-- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g3/`
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g3/`
 
 ### resolve-review-loop.sh: audit every remaining runner comparison for codex-cli/codex canonicalisation
 - **Trigger**: next touch of the reviewer_ladder / hetero_review extraction or any `entry.runner === implRunner` site
@@ -111,13 +111,13 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Trigger**: every release closeout — CHANGELOG/ledger/archive commits land after the last review generation, so the receipt's head never equals the merge head
 - **Context**: the checker binds `review_head_sha` to the branch head; today the honest sequence is "checker exit 0 at the reviewed head, recorded in the ledger, then docs-only commits". Candidate: accept a moved head when `git diff <receipt_head>..<head>` touches only paths matched by the frozen exclusion allowlist (plus CHANGELOG.md / INDEX.md), and record that delta in the receipt check output
 - **Effort**: S
-- **Source**: v2.36.0 closeout, `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/`
+- **Source**: v2.36.0 closeout, `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/`
 
 ### hetero-review-loop / check-phase-review-receipt: hoist EXCLUDE_ALLOWLIST and isPathspecAllowed into scripts/lib
 - **Trigger**: the next edit to either copy (they are byte-identical today)
 - **Context**: duplicated verbatim in both scripts; a one-sided edit would silently desynchronise the gate (GLM + MiniMax FOLLOW-UP, core review g2, 2026-09-04)
 - **Effort**: S
-- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g2/`
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g2/`
 
 ### review-chain-derive.js documents "no side effects" but mutates the chain entries it receives
 - **Trigger**: any caller that keeps a reference to the chain after derivation
@@ -141,19 +141,19 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Trigger**: a `qc_panel` entry written as an agy alias (e.g. `gemini-flash`) while the topology ladder carries the resolved name — the exclusion set never matches and a qc seat can be picked as the consult seat
 - **Context**: found by the D4 hermetic test's first fixture (2026-09-04); the fixture was changed to a non-aliased name, the resolver was not. Fix: normalise both sides (or compare on the resolved tuple) in the exclusion builder
 - **Effort**: S
-- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/D4.md`
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D4.md`
 
 ### `resolve-review-loop.sh` `auto` knobs read a stale `~/.autopilot/topology.json` and fall back natively
 - **Trigger**: a host whose cached topology predates a plugin version that added roles (observed 2026-09-04: cache without `consult_ladder` ⇒ `consult_resolved_from: native-fallback` until `resolve-dispatch-topology.js` was re-run)
 - **Context**: the resolver never regenerates the cache; `sync-all.sh` runs `--check` only. Candidate: regenerate when the cache lacks a role key the resolver asks for, or emit a distinct warning naming the stale cache
 - **Effort**: S
-- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/D1.md`
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D1.md`
 
 ### `hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename
 - **Trigger**: two collects for the same phase ever run concurrently (today callers serialise by generation)
 - **Context**: a lost chain entry would self-recover on retry, never forge a gate pass; MiniMax CUT/FOLLOW-UP on the D2 review 2026-09-04
 - **Effort**: S
-- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-D2-attempt1-parser-defect/`
+- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-D2-attempt1-parser-defect/`
 
 ### `hetero-review-loop.js` opt-out knob parser character class parses `*->` as a range
 - **Trigger**: the next touch of the knob parser in handleOptOut

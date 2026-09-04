@@ -1,7 +1,7 @@
 # D2-repair-2 ledger
 
 Deliverable: D2-repair-2 — repair the 19 verified (4 Critical) + 1 deferred depth-0 findings from
-the generation-1 review of the new hetero-review driver/checker (`docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g1/dispositions.json`).
+the generation-1 review of the new hetero-review driver/checker (`docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g1/dispositions.json`).
 
 Foreman branch: `worktree-agent-aef93d16ebb646335` (worktree `agent-aef93d16ebb646335`).
 Base: `0701589b8f2dd22523a6dbcfedc749cfae499dd9`. Head: `3a9342d042cbfa9bd3d750a4c287dce3e38519d1`.

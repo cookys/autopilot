@@ -1,84 +1,83 @@
 ## 目標
 
-無進行中工作。這份 handoff 記錄的是一個**收束完成**的狀態：2026-09-03～04 兩天出了五個版本（v2.35.11–v2.35.15），全部 merge、push，記下「下一個 session 需要知道但不在 code 裡」的東西。
+無進行中工作。這份 handoff 記錄 2026-09-04 的第二段：**v2.35.16 預設派遣拓樸（brain up, hands down）** 已出貨、merge、push；
+以及當天稍早收掉的舊帳（ladder 裁定、fixture 隔離、guard headless BACKLOG）。
 
 ## 現況
 
-- **branch**: `develop`；本機比 origin 多三個 no-bump docs／comment commit（`62297210`、`1b85e47a` 與這份 handoff），**尚未 push**，`origin/develop` 在 `0ed8680f`
-- **working tree**: 乾淨；`docs/projects/` 沒有進行中專案（09-02 兩個已出貨專案已搬進 `_archive/`，INDEX 過期的 08-28 In-Progress 列已刪）
-- **version**: 2.35.15（27 hooks：14 default-on／13 opt-in）
-- **測試**: 最後一次全套在 `479552c0` 上 311 檔（310 綠 + `suite-oracle-lock` 因繞鎖 env 被繼承而單獨重跑 32 條綠）
+- **branch**: `develop`，與 `origin/develop` 同步在 `8e188403`（handoff commit 在其後）；working tree 乾淨；`docs/projects/` 無進行中專案。
+- **version**: 2.35.16（28 hooks：15 default-on／13 opt-in；新 default-on `cost-fuse`）。
+- **session marker**: 已 clear。governance `enforcement_mode` 為 **enforce**（分支期間曾 shadow，merge 前還原）。
+- **dogfood roster**（`.claude/review-loop-config.md`）：implementer 仍是 grok-4.5@grok（派工期間暫切 gemini，已還原）。
+  `implementer_ladder` 未設 `auto`——這台是否採用 auto 是 owner 決定（見下一步 2）。
+- **測試**: 全套 `run.sh --parallel 4` 平行段 ALL TESTS PASSED；重釘後 `autopilot-engine` 470、`check-hook-inventory` 18、
+  `resolve-review-loop` 335、`cost-fuse` 63、`dispatch-model-guard` 65 單跑綠。既有紅：`opencode-v2-plugin` 3 條在 develop 上同樣紅
+  （opencode 1.18 `debug config` 行為漂移，未修）。`slash-entry-probe` 在負載下 0-byte，單獨開 probe 7/7 綠。
 
-**DONE**（皆已 merge 並 push）：
+**DONE**（v2.35.16，merge `8e188403`）：`scripts/resolve-dispatch-topology.js`＋`implementer_ladder: auto`＋rung-0；
+`resolve-dispatch.sh` implementer→sonnet、`hands`→haiku；`dispatch-model-guard` `guarded_models_implementing`＋`require_engine_header`
+（缺 model 先走 `on_missing_model`）；`hooks/cost-fuse.js`＋`scripts/cost-digest.js`；front-door canonical 拓樸段、l3–l6 薄殼。
+完整帳在 `CHANGELOG.md` v2.35.16 節與 `docs/projects/_archive/2026-09-04-default-dispatch-topology/`（README＋ledger/P0–P4）。
 
-| 版本 | merge | 內容 |
-|---|---|---|
-| v2.35.11 | `a4d5d8f9` | named endpoint 明文私網 opt-in（`_TRANSPORT=plaintext-private`，只收私網 IP literal）、`engine-qualify implementer --endpoint` 與路由對齊、團隊本機模型食譜 |
-| v2.35.12 | `3949e2ab` | `--runner opencode` implementer 軌道；muse-spark-1.3（OpenCode Go）考過 24/24 |
-| v2.35.13 | `219de2a6` | agy 信封格式錯降級為遙測遺失（狀態看 git、信封原文留 log） |
-| v2.35.14 | `013ca863` | opencode 軌道 effort → `--variant`（`max`→`xhigh`）；不帶 effort 現在送 xhigh |
-| v2.35.15 | `72dfa052` | `foreman-guard` PreToolUse hook；context-budget／dispatch-model-guard／cost-tracker 改 default-on；工頭一刀一命與接手 read-list 上限 |
-
-**考試新增合格席**（implementer，全部 24/24）：qwen3.8-flash-next（cc-shim，本機 SGLang，event 186，每 case 中位數 14 s，全板最快）、muse-spark-1.3 contributor（opencode；預設檔 187、low 191、medium 192，三檔速度無差）、gemini-3.8-flash low／medium／high（agy，188–190，速度 15／21／26 s 線性）。合格席共 18。
-
-**IN-FLIGHT**: 無。沒有背景派工、沒有等待中的 review。cuda（visionforge session）已確認拉到 `1b332f83`。
+**IN-FLIGHT**: 無。沒有背景派工。cuda 的 fleet 訊息皆已回覆（設計＋rollout；owner 裁定確認；出貨通知＋P5 配方）。
 
 ## 已決事項(不重議)
 
-- **loopback 規則不放寬成一般 http**——明文只對私網 IP literal 且要顯式 opt-in，多人共用的正解是部署端 TLS + api-key；`dispatch-local-openai.js` 不重啟當 implementer 路徑，不加第三個 adaptor（cc-shim 就是 Anthropic 協定的 adaptor）。
-- **agy 信封無效 = 遙測遺失，不是判決**——8/22 三席 gemini 的 row 不改，翻案靠重考。
-- **`minimal` 不進 effort 詞彙**（除非開 L）：要動 scorecard／evidence／schema／seat 分區一整排驗證器。
-- **cuda 稽核六項全做、不 fleet-wide 廣播**——operator 2026-09-04 決定；只回 cuda。
-- **context-budget 對子代理不量**——它只看得到父 transcript；工頭天花板 = Bash 上限 + 一刀一命，等 CC 提供子代理 transcript 再補（BACKLOG）。
-- **`--engine` 收 vendor id、`--model-version` 維持 strict TOKEN**——參數層文法必須等於 evidence 編譯器文法；sweep 對 provider/model id 派生 version token（`/`→`:`）。
-- **runImplQualification 已移出 verdict-stability D6 逐位元組同位清單**——釘值只能指 origin/develop 上的 commit，刻意改動落地前無法前移。
+- **§8 四項照提案值**（owner 2026-09-04，cuda 轉達＋本機直接裁定）：門檻 USD 150/host/day；`judgment` 也 rung-0；`/l3` 改 brain brief
+  + sonnet hands，`--solo` 唯一 inline 逃生；未合格引擎不進 ladder（`candidates_to_qualify`）。
+- **claude-native 退路不展開進 hetero ladder**——`claude_fallback_ladder` 只是給原生 Agent 派工的提示，`dispatch-hetero` runner enum
+  沒有 claude-native；auto 空階梯 ⇒ implicit rung + warning。
+- **cost-fuse 永不 `ask`**；預設 warn，block 要自己開。
+- **sol delta 的「`set -e` 會終止 auto probe」不成立**——`resolve-review-loop.sh` 是 `set -uo pipefail`；別再重查。
+- **本 repo 的 L5 mission rail 綁在 verdict-stability graph**；要派 hetero 又不想寫 rubric／graph／sources，就走「分支 shadow + /l4 sonnet
+  工頭 + dispatch-hetero」（先例 `4c842a92`、本次 `5ca93e08`），merge 前還原 enforce。
 
 ## 下一步
 
-沒有被指派的下一步。2026-09-04 本 session 已收掉的舊帳：
-
-- **`ladder --role implementer` 回 `[]` 不是 bug**：磁碟 view 一律把 qualified 投影成 provisional（ADR-0001，`engine-scorecard.js --help` 明寫），只有 `--require-evidence --scope-file --identity-file`（`resolve-review-loop.sh --check-scorecard` 才帶）能產出候選，而 `write-scope` 只凍結了 consult/discuss。看席位用 `seat-status`。記在 memory `engine-qualify-administration-gotchas`。
-- **evidence store 兩列 fixture（event 271/272）已隔離**：identity `e|r|f|m|0`、指紋全 a/b/c、consult、`degraded`、0/10，2026-08-28T09:26Z 寫入。現在與 08-28 當時的樹都沒有任何測試發這組參數，transcript 也找不到指令，最可能是當天 consult-discuss administration session 的手動 smoke。備份 `qualification-evidence.jsonl.bak-fixture-quarantine-2026-09-04`（55 列，sha 相符），隔離檔 `.test-residue-quarantined-20260904`，主檔 53 列；consult `current` 前後都 7 席、flash-next 仍 qualified。`run.sh` 自 09-02 起有 sha256 前後 guard，同類再犯會被抓。
-- **`~/.autopilot/engine-scorecard/qualification-evidence.jsonl`（19 列）是孤兒檔**：code 只讀 `engine-capability/` 那份；19 列中 11 列與正本重複、8 列（08-28／29 的 consult/discuss `degraded` 早期嘗試）不在正本。沒動它，也不用動。
-- **BACKLOG「dispatch-model-guard 在 headless 回 ask 會卡」已刪**：實測 CC 2.1.259 `-p` 下 ask 立即變 `is_error` tool_result 帶原因，兩種權限模式皆然。紀錄在 hook 檔頭、`references/multi-agent-portability.md` §5、memory `cc-headless-hook-ask-auto-denies`。
-
-仍在的、已評估未動工：
-
-1. **BACKLOG 其餘八筆**（`docs/BACKLOG.md` Active entries 前段）：工頭 context 量不到、effort `minimal`、feed 列表兩個顯示瑕疵、opencode 用量解析、gate 測試改 scratch copy、`endpoints test --model`、`local-deployment.js` 政策對齊。每筆都有 Trigger。
-2. **suite oracle lock 殘留**（BACKLOG 🔵）：`kill -9` 一次 suite 後 `.owner` 留著死 pid，下一次被拒。若又撞到：確認沒有活的 `run.sh` 後 `AUTOPILOT_SUITE_ORACLE_LOCK=0`，然後**不帶那個 env** 單跑 `hooks/tests/suite-oracle-lock.test.sh` 補證。訊息清晰度同一筆。
-3. 若要正式切 implementer 到 flash-next：改 `.claude/review-loop-config.md` 三欄加 `implementer_endpoint: qwen38`（endpoints.env 已有 `QWEN38` 三鍵，plaintext-private）。
+1. **P5 fleet rollout（cuda 優先）**：每台 `scripts/dev-update.sh` → `node scripts/resolve-dispatch-topology.js --json` → 有合格 hetero 席的主機
+   在 `.claude/review-loop-config.md` 設 `implementer_ladder: auto`；cuda 先跑 `node scripts/cost-digest.js --since 14` 重現 $1,180 形狀，
+   用 p75 決定是否調 `cost_fuse.daily_usd_brain`。一週後 KR5：各主機 digest 的 brain_share。
+2. **這台 dogfood 是否切 `implementer_ladder: auto`**：切了會讓 `resolve-review-loop.test.sh` 九條 roster 釘值（grok-4.5/xai → review_risk
+   high、required_review_families 2、l1_required）失效，且 google 家族 implementer 會把 review 姿態降成 low——owner 決定，不要靜默切。
+3. **BACKLOG 候選（未寫）**：guard header 比對是嚴格前綴、`guarded_models` 是子字串（長 model id 如 `claude-opus-4-5@agy` 會誤拒）；
+   legacy 無 effort 的 scorecard 列在 ladder 排尾端、`effort:""` 是否能過 `implementer-ladder.js isTuple`；`opencode-v2-plugin` 既有紅；
+   cost-fuse 一週 warn 後改 block 的日期（P3 acceptance 寫的 calibration week）。
+4. 舊 handoff 其餘未動項目仍在：BACKLOG 八筆、suite oracle lock 殘留處置、flash-next 正式切 implementer。
 
 ## 驗證方式
 
 ```bash
 cd /home/cookys/projects/autopilot
-git status --porcelain              # 應為空
-git log --oneline -3                # 最新在上：handoff commit → 1b85e47a → 62297210
-node -p "require('./.claude-plugin/plugin.json').version"   # 2.35.15
-node scripts/check-hook-inventory.js --check   # in sync: 27 hooks (14 default-on, 13 opt-in)
-AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh   # ✅ 8/8 for v2.35.15
-node scripts/engine-scorecard.js seat-status --engine qwen3.8-flash-next --runner cc-shim --role implementer --effort high   # qualified, event 186
-wc -l ~/.autopilot/engine-capability/qualification-evidence.jsonl   # 53
+git status --porcelain              # 空
+git log --oneline -2                # handoff commit → 8e188403
+node -p "require('./.claude-plugin/plugin.json').version"   # 2.35.16
+node scripts/check-hook-inventory.js --check   # 28 hooks (15 default-on, 13 opt-in)
+node scripts/resolve-dispatch-topology.js --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).implementer_ladder[0].rung))'   # gemini-3.8-flash-low/low@agy
+bash hooks/tests/cost-fuse.test.sh; bash hooks/tests/dispatch-model-guard.test.sh   # 63 / 65
 ```
 
 ## Read-order
 
-1. `/home/cookys/projects/autopilot/CHANGELOG.md` — v2.35.11 到 v2.35.15 五節；每節寫了 QC 抓到什麼、哪些成立、與行為改變（default-on、xhigh 轉送）。
-2. `/home/cookys/projects/autopilot/docs/plans/2026-09-04-foreman-cost-discipline.md` — cuda digest 的稽核與 D1–D5，含「工頭 context 量不到」的誠實限制。
-3. `/home/cookys/projects/autopilot/skills/engine-onboarding/references/local-model-team-recipe.md` — 本機模型接 implementer 的正規做法與 opt-in 的邊界。
-4. `/home/cookys/projects/autopilot/docs/plans/evidence/2026-09-03-muse-spark-opencode-qualify/README.md` — 第二次施測 24 題白燒的完整紀錄（argv 文法 vs 編譯器文法）。
+1. `CHANGELOG.md` v2.35.16 節——三個新件、qc 六修、refuted 一項、測試現況。
+2. `docs/plans/2026-09-04-default-dispatch-topology.md`——三層拓樸、KR、§8。
+3. `docs/projects/_archive/2026-09-04-default-dispatch-topology/README.md` 與 `ledger/P1.md`——實際派工帳（含被退的 cut A 與工頭到上限後 depth-0 接手）。
+4. `skills/ceo-agent/references/level-front-door.md` § Default dispatch topology——canonical 段落。
 
 ## 陷阱
 
-- **Bash 工具跑的是 zsh**：`grep --include=*.md` 會被 glob 成 `no matches found`、`echo ====x` 會觸發 `=cmd` 展開、`$VA` 不做字詞切分（`--variant minimal` 變一個參數）。需要 bash 語意就 `bash -c '…'`。`load-endpoints-env.sh` 只能在 bash 下 source。
-- **`pkill -f`／`pgrep -f` 會比對到自己這條指令**——殺用 PID，數行程把樣式拆變數且同一條指令不要再出現字面。
-- **並行 suite 會撞**：`resolve-review-loop-consult-discuss-gate` 會 `chmod 000` 真的 evals 檔（已進 serial tail）；`engine-qualify.test.sh` 在負載下會超過 600 s，用 `AUTOPILOT_TEST_SUITE_TIMEOUT_SECS=1200`。
-- **`git stash list` 的 `stash@{0}`（evidence-discipline §20/§21）是別的 session 的**，不要 pop、不要清。
-- **送審 diff 不要過濾 `':!platforms/codex'`**；review spec 直接寫「鏡像是逐位元組同步、別報 drift」。
-- **新 hook 要進 `profiles/hook-classes.json`** 並重釘 catalog 的 `hook_classes_sha256`，否則 profile payload build 直接紅。
-- **opencode `--variant` 對未知值不驗證、靜默退回 provider 預設**（≈medium）；`bogus` 也 rc=0。
+- **停車的工頭／hands 不會被自己的背景子任務喚醒**：depth-0 要用等待迴圈盯 leaf 的 JSON 落地再 SendMessage；等 `test` 這種它自己開的
+  背景工作也一樣，要定時叫醒。
+- **等待迴圈別用 `ls … | xargs -r test -s`**：沒有檔案時 xargs 空輸入回 0，`until` 立刻結束；zsh 下 glob 無匹配還會直接 error——寫成
+  `bash -c 'for f in glob; do [ -s "$f" ] && exit 0; done'`。
+- **`check-redispatch-prompt.sh` 會擋 implementer prompt 裡的 fenced code 與「around line N」**：修復 brief 用文字描述位置與程式碼。
+- **governance enforce 下 raw `dispatch-hetero` 必拒**（`check_mission_enforcement_gate`）：還原 enforce 之後的小修改走 sonnet 原生 hands。
+- **在 worktree 目錄裡 `git merge` 會 merge 到自己**：整合一律 `cd` 回主 checkout；Bash 工具的 cwd 會殘留。
+- **`worktree.baseRef`**：沒設 `head` 時 Agent worktree 從 `origin/develop` 開，hands 要先 ff 到 feature；設了記得在 release commit 前
+  `git checkout -- .claude/settings.local.json`。
+- **全套 suite 的平行段「ALL TESTS PASSED」不代表 serial 尾段綠**——要看整份 log 的每個 `FAIL [` 摘要行。
 
 ## 已路由出去的耐久內容
 
-- **memory**（`~/.claude/projects/-home-cookys-projects-autopilot/memory/`）：`engine-qualify-administration-gotchas.md`（更新：effort default 被擋、本機模型走 `--endpoint`、D6 同位釘值、argv 文法＝編譯器文法、opencode rail）、`foreman-guard-default-on.md`（新）、`pkill-self-match-trap.md`（新）、`zsh-bash-tool-quirks.md`（新，本次 handoff 路由）。
-- **repo**：BACKLOG 九筆、CHANGELOG 五節、`docs/ironlaw-to-gate-map.md` #6、四份 evidence bundle README（flash-next、muse-spark ×2、gemini 3.8 三檔）。
+- **memory**：`dispatch-topology-dogfood-lessons.md`（新：本節陷阱的機制版）、`cc-headless-hook-ask-auto-denies.md`、
+  `engine-qualify-administration-gotchas.md`（ladder 裁定）。
+- **repo**：CHANGELOG v2.35.16、INDEX Completed 列、archive README＋ledger、front-door canonical 段、BACKLOG 一筆已刪。

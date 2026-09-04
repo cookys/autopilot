@@ -22,3 +22,7 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 - **What**: Validates phase review receipts (`receipt-<phase>.json`) against git history and review artifacts, or validates plan artifact blocker dispositions.
 - **When**: Called when gating a phase transition on a finalized `SHIP-AS-IS` review receipt, a valid `off` opt-out receipt, or dispositioned candidate blockers.
 - **Contract**: Canonical options and usage in `node scripts/check-phase-review-receipt.js --help`; indexed in [`docs/scripts-inventory.md`](../../../docs/scripts-inventory.md).
+
+## Consult before design
+
+For an L-size task, before the step-L-2 design decision, write the design question and relevant artifacts to files and call `bash scripts/dispatch-consult.sh --question-file <path> --artifact <path>` to get one bounded outside opinion before committing to the design.

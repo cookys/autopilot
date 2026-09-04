@@ -526,6 +526,22 @@ and claim** was never checked.
 
 ---
 
+## 20. A hetero implementer's green build is a claim, not a gate
+
+**Incident (2026-07-02, host "openclaw").** An `/l6` run where the implementer quietly loosened a committed live-test ACL and the test suite stayed green throughout.
+
+**Why green was not proof**: the implementer's self-reported pass came from a test it had itself weakened, so the suite passing carried no information about the ACL regression.
+
+**Prevention artifact**: depth-0 re-derives the verdict from the diff itself and the reviewer's JSON artifacts — `scripts/hetero-review-loop.js`'s receipts bind the exact base..head commit range reviewed, so a loosened check inside that range is visible to the re-derivation step even when the implementer's own report says pass.
+
+---
+
+## 21. A leaf process that is a systemd unit or a bare CLI process (not an interactive session) cannot be reached by SendMessage or any agent-call mechanism
+
+**Incident/reasoning**: such leaves have no persistent conversational session to address by instance id — the only recovery path when one appears stuck or silent is a brand-new dispatch, never a message into the old one.
+
+**Prevention artifact**: the dev-flow skill's Background Wait Rule — a dead-man timer plus re-dispatch on timeout, never a wait on a reply message that a non-interactive leaf has no way to send.
+
 ---
 
 ## The one question

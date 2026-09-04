@@ -123,7 +123,7 @@ Build `<round-bundle.json>` from this round: `{round_id, question, transcript: [
 - **Exit 0**: stdout is one positional contribution (`{round_id, axis_id, claim_vector, position, risk_tags, anchors}`). Add it to the round as a labeled **external role** — advisory only, same trust boundary as `autopilot:survey` input. It never counts as sole basis for consensus, never becomes the CEO recommendation by itself, and never carries a verdict.
 - **Non-zero exit** (switch off, unqualified seat, rail failure): proceed with the debate unchanged — no fallback substitute, no retry.
 
-Exactly one call per round-set — this is a single evidence draw, not a multi-turn negotiation.
+Exactly one call per round-set — this is a single evidence draw, not a multi-turn negotiation. For narrow one-off inquiries, `scripts/dispatch-consult.sh` is the single-question sibling of the discuss seat family when only one bounded question is needed instead of a full discussion round.
 
 ### Step 4: Cross-Collision Synthesis
 

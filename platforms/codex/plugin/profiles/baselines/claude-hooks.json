@@ -79,6 +79,16 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-model-guard.js"
           }
         ]
+      },
+      {
+        "//": "v2.36.1 default-on: depth0-delegate-gate — nudges depth-0 (never a subagent; skipped when payload.agent_id is present) away from long read bursts toward delegating to an Explore/survey subagent; warns by default, denies only in block mode against a fresh guarded-model live file. AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE=off to opt out.",
+        "matcher": "WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/depth0-delegate-gate.js"
+          }
+        ]
       }
     ],
     "PostToolUse": [

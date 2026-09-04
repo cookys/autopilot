@@ -10,6 +10,118 @@
     ],
     "status": "finalized",
     "dispositions_path": "review-core/g1/dispositions.json",
-    "dispositions_sha256": "8bd2c27e3c2680bde35df2ce5d3e1247da382fabd4ce1cfc451df7b5c3e06a0b"
+    "dispositions_sha256": "8bd2c27e3c2680bde35df2ce5d3e1247da382fabd4ce1cfc451df7b5c3e06a0b",
+    "closed_findings": [
+      {
+        "id": "ec8ba780e0fbd2e0f80e5446d2068f313165ffe30626abc5938e3f719b5d44a6",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "41cc56863b2ab2ec29e5cb2993a52c903f2d5ccadb0b3d938f164d2e4dc7537f",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "4249df82fbf1ce050f015ba4782335968ff1d70460d2fb4cd70c63c992362c25",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "fb472166752691eb261c679b6ff4f5956dea9dbeadc903c5a64094b5b952608a",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "83debe7b5692908ad2fa2d9462b2148d5fc55dd421dae1bb97e1d1beeb42cccb",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "c3f2203726854eb4771df327ad3434517956cb6e72b936cd6908949333922c5a",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "c74bdc05f00a791fd289163fca5f64ed7a6fa887c4c9d6cde15f716cf3edd06a",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "c2ca07fe33b2e76ce8378aff7948b3cf4ed8d59c228f3a9df84f202142a66b29",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "22814c72113973fc9c311e367e471b097f9c7429964a5030ed6d69c8cade977c",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "d3b4a27eef540eae1644847a7b434be8c4f76a9089d972835a95dd852fcb2457",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "78976dc6645475350112619667af98e030d15e6f8d3cd7c479c09c6dcd8e67cf",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "4ffd0544ff9ad766074f47917d18eb9f0ae6d8308b385b1da92492c0850b634c",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "42864072a0abc27ec1ab62c608f2e64acc2e76f4aaecf6a97713b5e78f6a13a8",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "88084fa9482b0ff98255a53bb5cea88d70c953c0ed4bc4d8cbe2bed322d9eab6",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "97c05534e6de7a4ae82fb195c02350b26e35b9b81b2806b9efbf1363f09bc0ad",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "2ab20291252d7ee3ed1d31dddf2f8def06f19bc9744ad7db741f8b6c0e32a9f9",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "bdfe1fa885210409f842384264a3b519504878395b07d731b6613523e837bdea",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "13f01363092ed1689e48e8d7afd7ed8878f60796996c96f40b12aa81a8dca1d8",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "f61e6dec4521e24701b5da1e3fece33ed1f6d49990d3b9307858e864b5328cd6",
+        "closed_by_generation": 2
+      }
+    ]
+  },
+  {
+    "generation": 2,
+    "base": "c1a16011f4f279e3441f9077213c51909552af74",
+    "head": "2de14a0dcfb0b24fcacb7e5fd3a4f31c5ee4c89a",
+    "seats": [
+      {
+        "id": "s0",
+        "status": "reviewed"
+      },
+      {
+        "id": "s1",
+        "status": "reviewed"
+      },
+      {
+        "id": "s2",
+        "status": "reviewed"
+      }
+    ],
+    "reviewed_seats": 3,
+    "total_seats": 3,
+    "reviewed_seats_count": 3,
+    "total_seats_count": 3,
+    "status": "finalized",
+    "diff_sha256": "d1fd618541b0cc68b17ae20e3f6ae1aad6137c53201d034b3c6f307471ab876b",
+    "full_range_sha256": "c3c12a0e6e5e3904ba7f20e8735541e6db1ffefebc794d67177ee738da06f39c",
+    "findings_sha256": "6a1cdcc73115c4d6265635b40979145b9a3c8fc570194875a58d80ddfcb5ab92",
+    "seat_artifact_sha256": {
+      "s0": "2a8be1faed78b0a6654aaa3e7a0e341b1e0a4d6652220e9867a3f308be5992b0",
+      "s1": "7374c0c3964e93a93e4271417fa4bc40376175687e32cfade365cdd1ef822bf3",
+      "s2": "fa2ad735739e4071f3d6b6855a34a95746b84a3391a68c3c0dab7af8745c84ca"
+    },
+    "dispositions_path": "review-core/g2/dispositions.json",
+    "dispositions_sha256": "9ecdca205a0109ccaf07d682b1d8b27c4b6c816487693c161b21b597b777a2eb"
   }
 ]

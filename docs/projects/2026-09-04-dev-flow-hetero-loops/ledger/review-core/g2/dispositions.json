@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "phase": "core",
+  "generation": 2,
+  "findings": [
+    {
+      "id": "fc90b70e0ffd9f337b3e2c1339995a28b978205fcdeb2dd7a2459493edfdce39",
+      "disposition": "verified",
+      "rationale": "Confirmed by three seats: a test-only p7 carve-out and aborted-directory recreation leaked into production. Remove the carve-out, require every predecessor finalized, never recreate a generation directory (an aborted retry gets a new generation number or the retry is recorded without deleting evidence)."
+    },
+    {
+      "id": "d2370f98c29571f6350306d3e8e7d921f3e5c61c38813b4c301823571112f1dd",
+      "disposition": "verified",
+      "rationale": "Confirmed: seat_artifact_sha256 may be empty and the minimum reviewed-seat count is receipt-supplied. Require exact seat-to-hash coverage for every seat in the chain entry, derive reviewed status from validated seat artifacts, and take the minimum from configuration (default: all seats)."
+    },
+    {
+      "id": "387e0161aeb38e0f710b046f7290012e55272340a65a855c10e788733602c3ac",
+      "disposition": "verified",
+      "rationale": "Confirmed: candidate_blocker must be a mandatory boolean on every canonical plan finding and its disposition class must match."
+    },
+    {
+      "id": "d9fa4ae46607b4edc99b35e6dcfc22ef5b41c4158381a3126a1fe59e2ca2da89",
+      "disposition": "verified",
+      "rationale": "Confirmed: open_findings must be the canonical array and deep-equal the re-derived entries; numeric or absent forms are rejected."
+    },
+    {
+      "id": "5020b2fea5a5006a7dab35abaafa21acaa50079f1c08839c86ff7ae47338adb6",
+      "disposition": "verified",
+      "rationale": "Confirmed (was a BACKLOG row): canonicalise runner aliases (codex-cli≡codex) before every collision, exclusion and tuple-key comparison in the resolver and the topology script."
+    },
+    {
+      "id": "c930b0b2276eaeeba412a5432b3850c7d0666b7e8e69a6fad98cfff5ec3a4c2f",
+      "disposition": "verified",
+      "rationale": "Confirmed with the GLM finding: collect writes the phase base under review-<p>/ while the docs read ledger/phase-<p>.base. Write it at the documented ledger-root path and keep the docs."
+    },
+    {
+      "id": "5f1cc9e6f573c15f659f5b982f5bd034dccbe99437b9b3755cf0b6467c158adc",
+      "disposition": "verified",
+      "rationale": "Same defect as the sol Critical (p7 carve-out); fold: delete the branch and make test case 7 finalize generation 1 first."
+    },
+    {
+      "id": "be1a7ed9d2a322c8f52dfa65a37068ea6c278450190ee9b5ef825b567946163e",
+      "disposition": "verified",
+      "rationale": "Same defect as the sol phase-base location finding; fold: writer moves to the documented path."
+    },
+    {
+      "id": "8c923e32564892692069ebb9957906984990da75f168c983fda3c28f2ffff0c0",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP per seat: cross-check reviewed_seats/total_seats against seat artifacts — subsumed by the seat-coverage repair; BACKLOG row if any residue remains."
+    },
+    {
+      "id": "88587b32c6d0f05bb57e0557cdb9a30dd7f917bf4cbcb02fd38dc640bf34cd4a",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP per seat: hoist EXCLUDE_ALLOWLIST/isPathspecAllowed into scripts/lib — BACKLOG."
+    },
+    {
+      "id": "235c3424474596156138c71b870f4ec9e73c658250ecf08110a2cc022152523f",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP per seat: derive module purity comment vs mutation — BACKLOG."
+    },
+    {
+      "id": "d0ff0a64bb086a27d14ee26f604c7657e1f356f634830bf87f547830e432b93a",
+      "disposition": "deferred",
+      "rationale": "CUT per seat: assertion message wording — BACKLOG."
+    },
+    {
+      "id": "399c9bdec64c757ff6fbcb35bb6601fb586d316fbdfe0410afef8018eb08eaa0",
+      "disposition": "verified",
+      "rationale": "Same defect as the sol Critical (p7 carve-out); fold as above."
+    },
+    {
+      "id": "50d4d11f25679ef15a1eebc488d5b712e01a2e2f38e68865138e4e78767d85f0",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP per seat: open_findings severity comparison — folded into the deep-equality repair where it lands, otherwise BACKLOG."
+    },
+    {
+      "id": "8dcb0ef4c970b94283db2fc69c1a5850c189515a87f764f2c21fc195f4268270",
+      "disposition": "deferred",
+      "rationale": "Duplicate of the allowlist-duplication follow-up — BACKLOG."
+    },
+    {
+      "id": "2d65520db6a3e5cb8fcab11e712010af152df8af94934fd8bfafd9d4499258d8",
+      "disposition": "deferred",
+      "rationale": "CUT per seat: the topology script landed before generation 1 and is unchanged in this delta; not a defect."
+    }
+  ]
+}

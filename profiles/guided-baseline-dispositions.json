@@ -164,9 +164,9 @@
       "content_hash": "80f4fec35145178f080834d452b7aad83f2e79ce80b294b903a792b66f5222b3",
       "disposition": "rewritten",
       "successor_hashes": [
-        "4751ec91e456e4b20e0901050b42b776e104d1c3d2e56fdfc985fc7ebb0f9998"
+        "e4465920b08de5d9dda4cb848fac3b3d2eefd5712bc9d5cf38a6229257c93410"
       ],
-      "rationale": "P0 skills/dev-flow/SKILL.md:475. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :479 (\"- [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b>` exits 0 (SHIP-...). Auto-resolved offset repin — see commit for full diff context."
+      "rationale": "P0 skills/dev-flow/SKILL.md:475. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :479 (\"- [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b> --phase-base \\\"$(cat <project>/ledger/phase-<p>.base)\\\"` exits 0 (SHIP-...). D2-repair-2: added --phase-base to the L-4 gate line. Auto-resolved offset repin — see commit for full diff context."
     },
     {
       "content_hash": "e69e8b1b39e5d17531549e57e74d2b379955f0cd3c3a8fa845555e0fcaf39fd7",

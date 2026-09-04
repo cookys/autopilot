@@ -344,7 +344,7 @@
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "b999b26566798fb92912be87cd27eeabf23af19674ef4905cf40b96accff6c1b",
+      "sha256": "cd67a215f831b8cb6c762f119a0e1e585044837070730e58ce21cfaddb9ef1a7",
       "segments": [
         {
           "id": "dev.discovery-routing",

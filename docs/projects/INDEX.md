@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-04 | default dispatch topology — brain up, hands down (`docs/projects/2026-09-04-default-dispatch-topology/README.md`); governance `shadow` on the branch only, restore before merge | 2.35.16+ | `feat/default-dispatch-topology` |
 
 ## 已完成 (Completed)
 

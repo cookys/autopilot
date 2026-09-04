@@ -203,7 +203,7 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Effort**: S
 - **Source**: `docs/plans/evidence/2026-09-04-dev-flow-hetero-loops-default/context.md`
 
-### Foreman context is not measurable by hook — `context-budget` only sees the parent transcript
+### ~~Foreman context is not measurable by hook — `context-budget` only sees the parent transcript~~ (CLOSED 2026-09-05, v2.36.1: `subagentStatusLine` `tasks[].tokenCount` is the per-agent usage field; `foreman-guard.js` denies at T2 from the tmpfs live file — `docs/plans/2026-09-05-statusline-live-context-feed.md`)
 - **Trigger**: Claude Code's hook payload carries the SUBAGENT's own `transcript_path` (or an equivalent per-agent usage field) — check the CC changelog / a SPIKE on the running version; or a second cost incident where a foreman's context (not its Bash count) is the driver.
 - **Context**: v2.35.15 put ironlaw #6 in the loop through `foreman-guard` (Bash cap, polling, Monitor), but the digest's second burn shape — waking after cache TTL and re-writing a ≈900K context — is a CONTEXT ceiling, and `context-budget` deliberately exits on `agent_id` because the payload's `transcript_path` is the parent's. Until the payload identifies the subagent transcript, the Bash cap + 一刀一命 are the foreman's only ceilings. Fix shape: when a per-agent transcript is available, apply T1/T2 to it and make T2 a `deny` for subagents (a foreman can be forced to hand off; depth-0 cannot).
 - **Effort**: Fix (once the payload exists) / Spike first
@@ -565,6 +565,7 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ### context-budget T3 deny tier — calibration and obedience evidence
 - **Trigger**: 有可持久化的 context calibration／handoff obedience receipts，或再次觀察到 T3 後新派遣造成 spiral。
 - **Context**: 先前 finish-flow marker blocker 已解；真正未完成的是用 session evidence 校準 deny threshold、handoff structure 與 anti-spiral policy，不能只靠靜態 token 比例。
+- **2026-09-05 補充**：v2.36.1 起子代理（l4–l6 工頭）的 T2 deny 已由 `foreman-guard.js` 讀 live 檔實作；本 row 只剩 **depth-0** 的 deny tier，仍待校準證據。
 - **Effort**: M。
 - **Source**: context-budget follow-up audit。
 

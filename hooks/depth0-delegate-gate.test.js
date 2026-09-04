@@ -288,3 +288,27 @@ test('AUTOPILOT_DEPTH0_GATE_DIR overrides the state directory', () => {
   assert.ok(fs.existsSync(path.join(override, 'd0-test-session.json')));
   assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json')));
 });
+
+test('subagent fire with empty or null agent_id is still skipped (presence, not truthiness)', () => {
+  const env = freshEnv();
+  for (const v of ['', null]) {
+    for (let i = 0; i < 12; i += 1) {
+      const r = runHook(payload('Read', { agent_id: v }), env);
+      assert.strictEqual(r.status, 0);
+      assert.strictEqual(r.stdout.trim(), '');
+      assert.strictEqual(r.stderr.trim(), '');
+    }
+  }
+});
+
+test('garbage env mode maps to warn even when config says block and the live model is guarded', () => {
+  const env = blockEnv();
+  env.AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE = 'bogus';
+  writeLiveMain(env.AUTOPILOT_LIVE_DIR, 'd0-test-session', liveMainFixture({ model: { id: 'claude-fable-5-1', display_name: 'x' } }));
+  let last;
+  for (let i = 1; i <= 16; i += 1) last = runHook(payload('Read'), env); // 16 = 2x threshold: block would deny here
+  assert.strictEqual(last.status, 0);
+  assert.doesNotMatch(last.stdout, /"permissionDecision":"deny"/);
+  assert.match(last.stderr, /16 consecutive read-class calls/);
+});
+

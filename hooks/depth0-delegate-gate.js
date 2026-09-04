@@ -106,7 +106,10 @@ function loadConfig() {
     }
   } catch { /* defaults */ }
   const envMode = process.env.AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE;
-  if (['off', 'warn', 'block'].includes(envMode)) cfg.mode = envMode; // garbage/unset ⇒ keep warn default
+  if (envMode !== undefined) {
+    // An explicit env override wins over config; a garbage value maps to warn (never leaves block armed).
+    cfg.mode = ['off', 'warn', 'block'].includes(envMode) ? envMode : 'warn';
+  }
   return cfg;
 }
 
@@ -164,7 +167,8 @@ function classify(tool, input) {
     let payload = {};
     try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { process.exit(0); }
     if (!payload || typeof payload !== 'object') process.exit(0);
-    if (payload.agent_id) process.exit(0); // depth-1+ subagent: foreman-guard's territory, not this gate's
+    // Presence, not truthiness: an empty/null agent_id still marks a subagent fire (review 🟠 agent-id-presence).
+    if (Object.prototype.hasOwnProperty.call(payload, 'agent_id')) process.exit(0); // depth-1+: foreman-guard's territory
 
     const tool = payload.tool_name || '';
     const kind = classify(tool, payload.tool_input);

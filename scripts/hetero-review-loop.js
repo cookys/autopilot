@@ -88,24 +88,51 @@ function parseArgv(argv) {
   return { positional, flags };
 }
 
-function resolveField(resolverPath, repoRoot, name) {
-  try {
-    const args = ['--field', name];
-    if (repoRoot) {
-      args.push('--repo-root', repoRoot);
-    }
-    const res = spawnSync(resolverPath, args, {
-      encoding: 'utf8',
-      cwd: repoRoot || process.cwd(),
-      env: { ...process.env },
-    });
-    if (res.status === 0 && res.stdout) {
-      return res.stdout.trim();
-    }
-    return '';
-  } catch (_e) {
-    return '';
+function getResolverPath(repoRoot) {
+  if (process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER) {
+    return process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
   }
+  if (repoRoot) {
+    const inRepo = path.join(repoRoot, 'scripts', 'resolve-review-loop.sh');
+    if (fs.existsSync(inRepo)) {
+      return inRepo;
+    }
+  }
+  return path.join(__dirname, 'resolve-review-loop.sh');
+}
+
+function runResolver(resolverPath, repoRoot, fieldName) {
+  const args = fieldName ? ['--field', fieldName] : [];
+  const res = spawnSync(resolverPath, args, {
+    encoding: 'utf8',
+    cwd: repoRoot || process.cwd(),
+    env: { ...process.env },
+  });
+  if (res.error) {
+    const errDetail = res.error.message || String(res.error);
+    console.error(`ERROR: Failed to run review-loop resolver (${resolverPath}): ${errDetail}`);
+    process.exit(2);
+  }
+  if (res.status !== 0) {
+    const errDetail = (res.stderr || '').trim() || (res.stdout || '').trim() || `exit code ${res.status}`;
+    console.error(`ERROR: Review-loop resolver failed: ${errDetail}`);
+    process.exit(2);
+  }
+  return (res.stdout || '').trim();
+}
+
+function resolveConfig(resolverPath, repoRoot) {
+  const stdout = runResolver(resolverPath, repoRoot);
+  try {
+    return JSON.parse(stdout);
+  } catch (e) {
+    console.error(`ERROR: Failed to parse review-loop resolver JSON: ${e.message}`);
+    process.exit(2);
+  }
+}
+
+function resolveField(resolverPath, repoRoot, name) {
+  return runResolver(resolverPath, repoRoot, name);
 }
 
 function parseSeatSpec(spec, id) {
@@ -146,34 +173,8 @@ function resolveSeats(seatsArg, repoRoot) {
     return specs.map((spec, idx) => parseSeatSpec(spec, `s${idx}`));
   }
 
-  let resolver = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
-  if (!resolver) {
-    resolver = path.join(__dirname, 'resolve-review-loop.sh');
-  }
-
-  let fullJson = null;
-  const res = spawnSync(resolver, [], {
-    encoding: 'utf8',
-    cwd: repoRoot || process.cwd(),
-    env: { ...process.env },
-  });
-  if (res.error) {
-    const errDetail = res.error.message || String(res.error);
-    console.error(`ERROR: Failed to run review-loop resolver (${resolver}): ${errDetail}`);
-    process.exit(2);
-  }
-  if (res.status !== 0) {
-    const errDetail = (res.stderr || '').trim() || (res.stdout || '').trim() || `exit code ${res.status}`;
-    console.error(`ERROR: Review-loop resolver failed: ${errDetail}`);
-    process.exit(2);
-  }
-  try {
-    fullJson = JSON.parse(res.stdout);
-  } catch (e) {
-    const errDetail = (res.stderr || '').trim() || e.message;
-    console.error(`ERROR: Failed to parse review-loop resolver JSON: ${errDetail}`);
-    process.exit(2);
-  }
+  const resolver = getResolverPath(repoRoot);
+  const fullJson = resolveConfig(resolver, repoRoot);
 
   let qcPanelSeats = fullJson && fullJson.qc_panel_seats;
   if (Array.isArray(qcPanelSeats) && qcPanelSeats.length > 0) {
@@ -1042,13 +1043,7 @@ async function handleFinalize(flags) {
     phaseBaseSha = gen1Entry.base;
   }
 
-  let resolverPath = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
-  if (!resolverPath) {
-    resolverPath = repoRoot
-      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
-      : path.join('scripts', 'resolve-review-loop.sh');
-  }
-
+  const resolverPath = getResolverPath(repoRoot);
   let resolvedFrom = resolveField(resolverPath, repoRoot, 'hetero_review_resolved_from');
   if (!resolvedFrom) {
     resolvedFrom = 'unknown';
@@ -1129,30 +1124,8 @@ async function handleOptOut(flags) {
     sha256,
   };
 
-  let resolverPath = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
-  if (!resolverPath) {
-    resolverPath = repoRoot
-      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
-      : path.join('scripts', 'resolve-review-loop.sh');
-  }
-
+  const resolverPath = getResolverPath(repoRoot);
   let resolvedFrom = resolveField(resolverPath, repoRoot, `${knob}_resolved_from`);
-  if (!resolvedFrom) {
-    // If empty or not provided by resolver, try full json or fallback
-    try {
-      const res = spawnSync(resolverPath, repoRoot ? ['--repo-root', repoRoot] : [], {
-        encoding: 'utf8',
-        cwd: repoRoot || process.cwd(),
-        env: { ...process.env },
-      });
-      if (res.status === 0 && res.stdout) {
-        const fullJson = JSON.parse(res.stdout);
-        if (fullJson && fullJson[`${knob}_resolved_from`]) {
-          resolvedFrom = fullJson[`${knob}_resolved_from`];
-        }
-      }
-    } catch (_e) {}
-  }
   if (!resolvedFrom) {
     resolvedFrom = 'unknown';
   }

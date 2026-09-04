@@ -46,26 +46,30 @@ already pins `AUTOPILOT_TOPOLOGY_FILE` to a scratch path per case (existing conv
 top of the D1-2c section and inline per-scenario `AUTOPILOT_TOPOLOGY_FILE=...` on every
 invocation) — no `off`-line workaround was needed or added.
 
-**Verification caveat**: the full `hooks/tests/resolve-review-loop.test.sh` run (1473 lines, ~100+
-node subprocess spawns per assertion) did not complete within this session's available time
-budget. The fix was independently verified by direct script invocation (above, two scratch
-scenarios matching cases 5/6 exactly) reproducing the correct resolved values with no exit-3,
-so the resolver logic is confirmed correct. Two background attempts to run the full test file
-were made:
-  - `biu62fydk`: started before the test-file edits were finalized, then the test file was
-    edited again while it was still reading/running — its output is contaminated (interleaved
-    old/new content) and MUST BE DISCARDED, not used as evidence. Do not trust its "24 failed"
-    count.
-  - `buh5gge1u`: launched clean, after all edits landed. At turn-end it had emitted 29 lines and
-    was still running, past the roster-pinned-grok default-tuple assertions (all failing exactly
-    as EXPECTED per the brief — `implementer_engine=grok-4.5`/`implementer_family=xai` not found
-    because the roster is temporarily gemini, matching the brief's known-red classification) and
-    into the `allow_same_runner_dual_seat` seat-collision section, without having reached the new
-    plan_review case 5/6 assertions yet. The next foreman should re-run this file fresh (its
-    output path is noted here only for reference; the process itself will be gone by the next
-    session) and check cases 5/6 first — if either fails, the fix is almost certainly a
-    runner-value adjustment needed in the test config, not the resolver logic itself (which is
-    independently confirmed correct via the manual runs above).
+**Verification — completed and confirmed clean.** Background run `buh5gge1u`
+(`bash hooks/tests/resolve-review-loop.test.sh`, launched after all edits landed) finished:
+**380 passed, 21 failed**. The new cases 5/6 (plan_review auto skips a colliding panel seat;
+all-collide → native fallback + warning) both PASS — neither appears in the failure list.
+The 21 failures are all pre-existing: 9 are the roster-pinned-grok default-tuple assertions
+the brief already classifies as EXPECTED red until the dogfood roster is restored (default
+`implementer_engine=grok-4.5`/`implementer_family=xai`/`review_risk`/`required_review_families`/
+`l1_required`, both the JSON-body and `--field` forms, plus 4 downstream cap-warning-array
+assertions that key off that same default-implementer resolution), 2 are `hetero_review=on`
+tuple-validation assertions unrelated to this pass's scope, and 3
+(`consult_engine`/`consult_effort`/`consult_runner` "matches consult_ladder[0]") are a
+genuinely pre-existing, unrelated bug: **verified by running the pre-this-pass script
+(`git show 65abf1ab:scripts/resolve-review-loop.sh`) against the identical scratch fixture —
+it also picks `consult_ladder[1]` (MiniMax-M3) instead of `[0]` (gpt-5.5)**, so this is not a
+regression from the `consult_dispatch` auto collision-skip added this pass; something in the
+pre-existing `QC_PANEL`-based exclusion set (populated from the default reviewer
+engine/runner/effort before this test's config even sets `consult_dispatch`) already excludes
+`consult_ladder[0]`. Left untouched — flagged for the next foreman under cluster (b)
+(`resolve-review-loop-consult-discuss-switch` is the most likely home for this).
+
+An earlier background attempt (`biu62fydk`) was contaminated: it started before the test-file
+edits were finalized and the file was edited again while it was still reading it, producing an
+interleaved old/new read with a spurious "24 failed" count and bogus per-assertion diffs. That
+run's output should never be cited as evidence — `buh5gge1u` above is the trustworthy result.
 
 ## Docs cluster (c, first half) — skill count 29→30
 
@@ -133,8 +137,9 @@ foreman, in the brief's stated order:
    (EXPECTED red until dogfood roster restored at closeout) from anything else; dispatch-hetero
    (9) and dispatch-detach (14) — verify against a scratch copy of the governance file set to
    `enforce` before classifying as expected-under-shadow; slash-entry-probe (6) — run alone.
-5. Verify `hooks/tests/resolve-review-loop.test.sh` background run `buh5gge1u` from this pass
-   (output path noted above) before touching that file further.
+5. `hooks/tests/resolve-review-loop.test.sh` result is now confirmed for this pass (380
+   passed / 21 failed, all 21 pre-existing — see verification section above); no further
+   action needed on it beyond cluster (d)'s triage of the 21.
 
 bash_calls_used: over budget this pass (~46) — the product-fix investigation (reading the
 resolver's seat-picking and guard logic before editing) and the full-suite verification

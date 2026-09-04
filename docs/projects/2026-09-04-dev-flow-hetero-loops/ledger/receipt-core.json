@@ -141,7 +141,27 @@
           "id": "6019b1bd37a72f6df5111d841de3904ada42ef2e007da3944cbdee6f8b44c0e2",
           "closed_by_generation": 4
         }
-      ]
+      ],
+      "findings_sha256": "e44f4137125ca78ba68f3d1454e8c355d64ecc8bbbf66fab8de79f301558c89c",
+      "seat_artifact_sha256": {
+        "s0": "3d0966ebb0f97d5f037e87109f10657aa77c2ae4f2d655599bf9815e550291d7",
+        "s1": "9995e67e36fdb303feaa9a43a0d480fb639ff14e074ec13bbc293e2d610634ca",
+        "s2": "de9f5e888afe2c5aeac6d3af8007056259aef7c59282a2e5ac4a196617c099e8"
+      },
+      "full_range_sha256": "df01a826c625cde2a5f56e0385e40e49238463c15d836cfa9681fecd0974f7b5",
+      "diff_sha256": "6fc9e7eb4e225fc5fbbe5995f174ae5303577d48da313aa34980904bdf184fca",
+      "reviewed_seats": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "total_seats": [
+        "s0",
+        "s1",
+        "s2"
+      ],
+      "reviewed_seats_count": 3,
+      "total_seats_count": 3
     },
     {
       "generation": 2,

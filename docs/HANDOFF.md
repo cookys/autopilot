@@ -5,13 +5,21 @@
 
 ## 現況
 
-- **branch**: `develop`，與 `origin/develop` 同步在 `f756fcf5`；working tree 乾淨；feature 分支已刪；session marker 已 clear；
+- **branch**: `develop`，與 `origin/develop` 同步（merge `f756fcf5`，之後兩個 docs commit：handoff、evidence-discipline §22–25）；working tree 乾淨；feature 分支已刪；session marker 已 clear；
   governance `enforce`、dogfood roster implementer `grok-4.5/high@grok`（派工期間暫切 gemini，已還原）。
 - **version**: 2.36.0（30 skills，28 hooks：15/13）。新 skill `hetero-review`；三個新 script（`plan-rubric-scaffold.js`、
   `hetero-review-loop.js`、`check-phase-review-receipt.js`）＋ `scripts/lib/review-chain-derive.js`。
 - **測試**: 全套 `run.sh --parallel 4` 277 檔綠含 serial 尾段；殘留 `contract-parity` 8、`resolve-review-loop-consult-discuss-switch` 3
   在 develop 上同樣紅（既有，`implementer_ladder[17]` template fallback ladder），`slash-entry-probe` 負載下 0-byte（preflight 的 LLM probe 8/8 綠）。
 - **IN-FLIGHT**: 無派工。harness 鎖住的 `.claude/worktrees/agent-*` 已 reap（若還有殘留是 harness 鎖，`git worktree prune` 即可）。
+
+## 已路由出去的耐久內容（本段補的）
+
+- `references/evidence-discipline.md` §22–25（stub 比真程式寬鬆、測試後門漏進 production、工頭「綠」是主張、`auto` 預設洩漏主機狀態）；sol 審過（docs-only diff，第一輪 MUST-FIX 是我送審範圍漏了 archive 副本，補全後 SHIP）。
+- `skills/ceo-agent/references/level-front-door.md`：工頭 DONE 線含全套 suite 平行段（改共享契約時）。
+- archive ledger：`brief-common.md`、`brief-d1-example.md`、`watch-hetero.sh` 副本（scratchpad 會隨 session 消失）；`D5.md` 有說明。
+- BACKLOG：dispatch-watch script 升級、hands diff 的 fixture 字面 lint。
+- memory：`hetero-review-loop-dogfood-lessons`（新）、`dispatch-plan-review-contract`（補 RUNNERS 無 kimi、無 plan_reviewer 角色、growth 1.28×）。
 
 ## 已決事項(不重議)
 

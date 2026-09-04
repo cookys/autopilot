@@ -973,3 +973,21 @@ never an ad hoc descriptive string.
 - **Context**: `check-phase-review-receipt.js --plan-artifact` requires `disposition` on every artifact finding and `candidate_blocker` on every disposition entry; `dispatch-plan-review.js` writes neither into the terminal artifact and its disposition file has no `candidate_blocker`. Depth-0 bridged with an `adjudicate.js` (applyDispositions + reshaped file) on 2026-09-05. Fix shape: the driver emits `gN.adjudicated.json` when a generation-N disposition file is supplied at the cap, and the checker accepts the driver's disposition shape. Also: post-terminal accept-and-fold always breaks the plan sha; the checker should accept a `--reviewed-plan` copy plus a recorded delta, or the driver should snapshot the reviewed bytes into state.
 - **Effort**: Fix
 - **Source**: `docs/projects/2026-09-05-statusline-live-context-feed/ledger/plan-review/README.md`
+
+### Live-state base on world-writable tmpfs — ownership/mode check on the reader side
+- **Trigger**: autopilot runs on a multi-user host, or a second local user is observed on any fleet host; or the first report of a foreign `/dev/shm/autopilot-<uid>` directory.
+- **Context**: v2.36.1 moved `context-budget`/`depth0-gate` state and the codeforge live files under `$XDG_RUNTIME_DIR/autopilot` (0700, safe) or `/dev/shm/autopilot-<uid>` / `/tmp/autopilot-<uid>` (parent `drwxrwxrwt`, name predictable, no pre-existing dir). A hostile local user could pre-create the dir and plant a fresh `context/<sid>.tasks.json` to deny a foreman's Bash (`foreman-guard.js`) or a depth-0 read (`depth0-delegate-gate.js` block mode). Readers check schema/freshness but not owner or mode. Fix shape: create the base with `mkdirSync(..., {mode: 0o700})`; reject a candidate whose `lstat` is a symlink, has a foreign uid, or `mode & 0o077`; same in codeforge `live.rs`. Cut from v2.36.1 (pre-merge review 🟡): shipped target is single-user dev hosts.
+- **Effort**: S (both repos)
+- **Source**: `docs/projects/_archive/2026-09-05-statusline-live-context-feed/` pre-merge review (opus), 2026-09-05
+
+### Live-file window sizes accepted without `> 0`; depth0 counter unlocked; foreman-guard 0-row diagnostic repeats
+- **Trigger**: any of: a live file with `context_window_size <= 0` observed; a depth-0 parallel read burst undercounted (`reads` lower than calls); a foreman transcript showing the 0-row diagnostic more than once per run.
+- **Context**: three pre-merge-review 🟡 cuts from v2.36.1: (a) `context-budget.js` / `foreman-guard.js` accept `Number.isFinite` windows, so `-1` yields a `-15300000% of the ~-0k window` message and `0` silently reverts to the unscaled 150k ceiling — require `> 0`, else treat as absent; (b) `depth0-delegate-gate.js` read-modify-write on its counter loses updates under parallel tool calls (24 concurrent ⇒ 22–23) — reuse `foreman-guard.js`'s `withLock`; (c) `foreman-guard.js` prints the 0-row diagnostic on every Bash call instead of once — record a flag in its per-agent state. Also 🔵: multi-row `findmnt` output only first row read; `/proc/mounts` unescapes only `\040`; SSD-fallback warning is per-process (= per hook fire) on hosts with neither findmnt nor /proc/mounts (macOS, unverified); sub-200k live window scales tiers down with no test.
+- **Effort**: S each
+- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05
+
+### depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher
+- **Trigger**: a measured depth-0 Bash latency complaint, or the next revision of `depth0-delegate-gate`.
+- **Context**: plan §4 P3.1 lists `WebFetch|WebSearch|Read|Grep|Glob|Agent|Skill|Task`; the shipped hook also matches `Bash` and classifies read-shaped commands (`grep|rg|find|cat|sed -n|head|tail`) with a duplicated 35-line shell lexer, adding ~17 ms and two `/bin/sh` spawns per depth-0 Bash call (reviewer measurement). Accepted for v2.36.1 (depth-0's own grep bursts were the incident); recorded here so the delta is explicit. Options: keep and share the lexer with `foreman-guard.js`; or drop `Bash` and accept that grep-via-Bash is uncounted.
+- **Effort**: S
+- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05; `docs/plans/2026-09-05-statusline-live-context-feed.md` §4 P3.1

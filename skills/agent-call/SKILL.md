@@ -1,6 +1,6 @@
 ---
 name: agent-call
-description: Contact an already-running persistent coding-agent session by exact name. Prefer Claude native messaging when it can address the target; otherwise use the installed Agent Call CLI. Never use this route to create temporary workers.
+description: Contact an already-running persistent coding-agent session by exact name. Triggers on owner instructions like "通知 <host>", "跟 <host/project> 說", "叫 <host> 看一下", or naming a hangar-bridge peer or pane by name. Prefer Claude native messaging when it can address the target; otherwise use the installed Agent Call CLI. Not for: asking a model for an opinion (redirect to the consult seat via `scripts/dispatch-consult.sh`), reviewing a plan or diff with heterogeneous engines (redirect to hetero-review), or creating new implementers (redirect to `/l4`, `/l5`, or `/l6`). Never use this route to create temporary workers. Claude Code sessions are addressed by the instance id shown by `fleet peers`, while `fleet local list` shows only non-Claude panes on the local host.
 ---
 
 # Agent Call — persistent peer routing

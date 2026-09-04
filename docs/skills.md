@@ -2,13 +2,13 @@
 
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
-The full catalog of all 29 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
+The full catalog of all 30 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
 
 ---
 
 ## The Solution
 
-Autopilot ships **29 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, persistent-peer coordination, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
+Autopilot ships **30 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, persistent-peer coordination, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
 
 The catalog is layered by how central a skill is to the daily loop — **core** (the seven you touch on almost every task), **delegation** (the CEO autonomy ladder), and **pioneer** (specialized / lower-frequency capabilities, each with its own owner scenario). Layering is presentation only: every skill is equally installed and invocable.
 

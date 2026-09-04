@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
   <img src="https://img.shields.io/badge/version-2.36.0-E8A838?style=flat-square" alt="v2.36.0">
-  <img src="https://img.shields.io/badge/skills-29-4A90D9?style=flat-square" alt="29 Skills">
+  <img src="https://img.shields.io/badge/skills-30-4A90D9?style=flat-square" alt="30 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-28-6B8E6B?style=flat-square" alt="28 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
@@ -51,7 +51,7 @@ Claude Code 仍是最完整的 host。Autopilot 讓 AI coding agent **把整件�
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它優先以 Claude Code plugin 出貨 —— **29 個 skill、3 個方法論 agent、25 個 hook、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它優先以 Claude Code plugin 出貨 —— **30 個 skill、3 個方法論 agent、25 個 hook、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
@@ -114,7 +114,7 @@ Autopilot 是 Claude Code-first，但不是 Claude Code-only。依照你實際�
 
 ## What It Does
 
-29 個 skill，依你想做的事分組。每個都從自然語言觸發 ——「Try saying」列出的就是真正的觸發語。
+30 個 skill，依你想做的事分組。每個都從自然語言觸發 ——「Try saying」列出的就是真正的觸發語。
 
 ### ✍️ 寫程式
 
@@ -189,7 +189,7 @@ local runtime 或 agentic local runner。
 
 > **Try saying：** *「記下來供下次使用」* · *「回顧這週」* · *「最高優先是什麼？」*
 
-**→ 全部 29 個 skill 的完整目錄、三種認知模式、以及彼此如何組合：[docs/skills.md](docs/skills.md)。**
+**→ 全部 30 個 skill 的完整目錄、三種認知模式、以及彼此如何組合：[docs/skills.md](docs/skills.md)。**
 
 ### 🔗 聯絡 persistent peer
 
@@ -199,7 +199,7 @@ local runtime 或 agentic local runner。
 
 ## Install
 
-**Claude Code**（主要）—— 上面那兩行指令。29 個 skill 立即可用，如 `autopilot:dev-flow`、`autopilot:survey` 等。
+**Claude Code**（主要）—— 上面那兩行指令。30 個 skill 立即可用，如 `autopilot:dev-flow`、`autopilot:survey` 等。
 
 > **⚠️ Claude Code ≥ 2.1.233 + Claude 5 世代模型**:task 工具(`TaskCreate` 家族)在
 > Opus ≥ 4.8 / Sonnet ≥ 5 / Fable ≥ 5 上**預設關閉**——dev-flow 全部 forcing function 會被
@@ -210,7 +210,7 @@ local runtime 或 agentic local runner。
 
 | Harness | 如何開始 | 目前支援 | 已知限制 |
 |---|---|---|---|
-| **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：29 個 skills、3 個方法論 agents、25 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：30 個 skills、3 個方法論 agents、25 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
 | **Codex** | `.agents/skills/`，或加入 `platforms/codex` marketplace 後 `codex plugin add autopilot@autopilot-local` | Skills、generated support payload，以及一條 production `PostCompact` recovery hook（`manual\|auto`） | 這是 Codex-native recovery boundary，不代表 Claude hook parity；不載入 Claude hook bundle、apps 或 MCP servers。經 `spawn_agent` 的 subagent model 路由需 user 自行 opt-in — 見 `platforms/codex/README.md` |
 | **OpenCode** | 在這個 repo 使用 `.agents/skills/`；agents 走 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies、OpenCode plugin wrapper | Optional TypeScript deps 只在編輯 wrapper 時需要；hook parity 屬平台特定問題 |
 | **Antigravity（`agy`）** | `./scripts/install-antigravity.sh` | 受 guard 保護的 `agy plugin validate` / install / list 流程，採 export-then-install | Runtime hook firing 仍未驗證；install 不代表 hook behavior parity |
@@ -223,7 +223,7 @@ local runtime 或 agentic local runner。
 
 | 主題 | 文件 |
 |------|------|
-| **全部 29 個 skill** + 三種模式 + 如何組合 | [docs/skills.md](docs/skills.md) |
+| **全部 30 個 skill** + 三種模式 + 如何組合 | [docs/skills.md](docs/skills.md) |
 | **Superpowers 並存** —— 三種情境、遷移 | [docs/coexistence.md](docs/coexistence.md) |
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |

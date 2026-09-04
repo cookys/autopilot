@@ -41,8 +41,7 @@ LEDGER="$TEST_TMP/ledger"
 mkdir -p "$LEDGER"
 
 # Compute real diff and sha256 between PHASE_BASE and GEN1_HEAD
-DIFF_C2_C3=$(git -C "$SCRATCH_REPO" diff "$PHASE_BASE" "$GEN1_HEAD")
-DIFF_SHA=$(node -e "const crypto=require('crypto'); process.stdout.write(crypto.createHash('sha256').update(process.argv[1], 'utf8').digest('hex'))" "$DIFF_C2_C3")
+DIFF_SHA=$(git -C "$SCRATCH_REPO" diff "$PHASE_BASE" "$GEN1_HEAD" | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
 
 # Helper to write standard range.json
 write_range_json() {

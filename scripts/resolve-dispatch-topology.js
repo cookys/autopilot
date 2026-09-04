@@ -273,7 +273,8 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     // A seat is usable only if its runner is installed
     if (!runnersInstalled[runner]) continue;
 
-    // Query scorecard status with the row's runner token (or normalized)
+    // Query scorecard status with the row's runner token (or normalized).
+    // When effort is empty/null, omit --effort to query the legacy partition.
     const status = checkSeatStatus(repoRoot, engine, origRunner, effort, role)
       || checkSeatStatus(repoRoot, engine, runner, effort, role);
     if (!status || status.admission_status !== 'qualified') continue;
@@ -306,10 +307,11 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
 
     const family = familyOf(engine);
     const endpoint = resolveEndpoint(engine, runner);
+    const emittedEffort = effort || 'high';
 
     const seatObj = {
       engine,
-      effort: effort || '',
+      effort: emittedEffort,
       runner,
       family,
       endpoint,
@@ -323,7 +325,7 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     const legacyRungObj = {
       rung: rungName,
       engine,
-      effort: effort || '',
+      effort: emittedEffort,
       runner,
     };
     if (baselineEventId !== undefined) {
@@ -333,6 +335,7 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     qualified.push({
       engine,
       effort: effort || '',
+      emittedEffort,
       runner,
       family,
       latency: rowLatency,
@@ -469,8 +472,9 @@ function deriveTopology(repoRoot, options = {}) {
   if (roles.has('reviewer')) {
     const seats = [...getReviewerQualified()];
     seats.sort((a, b) => {
-      const rankA = EFFORT_RANK[a.effort] || 99;
-      const rankB = EFFORT_RANK[b.effort] || 99;
+      // In ordering: empty effort ranks below every explicit effort (sorts last)
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
@@ -487,6 +491,10 @@ function deriveTopology(repoRoot, options = {}) {
       const diffA = a.family !== askingFamily ? 0 : 1;
       const diffB = b.family !== askingFamily ? 0 : 1;
       if (diffA !== diffB) return diffA - diffB;
+      // An originally-empty effort ranks below every explicit effort
+      const rankA = a.effort ? 0 : 1;
+      const rankB = b.effort ? 0 : 1;
+      if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       if (a.costRank !== b.costRank) return a.costRank - b.costRank;
       return a.engine.localeCompare(b.engine);
@@ -523,8 +531,11 @@ function deriveTopology(repoRoot, options = {}) {
     });
 
     function comparePanelCandidates(a, b) {
-      const rankA = EFFORT_RANK[a.effort] || 0;
-      const rankB = EFFORT_RANK[b.effort] || 0;
+      // In panel ordering: highest effort rank first.
+      // An originally-empty effort ranks below every explicit effort, so rank 0 ensures it sorts last
+      // and never becomes chair over any explicit effort.
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 0) : -1;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 0) : -1;
       if (rankA !== rankB) return rankB - rankA; // highest effort rank first
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);

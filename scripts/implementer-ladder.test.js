@@ -180,13 +180,24 @@ test('planted negative: empty ladder dispatch argv equals pre-ladder roster', ()
   assert.deepEqual(after, before);
 });
 
-test('template config has no implementer_ladder field (empty emit)', () => {
+test('template config with auto implementer_ladder and no topology file emits empty ladder plus warning', () => {
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-ladder-template-'));
+  const nonExistentTopo = path.join(scratchDir, 'nonexistent-topology.json');
   const run = spawnSync('bash', [RESOLVER], {
     cwd: REPO,
     encoding: 'utf8',
-    env: { ...process.env, REVIEW_LOOP_CONFIG_OVERRIDE: TEMPLATE },
+    env: {
+      ...process.env,
+      REVIEW_LOOP_CONFIG_OVERRIDE: TEMPLATE,
+      AUTOPILOT_TOPOLOGY_FILE: nonExistentTopo,
+    },
   });
   assert.equal(run.status, 0, run.stderr);
   const json = JSON.parse(run.stdout);
   assert.deepEqual(json.implementer_ladder, []);
+  assert.ok(Array.isArray(json.capability_warnings), 'capability_warnings should be an array');
+  assert.ok(
+    json.capability_warnings.some((w) => w.includes('implementer_ladder auto')),
+    `expected warning containing "implementer_ladder auto", got: ${JSON.stringify(json.capability_warnings)}`
+  );
 });

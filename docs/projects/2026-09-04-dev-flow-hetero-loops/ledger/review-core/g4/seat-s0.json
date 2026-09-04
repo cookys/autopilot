@@ -1,0 +1,11 @@
+{
+  "runner": "codex",
+  "model": "gpt-5.6-sol",
+  "status": "reviewed",
+  "verdict": "SHIP-AS-IS",
+  "findings": "none",
+  "no_finding_proof": "checked=disposition validation, minimum-seat parsing, aborted-generation recovery, regression fixtures, and routing documentation; evidence=rejected non-blockers now require rationale while accepted_blocker remains exclusive, minimum-seat inputs are validated before chain processing, existing generations/directories cannot be reused, and successors resume from the preserved aborted base without mutating prior evidence; conclusion=the diff closes the targeted fail-open and reuse gaps without introducing a correctness, security, or completeness defect",
+  "raw_log": "/tmp/dispatch-review-log-gTpI1s",
+  "error": null,
+  "usage": null
+}

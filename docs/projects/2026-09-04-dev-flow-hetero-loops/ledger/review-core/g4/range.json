@@ -1,0 +1,14 @@
+{
+  "base": "7d0b0afee75ff2100e970dcf440d0667c1760947",
+  "head": "286d1cf0c96a8e0266c69406db01b03ff283963d",
+  "diff_sha256": "55008caccad61e82e5ea9c3e57795dccbea93f088babf02f6b2bd99ecd7574dc",
+  "full_range_sha256": "1621b4438faca20adea5681983d6b60d2d566e122c53f94fa0b6f0d75942b32b",
+  "excluded": [
+    "platforms/**",
+    "profiles/*.json",
+    "docs/projects/**",
+    "docs/plans/evidence/**",
+    "docs/BACKLOG.md"
+  ],
+  "diff_bytes": 25334
+}

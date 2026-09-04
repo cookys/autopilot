@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "phase": "core",
+  "generation": 4,
+  "findings": [
+    {
+      "id": "7bb33333cf986f8fa299486622060c3fd30045e31f711354ecc67426b20578ea",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP per seat: end-to-end aborted-chain checker case — BACKLOG."
+    },
+    {
+      "id": "56c818abddd66d2ecad461951d9666fcafc29795f10ec209516e5595f7476f1c",
+      "disposition": "deferred",
+      "rationale": "CUT per seat: --retry doc sweep — depth-0 grepped the references at closeout (see ledger D5)."
+    },
+    {
+      "id": "c49b568886b5d20d409086783b20dde236750a4ea92a0158d7f88c9337b72613",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP per seat: threshold enforcement on a multi-seat fixture — BACKLOG."
+    },
+    {
+      "id": "c8a1a3e506ab109c9951b2784bd3876d10fbabcb8c4ac069eab4eba6989f482e",
+      "disposition": "deferred",
+      "rationale": "FOLLOW-UP per seat: explicit base-inheritance assertion — BACKLOG."
+    }
+  ]
+}

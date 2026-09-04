@@ -508,7 +508,7 @@ If deferral passes: add to BACKLOG with context + trigger condition, mark phase 
 - [ ] Goal check: all three verification questions answered "yes"
 - [ ] Tests pass: zero failures
 - [ ] Completeness scan: no placeholder markers or stub implementations
-- [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b>` exits 0 (SHIP-AS-IS chain or explicit opt-out)
+- [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b> --phase-base "$(cat <project>/ledger/phase-<p>.base)"` exits 0 (SHIP-AS-IS chain or explicit opt-out)
 - [ ] Project docs: progress row updated to reflect phase completion
 
 **CEO mode**: CEO verifies all prerequisites. No user confirmation needed for passing gates.

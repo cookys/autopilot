@@ -45,6 +45,7 @@ Collect flags:
   --phase-base <sha>    Base commit sha (required for generation 1)
   --seats <specs>       Comma-separated list of seats (engine/effort@runner[:endpoint])
   --spec-file <file>    Task specification file to pass to reviewer
+  --exclude <specs>     Comma-separated git pathspecs to exclude from diff
   --timeout <duration>  Timeout for dispatch (default: 20m)
   --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict
 
@@ -283,8 +284,15 @@ function runGitRevParse(branch, repoRoot) {
   return res.stdout.trim();
 }
 
-function runGitDiff(base, head, repoRoot) {
-  const res = spawnSync('git', ['diff', `${base}..${head}`], {
+function runGitDiff(base, head, repoRoot, excludes = []) {
+  const args = ['diff', `${base}..${head}`];
+  if (Array.isArray(excludes) && excludes.length > 0) {
+    args.push('--');
+    for (const pattern of excludes) {
+      args.push(`:!${pattern}`);
+    }
+  }
+  const res = spawnSync('git', args, {
     encoding: 'utf8',
     cwd: repoRoot || process.cwd(),
     maxBuffer: 64 * 1024 * 1024,
@@ -484,23 +492,35 @@ async function handleCollect(flags) {
   const gDir = path.join(reviewPhaseDir, `g${generation}`);
   fs.mkdirSync(gDir, { recursive: true });
 
+  const excludedList = typeof flags.exclude === 'string'
+    ? flags.exclude.split(',').map((p) => p.trim()).filter(Boolean)
+    : [];
+
   let diffText = '';
   try {
-    diffText = runGitDiff(base, head, repoRoot);
+    diffText = runGitDiff(base, head, repoRoot, excludedList);
   } catch (e) {
     console.error(`ERROR: Failed to generate diff: ${e.message}`);
     process.exit(1);
   }
 
+  const diffBytes = Buffer.byteLength(diffText, 'utf8');
   const diffSha256 = crypto.createHash('sha256').update(diffText, 'utf8').digest('hex');
 
   const rangeJson = {
     base,
     head,
     diff_sha256: diffSha256,
+    excluded: excludedList,
+    diff_bytes: diffBytes,
   };
   writeFileSyncAtomic(path.join(gDir, 'range.json'), JSON.stringify(rangeJson, null, 2) + '\n');
   writeFileSyncAtomic(path.join(gDir, 'diff.txt'), diffText);
+
+  // Before dispatching, if diff exceeds 400000 bytes, print warning
+  if (diffBytes > 400000) {
+    console.warn(`WARNING: Diff size (${diffBytes} bytes) exceeds 400000 bytes; consider using --exclude <pathspec,...>`);
+  }
 
   // Dispatch all seats concurrently
   const timeout = flags.timeout || '20m';

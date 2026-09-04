@@ -13,7 +13,7 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 
 ### scripts/hetero-review-loop.js
 
-- **What**: Executes multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipt generation.
+- **What**: Executes multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipt generation. Supports `--exclude <pathspec,...>` on `collect` to omit generated or mirrored files via negative pathspecs, records `excluded` and `diff_bytes` in `range.json`, and warns if diff size exceeds 400,000 bytes prior to dispatching.
 - **When**: Called by the `hetero_review` generation-adversarial review loop via `collect`, `finalize`, or `opt-out` subcommands.
 - **Contract**: Canonical options and subcommands in `node scripts/hetero-review-loop.js --help`; indexed in `docs/scripts-inventory.md`.
 

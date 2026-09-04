@@ -426,7 +426,7 @@ if [ -n "$STUB_SEAT_RESPONSE" ]; then
   echo "$STUB_SEAT_RESPONSE"
   exit 0
 fi
-echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 STUB_EOF
 chmod +x "$DISPATCH_STUB"
 
@@ -440,7 +440,7 @@ export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$DISPATCH_STUB"
 
 # Seat s0 reports a Critical finding; Seat s1 reports empty findings with verdict SHIP-AS-IS
 export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "🔴 Critical: Critical security bug found in validation logic"}'
-export STUB_RESPONSE_s1='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_RESPONSE_s1='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 unset STUB_SEAT_RESPONSE
 
 E2E_PHASE="p_e2e"
@@ -527,4 +527,67 @@ NEG2_OUT=$(node "$SCRIPT" \
   --repo-root "$SCRATCH_REPO" 2>&1); NEG2_RC=$?
 assert_exit_code "$NEG2_RC" "1" "e2e: checker exits 1 on mismatched phase-base sha"
 
+# Case 13: Receipt where range.json carries an exclusion list
+EXCL_PHASE="p_excl_case"
+(
+  cd "$SCRATCH_REPO"
+  echo "normal line" > excl_norm.txt
+  mkdir -p excl_gen
+  echo "generated line" > excl_gen/gen.txt
+  git add excl_norm.txt excl_gen/gen.txt
+  git commit -q -m "commit with generated"
+)
+EXCL_TEST_HEAD=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
+EXCL_TEST_DIFF_SHA=$(git -C "$SCRATCH_REPO" diff "$GEN1_HEAD..$EXCL_TEST_HEAD" -- ':!excl_gen/**' | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+
+mkdir -p "$LEDGER/review-$EXCL_PHASE/g1"
+cat << EOF > "$LEDGER/review-$EXCL_PHASE/g1/range.json"
+{
+  "base": "$GEN1_HEAD",
+  "head": "$EXCL_TEST_HEAD",
+  "diff_sha256": "$EXCL_TEST_DIFF_SHA",
+  "excluded": ["excl_gen/**"],
+  "diff_bytes": 100
+}
+EOF
+EXCL_DISP_SHA=$(write_gen_artifacts "$EXCL_PHASE" "1")
+cat << EOF > "$LEDGER/review-$EXCL_PHASE/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "$GEN1_HEAD",
+    "head": "$EXCL_TEST_HEAD",
+    "status": "finalized",
+    "dispositions_sha256": "$EXCL_DISP_SHA"
+  }
+]
+EOF
+write_receipt_json "$EXCL_PHASE" "{
+  \"kind\": \"review\",
+  \"phase\": \"$EXCL_PHASE\",
+  \"branch\": \"work\",
+  \"phase_base_sha\": \"$GEN1_HEAD\",
+  \"chain\": [
+    {
+      \"generation\": 1,
+      \"base\": \"$GEN1_HEAD\",
+      \"head\": \"$EXCL_TEST_HEAD\",
+      \"status\": \"finalized\",
+      \"dispositions_sha256\": \"$EXCL_DISP_SHA\"
+    }
+  ],
+  \"verdict\": \"SHIP-AS-IS\",
+  \"open_findings\": [],
+  \"resolved_from\": \"test\",
+  \"written_at\": \"2026-09-04T00:00:00Z\"
+}"
+CHECK_EXCL_OUT=$(node "$SCRIPT" \
+  --ledger "$LEDGER" \
+  --phase "$EXCL_PHASE" \
+  --branch work \
+  --phase-base "$GEN1_HEAD" \
+  --repo-root "$SCRATCH_REPO" 2>&1); CHECK_EXCL_RC=$?
+assert_exit_code "$CHECK_EXCL_RC" "0" "case 13: checker exits 0 when range.json carries an exclusion"
+
 finalize_test
+

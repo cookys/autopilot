@@ -17,6 +17,70 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const deriveReceiptState = require('./lib/review-chain-derive');
+
+const EXCLUDE_ALLOWLIST = [
+  'platforms/**',
+  'profiles/*.json',
+  'docs/projects/**',
+  'docs/plans/evidence/**',
+  'docs/BACKLOG.md',
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'Gemfile.lock',
+  'Cargo.lock',
+  'composer.lock',
+  'poetry.lock',
+  'flake.lock',
+  '*.lock',
+  '**/*.lock',
+  '**/package-lock.json',
+  '**/yarn.lock',
+  '**/pnpm-lock.yaml',
+  'lockfiles',
+  'generated/**',
+];
+
+function isPathspecAllowed(pathspec) {
+  const normalized = pathspec.trim();
+  if (EXCLUDE_ALLOWLIST.includes(normalized)) {
+    return true;
+  }
+  for (const pattern of EXCLUDE_ALLOWLIST) {
+    if (pattern === normalized) return true;
+    if (pattern.endsWith('/**')) {
+      const prefix = pattern.slice(0, -3);
+      if (normalized === prefix || normalized.startsWith(prefix + '/')) return true;
+    }
+  }
+  return false;
+}
+
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+    return false;
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) {
+    return false;
+  }
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!deepEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
 
 function printUsage() {
   console.log(`Usage:
@@ -24,7 +88,7 @@ function printUsage() {
     node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> --phase-base <sha> [--repo-root <r>]
 
   Mode B (Plan-artifact / dispositions validation):
-    node scripts/check-phase-review-receipt.js --plan-artifact <gN.json> --dispositions <gN-disposition.json>
+    node scripts/check-phase-review-receipt.js --plan-artifact <gN.json> --dispositions <gN-disp.json> [--plan-file <p>] [--rubric-file <r>]
 
 Flags:
   --ledger <dir>                    Ledger directory containing receipts
@@ -34,6 +98,9 @@ Flags:
   --repo-root <r>                   Path to repository root (defaults to cwd)
   --plan-artifact <gN.json>         Plan artifact JSON file
   --dispositions <gN-disp.json>     Dispositions JSON file
+  --plan-file <file>                Plan markdown file (optional, resolved automatically if omitted)
+  --rubric-file <file>              Rubric markdown file (optional, resolved automatically if omitted)
+  --min-reviewed-seats <n>          Minimum reviewed seats required per generation
   --help, -h                        Show this help message and exit 0
 `);
 }
@@ -77,9 +144,125 @@ function runResolverField(resolverPath, repoRoot, fieldName) {
   }
 }
 
+function resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, dispositionsPath, repoRoot) {
+  const explicit = flags['plan-file'] || flags['plan_file'] || flags.plan || flags['plan-path'] || flags['plan_path']
+    || planArtifact.plan_path || planArtifact.plan_file || planArtifact.planFile
+    || dispositions.plan_path || dispositions.plan_file || dispositions.planFile;
+  if (explicit) {
+    const resolved = path.isAbsolute(explicit) ? explicit : path.resolve(repoRoot, explicit);
+    if (fs.existsSync(resolved)) return resolved;
+  }
+  const id = planArtifact.logical_plan_id;
+  if (id) {
+    const candidates = [
+      path.join(repoRoot, 'docs', 'plans', `${id}.md`),
+      path.join(repoRoot, `${id}.md`),
+      path.join(path.dirname(planArtifactPath), `${id}.md`),
+      path.join(path.dirname(planArtifactPath), 'plan.md'),
+      path.join(path.dirname(dispositionsPath), `${id}.md`),
+      path.join(path.dirname(dispositionsPath), 'plan.md'),
+    ];
+    const mSuff = id.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
+    if (mSuff) {
+      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mSuff[2]}-${mSuff[1]}.md`));
+      candidates.push(path.join(path.dirname(planArtifactPath), `${mSuff[2]}-${mSuff[1]}.md`));
+      candidates.push(path.join(path.dirname(dispositionsPath), `${mSuff[2]}-${mSuff[1]}.md`));
+    }
+    const mPref = id.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if (mPref) {
+      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mPref[2]}-${mPref[1]}.md`));
+      candidates.push(path.join(path.dirname(planArtifactPath), `${mPref[2]}-${mPref[1]}.md`));
+      candidates.push(path.join(path.dirname(dispositionsPath), `${mPref[2]}-${mPref[1]}.md`));
+    }
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) return cand;
+    }
+  }
+  if (planArtifact.plan_sha256) {
+    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), path.join(repoRoot, 'docs', 'plans')];
+    for (const d of searchDirs) {
+      try {
+        if (!fs.existsSync(d)) continue;
+        const files = fs.readdirSync(d);
+        for (const file of files) {
+          if (file.endsWith('.md') && !file.endsWith('.rubric.md')) {
+            const full = path.join(d, file);
+            const bytes = fs.readFileSync(full);
+            if (crypto.createHash('sha256').update(bytes).digest('hex') === planArtifact.plan_sha256) {
+              return full;
+            }
+          }
+        }
+      } catch (_e) {}
+    }
+  }
+  return null;
+}
+
+function resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, dispositionsPath, planFilePath, repoRoot) {
+  const explicit = flags['rubric-file'] || flags['rubric_file'] || flags.rubric || flags['rubric-path'] || flags['rubric_path']
+    || planArtifact.rubric_path || planArtifact.rubric_file || planArtifact.rubricFile
+    || dispositions.rubric_path || dispositions.rubric_file || dispositions.rubricFile;
+  if (explicit) {
+    const resolved = path.isAbsolute(explicit) ? explicit : path.resolve(repoRoot, explicit);
+    if (fs.existsSync(resolved)) return resolved;
+  }
+  if (planFilePath) {
+    const parsed = path.parse(planFilePath);
+    const cand = path.join(parsed.dir, `${parsed.name}.rubric.md`);
+    if (fs.existsSync(cand)) return cand;
+  }
+  const id = planArtifact.logical_plan_id;
+  if (id) {
+    const candidates = [
+      path.join(repoRoot, 'docs', 'plans', `${id}.rubric.md`),
+      path.join(repoRoot, `${id}.rubric.md`),
+      path.join(path.dirname(planArtifactPath), `${id}.rubric.md`),
+      path.join(path.dirname(planArtifactPath), 'rubric.md'),
+      path.join(path.dirname(dispositionsPath), `${id}.rubric.md`),
+      path.join(path.dirname(dispositionsPath), 'rubric.md'),
+    ];
+    const mSuff = id.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
+    if (mSuff) {
+      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mSuff[2]}-${mSuff[1]}.rubric.md`));
+      candidates.push(path.join(path.dirname(planArtifactPath), `${mSuff[2]}-${mSuff[1]}.rubric.md`));
+      candidates.push(path.join(path.dirname(dispositionsPath), `${mSuff[2]}-${mSuff[1]}.rubric.md`));
+    }
+    const mPref = id.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if (mPref) {
+      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mPref[2]}-${mPref[1]}.rubric.md`));
+      candidates.push(path.join(path.dirname(planArtifactPath), `${mPref[2]}-${mPref[1]}.rubric.md`));
+      candidates.push(path.join(path.dirname(dispositionsPath), `${mPref[2]}-${mPref[1]}.rubric.md`));
+    }
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) return cand;
+    }
+  }
+  if (planArtifact.rubric_sha256) {
+    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), path.join(repoRoot, 'docs', 'plans'), path.join(repoRoot, 'evals')];
+    for (const d of searchDirs) {
+      try {
+        if (!fs.existsSync(d)) continue;
+        const files = fs.readdirSync(d);
+        for (const file of files) {
+          if (file.endsWith('.md')) {
+            const full = path.join(d, file);
+            const bytes = fs.readFileSync(full);
+            if (crypto.createHash('sha256').update(bytes).digest('hex') === planArtifact.rubric_sha256) {
+              return full;
+            }
+          }
+        }
+      } catch (_e) {}
+    }
+  }
+  return null;
+}
+
 function validateModeB(flags) {
   const planArtifactPath = flags['plan-artifact'];
   const dispositionsPath = flags.dispositions;
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : process.cwd();
 
   let planArtifact;
   try {
@@ -99,20 +282,105 @@ function validateModeB(flags) {
     process.exit(1);
   }
 
-  if (!planArtifact || typeof planArtifact !== 'object' || Array.isArray(planArtifact) || !Array.isArray(planArtifact.findings)) {
-    console.error('Plan artifact must parse as a JSON object with a findings array');
+  if (!planArtifact || typeof planArtifact !== 'object' || Array.isArray(planArtifact)) {
+    console.error('Plan artifact must parse as a JSON object');
     process.exit(1);
   }
 
-  if (!dispositions || typeof dispositions !== 'object' || Array.isArray(dispositions) || !Array.isArray(dispositions.findings)) {
-    console.error('Dispositions must parse as a JSON object with a findings array');
+  if (!dispositions || typeof dispositions !== 'object' || Array.isArray(dispositions)) {
+    console.error('Dispositions must parse as a JSON object');
     process.exit(1);
   }
 
-  // Enum values already used elsewhere in this file:
-  // - Mode B dispositions: accepted_blocker, rejected
-  // - hetero-review dispositions: verified, refuted, deferred
-  // - plan-review DISPOSITIONS: accepted_blocker, accepted_nonblocking, rejected, duplicate, deferred
+  // Canonical plan_review_artifact shape:
+  // artifact_type, logical_plan_id, generation, plan_sha256, rubric_sha256
+  if (planArtifact.artifact_type !== 'plan_review_artifact') {
+    console.error(`Invalid or missing artifact_type in plan-artifact: expected 'plan_review_artifact', got '${planArtifact.artifact_type}'`);
+    process.exit(1);
+  }
+
+  if (typeof planArtifact.logical_plan_id !== 'string' || planArtifact.logical_plan_id.trim().length === 0) {
+    console.error('Missing or invalid logical_plan_id in plan-artifact');
+    process.exit(1);
+  }
+
+  if (typeof planArtifact.generation !== 'number' || !Number.isInteger(planArtifact.generation)) {
+    console.error('Missing or invalid generation in plan-artifact');
+    process.exit(1);
+  }
+
+  const sha256Regex = /^[0-9a-f]{64}$/i;
+  if (typeof planArtifact.plan_sha256 !== 'string' || !sha256Regex.test(planArtifact.plan_sha256)) {
+    console.error('Missing or invalid plan_sha256 in plan-artifact');
+    process.exit(1);
+  }
+
+  if (typeof planArtifact.rubric_sha256 !== 'string' || !sha256Regex.test(planArtifact.rubric_sha256)) {
+    console.error('Missing or invalid rubric_sha256 in plan-artifact');
+    process.exit(1);
+  }
+
+  if (!Array.isArray(planArtifact.findings)) {
+    console.error('Plan artifact must contain a findings array');
+    process.exit(1);
+  }
+
+  // Dispositions file identity match:
+  // logical_plan_id and generation must match artifact
+  if (typeof dispositions.logical_plan_id !== 'string' || dispositions.logical_plan_id !== planArtifact.logical_plan_id) {
+    console.error(`Dispositions logical_plan_id mismatch: expected '${planArtifact.logical_plan_id}', got '${dispositions.logical_plan_id}'`);
+    process.exit(1);
+  }
+
+  if (dispositions.generation !== planArtifact.generation) {
+    console.error(`Dispositions generation mismatch: expected ${planArtifact.generation}, got ${dispositions.generation}`);
+    process.exit(1);
+  }
+
+  if (!Array.isArray(dispositions.findings)) {
+    console.error('Dispositions must contain a findings array');
+    process.exit(1);
+  }
+
+  // Verify actual plan file and rubric file on disk
+  const planFile = resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, dispositionsPath, repoRoot);
+  if (!planFile || !fs.existsSync(planFile)) {
+    console.error(`Cannot find plan file on disk for logical_plan_id '${planArtifact.logical_plan_id}'`);
+    process.exit(1);
+  }
+
+  let planBytes;
+  try {
+    planBytes = fs.readFileSync(planFile);
+  } catch (err) {
+    console.error(`Failed to read plan file at ${planFile}: ${err.message}`);
+    process.exit(1);
+  }
+  const computedPlanSha = crypto.createHash('sha256').update(planBytes).digest('hex');
+  if (computedPlanSha !== planArtifact.plan_sha256) {
+    console.error(`Plan file sha256 mismatch: expected '${planArtifact.plan_sha256}', computed '${computedPlanSha}'`);
+    process.exit(1);
+  }
+
+  const rubricFile = resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, dispositionsPath, planFile, repoRoot);
+  if (!rubricFile || !fs.existsSync(rubricFile)) {
+    console.error(`Cannot find rubric file on disk for logical_plan_id '${planArtifact.logical_plan_id}'`);
+    process.exit(1);
+  }
+
+  let rubricBytes;
+  try {
+    rubricBytes = fs.readFileSync(rubricFile);
+  } catch (err) {
+    console.error(`Failed to read rubric file at ${rubricFile}: ${err.message}`);
+    process.exit(1);
+  }
+  const computedRubricSha = crypto.createHash('sha256').update(rubricBytes).digest('hex');
+  if (computedRubricSha !== planArtifact.rubric_sha256) {
+    console.error(`Rubric file sha256 mismatch: expected '${planArtifact.rubric_sha256}', computed '${computedRubricSha}'`);
+    process.exit(1);
+  }
+
   const allowedDispositions = new Set([
     'accepted_blocker',
     'accepted_nonblocking',
@@ -129,11 +397,11 @@ function validateModeB(flags) {
       process.exit(1);
     }
     const idVal = f.fingerprint !== undefined ? f.fingerprint : f.id;
-    if (typeof idVal !== 'string') {
+    if (typeof idVal !== 'string' || idVal.trim().length === 0) {
       console.error(`Finding in ${sourceName} missing valid string id/fingerprint`);
       process.exit(1);
     }
-    if (typeof f.candidate_blocker !== 'boolean') {
+    if (f.candidate_blocker !== undefined && typeof f.candidate_blocker !== 'boolean') {
       console.error(`Finding '${idVal}' in ${sourceName} candidate_blocker must be a boolean`);
       process.exit(1);
     }
@@ -144,16 +412,42 @@ function validateModeB(flags) {
     return idVal;
   }
 
-  // Validate each finding object in planArtifact
+  // Validate each finding object in planArtifact & check duplicates
+  const artifactFindingMap = new Map();
   for (const f of planArtifact.findings) {
-    validateFindingObj(f, 'plan artifact');
+    const id = validateFindingObj(f, 'plan artifact');
+    if (artifactFindingMap.has(id)) {
+      console.error(`Duplicate finding id in plan-artifact: '${id}'`);
+      process.exit(1);
+    }
+    artifactFindingMap.set(id, f);
   }
 
-  // Validate each finding object in dispositions and build map
+  // Validate each finding object in dispositions & check duplicates
   const dispMap = new Map();
   for (const f of dispositions.findings) {
     const id = validateFindingObj(f, 'dispositions');
+    if (dispMap.has(id)) {
+      console.error(`Duplicate finding id in dispositions: '${id}'`);
+      process.exit(1);
+    }
     dispMap.set(id, f);
+  }
+
+  // Require exact one-to-one disposition coverage: every finding id in the artifact
+  // has exactly one disposition, no extras, no duplicates
+  for (const id of artifactFindingMap.keys()) {
+    if (!dispMap.has(id)) {
+      console.error(`Finding '${id}' in plan-artifact missing in dispositions`);
+      process.exit(1);
+    }
+  }
+
+  for (const id of dispMap.keys()) {
+    if (!artifactFindingMap.has(id)) {
+      console.error(`Dispositions contains unexpected finding id '${id}' not in plan-artifact`);
+      process.exit(1);
+    }
   }
 
   const failingFindings = [];
@@ -250,24 +544,39 @@ function validateModeA(flags) {
       process.exit(1);
     }
 
+    // Item 5: Deep chain equality with disk
+    if (!Array.isArray(receipt.chain) || !deepEqual(receipt.chain, chainOnDisk)) {
+      console.error('Receipt chain diverges from on-disk chain.json (different generations, dropped/reordered entries, or differing fields)');
+      process.exit(1);
+    }
+
+    // Drive validation from disk: use chainOnDisk
+    const chain = [...chainOnDisk];
+    chain.sort((a, b) => (a.generation || 0) - (b.generation || 0));
+
     // Require ledger chain first entry base to equal expectedBaseSha
-    const firstEntryDisk = chainOnDisk[0];
+    const firstEntryDisk = chain[0];
     if (!firstEntryDisk || firstEntryDisk.base !== expectedBaseSha) {
       console.error(`Ledger chain first entry base '${firstEntryDisk && firstEntryDisk.base}' does not match expected phase-base '${expectedBaseSha}'`);
       process.exit(1);
     }
 
-    // sort chain entries by generation ascending
-    const chain = Array.isArray(receipt.chain) ? [...receipt.chain] : [];
-    if (chain.length === 0) {
-      console.error('Receipt chain is empty');
-      process.exit(1);
+    // Check configured minimum reviewed seats (Item 2)
+    let configuredMinSeats = null;
+    if (flags['min-reviewed-seats'] !== undefined) {
+      configuredMinSeats = parseInt(flags['min-reviewed-seats'], 10);
+    } else if (flags['min-seats'] !== undefined) {
+      configuredMinSeats = parseInt(flags['min-seats'], 10);
+    } else if (flags['min_reviewed_seats'] !== undefined) {
+      configuredMinSeats = parseInt(flags['min_reviewed_seats'], 10);
+    } else if (process.env.AUTOPILOT_MIN_REVIEWED_SEATS !== undefined) {
+      configuredMinSeats = parseInt(process.env.AUTOPILOT_MIN_REVIEWED_SEATS, 10);
+    } else if (receipt.min_reviewed_seats !== undefined) {
+      configuredMinSeats = parseInt(receipt.min_reviewed_seats, 10);
     }
 
-    chain.sort((a, b) => (a.generation || 0) - (b.generation || 0));
-
-    let recomputedHasVerifiedCritical = false;
-    const recomputedOpenFindings = [];
+    const findingsByGeneration = new Map();
+    const dispositionsByGeneration = new Map();
 
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
@@ -296,6 +605,42 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
+      // Item 2: Reject gap generations below the minimum reviewed seats
+      const hasSeatInfo = entry.reviewed_seats !== undefined
+        || entry.reviewed_seats_count !== undefined
+        || entry.total_seats !== undefined
+        || entry.total_seats_count !== undefined
+        || entry.seats !== undefined;
+
+      if (hasSeatInfo || configuredMinSeats !== null) {
+        let totalCount = 0;
+        if (typeof entry.total_seats === 'number') {
+          totalCount = entry.total_seats;
+        } else if (typeof entry.total_seats_count === 'number') {
+          totalCount = entry.total_seats_count;
+        } else if (Array.isArray(entry.seats)) {
+          totalCount = entry.seats.length;
+        }
+
+        let reviewedCount = 0;
+        if (typeof entry.reviewed_seats === 'number') {
+          reviewedCount = entry.reviewed_seats;
+        } else if (typeof entry.reviewed_seats_count === 'number') {
+          reviewedCount = entry.reviewed_seats_count;
+        } else if (Array.isArray(entry.seats)) {
+          reviewedCount = entry.seats.filter((s) => typeof s === 'string' || (s && s.status === 'reviewed')).length;
+        }
+
+        const requiredMin = (configuredMinSeats !== null && !isNaN(configuredMinSeats))
+          ? configuredMinSeats
+          : totalCount;
+
+        if (reviewedCount < requiredMin) {
+          console.error(`Generation ${entry.generation} reviewed seats (${reviewedCount}) below minimum required (${requiredMin})`);
+          process.exit(1);
+        }
+      }
+
       const gDir = path.join(reviewPhaseDir, `g${entry.generation}`);
 
       // (4) read <ledger>/review-<phase>/g<generation>/range.json
@@ -317,9 +662,42 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
+      // Item 7: Exclusion allowlist enforcement
+      const hasExclusions = Array.isArray(rangeObj.excluded) && rangeObj.excluded.length > 0;
+      if (hasExclusions) {
+        for (const pattern of rangeObj.excluded) {
+          if (!isPathspecAllowed(pattern)) {
+            console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
+            process.exit(1);
+          }
+        }
+        if (!rangeObj.full_range_sha256 || typeof rangeObj.full_range_sha256 !== 'string') {
+          console.error(`Missing full_range_sha256 in range.json for generation ${entry.generation} with exclusions`);
+          process.exit(1);
+        }
+        const fullDiffRes = spawnSync('git', ['diff', `${entry.base}..${entry.head}`], {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          maxBuffer: 64 * 1024 * 1024,
+        });
+        if (fullDiffRes.status !== 0) {
+          console.error(`git diff (full range) failed for generation ${entry.generation}: ${fullDiffRes.stderr || 'unknown error'}`);
+          process.exit(1);
+        }
+        const computedFullSha = crypto.createHash('sha256').update(fullDiffRes.stdout, 'utf8').digest('hex');
+        if (computedFullSha !== rangeObj.full_range_sha256) {
+          console.error(`full_range_sha256 mismatch for generation ${entry.generation}: expected '${rangeObj.full_range_sha256}', computed '${computedFullSha}'`);
+          process.exit(1);
+        }
+        if (entry.full_range_sha256 && entry.full_range_sha256 !== rangeObj.full_range_sha256) {
+          console.error(`Chain entry full_range_sha256 mismatch for generation ${entry.generation}`);
+          process.exit(1);
+        }
+      }
+
       // git diff <base>..<head> with maxBuffer 64MB and negative pathspecs if rangeObj.excluded exists
       const diffArgs = ['diff', `${entry.base}..${entry.head}`];
-      if (Array.isArray(rangeObj.excluded) && rangeObj.excluded.length > 0) {
+      if (hasExclusions) {
         diffArgs.push('--');
         for (const pattern of rangeObj.excluded) {
           diffArgs.push(`:!${pattern}`);
@@ -341,7 +719,7 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // For every finalized generation, read findings.json and snapshotted dispositions.json
+      // Item 6: findings/seat sha verification
       const findingsPath = path.join(gDir, 'findings.json');
       const dispositionsPath = path.join(gDir, 'dispositions.json');
 
@@ -354,12 +732,38 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      let findingsData;
+      let findingsRaw;
       try {
-        findingsData = JSON.parse(fs.readFileSync(findingsPath, 'utf8'));
+        findingsRaw = fs.readFileSync(findingsPath);
       } catch (err) {
-        console.error(`Failed to read or parse findings.json for generation ${entry.generation}: ${err.message}`);
+        console.error(`Failed to read findings.json for generation ${entry.generation}: ${err.message}`);
         process.exit(1);
+      }
+
+      const computedFindingsSha = crypto.createHash('sha256').update(findingsRaw).digest('hex');
+      if (!entry.findings_sha256 || computedFindingsSha !== entry.findings_sha256) {
+        console.error(`findings_sha256 mismatch or missing for generation ${entry.generation}: expected '${entry.findings_sha256}', computed '${computedFindingsSha}'`);
+        process.exit(1);
+      }
+
+      // Seat artifacts verification
+      if (!entry.seat_artifact_sha256 || typeof entry.seat_artifact_sha256 !== 'object') {
+        console.error(`seat_artifact_sha256 missing or not an object for generation ${entry.generation}`);
+        process.exit(1);
+      }
+
+      for (const [seatId, expectedSha] of Object.entries(entry.seat_artifact_sha256)) {
+        const seatFile = path.join(gDir, `seat-${seatId}.json`);
+        if (!fs.existsSync(seatFile)) {
+          console.error(`Missing seat artifact at ${seatFile} for generation ${entry.generation}`);
+          process.exit(1);
+        }
+        const seatRaw = fs.readFileSync(seatFile);
+        const computedSeatSha = crypto.createHash('sha256').update(seatRaw).digest('hex');
+        if (computedSeatSha !== expectedSha) {
+          console.error(`seat_artifact_sha256 mismatch for seat '${seatId}' in generation ${entry.generation}: expected '${expectedSha}', computed '${computedSeatSha}'`);
+          process.exit(1);
+        }
       }
 
       let dispBytes;
@@ -376,6 +780,44 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
+      // Item 4: Strict validation of findings.json and dispositions.json
+      let findingsData;
+      try {
+        findingsData = JSON.parse(findingsRaw.toString('utf8'));
+      } catch (err) {
+        console.error(`Failed to parse findings.json for generation ${entry.generation}: ${err.message}`);
+        process.exit(1);
+      }
+
+      if (!findingsData || typeof findingsData !== 'object' || Array.isArray(findingsData) || !Array.isArray(findingsData.findings)) {
+        console.error(`findings.json for generation ${entry.generation} must be a JSON object with a findings array`);
+        process.exit(1);
+      }
+
+      const SEVERITY_WORDS = new Set(['Critical', 'Major', 'Minor', 'Suggestion']);
+      const findingsList = findingsData.findings;
+      const findingsMap = new Map();
+      for (let j = 0; j < findingsList.length; j++) {
+        const f = findingsList[j];
+        if (!f || typeof f !== 'object' || Array.isArray(f)) {
+          console.error(`Finding at index ${j} in generation ${entry.generation} is not an object`);
+          process.exit(1);
+        }
+        if (typeof f.id !== 'string' || f.id.trim().length === 0) {
+          console.error(`Finding at index ${j} in generation ${entry.generation} missing valid string id`);
+          process.exit(1);
+        }
+        if (findingsMap.has(f.id)) {
+          console.error(`Duplicate finding id '${f.id}' in generation ${entry.generation} findings.json`);
+          process.exit(1);
+        }
+        if (!SEVERITY_WORDS.has(f.severity)) {
+          console.error(`Finding '${f.id}' has invalid severity '${f.severity}' in generation ${entry.generation}`);
+          process.exit(1);
+        }
+        findingsMap.set(f.id, f);
+      }
+
       let dispData;
       try {
         dispData = JSON.parse(dispBytes.toString('utf8'));
@@ -384,60 +826,114 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      const genFindings = (findingsData && Array.isArray(findingsData.findings)) ? findingsData.findings : [];
-      const genDispFindings = (dispData && Array.isArray(dispData.findings)) ? dispData.findings : [];
-      const dispMap = new Map();
-      for (const df of genDispFindings) {
-        if (df && df.id !== undefined) {
-          dispMap.set(df.id, df);
-        }
-      }
-
-      for (const f of genFindings) {
-        const disp = dispMap.get(f.id);
-        const disposition = disp ? disp.disposition : undefined;
-
-        if (f.severity === 'Critical' && disposition === 'verified') {
-          recomputedHasVerifiedCritical = true;
-        }
-
-        if ((f.severity === 'Major' || f.severity === 'Minor') && disposition === 'verified') {
-          recomputedOpenFindings.push({
-            id: f.id,
-            severity: f.severity,
-            seat: f.seat,
-            text: f.text,
-            disposition: 'verified',
-          });
-        }
-      }
-    }
-
-    const recomputedVerdict = recomputedHasVerifiedCritical ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
-
-    // Check receipt's verdict equals recomputedVerdict
-    if (receipt.verdict !== recomputedVerdict) {
-      console.error(`Receipt verdict mismatch: expected '${recomputedVerdict}', got '${receipt.verdict}'`);
-      process.exit(1);
-    }
-
-    // Check open_findings matches receipt
-    if (Array.isArray(receipt.open_findings)) {
-      if (receipt.open_findings.length !== recomputedOpenFindings.length) {
-        console.error(`Receipt open_findings length mismatch: expected ${recomputedOpenFindings.length}, got ${receipt.open_findings.length}`);
+      if (!dispData || typeof dispData !== 'object' || Array.isArray(dispData) || !Array.isArray(dispData.findings)) {
+        console.error(`dispositions.json for generation ${entry.generation} must be a JSON object with a findings array`);
         process.exit(1);
       }
-      for (let i = 0; i < recomputedOpenFindings.length; i++) {
-        const recF = receipt.open_findings[i];
-        const reF = recomputedOpenFindings[i];
-        if (!recF || recF.id !== reF.id || recF.disposition !== reF.disposition) {
-          console.error(`Receipt open_findings mismatch at index ${i}`);
+
+      const allowedDispositions = new Set(['verified', 'refuted', 'deferred']);
+      const dispList = dispData.findings;
+      const dispMap = new Map();
+      for (let j = 0; j < dispList.length; j++) {
+        const d = dispList[j];
+        if (!d || typeof d !== 'object' || Array.isArray(d)) {
+          console.error(`Disposition at index ${j} in generation ${entry.generation} is not an object`);
+          process.exit(1);
+        }
+        if (typeof d.id !== 'string' || d.id.trim().length === 0) {
+          console.error(`Disposition at index ${j} in generation ${entry.generation} missing valid string id`);
+          process.exit(1);
+        }
+        if (dispMap.has(d.id)) {
+          console.error(`Duplicate disposition id '${d.id}' in generation ${entry.generation} dispositions.json`);
+          process.exit(1);
+        }
+        if (!allowedDispositions.has(d.disposition)) {
+          console.error(`Disposition '${d.id}' has invalid disposition '${d.disposition}' in generation ${entry.generation}`);
+          process.exit(1);
+        }
+        if (typeof d.rationale !== 'string' || d.rationale.trim().length === 0) {
+          console.error(`Disposition '${d.id}' missing non-empty rationale string in generation ${entry.generation}`);
+          process.exit(1);
+        }
+        dispMap.set(d.id, d);
+      }
+
+      // Check matching IDs: one entry per finding id, no extras, none missing
+      for (const fid of findingsMap.keys()) {
+        if (!dispMap.has(fid)) {
+          console.error(`Dispositions missing finding id '${fid}' in generation ${entry.generation}`);
           process.exit(1);
         }
       }
-    } else if (typeof receipt.open_findings === 'number') {
-      if (receipt.open_findings !== recomputedOpenFindings.length) {
-        console.error(`Receipt open_findings count mismatch: expected ${recomputedOpenFindings.length}, got ${receipt.open_findings}`);
+      for (const did of dispMap.keys()) {
+        if (!findingsMap.has(did)) {
+          console.error(`Dispositions contains unexpected finding id '${did}' in generation ${entry.generation}`);
+          process.exit(1);
+        }
+      }
+
+      findingsByGeneration.set(entry.generation, findingsList);
+      dispositionsByGeneration.set(entry.generation, dispList);
+    }
+
+    // Item 4: Call shared review-chain-derive routine
+    const derivedState = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
+
+    // Item 1: Require both recorded and re-derived SHIP-AS-IS
+    if (receipt.verdict !== 'SHIP-AS-IS' || derivedState.verdict !== 'SHIP-AS-IS') {
+      console.error(`Receipt verdict is not SHIP-AS-IS or re-derived verdict mismatch (receipt: '${receipt.verdict}', re-derived: '${derivedState.verdict}')`);
+      process.exit(1);
+    }
+
+    // Item 8: Malformed open_findings must fail closed
+    if (receipt.open_findings !== undefined) {
+      if (Array.isArray(receipt.open_findings)) {
+        if (receipt.open_findings.length !== derivedState.open_findings.length) {
+          console.error(`Receipt open_findings length mismatch: expected ${derivedState.open_findings.length}, got ${receipt.open_findings.length}`);
+          process.exit(1);
+        }
+        for (let i = 0; i < derivedState.open_findings.length; i++) {
+          const recF = receipt.open_findings[i];
+          const derF = derivedState.open_findings[i];
+          if (!recF || recF.id !== derF.id || recF.disposition !== derF.disposition) {
+            console.error(`Receipt open_findings mismatch at index ${i}`);
+            process.exit(1);
+          }
+        }
+      } else if (typeof receipt.open_findings === 'number') {
+        if (receipt.open_findings !== derivedState.open_findings.length) {
+          console.error(`Receipt open_findings count mismatch: expected ${derivedState.open_findings.length}, got ${receipt.open_findings}`);
+          process.exit(1);
+        }
+      } else {
+        console.error(`Receipt open_findings is neither an array nor a number (got ${typeof receipt.open_findings})`);
+        process.exit(1);
+      }
+    }
+
+    // Check closed_findings if present on receipt
+    if (receipt.closed_findings !== undefined) {
+      if (Array.isArray(receipt.closed_findings)) {
+        if (receipt.closed_findings.length !== derivedState.closed_findings.length) {
+          console.error(`Receipt closed_findings length mismatch: expected ${derivedState.closed_findings.length}, got ${receipt.closed_findings.length}`);
+          process.exit(1);
+        }
+        for (let i = 0; i < derivedState.closed_findings.length; i++) {
+          const recF = receipt.closed_findings[i];
+          const derF = derivedState.closed_findings[i];
+          if (!recF || recF.id !== derF.id || recF.closed_by_generation !== derF.closed_by_generation) {
+            console.error(`Receipt closed_findings mismatch at index ${i}`);
+            process.exit(1);
+          }
+        }
+      } else if (typeof receipt.closed_findings === 'number') {
+        if (receipt.closed_findings !== derivedState.closed_findings.length) {
+          console.error(`Receipt closed_findings count mismatch: expected ${derivedState.closed_findings.length}, got ${receipt.closed_findings}`);
+          process.exit(1);
+        }
+      } else {
+        console.error(`Receipt closed_findings is neither an array nor a number (got ${typeof receipt.closed_findings})`);
         process.exit(1);
       }
     }

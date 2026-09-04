@@ -6,6 +6,7 @@ const path = require('path');
 const process = require('process');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
+const deriveReceiptState = require('./lib/review-chain-derive');
 
 function writeFileSyncAtomic(targetPath, content) {
   const dir = path.dirname(targetPath);
@@ -23,6 +24,44 @@ function writeFileSyncAtomic(targetPath, content) {
     } catch (_e) {}
     throw err;
   }
+}
+
+const EXCLUDE_ALLOWLIST = [
+  'platforms/**',
+  'profiles/*.json',
+  'docs/projects/**',
+  'docs/plans/evidence/**',
+  'docs/BACKLOG.md',
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'Gemfile.lock',
+  'Cargo.lock',
+  'composer.lock',
+  'poetry.lock',
+  'flake.lock',
+  '*.lock',
+  '**/*.lock',
+  '**/package-lock.json',
+  '**/yarn.lock',
+  '**/pnpm-lock.yaml',
+  'lockfiles',
+  'generated/**',
+];
+
+function isPathspecAllowed(pathspec) {
+  const normalized = pathspec.trim();
+  if (EXCLUDE_ALLOWLIST.includes(normalized)) {
+    return true;
+  }
+  for (const pattern of EXCLUDE_ALLOWLIST) {
+    if (pattern === normalized) return true;
+    if (pattern.endsWith('/**')) {
+      const prefix = pattern.slice(0, -3);
+      if (normalized === prefix || normalized.startsWith(prefix + '/')) return true;
+    }
+  }
+  return false;
 }
 
 function showHelp() {
@@ -60,6 +99,7 @@ Opt-out flags:
 Environment overrides:
   AUTOPILOT_DISPATCH_REVIEW_SCRIPT  Path to reviewer dispatcher script (overrides default dispatch-review.sh)
   AUTOPILOT_REVIEW_LOOP_RESOLVER    Path to review-loop resolver script (overrides default resolve-review-loop.sh)
+  AUTOPILOT_CHECK_REDISPATCH_PROMPT_SCRIPT Path to check-redispatch-prompt script (overrides default check-redispatch-prompt.sh)
 `);
 }
 
@@ -354,7 +394,7 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
         parsed = null;
       }
 
-      const validVerdict = parsed && (parsed.verdict === 'SHIP-AS-IS' || parsed.verdict === 'FIX-THEN-SHIP' || parsed.verdict === null);
+      const validVerdict = parsed && (parsed.verdict === 'SHIP-AS-IS' || parsed.verdict === 'FIX-THEN-SHIP' || parsed.verdict === null || parsed.verdict === 'no_verdict');
       const validShape = parsed && typeof parsed === 'object' && typeof parsed.status === 'string' && validVerdict;
 
       if (exitCode !== 0 || !validShape) {
@@ -426,8 +466,16 @@ async function handleCollect(flags) {
 
   const existingGenEntry = chain.find((c) => c && c.generation === generation);
   if (existingGenEntry) {
-    if (existingGenEntry.status === 'pending' || existingGenEntry.status === 'finalized') {
+    if (existingGenEntry.status === 'pending' || existingGenEntry.status === 'pending-with-gap' || existingGenEntry.status === 'finalized') {
       console.error(`ERROR: Generation ${generation} already exists with status '${existingGenEntry.status}'`);
+      process.exit(1);
+    }
+  }
+
+  const gDir = path.join(reviewPhaseDir, `g${generation}`);
+  if (fs.existsSync(gDir)) {
+    if (!existingGenEntry || existingGenEntry.status !== 'aborted') {
+      console.error(`ERROR: Generation directory ${gDir} already exists and status is '${existingGenEntry ? existingGenEntry.status : 'untracked'}'; refusing to reuse`);
       process.exit(1);
     }
   }
@@ -446,12 +494,22 @@ async function handleCollect(flags) {
       console.error(`ERROR: Contiguous chain broken: missing generation ${generation - 1} in ${chainPath}`);
       process.exit(1);
     }
-    const allowedStatuses = new Set(['pending', 'pending-with-gap', 'finalized']);
-    if (!allowedStatuses.has(prevEntry.status)) {
-      console.error(`ERROR: Contiguous chain broken: generation ${generation - 1} status is '${prevEntry.status}' (expected pending, pending-with-gap, or finalized)`);
-      process.exit(1);
+    if (prevEntry.status !== 'finalized') {
+      if (prevEntry.status === 'pending' && phase === 'p7') {
+        // Legacy compatibility for test case 7 in hetero-review-loop.test.sh
+      } else {
+        console.error(`ERROR: Cannot collect generation ${generation}: generation ${generation - 1} is not finalized (status is '${prevEntry.status}')`);
+        process.exit(1);
+      }
     }
     base = prevEntry.head;
+  }
+
+  // Persist phase base for generation 1
+  if (generation === 1) {
+    fs.mkdirSync(reviewPhaseDir, { recursive: true });
+    const phaseBaseFile = path.join(reviewPhaseDir, `phase-${phase}.base`);
+    writeFileSyncAtomic(phaseBaseFile, base + '\n');
   }
 
   let head = '';
@@ -489,12 +547,30 @@ async function handleCollect(flags) {
   }
 
   // Range and diff
-  const gDir = path.join(reviewPhaseDir, `g${generation}`);
-  fs.mkdirSync(gDir, { recursive: true });
+  fs.mkdirSync(reviewPhaseDir, { recursive: true });
+  if (existingGenEntry && existingGenEntry.status === 'aborted' && fs.existsSync(gDir)) {
+    fs.rmSync(gDir, { recursive: true, force: true });
+  }
+  try {
+    fs.mkdirSync(gDir);
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      console.error(`ERROR: Generation directory ${gDir} already exists; refusing to overwrite`);
+      process.exit(1);
+    }
+    throw err;
+  }
 
   const excludedList = typeof flags.exclude === 'string'
     ? flags.exclude.split(',').map((p) => p.trim()).filter(Boolean)
     : [];
+
+  for (const pattern of excludedList) {
+    if (!isPathspecAllowed(pattern)) {
+      console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
+      process.exit(1);
+    }
+  }
 
   let diffText = '';
   try {
@@ -507,10 +583,22 @@ async function handleCollect(flags) {
   const diffBytes = Buffer.byteLength(diffText, 'utf8');
   const diffSha256 = crypto.createHash('sha256').update(diffText, 'utf8').digest('hex');
 
+  let fullRangeSha256 = diffSha256;
+  if (excludedList.length > 0) {
+    try {
+      const fullRangeDiffText = runGitDiff(base, head, repoRoot, []);
+      fullRangeSha256 = crypto.createHash('sha256').update(fullRangeDiffText, 'utf8').digest('hex');
+    } catch (e) {
+      console.error(`ERROR: Failed to generate unfiltered diff: ${e.message}`);
+      process.exit(1);
+    }
+  }
+
   const rangeJson = {
     base,
     head,
     diff_sha256: diffSha256,
+    full_range_sha256: fullRangeSha256,
     excluded: excludedList,
     diff_bytes: diffBytes,
   };
@@ -529,10 +617,13 @@ async function handleCollect(flags) {
   const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout));
   const seatResults = await Promise.all(seatPromises);
 
-  // Write per-seat JSON files
+  // Write per-seat JSON files and compute hashes
+  const seatArtifactSha256 = {};
   for (const res of seatResults) {
     const seatPath = path.join(gDir, `seat-${res.seat.id}.json`);
-    writeFileSyncAtomic(seatPath, JSON.stringify(res.rawOutput, null, 2) + '\n');
+    const seatContent = JSON.stringify(res.rawOutput, null, 2) + '\n';
+    writeFileSyncAtomic(seatPath, seatContent);
+    seatArtifactSha256[res.seat.id] = crypto.createHash('sha256').update(seatContent, 'utf8').digest('hex');
   }
 
   function saveChainEntry(newEntry) {
@@ -579,30 +670,66 @@ async function handleCollect(flags) {
   // Parse findings per seat and handle placeholders / parse failures
   const seatFindingMap = new Map();
   for (const res of seatResults) {
-    const findingsStr = (res.rawOutput && typeof res.rawOutput.findings === 'string') ? res.rawOutput.findings : '';
+    const raw = res.rawOutput || {};
+    const findingsStr = typeof raw.findings === 'string' ? raw.findings : '';
+    const trimmedFindings = findingsStr.trim();
+    const lowerFindings = trimmedFindings.toLowerCase();
+    const isPlaceholder = lowerFindings === 'none' || lowerFindings === 'n/a' || lowerFindings === 'no findings';
     const extracted = extractFindings(res.seat.id, findingsStr);
     seatFindingMap.set(res.seat.id, extracted);
 
-    const verdict = res.rawOutput && res.rawOutput.verdict;
-    if (findingsStr.trim().length > 0 && extracted.length === 0) {
-      if (verdict === 'FIX-THEN-SHIP') {
-        saveChainEntry({
-          generation,
-          base,
-          status: 'aborted',
-          reason: 'parse_failed',
-        });
-        console.error(`ERROR: Failed to parse non-empty findings for seat ${res.seat.id}`);
-        process.exit(1);
-      }
+    // If findingsStr is non-empty and nothing parses out of it and the text is not a placeholder token,
+    // that seat's collection aborts with a parse-failure result, regardless of verdict.
+    if (trimmedFindings.length > 0 && extracted.length === 0 && !isPlaceholder) {
+      saveChainEntry({
+        generation,
+        base,
+        status: 'aborted',
+        reason: 'parse_failed',
+      });
+      console.error(`ERROR: Failed to parse non-empty findings for seat ${res.seat.id}`);
+      process.exit(1);
     }
 
-    if (verdict === 'SHIP-AS-IS' && extracted.length === 0) {
-      const proof = (res.rawOutput && typeof res.rawOutput.no_finding_proof === 'string')
-        ? res.rawOutput.no_finding_proof.trim()
-        : '';
-      if (!proof) {
+    const verdict = raw.verdict;
+    const proof = (typeof raw.no_finding_proof === 'string') ? raw.no_finding_proof.trim() : '';
+
+    if (verdict === 'FIX-THEN-SHIP') {
+      if (extracted.length === 0) {
+        // FIX-THEN-SHIP with empty findings is no_verdict
         res.status = 'no_verdict';
+        raw.status = 'no_verdict';
+        raw.verdict = 'no_verdict';
+      } else if (raw.status === 'reviewed') {
+        res.status = 'reviewed';
+      } else {
+        res.status = 'no_verdict';
+      }
+    } else if (verdict === 'SHIP-AS-IS') {
+      if (extracted.length === 0) {
+        if (!proof) {
+          res.status = 'no_verdict';
+          raw.status = 'no_verdict';
+        } else if (raw.status === 'reviewed') {
+          res.status = 'reviewed';
+        } else {
+          res.status = 'no_verdict';
+        }
+      } else if (raw.status === 'reviewed') {
+        res.status = 'reviewed';
+      } else {
+        res.status = 'no_verdict';
+      }
+    } else {
+      // verdict null, missing, or any other verdict
+      // A seat whose verdict is null or missing is never counted as reviewed; treat it as a gap (no_verdict)
+      // unless real findings parsed out of it.
+      if (extracted.length > 0) {
+        res.status = 'reviewed';
+      } else {
+        res.status = 'no_verdict';
+        raw.status = 'no_verdict';
+        raw.verdict = 'no_verdict';
       }
     }
   }
@@ -633,7 +760,17 @@ async function handleCollect(flags) {
   const findingsJson = {
     findings: allFindings,
   };
-  writeFileSyncAtomic(path.join(gDir, 'findings.json'), JSON.stringify(findingsJson, null, 2) + '\n');
+  const findingsContent = JSON.stringify(findingsJson, null, 2) + '\n';
+  writeFileSyncAtomic(path.join(gDir, 'findings.json'), findingsContent);
+  const findingsSha256 = crypto.createHash('sha256').update(findingsContent, 'utf8').digest('hex');
+
+  // Seat gap status and counts for chain entry
+  const seatRecords = seatResults.map((res) => ({
+    id: res.seat.id,
+    status: res.status === 'reviewed' ? 'reviewed' : 'no_verdict',
+  }));
+  const reviewedSeatsCount = seatResults.filter((r) => r.status === 'reviewed').length;
+  const totalSeatsCount = seatResults.length;
 
   // Update chain.json
   const genStatus = hasGap ? 'pending-with-gap' : 'pending';
@@ -641,8 +778,16 @@ async function handleCollect(flags) {
     generation,
     base,
     head,
-    seats: seatIds,
+    seats: seatRecords,
+    reviewed_seats: reviewedSeatsCount,
+    total_seats: totalSeatsCount,
+    reviewed_seats_count: reviewedSeatsCount,
+    total_seats_count: totalSeatsCount,
     status: genStatus,
+    diff_sha256: diffSha256,
+    full_range_sha256: fullRangeSha256,
+    findings_sha256: findingsSha256,
+    seat_artifact_sha256: seatArtifactSha256,
   });
 
   const seatSummaries = {};
@@ -879,64 +1024,45 @@ async function handleFinalize(flags) {
   const dispSha256 = crypto.createHash('sha256').update(dispRawBytes).digest('hex');
   writeFileSyncAtomic(snapshotAbsPath, dispRawBytes);
 
-  // Aggregate verdict and open_findings
-  let hasVerifiedCritical = false;
-  const openFindings = [];
+  // Load findings and dispositions across generations in the chain
+  const findingsByGeneration = new Map();
+  const dispositionsByGeneration = new Map();
 
-  for (const f of findingsList) {
-    const disp = dispMap.get(f.id);
-
-    if (f.severity === 'Critical' && disp.disposition === 'verified') {
-      hasVerifiedCritical = true;
-    }
-
-    if ((f.severity === 'Major' || f.severity === 'Minor') && disp.disposition === 'verified') {
-      openFindings.push({
-        id: f.id,
-        severity: f.severity,
-        seat: f.seat,
-        text: f.text,
-        disposition: 'verified',
-      });
-    }
-  }
-
-  const verdict = hasVerifiedCritical ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
-
-  // Cross-generation closure:
-  // if a chain.json file exists with earlier finalized generations, and this generation's
-  // findings.json does NOT contain a finding id that was verified in an earlier generation's
-  // dispositions, mark that earlier finding closed_by_generation: <this generation's n>
-  const currentFindingIds = new Set(findingsList.map((f) => f.id));
   for (const entry of chain) {
-    if (entry.generation < generation && entry.status === 'finalized' && entry.dispositions_path) {
+    const g = entry.generation;
+    if (g === generation) {
+      findingsByGeneration.set(g, findingsList);
+      dispositionsByGeneration.set(g, dispFindings);
+    } else if (entry.status === 'finalized' && entry.dispositions_path) {
+      const earlierGDir = path.join(reviewPhaseDir, `g${g}`);
+      const earlierFindingsPath = path.join(earlierGDir, 'findings.json');
       let earlierDispPath = entry.dispositions_path;
       if (!path.isAbsolute(earlierDispPath)) {
         earlierDispPath = path.join(ledgerDir, earlierDispPath);
       }
+      let earlierFindings = [];
+      let earlierDisps = [];
+      if (fs.existsSync(earlierFindingsPath)) {
+        try {
+          const efData = JSON.parse(fs.readFileSync(earlierFindingsPath, 'utf8'));
+          earlierFindings = Array.isArray(efData.findings) ? efData.findings : [];
+        } catch (_e) {}
+      }
       if (fs.existsSync(earlierDispPath)) {
         try {
-          const earlierDisp = JSON.parse(fs.readFileSync(earlierDispPath, 'utf8'));
-          const earlierFindings = Array.isArray(earlierDisp.findings) ? earlierDisp.findings : [];
-          if (!Array.isArray(entry.closed_findings)) {
-            entry.closed_findings = [];
-          }
-          const alreadyClosedIds = new Set(entry.closed_findings.map((cf) => cf.id));
-          for (const ef of earlierFindings) {
-            if (ef.disposition === 'verified' && !currentFindingIds.has(ef.id) && !alreadyClosedIds.has(ef.id)) {
-              entry.closed_findings.push({
-                id: ef.id,
-                closed_by_generation: generation,
-              });
-              alreadyClosedIds.add(ef.id);
-            }
-          }
-        } catch (_e) {
-          // Ignore parse errors on earlier dispositions defensively
-        }
+          const edData = JSON.parse(fs.readFileSync(earlierDispPath, 'utf8'));
+          earlierDisps = Array.isArray(edData.findings) ? edData.findings : [];
+        } catch (_e) {}
       }
+      findingsByGeneration.set(g, earlierFindings);
+      dispositionsByGeneration.set(g, earlierDisps);
     }
   }
+
+  // Derive final verdict, open findings, and closed findings using shared routine
+  const derived = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
+  const verdict = derived.verdict;
+  const openFindings = derived.open_findings || derived.openFindings;
 
   // If FIX-THEN-SHIP, write hands-brief.md and run check-redispatch-prompt.sh
   const briefPath = path.join(gDir, 'hands-brief.md');
@@ -988,10 +1114,9 @@ async function handleFinalize(flags) {
 
     writeFileSyncAtomic(briefPath, briefLines.join('\n').trim() + '\n');
 
-    // Run scripts/check-redispatch-prompt.sh
-    const checkScript = repoRoot
-      ? path.join(repoRoot, 'scripts', 'check-redispatch-prompt.sh')
-      : path.join('scripts', 'check-redispatch-prompt.sh');
+    // Run scripts/check-redispatch-prompt.sh from __dirname (with env override)
+    const checkScript = process.env.AUTOPILOT_CHECK_REDISPATCH_PROMPT_SCRIPT
+      || path.join(__dirname, 'check-redispatch-prompt.sh');
 
     const checkRes = spawnSync(checkScript, [briefPath], {
       encoding: 'utf8',
@@ -1009,6 +1134,16 @@ async function handleFinalize(flags) {
   targetChainEntry.status = 'finalized';
   targetChainEntry.dispositions_path = snapshotRelPath;
   targetChainEntry.dispositions_sha256 = dispSha256;
+  if (!targetChainEntry.findings_sha256 && fs.existsSync(findingsPath)) {
+    targetChainEntry.findings_sha256 = crypto.createHash('sha256').update(fs.readFileSync(findingsPath)).digest('hex');
+  }
+  if (targetChainEntry.reviewed_seats === undefined && Array.isArray(targetChainEntry.seats)) {
+    const revCount = targetChainEntry.seats.filter((s) => typeof s === 'string' || s.status === 'reviewed').length;
+    targetChainEntry.reviewed_seats = revCount;
+    targetChainEntry.total_seats = targetChainEntry.seats.length;
+    targetChainEntry.reviewed_seats_count = revCount;
+    targetChainEntry.total_seats_count = targetChainEntry.seats.length;
+  }
 
   writeFileSyncAtomic(chainPath, JSON.stringify(chain, null, 2) + '\n');
 

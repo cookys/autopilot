@@ -50,7 +50,7 @@ Receipt verdicts strictly permit only two tokens: `SHIP-AS-IS` and `FIX-THEN-SHI
 ## L-4 Phase Advance Gate & Receipt Chain Validation
 
 The L-4 phase advance gate enforces mechanical verification before any phase is marked complete and execution transitions to the next phase:
-`node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b>`
+`node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b> --phase-base "$(cat <project>/ledger/phase-<p>.base)"`
 
 ### What Receipt Validation Checks
 1. **Contiguous Generation Chain**: Verifies that generations start at generation 1, increase contiguously without gaps, and link each iteration's base and head commits.

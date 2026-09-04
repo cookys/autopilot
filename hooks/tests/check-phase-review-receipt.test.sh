@@ -95,6 +95,7 @@ EOF
 #    in the scratch repo, and the branch's current head matching the last chain entry's head: expect exit 0.
 write_range_json "p1" "1" "$PHASE_BASE" "$GEN1_HEAD" "$DIFF_SHA"
 P1_DISP_SHA=$(write_gen_artifacts "p1" "1")
+P1_FINDINGS_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-p1/g1/findings.json")
 mkdir -p "$LEDGER/review-p1"
 cat << EOF > "$LEDGER/review-p1/chain.json"
 [
@@ -103,7 +104,9 @@ cat << EOF > "$LEDGER/review-p1/chain.json"
     "base": "$PHASE_BASE",
     "head": "$GEN1_HEAD",
     "status": "finalized",
-    "dispositions_sha256": "$P1_DISP_SHA"
+    "dispositions_sha256": "$P1_DISP_SHA",
+    "findings_sha256": "$P1_FINDINGS_SHA",
+    "seat_artifact_sha256": {}
   }
 ]
 EOF
@@ -118,7 +121,9 @@ write_receipt_json "p1" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
-      \"dispositions_sha256\": \"$P1_DISP_SHA\"
+      \"dispositions_sha256\": \"$P1_DISP_SHA\",
+      \"findings_sha256\": \"$P1_FINDINGS_SHA\",
+      \"seat_artifact_sha256\": {}
     }
   ],
   \"verdict\": \"SHIP-AS-IS\",
@@ -385,19 +390,30 @@ assert_exit_code "$C10_RC" "1" "case 10: deferred disposition for candidate_bloc
 
 # 11. Mode B: a plan-artifact with two candidate_blocker:true findings, both given
 #     "accepted_blocker"/"rejected" dispositions with non-empty rationale: expect exit 0.
+echo "# Test Plan 11" > "$TEST_TMP/plan11.md"
+echo "# Test Rubric 11" > "$TEST_TMP/plan11.rubric.md"
+PLAN11_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$TEST_TMP/plan11.md")
+RUBRIC11_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$TEST_TMP/plan11.rubric.md")
+
 PLAN_ARTIFACT_11="$TEST_TMP/plan11.json"
 DISPOSITIONS_11="$TEST_TMP/disp11.json"
-cat << 'EOF' > "$PLAN_ARTIFACT_11"
+cat << EOF > "$PLAN_ARTIFACT_11"
 {
+  "artifact_type": "plan_review_artifact",
+  "logical_plan_id": "test-plan-11",
+  "generation": 1,
+  "plan_sha256": "$PLAN11_SHA",
+  "rubric_sha256": "$RUBRIC11_SHA",
   "findings": [
     { "id": "f1", "candidate_blocker": true, "disposition": "accepted_blocker" },
-    { "id": "f2", "candidate_blocker": true, "disposition": "rejected" },
-    { "id": "f3", "candidate_blocker": false, "disposition": "rejected" }
+    { "id": "f2", "candidate_blocker": true, "disposition": "rejected" }
   ]
 }
 EOF
-cat << 'EOF' > "$DISPOSITIONS_11"
+cat << EOF > "$DISPOSITIONS_11"
 {
+  "logical_plan_id": "test-plan-11",
+  "generation": 1,
   "findings": [
     { "id": "f1", "candidate_blocker": true, "disposition": "accepted_blocker", "rationale": "Confirmed blocking flaw" },
     { "id": "f2", "candidate_blocker": true, "disposition": "rejected", "rationale": "False positive due to X" }
@@ -486,14 +502,14 @@ assert_exit_code "$FINALIZE_RC" "0" "e2e: finalize exits 0"
 E2E_RECEIPT="$LEDGER/receipt-$E2E_PHASE.json"
 assert_file_exists "$E2E_RECEIPT" "e2e: receipt exists"
 
-# Run checker in review mode against resulting receipt and confirm it exits 0
+# Run checker in review mode against resulting receipt and confirm it exits 1 (checker correctly refuses to advance the phase on a re-derived FIX-THEN-SHIP verdict)
 CHECK_E2E_OUT=$(node "$SCRIPT" \
   --ledger "$LEDGER" \
   --phase "$E2E_PHASE" \
   --branch work \
   --phase-base "$PHASE_BASE" \
   --repo-root "$SCRATCH_REPO" 2>&1); CHECK_E2E_RC=$?
-assert_exit_code "$CHECK_E2E_RC" "0" "e2e: checker exits 0 on valid finalized review receipt"
+assert_exit_code "$CHECK_E2E_RC" "1" "e2e: checker correctly refuses to advance the phase on a re-derived FIX-THEN-SHIP verdict"
 
 # Negative control 1: Hand-edit receipt so verdict says SHIP-AS-IS while finding is Critical & verified -> exit 1
 FORGED_RECEIPT_CONTENT=$(node -e "
@@ -532,13 +548,15 @@ EXCL_PHASE="p_excl_case"
 (
   cd "$SCRATCH_REPO"
   echo "normal line" > excl_norm.txt
-  mkdir -p excl_gen
-  echo "generated line" > excl_gen/gen.txt
-  git add excl_norm.txt excl_gen/gen.txt
+  mkdir -p docs/projects
+  echo "generated line" > docs/projects/proj.txt
+  git add excl_norm.txt docs/projects/proj.txt
   git commit -q -m "commit with generated"
 )
 EXCL_TEST_HEAD=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
-EXCL_TEST_DIFF_SHA=$(git -C "$SCRATCH_REPO" diff "$GEN1_HEAD..$EXCL_TEST_HEAD" -- ':!excl_gen/**' | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+EXCL_TEST_DIFF_SHA=$(git -C "$SCRATCH_REPO" diff "$GEN1_HEAD..$EXCL_TEST_HEAD" -- ':!docs/projects/**' | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+EXCL_TEST_FULL_DIFF_SHA=$(git -C "$SCRATCH_REPO" diff "$GEN1_HEAD..$EXCL_TEST_HEAD" | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+EXCL_DIFF_BYTES=$(git -C "$SCRATCH_REPO" diff "$GEN1_HEAD..$EXCL_TEST_HEAD" -- ':!docs/projects/**' | wc -c | awk '{print $1}')
 
 mkdir -p "$LEDGER/review-$EXCL_PHASE/g1"
 cat << EOF > "$LEDGER/review-$EXCL_PHASE/g1/range.json"
@@ -546,11 +564,13 @@ cat << EOF > "$LEDGER/review-$EXCL_PHASE/g1/range.json"
   "base": "$GEN1_HEAD",
   "head": "$EXCL_TEST_HEAD",
   "diff_sha256": "$EXCL_TEST_DIFF_SHA",
-  "excluded": ["excl_gen/**"],
-  "diff_bytes": 100
+  "full_range_sha256": "$EXCL_TEST_FULL_DIFF_SHA",
+  "excluded": ["docs/projects/**"],
+  "diff_bytes": $EXCL_DIFF_BYTES
 }
 EOF
 EXCL_DISP_SHA=$(write_gen_artifacts "$EXCL_PHASE" "1")
+EXCL_FINDINGS_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-$EXCL_PHASE/g1/findings.json")
 cat << EOF > "$LEDGER/review-$EXCL_PHASE/chain.json"
 [
   {
@@ -558,7 +578,9 @@ cat << EOF > "$LEDGER/review-$EXCL_PHASE/chain.json"
     "base": "$GEN1_HEAD",
     "head": "$EXCL_TEST_HEAD",
     "status": "finalized",
-    "dispositions_sha256": "$EXCL_DISP_SHA"
+    "dispositions_sha256": "$EXCL_DISP_SHA",
+    "findings_sha256": "$EXCL_FINDINGS_SHA",
+    "seat_artifact_sha256": {}
   }
 ]
 EOF
@@ -573,7 +595,9 @@ write_receipt_json "$EXCL_PHASE" "{
       \"base\": \"$GEN1_HEAD\",
       \"head\": \"$EXCL_TEST_HEAD\",
       \"status\": \"finalized\",
-      \"dispositions_sha256\": \"$EXCL_DISP_SHA\"
+      \"dispositions_sha256\": \"$EXCL_DISP_SHA\",
+      \"findings_sha256\": \"$EXCL_FINDINGS_SHA\",
+      \"seat_artifact_sha256\": {}
     }
   ],
   \"verdict\": \"SHIP-AS-IS\",

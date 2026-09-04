@@ -1003,6 +1003,9 @@ unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT
 TEST6_DRIVER_DIR="$TEST_TMP/driver-dir-test"
 mkdir -p "$TEST6_DRIVER_DIR"
 cp "$SCRIPT" "$TEST6_DRIVER_DIR/hetero-review-loop.js"
+if [[ -d "$(dirname "$SCRIPT")/lib" ]]; then
+  cp -r "$(dirname "$SCRIPT")/lib" "$TEST6_DRIVER_DIR/lib"
+fi
 cat << 'EOF' > "$TEST6_DRIVER_DIR/dispatch-review.sh"
 #!/usr/bin/env bash
 echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": true, "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'

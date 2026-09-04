@@ -12,6 +12,8 @@ function showHelp() {
 
 Subcommands:
   collect     Collect reviews across seat panel for a generation
+  finalize    Finalize review generation, aggregate verdict, and write receipt
+  opt-out     Record opt-out receipt for review loop
 
 Common flags:
   --repo-root <path>    Path to target git repository
@@ -27,6 +29,14 @@ Collect flags:
   --spec-file <file>    Task specification file to pass to reviewer
   --timeout <duration>  Timeout for dispatch (default: 20m)
   --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict
+
+Finalize flags:
+  --generation <n>      Generation number (integer >= 1)
+  --dispositions <file> Path to dispositions JSON file
+  --branch <b>          Target git branch (optional)
+
+Opt-out flags:
+  --knob <knob>         Review knob to opt out (plan_review|hetero_review)
 `);
 }
 
@@ -578,6 +588,393 @@ async function handleCollect(flags) {
   process.exit(0);
 }
 
+async function handleFinalize(flags) {
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
+  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const phase = flags.phase;
+  const generationRaw = flags.generation;
+  const dispositionsFile = flags.dispositions ? path.resolve(flags.dispositions) : '';
+  const branch = flags.branch || '';
+
+  if (!ledgerDir || !phase || !generationRaw || !dispositionsFile) {
+    console.error('ERROR: --ledger <dir>, --phase <id>, --generation <n>, and --dispositions <file> are required for finalize');
+    process.exit(2);
+  }
+
+  const generation = parseInt(generationRaw, 10);
+  if (isNaN(generation) || generation < 1) {
+    console.error(`ERROR: Invalid --generation: '${generationRaw}' (must be integer >= 1)`);
+    process.exit(2);
+  }
+
+  const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
+  const gDir = path.join(reviewPhaseDir, `g${generation}`);
+  const findingsPath = path.join(gDir, 'findings.json');
+
+  if (!fs.existsSync(findingsPath)) {
+    console.error(`ERROR: Missing findings.json at ${findingsPath}`);
+    process.exit(1);
+  }
+
+  let findingsData;
+  try {
+    findingsData = JSON.parse(fs.readFileSync(findingsPath, 'utf8'));
+  } catch (e) {
+    console.error(`ERROR: Failed to parse ${findingsPath}: ${e.message}`);
+    process.exit(1);
+  }
+
+  const findingsList = Array.isArray(findingsData.findings) ? findingsData.findings : [];
+  const findingsMap = new Map();
+  for (const f of findingsList) {
+    findingsMap.set(f.id, f);
+  }
+
+  if (!fs.existsSync(dispositionsFile)) {
+    console.error(`ERROR: Missing dispositions file at ${dispositionsFile}`);
+    process.exit(1);
+  }
+
+  let dispData;
+  try {
+    dispData = JSON.parse(fs.readFileSync(dispositionsFile, 'utf8'));
+  } catch (e) {
+    console.error(`ERROR: Failed to parse dispositions file ${dispositionsFile}: ${e.message}`);
+    process.exit(1);
+  }
+
+  if (dispData.schema_version !== 1) {
+    console.error(`ERROR: Schema version mismatch in dispositions file: expected 1, got ${dispData.schema_version}`);
+    process.exit(1);
+  }
+
+  if (dispData.phase !== phase || dispData.generation !== generation) {
+    console.error(`ERROR: Phase or generation mismatch in dispositions file: expected phase '${phase}' generation ${generation}, got phase '${dispData.phase}' generation ${dispData.generation}`);
+    process.exit(1);
+  }
+
+  const dispFindings = Array.isArray(dispData.findings) ? dispData.findings : [];
+  const dispMap = new Map();
+  for (const df of dispFindings) {
+    dispMap.set(df.id, df);
+  }
+
+  // Check matching IDs: one entry per finding id, no extras, none missing
+  for (const fid of findingsMap.keys()) {
+    if (!dispMap.has(fid)) {
+      console.error(`ERROR: Dispositions file missing finding id: ${fid}`);
+      process.exit(1);
+    }
+  }
+  for (const did of dispMap.keys()) {
+    if (!findingsMap.has(did)) {
+      console.error(`ERROR: Dispositions file contains unexpected finding id: ${did}`);
+      process.exit(1);
+    }
+  }
+
+  // Aggregate verdict and open_findings
+  let hasVerifiedCritical = false;
+  const openFindings = [];
+
+  for (const f of findingsList) {
+    const disp = dispMap.get(f.id);
+    if (!disp) {
+      if (f.severity === 'Critical') {
+        console.error(`ERROR: Critical finding ${f.id} has no matching disposition entry`);
+        process.exit(1);
+      }
+      continue;
+    }
+
+    if (f.severity === 'Critical' && disp.disposition === 'verified') {
+      hasVerifiedCritical = true;
+    }
+
+    if ((f.severity === 'Major' || f.severity === 'Minor') && disp.disposition === 'verified') {
+      openFindings.push({
+        id: f.id,
+        severity: f.severity,
+        seat: f.seat,
+        text: f.text,
+        disposition: 'verified',
+      });
+    }
+  }
+
+  // Defensive check: if any finding has severity Critical and no matching disposition
+  for (const f of findingsList) {
+    if (f.severity === 'Critical' && !dispMap.has(f.id)) {
+      console.error(`ERROR: Undispositioned Critical finding encountered: ${f.id}`);
+      process.exit(1);
+    }
+  }
+
+  const verdict = hasVerifiedCritical ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
+
+  // Read chain.json
+  const chainPath = path.join(reviewPhaseDir, 'chain.json');
+  let chain = [];
+  if (fs.existsSync(chainPath)) {
+    try {
+      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+    } catch (_e) {
+      chain = [];
+    }
+  }
+
+  // Cross-generation closure:
+  // if a chain.json file exists with earlier finalized generations, and this generation's
+  // findings.json does NOT contain a finding id that was verified in an earlier generation's
+  // dispositions, mark that earlier finding closed_by_generation: <this generation's n>
+  const currentFindingIds = new Set(findingsList.map((f) => f.id));
+  for (const entry of chain) {
+    if (entry.generation < generation && entry.status === 'finalized' && entry.dispositions_path) {
+      const earlierDispPath = entry.dispositions_path;
+      if (fs.existsSync(earlierDispPath)) {
+        try {
+          const earlierDisp = JSON.parse(fs.readFileSync(earlierDispPath, 'utf8'));
+          const earlierFindings = Array.isArray(earlierDisp.findings) ? earlierDisp.findings : [];
+          if (!Array.isArray(entry.closed_findings)) {
+            entry.closed_findings = [];
+          }
+          const alreadyClosedIds = new Set(entry.closed_findings.map((cf) => cf.id));
+          for (const ef of earlierFindings) {
+            if (ef.disposition === 'verified' && !currentFindingIds.has(ef.id) && !alreadyClosedIds.has(ef.id)) {
+              entry.closed_findings.push({
+                id: ef.id,
+                closed_by_generation: generation,
+              });
+              alreadyClosedIds.add(ef.id);
+            }
+          }
+        } catch (_e) {
+          // Ignore parse errors on earlier dispositions defensively
+        }
+      }
+    }
+  }
+
+  // If FIX-THEN-SHIP, write hands-brief.md and run check-redispatch-prompt.sh
+  const briefPath = path.join(gDir, 'hands-brief.md');
+  if (verdict === 'FIX-THEN-SHIP') {
+    let engineLine = 'Engine: sonnet@claude-native effort=high';
+    const topologyPath = process.env.AUTOPILOT_TOPOLOGY_FILE || path.join(process.env.HOME || '', '.autopilot', 'topology.json');
+    if (fs.existsSync(topologyPath)) {
+      try {
+        const topData = JSON.parse(fs.readFileSync(topologyPath, 'utf8'));
+        if (Array.isArray(topData.implementer_ladder) && topData.implementer_ladder.length > 0) {
+          const first = topData.implementer_ladder[0];
+          const eng = first.engine || '';
+          const run = first.runner || '';
+          const eff = first.effort || '';
+          if (eng && run && eff) {
+            engineLine = `Engine: ${eng}@${run} effort=${eff}`;
+          }
+        }
+      } catch (_e) {
+        engineLine = 'Engine: sonnet@claude-native effort=high';
+      }
+    }
+
+    const briefLines = [engineLine];
+    if (branch) {
+      briefLines.push(`Branch: ${branch}`);
+    }
+
+    const rangePath = path.join(gDir, 'range.json');
+    let baseSha = '';
+    let headSha = '';
+    if (fs.existsSync(rangePath)) {
+      try {
+        const rangeObj = JSON.parse(fs.readFileSync(rangePath, 'utf8'));
+        baseSha = rangeObj.base || '';
+        headSha = rangeObj.head || '';
+      } catch (_e) {}
+    }
+    briefLines.push(`Base: ${baseSha}`);
+    briefLines.push(`Head: ${headSha}`);
+    briefLines.push('');
+
+    // One paragraph per verified finding (any severity) written in plain prose — no fenced code blocks, no "around line N" phrasing; just describe the finding text and the file/location it concerns in prose sentences.
+    for (const f of findingsList) {
+      const disp = dispMap.get(f.id);
+      if (disp && disp.disposition === 'verified') {
+        const cleanText = (f.text || '')
+          .replace(/```[\s\S]*?```/g, ' ')
+          .replace(/[🔴🟠🟡🔵]/g, '')
+          .replace(/\baround\s+line\s+\d+\b/gi, 'at the specified line')
+          .replace(/[\r\n]+/g, ' ')
+          .trim();
+        briefLines.push(`Finding ${f.id} from seat ${f.seat}: ${cleanText}`);
+        briefLines.push('');
+      }
+    }
+
+    fs.writeFileSync(briefPath, briefLines.join('\n').trim() + '\n');
+
+    // Run scripts/check-redispatch-prompt.sh
+    const checkScript = repoRoot
+      ? path.join(repoRoot, 'scripts', 'check-redispatch-prompt.sh')
+      : path.join('scripts', 'check-redispatch-prompt.sh');
+
+    const checkRes = spawnSync(checkScript, [briefPath], {
+      encoding: 'utf8',
+      cwd: repoRoot || process.cwd(),
+      env: { ...process.env },
+    });
+
+    if (checkRes.status !== 0) {
+      console.error(`ERROR: check-redispatch-prompt.sh failed for ${briefPath}: ${checkRes.stderr || checkRes.stdout}`);
+      process.exit(1);
+    }
+  }
+
+  // Update this generation's entry in chain.json before writing receipt
+  let currentGenEntry = chain.find((c) => c.generation === generation);
+  if (!currentGenEntry) {
+    currentGenEntry = {
+      generation,
+      base: '',
+      head: '',
+      status: 'finalized',
+      dispositions_path: dispositionsFile,
+    };
+    chain.push(currentGenEntry);
+  } else {
+    currentGenEntry.status = 'finalized';
+    currentGenEntry.dispositions_path = dispositionsFile;
+  }
+
+  fs.mkdirSync(reviewPhaseDir, { recursive: true });
+  fs.writeFileSync(chainPath, JSON.stringify(chain, null, 2) + '\n');
+
+  // Receipt
+  let phaseBaseSha = '';
+  const gen1Entry = chain.find((c) => c.generation === 1);
+  if (gen1Entry && gen1Entry.base) {
+    phaseBaseSha = gen1Entry.base;
+  }
+
+  let resolverPath = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
+  if (!resolverPath) {
+    resolverPath = repoRoot
+      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
+      : path.join('scripts', 'resolve-review-loop.sh');
+  }
+
+  let resolvedFrom = resolveField(resolverPath, repoRoot, 'hetero_review_resolved_from');
+  if (!resolvedFrom) {
+    resolvedFrom = 'unknown';
+  }
+
+  const receipt = {
+    kind: 'review',
+    phase,
+    branch: branch || undefined,
+    phase_base_sha: phaseBaseSha,
+    chain,
+    verdict,
+    open_findings: openFindings,
+    resolved_from: resolvedFrom,
+    written_at: new Date().toISOString(),
+  };
+
+  const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+
+  const summary = {
+    phase,
+    generation,
+    verdict,
+    open_findings_count: openFindings.length,
+  };
+  console.log(JSON.stringify(summary, null, 2));
+  process.exit(0);
+}
+
+async function handleOptOut(flags) {
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
+  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const phase = flags.phase;
+  const knob = flags.knob;
+
+  if (!ledgerDir || !phase || !knob) {
+    console.error('ERROR: --ledger <dir>, --phase <id>, and --knob <knob> are required for opt-out');
+    process.exit(2);
+  }
+
+  if (knob !== 'plan_review' && knob !== 'hetero_review') {
+    console.error(`ERROR: Invalid --knob '${knob}' (must be plan_review or hetero_review)`);
+    process.exit(2);
+  }
+
+  const configRelPath = path.join('.claude', 'review-loop-config.md');
+  const configPath = repoRoot ? path.join(repoRoot, configRelPath) : configRelPath;
+
+  let configuredValue = 'absent';
+  let configBytes = Buffer.alloc(0);
+
+  if (fs.existsSync(configPath)) {
+    try {
+      configBytes = fs.readFileSync(configPath);
+      const text = configBytes.toString('utf8');
+      const lines = text.split(/\r?\n/);
+      const regex = new RegExp(`(?:^|[\\s#*->])${knob}(?:[\\s:=]+)(off|on|auto)\\b`, 'i');
+      for (const line of lines) {
+        const m = line.match(regex);
+        if (m) {
+          configuredValue = m[1].toLowerCase();
+          break;
+        }
+      }
+    } catch (_e) {
+      configuredValue = 'absent';
+      configBytes = Buffer.alloc(0);
+    }
+  }
+
+  const sha256 = crypto.createHash('sha256').update(configBytes).digest('hex');
+  const configSource = {
+    path: configPath,
+    sha256,
+  };
+
+  let resolverPath = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
+  if (!resolverPath) {
+    resolverPath = repoRoot
+      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
+      : path.join('scripts', 'resolve-review-loop.sh');
+  }
+
+  let resolvedFrom = resolveField(resolverPath, repoRoot, `${knob}_resolved_from`);
+  if (!resolvedFrom) {
+    resolvedFrom = 'unknown';
+  }
+
+  const receipt = {
+    kind: 'opt-out',
+    phase,
+    knob,
+    configured_value: configuredValue,
+    config_source: configSource,
+    resolved_from: resolvedFrom,
+    written_at: new Date().toISOString(),
+  };
+
+  fs.mkdirSync(ledgerDir, { recursive: true });
+  const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+
+  const summary = {
+    phase,
+    knob,
+    configured_value: configuredValue,
+  };
+  console.log(JSON.stringify(summary, null, 2));
+  process.exit(0);
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const { positional, flags } = parseArgv(argv);
@@ -591,6 +988,10 @@ async function main() {
 
   if (subcommand === 'collect') {
     await handleCollect(flags);
+  } else if (subcommand === 'finalize') {
+    await handleFinalize(flags);
+  } else if (subcommand === 'opt-out') {
+    await handleOptOut(flags);
   } else {
     console.error(`Subcommand '${subcommand}' is not yet implemented.`);
     console.error('Usage: node scripts/hetero-review-loop.js <subcommand> [flags]');

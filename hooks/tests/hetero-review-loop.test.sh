@@ -179,4 +179,296 @@ assert_contains "$(cat "$LEDGER/review-p10/chain.json")" '"seats": [' "case 10: 
 assert_file_exists "$LEDGER/review-p10/g1/seat-s0.json" "case 10: seat-s0.json exists"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 
+# ─── finalize & opt-out ───
+
+# Section setup: helper to write topology for hands-brief test
+TOPOLOGY_FILE="$TEST_TMP/topology.json"
+cat << 'TOPO_EOF' > "$TOPOLOGY_FILE"
+{
+  "implementer_ladder": [
+    {
+      "engine": "custom-engine",
+      "runner": "custom-runner",
+      "effort": "max"
+    }
+  ]
+}
+TOPO_EOF
+export AUTOPILOT_TOPOLOGY_FILE="$TOPOLOGY_FILE"
+
+# Case 1 (finalize): three seats' combined findings all disposed refuted -> exits 0, verdict: SHIP-AS-IS, no hands-brief.md written
+mkdir -p "$LEDGER/review-p_fin1/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin1/g1/range.json"
+{
+  "base": "base111",
+  "head": "head111"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin1/g1/findings.json"
+{
+  "findings": [
+    { "id": "f1", "severity": "Minor", "seat": "s0", "text": "minor issue in foo.js" },
+    { "id": "f2", "severity": "Major", "seat": "s1", "text": "major issue in bar.js" },
+    { "id": "f3", "severity": "Critical", "seat": "s2", "text": "critical security bug in baz.js" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin1.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin1",
+  "generation": 1,
+  "findings": [
+    { "id": "f1", "disposition": "refuted", "rationale": "not a bug" },
+    { "id": "f2", "disposition": "refuted", "rationale": "intended behavior" },
+    { "id": "f3", "disposition": "refuted", "rationale": "already guarded" }
+  ]
+}
+EOF
+FIN1_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin1 --generation 1 --dispositions "$TEST_TMP/disp_fin1.json" 2>&1); FIN1_RC=$?
+assert_exit_code "$FIN1_RC" "0" "case 1 (fin): exits 0 when all findings refuted"
+assert_file_exists "$LEDGER/receipt-p_fin1.json" "case 1 (fin): receipt-p_fin1.json exists"
+assert_contains "$(cat "$LEDGER/receipt-p_fin1.json")" '"verdict": "SHIP-AS-IS"' "case 1 (fin): receipt verdict is SHIP-AS-IS"
+assert_file_absent "$LEDGER/review-p_fin1/g1/hands-brief.md" "case 1 (fin): no hands-brief.md written on SHIP-AS-IS"
+
+# Case 2 (finalize): one finding severity Critical disposed verified -> exits 0, verdict: FIX-THEN-SHIP, hands-brief.md exists, check-redispatch-prompt.sh exits 0
+mkdir -p "$LEDGER/review-p_fin2/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2/g1/range.json"
+{
+  "base": "base222",
+  "head": "head222"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_crit", "severity": "Critical", "seat": "s0", "text": "Buffer boundary vulnerability in parser.js" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2",
+  "generation": 1,
+  "findings": [
+    { "id": "f_crit", "disposition": "verified", "rationale": "confirmed issue" }
+  ]
+}
+EOF
+FIN2_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2 --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2.json" 2>&1); FIN2_RC=$?
+assert_exit_code "$FIN2_RC" "0" "case 2 (fin): exits 0 on verified Critical"
+assert_file_exists "$LEDGER/receipt-p_fin2.json" "case 2 (fin): receipt exists"
+assert_contains "$(cat "$LEDGER/receipt-p_fin2.json")" '"verdict": "FIX-THEN-SHIP"' "case 2 (fin): receipt verdict is FIX-THEN-SHIP"
+assert_file_exists "$LEDGER/review-p_fin2/g1/hands-brief.md" "case 2 (fin): hands-brief.md exists"
+BRIEF_LINE1=$(head -n 1 "$LEDGER/review-p_fin2/g1/hands-brief.md")
+assert_contains "$BRIEF_LINE1" "Engine: " "case 2 (fin): line 1 starts with Engine: "
+assert_contains "$BRIEF_LINE1" "custom-engine@custom-runner effort=max" "case 2 (fin): line 1 uses custom topology"
+# Run check-redispatch-prompt.sh on the hands-brief.md
+CHECK_BRIEF_OUT=$(bash "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$LEDGER/review-p_fin2/g1/hands-brief.md" 2>&1); CHECK_BRIEF_RC=$?
+assert_exit_code "$CHECK_BRIEF_RC" "0" "case 2 (fin): check-redispatch-prompt.sh exits 0 on hands-brief.md"
+
+# Case 3 (finalize): same Critical finding disposed refuted instead -> verdict: SHIP-AS-IS
+mkdir -p "$LEDGER/review-p_fin3/g1"
+cp "$LEDGER/review-p_fin2/g1/range.json" "$LEDGER/review-p_fin3/g1/range.json"
+cp "$LEDGER/review-p_fin2/g1/findings.json" "$LEDGER/review-p_fin3/g1/findings.json"
+cat << 'EOF' > "$TEST_TMP/disp_fin3.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin3",
+  "generation": 1,
+  "findings": [
+    { "id": "f_crit", "disposition": "refuted", "rationale": "false positive" }
+  ]
+}
+EOF
+FIN3_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin3 --generation 1 --dispositions "$TEST_TMP/disp_fin3.json" 2>&1); FIN3_RC=$?
+assert_exit_code "$FIN3_RC" "0" "case 3 (fin): exits 0 on refuted Critical"
+assert_contains "$(cat "$LEDGER/receipt-p_fin3.json")" '"verdict": "SHIP-AS-IS"' "case 3 (fin): verdict is SHIP-AS-IS"
+
+# Case 4 (finalize): a Major-severity finding disposed verified alone -> SHIP-AS-IS with exactly one entry in open_findings
+mkdir -p "$LEDGER/review-p_fin4/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin4/g1/range.json"
+{
+  "base": "base444",
+  "head": "head444"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin4/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_major", "severity": "Major", "seat": "s0", "text": "Unchecked return value in write.js" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin4.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin4",
+  "generation": 1,
+  "findings": [
+    { "id": "f_major", "disposition": "verified", "rationale": "needs follow up" }
+  ]
+}
+EOF
+FIN4_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin4 --generation 1 --dispositions "$TEST_TMP/disp_fin4.json" 2>&1); FIN4_RC=$?
+assert_exit_code "$FIN4_RC" "0" "case 4 (fin): exits 0 on verified Major"
+assert_contains "$(cat "$LEDGER/receipt-p_fin4.json")" '"verdict": "SHIP-AS-IS"' "case 4 (fin): verdict is SHIP-AS-IS"
+OPEN_COUNT=$(node -e 'const r = JSON.parse(fs.readFileSync(process.argv[1])); console.log(r.open_findings.length);' "$LEDGER/receipt-p_fin4.json")
+assert_eq "$OPEN_COUNT" "1" "case 4 (fin): open_findings has exactly 1 entry"
+
+# Case 5 (finalize): dispositions file missing one of the finding ids -> exit 1, no receipt written
+mkdir -p "$LEDGER/review-p_fin5/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin5/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_one", "severity": "Minor", "seat": "s0", "text": "one" },
+    { "id": "f_two", "severity": "Minor", "seat": "s1", "text": "two" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin5.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin5",
+  "generation": 1,
+  "findings": [
+    { "id": "f_one", "disposition": "verified", "rationale": "ok" }
+  ]
+}
+EOF
+FIN5_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin5 --generation 1 --dispositions "$TEST_TMP/disp_fin5.json" 2>&1); FIN5_RC=$?
+assert_exit_code "$FIN5_RC" "1" "case 5 (fin): exit 1 when finding id missing in dispositions"
+assert_file_absent "$LEDGER/receipt-p_fin5.json" "case 5 (fin): receipt not written"
+
+# Case 6 (finalize): defensive check for undispositioned Critical finding -> exit 1, no receipt written
+mkdir -p "$LEDGER/review-p_fin6/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin6/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_crit_undisp", "severity": "Critical", "seat": "s0", "text": "Critical flaw" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin6.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin6",
+  "generation": 1,
+  "findings": []
+}
+EOF
+FIN6_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin6 --generation 1 --dispositions "$TEST_TMP/disp_fin6.json" 2>&1); FIN6_RC=$?
+assert_exit_code "$FIN6_RC" "1" "case 6 (fin): exit 1 when Critical finding is undispositioned"
+assert_file_absent "$LEDGER/receipt-p_fin6.json" "case 6 (fin): receipt not written"
+
+# Case 7 (finalize): two-generation flow: gen 1 collect -> finalize with verified Critical, gen 2 collect -> finalize gen 2 refuted -> SHIP-AS-IS, closed_findings recorded
+mkdir -p "$LEDGER/review-p_fin7/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base1",
+    "head": "sha_head1",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7/g1/range.json"
+{
+  "base": "sha_base1",
+  "head": "sha_head1"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7/g1/findings.json"
+{
+  "findings": [
+    { "id": "finding_g1_crit", "severity": "Critical", "seat": "s0", "text": "Memory corruption in parser" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7_g1.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7",
+  "generation": 1,
+  "findings": [
+    { "id": "finding_g1_crit", "disposition": "verified", "rationale": "reproduced memory corruption" }
+  ]
+}
+EOF
+FIN7_G1_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7 --generation 1 --dispositions "$TEST_TMP/disp_fin7_g1.json" 2>&1); FIN7_G1_RC=$?
+assert_exit_code "$FIN7_G1_RC" "0" "case 7 (fin): gen 1 finalize exits 0"
+assert_contains "$(cat "$LEDGER/receipt-p_fin7.json")" '"verdict": "FIX-THEN-SHIP"' "case 7 (fin): gen 1 verdict is FIX-THEN-SHIP"
+
+# Now generation 2
+mkdir -p "$LEDGER/review-p_fin7/g2"
+cat << 'EOF' > "$LEDGER/review-p_fin7/g2/range.json"
+{
+  "base": "sha_head1",
+  "head": "sha_head2"
+}
+EOF
+# In generation 2, finding_g1_crit is no longer reported! Only a minor finding is reported.
+cat << 'EOF' > "$LEDGER/review-p_fin7/g2/findings.json"
+{
+  "findings": [
+    { "id": "finding_g2_minor", "severity": "Minor", "seat": "s0", "text": "Typo in comment" }
+  ]
+}
+EOF
+# Append gen 2 pending entry to chain
+node -e '
+  const fs = require("fs");
+  const p = process.argv[1];
+  const chain = JSON.parse(fs.readFileSync(p, "utf8"));
+  chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", seats: ["s0"], status: "pending" });
+  fs.writeFileSync(p, JSON.stringify(chain, null, 2) + "\n");
+' "$LEDGER/review-p_fin7/chain.json"
+
+cat << 'EOF' > "$TEST_TMP/disp_fin7_g2.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7",
+  "generation": 2,
+  "findings": [
+    { "id": "finding_g2_minor", "disposition": "refuted", "rationale": "not a problem" }
+  ]
+}
+EOF
+FIN7_G2_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7 --generation 2 --dispositions "$TEST_TMP/disp_fin7_g2.json" 2>&1); FIN7_G2_RC=$?
+assert_exit_code "$FIN7_G2_RC" "0" "case 7 (fin): gen 2 finalize exits 0"
+assert_contains "$(cat "$LEDGER/receipt-p_fin7.json")" '"verdict": "SHIP-AS-IS"' "case 7 (fin): gen 2 verdict is SHIP-AS-IS"
+
+CHAIN_P7=$(cat "$LEDGER/review-p_fin7/chain.json")
+assert_contains "$CHAIN_P7" '"closed_by_generation": 2' "case 7 (fin): gen 1 entry recorded closed_by_generation: 2"
+assert_contains "$CHAIN_P7" '"finding_g1_crit"' "case 7 (fin): closed finding id matches finding_g1_crit"
+
+# Case 8 (opt-out): config file containing line configuring knob to off -> receipt kind: opt-out, configured_value: off
+mkdir -p "$SCRATCH_REPO/.claude"
+echo "- hetero_review: off" > "$SCRATCH_REPO/.claude/review-loop-config.md"
+OPT8_OUT=$(node "$SCRIPT" opt-out --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_opt8 --knob hetero_review 2>&1); OPT8_RC=$?
+assert_exit_code "$OPT8_RC" "0" "case 8 (opt): exits 0"
+assert_file_exists "$LEDGER/receipt-p_opt8.json" "case 8 (opt): receipt-p_opt8.json exists"
+OPT8_RECEIPT=$(cat "$LEDGER/receipt-p_opt8.json")
+assert_contains "$OPT8_RECEIPT" '"kind": "opt-out"' "case 8 (opt): kind is opt-out"
+assert_contains "$OPT8_RECEIPT" '"configured_value": "off"' "case 8 (opt): configured_value is off"
+
+# Case 9 (opt-out): no config file present -> configured_value: absent
+rm -f "$SCRATCH_REPO/.claude/review-loop-config.md"
+OPT9_OUT=$(node "$SCRIPT" opt-out --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_opt9 --knob plan_review 2>&1); OPT9_RC=$?
+assert_exit_code "$OPT9_RC" "0" "case 9 (opt): exits 0 without config file"
+OPT9_RECEIPT=$(cat "$LEDGER/receipt-p_opt9.json")
+assert_contains "$OPT9_RECEIPT" '"configured_value": "absent"' "case 9 (opt): configured_value is absent"
+
+# Case 10: run --help and assert it mentions finalize and opt-out
+HELP2_OUT=$(node "$SCRIPT" --help 2>&1); HELP2_RC=$?
+assert_exit_code "$HELP2_RC" "0" "case 10 (help): --help exits 0"
+assert_contains "$HELP2_OUT" "finalize" "case 10 (help): mentions finalize"
+assert_contains "$HELP2_OUT" "opt-out" "case 10 (help): mentions opt-out"
+assert_contains "$HELP2_OUT" "--dispositions" "case 10 (help): mentions --dispositions"
+assert_contains "$HELP2_OUT" "--knob" "case 10 (help): mentions --knob"
+
 finalize_test
+

@@ -73,13 +73,27 @@ assert_eq 0 "$__RUN_EXIT" "case9b-exit"
 assert_eq "" "$__RUN_STDOUT" "case9b-silent"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# Case 10: Config on_missing_model: allow → absent model silent
+# Case 10: Config on_missing_model: allow (require_engine_header left at its "on" default)
+# → absent model silent. Missing model must be decided by on_missing_model BEFORE the
+# header check runs — a header check on an empty model would otherwise deny first and
+# make on_missing_model: allow dead config (regression this case guards against).
 printf '%s\n' "- on_missing_model: allow" "- require_engine_header: off" > "$TEST_TMP/config10.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config10.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case10-exit"
 assert_eq "" "$__RUN_STDOUT" "case10-silent"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# Case 10b: on_missing_model: allow with require_engine_header: on (default, not switched off)
+# + no model ⇒ allow. This is the precedence regression test: the header check must be
+# skipped entirely when model is absent, not run-then-denied ahead of on_missing_model.
+printf '%s\n' "- on_missing_model: allow" > "$TEST_TMP/config10b.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config10b.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case10b-exit"
+assert_eq "" "$__RUN_STDOUT" "case10b-silent (on_missing_model: allow wins over header check when model absent)"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # Case 11: Config mode: off → model fable silent

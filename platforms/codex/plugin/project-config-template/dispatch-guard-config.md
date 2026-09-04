@@ -28,8 +28,8 @@ on unreadable payloads (spend control, not a security boundary).
 |-----|--------|---------|
 | `guarded_models` | comma-separated tokens | Case-insensitive substring match against `tool_input.model` (e.g. `fable` matches `claude-fable-5`). Empty/garbage → default `fable`. |
 | `guarded_models_implementing` | comma-separated tokens | Case-insensitive substring match against `tool_input.model`, applied ONLY when the dispatch is implementation-shaped (`tool_input.mode` is absent or not `"plan"`); union'd with `guarded_models`. Empty/garbage → default `fable,opus`. |
-| `on_missing_model` | `ask` \| `allow` | When `model` is omitted: `ask` = permission ASK (default); `allow` = pass through. Garbage → `ask` (fail-closed). |
-| `require_engine_header` | `on` \| `off` | When `on` (default), the dispatch prompt's first non-empty line must be `Engine: <model>…` matching `tool_input.model`, or the dispatch is denied (not asked — mechanical, nothing for a human to approve). Garbage → `on` (fail-closed). |
+| `on_missing_model` | `ask` \| `allow` | When `model` is omitted, this decides outright BEFORE `require_engine_header` runs (there is nothing for the header to match against): `ask` = permission ASK (default); `allow` = pass through. Garbage → `ask` (fail-closed). |
+| `require_engine_header` | `on` \| `off` | Only evaluated when `model` is present. When `on` (default), the dispatch prompt's first non-empty line must be `Engine: <model>…` matching `tool_input.model`, or the dispatch is denied (not asked — mechanical, nothing for a human to approve). Garbage → `on` (fail-closed). |
 | `mode` | `ask` \| `warn` \| `off` | `ask` = native permission ASK; `warn` = advisory stderr only; `off` = inert. Garbage → `ask` (fail-closed). |
 
 ## Defaults & fail-closed

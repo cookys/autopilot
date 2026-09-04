@@ -203,7 +203,22 @@ try {
   const modelRaw = String(toolInput.model || '').trim();
   const model = modelRaw.toLowerCase();
 
-  // require_engine_header check
+  // model empty: on_missing_model policy decides outright — the header check
+  // has nothing to match against and must not run (on_missing_model: allow
+  // would otherwise be dead config, since the header check ran first and
+  // denied before allow could take effect).
+  if (!model) {
+    if (config.on_missing_model === 'allow') {
+      process.exit(0);
+    }
+    handleGuard(
+      'dispatch-model-guard: no model specified — the subagent would inherit the session model (possibly a guarded engine); re-dispatch with an explicit model: (see scripts/resolve-dispatch.sh) or approve',
+      config.mode
+    );
+    process.exit(0);
+  }
+
+  // require_engine_header check (model present)
   if (config.require_engine_header === 'on') {
     const promptRaw = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
     let firstLine = null;
@@ -235,31 +250,19 @@ try {
   }
 
   // guarded models check
-  if (model) {
-    const isPlan = toolInput.mode === 'plan';
-    const effectiveGuarded = isPlan
-      ? config.guarded_models
-      : Array.from(new Set([...config.guarded_models, ...config.guarded_models_implementing]));
+  const isPlan = toolInput.mode === 'plan';
+  const effectiveGuarded = isPlan
+    ? config.guarded_models
+    : Array.from(new Set([...config.guarded_models, ...config.guarded_models_implementing]));
 
-    const hit = effectiveGuarded.some((token) => model.includes(token));
-    if (hit) {
-      handleGuard(
-        `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine — approve, or re-dispatch with a cheaper model per scripts/resolve-dispatch.sh`,
-        config.mode
-      );
-    }
-    process.exit(0);
+  const hit = effectiveGuarded.some((token) => model.includes(token));
+  if (hit) {
+    handleGuard(
+      `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine — approve, or re-dispatch with a cheaper model per scripts/resolve-dispatch.sh`,
+      config.mode
+    );
   }
-
-  // model empty
-  if (config.on_missing_model === 'allow') {
-    process.exit(0);
-  }
-
-  handleGuard(
-    'dispatch-model-guard: no model specified — the subagent would inherit the session model (possibly a guarded engine); re-dispatch with an explicit model: (see scripts/resolve-dispatch.sh) or approve',
-    config.mode
-  );
+  process.exit(0);
 } catch (e) {
   process.stderr.write(
     `dispatch-model-guard: unexpected error — allowing (fail-open): ${e.message}\n`

@@ -87,6 +87,10 @@ Collect flags:
   --exclude <specs>     Comma-separated git pathspecs to exclude from diff
   --timeout <duration>  Timeout for dispatch (default: 20m)
   --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict
+  --retry                Reuse this generation number after it was aborted; the aborted
+                          generation's directory is preserved (renamed aside), never deleted.
+                          Without --retry, an aborted generation refuses reuse — collect the
+                          next generation number instead.
 
 Finalize flags:
   --generation <n>      Generation number (integer >= 1)
@@ -113,7 +117,7 @@ function parseArgv(argv) {
       flags.help = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
-      if (key === 'allow-seat-gap') {
+      if (key === 'allow-seat-gap' || key === 'retry') {
         flags[key] = true;
       } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
         flags[key] = argv[i + 1];
@@ -473,9 +477,14 @@ async function handleCollect(flags) {
   }
 
   const gDir = path.join(reviewPhaseDir, `g${generation}`);
+  const retryAborted = Boolean(flags.retry);
   if (fs.existsSync(gDir)) {
     if (!existingGenEntry || existingGenEntry.status !== 'aborted') {
       console.error(`ERROR: Generation directory ${gDir} already exists and status is '${existingGenEntry ? existingGenEntry.status : 'untracked'}'; refusing to reuse`);
+      process.exit(1);
+    }
+    if (!retryAborted) {
+      console.error(`ERROR: Generation ${generation} was aborted and its evidence directory ${gDir} still exists; collect the next generation number instead, or pass --retry to reuse generation ${generation} (the aborted evidence is preserved, never deleted)`);
       process.exit(1);
     }
   }
@@ -495,20 +504,18 @@ async function handleCollect(flags) {
       process.exit(1);
     }
     if (prevEntry.status !== 'finalized') {
-      if (prevEntry.status === 'pending' && phase === 'p7') {
-        // Legacy compatibility for test case 7 in hetero-review-loop.test.sh
-      } else {
-        console.error(`ERROR: Cannot collect generation ${generation}: generation ${generation - 1} is not finalized (status is '${prevEntry.status}')`);
-        process.exit(1);
-      }
+      console.error(`ERROR: Cannot collect generation ${generation}: generation ${generation - 1} is not finalized (status is '${prevEntry.status}')`);
+      process.exit(1);
     }
     base = prevEntry.head;
   }
 
-  // Persist phase base for generation 1
+  // Persist phase base for generation 1 at the documented ledger-root path
+  // (<ledger>/phase-<phase>.base) — this is what skills/dev-flow/SKILL.md and
+  // skills/dev-flow/references/hetero-loops.md `cat` to build --phase-base.
   if (generation === 1) {
-    fs.mkdirSync(reviewPhaseDir, { recursive: true });
-    const phaseBaseFile = path.join(reviewPhaseDir, `phase-${phase}.base`);
+    fs.mkdirSync(ledgerDir, { recursive: true });
+    const phaseBaseFile = path.join(ledgerDir, `phase-${phase}.base`);
     writeFileSyncAtomic(phaseBaseFile, base + '\n');
   }
 
@@ -549,7 +556,11 @@ async function handleCollect(flags) {
   // Range and diff
   fs.mkdirSync(reviewPhaseDir, { recursive: true });
   if (existingGenEntry && existingGenEntry.status === 'aborted' && fs.existsSync(gDir)) {
-    fs.rmSync(gDir, { recursive: true, force: true });
+    // --retry was required to get here (see the gate above). Never delete evidence: move the
+    // aborted generation's directory aside so it stays on disk, then create a fresh one for the
+    // retry to write into.
+    const preservedDir = path.join(reviewPhaseDir, `g${generation}.aborted-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`);
+    fs.renameSync(gDir, preservedDir);
   }
   try {
     fs.mkdirSync(gDir);

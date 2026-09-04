@@ -891,9 +891,13 @@ process.exit(0);
     _seat1_json=""
     if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
       _seats_extracted="$(node -e '
+// Canonicalize runner aliases before every collision/exclusion comparison — codex-cli and codex
+// are the same rail and must never be treated as distinct for the same-runner-dual-seat guard.
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
 try {
   const d = JSON.parse(process.argv[1]);
   const implRunner = process.argv[2] || "";
+  const normImplRunner = normRunner(implRunner);
   const p = d.plan_review_panel;
   if (Array.isArray(p) && p.length >= 1) {
     // Skip any panel seat that would collide with the resolved implementer
@@ -905,7 +909,7 @@ try {
       const r = seat && seat.runner;
       if (!r) return true;
       if (!implRunner || implRunner === "auto") return true;
-      return r !== implRunner;
+      return normRunner(r) !== normImplRunner;
     });
     if (survivors.length >= 1) {
       const s0 = survivors[0] || {};
@@ -987,6 +991,9 @@ process.stdout.write(JSON.stringify(a));
       _qc_panel_runners_arg="${QC_PANEL_RUNNERS[*]:-}"
       _qc_panel_efforts_arg="${QC_PANEL_EFFORTS[*]:-}"
       _consult_picked="$(node -e '
+// Canonicalize runner aliases before every collision/exclusion/tuple-key comparison — codex-cli
+// and codex are the same rail and must never be treated as distinct.
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
 try {
   const d = JSON.parse(process.argv[1]);
   const ladder = d.consult_ladder;
@@ -996,12 +1003,13 @@ try {
   const qcRunners = (process.argv[3] || "").split(" ").filter(Boolean);
   const qcEfforts = (process.argv[4] || "").split(" ").filter(Boolean);
   const implRunner = process.argv[5] || "";
+  const normImplRunner = normRunner(implRunner);
 
   const excluded = new Set();
   const maxIdx = Math.min(qcPanels.length, qcRunners.length, qcEfforts.length);
   for (let i = 0; i < maxIdx; i++) {
     const eng = qcPanels[i];
-    const run = qcRunners[i];
+    const run = normRunner(qcRunners[i]);
     const eff = qcEfforts[i];
     if (run && eff) {
       excluded.add(`${eng}|${run}|${eff}`);
@@ -1010,12 +1018,13 @@ try {
 
   for (const entry of ladder) {
     if (!entry || !entry.engine || !entry.runner || !entry.effort) continue;
+    const entryRunner = normRunner(entry.runner);
     // Skip any ladder seat that would collide with the resolved implementer
     // runner under the same-runner-dual-seat guard — consult is a loop
     // review seat like any other for that guard. "auto" is not a rail
     // identity and never collides.
-    if (implRunner && implRunner !== "auto" && entry.runner === implRunner) continue;
-    const key = `${entry.engine}|${entry.runner}|${entry.effort}`;
+    if (implRunner && implRunner !== "auto" && entryRunner === normImplRunner) continue;
+    const key = `${entry.engine}|${entryRunner}|${entry.effort}`;
     if (!excluded.has(key)) {
       process.stdout.write(JSON.stringify(entry));
       process.exit(0);

@@ -350,6 +350,25 @@ NODE
 assert_eq "claude-sonnet" "$PANEL_SEATS" "Case 9: excluded seat removed from plan_review_panel"
 
 # -----------------------------------------------------------------------------
+# Case 9b (negative control, d1-runner-alias-exclusion): a --exclude-seats entry spelled with
+# the canonical "codex" runner must still exclude a seat whose scorecard row is qualified under
+# the "codex-cli" alias — the two must be treated as the same rail for exclusion.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-4o-cli" "codex-cli" "high" 10.0 "qualified" 703 "reviewer"
+write_scorecard_row "claude-sonnet" "agy" "high" 10.0 "qualified" 704 "reviewer"
+
+OUT="$(node "$SCRIPT" --json --role reviewer --exclude-seats "gpt-4o-cli/high@codex" --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 9b: exit 0"
+
+REV_SEATS_ALIAS="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.reviewer_ladder.map(s => s.engine).join(','));
+NODE
+)"
+assert_eq "claude-sonnet" "$REV_SEATS_ALIAS" "Case 9b: codex-cli seat excluded by a codex exclusion (alias canonicalized before comparison)"
+
+# -----------------------------------------------------------------------------
 # Case 10: --asking-family openai sorts minimax before openai in consult_ladder
 # -----------------------------------------------------------------------------
 rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"

@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-04 | dev-flow hetero loops as default（`docs/projects/2026-09-04-dev-flow-hetero-loops/README.md`）— plan loop → 派工 → per-phase hetero review → qc gate 成為 L-size 預設；新薄 skill `hetero-review` 以 owner 原話當觸發；consult 與 codex plugin 脫鉤 | v2.36.0 | `feat/dev-flow-hetero-loops` |
 
 ## 已完成 (Completed)
 

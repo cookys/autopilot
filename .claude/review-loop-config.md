@@ -30,9 +30,9 @@
 - on_family_conflict: fallback
 - reviewer_fallback_preference: GLM-5.2
 - reviewer_fallback_preference_low_risk: GLM-5.2
-- implementer_engine: grok-4.5
-- implementer_effort: high
-- implementer_runner: grok
+- implementer_engine: gemini-3.8-flash-low
+- implementer_effort: low
+- implementer_runner: agy
 - verification_author_present: true
 - verification_author_engine: Qwen3.8-Max-Preview
 - verification_author_runner: qoderclicn

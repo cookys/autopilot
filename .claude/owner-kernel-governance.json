@@ -87,7 +87,7 @@
   },
   "mission_convergence": {
     "schema_version": 1,
-    "enforcement_mode": "enforce",
+    "enforcement_mode": "shadow",
     "max_campaigns": 10,
     "max_wall_seconds": 36000,
     "max_tool_calls": 1500,

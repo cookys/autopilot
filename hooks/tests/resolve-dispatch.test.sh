@@ -71,13 +71,21 @@ assert_contains "$OUT" '"mode":"plan"'                       "legacy debugger mo
 assert_contains "$OUT" '"agent":"autopilot:debugger"'        "legacy debugger agent"
 assert_not_contains "$OUT" '"table"'                         "legacy debugger no table field"
 
-# implementer → opus/default (specifically asserted)
+# implementer → sonnet/default (specifically asserted)
 OUT="$(run_dispatch --role implementer)"; EXIT=$?
 assert_eq "0" "$EXIT"                                        "legacy implementer exit code"
-assert_contains "$OUT" '"model":"opus"'                      "legacy implementer model=opus (specific check)"
+assert_contains "$OUT" '"model":"sonnet"'                    "legacy implementer model=sonnet (specific check)"
 assert_contains "$OUT" '"mode":"default"'                    "legacy implementer mode=default"
 assert_contains "$OUT" '"agent":""'                          "legacy implementer agent empty"
 assert_not_contains "$OUT" '"table"'                         "legacy implementer no table field (byte-stability proxy)"
+
+# hands → haiku/default (source default)
+OUT="$(run_dispatch --role hands)"; EXIT=$?
+assert_eq "0" "$EXIT"                                        "legacy hands exit code"
+assert_contains "$OUT" '"model":"haiku"'                     "legacy hands model=haiku"
+assert_contains "$OUT" '"mode":"default"'                    "legacy hands mode=default"
+assert_contains "$OUT" '"agent":""'                          "legacy hands agent empty"
+assert_not_contains "$OUT" '"table"'                         "legacy hands no table field"
 
 # deep-reasoner → opus/plan
 OUT="$(run_dispatch --role deep-reasoner)"; EXIT=$?
@@ -217,7 +225,7 @@ assert_contains "$OUT" '"model":"sonnet"'         "bare-only config: tree falls 
 assert_contains "$OUT" '"source":"default"'       "bare-only config: tree source=default"
 assert_contains "$OUT" '"table":"tree"'           "bare-only config: tree table present"
 
-# (d) config with ONLY tree:implementer does NOT match legacy lookups (falls back to opus)
+# (d) config with ONLY tree:implementer does NOT match legacy lookups (falls back to sonnet)
 OVERRIDE_FILE="$OVERRIDE_DIR/tree-only.md"
 cat > "$OVERRIDE_FILE" <<'CFGEOF'
 | Role | Model | Mode |
@@ -226,7 +234,7 @@ cat > "$OVERRIDE_FILE" <<'CFGEOF'
 CFGEOF
 OUT="$(run_dispatch --role implementer)"; EXIT=$?
 assert_eq "0" "$EXIT"                            "tree-only config: legacy fallback exit code"
-assert_contains "$OUT" '"model":"opus"'           "tree-only config: legacy falls back to opus default"
+assert_contains "$OUT" '"model":"sonnet"'         "tree-only config: legacy falls back to sonnet default"
 assert_contains "$OUT" '"source":"default"'       "tree-only config: legacy source=default"
 assert_not_contains "$OUT" '"table"'              "tree-only config: legacy no table field"
 
@@ -251,7 +259,7 @@ assert_contains "$OUT" "invalid --role"          "sanitize: pipe-in-role --tree 
 # Clean valid inputs still work (regression)
 OUT="$(run_dispatch --role implementer)"; EXIT=$?
 assert_eq "0" "$EXIT"                            "sanitize: clean legacy still works"
-assert_contains "$OUT" '"model":"opus"'           "sanitize: clean legacy correct model"
+assert_contains "$OUT" '"model":"sonnet"'         "sanitize: clean legacy correct model"
 
 OUT="$(run_dispatch --role implementer --tree)"; EXIT=$?
 assert_eq "0" "$EXIT"                            "sanitize: clean tree still works"
@@ -267,7 +275,7 @@ BEOF
 OUT="$(MODEL_ROUTING_CONFIG_OVERRIDE="$MALFORMED_FILE" \
   bash "$SCRIPT" --role implementer 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT"                            "malformed legacy: exit code (no crash)"
-assert_contains "$OUT" '"model":"opus"'           "malformed legacy: falls back to opus default"
+assert_contains "$OUT" '"model":"sonnet"'         "malformed legacy: falls back to sonnet default"
 
 OUT="$(MODEL_ROUTING_CONFIG_OVERRIDE="$MALFORMED_FILE" \
   bash "$SCRIPT" --role implementer --tree 2>&1)"; EXIT=$?
@@ -301,6 +309,13 @@ OUT="$(MODEL_ROUTING_CONFIG_OVERRIDE="$INJECT_FILE" \
   bash "$SCRIPT" --role implementer 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT"                             "inject legacy: exit code (no crash)"
 assert_not_contains "$OUT" 'bad"value'             "inject legacy: crafted value NOT in output"
-assert_contains "$OUT" '"model":"opus"'            "inject legacy: falls back to opus default"
+assert_contains "$OUT" '"model":"sonnet"'          "inject legacy: falls back to sonnet default"
+
+# ── 14. Negative-control: no legacy default resolves to opus ─────────────
+for r in implementer fast-worker test-runner researcher hands; do
+  OUT="$(run_dispatch --role "$r")"; EXIT=$?
+  assert_eq "0" "$EXIT"                             "legacy role $r exit code"
+  assert_not_contains "$OUT" '"model":"opus"'       "legacy role $r must not resolve to opus"
+done
 
 finalize_test

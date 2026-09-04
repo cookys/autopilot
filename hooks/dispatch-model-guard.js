@@ -4,6 +4,8 @@
  * Intercepts subagent dispatch and returns permissionDecision: "ask" when the
  * dispatch would land on a guarded expensive engine (default: fable) or when
  * model is omitted (would silently inherit the session model).
+ * Guards expensive engines during implementation dispatches (default: fable,opus via guarded_models_implementing).
+ * Enforces self-declared engine headers on prompt line 1 matching the dispatch model (default: on via require_engine_header).
  *
  * Headless (`claude -p`) behavior — verified 2026-09-04 on CC 2.1.259, both with and
  * without --dangerously-skip-permissions: an "ask" from a PreToolUse hook does NOT wedge
@@ -31,7 +33,9 @@ if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'off') process.exit(0);
 
 const DEFAULTS = {
   guarded_models: ['fable'],
+  guarded_models_implementing: ['fable', 'opus'],
   on_missing_model: 'ask',
+  require_engine_header: 'on',
   mode: 'ask',
 };
 
@@ -78,11 +82,28 @@ function loadConfig(cwd) {
     guarded = tokens.length ? tokens : DEFAULTS.guarded_models;
   }
 
+  // guarded_models_implementing: comma-separated tokens; empty/garbage → default
+  let guardedImplementing = DEFAULTS.guarded_models_implementing;
+  if (Object.prototype.hasOwnProperty.call(parsed, 'guarded_models_implementing')) {
+    const tokens = String(parsed.guarded_models_implementing || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    guardedImplementing = tokens.length ? tokens : DEFAULTS.guarded_models_implementing;
+  }
+
   // on_missing_model: ask | allow; garbage → ask (fail-closed)
   let onMissing = DEFAULTS.on_missing_model;
   if (Object.prototype.hasOwnProperty.call(parsed, 'on_missing_model')) {
     const v = String(parsed.on_missing_model || '').trim().toLowerCase();
     onMissing = (v === 'ask' || v === 'allow') ? v : 'ask';
+  }
+
+  // require_engine_header: on | off; garbage → on (fail-closed)
+  let requireEngineHeader = DEFAULTS.require_engine_header;
+  if (Object.prototype.hasOwnProperty.call(parsed, 'require_engine_header')) {
+    const v = String(parsed.require_engine_header || '').trim().toLowerCase();
+    requireEngineHeader = (v === 'on' || v === 'off') ? v : 'on';
   }
 
   // mode: ask | warn | off; garbage → ask (fail-closed)
@@ -92,7 +113,13 @@ function loadConfig(cwd) {
     mode = (v === 'ask' || v === 'warn' || v === 'off') ? v : 'ask';
   }
 
-  return { guarded_models: guarded, on_missing_model: onMissing, mode };
+  return {
+    guarded_models: guarded,
+    guarded_models_implementing: guardedImplementing,
+    on_missing_model: onMissing,
+    require_engine_header: requireEngineHeader,
+    mode,
+  };
 }
 
 function emitAsk(reason) {
@@ -107,6 +134,18 @@ function emitAsk(reason) {
   process.exit(0);
 }
 
+function emitDeny(reason) {
+  const payload = {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason,
+    },
+  };
+  process.stdout.write(JSON.stringify(payload) + '\n');
+  process.exit(0);
+}
+
 function handleGuard(reason, mode) {
   if (mode === 'warn') {
     process.stderr.write(reason + '\n');
@@ -114,6 +153,15 @@ function handleGuard(reason, mode) {
   }
   // mode === 'ask' (default path)
   emitAsk(reason);
+}
+
+function handleDeny(reason, mode) {
+  if (mode === 'warn') {
+    process.stderr.write(reason + '\n');
+    process.exit(0);
+  }
+  // denial on fail-closed header check (mode !== 'warn')
+  emitDeny(reason);
 }
 
 try {
@@ -155,8 +203,45 @@ try {
   const modelRaw = String(toolInput.model || '').trim();
   const model = modelRaw.toLowerCase();
 
+  // require_engine_header check
+  if (config.require_engine_header === 'on') {
+    const promptRaw = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
+    let firstLine = null;
+    for (const line of promptRaw.split('\n')) {
+      if (line.trim().length > 0) {
+        firstLine = line;
+        break;
+      }
+    }
+
+    let headerMatch = false;
+    if (firstLine !== null) {
+      const m = firstLine.match(/^Engine:\s*(\S+)/);
+      if (m) {
+        const token = m[1].toLowerCase();
+        if (token === model || token.startsWith(model + '@')) {
+          headerMatch = true;
+        }
+      }
+    }
+
+    if (!headerMatch) {
+      const got = firstLine !== null ? firstLine : '(none)';
+      handleDeny(
+        `dispatch-model-guard: prompt line 1 must be "Engine: <model>…" matching model: ${modelRaw} (got: ${got})`,
+        config.mode
+      );
+    }
+  }
+
+  // guarded models check
   if (model) {
-    const hit = config.guarded_models.some((token) => model.includes(token));
+    const isPlan = toolInput.mode === 'plan';
+    const effectiveGuarded = isPlan
+      ? config.guarded_models
+      : Array.from(new Set([...config.guarded_models, ...config.guarded_models_implementing]));
+
+    const hit = effectiveGuarded.some((token) => model.includes(token));
     if (hit) {
       handleGuard(
         `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine — approve, or re-dispatch with a cheaper model per scripts/resolve-dispatch.sh`,

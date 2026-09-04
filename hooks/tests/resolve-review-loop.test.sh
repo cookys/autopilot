@@ -234,6 +234,33 @@ assert_contains "$(json_get "$NO_TOPO_OUT" capability_warnings)" \
 # (c) an explicit comma list still works unchanged (regression check)
 assert_contains "$OCL_JSON" '"engine": "grok-4.5"' "explicit comma list preserves second rung"
 
+# (c2) implementer_ladder: auto + topology file exists but implementer_ladder is empty
+# -> implicit rung kept, [] output, and the specific "no qualified hetero implementer"
+# warning (not the "no host topology" one from (b) — the file DOES exist and parse).
+EMPTY_TOPO_FILE="$TEST_TMP/topo-empty-fixture.json"
+printf '%s\n' '{ "implementer_ladder": [] }' > "$EMPTY_TOPO_FILE"
+EMPTY_TOPO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$EMPTY_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>/dev/null)"; EMPTY_TOPO_RC=$?
+assert_exit_code "$EMPTY_TOPO_RC" 0 "implementer_ladder: auto with empty topology ladder exits 0"
+assert_eq "[]" "$(json_get "$EMPTY_TOPO_OUT" implementer_ladder)" "implementer_ladder auto with empty topology ladder falls back to []"
+assert_contains "$(json_get "$EMPTY_TOPO_OUT" capability_warnings)" \
+  "implementer_ladder auto: no qualified hetero implementer on this host — hands run native (haiku→sonnet), see claude_fallback_ladder" \
+  "capability_warnings contains the empty-ladder warning (distinct from the no-topology-file warning)"
+
+# (c3) implementer_ladder: auto + topology file has a rung whose runner fails the enum
+# check -> exit 3, same message shape as the comma-list path; a stale topology file
+# must not smuggle an invalid runner past the resolver.
+BOGUS_TOPO_FILE="$TEST_TMP/topo-bogus-fixture.json"
+cat > "$BOGUS_TOPO_FILE" <<'JSON'
+{
+  "implementer_ladder": [
+    { "engine": "grok-4.6", "effort": "low", "runner": "bogus" }
+  ]
+}
+JSON
+BOGUS_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$BOGUS_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>&1 1>/dev/null)"; BOGUS_TOPO_RC=$?
+assert_exit_code "$BOGUS_TOPO_RC" 3 "implementer_ladder: auto with a bogus rung runner exits 3"
+assert_contains "$BOGUS_TOPO_ERR" "invalid implementer_ladder runner" "bogus auto rung runner error matches comma-list message shape"
+
 # (d) default ladder_start_rung_judgment is 0 when absent from config, 1 when 1, falls back to 0 for garbage
 JUDG_DEF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" 2>/dev/null)"
 assert_eq "0" "$(json_get "$JUDG_DEF_OUT" ladder_start_rung_judgment)" "ladder_start_rung_judgment defaults to 0 when absent"

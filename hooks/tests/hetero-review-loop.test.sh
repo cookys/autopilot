@@ -38,6 +38,10 @@ mkdir -p "$TEST_TMP/bin"
 # Stub dispatch-review.sh
 cat << 'STUB_EOF' > "$SCRATCH_REPO/scripts/dispatch-review.sh"
 #!/usr/bin/env bash
+if [ -n "$LOG_DISPATCH_ARGS" ]; then
+  echo "SEAT:$STUB_SEAT_ID ARGS:$*" >> "$LOG_DISPATCH_ARGS"
+fi
+
 if [ -n "$SIMULATE_HEAD_MOVE" ]; then
   # Append commit to scratch repo to move head
   echo "moved" >> "$REPO_FOR_TEST/file.txt"
@@ -179,6 +183,98 @@ assert_exit_code "$C10_RC" "0" "case 10: exits 0 with resolver stub"
 assert_file_exists "$LEDGER/review-p10/chain.json" "case 10: chain.json exists"
 assert_contains "$(cat "$LEDGER/review-p10/chain.json")" '"seats": [' "case 10: chain.json has seats"
 assert_file_exists "$LEDGER/review-p10/g1/seat-s0.json" "case 10: seat-s0.json exists"
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+
+# Case 10a: resolver stub prints JSON with qc_panel_seats holding three objects (one with endpoint null, one with endpoint glm)
+cat << 'RESOLVE_10A_EOF' > "$TEST_TMP/bin/resolve-review-loop-10a.sh"
+#!/usr/bin/env bash
+cat << 'EOF'
+{
+  "qc_panel": ["model-a", "model-b", "model-c"],
+  "qc_panel_seats": [
+    {"role": "r0", "runner": "runner-a", "model": "model-a", "effort": "low", "endpoint": null, "family": "fam-a"},
+    {"role": "r1", "runner": "runner-b", "model": "model-b", "effort": "med", "endpoint": "glm", "family": "fam-b"},
+    {"role": "r2", "runner": "runner-c", "model": "model-c", "effort": "high", "endpoint": "custom-ep", "family": "fam-c"}
+  ]
+}
+EOF
+RESOLVE_10A_EOF
+chmod +x "$TEST_TMP/bin/resolve-review-loop-10a.sh"
+export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10a.sh"
+export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10a.log"
+rm -f "$LOG_DISPATCH_ARGS"
+C10A_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10a --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10A_RC=$?
+assert_exit_code "$C10A_RC" "0" "case 10a: exits 0 with qc_panel_seats"
+assert_file_exists "$LEDGER/review-p10a/g1/seat-s0.json" "case 10a: seat-s0.json exists"
+assert_file_exists "$LEDGER/review-p10a/g1/seat-s1.json" "case 10a: seat-s1.json exists"
+assert_file_exists "$LEDGER/review-p10a/g1/seat-s2.json" "case 10a: seat-s2.json exists"
+CHAIN_10A=$(cat "$LEDGER/review-p10a/chain.json")
+assert_contains "$CHAIN_10A" '"s0"' "case 10a: chain includes s0"
+assert_contains "$CHAIN_10A" '"s1"' "case 10a: chain includes s1"
+assert_contains "$CHAIN_10A" '"s2"' "case 10a: chain includes s2"
+
+# Verify seat properties passed to dispatch-review.sh:
+# s0: runner runner-a, model model-a, effort low, no --endpoint
+S0_LINE=$(grep "^SEAT:s0 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S0_LINE" "--runner runner-a --model model-a --effort low" "case 10a: s0 has correct runner, model, effort"
+assert_not_contains "$S0_LINE" "--endpoint" "case 10a: s0 with null endpoint has undefined endpoint (no --endpoint flag)"
+
+# s1: runner runner-b, model model-b, effort med, --endpoint glm
+S1_LINE=$(grep "^SEAT:s1 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S1_LINE" "--runner runner-b --model model-b --effort med" "case 10a: s1 has correct runner, model, effort"
+assert_contains "$S1_LINE" "--endpoint glm" "case 10a: s1 has endpoint glm"
+
+# s2: runner runner-c, model model-c, effort high, --endpoint custom-ep
+S2_LINE=$(grep "^SEAT:s2 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S2_LINE" "--runner runner-c --model model-c --effort high" "case 10a: s2 has correct runner, model, effort"
+assert_contains "$S2_LINE" "--endpoint custom-ep" "case 10a: s2 has endpoint custom-ep"
+
+unset LOG_DISPATCH_ARGS
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+
+# Case 10b: resolver stub prints only the legacy four keys still yields seats
+cat << 'RESOLVE_10B_EOF' > "$TEST_TMP/bin/resolve-review-loop-10b.sh"
+#!/usr/bin/env bash
+cat << 'EOF'
+{
+  "qc_panel": ["legacy-model1", "legacy-model2"],
+  "qc_panel_runners": ["legacy-run1", "legacy-run2"],
+  "qc_panel_efforts": ["low", "high"],
+  "qc_panel_endpoints": ["@none", "legacy-ep"]
+}
+EOF
+RESOLVE_10B_EOF
+chmod +x "$TEST_TMP/bin/resolve-review-loop-10b.sh"
+export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10b.sh"
+C10B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10b --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10B_RC=$?
+assert_exit_code "$C10B_RC" "0" "case 10b: exits 0 with legacy keys"
+assert_file_exists "$LEDGER/review-p10b/g1/seat-s0.json" "case 10b: seat-s0.json exists"
+assert_file_exists "$LEDGER/review-p10b/g1/seat-s1.json" "case 10b: seat-s1.json exists"
+CHAIN_10B=$(cat "$LEDGER/review-p10b/chain.json")
+assert_contains "$CHAIN_10B" '"s0"' "case 10b: chain includes s0"
+assert_contains "$CHAIN_10B" '"s1"' "case 10b: chain includes s1"
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+
+# Case 10c: resolver stub whose seats have an empty runner makes collect exit 2 with stderr message and creates no seat artifact files
+cat << 'RESOLVE_10C_EOF' > "$TEST_TMP/bin/resolve-review-loop-10c.sh"
+#!/usr/bin/env bash
+cat << 'EOF'
+{
+  "qc_panel_seats": [
+    {"role": "r0", "runner": "valid-runner", "model": "valid-model", "effort": "low", "endpoint": null, "family": "fam-a"},
+    {"role": "r1", "runner": "", "model": "model-b", "effort": "med", "endpoint": null, "family": "fam-b"}
+  ]
+}
+EOF
+RESOLVE_10C_EOF
+chmod +x "$TEST_TMP/bin/resolve-review-loop-10c.sh"
+export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10c.sh"
+C10C_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10c --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10C_RC=$?
+assert_exit_code "$C10C_RC" "2" "case 10c: exits 2 when seat has empty runner"
+assert_contains "$C10C_OUT" "Seat s1 missing runner" "case 10c: stderr names seat index and missing field"
+assert_file_absent "$LEDGER/review-p10c/g1/seat-s0.json" "case 10c: no seat-s0 artifact file created"
+assert_file_absent "$LEDGER/review-p10c/g1/seat-s1.json" "case 10c: no seat-s1 artifact file created"
+assert_file_absent "$LEDGER/review-p10c/chain.json" "case 10c: no chain.json written"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 
 # ─── finalize & opt-out ───

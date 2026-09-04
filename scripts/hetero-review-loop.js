@@ -149,6 +149,23 @@ function resolveSeats(seatsArg, repoRoot) {
     fullJson = null;
   }
 
+  let qcPanelSeats = fullJson && fullJson.qc_panel_seats;
+  if (Array.isArray(qcPanelSeats) && qcPanelSeats.length > 0) {
+    return qcPanelSeats.map((seatObj, idx) => {
+      let endpoint = seatObj.endpoint;
+      if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
+        endpoint = undefined;
+      }
+      return {
+        id: `s${idx}`,
+        runner: seatObj.runner || '',
+        engine: seatObj.model || '',
+        effort: seatObj.effort || '',
+        endpoint,
+      };
+    });
+  }
+
   let qcPanel = fullJson && fullJson.qc_panel;
   let qcRunners = fullJson && fullJson.qc_panel_runners;
   let qcEfforts = fullJson && fullJson.qc_panel_efforts;
@@ -458,6 +475,18 @@ async function handleCollect(flags) {
   if (!seats.length) {
     console.error('ERROR: No seats configured or resolved');
     process.exit(1);
+  }
+
+  for (let idx = 0; idx < seats.length; idx++) {
+    const seat = seats[idx];
+    if (!seat.runner) {
+      console.error(`ERROR: Seat ${seat.id || `s${idx}`} missing runner`);
+      process.exit(2);
+    }
+    if (!seat.engine) {
+      console.error(`ERROR: Seat ${seat.id || `s${idx}`} missing engine`);
+      process.exit(2);
+    }
   }
 
   // Range and diff

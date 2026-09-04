@@ -19,6 +19,18 @@ const {
   resolveLiveDir, sanitizeSessionId, readLive, modelFamily,
 } = require(LIB);
 
+// The shared vector file lives at <repo>/hooks/tests/fixtures/; this test file exists at two depths
+// (scripts/lib and platforms/codex/plugin/scripts/lib), so walk up until the fixture is found.
+function findVectorFile() {
+  let dir = __dirname;
+  for (let i = 0; i < 8; i++) {
+    const cand = path.join(dir, 'hooks', 'tests', 'fixtures', 'session-id-vectors.json');
+    if (fs.existsSync(cand)) return cand;
+    dir = path.dirname(dir);
+  }
+  throw new Error('session-id-vectors.json not found above ' + __dirname);
+}
+
 function mkTmp(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -150,7 +162,7 @@ test('resolveLiveDir: accepted tmpfs override wins over everything else', () => 
 
 test('sanitizeSessionId: shared vector file (writer/reader contract)', () => {
   const vectors = JSON.parse(fs.readFileSync(
-    path.join(__dirname, '..', '..', 'hooks', 'tests', 'fixtures', 'session-id-vectors.json'), 'utf8',
+    findVectorFile(), 'utf8',
   ));
   assert.ok(vectors.length >= 6, 'vector file should carry at least the 6 spec cases');
   for (const v of vectors) {

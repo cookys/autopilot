@@ -1,9 +1,9 @@
 # Default dispatch topology — brain up, hands down
 
 **Plan**: [`docs/plans/2026-09-04-default-dispatch-topology.md`](../../plans/2026-09-04-default-dispatch-topology.md)
-**Branch**: `feat/default-dispatch-topology` · **Target**: v2.36.0 (new hook `cost-fuse` + new scripts → PATCH by the semver rule; the MINOR digit is reserved for a new skill/agent, none here — final number decided at release; placeholder)
+**Branch**: `feat/default-dispatch-topology` · **Target**: v2.35.16 (PATCH: new hook + scripts, no new skill/agent)
 **Requested**: owner via the revival.3d CEO on cuda, 2026-09-04 (`msg_01M1MZ55SZFJYA5A68EW9PF8QW`)
-**Status**: in progress — P0–P4 on this branch; P5 (fleet rollout) is out of scope for this project
+**Status**: P0–P4 shipped in v2.35.16 (qc three-seat FIX-THEN-SHIP → six fixes → sol delta SHIP after one refuted finding); P5 (fleet rollout, cuda first) is a follow-up
 
 ## Topology of this project's own execution (dogfood)
 
@@ -26,11 +26,11 @@ normal.
 
 | # | Phase | Size | Foreman wave | Status |
 |---|---|---|---|---|
-| P0 | `scripts/cost-digest.js` — per-day × model × session table over `~/.claude/metrics/costs.jsonl`; evidence table for the threshold | S | 1 | pending |
-| P1 | `scripts/resolve-dispatch-topology.js` + `implementer_ladder: auto` + rung-0 default | L | 1 | pending |
-| P2 | routing flip (implementer → sonnet, `hands` → haiku), `dispatch-model-guard` mode-aware `fable,opus` + `Engine:` header rule | S | 2 | pending |
-| P3 | `hooks/cost-fuse.js` (PreToolUse, warn-mode default-on) + hook-classes/catalog wiring | S | 2 | pending |
-| P4 | skill text: front-door canonical topology paragraph; dev-flow/ceo-agent/l3–l6 link; `/l3` → brief + sonnet hands | S | 3 | pending |
+| P0 | `scripts/cost-digest.js` — per-day × model × session table over `~/.claude/metrics/costs.jsonl`; evidence table for the threshold | S | 1 | ✅ v2.35.16 |
+| P1 | `scripts/resolve-dispatch-topology.js` + `implementer_ladder: auto` + rung-0 default | L | 1 | ✅ v2.35.16 |
+| P2 | routing flip (implementer → sonnet, `hands` → haiku), `dispatch-model-guard` mode-aware `fable,opus` + `Engine:` header rule | S | 2 | ✅ v2.35.16 |
+| P3 | `hooks/cost-fuse.js` (PreToolUse, warn-mode default-on) + hook-classes/catalog wiring | S | 2 | ✅ v2.35.16 |
+| P4 | skill text: front-door canonical topology paragraph; dev-flow/ceo-agent/l3–l6 link; `/l3` → brief + sonnet hands | S | 3 | ✅ v2.35.16 |
 
 Open questions §8 resolved by owner 2026-09-04 with the proposal values: USD 150/host/day; rung-0 for
 `judgment` too; `/l3` converts (`--solo` is the only inline escape); unqualified engines never enter the

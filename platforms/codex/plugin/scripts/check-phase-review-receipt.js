@@ -21,7 +21,7 @@ const { spawnSync } = require('child_process');
 function printUsage() {
   console.log(`Usage:
   Mode A (Receipt validation):
-    node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> [--repo-root <r>]
+    node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> --phase-base <sha> [--repo-root <r>]
 
   Mode B (Plan-artifact / dispositions validation):
     node scripts/check-phase-review-receipt.js --plan-artifact <gN.json> --dispositions <gN-disposition.json>
@@ -30,6 +30,7 @@ Flags:
   --ledger <dir>                    Ledger directory containing receipts
   --phase <id>                      Phase identifier
   --branch <b>                      Git branch name
+  --phase-base <sha>                Expected phase base commit sha (mandatory for review mode)
   --repo-root <r>                   Path to repository root (defaults to cwd)
   --plan-artifact <gN.json>         Plan artifact JSON file
   --dispositions <gN-disp.json>     Dispositions JSON file
@@ -98,23 +99,70 @@ function validateModeB(flags) {
     process.exit(1);
   }
 
-  const dispMap = new Map();
-  if (Array.isArray(dispositions.findings)) {
-    for (const f of dispositions.findings) {
-      if (f && f.id !== undefined) {
-        dispMap.set(f.id, f);
-      }
-    }
+  if (!planArtifact || typeof planArtifact !== 'object' || Array.isArray(planArtifact) || !Array.isArray(planArtifact.findings)) {
+    console.error('Plan artifact must parse as a JSON object with a findings array');
+    process.exit(1);
   }
 
-  const planFindings = Array.isArray(planArtifact.findings) ? planArtifact.findings : [];
+  if (!dispositions || typeof dispositions !== 'object' || Array.isArray(dispositions) || !Array.isArray(dispositions.findings)) {
+    console.error('Dispositions must parse as a JSON object with a findings array');
+    process.exit(1);
+  }
+
+  // Enum values already used elsewhere in this file:
+  // - Mode B dispositions: accepted_blocker, rejected
+  // - hetero-review dispositions: verified, refuted, deferred
+  // - plan-review DISPOSITIONS: accepted_blocker, accepted_nonblocking, rejected, duplicate, deferred
+  const allowedDispositions = new Set([
+    'accepted_blocker',
+    'accepted_nonblocking',
+    'rejected',
+    'duplicate',
+    'deferred',
+    'verified',
+    'refuted',
+  ]);
+
+  function validateFindingObj(f, sourceName) {
+    if (!f || typeof f !== 'object' || Array.isArray(f)) {
+      console.error(`Finding in ${sourceName} is not an object`);
+      process.exit(1);
+    }
+    const idVal = f.fingerprint !== undefined ? f.fingerprint : f.id;
+    if (typeof idVal !== 'string') {
+      console.error(`Finding in ${sourceName} missing valid string id/fingerprint`);
+      process.exit(1);
+    }
+    if (typeof f.candidate_blocker !== 'boolean') {
+      console.error(`Finding '${idVal}' in ${sourceName} candidate_blocker must be a boolean`);
+      process.exit(1);
+    }
+    if (typeof f.disposition !== 'string' || !allowedDispositions.has(f.disposition)) {
+      console.error(`Finding '${idVal}' in ${sourceName} invalid disposition '${f.disposition}'`);
+      process.exit(1);
+    }
+    return idVal;
+  }
+
+  // Validate each finding object in planArtifact
+  for (const f of planArtifact.findings) {
+    validateFindingObj(f, 'plan artifact');
+  }
+
+  // Validate each finding object in dispositions and build map
+  const dispMap = new Map();
+  for (const f of dispositions.findings) {
+    const id = validateFindingObj(f, 'dispositions');
+    dispMap.set(id, f);
+  }
+
   const failingFindings = [];
 
-  for (const finding of planFindings) {
+  for (const finding of planArtifact.findings) {
     if (!finding || finding.candidate_blocker !== true) {
       continue;
     }
-    const id = finding.id;
+    const id = finding.fingerprint !== undefined ? finding.fingerprint : finding.id;
     const disp = dispMap.get(id);
     if (!disp) {
       failingFindings.push(`Finding '${id}': missing in dispositions`);
@@ -177,13 +225,39 @@ function validateModeA(flags) {
   }
 
   if (receipt.kind === 'review') {
-    // (1) verdict === "SHIP-AS-IS"
-    if (receipt.verdict !== 'SHIP-AS-IS') {
-      console.error(`Invalid receipt verdict: expected 'SHIP-AS-IS', got '${receipt.verdict}'`);
+    const expectedBaseSha = flags['phase-base'];
+    if (!expectedBaseSha || typeof expectedBaseSha !== 'string') {
+      console.error('Review mode requires mandatory --phase-base <sha>');
       process.exit(1);
     }
 
-    // (2) sort chain entries by generation ascending
+    const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
+    const chainPath = path.join(reviewPhaseDir, 'chain.json');
+    let chainOnDisk = [];
+    try {
+      if (!fs.existsSync(chainPath)) {
+        console.error(`Chain file not found at ${chainPath}`);
+        process.exit(1);
+      }
+      chainOnDisk = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+    } catch (err) {
+      console.error(`Failed to read or parse ledger chain at ${chainPath}: ${err.message}`);
+      process.exit(1);
+    }
+
+    if (!Array.isArray(chainOnDisk) || chainOnDisk.length === 0) {
+      console.error('Ledger chain.json is empty or not an array');
+      process.exit(1);
+    }
+
+    // Require ledger chain first entry base to equal expectedBaseSha
+    const firstEntryDisk = chainOnDisk[0];
+    if (!firstEntryDisk || firstEntryDisk.base !== expectedBaseSha) {
+      console.error(`Ledger chain first entry base '${firstEntryDisk && firstEntryDisk.base}' does not match expected phase-base '${expectedBaseSha}'`);
+      process.exit(1);
+    }
+
+    // sort chain entries by generation ascending
     const chain = Array.isArray(receipt.chain) ? [...receipt.chain] : [];
     if (chain.length === 0) {
       console.error('Receipt chain is empty');
@@ -192,6 +266,9 @@ function validateModeA(flags) {
 
     chain.sort((a, b) => (a.generation || 0) - (b.generation || 0));
 
+    let recomputedHasVerifiedCritical = false;
+    const recomputedOpenFindings = [];
+
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
       if (entry.generation !== i + 1) {
@@ -199,10 +276,10 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // first entry's base must equal phase_base_sha, each later entry's base must equal previous entry's head
+      // first entry's base must equal expectedBaseSha, each later entry's base must equal previous entry's head
       if (i === 0) {
-        if (entry.base !== receipt.phase_base_sha) {
-          console.error(`First chain entry base '${entry.base}' does not match phase_base_sha '${receipt.phase_base_sha}'`);
+        if (entry.base !== expectedBaseSha) {
+          console.error(`First chain entry base '${entry.base}' does not match expected phase-base '${expectedBaseSha}'`);
           process.exit(1);
         }
       } else {
@@ -219,8 +296,10 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
+      const gDir = path.join(reviewPhaseDir, `g${entry.generation}`);
+
       // (4) read <ledger>/review-<phase>/g<generation>/range.json
-      const rangePath = path.join(ledgerDir, `review-${phase}`, `g${entry.generation}`, 'range.json');
+      const rangePath = path.join(gDir, 'range.json');
       let rangeObj;
       try {
         if (!fs.existsSync(rangePath)) {
@@ -238,10 +317,11 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // git diff <base> <head>
+      // git diff <base> <head> with maxBuffer 64MB
       const diffRes = spawnSync('git', ['diff', entry.base, entry.head], {
         cwd: repoRoot,
         encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
       });
       if (diffRes.status !== 0) {
         console.error(`git diff failed for generation ${entry.generation}: ${diffRes.stderr || 'unknown error'}`);
@@ -251,6 +331,106 @@ function validateModeA(flags) {
       const computedDiffSha = crypto.createHash('sha256').update(diffRes.stdout, 'utf8').digest('hex');
       if (computedDiffSha !== rangeObj.diff_sha256) {
         console.error(`diff_sha256 mismatch for generation ${entry.generation}: expected '${rangeObj.diff_sha256}', computed '${computedDiffSha}'`);
+        process.exit(1);
+      }
+
+      // For every finalized generation, read findings.json and snapshotted dispositions.json
+      const findingsPath = path.join(gDir, 'findings.json');
+      const dispositionsPath = path.join(gDir, 'dispositions.json');
+
+      if (!fs.existsSync(findingsPath)) {
+        console.error(`Missing findings.json for finalized generation ${entry.generation} at ${findingsPath}`);
+        process.exit(1);
+      }
+      if (!fs.existsSync(dispositionsPath)) {
+        console.error(`Missing snapshotted dispositions.json for finalized generation ${entry.generation} at ${dispositionsPath}`);
+        process.exit(1);
+      }
+
+      let findingsData;
+      try {
+        findingsData = JSON.parse(fs.readFileSync(findingsPath, 'utf8'));
+      } catch (err) {
+        console.error(`Failed to read or parse findings.json for generation ${entry.generation}: ${err.message}`);
+        process.exit(1);
+      }
+
+      let dispBytes;
+      try {
+        dispBytes = fs.readFileSync(dispositionsPath);
+      } catch (err) {
+        console.error(`Failed to read dispositions.json for generation ${entry.generation}: ${err.message}`);
+        process.exit(1);
+      }
+
+      const dispSha256 = crypto.createHash('sha256').update(dispBytes).digest('hex');
+      if (!entry.dispositions_sha256 || dispSha256 !== entry.dispositions_sha256) {
+        console.error(`dispositions_sha256 mismatch for generation ${entry.generation}: expected '${entry.dispositions_sha256}', computed '${dispSha256}'`);
+        process.exit(1);
+      }
+
+      let dispData;
+      try {
+        dispData = JSON.parse(dispBytes.toString('utf8'));
+      } catch (err) {
+        console.error(`Failed to parse dispositions.json for generation ${entry.generation}: ${err.message}`);
+        process.exit(1);
+      }
+
+      const genFindings = (findingsData && Array.isArray(findingsData.findings)) ? findingsData.findings : [];
+      const genDispFindings = (dispData && Array.isArray(dispData.findings)) ? dispData.findings : [];
+      const dispMap = new Map();
+      for (const df of genDispFindings) {
+        if (df && df.id !== undefined) {
+          dispMap.set(df.id, df);
+        }
+      }
+
+      for (const f of genFindings) {
+        const disp = dispMap.get(f.id);
+        const disposition = disp ? disp.disposition : undefined;
+
+        if (f.severity === 'Critical' && disposition === 'verified') {
+          recomputedHasVerifiedCritical = true;
+        }
+
+        if ((f.severity === 'Major' || f.severity === 'Minor') && disposition === 'verified') {
+          recomputedOpenFindings.push({
+            id: f.id,
+            severity: f.severity,
+            seat: f.seat,
+            text: f.text,
+            disposition: 'verified',
+          });
+        }
+      }
+    }
+
+    const recomputedVerdict = recomputedHasVerifiedCritical ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
+
+    // Check receipt's verdict equals recomputedVerdict
+    if (receipt.verdict !== recomputedVerdict) {
+      console.error(`Receipt verdict mismatch: expected '${recomputedVerdict}', got '${receipt.verdict}'`);
+      process.exit(1);
+    }
+
+    // Check open_findings matches receipt
+    if (Array.isArray(receipt.open_findings)) {
+      if (receipt.open_findings.length !== recomputedOpenFindings.length) {
+        console.error(`Receipt open_findings length mismatch: expected ${recomputedOpenFindings.length}, got ${receipt.open_findings.length}`);
+        process.exit(1);
+      }
+      for (let i = 0; i < recomputedOpenFindings.length; i++) {
+        const recF = receipt.open_findings[i];
+        const reF = recomputedOpenFindings[i];
+        if (!recF || recF.id !== reF.id || recF.disposition !== reF.disposition) {
+          console.error(`Receipt open_findings mismatch at index ${i}`);
+          process.exit(1);
+        }
+      }
+    } else if (typeof receipt.open_findings === 'number') {
+      if (receipt.open_findings !== recomputedOpenFindings.length) {
+        console.error(`Receipt open_findings count mismatch: expected ${recomputedOpenFindings.length}, got ${receipt.open_findings}`);
         process.exit(1);
       }
     }
@@ -288,8 +468,9 @@ function validateModeA(flags) {
     }
 
     const knob = receipt.knob;
-    if (!knob) {
-      console.error('Opt-out receipt missing knob property');
+    const allowedKnobs = new Set(['plan_review', 'hetero_review']);
+    if (!knob || !allowedKnobs.has(knob)) {
+      console.error(`Invalid or missing knob '${knob}' (must be 'plan_review' or 'hetero_review')`);
       process.exit(1);
     }
 
@@ -300,8 +481,8 @@ function validateModeA(flags) {
       console.error(`Resolver field '${knob}' returned '${resolvedKnob}' (expected 'off')`);
       process.exit(1);
     }
-    if (resolvedFrom !== 'off') {
-      console.error(`Resolver field '${knob}_resolved_from' returned '${resolvedFrom}' (expected 'off')`);
+    if (resolvedFrom !== receipt.resolved_from) {
+      console.error(`Resolver field '${knob}_resolved_from' returned '${resolvedFrom}' (expected '${receipt.resolved_from}')`);
       process.exit(1);
     }
 
@@ -311,13 +492,17 @@ function validateModeA(flags) {
       process.exit(1);
     }
 
-    let configBytes = Buffer.alloc(0);
-    if (fs.existsSync(receipt.config_source.path)) {
-      try {
-        configBytes = fs.readFileSync(receipt.config_source.path);
-      } catch (_e) {
-        configBytes = Buffer.alloc(0);
-      }
+    if (!fs.existsSync(receipt.config_source.path)) {
+      console.error(`Config source path does not exist: ${receipt.config_source.path}`);
+      process.exit(1);
+    }
+
+    let configBytes;
+    try {
+      configBytes = fs.readFileSync(receipt.config_source.path);
+    } catch (err) {
+      console.error(`Failed to read config source file: ${err.message}`);
+      process.exit(1);
     }
 
     const computedSha = crypto.createHash('sha256').update(configBytes).digest('hex');

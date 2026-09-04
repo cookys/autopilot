@@ -61,11 +61,16 @@ if [ -n "$STUB_SEAT_RESPONSE" ]; then
   exit 0
 fi
 
-echo '{"status": "reviewed", "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 STUB_EOF
 chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
 cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
 chmod +x "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+
+# Point the driver at the stub dispatcher by default (test seam). Individual cases that need a
+# different dispatcher (a non-zero-exit stub, or the isolated driver-directory test) override or
+# unset this locally and restore it afterward.
+export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh"
 
 # Stub resolve-review-loop.sh
 cat << 'RESOLVE_EOF' > "$TEST_TMP/bin/resolve-review-loop.sh"
@@ -97,7 +102,7 @@ C2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" -
 assert_exit_code "$C2_RC" "2" "case 2: gen 1 without --phase-base exits 2"
 
 # Case 3: generation 1 with three seats all reviewed exits 0, writes range.json, diff.txt, findings.json, chain.json
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "findings": "No issues found."}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 C3_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy,m3/high@grok" 2>&1); C3_RC=$?
 assert_exit_code "$C3_RC" "0" "case 3: exits 0 on 3 reviewed seats"
 assert_file_exists "$LEDGER/review-p1/g1/range.json" "case 3: range.json exists"
@@ -108,7 +113,7 @@ assert_contains "$(cat "$LEDGER/review-p1/chain.json")" '"status": "pending"' "c
 assert_contains "$(cat "$LEDGER/review-p1/g1/findings.json")" '"findings": []' "case 3: findings array is empty"
 
 # Case 4: a seat with findings text containing one Critical and one Major produces two entries with distinct ids
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "findings": "Critical: SQL injection vulnerability\nDetailed description here.\n\nMajor: Unhandled promise rejection\nMore details."}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Critical: SQL injection vulnerability\nDetailed description here.\n\nMajor: Unhandled promise rejection\nMore details."}'
 C4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C4_RC=$?
 assert_exit_code "$C4_RC" "0" "case 4: exits 0"
 FINDINGS_C4=$(cat "$LEDGER/review-p4/g1/findings.json")
@@ -121,7 +126,7 @@ ID2=$(node -e 'const f = JSON.parse(fs.readFileSync(process.argv[1])).findings; 
 assert_exit_code "$ID_DIFF_RC" "0" "case 4: finding IDs are distinct"
 
 # Case 5: a seat returning {status: "no_verdict"} without --allow-seat-gap exits 1 and chain.json is not updated
-export STUB_RESPONSE_s0='{"status": "reviewed", "findings": ""}'
+export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 export STUB_RESPONSE_s1='{"status": "no_verdict"}'
 unset STUB_SEAT_RESPONSE
 C5_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" 2>&1); C5_RC=$?
@@ -152,7 +157,7 @@ cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
   }
 ]
 SEED_EOF
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 unset STUB_RESPONSE_s0
 unset STUB_RESPONSE_s1
 C7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7_RC=$?
@@ -296,6 +301,17 @@ export AUTOPILOT_TOPOLOGY_FILE="$TOPOLOGY_FILE"
 
 # Case 1 (finalize): three seats' combined findings all disposed refuted -> exits 0, verdict: SHIP-AS-IS, no hands-brief.md written
 mkdir -p "$LEDGER/review-p_fin1/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin1/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base111",
+    "head": "head111",
+    "seats": ["s0", "s1", "s2"],
+    "status": "pending"
+  }
+]
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin1/g1/range.json"
 {
   "base": "base111",
@@ -331,6 +347,17 @@ assert_file_absent "$LEDGER/review-p_fin1/g1/hands-brief.md" "case 1 (fin): no h
 
 # Case 2 (finalize): one finding severity Critical disposed verified -> exits 0, verdict: FIX-THEN-SHIP, hands-brief.md exists, check-redispatch-prompt.sh exits 0
 mkdir -p "$LEDGER/review-p_fin2/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base222",
+    "head": "head222",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin2/g1/range.json"
 {
   "base": "base222",
@@ -367,7 +394,20 @@ CHECK_BRIEF_OUT=$(bash "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$LEDGER/
 assert_exit_code "$CHECK_BRIEF_RC" "0" "case 2 (fin): check-redispatch-prompt.sh exits 0 on hands-brief.md"
 
 # Case 3 (finalize): same Critical finding disposed refuted instead -> verdict: SHIP-AS-IS
+# (own fresh pending chain entry — reusing p_fin2's chain.json would copy its post-finalize
+# 'finalized' status, which the pending-chain-entry requirement now correctly rejects)
 mkdir -p "$LEDGER/review-p_fin3/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin3/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base222",
+    "head": "head222",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
 cp "$LEDGER/review-p_fin2/g1/range.json" "$LEDGER/review-p_fin3/g1/range.json"
 cp "$LEDGER/review-p_fin2/g1/findings.json" "$LEDGER/review-p_fin3/g1/findings.json"
 cat << 'EOF' > "$TEST_TMP/disp_fin3.json"
@@ -386,6 +426,17 @@ assert_contains "$(cat "$LEDGER/receipt-p_fin3.json")" '"verdict": "SHIP-AS-IS"'
 
 # Case 4 (finalize): a Major-severity finding disposed verified alone -> SHIP-AS-IS with exactly one entry in open_findings
 mkdir -p "$LEDGER/review-p_fin4/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin4/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base444",
+    "head": "head444",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin4/g1/range.json"
 {
   "base": "base444",
@@ -417,6 +468,23 @@ assert_eq "$OPEN_COUNT" "1" "case 4 (fin): open_findings has exactly 1 entry"
 
 # Case 5 (finalize): dispositions file missing one of the finding ids -> exit 1, no receipt written
 mkdir -p "$LEDGER/review-p_fin5/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin5/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base555",
+    "head": "head555",
+    "seats": ["s0", "s1"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin5/g1/range.json"
+{
+  "base": "base555",
+  "head": "head555"
+}
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin5/g1/findings.json"
 {
   "findings": [
@@ -441,6 +509,23 @@ assert_file_absent "$LEDGER/receipt-p_fin5.json" "case 5 (fin): receipt not writ
 
 # Case 6 (finalize): defensive check for undispositioned Critical finding -> exit 1, no receipt written
 mkdir -p "$LEDGER/review-p_fin6/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin6/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base666",
+    "head": "head666",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin6/g1/range.json"
+{
+  "base": "base666",
+  "head": "head666"
+}
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin6/g1/findings.json"
 {
   "findings": [
@@ -543,6 +628,173 @@ CHAIN_P7=$(cat "$LEDGER/review-p_fin7/chain.json")
 assert_contains "$CHAIN_P7" '"closed_by_generation": 2' "case 7 (fin): gen 1 entry recorded closed_by_generation: 2"
 assert_contains "$CHAIN_P7" '"finding_g1_crit"' "case 7 (fin): closed finding id matches finding_g1_crit"
 
+# Case 7a (finalize): a misspelled disposition value makes finalize exit 1
+mkdir -p "$LEDGER/review-p_fin7a/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7a/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7a",
+    "head": "sha_head7a",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7a/g1/range.json"
+{
+  "base": "sha_base7a",
+  "head": "sha_head7a"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7a/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_misspell", "severity": "Minor", "seat": "s0", "text": "Minor issue" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7a.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7a",
+  "generation": 1,
+  "findings": [
+    { "id": "f_misspell", "disposition": "verifieeed", "rationale": "typo in disposition value" }
+  ]
+}
+EOF
+FIN7A_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7a --generation 1 --dispositions "$TEST_TMP/disp_fin7a.json" 2>&1); FIN7A_RC=$?
+assert_exit_code "$FIN7A_RC" "1" "case 7a (fin): misspelled disposition value exits 1"
+assert_file_absent "$LEDGER/receipt-p_fin7a.json" "case 7a (fin): no receipt written on misspelled disposition"
+
+# Case 7b (finalize): a dispositions file with a duplicate finding id makes finalize exit 1
+mkdir -p "$LEDGER/review-p_fin7b/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7b/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7b",
+    "head": "sha_head7b",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7b/g1/range.json"
+{
+  "base": "sha_base7b",
+  "head": "sha_head7b"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7b/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_dup", "severity": "Minor", "seat": "s0", "text": "Minor issue" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7b.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7b",
+  "generation": 1,
+  "findings": [
+    { "id": "f_dup", "disposition": "verified", "rationale": "first entry" },
+    { "id": "f_dup", "disposition": "refuted", "rationale": "second entry duplicate id" }
+  ]
+}
+EOF
+FIN7B_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7b --generation 1 --dispositions "$TEST_TMP/disp_fin7b.json" 2>&1); FIN7B_RC=$?
+assert_exit_code "$FIN7B_RC" "1" "case 7b (fin): duplicate finding id in dispositions exits 1"
+assert_file_absent "$LEDGER/receipt-p_fin7b.json" "case 7b (fin): no receipt written on duplicate finding id"
+
+# Case 7c (finalize): calling finalize for a generation with no pending chain entry makes it exit 1
+mkdir -p "$LEDGER/review-p_fin7c/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7c/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7c",
+    "head": "sha_head7c",
+    "seats": ["s0"],
+    "status": "finalized"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7c/g1/range.json"
+{
+  "base": "sha_base7c",
+  "head": "sha_head7c"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7c/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_nopen", "severity": "Minor", "seat": "s0", "text": "Minor issue" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7c.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7c",
+  "generation": 1,
+  "findings": [
+    { "id": "f_nopen", "disposition": "verified", "rationale": "already finalized chain entry" }
+  ]
+}
+EOF
+FIN7C_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7c --generation 1 --dispositions "$TEST_TMP/disp_fin7c.json" 2>&1); FIN7C_RC=$?
+assert_exit_code "$FIN7C_RC" "1" "case 7c (fin): generation with no pending chain entry exits 1"
+assert_file_absent "$LEDGER/receipt-p_fin7c.json" "case 7c (fin): no receipt written on non-pending chain entry"
+
+# Case 7d (finalize): a successful finalize leaves a dispositions.json snapshot file in the generation directory whose sha256 matches the digest recorded in the chain entry for that generation
+mkdir -p "$LEDGER/review-p_fin7d/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7d/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7d",
+    "head": "sha_head7d",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7d/g1/range.json"
+{
+  "base": "sha_base7d",
+  "head": "sha_head7d"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7d/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_snap", "severity": "Minor", "seat": "s0", "text": "Snapshot test finding" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7d.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7d",
+  "generation": 1,
+  "findings": [
+    { "id": "f_snap", "disposition": "verified", "rationale": "confirmed for snapshot test" }
+  ]
+}
+EOF
+FIN7D_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7d --generation 1 --dispositions "$TEST_TMP/disp_fin7d.json" 2>&1); FIN7D_RC=$?
+assert_exit_code "$FIN7D_RC" "0" "case 7d (fin): successful finalize exits 0"
+SNAPSHOT_FILE="$LEDGER/review-p_fin7d/g1/dispositions.json"
+assert_file_exists "$SNAPSHOT_FILE" "case 7d (fin): dispositions.json snapshot exists in generation directory"
+SNAPSHOT_SHA=$(node -e 'const c = fs.readFileSync(process.argv[1]); console.log(crypto.createHash("sha256").update(c).digest("hex"));' "$SNAPSHOT_FILE")
+CHAIN_SHA=$(node -e 'const chain = JSON.parse(fs.readFileSync(process.argv[1])); console.log(chain[0].dispositions_sha256);' "$LEDGER/review-p_fin7d/chain.json")
+assert_eq "$SNAPSHOT_SHA" "$CHAIN_SHA" "case 7d (fin): snapshot sha256 matches digest recorded in chain entry"
+CHAIN_DISP_PATH=$(node -e 'const chain = JSON.parse(fs.readFileSync(process.argv[1])); console.log(chain[0].dispositions_path);' "$LEDGER/review-p_fin7d/chain.json")
+assert_eq "$CHAIN_DISP_PATH" "review-p_fin7d/g1/dispositions.json" "case 7d (fin): chain entry references ledger-relative dispositions path"
+
 # Case 8 (opt-out): config file containing line configuring knob to off -> receipt kind: opt-out, configured_value: off
 mkdir -p "$SCRATCH_REPO/.claude"
 echo "- hetero_review: off" > "$SCRATCH_REPO/.claude/review-loop-config.md"
@@ -553,12 +805,11 @@ OPT8_RECEIPT=$(cat "$LEDGER/receipt-p_opt8.json")
 assert_contains "$OPT8_RECEIPT" '"kind": "opt-out"' "case 8 (opt): kind is opt-out"
 assert_contains "$OPT8_RECEIPT" '"configured_value": "off"' "case 8 (opt): configured_value is off"
 
-# Case 9 (opt-out): no config file present -> configured_value: absent
+# Case 9 (opt-out): an opt-out run against a config source path that does not exist on disk exits 1
 rm -f "$SCRATCH_REPO/.claude/review-loop-config.md"
 OPT9_OUT=$(node "$SCRIPT" opt-out --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_opt9 --knob plan_review 2>&1); OPT9_RC=$?
-assert_exit_code "$OPT9_RC" "0" "case 9 (opt): exits 0 without config file"
-OPT9_RECEIPT=$(cat "$LEDGER/receipt-p_opt9.json")
-assert_contains "$OPT9_RECEIPT" '"configured_value": "absent"' "case 9 (opt): configured_value is absent"
+assert_exit_code "$OPT9_RC" "1" "case 9 (opt): opt-out against non-existent config file exits 1"
+assert_file_absent "$LEDGER/receipt-p_opt9.json" "case 9 (opt): receipt not written when config source missing"
 
 # Case 10: run --help and assert it mentions finalize and opt-out
 HELP2_OUT=$(node "$SCRIPT" --help 2>&1); HELP2_RC=$?
@@ -567,6 +818,140 @@ assert_contains "$HELP2_OUT" "finalize" "case 10 (help): mentions finalize"
 assert_contains "$HELP2_OUT" "opt-out" "case 10 (help): mentions opt-out"
 assert_contains "$HELP2_OUT" "--dispositions" "case 10 (help): mentions --dispositions"
 assert_contains "$HELP2_OUT" "--knob" "case 10 (help): mentions --knob"
+assert_contains "$HELP2_OUT" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT" "case 10 (help): mentions AUTOPILOT_DISPATCH_REVIEW_SCRIPT"
+
+# ─── New verification tests ───
+
+# Test 1: all four line shapes for all four severity words
+# Shapes:
+# 1) Severity glyph alone at the start of the line
+# 2) Severity glyph followed by the plain severity word
+# 3) Plain severity word alone with no glyph
+# 4) Severity glyph immediately followed by a bracketed id (glyph then whitespace then open bracket)
+T1_FINDINGS_TEXT=$(cat << 'EOF'
+🔴
+SQL injection reported via glyph alone
+🟠 Major
+Unhandled promise reported via glyph plus word
+Minor
+Unused import reported via plain word alone
+🔵 [sugg-101]
+Naming nit reported via glyph followed by bracket
+EOF
+)
+export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: process.argv[1]}));' "$T1_FINDINGS_TEXT")"
+T1_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T1_RC=$?
+assert_exit_code "$T1_RC" "0" "test 1: exits 0 when parsing all four line shapes"
+T1_FINDINGS_FILE="$LEDGER/review-p_test1/g1/findings.json"
+assert_file_exists "$T1_FINDINGS_FILE" "test 1: findings.json exists"
+T1_SEVS=$(node -e '
+  const f = JSON.parse(fs.readFileSync(process.argv[1])).findings;
+  console.log(f.map(x => x.severity).join(","));
+' "$T1_FINDINGS_FILE")
+assert_eq "$T1_SEVS" "Critical,Major,Minor,Suggestion" "test 1: extracted severities match Critical,Major,Minor,Suggestion"
+
+# Test 2: non-empty unparseable findings text must fail closed (status 1, aborted with parse_failed, no findings.json)
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Some unparseable free text that does not match any severity pattern at all."}'
+T2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2_RC=$?
+assert_exit_code "$T2_RC" "1" "test 2: exits 1 when findings text is unparseable"
+assert_file_absent "$LEDGER/review-p_test2/g1/findings.json" "test 2: findings.json must not be written"
+assert_file_exists "$LEDGER/review-p_test2/chain.json" "test 2: chain.json exists"
+T2_CHAIN=$(cat "$LEDGER/review-p_test2/chain.json")
+assert_contains "$T2_CHAIN" '"status": "aborted"' "test 2: chain entry status is aborted"
+assert_contains "$T2_CHAIN" '"reason": "parse_failed"' "test 2: chain entry reason is parse_failed"
+
+# Test 2b: fail closed also when verdict is SHIP-AS-IS with unparseable findings
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "Random text without severity markers"}'
+T2B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2B_RC=$?
+assert_exit_code "$T2B_RC" "1" "test 2b: exits 1 for SHIP-AS-IS seat with unparseable findings"
+assert_file_absent "$LEDGER/review-p_test2b/g1/findings.json" "test 2b: no findings.json written"
+assert_contains "$(cat "$LEDGER/review-p_test2b/chain.json")" '"reason": "parse_failed"' "test 2b: chain entry reason is parse_failed"
+
+# Test 3: chain immutability: run collect once (pending), run again for same generation -> exits 1 without modifying entry
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+T3_OUT1=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC1=$?
+assert_exit_code "$T3_RC1" "0" "test 3: first collect exits 0"
+T3_CHAIN_BEFORE=$(cat "$LEDGER/review-p_test3/chain.json")
+T3_OUT2=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC2=$?
+assert_exit_code "$T3_RC2" "1" "test 3: second collect for same generation exits 1"
+T3_CHAIN_AFTER=$(cat "$LEDGER/review-p_test3/chain.json")
+assert_eq "$T3_CHAIN_BEFORE" "$T3_CHAIN_AFTER" "test 3: chain.json unchanged on refused rerun"
+
+# Test 4: aborted entry replacement: chain entry with status aborted replaced in place (exactly 1 entry, not 2)
+mkdir -p "$LEDGER/review-p_test4"
+cat << 'EOF' > "$LEDGER/review-p_test4/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "dummy_base",
+    "status": "aborted",
+    "reason": "parse_failed"
+  }
+]
+EOF
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+T4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T4_RC=$?
+assert_exit_code "$T4_RC" "0" "test 4: collect succeeds on replacing aborted entry"
+T4_CHAIN_LEN=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).length);' "$LEDGER/review-p_test4/chain.json")
+assert_eq "$T4_CHAIN_LEN" "1" "test 4: chain has exactly 1 entry (replaced in place)"
+T4_STATUS=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1]))[0].status);' "$LEDGER/review-p_test4/chain.json")
+assert_eq "$T4_STATUS" "pending" "test 4: replaced entry status reflects new run"
+
+# Test 5: malformed chain.json (not valid JSON or wrong top-level shape) exits 1 and file left unchanged
+mkdir -p "$LEDGER/review-p_test5a"
+echo "this is not json {[" > "$LEDGER/review-p_test5a/chain.json"
+T5A_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5a --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T5A_RC=$?
+assert_exit_code "$T5A_RC" "1" "test 5a: exits 1 on invalid JSON chain.json"
+assert_eq "$(cat "$LEDGER/review-p_test5a/chain.json")" "this is not json {[" "test 5a: malformed file left unchanged"
+
+mkdir -p "$LEDGER/review-p_test5b"
+echo '{"not": "an array"}' > "$LEDGER/review-p_test5b/chain.json"
+T5B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T5B_RC=$?
+assert_exit_code "$T5B_RC" "1" "test 5b: exits 1 on non-array chain.json"
+assert_eq "$(cat "$LEDGER/review-p_test5b/chain.json")" '{"not": "an array"}' "test 5b: non-array file left unchanged"
+
+# Test 6: rogue scripts/dispatch-review.sh in repo under test is ignored; driver script dir's dispatcher used
+# Put rogue script in SCRATCH_REPO/scripts/dispatch-review.sh that outputs rogue_marker
+cat << 'EOF' > "$SCRATCH_REPO/scripts/dispatch-review.sh"
+#!/usr/bin/env bash
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "rogue_marker": true, "findings": ""}'
+exit 0
+EOF
+chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
+unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT
+# We create an isolated driver script in a temp directory alongside a mock dispatch-review.sh
+TEST6_DRIVER_DIR="$TEST_TMP/driver-dir-test"
+mkdir -p "$TEST6_DRIVER_DIR"
+cp "$SCRIPT" "$TEST6_DRIVER_DIR/hetero-review-loop.js"
+cat << 'EOF' > "$TEST6_DRIVER_DIR/dispatch-review.sh"
+#!/usr/bin/env bash
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": true, "findings": ""}'
+exit 0
+EOF
+chmod +x "$TEST6_DRIVER_DIR/dispatch-review.sh"
+T6_OUT=$(node "$TEST6_DRIVER_DIR/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T6_RC=$?
+assert_exit_code "$T6_RC" "0" "test 6: collect exits 0 using driver-directory dispatcher"
+T6_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test6/g1/seat-s0.json")
+assert_contains "$T6_SEAT_OUTPUT" '"driver_dir_dispatcher": true' "test 6: executed dispatcher from driver script directory"
+assert_not_contains "$T6_SEAT_OUTPUT" "rogue_marker" "test 6: rogue dispatcher in target repository was NOT executed"
+
+# Test 7: stub dispatcher exits non-zero while printing valid JSON on stdout -> recorded with verdict no_verdict
+TEST7_STUB="$TEST_TMP/nonzero-exit-dispatcher.sh"
+cat << 'EOF' > "$TEST7_STUB"
+#!/usr/bin/env bash
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+exit 1
+EOF
+chmod +x "$TEST7_STUB"
+export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$TEST7_STUB"
+# Run with --allow-seat-gap so collect doesn't abort early due to gap, allowing us to inspect seat JSON
+T7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test7 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T7_RC=$?
+assert_exit_code "$T7_RC" "0" "test 7: collect exits 0 with --allow-seat-gap"
+T7_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test7/g1/seat-s0.json")
+assert_contains "$T7_SEAT_OUTPUT" '"verdict": "no_verdict"' "test 7: recorded verdict is no_verdict on non-zero exit"
+assert_contains "$T7_SEAT_OUTPUT" '"status": "no_verdict"' "test 7: recorded status is no_verdict on non-zero exit"
+assert_not_contains "$T7_SEAT_OUTPUT" '"verdict": "SHIP-AS-IS"' "test 7: printed verdict SHIP-AS-IS is ignored"
+unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT
 
 finalize_test
 

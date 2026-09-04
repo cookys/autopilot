@@ -7,6 +7,24 @@ const process = require('process');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 
+function writeFileSyncAtomic(targetPath, content) {
+  const dir = path.dirname(targetPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmpName = `.tmp-${Date.now()}-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
+  const tmpPath = path.join(dir, tmpName);
+  try {
+    fs.writeFileSync(tmpPath, content);
+    fs.renameSync(tmpPath, targetPath);
+  } catch (err) {
+    try {
+      if (fs.existsSync(tmpPath)) {
+        fs.unlinkSync(tmpPath);
+      }
+    } catch (_e) {}
+    throw err;
+  }
+}
+
 function showHelp() {
   console.log(`Usage: node scripts/hetero-review-loop.js <subcommand> [flags]
 
@@ -37,6 +55,9 @@ Finalize flags:
 
 Opt-out flags:
   --knob <knob>         Review knob to opt out (plan_review|hetero_review)
+
+Environment overrides:
+  AUTOPILOT_DISPATCH_REVIEW_SCRIPT  Path to reviewer dispatcher script (overrides default dispatch-review.sh)
 `);
 }
 
@@ -256,7 +277,12 @@ function extractFindings(seatId, findingsText) {
 
   function parseSeverityFromLine(line) {
     const trimmed = line.trim();
-    const match = trimmed.match(/^(?:[-*#>\s\d.)]*)(?:(🔴|🟠|🟡|🔵)\s*(Critical|Major|Minor|Suggestion)?|(Critical|Major|Minor|Suggestion))\b/i);
+    // Recognise four line shapes:
+    // 1. A severity glyph alone at start of line
+    // 2. A severity glyph followed by the plain severity word
+    // 3. The plain severity word alone with no glyph
+    // 4. A severity glyph immediately followed by a bracketed id (glyph then whitespace then open bracket)
+    const match = trimmed.match(/^(?:[-*#>\s\d.)]*)(?:(🔴|🟠|🟡|🔵)(?:\s*\[|\s+(Critical|Major|Minor|Suggestion)\b|\s*$|\s+)|(Critical|Major|Minor|Suggestion)\b)/i);
     if (!match) return null;
     if (match[1]) {
       const word = EMOJI_TO_WORD[match[1]];
@@ -335,9 +361,10 @@ function runGitDiff(base, head, repoRoot) {
 
 function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
   return new Promise((resolve) => {
-    const dispatchScript = repoRoot
-      ? path.join(repoRoot, 'scripts', 'dispatch-review.sh')
-      : path.join('scripts', 'dispatch-review.sh');
+    let dispatchScript = process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT;
+    if (!dispatchScript) {
+      dispatchScript = path.join(__dirname, 'dispatch-review.sh');
+    }
 
     const diffFile = path.join(ledgerPhaseGDir, 'diff.txt');
 
@@ -375,7 +402,7 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
       });
     });
 
-    child.on('close', () => {
+    child.on('close', (exitCode) => {
       let parsed = null;
       try {
         parsed = JSON.parse(stdout.trim());
@@ -383,8 +410,25 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
         parsed = null;
       }
 
-      if (!parsed || typeof parsed !== 'object') {
-        parsed = { status: 'no_verdict', error: 'Invalid JSON output from dispatch-review', raw: stdout };
+      const validVerdict = parsed && (parsed.verdict === 'SHIP-AS-IS' || parsed.verdict === 'FIX-THEN-SHIP' || parsed.verdict === null);
+      const validShape = parsed && typeof parsed === 'object' && typeof parsed.status === 'string' && validVerdict;
+
+      if (exitCode !== 0 || !validShape) {
+        const errorMsg = exitCode !== 0
+          ? `dispatch-review exited with status ${exitCode}`
+          : 'Invalid or non-matching output shape from dispatch-review';
+        const fallbackRaw = (parsed && typeof parsed === 'object') ? parsed : { raw: stdout };
+        resolve({
+          seat,
+          status: 'no_verdict',
+          rawOutput: {
+            ...fallbackRaw,
+            status: 'no_verdict',
+            verdict: 'no_verdict',
+            error: errorMsg,
+          },
+        });
+        return;
       }
 
       const status = parsed.status === 'reviewed' ? 'reviewed' : 'no_verdict';
@@ -422,6 +466,28 @@ async function handleCollect(flags) {
   const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
   const chainPath = path.join(reviewPhaseDir, 'chain.json');
 
+  let chain = [];
+  if (fs.existsSync(chainPath)) {
+    try {
+      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+    } catch (_e) {
+      console.error(`ERROR: Failed to parse chain.json at ${chainPath}`);
+      process.exit(1);
+    }
+    if (!Array.isArray(chain)) {
+      console.error(`ERROR: Malformed chain.json at ${chainPath}: expected array`);
+      process.exit(1);
+    }
+  }
+
+  const existingGenEntry = chain.find((c) => c && c.generation === generation);
+  if (existingGenEntry) {
+    if (existingGenEntry.status === 'pending' || existingGenEntry.status === 'finalized') {
+      console.error(`ERROR: Generation ${generation} already exists with status '${existingGenEntry.status}'`);
+      process.exit(1);
+    }
+  }
+
   let base = '';
   if (generation === 1) {
     if (!flags['phase-base']) {
@@ -431,18 +497,7 @@ async function handleCollect(flags) {
     base = flags['phase-base'].trim();
   } else {
     // generation > 1
-    if (!fs.existsSync(chainPath)) {
-      console.error(`ERROR: Contiguous chain broken: chain.json does not exist at ${chainPath}`);
-      process.exit(1);
-    }
-    let chain = [];
-    try {
-      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
-    } catch (_e) {
-      console.error(`ERROR: Failed to parse chain.json at ${chainPath}`);
-      process.exit(1);
-    }
-    const prevEntry = chain.find((c) => c.generation === generation - 1);
+    const prevEntry = chain.find((c) => c && c.generation === generation - 1);
     if (!prevEntry) {
       console.error(`ERROR: Contiguous chain broken: missing generation ${generation - 1} in ${chainPath}`);
       process.exit(1);
@@ -508,8 +563,8 @@ async function handleCollect(flags) {
     head,
     diff_sha256: diffSha256,
   };
-  fs.writeFileSync(path.join(gDir, 'range.json'), JSON.stringify(rangeJson, null, 2) + '\n');
-  fs.writeFileSync(path.join(gDir, 'diff.txt'), diffText);
+  writeFileSyncAtomic(path.join(gDir, 'range.json'), JSON.stringify(rangeJson, null, 2) + '\n');
+  writeFileSyncAtomic(path.join(gDir, 'diff.txt'), diffText);
 
   // Dispatch all seats concurrently
   const timeout = flags.timeout || '20m';
@@ -521,7 +576,28 @@ async function handleCollect(flags) {
   // Write per-seat JSON files
   for (const res of seatResults) {
     const seatPath = path.join(gDir, `seat-${res.seat.id}.json`);
-    fs.writeFileSync(seatPath, JSON.stringify(res.rawOutput, null, 2) + '\n');
+    writeFileSyncAtomic(seatPath, JSON.stringify(res.rawOutput, null, 2) + '\n');
+  }
+
+  function saveChainEntry(newEntry) {
+    let currentChain = [];
+    if (fs.existsSync(chainPath)) {
+      try {
+        currentChain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+      } catch (_e) {
+        currentChain = [];
+      }
+      if (!Array.isArray(currentChain)) {
+        currentChain = [];
+      }
+    }
+    const existingIdx = currentChain.findIndex((c) => c && c.generation === generation);
+    if (existingIdx !== -1) {
+      currentChain[existingIdx] = newEntry;
+    } else {
+      currentChain.push(newEntry);
+    }
+    writeFileSyncAtomic(chainPath, JSON.stringify(currentChain, null, 2) + '\n');
   }
 
   // Check head again
@@ -535,23 +611,31 @@ async function handleCollect(flags) {
 
   if (postHead !== head) {
     // Head moved during dispatch
-    let chain = [];
-    if (fs.existsSync(chainPath)) {
-      try {
-        chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
-      } catch (_e) {
-        chain = [];
-      }
-    }
-    chain.push({
+    saveChainEntry({
       generation,
       base,
       status: 'aborted',
     });
-    fs.mkdirSync(reviewPhaseDir, { recursive: true });
-    fs.writeFileSync(chainPath, JSON.stringify(chain, null, 2) + '\n');
     console.error(`ERROR: Branch '${branch}' moved from ${head} to ${postHead} during review collection`);
     process.exit(1);
+  }
+
+  // Check for parse failures across seats (Defect 2)
+  for (const res of seatResults) {
+    const findingsStr = (res.rawOutput && typeof res.rawOutput.findings === 'string') ? res.rawOutput.findings : '';
+    if (findingsStr.trim().length > 0) {
+      const extracted = extractFindings(res.seat.id, findingsStr);
+      if (extracted.length === 0) {
+        saveChainEntry({
+          generation,
+          base,
+          status: 'aborted',
+          reason: 'parse_failed',
+        });
+        console.error(`ERROR: Failed to parse non-empty findings for seat ${res.seat.id}`);
+        process.exit(1);
+      }
+    }
   }
 
   // Extract findings
@@ -580,28 +664,17 @@ async function handleCollect(flags) {
   const findingsJson = {
     findings: allFindings,
   };
-  fs.writeFileSync(path.join(gDir, 'findings.json'), JSON.stringify(findingsJson, null, 2) + '\n');
+  writeFileSyncAtomic(path.join(gDir, 'findings.json'), JSON.stringify(findingsJson, null, 2) + '\n');
 
   // Update chain.json
-  let chain = [];
-  if (fs.existsSync(chainPath)) {
-    try {
-      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
-    } catch (_e) {
-      chain = [];
-    }
-  }
-
   const genStatus = hasGap ? 'pending-with-gap' : 'pending';
-  chain.push({
+  saveChainEntry({
     generation,
     base,
     head,
     seats: seatIds,
     status: genStatus,
   });
-  fs.mkdirSync(reviewPhaseDir, { recursive: true });
-  fs.writeFileSync(chainPath, JSON.stringify(chain, null, 2) + '\n');
 
   // Output summary JSON
   const summary = {
@@ -639,7 +712,72 @@ async function handleFinalize(flags) {
   const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
   const gDir = path.join(reviewPhaseDir, `g${generation}`);
   const findingsPath = path.join(gDir, 'findings.json');
+  const rangePath = path.join(gDir, 'range.json');
 
+  // Require readable range.json file for that generation
+  if (!fs.existsSync(rangePath)) {
+    console.error(`ERROR: Missing or unreadable range.json at ${rangePath}`);
+    process.exit(1);
+  }
+  let rangeObj;
+  try {
+    rangeObj = JSON.parse(fs.readFileSync(rangePath, 'utf8'));
+    if (!rangeObj || typeof rangeObj !== 'object') {
+      console.error(`ERROR: Invalid range.json at ${rangePath}`);
+      process.exit(1);
+    }
+  } catch (e) {
+    console.error(`ERROR: Failed to parse range.json at ${rangePath}: ${e.message}`);
+    process.exit(1);
+  }
+
+  // Chain entry validation
+  const chainPath = path.join(reviewPhaseDir, 'chain.json');
+  let chain = [];
+  if (!fs.existsSync(chainPath)) {
+    console.error(`ERROR: Missing chain.json at ${chainPath}`);
+    process.exit(1);
+  }
+  try {
+    chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+  } catch (e) {
+    console.error(`ERROR: Failed to parse chain.json at ${chainPath}: ${e.message}`);
+    process.exit(1);
+  }
+  if (!Array.isArray(chain)) {
+    console.error(`ERROR: Malformed chain.json at ${chainPath}: expected array`);
+    process.exit(1);
+  }
+
+  // When more than one chain entry exists for the same generation, select the last one in the chain array
+  let targetChainIdx = -1;
+  for (let i = chain.length - 1; i >= 0; i--) {
+    if (chain[i] && chain[i].generation === generation) {
+      targetChainIdx = i;
+      break;
+    }
+  }
+
+  if (targetChainIdx === -1) {
+    console.error(`ERROR: No chain entry found for generation ${generation}`);
+    process.exit(1);
+  }
+
+  const targetChainEntry = chain[targetChainIdx];
+  const allowedPendingStatuses = new Set(['pending', 'pending-with-gap']);
+  if (!allowedPendingStatuses.has(targetChainEntry.status)) {
+    console.error(`ERROR: Chain entry for generation ${generation} is not pending (got '${targetChainEntry.status}')`);
+    process.exit(1);
+  }
+
+  // Never fabricate or default a chain entry with a blank base or head field if the real entry is missing fields
+  if (!targetChainEntry.base || typeof targetChainEntry.base !== 'string' || !targetChainEntry.base.trim() ||
+      !targetChainEntry.head || typeof targetChainEntry.head !== 'string' || !targetChainEntry.head.trim()) {
+    console.error(`ERROR: Chain entry for generation ${generation} is missing base or head field`);
+    process.exit(1);
+  }
+
+  // Validate findings.json
   if (!fs.existsSync(findingsPath)) {
     console.error(`ERROR: Missing findings.json at ${findingsPath}`);
     process.exit(1);
@@ -653,12 +791,35 @@ async function handleFinalize(flags) {
     process.exit(1);
   }
 
-  const findingsList = Array.isArray(findingsData.findings) ? findingsData.findings : [];
+  if (!findingsData || typeof findingsData !== 'object' || Array.isArray(findingsData) || !Array.isArray(findingsData.findings)) {
+    console.error(`ERROR: findings.json must be a JSON object holding a findings array`);
+    process.exit(1);
+  }
+
+  const findingsList = findingsData.findings;
   const findingsMap = new Map();
-  for (const f of findingsList) {
+  for (let i = 0; i < findingsList.length; i++) {
+    const f = findingsList[i];
+    if (!f || typeof f !== 'object') {
+      console.error(`ERROR: Finding entry at index ${i} is not an object`);
+      process.exit(1);
+    }
+    if (typeof f.id !== 'string' || f.id.trim().length === 0) {
+      console.error(`ERROR: Finding entry at index ${i} has empty or non-string id`);
+      process.exit(1);
+    }
+    if (findingsMap.has(f.id)) {
+      console.error(`ERROR: Duplicate finding id in findings.json: ${f.id}`);
+      process.exit(1);
+    }
+    if (!SEVERITY_WORDS.has(f.severity)) {
+      console.error(`ERROR: Finding ${f.id} has invalid severity '${f.severity}' (must be Critical, Major, Minor, or Suggestion)`);
+      process.exit(1);
+    }
     findingsMap.set(f.id, f);
   }
 
+  // Validate dispositions file
   if (!fs.existsSync(dispositionsFile)) {
     console.error(`ERROR: Missing dispositions file at ${dispositionsFile}`);
     process.exit(1);
@@ -672,6 +833,11 @@ async function handleFinalize(flags) {
     process.exit(1);
   }
 
+  if (!dispData || typeof dispData !== 'object' || Array.isArray(dispData) || !Array.isArray(dispData.findings)) {
+    console.error(`ERROR: Dispositions file must be a JSON object holding a findings array`);
+    process.exit(1);
+  }
+
   if (dispData.schema_version !== 1) {
     console.error(`ERROR: Schema version mismatch in dispositions file: expected 1, got ${dispData.schema_version}`);
     process.exit(1);
@@ -682,9 +848,31 @@ async function handleFinalize(flags) {
     process.exit(1);
   }
 
-  const dispFindings = Array.isArray(dispData.findings) ? dispData.findings : [];
+  const allowedDispositions = new Set(['verified', 'refuted', 'deferred']);
+  const dispFindings = dispData.findings;
   const dispMap = new Map();
-  for (const df of dispFindings) {
+  for (let i = 0; i < dispFindings.length; i++) {
+    const df = dispFindings[i];
+    if (!df || typeof df !== 'object') {
+      console.error(`ERROR: Dispositions entry at index ${i} is not an object`);
+      process.exit(1);
+    }
+    if (typeof df.id !== 'string' || df.id.trim().length === 0) {
+      console.error(`ERROR: Dispositions entry at index ${i} has empty or non-string id`);
+      process.exit(1);
+    }
+    if (dispMap.has(df.id)) {
+      console.error(`ERROR: Duplicate finding id in dispositions file: ${df.id}`);
+      process.exit(1);
+    }
+    if (!allowedDispositions.has(df.disposition)) {
+      console.error(`ERROR: Finding ${df.id} has invalid disposition '${df.disposition}' (must be verified, refuted, or deferred)`);
+      process.exit(1);
+    }
+    if (typeof df.rationale !== 'string' || df.rationale.trim().length === 0) {
+      console.error(`ERROR: Finding ${df.id} missing non-empty rationale string`);
+      process.exit(1);
+    }
     dispMap.set(df.id, df);
   }
 
@@ -702,19 +890,19 @@ async function handleFinalize(flags) {
     }
   }
 
+  // Snapshot dispositions file into the generation's ledger directory as dispositions.json
+  const snapshotRelPath = path.join(`review-${phase}`, `g${generation}`, 'dispositions.json');
+  const snapshotAbsPath = path.join(gDir, 'dispositions.json');
+  const dispRawBytes = fs.readFileSync(dispositionsFile);
+  const dispSha256 = crypto.createHash('sha256').update(dispRawBytes).digest('hex');
+  writeFileSyncAtomic(snapshotAbsPath, dispRawBytes);
+
   // Aggregate verdict and open_findings
   let hasVerifiedCritical = false;
   const openFindings = [];
 
   for (const f of findingsList) {
     const disp = dispMap.get(f.id);
-    if (!disp) {
-      if (f.severity === 'Critical') {
-        console.error(`ERROR: Critical finding ${f.id} has no matching disposition entry`);
-        process.exit(1);
-      }
-      continue;
-    }
 
     if (f.severity === 'Critical' && disp.disposition === 'verified') {
       hasVerifiedCritical = true;
@@ -731,26 +919,7 @@ async function handleFinalize(flags) {
     }
   }
 
-  // Defensive check: if any finding has severity Critical and no matching disposition
-  for (const f of findingsList) {
-    if (f.severity === 'Critical' && !dispMap.has(f.id)) {
-      console.error(`ERROR: Undispositioned Critical finding encountered: ${f.id}`);
-      process.exit(1);
-    }
-  }
-
   const verdict = hasVerifiedCritical ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
-
-  // Read chain.json
-  const chainPath = path.join(reviewPhaseDir, 'chain.json');
-  let chain = [];
-  if (fs.existsSync(chainPath)) {
-    try {
-      chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
-    } catch (_e) {
-      chain = [];
-    }
-  }
 
   // Cross-generation closure:
   // if a chain.json file exists with earlier finalized generations, and this generation's
@@ -759,7 +928,10 @@ async function handleFinalize(flags) {
   const currentFindingIds = new Set(findingsList.map((f) => f.id));
   for (const entry of chain) {
     if (entry.generation < generation && entry.status === 'finalized' && entry.dispositions_path) {
-      const earlierDispPath = entry.dispositions_path;
+      let earlierDispPath = entry.dispositions_path;
+      if (!path.isAbsolute(earlierDispPath)) {
+        earlierDispPath = path.join(ledgerDir, earlierDispPath);
+      }
       if (fs.existsSync(earlierDispPath)) {
         try {
           const earlierDisp = JSON.parse(fs.readFileSync(earlierDispPath, 'utf8'));
@@ -811,21 +983,13 @@ async function handleFinalize(flags) {
       briefLines.push(`Branch: ${branch}`);
     }
 
-    const rangePath = path.join(gDir, 'range.json');
-    let baseSha = '';
-    let headSha = '';
-    if (fs.existsSync(rangePath)) {
-      try {
-        const rangeObj = JSON.parse(fs.readFileSync(rangePath, 'utf8'));
-        baseSha = rangeObj.base || '';
-        headSha = rangeObj.head || '';
-      } catch (_e) {}
-    }
+    const baseSha = rangeObj.base || '';
+    const headSha = rangeObj.head || '';
     briefLines.push(`Base: ${baseSha}`);
     briefLines.push(`Head: ${headSha}`);
     briefLines.push('');
 
-    // One paragraph per verified finding (any severity) written in plain prose — no fenced code blocks, no "around line N" phrasing; just describe the finding text and the file/location it concerns in prose sentences.
+    // One paragraph per verified finding (any severity) written in plain prose
     for (const f of findingsList) {
       const disp = dispMap.get(f.id);
       if (disp && disp.disposition === 'verified') {
@@ -840,7 +1004,7 @@ async function handleFinalize(flags) {
       }
     }
 
-    fs.writeFileSync(briefPath, briefLines.join('\n').trim() + '\n');
+    writeFileSyncAtomic(briefPath, briefLines.join('\n').trim() + '\n');
 
     // Run scripts/check-redispatch-prompt.sh
     const checkScript = repoRoot
@@ -859,28 +1023,16 @@ async function handleFinalize(flags) {
     }
   }
 
-  // Update this generation's entry in chain.json before writing receipt
-  let currentGenEntry = chain.find((c) => c.generation === generation);
-  if (!currentGenEntry) {
-    currentGenEntry = {
-      generation,
-      base: '',
-      head: '',
-      status: 'finalized',
-      dispositions_path: dispositionsFile,
-    };
-    chain.push(currentGenEntry);
-  } else {
-    currentGenEntry.status = 'finalized';
-    currentGenEntry.dispositions_path = dispositionsFile;
-  }
+  // Update target chain entry
+  targetChainEntry.status = 'finalized';
+  targetChainEntry.dispositions_path = snapshotRelPath;
+  targetChainEntry.dispositions_sha256 = dispSha256;
 
-  fs.mkdirSync(reviewPhaseDir, { recursive: true });
-  fs.writeFileSync(chainPath, JSON.stringify(chain, null, 2) + '\n');
+  writeFileSyncAtomic(chainPath, JSON.stringify(chain, null, 2) + '\n');
 
   // Receipt
   let phaseBaseSha = '';
-  const gen1Entry = chain.find((c) => c.generation === 1);
+  const gen1Entry = chain.find((c) => c && c.generation === 1);
   if (gen1Entry && gen1Entry.base) {
     phaseBaseSha = gen1Entry.base;
   }
@@ -910,7 +1062,7 @@ async function handleFinalize(flags) {
   };
 
   const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
-  fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+  writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 
   const summary = {
     phase,
@@ -941,26 +1093,29 @@ async function handleOptOut(flags) {
   const configRelPath = path.join('.claude', 'review-loop-config.md');
   const configPath = repoRoot ? path.join(repoRoot, configRelPath) : configRelPath;
 
-  let configuredValue = 'absent';
-  let configBytes = Buffer.alloc(0);
+  if (!fs.existsSync(configPath)) {
+    console.error(`ERROR: Config source file does not exist at ${configPath}`);
+    process.exit(1);
+  }
 
-  if (fs.existsSync(configPath)) {
-    try {
-      configBytes = fs.readFileSync(configPath);
-      const text = configBytes.toString('utf8');
-      const lines = text.split(/\r?\n/);
-      const regex = new RegExp(`(?:^|[\\s#*->])${knob}(?:[\\s:=]+)(off|on|auto)\\b`, 'i');
-      for (const line of lines) {
-        const m = line.match(regex);
-        if (m) {
-          configuredValue = m[1].toLowerCase();
-          break;
-        }
+  let configuredValue = 'absent';
+  let configBytes;
+
+  try {
+    configBytes = fs.readFileSync(configPath);
+    const text = configBytes.toString('utf8');
+    const lines = text.split(/\r?\n/);
+    const regex = new RegExp(`(?:^|[\\s#*->])${knob}(?:[\\s:=]+)(off|on|auto)\\b`, 'i');
+    for (const line of lines) {
+      const m = line.match(regex);
+      if (m) {
+        configuredValue = m[1].toLowerCase();
+        break;
       }
-    } catch (_e) {
-      configuredValue = 'absent';
-      configBytes = Buffer.alloc(0);
     }
+  } catch (e) {
+    console.error(`ERROR: Failed to read config source file at ${configPath}: ${e.message}`);
+    process.exit(1);
   }
 
   const sha256 = crypto.createHash('sha256').update(configBytes).digest('hex');
@@ -978,6 +1133,22 @@ async function handleOptOut(flags) {
 
   let resolvedFrom = resolveField(resolverPath, repoRoot, `${knob}_resolved_from`);
   if (!resolvedFrom) {
+    // If empty or not provided by resolver, try full json or fallback
+    try {
+      const res = spawnSync(resolverPath, repoRoot ? ['--repo-root', repoRoot] : [], {
+        encoding: 'utf8',
+        cwd: repoRoot || process.cwd(),
+        env: { ...process.env },
+      });
+      if (res.status === 0 && res.stdout) {
+        const fullJson = JSON.parse(res.stdout);
+        if (fullJson && fullJson[`${knob}_resolved_from`]) {
+          resolvedFrom = fullJson[`${knob}_resolved_from`];
+        }
+      }
+    } catch (_e) {}
+  }
+  if (!resolvedFrom) {
     resolvedFrom = 'unknown';
   }
 
@@ -991,9 +1162,8 @@ async function handleOptOut(flags) {
     written_at: new Date().toISOString(),
   };
 
-  fs.mkdirSync(ledgerDir, { recursive: true });
   const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
-  fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+  writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 
   const summary = {
     phase,

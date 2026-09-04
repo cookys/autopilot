@@ -3,7 +3,7 @@
 **Plan**: [`docs/plans/2026-09-04-dev-flow-hetero-loops-default.md`](../../plans/2026-09-04-dev-flow-hetero-loops-default.md)
 **Branch**: `feat/dev-flow-hetero-loops` · **Target**: v2.36.0 (MINOR: new skill `hetero-review`)
 **Requested**: owner, 2026-09-04, this host ("預設 dev-flow 就是走 plan hetero loop review → 派工 → hetero review → qc gate", go)
-**Status**: D0 plan loop in flight
+**Status**: D0 frozen; D1 dispatching
 
 ## Topology of this project's own execution (dogfood)
 
@@ -25,7 +25,7 @@ cannot pass as normal.
 
 | # | Deliverable | Size | Status |
 |---|---|---|---|
-| D0 | Plan loop on the plan itself (sol@codex max chair, GLM-5.2@cc-shim, MiniMax-M3@cc-shim; ≤2 generations; depth-0 adjudication; freeze) | S | 🔄 |
+| D0 | Plan loop on the plan itself (sol@codex max chair, GLM-5.2@cc-shim, MiniMax-M3@cc-shim; 2 generations; 21 blockers folded; frozen by depth-0) | S | ✅ |
 | D1 | Topology roles (`--role plan_reviewer\|reviewer\|consult\|discuss`) + resolver `auto` knobs (`plan_review`, `hetero_review`, `consult_dispatch`) + `dispatch-plan-review.js` kimi runner | M | ⏳ |
 | D2 | `plan-rubric-scaffold.js`, `hetero-review-loop.js`, `check-phase-review-receipt.js` + tests | L | ⏳ |
 | D3 | `hetero-review` skill + dev-flow / ceo-agent / research-to-ship / front-door edits (line-neutral) + profiles repin | M | ⏳ |

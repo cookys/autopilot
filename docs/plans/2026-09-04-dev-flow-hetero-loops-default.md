@@ -1,6 +1,6 @@
 # dev-flow hetero loops as default — plan loop → dispatch → per-phase hetero review → qc gate
 
-Status: **R1 after plan-review generation 1 (owner go 2026-09-04)**. Ships as MINOR **v2.36.0**
+Status: **R2 — FROZEN after plan-review generation 2 (owner go 2026-09-04)**. Ships as MINOR **v2.36.0**
 (new skill `hetero-review`). Investigation narrative and scorecard facts:
 `docs/plans/evidence/2026-09-04-dev-flow-hetero-loops-default/context.md` (provenance, not a
 reading assignment — this packet is self-contained).
@@ -22,30 +22,35 @@ Existing, reused unchanged: `dispatch-plan-review.js` (rubric freeze, manifest s
 cap, growth rails); `plan_review` / `plan_reviewer_*` / `plan_review_max_*` knobs in
 `resolve-review-loop.sh`; `dispatch-review.sh` (one seat, `SHIP-AS-IS` / `FIX-THEN-SHIP`); `qc_panel`
 + `qc_panel_aggregation: union-on-verified-critical`; the pre-push qc-gate trailer;
-`resolve-dispatch-topology.js`; `dispatch-consult.sh` (raw-prompt rail, blind-evidence preflight).
+`resolve-dispatch-topology.js`; `dispatch-consult.sh` (byte-identical; its documented input is the
+`resolve-review-loop.sh --field consult_*` seat, already qc-excluded and family-ordered by D1).
 
 ## 1. Problem
 
-1. **No trigger.** The phrases route nowhere; sessions improvise three `dispatch-review.sh` calls
-   plus a manual union, unreproducibly.
-2. **Plan review is opt-in twice.** `plan_review: off` by default, and dev-flow L-2 never calls it.
-3. **Per-phase code review is prose.** L-4's advance gate item has enforcer `documented-only`.
-4. **Consult is chained to the codex plugin** in the docs; the seat rail has no skill hook point and
-   its switch is off.
+No trigger (phrases route nowhere; sessions improvise seats and a manual union). Plan review is
+opt-in twice (`off` default, dev-flow never calls it). Per-phase code review is `documented-only`
+prose. Consult is chained to the codex plugin in the docs and has no skill hook point.
 
 ## 2. KRs
 
 - KR1: on a host whose topology yields ≥2 qualified plan-review seats of distinct families, a fresh
-  L-size dev-flow run reaches L-3 only after `dispatch-plan-review.js` returned READY or a
-  depth-0-adjudicated CONDITIONAL, with zero project config edits (`plan_review: auto`).
+  L-size dev-flow run reaches L-3 only after `dispatch-plan-review.js` returned READY or a CONDITIONAL
+  that passes the **freeze predicate**: every `candidate_blocker` finding of the last generation is
+  dispositioned `accepted_blocker` (repaired in a reviewed revision, rationale names the fold) or
+  `rejected` (rationale); none is `deferred`; non-blocking `implementation-spike`/future findings may
+  remain and go to BACKLOG. Enforcer: `check-phase-review-receipt.js --plan-artifact <gN.json>
+  --dispositions <gN-disposition.json>` (exit 1 on any unmet blocker). Zero project config edits.
 - KR2: each owner phrase above appears verbatim in exactly one skill `description:`
   (`hetero-review`) and in no other; enforcer: `hooks/tests/hetero-review-trigger.test.sh`, which
   parses every `skills/*/SKILL.md` frontmatter `description:` (not the whole file) and asserts each
   of the four phrases occurs exactly once overall, in `hetero-review`.
 - KR3: the L-4 advance gate's code-review item is satisfied only by a gate receipt (§3 receipt
   contract) that `check-phase-review-receipt.js` validates: `kind: review` with aggregate verdict
-  `SHIP-AS-IS` and `review_head_sha` equal to the branch head, or `kind: opt-out` with an explicit
-  `off` knob. Missing, stale, non-SHIP, or `auto`-degraded-without-receipt ⇒ exit 1.
+  `SHIP-AS-IS`, a contiguous generation chain rooted at the phase base, and final `review_head_sha`
+  equal to the branch head; or `kind: opt-out` whose `knob`, `configured_value: off`, `config_source`
+  (path + sha256) and `resolved_from: off` the checker re-derives by running
+  `resolve-review-loop.sh --field <knob>` / `--field <knob>_resolved_from`. Missing, stale, non-SHIP,
+  broken chain, forged `auto` opt-out, or changed config ⇒ exit 1.
 - KR4: size rules as predicates: L/H run all four stages; S skips the plan loop and runs one hetero
   seat plus qc; Fix runs qc only. Every explicit `off` writes an opt-out receipt (writer:
   `hetero-review-loop.js --opt-out --knob <k>`), and a fixture asserts S, Fix, L, H each produce the
@@ -66,10 +71,12 @@ cap, growth rails); `plan_review` / `plan_reviewer_*` / `plan_review_max_*` knob
 
   | value | topology | result |
   |---|---|---|
+  | absent from config | any | behaves as `auto` (template default; owner ruling 1); D1 fixture: pre-template config with all three knobs missing |
   | `off` | any | stage skipped; opt-out receipt written; `capability_warnings` line |
+  | unrecognised value | any | exit 3 with the existing `invalid <knob>` message, before any stage selection; never `off`, never an empty `on` |
   | `on` | any | explicit tuple required (`plan_reviewer_*` / `reviewer_*` / `consult_*`); incomplete or invalid ⇒ exit 3, existing message shape |
   | `auto` | ≥1 qualified seat for the role | tuple(s) expanded from topology; ledger records `resolved_from: topology` |
-  | `auto` | absent file, malformed JSON, or zero seats for the role | **native fallback** (claude-native reviewer/consult seat, `resolved_from: native-fallback`) plus `capability_warnings` line; the stage still runs; never `on` with an empty tuple, never silently skipped |
+  | `auto` | absent file, malformed JSON, zero seats for the role, or all seats filtered (unsupported runner / `--exclude-seats`) | **native fallback** (claude-native reviewer/consult seat, `resolved_from: native-fallback`) plus `capability_warnings` line; the stage still runs; never `on` with an empty tuple, never silently skipped |
 
 - No new severity vocabulary; receipt verdict tokens are the existing `SHIP-AS-IS` /
   `FIX-THEN-SHIP` only. No trust machinery. No third canonical statement of "what the reviewer
@@ -83,8 +90,8 @@ cap, growth rails); `plan_review` / `plan_reviewer_*` / `plan_review_max_*` knob
 | `scripts/resolve-dispatch-topology.js` | `--role implementer\|plan_reviewer\|reviewer\|consult\|discuss` (default all); `--exclude-seats <engine/effort@runner,…>`; `--asking-family <f>`. JSON gains `plan_review_panel` (≤3 seats, distinct families, chair = highest effort rank), `reviewer_ladder`, `consult_ladder` (order: family ≠ asking family, then latency, then cost rank), `discuss_ladder`. Facts from `engine-scorecard.js seat-status` per role, never `ladder`/`report`. Role mapping (scorecard has no `plan_reviewer` role): plan seats derive from `reviewer` rows (chair must be reviewer-qualified) plus `consult` rows for non-chair seats. Runner token aliases normalised (`codex-cli` ≡ `codex`). Seats whose `runner` is not in `dispatch-plan-review.js`'s unchanged `RUNNERS` are never placed in `plan_review_panel` |
 | `scripts/resolve-review-loop.sh` + schema + `project-config-template/review-loop-config.md` | the §2.5 transition table for the three knobs; template defaults `auto`; `--field` emits expanded tuples and `resolved_from`; when `consult_dispatch: auto` the resolver passes the resolved `qc_panel` seats as `--exclude-seats` |
 | `scripts/plan-rubric-scaffold.js` (new) | input plan file → rubric skeleton: one `R<n>:` per KR, then one per §2.5 bullet, then one per §6 bullet, ids ordinal by source position; the author trims before freeze. Contract: same input ⇒ byte-identical output; existing rubric ⇒ exit 2, file untouched. Golden test on a fixture plan (not on this plan) |
-| `scripts/hetero-review-loop.js` (new) | code-loop driver. Before dispatch: snapshot `review_base_sha`, `review_head_sha`; refuse if the branch head moves before the receipt is written. Runs `dispatch-review.sh` per seat in parallel over exactly that range; stores each seat's raw JSON under `<ledger>/review-<phase>-g<n>/seat-<id>.json`. Findings pass through a depth-0 disposition file (`dispositions.json`: per finding `verified` / `refuted` + rationale / `deferred`); aggregate = `union-on-verified-critical` over dispositioned findings only (any `verified` Critical/Major ⇒ `FIX-THEN-SHIP`; an undispositioned blocking finding ⇒ no receipt, exit 1). Writes the gate receipt `<ledger>/receipt-<phase>.json` (`kind`, `phase`, `branch`, `generation`, `review_base_sha`, `review_head_sha`, seat artifact paths, dispositions path, `verdict`, `resolved_from`). `--delta` binds to an immutable `<prev_head>..<head>` range. `--opt-out --knob <k>` writes `kind: opt-out`. Independent of `adjudicate-findings.js` |
-| `scripts/check-phase-review-receipt.js` (new) | KR3 enforcer over the receipt contract above |
+| `scripts/hetero-review-loop.js` (new) | code-loop driver as a two-step state machine. `collect --phase <p> --generation <n>`: snapshots `review_base_sha`/`review_head_sha` (generation 1 base = phase base; generation n base = generation n-1 head, contiguous, immutable), refuses if the head moved, runs `dispatch-review.sh` per seat in parallel over that range, writes immutable artifacts under `<ledger>/review-<p>/g<n>/` (`seat-<id>.json`, `range.json`), appends to `chain.json`, exits 0 with status `pending`. `finalize --phase <p> --generation <n> --dispositions <file>`: the schema-versioned dispositions file names that exact generation and carries one entry per stable finding id (`verified` / `refuted` + rationale / `deferred`); aggregate = `union-on-verified-critical` exactly as in qc: **any `verified` Critical from any seat ⇒ `FIX-THEN-SHIP`**; verified Major/Minor are listed as `open_findings` in the receipt and in the hands brief but do not flip the verdict; an undispositioned `candidate_blocker` ⇒ exit 1, no receipt. On `FIX-THEN-SHIP` it writes `g<n>/hands-brief.md` (line 1 `Engine:` from the topology rung 0, the verified findings, the range) and runs `check-redispatch-prompt.sh` on it — non-zero ⇒ exit 1 and no dispatch. Every verified finding carries `closed_by_generation` once a later generation's seat artifacts no longer report it. Final receipt `<ledger>/receipt-<p>.json` (`kind`, `phase`, `branch`, `phase_base_sha`, chain of `{generation, base, head, artifacts, dispositions}`, `verdict`, `open_findings`, `resolved_from`). `--opt-out --knob <k>` writes `kind: opt-out` with `knob`, `configured_value`, `config_source`, `resolved_from`. Independent of `adjudicate-findings.js` |
+| `scripts/check-phase-review-receipt.js` (new) | KR3 enforcer over the receipt contract above (chain contiguity, head binding, opt-out re-derivation) and, with `--plan-artifact`, the KR1 freeze predicate |
 | `skills/hetero-review/SKILL.md` (new, ≤120 lines) + `references/{plan-loop,code-loop}.md` | router only: plan path → plan loop (`plan-rubric-scaffold.js` → manifest from `plan_review_panel` → `dispatch-plan-review.js --timeout 20m` → depth-0 disposition → freeze); branch/diff → code loop (`hetero-review-loop.js` → hands repair via topology → `--delta` → `SHIP-AS-IS` → trailer). `description:` carries the four phrases verbatim |
 | `skills/dev-flow/SKILL.md` (line-neutral) + `skills/dev-flow/references/hetero-loops.md` (new) | L-2.5 row (→ `hetero-review` plan loop; gate = frozen rubric + READY/adjudicated CONDITIONAL, or opt-out receipt); L-4 advance-gate code-review item → `check-phase-review-receipt.js`; size table gains KR4 predicates; Available Scripts rows for the three scripts; prose to the reference |
 | `skills/ceo-agent/SKILL.md` (line-neutral) + `references/level-front-door.md` | pointer to the four-stage default; front-door § Default dispatch topology gains one "review seats" row |
@@ -104,8 +111,8 @@ BACKLOG row, not this slice).
 
 | # | Deliverable | Size | Acceptance |
 |---|---|---|---|
-| D1 | Topology roles + `--exclude-seats` / `--asking-family` + the §2.5 transition table in the resolver | M | `--role plan_reviewer` yields ≥2 seats of distinct families on this host; `--field plan_review` prints the expanded tuple with `resolved_from`; fixtures: absent file, malformed JSON, zero-seat role ⇒ native fallback + warning + stage-runs; `on` with incomplete tuple ⇒ exit 3; `off` ⇒ opt-out marker in output; `plan_reviewer_runner: bogus` ⇒ exit 3; `check-contract-schema.js` green |
-| D2 | `plan-rubric-scaffold.js`, `hetero-review-loop.js`, `check-phase-review-receipt.js` | L | scaffold: golden fixture; re-run byte-identical; pre-existing rubric with sentinel bytes ⇒ exit 2 and file byte-identical. Loop: `PATH`-shimmed `dispatch-review.sh` fixtures — three SHIP ⇒ `SHIP-AS-IS`; one seat with a `verified` Critical ⇒ `FIX-THEN-SHIP`; a raw (undispositioned) Critical ⇒ exit 1, no receipt; a `refuted` Critical ⇒ `SHIP-AS-IS`; head moved between snapshot and receipt ⇒ exit 1; opt-out receipt shape. Checker: SHIP + matching head ⇒ 0; stale head ⇒ 1; `FIX-THEN-SHIP` ⇒ 1; missing ⇒ 1; opt-out with explicit `off` ⇒ 0; opt-out with `auto` ⇒ 1 |
+| D1 | Topology roles + `--exclude-seats` / `--asking-family` + the §2.5 transition table in the resolver | M | `--role plan_reviewer` yields ≥2 seats of distinct families on this host; `--field plan_review` prints the expanded tuple with `resolved_from`; fixtures: absent file, malformed JSON, zero-seat role, all-seats-filtered ⇒ native fallback + warning + stage-runs; knob absent from a pre-template config ⇒ as `auto`; misspelled knob value (each of the three) ⇒ exit 3 with the existing message; `on` with incomplete tuple ⇒ exit 3; `off` ⇒ opt-out marker in output; `plan_reviewer_runner: bogus` ⇒ exit 3; `check-contract-schema.js` green |
+| D2 | `plan-rubric-scaffold.js`, `hetero-review-loop.js`, `check-phase-review-receipt.js` | L | scaffold: golden fixture; re-run byte-identical; pre-existing rubric with sentinel bytes ⇒ exit 2 and file byte-identical. Loop: `PATH`-shimmed `dispatch-review.sh` fixtures — three SHIP ⇒ `SHIP-AS-IS`; one seat with a `verified` Critical ⇒ `FIX-THEN-SHIP`; a raw (undispositioned) Critical ⇒ exit 1, no receipt; a `refuted` Critical ⇒ `SHIP-AS-IS`; a `verified` Major alone ⇒ `SHIP-AS-IS` with one `open_findings` entry; head moved between snapshot and receipt ⇒ exit 1; FIX → delta → SHIP across two generations produces a two-link chain, and the negative control that edits g1's `range.json` makes the checker exit 1; emitted hands brief passes `check-redispatch-prompt.sh`, a malformed brief fixture ⇒ exit 1; opt-out receipt shape. Checker: SHIP + contiguous chain + matching head ⇒ 0; stale head ⇒ 1; `FIX-THEN-SHIP` ⇒ 1; missing ⇒ 1; opt-out with explicit `off` re-derived ⇒ 0; opt-out claiming `off` while the config says `auto` (forged) ⇒ 1; changed config sha ⇒ 1; `--plan-artifact` with a `deferred` blocker ⇒ 1, with all blockers accepted/rejected ⇒ 0 |
 | D3 | `hetero-review` skill + dev-flow / ceo-agent / research-to-ship / front-door edits + profiles repin | M | `hetero-review-trigger.test.sh` green; slash-entry probe green; `build-profile-payload.js catalog --check` rc 0; `wc -l` dev-flow ≤ 733, ceo-agent ≤ 550; a size-rule fixture asserts S/Fix/L/H receipt sequences |
 | D4 | Consult decoupling: hook points in debug / think-tank / dev-flow reference / quality-pipeline, hetero-dispatch.md rename, agent-call description, evidence-discipline rows, hermetic consult test | M | `dispatch-consult-hermetic.test.sh` green (scratch `HOME`, no plugins dir, shimmed runners, qc seats excluded, family order asserted); hetero-dispatch.md has no "peer consult" heading; `check-canonical-invariants.sh` green |
 | D5 | Release v2.36.0: CHANGELOG (`prose-justification:` line), README/INDEX/mirrors, archive | S | `preflight-release.sh` green; full suite; qc three-seat SHIP; trailer on merge |
@@ -135,16 +142,13 @@ from the exclusion input ⇒ test red.
 
 ## 6. Risks + inversion
 
-- **Loop fatigue switches the default off.** Guaranteed if S-size pays for three seats — KR4's one-
-  seat S posture; opt-outs are receipts, not silence.
-- **Chair over-production.** sol@max emits many findings per generation; freeze criterion is zero
-  construct-level findings after depth-0 disposition, not zero findings.
-- **Growth rail.** Repairs move narrative to the evidence dir, never raise the ratio.
-- **Receipt theater.** Receipts are written by the driver from reviewer JSON + snapshot shas; the
-  checker binds head; an implementer cannot produce one.
-- **Hetero seats down.** `auto` degrades to the native seat with a warning; the ledger shows which
-  family judged.
-- **Prose ratchet.** D3 is line-neutral: every added row removes a prose line into the reference.
+- **Loop fatigue switches the default off** — KR4's one-seat S posture; opt-outs are receipts.
+- **Chair over-production** — freeze predicate (KR1), not zero findings.
+- **Growth rail** — narrative moves to the evidence dir; ratios never rise.
+- **Receipt theater** — receipts come from reviewer JSON + snapshot shas + chain; an implementer
+  cannot produce one.
+- **Hetero seats down** — `auto` degrades to the native seat with a warning; the ledger shows who judged.
+- **Prose ratchet** — D3 is line-neutral.
 
 ## 7. Out of scope
 
@@ -168,4 +172,10 @@ hetero implementer ladder; kimi as a plan-review runner; P5 fleet rollout of v2.
   dispositions; verified = depth-0 disposition; consult hook points made executable + qc exclusion
   + hermetic test; KR2 enforcer is a frontmatter-parsing test; scaffold negative control; SHIP token
   = `SHIP-AS-IS`; opt-out writer named; malformed-topology fixture; wiring enumerated per script.
-- R1: generation 2 pending.
+- R1 → G2 (terminal, generation cap): sol STOP / GLM CONDITIONAL / MiniMax STOP, 13 findings, 10
+  blockers. Depth-0 final adjudication (`g2-disposition.json`): all 10 accepted and folded — collect/
+  finalize state machine; chained generation manifest with closure; opt-out receipt fields re-derived by
+  the checker; driver emits and lint-checks the hands brief; unrecognised knob ⇒ exit 3; absent knob ⇒
+  `auto`; aggregate narrowed to verified Critical (R7 verbatim, verified Major/Minor as `open_findings`);
+  freeze predicate stated and enforced; `dispatch-consult.sh` byte-identical with its input named.
+  **FROZEN 2026-09-04** by depth-0 under the predicate above (zero unrepaired blockers, zero deferred).

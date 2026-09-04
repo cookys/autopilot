@@ -1,0 +1,3 @@
+dispatch-review: run_id=review-1788560185-3915685-598c manifest=/tmp/autopilot-dispatch-runs/review-1788560185-3915685-598c.manifest.json (watch: scripts/dispatch-status.js --run review-1788560185-3915685-598c)
+dispatch-review: cc-shim/MiniMax-M3 (effort=high) may run for MINUTES — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.
+rc=1

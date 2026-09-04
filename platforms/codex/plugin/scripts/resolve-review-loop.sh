@@ -885,16 +885,30 @@ process.exit(0);
       _seats_extracted="$(node -e '
 try {
   const d = JSON.parse(process.argv[1]);
+  const implRunner = process.argv[2] || "";
   const p = d.plan_review_panel;
   if (Array.isArray(p) && p.length >= 1) {
-    const s0 = p[0] || {};
-    const s1 = p.length >= 2 ? (p[1] || {}) : null;
-    process.stdout.write(JSON.stringify({ s0, s1 }));
-    process.exit(0);
+    // Skip any panel seat that would collide with the resolved implementer
+    // runner under the same-runner-dual-seat guard (a plan_reviewer seat is
+    // a loop review seat like any other for that guard). "auto" is not a
+    // rail identity and never collides. Fall through to the next panel
+    // seat; when none survive, the caller falls back to native.
+    const survivors = p.filter((seat) => {
+      const r = seat && seat.runner;
+      if (!r) return true;
+      if (!implRunner || implRunner === "auto") return true;
+      return r !== implRunner;
+    });
+    if (survivors.length >= 1) {
+      const s0 = survivors[0] || {};
+      const s1 = survivors.length >= 2 ? (survivors[1] || {}) : null;
+      process.stdout.write(JSON.stringify({ s0, s1 }));
+      process.exit(0);
+    }
   }
 } catch {}
 process.exit(1);
-' "$_topo_json" 2>/dev/null)"
+' "$_topo_json" "$IMPL_RUNNER" 2>/dev/null)"
       if [[ $? -eq 0 && -n "$_seats_extracted" ]]; then
         _seat0_json="$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).s0))' "$_seats_extracted" 2>/dev/null)"
         _seat1_json="$(node -e 'const s1 = JSON.parse(process.argv[1]).s1; process.stdout.write(s1 ? JSON.stringify(s1) : "");' "$_seats_extracted" 2>/dev/null)"
@@ -973,6 +987,7 @@ try {
   const qcPanels = (process.argv[2] || "").split(" ").filter(Boolean);
   const qcRunners = (process.argv[3] || "").split(" ").filter(Boolean);
   const qcEfforts = (process.argv[4] || "").split(" ").filter(Boolean);
+  const implRunner = process.argv[5] || "";
 
   const excluded = new Set();
   const maxIdx = Math.min(qcPanels.length, qcRunners.length, qcEfforts.length);
@@ -987,6 +1002,11 @@ try {
 
   for (const entry of ladder) {
     if (!entry || !entry.engine || !entry.runner || !entry.effort) continue;
+    // Skip any ladder seat that would collide with the resolved implementer
+    // runner under the same-runner-dual-seat guard — consult is a loop
+    // review seat like any other for that guard. "auto" is not a rail
+    // identity and never collides.
+    if (implRunner && implRunner !== "auto" && entry.runner === implRunner) continue;
     const key = `${entry.engine}|${entry.runner}|${entry.effort}`;
     if (!excluded.has(key)) {
       process.stdout.write(JSON.stringify(entry));
@@ -995,7 +1015,7 @@ try {
   }
 } catch {}
 process.exit(1);
-' "$_topo_json" "$_qc_panel_arg" "$_qc_panel_runners_arg" "$_qc_panel_efforts_arg" 2>/dev/null)"
+' "$_topo_json" "$_qc_panel_arg" "$_qc_panel_runners_arg" "$_qc_panel_efforts_arg" "$IMPL_RUNNER" 2>/dev/null)"
     fi
 
     if [[ -n "$_consult_picked" ]]; then

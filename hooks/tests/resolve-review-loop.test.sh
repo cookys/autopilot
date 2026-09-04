@@ -1322,6 +1322,39 @@ assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ABSENT" REVIEW_LOO
 assert_contains "$PLAN_ABS_OUT" "plan_review" "plan_review native-fallback output names knob (absent)"
 assert_contains "$PLAN_ABS_OUT" "opus/high@claude-native" "plan_review native-fallback output contains fallback tuple (absent)"
 
+# 5. same-runner collision against the resolved implementer: the second panel
+# seat (codex) collides with implementer_runner — auto must skip it and pick
+# the surviving first seat (claude-native), never fail closed.
+PLAN_COLLIDE_FIRST_CFG="$TEST_TMP/rl-plan-auto-collide-first.md"
+printf -- '- plan_review: auto\n- implementer_runner: codex\n- implementer_engine: gpt-5.6-sol\n- reviewer_runner: agy\n- reviewer_engine: gemini-3.8-flash-low\n' > "$PLAN_COLLIDE_FIRST_CFG"
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_FIRST_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto skips the runner-colliding panel seat and still resolves from topology"
+assert_eq "claude-fable-5" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_FIRST_CFG" bash "$SCRIPT" --field plan_reviewer_engine)" \
+  "plan_reviewer_engine is the surviving non-colliding seat when plan_review_panel[1] collides with the implementer runner"
+assert_eq "claude-native" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_PRESENT_SEATS" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_FIRST_CFG" bash "$SCRIPT" --field plan_reviewer_runner)" \
+  "plan_reviewer_runner is the surviving non-colliding seat, not the implementer's own runner"
+
+# 6. every panel seat collides with the implementer runner: auto falls back
+# to native with a capability warning, never fails closed with an empty tuple.
+TOPO_ALL_SAME_RUNNER="$TEST_TMP/topo-all-same-runner.json"
+cat > "$TOPO_ALL_SAME_RUNNER" <<'JSON'
+{
+  "plan_review_panel": [
+    { "engine": "claude-fable-5", "effort": "high", "runner": "codex", "endpoint": "ep-fable" },
+    { "engine": "gpt-5.6-sol", "effort": "max", "runner": "codex", "endpoint": "ep-sol" }
+  ],
+  "reviewer_ladder": [],
+  "consult_ladder": []
+}
+JSON
+PLAN_COLLIDE_ALL_CFG="$TEST_TMP/rl-plan-auto-collide-all.md"
+printf -- '- plan_review: auto\n- implementer_runner: codex\n- implementer_engine: gemini-3.8-flash-low\n- reviewer_runner: claude-native\n' > "$PLAN_COLLIDE_ALL_CFG"
+PLAN_COLLIDE_ALL_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALL_SAME_RUNNER" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_ALL_CFG" bash "$SCRIPT" 2>&1)"
+assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALL_SAME_RUNNER" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_COLLIDE_ALL_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto with every panel seat colliding falls back to native, never fails closed"
+assert_contains "$PLAN_COLLIDE_ALL_OUT" "plan_review" "plan_review all-collide native-fallback output names knob"
+assert_contains "$PLAN_COLLIDE_ALL_OUT" "opus/high@claude-native" "plan_review all-collide native-fallback output contains fallback tuple"
+
 
 # --- hetero_review: auto × 4 topology states ---
 HETERO_AUTO_CFG="$TEST_TMP/rl-hetero-auto.md"

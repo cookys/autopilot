@@ -301,6 +301,17 @@ export AUTOPILOT_TOPOLOGY_FILE="$TOPOLOGY_FILE"
 
 # Case 1 (finalize): three seats' combined findings all disposed refuted -> exits 0, verdict: SHIP-AS-IS, no hands-brief.md written
 mkdir -p "$LEDGER/review-p_fin1/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin1/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base111",
+    "head": "head111",
+    "seats": ["s0", "s1", "s2"],
+    "status": "pending"
+  }
+]
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin1/g1/range.json"
 {
   "base": "base111",
@@ -336,6 +347,17 @@ assert_file_absent "$LEDGER/review-p_fin1/g1/hands-brief.md" "case 1 (fin): no h
 
 # Case 2 (finalize): one finding severity Critical disposed verified -> exits 0, verdict: FIX-THEN-SHIP, hands-brief.md exists, check-redispatch-prompt.sh exits 0
 mkdir -p "$LEDGER/review-p_fin2/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base222",
+    "head": "head222",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin2/g1/range.json"
 {
   "base": "base222",
@@ -373,6 +395,7 @@ assert_exit_code "$CHECK_BRIEF_RC" "0" "case 2 (fin): check-redispatch-prompt.sh
 
 # Case 3 (finalize): same Critical finding disposed refuted instead -> verdict: SHIP-AS-IS
 mkdir -p "$LEDGER/review-p_fin3/g1"
+cp "$LEDGER/review-p_fin2/chain.json" "$LEDGER/review-p_fin3/chain.json"
 cp "$LEDGER/review-p_fin2/g1/range.json" "$LEDGER/review-p_fin3/g1/range.json"
 cp "$LEDGER/review-p_fin2/g1/findings.json" "$LEDGER/review-p_fin3/g1/findings.json"
 cat << 'EOF' > "$TEST_TMP/disp_fin3.json"
@@ -391,6 +414,17 @@ assert_contains "$(cat "$LEDGER/receipt-p_fin3.json")" '"verdict": "SHIP-AS-IS"'
 
 # Case 4 (finalize): a Major-severity finding disposed verified alone -> SHIP-AS-IS with exactly one entry in open_findings
 mkdir -p "$LEDGER/review-p_fin4/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin4/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base444",
+    "head": "head444",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin4/g1/range.json"
 {
   "base": "base444",
@@ -422,6 +456,23 @@ assert_eq "$OPEN_COUNT" "1" "case 4 (fin): open_findings has exactly 1 entry"
 
 # Case 5 (finalize): dispositions file missing one of the finding ids -> exit 1, no receipt written
 mkdir -p "$LEDGER/review-p_fin5/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin5/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base555",
+    "head": "head555",
+    "seats": ["s0", "s1"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin5/g1/range.json"
+{
+  "base": "base555",
+  "head": "head555"
+}
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin5/g1/findings.json"
 {
   "findings": [
@@ -446,6 +497,23 @@ assert_file_absent "$LEDGER/receipt-p_fin5.json" "case 5 (fin): receipt not writ
 
 # Case 6 (finalize): defensive check for undispositioned Critical finding -> exit 1, no receipt written
 mkdir -p "$LEDGER/review-p_fin6/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin6/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base666",
+    "head": "head666",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin6/g1/range.json"
+{
+  "base": "base666",
+  "head": "head666"
+}
+EOF
 cat << 'EOF' > "$LEDGER/review-p_fin6/g1/findings.json"
 {
   "findings": [
@@ -548,6 +616,173 @@ CHAIN_P7=$(cat "$LEDGER/review-p_fin7/chain.json")
 assert_contains "$CHAIN_P7" '"closed_by_generation": 2' "case 7 (fin): gen 1 entry recorded closed_by_generation: 2"
 assert_contains "$CHAIN_P7" '"finding_g1_crit"' "case 7 (fin): closed finding id matches finding_g1_crit"
 
+# Case 7a (finalize): a misspelled disposition value makes finalize exit 1
+mkdir -p "$LEDGER/review-p_fin7a/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7a/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7a",
+    "head": "sha_head7a",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7a/g1/range.json"
+{
+  "base": "sha_base7a",
+  "head": "sha_head7a"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7a/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_misspell", "severity": "Minor", "seat": "s0", "text": "Minor issue" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7a.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7a",
+  "generation": 1,
+  "findings": [
+    { "id": "f_misspell", "disposition": "verifieeed", "rationale": "typo in disposition value" }
+  ]
+}
+EOF
+FIN7A_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7a --generation 1 --dispositions "$TEST_TMP/disp_fin7a.json" 2>&1); FIN7A_RC=$?
+assert_exit_code "$FIN7A_RC" "1" "case 7a (fin): misspelled disposition value exits 1"
+assert_file_absent "$LEDGER/receipt-p_fin7a.json" "case 7a (fin): no receipt written on misspelled disposition"
+
+# Case 7b (finalize): a dispositions file with a duplicate finding id makes finalize exit 1
+mkdir -p "$LEDGER/review-p_fin7b/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7b/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7b",
+    "head": "sha_head7b",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7b/g1/range.json"
+{
+  "base": "sha_base7b",
+  "head": "sha_head7b"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7b/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_dup", "severity": "Minor", "seat": "s0", "text": "Minor issue" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7b.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7b",
+  "generation": 1,
+  "findings": [
+    { "id": "f_dup", "disposition": "verified", "rationale": "first entry" },
+    { "id": "f_dup", "disposition": "refuted", "rationale": "second entry duplicate id" }
+  ]
+}
+EOF
+FIN7B_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7b --generation 1 --dispositions "$TEST_TMP/disp_fin7b.json" 2>&1); FIN7B_RC=$?
+assert_exit_code "$FIN7B_RC" "1" "case 7b (fin): duplicate finding id in dispositions exits 1"
+assert_file_absent "$LEDGER/receipt-p_fin7b.json" "case 7b (fin): no receipt written on duplicate finding id"
+
+# Case 7c (finalize): calling finalize for a generation with no pending chain entry makes it exit 1
+mkdir -p "$LEDGER/review-p_fin7c/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7c/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7c",
+    "head": "sha_head7c",
+    "seats": ["s0"],
+    "status": "finalized"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7c/g1/range.json"
+{
+  "base": "sha_base7c",
+  "head": "sha_head7c"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7c/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_nopen", "severity": "Minor", "seat": "s0", "text": "Minor issue" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7c.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7c",
+  "generation": 1,
+  "findings": [
+    { "id": "f_nopen", "disposition": "verified", "rationale": "already finalized chain entry" }
+  ]
+}
+EOF
+FIN7C_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7c --generation 1 --dispositions "$TEST_TMP/disp_fin7c.json" 2>&1); FIN7C_RC=$?
+assert_exit_code "$FIN7C_RC" "1" "case 7c (fin): generation with no pending chain entry exits 1"
+assert_file_absent "$LEDGER/receipt-p_fin7c.json" "case 7c (fin): no receipt written on non-pending chain entry"
+
+# Case 7d (finalize): a successful finalize leaves a dispositions.json snapshot file in the generation directory whose sha256 matches the digest recorded in the chain entry for that generation
+mkdir -p "$LEDGER/review-p_fin7d/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7d/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7d",
+    "head": "sha_head7d",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7d/g1/range.json"
+{
+  "base": "sha_base7d",
+  "head": "sha_head7d"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7d/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_snap", "severity": "Minor", "seat": "s0", "text": "Snapshot test finding" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7d.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7d",
+  "generation": 1,
+  "findings": [
+    { "id": "f_snap", "disposition": "verified", "rationale": "confirmed for snapshot test" }
+  ]
+}
+EOF
+FIN7D_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7d --generation 1 --dispositions "$TEST_TMP/disp_fin7d.json" 2>&1); FIN7D_RC=$?
+assert_exit_code "$FIN7D_RC" "0" "case 7d (fin): successful finalize exits 0"
+SNAPSHOT_FILE="$LEDGER/review-p_fin7d/g1/dispositions.json"
+assert_file_exists "$SNAPSHOT_FILE" "case 7d (fin): dispositions.json snapshot exists in generation directory"
+SNAPSHOT_SHA=$(node -e 'const c = fs.readFileSync(process.argv[1]); console.log(crypto.createHash("sha256").update(c).digest("hex"));' "$SNAPSHOT_FILE")
+CHAIN_SHA=$(node -e 'const chain = JSON.parse(fs.readFileSync(process.argv[1])); console.log(chain[0].dispositions_sha256);' "$LEDGER/review-p_fin7d/chain.json")
+assert_eq "$SNAPSHOT_SHA" "$CHAIN_SHA" "case 7d (fin): snapshot sha256 matches digest recorded in chain entry"
+CHAIN_DISP_PATH=$(node -e 'const chain = JSON.parse(fs.readFileSync(process.argv[1])); console.log(chain[0].dispositions_path);' "$LEDGER/review-p_fin7d/chain.json")
+assert_eq "$CHAIN_DISP_PATH" "review-p_fin7d/g1/dispositions.json" "case 7d (fin): chain entry references ledger-relative dispositions path"
+
 # Case 8 (opt-out): config file containing line configuring knob to off -> receipt kind: opt-out, configured_value: off
 mkdir -p "$SCRATCH_REPO/.claude"
 echo "- hetero_review: off" > "$SCRATCH_REPO/.claude/review-loop-config.md"
@@ -558,12 +793,11 @@ OPT8_RECEIPT=$(cat "$LEDGER/receipt-p_opt8.json")
 assert_contains "$OPT8_RECEIPT" '"kind": "opt-out"' "case 8 (opt): kind is opt-out"
 assert_contains "$OPT8_RECEIPT" '"configured_value": "off"' "case 8 (opt): configured_value is off"
 
-# Case 9 (opt-out): no config file present -> configured_value: absent
+# Case 9 (opt-out): an opt-out run against a config source path that does not exist on disk exits 1
 rm -f "$SCRATCH_REPO/.claude/review-loop-config.md"
 OPT9_OUT=$(node "$SCRIPT" opt-out --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_opt9 --knob plan_review 2>&1); OPT9_RC=$?
-assert_exit_code "$OPT9_RC" "0" "case 9 (opt): exits 0 without config file"
-OPT9_RECEIPT=$(cat "$LEDGER/receipt-p_opt9.json")
-assert_contains "$OPT9_RECEIPT" '"configured_value": "absent"' "case 9 (opt): configured_value is absent"
+assert_exit_code "$OPT9_RC" "1" "case 9 (opt): opt-out against non-existent config file exits 1"
+assert_file_absent "$LEDGER/receipt-p_opt9.json" "case 9 (opt): receipt not written when config source missing"
 
 # Case 10: run --help and assert it mentions finalize and opt-out
 HELP2_OUT=$(node "$SCRIPT" --help 2>&1); HELP2_RC=$?

@@ -89,6 +89,10 @@ cat > .claude/review-loop-config.md <<EOF
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
 - verification_author_effort: high
+- plan_review: off
+- hetero_review: off
+- consult_dispatch: off
+- discuss_dispatch: off
 EOF
 git add . >/dev/null 2>&1
 git commit -m "B" >/dev/null 2>&1

@@ -282,6 +282,67 @@ assert_file_absent "$LEDGER/review-p10c/g1/seat-s1.json" "case 10c: no seat-s1 a
 assert_file_absent "$LEDGER/review-p10c/chain.json" "case 10c: no chain.json written"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 
+# Case 10d: collect against the REAL resolver with a scratch target repo declaring a three-seat qc panel
+SCRATCH_10D="$TEST_TMP/scratch_10d_repo"
+mkdir -p "$SCRATCH_10D/.claude"
+(
+  cd "$SCRATCH_10D"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test User"
+  echo "initial" > file.txt
+  git add file.txt
+  git commit -q -m "c1"
+  git checkout -q -b work
+  echo "changes" >> file.txt
+  git add file.txt
+  git commit -q -m "c2"
+)
+cat << 'CFG_10D_EOF' > "$SCRATCH_10D/.claude/review-loop-config.md"
+qc_panel: gpt-5.5, gemini-flash, grok
+qc_panel_runners: codex, agy, grok
+qc_panel_efforts: high, low, max
+qc_panel_endpoints: @none, custom-ep, @none
+CFG_10D_EOF
+
+BASE_10D=$(git -C "$SCRATCH_10D" rev-parse HEAD~1)
+export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10d.log"
+rm -f "$LOG_DISPATCH_ARGS"
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+C10D_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_10D" --ledger "$LEDGER" --phase p10d --generation 1 --branch work --phase-base "$BASE_10D" 2>&1); C10D_RC=$?
+assert_exit_code "$C10D_RC" "0" "case 10d: exits 0 with real resolver"
+assert_file_exists "$LEDGER/review-p10d/g1/seat-s0.json" "case 10d: seat-s0.json exists"
+assert_file_exists "$LEDGER/review-p10d/g1/seat-s1.json" "case 10d: seat-s1.json exists"
+assert_file_exists "$LEDGER/review-p10d/g1/seat-s2.json" "case 10d: seat-s2.json exists"
+
+S0_DISP_10D=$(grep "^SEAT:s0 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S0_DISP_10D" "--runner codex" "case 10d: s0 dispatched with codex runner"
+assert_not_contains "$S0_DISP_10D" "--endpoint" "case 10d: s0 has no endpoint flag"
+
+S1_DISP_10D=$(grep "^SEAT:s1 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S1_DISP_10D" "--runner agy" "case 10d: s1 dispatched with agy runner"
+assert_contains "$S1_DISP_10D" "--endpoint custom-ep" "case 10d: s1 dispatched with custom-ep"
+
+S2_DISP_10D=$(grep "^SEAT:s2 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S2_DISP_10D" "--runner grok" "case 10d: s2 dispatched with grok runner"
+assert_not_contains "$S2_DISP_10D" "--endpoint" "case 10d: s2 has no endpoint flag"
+
+unset LOG_DISPATCH_ARGS
+
+# Case 10e: negative case where resolver override points at a stub that exits 2 with a message
+cat << 'RESOLVE_10E_EOF' > "$TEST_TMP/bin/resolve-review-loop-10e.sh"
+#!/usr/bin/env bash
+echo "custom resolver error failure" >&2
+exit 2
+RESOLVE_10E_EOF
+chmod +x "$TEST_TMP/bin/resolve-review-loop-10e.sh"
+export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10e.sh"
+C10E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10e --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10E_RC=$?
+assert_exit_code "$C10E_RC" "2" "case 10e: collect exits 2 when resolver exits 2"
+assert_contains "$C10E_OUT" "custom resolver error failure" "case 10e: stderr prints message from resolver stub"
+assert_file_absent "$LEDGER/review-p10e/chain.json" "case 10e: no chain.json written"
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+
 # ─── finalize & opt-out ───
 
 # Section setup: helper to write topology for hands-brief test

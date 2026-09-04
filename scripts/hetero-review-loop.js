@@ -58,6 +58,7 @@ Opt-out flags:
 
 Environment overrides:
   AUTOPILOT_DISPATCH_REVIEW_SCRIPT  Path to reviewer dispatcher script (overrides default dispatch-review.sh)
+  AUTOPILOT_REVIEW_LOOP_RESOLVER    Path to review-loop resolver script (overrides default resolve-review-loop.sh)
 `);
 }
 
@@ -147,27 +148,31 @@ function resolveSeats(seatsArg, repoRoot) {
 
   let resolver = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
   if (!resolver) {
-    resolver = repoRoot
-      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
-      : path.join('scripts', 'resolve-review-loop.sh');
+    resolver = path.join(__dirname, 'resolve-review-loop.sh');
   }
 
   let fullJson = null;
+  const res = spawnSync(resolver, [], {
+    encoding: 'utf8',
+    cwd: repoRoot || process.cwd(),
+    env: { ...process.env },
+  });
+  if (res.error) {
+    const errDetail = res.error.message || String(res.error);
+    console.error(`ERROR: Failed to run review-loop resolver (${resolver}): ${errDetail}`);
+    process.exit(2);
+  }
+  if (res.status !== 0) {
+    const errDetail = (res.stderr || '').trim() || (res.stdout || '').trim() || `exit code ${res.status}`;
+    console.error(`ERROR: Review-loop resolver failed: ${errDetail}`);
+    process.exit(2);
+  }
   try {
-    const args = [];
-    if (repoRoot) {
-      args.push('--repo-root', repoRoot);
-    }
-    const res = spawnSync(resolver, args, {
-      encoding: 'utf8',
-      cwd: repoRoot || process.cwd(),
-      env: { ...process.env },
-    });
-    if (res.status === 0 && res.stdout) {
-      fullJson = JSON.parse(res.stdout);
-    }
-  } catch (_e) {
-    fullJson = null;
+    fullJson = JSON.parse(res.stdout);
+  } catch (e) {
+    const errDetail = (res.stderr || '').trim() || e.message;
+    console.error(`ERROR: Failed to parse review-loop resolver JSON: ${errDetail}`);
+    process.exit(2);
   }
 
   let qcPanelSeats = fullJson && fullJson.qc_panel_seats;

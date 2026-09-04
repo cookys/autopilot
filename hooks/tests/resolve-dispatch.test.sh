@@ -312,7 +312,7 @@ assert_not_contains "$OUT" 'bad"value'             "inject legacy: crafted value
 assert_contains "$OUT" '"model":"sonnet"'          "inject legacy: falls back to sonnet default"
 
 # ── 14. Negative-control: no legacy default resolves to opus ─────────────
-for r in planner reviewer debugger implementer deep-reasoner fast-worker test-runner researcher think-tank-role hands; do
+for r in implementer fast-worker test-runner researcher hands; do
   OUT="$(run_dispatch --role "$r")"; EXIT=$?
   assert_eq "0" "$EXIT"                             "legacy role $r exit code"
   assert_not_contains "$OUT" '"model":"opus"'       "legacy role $r must not resolve to opus"

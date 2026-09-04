@@ -166,8 +166,7 @@ If the config file does not exist, proceed normally without it.
 
 ### Quality Gate Rule
 
-Stated at the step that runs it — S step 2 / Fix step 4 run the project-config gate (default lint + test; the
-optional finish-flow route runs the stricter `quality-pipeline --size S` at F.1); L / H run `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2. Enforcer: `documented-only`.
+Stated at the step that runs it — S step 2 / Fix step 4 run the project-config gate (default lint + test; the optional finish-flow route runs the stricter `quality-pipeline --size S` at F.1); L / H run `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2; for L-size work, quality gate completion also depends on valid L-2.5 and L-4 hetero review receipts. Enforcer: `documented-only`.
 
 ### Background Wait Rule
 
@@ -197,17 +196,19 @@ When the user signals session end (or task completion for S-size):
 
 First ask: **what kind of work is this?**
 
-| Nature | Criteria | Workflow |
-|--------|----------|----------|
-| **Fix** | Bug fix — root cause known, solution clear. No design needed. | Fix (any module count) |
-| **H** | Production broken — immediate fix needed. | Hotfix |
+| Nature | Criteria | Workflow | Hetero Review Predicate |
+|--------|----------|----------|-------------------------|
+| **Fix** | Bug fix — root cause known, solution clear. No design needed. | Fix (any module count) | qc only |
+| **H** | Production broken — immediate fix needed. | Hotfix | plan loop + per-phase hetero review + qc |
 
 If neither → size the **feature**:
 
-| Size | Criteria | Workflow |
-|------|----------|----------|
-| **S** | Single commit (single module, no interface change, self-contained) | Direct commit |
-| **L** | Multiple commits (3+ modules / public API / incompatible data / Feature Flag / user requests planning) | Plan + Project |
+| Size | Criteria | Workflow | Hetero Review Predicate |
+|------|----------|----------|-------------------------|
+| **S** | Single commit (single module, no interface change, self-contained) | Direct commit | no plan loop, one hetero seat + qc |
+| **L** | Multiple commits (3+ modules / public API / incompatible data / Feature Flag / user requests planning) | Plan + Project | plan loop + per-phase hetero review + qc |
+
+Enforcer for all four size predicates is `scripts/hetero-review-loop.js` receipts (details: [references/hetero-loops.md#kr4-size-predicates--rationales](references/hetero-loops.md#kr4-size-predicates--rationales)).
 
 **Fix vs L**: "Do I need to *design* the solution, or just *implement* a known fix?" Design → L. Known fix → Fix.
 
@@ -464,6 +465,9 @@ scope boundary. Do not ask the user to enumerate dimensions — that's CEO tacti
 - Needs design → EnterPlanMode → design → ExitPlanMode → user approval.
 - Save plan to: `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
+### L-2.5. Plan hetero loop review
+Invoke the `autopilot:hetero-review` skill with the plan file path (runs the plan loop). The gate is a frozen rubric plus `node scripts/check-phase-review-receipt.js --plan-artifact <file> --dispositions <file>` exiting 0, or a valid opt-out receipt when the plan_review knob resolves to off (enforcer: `scripts/check-phase-review-receipt.js`; details: [references/hetero-loops.md#l-25-plan-hetero-review-gate--frozen-rubrics](references/hetero-loops.md#l-25-plan-hetero-review-gate--frozen-rubrics)).
+
 ### L-3. Project Setup (mandatory)
 - Create project directory structure, branch, update project index
 - Per project config for specific bootstrap commands
@@ -504,7 +508,7 @@ If deferral passes: add to BACKLOG with context + trigger condition, mark phase 
 - [ ] Goal check: all three verification questions answered "yes"
 - [ ] Tests pass: zero failures
 - [ ] Completeness scan: no placeholder markers or stub implementations
-- [ ] Code review: no blocking issues remain
+- [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b>` exits 0 (SHIP-AS-IS chain or explicit opt-out)
 - [ ] Project docs: progress row updated to reflect phase completion
 
 **CEO mode**: CEO verifies all prerequisites. No user confirmation needed for passing gates.
@@ -628,20 +632,7 @@ complete each item before concluding.
 
 ### Context Health Check (conditional)
 
-If the session was long or context feels degraded, measure token budget:
-
-```
-Budget baseline: 200K tokens = 100%.
-Approximate conversion: 1 token ~ 3.5 bytes (blended estimate for mixed-language codebases).
-
-Report three layers:
-- Fixed (loaded every session): CLAUDE.md, MEMORY.md, auto-injected context
-- Loaded this session: skills invoked in current conversation
-- On-demand (not yet loaded): remaining skills, knowledge files
-
-If usage > 70%: flag for attention.
-If specific files are bloated: recommend compress or split strategies.
-```
+If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](references/hetero-loops.md#context-health-check-reference).
 
 ### Post-Feature Doc Sync
 
@@ -735,6 +726,9 @@ Phase/P0 task-enumeration rule above.
 |---|---|
 | `scripts/mission-routing-admission.js` | Resolve project Mission policy and admit the authoritative bounded graph/source coverage before L-size TaskCreate or execution topology effects. |
 | `scripts/mission-execution-graph-check.js` | Validate graph limits, exact source/rubric coverage, critical path, batches, gate attempts, aggregate reservations, and ICC campaign projection bounds. |
+| `scripts/plan-rubric-scaffold.js` | Generate structured rubric markdown skeletons from an input plan document for frozen review rubrics. |
+| `scripts/hetero-review-loop.js` | Drive multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipts for review loops. |
+| `scripts/check-phase-review-receipt.js` | Validate phase review receipts against git history and review artifacts or validate plan artifact blocker dispositions. |
 
 Before any TaskCreate, branch, worktree, runner, or model effect:
 

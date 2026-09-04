@@ -63,6 +63,15 @@ genuinely cannot be self-derived. Near-misses (差點走錯路) are **recorded**
 run summary and `autopilot:learn` at session end — never asked mid-run. (Transcript
 evidence 2026-07-05: 5 explicit user corrections for stopping early.)
 
+**Note on merge as an "irreversible op"**: A `git merge --no-ff` into `develop` (or equivalent
+team-default branch) is considered **within CEO DOA** for L-size workflows when all pre-merge
+gates pass. This is tactical and locally reversible (`git reset --hard`). Merging to `main`
+or force-pushing is NOT within DOA. The forcing function in `autopilot:finish-flow` treats
+merge (L-5.3 / H-9.3) as an autonomous sub-task; CEO does not pause to ask before merging.
+Deleting an **already-merged** feature branch during finish-flow cleanup (L-5.7 / F.5 /
+H-9.5 — merged-status verified first) is likewise within CEO DOA; the "Delete
+files/branches" escalation row in `SKILL.md` covers unmerged or protected branches.
+
 ### Economy mode — when the session model is premium or usage-capped
 
 When depth-0 runs on a scarce top-tier model, the orchestrator's spend should narrow
@@ -148,8 +157,10 @@ CEO (depth 0, this session)
 | **T0 brain** | depth-0 (Fable/opus session) | brief, adjudicate review findings, run qc, merge | hand-author implementation/prose content itself (except via `--solo` escape) |
 | **T1 hands** | hetero implementer ladder (cheapest qualified rung first, climb on red) or, when no hetero engine is qualified, `haiku` → `sonnet` | mechanical implementation/prose cuts | adjudicate its own work, merge, or skip the `Engine:` header |
 | **T2 judge** | cross-family qc reviewer(s) | review, find, block | implement or merge |
+| **review seats** | plan review panel, reviewer ladder, consult ladder resolved via `scripts/resolve-dispatch-topology.js --role <plan_reviewer\|reviewer\|consult>` | auto expands to topology seats; falls back to native claude-native seat if unavailable | silent skip |
 
 Mechanical sources:
+- Review seats: the plan review panel, the reviewer ladder, and the consult ladder are all resolved by `scripts/resolve-dispatch-topology.js --role <plan_reviewer|reviewer|consult>`. Each of the three review-related knobs (`plan_review`, `hetero_review`, `consult_dispatch`) supports `auto`, which expands to these topology-resolved seats; when topology resolution is unavailable the stage falls back to a native claude-native seat rather than being silently skipped.
 - `implementer_ladder: auto` in `review-loop-config.md` expands the host topology written by `scripts/resolve-dispatch-topology.js` (cached at `~/.autopilot/topology.json`; `--check` detects drift).
 - Rung 0 is the first attempt for every unit class now (`ladder_start_rung_judgment` restores the old rung-1-first behavior for `judgment`-class units only).
 - `scripts/resolve-dispatch.sh` implementer default is `sonnet`; the new role `hands` resolves to `haiku`.

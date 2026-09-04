@@ -1,0 +1,19 @@
+{
+  "session_id": "93196c52-25cb-47ca-821c-cec391832eed",
+  "transcript_path": "/home/cookys/.claude/projects/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed.jsonl",
+  "cwd": "/home/cookys/projects/autopilot",
+  "scratchpad_dir": "/tmp/claude-1000/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed/scratchpad",
+  "prompt_id": "ab0448cf-a3ff-41ca-9daa-ca13191d4888",
+  "permission_mode": "bypassPermissions",
+  "agent_id": "a9c9b5673eb39f842",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "redacted": true
+  },
+  "tool_use_id": "toolu_01K3g1Wof2eYQ9Gxk7Nqxs3A"
+}

@@ -1,0 +1,63 @@
+{
+  "session_id": "93196c52-25cb-47ca-821c-cec391832eed",
+  "transcript_path": "/home/cookys/.claude/projects/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed.jsonl",
+  "cwd": "/home/cookys/projects/autopilot",
+  "scratchpad_dir": "/tmp/claude-1000/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed/scratchpad",
+  "prompt_id": "ab0448cf-a3ff-41ca-9daa-ca13191d4888",
+  "effort": {
+    "level": "medium"
+  },
+  "session_name": "HANDOFF.md 文件閱讀",
+  "model": {
+    "id": "claude-fable-5-1",
+    "display_name": "Fable 5.1"
+  },
+  "workspace": {
+    "current_dir": "/home/cookys/projects/autopilot",
+    "project_dir": "/home/cookys/projects/autopilot",
+    "added_dirs": [],
+    "repo": {
+      "host": "github.com",
+      "owner": "cookys",
+      "name": "autopilot"
+    }
+  },
+  "version": "2.1.260",
+  "output_style": {
+    "name": "default"
+  },
+  "context_window": {
+    "total_input_tokens": 262707,
+    "total_output_tokens": 4,
+    "context_window_size": 1000000,
+    "current_usage": {
+      "input_tokens": 32,
+      "output_tokens": 4,
+      "cache_creation_input_tokens": 1356,
+      "cache_read_input_tokens": 261319
+    },
+    "used_percentage": 26,
+    "remaining_percentage": 74
+  },
+  "exceeds_200k_tokens": true,
+  "prompt_cache": {
+    "warm": true,
+    "caching_observed": true,
+    "ttl": "1h",
+    "expires_at": 1788557868,
+    "requests": 82,
+    "misses": 0,
+    "expected_rebuilds": 0,
+    "hit_ratio": 0.9823627058677764,
+    "cache_write_tokens": 231220,
+    "miss_recache_tokens": 0,
+    "last_miss_at": null,
+    "last_miss_cause": null,
+    "miss_causes": {},
+    "recache_tokens_if_cold": 261321
+  },
+  "fast_mode": false,
+  "thinking": {
+    "enabled": true
+  }
+}

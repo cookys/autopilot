@@ -1,0 +1,30 @@
+{
+  "session_id": "93196c52-25cb-47ca-821c-cec391832eed",
+  "transcript_path": "/home/cookys/.claude/projects/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed.jsonl",
+  "cwd": "/home/cookys/projects/autopilot",
+  "scratchpad_dir": "/tmp/claude-1000/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed/scratchpad",
+  "prompt_id": "ab0448cf-a3ff-41ca-9daa-ca13191d4888",
+  "columns": 203,
+  "tasks": [
+    {
+      "id": "a9c9b5673eb39f842",
+      "type": "local_agent",
+      "status": "running",
+      "description": "P0 spike probe subagent",
+      "label": "P0 spike probe subagent",
+      "startTime": 1788554259733,
+      "model": "claude-sonnet-5",
+      "contextWindowSize": 1000000,
+      "tokenCount": 47688,
+      "tokenSamples": [
+        0,
+        47688,
+        47688,
+        47688,
+        47688,
+        47688
+      ],
+      "cwd": "/home/cookys/projects/autopilot"
+    }
+  ]
+}

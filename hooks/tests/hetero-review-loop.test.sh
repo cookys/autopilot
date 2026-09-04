@@ -61,11 +61,16 @@ if [ -n "$STUB_SEAT_RESPONSE" ]; then
   exit 0
 fi
 
-echo '{"status": "reviewed", "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 STUB_EOF
 chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
 cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
 chmod +x "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+
+# Point the driver at the stub dispatcher by default (test seam). Individual cases that need a
+# different dispatcher (a non-zero-exit stub, or the isolated driver-directory test) override or
+# unset this locally and restore it afterward.
+export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh"
 
 # Stub resolve-review-loop.sh
 cat << 'RESOLVE_EOF' > "$TEST_TMP/bin/resolve-review-loop.sh"
@@ -97,7 +102,7 @@ C2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" -
 assert_exit_code "$C2_RC" "2" "case 2: gen 1 without --phase-base exits 2"
 
 # Case 3: generation 1 with three seats all reviewed exits 0, writes range.json, diff.txt, findings.json, chain.json
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "findings": "No issues found."}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 C3_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy,m3/high@grok" 2>&1); C3_RC=$?
 assert_exit_code "$C3_RC" "0" "case 3: exits 0 on 3 reviewed seats"
 assert_file_exists "$LEDGER/review-p1/g1/range.json" "case 3: range.json exists"
@@ -108,7 +113,7 @@ assert_contains "$(cat "$LEDGER/review-p1/chain.json")" '"status": "pending"' "c
 assert_contains "$(cat "$LEDGER/review-p1/g1/findings.json")" '"findings": []' "case 3: findings array is empty"
 
 # Case 4: a seat with findings text containing one Critical and one Major produces two entries with distinct ids
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "findings": "Critical: SQL injection vulnerability\nDetailed description here.\n\nMajor: Unhandled promise rejection\nMore details."}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Critical: SQL injection vulnerability\nDetailed description here.\n\nMajor: Unhandled promise rejection\nMore details."}'
 C4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C4_RC=$?
 assert_exit_code "$C4_RC" "0" "case 4: exits 0"
 FINDINGS_C4=$(cat "$LEDGER/review-p4/g1/findings.json")
@@ -121,7 +126,7 @@ ID2=$(node -e 'const f = JSON.parse(fs.readFileSync(process.argv[1])).findings; 
 assert_exit_code "$ID_DIFF_RC" "0" "case 4: finding IDs are distinct"
 
 # Case 5: a seat returning {status: "no_verdict"} without --allow-seat-gap exits 1 and chain.json is not updated
-export STUB_RESPONSE_s0='{"status": "reviewed", "findings": ""}'
+export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 export STUB_RESPONSE_s1='{"status": "no_verdict"}'
 unset STUB_SEAT_RESPONSE
 C5_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" 2>&1); C5_RC=$?
@@ -152,7 +157,7 @@ cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
   }
 ]
 SEED_EOF
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 unset STUB_RESPONSE_s0
 unset STUB_RESPONSE_s1
 C7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7_RC=$?
@@ -579,13 +584,13 @@ assert_contains "$HELP2_OUT" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT" "case 10 (help):
 # 4) Severity glyph immediately followed by a bracketed id (glyph then whitespace then open bracket)
 T1_FINDINGS_TEXT=$(cat << 'EOF'
 🔴
-critical issue from glyph alone
+SQL injection reported via glyph alone
 🟠 Major
-major issue from glyph plus word
+Unhandled promise reported via glyph plus word
 Minor
-minor issue from plain word alone
+Unused import reported via plain word alone
 🔵 [sugg-101]
-suggestion issue from glyph followed by bracket
+Naming nit reported via glyph followed by bracket
 EOF
 )
 export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: process.argv[1]}));' "$T1_FINDINGS_TEXT")"
@@ -617,7 +622,7 @@ assert_file_absent "$LEDGER/review-p_test2b/g1/findings.json" "test 2b: no findi
 assert_contains "$(cat "$LEDGER/review-p_test2b/chain.json")" '"reason": "parse_failed"' "test 2b: chain entry reason is parse_failed"
 
 # Test 3: chain immutability: run collect once (pending), run again for same generation -> exits 1 without modifying entry
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "No issues found."}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
 T3_OUT1=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC1=$?
 assert_exit_code "$T3_RC1" "0" "test 3: first collect exits 0"
 T3_CHAIN_BEFORE=$(cat "$LEDGER/review-p_test3/chain.json")

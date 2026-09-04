@@ -715,6 +715,7 @@ case "$IMPL_RUNNER" in
 esac
 # Optional implementer_ladder: comma list of engine/effort@runner, or 'auto'. Absent/empty
 # ⇒ [] (the three implementer_* fields remain the single implicit rung).
+CAP_WARNINGS_JSON="[]"
 IMPL_LADDER_JSON="[]"
 if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
@@ -1150,7 +1151,6 @@ CAP_QUOTA_STATUS="unknown"
 CAP_QUOTA_RESET_AT=null
 CAP_SKILL_MODE_REQ="${SKILL_MODE_REQ:-off}"
 CAP_SKILL_MODE_EFF="$CAP_SKILL_MODE_REQ"
-CAP_WARNINGS_JSON="[]"
 
 # When capability-state consultation is explicitly OFF, the source is "none" (deliberately
 # not consulted) — distinct from "unknown" (consulted but the store had no fresh data).

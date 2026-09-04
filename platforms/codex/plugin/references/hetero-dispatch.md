@@ -620,7 +620,7 @@ When the ladder is present:
 - `on_engine_unavailable` stays the availability axis and is not reused for this climb
 
 The engine records the dispatched tuple plus `implementer_ladder_rung` on the
-`dispatch_implementation` ledger row.
+`dispatch_implementation` ledger row. The same topology resolver (`scripts/resolve-dispatch-topology.js`) also derives `reviewer_ladder`, `consult_ladder`, `discuss_ladder`, and a `plan_review_panel` via `--role`, consumed by `scripts/resolve-review-loop.sh`'s `auto` transitions for `plan_review`, `hetero_review`, and `consult_dispatch`.
 
 ## Wired engines (runners) — how to pick one
 

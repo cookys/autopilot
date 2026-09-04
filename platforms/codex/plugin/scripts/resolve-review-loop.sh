@@ -64,7 +64,7 @@ DEF_REV_EFFORT_LOW_RISK=""
 DEF_MAX_ROUNDS="5"
 DEF_CONVERGE="SHIP-AS-IS"
 DEF_SPEC_REVIEW="on"
-DEF_PLAN_REVIEW="off"
+DEF_PLAN_REVIEW="auto"
 DEF_PLAN_MAX_GENERATIONS="2"
 DEF_PLAN_MAX_WALL_SECONDS="7200"
 DEF_PLAN_GROWTH_WARN_RATIO="1.25"
@@ -114,8 +114,9 @@ DEF_DISCUSS_ENDPOINT=""
 # dispatch, no new refusal. The switch-ON qualification gate (role evidence /
 # override enforcement) is implemented further below (D7, "the keystone") —
 # this field plumbing only defines/reads the switch itself.
-DEF_CONSULT_DISPATCH="off"
+DEF_CONSULT_DISPATCH="auto"
 DEF_DISCUSS_DISPATCH="off"
+DEF_HETERO_REVIEW="auto"
 # Board ruling 2026-08-27: dual-seat occupancy by an UNQUALIFIED (override-admitted)
 # runner is configurable but DEFAULT CLOSED. See the schema description for why the
 # axis is the runner and not the model family.
@@ -381,6 +382,7 @@ MAX_ROUNDS="$(read_field "$CONFIG" loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field "$CONFIG" loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field "$CONFIG" spec_review "$DEF_SPEC_REVIEW")"
 PLAN_REVIEW="$(read_field "$CONFIG" plan_review "$DEF_PLAN_REVIEW")"
+HETERO_REVIEW="$(read_field "$CONFIG" hetero_review "$DEF_HETERO_REVIEW")"
 PLAN_REV_ENGINE="$(read_field "$CONFIG" plan_reviewer_engine "")"
 PLAN_REV_EFFORT="$(read_field "$CONFIG" plan_reviewer_effort "")"
 PLAN_REV_RUNNER="$(read_field "$CONFIG" plan_reviewer_runner "")"
@@ -405,8 +407,12 @@ PLAN_MAX_WALL_SECONDS="$(read_field "$CONFIG" plan_review_max_wall_seconds "$DEF
 PLAN_GROWTH_WARN_RATIO="$(read_field "$CONFIG" plan_review_growth_warn_ratio "$DEF_PLAN_GROWTH_WARN_RATIO")"
 PLAN_GROWTH_STOP_RATIO="$(read_field "$CONFIG" plan_review_growth_stop_ratio "$DEF_PLAN_GROWTH_STOP_RATIO")"
 
-case "$PLAN_REVIEW" in on|off) ;; *)
-  echo "resolve-review-loop: invalid plan_review (must be on|off): $PLAN_REVIEW" >&2
+case "$PLAN_REVIEW" in auto|on|off) ;; *)
+  echo "resolve-review-loop: invalid plan_review (must be auto|on|off): $PLAN_REVIEW" >&2
+  exit 3
+esac
+case "$HETERO_REVIEW" in auto|on|off) ;; *)
+  echo "resolve-review-loop: invalid hetero_review (must be auto|on|off): $HETERO_REVIEW" >&2
   exit 3
 esac
 case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *)
@@ -469,9 +475,9 @@ esac
 # consult_dispatch / discuss_dispatch (D6 field validation; the switch-ON
 # qualification gate over role evidence/overrides lives further below, D7).
 case "$CONSULT_DISPATCH" in
-  off|on) ;;
+  auto|on|off) ;;
   *)
-    echo "resolve-review-loop: invalid consult_dispatch (must be off|on): $CONSULT_DISPATCH" >&2
+    echo "resolve-review-loop: invalid consult_dispatch (must be auto|on|off): $CONSULT_DISPATCH" >&2
     exit 3
     ;;
 esac
@@ -493,6 +499,11 @@ if [[ "$CONSULT_DISPATCH" == "on" && ( -z "$CONSULT_ENGINE" || -z "$CONSULT_RUNN
 fi
 if [[ "$DISCUSS_DISPATCH" == "on" && ( -z "$DISCUSS_ENGINE" || -z "$DISCUSS_RUNNER" || -z "$DISCUSS_EFFORT" ) ]]; then
   echo "resolve-review-loop: discuss_dispatch=on requires discuss_engine, discuss_runner, and discuss_effort" >&2
+  exit 3
+fi
+
+if [[ "$HETERO_REVIEW" == "on" && ( -z "$REV_ENGINE" || -z "$REV_RUNNER" || -z "$REV_EFFORT" ) ]]; then
+  echo "resolve-review-loop: hetero_review=on requires reviewer_engine, reviewer_runner, and reviewer_effort" >&2
   exit 3
 fi
 
@@ -833,6 +844,199 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
   done
   IMPL_LADDER_JSON+="]"
   [[ "$_ladder_first" -eq 1 ]] && IMPL_LADDER_JSON="[]"
+fi
+
+PLAN_REVIEW_RESOLVED_FROM=""
+HETERO_REVIEW_RESOLVED_FROM=""
+CONSULT_RESOLVED_FROM=""
+
+if [[ "$PLAN_REVIEW" == "auto" || "$HETERO_REVIEW" == "auto" || "$CONSULT_DISPATCH" == "auto" ]]; then
+  _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
+  _auto_out="$(node -e '
+const fs = require("fs");
+const file = process.argv[1];
+let raw;
+try {
+  raw = fs.readFileSync(file, "utf8");
+} catch {
+  process.exit(1);
+}
+let doc;
+try {
+  doc = JSON.parse(raw);
+} catch {
+  process.exit(1);
+}
+const res = {
+  plan_review_panel: Array.isArray(doc.plan_review_panel) ? doc.plan_review_panel : [],
+  reviewer_ladder: Array.isArray(doc.reviewer_ladder) ? doc.reviewer_ladder : [],
+  consult_ladder: Array.isArray(doc.consult_ladder) ? doc.consult_ladder : []
+};
+process.stdout.write(JSON.stringify(res));
+process.exit(0);
+' "$_topo_file" 2>/dev/null)"
+  _topo_ok=$?
+  _topo_json="$_auto_out"
+
+  if [[ "$PLAN_REVIEW" == "auto" ]]; then
+    _seat0_json=""
+    _seat1_json=""
+    if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
+      _seats_extracted="$(node -e '
+try {
+  const d = JSON.parse(process.argv[1]);
+  const p = d.plan_review_panel;
+  if (Array.isArray(p) && p.length >= 1) {
+    const s0 = p[0] || {};
+    const s1 = p.length >= 2 ? (p[1] || {}) : null;
+    process.stdout.write(JSON.stringify({ s0, s1 }));
+    process.exit(0);
+  }
+} catch {}
+process.exit(1);
+' "$_topo_json" 2>/dev/null)"
+      if [[ $? -eq 0 && -n "$_seats_extracted" ]]; then
+        _seat0_json="$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).s0))' "$_seats_extracted" 2>/dev/null)"
+        _seat1_json="$(node -e 'const s1 = JSON.parse(process.argv[1]).s1; process.stdout.write(s1 ? JSON.stringify(s1) : "");' "$_seats_extracted" 2>/dev/null)"
+      fi
+    fi
+
+    if [[ -n "$_seat0_json" ]]; then
+      PLAN_REV_ENGINE="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).engine || ""))' "$_seat0_json" 2>/dev/null)"
+      PLAN_REV_EFFORT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).effort || ""))' "$_seat0_json" 2>/dev/null)"
+      PLAN_REV_RUNNER="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).runner || ""))' "$_seat0_json" 2>/dev/null)"
+      PLAN_REV_ENDPOINT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).endpoint || ""))' "$_seat0_json" 2>/dev/null)"
+
+      if [[ -n "$_seat1_json" ]]; then
+        PLAN_DEEP_ENGINE="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).engine || ""))' "$_seat1_json" 2>/dev/null)"
+        PLAN_DEEP_EFFORT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).effort || ""))' "$_seat1_json" 2>/dev/null)"
+        PLAN_DEEP_RUNNER="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).runner || ""))' "$_seat1_json" 2>/dev/null)"
+        PLAN_DEEP_ENDPOINT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).endpoint || ""))' "$_seat1_json" 2>/dev/null)"
+      fi
+      PLAN_REVIEW_RESOLVED_FROM="topology"
+    else
+      PLAN_REV_ENGINE="opus"
+      PLAN_REV_EFFORT="high"
+      PLAN_REV_RUNNER="claude-native"
+      PLAN_REV_ENDPOINT=""
+      PLAN_REVIEW_RESOLVED_FROM="native-fallback"
+      CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+    fi
+  fi
+
+  if [[ "$HETERO_REVIEW" == "auto" ]]; then
+    _has_rev_ladder=0
+    if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
+      node -e '
+try {
+  const d = JSON.parse(process.argv[1]);
+  if (Array.isArray(d.reviewer_ladder) && d.reviewer_ladder.length >= 1) {
+    process.exit(0);
+  }
+} catch {}
+process.exit(1);
+' "$_topo_json" 2>/dev/null && _has_rev_ladder=1
+    fi
+
+    if [[ "$_has_rev_ladder" -eq 1 ]]; then
+      HETERO_REVIEW_RESOLVED_FROM="topology"
+    else
+      HETERO_REVIEW_RESOLVED_FROM="native-fallback"
+      CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+    fi
+  fi
+
+  if [[ "$CONSULT_DISPATCH" == "auto" ]]; then
+    _consult_picked=""
+    if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
+      _qc_panel_arg="${QC_PANEL[*]:-}"
+      _qc_panel_runners_arg="${QC_PANEL_RUNNERS[*]:-}"
+      _qc_panel_efforts_arg="${QC_PANEL_EFFORTS[*]:-}"
+      _consult_picked="$(node -e '
+try {
+  const d = JSON.parse(process.argv[1]);
+  const ladder = d.consult_ladder;
+  if (!Array.isArray(ladder) || ladder.length === 0) process.exit(1);
+
+  const qcPanels = (process.argv[2] || "").split(" ").filter(Boolean);
+  const qcRunners = (process.argv[3] || "").split(" ").filter(Boolean);
+  const qcEfforts = (process.argv[4] || "").split(" ").filter(Boolean);
+
+  const excluded = new Set();
+  const maxIdx = Math.min(qcPanels.length, qcRunners.length, qcEfforts.length);
+  for (let i = 0; i < maxIdx; i++) {
+    const eng = qcPanels[i];
+    const run = qcRunners[i];
+    const eff = qcEfforts[i];
+    if (run && eff) {
+      excluded.add(`${eng}|${run}|${eff}`);
+    }
+  }
+
+  for (const entry of ladder) {
+    if (!entry || !entry.engine || !entry.runner || !entry.effort) continue;
+    const key = `${entry.engine}|${entry.runner}|${entry.effort}`;
+    if (!excluded.has(key)) {
+      process.stdout.write(JSON.stringify(entry));
+      process.exit(0);
+    }
+  }
+} catch {}
+process.exit(1);
+' "$_topo_json" "$_qc_panel_arg" "$_qc_panel_runners_arg" "$_qc_panel_efforts_arg" 2>/dev/null)"
+    fi
+
+    if [[ -n "$_consult_picked" ]]; then
+      CONSULT_ENGINE="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).engine || ""))' "$_consult_picked" 2>/dev/null)"
+      CONSULT_EFFORT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).effort || ""))' "$_consult_picked" 2>/dev/null)"
+      CONSULT_RUNNER="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).runner || ""))' "$_consult_picked" 2>/dev/null)"
+      CONSULT_ENDPOINT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).endpoint || ""))' "$_consult_picked" 2>/dev/null)"
+      CONSULT_RESOLVED_FROM="topology"
+    else
+      CONSULT_ENGINE="sonnet"
+      CONSULT_EFFORT="high"
+      CONSULT_RUNNER="claude-native"
+      CONSULT_ENDPOINT=""
+      CONSULT_RESOLVED_FROM="native-fallback"
+      CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+    fi
+  fi
+fi
+
+if [[ "$PLAN_REVIEW" == "on" ]]; then
+  PLAN_REVIEW_RESOLVED_FROM="explicit"
+elif [[ "$PLAN_REVIEW" == "off" ]]; then
+  PLAN_REVIEW_RESOLVED_FROM="off"
+fi
+
+if [[ "$HETERO_REVIEW" == "on" ]]; then
+  HETERO_REVIEW_RESOLVED_FROM="explicit"
+elif [[ "$HETERO_REVIEW" == "off" ]]; then
+  HETERO_REVIEW_RESOLVED_FROM="off"
+fi
+
+if [[ "$CONSULT_DISPATCH" == "on" ]]; then
+  CONSULT_RESOLVED_FROM="explicit"
+elif [[ "$CONSULT_DISPATCH" == "off" ]]; then
+  CONSULT_RESOLVED_FROM="off"
 fi
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
@@ -2066,6 +2270,10 @@ if [[ -n "$FIELD" ]]; then
     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;
     plan_review) printf '%s\n' "$PLAN_REVIEW" ;;
+    hetero_review) printf '%s\n' "$HETERO_REVIEW" ;;
+    plan_review_resolved_from) printf '%s\n' "$PLAN_REVIEW_RESOLVED_FROM" ;;
+    hetero_review_resolved_from) printf '%s\n' "$HETERO_REVIEW_RESOLVED_FROM" ;;
+    consult_resolved_from) printf '%s\n' "$CONSULT_RESOLVED_FROM" ;;
     plan_reviewer_engine) printf '%s\n' "$PLAN_REV_ENGINE" ;;
     plan_reviewer_effort) printf '%s\n' "$PLAN_REV_EFFORT" ;;
     plan_reviewer_runner) printf '%s\n' "$PLAN_REV_RUNNER" ;;
@@ -2182,16 +2390,19 @@ READINESS_ARGS=(
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
 )
-SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "discuss_dispatch": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
 SEATS_ARGS=(
   "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
   "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
-  "$CONSULT_DISPATCH" "$DISCUSS_DISPATCH"
+  "$CONSULT_DISPATCH" "$CONSULT_RESOLVED_FROM" "$DISCUSS_DISPATCH"
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
 )
-PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
+PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(
   "$PLAN_REVIEW"
+  "$PLAN_REVIEW_RESOLVED_FROM"
+  "$HETERO_REVIEW"
+  "$HETERO_REVIEW_RESOLVED_FROM"
   "$(json_escape "$PLAN_REV_ENGINE")"
   "$PLAN_REV_EFFORT"
   "$PLAN_REV_RUNNER"

@@ -65,6 +65,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - review_diff_scope: full
 - min_panel_size: 3
 - density_scaling: off
+- plan_review: auto
+- hetero_review: auto
 - consult_engine:
 - consult_effort:
 - consult_runner:
@@ -73,7 +75,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - discuss_effort:
 - discuss_runner:
 - discuss_endpoint:
-- consult_dispatch: off
+- consult_dispatch: auto
 - discuss_dispatch: off
 - allow_same_runner_dual_seat: off
 
@@ -169,7 +171,9 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `implementer_endpoint` | same, for a `cc-shim` IMPLEMENTER (→ `dispatch-hetero.sh --endpoint`). Empty = none | an endpoint name `[A-Za-z0-9_]`, or empty |
 | `consult_engine` / `consult_effort` / `consult_runner` / `consult_endpoint` | the **consult** seat: a mid-run ad-hoc heterogeneous second opinion. Read by callers as `resolve-review-loop.sh --field consult_engine` (etc.) instead of hand-typing `dispatch-review.sh` argv — see `references/hetero-dispatch.md`. Tuple is wholly empty or engine+runner+effort all present | engine name / `low\|medium\|high\|xhigh\|max` / any reviewer runner incl. `cursor` / endpoint name, all optionally empty |
 | `discuss_engine` / `discuss_effort` / `discuss_runner` / `discuss_endpoint` | the **discuss** seat: heterogeneous participation in `think-tank`. Consumed by `scripts/dispatch-discuss.js` (plan `2026-08-28-consult-discuss-qualification.md` D9), called unconditionally from `skills/think-tank/SKILL.md` Step 3.5 — the wrapper itself resolves `discuss_dispatch` and refuses when the seat is off or unqualified. `brainstorm` is not wired (backlog candidate). Same tuple rule | as above |
-| `consult_dispatch` | whether the consult rail (`scripts/dispatch-consult.sh`) is live. DEFAULT OFF. `off` = today's behavior byte-for-byte — the `consult_*` tuple stays data a caller may read by hand, no new dispatch. `on` requires a non-empty `consult_*` tuple AND a real `consult` role qualification for the configured `{engine, runner}` (`references/consult-discuss-seats.md`) | `on\|off` (default `off`) |
+| `plan_review` | first-class bounded plan-readiness rail: `off` ⇒ stage skipped, opt-out receipt + `capability_warnings` line; `on` ⇒ explicit tuple required (incomplete ⇒ exit 3); `auto` (new default) with ≥1 qualified topology seat for the role ⇒ tuple expanded from `~/.autopilot/topology.json`, `plan_review_resolved_from: topology`; `auto` with an absent/malformed/zero-seat topology ⇒ native fallback (`opus/high@claude-native` for plan and hetero review, `sonnet/high@claude-native` for consult), `plan_review_resolved_from: native-fallback` plus a `capability_warnings` line, and the knob's own value stays the literal `auto` (never rewritten) | `auto\|on\|off` (default `auto`) |
+| `hetero_review` | per-phase code-review loop switch: `off` ⇒ stage skipped, opt-out receipt + `capability_warnings` line; `on` ⇒ explicit tuple required (incomplete ⇒ exit 3); `auto` (new default) with ≥1 qualified topology seat for the role ⇒ tuple expanded from `~/.autopilot/topology.json`, `hetero_review_resolved_from: topology`; `auto` with an absent/malformed/zero-seat topology ⇒ native fallback (`opus/high@claude-native` for plan and hetero review, `sonnet/high@claude-native` for consult), `hetero_review_resolved_from: native-fallback` plus a `capability_warnings` line, and the knob's own value stays the literal `auto` (never rewritten) | `auto\|on\|off` (default `auto`) |
+| `consult_dispatch` | whether the consult rail (`scripts/dispatch-consult.sh`) is live: `off` ⇒ stage skipped, opt-out receipt + `capability_warnings` line; `on` ⇒ explicit tuple required (incomplete ⇒ exit 3); `auto` (new default) with ≥1 qualified topology seat for the role ⇒ tuple expanded from `~/.autopilot/topology.json`, `consult_resolved_from: topology`; `auto` with an absent/malformed/zero-seat topology ⇒ native fallback (`opus/high@claude-native` for plan and hetero review, `sonnet/high@claude-native` for consult), `consult_resolved_from: native-fallback` plus a `capability_warnings` line, and the knob's own value stays the literal `auto` (never rewritten) | `auto\|on\|off` (default `auto`) |
 | `discuss_dispatch` | whether the discuss rail (`scripts/dispatch-discuss.js`) is live. DEFAULT OFF. `off` = today's behavior byte-for-byte — `discuss_*` stays declared but not dispatched. `on` requires a non-empty `discuss_*` tuple AND a real `discuss` role qualification for the configured `{engine, runner}` (`references/consult-discuss-seats.md`) | `on\|off` (default `off`) |
 | `allow_same_runner_dual_seat` | may one runner hold the implementer seat and a reviewer-class **loop** seat simultaneously? `off` = resolver exit 3. `on` = permitted, stderr warning, `same_runner_dual_seat: true`. Applies to qualified engines too; runner axis, not family axis; compares the CONFIGURED token (`auto` is inert, an inherited default is not). `qc_panel` has its own proportionate rule — see the note above | `off` (default) \| `on` |
 | `on_engine_unavailable` | what to do when a dispatch engine is unavailable (quota exhausted / `precondition_failed`) | `ask\|solo-fallback\|wait-reset` (default `ask`). **Behavior matrix**: `ask` — BOTH engine-quota death and `precondition_failed` stop the run and escalate to the user (no automatic `--solo` inline fallback, no automatic quota-reset wakeup). Fail-closed: the expensive depth-0 session model never silently takes over implementation labor. `solo-fallback` — legacy: `precondition_failed` falls back to `--solo` inline; quota death follows the §1.b auto-wakeup recovery (see `level-front-door.md`). `wait-reset` — quota death follows §1.b auto-wakeup; `precondition_failed` (non-quota) still escalates to the user. **Engine wiring**: when a dispatch dies `engine_unavailable`/`precondition_failed`, `engine implement-review` applies this matrix mechanically and emits an additive `engine_unavailable: {policy, action, error_class}` on its result (`action` ∈ `escalate\|solo-fallback\|wait-reset`; auth/unparseable deaths always `escalate` — waiting can't fix auth) so the orchestrator acts on `action` instead of re-deriving the policy from raw dispatch JSON |
@@ -270,6 +274,13 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
 
 ## Gotchas (carried from the test-integrity-l1 ship)
 
+- **Native fallback under `auto` when topology is unavailable.** When `plan_review`, `hetero_review`,
+  or `consult_dispatch` is set to `auto` (the default) and the host topology file
+  (`~/.autopilot/topology.json`, produced by `scripts/resolve-dispatch-topology.js`) is absent,
+  malformed, or has zero qualified seats for the role, the resolver falls back to native models
+  (`opus/high@claude-native` for plan and hetero review, `sonnet/high@claude-native` for consult).
+  The resolved origin is set to `*_resolved_from: native-fallback`, an entry is recorded in
+  `capability_warnings`, and the knob's own value remains the literal `auto` (never rewritten).
 - **Implementer model rate-limits are transient, not engine failures.** A per-model usage cap
   (e.g. "You've hit your usage limit for GPT-5.3-Codex-Spark") makes the codex worker exit
   non-zero with no commit → dispatch-hetero reports `question_suspected` and the engine

@@ -77,6 +77,12 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 
 ## Active entries
 
+### `normalize_agy_alias()` rewrites config-side seat names before the qc-exclusion match in `consult_dispatch: auto`
+- **Trigger**: a `qc_panel` entry written as an agy alias (e.g. `gemini-flash`) while the topology ladder carries the resolved name — the exclusion set never matches and a qc seat can be picked as the consult seat
+- **Context**: found by the D4 hermetic test's first fixture (2026-09-04); the fixture was changed to a non-aliased name, the resolver was not. Fix: normalise both sides (or compare on the resolved tuple) in the exclusion builder
+- **Effort**: S
+- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/D4.md`
+
 ### `resolve-review-loop.sh` `auto` knobs read a stale `~/.autopilot/topology.json` and fall back natively
 - **Trigger**: a host whose cached topology predates a plugin version that added roles (observed 2026-09-04: cache without `consult_ladder` ⇒ `consult_resolved_from: native-fallback` until `resolve-dispatch-topology.js` was re-run)
 - **Context**: the resolver never regenerates the cache; `sync-all.sh` runs `--check` only. Candidate: regenerate when the cache lacks a role key the resolver asks for, or emit a distinct warning naming the stale cache

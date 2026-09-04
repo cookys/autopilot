@@ -3,7 +3,7 @@
 **Plan**: [`docs/plans/2026-09-04-dev-flow-hetero-loops-default.md`](../../plans/2026-09-04-dev-flow-hetero-loops-default.md)
 **Branch**: `feat/dev-flow-hetero-loops` · **Target**: v2.36.0 (MINOR: new skill `hetero-review`)
 **Requested**: owner, 2026-09-04, this host ("預設 dev-flow 就是走 plan hetero loop review → 派工 → hetero review → qc gate", go)
-**Status**: D0 frozen; D1-1 + D2 integrated; D1-2/D1-3 (second foreman) and D2-repair (review findings) in flight
+**Status**: D0 frozen; D1, D2, D2-repair, D4 integrated; D3 (skill + dev-flow edits) in flight; D1-2e (legacy-seat effort) repair in flight; D5 pending
 
 ## Topology of this project's own execution (dogfood)
 
@@ -26,10 +26,10 @@ cannot pass as normal.
 | # | Deliverable | Size | Status |
 |---|---|---|---|
 | D0 | Plan loop on the plan itself (sol@codex max chair, GLM-5.2@cc-shim, MiniMax-M3@cc-shim; 2 generations; 21 blockers folded; frozen by depth-0) | S | ✅ |
-| D1 | Topology roles (`--role plan_reviewer\|reviewer\|consult\|discuss`) + resolver `auto` knobs (`plan_review`, `hetero_review`, `consult_dispatch`) + `dispatch-plan-review.js` kimi runner | M | ⏳ |
-| D2 | `plan-rubric-scaffold.js`, `hetero-review-loop.js`, `check-phase-review-receipt.js` + tests | L | ⏳ |
+| D1 | Topology roles (`--role plan_reviewer\|reviewer\|consult\|discuss`) + resolver `auto` knobs (`plan_review`, `hetero_review`, `consult_dispatch`); kimi runner cut by plan review | M | ✅ (2e repair pending) |
+| D2 | `plan-rubric-scaffold.js`, `hetero-review-loop.js`, `check-phase-review-receipt.js` + tests; D2-repair after the first real three-seat review (14 MUST-FIX folded) | L | ✅ |
 | D3 | `hetero-review` skill + dev-flow / ceo-agent / research-to-ship / front-door edits (line-neutral) + profiles repin | M | ⏳ |
-| D4 | Consult decoupling, agent-call description, evidence-discipline rows | S | ⏳ |
+| D4 | Consult decoupling, agent-call description, evidence-discipline rows, hermetic consult test | M | ✅ |
 | D5 | Release v2.36.0: CHANGELOG, README/INDEX/mirrors, archive | S | ⏳ |
 
 ## Ledger

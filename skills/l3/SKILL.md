@@ -23,7 +23,7 @@ Hard rules:
   `node <plugin>/scripts/session-mode.js set --level l3 --repo-root <repo>`. The command performs
   canonical Mission policy/graph/source admission before writing its marker. Enforce requires
   `READY`; shadow is disclosed without authority; off remains `LEGACY`.
-- Posture: **inline** — depth-0 writes the brief and dispatches a `hands` agent (`model: sonnet`, `Engine:` header) inline on this thread; depth-0 itself does not hand-author product files. `/l3` is also the `--solo` degradation target for `/l4`/`/l5`/`/l6`; `--solo` is the only true inline-implements-itself escape and the cost fuse still applies to it.
+- Posture: **inline** — depth-0 writes the brief and dispatches a `hands` agent (`model: sonnet`, `Engine:` header) inline on this thread; depth-0 itself does not hand-author product files. `sonnet` is a deliberate step above the `hands` role default (`haiku`, per `scripts/resolve-dispatch.sh --role hands`) because `/l3` units are judgment-class. `/l3` is also the `--solo` degradation target for `/l4`/`/l5`/`/l6`; `--solo` is the only true inline-implements-itself escape and the cost fuse still applies to it.
 - The front-door changes startup ONLY — every `ceo-agent` gate (size → project setup
   → admitted deliverables → finish-flow) still applies. Plan headings, modules, tests,
   reviewers, and retries remain coverage/gates inside those deliverables.

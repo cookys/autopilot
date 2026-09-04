@@ -77,6 +77,30 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 
 ## Active entries
 
+### hetero-review-loop / check-phase-review-receipt: hoist EXCLUDE_ALLOWLIST and isPathspecAllowed into scripts/lib
+- **Trigger**: the next edit to either copy (they are byte-identical today)
+- **Context**: duplicated verbatim in both scripts; a one-sided edit would silently desynchronise the gate (GLM + MiniMax FOLLOW-UP, core review g2, 2026-09-04)
+- **Effort**: S
+- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g2/`
+
+### review-chain-derive.js documents "no side effects" but mutates the chain entries it receives
+- **Trigger**: any caller that keeps a reference to the chain after derivation
+- **Context**: either copy on entry or drop the purity claim (GLM FOLLOW-UP, core review g2)
+- **Effort**: S
+- **Source**: same g2 dir
+
+### check-phase-review-receipt: open_findings comparison ignores severity; reviewed_seats/total_seats not cross-checked against seat artifacts
+- **Trigger**: verify after the g2 repairs land whether the deep-equality and seat-coverage fixes already cover both; close the row if so
+- **Context**: MiniMax + GLM FOLLOW-UP, core review g2
+- **Effort**: S
+- **Source**: same g2 dir
+
+### resolve-review-loop.test.sh capability-warning assertion messages still say "no warning" while expecting the topology fallback lines
+- **Trigger**: next touch of that test file
+- **Context**: wording only; the expectations are correct (GLM CUT, core review g2)
+- **Effort**: S
+- **Source**: same g2 dir
+
 ### `normalize_agy_alias()` rewrites config-side seat names before the qc-exclusion match in `consult_dispatch: auto`
 - **Trigger**: a `qc_panel` entry written as an agy alias (e.g. `gemini-flash`) while the topology ladder carries the resolved name — the exclusion set never matches and a qc seat can be picked as the consult seat
 - **Context**: found by the D4 hermetic test's first fixture (2026-09-04); the fixture was changed to a non-aliased name, the resolver was not. Fix: normalise both sides (or compare on the resolved tuple) in the exclusion builder

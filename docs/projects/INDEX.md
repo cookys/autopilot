@@ -8,12 +8,12 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-09-04 | default dispatch topology — brain up, hands down (`docs/projects/2026-09-04-default-dispatch-topology/README.md`); governance `shadow` on the branch only, restore before merge | 2.35.16 | `feat/default-dispatch-topology` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-09-04 | default dispatch topology — brain up, hands down（`docs/projects/_archive/2026-09-04-default-dispatch-topology/README.md`）— owner 經 cuda 轉達：實作勞力預設不落在 fable/opus。`scripts/resolve-dispatch-topology.js` 從已裝 runner × 合格席推導 implementer ladder（本機 19 階、`gemini-3.8-flash-low/low@agy` 起），`implementer_ladder: auto`、rung-0 起跳；`resolve-dispatch.sh` implementer 預設 opus→sonnet、新角色 `hands`→haiku；`dispatch-model-guard` 對非 plan-mode 派工擋 `fable,opus` 並強制 `Engine:` header；新 default-on hook `cost-fuse`（USD 150/host/day brain 層熔斷，warn）＋ `cost-digest.js` 看板（28 hooks：15/13）；front-door canonical 拓樸段、`/l3` 改 brain brief + sonnet hands。**本專案自己照拓樸做**：五個 sonnet 工頭、十把實作刀全派 gemini-3.8-flash-low@agy（全 committed、每刀 2–4 分鐘）、governance 本分支 shadow 後還原 enforce。qc 三席 FIX-THEN-SHIP → 六項修復（sonnet hands）→ sol delta 一項 refuted。P5 fleet rollout（cuda 優先）另開 | v2.35.16 | (feature branch merge) | [plan](../plans/2026-09-04-default-dispatch-topology.md) |
 | 2026-09-04 | foreman cost discipline（`docs/projects/_archive/2026-09-04-foreman-cost-discipline/README.md`）— cuda quota digest：36 小時 ≈$2,200、79% 是四個常駐工頭輪詢。新 default-on hook `foreman-guard`（l4–l6 子代理：Bash 上限 40 原子計數、前景輪詢 deny、Monitor deny；規則跑在可執行文字上，heredoc／註解／引號感知）；`context-budget`／`dispatch-model-guard`／`cost-tracker` 改 default-on 附退出旋鈕（27 hooks：14/13）；cost-tracker 累計 cache-read 回報；l4–l6 與 front-door 加「一刀一命」與接手 read-list 上限。MiniMax 一輪 SHIP、sol 三輪收斂；全套 311 檔綠（oracle-lock 單跑補證）。不廣播，只回 cuda | v2.35.15 | `72dfa052` | [plan](../plans/2026-09-04-foreman-cost-discipline.md) |
 | 2026-09-04 | opencode rail effort → `--variant`（無 project dir — S-size）— 實測 `--variant` 會到 provider（推理 token minimal≈53 < low≈103 < medium≈171≈high≈174 < xhigh≈201），未知值與不帶值都退回 provider 預設（≈medium）；rail 轉送 effort、`max`→`xhigh`；`minimal` 不在 autopilot 詞彙（BACKLOG，L）。v2.35.12 的 muse-spark row 實際跑的是預設檔位，註記保留 | v2.35.14 | (direct on develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-03 | agy 信封格式錯降級為遙測遺失（無 project dir — S-size，Board 2026-09-03）— `dispatch-hetero.sh` agy 分支不再因信封過不了嚴格鍵比對就把已落地的 commit 判成 `failure`（8/22 gemini 三席全部建新檔題就是這樣被扣的）；usage 維持 `null`、信封原文前 64 KiB 留在 log 供重現、狀態交給 git artifact。8/22 的 row 不改，重考才翻案 | v2.35.13 | `219de2a6` | [CHANGELOG](../../CHANGELOG.md) |

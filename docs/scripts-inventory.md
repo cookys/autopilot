@@ -168,6 +168,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/check-escalation-coverage.js`](../scripts/check-escalation-coverage.js) / [`scripts/rubric-freeze.js`](../scripts/rubric-freeze.js) | Loop-convergence-gates 專案配套：escalation 出口覆蓋檢查 / rubric 凍結（防 mid-run 改分規）。 |
 | [`scripts/probe-mutation.js`](../scripts/probe-mutation.js) | Mutation-validated probe 執行器（`adjudicate-findings.js` refute 路徑的機械後盾）。 |
 | [`scripts/resolve-worktree-teardown.sh`](../scripts/resolve-worktree-teardown.sh) | Worktree teardown policy resolver（`scripts/lib/worktree-reap.sh` 消費）。 |
+| [`scripts/resolve-dispatch-topology.js`](../scripts/resolve-dispatch-topology.js) | Derives host default implementer dispatch ladder from installed runners + qualified scorecard seats. |
 | [`scripts/install-opencode.sh`](../scripts/install-opencode.sh) / [`scripts/sync-opencode-plugin.sh`](../scripts/sync-opencode-plugin.sh) | OpenCode 接入：安裝 / plugin payload 同步（`dev-setup.sh` 消費）。 |
 
 Most scripts answer `<script> --help`, but **37 of 129 do not parse argv at all** — and several of those are installers that act immediately, so `--help` EXECUTES them (`dev-update.sh` pulls, `install-hooks.sh` rewrites `core.hooksPath`, `setup-symlinks.sh` recreates symlinks). Read the header comment before invoking an unfamiliar script. JSON-emitting scripts have stable schemas; exit codes follow each script's header.

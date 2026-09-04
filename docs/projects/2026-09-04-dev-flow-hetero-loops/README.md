@@ -3,7 +3,7 @@
 **Plan**: [`docs/plans/2026-09-04-dev-flow-hetero-loops-default.md`](../../plans/2026-09-04-dev-flow-hetero-loops-default.md)
 **Branch**: `feat/dev-flow-hetero-loops` · **Target**: v2.36.0 (MINOR: new skill `hetero-review`)
 **Requested**: owner, 2026-09-04, this host ("預設 dev-flow 就是走 plan hetero loop review → 派工 → hetero review → qc gate", go)
-**Status**: D0 frozen; D1 dispatching
+**Status**: D0 frozen; D1-1 + D2 integrated; D1-2/D1-3 (second foreman) and D2-repair (review findings) in flight
 
 ## Topology of this project's own execution (dogfood)
 

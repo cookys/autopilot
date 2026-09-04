@@ -76,6 +76,49 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 ---
 
 ## Active entries
+
+### `hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename
+- **Trigger**: two collects for the same phase ever run concurrently (today callers serialise by generation)
+- **Context**: a lost chain entry would self-recover on retry, never forge a gate pass; MiniMax CUT/FOLLOW-UP on the D2 review 2026-09-04
+- **Effort**: S
+- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-D2-attempt1-parser-defect/`
+
+### `hetero-review-loop.js` opt-out knob parser character class parses `*->` as a range
+- **Trigger**: the next touch of the knob parser in handleOptOut
+- **Context**: a line such as "9plan_review: off" can set configured_value; harmless while the checker re-derives the value from the resolver (GLM CUT/FOLLOW-UP)
+- **Effort**: S
+- **Source**: same ledger dir as above
+
+### `hetero-review-loop.js` exports the STUB_SEAT_ID test seam into the real dispatch-review.sh environment
+- **Trigger**: reworking the seat-stub mechanism for any other reason
+- **Context**: cosmetic hardening; the real script ignores the variable (GLM CUT/FOLLOW-UP)
+- **Effort**: S
+- **Source**: same ledger dir as above
+
+### `finalize` closes an earlier verified finding by absence in a later generation
+- **Trigger**: a future review-policy deliverable, or evidence that a reviewer missed a still-open finding
+- **Context**: the plan defines closure as absence-in-later-findings; tightening to "explicitly re-verified" needs a policy decision (MiniMax CUT/FOLLOW-UP)
+- **Effort**: Fix
+- **Source**: same ledger dir as above
+
+### Opt-out receipt with a non-existent config path hashes the empty buffer
+- **Trigger**: D2-repair R2/R3 does not already require the config path to exist (it is in that brief; verify at closeout)
+- **Context**: sha256 of empty matches a receipt claiming the empty-file hash; the resolver's `off` re-derivation is the real boundary (MiniMax CUT/FOLLOW-UP)
+- **Effort**: S
+- **Source**: same ledger dir as above
+
+### `dispatch-plan-review.js` RUNNERS lacks `kimi` while `dispatch-review.sh` supports it
+- **Trigger**: an owner ruling that amends the frozen "reuse unchanged" invariant for the plan-review driver
+- **Context**: D0 of the dev-flow hetero loops plan had to seat GLM instead of kimi-code/k3 (consult-qualified, event 182); cut from that slice by plan-review R6
+- **Effort**: S
+- **Source**: `docs/plans/2026-09-04-dev-flow-hetero-loops-default.md` §3 "Not changed"
+
+### scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`
+- **Trigger**: any seat resolver that matches runner tokens exactly (topology `--role plan_reviewer` normalises it today)
+- **Context**: a qualified seat silently drops out of auto-derived panels when the recorded runner spelling differs from the dispatch runner enum
+- **Effort**: S
+- **Source**: `docs/plans/evidence/2026-09-04-dev-flow-hetero-loops-default/context.md`
+
 ### Foreman context is not measurable by hook — `context-budget` only sees the parent transcript
 - **Trigger**: Claude Code's hook payload carries the SUBAGENT's own `transcript_path` (or an equivalent per-agent usage field) — check the CC changelog / a SPIKE on the running version; or a second cost incident where a foreman's context (not its Bash count) is the driver.
 - **Context**: v2.35.15 put ironlaw #6 in the loop through `foreman-guard` (Bash cap, polling, Monitor), but the digest's second burn shape — waking after cache TTL and re-writing a ≈900K context — is a CONTEXT ceiling, and `context-budget` deliberately exits on `agent_id` because the payload's `transcript_path` is the parent's. Until the payload identifies the subagent transcript, the Bash cap + 一刀一命 are the foreman's only ceilings. Fix shape: when a per-agent transcript is available, apply T1/T2 to it and make T2 a `deny` for subagents (a foreman can be forced to hand off; depth-0 cannot).

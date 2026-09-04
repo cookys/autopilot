@@ -1,0 +1,13 @@
+[
+  {
+    "generation": 1,
+    "base": "1e5c2841",
+    "head": "8a7523f798e07323b02985e92e226234c7c4e478",
+    "seats": [
+      "s0",
+      "s1",
+      "s2"
+    ],
+    "status": "pending"
+  }
+]

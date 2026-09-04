@@ -96,6 +96,7 @@ mkdir -p "$LEDGER"
 HELP_OUT=$(node "$SCRIPT" --help 2>&1); HELP_RC=$?
 assert_exit_code "$HELP_RC" "0" "case 1: --help exits 0"
 assert_contains "$HELP_OUT" "Usage:" "case 1: --help outputs usage instructions"
+assert_contains "$HELP_OUT" "--exclude" "case 1: --help documents --exclude flag"
 
 # Case 2: generation 1 without --phase-base exits 2
 C2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work 2>&1); C2_RC=$?
@@ -1030,6 +1031,72 @@ assert_contains "$T7_SEAT_OUTPUT" '"verdict": "no_verdict"' "test 7: recorded ve
 assert_contains "$T7_SEAT_OUTPUT" '"status": "no_verdict"' "test 7: recorded status is no_verdict on non-zero exit"
 assert_not_contains "$T7_SEAT_OUTPUT" '"verdict": "SHIP-AS-IS"' "test 7: printed verdict SHIP-AS-IS is ignored"
 unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT
+
+# Test 8: --exclude removes matched pathspec from diff.txt and records in range.json
+EXCL_REPO="$TEST_TMP/excl_repo"
+mkdir -p "$EXCL_REPO/generated"
+(
+  cd "$EXCL_REPO"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test User"
+  echo "base normal" > normal.txt
+  echo "base gen" > generated/gen.txt
+  git add normal.txt generated/gen.txt
+  git commit -q -m "initial"
+  git checkout -q -b work
+  echo "work normal" >> normal.txt
+  echo "work gen" >> generated/gen.txt
+  git add normal.txt generated/gen.txt
+  git commit -q -m "changes"
+)
+EXCL_BASE=$(git -C "$EXCL_REPO" rev-parse HEAD~1)
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+
+# Collect with --exclude generated/**
+T8_OUT=$(node "$SCRIPT" collect --repo-root "$EXCL_REPO" --ledger "$LEDGER" --phase p_test8_excl --generation 1 --branch work --phase-base "$EXCL_BASE" --seats "m1/low@codex" --exclude "generated/**" 2>&1); T8_RC=$?
+assert_exit_code "$T8_RC" "0" "test 8: collect with --exclude exits 0"
+T8_DIFF=$(cat "$LEDGER/review-p_test8_excl/g1/diff.txt")
+assert_contains "$T8_DIFF" "normal.txt" "test 8: normal.txt present in diff.txt"
+assert_not_contains "$T8_DIFF" "generated/gen.txt" "test 8: generated/gen.txt omitted from diff.txt"
+T8_RANGE=$(cat "$LEDGER/review-p_test8_excl/g1/range.json")
+assert_contains "$T8_RANGE" '"excluded": [' "test 8: range.json has excluded array"
+assert_contains "$T8_RANGE" '"generated/**"' "test 8: range.json lists excluded pathspec"
+assert_contains "$T8_RANGE" '"diff_bytes":' "test 8: range.json has diff_bytes"
+
+# Test 9: collect without --exclude includes both paths, and range.json excluded is []
+T9_OUT=$(node "$SCRIPT" collect --repo-root "$EXCL_REPO" --ledger "$LEDGER" --phase p_test9_noexcl --generation 1 --branch work --phase-base "$EXCL_BASE" --seats "m1/low@codex" 2>&1); T9_RC=$?
+assert_exit_code "$T9_RC" "0" "test 9: collect without --exclude exits 0"
+T9_DIFF=$(cat "$LEDGER/review-p_test9_noexcl/g1/diff.txt")
+assert_contains "$T9_DIFF" "normal.txt" "test 9: normal.txt present in diff.txt"
+assert_contains "$T9_DIFF" "generated/gen.txt" "test 9: generated/gen.txt present in diff.txt"
+T9_RANGE=$(cat "$LEDGER/review-p_test9_noexcl/g1/range.json")
+assert_contains "$T9_RANGE" '"excluded": []' "test 9: range.json excluded is empty list"
+assert_contains "$T9_RANGE" '"diff_bytes":' "test 9: range.json has diff_bytes"
+
+# Test 10: diff exceeding 400000 bytes triggers warning naming size and suggesting --exclude, does not block
+LARGE_REPO="$TEST_TMP/large_repo"
+mkdir -p "$LARGE_REPO"
+(
+  cd "$LARGE_REPO"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test User"
+  echo "base" > base.txt
+  git add base.txt
+  git commit -q -m "initial"
+  git checkout -q -b work
+  # Generate 450,000 bytes file
+  python3 -c "print('A' * 450000)" > large.txt
+  git add large.txt
+  git commit -q -m "large file"
+)
+LARGE_BASE=$(git -C "$LARGE_REPO" rev-parse HEAD~1)
+T10_OUT=$(node "$SCRIPT" collect --repo-root "$LARGE_REPO" --ledger "$LEDGER" --phase p_test10_warn --generation 1 --branch work --phase-base "$LARGE_BASE" --seats "m1/low@codex" 2>&1); T10_RC=$?
+assert_exit_code "$T10_RC" "0" "test 10: large diff collect exits 0 (does not block)"
+assert_contains "$T10_OUT" "WARNING: Diff size" "test 10: diff size warning printed"
+assert_contains "$T10_OUT" "exceeds 400000 bytes" "test 10: diff size warning names threshold"
+assert_contains "$T10_OUT" "--exclude" "test 10: diff size warning suggests --exclude"
 
 finalize_test
 

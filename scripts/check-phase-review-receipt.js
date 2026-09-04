@@ -317,8 +317,15 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // git diff <base> <head> with maxBuffer 64MB
-      const diffRes = spawnSync('git', ['diff', entry.base, entry.head], {
+      // git diff <base> <head> with maxBuffer 64MB and negative pathspecs if rangeObj.excluded exists
+      const diffArgs = ['diff', entry.base, entry.head];
+      if (Array.isArray(rangeObj.excluded) && rangeObj.excluded.length > 0) {
+        diffArgs.push('--');
+        for (const pattern of rangeObj.excluded) {
+          diffArgs.push(`:!${pattern}`);
+        }
+      }
+      const diffRes = spawnSync('git', diffArgs, {
         cwd: repoRoot,
         encoding: 'utf8',
         maxBuffer: 64 * 1024 * 1024,

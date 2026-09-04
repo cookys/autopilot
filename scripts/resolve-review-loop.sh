@@ -1367,6 +1367,7 @@ console.log(effectiveMode);
 console.log(JSON.stringify(warnings));
 ' 2>/dev/null)" || _node_out=""
 
+  _early_cap_warnings="$CAP_WARNINGS_JSON"
   if [[ -n "$_node_out" ]]; then
     {
       read -r CAP_STATE_SOURCE
@@ -1376,6 +1377,19 @@ console.log(JSON.stringify(warnings));
       read -r CAP_SKILL_MODE_EFF
       read -r CAP_WARNINGS_JSON
     } <<< "$_node_out"
+  fi
+  if [[ -n "$_early_cap_warnings" && "$_early_cap_warnings" != "[]" ]]; then
+    CAP_WARNINGS_JSON="$(node -e '
+let cur = [], early = [];
+try { cur = JSON.parse(process.argv[1]); } catch { cur = []; }
+try { early = JSON.parse(process.argv[2]); } catch { early = []; }
+if (!Array.isArray(cur)) cur = [];
+if (!Array.isArray(early)) early = [];
+for (const w of early) {
+  if (!cur.includes(w)) cur.push(w);
+}
+process.stdout.write(JSON.stringify(cur));
+' "$CAP_WARNINGS_JSON" "$_early_cap_warnings" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
   fi
 fi
 

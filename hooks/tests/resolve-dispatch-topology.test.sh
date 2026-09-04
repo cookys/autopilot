@@ -55,7 +55,6 @@ const row = {
   date: '2026-08-01',
   quality: 0.95,
   capability_score: 0.95,
-  effort,
   status,
   admission_status: status,
   latency: { sample_wall_time_s: Number(latency) },
@@ -63,6 +62,9 @@ const row = {
   baseline_event_id: Number(eventId),
   qualified_at: '2026-08-01T00:00:00.000Z',
 };
+if (effort && effort !== '') {
+  row.effort = effort;
+}
 if (costRaw && costRaw !== 'null') {
   row.cost = Number(costRaw);
 }

@@ -77,6 +77,18 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 
 ## Active entries
 
+### hetero-review-loop / checker: end-to-end aborted-chain case and explicit base-inheritance assertion
+- **Trigger**: next touch of the chain semantics (abort g1 → collect g2 → finalize → checker exit 0; g2.base equals the aborted g1 base)
+- **Context**: writer side is pinned (tests 2d/2e/4); the reader side and the base inheritance are only implicit (GLM + MiniMax FOLLOW-UP, core review g4)
+- **Effort**: S
+- **Source**: `docs/projects/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g4/`
+
+### check-phase-review-receipt: min-reviewed-seats enforcement test on a multi-seat fixture
+- **Trigger**: next touch of the seat-coverage rule
+- **Context**: case 14 proves the parse guard, not that a higher minimum is enforced on a 3-seat chain (MiniMax FOLLOW-UP, core review g4)
+- **Effort**: S
+- **Source**: same g4 dir
+
 ### hetero-review-loop: confirm finalize always emits severity in open_findings (checker now requires deep equality on id/severity/disposition)
 - **Trigger**: the next FIX-THEN-SHIP receipt with verified Major/Minor findings — depth-0 saw severity present on the v2.36.0 receipts, so this is a confirmation row (GLM FOLLOW-UP, core review g3)
 - **Context**: shared-format drift surface between finalize and the checker

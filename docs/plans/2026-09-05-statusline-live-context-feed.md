@@ -260,6 +260,13 @@ What would guarantee failure:
 - R0 author: depth-0 (Fable), 2026-09-05. Context brief extracted by an Explore subagent (sonnet).
 - logical_plan_id: `statusline-live-context-feed-2026-09-05`
 - manifest: `docs/plans/2026-09-05-statusline-live-context-feed.plan-review-manifest.json`; rubric: `….rubric.md` (frozen g1).
+- Pre-merge review (L-5.2, `autopilot:reviewer` @ opus, 2026-09-05): FIX with three Major — `findmnt` probe built as a shell string
+  (injection via a directory name), `hooks/tests/run.sh` never globbed `scripts/lib/*.test.js` (the library's 20 tests had never run in
+  the suite), the live/transcript lag guard in `context-budget.js` was mutation-provably untested. All three fixed by a sonnet hands
+  (`d7122fb`, merged `54a5e220`): `execFileSync` argv seam + injection test, glob added (L1 now 299 files incl. `resolveLiveDir`),
+  timestamped fixtures + two lag tests (2 fail with the block deleted, 35/0 restored). Six cuts recorded as BACKLOG rows (tmpfs
+  ownership check, `> 0` windows, counter lock, 0-row diag rate-limit, `Bash` matcher expansion — accepted delta over §4 P3.1 —
+  and the pre-existing `contract-parity` red).
 - G2 (2026-09-05, terminal — generation cap): sol STOP with 4 residual blockers (R4 text contradiction on the
   tasks file, R6 fallback path composition, R10 parser vs tests, R12 skew wording), MiniMax READY. Depth-0
   adjudication: R4/R6/R10 accepted-and-folded; R12 folded as wording (skew text now states the gate warns without

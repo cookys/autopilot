@@ -719,36 +719,78 @@ CAP_WARNINGS_JSON="[]"
 IMPL_LADDER_JSON="[]"
 if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
+  # Exit protocol: 0 + JSON array on stdout = valid non-empty ladder; 2 = topology
+  # file exists but implementer_ladder is empty/absent (keep implicit rung, warn);
+  # 1 = no readable/parseable topology file at all (keep implicit rung, warn);
+  # 3 + error message on stdout = a rung's runner failed the same enum check the
+  # comma-list path applies (a stale topology file must not smuggle an invalid
+  # runner past the resolver).
   _auto_ladder="$(node -e '
 const fs = require("fs");
+const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","qoderclicn","cursor","opencode"]);
+const file = process.argv[1];
+let raw;
 try {
-  const file = process.argv[1];
-  const raw = fs.readFileSync(file, "utf8");
-  const doc = JSON.parse(raw);
-  if (Array.isArray(doc.implementer_ladder) && doc.implementer_ladder.length > 0) {
-    const rungs = doc.implementer_ladder.map((r) => ({
-      engine: r.engine,
-      effort: r.effort,
-      runner: r.runner,
-    }));
-    process.stdout.write(JSON.stringify(rungs));
-    process.exit(0);
+  raw = fs.readFileSync(file, "utf8");
+} catch {
+  process.exit(1);
+}
+let doc;
+try {
+  doc = JSON.parse(raw);
+} catch {
+  process.exit(1);
+}
+if (!Array.isArray(doc.implementer_ladder) || doc.implementer_ladder.length === 0) {
+  process.exit(2);
+}
+const rungs = doc.implementer_ladder.map((r) => ({
+  engine: r.engine,
+  effort: r.effort,
+  runner: r.runner,
+}));
+for (const r of rungs) {
+  if (!VALID_RUNNERS.has(r.runner)) {
+    process.stdout.write(
+      "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): " +
+      r.engine + "/" + r.effort + "@" + r.runner
+    );
+    process.exit(3);
   }
-} catch {}
-process.exit(1);
-' "$_topo_file" 2>/dev/null || true)"
-  if [[ -n "$_auto_ladder" ]]; then
-    IMPL_LADDER_JSON="$_auto_ladder"
-  else
-    IMPL_LADDER_JSON="[]"
-    CAP_WARNINGS_JSON="$(node -e '
+}
+process.stdout.write(JSON.stringify(rungs));
+process.exit(0);
+' "$_topo_file" 2>/dev/null)"
+  _auto_status=$?
+  case "$_auto_status" in
+    0)
+      IMPL_LADDER_JSON="$_auto_ladder"
+      ;;
+    3)
+      echo "resolve-review-loop: ${_auto_ladder}" >&2
+      exit 3
+      ;;
+    2)
+      IMPL_LADDER_JSON="[]"
+      CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "implementer_ladder auto: no qualified hetero implementer on this host — hands run native (haiku→sonnet), see claude_fallback_ladder" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+      ;;
+    *)
+      IMPL_LADDER_JSON="[]"
+      CAP_WARNINGS_JSON="$(node -e '
 let a = [];
 try { a = JSON.parse(process.argv[1]); } catch { a = []; }
 if (!Array.isArray(a)) a = [];
 a.push(process.argv[2]);
 process.stdout.write(JSON.stringify(a));
 ' "$CAP_WARNINGS_JSON" "implementer_ladder auto: no host topology (run scripts/resolve-dispatch-topology.js)" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
-  fi
+      ;;
+  esac
 elif [[ -n "$IMPL_LADDER_RAW" ]]; then
   IMPL_LADDER_JSON="["
   _ladder_first=1

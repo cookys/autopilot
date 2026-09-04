@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "statusline-live-context-feed-2026-09-05",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "fc9203188aa70232fb60c3efaeb30afe17ee2971e9ebd7c7f5306335b17c6b8f",
+      "disposition": "accepted_blocker",
+      "rationale": "Real: an unprobed override defeats KR4. Folded section 2.5: every candidate incl. AUTOPILOT_LIVE_DIR is probed; a rejected override is skipped; test ext4-override + tmpfs-candidate => tmpfs chosen."
+    },
+    {
+      "fingerprint": "d002d3ad1501aebe9505b5a7dc3adff1f9b27d272081c203326a8bdc1e3eeaa6",
+      "disposition": "accepted_blocker",
+      "rationale": "Real: alphabet + length is not an algorithm. Folded section 2.5: getSessionId() made normative (per-scalar replace with underscore, first 64 scalars, empty => unknown) plus shared vector file hooks/tests/fixtures/session-id-vectors.json for Rust and Node."
+    },
+    {
+      "fingerprint": "a5ad399618501e76d9d95f737ca0bb6b9244e23c01a6b5e0d9b998d22b0064a5",
+      "disposition": "accepted_blocker",
+      "rationale": "Real: rename is atomic replacement, not synchronisation. Folded: two files, one writer each (<sid>.json main, <sid>.tasks.json subagent), no read-modify-write; section 3, P1.3 and section 6 rewritten."
+    },
+    {
+      "fingerprint": "209305f426e5e9426a4f6c8b357a6636b596b2f1a422d1179cc21c82f6c1b10d",
+      "disposition": "accepted_blocker",
+      "rationale": "Real: one written_at cannot cover two independently refreshed sections. Folded: per-file written_at, a reader checks only the file it uses (section 2.5 freshness, P2.3)."
+    },
+    {
+      "fingerprint": "e66758c75c7c45e218e1f5379f53d2abb0b0f28d38b07120445cd7407a31a3e9",
+      "disposition": "accepted_blocker",
+      "rationale": "Real contradiction. Folded section 2.6: existing hooks byte-identical (exit/stdout/stderr) against a pinned v2.36.0 fixture when no usable live file exists; state-file location moves only when a RAM dir exists (owner requirement); the delegate gate is declared as new default-on behaviour and block requires a fresh live model. The sub-repair that the gate must stay silent without a live file is refuted: the nudge without model knowledge is the purpose of the gate; it is new stderr by design and is now stated as such."
+    },
+    {
+      "fingerprint": "0024000a8e8a23c7d9ec1cf927834856ea4684053dbdc5dfc816a632bc74baca",
+      "disposition": "accepted_blocker",
+      "rationale": "Real gap. Folded section 0: v2.32.56 scaleTiers already scales non-explicit tiers to the window (named tests cited); decision formula t1 = explicit ?? round(100000*W/200000), t2 = explicit ?? round(150000*W/200000) stated; the plan changes only the source of W, so the 2026-07-14 ruling is not reopened."
+    },
+    {
+      "fingerprint": "db165ac6d3ca0477ded201a7aec75bae524298c68aab397e9d31b3f6709f45e4",
+      "disposition": "accepted_blocker",
+      "rationale": "Real: fallback fields were absent from the schema. Folded: tasks schema carries cwd and startTime; P0 is a precondition of P1 and must produce a mapping contract (id equality or exact (model,cwd,startTime) match) with 0 or >=2 rows => fail-open plus a stderr diagnostic."
+    },
+    {
+      "fingerprint": "c79b03701119b64ae5afb5e688973b46b93e19bda1f06fe8df0536408fe5ea79",
+      "disposition": "accepted_blocker",
+      "rationale": "Real: fable vs claude-fable-5-1 would never match. Folded section 2.5: family(id) parser defined with three worked examples, exact family membership, single implementation in scripts/lib/live-state-dir.js; P3 tests list positive, negative, near-match, case, malformed, stale and absent cases."
+    },
+    {
+      "fingerprint": "c91d93347f21c4cd858724e62c922860c62a5e5b4f0be16f96dd1d7e3f2658f8",
+      "disposition": "accepted_blocker",
+      "rationale": "Real: a version field without an acceptance rule guards nothing. Folded section 2.5: readers accept integer 1 only, anything else => treated as absent; P2.2 tests cover version 2, missing and malformed."
+    }
+  ]
+}

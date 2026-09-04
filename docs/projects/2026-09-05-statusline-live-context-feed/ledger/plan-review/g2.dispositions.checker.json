@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "statusline-live-context-feed-2026-09-05",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "69605326822746bd483005bdbdadc1b047a4a4381e5e003d108a265c4d7cb85b",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Real: my G1 fold left section 3 and P1.5 describing a merge. Folded: file map says subagent_statusline.rs writes only <sid>.tasks.json and never reads or merges <sid>.json; P1.5 acceptance validates the tasks row in that file and that <sid>.json is untouched."
+    },
+    {
+      "fingerprint": "77b906c42b9fefef42ac54921644ec70920f33d3edad12c7a9482f5e266268e5",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Real: appending context-budget to the fallback produced a doubled path. Folded section 2.5: resolveLiveDir() returns a BASE (~/.autopilot on SSD fallback); each consumer appends its purpose segment, so the fallback state path is exactly the legacy ~/.autopilot/context-budget/<sid>.json, asserted by test."
+    },
+    {
+      "fingerprint": "18aca00538517a83c5526dcf078e747fed2f7b4f27df0bf6e1cdb481786e541b",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Real: parser and tests contradicted each other. Folded section 2.5: lowercase then a grammar ^claude-([a-z]+)-[0-9]+(-[0-9]+)*(\\[[a-z0-9]+\\])?$ with group 1 as family; non-matching ids are unknown and never block; P3.3 tests now block CLAUDE-FABLE-5-1 and reject fable-ish and claude-fable."
+    },
+    {
+      "fingerprint": "ceb90705df8ec5251bf94470af5c7283a40df3318a1db8302daf27d3c7e2bad1",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Wording contradiction accepted and folded: section 6 skew text now states that an older codeforge leaves context-budget and foreman-guard on old behaviour while depth0-delegate-gate stays in warn and never blocks, with tests in both skew directions. The repair (make the gate a no-op without a live file) is refuted: the owner asked for a gate on depth-0 self-research in plain sessions where no live file may exist; section 2.6 already declares the nudge as new default-on behaviour, so the frozen compatibility contract is the declared one, not silence."
+    }
+  ]
+}

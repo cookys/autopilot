@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-05 | [statusline → hook live context feed](2026-09-05-statusline-live-context-feed/README.md) | v2.36.1 | `feat/v2.36.1-statusline-live-context-feed` |
 
 ## 已完成 (Completed)
 

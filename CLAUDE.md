@@ -6,7 +6,7 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 29 skills, 3 methodology agents, 27 hooks (14 default-on,
+Standalone lifecycle orchestration plugin: 29 skills, 3 methodology agents, 28 hooks (15 default-on,
 13 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
 
 ## Scripts inventory (prefer over LLM judgment)
@@ -19,7 +19,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-consult.sh` `dispatch-discuss.js` `dispatch-explore.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/cursor-model.sh` `lib/agy-model-alias.sh` `lib/agy-argv-ceiling.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js` `lib/plan-review-timeout.js` `lib/plan-review-panel.js`
 
-**Routing & config resolution** — `resolve-dispatch.sh` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
+**Routing & config resolution** — `resolve-dispatch.sh` `resolve-dispatch-topology.js` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js`
 
@@ -39,7 +39,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Setup & install** — `dev-setup.sh` `dev-update.sh` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js`
 
-**Skills tooling, evals & measurement** — `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh`
+**Skills tooling, evals & measurement** — `cost-digest.js` `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh`
 
 **Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js`
 

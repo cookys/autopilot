@@ -62,6 +62,16 @@
         ]
       },
       {
+        "//": "v2.35.16 default-on: cost-fuse — brain-tier (fable/opus) daily spend fuse, warn-mode default; AUTOPILOT_COST_FUSE_MODE=off to opt out.",
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-fuse.js"
+          }
+        ]
+      },
+      {
         "matcher": "Task|Agent",
         "hooks": [
           {

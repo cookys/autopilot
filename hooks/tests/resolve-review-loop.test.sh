@@ -203,6 +203,81 @@ OCL_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$OCLCFG" bash "$SCRIPT" 2>/dev/null)"; 
 assert_exit_code "$OCL_RC" 0 "ladder rung with a provider/model engine id (contains /) parses"
 assert_contains "$OCL_JSON" '"engine": "opencode-go/muse-spark-1.3-contributor"' "rung engine keeps the full provider/model id (split at the LAST /)"
 assert_contains "$OCL_JSON" '"runner": "opencode"' "rung runner opencode accepted"
+
+# implementer_ladder: auto + ladder_start_rung_judgment test cases
+# (a) implementer_ladder: auto + a scratch AUTOPILOT_TOPOLOGY_FILE with a 2-rung implementer_ladder
+AUTO_TOPO_FILE="$TEST_TMP/topo-fixture.json"
+cat > "$AUTO_TOPO_FILE" <<'JSON'
+{
+  "implementer_ladder": [
+    { "rung": "gemini-3.7-flash-low/low@agy", "engine": "gemini-3.7-flash-low", "effort": "low", "runner": "agy", "baseline_event_id": "b1" },
+    { "rung": "grok-4.6/low@grok", "engine": "grok-4.6", "effort": "low", "runner": "grok" }
+  ]
+}
+JSON
+AUTO_CFG="$TEST_TMP/rl-impl-auto.md"
+printf -- '- implementer_ladder: auto\n' > "$AUTO_CFG"
+AUTO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$AUTO_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>/dev/null)"; AUTO_RC=$?
+assert_exit_code "$AUTO_RC" 0 "implementer_ladder: auto with valid topology exits 0"
+assert_eq '[{"engine":"gemini-3.7-flash-low","effort":"low","runner":"agy"},{"engine":"grok-4.6","effort":"low","runner":"grok"}]' \
+  "$(json_get "$AUTO_OUT" implementer_ladder)" \
+  "implementer_ladder auto expands to rungs from topology file dropping rung label and baseline_event_id"
+
+# (b) implementer_ladder: auto + no topology file (unset/missing path)
+NO_TOPO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/nonexistent-topo.json" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>/dev/null)"; NO_TOPO_RC=$?
+assert_exit_code "$NO_TOPO_RC" 0 "implementer_ladder: auto with missing topology exits 0"
+assert_eq "[]" "$(json_get "$NO_TOPO_OUT" implementer_ladder)" "implementer_ladder auto without topology falls back to []"
+assert_contains "$(json_get "$NO_TOPO_OUT" capability_warnings)" \
+  "implementer_ladder auto: no host topology (run scripts/resolve-dispatch-topology.js)" \
+  "capability_warnings contains exact auto topology warning when topology file is missing"
+
+# (c) an explicit comma list still works unchanged (regression check)
+assert_contains "$OCL_JSON" '"engine": "grok-4.5"' "explicit comma list preserves second rung"
+
+# (c2) implementer_ladder: auto + topology file exists but implementer_ladder is empty
+# -> implicit rung kept, [] output, and the specific "no qualified hetero implementer"
+# warning (not the "no host topology" one from (b) — the file DOES exist and parse).
+EMPTY_TOPO_FILE="$TEST_TMP/topo-empty-fixture.json"
+printf '%s\n' '{ "implementer_ladder": [] }' > "$EMPTY_TOPO_FILE"
+EMPTY_TOPO_OUT="$(AUTOPILOT_TOPOLOGY_FILE="$EMPTY_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>/dev/null)"; EMPTY_TOPO_RC=$?
+assert_exit_code "$EMPTY_TOPO_RC" 0 "implementer_ladder: auto with empty topology ladder exits 0"
+assert_eq "[]" "$(json_get "$EMPTY_TOPO_OUT" implementer_ladder)" "implementer_ladder auto with empty topology ladder falls back to []"
+assert_contains "$(json_get "$EMPTY_TOPO_OUT" capability_warnings)" \
+  "implementer_ladder auto: no qualified hetero implementer on this host — hands run native (haiku→sonnet), see claude_fallback_ladder" \
+  "capability_warnings contains the empty-ladder warning (distinct from the no-topology-file warning)"
+
+# (c3) implementer_ladder: auto + topology file has a rung whose runner fails the enum
+# check -> exit 3, same message shape as the comma-list path; a stale topology file
+# must not smuggle an invalid runner past the resolver.
+BOGUS_TOPO_FILE="$TEST_TMP/topo-bogus-fixture.json"
+cat > "$BOGUS_TOPO_FILE" <<'JSON'
+{
+  "implementer_ladder": [
+    { "engine": "grok-4.6", "effort": "low", "runner": "bogus" }
+  ]
+}
+JSON
+BOGUS_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$BOGUS_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>&1 1>/dev/null)"; BOGUS_TOPO_RC=$?
+assert_exit_code "$BOGUS_TOPO_RC" 3 "implementer_ladder: auto with a bogus rung runner exits 3"
+assert_contains "$BOGUS_TOPO_ERR" "invalid implementer_ladder runner" "bogus auto rung runner error matches comma-list message shape"
+
+# (d) default ladder_start_rung_judgment is 0 when absent from config, 1 when 1, falls back to 0 for garbage
+JUDG_DEF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "0" "$(json_get "$JUDG_DEF_OUT" ladder_start_rung_judgment)" "ladder_start_rung_judgment defaults to 0 when absent"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field ladder_start_rung_judgment)" "--field ladder_start_rung_judgment defaults to 0"
+
+JUDG1_CFG="$TEST_TMP/rl-judg-1.md"
+printf -- '- ladder_start_rung_judgment: 1\n' > "$JUDG1_CFG"
+JUDG1_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$JUDG1_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "1" "$(json_get "$JUDG1_OUT" ladder_start_rung_judgment)" "ladder_start_rung_judgment is 1 when configured to 1"
+assert_eq "1" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$JUDG1_CFG" bash "$SCRIPT" --field ladder_start_rung_judgment)" "--field ladder_start_rung_judgment is 1 when configured to 1"
+
+JUDGBAD_CFG="$TEST_TMP/rl-judg-bad.md"
+printf -- '- ladder_start_rung_judgment: 7\n' > "$JUDGBAD_CFG"
+JUDGBAD_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$JUDGBAD_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "0" "$(json_get "$JUDGBAD_OUT" ladder_start_rung_judgment)" "ladder_start_rung_judgment falls back to 0 for garbage value 7"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$JUDGBAD_CFG" bash "$SCRIPT" --field ladder_start_rung_judgment)" "--field ladder_start_rung_judgment falls back to 0 for garbage value 7"
+
 RCFG="$TEST_TMP/rl-ccshim-rev.md"
 printf -- '- reviewer_runner: cc-shim\n- reviewer_engine: MiniMax-M3\n' > "$RCFG"
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RCFG" bash "$SCRIPT" --field reviewer_runner)" "cc-shim reviewer_runner honored (dispatch-review supports it since v2.26.10)"
@@ -446,7 +521,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"discuss_dispatch":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"discuss_dispatch":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 

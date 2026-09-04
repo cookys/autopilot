@@ -1,5 +1,53 @@
 # Changelog
 
+## v2.35.16 — 預設派遣拓樸：brain up, hands down（owner 2026-09-04 經 cuda 轉達）
+
+revival.3d 的實證（cuda memory `quota-opus-foreman-cost`、`standing-foremen-burn-quota`）：一天十幾把實作刀全跑在
+sonnet、常駐工頭一天半燒 $1,180。v2.35.15 把「輪詢燒法」擋在迴圈裡；這一版處理另一半——**實作勞力預設落在哪一層**。
+設計與 rollout：`docs/plans/2026-09-04-default-dispatch-topology.md`（P0–P4 本版出貨；P5 逐主機 rollout 另開，cuda 優先）。
+
+三層拓樸：**T0 brain**（depth-0 fable/opus：brief、裁決、merge，不下場）／**T1 hands**（有 hetero 就從最便宜的合格 rung
+起、紅了爬一階；沒有就 haiku→sonnet）／**T2 judge**（跨家族 qc）。三個缺口對應三個新件：
+
+- **`scripts/resolve-dispatch-topology.js`**（P1）：從已裝 runner（`lib/runner-binary.js`）× 合格席（`engine-scorecard.js
+  seat-status`，磁碟 view 投影成 provisional 是設計，所以逐席問 admission）推導 implementer ladder，寫
+  `~/.autopilot/topology.json`，`--check` 抓漂移。排序是 effort 等級→延遲→名稱（沒有可靠價格資料，檔頭明寫）。
+  `resolve-review-loop.sh` 新值 `implementer_ladder: auto` 展開該檔（缺檔 ⇒ 單 rung + `capability_warnings` 一條）；
+  rung 0 現在對 `judgment` 單元也是起點（`ladder_start_rung_judgment: 1` 還原舊行為）。template 預設 `auto`。
+  本機（aimax395）推導出 19 階：`gemini-3.8-flash-low/low@agy` 起、`kimi` 列為 `candidates_to_qualify`。
+- **路由翻轉**（P2）：`resolve-dispatch.sh` implementer 預設 opus→**sonnet**，新角色 `hands`→haiku；`references/model-routing.md`
+  同步。`dispatch-model-guard` 新增 `guarded_models_implementing`（預設 `fable,opus`，只對非 plan-mode 派工生效，reviewer／
+  debugger 的 plan-mode opus 不受影響）與 `require_engine_header`（派工單第一行必須是 `Engine: <model>…` 且與 `model:` 一致，
+  不符 ⇒ deny，不是 ask——機械規則沒有人要核准）。
+- **`hooks/cost-fuse.js`**（P3，default-on，warn；28 hooks：15/13）：用 `cost-tracker` 既有的 `~/.claude/metrics/costs.jsonl`
+  加總當日 brain 層（fable/opus）支出，過門檻（預設 USD 150/host/day，`cost_fuse` 於 `~/.autopilot/config.json`）時對 brain
+  層 session 的實作型工具呼叫警告（`block` 模式 deny），唯讀 Bash 永遠放行，永不 `ask`。**`scripts/cost-digest.js`**（P0）
+  是同一份 ledger 的看板（日 × 層 × 模型 × session，`--json`），`tierOf()` 兩者共用。
+- **文字**（P4）：front-door 一段 canonical「Default dispatch topology」，l3–l6 薄殼指向它、行數不增；`/l3` 改為 brain 出
+  brief＋sonnet hands inline，`--solo` 是唯一真正 inline 的逃生口，cost fuse 照樣適用。
+
+**本版自己就照這個拓樸做**：depth-0（Fable）只寫 brief、裁決、merge；五個 deliverable 各一個 **sonnet 工頭**（一刀一命，
+Bash ≤40）；十把實作刀全部派 **`gemini-3.8-flash-low@agy` effort=low**（合格席 event 188），全部 `committed`、每刀 2–4 分鐘；
+三刀第一版驗收紅（寫錯檔、`set -u` 未初始化、warning 被後段覆蓋）都在 rung 0 修好，沒有爬階。P1 工頭到 Bash 上限時
+depth-0 接手：自己讀出根因、寫 brief、派 hands 修（沒有親手改）。過程中 governance `enforcement_mode` 在本分支改 `shadow`
+（raw `dispatch-hetero` 在 enforce 下必拒；先例 `4c842a92`），merge 前已還原 `enforce`；dogfood roster 為派工暫切 gemini，
+已還原 grok-4.5。詳見 `docs/projects/2026-09-04-default-dispatch-topology/`（ledger/P0–P4）。
+
+QC（depth-0 authoritative，`union-on-verified-critical`）：三席 gpt-5.6-sol@max／GLM-5.2／MiniMax-M3 首輪皆
+FIX-THEN-SHIP。逐項核實後成立並修掉六項：cost-fuse 唯讀 allowlist 可被 `&&`／`;`／`>`／heredoc／第二行／`node -e` 繞過
+（三席同報；現在先拒任何控制運算子與重導向再比對 allowlist）、session 模型先讀落後一回合的 ledger（改 transcript 優先）、
+warn 狀態沒按 UTC 日重置、`dispatch-model-guard` header 檢查跑在 `on_missing_model` 之前讓 `allow` 變死設定（改先決定
+缺 model 政策）、`cost-digest --by session` 在 `--json` 下不分組且 8 字元截斷後才當 key、`auto` 階梯空時無警告且不驗
+runner（現在補 warning、runner 走同一 enum 檢查 exit 3；claude-native 退路刻意不展開進 hetero ladder）。修復由兩個
+sonnet hands 完成（governance 已還原 enforce，raw hetero 派工依設計被拒）。sol delta 複核回 FIX-THEN-SHIP 一項
+「`set -e` 下 auto probe 非零會終止腳本」——**經核驗不成立**：`resolve-review-loop.sh` 是 `set -uo pipefail`，且缺
+topology 實測正常產出 warning；記錄為 refuted。未收的 🔵：header 比對是嚴格前綴而 `guarded_models` 是子字串（長 model id
+會誤拒）、legacy 無 effort 列排尾端——BACKLOG。全套 `hooks/tests/run.sh --parallel 4`：平行段 ALL TESTS PASSED（重釘後
+`autopilot-engine` 470、`check-hook-inventory` 18 單跑綠）；serial 尾段 `opencode-v2-plugin` 3 紅在 develop 上同樣紅
+（opencode 1.18 `debug config` 行為漂移，既有），`slash-entry-probe` 在負載下 0-byte、單獨開 LLM probe 跑 7/7 綠。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (l3/l4/l5/l6 edits are line-neutral: 35/54/82/113).
+
 ## v2.35.15 — 工頭的鐵律終於進了迴圈：foreman-guard、三個成本 hook 改 default-on、一刀一命
 
 cuda 2026-09-04 的 quota digest（`cuda:~/projects/QUOTA-DIGEST-2026-09-04.md`，經 hangar-bridge 轉來、

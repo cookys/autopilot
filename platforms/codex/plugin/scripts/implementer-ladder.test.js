@@ -64,12 +64,36 @@ test('select: mechanical r0/r1/r2 climb then cap', () => {
   assert.equal(r3.rung, 2);
 });
 
-test('select: judgment starts at rung 1', () => {
+test('select: judgment defaults to rung 0 and climbs', () => {
   const r0 = selectImplementerRung({ ladder: LADDER, unitClass: 'judgment', repairRound: 0 });
   const r1 = selectImplementerRung({ ladder: LADDER, unitClass: 'judgment', repairRound: 1 });
+  assert.equal(r0.rung, 0);
+  assert.equal(r0.tuple.engine, 'gemini-3.7-flash-low');
+  assert.equal(r1.rung, 1);
+  assert.equal(r1.tuple.engine, 'grok-4.6');
+});
+
+test('select: judgment with startRungJudgment 0 starts at rung 0', () => {
+  const r0 = selectImplementerRung({ ladder: LADDER, unitClass: 'judgment', repairRound: 0, startRungJudgment: 0 });
+  assert.equal(r0.rung, 0);
+  assert.equal(r0.tuple.engine, 'gemini-3.7-flash-low');
+});
+
+test('select: judgment with startRungJudgment 1 starts at rung 1', () => {
+  const r0 = selectImplementerRung({ ladder: LADDER, unitClass: 'judgment', repairRound: 0, startRungJudgment: 1 });
+  const r1 = selectImplementerRung({ ladder: LADDER, unitClass: 'judgment', repairRound: 1, startRungJudgment: 1 });
   assert.equal(r0.rung, 1);
   assert.equal(r0.tuple.engine, 'grok-4.6');
   assert.equal(r1.rung, 2);
+});
+
+test('select: mechanical always starts at rung 0 regardless of startRungJudgment', () => {
+  const mDef = selectImplementerRung({ ladder: LADDER, unitClass: 'mechanical', repairRound: 0 });
+  const m0 = selectImplementerRung({ ladder: LADDER, unitClass: 'mechanical', repairRound: 0, startRungJudgment: 0 });
+  const m1 = selectImplementerRung({ ladder: LADDER, unitClass: 'mechanical', repairRound: 0, startRungJudgment: 1 });
+  assert.equal(mDef.rung, 0);
+  assert.equal(m0.rung, 0);
+  assert.equal(m1.rung, 0);
 });
 
 test('select: single rung is used for both classes', () => {

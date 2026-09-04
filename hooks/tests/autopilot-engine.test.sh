@@ -3464,6 +3464,7 @@ const validPayload = {
   implementer_effort: 'high',
   implementer_runner: 'auto',
   implementer_ladder: [],
+  ladder_start_rung_judgment: 0,
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
   spec_review: 'on',

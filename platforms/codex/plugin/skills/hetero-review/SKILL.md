@@ -54,3 +54,8 @@ Prose execution sequence for code phases and diffs (see [`references/code-loop.m
 5. Run `node scripts/check-phase-review-receipt.js` in receipt mode.
 6. The eventual merge commit carries the existing `QC-Verdict` trailer unchanged.
 7. When the `hetero_review` knob resolves to `off`, write the opt-out receipt via `node scripts/hetero-review-loop.js opt-out --knob hetero_review` instead of running the loop.
+
+**MUST-READ**: [`references/plan-loop.md`](references/plan-loop.md) and
+[`references/code-loop.md`](references/code-loop.md) — read both before routing, even when the
+input shape only calls for one loop: the code loop's freeze predicate and the plan loop's
+receipt rules cross-reference each other.

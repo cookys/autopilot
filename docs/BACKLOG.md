@@ -77,6 +77,18 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 
 ## Active entries
 
+### Promote the depth-0 hetero-run watcher to a shipped dispatch-watch script
+- **Trigger**: the next `/l4`–`/l6` session that has to wake parked foremen — depth-0 re-armed a scratch script ~40 times in v2.36.0 (report the first run whose `dispatch-status.js` phase flips from running to terminal)
+- **Context**: parked foremen are never woken by their own background children; a shipped watcher plus a documented `SendMessage` wake step would replace the hand-rolled loop. Reference copy: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/watch-hetero.sh`
+- **Effort**: S (new script ⇒ PATCH; wire in all four places)
+- **Source**: v2.36.0 session
+
+### Lint hands diffs for fixture literals leaking into production code
+- **Trigger**: next hands cut on a script with a test that names phases/ids (`p7`, `fixture`, `test`)
+- **Context**: `references/evidence-discipline.md` §23 — three reviewers caught a `phase === 'p7'` carve-out the suite could not
+- **Effort**: S
+- **Source**: core review g2, v2.36.0
+
 ### hetero-review-loop / checker: end-to-end aborted-chain case and explicit base-inheritance assertion
 - **Trigger**: next touch of the chain semantics (abort g1 → collect g2 → finalize → checker exit 0; g2.base equals the aborted g1 base)
 - **Context**: writer side is pinned (tests 2d/2e/4); the reader side and the base inheritance are only implicit (GLM + MiniMax FOLLOW-UP, core review g4)

@@ -553,3 +553,57 @@ Before recording anything as verified:
 If the broken case and the working case produce the same observation, you have not verified anything
 yet. Plant the broken case and watch it fail. That is the only step that converts a green run into
 evidence.
+
+## 22. A test stub that is more permissive than the real program hides the contract it stubs
+
+v2.36.0: `hetero-review-loop.js` spawned the review-loop resolver with `--repo-root <path>`. The real
+resolver rejects unknown flags (exit 2), so every real run produced zero seats. The suite was green
+because its resolver stub accepted any argv. Two more of the same shape in one day: the stub dispatcher
+returned `reviewed` for a seat with no `no_finding_proof`, which the real dispatcher never does, and the
+stub resolver emitted `qc_panel_runners` keys the real resolver never emits.
+
+> **A stub must be at least as strict as the program it replaces.** Every driver that talks to a
+> sibling script needs one case against the real script (a scratch config, a PATH shim only for the
+> paid transport).
+
+Prevention: `hooks/tests/hetero-review-loop.test.sh` case 10d runs `collect` against the real
+`scripts/resolve-review-loop.sh`; the driver fails closed on resolver exit ≠ 0 instead of falling back.
+
+## 23. A test-only carve-out in production code is a backdoor the unit suite cannot see
+
+v2.36.0: a hands cut added `prevEntry.status === 'pending' && phase === 'p7'` to `handleCollect` so test
+case 7 could collect generation 2 behind a non-finalized generation 1. The suite was green (the branch
+existed for it). Three hetero reviewers flagged it independently as a contiguity bypass; nothing in the
+repository would have caught it otherwise.
+
+> **When a test needs a special path, the special path belongs in the fixture, never in the program.**
+> Grep the diff for literal fixture names (`p7`, `test`, `fixture`) before integrating a hands cut.
+
+Prevention: the carve-out is removed and case 7 finalizes generation 1 first; `check-redispatch-prompt.sh`
+style linting of hands diffs for fixture literals is a BACKLOG row.
+
+## 24. A foreman's "green" is a claim until depth-0 re-runs the command
+
+v2.36.0: a foreman reported cut D1-2d "GREEN, integrated" with the topology test. Depth-0 ran the same
+test in the foreman's own worktree: 39 passed, 2 failed. The foreman had read a stale output file from
+an earlier background run. Separately, foremen that only ran their own deliverable's DONE line shipped a
+resolver-contract change that turned 25 other test files red; nobody saw it until the release suite.
+
+> **Verify by re-running, not by reading a report — and each deliverable's DONE includes the parallel
+> section of the full suite** when it touches a shared contract (resolver fields, schema, defaults).
+
+Prevention: depth-0 re-runs the cut's test file in a scratch worktree before every merge (this session's
+integration rule); the front-door topology section carries the full-suite-per-deliverable line.
+
+## 25. A new `auto` default that reads host state leaks that state into every fixture that did not pin it
+
+v2.36.0: `plan_review`/`hetero_review`/`consult_dispatch` gained `auto`, which reads
+`~/.autopilot/topology.json`. Every mini-repo fixture that had never mentioned those knobs suddenly
+expanded the real host's plan panel, collided with the fixture's implementer runner, and tripped the
+same-runner guard — 25 red files, all "unrelated" to the change.
+
+> **A default that consults the environment needs a test-side kill switch, and every fixture must set
+> it.** Here: `AUTOPILOT_TOPOLOGY_FILE` pinned to a nonexistent path.
+
+Prevention: the shell resolver suite, the ladder unit test and the integration fixtures pin the variable;
+the product fix makes `auto` skip colliding seats and fall back natively instead of exiting 3.

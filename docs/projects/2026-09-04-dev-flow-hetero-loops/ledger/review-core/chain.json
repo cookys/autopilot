@@ -1,0 +1,15 @@
+[
+  {
+    "generation": 1,
+    "base": "1e5c2841",
+    "head": "c1a16011f4f279e3441f9077213c51909552af74",
+    "seats": [
+      "s0",
+      "s1",
+      "s2"
+    ],
+    "status": "finalized",
+    "dispositions_path": "review-core/g1/dispositions.json",
+    "dispositions_sha256": "8bd2c27e3c2680bde35df2ce5d3e1247da382fabd4ce1cfc451df7b5c3e06a0b"
+  }
+]

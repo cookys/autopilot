@@ -1,5 +1,13 @@
 {
   "base": "1e5c2841",
-  "head": "017b76c72563934b8b49dde9792a488d56dff62a",
-  "diff_sha256": "b7405ac6257e2ebb778f2019829fd33266f2124e06fdbbb18388fee5e6c3dc51"
+  "head": "c1a16011f4f279e3441f9077213c51909552af74",
+  "diff_sha256": "6fc9e7eb4e225fc5fbbe5995f174ae5303577d48da313aa34980904bdf184fca",
+  "excluded": [
+    "platforms/**",
+    "profiles/*.json",
+    "docs/projects/**",
+    "docs/plans/evidence/**",
+    "docs/BACKLOG.md"
+  ],
+  "diff_bytes": 308817
 }

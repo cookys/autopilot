@@ -272,6 +272,8 @@ else
   IMPL_RUNNER="$DEF_IMPL_RUNNER"
 fi
 IMPL_LADDER_RAW="$(read_field "$CONFIG" implementer_ladder "")"
+LADDER_START_RUNG_JUDGMENT="$(read_field "$CONFIG" ladder_start_rung_judgment "0")"
+[[ "$LADDER_START_RUNG_JUDGMENT" =~ ^[01]$ ]] || LADDER_START_RUNG_JUDGMENT="0"
 REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "$DEF_REV_ENDPOINT")"
 REV_LIMITATION="$(read_field "$CONFIG" reviewer_limitation "")"
 IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "$DEF_IMPL_ENDPOINT")"
@@ -711,10 +713,42 @@ case "$IMPL_RUNNER" in
     exit 3
     ;;
 esac
-# Optional implementer_ladder: comma list of engine/effort@runner. Absent/empty
+# Optional implementer_ladder: comma list of engine/effort@runner, or 'auto'. Absent/empty
 # ⇒ [] (the three implementer_* fields remain the single implicit rung).
 IMPL_LADDER_JSON="[]"
-if [[ -n "$IMPL_LADDER_RAW" ]]; then
+if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
+  _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
+  _auto_ladder="$(node -e '
+const fs = require("fs");
+try {
+  const file = process.argv[1];
+  const raw = fs.readFileSync(file, "utf8");
+  const doc = JSON.parse(raw);
+  if (Array.isArray(doc.implementer_ladder) && doc.implementer_ladder.length > 0) {
+    const rungs = doc.implementer_ladder.map((r) => ({
+      engine: r.engine,
+      effort: r.effort,
+      runner: r.runner,
+    }));
+    process.stdout.write(JSON.stringify(rungs));
+    process.exit(0);
+  }
+} catch {}
+process.exit(1);
+' "$_topo_file" 2>/dev/null || true)"
+  if [[ -n "$_auto_ladder" ]]; then
+    IMPL_LADDER_JSON="$_auto_ladder"
+  else
+    IMPL_LADDER_JSON="[]"
+    CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "implementer_ladder auto: no host topology (run scripts/resolve-dispatch-topology.js)" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+  fi
+elif [[ -n "$IMPL_LADDER_RAW" ]]; then
   IMPL_LADDER_JSON="["
   _ladder_first=1
   _ladder_work="${IMPL_LADDER_RAW},"
@@ -1972,6 +2006,7 @@ if [[ -n "$FIELD" ]]; then
     reviewer_fallback_preference) printf '%s\n' "$REV_FB_PREF_JSON" ;;
     reviewer_fallback_preference_low_risk) printf '%s\n' "$REV_FB_PREF_LOW_JSON" ;;
     loop_max_rounds) printf '%s\n' "$MAX_ROUNDS" ;;
+    ladder_start_rung_judgment) printf '%s\n' "$LADDER_START_RUNG_JUDGMENT" ;;
     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;
     plan_review) printf '%s\n' "$PLAN_REVIEW" ;;
@@ -2120,9 +2155,9 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "implementer_ladder": %s, "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${SEATS_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "implementer_ladder": %s, "ladder_start_rung_judgment": %s, "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${SEATS_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
-    "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" "$IMPL_LADDER_JSON" \
+    "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" "$IMPL_LADDER_JSON" "$LADDER_START_RUNG_JUDGMENT" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
@@ -2131,9 +2166,9 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REV_ENDPOINT" "$(json_escape "$REV_FAMILY")" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
     "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${SEATS_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "implementer_ladder": %s, "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${SEATS_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "implementer_ladder": %s, "ladder_start_rung_judgment": %s, "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${SEATS_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
-    "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" "$IMPL_LADDER_JSON" \
+    "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" "$IMPL_LADDER_JSON" "$LADDER_START_RUNG_JUDGMENT" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \

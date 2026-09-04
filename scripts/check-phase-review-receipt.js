@@ -450,7 +450,11 @@ function validateModeB(flags) {
     }
   }
 
-  const blockerClassDispositions = new Set(['accepted_blocker', 'rejected']);
+  // 'rejected' is a valid disposition for both blocker and non-blocker findings — only
+  // 'accepted_blocker' is exclusive to candidate_blocker=true findings.
+  const blockerValidDispositions = new Set(['accepted_blocker', 'rejected']);
+  const blockerExclusiveDispositions = new Set(['accepted_blocker']);
+  const rationaleRequiredDispositions = new Set(['accepted_blocker', 'rejected']);
   const failingFindings = [];
 
   for (const finding of planArtifact.findings) {
@@ -466,26 +470,29 @@ function validateModeB(flags) {
     const disposition = disp.disposition;
 
     if (finding.candidate_blocker === true) {
-      if (!blockerClassDispositions.has(disposition)) {
+      if (!blockerValidDispositions.has(disposition)) {
         failingFindings.push(
           `Finding '${id}': invalid disposition '${disposition}' (candidate_blocker=true requires 'accepted_blocker' or 'rejected')`
         );
-        continue;
-      }
-
-      const rationale = typeof disp.rationale === 'string' ? disp.rationale.trim() : '';
-      if (!rationale) {
-        failingFindings.push(`Finding '${id}': rationale must be a non-empty string`);
         continue;
       }
     } else {
       // d2-plan-candidate-blocker-fail-open: a non-blocker finding's disposition class must
       // match — it must NOT be disposed with a blocker-exclusive disposition, which would let a
       // finding evade the blocker-specific checks above by simply mislabelling itself.
-      if (blockerClassDispositions.has(disposition)) {
+      // 'rejected' is NOT blocker-exclusive: a non-blocker finding may legitimately be rejected.
+      if (blockerExclusiveDispositions.has(disposition)) {
         failingFindings.push(
           `Finding '${id}': disposition '${disposition}' is blocker-exclusive but candidate_blocker=false`
         );
+        continue;
+      }
+    }
+
+    if (rationaleRequiredDispositions.has(disposition)) {
+      const rationale = typeof disp.rationale === 'string' ? disp.rationale.trim() : '';
+      if (!rationale) {
+        failingFindings.push(`Finding '${id}': rationale must be a non-empty string`);
         continue;
       }
     }
@@ -501,7 +508,46 @@ function validateModeB(flags) {
   process.exit(0);
 }
 
+const CANONICAL_POSITIVE_INT_RE = /^[1-9][0-9]*$/;
+
+// Item 2 / d2-seat-receipt-forgery: the minimum reviewed-seat count is taken ONLY from
+// trusted configuration (a CLI flag or an environment variable) — never from the receipt
+// under test, which would otherwise let a forger ship its own passing threshold alongside
+// the forged evidence. With no configuration supplied, the default is "all seats".
+// The configured value, when present, must be a canonical positive integer string
+// (no leading zeros, no sign, no trailing junk) — parseInt() alone would silently accept
+// '3x' as 3 or '-1' as -1, so this is validated up front, before any generation validation.
+function resolveConfiguredMinSeats(flags) {
+  let raw;
+  let source;
+  if (flags['min-reviewed-seats'] !== undefined) {
+    raw = flags['min-reviewed-seats'];
+    source = '--min-reviewed-seats';
+  } else if (flags['min-seats'] !== undefined) {
+    raw = flags['min-seats'];
+    source = '--min-seats';
+  } else if (flags['min_reviewed_seats'] !== undefined) {
+    raw = flags['min_reviewed_seats'];
+    source = '--min_reviewed_seats';
+  } else if (process.env.AUTOPILOT_MIN_REVIEWED_SEATS !== undefined) {
+    raw = process.env.AUTOPILOT_MIN_REVIEWED_SEATS;
+    source = 'AUTOPILOT_MIN_REVIEWED_SEATS';
+  } else {
+    return null;
+  }
+
+  const str = typeof raw === 'string' ? raw : String(raw);
+  if (!CANONICAL_POSITIVE_INT_RE.test(str)) {
+    console.error(`Invalid ${source} value '${raw}': must be a canonical positive integer (e.g. '1', '2', '3'; no zero, negatives, signs, decimals, or trailing characters)`);
+    process.exit(1);
+  }
+  return parseInt(str, 10);
+}
+
 function validateModeA(flags) {
+  // Validated first, before any generation/chain validation runs — see resolveConfiguredMinSeats.
+  const configuredMinSeats = resolveConfiguredMinSeats(flags);
+
   const ledgerDir = flags.ledger;
   const phase = flags.phase;
   const branch = flags.branch;
@@ -572,21 +618,6 @@ function validateModeA(flags) {
     if (!firstEntryDisk || firstEntryDisk.base !== expectedBaseSha) {
       console.error(`Ledger chain first entry base '${firstEntryDisk && firstEntryDisk.base}' does not match expected phase-base '${expectedBaseSha}'`);
       process.exit(1);
-    }
-
-    // Item 2 / d2-seat-receipt-forgery: the minimum reviewed-seat count is taken ONLY from
-    // trusted configuration (a CLI flag or an environment variable) — never from the receipt
-    // under test, which would otherwise let a forger ship its own passing threshold alongside
-    // the forged evidence. With no configuration supplied, the default is "all seats".
-    let configuredMinSeats = null;
-    if (flags['min-reviewed-seats'] !== undefined) {
-      configuredMinSeats = parseInt(flags['min-reviewed-seats'], 10);
-    } else if (flags['min-seats'] !== undefined) {
-      configuredMinSeats = parseInt(flags['min-seats'], 10);
-    } else if (flags['min_reviewed_seats'] !== undefined) {
-      configuredMinSeats = parseInt(flags['min_reviewed_seats'], 10);
-    } else if (process.env.AUTOPILOT_MIN_REVIEWED_SEATS !== undefined) {
-      configuredMinSeats = parseInt(process.env.AUTOPILOT_MIN_REVIEWED_SEATS, 10);
     }
 
     const findingsByGeneration = new Map();

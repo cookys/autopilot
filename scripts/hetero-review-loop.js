@@ -87,10 +87,11 @@ Collect flags:
   --exclude <specs>     Comma-separated git pathspecs to exclude from diff
   --timeout <duration>  Timeout for dispatch (default: 20m)
   --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict
-  --retry                Reuse this generation number after it was aborted; the aborted
-                          generation's directory is preserved (renamed aside), never deleted.
-                          Without --retry, an aborted generation refuses reuse — collect the
-                          next generation number instead.
+
+Generation numbers are never reused. If a generation is aborted (e.g. the target branch
+moved during collection, or a seat's findings failed to parse), its evidence directory is
+left untouched on disk and stays referenced from chain.json; collect the next generation
+number instead — it continues from the aborted generation's base.
 
 Finalize flags:
   --generation <n>      Generation number (integer >= 1)
@@ -117,7 +118,7 @@ function parseArgv(argv) {
       flags.help = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
-      if (key === 'allow-seat-gap' || key === 'retry') {
+      if (key === 'allow-seat-gap') {
         flags[key] = true;
       } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
         flags[key] = argv[i + 1];
@@ -470,23 +471,14 @@ async function handleCollect(flags) {
 
   const existingGenEntry = chain.find((c) => c && c.generation === generation);
   if (existingGenEntry) {
-    if (existingGenEntry.status === 'pending' || existingGenEntry.status === 'pending-with-gap' || existingGenEntry.status === 'finalized') {
-      console.error(`ERROR: Generation ${generation} already exists with status '${existingGenEntry.status}'`);
-      process.exit(1);
-    }
+    console.error(`ERROR: Generation ${generation} already exists with status '${existingGenEntry.status}'; generation numbers are never reused (including aborted ones) — collect the next generation number instead`);
+    process.exit(1);
   }
 
   const gDir = path.join(reviewPhaseDir, `g${generation}`);
-  const retryAborted = Boolean(flags.retry);
   if (fs.existsSync(gDir)) {
-    if (!existingGenEntry || existingGenEntry.status !== 'aborted') {
-      console.error(`ERROR: Generation directory ${gDir} already exists and status is '${existingGenEntry ? existingGenEntry.status : 'untracked'}'; refusing to reuse`);
-      process.exit(1);
-    }
-    if (!retryAborted) {
-      console.error(`ERROR: Generation ${generation} was aborted and its evidence directory ${gDir} still exists; collect the next generation number instead, or pass --retry to reuse generation ${generation} (the aborted evidence is preserved, never deleted)`);
-      process.exit(1);
-    }
+    console.error(`ERROR: Generation directory ${gDir} already exists; refusing to reuse`);
+    process.exit(1);
   }
 
   let base = '';
@@ -503,11 +495,17 @@ async function handleCollect(flags) {
       console.error(`ERROR: Contiguous chain broken: missing generation ${generation - 1} in ${chainPath}`);
       process.exit(1);
     }
-    if (prevEntry.status !== 'finalized') {
+    if (prevEntry.status === 'finalized') {
+      base = prevEntry.head;
+    } else if (prevEntry.status === 'aborted') {
+      // The aborted generation never produced a reviewable result, so nothing advanced;
+      // continue from the same base it was attempted against. Its evidence directory is
+      // preserved on disk and remains referenced from this chain.json entry.
+      base = prevEntry.base;
+    } else {
       console.error(`ERROR: Cannot collect generation ${generation}: generation ${generation - 1} is not finalized (status is '${prevEntry.status}')`);
       process.exit(1);
     }
-    base = prevEntry.head;
   }
 
   // Persist phase base for generation 1 at the documented ledger-root path
@@ -555,13 +553,6 @@ async function handleCollect(flags) {
 
   // Range and diff
   fs.mkdirSync(reviewPhaseDir, { recursive: true });
-  if (existingGenEntry && existingGenEntry.status === 'aborted' && fs.existsSync(gDir)) {
-    // --retry was required to get here (see the gate above). Never delete evidence: move the
-    // aborted generation's directory aside so it stays on disk, then create a fresh one for the
-    // retry to write into.
-    const preservedDir = path.join(reviewPhaseDir, `g${generation}.aborted-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`);
-    fs.renameSync(gDir, preservedDir);
-  }
   try {
     fs.mkdirSync(gDir);
   } catch (err) {

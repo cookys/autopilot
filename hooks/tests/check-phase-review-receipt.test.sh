@@ -619,6 +619,69 @@ EOF
 C11O_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11O" --dispositions "$DISPOSITIONS_11O" 2>&1); C11O_RC=$?
 assert_exit_code "$C11O_RC" "1" "case 11 negative: candidate_blocker=false disposed as accepted_blocker (class mismatch) exits 1"
 
+# 11p (positive control): candidate_blocker=false disposed as 'rejected' with a non-empty
+# rationale must succeed — 'rejected' is a valid disposition for non-blocker findings; only
+# 'accepted_blocker' is exclusive to candidate_blocker=true findings: expect exit 0.
+echo "# Test Plan 11p" > "$TEST_TMP/plan11p.md"
+echo "# Test Rubric 11p" > "$TEST_TMP/plan11p.rubric.md"
+PLAN11P_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$TEST_TMP/plan11p.md")
+RUBRIC11P_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$TEST_TMP/plan11p.rubric.md")
+
+PLAN_ARTIFACT_11P="$TEST_TMP/plan11p.json"
+DISPOSITIONS_11P="$TEST_TMP/disp11p.json"
+cat << EOF > "$PLAN_ARTIFACT_11P"
+{
+  "artifact_type": "plan_review_artifact",
+  "logical_plan_id": "test-plan-11p",
+  "generation": 1,
+  "plan_sha256": "$PLAN11P_SHA",
+  "rubric_sha256": "$RUBRIC11P_SHA",
+  "findings": [
+    { "id": "f1", "candidate_blocker": false, "disposition": "rejected" }
+  ]
+}
+EOF
+cat << EOF > "$DISPOSITIONS_11P"
+{
+  "logical_plan_id": "test-plan-11p",
+  "generation": 1,
+  "findings": [
+    { "id": "f1", "candidate_blocker": false, "disposition": "rejected", "rationale": "Not applicable to this diff" }
+  ]
+}
+EOF
+C11P_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11P" --dispositions "$DISPOSITIONS_11P" 2>&1); C11P_RC=$?
+assert_exit_code "$C11P_RC" "0" "case 11p: candidate_blocker=false disposed as rejected with rationale exits 0"
+
+# 11q (negative control): candidate_blocker=false disposed as 'rejected' but with an empty
+# rationale must fail closed — the rejection rationale is required regardless of blocker class:
+# expect exit 1.
+PLAN_ARTIFACT_11Q="$TEST_TMP/plan11q.json"
+DISPOSITIONS_11Q="$TEST_TMP/disp11q.json"
+cat << EOF > "$PLAN_ARTIFACT_11Q"
+{
+  "artifact_type": "plan_review_artifact",
+  "logical_plan_id": "test-plan-11q",
+  "generation": 1,
+  "plan_sha256": "$PLAN11P_SHA",
+  "rubric_sha256": "$RUBRIC11P_SHA",
+  "findings": [
+    { "id": "f1", "candidate_blocker": false, "disposition": "rejected" }
+  ]
+}
+EOF
+cat << EOF > "$DISPOSITIONS_11Q"
+{
+  "logical_plan_id": "test-plan-11q",
+  "generation": 1,
+  "findings": [
+    { "id": "f1", "candidate_blocker": false, "disposition": "rejected", "rationale": "   " }
+  ]
+}
+EOF
+C11Q_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11Q" --dispositions "$DISPOSITIONS_11Q" 2>&1); C11Q_RC=$?
+assert_exit_code "$C11Q_RC" "1" "case 11q negative: candidate_blocker=false disposed as rejected with blank rationale exits 1"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 12. End-to-end case using hetero-review-loop.js collect and finalize
 # ─────────────────────────────────────────────────────────────────────────────
@@ -811,6 +874,40 @@ CHECK_EXCL_OUT=$(node "$SCRIPT" \
   --phase-base "$GEN1_HEAD" \
   --repo-root "$SCRATCH_REPO" 2>&1); CHECK_EXCL_RC=$?
 assert_exit_code "$CHECK_EXCL_RC" "0" "case 13: checker exits 0 when range.json carries an exclusion"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. --min-reviewed-seats / --min-seats / --min_reviewed_seats / AUTOPILOT_MIN_REVIEWED_SEATS
+# must be a canonical positive integer (/^[1-9][0-9]*$/); non-canonical values are refused with
+# exit 1 BEFORE any generation/chain validation runs (proven by refusing even with no --ledger/
+# --phase/--branch chain to validate at all).
+# ─────────────────────────────────────────────────────────────────────────────
+for BAD_VAL in "0" "-1" "3x" "" "01" "1.5" "+1" " 1"; do
+  BAD_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase "$EXCL_PHASE" --branch work --min-reviewed-seats "$BAD_VAL" 2>&1); BAD_RC=$?
+  assert_exit_code "$BAD_RC" "1" "case 14: --min-reviewed-seats '$BAD_VAL' is refused"
+  assert_contains "$BAD_OUT" "canonical positive integer" "case 14: refusal message for --min-reviewed-seats '$BAD_VAL' names the canonical-positive-integer rule"
+done
+
+# Same bad values via the --min-seats alias
+BADALIAS_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase "$EXCL_PHASE" --branch work --min-seats "3x" 2>&1); BADALIAS_RC=$?
+assert_exit_code "$BADALIAS_RC" "1" "case 14: --min-seats '3x' is refused"
+
+# Same bad value via the AUTOPILOT_MIN_REVIEWED_SEATS env var
+BADENV_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS="-1" node "$SCRIPT" --ledger "$LEDGER" --phase "$EXCL_PHASE" --branch work 2>&1); BADENV_RC=$?
+assert_exit_code "$BADENV_RC" "1" "case 14: AUTOPILOT_MIN_REVIEWED_SEATS='-1' is refused"
+assert_contains "$BADENV_OUT" "canonical positive integer" "case 14: refusal message for bad AUTOPILOT_MIN_REVIEWED_SEATS names the canonical-positive-integer rule"
+
+# Negative control (ordering): an invalid --min-reviewed-seats is refused even with --ledger/
+# --phase/--branch all missing (only --branch present so main() still routes into Mode A),
+# proving the check runs before Mode A's own "requires --ledger, --phase, and --branch" gate and
+# before any generation/chain validation.
+ORDER_OUT=$(node "$SCRIPT" --branch work --min-reviewed-seats "not-a-number" 2>&1); ORDER_RC=$?
+assert_exit_code "$ORDER_RC" "1" "case 14 negative: bad --min-reviewed-seats refused even with --ledger/--phase missing"
+assert_contains "$ORDER_OUT" "canonical positive integer" "case 14 negative: refusal names the canonical-positive-integer rule, not the missing-ledger/phase error"
+
+# Positive control: a canonical value ('1') is accepted and, on this single-seat fixture, does
+# not block the otherwise-valid case 13 run.
+GOOD_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase "$EXCL_PHASE" --branch work --phase-base "$GEN1_HEAD" --repo-root "$SCRATCH_REPO" --min-reviewed-seats "1" 2>&1); GOOD_RC=$?
+assert_exit_code "$GOOD_RC" "0" "case 14: canonical --min-reviewed-seats '1' is accepted and the otherwise-valid run still succeeds"
 
 finalize_test
 

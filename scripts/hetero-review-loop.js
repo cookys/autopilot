@@ -176,96 +176,32 @@ function resolveSeats(seatsArg, repoRoot) {
   const resolver = getResolverPath(repoRoot);
   const fullJson = resolveConfig(resolver, repoRoot);
 
-  let qcPanelSeats = fullJson && fullJson.qc_panel_seats;
-  if (Array.isArray(qcPanelSeats) && qcPanelSeats.length > 0) {
-    return qcPanelSeats.map((seatObj, idx) => {
-      let endpoint = seatObj.endpoint;
-      if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
-        endpoint = undefined;
-      }
-      return {
-        id: `s${idx}`,
-        runner: seatObj.runner || '',
-        engine: seatObj.model || '',
-        effort: seatObj.effort || '',
-        endpoint,
-      };
-    });
-  }
+  const qcComplete = fullJson && fullJson.qc_panel_seats_complete;
+  const qcSeats = fullJson && fullJson.qc_panel_seats;
 
-  let qcPanel = fullJson && fullJson.qc_panel;
-  let qcRunners = fullJson && fullJson.qc_panel_runners;
-  let qcEfforts = fullJson && fullJson.qc_panel_efforts;
-  let qcEndpoints = fullJson && fullJson.qc_panel_endpoints;
-
-  if (qcPanel === undefined) {
-    qcPanel = resolveField(resolver, repoRoot, 'qc_panel');
-  }
-  if (qcRunners === undefined) {
-    qcRunners = resolveField(resolver, repoRoot, 'qc_panel_runners');
-  }
-  if (qcEfforts === undefined) {
-    qcEfforts = resolveField(resolver, repoRoot, 'qc_panel_efforts');
-  }
-  if (qcEndpoints === undefined) {
-    qcEndpoints = resolveField(resolver, repoRoot, 'qc_panel_endpoints');
-  }
-
-  const toList = (val) => {
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'string' && val.trim().length > 0) {
-      return val.split(',').map((s) => s.trim());
+  if (qcComplete === false || !Array.isArray(qcSeats) || qcSeats.length === 0) {
+    const cfgSource = (fullJson && (fullJson.config_source || fullJson.config_path)) || '';
+    if (cfgSource) {
+      console.error(`ERROR: Resolved qc panel is incomplete (${cfgSource})`);
+    } else {
+      console.error('ERROR: Resolved qc panel is incomplete');
     }
-    return [];
-  };
-
-  const panelList = toList(qcPanel);
-  if (panelList.length > 0) {
-    const runnerList = toList(qcRunners);
-    const effortList = toList(qcEfforts);
-    const endpointList = toList(qcEndpoints);
-
-    return panelList.map((engine, idx) => {
-      const runner = runnerList[idx] || '';
-      const effort = effortList[idx] || '';
-      let endpoint = endpointList[idx] || '';
-      if (endpoint === '@none' || !endpoint) {
-        endpoint = undefined;
-      }
-      return {
-        id: `s${idx}`,
-        runner,
-        engine,
-        effort,
-        endpoint,
-      };
-    });
+    process.exit(2);
   }
 
-  // Fallback to reviewer_*
-  let revEngine = fullJson && fullJson.reviewer_engine;
-  let revEffort = fullJson && fullJson.reviewer_effort;
-  let revRunner = fullJson && fullJson.reviewer_runner;
-  let revEndpoint = fullJson && fullJson.reviewer_endpoint;
-
-  if (revEngine === undefined) revEngine = resolveField(resolver, repoRoot, 'reviewer_engine');
-  if (revEffort === undefined) revEffort = resolveField(resolver, repoRoot, 'reviewer_effort');
-  if (revRunner === undefined) revRunner = resolveField(resolver, repoRoot, 'reviewer_runner');
-  if (revEndpoint === undefined) revEndpoint = resolveField(resolver, repoRoot, 'reviewer_endpoint');
-
-  if (revEndpoint === '@none' || !revEndpoint) {
-    revEndpoint = undefined;
-  }
-
-  return [
-    {
-      id: 's0',
-      runner: revRunner || '',
-      engine: revEngine || '',
-      effort: revEffort || '',
-      endpoint: revEndpoint,
-    },
-  ];
+  return qcSeats.map((seatObj, idx) => {
+    let endpoint = seatObj.endpoint;
+    if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
+      endpoint = undefined;
+    }
+    return {
+      id: `s${idx}`,
+      runner: seatObj.runner || '',
+      engine: seatObj.model || '',
+      effort: seatObj.effort || '',
+      endpoint,
+    };
+  });
 }
 
 const SEVERITY_WORDS = new Set(['Critical', 'Major', 'Minor', 'Suggestion']);
@@ -626,12 +562,16 @@ async function handleCollect(flags) {
     process.exit(1);
   }
 
-  // Check for parse failures across seats (Defect 2)
+  // Parse findings per seat and handle placeholders / parse failures
+  const seatFindingMap = new Map();
   for (const res of seatResults) {
     const findingsStr = (res.rawOutput && typeof res.rawOutput.findings === 'string') ? res.rawOutput.findings : '';
-    if (findingsStr.trim().length > 0) {
-      const extracted = extractFindings(res.seat.id, findingsStr);
-      if (extracted.length === 0) {
+    const extracted = extractFindings(res.seat.id, findingsStr);
+    seatFindingMap.set(res.seat.id, extracted);
+
+    const verdict = res.rawOutput && res.rawOutput.verdict;
+    if (findingsStr.trim().length > 0 && extracted.length === 0) {
+      if (verdict === 'FIX-THEN-SHIP') {
         saveChainEntry({
           generation,
           base,
@@ -640,6 +580,15 @@ async function handleCollect(flags) {
         });
         console.error(`ERROR: Failed to parse non-empty findings for seat ${res.seat.id}`);
         process.exit(1);
+      }
+    }
+
+    if (verdict === 'SHIP-AS-IS' && extracted.length === 0) {
+      const proof = (res.rawOutput && typeof res.rawOutput.no_finding_proof === 'string')
+        ? res.rawOutput.no_finding_proof.trim()
+        : '';
+      if (!proof) {
+        res.status = 'no_verdict';
       }
     }
   }
@@ -651,7 +600,7 @@ async function handleCollect(flags) {
 
   for (const res of seatResults) {
     if (res.status === 'reviewed') {
-      const seatFindings = extractFindings(res.seat.id, res.rawOutput.findings || '');
+      const seatFindings = seatFindingMap.get(res.seat.id) || [];
       allFindings.push(...seatFindings);
     } else {
       hasGap = true;
@@ -682,6 +631,18 @@ async function handleCollect(flags) {
     status: genStatus,
   });
 
+  const seatSummaries = {};
+  for (const res of seatResults) {
+    const extracted = seatFindingMap.get(res.seat.id) || [];
+    const proof = (res.rawOutput && typeof res.rawOutput.no_finding_proof === 'string')
+      ? res.rawOutput.no_finding_proof.trim()
+      : '';
+    seatSummaries[res.seat.id] = {
+      findings_count: extracted.length,
+      proof_present: proof.length > 0,
+    };
+  }
+
   // Output summary JSON
   const summary = {
     phase,
@@ -691,6 +652,7 @@ async function handleCollect(flags) {
     seats: seatIds,
     findings_count: allFindings.length,
     status: genStatus,
+    seat_summaries: seatSummaries,
   };
   console.log(JSON.stringify(summary, null, 2));
   process.exit(0);

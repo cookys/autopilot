@@ -59,6 +59,9 @@
     "strict_l5_policy_override",
     "brain_seat",
     "plan_review",
+    "plan_review_resolved_from",
+    "hetero_review",
+    "hetero_review_resolved_from",
     "plan_reviewer_engine",
     "plan_reviewer_effort",
     "plan_reviewer_runner",
@@ -80,6 +83,7 @@
     "discuss_runner",
     "discuss_endpoint",
     "consult_dispatch",
+    "consult_resolved_from",
     "discuss_dispatch",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
@@ -503,12 +507,42 @@
     "plan_review": {
       "type": "string",
       "enum": [
+        "auto",
         "on",
         "off"
       ],
       "x-shell-validated": true,
       "x-shell-var": "PLAN_REVIEW",
       "description": "Enable the first-class bounded plan-readiness rail. Independent from the deprecated spec_review implementation-loop switch."
+    },
+    "plan_review_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "topology",
+        "native-fallback",
+        "off"
+      ]
+    },
+    "hetero_review": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "HETERO_REVIEW",
+      "description": "Enable the per-phase code-review loop switch; its explicit tuple is the existing reviewer_* tuple."
+    },
+    "hetero_review_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "topology",
+        "native-fallback",
+        "off"
+      ]
     },
     "plan_reviewer_engine": {
       "type": "string"
@@ -710,12 +744,22 @@
     "consult_dispatch": {
       "type": "string",
       "enum": [
+        "auto",
         "on",
         "off"
       ],
       "x-shell-validated": true,
       "x-shell-var": "CONSULT_DISPATCH",
       "description": "Whether the consult rail (scripts/dispatch-consult.sh) is live. DEFAULT OFF. off = today's behavior exactly — the consult_* seat tuple stays data a caller may read by hand, no new dispatch. on requires a non-empty consult seat tuple (empty seat + on is a misconfiguration) and, once D7 lands, a role-qualification row or matching override for that seat."
+    },
+    "consult_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "topology",
+        "native-fallback",
+        "off"
+      ]
     },
     "discuss_dispatch": {
       "type": "string",
@@ -801,7 +845,11 @@
     "qc_panel_seats_complete",
     "provider_readiness_receipt_ttl_seconds",
     "provider_readiness_fallback_family_constraint",
+    "strict_l5_policy_override",
     "plan_review",
+    "plan_review_resolved_from",
+    "hetero_review",
+    "hetero_review_resolved_from",
     "plan_reviewer_engine",
     "plan_reviewer_effort",
     "plan_reviewer_runner",
@@ -814,7 +862,6 @@
     "plan_review_max_wall_seconds",
     "plan_review_growth_warn_ratio",
     "plan_review_growth_stop_ratio",
-    "strict_l5_policy_override",
     "consult_engine",
     "consult_effort",
     "consult_runner",
@@ -824,6 +871,7 @@
     "discuss_runner",
     "discuss_endpoint",
     "consult_dispatch",
+    "consult_resolved_from",
     "discuss_dispatch",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",

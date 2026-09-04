@@ -678,7 +678,7 @@ Two properties carry over from the other seats, and both matter here:
   holds a recorded, non-demoted `consult` role-qualification row (D7's switch-on
   qualification gate, when `consult_dispatch: on`). `dispatch-consult.sh` surfaces the
   resolver's own refusal message rather than inventing its own.
-- **A consult is still ADVICE.** Same trust boundary as the peer-consult channel below:
+- **A consult is still ADVICE.** Same trust boundary as the codex-plugin consult channel below:
   it never substitutes qc@depth-0, artifact verification, or the decorrelated review
   rails. Routing it through a seat makes the choice reproducible; it does not promote the
   answer.
@@ -688,11 +688,20 @@ executable consumer, `scripts/dispatch-discuss.js` (plan D9), called from
 `skills/think-tank/SKILL.md`. It resolves and dispatches the same way — own switch
 resolution, `dispatch-author.sh`'s raw-prompt rail, a closed production schema, advisory only.
 
-## Peer consult — the codex plugin channel (Claude Code only, capability-gated)
+### Hook points
+
+- debug: after two failed hypotheses in the Debug Cycle, ask the consult seat one bounded question.
+- think-tank: Step 3.5 already dispatches the discuss seat; consult is the single-question sibling of that same seat family, for a narrower ask.
+- dev-flow: for an L-size design decision, consult before step L-2, per skills/dev-flow/references/hetero-loops.md.
+- quality-pipeline: never consults a seat that is already sitting in the resolved qc_panel — the resolver's exclusion enforces this mechanically, no extra code needed here.
+
+## Codex-plugin consult (optional)
+
+The seat rail (`scripts/dispatch-consult.sh`, resolved by `consult_dispatch: auto` from topology) is the default way to ask a model a single question; the codex plugin, when installed, is an optional faster transport for the same purpose, not a separate posture.
 
 When the official OpenAI codex plugin (`openai/codex-plugin-cc`) is installed AND the
 host is Claude Code, a THIRD posture exists alongside write-rails and review-rails:
-**peer consult** — a quick, repo-grounded second opinion that lands as advice in
+a quick, repo-grounded second opinion that lands as advice in
 context, not as a verified artifact.
 
 - Channels: the `codex:codex-rescue` subagent via the Agent tool, or

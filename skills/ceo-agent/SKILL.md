@@ -270,16 +270,7 @@ Record all decisions in CEO Report for traceability. No prior approval needed, b
 | Irreversible ops | Delete files/branches, force-push, drop tables | Cannot undo |
 | Resources 2x+ | Work estimate doubles original | Exceeds implied budget |
 
-**Note on merge as an "irreversible op"**: A `git merge --no-ff` into `develop` (or equivalent
-team-default branch) is considered **within CEO DOA** for L-size workflows when all pre-merge
-gates pass. This is tactical and locally reversible (`git reset --hard`). Merging to `main`
-or force-pushing is NOT within DOA. The forcing function in `autopilot:finish-flow` treats
-merge (L-5.3 / H-9.3) as an autonomous sub-task; CEO does not pause to ask before merging.
-Deleting an **already-merged** feature branch during finish-flow cleanup (L-5.7 / F.5 /
-H-9.5 — merged-status verified first) is likewise within CEO DOA; the "Delete
-files/branches" escalation row above covers unmerged or protected branches.
-
-A mid-run desire to "confirm direction" is not an escalation trigger — see level-front-door.md § "Mid-run question discipline".
+**Note on merge as an "irreversible op"**: Merging into `develop` is within CEO DOA for L-size workflows; see [references/level-front-door.md](references/level-front-door.md) § "Mid-run question discipline".
 
 When encountering these, pause and propose:
 
@@ -323,6 +314,7 @@ When encountering these, pause and propose:
       "L-5: Invoke autopilot:finish-flow". The parent tasks are the forcing functions
       for skill routing and L-5 completion and are NON-OPTIONAL — missing either =
       failed L-1 gate.
+   L-size four-stage default: plan hetero loop review → dispatch → per-phase hetero review → qc gate (with `autopilot:hetero-review` running plan-loop and code-loop stages).
    CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
 4. IF H-size:
    a. Create hotfix branch (`hotfix/<description>`).

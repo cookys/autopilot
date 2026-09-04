@@ -13,7 +13,7 @@ assert_file_absent "$HOOK_HOME/.claude/plugins" "scratch HOME does not contain .
 
 # ── 1. Build scratch topology-cache JSON with 3 seats ──
 # Seat 1: anthropic family (sonnet, claude-native, high)
-# Seat 2: qc-panel duplicate to be excluded (gemini-flash, agy, high)
+# Seat 2: qc-panel duplicate to be excluded (gpt-5.6, codex, high)
 # Seat 3: minimax family (minimax-m3, agy, high)
 # Order: Seat 3 (minimax) precedes Seat 1 (anthropic) reflecting sortConsultDiscuss asking-family anthropic
 TOPO_FILE="$TEST_TMP/topology-ladder.json"
@@ -24,11 +24,11 @@ cat > "$TOPO_FILE" <<'JSON'
   "host": "test-host",
   "consult_ladder": [
     {
-      "rung": "gemini-flash/high@agy",
-      "engine": "gemini-flash",
+      "rung": "gpt-5.6/high@codex",
+      "engine": "gpt-5.6",
       "effort": "high",
-      "runner": "agy",
-      "family": "google",
+      "runner": "codex",
+      "family": "openai",
       "endpoint": "",
       "role_source": "consult"
     },
@@ -58,8 +58,8 @@ JSON
 CFG_FILE="$TEST_TMP/review-loop-config.md"
 cat > "$CFG_FILE" <<'EOF'
 - consult_dispatch: auto
-- qc_panel: gemini-flash
-- qc_panel_runners: agy
+- qc_panel: gpt-5.6
+- qc_panel_runners: codex
 - qc_panel_efforts: high
 - qc_panel_endpoints: @none
 EOF

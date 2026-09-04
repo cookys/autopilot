@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 const LIB = path.join(__dirname, 'live-state-dir.js');
 const {
@@ -54,15 +54,15 @@ process.stdout.write(out + '\\n');
   return bin;
 }
 
-function execSyncWithPath(fakeBinDir) {
+function execFileWithPath(fakeBinDir) {
   const env = { ...process.env, PATH: `${fakeBinDir}:${process.env.PATH}` };
-  return (cmd, opts) => execSync(cmd, { ...opts, env });
+  return (file, args, opts) => execFileSync(file, args, { ...opts, env });
 }
 
-function execSyncNoFindmnt() {
+function execFileNoFindmnt() {
   // A PATH with no findmnt binary anywhere on it.
   const env = { ...process.env, PATH: '/nonexistent-bin-dir' };
-  return (cmd, opts) => execSync(cmd, { ...opts, env });
+  return (file, args, opts) => execFileSync(file, args, { ...opts, env });
 }
 
 test('resolveLiveDir: tmpfs candidate is chosen (shm)', () => {
@@ -71,7 +71,7 @@ test('resolveLiveDir: tmpfs candidate is chosen (shm)', () => {
   const warnings = [];
   const r = resolveLiveDir({
     env: {}, // no override, no XDG_RUNTIME_DIR ⇒ falls to /dev/shm/autopilot-<uid>
-    execSync: execSyncWithPath(bindir),
+    execFile: execFileWithPath(bindir),
     warn: (m) => warnings.push(m),
   });
   assert.strictEqual(r.source, 'shm');
@@ -85,7 +85,7 @@ test('resolveLiveDir: ext4 everywhere ⇒ ~/.autopilot fallback + exactly one wa
   const warnings = [];
   const r = resolveLiveDir({
     env: {},
-    execSync: execSyncWithPath(bindir),
+    execFile: execFileWithPath(bindir),
     warn: (m) => warnings.push(m),
   });
   assert.strictEqual(r.source, 'ssd-fallback');
@@ -104,7 +104,7 @@ test('resolveLiveDir: findmnt absent ⇒ falls back to /proc/mounts fixture (lon
   ].join('\n'));
   const r = resolveLiveDir({
     env: {},
-    execSync: execSyncNoFindmnt(),
+    execFile: execFileNoFindmnt(),
     procMountsPath: procMounts,
     warn: () => {},
   });
@@ -121,7 +121,7 @@ test('resolveLiveDir: findmnt absent + /proc/mounts fixture with no RAM mounts �
   const warnings = [];
   const r = resolveLiveDir({
     env: {},
-    execSync: execSyncNoFindmnt(),
+    execFile: execFileNoFindmnt(),
     procMountsPath: procMounts,
     warn: (m) => warnings.push(m),
   });
@@ -137,7 +137,7 @@ test('resolveLiveDir: rejected ext4 override + tmpfs XDG ⇒ XDG chosen (overrid
   const warnings = [];
   const r = resolveLiveDir({
     env: { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: xdgParent },
-    execSync: execSyncWithPath(bindir),
+    execFile: execFileWithPath(bindir),
     warn: (m) => warnings.push(m),
   });
   assert.strictEqual(r.source, 'xdg');
@@ -151,11 +151,39 @@ test('resolveLiveDir: accepted tmpfs override wins over everything else', () => 
   const overrideDir = mkTmp('override-ok-');
   const r = resolveLiveDir({
     env: { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: mkTmp('xdg-unused-') },
-    execSync: execSyncWithPath(bindir),
+    execFile: execFileWithPath(bindir),
     warn: () => {},
   });
   assert.strictEqual(r.source, 'override');
   assert.strictEqual(r.base, overrideDir);
+});
+
+test('resolveLiveDir: candidate dir name with shell metacharacters is probed literally, never executed', () => {
+  const tmpRoot = mkTmp('injection-');
+  const marker = path.join(tmpRoot, 'INJECTED_MARKER');
+  const overrideDir = path.join(tmpRoot, 'weird-$(touch ' + marker + ')-dir');
+  fs.mkdirSync(overrideDir, { recursive: true }); // a literal directory name, no shell involved
+
+  const bindir = mkTmp('findmnt-injection-');
+  const bin = path.join(bindir, 'findmnt');
+  const receipt = path.join(tmpRoot, 'receipt.txt');
+  // Records argv[3] (the target) verbatim, then always answers tmpfs.
+  fs.writeFileSync(bin, `#!/usr/bin/env node
+require('fs').writeFileSync(${JSON.stringify(receipt)}, process.argv[3] || '');
+process.stdout.write('tmpfs\\n');
+`);
+  fs.chmodSync(bin, 0o755);
+
+  const r = resolveLiveDir({
+    env: { AUTOPILOT_LIVE_DIR: overrideDir },
+    execFile: execFileWithPath(bindir),
+    warn: () => {},
+  });
+
+  assert.strictEqual(r.source, 'override');
+  assert.strictEqual(r.base, overrideDir);
+  assert.strictEqual(fs.existsSync(marker), false, 'the injected `touch` must never run');
+  assert.strictEqual(fs.readFileSync(receipt, 'utf8'), overrideDir, 'target passed to findmnt literally');
 });
 
 // ---- sanitizeSessionId: shared vector file ----

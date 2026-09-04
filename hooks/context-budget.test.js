@@ -30,12 +30,16 @@ function tmpFile(lines) {
   return p;
 }
 
-const usageLine = (input, cacheRead, cacheCreate, out) => JSON.stringify({
+// `timestamp` (ISO string) is optional — it exercises the v2.36.1 live/transcript lag
+// guard in context-budget.js (readContextUsage's row.timestamp vs the live file's
+// written_at). Omitted, the row carries no timestamp (pre-P2 fixture behaviour).
+const usageLine = (input, cacheRead, cacheCreate, out, timestamp) => JSON.stringify({
   type: 'assistant',
   message: { role: 'assistant', usage: {
     input_tokens: input, cache_read_input_tokens: cacheRead,
     cache_creation_input_tokens: cacheCreate, output_tokens: out,
   } },
+  ...(timestamp ? { timestamp } : {}),
 });
 
 test('readContextTokens: last assistant usage wins, trailing non-usage lines skipped', () => {
@@ -351,6 +355,59 @@ test('200K live file at 150k ⇒ T2 still fires (no regression for small windows
   assert.strictEqual(r.status, 2, '200K live-window session at 150k must still get T2');
   assert.match(r.stderr, /Context budget T2/);
   assert.match(r.stderr, /\(statusline\)/, 'message must say the window came from the statusline, not inference');
+});
+
+test('lag guard: OLDER transcript row with a HIGHER total ⇒ contextTokens = max(transcript, live)', () => {
+  const liveDir = shmTmp('ctxbud-live-lag-older-');
+  const sid = 'live-sid-lag-older';
+  const writtenAt = new Date();
+  writeLiveMain(liveDir, sid, liveMainFixture({
+    written_at: writtenAt.toISOString(),
+    context_window: {
+      context_window_size: 200_000,
+      used_percentage: 65,
+      total_input_tokens: 130_000, // below t2 (150k) on its own
+      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 129_068 },
+    },
+  }));
+  // Transcript row timestamped BEFORE written_at, but its own total (160k) is HIGHER than
+  // the live total (130k) — the lag guard must take the max, not blindly trust either side.
+  const rowTs = new Date(writtenAt.getTime() - 5_000).toISOString();
+  const p = tmpFile([usageLine(10_000, 149_000, 1_000, 10, rowTs)]); // 160k total, older row
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, 'max(160k transcript, 130k live) = 160k ≥ 150k t2');
+  assert.match(r.stderr, /is 160k tokens/, 'contextTokens must be the max, not the live total alone');
+  assert.match(r.stderr, /\(statusline\)/);
+});
+
+test('lag guard: NEWER transcript row ⇒ transcript value used even when the live total is larger', () => {
+  const liveDir = shmTmp('ctxbud-live-lag-newer-');
+  const sid = 'live-sid-lag-newer';
+  const writtenAt = new Date();
+  writeLiveMain(liveDir, sid, liveMainFixture({
+    written_at: writtenAt.toISOString(),
+    context_window: {
+      context_window_size: 200_000,
+      used_percentage: 80,
+      total_input_tokens: 160_000, // above t2 (150k) on its own
+      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 159_068 },
+    },
+  }));
+  // Transcript row timestamped AFTER written_at (fresher than the live tick) with a LOWER
+  // total (130k) — the fresher transcript row must win outright, not be maxed with the stale
+  // (larger) live total.
+  const rowTs = new Date(writtenAt.getTime() + 5_000).toISOString();
+  const p = tmpFile([usageLine(10_000, 119_000, 1_000, 10, rowTs)]); // 130k total, newer row
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 0, 'fresher transcript row (130k) is below t2 ⇒ no T2, even though live total (160k) is above it');
+  assert.match(r.stderr, /Context budget T1/, 'still ≥ t1 (100k) so T1 fires');
+  assert.match(r.stderr, /is 130k tokens/, 'contextTokens must be the fresher transcript value, not the live total');
 });
 
 test('stale live file (>120s) ⇒ falls back to the inference path', () => {

@@ -4,6 +4,8 @@ This document specifies the judgment rules and freeze discipline for heterogeneo
 
 ## Core Principle: Claims vs Gates (ADR-0001)
 
+The plan review loop's dispatch mechanism is `scripts/dispatch-plan-review.js` (which research-to-ship's Phase 3 invokes via the `autopilot:hetero-review` skill).
+
 A hetero engine's green verdict is a claim that depth-0 must independently re-derive, never a gate that stands on its own. The review verdict is not self-authenticating: depth-0 (the calling session) re-derives the verdict from the reviewer's structured JSON artifact and the exact base..head range or frozen plan artifact it reviewed.
 
 No trust machinery (no hash chains, event ledgers, witness receipts, attestation, or trust roots) is introduced. The authoritative state is derived strictly from the artifact and rubric evidence.

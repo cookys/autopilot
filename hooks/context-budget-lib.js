@@ -75,23 +75,30 @@ function scaleTiers(cfg, inferredWindow) {
   };
 }
 
-// Extract context tokens from one parsed transcript line, or null.
-function usageOf(line) {
+// Extract {tokens, timestamp} from one parsed transcript line, or null.
+// `timestamp` is the row's own ISO string when present, else null — used by the
+// v2.36.1 live-file comparison (contextTokens = max(transcript, live total) when the
+// transcript row is OLDER than the live file's written_at).
+function usageRowOf(line) {
   let obj;
   try { obj = JSON.parse(line); } catch { return null; }
   const u = obj && obj.message && obj.message.usage;
   if (!u || typeof u !== 'object') return null;
   const n = (v) => (Number.isFinite(v) ? v : 0);
   const total = n(u.input_tokens) + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens);
-  return total > 0 ? total : null;
+  if (total <= 0) return null;
+  return { tokens: total, timestamp: typeof obj.timestamp === 'string' ? obj.timestamp : null };
 }
 
-/**
- * Read the current context-token size from a transcript file.
- * Returns a positive number, or null (missing file / no usage row within cap /
- * any error) — callers treat null as "no signal", never as zero.
- */
-function readContextTokens(tpath, opts = {}) {
+// Back-compat: tokens-only view of usageRowOf (pre-v2.36.1 callers/tests).
+function usageOf(line) {
+  const row = usageRowOf(line);
+  return row ? row.tokens : null;
+}
+
+// Backward scan shared by readContextTokens and readContextUsage: grow a tail window
+// (×4, capped) until the last usage row is found, or the cap is hit ⇒ null.
+function scanLastUsageRow(tpath, opts = {}) {
   const capBytes = opts.capBytes || CAP_BYTES;
   try {
     const size = fs.statSync(tpath).size;
@@ -108,8 +115,8 @@ function readContextTokens(tpath, opts = {}) {
       for (let i = usable.length - 1; i >= 0; i--) {
         const t = usable[i].trim();
         if (!t) continue;
-        const tokens = usageOf(t);
-        if (tokens !== null) return tokens;
+        const row = usageRowOf(t);
+        if (row !== null) return row;
       }
       if (start === 0 || window >= capBytes) return null; // cap hit / whole file scanned
       window = Math.min(window * 4, capBytes);
@@ -117,6 +124,25 @@ function readContextTokens(tpath, opts = {}) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Read the current context-token size from a transcript file.
+ * Returns a positive number, or null (missing file / no usage row within cap /
+ * any error) — callers treat null as "no signal", never as zero.
+ */
+function readContextTokens(tpath, opts = {}) {
+  const row = scanLastUsageRow(tpath, opts);
+  return row ? row.tokens : null;
+}
+
+/**
+ * Read the current context-token size AND the timestamp of the transcript row it came
+ * from. Returns {tokens, timestamp} (timestamp may be null if the row carried none), or
+ * null under the same conditions as readContextTokens.
+ */
+function readContextUsage(tpath, opts = {}) {
+  return scanLastUsageRow(tpath, opts);
 }
 
 /**
@@ -131,8 +157,13 @@ function budgetDecision(state, cfg) {
   // reads as "nearly full" on a 200K window and as "barely started" on 1M; the
   // hook's own reader cannot disambiguate without this. (2026-07-20 finding.)
   const win = Number.isFinite(cfg.inferredWindow) ? cfg.inferredWindow : null;
+  // v2.36.1: when the window came from the statusline live file (exact, not inferred),
+  // say so — "inferred from observed usage" would be a false claim about a real number.
+  const windowClause = cfg.windowSource === 'statusline'
+    ? '(statusline)'
+    : 'inferred from observed usage';
   const pct = win ? ` = ${Math.round((contextTokens / win) * 100)}% of the ` +
-    `~${Math.round(win / 1000)}k window inferred from observed usage` : '';
+    `~${Math.round(win / 1000)}k window ${windowClause}` : '';
   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {
     // lastT2Call 0 = never fired ⇒ always eligible (first crossing must not be throttled)
     if (lastT2Call > 0 && calls - lastT2Call < T2_THROTTLE_CALLS) return { tier: null, message: null };
@@ -161,6 +192,7 @@ function budgetDecision(state, cfg) {
 
 module.exports = {
   readContextTokens,
+  readContextUsage,
   budgetDecision,
   usageOf,
   inferWindowTokens,

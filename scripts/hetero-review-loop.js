@@ -58,6 +58,7 @@ Opt-out flags:
 
 Environment overrides:
   AUTOPILOT_DISPATCH_REVIEW_SCRIPT  Path to reviewer dispatcher script (overrides default dispatch-review.sh)
+  AUTOPILOT_REVIEW_LOOP_RESOLVER    Path to review-loop resolver script (overrides default resolve-review-loop.sh)
 `);
 }
 
@@ -87,24 +88,45 @@ function parseArgv(argv) {
   return { positional, flags };
 }
 
-function resolveField(resolverPath, repoRoot, name) {
-  try {
-    const args = ['--field', name];
-    if (repoRoot) {
-      args.push('--repo-root', repoRoot);
-    }
-    const res = spawnSync(resolverPath, args, {
-      encoding: 'utf8',
-      cwd: repoRoot || process.cwd(),
-      env: { ...process.env },
-    });
-    if (res.status === 0 && res.stdout) {
-      return res.stdout.trim();
-    }
-    return '';
-  } catch (_e) {
-    return '';
+function getResolverPath(_repoRoot) {
+  if (process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER) {
+    return process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
   }
+  return path.join(__dirname, 'resolve-review-loop.sh');
+}
+
+function runResolver(resolverPath, repoRoot, fieldName) {
+  const args = fieldName ? ['--field', fieldName] : [];
+  const res = spawnSync(resolverPath, args, {
+    encoding: 'utf8',
+    cwd: repoRoot || process.cwd(),
+    env: { ...process.env },
+  });
+  if (res.error) {
+    const errDetail = res.error.message || String(res.error);
+    console.error(`ERROR: Failed to run review-loop resolver (${resolverPath}): ${errDetail}`);
+    process.exit(2);
+  }
+  if (res.status !== 0) {
+    const errDetail = (res.stderr || '').trim() || (res.stdout || '').trim() || `exit code ${res.status}`;
+    console.error(`ERROR: Review-loop resolver failed: ${errDetail}`);
+    process.exit(2);
+  }
+  return (res.stdout || '').trim();
+}
+
+function resolveConfig(resolverPath, repoRoot) {
+  const stdout = runResolver(resolverPath, repoRoot);
+  try {
+    return JSON.parse(stdout);
+  } catch (e) {
+    console.error(`ERROR: Failed to parse review-loop resolver JSON: ${e.message}`);
+    process.exit(2);
+  }
+}
+
+function resolveField(resolverPath, repoRoot, name) {
+  return runResolver(resolverPath, repoRoot, name);
 }
 
 function parseSeatSpec(spec, id) {
@@ -145,121 +167,35 @@ function resolveSeats(seatsArg, repoRoot) {
     return specs.map((spec, idx) => parseSeatSpec(spec, `s${idx}`));
   }
 
-  let resolver = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
-  if (!resolver) {
-    resolver = repoRoot
-      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
-      : path.join('scripts', 'resolve-review-loop.sh');
-  }
+  const resolver = getResolverPath(repoRoot);
+  const fullJson = resolveConfig(resolver, repoRoot);
 
-  let fullJson = null;
-  try {
-    const args = [];
-    if (repoRoot) {
-      args.push('--repo-root', repoRoot);
+  const qcComplete = fullJson && fullJson.qc_panel_seats_complete;
+  const qcSeats = fullJson && fullJson.qc_panel_seats;
+
+  if (qcComplete !== true || !Array.isArray(qcSeats) || qcSeats.length === 0) {
+    const cfgSource = (fullJson && (fullJson.config_source || fullJson.config_path)) || '';
+    if (cfgSource) {
+      console.error(`ERROR: Resolved qc panel is incomplete (${cfgSource})`);
+    } else {
+      console.error('ERROR: Resolved qc panel is incomplete');
     }
-    const res = spawnSync(resolver, args, {
-      encoding: 'utf8',
-      cwd: repoRoot || process.cwd(),
-      env: { ...process.env },
-    });
-    if (res.status === 0 && res.stdout) {
-      fullJson = JSON.parse(res.stdout);
+    process.exit(2);
+  }
+
+  return qcSeats.map((seatObj, idx) => {
+    let endpoint = seatObj.endpoint;
+    if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
+      endpoint = undefined;
     }
-  } catch (_e) {
-    fullJson = null;
-  }
-
-  let qcPanelSeats = fullJson && fullJson.qc_panel_seats;
-  if (Array.isArray(qcPanelSeats) && qcPanelSeats.length > 0) {
-    return qcPanelSeats.map((seatObj, idx) => {
-      let endpoint = seatObj.endpoint;
-      if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
-        endpoint = undefined;
-      }
-      return {
-        id: `s${idx}`,
-        runner: seatObj.runner || '',
-        engine: seatObj.model || '',
-        effort: seatObj.effort || '',
-        endpoint,
-      };
-    });
-  }
-
-  let qcPanel = fullJson && fullJson.qc_panel;
-  let qcRunners = fullJson && fullJson.qc_panel_runners;
-  let qcEfforts = fullJson && fullJson.qc_panel_efforts;
-  let qcEndpoints = fullJson && fullJson.qc_panel_endpoints;
-
-  if (qcPanel === undefined) {
-    qcPanel = resolveField(resolver, repoRoot, 'qc_panel');
-  }
-  if (qcRunners === undefined) {
-    qcRunners = resolveField(resolver, repoRoot, 'qc_panel_runners');
-  }
-  if (qcEfforts === undefined) {
-    qcEfforts = resolveField(resolver, repoRoot, 'qc_panel_efforts');
-  }
-  if (qcEndpoints === undefined) {
-    qcEndpoints = resolveField(resolver, repoRoot, 'qc_panel_endpoints');
-  }
-
-  const toList = (val) => {
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'string' && val.trim().length > 0) {
-      return val.split(',').map((s) => s.trim());
-    }
-    return [];
-  };
-
-  const panelList = toList(qcPanel);
-  if (panelList.length > 0) {
-    const runnerList = toList(qcRunners);
-    const effortList = toList(qcEfforts);
-    const endpointList = toList(qcEndpoints);
-
-    return panelList.map((engine, idx) => {
-      const runner = runnerList[idx] || '';
-      const effort = effortList[idx] || '';
-      let endpoint = endpointList[idx] || '';
-      if (endpoint === '@none' || !endpoint) {
-        endpoint = undefined;
-      }
-      return {
-        id: `s${idx}`,
-        runner,
-        engine,
-        effort,
-        endpoint,
-      };
-    });
-  }
-
-  // Fallback to reviewer_*
-  let revEngine = fullJson && fullJson.reviewer_engine;
-  let revEffort = fullJson && fullJson.reviewer_effort;
-  let revRunner = fullJson && fullJson.reviewer_runner;
-  let revEndpoint = fullJson && fullJson.reviewer_endpoint;
-
-  if (revEngine === undefined) revEngine = resolveField(resolver, repoRoot, 'reviewer_engine');
-  if (revEffort === undefined) revEffort = resolveField(resolver, repoRoot, 'reviewer_effort');
-  if (revRunner === undefined) revRunner = resolveField(resolver, repoRoot, 'reviewer_runner');
-  if (revEndpoint === undefined) revEndpoint = resolveField(resolver, repoRoot, 'reviewer_endpoint');
-
-  if (revEndpoint === '@none' || !revEndpoint) {
-    revEndpoint = undefined;
-  }
-
-  return [
-    {
-      id: 's0',
-      runner: revRunner || '',
-      engine: revEngine || '',
-      effort: revEffort || '',
-      endpoint: revEndpoint,
-    },
-  ];
+    return {
+      id: `s${idx}`,
+      runner: seatObj.runner || '',
+      engine: seatObj.model || '',
+      effort: seatObj.effort || '',
+      endpoint,
+    };
+  });
 }
 
 const SEVERITY_WORDS = new Set(['Critical', 'Major', 'Minor', 'Suggestion']);
@@ -620,12 +556,16 @@ async function handleCollect(flags) {
     process.exit(1);
   }
 
-  // Check for parse failures across seats (Defect 2)
+  // Parse findings per seat and handle placeholders / parse failures
+  const seatFindingMap = new Map();
   for (const res of seatResults) {
     const findingsStr = (res.rawOutput && typeof res.rawOutput.findings === 'string') ? res.rawOutput.findings : '';
-    if (findingsStr.trim().length > 0) {
-      const extracted = extractFindings(res.seat.id, findingsStr);
-      if (extracted.length === 0) {
+    const extracted = extractFindings(res.seat.id, findingsStr);
+    seatFindingMap.set(res.seat.id, extracted);
+
+    const verdict = res.rawOutput && res.rawOutput.verdict;
+    if (findingsStr.trim().length > 0 && extracted.length === 0) {
+      if (verdict === 'FIX-THEN-SHIP') {
         saveChainEntry({
           generation,
           base,
@@ -634,6 +574,15 @@ async function handleCollect(flags) {
         });
         console.error(`ERROR: Failed to parse non-empty findings for seat ${res.seat.id}`);
         process.exit(1);
+      }
+    }
+
+    if (verdict === 'SHIP-AS-IS' && extracted.length === 0) {
+      const proof = (res.rawOutput && typeof res.rawOutput.no_finding_proof === 'string')
+        ? res.rawOutput.no_finding_proof.trim()
+        : '';
+      if (!proof) {
+        res.status = 'no_verdict';
       }
     }
   }
@@ -645,7 +594,7 @@ async function handleCollect(flags) {
 
   for (const res of seatResults) {
     if (res.status === 'reviewed') {
-      const seatFindings = extractFindings(res.seat.id, res.rawOutput.findings || '');
+      const seatFindings = seatFindingMap.get(res.seat.id) || [];
       allFindings.push(...seatFindings);
     } else {
       hasGap = true;
@@ -676,6 +625,18 @@ async function handleCollect(flags) {
     status: genStatus,
   });
 
+  const seatSummaries = {};
+  for (const res of seatResults) {
+    const extracted = seatFindingMap.get(res.seat.id) || [];
+    const proof = (res.rawOutput && typeof res.rawOutput.no_finding_proof === 'string')
+      ? res.rawOutput.no_finding_proof.trim()
+      : '';
+    seatSummaries[res.seat.id] = {
+      findings_count: extracted.length,
+      proof_present: proof.length > 0,
+    };
+  }
+
   // Output summary JSON
   const summary = {
     phase,
@@ -685,6 +646,7 @@ async function handleCollect(flags) {
     seats: seatIds,
     findings_count: allFindings.length,
     status: genStatus,
+    seat_summaries: seatSummaries,
   };
   console.log(JSON.stringify(summary, null, 2));
   process.exit(0);
@@ -1037,13 +999,7 @@ async function handleFinalize(flags) {
     phaseBaseSha = gen1Entry.base;
   }
 
-  let resolverPath = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
-  if (!resolverPath) {
-    resolverPath = repoRoot
-      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
-      : path.join('scripts', 'resolve-review-loop.sh');
-  }
-
+  const resolverPath = getResolverPath(repoRoot);
   let resolvedFrom = resolveField(resolverPath, repoRoot, 'hetero_review_resolved_from');
   if (!resolvedFrom) {
     resolvedFrom = 'unknown';
@@ -1124,30 +1080,8 @@ async function handleOptOut(flags) {
     sha256,
   };
 
-  let resolverPath = process.env.AUTOPILOT_REVIEW_LOOP_RESOLVER;
-  if (!resolverPath) {
-    resolverPath = repoRoot
-      ? path.join(repoRoot, 'scripts', 'resolve-review-loop.sh')
-      : path.join('scripts', 'resolve-review-loop.sh');
-  }
-
+  const resolverPath = getResolverPath(repoRoot);
   let resolvedFrom = resolveField(resolverPath, repoRoot, `${knob}_resolved_from`);
-  if (!resolvedFrom) {
-    // If empty or not provided by resolver, try full json or fallback
-    try {
-      const res = spawnSync(resolverPath, repoRoot ? ['--repo-root', repoRoot] : [], {
-        encoding: 'utf8',
-        cwd: repoRoot || process.cwd(),
-        env: { ...process.env },
-      });
-      if (res.status === 0 && res.stdout) {
-        const fullJson = JSON.parse(res.stdout);
-        if (fullJson && fullJson[`${knob}_resolved_from`]) {
-          resolvedFrom = fullJson[`${knob}_resolved_from`];
-        }
-      }
-    } catch (_e) {}
-  }
   if (!resolvedFrom) {
     resolvedFrom = 'unknown';
   }

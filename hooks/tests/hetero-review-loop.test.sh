@@ -61,7 +61,7 @@ if [ -n "$STUB_SEAT_RESPONSE" ]; then
   exit 0
 fi
 
-echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 STUB_EOF
 chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
 cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
@@ -85,7 +85,7 @@ if [ "$1" = "--field" ]; then
   esac
   exit 0
 fi
-echo '{"reviewer_engine": "x", "reviewer_runner": "agy", "reviewer_effort": "low", "reviewer_endpoint": "@none"}'
+echo '{"reviewer_engine": "x", "reviewer_runner": "agy", "reviewer_effort": "low", "reviewer_endpoint": "@none", "qc_panel_seats_complete": true, "qc_panel_seats": [{"role": "qc", "runner": "agy", "model": "x", "effort": "low", "endpoint": null, "family": "unknown"}]}'
 RESOLVE_EOF
 chmod +x "$TEST_TMP/bin/resolve-review-loop.sh"
 
@@ -102,7 +102,7 @@ C2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" -
 assert_exit_code "$C2_RC" "2" "case 2: gen 1 without --phase-base exits 2"
 
 # Case 3: generation 1 with three seats all reviewed exits 0, writes range.json, diff.txt, findings.json, chain.json
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 C3_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy,m3/high@grok" 2>&1); C3_RC=$?
 assert_exit_code "$C3_RC" "0" "case 3: exits 0 on 3 reviewed seats"
 assert_file_exists "$LEDGER/review-p1/g1/range.json" "case 3: range.json exists"
@@ -126,7 +126,7 @@ ID2=$(node -e 'const f = JSON.parse(fs.readFileSync(process.argv[1])).findings; 
 assert_exit_code "$ID_DIFF_RC" "0" "case 4: finding IDs are distinct"
 
 # Case 5: a seat returning {status: "no_verdict"} without --allow-seat-gap exits 1 and chain.json is not updated
-export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 export STUB_RESPONSE_s1='{"status": "no_verdict"}'
 unset STUB_SEAT_RESPONSE
 C5_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" 2>&1); C5_RC=$?
@@ -157,7 +157,7 @@ cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
   }
 ]
 SEED_EOF
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 unset STUB_RESPONSE_s0
 unset STUB_RESPONSE_s1
 C7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7_RC=$?
@@ -196,6 +196,7 @@ cat << 'RESOLVE_10A_EOF' > "$TEST_TMP/bin/resolve-review-loop-10a.sh"
 cat << 'EOF'
 {
   "qc_panel": ["model-a", "model-b", "model-c"],
+  "qc_panel_seats_complete": true,
   "qc_panel_seats": [
     {"role": "r0", "runner": "runner-a", "model": "model-a", "effort": "low", "endpoint": null, "family": "fam-a"},
     {"role": "r1", "runner": "runner-b", "model": "model-b", "effort": "med", "endpoint": "glm", "family": "fam-b"},
@@ -237,11 +238,13 @@ assert_contains "$S2_LINE" "--endpoint custom-ep" "case 10a: s2 has endpoint cus
 unset LOG_DISPATCH_ARGS
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 
-# Case 10b: resolver stub prints only the legacy four keys still yields seats
+# Case 10b: resolver stub returning qc_panel_seats_complete false exits 2 and prints stderr
 cat << 'RESOLVE_10B_EOF' > "$TEST_TMP/bin/resolve-review-loop-10b.sh"
 #!/usr/bin/env bash
 cat << 'EOF'
 {
+  "config_source": "test-stub-config",
+  "qc_panel_seats_complete": false,
   "qc_panel": ["legacy-model1", "legacy-model2"],
   "qc_panel_runners": ["legacy-run1", "legacy-run2"],
   "qc_panel_efforts": ["low", "high"],
@@ -252,12 +255,10 @@ RESOLVE_10B_EOF
 chmod +x "$TEST_TMP/bin/resolve-review-loop-10b.sh"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10b.sh"
 C10B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10b --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10B_RC=$?
-assert_exit_code "$C10B_RC" "0" "case 10b: exits 0 with legacy keys"
-assert_file_exists "$LEDGER/review-p10b/g1/seat-s0.json" "case 10b: seat-s0.json exists"
-assert_file_exists "$LEDGER/review-p10b/g1/seat-s1.json" "case 10b: seat-s1.json exists"
-CHAIN_10B=$(cat "$LEDGER/review-p10b/chain.json")
-assert_contains "$CHAIN_10B" '"s0"' "case 10b: chain includes s0"
-assert_contains "$CHAIN_10B" '"s1"' "case 10b: chain includes s1"
+assert_exit_code "$C10B_RC" "2" "case 10b: exits 2 when qc_panel_seats_complete is false"
+assert_contains "$C10B_OUT" "Resolved qc panel is incomplete" "case 10b: stderr mentions resolved qc panel is incomplete"
+assert_file_absent "$LEDGER/review-p10b/g1/seat-s0.json" "case 10b: no seat-s0 artifact file created"
+assert_file_absent "$LEDGER/review-p10b/chain.json" "case 10b: no chain.json written"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 
 # Case 10c: resolver stub whose seats have an empty runner makes collect exit 2 with stderr message and creates no seat artifact files
@@ -265,6 +266,7 @@ cat << 'RESOLVE_10C_EOF' > "$TEST_TMP/bin/resolve-review-loop-10c.sh"
 #!/usr/bin/env bash
 cat << 'EOF'
 {
+  "qc_panel_seats_complete": true,
   "qc_panel_seats": [
     {"role": "r0", "runner": "valid-runner", "model": "valid-model", "effort": "low", "endpoint": null, "family": "fam-a"},
     {"role": "r1", "runner": "", "model": "model-b", "effort": "med", "endpoint": null, "family": "fam-b"}
@@ -280,6 +282,69 @@ assert_contains "$C10C_OUT" "Seat s1 missing runner" "case 10c: stderr names sea
 assert_file_absent "$LEDGER/review-p10c/g1/seat-s0.json" "case 10c: no seat-s0 artifact file created"
 assert_file_absent "$LEDGER/review-p10c/g1/seat-s1.json" "case 10c: no seat-s1 artifact file created"
 assert_file_absent "$LEDGER/review-p10c/chain.json" "case 10c: no chain.json written"
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+
+# Case 10d: collect against the REAL resolver with a scratch target repo declaring a three-seat qc panel
+SCRATCH_10D="$TEST_TMP/scratch_10d_repo"
+mkdir -p "$SCRATCH_10D/.claude"
+(
+  cd "$SCRATCH_10D"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test User"
+  echo "initial" > file.txt
+  git add file.txt
+  git commit -q -m "c1"
+  git checkout -q -b work
+  echo "changes" >> file.txt
+  git add file.txt
+  git commit -q -m "c2"
+)
+cat << 'CFG_10D_EOF' > "$SCRATCH_10D/.claude/review-loop-config.md"
+## Settings
+- qc_panel: gpt-5.5, gemini-flash, MiniMax-M3
+- qc_panel_runners: codex, agy, cc-shim
+- qc_panel_efforts: high, low, high
+- qc_panel_endpoints: @none, custom_ep, minimax
+CFG_10D_EOF
+
+BASE_10D=$(git -C "$SCRATCH_10D" rev-parse HEAD~1)
+export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10d.log"
+rm -f "$LOG_DISPATCH_ARGS"
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+C10D_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_10D" --ledger "$LEDGER" --phase p10d --generation 1 --branch work --phase-base "$BASE_10D" 2>&1); C10D_RC=$?
+assert_exit_code "$C10D_RC" "0" "case 10d: exits 0 with real resolver"
+assert_file_exists "$LEDGER/review-p10d/g1/seat-s0.json" "case 10d: seat-s0.json exists"
+assert_file_exists "$LEDGER/review-p10d/g1/seat-s1.json" "case 10d: seat-s1.json exists"
+assert_file_exists "$LEDGER/review-p10d/g1/seat-s2.json" "case 10d: seat-s2.json exists"
+
+S0_DISP_10D=$(grep "^SEAT:s0 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S0_DISP_10D" "--runner codex" "case 10d: s0 dispatched with codex runner"
+assert_not_contains "$S0_DISP_10D" "--endpoint" "case 10d: s0 has no endpoint flag"
+
+S1_DISP_10D=$(grep "^SEAT:s1 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S1_DISP_10D" "--runner agy" "case 10d: s1 dispatched with agy runner"
+assert_contains "$S1_DISP_10D" "--endpoint custom_ep" "case 10d: s1 dispatched with custom_ep"
+
+S2_DISP_10D=$(grep "^SEAT:s2 " "$LOG_DISPATCH_ARGS")
+assert_contains "$S2_DISP_10D" "--runner cc-shim" "case 10d: s2 dispatched with cc-shim runner"
+assert_contains "$S2_DISP_10D" "--endpoint minimax" "case 10d: s2 dispatched with minimax"
+
+unset LOG_DISPATCH_ARGS
+
+# Case 10e: negative case where resolver override points at a stub that exits 2 with a message
+cat << 'RESOLVE_10E_EOF' > "$TEST_TMP/bin/resolve-review-loop-10e.sh"
+#!/usr/bin/env bash
+echo "custom resolver error failure" >&2
+exit 2
+RESOLVE_10E_EOF
+chmod +x "$TEST_TMP/bin/resolve-review-loop-10e.sh"
+export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10e.sh"
+C10E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10e --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10E_RC=$?
+assert_exit_code "$C10E_RC" "2" "case 10e: collect exits 2 when resolver exits 2"
+assert_contains "$C10E_OUT" "custom resolver error failure" "case 10e: stderr prints message from resolver stub"
+assert_file_absent "$LEDGER/review-p10e/chain.json" "case 10e: no chain.json written"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 
 # ─── finalize & opt-out ───
@@ -860,15 +925,28 @@ T2_CHAIN=$(cat "$LEDGER/review-p_test2/chain.json")
 assert_contains "$T2_CHAIN" '"status": "aborted"' "test 2: chain entry status is aborted"
 assert_contains "$T2_CHAIN" '"reason": "parse_failed"' "test 2: chain entry reason is parse_failed"
 
-# Test 2b: fail closed also when verdict is SHIP-AS-IS with unparseable findings
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "Random text without severity markers"}'
+# Test 2b: SHIP-AS-IS with findings "none" and non-empty no_finding_proof succeeds with 0 findings and pending status
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T2B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2B_RC=$?
-assert_exit_code "$T2B_RC" "1" "test 2b: exits 1 for SHIP-AS-IS seat with unparseable findings"
-assert_file_absent "$LEDGER/review-p_test2b/g1/findings.json" "test 2b: no findings.json written"
-assert_contains "$(cat "$LEDGER/review-p_test2b/chain.json")" '"reason": "parse_failed"' "test 2b: chain entry reason is parse_failed"
+assert_exit_code "$T2B_RC" "0" "test 2b: exits 0 for SHIP-AS-IS with proof"
+assert_file_exists "$LEDGER/review-p_test2b/g1/findings.json" "test 2b: findings.json written"
+assert_contains "$(cat "$LEDGER/review-p_test2b/g1/findings.json")" '"findings": []' "test 2b: findings array is empty"
+assert_contains "$(cat "$LEDGER/review-p_test2b/chain.json")" '"status": "pending"' "test 2b: chain entry status is pending"
+assert_contains "$T2B_OUT" '"proof_present": true' "test 2b: summary records proof_present true"
+
+# Test 2c: SHIP-AS-IS with findings "none" and empty no_finding_proof treated as no_verdict (gap)
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": ""}'
+T2C_OUT_NOGAP=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c_nogap --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2C_RC_NOGAP=$?
+assert_exit_code "$T2C_RC_NOGAP" "1" "test 2c: exits 1 when SHIP-AS-IS lacks proof and gap not allowed"
+assert_contains "$T2C_OUT_NOGAP" "Review seat gap detected on seat(s): s0" "test 2c: gap detected on unproven seat"
+
+T2C_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T2C_RC=$?
+assert_exit_code "$T2C_RC" "0" "test 2c: exits 0 with --allow-seat-gap"
+assert_contains "$(cat "$LEDGER/review-p_test2c/chain.json")" '"status": "pending-with-gap"' "test 2c: chain entry status is pending-with-gap"
+assert_contains "$T2C_OUT" '"proof_present": false' "test 2c: summary records proof_present false"
 
 # Test 3: chain immutability: run collect once (pending), run again for same generation -> exits 1 without modifying entry
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T3_OUT1=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC1=$?
 assert_exit_code "$T3_RC1" "0" "test 3: first collect exits 0"
 T3_CHAIN_BEFORE=$(cat "$LEDGER/review-p_test3/chain.json")
@@ -889,7 +967,7 @@ cat << 'EOF' > "$LEDGER/review-p_test4/chain.json"
   }
 ]
 EOF
-export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T4_RC=$?
 assert_exit_code "$T4_RC" "0" "test 4: collect succeeds on replacing aborted entry"
 T4_CHAIN_LEN=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).length);' "$LEDGER/review-p_test4/chain.json")
@@ -925,7 +1003,7 @@ mkdir -p "$TEST6_DRIVER_DIR"
 cp "$SCRIPT" "$TEST6_DRIVER_DIR/hetero-review-loop.js"
 cat << 'EOF' > "$TEST6_DRIVER_DIR/dispatch-review.sh"
 #!/usr/bin/env bash
-echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": true, "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": true, "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 exit 0
 EOF
 chmod +x "$TEST6_DRIVER_DIR/dispatch-review.sh"

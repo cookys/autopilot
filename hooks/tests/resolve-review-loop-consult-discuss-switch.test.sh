@@ -132,13 +132,13 @@ const expectedAdded = ['consult_dispatch', 'discuss_dispatch'];
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);
 }
-if (newJson.consult_dispatch !== 'off') problems.push('consult_dispatch-not-off');
+if (newJson.consult_dispatch !== 'auto') problems.push('consult_dispatch-not-auto');
 if (newJson.discuss_dispatch !== 'off') problems.push('discuss_dispatch-not-off');
 
 console.log(problems.length === 0 ? 'parity-ok' : problems.join('\n'));
 NODE
 )"
-assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-identical, only consult_dispatch/discuss_dispatch added (both off)"
+assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-identical, only consult_dispatch/discuss_dispatch added (consult_dispatch auto, discuss_dispatch off)"
 
 # ── 4. Per-fixture parity across Population A ───────────────────────────────
 # Population A — complete roster objects passed to validateReviewLoopConfig
@@ -168,6 +168,9 @@ assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-
 # "reviewer_engine" — never fed through validateReviewLoopConfig as a live
 # literal). Raw bound moves 7 -> 8.
 #
+# RECOUNTED AGAIN: hooks/tests/hetero-review-loop.test.sh was added and matches
+# the Population A extractor. Raw bound moves 8 -> 9.
+#
 # NOTE ON evals/clean/11-review-loop-tier-fields.diff: this file is a FROZEN
 # git-diff snapshot of a 2026 v2.32.23 commit (schema state that predates even
 # consult_engine/discuss_engine), consumed ONLY by scripts/calibration.sh's
@@ -192,7 +195,7 @@ POP_A_RAW_COUNT="$(
     git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" 2>/dev/null; } \
     | sort -u | wc -l | tr -d '[:space:]'
 )"
-assert_eq "8" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 8 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures)"
+assert_eq "9" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 9 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures and hetero-review-loop.test.sh)"
 
 # Per-object parity subset: files whose roster literal is genuinely fed through
 # validateReviewLoopConfig, either directly (JS payload) or via the live
@@ -217,7 +220,7 @@ assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
 # review-log repair [2]: "D6 fixture enumeration + real call-site smoke").
 CLI_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" node "$REPO_ROOT/bin/autopilot.js" engine review-loop 2>&1)"; CLI_EXIT=$?
 assert_eq "0" "$CLI_EXIT" "engine review-loop CLI (autopilot-cli.test.sh's real call site) exits 0 on the shipped template"
-assert_contains "$CLI_OUT" '"consult_dispatch": "off"' "engine review-loop CLI surfaces consult_dispatch: off"
+assert_contains "$CLI_OUT" '"consult_dispatch": "auto"' "engine review-loop CLI surfaces consult_dispatch: auto"
 assert_contains "$CLI_OUT" '"discuss_dispatch": "off"' "engine review-loop CLI surfaces discuss_dispatch: off"
 CONTRACT_PARITY_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" bash "$SCRIPT")"
 export CONTRACT_PARITY_JSON
@@ -429,7 +432,7 @@ assert_eq "0" "$CODEX_MIRROR_3WAY_EXIT" "codex mirror check-contract-schema.js e
 
 CODEX_SHELL_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_TEMPLATE" bash "$CODEX_SHELL" 2>/dev/null)"; CODEX_SHELL_EXIT=$?
 assert_eq "0" "$CODEX_SHELL_EXIT" "codex mirror resolver exits 0 on its own shipped template"
-assert_eq "off" "$(json_get "$CODEX_SHELL_JSON" consult_dispatch)" "codex mirror resolver emits consult_dispatch: off on the shipped template"
+assert_eq "auto" "$(json_get "$CODEX_SHELL_JSON" consult_dispatch)" "codex mirror resolver emits consult_dispatch: auto on the shipped template"
 assert_eq "off" "$(json_get "$CODEX_SHELL_JSON" discuss_dispatch)" "codex mirror resolver emits discuss_dispatch: off on the shipped template"
 
 # ── 8. Switch-on requires a non-empty seat tuple (tuple integrity, not D7 ───

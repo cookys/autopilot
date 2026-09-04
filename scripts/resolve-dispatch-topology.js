@@ -273,7 +273,8 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     // A seat is usable only if its runner is installed
     if (!runnersInstalled[runner]) continue;
 
-    // Query scorecard status with the row's runner token (or normalized)
+    // Query scorecard status with the row's runner token (or normalized).
+    // When effort is empty/null, omit --effort to query the legacy partition.
     const status = checkSeatStatus(repoRoot, engine, origRunner, effort, role)
       || checkSeatStatus(repoRoot, engine, runner, effort, role);
     if (!status || status.admission_status !== 'qualified') continue;
@@ -306,10 +307,11 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
 
     const family = familyOf(engine);
     const endpoint = resolveEndpoint(engine, runner);
+    const emittedEffort = effort || 'high';
 
     const seatObj = {
       engine,
-      effort: effort || '',
+      effort: emittedEffort,
       runner,
       family,
       endpoint,
@@ -323,7 +325,7 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     const legacyRungObj = {
       rung: rungName,
       engine,
-      effort: effort || '',
+      effort: emittedEffort,
       runner,
     };
     if (baselineEventId !== undefined) {
@@ -333,6 +335,7 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     qualified.push({
       engine,
       effort: effort || '',
+      emittedEffort,
       runner,
       family,
       latency: rowLatency,
@@ -347,9 +350,17 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
 
 function seatMatchesExcluded(engine, effort, runner, excludeSet) {
   const normRunner = normalizeRunner(runner);
-  const eff = effort || '';
-  const tuple = eff ? `${engine}/${eff}@${normRunner}` : `${engine}@${normRunner}`;
-  return excludeSet.has(tuple);
+  const defaultedEffort = effort || 'high';
+  const emittedTuple = `${engine}/${defaultedEffort}@${normRunner}`;
+  const rawTuple = `${engine}/${defaultedEffort}@${runner}`;
+  const legacyNormTuple = `${engine}@${normRunner}`;
+  const legacyRawTuple = `${engine}@${runner}`;
+  return (
+    excludeSet.has(emittedTuple) ||
+    excludeSet.has(rawTuple) ||
+    excludeSet.has(legacyNormTuple) ||
+    excludeSet.has(legacyRawTuple)
+  );
 }
 
 function deriveTopology(repoRoot, options = {}) {
@@ -412,8 +423,8 @@ function deriveTopology(repoRoot, options = {}) {
     }
 
     qualifiedSeats.sort((a, b) => {
-      const rankA = EFFORT_RANK[a.effort] || 99;
-      const rankB = EFFORT_RANK[b.effort] || 99;
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
@@ -469,13 +480,14 @@ function deriveTopology(repoRoot, options = {}) {
   if (roles.has('reviewer')) {
     const seats = [...getReviewerQualified()];
     seats.sort((a, b) => {
-      const rankA = EFFORT_RANK[a.effort] || 99;
-      const rankB = EFFORT_RANK[b.effort] || 99;
+      // In ordering: empty effort ranks below every explicit effort (sorts last)
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
     });
-    let ladder = seats.map((s) => ({ ...s.seatObj }));
+    let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
       ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
     }
@@ -487,6 +499,10 @@ function deriveTopology(repoRoot, options = {}) {
       const diffA = a.family !== askingFamily ? 0 : 1;
       const diffB = b.family !== askingFamily ? 0 : 1;
       if (diffA !== diffB) return diffA - diffB;
+      // An originally-empty effort ranks below every explicit effort
+      const rankA = a.effort ? 0 : 1;
+      const rankB = b.effort ? 0 : 1;
+      if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       if (a.costRank !== b.costRank) return a.costRank - b.costRank;
       return a.engine.localeCompare(b.engine);
@@ -497,7 +513,7 @@ function deriveTopology(repoRoot, options = {}) {
   if (roles.has('consult')) {
     const seats = [...getConsultQualified()];
     sortConsultDiscuss(seats);
-    let ladder = seats.map((s) => ({ ...s.seatObj }));
+    let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
       ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
     }
@@ -507,7 +523,7 @@ function deriveTopology(repoRoot, options = {}) {
   if (roles.has('discuss')) {
     const seats = [...getQualifiedSeatsForRole(repoRoot, 'discuss', runnersInstalled)];
     sortConsultDiscuss(seats);
-    let ladder = seats.map((s) => ({ ...s.seatObj }));
+    let ladder = seats.map((s) => ({ ...s.seatObj, effort: s.emittedEffort }));
     if (excludeSet.size > 0) {
       ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
     }
@@ -518,13 +534,16 @@ function deriveTopology(repoRoot, options = {}) {
     // Chair candidates: qualified reviewer-role rows only, eligible runners only, not excluded
     const chairCandidates = getReviewerQualified().filter((s) => {
       if (!PANEL_RUNNERS_SET.has(s.runner)) return false;
-      if (seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet)) return false;
+      if (seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet)) return false;
       return true;
     });
 
     function comparePanelCandidates(a, b) {
-      const rankA = EFFORT_RANK[a.effort] || 0;
-      const rankB = EFFORT_RANK[b.effort] || 0;
+      // In panel ordering: highest effort rank first.
+      // An originally-empty effort ranks below every explicit effort, so rank 0 ensures it sorts last
+      // and never becomes chair over any explicit effort.
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 0) : -1;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 0) : -1;
       if (rankA !== rankB) return rankB - rankA; // highest effort rank first
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
@@ -537,14 +556,14 @@ function deriveTopology(repoRoot, options = {}) {
 
     if (chairCandidates.length > 0) {
       const chair = chairCandidates[0];
-      panel.push({ ...chair.seatObj, effort: chair.seatObj.effort || 'high', role_source: 'reviewer' });
+      panel.push({ ...chair.seatObj, effort: chair.emittedEffort, role_source: 'reviewer' });
       usedFamilies.add(chair.family);
     }
 
     // Non-chair candidate pool: union of reviewer-role and consult-role rows
     const nonChairCandidates = [...getReviewerQualified(), ...getConsultQualified()].filter((s) => {
       if (!PANEL_RUNNERS_SET.has(s.runner)) return false;
-      if (seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet)) return false;
+      if (seatMatchesExcluded(s.engine, s.emittedEffort, s.runner, excludeSet)) return false;
       return true;
     });
 
@@ -553,7 +572,7 @@ function deriveTopology(repoRoot, options = {}) {
     for (const cand of nonChairCandidates) {
       if (panel.length >= 3) break;
       if (usedFamilies.has(cand.family)) continue;
-      panel.push({ ...cand.seatObj, effort: cand.seatObj.effort || 'high' });
+      panel.push({ ...cand.seatObj, effort: cand.emittedEffort });
       usedFamilies.add(cand.family);
     }
 
@@ -646,6 +665,12 @@ function main() {
     const parts = excludeSeatsArg.split(',').map((s) => s.trim()).filter(Boolean);
     for (const p of parts) {
       excludeSet.add(p);
+      const atIdx = p.indexOf('@');
+      if (atIdx !== -1) {
+        const prefix = p.slice(0, atIdx);
+        const normR = normalizeRunner(p.slice(atIdx + 1));
+        excludeSet.add(`${prefix}@${normR}`);
+      }
     }
   }
 

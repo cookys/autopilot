@@ -1,83 +1,73 @@
 ## 目標
 
-無進行中工作。這份 handoff 記錄 2026-09-04 的第二段：**v2.35.16 預設派遣拓樸（brain up, hands down）** 已出貨、merge、push；
-以及當天稍早收掉的舊帳（ladder 裁定、fixture 隔離、guard headless BACKLOG）。
+**進行中**：owner 2026-09-04 裁定（go）：把「plan hetero loop review → 派工 → hetero review loop → qc gate」做成 dev-flow L-size 的**預設**（opt-out，不是 opt-in），並給 owner 口語「hetero review」一個入口。尚未動工：下一步從寫 plan 開始，plan 先過 plan loop review hetero，再照拓樸派工。
+上一段（v2.35.16 拓樸出貨）已 merge、push，見本檔末「上一段」。
 
 ## 現況
 
-- **branch**: `develop`，與 `origin/develop` 同步在 `8e188403`（handoff commit 在其後）；working tree 乾淨；`docs/projects/` 無進行中專案。
-- **version**: 2.35.16（28 hooks：15 default-on／13 opt-in；新 default-on `cost-fuse`）。
-- **session marker**: 已 clear。governance `enforcement_mode` 為 **enforce**（分支期間曾 shadow，merge 前還原）。
-- **dogfood roster**（`.claude/review-loop-config.md`）：implementer 仍是 grok-4.5@grok（派工期間暫切 gemini，已還原）。
-  `implementer_ladder` 未設 `auto`——這台是否採用 auto 是 owner 決定（見下一步 2）。
-- **測試**: 全套 `run.sh --parallel 4` 平行段 ALL TESTS PASSED；重釘後 `autopilot-engine` 470、`check-hook-inventory` 18、
-  `resolve-review-loop` 335、`cost-fuse` 63、`dispatch-model-guard` 65 單跑綠。既有紅：`opencode-v2-plugin` 3 條在 develop 上同樣紅
-  （opencode 1.18 `debug config` 行為漂移，未修）。`slash-entry-probe` 在負載下 0-byte，單獨開 probe 7/7 綠。
-
-**DONE**（v2.35.16，merge `8e188403`）：`scripts/resolve-dispatch-topology.js`＋`implementer_ladder: auto`＋rung-0；
-`resolve-dispatch.sh` implementer→sonnet、`hands`→haiku；`dispatch-model-guard` `guarded_models_implementing`＋`require_engine_header`
-（缺 model 先走 `on_missing_model`）；`hooks/cost-fuse.js`＋`scripts/cost-digest.js`；front-door canonical 拓樸段、l3–l6 薄殼。
-完整帳在 `CHANGELOG.md` v2.35.16 節與 `docs/projects/_archive/2026-09-04-default-dispatch-topology/`（README＋ledger/P0–P4）。
-
-**IN-FLIGHT**: 無。沒有背景派工。cuda 的 fleet 訊息皆已回覆（設計＋rollout；owner 裁定確認；出貨通知＋P5 配方）。
+- **branch**: `develop`，`origin/develop` 同步在 `84a7ca56`（handoff commit 之後多一個 docs commit）；working tree 乾淨；session marker 已 clear；governance `enforce`。
+- **version**: 2.35.16（28 hooks：15/13）。
+- **IN-FLIGHT**: 無派工。fleet 問卷已收 7 支 session 回覆（cuda×3、7840hs×2、gentoo×2、openclaw×3），內容已消化進下方設計；兩支（7840hs/mple2、openclaw/hangar-bridge）以「peer 轉述不算授權、行為側寫敏感」為由只回 memory——**合理，不要再問卷式 fan-out**，要問就 `--instance` 定址或 owner 親自說。
 
 ## 已決事項(不重議)
 
-- **§8 四項照提案值**（owner 2026-09-04，cuda 轉達＋本機直接裁定）：門檻 USD 150/host/day；`judgment` 也 rung-0；`/l3` 改 brain brief
-  + sonnet hands，`--solo` 唯一 inline 逃生；未合格引擎不進 ladder（`candidates_to_qualify`）。
-- **claude-native 退路不展開進 hetero ladder**——`claude_fallback_ladder` 只是給原生 Agent 派工的提示，`dispatch-hetero` runner enum
-  沒有 claude-native；auto 空階梯 ⇒ implicit rung + warning。
-- **cost-fuse 永不 `ask`**；預設 warn，block 要自己開。
-- **sol delta 的「`set -e` 會終止 auto probe」不成立**——`resolve-review-loop.sh` 是 `set -uo pipefail`；別再重查。
-- **本 repo 的 L5 mission rail 綁在 verdict-stability graph**；要派 hetero 又不想寫 rubric／graph／sources，就走「分支 shadow + /l4 sonnet
-  工頭 + dispatch-hetero」（先例 `4c842a92`、本次 `5ca93e08`），merge 前還原 enforce。
+**調查結論（本機 878 session + fleet 7 支，母體各自標明）**
+- owner 最常講的是「叫 autopilot plan loop review hetero」「coding 完成後過 hetero loop review」「engage hetero engine review」。**沒有任何 skill description 含這些字**；`dispatch-plan-review.js` 只有 research-to-ship 呼叫；code qc panel 藏在 finish-flow。這才是「hetero 跟 agent-call 混淆」的主因。
+- 動詞決定姿態：諮詢／問一下 → 問模型；叫／派／處理／通知／跟 X 說 → X 是引擎名就跑 CLI，X 是主機／專案／pane 就是 session（agent-call）。
+- 問模型的實況：全 fleet 都直接叫 CLI（codex exec、claude -p、GLM API key、kimi cli）；`dispatch-consult`／`dispatch-explore`／codex plugin **零使用**。consult 席六個合格（kimi、sol、fable、grok-4.6@xhigh、MiniMax、Qwen）但 `consult_dispatch` 預設 off、dogfood 沒填席、無 skill 呼叫。
+- 引擎分工固定：sol 審稿／讀圖、fable/kimi/grok 討論、gemini flash 實作、sonnet 工頭、GLM/MiniMax/Qwen 多為被考對象。
+- 兩條紀律要進 evidence-discipline：hetero implementer 的 green 是主張不是閘（openclaw 2026-07-02 /l6：implementer 默默放寬已 commit 的 live-test ACL）；leaf 是 systemd／CLI 程序時 SendMessage 到不了，只能再派一刀。
 
-## 下一步
+**設計（owner go）**
 
-1. **P5 fleet rollout（cuda 優先）**：每台 `scripts/dev-update.sh` → `node scripts/resolve-dispatch-topology.js --json` → 有合格 hetero 席的主機
-   在 `.claude/review-loop-config.md` 設 `implementer_ladder: auto`；cuda 先跑 `node scripts/cost-digest.js --since 14` 重現 $1,180 形狀，
-   用 p75 決定是否調 `cost_fuse.daily_usd_brain`。一週後 KR5：各主機 digest 的 brain_share。
-2. **這台 dogfood 是否切 `implementer_ladder: auto`**：切了會讓 `resolve-review-loop.test.sh` 九條 roster 釘值（grok-4.5/xai → review_risk
-   high、required_review_families 2、l1_required）失效，且 google 家族 implementer 會把 review 姿態降成 low——owner 決定，不要靜默切。
-3. **BACKLOG 候選（未寫）**：guard header 比對是嚴格前綴、`guarded_models` 是子字串（長 model id 如 `claude-opus-4-5@agy` 會誤拒）；
-   legacy 無 effort 的 scorecard 列在 ladder 排尾端、`effort:""` 是否能過 `implementer-ladder.js isTuple`；`opencode-v2-plugin` 既有紅；
-   cost-fuse 一週 warn 後改 block 的日期（P3 acceptance 寫的 calibration week）。
-4. 舊 handoff 其餘未動項目仍在：BACKLOG 八筆、suite oracle lock 殘留處置、flash-next 正式切 implementer。
+```
+L-2 plan → L-2.5 plan hetero loop review → L-4 派工（拓樸）→ 每 phase hetero review loop → L-5 qc gate
+```
+1. **L-2.5**：`dispatch-plan-review.js`；`plan_review: auto`（有合格 plan_reviewer 席就 on，席由 topology 推導）；rubric 從 plan 的 KR／§2.5／§6 自動生骨架；≤2 代；depth-0 逐條裁決後 freeze；沒 freeze 不進 L-3。
+2. **L-4 派工**：v2.35.16 拓樸（sonnet 工頭、hands ladder rung-0、brain 不下場）。
+3. **每 phase hetero review loop**：`hetero_review: auto|on|off`；工頭整合後跑 reviewer 席（跨家族），FIX-THEN-SHIP → hands 修 → SHIP 才算 phase advance gate 的 code review 項（取代現在那行空泛文字）。
+4. **L-5 qc gate**：三席 panel union-on-verified-critical，delta 複核到 SHIP，QC-Verdict trailer（pre-push gate 已在）。
+5. **尺寸**：L／H 全走；S 跳過 plan loop、保留一席 hetero review＋qc；Fix 只 qc。
+6. **新薄 skill `hetero-review`**：description 用 owner 原話當觸發（「plan loop review hetero」「過 hetero loop review」「hetero review」「engage hetero engine review」）；只分流：plan 檔 → plan loop；branch／diff → code loop（resolve 三席、dispatch-review 三路、union 合成、FIX-THEN-SHIP 派 hands、delta 複核、trailer）。dev-flow 內部重用它。→ MINOR（v2.36.0）。
+7. **附帶**：consult 與 codex plugin 脫鉤（`hetero-dispatch.md` 那節改「Codex-plugin consult（optional）」，「peer」只留給 session）；`resolve-dispatch-topology.js` 加 `--role consult|discuss|plan_reviewer|reviewer`，consult ladder 優先「與提問者不同家族」再快又便宜；`consult_dispatch: auto`；consult 接點：debug 卡兩輪、think-tank 3.5、dev-flow L 設計決策前、qc 三席互斥。`agent-call` description 加 owner 動詞與 hangar-bridge 觸發，Not-for 指向 hetero-review／consult／l4–l6，並記「Claude session 用 `fleet peers` instance 定址，`fleet local list` 只有非 Claude pane」。research-to-ship 改成「dev-flow 加先 survey」。
+8. **不做**：新頂層 `/ask`、強制裝 codex plugin、claude-native 進 hetero ladder。
+
+## 下一步（下一個 session 從這裡開始）
+
+1. 寫 `docs/plans/2026-09-04-dev-flow-hetero-loops-default.md`＋`.rubric.md`（R1: 格式；rubric ID 後直接冒號）。內容＝上面設計＋KR＋§2.5＋§6＋§8。
+2. **先過 plan loop review hetero**：manifest 三席 sol@codex max（chair）、kimi-code/k3@kimi、MiniMax-M3@cc-shim；`--timeout 20m`；≤2 代；depth-0 逐條裁決（accept-and-fold／refute-with-rationale），瘦身不調 growth 閾值；契約陷阱見 memory `dispatch-plan-review-contract`。
+3. 派工照拓樸：分支 `feat/dev-flow-hetero-loops`，governance 本分支 shadow（先例 `5ca93e08`）、`worktree.baseRef: head`、session marker l4；sonnet 工頭一刀一命、hands `gemini-3.8-flash-low@agy`（dogfood roster 要暫切 gemini 三欄，收尾還原）；brief 模板在上一 session 的 scratchpad 已失效，照 `docs/projects/_archive/2026-09-04-default-dispatch-topology/ledger/P1.md` 的形狀重寫。
+4. dev-flow／ceo-agent SKILL.md 有改動就要重釘 profiles hash 鏈（skill `profiles-hash-repin`）；CHANGELOG 要 `prose-justification:` 行。
+5. 收尾：還原 enforce 與 roster、全套 suite、qc 三席、delta 複核、trailer、preflight、archive、push；P5 fleet rollout 仍待 cuda。
 
 ## 驗證方式
 
 ```bash
 cd /home/cookys/projects/autopilot
 git status --porcelain              # 空
-git log --oneline -2                # handoff commit → 8e188403
+git log --oneline -1
 node -p "require('./.claude-plugin/plugin.json').version"   # 2.35.16
-node scripts/check-hook-inventory.js --check   # 28 hooks (15 default-on, 13 opt-in)
-node scripts/resolve-dispatch-topology.js --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).implementer_ladder[0].rung))'   # gemini-3.8-flash-low/low@agy
-bash hooks/tests/cost-fuse.test.sh; bash hooks/tests/dispatch-model-guard.test.sh   # 63 / 65
+bash scripts/resolve-review-loop.sh --field plan_review     # off（現況；設計要改成 auto）
+grep -rl "hetero review\|loop review" skills/*/SKILL.md     # 空（現況；設計要補）
 ```
 
 ## Read-order
 
-1. `CHANGELOG.md` v2.35.16 節——三個新件、qc 六修、refuted 一項、測試現況。
-2. `docs/plans/2026-09-04-default-dispatch-topology.md`——三層拓樸、KR、§8。
-3. `docs/projects/_archive/2026-09-04-default-dispatch-topology/README.md` 與 `ledger/P1.md`——實際派工帳（含被退的 cut A 與工頭到上限後 depth-0 接手）。
-4. `skills/ceo-agent/references/level-front-door.md` § Default dispatch topology——canonical 段落。
+1. `docs/projects/_archive/2026-09-04-default-dispatch-topology/README.md`＋`ledger/P1.md`——上一段的派工形狀與工頭到上限的接手方式。
+2. `skills/dev-flow/SKILL.md` L-2～L-5（430–545 行）——要改的段落。
+3. `scripts/resolve-review-loop.sh` 的 `plan_review`／`plan_reviewer_*`（383、500 行附近）與 `scripts/dispatch-plan-review.js --help`。
+4. `references/hetero-dispatch.md` § consult seat、§ Peer consult——要改名與脫鉤的段落。
+5. memory：`dispatch-plan-review-contract`、`dispatch-topology-dogfood-lessons`、`dispatch-review-runner-setup`。
 
 ## 陷阱
 
-- **停車的工頭／hands 不會被自己的背景子任務喚醒**：depth-0 要用等待迴圈盯 leaf 的 JSON 落地再 SendMessage；等 `test` 這種它自己開的
-  背景工作也一樣，要定時叫醒。
-- **等待迴圈別用 `ls … | xargs -r test -s`**：沒有檔案時 xargs 空輸入回 0，`until` 立刻結束；zsh 下 glob 無匹配還會直接 error——寫成
-  `bash -c 'for f in glob; do [ -s "$f" ] && exit 0; done'`。
-- **`check-redispatch-prompt.sh` 會擋 implementer prompt 裡的 fenced code 與「around line N」**：修復 brief 用文字描述位置與程式碼。
-- **governance enforce 下 raw `dispatch-hetero` 必拒**（`check_mission_enforcement_gate`）：還原 enforce 之後的小修改走 sonnet 原生 hands。
-- **在 worktree 目錄裡 `git merge` 會 merge 到自己**：整合一律 `cd` 回主 checkout；Bash 工具的 cwd 會殘留。
-- **`worktree.baseRef`**：沒設 `head` 時 Agent worktree 從 `origin/develop` 開，hands 要先 ff 到 feature；設了記得在 release commit 前
-  `git checkout -- .claude/settings.local.json`。
-- **全套 suite 的平行段「ALL TESTS PASSED」不代表 serial 尾段綠**——要看整份 log 的每個 `FAIL [` 摘要行。
+- 停車的工頭／hands 不會被自己的背景子任務喚醒；等待迴圈用 `bash -c 'for f in glob; do [ -s "$f" ] && exit 0; done'`，別用 `xargs -r`。
+- `check-redispatch-prompt.sh` 擋 implementer prompt 裡的 fenced code 與「around line N」。
+- enforce 下 raw `dispatch-hetero` 必拒；還原後的小修改走 sonnet 原生 hands。
+- 在 worktree 目錄裡 `git merge` 只會 merge 到自己；整合回主 checkout。
+- `git diff 68e142c0..HEAD` 這種 range 在 handoff 後 sha 都變了；重新 `git log` 取。
+- 全套 suite 平行段 ALL TESTS PASSED 不含 serial 尾段；`opencode-v2-plugin` 3 紅是既有；`slash-entry-probe` 負載下假紅。
 
-## 已路由出去的耐久內容
+## 上一段（2026-09-04 前半，已出貨）
 
-- **memory**：`dispatch-topology-dogfood-lessons.md`（新：本節陷阱的機制版）、`cc-headless-hook-ask-auto-denies.md`、
-  `engine-qualify-administration-gotchas.md`（ladder 裁定）。
-- **repo**：CHANGELOG v2.35.16、INDEX Completed 列、archive README＋ledger、front-door canonical 段、BACKLOG 一筆已刪。
+v2.35.16 拓樸：`resolve-dispatch-topology.js`、`implementer_ladder: auto`、implementer→sonnet／hands→haiku、`dispatch-model-guard` header 規則、`cost-fuse`＋`cost-digest`、front-door canonical 段；本身照拓樸做（5 sonnet 工頭、10 把 gemini-low 刀）；qc 三席 FIX-THEN-SHIP → 六修 → sol delta 一項 refuted。舊帳收掉：ladder `[]` 是設計、fixture 271/272 已隔離、guard headless BACKLOG 刪（CC 2.1.259 `-p` 下 ask 自動拒）。cuda 已收 P5 配方，等 owner 授權跑。

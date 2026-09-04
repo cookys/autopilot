@@ -401,8 +401,8 @@ function validateModeB(flags) {
       console.error(`Finding in ${sourceName} missing valid string id/fingerprint`);
       process.exit(1);
     }
-    if (f.candidate_blocker !== undefined && typeof f.candidate_blocker !== 'boolean') {
-      console.error(`Finding '${idVal}' in ${sourceName} candidate_blocker must be a boolean`);
+    if (typeof f.candidate_blocker !== 'boolean') {
+      console.error(`Finding '${idVal}' in ${sourceName} candidate_blocker is mandatory and must be a boolean`);
       process.exit(1);
     }
     if (typeof f.disposition !== 'string' || !allowedDispositions.has(f.disposition)) {
@@ -450,10 +450,11 @@ function validateModeB(flags) {
     }
   }
 
+  const blockerClassDispositions = new Set(['accepted_blocker', 'rejected']);
   const failingFindings = [];
 
   for (const finding of planArtifact.findings) {
-    if (!finding || finding.candidate_blocker !== true) {
+    if (!finding) {
       continue;
     }
     const id = finding.fingerprint !== undefined ? finding.fingerprint : finding.id;
@@ -462,19 +463,31 @@ function validateModeB(flags) {
       failingFindings.push(`Finding '${id}': missing in dispositions`);
       continue;
     }
-
     const disposition = disp.disposition;
-    if (disposition !== 'accepted_blocker' && disposition !== 'rejected') {
-      failingFindings.push(
-        `Finding '${id}': invalid disposition '${disposition}' (must be 'accepted_blocker' or 'rejected')`
-      );
-      continue;
-    }
 
-    const rationale = typeof disp.rationale === 'string' ? disp.rationale.trim() : '';
-    if (!rationale) {
-      failingFindings.push(`Finding '${id}': rationale must be a non-empty string`);
-      continue;
+    if (finding.candidate_blocker === true) {
+      if (!blockerClassDispositions.has(disposition)) {
+        failingFindings.push(
+          `Finding '${id}': invalid disposition '${disposition}' (candidate_blocker=true requires 'accepted_blocker' or 'rejected')`
+        );
+        continue;
+      }
+
+      const rationale = typeof disp.rationale === 'string' ? disp.rationale.trim() : '';
+      if (!rationale) {
+        failingFindings.push(`Finding '${id}': rationale must be a non-empty string`);
+        continue;
+      }
+    } else {
+      // d2-plan-candidate-blocker-fail-open: a non-blocker finding's disposition class must
+      // match — it must NOT be disposed with a blocker-exclusive disposition, which would let a
+      // finding evade the blocker-specific checks above by simply mislabelling itself.
+      if (blockerClassDispositions.has(disposition)) {
+        failingFindings.push(
+          `Finding '${id}': disposition '${disposition}' is blocker-exclusive but candidate_blocker=false`
+        );
+        continue;
+      }
     }
   }
 
@@ -561,7 +574,10 @@ function validateModeA(flags) {
       process.exit(1);
     }
 
-    // Check configured minimum reviewed seats (Item 2)
+    // Item 2 / d2-seat-receipt-forgery: the minimum reviewed-seat count is taken ONLY from
+    // trusted configuration (a CLI flag or an environment variable) — never from the receipt
+    // under test, which would otherwise let a forger ship its own passing threshold alongside
+    // the forged evidence. With no configuration supplied, the default is "all seats".
     let configuredMinSeats = null;
     if (flags['min-reviewed-seats'] !== undefined) {
       configuredMinSeats = parseInt(flags['min-reviewed-seats'], 10);
@@ -571,8 +587,6 @@ function validateModeA(flags) {
       configuredMinSeats = parseInt(flags['min_reviewed_seats'], 10);
     } else if (process.env.AUTOPILOT_MIN_REVIEWED_SEATS !== undefined) {
       configuredMinSeats = parseInt(process.env.AUTOPILOT_MIN_REVIEWED_SEATS, 10);
-    } else if (receipt.min_reviewed_seats !== undefined) {
-      configuredMinSeats = parseInt(receipt.min_reviewed_seats, 10);
     }
 
     const findingsByGeneration = new Map();
@@ -605,41 +619,10 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // Item 2: Reject gap generations below the minimum reviewed seats
-      const hasSeatInfo = entry.reviewed_seats !== undefined
-        || entry.reviewed_seats_count !== undefined
-        || entry.total_seats !== undefined
-        || entry.total_seats_count !== undefined
-        || entry.seats !== undefined;
-
-      if (hasSeatInfo || configuredMinSeats !== null) {
-        let totalCount = 0;
-        if (typeof entry.total_seats === 'number') {
-          totalCount = entry.total_seats;
-        } else if (typeof entry.total_seats_count === 'number') {
-          totalCount = entry.total_seats_count;
-        } else if (Array.isArray(entry.seats)) {
-          totalCount = entry.seats.length;
-        }
-
-        let reviewedCount = 0;
-        if (typeof entry.reviewed_seats === 'number') {
-          reviewedCount = entry.reviewed_seats;
-        } else if (typeof entry.reviewed_seats_count === 'number') {
-          reviewedCount = entry.reviewed_seats_count;
-        } else if (Array.isArray(entry.seats)) {
-          reviewedCount = entry.seats.filter((s) => typeof s === 'string' || (s && s.status === 'reviewed')).length;
-        }
-
-        const requiredMin = (configuredMinSeats !== null && !isNaN(configuredMinSeats))
-          ? configuredMinSeats
-          : totalCount;
-
-        if (reviewedCount < requiredMin) {
-          console.error(`Generation ${entry.generation} reviewed seats (${reviewedCount}) below minimum required (${requiredMin})`);
-          process.exit(1);
-        }
-      }
+      // Item 2 / d2-seat-receipt-forgery: seat coverage and the reviewed-seat count are
+      // resolved further below, once the per-generation directory (gDir) is known and each
+      // seat artifact can be read and sha-verified from disk — never trusted from chain-level
+      // counts (reviewed_seats/total_seats) or from the receipt.
 
       const gDir = path.join(reviewPhaseDir, `g${entry.generation}`);
 
@@ -747,12 +730,41 @@ function validateModeA(flags) {
       }
 
       // Seat artifacts verification
-      if (!entry.seat_artifact_sha256 || typeof entry.seat_artifact_sha256 !== 'object') {
-        console.error(`seat_artifact_sha256 missing or not an object for generation ${entry.generation}`);
+      // Item 2 / d2-seat-receipt-forgery: exact seat-to-hash coverage for every seat listed in
+      // this chain entry, reviewed status derived from each validated (sha-verified) seat
+      // artifact on disk — never from chain-level counts or the receipt — and the minimum
+      // reviewed-seat count enforced from trusted configuration only (default: all seats).
+      if (!Array.isArray(entry.seats) || entry.seats.length === 0) {
+        console.error(`Chain entry generation ${entry.generation} is missing a non-empty 'seats' array; cannot verify review coverage`);
+        process.exit(1);
+      }
+      const entrySeatIds = entry.seats.map((s) => (s && typeof s === 'object' ? s.id : s));
+      if (entrySeatIds.some((id) => typeof id !== 'string' || id.length === 0)) {
+        console.error(`Chain entry generation ${entry.generation} has a seat with a missing or invalid id`);
         process.exit(1);
       }
 
-      for (const [seatId, expectedSha] of Object.entries(entry.seat_artifact_sha256)) {
+      if (!entry.seat_artifact_sha256 || typeof entry.seat_artifact_sha256 !== 'object' || Array.isArray(entry.seat_artifact_sha256)) {
+        console.error(`seat_artifact_sha256 missing or not an object for generation ${entry.generation}`);
+        process.exit(1);
+      }
+      const shaKeys = Object.keys(entry.seat_artifact_sha256);
+      if (shaKeys.length === 0) {
+        console.error(`seat_artifact_sha256 is empty for generation ${entry.generation}; no seat evidence provided (forged empty-seat receipt)`);
+        process.exit(1);
+      }
+      const sortedEntrySeatIds = [...entrySeatIds].sort();
+      const sortedShaKeys = [...shaKeys].sort();
+      const exactSeatCoverage = sortedEntrySeatIds.length === sortedShaKeys.length
+        && sortedEntrySeatIds.every((id, idx) => id === sortedShaKeys[idx]);
+      if (!exactSeatCoverage) {
+        console.error(`seat_artifact_sha256 keys [${sortedShaKeys.join(', ')}] do not exactly match the seats [${sortedEntrySeatIds.join(', ')}] listed for generation ${entry.generation}`);
+        process.exit(1);
+      }
+
+      let reviewedCount = 0;
+      for (const seatId of entrySeatIds) {
+        const expectedSha = entry.seat_artifact_sha256[seatId];
         const seatFile = path.join(gDir, `seat-${seatId}.json`);
         if (!fs.existsSync(seatFile)) {
           console.error(`Missing seat artifact at ${seatFile} for generation ${entry.generation}`);
@@ -764,6 +776,24 @@ function validateModeA(flags) {
           console.error(`seat_artifact_sha256 mismatch for seat '${seatId}' in generation ${entry.generation}: expected '${expectedSha}', computed '${computedSeatSha}'`);
           process.exit(1);
         }
+        let seatContent;
+        try {
+          seatContent = JSON.parse(seatRaw.toString('utf8'));
+        } catch (err) {
+          console.error(`Failed to parse seat artifact ${seatFile} for generation ${entry.generation}: ${err.message}`);
+          process.exit(1);
+        }
+        if (seatContent && seatContent.status === 'reviewed') {
+          reviewedCount++;
+        }
+      }
+
+      const requiredMinSeats = (configuredMinSeats !== null && !isNaN(configuredMinSeats))
+        ? configuredMinSeats
+        : entrySeatIds.length;
+      if (reviewedCount < requiredMinSeats) {
+        console.error(`Generation ${entry.generation} reviewed seats (${reviewedCount}) below minimum required (${requiredMinSeats})`);
+        process.exit(1);
       }
 
       let dispBytes;
@@ -886,28 +916,24 @@ function validateModeA(flags) {
       process.exit(1);
     }
 
-    // Item 8: Malformed open_findings must fail closed
-    if (receipt.open_findings !== undefined) {
-      if (Array.isArray(receipt.open_findings)) {
-        if (receipt.open_findings.length !== derivedState.open_findings.length) {
-          console.error(`Receipt open_findings length mismatch: expected ${derivedState.open_findings.length}, got ${receipt.open_findings.length}`);
-          process.exit(1);
-        }
-        for (let i = 0; i < derivedState.open_findings.length; i++) {
-          const recF = receipt.open_findings[i];
-          const derF = derivedState.open_findings[i];
-          if (!recF || recF.id !== derF.id || recF.disposition !== derF.disposition) {
-            console.error(`Receipt open_findings mismatch at index ${i}`);
-            process.exit(1);
-          }
-        }
-      } else if (typeof receipt.open_findings === 'number') {
-        if (receipt.open_findings !== derivedState.open_findings.length) {
-          console.error(`Receipt open_findings count mismatch: expected ${derivedState.open_findings.length}, got ${receipt.open_findings}`);
-          process.exit(1);
-        }
-      } else {
-        console.error(`Receipt open_findings is neither an array nor a number (got ${typeof receipt.open_findings})`);
+    // Item 8 / d2-open-findings-drift: the shared format requires verified Major/Minor findings
+    // to populate the canonical open_findings array — a numeric count (or an absent field) would
+    // let a forged receipt omit their actionable details while still passing. open_findings is
+    // therefore mandatory whenever the chain re-derives to a non-empty set, and must deep-equal
+    // the re-derived entries (id, severity, disposition) exactly, in order.
+    if (!Array.isArray(receipt.open_findings)) {
+      console.error(`Receipt open_findings must be the canonical array of re-derived open findings (got ${typeof receipt.open_findings})`);
+      process.exit(1);
+    }
+    if (receipt.open_findings.length !== derivedState.open_findings.length) {
+      console.error(`Receipt open_findings length mismatch: expected ${derivedState.open_findings.length}, got ${receipt.open_findings.length}`);
+      process.exit(1);
+    }
+    for (let i = 0; i < derivedState.open_findings.length; i++) {
+      const recF = receipt.open_findings[i];
+      const derF = derivedState.open_findings[i];
+      if (!recF || recF.id !== derF.id || recF.severity !== derF.severity || recF.disposition !== derF.disposition) {
+        console.error(`Receipt open_findings mismatch at index ${i}: expected {id: '${derF.id}', severity: '${derF.severity}', disposition: '${derF.disposition}'}, got ${JSON.stringify(recF)}`);
         process.exit(1);
       }
     }

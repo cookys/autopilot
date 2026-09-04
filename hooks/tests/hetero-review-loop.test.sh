@@ -112,6 +112,9 @@ assert_file_exists "$LEDGER/review-p1/g1/findings.json" "case 3: findings.json e
 assert_file_exists "$LEDGER/review-p1/chain.json" "case 3: chain.json exists"
 assert_contains "$(cat "$LEDGER/review-p1/chain.json")" '"status": "pending"' "case 3: chain entry status is pending"
 assert_contains "$(cat "$LEDGER/review-p1/g1/findings.json")" '"findings": []' "case 3: findings array is empty"
+assert_file_exists "$LEDGER/phase-p1.base" "case 3: phase base persisted at the documented ledger-root path"
+assert_eq "$(cat "$LEDGER/phase-p1.base")" "$PHASE_BASE" "case 3: ledger-root phase base file content matches --phase-base"
+assert_file_absent "$LEDGER/review-p1/phase-p1.base" "case 3: phase base is NOT written under review-p1/ (that was the doc-path-mismatch defect)"
 
 # Case 4: a seat with findings text containing one Critical and one Major produces two entries with distinct ids
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Critical: SQL injection vulnerability\nDetailed description here.\n\nMajor: Unhandled promise rejection\nMore details."}'
@@ -143,7 +146,9 @@ assert_exit_code "$C6_RC" "0" "case 6: exits 0 with --allow-seat-gap"
 assert_file_exists "$LEDGER/review-p6/chain.json" "case 6: chain.json written"
 assert_contains "$(cat "$LEDGER/review-p6/chain.json")" '"status": "pending-with-gap"' "case 6: status is pending-with-gap"
 
-# Case 7: generation 2 with chain.json seeded with g1 head X uses X as base
+# Case 7 (negative control): generation 2 attempted over a PENDING (not finalized) generation-1
+# predecessor is refused, even under a phase literally named "p7" — the removed legacy carve-out
+# ("prevEntry.status === 'pending' && phase === 'p7'") must never resurrect.
 mkdir -p "$LEDGER/review-p7"
 SEED_BASE="$PHASE_BASE"
 SEED_HEAD=$(git -C "$SCRATCH_REPO" rev-parse work~0)
@@ -161,6 +166,24 @@ SEED_EOF
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 unset STUB_RESPONSE_s0
 unset STUB_RESPONSE_s1
+C7NEG_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7NEG_RC=$?
+assert_exit_code "$C7NEG_RC" "1" "case 7 negative: gen 2 refused when gen 1 is pending (not finalized), even under phase literally named p7"
+assert_contains "$C7NEG_OUT" "is not finalized" "case 7 negative: refusal message names the not-finalized predecessor"
+assert_file_absent "$LEDGER/review-p7/g2" "case 7 negative: no g2 directory created on refusal"
+
+# Case 7: generation 2 with chain.json seeded with a FINALIZED g1 head X uses X as base
+# (fixed: legacy p7 carve-out removed, so the predecessor must actually be finalized)
+cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "$SEED_BASE",
+    "head": "$SEED_HEAD",
+    "seats": ["s0"],
+    "status": "finalized"
+  }
+]
+SEED_EOF
 C7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7_RC=$?
 assert_exit_code "$C7_RC" "0" "case 7: exits 0 for gen 2"
 RANGE_BASE=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).base);' "$LEDGER/review-p7/g2/range.json")
@@ -925,6 +948,22 @@ assert_file_exists "$LEDGER/review-p_test2/chain.json" "test 2: chain.json exist
 T2_CHAIN=$(cat "$LEDGER/review-p_test2/chain.json")
 assert_contains "$T2_CHAIN" '"status": "aborted"' "test 2: chain entry status is aborted"
 assert_contains "$T2_CHAIN" '"reason": "parse_failed"' "test 2: chain entry reason is parse_failed"
+
+# Test 2d (negative control): the aborted generation left real evidence on disk (range.json, diff.txt);
+# retrying without --retry must be refused and must NOT delete/recreate that directory.
+assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json exists before retry"
+T2D_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2D_RC=$?
+assert_exit_code "$T2D_RC" "1" "test 2d: retry without --retry on an aborted generation with existing evidence is refused"
+assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json still present after refused retry (not deleted)"
+
+# Test 2e: --retry reuses the generation number but preserves the aborted evidence directory
+# (renamed aside under g1.aborted-*, never deleted).
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+T2E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --retry 2>&1); T2E_RC=$?
+assert_exit_code "$T2E_RC" "0" "test 2e: --retry succeeds"
+assert_file_exists "$LEDGER/review-p_test2/g1/findings.json" "test 2e: fresh g1 directory has findings.json"
+T2E_PRESERVED_COUNT=$(find "$LEDGER/review-p_test2" -maxdepth 1 -name "g1.aborted-*" -type d | wc -l | tr -d ' ')
+assert_eq "$T2E_PRESERVED_COUNT" "1" "test 2e: aborted evidence directory preserved under g1.aborted-*, not deleted"
 
 # Test 2b: SHIP-AS-IS with findings "none" and non-empty no_finding_proof succeeds with 0 findings and pending status
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'

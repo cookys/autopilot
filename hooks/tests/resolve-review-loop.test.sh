@@ -1355,6 +1355,27 @@ assert_eq "native-fallback" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALL_SAME_RUNNER" R
 assert_contains "$PLAN_COLLIDE_ALL_OUT" "plan_review" "plan_review all-collide native-fallback output names knob"
 assert_contains "$PLAN_COLLIDE_ALL_OUT" "opus/high@claude-native" "plan_review all-collide native-fallback output contains fallback tuple"
 
+# 7 (negative control, d1-runner-alias-exclusion): a panel seat spelled with the "codex-cli"
+# alias must still collide with an implementer_runner of "codex" under the same-runner-dual-seat
+# guard — the two are the same rail and must be canonicalized before comparison.
+TOPO_ALIAS_COLLIDE="$TEST_TMP/topo-alias-collide.json"
+cat > "$TOPO_ALIAS_COLLIDE" <<'JSON'
+{
+  "plan_review_panel": [
+    { "engine": "gpt-4o-cli", "effort": "high", "runner": "codex-cli", "endpoint": "" },
+    { "engine": "claude-fable-5", "effort": "high", "runner": "claude-native", "endpoint": "ep-fable" }
+  ],
+  "reviewer_ladder": [],
+  "consult_ladder": []
+}
+JSON
+PLAN_ALIAS_COLLIDE_CFG="$TEST_TMP/rl-plan-auto-alias-collide.md"
+printf -- '- plan_review: auto\n- implementer_runner: codex\n- implementer_engine: gpt-5.6-sol\n- reviewer_runner: agy\n- reviewer_engine: gemini-3.8-flash-low\n' > "$PLAN_ALIAS_COLLIDE_CFG"
+assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALIAS_COLLIDE" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_ALIAS_COLLIDE_CFG" bash "$SCRIPT" --field plan_review_resolved_from)" \
+  "plan_review auto skips the codex-cli panel seat (aliased collision with implementer_runner=codex) and still resolves from topology"
+assert_eq "claude-fable-5" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_ALIAS_COLLIDE" REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_ALIAS_COLLIDE_CFG" bash "$SCRIPT" --field plan_reviewer_engine)" \
+  "plan_reviewer_engine is the surviving seat, not the codex-cli seat that aliases to the implementer's own runner"
+
 
 # --- hetero_review: auto × 4 topology states ---
 HETERO_AUTO_CFG="$TEST_TMP/rl-hetero-auto.md"
@@ -1468,6 +1489,42 @@ assert_eq "high" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CON
   "consult_effort picks consult_ladder[1] when [0] is in qc_panel"
 assert_eq "topology" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_CFG" bash "$SCRIPT" --field consult_resolved_from)" \
   "consult_resolved_from is topology after exclusion"
+
+# Negative control (d1-runner-alias-exclusion): qc_panel_runners spelled "codex" must still
+# exclude a consult_ladder[0] seat whose topology runner is the "codex-cli" alias — the two are
+# the same rail and the exclusion tuple-key must canonicalize before comparison.
+TOPO_CONSULT_EXCL_ALIAS="$TEST_TMP/topo-consult-excl-alias.json"
+cat > "$TOPO_CONSULT_EXCL_ALIAS" <<'JSON'
+{
+  "consult_ladder": [
+    { "engine": "gpt-5.5", "effort": "xhigh", "runner": "codex-cli", "endpoint": "" },
+    { "engine": "MiniMax-M3", "effort": "high", "runner": "cc-shim", "endpoint": "" }
+  ]
+}
+JSON
+CONSULT_EXCL_ALIAS_CFG="$TEST_TMP/rl-consult-excl-alias.md"
+printf -- '- consult_dispatch: auto\n- qc_panel: gpt-5.5, claude-opus, gemini-flash\n- qc_panel_runners: codex, claude-native, agy\n- qc_panel_efforts: xhigh, high, high\n' > "$CONSULT_EXCL_ALIAS_CFG"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_ALIAS_CFG" bash "$SCRIPT" --field consult_engine)" \
+  "consult_engine picks consult_ladder[1] when [0] (codex-cli) is excluded by a qc_panel_runners entry spelled codex"
+assert_eq "cc-shim" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_ALIAS_CFG" bash "$SCRIPT" --field consult_runner)" \
+  "consult_runner picks consult_ladder[1] when [0] is excluded via the codex/codex-cli alias"
+
+# Negative control (d1-runner-alias-exclusion): implementer_runner=codex must still collide with
+# a consult_ladder seat whose topology runner is the "codex-cli" alias under the
+# same-runner-dual-seat guard.
+TOPO_CONSULT_COLLIDE_ALIAS="$TEST_TMP/topo-consult-collide-alias.json"
+cat > "$TOPO_CONSULT_COLLIDE_ALIAS" <<'JSON'
+{
+  "consult_ladder": [
+    { "engine": "gpt-4o-cli", "effort": "high", "runner": "codex-cli", "endpoint": "" },
+    { "engine": "MiniMax-M3", "effort": "high", "runner": "cc-shim", "endpoint": "" }
+  ]
+}
+JSON
+CONSULT_COLLIDE_ALIAS_CFG="$TEST_TMP/rl-consult-collide-alias.md"
+printf -- '- consult_dispatch: auto\n- implementer_runner: codex\n- implementer_engine: gpt-5.6-sol\n- reviewer_runner: agy\n- reviewer_engine: gemini-3.8-flash-low\n' > "$CONSULT_COLLIDE_ALIAS_CFG"
+assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_COLLIDE_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_COLLIDE_ALIAS_CFG" bash "$SCRIPT" --field consult_engine)" \
+  "consult_engine skips consult_ladder[0] (codex-cli, aliased collision with implementer_runner=codex) under the same-runner-dual-seat guard"
 
 
 # --- Absent-knob pre-template config ---

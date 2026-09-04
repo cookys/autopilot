@@ -80,6 +80,24 @@ EOF
   echo "$dsha"
 }
 
+# Helper to write a real reviewed seat artifact and print its sha256 (Item 2 / d2-seat-receipt-forgery
+# requires the chain entry's seats to have exact, sha-verified coverage — no empty seat_artifact_sha256).
+write_seat_artifact() {
+  local p="$1"
+  local gen="$2"
+  local seat_id="$3"
+  mkdir -p "$LEDGER/review-$p/g$gen"
+  cat << EOF > "$LEDGER/review-$p/g$gen/seat-$seat_id.json"
+{
+  "status": "reviewed",
+  "verdict": "SHIP-AS-IS",
+  "findings": "",
+  "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"
+}
+EOF
+  node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-$p/g$gen/seat-$seat_id.json"
+}
+
 # Helper to write receipt.json
 write_receipt_json() {
   local p="$1"
@@ -96,6 +114,7 @@ EOF
 write_range_json "p1" "1" "$PHASE_BASE" "$GEN1_HEAD" "$DIFF_SHA"
 P1_DISP_SHA=$(write_gen_artifacts "p1" "1")
 P1_FINDINGS_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-p1/g1/findings.json")
+P1_SEAT_S0_SHA=$(write_seat_artifact "p1" "1" "s0")
 mkdir -p "$LEDGER/review-p1"
 cat << EOF > "$LEDGER/review-p1/chain.json"
 [
@@ -104,6 +123,51 @@ cat << EOF > "$LEDGER/review-p1/chain.json"
     "base": "$PHASE_BASE",
     "head": "$GEN1_HEAD",
     "status": "finalized",
+    "seats": [{ "id": "s0", "status": "reviewed" }],
+    "dispositions_sha256": "$P1_DISP_SHA",
+    "findings_sha256": "$P1_FINDINGS_SHA",
+    "seat_artifact_sha256": { "s0": "$P1_SEAT_S0_SHA" }
+  }
+]
+EOF
+write_receipt_json "p1" "{
+  \"kind\": \"review\",
+  \"phase\": \"p1\",
+  \"branch\": \"work\",
+  \"phase_base_sha\": \"$PHASE_BASE\",
+  \"chain\": [
+    {
+      \"generation\": 1,
+      \"base\": \"$PHASE_BASE\",
+      \"head\": \"$GEN1_HEAD\",
+      \"status\": \"finalized\",
+      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"dispositions_sha256\": \"$P1_DISP_SHA\",
+      \"findings_sha256\": \"$P1_FINDINGS_SHA\",
+      \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
+    }
+  ],
+  \"verdict\": \"SHIP-AS-IS\",
+  \"open_findings\": [],
+  \"resolved_from\": \"test\",
+  \"written_at\": \"2026-09-04T00:00:00Z\"
+}"
+
+C1_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase p1 --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C1_RC=$?
+assert_exit_code "$C1_RC" "0" "case 1: valid review receipt exits 0"
+
+# 1n (negative control): same fixture but seat_artifact_sha256 forged empty ({}) on BOTH the
+# on-disk chain.json and the receipt (so the seat-coverage gate itself is exercised, not the
+# chain-divergence check) -> exit 1 (d2-seat-receipt-forgery: an implementer must not be able to
+# fabricate an empty-finding SHIP-AS-IS chain without any reviewer evidence).
+cat << EOF > "$LEDGER/review-p1/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "$PHASE_BASE",
+    "head": "$GEN1_HEAD",
+    "status": "finalized",
+    "seats": [{ "id": "s0", "status": "reviewed" }],
     "dispositions_sha256": "$P1_DISP_SHA",
     "findings_sha256": "$P1_FINDINGS_SHA",
     "seat_artifact_sha256": {}
@@ -121,6 +185,7 @@ write_receipt_json "p1" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
+      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
       \"dispositions_sha256\": \"$P1_DISP_SHA\",
       \"findings_sha256\": \"$P1_FINDINGS_SHA\",
       \"seat_artifact_sha256\": {}
@@ -131,9 +196,97 @@ write_receipt_json "p1" "{
   \"resolved_from\": \"test\",
   \"written_at\": \"2026-09-04T00:00:00Z\"
 }"
+C1N_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase p1 --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C1N_RC=$?
+assert_exit_code "$C1N_RC" "1" "case 1 negative: forged empty seat_artifact_sha256 ({}) with a non-empty seats array exits 1"
 
-C1_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase p1 --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C1_RC=$?
-assert_exit_code "$C1_RC" "0" "case 1: valid review receipt exits 0"
+# Restore the valid chain.json and receipt for subsequent tests that reuse phase p1
+cat << EOF > "$LEDGER/review-p1/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "$PHASE_BASE",
+    "head": "$GEN1_HEAD",
+    "status": "finalized",
+    "seats": [{ "id": "s0", "status": "reviewed" }],
+    "dispositions_sha256": "$P1_DISP_SHA",
+    "findings_sha256": "$P1_FINDINGS_SHA",
+    "seat_artifact_sha256": { "s0": "$P1_SEAT_S0_SHA" }
+  }
+]
+EOF
+write_receipt_json "p1" "{
+  \"kind\": \"review\",
+  \"phase\": \"p1\",
+  \"branch\": \"work\",
+  \"phase_base_sha\": \"$PHASE_BASE\",
+  \"chain\": [
+    {
+      \"generation\": 1,
+      \"base\": \"$PHASE_BASE\",
+      \"head\": \"$GEN1_HEAD\",
+      \"status\": \"finalized\",
+      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"dispositions_sha256\": \"$P1_DISP_SHA\",
+      \"findings_sha256\": \"$P1_FINDINGS_SHA\",
+      \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
+    }
+  ],
+  \"verdict\": \"SHIP-AS-IS\",
+  \"open_findings\": [],
+  \"resolved_from\": \"test\",
+  \"written_at\": \"2026-09-04T00:00:00Z\"
+}"
+
+# 1p (negative control): d2-open-findings-drift — a numeric open_findings count (instead of the
+# canonical array) must fail closed even when the count itself is correct (0): expect exit 1.
+write_receipt_json "p1" "{
+  \"kind\": \"review\",
+  \"phase\": \"p1\",
+  \"branch\": \"work\",
+  \"phase_base_sha\": \"$PHASE_BASE\",
+  \"chain\": [
+    {
+      \"generation\": 1,
+      \"base\": \"$PHASE_BASE\",
+      \"head\": \"$GEN1_HEAD\",
+      \"status\": \"finalized\",
+      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"dispositions_sha256\": \"$P1_DISP_SHA\",
+      \"findings_sha256\": \"$P1_FINDINGS_SHA\",
+      \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
+    }
+  ],
+  \"verdict\": \"SHIP-AS-IS\",
+  \"open_findings\": 0,
+  \"resolved_from\": \"test\",
+  \"written_at\": \"2026-09-04T00:00:00Z\"
+}"
+C1P_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase p1 --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C1P_RC=$?
+assert_exit_code "$C1P_RC" "1" "case 1 negative: numeric open_findings (instead of the canonical array) exits 1"
+
+# Restore the valid receipt for case 2, which reuses phase p1
+write_receipt_json "p1" "{
+  \"kind\": \"review\",
+  \"phase\": \"p1\",
+  \"branch\": \"work\",
+  \"phase_base_sha\": \"$PHASE_BASE\",
+  \"chain\": [
+    {
+      \"generation\": 1,
+      \"base\": \"$PHASE_BASE\",
+      \"head\": \"$GEN1_HEAD\",
+      \"status\": \"finalized\",
+      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"dispositions_sha256\": \"$P1_DISP_SHA\",
+      \"findings_sha256\": \"$P1_FINDINGS_SHA\",
+      \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
+    }
+  ],
+  \"verdict\": \"SHIP-AS-IS\",
+  \"open_findings\": [],
+  \"resolved_from\": \"test\",
+  \"written_at\": \"2026-09-04T00:00:00Z\"
+}"
 
 # 2. Same as (1) but the branch has since moved (add a new commit after building the fixture)
 #    so the recorded head no longer matches: expect exit 1.
@@ -423,6 +576,49 @@ EOF
 C11_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11" --dispositions "$DISPOSITIONS_11" 2>&1); C11_RC=$?
 assert_exit_code "$C11_RC" "0" "case 11: valid dispositions exit 0"
 
+# 11n (negative control): d2-plan-candidate-blocker-fail-open — a plan-artifact finding that
+# omits candidate_blocker entirely must fail closed (it must not silently evade the
+# blocker-specific disposition checks by being treated as an implicit non-blocker): expect exit 1.
+PLAN_ARTIFACT_11N="$TEST_TMP/plan11n.json"
+DISPOSITIONS_11N="$TEST_TMP/disp11n.json"
+cat << 'EOF' > "$PLAN_ARTIFACT_11N"
+{
+  "findings": [
+    { "id": "f1", "disposition": "accepted_blocker" }
+  ]
+}
+EOF
+cat << 'EOF' > "$DISPOSITIONS_11N"
+{
+  "findings": [
+    { "id": "f1", "disposition": "accepted_blocker", "rationale": "Confirmed blocking flaw" }
+  ]
+}
+EOF
+C11N_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11N" --dispositions "$DISPOSITIONS_11N" 2>&1); C11N_RC=$?
+assert_exit_code "$C11N_RC" "1" "case 11 negative: missing candidate_blocker on a plan-artifact finding exits 1"
+
+# 11o (negative control): candidate_blocker=false disposed with a blocker-exclusive disposition
+# class ('accepted_blocker') must fail closed: expect exit 1.
+PLAN_ARTIFACT_11O="$TEST_TMP/plan11o.json"
+DISPOSITIONS_11O="$TEST_TMP/disp11o.json"
+cat << 'EOF' > "$PLAN_ARTIFACT_11O"
+{
+  "findings": [
+    { "id": "f1", "candidate_blocker": false, "disposition": "accepted_blocker" }
+  ]
+}
+EOF
+cat << 'EOF' > "$DISPOSITIONS_11O"
+{
+  "findings": [
+    { "id": "f1", "candidate_blocker": false, "disposition": "accepted_blocker", "rationale": "mislabelled" }
+  ]
+}
+EOF
+C11O_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11O" --dispositions "$DISPOSITIONS_11O" 2>&1); C11O_RC=$?
+assert_exit_code "$C11O_RC" "1" "case 11 negative: candidate_blocker=false disposed as accepted_blocker (class mismatch) exits 1"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 12. End-to-end case using hetero-review-loop.js collect and finalize
 # ─────────────────────────────────────────────────────────────────────────────
@@ -571,6 +767,7 @@ cat << EOF > "$LEDGER/review-$EXCL_PHASE/g1/range.json"
 EOF
 EXCL_DISP_SHA=$(write_gen_artifacts "$EXCL_PHASE" "1")
 EXCL_FINDINGS_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-$EXCL_PHASE/g1/findings.json")
+EXCL_SEAT_S0_SHA=$(write_seat_artifact "$EXCL_PHASE" "1" "s0")
 cat << EOF > "$LEDGER/review-$EXCL_PHASE/chain.json"
 [
   {
@@ -578,9 +775,10 @@ cat << EOF > "$LEDGER/review-$EXCL_PHASE/chain.json"
     "base": "$GEN1_HEAD",
     "head": "$EXCL_TEST_HEAD",
     "status": "finalized",
+    "seats": [{ "id": "s0", "status": "reviewed" }],
     "dispositions_sha256": "$EXCL_DISP_SHA",
     "findings_sha256": "$EXCL_FINDINGS_SHA",
-    "seat_artifact_sha256": {}
+    "seat_artifact_sha256": { "s0": "$EXCL_SEAT_S0_SHA" }
   }
 ]
 EOF
@@ -595,9 +793,10 @@ write_receipt_json "$EXCL_PHASE" "{
       \"base\": \"$GEN1_HEAD\",
       \"head\": \"$EXCL_TEST_HEAD\",
       \"status\": \"finalized\",
+      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
       \"dispositions_sha256\": \"$EXCL_DISP_SHA\",
       \"findings_sha256\": \"$EXCL_FINDINGS_SHA\",
-      \"seat_artifact_sha256\": {}
+      \"seat_artifact_sha256\": { \"s0\": \"$EXCL_SEAT_S0_SHA\" }
     }
   ],
   \"verdict\": \"SHIP-AS-IS\",

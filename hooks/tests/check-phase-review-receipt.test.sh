@@ -214,7 +214,7 @@ write_receipt_json "p5" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
-      \"dispositions_sha256\": "$P5_DISP_SHA\"
+      \"dispositions_sha256\": \"$P5_DISP_SHA\"
     }
   ],
   \"verdict\": \"SHIP-AS-IS\",

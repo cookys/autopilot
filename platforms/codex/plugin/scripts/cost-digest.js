@@ -236,7 +236,9 @@ function run() {
   });
 
   if (args.json) {
-    // Grouping by day x tier x model
+    // Grouping by day x <args.by> — 'day'/'model' -> tier+model, 'tier' -> tier
+    // only, 'session' -> the FULL (untruncated) session id.
+    const byMode = args.by;
     const dayMap = new Map();
 
     for (const r of filteredRows) {
@@ -257,24 +259,39 @@ function run() {
         dObj.brain_usd += r.cost_usd;
       }
 
-      const gKey = `${r._tier}\0${r.model || 'unknown'}`;
+      let gKey;
+      let gInit;
+      if (byMode === 'session') {
+        const sessId = typeof r.session === 'string' ? r.session : 'unknown';
+        gKey = sessId;
+        gInit = { session: sessId, modelSet: new Set(), sessionSet: new Set() };
+      } else if (byMode === 'tier') {
+        gKey = r._tier;
+        gInit = { tier: r._tier, sessionSet: new Set() };
+      } else {
+        // 'day' (default) and 'model' both group by tier x model within the day.
+        const model = r.model || 'unknown';
+        gKey = `${r._tier}\0${model}`;
+        gInit = { tier: r._tier, model, sessionSet: new Set() };
+      }
+
       let gObj = dObj.groups.get(gKey);
       if (!gObj) {
-        gObj = {
-          tier: r._tier,
-          model: r.model || 'unknown',
-          sessionSet: new Set(),
+        gObj = Object.assign(gInit, {
           turns: 0,
           input_tokens: 0,
           output_tokens: 0,
           cache_read_tokens: 0,
           cost_usd: 0
-        };
+        });
         dObj.groups.set(gKey, gObj);
       }
 
       if (r.session) {
         gObj.sessionSet.add(r.session);
+      }
+      if (byMode === 'session' && gObj.modelSet) {
+        gObj.modelSet.add(r.model || 'unknown');
       }
       const turns = typeof r.turns === 'number' && !isNaN(r.turns) ? r.turns : 0;
       gObj.turns += turns;
@@ -291,16 +308,23 @@ function run() {
       const dObj = dayMap.get(dStr);
       const brainShare = dObj.total_usd > 0 ? dObj.brain_usd / dObj.total_usd : 0;
 
-      const groupRows = Array.from(dObj.groups.values()).map((g) => ({
-        tier: g.tier,
-        model: g.model,
-        sessions: g.sessionSet.size,
-        turns: g.turns,
-        input_tokens: g.input_tokens,
-        output_tokens: g.output_tokens,
-        cache_read_tokens: g.cache_read_tokens,
-        cost_usd: Number(g.cost_usd.toFixed(4))
-      }));
+      const groupRows = Array.from(dObj.groups.values()).map((g) => {
+        const base = {
+          sessions: g.sessionSet.size,
+          turns: g.turns,
+          input_tokens: g.input_tokens,
+          output_tokens: g.output_tokens,
+          cache_read_tokens: g.cache_read_tokens,
+          cost_usd: Number(g.cost_usd.toFixed(4))
+        };
+        if (byMode === 'session') {
+          return Object.assign({ session: g.session, models: Array.from(g.modelSet).sort() }, base);
+        }
+        if (byMode === 'tier') {
+          return Object.assign({ tier: g.tier }, base);
+        }
+        return Object.assign({ tier: g.tier, model: g.model }, base);
+      });
 
       // Sort rows by cost_usd descending
       groupRows.sort((a, b) => b.cost_usd - a.cost_usd);
@@ -318,6 +342,7 @@ function run() {
       schema_version: 1,
       file: resolvedPath,
       since: sinceDay,
+      by: byMode,
       skipped_lines: skippedLines,
       days: daysResult
     };
@@ -354,7 +379,7 @@ function run() {
           dayBrainUsd += r.cost_usd;
         }
 
-        const sessId = typeof r.session === 'string' ? r.session.slice(0, 8) : 'unknown';
+        const sessId = typeof r.session === 'string' ? r.session : 'unknown';
         const cwdBase = typeof r.cwd === 'string' ? path.basename(r.cwd) : '';
         const key = `${sessId}\0${cwdBase}`;
 
@@ -400,7 +425,7 @@ function run() {
         dayCache += r.cache_read_tokens;
 
         const dayCol = day.padEnd(10);
-        const sessCol = r.session.padEnd(9);
+        const sessCol = r.session.slice(0, 8).padEnd(9);
         const cwdCol = r.cwd.slice(0, 20).padEnd(20);
         const sCountCol = String(r.sessionSet.size).padStart(8);
         const turnsCol = String(r.turns).padStart(5);

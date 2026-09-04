@@ -109,4 +109,65 @@ TIEROF_TEST="$(node -e '
 ' "$DIGEST_SCRIPT")"
 assert_eq "$TIEROF_TEST" "brain,brain,brain,hands,hands-cheap,other" "tierOf export correctly classifies models"
 
+# Test (f): --by session grouping does not merge distinct sessions sharing an
+# 8-char prefix, in BOTH text and --json modes; a session that used two models
+# aggregates its cost/turns across both rows.
+SESSION_FIXTURE="$FIXTURE_DIR/sessions.jsonl"
+cat > "$SESSION_FIXTURE" <<JSONL
+{"ts":"${DAY1}T09:00:00.000Z","session":"abcdefgh-one","model":"claude-sonnet-4-5","turns":1,"cost_usd":1.0000,"cwd":"/app"}
+{"ts":"${DAY1}T09:30:00.000Z","session":"abcdefgh-two","model":"claude-sonnet-4-5","turns":1,"cost_usd":1.0000,"cwd":"/app"}
+{"ts":"${DAY1}T10:00:00.000Z","session":"multi-model-session","model":"claude-sonnet-4-5","turns":1,"cost_usd":0.5000,"cwd":"/app"}
+{"ts":"${DAY1}T10:30:00.000Z","session":"multi-model-session","model":"claude-haiku-3-5","turns":1,"cost_usd":0.2500,"cwd":"/app"}
+JSONL
+
+SESSION_JSON_OUT="$(node "$DIGEST_SCRIPT" --file "$SESSION_FIXTURE" --since 100 --by session --json)"
+assert_exit_code "$?" "0" "digest --by session --json exits 0"
+
+SESSION_JSON_BY="$(node -e '
+  const data = JSON.parse(process.argv[1]);
+  process.stdout.write(String(data.by));
+' "$SESSION_JSON_OUT")"
+assert_eq "$SESSION_JSON_BY" "session" "--json honours --by session (top-level by field)"
+
+SESSION_JSON_ROWS_COUNT="$(node -e '
+  const data = JSON.parse(process.argv[1]);
+  const day = data.days.find(d => d.day === process.argv[2]);
+  process.stdout.write(day ? String(day.rows.length) : "missing");
+' "$SESSION_JSON_OUT" "$DAY1")"
+assert_eq "$SESSION_JSON_ROWS_COUNT" "3" "--json --by session keeps the two 8-char-prefix-sharing sessions distinct (3 rows total)"
+
+SESSION_JSON_PREFIX_SESSIONS="$(node -e '
+  const data = JSON.parse(process.argv[1]);
+  const day = data.days.find(d => d.day === process.argv[2]);
+  const sessions = day.rows.map(r => r.session).filter(s => s.startsWith("abcdefgh")).sort();
+  process.stdout.write(sessions.join(","));
+' "$SESSION_JSON_OUT" "$DAY1")"
+assert_eq "$SESSION_JSON_PREFIX_SESSIONS" "abcdefgh-one,abcdefgh-two" "--json --by session emits full untruncated session ids, not merged"
+
+SESSION_JSON_MULTI_MODEL_COST="$(node -e '
+  const data = JSON.parse(process.argv[1]);
+  const day = data.days.find(d => d.day === process.argv[2]);
+  const row = day.rows.find(r => r.session === "multi-model-session");
+  process.stdout.write(row ? String(row.cost_usd) : "missing");
+' "$SESSION_JSON_OUT" "$DAY1")"
+assert_eq "$SESSION_JSON_MULTI_MODEL_COST" "0.75" "--json --by session aggregates cost across a session's two models"
+
+SESSION_JSON_MULTI_MODEL_MODELS="$(node -e '
+  const data = JSON.parse(process.argv[1]);
+  const day = data.days.find(d => d.day === process.argv[2]);
+  const row = day.rows.find(r => r.session === "multi-model-session");
+  process.stdout.write(row ? row.models.sort().join(",") : "missing");
+' "$SESSION_JSON_OUT" "$DAY1")"
+assert_eq "$SESSION_JSON_MULTI_MODEL_MODELS" "claude-haiku-3-5,claude-sonnet-4-5" "--json --by session lists both models a session used"
+
+SESSION_TEXT_OUT="$(node "$DIGEST_SCRIPT" --file "$SESSION_FIXTURE" --since 100 --by session)"
+assert_exit_code "$?" "0" "digest --by session (text) exits 0"
+
+SESSION_TEXT_DISTINCT_ROWS="$(node -e '
+  const text = process.argv[1];
+  const lines = text.split("\n").filter(l => l.startsWith(process.argv[2]));
+  process.stdout.write(String(lines.length));
+' "$SESSION_TEXT_OUT" "$DAY1")"
+assert_eq "$SESSION_TEXT_DISTINCT_ROWS" "3" "text --by session keeps the 8-char-prefix sessions on separate rows"
+
 finalize_test

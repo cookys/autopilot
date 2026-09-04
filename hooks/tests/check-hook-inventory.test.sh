@@ -42,7 +42,7 @@ assert_eq "0" "$?" "--help exit 0"
 # 3. default print = regeneration oracle (derived counts + real names)
 OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default print exit 0"
-assert_contains "$OUT" "default-on (14)" "default print shows 14 default-on"
+assert_contains "$OUT" "default-on (15)" "default print shows 15 default-on"
 assert_contains "$OUT" "disabled   (0)" "default print shows 0 disabled"
 assert_contains "$OUT" "audit-log" "default print lists a real wired hook"
 
@@ -62,14 +62,14 @@ assert_contains "$OUT" "Tier-A" "membership drift identifies the Tier-A placemen
 restore "hooks/README.md"
 
 # 5. COUNT drift: canonical default-on count wrong in the description
-sed -i 's/14 default-on/15 default-on/' "$SBX/.claude-plugin/plugin.json"
+sed -i 's/15 default-on/16 default-on/' "$SBX/.claude-plugin/plugin.json"
 OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "count drift exit 1"
 assert_contains "$OUT" "defaultOn" "count drift names the field"
 restore ".claude-plugin/plugin.json"
 
 # 6. TIER-HEADER count drift in hooks/README.md
-sed -i 's/Default-On (14 hooks)/Default-On (15 hooks)/' "$SBX/hooks/README.md"
+sed -i 's/Default-On (15 hooks)/Default-On (16 hooks)/' "$SBX/hooks/README.md"
 OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "tier-header count drift exit 1"
 assert_contains "$OUT" "hooks/README.md" "tier-header drift names the file"

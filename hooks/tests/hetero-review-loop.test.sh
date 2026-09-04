@@ -990,6 +990,7 @@ assert_exit_code "$T5B_RC" "1" "test 5b: exits 1 on non-array chain.json"
 assert_eq "$(cat "$LEDGER/review-p_test5b/chain.json")" '{"not": "an array"}' "test 5b: non-array file left unchanged"
 
 # Test 6: rogue scripts/dispatch-review.sh in repo under test is ignored; driver script dir's dispatcher used
+cp "$SCRATCH_REPO/scripts/dispatch-review.sh" "$TEST_TMP/saved-dispatch-review.sh"
 # Put rogue script in SCRATCH_REPO/scripts/dispatch-review.sh that outputs rogue_marker
 cat << 'EOF' > "$SCRATCH_REPO/scripts/dispatch-review.sh"
 #!/usr/bin/env bash
@@ -1013,6 +1014,7 @@ assert_exit_code "$T6_RC" "0" "test 6: collect exits 0 using driver-directory di
 T6_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test6/g1/seat-s0.json")
 assert_contains "$T6_SEAT_OUTPUT" '"driver_dir_dispatcher": true' "test 6: executed dispatcher from driver script directory"
 assert_not_contains "$T6_SEAT_OUTPUT" "rogue_marker" "test 6: rogue dispatcher in target repository was NOT executed"
+cp "$TEST_TMP/saved-dispatch-review.sh" "$SCRATCH_REPO/scripts/dispatch-review.sh"
 
 # Test 7: stub dispatcher exits non-zero while printing valid JSON on stdout -> recorded with verdict no_verdict
 TEST7_STUB="$TEST_TMP/nonzero-exit-dispatcher.sh"
@@ -1092,6 +1094,8 @@ mkdir -p "$LARGE_REPO"
   git commit -q -m "large file"
 )
 LARGE_BASE=$(git -C "$LARGE_REPO" rev-parse HEAD~1)
+export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T10_OUT=$(node "$SCRIPT" collect --repo-root "$LARGE_REPO" --ledger "$LEDGER" --phase p_test10_warn --generation 1 --branch work --phase-base "$LARGE_BASE" --seats "m1/low@codex" 2>&1); T10_RC=$?
 assert_exit_code "$T10_RC" "0" "test 10: large diff collect exits 0 (does not block)"
 assert_contains "$T10_OUT" "WARNING: Diff size" "test 10: diff size warning printed"

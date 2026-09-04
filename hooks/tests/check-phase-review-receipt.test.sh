@@ -426,7 +426,7 @@ if [ -n "$STUB_SEAT_RESPONSE" ]; then
   echo "$STUB_SEAT_RESPONSE"
   exit 0
 fi
-echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 STUB_EOF
 chmod +x "$DISPATCH_STUB"
 
@@ -440,7 +440,7 @@ export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$DISPATCH_STUB"
 
 # Seat s0 reports a Critical finding; Seat s1 reports empty findings with verdict SHIP-AS-IS
 export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "🔴 Critical: Critical security bug found in validation logic"}'
-export STUB_RESPONSE_s1='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": ""}'
+export STUB_RESPONSE_s1='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 unset STUB_SEAT_RESPONSE
 
 E2E_PHASE="p_e2e"

@@ -80,14 +80,25 @@ function stateFile(sessionId) {
   return path.join(stateDir(), `${safe(sessionId)}.json`);
 }
 
+function todayUtcDay() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function loadState(file) {
   try {
     const s = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (s && typeof s === 'object' && Number.isInteger(s.warned_multiple)) return s;
+    if (s && typeof s === 'object' && Number.isInteger(s.warned_multiple)) {
+      if (typeof s.day === 'string' && s.day === todayUtcDay()) {
+        return s;
+      }
+      // Stale (or day-less legacy) state from a previous UTC day: reset the
+      // multiple so a session that warned yesterday can warn again today.
+      return { warned_multiple: 0, day: todayUtcDay() };
+    }
   } catch {
     // fresh
   }
-  return { warned_multiple: 0 };
+  return { warned_multiple: 0, day: todayUtcDay() };
 }
 
 function saveState(file, st) {
@@ -137,20 +148,32 @@ function isReadOnlyBash(cmd) {
   const trimmed = cmd.trim();
   if (!trimmed) return true;
 
+  // BEFORE any allowlist match: reject anything that could chain, redirect,
+  // substitute, or hide a second command — this is intentionally NOT a full
+  // parser, just a conservative bail-out.
+  if (/[;&|><`]/.test(trimmed)) return false;
+  if (trimmed.includes('$(')) return false;
+  if (/\bsed\b[^\n]*(^|\s)-i\b/.test(trimmed)) return false;
+  const nonBlankLines = trimmed.split('\n').filter((l) => l.trim().length > 0);
+  if (nonBlankLines.length > 1) return false;
+
   // Patterns specified in requirements:
   // - git status|log|diff|show|rev-parse|branch (as first two tokens)
   // - ls, cat, sed -n, grep, rg, head, tail, wc
-  // - node ... --check (contains --check)
+  // - node <path-not-starting-with-dash> ... --check (a -e anywhere disqualifies)
   // - bash scripts/*-check*
   // - bash hooks/tests/*.test.sh
 
-  if (/\bnode\s+.*--check\b/.test(trimmed)) return true;
+  if (/^node\s+/.test(trimmed) && /--check\b/.test(trimmed) && !/(^|\s)-e(\s|$)/.test(trimmed)) {
+    const rest = trimmed.slice(trimmed.indexOf('node') + 'node'.length).trim();
+    const firstTok = rest.split(/\s+/)[0] || '';
+    if (firstTok && !firstTok.startsWith('-')) return true;
+  }
   if (/^bash\s+scripts\/[^\s]*check[^\s]*/.test(trimmed)) return true;
   if (/^bash\s+hooks\/tests\/[^\s]*\.test\.sh\b/.test(trimmed)) return true;
 
-  // First line or command prefix checking
-  const firstLine = trimmed.split('\n')[0].trim();
-  const tokens = firstLine.split(/\s+/);
+  // Single-line at this point (multi-line already rejected above).
+  const tokens = trimmed.split(/\s+/);
   const t0 = tokens[0];
   const t1 = tokens[1] || '';
 
@@ -171,30 +194,9 @@ function isReadOnlyBash(cmd) {
 }
 
 function resolveSessionModel(payload, costsFile) {
-  // 1. Read costs.jsonl, find newest row where session === payload.session_id
-  const targetSession = payload.session_id;
-  if (costsFile && fs.existsSync(costsFile) && targetSession) {
-    try {
-      const content = fs.readFileSync(costsFile, 'utf8');
-      const lines = content.split('\n');
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        try {
-          const row = JSON.parse(line);
-          if (row && row.session === targetSession && row.model) {
-            return row.model;
-          }
-        } catch {
-          // ignore malformed line
-        }
-      }
-    } catch {
-      // ignore read error
-    }
-  }
-
-  // 2. Read payload.transcript_path, parse from end (capped at 512 KiB)
+  // 1. Read payload.transcript_path, parse from end (capped at 512 KiB) —
+  //    the latest assistant message.model reflects a mid-session model
+  //    switch (opus<->sonnet etc.) that the Stop-written ledger row can't.
   const tpath = payload.transcript_path;
   if (tpath && fs.existsSync(tpath)) {
     try {
@@ -225,6 +227,30 @@ function resolveSessionModel(payload, costsFile) {
       }
     } catch {
       // ignore
+    }
+  }
+
+  // 2. Fall back to costs.jsonl (the Stop-written ledger row) only when the
+  //    transcript yields nothing.
+  const targetSession = payload.session_id;
+  if (costsFile && fs.existsSync(costsFile) && targetSession) {
+    try {
+      const content = fs.readFileSync(costsFile, 'utf8');
+      const lines = content.split('\n');
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        try {
+          const row = JSON.parse(line);
+          if (row && row.session === targetSession && row.model) {
+            return row.model;
+          }
+        } catch {
+          // ignore malformed line
+        }
+      }
+    } catch {
+      // ignore read error
     }
   }
 

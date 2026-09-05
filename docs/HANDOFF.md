@@ -1,12 +1,13 @@
 ## 目標
 
-無進行中工作。這份 handoff 是 2026-09-05 第二次收尾快照：**v2.36.2 已 merge 到 develop（`6712ba67`），**已 push**。
+無進行中工作。這份 handoff 是 2026-09-05 第二次收尾快照：**v2.36.2 已 push；v2.36.3（7840hs 回報的 aborted 世代 receipt 死鎖）已 merge 到 develop（`27bc8abc`），尚未 push**。
 （取代前一版 handoff。）
 
 ## 現況
 
-- **autopilot**: `develop` = merge `6712ba67` + 兩個 docs commit（handoff、maintenance hash），與 `origin/develop` 同步（push 於 2026-09-05，owner 指示）；working tree 乾淨；fix 分支已刪。
-- **version**: 2.36.2（30 skills，29 hooks：16 default-on／13 opt-in）。
+- **autopilot**: `develop` = `601b9ee0`（v2.36.3 merge `27bc8abc` + maintenance hash）；`origin/develop` 停在 v2.36.2（`7fa140f0`），**v2.36.3 未 push**；working tree 乾淨；fix 分支已刪。
+- **version**: 2.36.3（30 skills，29 hooks：16 default-on／13 opt-in）。
+- **v2.36.3 內容**：`check-phase-review-receipt` 接受被 finalized 後代夾住的 `aborted` 條目（非末筆、無 head、後代同 base）；`review-chain-derive` 跳過 aborted（原本會把它的空 findings 當 closure by absence 關掉所有未結 finding）。已回覆 7840hs（disposition completed），承諾 push 後再通知。
 - **v2.36.2 內容**：live 窗口 `> 0` 才算訊號（context-budget／foreman-guard）；depth0-delegate-gate 計數上鎖；foreman-guard 0/≥2 列診斷每 agent 每種文字一次；
   `dispatch-model-guard` 漏 `model:` 預設 **deny**（不再跳 dialog；`on_missing_model: deny|ask|allow`）；四項測試強度；context-budget state 新增 `lastLive {at, ageMs, present, used}`。
 - **suite**: 316/321 綠。既有紅：contract-parity 8、consult-discuss-switch 3（develop 同樣紅）；probe-runner-coverage 只在 `--parallel` 下偶紅、序列跑兩棵樹都綠。
@@ -20,7 +21,7 @@
 
 ## 下一步
 
-1. 沒有必做項；push 已完成。
+1. owner 說推就 `git push origin develop`（先確認 origin 沒人搶 2.36.3），然後 `fleet send --to cookys-7840hs` 通知可以 dev-update 重跑 receipt。
 2. BACKLOG 新 row「context-budget falls back to inference after a long foreground tool call」：本 session 1M 窗口兩次無「(statusline)」的 T2（call 36 在 600 s suite 後、call 50 在 Agent spawn 後），下一次發生先讀 `$XDG_RUNTIME_DIR/autopilot/context-budget/<sid>.json` 的 `lastLive` 再動 freshness cap。
 3. 其餘同前：tmpfs 擁有者檢查（多人主機前）、plan-loop disposition 形狀、P5 fleet rollout（cuda 授權）、`normalize_agy_alias`／stale topology cache／g1 `42864072`／ladder auto。
 
@@ -29,8 +30,8 @@
 ```bash
 cd /home/cookys/projects/autopilot
 git status --porcelain && git log --oneline -3                 # 空；00986d3c 6712ba67 1821954a
-git log --oneline origin/develop..develop | wc -l              # 0
-node -p "require('./.claude-plugin/plugin.json').version"      # 2.36.2
+git log --oneline origin/develop..develop | wc -l              # 3（v2.36.3 未 push）
+node -p "require('./.claude-plugin/plugin.json').version"      # 2.36.3
 bash scripts/preflight-release.sh | tail -1                     # 8/8
 bash scripts/sync-codex-plugin-skills.sh --check | tail -1      # in sync
 node --test hooks/context-budget.test.js hooks/depth0-delegate-gate.test.js scripts/lib/live-state-dir.test.js  # 89 pass

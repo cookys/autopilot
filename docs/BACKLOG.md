@@ -859,9 +859,10 @@ never an ad hoc descriptive string.
 - **Effort**: Fix
 - **Source**: l6-verdict-stability-p1-20260829T1804Z campaign attempt 2; debugger replay 2026-08-29.
 
-### L6 managed campaigns can never satisfy `reviewer_qualification` — strict provider-readiness bootstrap compiles for `l5` only
+### Managed campaigns under an `l4` marker can never satisfy `reviewer_qualification` — strict provider-readiness bootstrap compiles for `l5`/`l6` only (l6 added since; l4 + `engine implement-review` is the remaining trap)
 - **Trigger**: next `/l6` run on any repo with `mission_convergence.enforcement_mode: enforce` (reproduced 2026-08-29: attempt 1b blocked at rounds 0 for every seat).
 - **Context**: `bin/autopilot.js:396-399` builds `createStrictL5ProviderBootstrap` only when `AUTOPILOT_LEVEL === 'l5'`; managed dev-flow admission (`scripts/session-mode.js:349`) requires `marker.level === AUTOPILOT_LEVEL`; so an `l6` marker gets neither the readiness authority nor `reviewer_qualified` and the disk-scorecard path is `untrusted_telemetry` by design. Workaround used: session marker set to `l5` (deviation recorded). Fix: gate the bootstrap on `l5|l6` and let `provider-bootstrap.js strict_level` carry the actual level.
+- **Update 2026-09-06**: `bin/autopilot.js:396` now compiles the bootstrap for `l5 || l6`, so the l6 case is closed. cuda (WIZHALL, revival-world-city-war) hit the same wall with an **l4** marker + `engine implement-review`: `reviewer_qualified` stays false forever. Legal paths given: run as /l5 with a scorecard-qualified reviewer seat, or pass `--allow-unqualified-reviewer` (recorded decision). Candidate fix: the engine should refuse `implement-review` under an l4 marker with a named reason ("l4 hands are Claude subagents; use /l5") instead of blocking at reviewer_qualification.
 - **Effort**: Fix
 - **Source**: l6-verdict-stability-p1 attempt 1b/1c, 2026-08-29.
 

@@ -35,8 +35,10 @@ Two facts make the complete fix smaller than the BACKLOG row estimated:
   optional fallback ladder and optional QC panel.
 
 The thesis: **give l4 the same live-probed, host-owned readiness bundle as l5/l6, with an l4 roster
-profile, and thread it through the CLI exactly as l5/l6 are threaded.** Nothing is waived; nothing is
-faked; the advisory policy-coverage rule already covers uncertified seats honestly.
+profile, and thread it through the CLI exactly as l5/l6 are threaded.** No provider-readiness evidence is
+waived or fabricated; the advisory policy-coverage rule already covers uncertified seats honestly. The
+existing v2.36.7 reviewer-qualification waiver is a separate, narrower mechanism and stays governed by KR4
+(it fires only when the bootstrap does not certify the reviewer seat).
 
 ## 1. Problem
 
@@ -59,8 +61,12 @@ operator configured, with every uncertified seat recorded as such.**
   `policy_override.reason = advisory_default`, each uncertified seat listed, and the stderr `POLICY
   OVERRIDE` line present. Verified by the same fixture family (advisory case).
 - **KR3** — l5 and l6 behaviour is byte-identical before/after: the existing L5/L6 fixtures and
-  `provider-readiness-consumer.test.sh` pass unchanged; an l5 roster missing its VA seat still fails
-  `strict_l5_provider_roster_incomplete`.
+  `provider-readiness-consumer.test.sh` pass unchanged, AND each l5/l6 roster invariant is pinned by its
+  own isolated negative control (parameterized over `l5` and `l6`): (i) VA missing with a complete QC
+  panel ⇒ `strict_l5_provider_roster_incomplete` ("requires the verification-author seat"); (ii) VA
+  present with an empty QC panel ⇒ `strict_l5_provider_roster_incomplete` ("exact QC roster is
+  incomplete"); (iii) VA present with `qc_panel_seats_complete:false` ⇒ same as (ii). A control that
+  removes both at once proves nothing about the QC invariant (the VA check fires first).
 - **KR4** — the v2.36.7 reviewer-qualification waiver interplay is explicit: when the l4 bootstrap's
   qualification provider certifies the reviewer tuple, the ledger shows **no** `waived` entry; when it does
   not (uncertified), the `waived` entry remains. Verified by an engine-level test.
@@ -127,19 +133,28 @@ node -e '
 const { createStrictL5ProviderBootstrap } = require("./src/readiness/provider-bootstrap");
 const { resolveReviewLoopJson } = require("./src/engine/resolve-review-loop");
 const r = resolveReviewLoopJson(["--check-scorecard"], { cwd: process.cwd(), env: process.env }).result;
-r.verification_author_present = false; r.qc_panel_seats = []; r.qc_panel_seats_complete = false;
-try { createStrictL5ProviderBootstrap({ cwd: process.cwd(), level: "l5" }, { resolvedRoster: r }); }
-catch (e) { console.log(e.code, e.message); }'
+const probe = (label, level, roster) => { try { createStrictL5ProviderBootstrap({ cwd: process.cwd(), level }, { resolvedRoster: roster }); console.log(label, "derives"); } catch (e) { console.log(label, e.code, e.message); } };
+probe("A", "l4", r);
+probe("B", "l5", { ...r, verification_author_present: false });
+probe("C", "l5", { ...r, qc_panel_seats: [], qc_panel_seats_complete: false });'
 ```
 
 Expected today: `strict_l5_provider_bootstrap_invalid` for `level: 'l4'` (constructor guard) and
 `strict_l5_provider_roster_incomplete` for the VA/QC shape.
 
 **Spike run 2026-09-07 (aimax395, autopilot's own roster grok-4.5/grok + MiniMax-M3/cc-shim, VA present, 3 QC
-seats)**: `level: 'l4'` → `strict_l5_provider_bootstrap_invalid` ("accepts only … l5 or l6"); `level: 'l5'`
-→ derives; the same roster with `verification_author_present:false` + empty QC panel under `l5` →
-`strict_l5_provider_roster_incomplete` ("requires the verification-author seat"). Exactly the two sites P1
-names; no third site surfaced. Record the list in
+seats) — five isolated probes, each varying ONE thing (g1 chair R9 asked for the sites to be separated):**
+
+| Probe | level | roster change | result |
+|---|---|---|---|
+| A | `l4` | none (full roster) | `strict_l5_provider_bootstrap_invalid` — "accepts only … l5 or l6" (constructor guard, ~489-497) |
+| B | `l5` | `verification_author_present:false`, QC complete | `strict_l5_provider_roster_incomplete` — "requires the verification-author seat" (~292) |
+| C | `l5` | VA present, `qc_panel_seats:[]` | `strict_l5_provider_roster_incomplete` — "exact QC roster is incomplete" (~301) |
+| D | `l5` | VA present, `qc_panel_seats_complete:false` only | same as C (the flag alone trips ~301) |
+| E | `l6` | as B | same as B (l6 shares the profile) |
+
+Exactly the two code sites P1 names (constructor guard; VA and QC checks in `deriveStrictL5InvocationPolicy`),
+now each reproduced in isolation. The probe script (five calls) is the P0 ledger artifact. Record the list in
 `docs/projects/2026-09-07-l4-host-bootstrap/ledger/p0-spike.md`. **Done when** the list is written and
 every code line it names is cited by P1.
 
@@ -186,10 +201,13 @@ campaign-file rejection (same observable the L6 fixture uses).
 - `hooks/tests/autopilot-cli.test.sh`: **L4 executable fixture** — clone of the L6 fixture (~270-295)
   with `AUTOPILOT_LEVEL=l4` and the STRICT_L5_PRELOAD roster edited to `verification_author_present:false`
   and an empty QC panel; assert `status:"ready"`, `strict_level:"l4"`, and (advisory case) the
-  `policy_override` record. **Negative control**: `AUTOPILOT_LEVEL=l5` with the same VA-less roster still
-  rejects with `strict_l5_provider_roster_incomplete` before spend.
+  `policy_override` record. **Negative controls (KR3, one per invariant, for `l5` AND `l6`)**: (i)
+  VA-less roster with a complete QC panel ⇒ `strict_l5_provider_roster_incomplete` naming the VA seat;
+  (ii) VA present, empty QC panel ⇒ the same code naming the QC roster; (iii) VA present,
+  `qc_panel_seats_complete:false` ⇒ as (ii). All before spend.
 - `hooks/tests/provider-readiness-consumer.test.sh`: unit cases for the profile table (P1 done-when items
-  as assertions) and level drift `l4` bundle consumed by an `l5` bootstrap ⇒ `strict_l5_provider_level_drift`.
+  as assertions), the three isolated l5/l6 negative controls above at the bootstrap level (no CLI), and
+  level drift `l4` bundle consumed by an `l5` bootstrap ⇒ `strict_l5_provider_level_drift`.
 - `hooks/tests/autopilot-engine.test.sh`: KR4 interplay (certified reviewer tuple via an injected
   `qualificationProvider` ⇒ no `waived`; uncertified ⇒ `waived`).
 - Lifecycle observation unit for KR5.

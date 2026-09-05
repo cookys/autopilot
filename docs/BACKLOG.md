@@ -991,3 +991,9 @@ never an ad hoc descriptive string.
 - **Context**: plan §4 P3.1 lists `WebFetch|WebSearch|Read|Grep|Glob|Agent|Skill|Task`; the shipped hook also matches `Bash` and classifies read-shaped commands (`grep|rg|find|cat|sed -n|head|tail`) with a duplicated 35-line shell lexer, adding ~17 ms and two `/bin/sh` spawns per depth-0 Bash call (reviewer measurement). Accepted for v2.36.1 (depth-0's own grep bursts were the incident); recorded here so the delta is explicit. Options: keep and share the lexer with `foreman-guard.js`; or drop `Bash` and accept that grep-via-Bash is uncounted.
 - **Effort**: S
 - **Source**: v2.36.1 pre-merge review (opus), 2026-09-05; `docs/plans/2026-09-05-statusline-live-context-feed.md` §4 P3.1
+
+### live-state-dir / context-budget test strength — two surviving mutants, one vacuous-off-Linux assertion, injection-test residue
+- **Trigger**: the next edit to `scripts/lib/live-state-dir.js` probe error handling or to the `context-budget.js` live/transcript lag guard; or a `/tmp/injection-*` count above 50.
+- **Context**: v2.36.1 round-2 pre-merge review (opus) mutation results: (a) `notFound: true` (fall back to `/proc/mounts` on any findmnt failure) survives 21/21 because every fake-findmnt rule set has a `'*'` default — add a rule set without it plus a `/proc/mounts` fixture saying tmpfs and assert `ssd-fallback`; (b) the lag guard's `Math.max` collapsed to "trust transcript" survives 35/35 because the older-row fixture uses transcript > live — add the case row older + transcript 130k + live 160k ⇒ 160k; (c) the newer-row test lacks `/\(statusline\)/` so it passes vacuously where `/dev/shm` is absent; (d) the injection test leaks `/tmp/injection-*` dirs whose names carry a `$(touch …)` payload — wrap in `finally { rmSync }`. Also: document `timeout: 2000` in the module header.
+- **Effort**: S
+- **Source**: v2.36.1 pre-merge review round 2 (opus), 2026-09-05

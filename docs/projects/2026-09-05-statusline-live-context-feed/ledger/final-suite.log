@@ -1,0 +1,2441 @@
+reaper: reaped 1 stale residue entries (live 1, unknown 0, foreign 0)
+════════ L1 unit tests (node --test) ════════
+✔ readContextTokens: last assistant usage wins, trailing non-usage lines skipped (2.233655ms)
+✔ readContextTokens: usage hidden behind a >64KB single line is still found (window growth) (5.739585ms)
+✔ readContextTokens: no usage anywhere ⇒ null (fail-open) (0.534236ms)
+✔ readContextTokens: missing file ⇒ null (0.186491ms)
+✔ readContextTokens: cap hit ⇒ null (fail-open), never a throw (0.780159ms)
+✔ budgetDecision: below t1 ⇒ no fire (0.261883ms)
+✔ budgetDecision: t1 fires, then throttles for 20 calls (0.352864ms)
+✔ budgetDecision: t2 outranks t1, refires every 10 calls, message directs handoff (0.273254ms)
+✔ wrapper: opt-OUT (AUTOPILOT_CONTEXT_BUDGET_MODE=off) ⇒ silent exit 0 (76.732202ms)
+✔ wrapper: default-on — fires with NO enable flag at all (70.121777ms)
+✔ wrapper: garbage stdin ⇒ fail-open exit 0 (79.617715ms)
+✔ wrapper: below t1 ⇒ exit 0 silent (71.784638ms)
+✔ wrapper: t1 crossing ⇒ exit 0 with nudge on stderr (81.061994ms)
+✔ wrapper: t2 crossing ⇒ exit 2 with handoff directive on stderr (model-visible) (78.359426ms)
+✔ wrapper: corrupt state file ⇒ reset-and-continue, exit 0/2 not crash (71.749241ms)
+✔ wrapper: env threshold override respected (109.430563ms)
+✔ wrapper: parse cadence — below t1 only every 5th call parses (cheap path) (323.386934ms)
+✔ wrapper: subagent fire (agent_id present) ⇒ silent exit 0 (depth-0 only) (52.517383ms)
+✔ inferWindowTokens: snaps to smallest known window above the observation (0.258637ms)
+✔ scaleTiers: scales defaults proportionally, leaves explicit values alone (1.008218ms)
+✔ budgetDecision: message states PROPORTION, not just absolute tokens (0.153028ms)
+✔ RED CHECK: pre-fix tiers would have fired T2 at 216k on a 1M window (0.147097ms)
+✔ GREEN: 216k on an inferred 1M window is silent (the reported bug) (0.837417ms)
+✔ wrapper end-to-end: 1M-scale context does not emit T2 (exit 0, no stderr) (76.031533ms)
+✔ wrapper: 200K-window session still gets its T2 (no regression for small windows) (92.066913ms)
+✔ RED/GREEN: 1M live file at 153k ⇒ no T2 (fails on pre-P2 code, which only infers the window) (89.434036ms)
+✔ 200K live file at 150k ⇒ T2 still fires (no regression for small windows) (106.641291ms)
+✔ lag guard: OLDER transcript row with a HIGHER total ⇒ contextTokens = max(transcript, live) (97.849629ms)
+✔ lag guard: NEWER transcript row ⇒ transcript value used even when the live total is larger (80.939794ms)
+✔ stale live file (>120s) ⇒ falls back to the inference path (75.161795ms)
+✔ schema_version 2 ⇒ treated as absent, inference path used (91.006666ms)
+✔ missing live file ⇒ inference path used (no crash) (77.814019ms)
+✔ malformed live file (invalid JSON) ⇒ inference path used (70.691169ms)
+✔ state file lands under the tmpfs live base when no AUTOPILOT_CONTEXT_BUDGET_DIR override is set (63.264597ms)
+✔ absent live (no AUTOPILOT_LIVE_DIR override, no live file) ⇒ exit/stdout/stderr identical to the pre-P2 fixture (281.868689ms)
+✔ parseAssistantTurns: extracts model+usage in file order, skips non-assistant (8.260321ms)
+✔ parseAssistantTurns: malformed lines / empty / missing usage are skipped, never throw (0.421384ms)
+✔ parseAssistantTurns: missing model defaults to sonnet (0.21776ms)
+✔ getRate: substring match opus/haiku, default sonnet (0.235954ms)
+✔ costOf: cache-aware pricing (read 0.1x, write 1.25x of input rate) (0.290577ms)
+✔ aggregateSince: from 0 sums all turns, groups by model, sets cursor to total (4.505573ms)
+✔ aggregateSince: cursor delta — only NEW turns after a prior Stop are counted (0.240884ms)
+✔ aggregateSince: no new turns → empty deltas, cursor unchanged at total (0.176983ms)
+✔ aggregateSince: transcript shrank (cursor > total) → re-baseline, emit nothing (no double-count) (0.211509ms)
+✔ integration: per-Stop deltas reproduce the one-shot total — token fields EXACT, cost within rounding tolerance (0.609978ms)
+✔ subagent fire (agent_id present) is silent regardless of tool or count (845.655099ms)
+✔ garbage stdin ⇒ fail-open exit 0 (69.203157ms)
+✔ off mode ⇒ silent, no state written (677.750848ms)
+✔ an unrelated tool (Edit) is a no-op: counter untouched (619.140052ms)
+✔ below threshold: silent for each of Read/Grep/Glob/WebFetch/WebSearch (324.466197ms)
+✔ threshold nudge fires at 8 and refires every 8 after, silent in between (1610.32115ms)
+✔ Agent resets the counter to 0 (1102.271144ms)
+✔ Task resets the counter to 0 (1014.966538ms)
+✔ Skill resets the counter to 0 (1079.705922ms)
+✔ Bash grep/rg/find/cat/sed -n/head/tail count as read-class (471.936035ms)
+✔ Bash npm test does not count (53.783657ms)
+✔ heredoc body containing grep is data, not counted (58.043076ms)
+✔ a comment containing a read-class word is data, not counted (60.800127ms)
+✔ block mode denies at 2x threshold with a fresh guarded model id "claude-fable-5-1" (1260.021759ms)
+✔ block mode denies at 2x threshold with a fresh guarded model id "CLAUDE-FABLE-5-1" (1151.152151ms)
+✔ block mode denies at 2x threshold with a fresh guarded model id "claude-opus-4-8[1m]" (1131.5941ms)
+✔ block mode does NOT deny for non-guarded/malformed model id "claude-sonnet-5" (1132.308955ms)
+✔ block mode does NOT deny for non-guarded/malformed model id "fable-ish" (1028.693141ms)
+✔ block mode does NOT deny for non-guarded/malformed model id "claude-fable" (1088.601408ms)
+✔ block mode: malformed model id (does not match grammar) never blocks (1055.97814ms)
+✔ block mode: stale live file (>120s) never blocks (1144.882448ms)
+✔ block mode: absent live file never blocks, only warns (1020.999525ms)
+✔ warn mode never blocks even with a fresh guarded model far past 2x threshold (1376.533573ms)
+✔ below-2x-threshold reads with a fresh guarded model in block mode only warn, never deny (534.023155ms)
+✔ state file lands under the resolved live-dir base at depth0-gate/<sid>.json (60.034386ms)
+✔ AUTOPILOT_DEPTH0_GATE_DIR overrides the state directory (91.924594ms)
+✔ subagent fire with empty or null agent_id is still skipped (presence, not truthiness) (1444.940831ms)
+✔ garbage env mode maps to warn even when config says block and the live model is guarded (1131.106492ms)
+✔ summarizeToolInput: returns toolName when input is null/non-object (1.500044ms)
+✔ summarizeToolInput: picks file_path before other fields (0.218501ms)
+✔ summarizeToolInput: falls through to pattern when file_path absent (1.634427ms)
+✔ summarizeToolInput: command for Bash (0.163298ms)
+✔ summarizeToolInput: truncates long values with ellipsis (0.238649ms)
+✔ summarizeToolInput: returns toolName when no candidate field matches (0.506343ms)
+✔ summarizeToolInput: empty-string field treated as absent (falsy) (0.164289ms)
+✔ disableFlagDecision: no_flag when mtimeMs is null (0.221948ms)
+✔ disableFlagDecision: clear_stale when age > staleHours (0.448835ms)
+✔ disableFlagDecision: clear_version when content version differs (0.502997ms)
+✔ disableFlagDecision: active when fresh + matching version (0.279216ms)
+✔ disableFlagDecision: active when content has no plugin_version field (1.079713ms)
+✔ disableFlagDecision: malformed JSON content → clear_malformed (self-heal) (0.135185ms)
+✔ disableFlagDecision: empty-but-present flag (0-byte truncate) → clear_malformed (0.083237ms)
+✔ disableFlagDecision: stale takes precedence over malformed (0.338287ms)
+✔ disableFlagDecision: null flagContentJson + fresh → active (0.559804ms)
+✔ disableFlagDecision: staleHours override honored (0.145534ms)
+✔ FAILURE_THRESHOLD has the expected production value (0.060594ms)
+✔ STALE_DISABLE_HOURS has the expected production value (0.051497ms)
+✔ decide: no marker ⇒ allow (4.678439ms)
+✔ decide: l3 marker ⇒ allow (inline-by-design) (0.231797ms)
+✔ decide: l5 + depth-0 + product path ⇒ gate (0.305045ms)
+✔ decide: l5 + SUBAGENT ⇒ allow (SPIKE-1 identity) (0.170771ms)
+✔ decide: l5 + depth-0 + allowlisted ⇒ allow (0.132139ms)
+✔ decide: l5 + depth-0 + dispatch worktree ⇒ gate (WHERE-not-WHO) (0.117401ms)
+✔ decide: l5 + depth-0 + outside repo & worktrees ⇒ allow (scratchpad etc.) (0.112101ms)
+✔ isAllowlisted: tracking/config/plans paths pass, product paths fail (0.248728ms)
+✔ decideCodexPreEffect: no marker blocks effect-capable repository tools (0.245582ms)
+✔ decideCodexPreEffect: non-repository and read-only activity are no-ops (0.279786ms)
+✔ decideCodexPreEffect: fixed lifecycle entry remains available without a marker (0.180159ms)
+✔ decideCodexPreEffect: l3 preserves inline effects (0.169439ms)
+✔ decideCodexPreEffect: managed levels block depth-0 but admit fixed Engine entry (0.158238ms)
+✔ classifyCodexGitProbe: only the real non-repository result is a no-op (1.209938ms)
+✔ Codex wrapper: no marker returns the live-proven structured denial (116.939029ms)
+✔ Codex wrapper: fixed session-mode entry is available before a marker exists (114.005766ms)
+✔ Codex wrapper: l3 allows inline shell while l5 blocks depth-0 shell (578.256793ms)
+✔ Codex wrapper: l5 admits only the fixed managed Engine entry (240.576729ms)
+✔ Codex wrapper: corrupt marker denies; read-only and non-repository calls no-op (324.087072ms)
+✔ Codex wrapper: a marker cannot be reused by another host session (249.897968ms)
+✔ Codex wrapper: host session IDs that would normalize ambiguously are denied (85.632679ms)
+✔ Codex wrapper: git spawn failures block effect-capable tools but read-only remains a no-op (151.882316ms)
+✔ Codex wrapper: a timed-out Git probe returns structured denial (5110.445545ms)
+✔ wrapper: disabled ⇒ exit 0 even with live l5 marker (214.207725ms)
+✔ wrapper: no marker ⇒ exit 0 silent (93.139412ms)
+✔ wrapper: l5 marker + depth-0 + product file + block ⇒ exit 2 deny (211.683432ms)
+✔ wrapper: l5 marker + SUBAGENT payload ⇒ exit 0 (foreman passes) (206.18493ms)
+✔ wrapper: l3 marker ⇒ exit 0 (225.841287ms)
+✔ wrapper: expired marker ⇒ exit 0 (201.661454ms)
+✔ wrapper: allowlisted tracking path ⇒ exit 0 (209.144512ms)
+✔ wrapper: depth-0 editing inside a dispatch worktree ⇒ exit 2 (WHERE-not-WHO) (200.135251ms)
+✔ wrapper: file outside repo/worktrees (scratch) ⇒ exit 0 (201.774146ms)
+✔ wrapper: warn mode ⇒ exit 0 with stderr warning (200.762912ms)
+✔ wrapper: garbage stdin ⇒ fail-open exit 0 (148.340798ms)
+✔ wrapper: Write and NotebookEdit paths are gated too (321.578811ms)
+✔ truncateUtf8Safe: no-op when input within budget (3.217838ms)
+✔ truncateUtf8Safe: cuts at UTF-8 codepoint boundary (0.28187ms)
+✔ truncateUtf8Safe: legitimate U+FFFD survives (no replacement-char strip) (0.162726ms)
+✔ truncateUtf8Safe: handles ASCII-only fast path (0.20738ms)
+✔ renderContentBlocks: text block returns its text (0.291239ms)
+✔ renderContentBlocks: thinking block wrapped + capped at THINKING_BLOCK_CAP (0.347995ms)
+✔ renderContentBlocks: tool_use surfaces name (0.167796ms)
+✔ renderContentBlocks: tool_result shows byte size for string content (0.126558ms)
+✔ renderContentBlocks: tool_result shows JSON size for array content (0.206669ms)
+✔ renderContentBlocks: image block (0.297029ms)
+✔ renderContentBlocks: unknown block type still rendered (no throw) (0.159901ms)
+✔ renderContentBlocks: null / non-object blocks are skipped (0.108173ms)
+✔ extractTurn: string content turn (0.960408ms)
+✔ extractTurn: array content turn → renders via renderContentBlocks (3.249118ms)
+✔ extractTurn: returns null when message absent (0.115648ms)
+✔ extractTurn: unknown content shape → JSON stub (0.155793ms)
+✔ parseTranscriptText: filters non user/assistant records (0.330513ms)
+✔ parseTranscriptText: CRLF tolerated (0.170722ms)
+✔ parseTranscriptText: malformed JSON line counted in errors but parsing continues (0.239742ms)
+✔ parseTranscriptText: empty input → 0 turns (0.097614ms)
+✔ buildTranscriptTail: empty turns → empty body (0.245132ms)
+✔ buildTranscriptTail: newest turn exempt from PER_TURN_BUDGET (0.215756ms)
+✔ buildTranscriptTail: older turn over PER_TURN_BUDGET gets truncated (0.158359ms)
+✔ buildTranscriptTail: respects tailN slicing (0.177935ms)
+✔ emitFailure: returns failure message with reason + lastStep (0.142137ms)
+✔ emitFailure: optional stderr-like sink receives diag line (0.104437ms)
+✔ emitFailure: extraDetail included when provided (0.058069ms)
+✔ selectFailureCounter: empty list → current null, no stale (0.166824ms)
+✔ selectFailureCounter: picks freshest among fresh files (0.118333ms)
+✔ selectFailureCounter: files older than staleMs go to stale, not current (0.094889ms)
+✔ selectFailureCounter: all stale → current null, all listed stale (0.073087ms)
+✔ selectFailureCounter: staleMs override honored (0.069401ms)
+✔ selectFailureCounter: boundary — exactly staleMs old counts as fresh (0.070883ms)
+✔ compactDecision: silent below first threshold (49) (1.25364ms)
+✔ compactDecision: warns at first threshold (50) with first-level message (0.277593ms)
+✔ compactDecision: silent between thresholds (51..74) (3.693113ms)
+✔ compactDecision: warns at first interval (75) with interval-level message (0.169849ms)
+✔ compactDecision: unbounded — warns at 100 and 125, not capped at 100 (0.147298ms)
+✔ compactDecision: guards non-positive / non-integer counts (1.762479ms)
+✔ compactDecision: constants match documented behavior (0.165522ms)
+✔ wrapper: counter increments across invocations and nudges at the threshold (2958.772212ms)
+✔ wrapper: counter STILL increments when the stdin read throws (the ENXIO regression) (183.336213ms)
+✔ wrapper: AUTOPILOT_SUGGEST_COMPACT=false opts out (no counter file written) (66.838405ms)
+✔ findLatestToolEvent: returns last tool_use with matching result (2.723026ms)
+✔ findLatestToolEvent: picks the LAST tool_use even with trailing noise (2.687179ms)
+✔ findLatestToolEvent: tool_use without a result → tool_response undefined, not error (0.262474ms)
+✔ findLatestToolEvent: is_error propagates (0.880859ms)
+✔ findLatestToolEvent: richer toolUseResult overrides block content (0.284486ms)
+✔ findLatestToolEvent: empty / garbage / no-tool input → null (0.198333ms)
+✔ findLatestToolEvent: tolerates CRLF and oversized lines (17.970233ms)
+✔ resolveTranscriptPath: finds <sessionId>.jsonl under projects/* regardless of dir name (3.607071ms)
+✔ readLatestToolEvent: end-to-end via env + sandbox home; fail-open without env (1.18441ms)
+✔ Part 3.1: current-schema fixture with tail-window read (1.17402ms)
+✔ Part 3.2: event-beyond-window fixture with full-read fallback (1.346786ms)
+✔ Part 3.3: schema-changed fixture triggers canary exactly once (6.094143ms)
+✔ Part 3.3b: schema-changed fixture does not trigger canary when AUTOPILOT_NO_CANARY=1 (1.822571ms)
+✔ Part 3.4: small-file fixture with byte-identical behavior (0.673669ms)
+[transcript-reader-lib] WARNING: Schema canary fired. No tool events found in transcript for session sid-canary-test.
+brain generator: 46 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/brain-eval-generator.test.js (938.186726ms)
+brain grader: 40 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/brain-eval-grader.test.js (160.30877ms)
+✔ extracts Bash tool_use from JSONL (5.872887ms)
+✔ GREEN: two git Bash calls (0.703965ms)
+✔ RED: three sleep >=30 (0.307609ms)
+✔ GREEN: sleep 2 does not count (0.166724ms)
+✔ RED: cat /tasks/*.output (1.973987ms)
+✔ RED: tail of tasks output (0.19095ms)
+✔ GREEN: grep of .output is not a listed reader (0.121439ms)
+✔ RED: bash cap 41 (0.203834ms)
+✔ GREEN: background until-loop with sleep >=30 (0.373122ms)
+✔ RED: foreground sleep x 3 (0.317709ms)
+local OpenAI dispatch: 63 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/dispatch-local-openai.test.js (1547.547908ms)
+brain qualifier: 43 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/engine-qualify-brain.test.js (23440.594578ms)
+56 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/engine-qualify-consult.test.js (214638.408597ms)
+55 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/engine-qualify-discuss.test.js (164189.114463ms)
+engine-qualify: --endpoint 'examlan' is PLAINTEXT to a private-range address (http://10.7.7.7:8001); the row will disclose transport_security=plaintext_private
+PASS [engine-qualify-impl] 72 assertions
+✔ /home/cookys/projects/autopilot/scripts/engine-qualify-impl.test.js (71631.697971ms)
+owner qualifier: 23 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/engine-qualify-owner.test.js (15860.208303ms)
+29 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/engine-qualify-va.test.js (38792.031205ms)
+✔ select: mechanical r0/r1/r2 climb then cap (3.158636ms)
+✔ select: judgment defaults to rung 0 and climbs (0.282451ms)
+✔ select: judgment with startRungJudgment 0 starts at rung 0 (0.209865ms)
+✔ select: judgment with startRungJudgment 1 starts at rung 1 (0.152187ms)
+✔ select: mechanical always starts at rung 0 regardless of startRungJudgment (0.208082ms)
+✔ select: single rung is used for both classes (0.124685ms)
+✔ select: absent ladder is identity (0.217259ms)
+✔ resolver: absent ladder emits empty array and keeps seat fields (1782.513653ms)
+✔ resolver: parses engine/effort@runner list (1622.752324ms)
+✔ resolver: rejects illegal ladder runner (966.216798ms)
+✔ planted negative: empty ladder dispatch argv equals pre-ladder roster (1.229615ms)
+✔ template config with auto implementer_ladder and no topology file emits empty ladder plus warning (2094.957505ms)
+✔ refresh fetches fixed paginated endpoint and writes only bounded provisional roles (73.061662ms)
+✔ all-tie cohorts use a deterministic neutral percentile (6.464801ms)
+✔ index versions remain separate content-addressed cohorts (17.886645ms)
+✔ missing key and API failures preserve current cache and evidence bytes (13.11935ms)
+✔ malformed later pages and endpoint overrides fail before cache publication (1.884137ms)
+✔ CLI exposes no endpoint override and cache integrity is fail-closed (164.197091ms)
+✔ refresh rejects a cache path inside a Git worktree before fetching (3.224741ms)
+✔ refresh resolves cache symlinks and refuses echoed credentials (4.344119ms)
+✔ refresh bounds streamed bodies and rejects cache child symlinks (10.572644ms)
+✔ aa-import ledger producer rejects non-external evidence and unknown producers (146.919102ms)
+✔ aa importer cannot claim an evidence id owned by another producer (54.747722ms)
+✔ refresh rejects an evidence store inside a Git worktree before fetching (5.126822ms)
+✔ failed current publication rolls back evidence and new cache objects (12.520763ms)
+✔ ledger validation failure leaves prior current and cache objects unchanged (32.800052ms)
+✔ new cohorts retire prior candidates that fall below floor or disappear (118.89977ms)
+✔ recorded candidates are retired even when their cache was lost (43.019742ms)
+✔ equal-time retirement evidence wins over a provisional prior (43.354112ms)
+✔ transactional evidence cannot become visible before cache publication (89.860859ms)
+✔ a later recorded refresh carries retirement debt across no-record snapshots (86.310205ms)
+✔ retirement after an unrecorded provisional targets recorded lineage (81.203961ms)
+✔ readCurrent binds manifest metadata and every raw object to the snapshot (15.073839ms)
+✔ an older completed fetch cannot overwrite a newer current snapshot (18.599497ms)
+✔ cache destination is re-resolved after fetch to catch ancestor swaps (5.117935ms)
+✔ resolveLiveDir: tmpfs candidate is chosen (shm) (101.503679ms)
+✔ resolveLiveDir: ext4 everywhere ⇒ ~/.autopilot fallback + exactly one warning (131.979405ms)
+✔ resolveLiveDir: findmnt absent ⇒ falls back to /proc/mounts fixture (longest-prefix) (7.307027ms)
+✔ resolveLiveDir: findmnt absent + /proc/mounts fixture with no RAM mounts ⇒ ssd-fallback (10.692611ms)
+✔ resolveLiveDir: rejected ext4 override + tmpfs XDG ⇒ XDG chosen (override skipped, not fatal) (134.674109ms)
+✔ resolveLiveDir: accepted tmpfs override wins over everything else (64.786953ms)
+✔ resolveLiveDir: candidate dir name with shell metacharacters is probed literally, never executed (62.513994ms)
+✔ sanitizeSessionId: shared vector file (writer/reader contract) (0.70642ms)
+✔ sanitizeSessionId: non-string input ⇒ unknown (0.547481ms)
+✔ readLive: fresh main file ⇒ returned (1.480277ms)
+✔ readLive: stale (>120s) ⇒ null (1.313953ms)
+✔ readLive: exactly at the 120s boundary is fresh, one ms past is stale (0.553743ms)
+✔ readLive: schema_version 2 ⇒ null (0.319612ms)
+✔ readLive: missing schema_version ⇒ null (3.624985ms)
+✔ readLive: non-integer schema_version ⇒ null (0.39825ms)
+✔ readLive: missing file ⇒ null (2.712457ms)
+✔ readLive: malformed JSON ⇒ null (0.430771ms)
+✔ readLive: wrong session id ⇒ null (no file at that path) (0.351752ms)
+✔ readLive: tasks kind reads the .tasks.json file, independent freshness (0.401176ms)
+✔ modelFamily: positive vectors (0.28693ms)
+✔ modelFamily: negative vectors ⇒ unknown (0.094999ms)
+local engine probe: 50 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/local-engine-probe.test.js (678.549842ms)
+profile cutover: 62 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/profile-cutover.test.js (548.39356ms)
+✔ emit writes a valid event as one JSONL line (10.66033ms)
+✔ emit appends (append-only, does not truncate) (0.640706ms)
+✔ validateEvent rejects bad verdict enum (0.535789ms)
+✔ validateEvent rejects bad finding stage (2.237031ms)
+✔ validateEvent rejects missing required field (0.229923ms)
+✔ resolveStore precedence: --store > env > null (0.147457ms)
+✔ buildEvent assembles from flags incl. lenses split (0.724113ms)
+✔ buildEvent defaults verdict_stage to depth0_panel (lone partial-delta safe) (0.236224ms)
+✔ main is a no-op (exit 0) when no store configured (0.487297ms)
+✔ main appends a full --event and exits 0 (0.674309ms)
+✔ main returns 2 on schema-invalid event and writes nothing (5.346956ms)
+qualification case broker: 42 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/qualification-case-broker.test.js (1304.388207ms)
+42 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/qualification-consult-discuss-transport.test.js (1985.166184ms)
+202 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/qualification-review-provider.test.js (11946.67424ms)
+445 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/va-eval-generator.test.js (666.337871ms)
+29 assertions passed
+✔ /home/cookys/projects/autopilot/scripts/va-eval-grader.test.js (182.98369ms)
+✔ REJECTED: -0 (sign-lossy integer: JSON.stringify(-0) === "0") (9.812374ms)
+✔ REJECTED: 1e2 (reformats to "100" on canonical re-serialize, byte-mismatch) (0.735505ms)
+✔ REJECTED: .5 (invalid JSON at the parser layer — no leading digit before ".") (4.521443ms)
+✔ REJECTED: 1.50 (trailing zero lost on canonical re-serialize ("1.5")) (2.498394ms)
+✔ REJECTED: 0.1000000000000000000000001 (rounds to the same double as 0.1, byte-mismatch) (0.535758ms)
+✔ REJECTED: 1e999 (overflows to Infinity, not finite JSON) (0.630587ms)
+✔ REJECTED: 9007199254740993 (unsafe integer — reparses to a different double (9007199254740992)) (3.706879ms)
+✔ REJECTED: 9007199254740992 (2**53 — exactly representable but adjacent integers collapse (Number.isSafeInteger is false)) (0.527453ms)
+✔ ACCEPTED: 0.75 (1.202424ms)
+✔ ACCEPTED: 0.9166666666666666 (3.392718ms)
+✔ ACCEPTED: 100 (0.367852ms)
+✔ ACCEPTED: -42 (0.196089ms)
+✔ ACCEPTED: 1.5 (0.15929ms)
+✔ ACCEPTED: 0.5 (0.165101ms)
+✔ assertJsonValue REJECTED: -0 as an in-memory value (Object.is(-0)) (0.518035ms)
+✔ assertJsonValue REJECTED: NaN as an in-memory value (0.171413ms)
+✔ assertJsonValue REJECTED: Infinity as an in-memory value (0.125997ms)
+✔ assertJsonValue ACCEPTED: a finite non-integer in-memory value (0.204104ms)
+✔ assertJsonValue REJECTED: 2**53 as an in-memory integer value (unsafe magnitude) (0.405373ms)
+✔ assertJsonValue REJECTED: Number.MAX_SAFE_INTEGER + 1 as an in-memory integer value (0.193464ms)
+✔ assertJsonValue ACCEPTED: 0.5 as an in-memory value (0.10657ms)
+✔ assertJsonValue ACCEPTED: 0 (positive zero) is not confused with -0 (0.104326ms)
+ℹ tests 299
+ℹ suites 0
+ℹ pass 299
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 214735.42611
+
+════════ L2 integration tests (*.test.sh) ════════
+
+──────── hooks/tests/audit-log-transcript-fallback.test.sh ────────
+PASS [audit-log-transcript-fallback] 4 assertions
+
+──────── hooks/tests/all-hooks-fail-open.test.sh ────────
+PASS [all-hooks-fail-open] 24 assertions
+
+──────── hooks/tests/autopilot-engine-resilience.test.sh ────────
+{"status":"initialized","path":"/tmp/autopilot-test-autopilot-engine-resilience-mR974d/ledger.jsonl"}
+{"kind":"stage","ts":"2026-09-04T23:53:09Z","run_id":"RUNX","stage":"implement","state":"committed","reason":"transition","idempotency_key":"","transition_from":"leased","generation":1,"nonce":"2ded105da6253694","pid":1648400,"start_time":1788565988,"heartbeat_ts":1788565989,"required_side_effect_keys":[],"git_ref":"refs/heads/round1-branch","git_sha":"8e62e7b4279c0b4d63148c6485b1ea1734026455","worktree":"/tmp/autopilot-test-autopilot-engine-resilience-mR974d/git-scratch","resources":""}
+{"kind":"stage","ts":"2026-09-04T23:53:10Z","run_id":"RUNX","stage":"implement#r2","state":"committed","reason":"transition","idempotency_key":"","transition_from":"leased","generation":1,"nonce":"3308aaf8ff4cb642","pid":1649114,"start_time":1788565989,"heartbeat_ts":1788565989,"required_side_effect_keys":[],"git_ref":"refs/heads/round2-branch","git_sha":"e4a98a5126f23034e1c9655121a0a48fe4a0df0c","worktree":"/tmp/autopilot-test-autopilot-engine-resilience-mR974d/git-scratch","resources":""}
+{"kind":"stage","ts":"2026-09-04T23:53:10Z","run_id":"RUNX","stage":"implement#r3","state":"committed","reason":"transition","idempotency_key":"","transition_from":"leased","generation":1,"nonce":"f38c49db7d0fd049","pid":1650096,"start_time":1788565989,"heartbeat_ts":1788565990,"required_side_effect_keys":[],"git_ref":"refs/heads/round2-branch","git_sha":"1111111111111111111111111111111111111111","worktree":"/tmp/autopilot-test-autopilot-engine-resilience-mR974d/git-scratch","resources":""}
+PASS [autopilot-engine-resilience] 14 assertions
+
+──────── hooks/tests/brain-eval-generator.test.sh ────────
+PASS [brain-eval-generator] 2 assertions
+
+──────── hooks/tests/brain-eval-grader.test.sh ────────
+PASS [brain-eval-grader] 2 assertions
+
+──────── hooks/tests/build-rehydration-bundle.test.sh ────────
+PASS [build-rehydration-bundle] 16 assertions
+
+──────── hooks/tests/adjudicate-findings.test.sh ────────
+Running Add tests...
+Running Probe tests...
+Running Refute tests...
+Running Trace tests...
+Running general validation tests...
+Running Append-only / Idempotency tests...
+Running option-argument parsing / missing value validation tests...
+Running Disposition / repair-gate tests...
+Running Completeness / all-blocking tests...
+PASS [adjudicate-findings] 130 assertions
+
+──────── hooks/tests/calibration.test.sh ────────
+PASS [calibration] 56 assertions
+
+──────── hooks/tests/autopilot-engine.test.sh ────────
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+Switched to a new branch 'sb-loop'
+PASS [autopilot-engine] 470 assertions
+
+──────── hooks/tests/campaign-boundary-receipt-e2e.test.sh ────────
+a_phase=boundary_rejected
+a_journal_phase=BOUNDARY_REJECTED
+a_lease_released=true
+a_events=1,1
+a_output_digest_bound=true
+a_boundary_reason=unauthorized_output_path: docs/leak.md
+a_receipt_verifiable=true
+a_receipt_before_phase=true
+a_negative_control=BOUNDARY_EVIDENCE_REQUIRED
+b_phase=controller_execution_authority
+b_ledger_commit=true
+b_dispatcher_called=true
+b_model_calls=1
+b_commit=true
+b_receipt_persisted_phase_unchanged=true
+PASS [campaign-boundary-receipt-e2e] 12 assertions
+
+──────── hooks/tests/calendar-teeth-negative.test.sh ────────
+PASS: a1: past-expires row => observed_status/admission_status qualified, expiry_warning true, store unmutated
+PASS: b1: past-expires implementer row does not tier 'low' (got 'unknown')
+PASS: c1: past-expires implementer row GOes under dispatch-contract.js (calendar tooth c pulled)
+PASS: strike1: 3 ordinary strikes => would_requalify true, admission_status qualified under shadow (default)
+PASS: strike2: same fixture under --enforce => requalify_required
+PASS: strike3: requalify_required seat tiers 'low' under --enforce
+PASS: strike4: requalify_required seat NO-GOes from dispatch-contract.js naming the strike cause (engine: seat requires requalification (3 ordinary strikes since last pass))
+PASS: critical1: one critical_reexam_trigger => requalify_required under shadow (default)
+PASS: epoch1: fresh pass after 3 strikes rebaselines (strikes_since_pass=0), strike rows byte-identical
+PASS: tie1: strike stamped exactly at qualified_at does not count
+PASS: epoch2: a critical strike stamped LATER THE SAME DAY as the pass COUNTS (fail-closed legacy date-only fallback, admission_status=requalify_required)
+PASS: writer1: writer=operator row excluded from count, shows in rejected_strikes
+PASS: invalidate1: strike_invalidated with full proof removes exactly one strike (2 -> 1)
+PASS: dedup1: ordinary_strike(N) + critical_reexam_trigger(N+1) sharing one dedup_key => critical NOT hidden, admission_status=requalify_required under default shadow
+PASS: invalidate2: invalidation with out-of-window observed_at is refused (both strikes still count, invalidation tallied into rejected_strikes)
+PASS: invalidate3: invalidation with invalidates_event_id >= its own event_id is refused (strike still counts, invalidation tallied into rejected_strikes)
+PASS: p3_1: no admission path compares an 'expired' literal inside a live admission branch
+PASS: p3_3: resolve-scaffold-tier.js has zero now-vs-expires comparisons anywhere (no expiry_warning carve-out exists here)
+PASS: p3_2: the only now-vs-expires comparison in the admission region lives inside computeExpiryWarning
+PASS: instant2: an evidence receipt issued later TODAY reads qualified with a baseline under the DEFAULT clock (was no_record / baseline null)
+PASS: instant1: three strikes stamped later TODAY count under the DEFAULT clock (strikes_since_pass=3, rejected_strikes=0, would_requalify)
+PASS: instant3: no UTC-midnight-truncated default clock remains anywhere in engine-scorecard.js
+PASS: instant4: the Codex mirror of engine-scorecard.js carries the same instant clock
+PASS: landing1: scorecard rows landed in the isolated ENGINE_SCORECARD_DIR
+PASS: landing2: strike rows landed in the isolated ENGINE_CAPABILITY_DIR
+PASS: landing3: ~/.autopilot/engine-scorecard/ was NOT written by this suite
+PASS: landing4: ~/.autopilot/engine-capability/ was NOT written by this suite
+----
+calendar-teeth-negative harness: 27 passed, 0 failed
+
+──────── hooks/tests/campaign-terminalize.test.sh ────────
+PASS [campaign-terminalize] 6 assertions
+
+──────── hooks/tests/capability-evidence.test.sh ────────
+PASS: public role membership cannot be mutated
+PASS: schema validator rejects duplicate union members
+PASS: external_prior cannot produce qualified evidence
+PASS: self_report cannot produce qualified evidence
+PASS: ordinary_receipt cannot produce qualified evidence
+PASS: runtime_probe cannot produce qualified evidence
+PASS: external prior cannot reuse a reviewer methodology
+PASS: external prior cannot fabricate reviewer eval trials
+PASS: one successful run cannot promote
+PASS: reviewer Critical false-pass blocks promotion
+PASS: reviewer clean-specificity miss blocks promotion
+PASS: vacuous mutation oracle blocks promotion
+PASS: dependent artifact oracle blocks promotion
+PASS: an untargeted restrictive record cannot demote the wrong qualification
+PASS: revocation target and supersedes must resolve in the exact ledger
+PASS: receipt applicability cannot claim a different requested scope
+PASS: qualified receipt cannot carry a contradictory revocation reason
+PASS: standalone caller-authored receipt cannot cross the trust boundary
+PASS: editing a known-bad defect invalidates the independent oracle
+PASS: corpus cannot count one artifact repeatedly under different ids
+PASS: (b) the frozen pre-D5 validator REJECTS a consult_panel row
+PASS: (b) the frozen pre-D5 validator REJECTS a discuss_rounds row
+PASS: (e) a non-10/10 consult trial cannot be promoted to qualified
+PASS: (e) a discuss trial over the zero-tolerance sycophantic-capitulation floor cannot be promoted
+PASS: (k) role=consult with generic role_eval methodology is rejected, not silently qualified via the generic threshold branch
+PASS: (k) role=discuss with generic role_eval methodology is rejected, not silently qualified via the generic threshold branch
+PASS [capability-evidence] 140 assertions
+PASS [capability-evidence] 11 assertions
+
+──────── hooks/tests/check-blueprint-conformance.test.sh ────────
+PASS [check-blueprint-conformance] 29 assertions
+
+──────── hooks/tests/check-blind-evidence.test.sh ────────
+PASS [check-blind-evidence] 8 assertions
+
+──────── hooks/tests/check-claude-md-inventory.test.sh ────────
+PASS [check-claude-md-inventory] 24 assertions
+
+──────── hooks/tests/check-canonical-invariants.test.sh ────────
+PASS [check-canonical-invariants] 26 assertions
+
+──────── hooks/tests/check-dispatch-suppression.test.sh ────────
+PASS [check-dispatch-suppression] 16 assertions
+
+──────── hooks/tests/check-escalation-coverage.test.sh ────────
+Testing missing project parameters...
+Testing project events file not found...
+Testing clean case: 2 events matching 2 expected signals...
+Testing json output format...
+Testing deficit case (warn-first default exit 0)...
+Testing deficit case with --gate (exit 1)...
+Testing no signals file...
+Testing malformed lines in events.jsonl...
+Testing fallback project path...
+PASS [check-escalation-coverage] 24 assertions
+
+──────── hooks/tests/check-holdout-coverage.test.sh ────────
+PASS [check-holdout-coverage] 14 assertions
+
+──────── hooks/tests/check-disjointness.test.sh ────────
+PASS [check-disjointness] 40 assertions
+
+──────── hooks/tests/check-hook-inventory.test.sh ────────
+PASS [check-hook-inventory] 18 assertions
+
+──────── hooks/tests/check-l1-cache-key-parity.test.sh ────────
+L1 cache-key parity: OK
+PASS [check-l1-cache-key-parity] 7 assertions
+
+──────── hooks/tests/check-loop-convergence.test.sh ────────
+PASS [check-loop-convergence] 18 assertions
+
+──────── hooks/tests/check-js-syntax.test.sh ────────
+PASS [check-js-syntax] 13 assertions
+
+──────── hooks/tests/check-node-report.test.sh ────────
+PASS [check-node-report] 92 assertions
+
+──────── hooks/tests/campaign-dispatch-projection.test.sh ────────
+PASS [campaign-dispatch-projection] 39 assertions
+
+──────── hooks/tests/check-readme-parity.test.sh ────────
+PASS [check-readme-parity] 10 assertions
+
+──────── hooks/tests/check-phase-review-receipt.test.sh ────────
+PASS [check-phase-review-receipt] 49 assertions
+
+──────── hooks/tests/check-redispatch-prompt.test.sh ────────
+PASS [check-redispatch-prompt] 21 assertions
+
+──────── hooks/tests/check-stall-fuse.test.sh ────────
+PASS [check-stall-fuse] 22 assertions
+
+──────── hooks/tests/check-optin-changelog.test.sh ────────
+PASS [check-optin-changelog] 41 assertions
+
+──────── hooks/tests/autopilot-cli.test.sh ────────
+PASS [autopilot-cli] 89 assertions
+
+──────── hooks/tests/check-repair-scope.test.sh ────────
+wrote /tmp/autopilot-test-check-repair-scope-ragNjd/repo/evil => scripts/assetctl/main.sh
+PASS [check-repair-scope] 45 assertions
+
+──────── hooks/tests/classify-diff-risk-filename-space.test.sh ────────
+PASS [classify-diff-risk-filename-space] 14 assertions
+
+──────── hooks/tests/classify-diff-risk.test.sh ────────
+PASS [classify-diff-risk] 24 assertions
+
+──────── hooks/tests/codex-enforcement-probe.test.sh ────────
+SKIP [codex-native-child] set AUTOPILOT_CODEX_NATIVE_CHILD_PROBE=1 for live probe
+PASS [codex-enforcement-probe] 34 assertions
+
+──────── hooks/tests/codex-hook-probe-package.test.sh ────────
+SKIP [codex-slash-entry] set AUTOPILOT_CODEX_SLASH_PROBE=1 for live probe
+PASS [codex-hook-probe-package] 90 assertions
+
+──────── hooks/tests/codex-postcompact-production-live-driver.test.sh ────────
+PASS [codex-postcompact-production-live-driver] 110 assertions
+
+──────── hooks/tests/codex-pre-effect-production-live.test.sh ────────
+SKIP codex-pre-effect-production-live: set AUTOPILOT_LIVE_CODEX=1
+
+──────── hooks/tests/check-test-integrity.test.sh ────────
+PASS [check-test-integrity] 135 assertions
+
+──────── hooks/tests/codex-compaction-rehydration.test.sh ────────
+dispatch-hetero: auto/gemini-3.7-flash-high (effort=xhigh) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.
+dispatch-hetero: auto/gemini-3.7-flash-high (effort=xhigh) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.
+PASS [codex-compaction-rehydration] 195 assertions
+
+──────── hooks/tests/controller-boundary-budget-bridge.test.sh ────────
+PASS [controller-boundary-budget-bridge] 7 assertions
+
+──────── hooks/tests/controller-execution-independent.test.sh ────────
+Starting independent verification tests for Controller Execution...
+Testing Group 1: Denominator integrity plus gate invalidation
+Testing Group 2: Vertical-failure/full-diff ordering
+Testing Group 3: Boundary/disposition semantics surviving campaign/resume-facing values
+Testing Group 4: Repair budgets & axes
+Testing Group 5: Debt/high-water blocking with zero effects
+Testing Group 6: Orphan proof completeness and single adoption
+Testing Group 7: Executable-delta no-op vs replay/create/mirror failures
+Testing Group 8: PostCompact host neutrality
+Testing Group 10: Production WO CAS / multi-node / tickets
+Testing Group 11: production counters / budget / inventory / orphan
+All inline verification assertions passed successfully!
+PASS [controller-execution-independent] 1 assertions
+
+──────── hooks/tests/cost-digest.test.sh ────────
+PASS [cost-digest] 20 assertions
+
+──────── hooks/tests/cost-fuse.test.sh ────────
+PASS [cost-fuse] 63 assertions
+
+──────── hooks/tests/cost-tracker-warn.test.sh ────────
+PASS [cost-tracker-warn] 16 assertions
+
+──────── hooks/tests/cursor-model.test.sh ────────
+PASS [cursor-model] 50 assertions
+
+──────── hooks/tests/decision-ledger.test.sh ────────
+PASS [decision-ledger] 17 assertions
+
+──────── hooks/tests/context-window.test.sh ────────
+error: No valid patches in input (allow with "--allow-empty")
+FAIL [context-window] in-budget resolve emits no warnings: '"capability_warnings": []' not found in output
+FAIL [context-window] no --input-bytes ⇒ no window checks: '"capability_warnings": []' not found in output
+FAIL [context-window] 50 passed, 2 failed
+      - in-budget resolve emits no warnings: '"capability_warnings": []' not found in output
+      - no --input-bytes ⇒ no window checks: '"capability_warnings": []' not found in output
+
+──────── hooks/tests/dispatch-author-claude-native.test.sh ────────
+error: No valid patches in input (allow with "--allow-empty")
+PASS [dispatch-author-claude-native] 7 assertions
+
+──────── hooks/tests/contract-parity.test.sh ────────
+PASS [contract-parity] 42 assertions
+
+──────── hooks/tests/dispatch-author-kimi.test.sh ────────
+PASS [dispatch-author-kimi] 6 assertions
+
+──────── hooks/tests/dispatch-author-result-failures.test.sh ────────
+PASS [dispatch-author-result-failures] 11 assertions
+
+──────── hooks/tests/dispatch-author-result-provenance.test.sh ────────
+PASS [dispatch-author-result-provenance] 9 assertions
+
+──────── hooks/tests/check-test-integrity-l1.test.sh ────────
+  SKIP go cases 5-6 (no go toolchain on this machine)
+  SKIP go cases 8-11 (no go toolchain on this machine)
+PASS [check-test-integrity-l1] 56 assertions
+
+──────── hooks/tests/dispatch-author-session-mode.test.sh ────────
+error: No valid patches in input (allow with "--allow-empty")
+PASS [dispatch-author-session-mode] 29 assertions
+
+──────── hooks/tests/dispatch-author-contract.test.sh ────────
+PASS [dispatch-author-contract] 46 assertions
+
+──────── hooks/tests/dispatch-author-strict-endpoint.test.sh ────────
+PASS [dispatch-author-strict-endpoint] 17 assertions
+
+──────── hooks/tests/dispatch-author-codex-transport.test.sh ────────
+PASS [dispatch-author-codex-transport] 204 assertions
+
+──────── hooks/tests/dispatch-batch.test.sh ────────
+PASS [dispatch-batch] 82 assertions
+
+──────── hooks/tests/dispatch-consult-hermetic.test.sh ────────
+Precondition: running with no ~/.claude/plugins directory present in scratch HOME (/tmp/autopilot-test-dispatch-consult-hermetic-EReW6e/home)
+PASS [dispatch-consult-hermetic] 9 assertions
+
+──────── hooks/tests/dispatch-author-strict-roster.test.sh ────────
+PASS [dispatch-author-strict-roster] 75 assertions
+
+──────── hooks/tests/dispatch-consult.test.sh ────────
+PASS [dispatch-consult] 37 assertions
+
+──────── hooks/tests/dispatch-detached-campaign-authority.test.sh ────────
+PASS [dispatch-detached-campaign-authority] 10 assertions
+
+──────── hooks/tests/dispatch-contract-artifact.test.sh ────────
+PASS [dispatch-contract-artifact] 38 assertions
+
+──────── hooks/tests/dispatch-experience-critic.test.sh ────────
+experience-critic: findings written to /tmp/autopilot-test-dispatch-experience-critic-GqCUvU/out.json (post-merge, non-blocking)
+PASS [dispatch-experience-critic] 15 assertions
+
+──────── hooks/tests/dispatch-explore.test.sh ────────
+PASS [dispatch-explore] 26 assertions
+
+──────── hooks/tests/dispatch-discuss.test.sh ────────
+PASS [dispatch-discuss] 77 assertions
+
+──────── hooks/tests/dispatch-author.test.sh ────────
+PASS [dispatch-author] 92 assertions
+
+──────── hooks/tests/dispatch-hetero-gc.test.sh ────────
+PASS [dispatch-hetero-gc] 43 assertions
+
+──────── hooks/tests/dispatch-hetero-cursor-routing.test.sh ────────
+PASS [dispatch-hetero-cursor-routing] 91 assertions
+
+──────── hooks/tests/dispatch-identity-containment.test.sh ────────
+Deleted branch probe (was 7f43401).
+PASS [dispatch-identity-containment] 12 assertions
+
+──────── hooks/tests/dispatch-local-openai.test.sh ────────
+PASS [dispatch-local-openai] 2 assertions
+
+──────── hooks/tests/dispatch-model-guard.test.sh ────────
+PASS [dispatch-model-guard] 65 assertions
+
+──────── hooks/tests/dispatch-hetero-contract.test.sh ────────
+--- Setting up contract dispatch test environment ---
+--- R1: Strict contract flags alone fail (precondition) ---
+--- R1: Contract file alone fails (precondition) ---
+--- R5: Active session marker blocks ---
+--- R5: Active l5 marker blocks non-strict ---
+--- R5: Expired session marker does not block ---
+--- R5: Foreign repo marker does not block ---
+--- R2: Strict NO-GO (invalid contract) ---
+--- R3: Strict GO (valid contract, omitted details) ---
+--- R3b: Strict GO forwards an explicit qualification override ---
+--- R4: Disagreement on --base ---
+--- R4: Disagreement on --model ---
+--- R4: Disagreement on --timeout ---
+--- R6: Legacy dispatch byte-compat ---
+--- R9: acceptance argv that cannot execute fails BEFORE the runner ---
+--- R9b: negative control — a runnable acceptance still dispatches ---
+--- R9c: strict pre-flight checks executability without running acceptance ---
+PASS [dispatch-hetero-contract] 64 assertions
+
+──────── hooks/tests/dispatch-plan-review-live.test.sh ────────
+SKIP: set AUTOPILOT_LIVE_CODEX=1 to run live codex trusted-cwd probe
+PASS [dispatch-plan-review-live] 0 assertions
+
+──────── hooks/tests/dispatch-output-quiescence.test.sh ────────
+PASS [dispatch-output-quiescence] 22 assertions
+
+──────── hooks/tests/dispatch-contract.test.sh ────────
+--- Case 1.1: Absent contract ---
+--- Case 1.2: Malformed JSON ---
+--- Case 1.3: Unknown top-level key ---
+--- Case 1.4: Wrong schema value ---
+--- Case 1.5: Short base SHA ---
+--- Case 2.1: Spec file missing ---
+--- Case 2.2: Named section missing ---
+--- Case 2.2b: Four-space indented ATX is not a heading ---
+--- Case 2.3: Hidden clean spec drift ---
+--- Case 2.4: Unresolvable full-hex base ---
+--- Case 2.5: Dirty tree ---
+--- Case 2.6: Missing dependency ---
+--- Case 2.7: Non-ancestor dependency ---
+--- Case 2.8: Missing required path ---
+--- Case 3.1: Engine absent from store ---
+--- Case 3.2: Present but unqualified ---
+--- Case 3.3: Quota unknown ---
+--- Case 3.4: Quota exhausted ---
+--- Case 3.5: FINDING 5 fix (2026-08-22 review repair) — operator override MUST NOT bypass a strike block ---
+--- Case 4.1: Allow/deny overlap ---
+--- Case 4.2: Omitted mandatory mirror ---
+--- Case 4.3: Out-of-range budget ---
+--- Case 4.4: Shell-string acceptance entry ---
+--- Case 4.5: One required no_go key missing ---
+--- Case 5: Valid contract GO ---
+--- Case 6: Immediate identical rerun ---
+--- Case 7.1: VA-1 GO (Role-aware resolution) ---
+--- Case 7.2: VA-2 Unqualified (VA status failed, implementer qualified) ---
+--- Case 7.3: VA-3 Quota exhausted ---
+--- Case 9.1: directory in output.paths (kind=commit) is NO-GO ---
+--- Case 9.2: trailing-slash directory (kind=commit) is NO-GO ---
+--- Case 9.3: negative control — file paths (kind=commit) still GO ---
+--- Case 9.4: negative control — kind=diff keeps accepting directories ---
+--- Case 10.1: provisional implementer GO (native projection) ---
+--- Case 10.1b: provisional row without observed_status=qualified is NO-GO ---
+--- Case 10.2: failed implementer remains NO-GO under native projection ---
+--- Case 10.3: past-expires implementer GOes under native projection (calendar tooth pulled 2026-08-22) ---
+--- Case 10.4: identity-mismatched implementer remains NO-GO ---
+--- Case 10.5: runner-mismatched implementer remains NO-GO ---
+--- Case 10.6: missing implementer scorecard remains NO-GO ---
+--- Case 10.7: provisional verification-author GO for raw-artifact only ---
+--- Case 10.7b: provisional VA without observed_status=qualified is NO-GO ---
+--- Case 10.7c: provisional VA with non-raw-artifact output is NO-GO ---
+--- Case 10.7d: failed VA remains NO-GO under native projection ---
+--- Case 10.7e: identity-mismatched VA remains NO-GO ---
+--- Case 11.1: exact high/@none available admits despite legacy ambiguous unknown (implementer) ---
+--- Case 11.2: competing effort cannot authorize configured implementer tuple ---
+--- Case 11.3: competing endpoint cannot authorize configured implementer tuple ---
+--- Case 11.4: exact high/@none available admits despite legacy unknown (verification-author) ---
+--- Case 11.5: competing effort cannot authorize configured verification-author tuple ---
+--- Case 11.6: implementer exact wallet does not authorize verification-author path ---
+--- Case 11.7: named endpoint exact wallet admits; competing null wallet alone cannot ---
+--- Case 11.8: resolver response missing endpoint property is NO-GO before quota ---
+--- Case 10.8: /l6 config tuple VA family differs from Grok implementer ---
+PASS [dispatch-contract] 317 assertions
+
+──────── hooks/tests/dispatch-review-prompt-skeleton.test.sh ────────
+PASS [dispatch-review-prompt-skeleton] 26 assertions
+
+──────── hooks/tests/dispatch-opencode.test.sh ────────
+PASS [dispatch-opencode] 32 assertions
+
+──────── hooks/tests/dispatch-status-contract.test.sh ────────
+PASS [dispatch-status-contract] 8 assertions
+
+──────── hooks/tests/dispatch-status-reap.test.sh ────────
+PASS [dispatch-status-reap] 28 assertions
+
+──────── hooks/tests/dispatch-status.test.sh ────────
+PASS [dispatch-status] 109 assertions
+
+──────── hooks/tests/dispatch-plan-review.test.sh ────────
+PASS [dispatch-plan-review] 266 assertions
+
+──────── hooks/tests/distill-consolidate.test.sh ────────
+PASS [distill-consolidate] 29 assertions
+
+──────── hooks/tests/distill-scan-identifiers-deny.test.sh ────────
+Testing --path lint without a stale identifiers.deny (baseline)...
+Testing --path lint clean dir without a stale identifiers.deny (baseline)...
+Testing --path lint WITH a stale identifiers.deny present...
+PASS [distill-scan-identifiers-deny] 8 assertions
+
+──────── hooks/tests/distill-scan-incremental.test.sh ────────
+PASS [distill-scan-incremental] 9 assertions
+
+──────── hooks/tests/distill-sync-setup.test.sh ────────
+PASS [distill-sync-setup] 29 assertions
+
+──────── hooks/tests/doc-drift-gate.test.sh ────────
+Testing empty sandbox...
+Testing good markdown file...
+Testing broken link...
+Testing unbalanced code fences...
+Testing custom exclude...
+Testing generated Codex plugin exclude...
+Testing CRLF line endings...
+Testing invalid usage...
+PASS [doc-drift-gate] 21 assertions
+
+──────── hooks/tests/endpoints-cli.test.sh ────────
+PASS [endpoints-cli] 97 assertions
+
+──────── hooks/tests/engine-capability-bench.test.sh ────────
+PASS [engine-capability-bench] 21 assertions
+
+──────── hooks/tests/engine-capability-state.test.sh ────────
+PASS: 1: monotonic event_id assigned
+PASS: 2: schema validation guards record
+PASS: 3: high confidence beats older/newer medium/low
+PASS: 4: expired high becomes unknown
+PASS: 5: newer medium/low beats older medium/low
+PASS: 6: report lists 2 entries
+PASS: 7: prune keeps latest even if expired
+PASS: 8: classify-error categories map correctly
+PASS: 9: native_observed_at tracks the native event, not the aggregate
+PASS: 10: prune protects the native-signal carrier row
+PASS: 11: cross-role live observation clears the per-model pool (+source_role provenance)
+PASS: 12: report emits one per-model row with the winning observation
+PASS: 13: cross-role unknown never clobbers a valid real signal
+PASS: 14: live exact effort/no-endpoint probe authorizes only matching strict tuple
+----
+engine-capability-state unit tests: 14 passed, 0 failed
+
+──────── hooks/tests/dispatch-review-author-cursor.test.sh ────────
+PASS [dispatch-review-author-cursor] 77 assertions
+
+──────── hooks/tests/engine-onboarding-methodology.test.sh ────────
+PASS [engine-onboarding-methodology] 39 assertions
+
+──────── hooks/tests/engine-lifecycle-observation.test.sh ────────
+PASS [engine-lifecycle-observation] 69 assertions
+
+──────── hooks/tests/dispatch-worktree-lifecycle.test.sh ────────
+PASS [dispatch-worktree-lifecycle] 134 assertions
+
+──────── hooks/tests/engine-qualify-brain.test.sh ────────
+PASS [engine-qualify-brain] 2 assertions
+
+──────── hooks/tests/engine-qualify-impl.test.sh ────────
+engine-qualify: --endpoint 'examlan' is PLAINTEXT to a private-range address (http://10.7.7.7:8001); the row will disclose transport_security=plaintext_private
+PASS [engine-qualify-impl] 72 assertions
+
+──────── hooks/tests/dispatch-review.test.sh ────────
+PASS [dispatch-review] 356 assertions
+
+──────── hooks/tests/engine-qualify-owner.test.sh ────────
+PASS [engine-qualify-owner] 2 assertions
+
+──────── hooks/tests/engine-qualify-va.test.sh ────────
+PASS [engine-qualify-va] 2 assertions
+
+──────── hooks/tests/engine-qualify-discuss.test.sh ────────
+PASS [engine-qualify-discuss] 57 assertions
+
+──────── hooks/tests/engine-scorecard.test.sh ────────
+PASS: 1: monotonic event_id, caller 999 ignored
+PASS: 2: latest-wins, failed supersedes qualified
+PASS: 3: model_version not in identity
+PASS: 4: differing runner => 2 identities
+PASS: 5: past-expires => qualified+expiry_warning at read, store unmutated
+PASS: 6: cost report cannot route disk telemetry
+PASS: 6b: unpriced disk telemetry cannot rank as free
+PASS: 7: capability report cannot route disk telemetry
+PASS: 8: disk-only fallback ladder is empty
+PASS: 8b: role aliases canonicalize and evidence-only roles remain ladder-blocked
+PASS: 8c: legacy disk roles migrate at read time
+PASS: 9: bad enum => exit 1, store unchanged
+PASS: 10: 5 concurrent records, all valid, none interleaved
+PASS: 11: --help=0, unknown-subcommand=2
+PASS: 12: stale lock broken/recovered (record ok in 0s)
+PASS: 13: distinct efforts coexist as telemetry tuples (got: high,xhigh)
+PASS: 14: model refinement supersedes the model-less telemetry row (got: 1:haiku)
+PASS: 15: later failed re-qual retires the telemetry tuple and no rung exists
+PASS: 16: cross-corpus telemetry rows remain distinct without creating a rung
+PASS: 17: transcript import is aggregate-only, deterministic, honest, and non-authoritative
+PASS: 18: realpath containment rejects ancestor-alias output deterministically
+PASS: 19: provider model contracts reject secrets/prose and preserve legitimate identifiers
+PASS: 20: provider metadata extraction never recurses into opaque content
+PASS: 21: provider model fields are direct-string-only and explicit roots retain cohort context
+PASS: 22: session IDs, strict metrics, and cost precedence enforce schema boundaries
+PASS: 23: schema coverage, cohort components, and overlapping roots are deterministic
+PASS: 24: agy dispatch usage is measured without merging historical transcripts
+----
+engine-scorecard harness: 27 passed, 0 failed
+
+──────── hooks/tests/error-path-scan.test.sh ────────
+PASS [error-path-scan] 13 assertions
+
+──────── hooks/tests/exec-boundary.test.sh ────────
+PASS [exec-boundary] 23 assertions
+
+──────── hooks/tests/execution-profile.test.sh ────────
+PASS [execution-profile] 33 assertions
+
+──────── hooks/tests/external-lifecycle-witness.test.sh ────────
+  bound measurement (elapsed/baseline ms): stop_bound_measurement=22/500
+  bound measurement (elapsed/baseline ms): lease_epipe_bound_measurement=15/501
+PASS [external-lifecycle-witness] 53 assertions
+
+──────── hooks/tests/foreman-guard.test.sh ────────
+PASS [foreman-guard] 97 assertions
+
+──────── hooks/tests/engine-qualify-consult.test.sh ────────
+PASS [engine-qualify-consult] 59 assertions
+
+──────── hooks/tests/harness-capabilities.test.sh ────────
+PASS [harness-capabilities] 147 assertions
+
+──────── hooks/tests/grok-implementer-ab.test.sh ────────
+PASS [grok-implementer-ab] 34 assertions
+
+──────── hooks/tests/hetero-review-trigger.test.sh ────────
+PASS [hetero-review-trigger] 11 assertions
+
+──────── hooks/tests/honest-consult-discuss-solver.test.sh ────────
+PASS [honest-consult-discuss-solver] 16 assertions
+
+──────── hooks/tests/hook-handlers.test.sh ────────
+PASS [hook-handlers] 2 assertions
+
+──────── hooks/tests/hook-multiplexer-benchmark.test.sh ────────
+PASS [hook-multiplexer-benchmark] 26 assertions
+
+──────── hooks/tests/hook-normalizers.test.sh ────────
+PASS [hook-normalizers] 2 assertions
+
+──────── hooks/tests/identifier-scan.test.sh ────────
+Testing each dirty fixture reports its named kind...
+Testing clean/ directory as a whole passes...
+Testing negative-scope.md fixture is silently clean (deliberate blind spot)...
+Testing stdin path...
+Testing usage error on nonexistent path...
+Testing negative control: neutered copy misses a dirty fixture...
+Testing reported line numbers are correct...
+Testing the pinned vendor-domain false-positive class...
+Testing uncovered-tld.md fixture is silently clean (pinned suffix boundary)...
+Testing unreadable stdin exits 2, not 0...
+Testing PATTERNS id set matches the dirty/ fixture coverage (pinned both directions)...
+PASS [identifier-scan] 29 assertions
+
+──────── hooks/tests/implementation-campaign-cli-seam.test.sh ────────
+PASS [implementation-campaign-cli-seam] 19 assertions
+
+──────── hooks/tests/hetero-review-loop.test.sh ────────
+PASS [hetero-review-loop] 180 assertions
+
+──────── hooks/tests/implementation-campaign-receipt.test.sh ────────
+PASS [implementation-campaign-receipt] 11 assertions
+
+──────── hooks/tests/engine-qualify-verdict-stability.test.sh ────────
+PASS [engine-qualify-verdict-stability] 54 assertions
+
+──────── hooks/tests/implementation-campaign-routing.test.sh ────────
+PASS [implementation-campaign-routing] 45 assertions
+
+──────── hooks/tests/implementation-campaign.test.sh ────────
+PASS [implementation-campaign] 73 assertions
+
+──────── hooks/tests/install-antigravity-guard.test.sh ────────
+PASS [install-antigravity-guard] 22 assertions
+
+──────── hooks/tests/intent-capture-basic-write.test.sh ────────
+PASS [intent-capture-basic-write] 9 assertions
+
+──────── hooks/tests/implementation-campaign-dogfood.test.sh ────────
+{"schema_version":1,"artifact_type":"lifecycle_residue_receipt","issued_at":"2026-09-05T00:02:27.121Z","repo_identity":"git-common-dir:/tmp/autopilot-test-implementation-campaign-dogfood-9YhiXO/057-repo/.git","root_run_id":"campaign-v1-15b670434cc567b5cba19633c8645cd43cfa4a2cecd650e7d4fa9ac679e5405c","observed_head":"015c665ad958d98fba3c7e5536015572871f4510","worktree_observation_digest":"1f2db4cf3fc2fbc0d397959ae6b556c4b1db73798adeb9b46fa88182b9b4b221","journal_digest":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","disposition_digest":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","branch_inventory_digest":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","owned_worktrees":[{"path":"/tmp/autopilot-test-implementation-campaign-dogfood-9YhiXO/057-owned-worktree","branch":"hetero/057-residue","tip":"015c665ad958d98fba3c7e5536015572871f4510","state":"dirty","reason":"worktree_not_clean"}],"branches":[],"blockers":[{"kind":"dirty_worktree","subject":"/tmp/autopilot-test-implementation-campaign-dogfood-9YhiXO/057-owned-worktree","reason":"worktree_not_clean","instruction":"preserve_or_clean_then_reap"}],"zero_residue":false,"receipt_digest":"63faa1a13a874c194fe97ab4f2ca38f4ed7bcd4b88a90a64e91318acf9e44f5b"}
+PASS [implementation-campaign-dogfood] 20 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-active.test.sh ────────
+PASS [intent-capture-disable-flag-active] 4 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-empty.test.sh ────────
+PASS [intent-capture-disable-flag-empty] 4 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-malformed.test.sh ────────
+PASS [intent-capture-disable-flag-malformed] 3 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-stale.test.sh ────────
+PASS [intent-capture-disable-flag-stale] 3 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-version-mismatch.test.sh ────────
+PASS [intent-capture-disable-flag-version-mismatch] 3 assertions
+
+──────── hooks/tests/intent-capture-env-opt-out.test.sh ────────
+PASS [intent-capture-env-opt-out] 2 assertions
+
+──────── hooks/tests/intent-capture-summary-truncation.test.sh ────────
+PASS [intent-capture-summary-truncation] 3 assertions
+
+──────── hooks/tests/intent-capture-transcript-fallback.test.sh ────────
+PASS [intent-capture-transcript-fallback] 6 assertions
+
+──────── hooks/tests/json-emit.test.sh ────────
+PASS [json-emit] 20 assertions
+
+──────── hooks/tests/jsonl-store.test.sh ────────
+PASS: 1: 2 procs × 25 concurrent appends → 50 valid rows, event_id 1..50 monotonic (exit 0/0)
+PASS: 2a: empty stale lock broken, append recorded
+PASS: 2b: dead-pid (2162804) stale lock broken, append recorded
+PASS: 3: live lock respected; timeout error carries store name
+----
+jsonl-store harness: 4 passed, 0 failed
+
+──────── hooks/tests/load-endpoints-env.test.sh ────────
+load-endpoints-env: all assertions passed
+
+──────── hooks/tests/local-engine-probe.test.sh ────────
+PASS [local-engine-probe] 2 assertions
+
+──────── hooks/tests/merge-execute.test.sh ────────
+preflight_overlap	PASS	{"schema_version":1,"artifact_type":"merge_intent_preflight","manifest_seal":"2b9c581930236c38ff072768bb069c4d2073487bccd9e536a29afb6669694435","status":"overlapping","can_merge":false,"edges":[{"sequence":1,"source_ref":"refs/heads/safety","source_from_edge":null,"target_ref":"refs/heads/develop","target_from_edge":null,"mode":"no-ff","status":"safe","dirty":{"staged":[],"unstaged":[],"untracked":[],"ambiguous":[]},"incoming_paths":["safety.txt"],"overlapping_paths":[],"preservation_proposal":[]},{"sequence":2,"source_ref":"refs/heads/develop","source_from_edge":1,"target_ref":"refs/heads/peo","target_from_edge":null,"mode":"ff-only","status":"overlapping","dirty":{"staged":["consumer/script.sh"],"unstaged":["consumer/local.txt","consumer/tool.sh"],"untracked":["consumer/new.txt"],"ambiguous":[]},"incoming_paths":["consumer/script.sh","develop.txt"],"overlapping_paths":["consumer/script.sh"],"preservation_proposal":["consumer/script.sh"]}],"blockers":[],"receipt_digest":"911ddbbd1cdd40317361d50b2608f78c13dd7c82c208ad3d47b6089bb96ceaf7"}
+receipt_valid	PASS	
+ordered_execution	PASS	
+predecessor_binding	PASS	
+no_ff_receipt	PASS	
+ff_only_receipt	PASS	
+preservation_receipt	PASS	
+no_conflicts	PASS	
+{
+  "valid": true,
+  "errors": []
+}
+PASS [merge-execute] 38 assertions
+
+──────── hooks/tests/merge-intent.test.sh ────────
+ordered_edges	PASS	
+pinned_shas	PASS	
+deterministic_seal	PASS	
+forbidden_reverse_explicit	PASS	
+predecessor_result_binding	PASS	
+safe_status	PASS	{"schema_version":1,"artifact_type":"merge_intent_preflight","manifest_seal":"25f850998f0085ad44e61bfefe0a0fa5dbcab6ca88f6aa0bf03bdac189800eb7","status":"safe","can_merge":true,"edges":[{"sequence":1,"source_ref":"refs/heads/safety","source_from_edge":null,"target_ref":"refs/heads/develop","target_from_edge":null,"mode":"no-ff","status":"safe","dirty":{"staged":[],"unstaged":[],"untracked":[],"ambiguous":[]},"incoming_paths":["safety.txt"],"overlapping_paths":[],"preservation_proposal":[]},{"sequence":2,"source_ref":"refs/heads/develop","source_from_edge":1,"target_ref":"refs/heads/peo","target_from_edge":null,"mode":"ff-only","status":"safe","dirty":{"staged":["consumer/script.sh"],"unstaged":["consumer/local.txt"],"untracked":["consumer/new.txt"],"ambiguous":[]},"incoming_paths":["develop.txt"],"overlapping_paths":[],"preservation_proposal":[]}],"blockers":[],"receipt_digest":"34b3680ad0504237ff6222bcf2d59a56762639b151f069e61f5852f76a443ecc"}
+dirty_inventory	PASS	{"staged":["consumer/script.sh"],"unstaged":["consumer/local.txt"],"untracked":["consumer/new.txt"],"ambiguous":[]}
+incoming_paths	PASS	
+safe_has_no_proposal	PASS	
+overlapping_status	PASS	
+path_scoped_proposal	PASS	
+ambiguous_status	PASS	
+ff_only_impossible_blocked	PASS	
+tamper_breaks_seal	PASS	
+sha_drift_blocked	PASS	
+worktree_drift_blocked	PASS	
+source_equals_target	PASS	MERGE_INTENT_SAME_ENDPOINT: edges[0] source and target must differ
+missing_ref	PASS	MERGE_INTENT_REF_MISSING: ref does not resolve to a commit: refs/heads/missing
+mode_restricted	PASS	MERGE_INTENT_MODE: edges[0].mode must be no-ff or ff-only
+reverse_edge_rejected	PASS	MERGE_INTENT_FORBIDDEN_EDGE: edges[0] is explicitly forbidden
+declared_reverse_is_exact	PASS	
+outside_policy_blocked	PASS	
+PASS [merge-intent] 24 assertions
+
+──────── hooks/tests/mission-authority-ownership.test.sh ────────
+PASS [mission-authority-ownership] 9 assertions
+
+──────── hooks/tests/implementation-campaign-state.test.sh ────────
+PASS [implementation-campaign-state] 291 assertions
+
+──────── hooks/tests/mission-convergence-integration.test.sh ────────
+PASS [mission-convergence-integration] 25 assertions
+
+──────── hooks/tests/mission-convergence.test.sh ────────
+PASS [mission-convergence] 194 assertions
+
+──────── hooks/tests/mission-enforce-failclosed.test.sh ────────
+PASS [mission-enforce-failclosed] 8 assertions
+
+──────── hooks/tests/mission-enforcement-runtime.test.sh ────────
+PASS [mission-enforcement-runtime] 96 assertions
+
+──────── hooks/tests/mission-enforce-roundtrip.test.sh ────────
+PASS [mission-enforce-roundtrip] 16 assertions
+
+──────── hooks/tests/mission-backlog-convergence.test.sh ────────
+PASS [backlog-convergence-e1] 5 assertions
+PASS [backlog-convergence-qualification] 10 assertions
+PASS [mission-backlog-convergence] 10 assertions
+
+──────── hooks/tests/mission-graph-path-authorization.test.sh ────────
+PASS [mission-graph-path-authorization] 13 assertions
+
+──────── hooks/tests/mission-grant-open-claim.test.sh ────────
+PASS [mission-grant-open-claim] 11 assertions
+
+──────── hooks/tests/mission-policy-graph.test.sh ────────
+PASS [mission-policy-graph] 9 assertions
+
+──────── hooks/tests/mission-icc-runtime.test.sh ────────
+PASS [mission-icc-runtime] 81 assertions
+
+──────── hooks/tests/lifecycle-residue-receipt.test.sh ────────
+{"schema_version":1,"artifact_type":"lifecycle_residue_receipt","issued_at":"2026-09-05T00:02:47.927Z","repo_identity":"git-common-dir:/tmp/autopilot-test-lifecycle-residue-receipt-I3pnpz/repo/.git","root_run_id":"wlb-p3-root","observed_head":"ef2790ea8103bf8e1d0ec4bdf5192e81860364b8","worktree_observation_digest":"4a7c1c7572ecaa33685cdcd3342d3cb1831b1b430fc614eca28f856650a423f4","journal_digest":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","disposition_digest":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","branch_inventory_digest":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","owned_worktrees":[{"path":"/tmp/autopilot-test-lifecycle-residue-receipt-I3pnpz/owned-worktree","branch":"hetero/p3-custom","tip":"ef2790ea8103bf8e1d0ec4bdf5192e81860364b8","state":"dirty","reason":"worktree_not_clean"}],"branches":[],"blockers":[{"kind":"dirty_worktree","subject":"/tmp/autopilot-test-lifecycle-residue-receipt-I3pnpz/owned-worktree","reason":"worktree_not_clean","instruction":"preserve_or_clean_then_reap"}],"zero_residue":false,"receipt_digest":"fcfb734093c0ad13cc2484cd152af4c8c5eb5035d838e59504f63db5fb1a3570"}
+{"schema_version":1,"artifact_type":"lifecycle_residue_receipt","issued_at":"2026-09-05T00:02:50.927Z","repo_identity":"git-common-dir:/tmp/autopilot-test-lifecycle-residue-receipt-I3pnpz/repo/.git","root_run_id":"wlb-p3-root","observed_head":"ef2790ea8103bf8e1d0ec4bdf5192e81860364b8","worktree_observation_digest":"cba5828d5ee1476a763e9992ec4493663866340d7de0c63e5dd1fcdd3800b896","journal_digest":"ab245a3f07a1f24c8ca1fabf4d058e068684755a150bd8ed22574398975288df","disposition_digest":"6daca92322724afdf29d17b2724b7f74cf3516d37ef2ee336975aa8727de8cec","branch_inventory_digest":"c50e8e22d22a9e9466ed0822554a07a52f42e3abf262390081ca032d7d223d1c","owned_worktrees":[],"branches":[{"name":"hetero/p3-custom","tip":"ef2790ea8103bf8e1d0ec4bdf5192e81860364b8","disposition":"reaped","bundle":"/tmp/autopilot-test-lifecycle-residue-receipt-I3pnpz/bundles/reap-20260905T000249Z-2165515.bundle","acknowledged":false}],"blockers":[],"zero_residue":true,"receipt_digest":"9314de9e4cc89528ab38f20c7a386383d00b216bfe538e7cae0749643e5bf674"}
+PASS [lifecycle-residue-receipt] 63 assertions
+
+──────── hooks/tests/mission-routing-admission.test.sh ────────
+error: No valid patches in input (allow with "--allow-empty")
+PASS [mission-routing-admission] 39 assertions
+
+──────── hooks/tests/mission-terminal-rollover.test.sh ────────
+PASS: refuses a COMPLETE adoption lacking integrated/zero-residue evidence
+PASS: refuses an adoption key that does not belong to the graph
+PASS: refuses a malformed graph digest
+PASS: refuses when observed_head is NOT an ancestor of HEAD (replay still possible)
+PASS: accepts the integrated adoption
+PASS: asserts zero synthesis, zero mutation, zero history rewrite
+PASS: re-running writes nothing (idempotent)
+PASS: legacy B/C disposition reconciled for the clone's bound graph
+PASS: a tampered rollover is discarded and admission returns to fail-closed
+PASS: restoring the intact rollover restores READY
+PASS: live host mission-terminal-rollovers.json is byte-identical before/after (scratch clone never touched it)
+
+mission-terminal-rollover.test.sh: 11 passed, 0 failed
+
+──────── hooks/tests/next-pick.test.sh ────────
+PASS [next-pick] 30 assertions
+
+──────── hooks/tests/mission-runtime-v2.test.sh ────────
+PASS [mission-runtime-v2] 100 assertions
+
+──────── hooks/tests/opencode-normalizer.test.sh ────────
+PASS [opencode-normalizer] 6 assertions
+
+──────── hooks/tests/mission-routing-campaign-bridge.test.sh ────────
+PASS [mission-routing-campaign-bridge] 40 assertions
+
+──────── hooks/tests/orchestration-eval-m3band.test.sh ────────
+=== t15-cache-invalidation ===
+PASS [t15-cache-invalidation] status=FAIL fid=false decoy=true
+PASS [t15-cache-invalidation] status=PASS fid=true decoy=true
+PASS [t15-cache-invalidation] status=FAIL fid=false decoy=true
+PASS [t15-cache-invalidation] status=FAIL fid=true decoy=false
+=== t16-findings-triage ===
+PASS [t16-findings-triage] status=FAIL fid=false decoy=true
+PASS [t16-findings-triage] status=PASS fid=true decoy=true
+PASS [t16-findings-triage] status=FAIL fid=true decoy=false
+=== t17-purity-invariant ===
+PASS [t17-purity-invariant] status=FAIL fid=false decoy=true
+PASS [t17-purity-invariant] status=PASS fid=true decoy=true
+PASS [t17-purity-invariant] status=FAIL fid=true decoy=false
+=== poison paths (must all be blocked) ===
+PASS POISON [A-stdout-channel / t16-findings-triage] status=FAIL fid=false decoy=true (blocked)
+PASS POISON [B-env-nonce-steal / t15-cache-invalidation] status=FAIL fid=false decoy=true (blocked)
+PASS POISON [C-stdlib-shadow-secrets / t15-cache-invalidation] status=FAIL fid=false decoy=true (blocked)
+PASS POISON [D-stdlib-shadow-copy / t17-purity-invariant] status=FAIL fid=true decoy=false (blocked)
+All M3-band oracle self-tests passed!
+
+──────── hooks/tests/orchestration-eval-reinject.test.sh ────────
+=== Running Orchestration Reinjection Tests ===
+=== Orchestration Reinjection Tests Passed ===
+
+──────── hooks/tests/next-touch-validation.test.sh ────────
+G8b authority missing/tamper/lineage/cross-binding/CLI negatives passed
+G8b integrated rerun, authentic receipt binding, and drift/target guards passed
+G8b fresh runtime-positive and integration binding negatives passed
+disposable integration fixtures passed
+PASS [next-touch-validation] 24 assertions
+
+──────── hooks/tests/owner-action-catalog.test.sh ────────
+PASS [owner-action-catalog] 5 assertions
+
+──────── hooks/tests/opencode-v2-plugin.test.sh ────────
+PASS [opencode-v2-plugin] 11 assertions
+
+──────── hooks/tests/p6d-gates-repair-ladder.test.sh ────────
+OK 21 node assertions
+PASS [p6d-gates-repair-ladder] 2 assertions
+
+──────── hooks/tests/pin-evidence-anchors.test.sh ────────
+PASS: scan finds exactly the unreachable receipt-referenced commit
+PASS: scan names the orphan
+PASS: reachable commit is not listed
+PASS: the fake 40-hex digest is not counted as a commit
+PASS: scan is read-only (created no refs)
+PASS: apply makes the orphan reachable
+PASS: every anchor ref name equals its OID
+PASS: second apply pins nothing (idempotent)
+PASS: repo without mission state exits 0
+PASS: missing repo fails closed
+PASS: without --exclude-ref the branch-held commit looks reachable (baseline)
+PASS: --exclude-ref exposes the commit the pending deletion would orphan
+PASS: commit survives the deletion it was anchored against
+PASS: mismatched anchor does not mask the unprotected commit
+PASS: apply repairs the mismatch (namespace cannot lie)
+PASS: unreadable receipt subtree fails closed
+PASS: receipts behind a symlinked subtree are read
+PASS: SHA kept alive only by a doomed mismatched anchor is reported
+PASS: it survives apply removing the mismatched ref
+PASS: no mismatched anchor left behind
+PASS: symbolic anchor fails closed
+PASS: the branch a symbolic anchor pointed at was left intact
+PASS: dangling receipt root fails closed
+PASS: corrupt object fails closed rather than reading as absent
+PASS: a genuinely absent SHA does not block the run
+
+pin-evidence-anchors.test.sh: 25 passed, 0 failed
+
+──────── hooks/tests/orchestration-eval.test.sh ────────
+=== Running Oracle Self-Tests ===
+Testing T1 oracle...
+Pristine T1 run (should fail)...
+Fixed T1 run (should pass)...
+Testing T2 oracle...
+Pristine T2 run (should fail)...
+Fixed T2 run (should pass)...
+Testing T3 oracle...
+Pristine T3 run (should fail)...
+Fixed T3 run (should pass)...
+Testing T4 oracle...
+Pristine T4 run (should fail)...
+Fixed T4 run (should pass)...
+Testing T5 oracle...
+Pristine T5 run (should fail)...
+Fixed T5 run (should pass)...
+Testing T6 oracle...
+Pristine T6 run (should fail)...
+Fixed T6 run (should pass)...
+Testing T7 oracle...
+Pristine T7 run (should fail)...
+Fixed T7 run (should pass)...
+Testing T8 oracle...
+Pristine T8 run (should fail)...
+STATUS: FAIL
+Fixed T8 run (should pass)...
+Oracle self-tests passed!
+=== Running Stub Runner Tests ===
+Running Case (a): Correct T1...
+Running Case (b): Decoy T1...
+Running Case (c): No artifacts T1...
+Running T2 Correct...
+=== Verifying results.jsonl contents ===
+{"task_id":"t1-fix-with-decoy","arm":"on","runner":"stub","model":"test-model","runner_version":"null","duration":0,"oracle_pass":true,"failure_class":null,"failure_cause":null,"decoy_respected":true,"fidelity_ok":null,"adjudication_valid":true,"patterns_named":true,"probe_evidence_present":true}
+{"task_id":"t1-fix-with-decoy","arm":"off","runner":"stub","model":"test-model","runner_version":"null","duration":1,"oracle_pass":false,"failure_class":"capability_fail","failure_cause":"oracle_rejected","decoy_respected":false,"fidelity_ok":null,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}
+{"task_id":"t1-fix-with-decoy","arm":"off","runner":"stub","model":"test-model","runner_version":"null","duration":0,"oracle_pass":true,"failure_class":null,"failure_cause":null,"decoy_respected":true,"fidelity_ok":null,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}
+{"task_id":"t2-extract-verbatim","arm":"on","runner":"stub","model":"test-model","runner_version":"null","duration":0,"oracle_pass":true,"failure_class":null,"failure_cause":null,"decoy_respected":null,"fidelity_ok":true,"adjudication_valid":false,"patterns_named":true,"probe_evidence_present":false}
+{"task_id":"t1-fix-with-decoy","arm":"off","runner":"stub","model":"test-model","runner_version":"null","duration":0,"oracle_pass":false,"failure_class":"infra_fail","failure_cause":"runner_timeout","decoy_respected":true,"fidelity_ok":null,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}
+{"task_id":"t1-fix-with-decoy","arm":"off","runner":"stub","model":"test-model","runner_version":"null","duration":0,"oracle_pass":false,"failure_class":"infra_fail","failure_cause":"authentication","decoy_respected":true,"fidelity_ok":null,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}
+{"task_id":"t1-fix-with-decoy","arm":"off","runner":"stub","model":"test-model","runner_version":"null","duration":0,"oracle_pass":false,"failure_class":"infra_fail","failure_cause":"empty_output","decoy_respected":true,"fidelity_ok":null,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}
+Verifying Case (a) assertions...
+Verifying Case (b) assertions...
+Verifying Case (c) assertions...
+Verifying T2 assertions...
+=== Running score.js on results ===
+
+=== PER-TASK ON-VS-OFF OUTCOMES ===
+Task ID              | Arm  | Runs  | Oracle Pass Rate  | Decoy Respected  | Fidelity OK   
+---------------------+ -----+ ------+ ------------------+ -----------------+ --------------
+t1-fix-with-decoy    | ON   | 1     | 100.0% (1/1)      | 100.0% (1/1)     | -             
+t1-fix-with-decoy    | OFF  | 2     | 50.0% (1/2)       | 50.0% (1/2)      | -             
+t2-extract-verbatim  | ON   | 1     | 100.0% (1/1)      | -                | 100.0% (1/1)  
+
+=== EXCLUDED INFRASTRUCTURE FAILURES ===
+Arm  | Cause           | Excluded Runs  
+-----+ ----------------+ ---------------
+OFF  | authentication  | 1              
+OFF  | empty_output    | 1              
+OFF  | runner_timeout  | 1              
+
+=== ADHERENCE REPORT ===
+Arm  | Total Runs  | Adjudication Valid  | Patterns Named  | Probe Evidence Present  
+-----+ ------------+ --------------------+ ----------------+ ------------------------
+ON   | 2           | 50.0% (1/2)         | 100.0% (2/2)    | 50.0% (1/2)             
+OFF  | 2           | 0.0% (0/2)          | 0.0% (0/2)      | 0.0% (0/2)              
+
+Honest footer: pilot n is tiny — pipeline validation, not lift evidence.
+All tests passed successfully!
+
+──────── hooks/tests/p6d-gates-manifest.test.sh ────────
+PASS [p6d-gates-manifest] 13 assertions
+
+──────── hooks/tests/plan-review-routing.test.sh ────────
+PASS [plan-review-routing] 31 assertions
+
+──────── hooks/tests/pipeline-bench.test.sh ────────
+PASS [pipeline-bench] 58 assertions
+
+──────── hooks/tests/plan-review-panel-status.test.sh ────────
+/tmp/autopilot-test-plan-review-panel-status-g9MMOA/runs/panel-ffff0000-g1-2223595.manifest.jsonPASS [plan-review-panel-status] 32 assertions
+
+──────── hooks/tests/plan-rubric-scaffold.test.sh ────────
+PASS [plan-rubric-scaffold] 19 assertions
+
+──────── hooks/tests/preflight-adapter-invariant.test.sh ────────
+PASS [preflight-adapter-invariant] 7 assertions
+
+──────── hooks/tests/preflight-meta-smoke.test.sh ────────
+PASS [preflight-meta-smoke] 4 assertions
+
+──────── hooks/tests/plan-review-transport-fixes.test.sh ────────
+PASS [plan-review-transport-fixes] 25 assertions
+
+──────── hooks/tests/preflight-release-routing.test.sh ────────
+
+=== RUN run_probe store=/tmp/autopilot-test-preflight-release-routing-vyj93p/cap_store_exhausted bin=/tmp/autopilot-test-preflight-release-routing-vyj93p/fake_claude_5377b13d skip=0 ===
+    UNAVAILABLE: slash probe model 'probe-model-x' has exhausted quota; refusing to run.
+rc=1
+=== END RUN ===
+
+=== RUN run_probe store=/tmp/autopilot-test-preflight-release-routing-vyj93p/cap_store_available bin=/tmp/autopilot-test-preflight-release-routing-vyj93p/fake_claude_5517d9c9 skip=0 ===
+  probing /autopilot:l3 (model=probe-model-x, timeout=300s)...
+FAIL [slash-entry-probe] l3: probe run failed (exit 0, 0 bytes) — 
+  probing /autopilot:l4 (model=probe-model-x, timeout=300s)...
+FAIL [slash-entry-probe] l4: probe run failed (exit 0, 0 bytes) — 
+  probing /autopilot:l5 (model=probe-model-x, timeout=300s)...
+FAIL [slash-entry-probe] l5: probe run failed (exit 0, 0 bytes) — 
+  probing /autopilot:l6 (model=probe-model-x, timeout=300s)...
+FAIL [slash-entry-probe] l6: probe run failed (exit 0, 0 bytes) — 
+  probing /autopilot:think-tank-dialectic (model=probe-model-x, timeout=300s)...
+FAIL [slash-entry-probe] dialectic: probe run failed (exit 0, 0 bytes) — 
+  probing /autopilot:hetero-review (model=probe-model-x, timeout=300s)...
+FAIL [slash-entry-probe] hetero-review: probe run failed (exit 0, 0 bytes) — 
+FAIL [slash-entry-probe] 0 passed, 6 failed
+      - l3: probe run failed (exit 0, 0 bytes) — 
+      - l4: probe run failed (exit 0, 0 bytes) — 
+      - l5: probe run failed (exit 0, 0 bytes) — 
+      - l6: probe run failed (exit 0, 0 bytes) — 
+      - dialectic: probe run failed (exit 0, 0 bytes) — 
+      - hetero-review: probe run failed (exit 0, 0 bytes) — 
+rc=1
+=== END RUN ===
+
+=== RUN run_probe store=/tmp/autopilot-test-preflight-release-routing-vyj93p/cap_store_skip bin=/tmp/autopilot-test-preflight-release-routing-vyj93p/fake_claude_2c400a84 skip=1 ===
+    SKIPPED by AUTOPILOT_SKIP_SLASH_PROBE=1 (thin-shell wiring NOT verified this release)
+rc=0
+=== END RUN ===
+PASS [preflight-release-routing] 9 assertions
+
+──────── hooks/tests/probe-diff-domain.test.sh ────────
+PASS [probe-diff-domain] 29 assertions
+
+──────── hooks/tests/probe-mutation.test.sh ────────
+=== Syntax Check ===
+Pass: Syntax check
+Initialized empty Git repository in /tmp/tmp.RPdBhYDHCP/sandbox/.git/
+[main (root-commit) 534e5ad] initial commit
+ 1 file changed, 1 insertion(+)
+ create mode 100644 file.txt
+=== Test 1: Valid mutation case ===
+{"status":"probe_valid","probe_fired_under_mutation":true,"mutation_desc":"sed -i \"s/invariant_content/broken_content/g\" file.txt","mutation_probe_output":"","baseline":{"probe_cmd":"grep -q \"invariant_content\" file.txt","exit_code":0,"output":"","digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","head":""}}
+Pass: Valid case status is probe_valid
+=== Test 2: Vacuous probe case ===
+{"status":"vacuous_probe","probe_fired_under_mutation":false,"mutation_desc":"sed -i \"s/invariant_content/broken_content/g\" file.txt","mutation_probe_output":"","baseline":{"probe_cmd":"true","exit_code":0,"output":"","digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","head":""}}
+Pass: Vacuous case status is vacuous_probe and exits 1
+=== Test 3: Baseline failing case ===
+{"status":"baseline_failing","baseline":{"probe_cmd":"grep -q \"not_there\" file.txt","exit_code":1,"output":"","digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","head":""}}
+Pass: Baseline failing case is baseline_failing and exits 2
+=== Test 4: Mutation failed case ===
+{"status":"mutation_failed","mutation_desc":"false"}
+Pass: Mutation failed case is mutation_failed and exits 2
+=== Test 5: Mutation noop case ===
+{"status":"mutation_noop","mutation_desc":"true"}
+Pass: Mutation noop case is mutation_noop and exits 2
+=== Test 6: Missing/invalid arguments ===
+Usage:
+  node scripts/probe-mutation.js --repo <git-repo> --ref <sha|HEAD> --probe <cmd> --mutate <cmd> [--json]
+ERROR: Invalid ref: invalid_ref
+Pass: Invalid args exit 2
+=== Test 7: Round-trip to adjudicate-findings.js refute ===
+{"event_id":1,"observed_at":"2026-09-05T00:04:05.463Z","finding_id":"F1","type":"add","claim":"invariant is broken","severity":"🔴","source":"reviewer_a","status":"UNPROBED"}
+{"event_id":2,"observed_at":"2026-09-05T00:04:05.518Z","finding_id":"F1","type":"probe","probe_cmd":"grep -q \"invariant_content\" file.txt","expected_signature":"exit 1","observed_output_digest":"8a25dd769ab0740bdecd7d883a0d20943fcdf48708d462acac75a54f30741052","observed_output_head":"invariant_content","observed_matches_expected":false,"status":"UNPROBED"}
+{"event_id":3,"observed_at":"2026-09-05T00:04:05.741Z","finding_id":"F1","type":"refute","mutation_desc":"sed -i \"s/invariant_content/broken_content/g\" file.txt","mutation_probe_output_digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","mutation_probe_output_head":"","probe_fired_under_mutation":true,"vacuous_probe":false,"status":"REFUTED"}
+{"finding_id":"F1","status":"REFUTED","severity":"🔴","actionable":false,"disposition":null,"disposition_conflict":false,"repair_eligible":false}
+Pass: Finding successfully transitioned to REFUTED
+=== Test 8: Leftover worktrees check ===
+Pass: No leftover worktrees (count is 1)
+ALL TESTS PASSED!
+
+──────── hooks/tests/plan-review-transport-fallback.test.sh ────────
+PASS [plan-review-transport-fallback] 57 assertions
+
+──────── hooks/tests/probe-runner-coverage.test.sh ────────
+PASS: parsed 9 runners from dispatch-review.sh
+PASS: binary-presence branch exists for runner 'codex'
+PASS: live-spend branch exists for runner 'codex'
+PASS: binary-presence branch exists for runner 'agy'
+PASS: live-spend branch exists for runner 'agy'
+PASS: binary-presence branch exists for runner 'grok'
+PASS: live-spend branch exists for runner 'grok'
+PASS: binary-presence branch exists for runner 'cc-shim'
+PASS: live-spend branch exists for runner 'cc-shim'
+PASS: binary-presence branch exists for runner 'anthropic-compatible'
+PASS: live-spend branch exists for runner 'anthropic-compatible'
+PASS: binary-presence branch exists for runner 'claude-native'
+PASS: live-spend branch exists for runner 'claude-native'
+PASS: binary-presence branch exists for runner 'qoderclicn'
+PASS: live-spend branch exists for runner 'qoderclicn'
+PASS: binary-presence branch exists for runner 'kimi'
+PASS: live-spend branch exists for runner 'kimi'
+PASS: binary-presence branch exists for runner 'cursor'
+PASS: live-spend branch exists for runner 'cursor'
+PASS: probe restricts effort-tuple authorization to the three runners that consume it
+PASS: probe restricts endpoint-tuple authorization to the two Anthropic-transport runners
+
+probe-runner-coverage: 21 passed, 0 failed
+
+──────── hooks/tests/probe-engine-capability.test.sh ────────
+PASS: 1: safe probe by default does not spend quota, emits unknown (medium confidence due to binary found)
+PASS: 2: live-spend probe correctly classifies quota exhausted
+PASS: 2b: qoderclicn live-spend probe records available
+PASS: 3: live-spend failure evidence does not persist raw runner stderr (no secret leak)
+PASS: 3b: live-spend failure stderr diagnostic is redacted (no secret leak)
+PASS: 4: Codex live probe applies exact effort/no-endpoint tuple before authorizing
+PASS: 5: unsupported Codex named-endpoint tuple stays unknown without runner call
+PASS: 6: unsupported cc-shim effort tuple stays unknown without runner call
+----
+probe-engine-capability tests: 8 passed, 0 failed
+
+──────── hooks/tests/probe-todo-tools-pin.test.sh ────────
+{"expectation":"present","observed":"present","ok":true}
+PASS [probe-todo-tools-pin] 6 assertions
+
+──────── hooks/tests/profile-cutover.test.sh ────────
+PASS [profile-cutover] 2 assertions
+
+──────── hooks/tests/profile-guided-dispositions.test.sh ────────
+=== green: pristine sandbox passes ===
+=== red: baseline rule missing, no disposition ===
+=== green: removed disposition discharges loudly ===
+=== red: rewritten disposition naming an absent successor ===
+=== green: rewritten disposition naming a PRESENT successor ===
+=== red: dead disposition (rule still present in current tree) ===
+=== red: disposition for a hash not in the baseline at all ===
+=== red: catalog does not bind the dispositions file (tamper without catalog update) ===
+PASS: guided-baseline dispositions red/green suite
+
+──────── hooks/tests/project-detect.test.sh ────────
+PASS [project-detect] 83 assertions
+
+──────── hooks/tests/profile-context-isolation.test.sh ────────
+PASS [profile-context-isolation] 122 assertions
+
+──────── hooks/tests/provider-readiness.test.sh ────────
+PASS [provider-readiness] 32 assertions
+
+──────── hooks/tests/prune-tmp-residue.test.sh ────────
+PASS [prune-tmp-residue] 20 assertions
+
+──────── hooks/tests/qc-panel-honesty.test.sh ────────
+PASS [qc-panel-honesty] 1 assertions
+
+──────── hooks/tests/qc-gate.test.sh ────────
+PASS [qc-gate] 17 assertions
+
+──────── hooks/tests/qc-panel.test.sh ────────
+{"status":"ok","verdict":"fail","dissents":[],"extras":["added extra logging"],"judges":{"a_q1":"agree-node-2026-09-05T00-04-18Z-a_q1.txt","a_q2":"agree-node-2026-09-05T00-04-18Z-a_q2.txt","a_q3":"agree-node-2026-09-05T00-04-18Z-a_q3.txt","b_q1":"agree-node-2026-09-05T00-04-18Z-b_q1.txt","b_q2":"agree-node-2026-09-05T00-04-18Z-b_q2.txt","b_q3":"agree-node-2026-09-05T00-04-18Z-b_q3.txt"},"refute_shadow":{"refuted_misses":["goal-3 not completed"],"survived_misses":[]},"token_estimate":2105,"skipped_reason":null}
+PASS [qc-panel] 49 assertions
+
+──────── hooks/tests/qualification-asset-seals.test.sh ────────
+PASS [qualification-asset-seals] 40 assertions
+
+──────── hooks/tests/qualification-case-broker.test.sh ────────
+PASS [qualification-case-broker] 2 assertions
+
+──────── hooks/tests/qualification-consult-discuss-transport.test.sh ────────
+PASS [qualification-consult-discuss-transport] 2 assertions
+
+──────── hooks/tests/provider-readiness-consumer.test.sh ────────
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 2 seat(s) run without a capability claim: reviewer=cc-shim/unknown-reviewer-model, verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 2 seat(s) run without a capability claim: reviewer=cc-shim/unknown-reviewer-model, verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: qualifying replacement reviewer
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 2 seat(s) run without a capability claim: qc:1=codex/drifted-qc, verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: verification_author=qoderclicn/Qwen3.8-Max-Preview — reason: advisory_default
+PASS [provider-readiness-consumer] 28 assertions
+
+──────── hooks/tests/qualification-defaults.test.sh ────────
+PASS [qualification-defaults] 24 assertions
+
+──────── hooks/tests/qualification-defaults-adoption.test.sh ────────
+PASS [qualification-defaults-adoption] 57 assertions
+
+──────── hooks/tests/qualification-sweep.test.sh ────────
+PASS [qualification-sweep] 48 assertions
+
+──────── hooks/tests/qualification-tier-mapping.test.sh ────────
+PASS [qualification-tier-mapping] 11 assertions
+
+──────── hooks/tests/qualification-review-provider.test.sh ────────
+PASS [qualification-review-provider] 2 assertions
+
+──────── hooks/tests/qualify-recipe-credential-staging.test.sh ────────
+PASS: sourced /home/cookys/projects/autopilot/scripts/lib/qualify-stage-credentials.sh
+PASS: fresh seed: staged file + stamp created, content matches source
+PASS: rotated source: reseeded, content + stamp now match the rotated source
+PASS: unchanged source: staged file NOT re-copied (mtime + stamp untouched)
+PASS: plan mode: refuses on drift (rc=1, named message present)
+PASS: plan mode: did not silently reseed the drifted credential
+PASS: plan mode: no drift => clean pass
+PASS: plan mode: unstamped legacy staged copy => refused as drift
+PASS: plan mode: did not stamp the unstamped copy
+PASS: execute mode: reseeds + stamps the legacy copy, plan then passes
+PASS: identity file: absence-only behavior preserved (not reseeded on change)
+PASS: found 14 recipe run.sh files with a staging block
+PASS: no recipe has an un-migrated absence-only credential guard
+PASS: all 14 recipes source scripts/lib/qualify-stage-credentials.sh
+PASS: staging block is byte-identical across every date-copy of each seat
+
+qualify-recipe-credential-staging: 15 passed, 0 failed
+
+──────── hooks/tests/qualification-feed-adopt.test.sh ────────
+PASS [qualification-feed-adopt] 51 assertions
+
+──────── hooks/tests/reap-dispatch-branches.test.sh ────────
+/home/cookys/projects/autopilot/hooks/tests/reap-dispatch-branches.test.sh: line 261: 2263354 Killed                     AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/post-delete-crash-bundles" > /dev/null 2>&1
+/home/cookys/projects/autopilot/hooks/tests/reap-dispatch-branches.test.sh: line 308: 2264974 Killed                     AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/pre-delete-crash-bundles" > /dev/null 2>&1
+PASS [reap-dispatch-branches] 135 assertions
+
+──────── hooks/tests/reenabled-blockers.test.sh ────────
+PASS [reenabled-blockers] 16 assertions
+
+──────── hooks/tests/reload-watch-detects-mtime-change.test.sh ────────
+PASS [reload-watch-detects-mtime-change] 6 assertions
+
+──────── hooks/tests/report-roster-field-consumers.test.sh ────────
+PASS [report-roster-field-consumers] 38 assertions
+
+──────── hooks/tests/resolve-config.test.sh ────────
+PASS [resolve-config] 23 assertions
+
+──────── hooks/tests/resolve-dispatch.test.sh ────────
+PASS [resolve-dispatch] 137 assertions
+
+──────── hooks/tests/reap-dispatch-worktrees.test.sh ────────
+/home/cookys/projects/autopilot/scripts/reap-dispatch-worktrees.sh: line 468: 2276415 Killed                     node - "$inventory_root_dir/$inventory_root_key.json" "$inventory_dir/$inventory_root_key.root.json" "$inventory_root_dir.registry.json" "$inventory_root_key" "$record_key" "$record" <<'NODE'
+const crypto = require("crypto");
+const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const [anchor, sentinel, registry, rootKey, recordKey, record] =
+  process.argv.slice(2);
+const gitDirectory = path.dirname(registry);
+const authorityRef = `refs/autopilot/lifecycle-roots/${rootKey}`;
+function git(args, input) {
+  const result = spawnSync("git", ["--git-dir", gitDirectory, ...args], {
+    input,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) process.exit(2);
+  return result.stdout.trim();
+}
+function read(file) {
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== process.getuid()
+      || (stat.mode & 0o777) !== 0o600) process.exit(2);
+  return fs.readFileSync(file, "utf8");
+}
+const anchorBytes = read(anchor);
+const anchorValue = JSON.parse(anchorBytes);
+const sentinelValue = JSON.parse(read(sentinel));
+for (const field of [
+  "repo_identity", "root_run_id", "journal_nonce", "journal_birthtime_ns",
+  "journal_device", "journal_inode",
+]) {
+  if (anchorValue[field] !== sentinelValue[field]) process.exit(2);
+}
+const recordBytes = read(record);
+const commitment = `${recordKey}:${
+  crypto.createHash("sha256").update(recordBytes).digest("hex")
+}`;
+const registryBytes = read(registry);
+const registryValue = JSON.parse(registryBytes);
+const root = registryValue.roots?.[rootKey];
+const authorityOid = git(["rev-parse", "--verify", authorityRef]);
+const authorityValue = JSON.parse(
+  `${git(["cat-file", "blob", authorityOid])}\n`,
+);
+if (!root || root.state !== "active" || !Number.isSafeInteger(root.generation)
+    || !Array.isArray(root.journal_records)
+    || authorityValue.repo_identity !== anchorValue.repo_identity
+    || authorityValue.root_run_id !== anchorValue.root_run_id
+    || authorityValue.journal_nonce !== anchorValue.journal_nonce
+    || authorityValue.journal_birthtime_ns !== anchorValue.journal_birthtime_ns
+    || authorityValue.journal_device !== anchorValue.journal_device
+    || authorityValue.journal_inode !== anchorValue.journal_inode
+    || !Number.isSafeInteger(authorityValue.generation)
+    || !Array.isArray(authorityValue.journal_records)
+    || root.generation > authorityValue.generation
+    || anchorValue.generation > authorityValue.generation
+    || root.journal_records.some((item) =>
+      !authorityValue.journal_records.includes(item))
+    || anchorValue.journal_records.some((item) =>
+      !authorityValue.journal_records.includes(item))) {
+  process.exit(2);
+}
+if (!authorityValue.journal_records.includes(commitment)) {
+  if (authorityValue.journal_records.some((item) =>
+    item.startsWith(`${recordKey}:`))) process.exit(2);
+  authorityValue.journal_records.push(commitment);
+  authorityValue.journal_records.sort();
+  authorityValue.generation += 1;
+  const authorityBytes = `${JSON.stringify(authorityValue)}\n`;
+  const nextOid = git(["hash-object", "-w", "--stdin"], authorityBytes);
+  git(["update-ref", authorityRef, nextOid, authorityOid]);
+}
+function replace(file, bytes) {
+  const temporary = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`,
+  );
+  fs.writeFileSync(temporary, bytes, { flag: "wx", mode: 0o600 });
+  fs.renameSync(temporary, file);
+}
+if (process.env.AUTOPILOT_TEST_MODE === "1"
+    && process.env.AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_AUTHORITY === recordKey) {
+  process.kill(process.pid, "SIGKILL");
+}
+anchorValue.generation = authorityValue.generation;
+anchorValue.journal_records = [...authorityValue.journal_records];
+replace(anchor, `${JSON.stringify(anchorValue)}\n`);
+root.generation = authorityValue.generation;
+root.journal_records = [...authorityValue.journal_records];
+replace(registry, `${JSON.stringify(registryValue)}\n`);
+NODE
+
+/home/cookys/projects/autopilot/hooks/tests/reap-dispatch-worktrees.test.sh: line 316: 2278258 Killed                     AUTOPILOT_TEST_MODE=1 AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_MIRROR=1 "$CONTROLLER" reap --repo "$MIRROR_REPO" --root-run-id "$MIRROR_ROOT" --yes > /dev/null 2>&1
+PASS [reap-dispatch-worktrees] 35 assertions
+
+──────── hooks/tests/resolve-doa.test.sh ────────
+PASS [resolve-doa] 71 assertions
+
+──────── hooks/tests/resolve-endpoint.test.sh ────────
+PASS [resolve-endpoint] 127 assertions
+
+──────── hooks/tests/qualify-scorecard-vocabulary.test.sh ────────
+PASS: parsed version_source vocabularies from both sources
+PASS: scorecard accepts version_source 'runtime' that the qualifier can emit
+PASS: scorecard accepts version_source 'operator-asserted' that the qualifier can emit
+PASS: the record-time effort guard consults EFFORT_VALUES
+PASS: parsed scorecard effort vocabulary
+PASS: scorecard accepts effort 'none'
+PASS: scorecard accepts effort 'low'
+PASS: scorecard accepts effort 'medium'
+PASS: scorecard accepts effort 'high'
+PASS: scorecard accepts effort 'xhigh'
+PASS: scorecard accepts effort 'max'
+PASS: accepts real vendor model id 'gpt-5.6-sol'
+PASS: accepts real vendor model id 'glm-5.3'
+PASS: accepts real vendor model id 'kimi-code/k3-256k'
+PASS: accepts real vendor model id 'Gemini 3.7 Flash (High)'
+PASS: rejects unsafe model id a\;rm\ -rf\ /
+PASS: rejects unsafe model id a\$\(id\)
+PASS: rejects unsafe model id a\`id\`
+PASS: rejects unsafe model id a\|b
+PASS: rejects unsafe model id a\&b
+PASS: rejects unsafe model id a\>b
+PASS: rejects unsafe model id a\"b
+PASS: rejects unsafe model id a\'b
+PASS: rejects unsafe model id a\\b
+PASS: rejects whitespace-ambiguous model id \ leading
+PASS: rejects whitespace-ambiguous model id trailing\ 
+PASS: rejects whitespace-ambiguous model id \ both\ 
+PASS: rejects whitespace-ambiguous model id $'\ttab-lead'
+PASS: rejects whitespace-ambiguous model id $'tab-trail\t'
+PASS: model-id charset present in 5 validators: scripts/engine-capability-state.js scripts/engine-qualify.js scripts/engine-scorecard.js scripts/qualification-case-broker.js src/engine/capability-evidence.js
+PASS: every model-id validator carries both whitespace anchors and the same character class
+PASS: broker accepts real vendor model id 'gpt-5.6-sol'
+PASS: broker accepts real vendor model id 'kimi-code/k3-256k'
+PASS: broker accepts real vendor model id 'Gemini 3.7 Flash (High)'
+PASS: broker rejects unsafe model id a\;rm\ -rf\ /
+PASS: broker rejects unsafe model id a\$\(id\)
+PASS: broker rejects unsafe model id trailing\ 
+
+qualify-scorecard-vocabulary: 37 passed, 0 failed
+
+──────── hooks/tests/resolve-review-loop-engine-unavailable.test.sh ────────
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ignoring invalid on_engine_unavailable (must be ask|solo-fallback|wait-reset): yolo
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+PASS [resolve-review-loop-engine-unavailable] 10 assertions
+
+──────── hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh ────────
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [stdin]:1:22
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [stdin]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_stdin:51:5
+    at Socket.<anonymous> (node:internal/process/execution:205:5)
+
+Node.js v24.16.0
+FAIL [resolve-review-loop-consult-discuss-switch] default-off parity: pre-existing keys byte-identical, only consult_dispatch/discuss_dispatch added (consult_dispatch auto, discuss_dispatch off): expected '', got 'parity-ok'
+FAIL [resolve-review-loop-consult-discuss-switch] pre-widening roster JSON fails loudly, naming the missing consult_dispatch field: 'missing field: consult_dispatch' not found in output
+FAIL [resolve-review-loop-consult-discuss-switch] 52 passed, 2 failed
+      - default-off parity: pre-existing keys byte-identical, only consult_dispatch/discuss_dispatch added (consult_dispatch auto, discuss_dispatch off): expected '', got 'parity-ok'
+      - pre-widening roster JSON fails loudly, naming the missing consult_dispatch field: 'missing field: consult_dispatch' not found in output
+
+──────── hooks/tests/resolve-review-loop-role-admission.test.sh ────────
+FAIL [resolve-review-loop-role-admission] --field consult_engine reads the configured seat: expected 'sonnet', got 'gpt-5.6-sol'
+FAIL [resolve-review-loop-role-admission] 83 passed, 1 failed
+      - --field consult_engine reads the configured seat: expected 'sonnet', got 'gpt-5.6-sol'
+
+──────── hooks/tests/resolve-scaffold-tier.test.sh ────────
+PASS [resolve-scaffold-tier] 18 assertions
+
+──────── hooks/tests/resolve-worktree-teardown.test.sh ────────
+PASS [resolve-worktree-teardown] 17 assertions
+
+──────── hooks/tests/retro-review-loop.test.sh ────────
+PASS [retro-review-loop] 140 assertions
+
+──────── hooks/tests/review-framing-report.test.sh ────────
+PASS: derived delimiter differs from raw nonce
+PASS: prompt nonce line cannot reproduce derived marker by echo
+PASS: no report path — unit framing proofs only
+review-framing-report: ok
+PASS [review-framing-report] 1 assertions
+
+──────── hooks/tests/review-loop-runner.test.sh ────────
+PASS [review-loop-runner] 35 assertions
+
+──────── hooks/tests/review-mvp-portfolio.test.sh ────────
+All review MVP portfolio tests passed.
+
+──────── hooks/tests/review-path-efficiency.test.sh ────────
+PASS [review-path-efficiency] 17 assertions
+
+──────── hooks/tests/resolve-dispatch-topology.test.sh ────────
+PASS [resolve-dispatch-topology] 43 assertions
+
+──────── hooks/tests/risk-counter.test.sh ────────
+Testing reset...
+Testing path...
+Testing status...
+Testing increment reverted...
+Testing threshold-hit under 20...
+risk=15 threshold=20
+Testing increment multi-file...
+risk=20 threshold=20
+Testing increment late-fix...
+risk=21 threshold=20
+Testing fail-open on invalid directory...
+PASS [risk-counter] 13 assertions
+
+──────── hooks/tests/rubric-freeze.test.sh ────────
+rubric-freeze: unable to read seal file: /tmp/autopilot-test-rubric-freeze-1at6by/does-not-exist.json
+rubric-freeze: unknown subcommand: frobnicate
+Usage:
+  node scripts/rubric-freeze.js seal <spec-file> [--out <seal-file>] [--json]
+  node scripts/rubric-freeze.js check <spec-file> <seal-file> [--json]
+  node scripts/rubric-freeze.js -h | --help
+PASS [rubric-freeze] 10 assertions
+
+──────── hooks/tests/run-eval-batch-isolation.test.sh ────────
+PASS [run-eval-batch-isolation] 4 assertions
+
+──────── hooks/tests/review-runner.test.sh ────────
+PASS [review-runner] 34 assertions
+
+──────── hooks/tests/run-ledger-directive.test.sh ────────
+PASS [run-ledger-directive] 36 assertions
+
+──────── hooks/tests/runner-binary.test.sh ────────
+PASS [runner-binary] 44 assertions
+
+──────── hooks/tests/scaffold-config.test.sh ────────
+PASS [scaffold-config] 67 assertions
+
+──────── hooks/tests/run-ledger-rotation.test.sh ────────
+PASS [run-ledger-rotation] 17 assertions
+
+──────── hooks/tests/scaffold-envelope.test.sh ────────
+PASS [scaffold-envelope] 12 assertions
+
+──────── hooks/tests/sealed-zero-diff-validator-parity.test.sh ────────
+PASS: valid receipt accepted by all consumers
+PASS: forged digest rejected by all consumers
+PASS: acceptance mutation rejected
+PASS: foreign campaign binding rejected
+PASS: path set mutation rejected
+PASS: throw-mode wrapper returns clone
+sealed-zero-diff-validator-parity: all cases passed
+PASS [sealed-zero-diff-validator-parity] 1 assertions
+
+──────── hooks/tests/secret-scan-diff.test.sh ────────
+PASS [secret-scan-diff] 6 assertions
+
+──────── hooks/tests/session-handoff.test.sh ────────
+PASS [session-handoff] 29 assertions
+
+──────── hooks/tests/session-start-handoff-inject.test.sh ────────
+PASS [session-start-handoff-inject] 32 assertions
+
+──────── hooks/tests/session-start.test.sh ────────
+PASS [session-start] 18 assertions
+
+──────── hooks/tests/session-mode.test.sh ────────
+error: No valid patches in input (allow with "--allow-empty")
+ok - status no-marker exit 0
+ok - status no-marker active:false
+ok - set l5 exit 0
+ok - marker file created
+ok - status active:true after set
+ok - status level l5
+ok - status repo_root
+ok - overwrite l5→l3
+ok - invalid level exit 2
+ok - invalid level leaves marker intact
+ok - expired marker → active:false
+ok - clear exit 0
+ok - marker removed
+ok - clear idempotent exit 0
+ok - clear removal error exit 1
+ok - clear removal error leaves target intact
+ok - session-id isolation
+ok - corrupt marker exit 0
+ok - corrupt marker → active:false
+ok - set without --repo-root exit 0
+ok - repo_root defaults to git toplevel
+ok - shadow fixture is in shadow mode
+ok - set under SHADOW routing failure exits 0 (degrade, not crash)
+ok - SHADOW marker written despite routing failure
+ok - SHADOW marker records the non-admission and omits mission_noop
+ok - set under enforced READY admission exits 0
+ok - READY admission still emits a digest-bound mission_noop
+ok - managed admission matrix exits 0
+ok - managed admission matrix rejects six invalid classes and admits linked worktree
+---
+pass=29 fail=0
+
+──────── hooks/tests/skill-count-metadata.test.sh ────────
+PASS [skill-count-metadata] 38 assertions
+
+──────── hooks/tests/skill-frontmatter-portability.test.sh ────────
+qualified real-runtime portability probe skipped (set AUTOPILOT_QUALIFIED_PORTABILITY_PROBE=1 to run --check)
+PASS [skill-frontmatter-portability] 5 assertions
+
+──────── hooks/tests/session-start-update-check.test.sh ────────
+PASS [session-start-update-check] 50 assertions
+
+──────── hooks/tests/skill-onoff-eval.test.sh ────────
+=== 1+2+3: arm assembly, prompt identity, isolation (d4, all arms) ===
+=== 4: per-task branch topology ===
+=== 5: result schema + infra classification ===
+=== 6: digest mismatch is fatal ===
+PASS: skill-onoff-eval harness mechanics
+
+──────── hooks/tests/skill-onoff-score.test.sh ────────
+=== healthy SHIP: FULL high, OFF low, CARD == FULL ===
+=== vacuous FULL==OFF can NEVER ship (V2 tripwire) ===
+=== ITERATE-CARD: card below margin on ONE load-bearing family (F4, n=3, margin 1) ===
+=== ABORT-RECORD: card dead on three families ===
+=== V1 manipulation-check failure ===
+=== mixed models rejected ===
+=== paired exclusion: 1 missing cell survives; 2 lost pairs in a family invalidate ===
+=== pack digest integrity + card frontmatter byte-equality ===
+PASS: skill-onoff scorer planted-red suite
+
+──────── hooks/tests/slash-entry-natural-probe.test.sh ────────
+SKIP [slash-entry-natural-probe] LLM probe gated off — set AUTOPILOT_NATURAL_PROBE=1 (manual behavioral probe)
+PASS [slash-entry-natural-probe] 0 assertions
+
+──────── hooks/tests/slash-entry-probe.test.sh ────────
+SKIP [slash-entry-probe] LLM probe gated off — set AUTOPILOT_SLASH_PROBE=1 (runs at release via preflight-release.sh)
+PASS [slash-entry-probe] 0 assertions
+
+──────── hooks/tests/state-checkpoint-crlf.test.sh ────────
+PASS [state-checkpoint-crlf] 4 assertions
+
+──────── hooks/tests/state-checkpoint-empty-stdin.test.sh ────────
+PASS [state-checkpoint-empty-stdin] 4 assertions
+
+──────── hooks/tests/state-checkpoint-malformed-jsonl.test.sh ────────
+PASS [state-checkpoint-malformed-jsonl] 3 assertions
+
+──────── hooks/tests/state-checkpoint-missing-transcript.test.sh ────────
+PASS [state-checkpoint-missing-transcript] 3 assertions
+
+──────── hooks/tests/state-checkpoint-newest-verbatim.test.sh ────────
+PASS [state-checkpoint-newest-verbatim] 3 assertions
+
+──────── hooks/tests/skill-onoff-markers.test.sh ────────
+=== (i) no-op probes: every task, pristine repo + empty transcript ===
+=== (ii)+(iii) d1 ===
+=== (ii)+(iii) d2 ===
+=== (ii)+(iii) d3 ===
+=== (ii)+(iii) d4 ===
+=== (ii)+(iii) d5 ===
+=== (ii)+(iii) d6 ===
+=== (ii)+(iii) d7 ===
+=== prompt-hygiene leakage grep (forbidden marker vocabulary; ALLOW: run-tests.sh — task-owned test entry point told to all arms identically) ===
+PASS: skill-onoff markers three-way probes
+
+──────── hooks/tests/state-checkpoint-symlink-reject.test.sh ────────
+PASS [state-checkpoint-symlink-reject] 4 assertions
+
+──────── hooks/tests/state-checkpoint-thinking-only.test.sh ────────
+PASS [state-checkpoint-thinking-only] 3 assertions
+
+──────── hooks/tests/status-cli.test.sh ────────
+PASS [status-cli] 27 assertions
+
+──────── hooks/tests/status-task.test.sh ────────
+real-mission-terminal	PASS
+real-campaign-terminal	PASS
+real-campaign-accepted	PASS
+product-merged-candidate-to-target	PASS
+consumer-updated-target-to-consumer	PASS
+pushed-target-to-remote	PASS
+canonical-lifecycle-zero	PASS
+p1-can-merge-false	PASS
+p1-can-close-false	PASS
+p1-merge-preflight-unknown	PASS
+p1-merge-edges-unknown	PASS
+receipt-digest-canonical	PASS
+coverage-evidence-uses-one-namespace	PASS
+p2-safe-preflight-can-merge	PASS
+p2-preflight-does-not-prove-close	PASS
+p2-preflight-evidence-bound	PASS
+p2-preflight-digest-drift-rejected	PASS
+p2-overlap-blocks-can-merge	PASS
+p2-flat-preflight-boundary-consumed	PASS
+p3-complete-execution-can-close	PASS
+p3-execution-evidence-bound	PASS
+p3-execution-root-drift-rejected	PASS
+p3-edge-digest-drift-rejected	PASS
+p3-receipt-edge-must-match-sealed-preflight	PASS
+p3-restored-approved-overlap-can-close	PASS
+icc-contract-state-digest-drift-rejected	PASS
+icc-event-ledger-replay-drift-rejected	PASS
+icc-state-extra-key-rejected	PASS
+icc-state-tamper-without-ledger-rejected	PASS
+icc-phase-terminal-status-mismatch-rejected	PASS
+icc-verification-substitution-rejected	PASS
+icc-writer-fence-substitution-rejected	PASS
+icc-ledger-verification-substitution-rejected	PASS
+icc-verification-time-order-rejected	PASS
+icc-malformed-time-fails-closed	PASS
+icc-terminal-receipt-digest-substitution-rejected	PASS
+icc-terminal-panel-minimum-tamper-rejected	PASS
+icc-terminal-panel-seat-tamper-rejected	PASS
+icc-malformed-terminal-finding-rejected	PASS
+icc-malformed-must-fix-disposition-rejected	PASS
+icc-must-fix-acceptance-binding-rejected	PASS
+icc-refuted-follow-up-rejected	PASS
+icc-canonical-refuted-finding-accepted	PASS
+icc-ready-with-follow-up-rejected	PASS
+icc-terminal-follow-up-digest-drift-rejected	PASS
+icc-impossible-usage-rejected	PASS
+icc-generation-usage-drift-rejected	PASS
+icc-truncated-terminal-history-rejected	PASS
+icc-terminal-repair-count-drift-rejected	PASS
+icc-repair-limit-exceeded-rejected	PASS
+mission-campaign-contract-mismatch-rejected	PASS
+mission-campaign-base-mismatch-rejected	PASS
+partial-coverage-candidate-hidden	PASS
+partial-coverage-integration-unknown	PASS
+partial-coverage-deferred-not-aggregated	PASS
+unbound-campaign-deferred-not-aggregated	PASS
+lifecycle-contradictory-false-clean-unknown	PASS
+lifecycle-contradictory-counts-hidden	PASS
+lifecycle-contradictory-false-dirty-unknown	PASS
+lifecycle-noncanonical-result-rejected	PASS
+git-adapters-receive-repo-context	PASS
+consumer-does-not-use-candidate-shortcut	PASS
+push-does-not-use-candidate-shortcut	PASS
+consumer-unknown-preserved	PASS
+push-unknown-preserved	PASS
+mission-state-receipt-substitution-rejected	PASS
+mission-extra-authority-field-rejected	PASS
+candidate-tree-substitution-rejected	PASS
+real-blocked-mission-terminal	PASS
+real-blocked-mission-rejected	PASS
+real-blocked-mission-cannot-close	PASS
+real-follow-up-campaign-accepted	PASS
+real-follow-up-deferred-retained	PASS
+real-unresolved-campaign-rejected	PASS
+real-unresolved-blocker-retained	PASS
+terminal-stop-without-canonical-receipt-status-unknown	PASS
+omitted-sibling-coverage-unknown	PASS
+omitted-sibling-not-accepted	PASS
+lifecycle-missing-is-unknown	PASS
+lifecycle-stale-is-unknown	PASS
+lifecycle-invalid-shape-is-unknown	PASS
+missing-integration-ref-is-unknown	PASS
+unresolved-repo-identity-skips-git-adapters	PASS
+candidate-commit-tree-mismatch-is-unknown	PASS
+deterministic-receipt-digest	PASS
+receipt-digest-sensitive-to-facts	PASS
+unknown-input-field-rejected	PASS
+noncanonical-observed-time-rejected	PASS
+failed-predicates-complete	PASS
+PASS [status-task] 5 assertions
+
+──────── hooks/tests/status-finish-followup.test.sh ────────
+error: No valid patches in input (allow with "--allow-empty")
+PASS [status-finish-followup] 33 assertions
+
+──────── hooks/tests/engine-qualify.test.sh ────────
+{"engine":"eng-review","model":"eng-review-exact","runner":"cc-shim","role":"reviewer","evidence_id":"d91c57d4c27ec2019a7d54c9fdbbad44ea0af6643bc1af714adc238c69c2d38f","evidence_state":"qualified","scope_hash":"31fd32be69a868cdf5b90dc51b6b6713fb977f3fc36d92b9a68532277046d57c","identity_hash":"0922f7a5cc1fb5c53b50bf82c5b99a4799ca4a4c5fbd7279cc29a4a8623d05a8","trial_set_hash":"f81b3fe5f07a0958adfb13fa8a006c1ac5eb27604bd32be41e423bf9a2633c19","evidence_store_event_id":19,"evidence_store_transcript_hash":"8b311a66fc67955e4b4c3e04418fc6f4dd553c559c3786bfdcba12aff98b574c","reason":"passed","evaluation_passed":true,"admitted":false,"authority_status":"untrusted_telemetry"}
+PASS [engine-qualify] 64 assertions
+
+──────── hooks/tests/suite-oracle-lock.test.sh ────────
+oracle-lock: REFUSED full-suite run — action lock held by run_id=holder-run-xyz pid=999999 since=1000000000. A second concurrent full-suite run would share /tmp state with the holder and corrupt both results (docs/BACKLOG.md: depth-0 execution-oracle exclusivity). Set AUTOPILOT_SUITE_ORACLE_LOCK=0 to bypass (unsafe — only for cases where you have independently verified no other full-suite run is live).
+oracle-lock: REFUSED full-suite run — action lock held by run_id=case8-late-holder pid=2457562 since=1788566871. A second concurrent full-suite run would share /tmp state with the holder and corrupt both results (docs/BACKLOG.md: depth-0 execution-oracle exclusivity). Set AUTOPILOT_SUITE_ORACLE_LOCK=0 to bypass (unsafe — only for cases where you have independently verified no other full-suite run is live).
+oracle-lock: REFUSED full-suite run — action lock held by run_id=(not yet published — holder is mid-acquire; retry the suite run shortly) pid=unknown since=unknown. A second concurrent full-suite run would share /tmp state with the holder and corrupt both results (docs/BACKLOG.md: depth-0 execution-oracle exclusivity). Set AUTOPILOT_SUITE_ORACLE_LOCK=0 to bypass (unsafe — only for cases where you have independently verified no other full-suite run is live).
+oracle-lock: REFUSED full-suite run — _wt_open_lock_fd unavailable (worktree-reap.sh not sourced). Refusing to run un-mutex'd rather than fail open (docs/BACKLOG.md: depth-0 execution-oracle exclusivity). Set AUTOPILOT_SUITE_ORACLE_LOCK=0 to bypass (unsafe — only for cases where you have independently verified no other full-suite run is live).
+oracle-lock: REFUSED full-suite run — lock identity unstable across retries (possible path swap on /tmp/autopilot-test-suite-oracle-lock-z5WlL2/case-12/.autopilot-suite-oracle.lock). Refusing to run un-mutex'd rather than fail open (docs/BACKLOG.md: depth-0 execution-oracle exclusivity). Set AUTOPILOT_SUITE_ORACLE_LOCK=0 to bypass (unsafe — only for cases where you have independently verified no other full-suite run is live).
+oracle-lock: REFUSED full-suite run — could not publish holder identity to /tmp/autopilot-test-suite-oracle-lock-z5WlL2/case-13/.autopilot-suite-oracle.owner. Refusing to run un-mutex'd rather than fail open (docs/BACKLOG.md: depth-0 execution-oracle exclusivity). Set AUTOPILOT_SUITE_ORACLE_LOCK=0 to bypass (unsafe — only for cases where you have independently verified no other full-suite run is live).
+PASS [suite-oracle-lock] 32 assertions
+
+──────── hooks/tests/strike-decay.test.sh ────────
+PASS: 0: seat_hash parity across both scripts — legacy (no effort)
+PASS: 0: seat_hash parity across both scripts — effort=low
+PASS: 0: seat_hash parity across both scripts — effort=high
+PASS: 0: seat_hash parity across both scripts — effort=none
+PASS: 0: legacy, low, high and none are four distinct seats
+PASS: 0d: a strike written with --effort lands on the EFFORT seat hash
+PASS: 0d: and NOT on the legacy seat hash
+PASS: 0d: invalidate-strike --effort accepts the effort-partitioned strike
+PASS: 0d: the invalidation is recorded against the SAME seat hash as the strike
+PASS: 1: seat-hash is stable and order-independent
+PASS: 2: v2 append round-trips every field and lands in $TESTDIR/strikes.jsonl
+PASS: 2b: real ~/.autopilot/engine-capability store was NOT written (size unchanged: 7241)
+PASS: 3: closed-key rejection — extra key on a v2 row throws at read
+PASS: 4: predicate_id required iff class=critical_reexam_trigger, both directions
+PASS: 5: unregistered predicate_id rejected at write
+PASS: 6: un-allowlisted writer rejected at write
+PASS: 7: dedup idempotency — one line on disk, second append exits 0 with deduplicated:true (stdout only)
+PASS: 8: strike_invalidated accepted with full proof and lands as event_id 2
+PASS: 9: strike_invalidated rejected when any of the three proof fields is missing
+PASS: 10: invalidates_event_id pointing at nonexistent or foreign-seat strike rejected
+PASS: 11: v1 and v2 rows coexist in one file with monotonic event_id
+PASS: 12: brainSeatStatus output is byte-identical with v2 rows present in the file (real baseline + 3 v1 strikes flips status; layering v2 rows changes nothing)
+PASS: 13: appendStrikeRecord (v1 module export, used by check-stall-fuse.js / check-blueprint-conformance.js) still works
+PASS: 13b: module-path append did NOT write the real ~/.autopilot/engine-capability store (size unchanged: 7241)
+PASS: 14: production-shaped vendor engine ids (space+parens, slash) round-trip through seat-hash and strike-seat
+PASS: 15: dedup is (seat_hash, dedup_key, class) — critical trigger not swallowed by ordinary strike sharing a key; same-class repeat still dedups
+PASS: 16: a malformed line is skipped-and-warned (not thrown), writer keeps working, and event_id stays monotonic (salvaged from the corrupt line's own event_id, 99+1=100)
+PASS: 17: brainSeatStatus tolerates a corrupt strike line in the same file and still exits 0
+PASS: 18a: a non-allowlisted hand-written row cannot reserve a dedup key — the legitimate strike is appended, not swallowed; a true repeat from the allowlisted writer still dedups to one line
+PASS: 18b: projection counts exactly ONE strike (the real one) and rejects the poisoned hand-written row
+----
+strike-decay unit tests: 30 passed, 0 failed
+
+──────── hooks/tests/sync-opencode-plugin.test.sh ────────
+PASS [sync-opencode-plugin] 6 assertions
+
+──────── hooks/tests/sync-version-check-clean.test.sh ────────
+PASS [sync-version-check-clean] 2 assertions
+
+──────── hooks/tests/sync-version-check-detects-drift.test.sh ────────
+PASS [sync-version-check-detects-drift] 6 assertions
+
+──────── hooks/tests/sync-version-dry-run.test.sh ────────
+PASS [sync-version-dry-run] 9 assertions
+
+──────── hooks/tests/sync-version-invalid-counts.test.sh ────────
+PASS [sync-version-invalid-counts] 5 assertions
+
+──────── hooks/tests/sync-version-invalid-version.test.sh ────────
+PASS [sync-version-invalid-version] 3 assertions
+
+──────── hooks/tests/sync-version-preserve-counts.test.sh ────────
+PASS [sync-version-preserve-counts] 9 assertions
+
+──────── hooks/tests/sync-version-round-trip.test.sh ────────
+PASS [sync-version-round-trip] 14 assertions
+
+──────── hooks/tests/toggle-payload-capture.test.sh ────────
+Testing status...
+Testing enable...
+Testing enable when already enabled...
+ERROR: capture mode already enabled (/tmp/autopilot-test-toggle-payload-capture-gDlLGB/hooks/hooks.json.capture-backup exists).
+  Run 'disable' first, or delete the backup manually.
+Testing disable...
+Testing fail-open on read error...
+PASS [toggle-payload-capture] 13 assertions
+
+──────── hooks/tests/transcript-reader-tail.test.sh ────────
+PASS [transcript-reader-tail] 11 assertions
+
+──────── hooks/tests/suite-residue-reaper.test.sh ────────
+PASS [suite-residue-reaper] 51 assertions
+rm: cannot remove '/tmp/autopilot-test-suite-residue-reaper-ezVzaN/case-12': Directory not empty
+
+──────── hooks/tests/va-eval-generator.test.sh ────────
+PASS [va-eval-generator] 2 assertions
+
+──────── hooks/tests/va-eval-grader.test.sh ────────
+PASS [va-eval-grader] 2 assertions
+
+──────── hooks/tests/validate-link-check.test.sh ────────
+PASS [validate-link-check] 6 assertions
+
+──────── hooks/tests/verification-author-resolver.test.sh ────────
+PASS [verification-author-resolver] 31 assertions
+
+──────── hooks/tests/tree-engine.test.sh ────────
+/home/cookys/projects/autopilot/hooks/tests/tree-engine.test.sh: line 190: 2474286 Killed                     ( for j in $(seq 1 "$VICTIM_TOTAL");
+do
+    EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"victim${j}\",\"type\":\"node_created\"}"; TREE_PROJECTS_DIR="$PROJECTS" node "$SCRIPT" emit crash "victim${j}" "$EV" 2> /dev/null;
+done )
+[]
+{
+  "id": "snode",
+  "status": "active",
+  "events": [
+    "2026-09-05T00:08:07Z:node_created"
+  ],
+  "report": null,
+  "doa_log": [],
+  "escalations": [],
+  "verdict": null,
+  "confidence": null,
+  "evidence_pointers": [],
+  "artifact_paths": [],
+  "parent": null,
+  "question": null,
+  "options": []
+}
+tree.js — append-only JSONL task-tree CLI.
+
+Single state-owning entrypoint for the task-tree engine (P1).
+All mutation goes through this script; consumers read via subcommands.
+
+Usage:
+  scripts/tree.js <subcommand> [args]
+
+Subcommands:
+  init <proj>                        Create tree/ dir + empty events.jsonl
+  emit <proj> <node-id> <event-json> Validate + append one JSONL event under lock
+  rebuild-index <proj>               Fold events → index.json (deterministic, idempotent)
+  next-decision <proj>               Print highest-priority pending decision (compact JSON)
+  report <proj> <node>               Print node report JSON
+  escalations <proj>                 List open escalations as JSON array
+  fetch <proj> <node> --raw          Print artifact content + emit manager_raw_read event
+  board-status <proj>                Print board_signoff index object or null;
+                                     gate on .active (present AND decision=="graduate")
+
+Event envelope (minimal, validated by emit):
+  schema_version  (integer)
+  ts              (ISO-8601 string)
+  node            (string)
+  type            (string)
+
+Per-type event validation (beyond the 4-field envelope) is not yet wired:
+$TREE_EVENT_VALIDATOR (stdin = event JSON) is the extension point. Note
+check-node-report.sh validates NODE REPORT FILES by path — a different
+interface; it is not a drop-in event validator.
+
+File locations (per project):
+  docs/projects/<proj>/tree/events.jsonl   — append-only event log (git-tracked)
+  docs/projects/<proj>/tree/events.jsonl.lock — flock sidecar
+  docs/projects/<proj>/tree/index.json     — derived, gitignored, rebuildable
+
+locking notes:
+  This script implements a custom cross-platform atomic locking mechanism using
+  exclusive file creation ('wx' mode) with self-healing lock recovery and PID/TTL
+  verification. It provides safe concurrency control on Linux, macOS, and Windows.
+
+Exit codes:
+  0  success
+  1  logic error (event rejected, file not found, etc.)
+  2  usage / missing required argument
+
+Output: JSON to stdout for machine-readable subcommands.
+tree.js — append-only JSONL task-tree CLI.
+
+Single state-owning entrypoint for the task-tree engine (P1).
+All mutation goes through this script; consumers read via subcommands.
+
+Usage:
+  scripts/tree.js <subcommand> [args]
+
+Subcommands:
+  init <proj>                        Create tree/ dir + empty events.jsonl
+  emit <proj> <node-id> <event-json> Validate + append one JSONL event under lock
+  rebuild-index <proj>               Fold events → index.json (deterministic, idempotent)
+  next-decision <proj>               Print highest-priority pending decision (compact JSON)
+  report <proj> <node>               Print node report JSON
+  escalations <proj>                 List open escalations as JSON array
+  fetch <proj> <node> --raw          Print artifact content + emit manager_raw_read event
+  board-status <proj>                Print board_signoff index object or null;
+                                     gate on .active (present AND decision=="graduate")
+
+Event envelope (minimal, validated by emit):
+  schema_version  (integer)
+  ts              (ISO-8601 string)
+  node            (string)
+  type            (string)
+
+Per-type event validation (beyond the 4-field envelope) is not yet wired:
+$TREE_EVENT_VALIDATOR (stdin = event JSON) is the extension point. Note
+check-node-report.sh validates NODE REPORT FILES by path — a different
+interface; it is not a drop-in event validator.
+
+File locations (per project):
+  docs/projects/<proj>/tree/events.jsonl   — append-only event log (git-tracked)
+  docs/projects/<proj>/tree/events.jsonl.lock — flock sidecar
+  docs/projects/<proj>/tree/index.json     — derived, gitignored, rebuildable
+
+locking notes:
+  This script implements a custom cross-platform atomic locking mechanism using
+  exclusive file creation ('wx' mode) with self-healing lock recovery and PID/TTL
+  verification. It provides safe concurrency control on Linux, macOS, and Windows.
+
+Exit codes:
+  0  success
+  1  logic error (event rejected, file not found, etc.)
+  2  usage / missing required argument
+
+Output: JSON to stdout for machine-readable subcommands.
+PASS [tree-engine] 119 assertions
+
+──────── hooks/tests/version-drift-check.test.sh ────────
+PASS [version-drift-check] 14 assertions
+
+──────── hooks/tests/strike-writer-wiring.test.sh ────────
+PASS: 1: dispatch exit code is 1 (failure)
+PASS: 1: status is failure
+PASS: 1: strikes.jsonl created under the isolated store
+PASS: 1: exactly one strike row
+PASS: 1: writer=dispatch_hetero_failclosed
+PASS: 1: engine field
+PASS: 1: runner field
+PASS: 1: role field
+PASS: 1: class=ordinary_strike
+PASS: 1: artifact_sha256 is a real 64-hex digest
+PASS: 1: receipt_ref non-empty
+PASS: 2: exactly one seat_strike_capture call site found to remove
+PASS: 2: call site removed from the mutated copy (function definition left intact)
+PASS: 2: seat_strike_capture FUNCTION definition still present (only the call was cut)
+=== delete-the-wiring negative control: UNWIRED copy run ===
+dispatch-hetero: agy/strike-engine-1 (effort=xhigh) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.
+dispatch-hetero: run_id=hetero-1788566871-2457632-0f92 manifest=/tmp/autopilot-dispatch-runs/hetero-1788566871-2457632-0f92.manifest.json log=/tmp/hetero-feat-strike-e2e-2-unwired-log-xeDQCE (watch: scripts/dispatch-status.js --run hetero-1788566871-2457632-0f92)
+dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at ~10s then AUTO-BACKGROUNDS longer commands and waits (empirically a 75s command DID complete and return stdout, bounded by --print-timeout — the old 'hard 10s cap / cannot run build/test' framing is REFUTED, agy 1.0.14 2026-07-02); what stays unreliable is chaining run-long-command THEN git-commit in ONE -p turn (the turn can yield after the backgrounded task). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test AND self-commit mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED).
+{ "status": "failure", "runner": "agy", "model": "strike-engine-1", "containment": "cgroup", "contained": true, "branch": "feat/strike-e2e-2-unwired", "base": "develop", "commit": "cccc7396f061487a957cf56a58a4ff26613302f7", "files_changed": 1, "insertions": 1, "deletions": 0, "worktree": "/tmp/hetero-feat-strike-e2e-2-unwired-4VzRTV", "agent_log": "/tmp/hetero-feat-strike-e2e-2-unwired-log-xeDQCE", "error": "agent left a clean commit but exited non-zero (agent exit 3); worktree kept", "dispatcher_called": true, "model_calls": 1, "mutation_attempts": 1, "gate_attempts": 0, "resources_created": 1, "zero_diff_receipt_digest": null, "skill_mode_effective": "off", "skills_injected": [], "orphan_worktree": null, "run_id": "hetero-1788566871-2457632-0f92", "usage": null, "wall_secs": 3, "duplex": null, "provider_session_id": null, "provider_session_reused": false, "worktree_reused": false, "retention_lease": null }
+exit=1
+=== delete-the-wiring negative control: WIRED (unmodified) run ===
+dispatch-hetero: agy/strike-engine-1 (effort=xhigh) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.
+dispatch-hetero: run_id=hetero-1788566875-2462094-0380 manifest=/tmp/autopilot-dispatch-runs/hetero-1788566875-2462094-0380.manifest.json log=/tmp/hetero-feat-strike-e2e-2-wired-log-MXbhBH (watch: scripts/dispatch-status.js --run hetero-1788566875-2462094-0380)
+dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at ~10s then AUTO-BACKGROUNDS longer commands and waits (empirically a 75s command DID complete and return stdout, bounded by --print-timeout — the old 'hard 10s cap / cannot run build/test' framing is REFUTED, agy 1.0.14 2026-07-02); what stays unreliable is chaining run-long-command THEN git-commit in ONE -p turn (the turn can yield after the backgrounded task). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test AND self-commit mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED).
+{ "status": "failure", "runner": "agy", "model": "strike-engine-1", "containment": "cgroup", "contained": true, "branch": "feat/strike-e2e-2-wired", "base": "develop", "commit": "32bfd5be5e1cefa5155737f91da5cb4f03b3a9c6", "files_changed": 1, "insertions": 1, "deletions": 0, "worktree": "/tmp/hetero-feat-strike-e2e-2-wired-Sirxl0", "agent_log": "/tmp/hetero-feat-strike-e2e-2-wired-log-MXbhBH", "error": "agent left a clean commit but exited non-zero (agent exit 3); worktree kept", "dispatcher_called": true, "model_calls": 1, "mutation_attempts": 1, "gate_attempts": 0, "resources_created": 1, "zero_diff_receipt_digest": null, "skill_mode_effective": "off", "skills_injected": [], "orphan_worktree": null, "run_id": "hetero-1788566875-2462094-0380", "usage": null, "wall_secs": 3, "duplex": null, "provider_session_id": null, "provider_session_reused": false, "worktree_reused": false, "retention_lease": null }
+exit=1
+PASS: 2: unwired run still classifies as failure/exit 1 (only the strike write is cut)
+PASS: 2: NO strike row with the wiring removed (deleting the call turns this red, as required)
+PASS: 2: exactly one strike row with the unmodified (wired) script
+PASS: setup: extracted the real seat_strike_capture/_hetero_runner_token/_is_engine_unavailable bodies (137 lines)
+PASS: 3a: engine_unavailable with host-corroborated exit code 429 appends NO strike
+PASS: 3b: engine_unavailable derived only from LOG TEXT (ordinary exit code 3) DOES accrue a strike
+PASS: 3b: cause_class is ambiguous (diagnostic only, not exclusionary)
+PASS: 3b: class is ordinary_strike
+PASS: 4: OUTCOME_DISPATCHER_CALLED=0 appends NO strike (pre-dispatch host abort)
+PASS: 5: success (committed) appends nothing
+PASS: 5b: no_op appends nothing
+PASS: 5c: question_suspected appends nothing
+PASS: 6: two appends of the same root incident dedup to exactly one line
+PASS: 6b: a genuinely different root incident is NOT collapsed by dedup
+PASS: 8: AUTOPILOT_STRIKE_WRITER=off appends nothing (operator escape hatch)
+PASS: 8b: control (writer=on) appends a strike, confirming 8 is the flag's effect
+PASS: 10: envelope-corruption-shaped outcome (no_verdict) DOES accrue a strike
+PASS: 10: cause_class is runner_delivery (diagnostic, not exclusionary)
+PASS: 10: class is ordinary_strike (dispatch-hetero never emits critical_reexam_trigger)
+PASS: 7: exit code identical, writable vs unwritable store (1)
+PASS: 7: stdout byte-identical after normalizing only the inherently per-run mktemp/branch/wall_secs fields
+PASS: 7: strike landed in the writable store
+PASS: 7: no strike row under the unwritable store — write failed soft, dispatch outcome unaffected
+PASS: 9: real ~/.autopilot/engine-capability/strikes.jsonl untouched (exists=1 size=7241)
+PASS: 11a: AUTOPILOT_STRIKE_WRITER=off writes NO strike row
+PASS: 11c: hatch OFF stamps strike_writer_suppressed:true into the manifest sidecar
+PASS: 11d: manifest names the suppressed seat (strike-engine-1/agy/implementer)
+PASS: 11b: hatch ON (default) writes exactly one strike row (control)
+PASS: 11e: hatch ON (default) — manifest has NO strike_writer_suppressed field at all
+PASS: 11f: exit code identical regardless of the hatch (off=1 on=1)
+
+strike-writer-wiring: 44 passed, 0 failed
+
+──────── hooks/tests/watch-foreman.test.sh ────────
+PASS [watch-foreman] 27 assertions
+
+──────── hooks/tests/worktree-reap.test.sh ────────
+PASS [worktree-reap] 28 assertions
+
+──────── hooks/tests/verify-red-green.test.sh ────────
+PASS [verify-red-green] 48 assertions
+
+──────── scripts/ladder-run.test.sh ────────
+ok   impl path uses returned commit when dispatch-hetero emits worktree:null
+ok   impl path rejects returned commits that are not the requested branch tip
+ok   impl path rejects returned commits that do not descend from base
+ok   pass verdict emits QC event (atomically committed)
+ok   state records change_id
+ok   cycle verdict=pass persisted
+ok   single clean cycle HOLDs at T0
+ok   dry-run does not write the store
+ok   L1: FAIL verdict not an autonomous ship (autonomous=false) — excluded from endorsement denom
+ok   gate: LLM pass + gate pass → panel pass, gate_verdict=pass persisted
+ok   gate: LLM pass + gate FAIL → panel FAIL (union of catches)
+ok   gate: finding carries gate output tail + rc (actionable without a re-run)
+ok   gate: a gate-failed cycle is not an autonomous ship
+ok   gate: runs with cwd = --gate-dir
+ok   gate: absent → gate_verdict n/a (no behaviour change)
+ok   cycle record carries findings[] (verifier reasons no longer discarded)
+ok   ambiguous artifact input rejected
+ok   H1: same head_sha, different change_id → same sample bucket (bucket=0.078890) — cannot dodge by renaming
+ok   H1: secret salt shifts the bucket → unpredictable to implementer
+ok   C2: audit turns an in-cycle pass into a counted class escape (0% → 100.0%)
+ok   C2: post-escape promotion correctly HOLDs (not T1-eligible)
+ok   C1: endorsement 40% (<0.90 as fraction) HOLDs at T1 (no vacuous promote)
+ok   H2: calculator failure → HOLD-ERROR (fail-closed, no PROMOTE)
+ok   H2: fail-closed exits 3 (needs_human)
+ok   H2: emit + state both recorded (no store/state divergence on calc failure)
+ok   #4: empty ids → count is a single 0 (no '0\n0')
+ok   #3: store-emit failure after state → BOTH rolled back (exit 4; store & state unchanged)
+ok   #3: emits explicit needs_human reconcile message
+ok   #3b: state-write failure → store NOT written (both-or-neither, exit 4)
+ok   emitted events parse through qc_metric.py
+
+ALL PASS
+
+──────── hooks/tests/resolve-review-loop.test.sh ────────
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'qoderclicn' occupies both an implementer seat and a reviewer-class loop seat (implementer family: alibaba, reviewer family: alibaba). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'qoderclicn' occupies both an implementer seat and a reviewer-class loop seat (implementer family: alibaba, reviewer family: alibaba). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: WARNING — cross-family: qc_panel spans 0 distinct famil(y/ies), 1 required. Add more diverse panel members.
+resolve-review-loop: WARNING — cross-family: qc_panel spans 0 distinct famil(y/ies), 1 required. Add more diverse panel members.
+resolve-review-loop: WARNING — cross-family: qc_panel shares the implementer family (openai); no cross-family decorrelation. Add a panel member from a different vendor.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ERROR — cross-family: qc_panel spans 0 distinct famil(y/ies), 2 required. Add more diverse panel members.
+resolve-review-loop: ERROR — cross-family: qc_panel spans 0 distinct famil(y/ies), 2 required. Add more diverse panel members.
+resolve-review-loop: ERROR — cross-family: qc_panel spans 1 distinct famil(y/ies), 2 required. Add more diverse panel members.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ERROR — cross-family: qc_panel spans 1 distinct famil(y/ies), 2 required. Add more diverse panel members.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner 'codex' occupies both an implementer seat and a reviewer-class loop seat (implementer family: openai, reviewer family: openai). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown.
+PASS [resolve-review-loop] 406 assertions
+
+──────── hooks/tests/codex-plugin-package.test.sh (serial tail) ────────
+PASS [codex-plugin-package] 118 assertions
+
+──────── hooks/tests/dev-setup.test.sh (serial tail) ────────
+PASS [dev-setup] 32 assertions
+
+──────── hooks/tests/dispatch-detach.test.sh (serial tail) ────────
+/home/cookys/projects/autopilot/hooks/tests/dispatch-detach.test.sh: line 104: 2725249 Killed                     DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" --branch feat/kill --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" --ledger "$LEDGER_A" --run-id rk --stage implement > "$TEST_TMP/kill-wrapper.out" 2> "$TEST_TMP/kill-wrapper.err"  (wd: /tmp/autopilot-test-dispatch-detach-aWWZaq/repo)
+PASS [dispatch-detach] 74 assertions
+
+──────── hooks/tests/dispatch-hetero.test.sh (serial tail) ────────
+PASS [dispatch-hetero] 232 assertions

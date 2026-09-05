@@ -165,7 +165,7 @@ sessions, foremen with no context ceiling, and no gate on depth-0 self-research.
 
 ### P2 — autopilot consumes the live file (size L; dispatched, depth-0 reviews receipts)
 1. `scripts/lib/live-state-dir.js`: `resolveLiveDir()`, `readLive(sessionId, {maxAgeMs: 120000})`; the probe
-   shells `findmnt -T <dir> -o FSTYPE -n` and falls back to `/proc/mounts`; test with a fake `findmnt` on `PATH`.
+   runs `findmnt` via `execFileSync` argv (`-T <dir> -o FSTYPE -n`, no shell; 2 s timeout) and falls back to `/proc/mounts`; test with a fake `findmnt` on `PATH`.
 2. `context-budget.js`: read live first. If `schema_version === 1`, fresh, and `session_id` matches: window = `context_window_size`
    (skip `inferWindowTokens`), contextTokens = `total_input_tokens` unless the transcript row is newer; message
    says `= N% of the 1000k window (statusline)`. Absent/stale ⇒ existing path unchanged. State dir moves to

@@ -1,11 +1,11 @@
 ## 目標
 
-無進行中工作。這份 handoff 是 2026-09-05 第二次收尾快照：**v2.36.2 已 push；v2.36.3（7840hs 回報的 aborted 世代 receipt 死鎖＋closure 改 evidence-only）已 merge 到 develop，尚未 push**。
+無進行中工作。這份 handoff 是 2026-09-05 第二次收尾快照：**v2.36.2 已 push；v2.36.3（7840hs 回報的 aborted 世代 receipt 死鎖＋closure 改 evidence-only）已 merge 並 push**（origin/develop `605c9ebe`）。
 （取代前一版 handoff。）
 
 ## 現況
 
-- **autopilot**: `develop` = 兩個 v2.36.3 merge（`27bc8abc` 核心、follow-up：derive 不吃戳記、aborted 歸因具名拒絕、finalize fail-closed）；`origin/develop` 停在 v2.36.2（`7fa140f0`），**v2.36.3 未 push**；working tree 乾淨；fix 分支已刪。
+- **autopilot**: `develop` = 兩個 v2.36.3 merge（`27bc8abc` 核心、follow-up：derive 不吃戳記、aborted 歸因具名拒絕、finalize fail-closed）；與 `origin/develop` 同步（`605c9ebe`，push 於 2026-09-05 owner 指示）；working tree 乾淨；fix 分支已刪。
 - **version**: 2.36.3（30 skills，29 hooks：16 default-on／13 opt-in）。
 - **v2.36.3 內容**：`check-phase-review-receipt` 接受被 finalized 後代夾住的 `aborted` 條目（非末筆、無 head、後代同 base）；`review-chain-derive` 跳過 aborted（原本會把它的空 findings 當 closure by absence 關掉所有未結 finding）。已回覆 7840hs（disposition completed），承諾 push 後再通知。
 - **v2.36.2 內容**：live 窗口 `> 0` 才算訊號（context-budget／foreman-guard）；depth0-delegate-gate 計數上鎖；foreman-guard 0/≥2 列診斷每 agent 每種文字一次；
@@ -21,7 +21,7 @@
 
 ## 下一步
 
-1. owner 說推就 `git push origin develop`（先確認 origin 沒人搶 2.36.3），然後 `fleet send --to cookys-7840hs` 通知可以 dev-update 重跑 receipt。
+1. 沒有必做項；v2.36.3 已 push，7840hs 已通知可 dev-update 重跑 receipt。
 2. BACKLOG 新 row「context-budget falls back to inference after a long foreground tool call」：本 session 1M 窗口兩次無「(statusline)」的 T2（call 36 在 600 s suite 後、call 50 在 Agent spawn 後），下一次發生先讀 `$XDG_RUNTIME_DIR/autopilot/context-budget/<sid>.json` 的 `lastLive` 再動 freshness cap。
 3. 其餘同前：tmpfs 擁有者檢查（多人主機前）、plan-loop disposition 形狀、P5 fleet rollout（cuda 授權）、`normalize_agy_alias`／stale topology cache／g1 `42864072`／ladder auto。
 
@@ -30,7 +30,7 @@
 ```bash
 cd /home/cookys/projects/autopilot
 git status --porcelain && git log --oneline -3                 # 空；00986d3c 6712ba67 1821954a
-git log --oneline origin/develop..develop | wc -l              # 8（v2.36.3 未 push）
+git log --oneline origin/develop..develop | wc -l              # 0
 node -p "require('./.claude-plugin/plugin.json').version"      # 2.36.3
 bash scripts/preflight-release.sh | tail -1                     # 8/8
 bash scripts/sync-codex-plugin-skills.sh --check | tail -1      # in sync

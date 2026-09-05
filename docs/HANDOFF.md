@@ -1,11 +1,11 @@
 ## 目標
 
-無進行中工作。這份 handoff 是 2026-09-05 第二次收尾快照：**v2.36.2 已 merge 到 develop（`6712ba67`），尚未 push**。
+無進行中工作。這份 handoff 是 2026-09-05 第二次收尾快照：**v2.36.2 已 merge 到 develop（`6712ba67`），**已 push**。
 （取代前一版 handoff。）
 
 ## 現況
 
-- **autopilot**: `develop` = `00986d3c`（merge `6712ba67` + maintenance 表 hash 戳記），與 `origin/develop` 同步（push 於 2026-09-05，owner 指示）；working tree 乾淨；fix 分支已刪。
+- **autopilot**: `develop` = merge `6712ba67` + 兩個 docs commit（handoff、maintenance hash），與 `origin/develop` 同步（push 於 2026-09-05，owner 指示）；working tree 乾淨；fix 分支已刪。
 - **version**: 2.36.2（30 skills，29 hooks：16 default-on／13 opt-in）。
 - **v2.36.2 內容**：live 窗口 `> 0` 才算訊號（context-budget／foreman-guard）；depth0-delegate-gate 計數上鎖；foreman-guard 0/≥2 列診斷每 agent 每種文字一次；
   `dispatch-model-guard` 漏 `model:` 預設 **deny**（不再跳 dialog；`on_missing_model: deny|ask|allow`）；四項測試強度；context-budget state 新增 `lastLive {at, ageMs, present, used}`。

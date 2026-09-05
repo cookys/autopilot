@@ -278,7 +278,6 @@ function parseImplementReviewArgs(rawArgs) {
   if (sawRequireQualifiedReviewer && sawAllowUnqualifiedReviewer) {
     return { error: 'flags --require-qualified-reviewer and --allow-unqualified-reviewer cannot be combined' };
   }
-  output.reviewerQualificationExplicit = sawRequireQualifiedReviewer || sawAllowUnqualifiedReviewer;
   output.reviewerQualificationForced = sawRequireQualifiedReviewer; // the only flag that keeps the l4 block
 
   if (!output.promptFile || !output.branch || !output.base) {

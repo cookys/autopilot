@@ -132,7 +132,13 @@ catch (e) { console.log(e.code, e.message); }'
 ```
 
 Expected today: `strict_l5_provider_bootstrap_invalid` for `level: 'l4'` (constructor guard) and
-`strict_l5_provider_roster_incomplete` for the VA/QC shape. Record the list in
+`strict_l5_provider_roster_incomplete` for the VA/QC shape.
+
+**Spike run 2026-09-07 (aimax395, autopilot's own roster grok-4.5/grok + MiniMax-M3/cc-shim, VA present, 3 QC
+seats)**: `level: 'l4'` → `strict_l5_provider_bootstrap_invalid` ("accepts only … l5 or l6"); `level: 'l5'`
+→ derives; the same roster with `verification_author_present:false` + empty QC panel under `l5` →
+`strict_l5_provider_roster_incomplete` ("requires the verification-author seat"). Exactly the two sites P1
+names; no third site surfaced. Record the list in
 `docs/projects/2026-09-07-l4-host-bootstrap/ledger/p0-spike.md`. **Done when** the list is written and
 every code line it names is cited by P1.
 

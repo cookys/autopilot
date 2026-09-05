@@ -607,6 +607,71 @@ assert.strictEqual(withdrawBeforeBody.claim_id, claimId, `refusal must carry cla
 assert.strictEqual(typeof withdrawBeforeBody.phase, 'string', `refusal must carry campaign phase: ${withdrawBefore.stdout}`);
 assert.ok(withdrawBeforeBody.reason.includes(claimId) && withdrawBeforeBody.reason.includes(withdrawBeforeBody.phase), `reason must name claim + phase: ${withdrawBeforeBody.reason}`);
 
+// --- v2.36.6 (cuda revival.3d QUIET-a): never-started claim + cross-scheme resolution ---
+// (1) A readable ledger with NO intake row for the claim (by id or by contract digest):
+// the campaign never started here. Refused by name without the acknowledgement, released
+// as never_started with `--never-started true`. Never faked terminal.
+const nsLedgerPath = path.join(tmp, 'never-started-campaign.jsonl');
+runLedger(['init', '--ledger', nsLedgerPath]);
+const wdNoAck = runCli([
+  'mission', 'withdraw', '--state', missionStatePath, '--out', path.join(tmp, 'ms-out-ns-noack.json'),
+  '--claim-id', claimId, '--campaign-ledger', nsLedgerPath,
+]);
+assert.strictEqual(wdNoAck.status, 1, `never-started without ack must refuse: ${wdNoAck.stdout}`);
+const wdNoAckBody = JSON.parse(wdNoAck.stdout);
+assert.strictEqual(wdNoAckBody.code, 'mission_withdraw_campaign_not_started');
+assert.ok(wdNoAckBody.reason.includes('--never-started true'), `refusal names the acknowledgement: ${wdNoAckBody.reason}`);
+assert.strictEqual(wdNoAckBody.phase, null);
+const wdAck = runCli([
+  'mission', 'withdraw', '--state', missionStatePath, '--out', path.join(tmp, 'ms-out-ns-ack.json'),
+  '--claim-id', claimId, '--campaign-ledger', nsLedgerPath, '--never-started', 'true',
+]);
+assert.strictEqual(wdAck.status, 0, `never-started with ack must release: ${wdAck.stdout} ${wdAck.stderr}`);
+const wdAckBody = JSON.parse(wdAck.stdout);
+assert.strictEqual(wdAckBody.status, 'withdrawn');
+assert.strictEqual(wdAckBody.resolved_via, 'never_started');
+assert.strictEqual(wdAckBody.ledger_campaign_id, null, 'no ledger campaign was resolved — nothing is claimed terminal');
+assert.strictEqual(wdAckBody.campaign_phase, null);
+assert.strictEqual(JSON.parse(fs.readFileSync(path.join(tmp, 'ms-out-ns-ack.json'), 'utf8')).claims[claimId].released, true);
+// (1b) `campaign status` on the same ledger: a well-formed absent id is `not_started`
+// (minted, never journaled here); a malformed id stays `not_found`.
+const absentV2 = `campaign-v2-${'a'.repeat(64)}`;
+const stNs = runCli(['campaign', 'status', '--campaign-id', absentV2, '--ledger', nsLedgerPath]);
+assert.strictEqual(stNs.status, 1);
+const stNsBody = JSON.parse(stNs.stdout.trim().split('\n').pop());
+assert.strictEqual(stNsBody.status, 'not_started', `well-formed absent id ⇒ not_started: ${stNs.stdout}`);
+assert.strictEqual(stNsBody.ledger, nsLedgerPath);
+const stMal = runCli(['campaign', 'status', '--campaign-id', 'campaign-does-not-exist', '--ledger', nsLedgerPath]);
+assert.strictEqual(JSON.parse(stMal.stdout.trim().split('\n').pop()).status, 'not_found', 'malformed id stays not_found');
+// (2) The released record names the asserted ledger (review 🟡, ADR-0001).
+assert.strictEqual(wdAckBody.campaign_ledger, nsLedgerPath);
+assert.strictEqual(wdAckBody.ledger_intake_roots, 0);
+// (3) ticket_present, end to end (review 🟡 recipe): a v2-shaped claim whose contract ticket has
+// an intake root in the ledger is refused even with the acknowledgement. The claim is the same
+// grant, patched in the state file (validateMissionState does not validate claims; the refusal
+// returns before the reducer runs).
+const v2StatePath = path.join(tmp, 'mission-state-v2.json');
+const v2State = JSON.parse(fs.readFileSync(missionStatePath, 'utf8'));
+v2State.claims[claimId].identity_scheme = 'mission-subject-v2';
+v2State.claims[claimId].campaign_id = `campaign-v2-${'a'.repeat(64)}`; // never keys an ICC intake row
+v2State.claims[claimId].campaign_contract_draft = { ticket: contract.ticket };
+fs.writeFileSync(v2StatePath, JSON.stringify(v2State));
+const wdTicket = runCli([
+  'mission', 'withdraw', '--state', v2StatePath, '--out', path.join(tmp, 'ms-out-ticket.json'),
+  '--claim-id', claimId, '--campaign-ledger', preLedgerPath, '--never-started', 'true',
+]);
+assert.strictEqual(wdTicket.status, 1, `ticket_present must refuse even with ack: ${wdTicket.stdout}`);
+const wdTicketBody = JSON.parse(wdTicket.stdout);
+assert.strictEqual(wdTicketBody.code, 'mission_withdraw_campaign_ticket_present');
+assert.ok(Array.isArray(wdTicketBody.ledger_roots) && wdTicketBody.ledger_roots.length === 1, `roots listed: ${wdTicket.stdout}`);
+// (3b) the same v2-shaped claim against the EMPTY ledger is absent ⇒ released with the ack
+const wdV2Ns = runCli([
+  'mission', 'withdraw', '--state', v2StatePath, '--out', path.join(tmp, 'ms-out-v2-ns.json'),
+  '--claim-id', claimId, '--campaign-ledger', nsLedgerPath, '--never-started', 'true',
+]);
+assert.strictEqual(wdV2Ns.status, 0, `v2 claim with no ticket root is releasable as never started: ${wdV2Ns.stdout}`);
+// The corrupt-payload propagation is unit-tested in hooks/tests/campaign-claim-resolve.test.sh.
+
 // Now use the ALREADY-terminalized ledger from above (`ledgerPath`) — its
 // campaign_id is the SAME campaignId the claim is bound to.
 const withdrawAfter = runCli([

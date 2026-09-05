@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "statusline-live-context-feed",
+  "logical_plan_id": "statusline-live-context-feed-2026-09-05",
+  "session_id": "93196c52",
+  "session_key": "439dcac3d93654cef67ab19c9811c5f37730c33275f2d91f240a8faa3fa14226",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "2e117cc0fb2047d7a5177ccf04b308380517c84dda3fa827918954a5d25aa01a",
+  "manifest_sha256": "e72ec4b433522b67ba4950d2c63d62361072e1939ba0aef34a83a53310def77c",
+  "plan_sha256": "ca5258b1babff9ef1d542b6da5cfb7f87ff8492ac1bc16bbb57c22e3f0222243",
+  "growth_ratio": {
+    "numerator": 22079,
+    "denominator": 18785
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "d0c2bd8aeac7e4b51264b1a2b9aa2874ccac249826aaf58f713a83e5eed65777"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7d3d3df056e345d433c48477949c447d9eba311897e977f8c26bfe4adb6ccce4",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-Vk9GJ9/stdout",
+          "digest": "7d3d3df056e345d433c48477949c447d9eba311897e977f8c26bfe4adb6ccce4"
+        },
+        "receipt_digest": "46005ab112d2090bf6865634a8ec5a669f04da84281041675b288c47489329bc"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "02c072f23d58d23e1b4c31ac306224b8a6dc73b54affc08578a58b08cac55734"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ZIA4iK",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "001dee83d2b283404aa2358dc1bc7cedc7ed21e5a18d97894226ab60104f6840"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "codeforge subagent writer, live-file schema, freshness, and P1 acceptance",
+      "claim": "The plan gives mutually exclusive instructions for whether subagent data is written to a separate tasks file or merged into the main live file.",
+      "evidence": "Section 2.5 requires two files with one writer each. The file-structure map instead says subagent_statusline.rs merges into the same live file using read-modify-write. P1.3 restores the separate tasks file, while P1.5 says the previously named main file carries a tasks row. Section 6 again says no shared file or read-modify-write exists.",
+      "evidence_reference": "§2.5; §3 file-structure map; P1.3; P1.5; §6",
+      "repair": "Make every reference require subagent_statusline.rs to write only <live-dir>/context/<sid>.tasks.json. Change P1.5 to validate the tasks row in that file and explicitly prohibit merging or read-modify-write against <sid>.json.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "69605326822746bd483005bdbdadc1b047a4a4381e5e003d108a265c4d7cb85b"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "live-directory fallback and context-budget state compatibility",
+      "claim": "The fallback path composition does not preserve the legacy context-budget state path as promised.",
+      "evidence": "Section 2.5 defines the resolved SSD fallback as ~/.autopilot/context-budget/. P2.2 then places state in <live-dir>/context-budget/, yielding ~/.autopilot/context-budget/context-budget/. Section 2.6 says the state remains at the legacy path when no RAM-backed directory is available.",
+      "evidence_reference": "§2.5 live-dir resolution; §2.6 compatibility impact; P2.2",
+      "repair": "Define an unambiguous base-directory contract, preferably using ~/.autopilot as the SSD fallback base so appending context-budget produces the exact legacy path. Alternatively return explicit per-purpose paths. Add an assertion for the exact SSD-fallback state pathname.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "77b906c42b9fefef42ac54921644ec70920f33d3edad12c7a9482f5e266268e5"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "guarded-model normalization and depth0-delegate-gate tests",
+      "claim": "The normative family parser and the required negative tests prescribe opposite block decisions.",
+      "evidence": "Section 2.5 lowercases the model id and takes the text before the first hyphen after removing an optional claude- prefix. That maps both CLAUDE-FABLE-5-1 and fable-ish to family fable. P3.3 nevertheless requires uppercase variants and fable-ish not to block.",
+      "evidence_reference": "§2.5 model-family rule; P3.3",
+      "repair": "Specify a recognized model-id grammar before family extraction and align the tests. A coherent contract is to lowercase canonical claude-prefixed IDs, require valid version segments, treat fable-ish as unknown, and require uppercase canonical Fable or Opus IDs to block after normalization.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "18aca00538517a83c5526dcf078e747fed2f7b4f27df0bf6e1cdb481786e541b"
+    },
+    {
+      "rubric_id": "R12",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "two-repository version-skew behavior",
+      "claim": "The stated older-codeforge skew behavior is not old behavior because the new default-on gate still emits warnings without a live file.",
+      "evidence": "Section 6 says older codeforge produces no live file and therefore old behavior. Section 2.6 identifies depth0-delegate-gate as a new default-on source of stderr, and P3.1 explicitly says an absent live file still warns while merely disabling blocking.",
+      "evidence_reference": "§2.6 compatibility impact; P3.1; §6 two-repo skew",
+      "repair": "To satisfy the frozen skew contract, make depth0-delegate-gate a no-op when the main live file is absent or stale, while retaining default-on warn and explicit block behavior when a fresh file exists. Add tests for both repository-skew directions.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ceb90705df8ec5251bf94470af5c7283a40df3318a1db8302daf27d3c7e2bad1"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-04T20:30:07.505Z"
+}

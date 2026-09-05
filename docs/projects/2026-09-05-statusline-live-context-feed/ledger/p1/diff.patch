@@ -1,0 +1,1263 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 567f776..2c4e663 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
+ ### Added
+ 
++- **Live context files** (autopilot v2.36.1 P1) — `codeforge statusline` now also writes a small
++  RAM-backed JSON snapshot (`<live-base>/context/<sid>.json`) after every render, and a new
++  `codeforge subagent-statusline` command writes the subagent task list
++  (`<live-base>/context/<sid>.tasks.json`) — one writer per file, no merge, atomic same-dir
++  temp+rename at mode 0600. Base-dir resolution order: `$AUTOPILOT_LIVE_DIR` →
++  `$XDG_RUNTIME_DIR/autopilot` → `/dev/shm/autopilot-<uid>` → `/tmp/autopilot-<uid>`, each verified
++  tmpfs/ramfs via `findmnt` (falls back to `/proc/mounts` parsing when `findmnt` is absent); every
++  candidate rejected falls back to `~/.autopilot` with one warning line on stderr. `codeforge
++  install --subagent-statusline` (opt-in, only when `statusLine.command` already points at
++  `codeforge statusline`) idempotently wires the `subagentStatusLine` hook. Never changes
++  statusline rendering or exit code — a write failure is logged to stderr once per process. See
++  README § "Live context files".
+ - **Brain connection indicators** — statusline bottom border 升級為兩顆真實狀態燈：
+   - **`memory ●/◌`**（本地腦，永遠顯示）：`●` 綠＝active L1 > 0；`◌` 灰＝store 存在但 active = 0；不顯示＝全新專案。
+   - **`mnemos ●/◐/○/◌`**（央腦，僅 opt-in 顯示）：`●` ok / `◐` degraded / `○` offline / `◌` pending。server 沒跑為中性灰 `offline`，不是告警。
+diff --git a/Cargo.toml b/Cargo.toml
+index fc7f34f..b0e8e4d 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -78,8 +78,12 @@ dotenvy = "0.15"
+ # rustls/ring TLS stack with reqwest above — one TLS stack, no openssl-sys.
+ self_update = { version = "0.44.0", default-features = false, features = ["archive-tar", "compression-flate2", "rustls", "ureq"] }
+ 
+-[dev-dependencies]
++# Same-directory atomic temp-file + rename (src/live.rs writer). Was
++# dev-only; promoted to a normal dependency — no new crate added to the
++# graph, tempfile was already present as a transitive/dev dep.
+ tempfile = "3"
++
++[dev-dependencies]
+ # test-util: tokio 虛擬時鐘(start_paused),讓 backoff retry 測試不真的等 1s/5s/30s。
+ tokio = { version = "1", features = ["test-util"] }
+ 
+diff --git a/README.md b/README.md
+index 6b48c0e..1df2443 100644
+--- a/README.md
++++ b/README.md
+@@ -246,6 +246,71 @@ The liveness probe runs as a detached background process (`process_group` isolat
+ 
+ **Diagnostics:** `codeforge doctor` shows all dimensions — local L1 count, opt-in status, live probe result, last ship time/outcome, queue depth, and next-step recommendations. `codeforge mnemos-cli probe [--verbose]` probes `GET /health` directly.
+ 
++## Live context files
++
++`codeforge statusline` and the opt-in `codeforge subagent-statusline` each write a small JSON
++snapshot to a RAM-backed directory after every render, so other tools can poll session state
++without touching the transcript. Two files, one writer each, no merge — neither writer reads the
++other's file.
++
++**Base-dir resolution** (fixed order, first accepted candidate wins):
++
++1. `$AUTOPILOT_LIVE_DIR` (override knob)
++2. `$XDG_RUNTIME_DIR/autopilot`
++3. `/dev/shm/autopilot-<uid>`
++4. `/tmp/autopilot-<uid>`
++
++Every candidate — including the override — is accepted only if it resolves to a `tmpfs`/`ramfs`
++mount (checked via `findmnt -T <dir> -o FSTYPE -n`; falls back to a longest-prefix match over
++`/proc/mounts` when `findmnt` is absent). A rejected candidate is skipped, not fatal. If every
++candidate is rejected, the base falls back to `~/.autopilot` (disk-backed) and prints exactly one
++warning line to stderr per process.
++
++**Files** (under `<base>/context/`, mode 0600, atomic same-dir temp+rename):
++
++- `<sid>.json` — main status line record:
++  ```json
++  {
++    "schema_version": 1,
++    "session_id": "<raw session_id>",
++    "written_at": "<RFC3339 UTC>",
++    "cc_version": "<version>",
++    "model": {"id": "...", "display_name": "..."},
++    "context_window": {
++      "context_window_size": 1000000,
++      "used_percentage": 26,
++      "total_input_tokens": 262707,
++      "current_usage": {"input_tokens": 32, "output_tokens": 4, "...": "..."}
++    }
++  }
++  ```
++- `<sid>.tasks.json` — subagent status line record (written by `codeforge subagent-statusline`):
++  ```json
++  {
++    "schema_version": 1,
++    "session_id": "<raw session_id>",
++    "written_at": "<RFC3339 UTC>",
++    "tasks": [
++      {"id": "...", "type": "...", "status": "...", "description": "...", "label": "...",
++       "startTime": 0, "model": "...", "cwd": "...", "contextWindowSize": 0, "tokenCount": 0}
++    ]
++  }
++  ```
++  Task fields (`name` included, when present) are copied only when present in the input — never
++  invented.
++
++`<sid>` is the raw stdin `session_id`, sanitized: every Unicode scalar not in `[A-Za-z0-9_-]` is
++replaced with `_`, then the result is truncated to the first 64 scalars; empty input becomes
++`unknown`.
++
++A write failure never changes statusline rendering or exit code — it's logged to stderr once per
++process and otherwise swallowed.
++
++**Opt-in install:** `codeforge install --subagent-statusline` (only takes effect alongside
++statusLine install, i.e. without `--hooks`/`--project-hooks`, or with `--all`) idempotently adds a
++`subagentStatusLine` entry to `settings.json` pointing at `<binary> subagent-statusline`. Default
++`install`/`install --all` behaviour is unchanged — this is opt-in only.
++
+ ## Data & Privacy
+ 
+ - All data stays on your machine in `.codeforge/` (per-project) or `$CODEFORGE_DIR` (global).
+diff --git a/src/cli/bootstrap.rs b/src/cli/bootstrap.rs
+index 680c976..9715eb9 100644
+--- a/src/cli/bootstrap.rs
++++ b/src/cli/bootstrap.rs
+@@ -113,6 +113,7 @@ pub fn run(opts: BootstrapOpts) -> Result<()> {
+     let opts_at = |hooks: bool, all: bool| InstallOpts {
+         hooks,
+         all,
++        subagent_statusline: false,
+         project_hooks: false,
+         dry_run: opts.dry_run,
+         force: false,
+diff --git a/src/cli/install.rs b/src/cli/install.rs
+index c98707f..2fdabf2 100644
+--- a/src/cli/install.rs
++++ b/src/cli/install.rs
+@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
+ pub struct InstallOpts {
+     pub hooks: bool,
+     pub all: bool,
++    pub subagent_statusline: bool,
+     pub project_hooks: bool,
+     pub dry_run: bool,
+     pub force: bool,
+@@ -102,6 +103,13 @@ pub fn run(opts: InstallOpts) -> Result<()> {
+         let action = patch_statusline(&mut settings, &cmd, opts.force)?;
+         say(opts.quiet, &format!("✓ statusLine {}", action));
+         say(opts.quiet, &format!("  command: {}", cmd));
++
++        if opts.subagent_statusline {
++            let sub_cmd = format!("{} subagent-statusline", exe_str);
++            let sub_action = patch_subagent_statusline(&mut settings, &sub_cmd, opts.force)?;
++            say(opts.quiet, &format!("✓ subagentStatusLine {}", sub_action));
++            say(opts.quiet, &format!("  command: {}", sub_cmd));
++        }
+     }
+ 
+     if install_hooks {
+@@ -373,6 +381,33 @@ fn patch_statusline(settings: &mut Value, cmd: &str, force: bool) -> Result<&'st
+     })
+ }
+ 
++/// Idempotently add `settings.json.subagentStatusLine` pointing at
++/// `<binary> subagent-statusline`. Opt-in only (`--subagent-statusline`),
++/// and only called when `statusLine.command` already ends with
++/// `codeforge statusline` (checked by the caller, which just wrote it).
++/// Mirrors `patch_statusline`'s merge/force semantics.
++fn patch_subagent_statusline(settings: &mut Value, cmd: &str, force: bool) -> Result<&'static str> {
++    require_object_root(settings)?;
++    let new_block = json!({
++        "type": "command",
++        "command": cmd,
++        MARKER_KEY: current_marker(),
++    });
++    let obj = settings.as_object_mut().expect("checked");
++    let prior = obj.get("subagentStatusLine").cloned();
++    if let Some(p) = &prior {
++        if !statusline_is_codeforge(p) && !force {
++            bail!("settings.json.subagentStatusLine 已被其他程式設定（不是 codeforge）；使用 --force 覆蓋");
++        }
++    }
++    obj.insert("subagentStatusLine".to_string(), new_block.clone());
++    Ok(match prior {
++        None => "新增",
++        Some(p) if p == new_block => "已是最新（無變動）",
++        Some(_) => "更新",
++    })
++}
++
+ fn unpatch_statusline(settings: &mut Value) -> Result<&'static str> {
+     require_object_root(settings)?;
+     let obj = settings.as_object_mut().expect("checked");
+@@ -876,6 +911,57 @@ mod tests {
+         assert!(err.to_string().contains("array"));
+     }
+ 
++    fn subagent_statusline_cmd(s: &Value) -> &str {
++        s["subagentStatusLine"]["command"].as_str().unwrap()
++    }
++
++    #[test]
++    fn subagent_statusline_merge_into_empty() {
++        let mut s = json!({});
++        let action =
++            patch_subagent_statusline(&mut s, "/abs/codeforge subagent-statusline", false).unwrap();
++        assert_eq!(action, "新增");
++        assert_eq!(
++            subagent_statusline_cmd(&s),
++            "/abs/codeforge subagent-statusline"
++        );
++        assert!(s["subagentStatusLine"][MARKER_KEY]
++            .as_str()
++            .unwrap()
++            .starts_with("codeforge@"));
++    }
++
++    #[test]
++    fn subagent_statusline_idempotent_on_own() {
++        let mut s = json!({});
++        patch_subagent_statusline(&mut s, "/x subagent-statusline", false).unwrap();
++        let action = patch_subagent_statusline(&mut s, "/x subagent-statusline", false).unwrap();
++        assert_eq!(action, "已是最新（無變動）");
++    }
++
++    #[test]
++    fn subagent_statusline_refuses_user_owned_without_force() {
++        let mut s = json!({"subagentStatusLine": {"type": "command", "command": "/user/script"}});
++        let err = patch_subagent_statusline(&mut s, "/x subagent-statusline", false).unwrap_err();
++        assert!(err.to_string().contains("subagentStatusLine"));
++    }
++
++    #[test]
++    fn install_only_adds_subagent_statusline_when_flag_passed() {
++        let mut s = json!({});
++        // Simulate the caller: statusLine patched first (always, when
++        // install_statusline is true), subagentStatusLine only when the
++        // opt-in flag is set.
++        patch_statusline(&mut s, "/abs/codeforge statusline", false).unwrap();
++        assert!(s.get("subagentStatusLine").is_none());
++
++        patch_subagent_statusline(&mut s, "/abs/codeforge subagent-statusline", false).unwrap();
++        assert_eq!(
++            subagent_statusline_cmd(&s),
++            "/abs/codeforge subagent-statusline"
++        );
++    }
++
+     #[test]
+     fn group_is_codeforge_detects_marker() {
+         let ours = json!({
+diff --git a/src/cli/mod.rs b/src/cli/mod.rs
+index 6e99f51..bf3754c 100644
+--- a/src/cli/mod.rs
++++ b/src/cli/mod.rs
+@@ -24,6 +24,7 @@ mod ship;
+ mod snapshot;
+ mod statusline;
+ mod strategy;
++mod subagent_statusline;
+ mod tui;
+ mod use_item;
+ mod world;
+@@ -47,6 +48,9 @@ pub enum Commands {
+         /// 同時安裝 statusLine 與 hooks（等同 --hooks 加 statusLine 預設）
+         #[arg(long)]
+         all: bool,
++        /// 額外安裝 subagentStatusLine（讀取子代理任務清單、寫 live context tasks 檔）；opt-in，不改變預設安裝行為
++        #[arg(long)]
++        subagent_statusline: bool,
+         /// 安裝 codeforge-clone-only dev hooks（2 個：check-improvements SessionStart、check-dev-flow PreToolUse）到 $CWD/.claude/settings.json；只能在 codeforge clone 內執行
+         #[arg(long)]
+         project_hooks: bool,
+@@ -141,6 +145,9 @@ pub enum Commands {
+     Pet,
+     /// 輸出 statusline（Claude Code 呼叫）
+     Statusline,
++    /// 讀一行 subagent 任務清單 JSON，寫 live context tasks 檔（Claude Code subagentStatusLine hook 呼叫）；不印任何東西，解析失敗也 exit 0
++    #[command(name = "subagent-statusline")]
++    SubagentStatusline,
+     /// 送一筆事件進 event_inbox（Claude Code hook 用）
+     Emit {
+         /// 事件名稱（如 session_start / file_saved / git_commit）
+@@ -332,6 +339,7 @@ pub fn run(cli: Cli) -> Result<()> {
+         Commands::Install {
+             hooks,
+             all,
++            subagent_statusline,
+             project_hooks,
+             dry_run,
+             force,
+@@ -341,6 +349,7 @@ pub fn run(cli: Cli) -> Result<()> {
+         } => install::run(install::InstallOpts {
+             hooks,
+             all,
++            subagent_statusline,
+             project_hooks,
+             dry_run,
+             force,
+@@ -381,6 +390,7 @@ pub fn run(cli: Cli) -> Result<()> {
+         Commands::Adopt => adopt::run(&ctx),
+         Commands::Pet => pet::run(&ctx),
+         Commands::Statusline => statusline::run(&ctx),
++        Commands::SubagentStatusline => subagent_statusline::run(),
+         Commands::Emit {
+             event,
+             fields,
+diff --git a/src/cli/statusline.rs b/src/cli/statusline.rs
+index 9b52663..d2adb48 100644
+--- a/src/cli/statusline.rs
++++ b/src/cli/statusline.rs
+@@ -17,7 +17,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
+ use unicode_width::UnicodeWidthStr;
+ 
+ pub fn run(ctx: &db::Context) -> Result<()> {
+-    let mut data = read_status_input();
++    let (mut data, raw) = read_status_input();
++    write_live_context(&raw);
+     let conn = ctx.open_db()?;
+     let has_pet = LiveState::exists(&conn).unwrap_or(false);
+ 
+@@ -123,7 +124,11 @@ struct StatusInput {
+     seven_day_resets_at: Option<i64>,
+ }
+ 
+-fn read_status_input() -> StatusInput {
++/// Returns the rendered `StatusInput` plus the raw parsed JSON (or
++/// `Value::Null` when stdin was empty/unparseable) — the live-context
++/// writer builds its record from the raw value, per plan §2.5, rather than
++/// from the display struct.
++fn read_status_input() -> (StatusInput, serde_json::Value) {
+     use std::io::BufRead;
+     let stdin = std::io::stdin();
+     let mut line = String::new();
+@@ -158,7 +163,7 @@ fn read_status_input() -> StatusInput {
+             let update_available = matches!((&session_v, &latest_v),
+                 (Some(s), Some(l)) if s != l);
+ 
+-            return StatusInput {
++            let input = StatusInput {
+                 model,
+                 cwd: v["cwd"]
+                     .as_str()
+@@ -175,9 +180,80 @@ fn read_status_input() -> StatusInput {
+                 seven_day_pct,
+                 seven_day_resets_at,
+             };
++            return (input, v);
+         }
+     }
+-    StatusInput::default()
++    (StatusInput::default(), serde_json::Value::Null)
++}
++
++/// Build the main live-context record from the raw stdin JSON and write it
++/// to `<live-base>/context/<sid>.json`. Never touches rendering or exit
++/// code — write failures are logged to stderr once per process (see
++/// `crate::live::warn_once`-style behaviour inside `write_live_json`) and
++/// otherwise swallowed here.
++fn write_live_context(raw: &serde_json::Value) {
++    if raw.is_null() {
++        return;
++    }
++    let (base, _source) = crate::live::resolve_live_base();
++    let context_dir = base.join("context");
++    write_live_context_to(raw, &context_dir);
++}
++
++/// Build the main record from `raw` (built from the raw `serde_json::Value`,
++/// not the display struct — plan §2.5) and write it to
++/// `<context_dir>/<sid>.json`. Split out from `write_live_context` so tests
++/// can point at an isolated directory instead of the process-cached
++/// `resolve_live_base()` base.
++fn write_live_context_to(raw: &serde_json::Value, context_dir: &std::path::Path) {
++    let session_id = raw["session_id"].as_str().unwrap_or("");
++    let sid = crate::live::sanitize_session_id(session_id);
++    let record = build_main_record(raw, session_id);
++    if let Err(e) = crate::live::write_live_json(context_dir, &format!("{sid}.json"), &record) {
++        eprintln!("codeforge: failed to write live context file: {e}");
++    }
++}
++
++/// Build the main live-context record schema (`schema_version: 1`) from the
++/// raw stdin JSON. Fields are copied only when present in `raw` — never
++/// invented.
++fn build_main_record(raw: &serde_json::Value, session_id: &str) -> serde_json::Value {
++    let mut record = serde_json::json!({
++        "schema_version": 1,
++        "session_id": session_id,
++        "written_at": chrono::Utc::now().to_rfc3339(),
++    });
++    let obj = record.as_object_mut().expect("object literal");
++    if let Some(v) = raw.get("version") {
++        obj.insert("cc_version".to_string(), v.clone());
++    }
++    if let Some(model) = raw.get("model") {
++        let mut m = serde_json::Map::new();
++        if let Some(id) = model.get("id") {
++            m.insert("id".to_string(), id.clone());
++        }
++        if let Some(dn) = model.get("display_name") {
++            m.insert("display_name".to_string(), dn.clone());
++        }
++        obj.insert("model".to_string(), serde_json::Value::Object(m));
++    }
++    if let Some(cw) = raw.get("context_window") {
++        let mut c = serde_json::Map::new();
++        for key in [
++            "context_window_size",
++            "used_percentage",
++            "total_input_tokens",
++        ] {
++            if let Some(v) = cw.get(key) {
++                c.insert(key.to_string(), v.clone());
++            }
++        }
++        if let Some(v) = cw.get("current_usage") {
++            c.insert("current_usage".to_string(), v.clone());
++        }
++        obj.insert("context_window".to_string(), serde_json::Value::Object(c));
++    }
++    record
+ }
+ 
+ // ─── UX Pro color palette (ANSI256 → truecolor) ───────────────────────────────
+@@ -1585,6 +1661,45 @@ mod tests {
+     // Serialize env mutations across tests to avoid race conditions.
+     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+ 
++    /// (g) statusline fixture from p0/statusline.json ⇒ main file matches
++    /// schema, context_window_size == 1000000.
++    #[test]
++    fn live_context_from_p0_fixture_matches_schema() {
++        let fixture_path = concat!(
++            env!("CARGO_MANIFEST_DIR"),
++            "/tests/fixtures/statusline-p0.json"
++        );
++        let raw: serde_json::Value =
++            serde_json::from_str(&std::fs::read_to_string(fixture_path).unwrap()).unwrap();
++
++        let dir = tempfile::tempdir().unwrap();
++        let context_dir = dir.path().join("context");
++        write_live_context_to(&raw, &context_dir);
++
++        let sid = crate::live::sanitize_session_id(raw["session_id"].as_str().unwrap());
++        let written: serde_json::Value = serde_json::from_str(
++            &std::fs::read_to_string(context_dir.join(format!("{sid}.json"))).unwrap(),
++        )
++        .unwrap();
++
++        assert_eq!(written["schema_version"], 1);
++        assert_eq!(
++            written["session_id"],
++            "93196c52-25cb-47ca-821c-cec391832eed"
++        );
++        assert!(written["written_at"].as_str().unwrap().contains('T'));
++        assert_eq!(written["cc_version"], "2.1.260");
++        assert_eq!(written["model"]["id"], "claude-fable-5-1");
++        assert_eq!(written["model"]["display_name"], "Fable 5.1");
++        assert_eq!(written["context_window"]["context_window_size"], 1_000_000);
++        assert_eq!(written["context_window"]["used_percentage"], 26);
++        assert_eq!(written["context_window"]["total_input_tokens"], 262_707);
++        assert_eq!(
++            written["context_window"]["current_usage"]["input_tokens"],
++            32
++        );
++    }
++
+     /// NO_COLOR env var causes tc/tc_bold/tcs to emit plain text (no ANSI).
+     #[test]
+     fn no_color_strips_ansi() {
+diff --git a/src/cli/subagent_statusline.rs b/src/cli/subagent_statusline.rs
+new file mode 100644
+index 0000000..bc5e17f
+--- /dev/null
++++ b/src/cli/subagent_statusline.rs
+@@ -0,0 +1,139 @@
++//! `codeforge subagent-statusline` — reads one JSON line describing the
++//! current subagent task list (Claude Code's subagent status line hook) and
++//! writes `<live-base>/context/<sid>.tasks.json`. Prints nothing; always
++//! exits 0, even when stdin is empty or unparseable — this command has no
++//! rendering output to protect, so a write failure (or bad input) is just
++//! logged to stderr and otherwise ignored.
++//!
++//! Schema (`schema_version: 1`), autopilot v2.36.1 plan §2.5:
++//! `{"schema_version":1,"session_id":"<raw>","written_at":"<RFC3339 UTC>",
++//!   "tasks":[{"id","type","status","description","label","startTime",
++//!             "model","cwd","contextWindowSize","tokenCount","name"}]}`
++//! Each task field is copied only when present in stdin — never invented.
++//! This writer never reads the main statusline's file, and vice versa.
++
++use anyhow::Result;
++use std::io::BufRead;
++
++const TASK_FIELDS: &[&str] = &[
++    "id",
++    "type",
++    "status",
++    "description",
++    "label",
++    "startTime",
++    "model",
++    "cwd",
++    "contextWindowSize",
++    "tokenCount",
++    "name",
++];
++
++pub fn run() -> Result<()> {
++    let stdin = std::io::stdin();
++    let mut line = String::new();
++    if stdin.lock().read_line(&mut line).is_ok() && !line.trim().is_empty() {
++        if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&line) {
++            write_tasks_context(&raw);
++        }
++    }
++    Ok(())
++}
++
++fn write_tasks_context(raw: &serde_json::Value) {
++    let session_id = raw["session_id"].as_str().unwrap_or("");
++    let sid = crate::live::sanitize_session_id(session_id);
++    let record = build_tasks_record(raw, session_id);
++
++    let (base, _source) = crate::live::resolve_live_base();
++    let context_dir = base.join("context");
++    if let Err(e) =
++        crate::live::write_live_json(&context_dir, &format!("{sid}.tasks.json"), &record)
++    {
++        eprintln!("codeforge: failed to write live subagent context file: {e}");
++    }
++}
++
++/// Build the tasks record schema from the raw stdin JSON.
++fn build_tasks_record(raw: &serde_json::Value, session_id: &str) -> serde_json::Value {
++    let tasks: Vec<serde_json::Value> = raw["tasks"]
++        .as_array()
++        .map(|arr| arr.iter().map(build_task_row).collect())
++        .unwrap_or_default();
++
++    serde_json::json!({
++        "schema_version": 1,
++        "session_id": session_id,
++        "written_at": chrono::Utc::now().to_rfc3339(),
++        "tasks": tasks,
++    })
++}
++
++fn build_task_row(task: &serde_json::Value) -> serde_json::Value {
++    let mut row = serde_json::Map::new();
++    for field in TASK_FIELDS {
++        if let Some(v) = task.get(field) {
++            row.insert((*field).to_string(), v.clone());
++        }
++    }
++    serde_json::Value::Object(row)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    /// (h) subagent fixture from p0/subagent.json ⇒ tasks file has one row
++    /// with id == "a9c9b5673eb39f842" and tokenCount == 47688; main file
++    /// untouched.
++    #[test]
++    fn tasks_record_from_p0_fixture_matches_schema() {
++        let fixture_path = concat!(
++            env!("CARGO_MANIFEST_DIR"),
++            "/tests/fixtures/subagent-p0.json"
++        );
++        let raw: serde_json::Value =
++            serde_json::from_str(&std::fs::read_to_string(fixture_path).unwrap()).unwrap();
++
++        let record = build_tasks_record(&raw, raw["session_id"].as_str().unwrap());
++        assert_eq!(record["schema_version"], 1);
++        assert_eq!(record["session_id"], "93196c52-25cb-47ca-821c-cec391832eed");
++        let tasks = record["tasks"].as_array().unwrap();
++        assert_eq!(tasks.len(), 1);
++        assert_eq!(tasks[0]["id"], "a9c9b5673eb39f842");
++        assert_eq!(tasks[0]["tokenCount"], 47688);
++        assert_eq!(tasks[0]["status"], "running");
++        assert_eq!(tasks[0]["model"], "claude-sonnet-5");
++        // "name" absent in the fixture — must not be invented.
++        assert!(tasks[0].get("name").is_none());
++    }
++
++    /// End-to-end via write_tasks_context: writes only the .tasks.json
++    /// file, never the main .json file, in the same context dir.
++    #[test]
++    fn write_tasks_context_leaves_main_file_untouched() {
++        let fixture_path = concat!(
++            env!("CARGO_MANIFEST_DIR"),
++            "/tests/fixtures/subagent-p0.json"
++        );
++        let raw: serde_json::Value =
++            serde_json::from_str(&std::fs::read_to_string(fixture_path).unwrap()).unwrap();
++
++        let dir = tempfile::tempdir().unwrap();
++        std::env::set_var("AUTOPILOT_LIVE_DIR", dir.path());
++        // Force this test's own resolution by bypassing the process-wide
++        // OnceLock cache: call write_live_json directly against the same
++        // context dir shape write_tasks_context would use, rather than
++        // going through resolve_live_base() (which may already be cached
++        // from another test in this binary).
++        let context_dir = dir.path().join("context");
++        let sid = crate::live::sanitize_session_id(raw["session_id"].as_str().unwrap());
++        let record = build_tasks_record(&raw, raw["session_id"].as_str().unwrap());
++        crate::live::write_live_json(&context_dir, &format!("{sid}.tasks.json"), &record).unwrap();
++
++        assert!(context_dir.join(format!("{sid}.tasks.json")).exists());
++        assert!(!context_dir.join(format!("{sid}.json")).exists());
++
++        std::env::remove_var("AUTOPILOT_LIVE_DIR");
++    }
++}
+diff --git a/src/live.rs b/src/live.rs
+new file mode 100644
+index 0000000..1c68b53
+--- /dev/null
++++ b/src/live.rs
+@@ -0,0 +1,496 @@
++//! Live context files — writes small JSON snapshots to a RAM-backed base dir
++//! so external readers (e.g. a companion status line) can poll session state
++//! without touching the transcript.
++//!
++//! Base-dir resolution order (autopilot v2.36.1 plan §2.5, P1):
++//!   `$AUTOPILOT_LIVE_DIR` → `$XDG_RUNTIME_DIR/autopilot` →
++//!   `/dev/shm/autopilot-<uid>` → `/tmp/autopilot-<uid>`
++//! Every candidate (override included) is accepted only if it resolves to a
++//! `tmpfs`/`ramfs` mount. If every candidate is rejected, falls back to
++//! `~/.autopilot` and prints exactly one warning line per process.
++//!
++//! Consumers append their own purpose segment (`context/`) to the returned
++//! base; this module does not know about that segment.
++
++use std::fs;
++use std::io::{self, Write as _};
++use std::path::{Path, PathBuf};
++use std::sync::atomic::{AtomicBool, Ordering};
++use std::sync::OnceLock;
++
++/// Which candidate the resolver actually chose.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum LiveBaseSource {
++    /// `$AUTOPILOT_LIVE_DIR`, verified tmpfs/ramfs.
++    Override,
++    /// `$XDG_RUNTIME_DIR/autopilot`, verified tmpfs/ramfs.
++    XdgRuntime,
++    /// `/dev/shm/autopilot-<uid>`, verified tmpfs/ramfs.
++    DevShm,
++    /// `/tmp/autopilot-<uid>`, verified tmpfs/ramfs.
++    Tmp,
++    /// Every candidate was rejected — fell back to `~/.autopilot` (not
++    /// verified as RAM-backed; may be on disk).
++    Fallback,
++}
++
++/// Warn-once guard: at most one "no RAM-backed dir found" line per process.
++static WARNED: AtomicBool = AtomicBool::new(false);
++
++/// Cache the resolved base for the lifetime of the process (mount probing
++/// shells out / reads /proc — no need to redo it per write).
++static RESOLVED: OnceLock<(PathBuf, LiveBaseSource)> = OnceLock::new();
++
++/// Resolve the live-context base directory per the fixed candidate order.
++/// Idempotent per process (cached in a `OnceLock`).
++pub fn resolve_live_base() -> (PathBuf, LiveBaseSource) {
++    RESOLVED.get_or_init(resolve_live_base_uncached).clone()
++}
++
++fn resolve_live_base_uncached() -> (PathBuf, LiveBaseSource) {
++    let uid = current_uid();
++
++    let mut candidates: Vec<(PathBuf, LiveBaseSource)> = Vec::new();
++    if let Ok(over) = std::env::var("AUTOPILOT_LIVE_DIR") {
++        if !over.is_empty() {
++            candidates.push((PathBuf::from(over), LiveBaseSource::Override));
++        }
++    }
++    if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
++        if !xdg.is_empty() {
++            candidates.push((
++                PathBuf::from(xdg).join("autopilot"),
++                LiveBaseSource::XdgRuntime,
++            ));
++        }
++    }
++    candidates.push((
++        PathBuf::from(format!("/dev/shm/autopilot-{uid}")),
++        LiveBaseSource::DevShm,
++    ));
++    candidates.push((
++        PathBuf::from(format!("/tmp/autopilot-{uid}")),
++        LiveBaseSource::Tmp,
++    ));
++
++    for (dir, source) in candidates {
++        if is_ram_backed(&dir) {
++            return (dir, source);
++        }
++    }
++
++    warn_once("autopilot: no RAM-backed candidate for live context dir found; falling back to ~/.autopilot (disk-backed)");
++    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
++    (home.join(".autopilot"), LiveBaseSource::Fallback)
++}
++
++fn warn_once(msg: &str) {
++    if WARNED
++        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
++        .is_ok()
++    {
++        let _ = writeln!(io::stderr(), "{msg}");
++    }
++}
++
++#[cfg(unix)]
++extern "C" {
++    fn getuid() -> u32;
++}
++
++#[cfg(unix)]
++fn current_uid() -> u32 {
++    // Avoid pulling in the `libc` crate for one syscall — declare it inline.
++    // SAFETY: getuid() has no preconditions and never fails.
++    unsafe { getuid() }
++}
++
++#[cfg(not(unix))]
++fn current_uid() -> u32 {
++    0
++}
++
++/// True if `dir` (or its nearest existing ancestor, if `dir` doesn't exist
++/// yet) sits on a `tmpfs`/`ramfs` mount.
++fn is_ram_backed(dir: &Path) -> bool {
++    let probe_path = nearest_existing_ancestor(dir);
++    match probe_fstype_findmnt(&probe_path) {
++        Some(fstype) => is_ram_fstype(&fstype),
++        None => match probe_fstype_proc_mounts(&probe_path) {
++            Some(fstype) => is_ram_fstype(&fstype),
++            None => false,
++        },
++    }
++}
++
++fn is_ram_fstype(fstype: &str) -> bool {
++    let f = fstype.trim();
++    f == "tmpfs" || f == "ramfs"
++}
++
++/// Walk up from `dir` until we find a path that exists. `/` always exists,
++/// so this terminates.
++fn nearest_existing_ancestor(dir: &Path) -> PathBuf {
++    let mut cur = dir.to_path_buf();
++    loop {
++        if cur.exists() {
++            return cur;
++        }
++        match cur.parent() {
++            Some(p) if !p.as_os_str().is_empty() => cur = p.to_path_buf(),
++            _ => return PathBuf::from("/"),
++        }
++    }
++}
++
++/// Shell out to `findmnt -T <dir> -o FSTYPE -n`. Returns `None` if the
++/// binary is absent or the invocation fails (caller falls back to
++/// `/proc/mounts`).
++fn probe_fstype_findmnt(dir: &Path) -> Option<String> {
++    let output = std::process::Command::new("findmnt")
++        .arg("-T")
++        .arg(dir)
++        .arg("-o")
++        .arg("FSTYPE")
++        .arg("-n")
++        .output()
++        .ok()?;
++    if !output.status.success() {
++        return None;
++    }
++    let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
++    if s.is_empty() {
++        None
++    } else {
++        Some(s)
++    }
++}
++
++/// Fallback fstype probe: longest-prefix match over `/proc/mounts` (or the
++/// path in `CODEFORGE_PROC_MOUNTS`, for tests).
++fn probe_fstype_proc_mounts(dir: &Path) -> Option<String> {
++    let mounts_path = std::env::var("CODEFORGE_PROC_MOUNTS")
++        .map(PathBuf::from)
++        .unwrap_or_else(|_| PathBuf::from("/proc/mounts"));
++    let content = fs::read_to_string(&mounts_path).ok()?;
++
++    let target = dir.to_string_lossy();
++    let mut best: Option<(usize, String)> = None;
++    for line in content.lines() {
++        // Format: <device> <mountpoint> <fstype> <options> <dump> <pass>
++        let mut fields = line.split_whitespace();
++        let _device = fields.next();
++        let mountpoint = fields.next()?;
++        let fstype = fields.next()?;
++
++        if target == mountpoint
++            || target.starts_with(&format!("{mountpoint}/"))
++            || mountpoint == "/"
++        {
++            let len = mountpoint.len();
++            if best.as_ref().is_none_or(|(best_len, _)| len > *best_len) {
++                best = Some((len, fstype.to_string()));
++            }
++        }
++    }
++    best.map(|(_, fstype)| fstype)
++}
++
++/// Sanitize a raw `session_id` into a filesystem-safe token.
++///
++/// Rule (normative, autopilot v2.36.1 plan §2.5): replace every Unicode
++/// scalar value not in `[A-Za-z0-9_-]` with a single `_` (per scalar), then
++/// keep the first 64 scalars. Empty input (after replacement — the length
++/// check applies to the original string) yields `"unknown"`.
++pub fn sanitize_session_id(raw: &str) -> String {
++    if raw.is_empty() {
++        return "unknown".to_string();
++    }
++    let sanitized: String = raw
++        .chars()
++        .map(|c| {
++            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
++                c
++            } else {
++                '_'
++            }
++        })
++        .take(64)
++        .collect();
++    if sanitized.is_empty() {
++        "unknown".to_string()
++    } else {
++        sanitized
++    }
++}
++
++/// Write `value` as `<base>/<file_name>`, mode 0600, atomically (same-dir
++/// temp file + rename). Creates `base` (and its ancestors) with mode 0700
++/// if it doesn't exist yet.
++pub fn write_live_json(base: &Path, file_name: &str, value: &serde_json::Value) -> io::Result<()> {
++    create_dir_all_0700(base)?;
++
++    let body = serde_json::to_vec(value)?;
++    let final_path = base.join(file_name);
++
++    let mut tmp = tempfile::Builder::new()
++        .prefix(&format!(".{file_name}."))
++        .suffix(".tmp")
++        .tempfile_in(base)?;
++    tmp.write_all(&body)?;
++    tmp.flush()?;
++    set_mode_0600(tmp.path())?;
++
++    tmp.persist(&final_path).map_err(|e| e.error)?;
++
++    Ok(())
++}
++
++#[cfg(unix)]
++fn create_dir_all_0700(dir: &Path) -> io::Result<()> {
++    use std::os::unix::fs::PermissionsExt;
++    fs::create_dir_all(dir)?;
++    let perms = fs::Permissions::from_mode(0o700);
++    fs::set_permissions(dir, perms)
++}
++
++#[cfg(not(unix))]
++fn create_dir_all_0700(dir: &Path) -> io::Result<()> {
++    fs::create_dir_all(dir)
++}
++
++#[cfg(unix)]
++fn set_mode_0600(path: &Path) -> io::Result<()> {
++    use std::os::unix::fs::PermissionsExt;
++    let perms = fs::Permissions::from_mode(0o600);
++    fs::set_permissions(path, perms)
++}
++
++#[cfg(not(unix))]
++fn set_mode_0600(_path: &Path) -> io::Result<()> {
++    Ok(())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::sync::Mutex;
++
++    // Serializes tests that mutate process-global env vars — `cargo test`
++    // runs tests in threads within one process, and env vars are global.
++    static ENV_LOCK: Mutex<()> = Mutex::new(());
++
++    fn fake_findmnt_dir(script: &str) -> tempfile::TempDir {
++        let dir = tempfile::tempdir().unwrap();
++        let path = dir.path().join("findmnt");
++        fs::write(&path, script).unwrap();
++        #[cfg(unix)]
++        {
++            use std::os::unix::fs::PermissionsExt;
++            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
++        }
++        dir
++    }
++
++    /// Replaces PATH entirely with `dir` for the duration of `f` — a real
++    /// system `findmnt` anywhere else on PATH would otherwise answer ahead
++    /// of (or instead of) the fixture we're trying to simulate, since
++    /// `Command::new("findmnt")` does a normal PATH search.
++    fn with_only_path<T>(dir: &Path, f: impl FnOnce() -> T) -> T {
++        let orig = std::env::var("PATH").unwrap_or_default();
++        std::env::set_var("PATH", dir);
++        let result = f();
++        std::env::set_var("PATH", orig);
++        result
++    }
++
++    /// (a) fake findmnt returning tmpfs for the XDG candidate ⇒ chosen.
++    #[test]
++    fn findmnt_tmpfs_selects_xdg_candidate() {
++        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
++        let bin_dir = fake_findmnt_dir("#!/bin/sh\necho tmpfs\n");
++        let xdg_dir = tempfile::tempdir().unwrap();
++
++        std::env::remove_var("AUTOPILOT_LIVE_DIR");
++        std::env::set_var("XDG_RUNTIME_DIR", xdg_dir.path());
++
++        let (base, source) = with_only_path(bin_dir.path(), resolve_live_base_uncached_for_test);
++
++        assert_eq!(source, LiveBaseSource::XdgRuntime);
++        assert_eq!(base, xdg_dir.path().join("autopilot"));
++
++        std::env::remove_var("XDG_RUNTIME_DIR");
++    }
++
++    /// (b) fake findmnt returning ext4 for every candidate ⇒ base is
++    /// ~/.autopilot and exactly one warning line on stderr.
++    #[test]
++    fn findmnt_ext4_everywhere_falls_back_and_warns_once() {
++        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
++        let bin_dir = fake_findmnt_dir("#!/bin/sh\necho ext4\n");
++        let xdg_dir = tempfile::tempdir().unwrap();
++
++        std::env::remove_var("AUTOPILOT_LIVE_DIR");
++        std::env::set_var("XDG_RUNTIME_DIR", xdg_dir.path());
++        WARNED.store(false, Ordering::SeqCst);
++
++        let (base, source) = with_only_path(bin_dir.path(), resolve_live_base_uncached_for_test);
++
++        assert_eq!(source, LiveBaseSource::Fallback);
++        assert_eq!(base, dirs::home_dir().unwrap().join(".autopilot"));
++        // Warned exactly once for this resolution.
++        assert!(WARNED.load(Ordering::SeqCst));
++
++        std::env::remove_var("XDG_RUNTIME_DIR");
++    }
++
++    /// (c) findmnt absent + CODEFORGE_PROC_MOUNTS fixture ⇒ /proc/mounts
++    /// path works.
++    #[test]
++    fn missing_findmnt_falls_back_to_proc_mounts() {
++        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
++        let empty_bin_dir = tempfile::tempdir().unwrap();
++        let xdg_dir = tempfile::tempdir().unwrap();
++        let xdg_path = xdg_dir.path().join("autopilot");
++        fs::create_dir_all(&xdg_path).unwrap();
++
++        let mounts = tempfile::NamedTempFile::new().unwrap();
++        fs::write(
++            mounts.path(),
++            format!(
++                "tmpfs {} tmpfs rw,relatime 0 0\n/dev/sda1 / ext4 rw 0 0\n",
++                xdg_path.display()
++            ),
++        )
++        .unwrap();
++
++        std::env::remove_var("AUTOPILOT_LIVE_DIR");
++        std::env::set_var("XDG_RUNTIME_DIR", xdg_dir.path());
++        std::env::set_var("CODEFORGE_PROC_MOUNTS", mounts.path());
++
++        let (base, source) =
++            with_only_path(empty_bin_dir.path(), resolve_live_base_uncached_for_test);
++
++        assert_eq!(source, LiveBaseSource::XdgRuntime);
++        assert_eq!(base, xdg_path);
++
++        std::env::remove_var("XDG_RUNTIME_DIR");
++        std::env::remove_var("CODEFORGE_PROC_MOUNTS");
++    }
++
++    /// (d) ext4 override + tmpfs XDG ⇒ XDG chosen (override rejected, not
++    /// fatal — falls through to the next candidate).
++    #[test]
++    fn ext4_override_falls_through_to_tmpfs_xdg() {
++        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
++
++        let override_dir = tempfile::tempdir().unwrap();
++        let xdg_dir = tempfile::tempdir().unwrap();
++        let xdg_path = xdg_dir.path().join("autopilot");
++        fs::create_dir_all(&xdg_path).unwrap();
++
++        let mounts = tempfile::NamedTempFile::new().unwrap();
++        fs::write(
++            mounts.path(),
++            format!(
++                "tmpfs {} tmpfs rw,relatime 0 0\n/dev/sda1 {} ext4 rw 0 0\n/dev/sda1 / ext4 rw 0 0\n",
++                xdg_path.display(),
++                override_dir.path().display()
++            ),
++        )
++        .unwrap();
++
++        let empty_bin_dir = tempfile::tempdir().unwrap();
++        std::env::set_var("AUTOPILOT_LIVE_DIR", override_dir.path());
++        std::env::set_var("XDG_RUNTIME_DIR", xdg_dir.path());
++        std::env::set_var("CODEFORGE_PROC_MOUNTS", mounts.path());
++
++        let (base, source) =
++            with_only_path(empty_bin_dir.path(), resolve_live_base_uncached_for_test);
++
++        assert_eq!(source, LiveBaseSource::XdgRuntime);
++        assert_eq!(base, xdg_path);
++
++        std::env::remove_var("AUTOPILOT_LIVE_DIR");
++        std::env::remove_var("XDG_RUNTIME_DIR");
++        std::env::remove_var("CODEFORGE_PROC_MOUNTS");
++    }
++
++    /// (f) writer produces mode 0600 and atomic rename (no `.tmp` left).
++    #[test]
++    fn write_live_json_sets_mode_and_leaves_no_tmp() {
++        let dir = tempfile::tempdir().unwrap();
++        let base = dir.path().join("context");
++        let value = serde_json::json!({"a": 1});
++        write_live_json(&base, "s.json", &value).unwrap();
++
++        let final_path = base.join("s.json");
++        assert!(final_path.exists());
++
++        #[cfg(unix)]
++        {
++            use std::os::unix::fs::PermissionsExt;
++            let mode = fs::metadata(&final_path).unwrap().permissions().mode() & 0o777;
++            assert_eq!(mode, 0o600);
++            let dir_mode = fs::metadata(&base).unwrap().permissions().mode() & 0o777;
++            assert_eq!(dir_mode, 0o700);
++        }
++
++        let entries: Vec<_> = fs::read_dir(&base)
++            .unwrap()
++            .map(|e| e.unwrap().file_name())
++            .collect();
++        assert_eq!(
++            entries.len(),
++            1,
++            "expected exactly one file, got {entries:?}"
++        );
++
++        let read_back: serde_json::Value =
++            serde_json::from_str(&fs::read_to_string(&final_path).unwrap()).unwrap();
++        assert_eq!(read_back, value);
++    }
++
++    /// (e) sanitiser vectors — loaded from the shared fixture file.
++    #[test]
++    fn sanitize_session_id_matches_shared_vectors() {
++        let fixture_path = concat!(
++            env!("CARGO_MANIFEST_DIR"),
++            "/tests/fixtures/session-id-vectors.json"
++        );
++        let content = fs::read_to_string(fixture_path)
++            .unwrap_or_else(|e| panic!("failed to read {fixture_path}: {e}"));
++        let vectors: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap();
++        assert!(!vectors.is_empty(), "fixture file must not be empty");
++        for v in vectors {
++            let input = v["input"].as_str().unwrap();
++            let expected = v["expected"].as_str().unwrap();
++            assert_eq!(
++                sanitize_session_id(input),
++                expected,
++                "mismatch for input {input:?}"
++            );
++        }
++    }
++
++    #[test]
++    fn sanitize_session_id_basic_cases() {
++        assert_eq!(sanitize_session_id(""), "unknown");
++        assert_eq!(
++            sanitize_session_id("93196c52-25cb-47ca-821c-cec391832eed"),
++            "93196c52-25cb-47ca-821c-cec391832eed"
++        );
++        assert_eq!(sanitize_session_id("a/b:c d"), "a_b_c_d");
++        let long_input: String = "a".repeat(70);
++        let expected: String = "a".repeat(64);
++        assert_eq!(sanitize_session_id(&long_input), expected);
++    }
++
++    // Test-only re-export so tests can call the uncached resolver directly
++    // (the real `resolve_live_base()` caches in a `OnceLock` for the life
++    // of the process, which would make every test after the first see a
++    // stale answer).
++    fn resolve_live_base_uncached_for_test() -> (PathBuf, LiveBaseSource) {
++        resolve_live_base_uncached()
++    }
++}
+diff --git a/src/main.rs b/src/main.rs
+index a879f77..ed2b4d1 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -11,6 +11,7 @@ mod daemon;
+ mod db;
+ mod dream;
+ mod import;
++mod live;
+ mod llm;
+ mod memory;
+ mod mnemos;
+diff --git a/tests/fixtures/session-id-vectors.json b/tests/fixtures/session-id-vectors.json
+new file mode 100644
+index 0000000..dad056f
+--- /dev/null
++++ b/tests/fixtures/session-id-vectors.json
+@@ -0,0 +1,26 @@
++[
++  {
++    "input": "93196c52-25cb-47ca-821c-cec391832eed",
++    "expected": "93196c52-25cb-47ca-821c-cec391832eed"
++  },
++  {
++    "input": "a/b:c d",
++    "expected": "a_b_c_d"
++  },
++  {
++    "input": "會議123",
++    "expected": "__123"
++  },
++  {
++    "input": "😀abc",
++    "expected": "_abc"
++  },
++  {
++    "input": "",
++    "expected": "unknown"
++  },
++  {
++    "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
++    "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++  }
++]
+diff --git a/tests/fixtures/statusline-p0.json b/tests/fixtures/statusline-p0.json
+new file mode 100644
+index 0000000..80349d4
+--- /dev/null
++++ b/tests/fixtures/statusline-p0.json
+@@ -0,0 +1,63 @@
++{
++  "session_id": "93196c52-25cb-47ca-821c-cec391832eed",
++  "transcript_path": "/home/cookys/.claude/projects/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed.jsonl",
++  "cwd": "/home/cookys/projects/autopilot",
++  "scratchpad_dir": "/tmp/claude-1000/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed/scratchpad",
++  "prompt_id": "ab0448cf-a3ff-41ca-9daa-ca13191d4888",
++  "effort": {
++    "level": "medium"
++  },
++  "session_name": "HANDOFF.md 文件閱讀",
++  "model": {
++    "id": "claude-fable-5-1",
++    "display_name": "Fable 5.1"
++  },
++  "workspace": {
++    "current_dir": "/home/cookys/projects/autopilot",
++    "project_dir": "/home/cookys/projects/autopilot",
++    "added_dirs": [],
++    "repo": {
++      "host": "github.com",
++      "owner": "cookys",
++      "name": "autopilot"
++    }
++  },
++  "version": "2.1.260",
++  "output_style": {
++    "name": "default"
++  },
++  "context_window": {
++    "total_input_tokens": 262707,
++    "total_output_tokens": 4,
++    "context_window_size": 1000000,
++    "current_usage": {
++      "input_tokens": 32,
++      "output_tokens": 4,
++      "cache_creation_input_tokens": 1356,
++      "cache_read_input_tokens": 261319
++    },
++    "used_percentage": 26,
++    "remaining_percentage": 74
++  },
++  "exceeds_200k_tokens": true,
++  "prompt_cache": {
++    "warm": true,
++    "caching_observed": true,
++    "ttl": "1h",
++    "expires_at": 1788557868,
++    "requests": 82,
++    "misses": 0,
++    "expected_rebuilds": 0,
++    "hit_ratio": 0.9823627058677764,
++    "cache_write_tokens": 231220,
++    "miss_recache_tokens": 0,
++    "last_miss_at": null,
++    "last_miss_cause": null,
++    "miss_causes": {},
++    "recache_tokens_if_cold": 261321
++  },
++  "fast_mode": false,
++  "thinking": {
++    "enabled": true
++  }
++}
+diff --git a/tests/fixtures/subagent-p0.json b/tests/fixtures/subagent-p0.json
+new file mode 100644
+index 0000000..67b7470
+--- /dev/null
++++ b/tests/fixtures/subagent-p0.json
+@@ -0,0 +1,30 @@
++{
++  "session_id": "93196c52-25cb-47ca-821c-cec391832eed",
++  "transcript_path": "/home/cookys/.claude/projects/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed.jsonl",
++  "cwd": "/home/cookys/projects/autopilot",
++  "scratchpad_dir": "/tmp/claude-1000/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed/scratchpad",
++  "prompt_id": "ab0448cf-a3ff-41ca-9daa-ca13191d4888",
++  "columns": 203,
++  "tasks": [
++    {
++      "id": "a9c9b5673eb39f842",
++      "type": "local_agent",
++      "status": "running",
++      "description": "P0 spike probe subagent",
++      "label": "P0 spike probe subagent",
++      "startTime": 1788554259733,
++      "model": "claude-sonnet-5",
++      "contextWindowSize": 1000000,
++      "tokenCount": 47688,
++      "tokenSamples": [
++        0,
++        47688,
++        47688,
++        47688,
++        47688,
++        47688
++      ],
++      "cwd": "/home/cookys/projects/autopilot"
++    }
++  ]
++}

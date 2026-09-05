@@ -1,0 +1,777 @@
+diff --git a/.claude-plugin/marketplace.json b/.claude-plugin/marketplace.json
+index 81b5f317..a500f46e 100644
+--- a/.claude-plugin/marketplace.json
++++ b/.claude-plugin/marketplace.json
+@@ -8,7 +8,7 @@
+       "name": "autopilot",
+       "source": "./",
+       "version": "2.36.0",
+-      "description": "Development autopilot — 30 skills + 3 methodology agents + 28 hooks (15 default-on, 13 opt-in) for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Standalone-capable; coexists with Superpowers when installed."
++      "description": "Development autopilot — 30 skills + 3 methodology agents + 29 hooks (16 default-on, 13 opt-in) for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Standalone-capable; coexists with Superpowers when installed."
+     }
+   ]
+ }
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index 48a067e0..b0418fff 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "autopilot",
+   "version": "2.36.0",
+-  "description": "Development autopilot — 30 lifecycle skills + 3 methodology agents + 28 hooks (15 default-on, 13 opt-in) enforcing Three Red Lines discipline. Standalone-capable orchestration that coexists with Superpowers.",
++  "description": "Development autopilot — 30 lifecycle skills + 3 methodology agents + 29 hooks (16 default-on, 13 opt-in) enforcing Three Red Lines discipline. Standalone-capable orchestration that coexists with Superpowers.",
+   "author": {
+     "name": "TWGS Team"
+   }
+diff --git a/.opencode/package-lock.json b/.opencode/package-lock.json
+index 992bb9a6..37b00fa6 100644
+--- a/.opencode/package-lock.json
++++ b/.opencode/package-lock.json
+@@ -5,7 +5,7 @@
+   "packages": {
+     "": {
+       "dependencies": {
+-        "@opencode-ai/plugin": "1.17.15"
++        "@opencode-ai/plugin": "1.18.27"
+       }
+     },
+     "node_modules/@ai-sdk/provider": {
+@@ -99,20 +99,20 @@
+       ]
+     },
+     "node_modules/@opencode-ai/plugin": {
+-      "version": "1.17.15",
+-      "resolved": "https://registry.npmjs.org/@opencode-ai/plugin/-/plugin-1.17.15.tgz",
+-      "integrity": "sha512-Y/3vs1K6TBcR8yBdNqbYGUX2z9ny7rxTyxZszI0sK2mPX9rMLlrmtya4I3QKXv6qRv12R4oN3psGr60AZS5fVg==",
++      "version": "1.18.27",
++      "resolved": "https://registry.npmjs.org/@opencode-ai/plugin/-/plugin-1.18.27.tgz",
++      "integrity": "sha512-/sQbDUVz/VlfTPjEEQ+fZ70Z9AwtVVwOMKYuGEjjSOpRvlQEC16+jnC3GO4w05VeyffAlghDbM/3p38fMEAhfw==",
+       "license": "MIT",
+       "dependencies": {
+         "@ai-sdk/provider": "3.0.8",
+-        "@opencode-ai/sdk": "1.17.15",
++        "@opencode-ai/sdk": "1.18.27",
+         "effect": "4.0.0-beta.83",
+         "zod": "4.1.8"
+       },
+       "peerDependencies": {
+-        "@opentui/core": ">=0.4.3",
+-        "@opentui/keymap": ">=0.4.3",
+-        "@opentui/solid": ">=0.4.3"
++        "@opentui/core": ">=0.4.5",
++        "@opentui/keymap": ">=0.4.5",
++        "@opentui/solid": ">=0.4.5"
+       },
+       "peerDependenciesMeta": {
+         "@opentui/core": {
+@@ -127,9 +127,9 @@
+       }
+     },
+     "node_modules/@opencode-ai/sdk": {
+-      "version": "1.17.15",
+-      "resolved": "https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.17.15.tgz",
+-      "integrity": "sha512-gWRQOEggHTELJ9+BtelxnuAczk9qutCXVZenPgRPaT8oVxePf52jfWbqfhyFjnrN8Vlp8tCCTdkEpFW5pZAuEA==",
++      "version": "1.18.27",
++      "resolved": "https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.18.27.tgz",
++      "integrity": "sha512-VTfAB9SWaGiMtI2L9rf2xl+0fTYDMHB2pHYKCquWG5OIX3rHvth9oM915d9Z38IuPZUZkmdNMVz2iAdxG4IR+A==",
+       "license": "MIT",
+       "dependencies": {
+         "cross-spawn": "7.0.6"
+diff --git a/.opencode/package.json b/.opencode/package.json
+index 01021851..834eb420 100644
+--- a/.opencode/package.json
++++ b/.opencode/package.json
+@@ -1,5 +1,5 @@
+ {
+   "dependencies": {
+-    "@opencode-ai/plugin": "1.17.15"
++    "@opencode-ai/plugin": "1.18.27"
+   }
+ }
+diff --git a/CLAUDE.md b/CLAUDE.md
+index f7537ced..a5ec128b 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -6,7 +6,7 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
+ 
+ ## What this repo is
+ 
+-Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 28 hooks (15 default-on,
++Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 29 hooks (16 default-on,
+ 13 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
+ 
+ ## Scripts inventory (prefer over LLM judgment)
+diff --git a/README.md b/README.md
+index 591592c1..91ff032c 100644
+--- a/README.md
++++ b/README.md
+@@ -13,7 +13,7 @@
+   <img src="https://img.shields.io/badge/version-2.36.0-E8A838?style=flat-square" alt="v2.36.0">
+   <img src="https://img.shields.io/badge/skills-30-4A90D9?style=flat-square" alt="30 Skills">
+   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
+-  <img src="https://img.shields.io/badge/hooks-28-6B8E6B?style=flat-square" alt="28 Hooks">
++  <img src="https://img.shields.io/badge/hooks-29-6B8E6B?style=flat-square" alt="29 Hooks">
+   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
+   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
+ </p>
+diff --git a/README.zh-TW.md b/README.zh-TW.md
+index a45e25a7..734dab7c 100644
+--- a/README.zh-TW.md
++++ b/README.zh-TW.md
+@@ -13,7 +13,7 @@
+   <img src="https://img.shields.io/badge/version-2.36.0-E8A838?style=flat-square" alt="v2.36.0">
+   <img src="https://img.shields.io/badge/skills-30-4A90D9?style=flat-square" alt="30 Skills">
+   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
+-  <img src="https://img.shields.io/badge/hooks-28-6B8E6B?style=flat-square" alt="28 Hooks">
++  <img src="https://img.shields.io/badge/hooks-29-6B8E6B?style=flat-square" alt="29 Hooks">
+   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
+   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
+ </p>
+diff --git a/hooks/README.md b/hooks/README.md
+index 7527178c..62db5f83 100644
+--- a/hooks/README.md
++++ b/hooks/README.md
+@@ -1,6 +1,6 @@
+ # Autopilot Hooks
+ 
+-28 Claude Code hooks for runtime enforcement of development discipline: **15 default-on** (Tier A) + **13 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (28 as of v2.35.16) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 13 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
++29 Claude Code hooks for runtime enforcement of development discipline: **16 default-on** (Tier A) + **13 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (29 as of v2.36.1) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 13 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+ 
+ ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
+ 
+@@ -126,7 +126,7 @@ hooks/
+ | `1` | Warning (context injection) | branch-protection (mutations) |
+ | `2` | Hard block | large-file-warner, branch-protection, commit-secret-scan, config-protection, mcp-health |
+ 
+-## Tier A — Default-On (15 hooks)
++## Tier A — Default-On (16 hooks)
+ 
+ Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project. (Two are wired here but **inert by default** — `session-handoff` no-ops unless handoff is enabled, `version-drift-check` is silent outside a behind-upstream dev clone — yet they MUST be wired in `hooks.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
+ 
+@@ -147,6 +147,7 @@ Registered in `hooks.json`. Active for all autopilot users. All are non-destruct
+ | context-budget | PostToolUse | .* | **Default-on since v2.35.15** (opt-out `context_budget.mode: off` / `AUTOPILOT_CONTEXT_BUDGET_MODE=off`). Reads REAL context size (last assistant `usage` in transcript, backward scan 64KB→5MB). T1 (100k) stderr nudge; T2 (150k) escalated advisory via exit 2 (model-visible handoff directive). Thresholds/mode: `context_budget` in `~/.autopilot/config.json` or `AUTOPILOT_CONTEXT_BUDGET_T1/T2/MODE`. **v2.36.1**: when the statusline live file (`scripts/lib/live-state-dir.js`, `<live-dir>/context/<sid>.json`) is present, schema-valid, and fresh (≤120s), the REAL `context_window_size` is used instead of the inference ratchet (message says "(statusline)"); state dir moves under the resolved live-dir base (`<base>/context-budget/`, `AUTOPILOT_CONTEXT_BUDGET_DIR` still wins) — with no usable live file the behaviour, including the SSD state path, is byte-for-byte v2.36.0. |
+ | dispatch-model-guard | PreToolUse | Task\|Agent | **Default-on since v2.35.15** (opt-out `AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off` or `- mode: off`). Asks when subagent dispatch names a guarded expensive engine (default `fable`) or omits `model:` (would inherit session model). Config: `guarded_models` / `on_missing_model` / `mode` via `.claude/dispatch-guard-config.md` |
+ | cost-tracker | Stop | — | **Default-on since v2.35.15** (opt-out `AUTOPILOT_COST_TRACKER=false`); prints a stderr warning when the session's cumulative cache-read passes `cost_tracker.cache_read_warn_tokens` (env `AUTOPILOT_COST_TRACKER_CACHE_READ_WARN`; default 50M) and each doubling after. Sums per-turn `usage` from `transcript_path` → `~/.claude/metrics/costs.jsonl` (cache-aware cost; per-session cursor avoids per-turn double-count). Opt-out `AUTOPILOT_COST_TRACKER=false` |
++| depth0-delegate-gate | PreToolUse | WebFetch\|WebSearch\|Read\|Grep\|Glob\|Bash\|Agent\|Task\|Skill | **v2.36.1.** Nudges DEPTH-0 (skipped when payload `agent_id` is present — foreman-guard's territory, not this gate's) away from long read bursts: counts consecutive read-class calls (`WebFetch`/`WebSearch`/`Read`/`Grep`/`Glob`, plus a `Bash` whose executable text — heredoc bodies/comments stripped — starts with `grep `/`rg `/`find `/`cat `/`sed -n`/`head `/`tail `) per session in `<live-dir>/depth0-gate/<sid>.json`; `Agent`/`Task`/`Skill` resets the counter to 0 (the burst was delegated); any other tool is a no-op. At `reads ≥ threshold` (default 8) and every `threshold` after: stderr nudge to delegate to an Explore/survey subagent (model: sonnet). In `block` mode only, when the statusline live main file is fresh and its `model.id` family (`scripts/lib/live-state-dir.js` `modelFamily`) is in `guarded_models` (default `fable`,`opus`) and `reads ≥ 2×threshold`: denies with the same JSON shape as `foreman-guard.js`. Without a live file the model is `unknown` — never blocks, only warns. Modes `depth0_delegate_gate.{mode,threshold,guarded_models}` via `~/.autopilot/config.json` or `AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE` (garbage/unset mode ⇒ `warn`); state dir override `AUTOPILOT_DEPTH0_GATE_DIR`. Fail-open. |
+ 
+ ### Hook order on PostToolUse
+ 
+diff --git a/hooks/depth0-delegate-gate.js b/hooks/depth0-delegate-gate.js
+new file mode 100644
+index 00000000..b87fc938
+--- /dev/null
++++ b/hooks/depth0-delegate-gate.js
+@@ -0,0 +1,216 @@
++#!/usr/bin/env node
++/**
++ * depth0-delegate-gate — PreToolUse WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill
++ * (default-on, v2.36.1 P3)
++ *
++ * Nudges DEPTH-0 (never a subagent — skip whenever the payload carries `agent_id`, SPIKE-1)
++ * away from doing its own long read bursts instead of delegating to an Explore/survey
++ * subagent. Companion to foreman-guard.js (which governs depth-1 foremen/workers); this one
++ * governs the orchestrator itself and is deliberately NOT bound to the l3-l6 session marker
++ * — a plain session doing 30 sequential Reads is exactly the pattern this nudges.
++ *
++ * TOOL CLASSES:
++ *   - read-class: WebFetch, WebSearch, Read, Grep, Glob, plus a Bash call whose EXECUTABLE
++ *     TEXT (heredoc bodies and `#` comments stripped, same lexer as foreman-guard.js) starts
++ *     with `grep `, `rg `, `find `, `cat `, `sed -n`, `head `, or `tail `. Increments the
++ *     per-session `reads` counter.
++ *   - delegation: Agent, Task, Skill — resets `reads` to 0 (the read burst was handed off).
++ *   - anything else (e.g. Bash `npm test`, Edit, Write): no-op, counter untouched.
++ *
++ * WARN (default mode): at `reads >= threshold` and every `threshold` calls after, one
++ * stderr line naming the count; exit 0 always (a nudge, never enforcement without a live
++ * model in `block` mode).
++ *
++ * BLOCK: only when the CURRENT model is fresh (statusline live main file, schema_version 1,
++ * written_at within 120s) and its family (scripts/lib/live-state-dir.js modelFamily) is in
++ * `guarded_models`, deny at `reads >= 2*threshold` (every call past that point) with the
++ * same JSON shape foreman-guard.js emits. Without a live file the model is `unknown` — never
++ * blocks, only warns (§2.6: this is new stderr by design).
++ *
++ * MODES: ~/.autopilot/config.json {"depth0_delegate_gate": {"mode": "off"|"warn"|"block",
++ * "threshold": 8, "guarded_models": ["fable","opus"]}} or AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE.
++ * Garbage/unrecognised mode ⇒ warn (the default). Fail-open: any internal error ⇒ exit 0.
++ * State: `<live-dir>/depth0-gate/<sid>.json` (+ AUTOPILOT_DEPTH0_GATE_DIR override), same
++ * live-dir resolution as every other v2.36.1 consumer (scripts/lib/live-state-dir.js).
++ */
++'use strict';
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('../scripts/lib/live-state-dir.js');
++
++const DEFAULT_THRESHOLD = 8;
++const DEFAULT_GUARDED = ['fable', 'opus'];
++const READ_CLASS_TOOLS = new Set(['WebFetch', 'WebSearch', 'Read', 'Grep', 'Glob']);
++const DELEGATION_TOOLS = new Set(['Agent', 'Task', 'Skill']);
++// Executable-text prefixes (post-strip, trimmed) that make a Bash call read-class.
++const BASH_READ_PREFIXES = ['grep ', 'rg ', 'find ', 'cat ', 'sed -n', 'head ', 'tail '];
++
++// Same executable-text lexer as foreman-guard.js (heredoc bodies + `#` comments are DATA,
++// quoted strings stay because `bash -c '…'`/`sh -c "…"` execute them). Deliberately
++// duplicated rather than imported — single-crash isolation between the two hooks.
++function executableText(cmd) {
++  const out = [];
++  const lines = String(cmd).split('\n');
++  let heredocTag = null;
++  for (const line of lines) {
++    if (heredocTag !== null) {
++      if (line.replace(/^\t+/, '') === heredocTag) heredocTag = null;
++      continue; // heredoc body: data
++    }
++    let keep = '';
++    let q = null;
++    let wordStart = true;
++    let i = 0;
++    while (i < line.length) {
++      const c = line[i];
++      if (q) {
++        if (c === '\\' && q === '"' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; continue; }
++        if (c === q) q = null;
++        keep += c; i += 1; continue;
++      }
++      if (c === '\\' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; wordStart = false; continue; }
++      if (c === "'" || c === '"') { q = c; keep += c; i += 1; wordStart = false; continue; }
++      if (c === '#' && wordStart) break; // comment to EOL
++      if (c === '<' && line[i + 1] === '<' && line[i + 2] !== '<') {
++        const m = /^<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][\w]*))/.exec(line.slice(i));
++        if (m) { heredocTag = m[1] || m[2] || m[3]; i += m[0].length; wordStart = true; continue; }
++      }
++      wordStart = /[\s;&|(]/.test(c);
++      keep += c; i += 1;
++    }
++    out.push(keep);
++  }
++  return `${out.join('\n')}\n`;
++}
++
++function isBashReadClass(cmd) {
++  const text = executableText(typeof cmd === 'string' ? cmd : '').trim();
++  return BASH_READ_PREFIXES.some((p) => text.startsWith(p));
++}
++
++function loadConfig() {
++  const cfg = { mode: 'warn', threshold: DEFAULT_THRESHOLD, guardedModels: DEFAULT_GUARDED };
++  try {
++    const file = path.join(os.homedir(), '.autopilot', 'config.json');
++    if (fs.existsSync(file)) {
++      const j = JSON.parse(fs.readFileSync(file, 'utf8'));
++      const g = j && j.depth0_delegate_gate;
++      if (g && typeof g === 'object') {
++        if (['off', 'warn', 'block'].includes(g.mode)) cfg.mode = g.mode;
++        if (Number.isInteger(g.threshold) && g.threshold > 0) cfg.threshold = g.threshold;
++        if (Array.isArray(g.guarded_models) && g.guarded_models.every((m) => typeof m === 'string')) {
++          cfg.guardedModels = g.guarded_models;
++        }
++      }
++    }
++  } catch { /* defaults */ }
++  const envMode = process.env.AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE;
++  if (['off', 'warn', 'block'].includes(envMode)) cfg.mode = envMode; // garbage/unset ⇒ keep warn default
++  return cfg;
++}
++
++function getSessionId(payload) {
++  const raw = (payload && typeof payload.session_id === 'string' && payload.session_id)
++    || process.env.CLAUDE_CODE_SESSION_ID
++    || process.env.CLAUDE_SESSION_ID
++    || process.cwd();
++  return sanitizeSessionId(raw);
++}
++
++function stateDir(live) {
++  return process.env.AUTOPILOT_DEPTH0_GATE_DIR || path.join(live.base, 'depth0-gate');
++}
++
++function loadState(file) {
++  try {
++    const s = JSON.parse(fs.readFileSync(file, 'utf8'));
++    if (s && typeof s === 'object' && Number.isInteger(s.reads)) return s;
++  } catch { /* fresh */ }
++  return { reads: 0, lastFireAt: null };
++}
++
++function saveState(file, st) {
++  fs.mkdirSync(path.dirname(file), { recursive: true });
++  const tmp = `${file}.tmp.${process.pid}.${Math.random().toString(16).slice(2)}`;
++  fs.writeFileSync(tmp, JSON.stringify(st));
++  fs.renameSync(tmp, file);
++}
++
++function emitDeny(reason) {
++  process.stdout.write(`${JSON.stringify({
++    hookSpecificOutput: {
++      hookEventName: 'PreToolUse',
++      permissionDecision: 'deny',
++      permissionDecisionReason: reason,
++    },
++  })}\n`);
++}
++
++function classify(tool, input) {
++  if (DELEGATION_TOOLS.has(tool)) return 'delegation';
++  if (READ_CLASS_TOOLS.has(tool)) return 'read';
++  if (tool === 'Bash' && isBashReadClass(input && input.command)) return 'read';
++  return 'other';
++}
++
++(function main() {
++  try {
++    const cfg = loadConfig();
++    if (cfg.mode === 'off') process.exit(0);
++
++    let raw = '';
++    try { raw = fs.readFileSync(0, 'utf8'); } catch { raw = ''; }
++    let payload = {};
++    try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { process.exit(0); }
++    if (!payload || typeof payload !== 'object') process.exit(0);
++    if (payload.agent_id) process.exit(0); // depth-1+ subagent: foreman-guard's territory, not this gate's
++
++    const tool = payload.tool_name || '';
++    const kind = classify(tool, payload.tool_input);
++    if (kind === 'other') process.exit(0); // no-op: counter untouched
++
++    const live = resolveLiveDir();
++    const sid = getSessionId(payload);
++    const dir = stateDir(live);
++    const file = path.join(dir, `${sid}.json`);
++    const st = loadState(file);
++
++    if (kind === 'delegation') {
++      st.reads = 0;
++      saveState(file, st);
++      process.exit(0);
++    }
++
++    // kind === 'read'
++    st.reads += 1;
++    const reads = st.reads;
++    const threshold = cfg.threshold;
++
++    if (cfg.mode === 'block' && reads >= 2 * threshold) {
++      const liveMain = readLive(live.base, sid, { kind: 'main' });
++      const modelId = liveMain && liveMain.model && typeof liveMain.model.id === 'string' ? liveMain.model.id : null;
++      const family = modelId ? modelFamily(modelId) : 'unknown';
++      if (modelId && family !== 'unknown' && cfg.guardedModels.includes(family)) {
++        saveState(file, st);
++        emitDeny(`depth0-delegate-gate: ${reads} consecutive read-class calls at depth-0 on a `
++          + `guarded model (family "${family}") — delegate to an Explore/survey subagent (model: sonnet) `
++          + 'and read only its conclusion.');
++        process.exit(0);
++      }
++    }
++
++    if (reads >= threshold && reads % threshold === 0) {
++      st.lastFireAt = new Date().toISOString();
++      saveState(file, st);
++      process.stderr.write(`depth0-delegate-gate: ${reads} consecutive read-class calls at depth-0 — `
++        + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion\n');
++      process.exit(0);
++    }
++
++    saveState(file, st);
++    process.exit(0);
++  } catch {
++    process.exit(0); // fail-open: a nudge must never wedge a tool call by crashing
++  }
++})();
+diff --git a/hooks/depth0-delegate-gate.test.js b/hooks/depth0-delegate-gate.test.js
+new file mode 100644
+index 00000000..59896206
+--- /dev/null
++++ b/hooks/depth0-delegate-gate.test.js
+@@ -0,0 +1,290 @@
++/**
++ * Tests for depth0-delegate-gate.js (PreToolUse WebFetch|WebSearch|Read|Grep|Glob|Bash|
++ * Agent|Task|Skill, default-on, v2.36.1 P3). Black-box: spawns the real hook.
++ *
++ * Run: node --test hooks/depth0-delegate-gate.test.js
++ */
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { spawnSync } = require('child_process');
++
++const HOOK = path.join(__dirname, 'depth0-delegate-gate.js');
++
++function shmTmp(prefix) {
++  const base = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
++  return fs.mkdtempSync(path.join(base, prefix));
++}
++
++function runHook(stdinObj, env) {
++  return spawnSync('node', [HOOK], {
++    input: typeof stdinObj === 'string' ? stdinObj : JSON.stringify(stdinObj),
++    encoding: 'utf8',
++    env: { ...process.env, ...env },
++  });
++}
++
++function freshEnv(extra = {}) {
++  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-home-'));
++  const liveDir = shmTmp('d0gate-live-');
++  return {
++    HOME: home,
++    AUTOPILOT_LIVE_DIR: liveDir,
++    ...extra,
++  };
++}
++
++function payload(tool, extra = {}) {
++  return { tool_name: tool, session_id: 'd0-test-session', tool_input: {}, hook_event_name: 'PreToolUse', ...extra };
++}
++
++function bashPayload(cmd, extra = {}) {
++  return payload('Bash', { tool_input: { command: cmd }, ...extra });
++}
++
++function writeLiveMain(base, sid, obj) {
++  const dir = path.join(base, 'context');
++  fs.mkdirSync(dir, { recursive: true });
++  fs.writeFileSync(path.join(dir, `${sid}.json`), JSON.stringify(obj));
++}
++
++function liveMainFixture(overrides = {}) {
++  return {
++    schema_version: 1,
++    session_id: 'd0-test-session',
++    written_at: new Date().toISOString(),
++    cc_version: '2.1.260',
++    model: { id: 'claude-fable-5-1', display_name: 'Fable 5.1' },
++    context_window: {
++      context_window_size: 1_000_000, used_percentage: 1, total_input_tokens: 1000,
++      current_usage: { input_tokens: 1, cache_creation_input_tokens: 1, cache_read_input_tokens: 1 },
++    },
++    ...overrides,
++  };
++}
++
++function readState(liveDir, sid) {
++  return JSON.parse(fs.readFileSync(path.join(liveDir, 'depth0-gate', `${sid}.json`), 'utf8'));
++}
++
++// ---- basic no-op / skip behavior ----
++
++test('subagent fire (agent_id present) is silent regardless of tool or count', () => {
++  const env = freshEnv();
++  for (let i = 0; i < 12; i += 1) {
++    const r = runHook(payload('Read', { agent_id: 'sub-1' }), env);
++    assert.strictEqual(r.status, 0);
++    assert.strictEqual(r.stdout.trim(), '');
++    assert.strictEqual(r.stderr.trim(), '');
++  }
++});
++
++test('garbage stdin ⇒ fail-open exit 0', () => {
++  const r = runHook('not json{{{', freshEnv());
++  assert.strictEqual(r.status, 0);
++});
++
++test('off mode ⇒ silent, no state written', () => {
++  const env = freshEnv({ AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'off' });
++  for (let i = 0; i < 10; i += 1) {
++    const r = runHook(payload('Read'), env);
++    assert.strictEqual(r.status, 0);
++    assert.strictEqual(r.stderr.trim(), '');
++  }
++  assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate')), 'off mode must not write state');
++});
++
++test('an unrelated tool (Edit) is a no-op: counter untouched', () => {
++  const env = freshEnv();
++  for (let i = 0; i < 7; i += 1) runHook(payload('Read'), env);
++  const before = readState(env.AUTOPILOT_LIVE_DIR, 'd0-test-session').reads;
++  const r = runHook(payload('Edit', { tool_input: { file_path: 'x.js' } }), env);
++  assert.strictEqual(r.status, 0);
++  assert.strictEqual(r.stderr.trim(), '');
++  const after = readState(env.AUTOPILOT_LIVE_DIR, 'd0-test-session').reads;
++  assert.strictEqual(after, before, 'Edit must not touch the read counter');
++});
++
++// ---- below threshold silent ----
++
++test('below threshold: silent for each of Read/Grep/Glob/WebFetch/WebSearch', () => {
++  const env = freshEnv();
++  for (const tool of ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch']) {
++    const r = runHook(payload(tool), env);
++    assert.strictEqual(r.status, 0);
++    assert.strictEqual(r.stderr.trim(), '', `${tool} below threshold must be silent`);
++  }
++});
++
++// ---- threshold nudge + refire cadence ----
++
++test('threshold nudge fires at 8 and refires every 8 after, silent in between', () => {
++  const env = freshEnv();
++  for (let i = 1; i <= 24; i += 1) {
++    const r = runHook(payload('Read'), env);
++    assert.strictEqual(r.status, 0);
++    if (i % 8 === 0) {
++      assert.match(r.stderr, /depth0-delegate-gate: \d+ consecutive read-class calls at depth-0/);
++      assert.match(r.stderr, new RegExp(`^depth0-delegate-gate: ${i} consecutive`));
++    } else {
++      assert.strictEqual(r.stderr.trim(), '', `call ${i} must be silent`);
++    }
++  }
++});
++
++// ---- reset on Agent/Task/Skill ----
++
++for (const resetTool of ['Agent', 'Task', 'Skill']) {
++  test(`${resetTool} resets the counter to 0`, () => {
++    const env = freshEnv();
++    for (let i = 0; i < 7; i += 1) runHook(payload('Read'), env);
++    assert.strictEqual(readState(env.AUTOPILOT_LIVE_DIR, 'd0-test-session').reads, 7);
++    const r = runHook(payload(resetTool, { tool_input: {} }), env);
++    assert.strictEqual(r.status, 0);
++    assert.strictEqual(r.stderr.trim(), '');
++    assert.strictEqual(readState(env.AUTOPILOT_LIVE_DIR, 'd0-test-session').reads, 0);
++    // and the next 7 reads stay silent again (post-reset)
++    for (let i = 0; i < 7; i += 1) {
++      const rr = runHook(payload('Read'), env);
++      assert.strictEqual(rr.stderr.trim(), '');
++    }
++    const nudge = runHook(payload('Read'), env);
++    assert.match(nudge.stderr, /8 consecutive/);
++  });
++}
++
++// ---- Bash read-class classification ----
++
++test('Bash grep/rg/find/cat/sed -n/head/tail count as read-class', () => {
++  const env = freshEnv();
++  const cmds = ['grep -R foo .', 'rg foo', 'find . -name "*.js"', 'cat README.md', 'sed -n 1,5p file', 'head -n 5 file', 'tail -n 5 file'];
++  for (const cmd of cmds) runHook(bashPayload(cmd), env);
++  assert.strictEqual(readState(env.AUTOPILOT_LIVE_DIR, 'd0-test-session').reads, cmds.length);
++});
++
++test('Bash npm test does not count', () => {
++  const env = freshEnv();
++  const r = runHook(bashPayload('npm test'), env);
++  assert.strictEqual(r.status, 0);
++  assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json')),
++    'a non-read-class Bash must not even create state');
++});
++
++test('heredoc body containing grep is data, not counted', () => {
++  const env = freshEnv();
++  // The literal command does not start with a read-class prefix; a heredoc BODY happens to
++  // mention grep, which the executable-text lexer strips as data before the prefix check.
++  const cmd = "npm test <<'EOF'\ngrep pattern in the body, not executed\nEOF";
++  const r = runHook(bashPayload(cmd), env);
++  assert.strictEqual(r.status, 0);
++  assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json')),
++    'heredoc-body grep must not count as a read-class Bash call');
++});
++
++test('a comment containing a read-class word is data, not counted', () => {
++  const env = freshEnv();
++  const r = runHook(bashPayload('npm test # grep this later'), env);
++  assert.strictEqual(r.status, 0);
++  assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json')));
++});
++
++// ---- block mode ----
++
++function blockEnv(extra = {}) {
++  return freshEnv({ AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'block', ...extra });
++}
++
++for (const modelId of ['claude-fable-5-1', 'CLAUDE-FABLE-5-1', 'claude-opus-4-8[1m]']) {
++  test(`block mode denies at 2x threshold with a fresh guarded model id "${modelId}"`, () => {
++    const env = blockEnv();
++    writeLiveMain(env.AUTOPILOT_LIVE_DIR, 'd0-test-session', liveMainFixture({ model: { id: modelId, display_name: 'x' } }));
++    let lastDenyIdx = -1;
++    for (let i = 1; i <= 16; i += 1) {
++      const r = runHook(payload('Read'), env);
++      assert.strictEqual(r.status, 0, 'deny is still exit 0 on stdin');
++      if (i >= 16) {
++        assert.match(r.stdout, /"permissionDecision":"deny"/, `call ${i} at/after 2x threshold must deny`);
++        lastDenyIdx = i;
++      }
++    }
++    assert.strictEqual(lastDenyIdx, 16);
++    // and it keeps denying past 2x threshold, not just once
++    const again = runHook(payload('Read'), env);
++    assert.match(again.stdout, /"permissionDecision":"deny"/);
++  });
++}
++
++for (const modelId of ['claude-sonnet-5', 'fable-ish', 'claude-fable']) {
++  test(`block mode does NOT deny for non-guarded/malformed model id "${modelId}"`, () => {
++    const env = blockEnv();
++    writeLiveMain(env.AUTOPILOT_LIVE_DIR, 'd0-test-session', liveMainFixture({ model: { id: modelId, display_name: 'x' } }));
++    let r;
++    for (let i = 1; i <= 16; i += 1) r = runHook(payload('Read'), env);
++    assert.doesNotMatch(r.stdout, /"permissionDecision":"deny"/);
++    assert.match(r.stderr, /16 consecutive/, 'still nudges via stderr in block mode');
++  });
++}
++
++test('block mode: malformed model id (does not match grammar) never blocks', () => {
++  const env = blockEnv();
++  writeLiveMain(env.AUTOPILOT_LIVE_DIR, 'd0-test-session', liveMainFixture({ model: { id: 'not-a-real-id', display_name: 'x' } }));
++  let r;
++  for (let i = 1; i <= 16; i += 1) r = runHook(payload('Read'), env);
++  assert.doesNotMatch(r.stdout, /"permissionDecision":"deny"/);
++});
++
++test('block mode: stale live file (>120s) never blocks', () => {
++  const env = blockEnv();
++  writeLiveMain(env.AUTOPILOT_LIVE_DIR, 'd0-test-session', liveMainFixture({
++    written_at: new Date(Date.now() - 121_000).toISOString(),
++  }));
++  let r;
++  for (let i = 1; i <= 16; i += 1) r = runHook(payload('Read'), env);
++  assert.doesNotMatch(r.stdout, /"permissionDecision":"deny"/);
++});
++
++test('block mode: absent live file never blocks, only warns', () => {
++  const env = blockEnv();
++  let r;
++  for (let i = 1; i <= 16; i += 1) r = runHook(payload('Read'), env);
++  assert.doesNotMatch(r.stdout, /"permissionDecision":"deny"/);
++  assert.match(r.stderr, /16 consecutive/);
++});
++
++test('warn mode never blocks even with a fresh guarded model far past 2x threshold', () => {
++  const env = freshEnv({ AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'warn' });
++  writeLiveMain(env.AUTOPILOT_LIVE_DIR, 'd0-test-session', liveMainFixture());
++  let r;
++  for (let i = 1; i <= 20; i += 1) r = runHook(payload('Read'), env);
++  assert.doesNotMatch(r.stdout, /"permissionDecision":"deny"/);
++});
++
++test('below-2x-threshold reads with a fresh guarded model in block mode only warn, never deny', () => {
++  const env = blockEnv();
++  writeLiveMain(env.AUTOPILOT_LIVE_DIR, 'd0-test-session', liveMainFixture());
++  let r;
++  for (let i = 1; i <= 8; i += 1) r = runHook(payload('Read'), env);
++  assert.doesNotMatch(r.stdout, /"permissionDecision":"deny"/);
++  assert.match(r.stderr, /8 consecutive/);
++});
++
++// ---- state location ----
++
++test('state file lands under the resolved live-dir base at depth0-gate/<sid>.json', () => {
++  const env = freshEnv();
++  runHook(payload('Read'), env);
++  const expected = path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json');
++  assert.ok(fs.existsSync(expected), `expected state at ${expected}`);
++});
++
++test('AUTOPILOT_DEPTH0_GATE_DIR overrides the state directory', () => {
++  const env = freshEnv();
++  const override = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-override-'));
++  runHook(payload('Read'), { ...env, AUTOPILOT_DEPTH0_GATE_DIR: override });
++  assert.ok(fs.existsSync(path.join(override, 'd0-test-session.json')));
++  assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json')));
++});
+diff --git a/hooks/hooks.json b/hooks/hooks.json
+index 31fe9acc..e29ca09d 100644
+--- a/hooks/hooks.json
++++ b/hooks/hooks.json
+@@ -79,6 +79,16 @@
+             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-model-guard.js"
+           }
+         ]
++      },
++      {
++        "//": "v2.36.1 default-on: depth0-delegate-gate — nudges depth-0 (never a subagent; skipped when payload.agent_id is present) away from long read bursts toward delegating to an Explore/survey subagent; warns by default, denies only in block mode against a fresh guarded-model live file. AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE=off to opt out.",
++        "matcher": "WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/depth0-delegate-gate.js"
++          }
++        ]
+       }
+     ],
+     "PostToolUse": [
+diff --git a/hooks/tests/check-hook-inventory.test.sh b/hooks/tests/check-hook-inventory.test.sh
+index a216c289..2441b487 100755
+--- a/hooks/tests/check-hook-inventory.test.sh
++++ b/hooks/tests/check-hook-inventory.test.sh
+@@ -42,7 +42,7 @@ assert_eq "0" "$?" "--help exit 0"
+ # 3. default print = regeneration oracle (derived counts + real names)
+ OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
+ assert_eq "0" "$EXIT" "default print exit 0"
+-assert_contains "$OUT" "default-on (15)" "default print shows 15 default-on"
++assert_contains "$OUT" "default-on (16)" "default print shows 16 default-on"
+ assert_contains "$OUT" "disabled   (0)" "default print shows 0 disabled"
+ assert_contains "$OUT" "audit-log" "default print lists a real wired hook"
+ 
+@@ -62,14 +62,14 @@ assert_contains "$OUT" "Tier-A" "membership drift identifies the Tier-A placemen
+ restore "hooks/README.md"
+ 
+ # 5. COUNT drift: canonical default-on count wrong in the description
+-sed -i 's/15 default-on/16 default-on/' "$SBX/.claude-plugin/plugin.json"
++sed -i 's/16 default-on/17 default-on/' "$SBX/.claude-plugin/plugin.json"
+ OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
+ assert_eq "1" "$EXIT" "count drift exit 1"
+ assert_contains "$OUT" "defaultOn" "count drift names the field"
+ restore ".claude-plugin/plugin.json"
+ 
+ # 6. TIER-HEADER count drift in hooks/README.md
+-sed -i 's/Default-On (15 hooks)/Default-On (16 hooks)/' "$SBX/hooks/README.md"
++sed -i 's/Default-On (16 hooks)/Default-On (17 hooks)/' "$SBX/hooks/README.md"
+ OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
+ assert_eq "1" "$EXIT" "tier-header count drift exit 1"
+ assert_contains "$OUT" "hooks/README.md" "tier-header drift names the file"
+diff --git a/plugin.json b/plugin.json
+index 48a067e0..b0418fff 100644
+--- a/plugin.json
++++ b/plugin.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "autopilot",
+   "version": "2.36.0",
+-  "description": "Development autopilot — 30 lifecycle skills + 3 methodology agents + 28 hooks (15 default-on, 13 opt-in) enforcing Three Red Lines discipline. Standalone-capable orchestration that coexists with Superpowers.",
++  "description": "Development autopilot — 30 lifecycle skills + 3 methodology agents + 29 hooks (16 default-on, 13 opt-in) enforcing Three Red Lines discipline. Standalone-capable orchestration that coexists with Superpowers.",
+   "author": {
+     "name": "TWGS Team"
+   }
+diff --git a/profiles/hook-classes.json b/profiles/hook-classes.json
+index 47c8b68f..55d19e79 100644
+--- a/profiles/hook-classes.json
++++ b/profiles/hook-classes.json
+@@ -11,6 +11,7 @@
+     { "stem": "context-budget", "class": "invariant_effect" },
+     { "stem": "cost-fuse", "class": "invariant_effect" },
+     { "stem": "cost-tracker", "class": "invariant_effect" },
++    { "stem": "depth0-delegate-gate", "class": "invariant_effect" },
+     { "stem": "design-quality", "class": "guidance", "profiles": ["guided"] },
+     { "stem": "dispatch-model-guard", "class": "invariant_effect" },
+     { "stem": "failure-escalation", "class": "invariant_effect" },
+diff --git a/profiles/profile-catalog.json b/profiles/profile-catalog.json
+index 2e3d4c0a..9dc1b077 100644
+--- a/profiles/profile-catalog.json
++++ b/profiles/profile-catalog.json
+@@ -3,7 +3,7 @@
+   "inventory_sha256": "0d9dec95106884a60d3e6bc1c71372bfc7d0e388e766eee24369ecf7687e7840",
+   "source_manifest_sha256": "5ba748b8e81e63b7c9278375385cdc9e84c22932ca7b31d8e7c96eb084784caa",
+   "source_map_sha256": "ede8e180aed5d4eb85d8e90a3d81afa49b79ae5a5c9c56de288f9a40fe65ea79",
+-  "hook_classes_sha256": "aed2bb978db73ba78189ac35a7cede1017a1e2739cdb9db8f6ce5821162a4f73",
++  "hook_classes_sha256": "ce75770975014d2adafde7dbdc1515c86df659152d345fd712090945bff419f3",
+   "rule_migration_sha256": "0a383e6533f3430bbca02d8d8c80cb7964d9f1822e14fbe7e70fd3e5fcf633b0",
+   "guided_compatibility_sha256": "819a1253cf41a2a208a39739a4bdfcc49d2c89da614910adf15f2a3eaf667212",
+   "guided_dispositions_sha256": "06ca825c5d97dc71ececd731e4cce5790e88d7d041ab1f07530d04b21a9f6816",
+diff --git a/settings.example.json b/settings.example.json
+index b9df926d..e72733f5 100644
+--- a/settings.example.json
++++ b/settings.example.json
+@@ -11,5 +11,5 @@
+ 
+   "//opt-in-hooks": "As of v2.26.2 opt-in hooks are NOT enabled by copying entries here. They are wired in the plugin's own hooks.json (the ONLY place ${CLAUDE_PLUGIN_ROOT} expands and where the path auto-tracks plugin updates) and stay default-OFF until you enable them. Enable via ~/.autopilot/config.json — NOT this file.",
+   "//opt-in-hooks-how": "Create/edit ~/.autopilot/config.json: {\"hooks\": {\"branch-protection\": true, \"commit-secret-scan\": true}}. Per-hook env override also works: AUTOPILOT_HOOK_BRANCH_PROTECTION=1. See hooks/README.md (Tier B) + hooks/opt-in-manifest.json for the full list.",
+-  "//opt-in-hooks-list": "Enable-able stems: accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, design-quality, exec-boundary, large-file-warner, mcp-health, orchestrator-edit-gate, session-summary, test-runner. Default-on cost hooks since v2.35.15 (opt-OUT knobs): foreman-guard (AUTOPILOT_FOREMAN_GUARD_MODE=off), context-budget (AUTOPILOT_CONTEXT_BUDGET_MODE=off), dispatch-model-guard (AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off), cost-tracker (AUTOPILOT_COST_TRACKER=false)."
++  "//opt-in-hooks-list": "Enable-able stems: accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, design-quality, exec-boundary, large-file-warner, mcp-health, orchestrator-edit-gate, session-summary, test-runner. Default-on cost hooks since v2.35.15 (opt-OUT knobs): foreman-guard (AUTOPILOT_FOREMAN_GUARD_MODE=off), context-budget (AUTOPILOT_CONTEXT_BUDGET_MODE=off), dispatch-model-guard (AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off), cost-tracker (AUTOPILOT_COST_TRACKER=false). v2.36.1: depth0-delegate-gate (AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE=off|warn|block, default warn) — nudges depth-0 to delegate read bursts to an Explore/survey subagent; ~/.autopilot/config.json {\"depth0_delegate_gate\": {\"mode\": \"warn\", \"threshold\": 8, \"guarded_models\": [\"fable\", \"opus\"]}}."
+ }

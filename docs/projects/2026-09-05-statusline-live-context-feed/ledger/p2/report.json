@@ -1,0 +1,45 @@
+{
+  "status": "done",
+  "worktree": "/home/cookys/projects/autopilot-wt-p2",
+  "branch": "feat/v2.36.1-p2",
+  "commits": [
+    "d4c11998 test(hooks): RED — context-budget must consume the statusline live file (v2.36.1 P2)",
+    "d8a05990 feat(hooks): context-budget + foreman-guard read the statusline live files (v2.36.1 P2)"
+  ],
+  "red_test": {
+    "name": "hooks/context-budget.test.js: 'RED/GREEN: 1M live file at 153k ⇒ no T2 (fails on pre-P2 code, which only infers the window)' plus two sibling RED assertions in the same commit ('200K live file at 150k ⇒ T2 still fires' — failed on the statusline message clause; 'state file lands under the tmpfs live base ...' — failed on state-dir location)",
+    "fails_on_base": true
+  },
+  "suite": {
+    "cmd": "AUTOPILOT_TOPOLOGY_FILE=/nonexistent bash hooks/tests/run.sh --parallel 4",
+    "passed": 316,
+    "failed": 3,
+    "failed_names": [
+      "hooks/tests/context-window.test.sh",
+      "hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh",
+      "hooks/tests/resolve-review-loop-role-admission.test.sh"
+    ],
+    "notes_on_failures": "All 3 reproduce byte-for-byte on the unmodified base branch (feat/v2.36.1-statusline-live-context-feed @ 04d40f5d, main tree /home/cookys/projects/autopilot) with the identical env var (AUTOPILOT_TOPOLOGY_FILE=/nonexistent) and command line, run directly outside this worktree — confirmed by re-running each of the three .test.sh files individually against the base checkout before this deliverable's commits existed there. Pre-existing/environmental (host topology/resolver-version drift), not touched by this deliverable's diff (verified via `git diff --stat 04d40f5d..HEAD` — none of the changed files intersect resolve-review-loop.sh, context-window.js, or their fixtures)."
+  },
+  "unit_tests": {
+    "hooks/context-budget.test.js": { "passed": 33, "failed": 0 },
+    "scripts/lib/live-state-dir.test.js": { "passed": 20, "failed": 0 },
+    "hooks/tests/foreman-guard.test.sh": { "assertions_passed": 97, "failed": 0 }
+  },
+  "files_changed": [
+    "CLAUDE.md",
+    "docs/scripts-inventory.md",
+    "hooks/README.md",
+    "hooks/context-budget-lib.js",
+    "hooks/context-budget.js",
+    "hooks/context-budget.test.js",
+    "hooks/foreman-guard.js",
+    "hooks/tests/fixtures/session-id-vectors.json",
+    "hooks/tests/foreman-guard.test.sh",
+    "platforms/codex/plugin/scripts/lib/live-state-dir.js",
+    "platforms/codex/plugin/scripts/lib/live-state-dir.test.js",
+    "scripts/lib/live-state-dir.js",
+    "scripts/lib/live-state-dir.test.js"
+  ],
+  "notes": "hooks.json, hook-classes.json, and all version files (.claude-plugin/plugin.json, CHANGELOG.md version header, sync-version.js outputs) are untouched — verified via `git diff --stat 04d40f5d..HEAD` against the excluded paths (empty diff). No merge was performed; the branch feat/v2.36.1-p2 sits on top of 04d40f5d in its own worktree. P0's ledger/p0 mapping (tasks[].id === payload.agent_id) is what foreman-guard.js's row match uses. The session-id-vectors.json fixture did not exist yet (P1 had not created it) so P2 created it per the brief's fallback instruction. Deliverable 1 (scripts/lib/live-state-dir.js + its test + the session-id vector fixture) and the context-budget-lib.js additive lib changes were folded into the RED commit since they are prerequisites the RED test itself exercises (no wrapper behavior changed in that commit — confirmed by re-running the full context-budget.test.js suite mid-commit and seeing exactly 3 of 33 assertions fail, all three describing the not-yet-wired consumption path)."
+}

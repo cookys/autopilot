@@ -1,0 +1,1 @@
+{ "runner": "cc-shim", "model": "MiniMax-M3", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "/tmp/dispatch-review-log-3vpCBk", "error": "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields", "usage": null, "unratified_verdict": null }

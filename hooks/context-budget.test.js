@@ -30,12 +30,16 @@ function tmpFile(lines) {
   return p;
 }
 
-const usageLine = (input, cacheRead, cacheCreate, out) => JSON.stringify({
+// `timestamp` (ISO string) is optional — it exercises the v2.36.1 live/transcript lag
+// guard in context-budget.js (readContextUsage's row.timestamp vs the live file's
+// written_at). Omitted, the row carries no timestamp (pre-P2 fixture behaviour).
+const usageLine = (input, cacheRead, cacheCreate, out, timestamp) => JSON.stringify({
   type: 'assistant',
   message: { role: 'assistant', usage: {
     input_tokens: input, cache_read_input_tokens: cacheRead,
     cache_creation_input_tokens: cacheCreate, output_tokens: out,
   } },
+  ...(timestamp ? { timestamp } : {}),
 });
 
 test('readContextTokens: last assistant usage wins, trailing non-usage lines skipped', () => {
@@ -277,4 +281,233 @@ test('wrapper: 200K-window session still gets its T2 (no regression for small wi
   const r = runHook({ transcript_path: p }, freshEnv());
   assert.strictEqual(r.status, 2, '200K sessions must keep the escalated advisory');
   assert.match(r.stderr, /Context budget T2/);
+});
+
+// --- v2.36.1 (P2): consume the statusline live file instead of inferring the window ---
+//
+// Live-dir resolution (scripts/lib/live-state-dir.js) requires a RAM-backed directory to
+// ACCEPT AUTOPILOT_LIVE_DIR (findmnt -T must print tmpfs/ramfs — even the override is
+// checked). /dev/shm is tmpfs on every Linux host these hooks run on, so tests use a
+// mkdtemp under /dev/shm as the live-dir override rather than mocking findmnt (that mock
+// lives in scripts/lib/live-state-dir.test.js; here we exercise the real resolver).
+function shmTmp(prefix) {
+  const base = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
+  return fs.mkdtempSync(path.join(base, prefix));
+}
+
+function writeLiveMain(base, sid, obj) {
+  const dir = path.join(base, 'context');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${sid}.json`), JSON.stringify(obj));
+}
+
+function liveMainFixture(overrides = {}) {
+  return {
+    schema_version: 1,
+    session_id: 'live-sid',
+    written_at: new Date().toISOString(),
+    cc_version: '2.1.260',
+    model: { id: 'claude-fable-5-1', display_name: 'Fable 5.1' },
+    context_window: {
+      context_window_size: 1_000_000,
+      used_percentage: 15.3,
+      total_input_tokens: 153_000,
+      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 152_068 },
+    },
+    ...overrides,
+  };
+}
+
+test('RED/GREEN: 1M live file at 153k ⇒ no T2 (fails on pre-P2 code, which only infers the window)', () => {
+  const liveDir = shmTmp('ctxbud-live-1m-');
+  const sid = 'live-sid-1m';
+  writeLiveMain(liveDir, sid, liveMainFixture());
+  // No transcript usage anywhere near 153k ⇒ the OLD code's inference path (which only
+  // trusts the transcript) would see nothing and stay silent for the wrong reason; give it
+  // a transcript that ALSO reports ~153k so the pre-fix code's inference-only path fires
+  // T2 (153k ≥ its 200K-calibrated 150k default) — proving this test actually discriminates
+  // pre-fix from post-fix, not just "no transcript ⇒ no signal".
+  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]); // 153k via transcript too
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 0, 'a 1M-window session at 153k must not get the T2 escalated advisory');
+  assert.strictEqual(r.stderr.trim(), '', 'no nudge at 15% of a 1M window');
+});
+
+test('200K live file at 150k ⇒ T2 still fires (no regression for small windows)', () => {
+  const liveDir = shmTmp('ctxbud-live-200k-');
+  const sid = 'live-sid-200k';
+  writeLiveMain(liveDir, sid, liveMainFixture({
+    context_window: {
+      context_window_size: 200_000,
+      used_percentage: 75,
+      total_input_tokens: 150_000,
+      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 149_068 },
+    },
+  }));
+  const p = tmpFile([usageLine(1_000, 148_000, 1_000, 10)]);
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, '200K live-window session at 150k must still get T2');
+  assert.match(r.stderr, /Context budget T2/);
+  assert.match(r.stderr, /\(statusline\)/, 'message must say the window came from the statusline, not inference');
+});
+
+test('lag guard: OLDER transcript row with a HIGHER total ⇒ contextTokens = max(transcript, live)', () => {
+  const liveDir = shmTmp('ctxbud-live-lag-older-');
+  const sid = 'live-sid-lag-older';
+  const writtenAt = new Date();
+  writeLiveMain(liveDir, sid, liveMainFixture({
+    written_at: writtenAt.toISOString(),
+    context_window: {
+      context_window_size: 200_000,
+      used_percentage: 65,
+      total_input_tokens: 130_000, // below t2 (150k) on its own
+      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 129_068 },
+    },
+  }));
+  // Transcript row timestamped BEFORE written_at, but its own total (160k) is HIGHER than
+  // the live total (130k) — the lag guard must take the max, not blindly trust either side.
+  const rowTs = new Date(writtenAt.getTime() - 5_000).toISOString();
+  const p = tmpFile([usageLine(10_000, 149_000, 1_000, 10, rowTs)]); // 160k total, older row
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, 'max(160k transcript, 130k live) = 160k ≥ 150k t2');
+  assert.match(r.stderr, /is 160k tokens/, 'contextTokens must be the max, not the live total alone');
+  assert.match(r.stderr, /\(statusline\)/);
+});
+
+test('lag guard: NEWER transcript row ⇒ transcript value used even when the live total is larger', () => {
+  const liveDir = shmTmp('ctxbud-live-lag-newer-');
+  const sid = 'live-sid-lag-newer';
+  const writtenAt = new Date();
+  writeLiveMain(liveDir, sid, liveMainFixture({
+    written_at: writtenAt.toISOString(),
+    context_window: {
+      context_window_size: 200_000,
+      used_percentage: 80,
+      total_input_tokens: 160_000, // above t2 (150k) on its own
+      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 159_068 },
+    },
+  }));
+  // Transcript row timestamped AFTER written_at (fresher than the live tick) with a LOWER
+  // total (130k) — the fresher transcript row must win outright, not be maxed with the stale
+  // (larger) live total.
+  const rowTs = new Date(writtenAt.getTime() + 5_000).toISOString();
+  const p = tmpFile([usageLine(10_000, 119_000, 1_000, 10, rowTs)]); // 130k total, newer row
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 0, 'fresher transcript row (130k) is below t2 ⇒ no T2, even though live total (160k) is above it');
+  assert.match(r.stderr, /Context budget T1/, 'still ≥ t1 (100k) so T1 fires');
+  assert.match(r.stderr, /is 130k tokens/, 'contextTokens must be the fresher transcript value, not the live total');
+});
+
+test('stale live file (>120s) ⇒ falls back to the inference path', () => {
+  const liveDir = shmTmp('ctxbud-live-stale-');
+  const sid = 'live-sid-stale';
+  writeLiveMain(liveDir, sid, liveMainFixture({
+    written_at: new Date(Date.now() - 121_000).toISOString(),
+  }));
+  // 153k via transcript with NO live signal ⇒ inference treats it as a 200K session ⇒ T2 fires.
+  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, 'a stale live file must not suppress the inference-path T2');
+  assert.doesNotMatch(r.stderr, /\(statusline\)/, 'a stale live file must not be attributed as the window source');
+});
+
+test('schema_version 2 ⇒ treated as absent, inference path used', () => {
+  const liveDir = shmTmp('ctxbud-live-schema2-');
+  const sid = 'live-sid-schema2';
+  writeLiveMain(liveDir, sid, liveMainFixture({ schema_version: 2 }));
+  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, 'unusable schema_version ⇒ inference path fires its own T2');
+});
+
+test('missing live file ⇒ inference path used (no crash)', () => {
+  const liveDir = shmTmp('ctxbud-live-missing-');
+  const sid = 'live-sid-missing';
+  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, 'no live file at all ⇒ old inference path still fires T2 for a 153k transcript');
+});
+
+test('malformed live file (invalid JSON) ⇒ inference path used', () => {
+  const liveDir = shmTmp('ctxbud-live-malformed-');
+  const sid = 'live-sid-malformed';
+  const dir = path.join(liveDir, 'context');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${sid}.json`), '{{{not json');
+  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, 'malformed live file ⇒ old inference path still fires T2');
+});
+
+test('state file lands under the tmpfs live base when no AUTOPILOT_CONTEXT_BUDGET_DIR override is set', () => {
+  const liveDir = shmTmp('ctxbud-live-statedir-');
+  const sid = 'live-sid-statedir';
+  const p = tmpFile([usageLine(1_000, 1_000, 100, 10)]);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-state-nooverride-'));
+  const env = {
+    HOME: dir,
+    AUTOPILOT_HOOK_CONTEXT_BUDGET: '1',
+    AUTOPILOT_LIVE_DIR: liveDir,
+    CLAUDE_CODE_SESSION_ID: sid,
+    // Deliberately NOT setting AUTOPILOT_CONTEXT_BUDGET_DIR: the state dir must be derived
+    // from the resolved (tmpfs) live base, not the legacy ~/.autopilot path.
+  };
+  const r = runHook({ transcript_path: p, session_id: sid }, env);
+  assert.strictEqual(r.status, 0);
+  const expected = path.join(liveDir, 'context-budget', `${sid}.json`);
+  assert.ok(fs.existsSync(expected), `state file expected at ${expected}`);
+});
+
+test('absent live (no AUTOPILOT_LIVE_DIR override, no live file) ⇒ exit/stdout/stderr identical to the pre-P2 fixture', () => {
+  // The develop fixture: below-t1 silent, t1 nudge, t2 escalated-advisory — reproduced here
+  // against a repo build with NO live file present anywhere the resolver could find one for
+  // this fresh, never-used session id. This is the compatibility contract (plan §2.6): with
+  // no usable live file, behaviour is byte-for-byte v2.36.0.
+  const belowP = tmpFile([usageLine(10_000, 5_000, 100, 10)]);
+  const belowR = runHook({ transcript_path: belowP }, freshEnv());
+  assert.strictEqual(belowR.status, 0);
+  assert.strictEqual(belowR.stderr.trim(), '');
+
+  const t1P = tmpFile([usageLine(50_000, 60_000, 1_000, 10)]);
+  const t1R = runHook({ transcript_path: t1P }, freshEnv());
+  assert.strictEqual(t1R.status, 0);
+  assert.match(t1R.stderr, /Context budget T1/);
+  assert.doesNotMatch(t1R.stderr, /\(statusline\)/, 'no live file ⇒ never attributed to the statusline');
+
+  const t2P = tmpFile([usageLine(80_000, 80_000, 1_000, 10)]);
+  const t2R = runHook({ transcript_path: t2P }, freshEnv());
+  assert.strictEqual(t2R.status, 2);
+  assert.match(t2R.stderr, /Context budget T2/);
+  assert.match(t2R.stderr, /handoff/i);
+  assert.doesNotMatch(t2R.stderr, /\(statusline\)/, 'no live file ⇒ never attributed to the statusline');
+
+  // 216k on a genuinely 1M window (via the RATCHET, not a live file) must still say
+  // "inferred from observed usage" — that phrasing is reserved for the inference path.
+  const bigP = tmpFile([usageLine(6_000, 200_000, 10_000, 10)]);
+  const bigR = runHook({ transcript_path: bigP }, freshEnv());
+  assert.strictEqual(bigR.status, 0, 'must not exit 2 on a 1M-window session (ratchet inference)');
 });

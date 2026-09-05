@@ -1,0 +1,332 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "statusline-live-context-feed",
+  "logical_plan_id": "statusline-live-context-feed-2026-09-05",
+  "session_id": "93196c52",
+  "session_key": "439dcac3d93654cef67ab19c9811c5f37730c33275f2d91f240a8faa3fa14226",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "2e117cc0fb2047d7a5177ccf04b308380517c84dda3fa827918954a5d25aa01a",
+  "manifest_sha256": "e72ec4b433522b67ba4950d2c63d62361072e1939ba0aef34a83a53310def77c",
+  "plan_sha256": "c0eedf8a40924c451f2a7e9fa2b3cbae6ad25393bed44a35a9f9e31e7d9084b2",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "53319367495261a7323a89447733a513964ea5420280f4845f252c8cb44dba7f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "d2cd1c8a5b622876b92371f8de81f08af37896e50b41ba29dc720a2fce57eac4",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-PjUo6q/stdout",
+          "digest": "d2cd1c8a5b622876b92371f8de81f08af37896e50b41ba29dc720a2fce57eac4"
+        },
+        "receipt_digest": "9e3db3ce0136ddb3e6b89c1f8fd4f0bc1955f9b2bb79e17b825becb042beb963"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "5f28f30e9e738d7377277844e107b5ffeefac4a0422082e469a9cef6ef01ad12"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "29e185316b7c300b1ec0f59a12c738c07f5dabde2f504e68d6676d179ff16f0a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-rM5twJ",
+          "digest": "29e185316b7c300b1ec0f59a12c738c07f5dabde2f504e68d6676d179ff16f0a"
+        },
+        "receipt_digest": "c4fdd10b51b4de828cb03d5933ca48980e7d2f3c9840cb2c6bfa2317cab89640"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 live-dir contract, KR4, P1.1, P2.1",
+      "claim": "The explicit live-dir override bypasses the mount-type probe, so the plan cannot guarantee that every selected live directory is RAM-backed or that an SSD selection emits the required warning.",
+      "evidence": "§2.5 places AUTOPILOT_LIVE_DIR first and labels it 'explicit, no probe'. An override on ext4 is therefore selected even when a later tmpfs candidate exists, contradicting KR4 and bypassing the all-candidates-rejected warning path.",
+      "evidence_reference": "§2.5 Global Constraints; KR4; P1.1; P2.1",
+      "repair": "Probe AUTOPILOT_LIVE_DIR with the same tmpfs-or-ramfs rule and continue through the ordered candidates when it fails. Reserve the warned SSD fallback for the final legacy directory and add a test covering an ext4 override followed by an available tmpfs candidate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fc9203188aa70232fb60c3efaeb30afe17ee2971e9ebd7c7f5306335b17c6b8f"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 session identity contract, codeforge/src/live.rs, scripts/lib/live-state-dir.js",
+      "claim": "The cross-language session-id sanitiser is not specified deterministically enough to guarantee identical writer and reader filenames.",
+      "evidence": "The plan specifies only an allowed output alphabet and a 64-character limit. It does not define replacement versus deletion, truncation order, empty-result handling, or byte-versus-character behavior. P1 introduces a Rust sanitiser while the readers use getSessionId(), with no shared conformance vectors.",
+      "evidence_reference": "§2.5 Global Constraints; §3 File-structure map; P1.1; P2.1",
+      "repair": "Make the existing getSessionId() behavior the normative algorithm, spell out every transformation and fallback, and require identical shared test vectors in Rust and Node, including invalid characters, Unicode, empty input, and overlength input.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d002d3ad1501aebe9505b5a7dc3adff1f9b27d272081c203326a8bdc1e3eeaa6"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 live-file schema, P1.2-P1.3 writer protocol, P2 foreman consumer",
+      "claim": "Atomic rename does not make the two-writer read-modify-write operation atomic, and the main writer is not required to preserve tasks, so valid task rows can be lost.",
+      "evidence": "P1.2 builds a record from the main status-line payload, while P1.3 reads and merges tasks from a separate process. A later main tick can erase tasks even sequentially, and concurrent readers can both rename records derived from stale snapshots. The §6 statement that last-writer-wins plus rename solves the problem confuses atomic replacement with synchronization.",
+      "evidence_reference": "§3 File-structure map; P1.2; P1.3; §6 risk 'Two writers, one file'",
+      "repair": "Define one authoritative writer or an interprocess locking and merge protocol that covers read, field-preserving update, rename, and unlock. Require each writer to preserve fields owned by the other writer and add deterministic sequential and concurrent interleaving tests.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a5ad399618501e76d9d95f737ca0bb6b9244e23c01a6b5e0d9b998d22b0064a5"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 freshness schema, both codeforge writers, all live-file readers",
+      "claim": "A single record-level written_at cannot represent freshness for fields updated independently by two processes.",
+      "evidence": "A subagent-statusline tick can refresh written_at while preserving stale model and context data, and a main status-line tick can refresh written_at while preserving stale tasks. Readers would then treat stale gate inputs as fresh for the full 120-second window.",
+      "evidence_reference": "§2.5 live-file schema and Freshness; P1.2; P1.3; §6 status-line-staleness and two-writer risks",
+      "repair": "Give independently owned sections separate source timestamps, such as context_written_at and tasks_written_at, or store them separately. Each consumer must validate the timestamp of the section it uses and fall back to old behavior when that section is stale.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "209305f426e5e9426a4f6c8b357a6636b596b2f1a422d1179cc21c82f6c1b10d"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.6 compatibility claim, P2.2 state handling, P3 default-on delegate gate",
+      "claim": "The promised byte-identical behavior when the live file is absent is contradicted by two planned default-path changes.",
+      "evidence": "P3 says the default-on delegate gate still warns when the live file is absent, producing stderr that does not exist today. P2.2 also moves context-budget state to the new live directory even though the same step says an absent or stale file follows the existing path.",
+      "evidence_reference": "§2.6 Compatibility impact; P2.2; P3.1; §6 two-repo skew and gate-noise risks",
+      "repair": "Require a fresh supported live record before the new delegate gate emits or denies, and retain the legacy context-budget state location and behavior whenever no usable live record exists. Add an absent-live compatibility test comparing exit status, stdout, stderr, and persisted state with the pre-change implementation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e66758c75c7c45e218e1f5379f53d2abb0b0f28d38b07120445cd7407a31a3e9"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§0 ruling interpretation, KR1, P2.2 context-budget decision logic",
+      "claim": "The stated preservation of window-independent absolute-token tiers is not reconciled with KR1, which requires the same token count to produce different T2 outcomes solely because the window differs.",
+      "evidence": "KR1 requires 150k tokens to avoid T2 in a 1M window but trigger T2 in a 200K window. P2.2 supplies the real window to obtain that result, while §0 says the real window only removes inference and reports proportion without reopening the no-window-relative-threshold ruling. No decision formula explains how both claims can hold.",
+      "evidence_reference": "§0 Context and thesis; KR1; P2.2",
+      "repair": "State the exact T1 and T2 decision formula and demonstrate its compliance with the prior ruling. If equal absolute usage must yield equal tier outcomes, revise KR1; if the window changes tier selection, explicitly reopen and obtain a decision on the prior ruling before implementation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0024000a8e8a23c7d9ec1cf927834856ea4684053dbdc5dfc816a632bc74baca"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P0 identity fallback, schema v1 tasks rows, P1.3 task extraction, P2.3 foreman matching",
+      "claim": "The written fallback match cannot be implemented from the frozen tasks schema.",
+      "evidence": "P0 specifies fallback matching on model, cwd, and startTime if tasks[].id differs from agent_id. The §2.5 schema contains model but neither cwd nor startTime, and P1.3 explicitly extracts only the fields listed in §2.5.",
+      "evidence_reference": "§2.5 live-file schema; P0.3-P0.4; P1.3; P2.3",
+      "repair": "Require P0 to establish an unambiguous mapping contract before P1. If fallback fields are proven available, add them to schema v1 and its writer and define collision handling; otherwise specify an alternative stable mapping and fail open with an explicit diagnostic when matching is ambiguous.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "db165ac6d3ca0477ded201a7aec75bae524298c68aab397e9d31b3f6709f45e4"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 guarded-model configuration, schema model.id, P3.1 block decision",
+      "claim": "Guarded-model matching is undefined and the documented defaults do not exactly match the documented live model identifiers.",
+      "evidence": "The schema example supplies model.id as 'claude-fable-5-1', while guarded_models defaults to 'fable,opus'. P3 merely says the identifier 'matches' the configured values, leaving exact, substring, family, case, and version-suffix semantics unspecified. Exact membership would silently disable the intended block.",
+      "evidence_reference": "§2.5 live-file schema and New knobs; P3.1",
+      "repair": "Define a canonical model-family parser or an explicit anchored matching format, reuse it consistently, and add positive tests for full Fable and Opus identifiers plus negative near-match, case, malformed, stale-file, and unknown-model cases.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c79b03701119b64ae5afb5e688973b46b93e19bda1f06fe8df0536408fe5ea79"
+    },
+    {
+      "rubric_id": "R12",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Schema-version acceptance, readLive(), two-repository version skew",
+      "claim": "The schema_version field is present but has no reader acceptance rule, so it does not yet guard future schema changes.",
+      "evidence": "P2.1 validates freshness, and P2.2 checks freshness plus session_id, but neither requires schema_version to equal 1. The instruction to ignore unknown fields does not define what happens for a missing, malformed, or newer schema version.",
+      "evidence_reference": "§2.5 live-file schema and Freshness; P2.1; P2.2; §6 two-repo skew",
+      "repair": "Specify that current readers accept only integer schema_version 1; missing, malformed, or unsupported versions must be treated as absent and follow old behavior. Add skew tests for version 1, a newer version, a missing version, and malformed data.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c91d93347f21c4cd858724e62c922860c62a5e5b4f0be16f96dd1d7e3f2658f8"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-04T20:20:38.704Z"
+}

@@ -607,3 +607,21 @@ same-runner guard — 25 red files, all "unrelated" to the change.
 
 Prevention: the shell resolver suite, the ladder unit test and the integration fixtures pin the variable;
 the product fix makes `auto` skip colliding seats and fall back natively instead of exiting 3.
+
+## 26. A gate built on inference when the harness already publishes the value through another channel
+
+**Incident (2026-09-05, v2.36.1).** `hooks/context-budget.js` inferred the model's context window from "observed N
+tokens ⇒ window > N" because hook stdin carries no model and no window (verified against the hooks reference and
+two closed GitHub issues). It fired T2 "STOP, hand off now" at 153k and again at 180k on a 1M session (15–18%).
+The same Claude Code build hands the **status line** `model.id`, `context_window.context_window_size`,
+`used_percentage`, and — per running subagent — `tasks[].contextWindowSize` / `tokenCount`. A BACKLOG row had
+waited nine days for "an equivalent per-agent usage field" that was already arriving through the other door.
+Fix: codeforge writes what the status line receives into a tmpfs live file; the hooks read it (`scripts/lib/live-state-dir.js`).
+
+**The lesson.** Before inferring a value the harness withholds on one channel, enumerate the harness's other
+channels (status line stdin, SDK result messages, transcript rows, env) and check whether it publishes the value
+there. An inference-based gate is a claim about the harness; the harness's own JSON is the measurement.
+
+**Corollary recorded the same day.** A status-line writer that "only draws" is a measurement that is thrown away
+every tick. If a channel already receives the truth, persist it where the acting component can read it — in RAM
+(`$XDG_RUNTIME_DIR`, probed with `findmnt`, never assumed) when it is rewritten every tick.

@@ -1,0 +1,8 @@
+[
+  { "input": "93196c52-25cb-47ca-821c-cec391832eed", "expected": "93196c52-25cb-47ca-821c-cec391832eed" },
+  { "input": "a/b:c d", "expected": "a_b_c_d" },
+  { "input": "會議123", "expected": "__123" },
+  { "input": "😀🎉session", "expected": "__session" },
+  { "input": "", "expected": "unknown" },
+  { "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+]

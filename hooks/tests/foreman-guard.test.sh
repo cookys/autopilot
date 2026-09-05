@@ -167,4 +167,65 @@ run_hook foreman-guard.js '{not json'
 assert_eq 0 "$__RUN_EXIT" "garbage payload exit 0"
 assert_eq "" "$__RUN_STDOUT" "garbage payload silent"
 
+# ── 8. context-ceiling (v2.36.1 P2): this agent's own tasks[] row vs its own T2 ────
+# AUTOPILOT_LIVE_DIR must be RAM-backed (resolveLiveDir checks findmnt even for the
+# override) — /dev/shm is tmpfs on every Linux host these hooks run on.
+LIVE_DIR="$(mktemp -d /dev/shm/fg-guard-live-XXXXXX 2>/dev/null || mktemp -d "$TEST_TMP/live-XXXXXX")"
+mkdir -p "$LIVE_DIR/context"
+export AUTOPILOT_LIVE_DIR="$LIVE_DIR"
+
+write_tasks() { # <sid> <tasks-json-array>
+  node -e '
+    const fs = require("fs");
+    const [, sid, tasksJson, dir] = process.argv;
+    const obj = { schema_version: 1, session_id: sid, written_at: new Date().toISOString(), tasks: JSON.parse(tasksJson) };
+    fs.writeFileSync(`${dir}/context/${sid}.tasks.json`, JSON.stringify(obj));
+  ' "$1" "$2" "$LIVE_DIR"
+}
+write_stale_tasks() { # <sid> <tasks-json-array>
+  node -e '
+    const fs = require("fs");
+    const [, sid, tasksJson, dir] = process.argv;
+    const obj = { schema_version: 1, session_id: sid, written_at: new Date(Date.now() - 121000).toISOString(), tasks: JSON.parse(tasksJson) };
+    fs.writeFileSync(`${dir}/context/${sid}.tasks.json`, JSON.stringify(obj));
+  ' "$1" "$2" "$LIVE_DIR"
+}
+
+set_marker l4; reset_state
+write_tasks fg-test-session '[{"id":"agent-1","tokenCount":160000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "context-ceiling: 160k/200k row denied"
+assert_contains "$__RUN_STDOUT" 'handoff' "context-ceiling deny carries the handoff directive"
+
+reset_state
+write_tasks fg-test-session '[{"id":"agent-1","tokenCount":90000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_eq "" "$__RUN_STDOUT" "context-ceiling: 90k/200k row allowed"
+
+reset_state
+write_tasks fg-test-session '[{"id":"other-agent","tokenCount":190000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_eq "" "$__RUN_STDOUT" "context-ceiling: no matching row ⇒ allowed"
+assert_contains "$__RUN_STDERR" '0 tasks[] row' "context-ceiling: diagnostic names the count (0)"
+
+reset_state
+write_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000},{"id":"agent-1","tokenCount":10000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_eq "" "$__RUN_STDOUT" "context-ceiling: two rows same id ⇒ allowed (ambiguous, never a gate)"
+assert_contains "$__RUN_STDERR" '2 tasks[] row' "context-ceiling: diagnostic names the count (2)"
+
+reset_state
+write_stale_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_eq "" "$__RUN_STDOUT" "context-ceiling: stale (>120s) tasks file ⇒ allowed (silence is never a gate)"
+
+# no marker ⇒ the whole hook (context-ceiling included) is untouched
+clear_marker; reset_state
+write_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_eq "" "$__RUN_STDOUT" "context-ceiling: no marker ⇒ untouched even with a denyable row"
+assert_eq "" "$__RUN_STDERR" "context-ceiling: no marker ⇒ no diagnostic either"
+
+unset AUTOPILOT_LIVE_DIR
+
 finalize_test

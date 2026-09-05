@@ -11,6 +11,7 @@
     { "stem": "context-budget", "class": "invariant_effect" },
     { "stem": "cost-fuse", "class": "invariant_effect" },
     { "stem": "cost-tracker", "class": "invariant_effect" },
+    { "stem": "depth0-delegate-gate", "class": "invariant_effect" },
     { "stem": "design-quality", "class": "guidance", "profiles": ["guided"] },
     { "stem": "dispatch-model-guard", "class": "invariant_effect" },
     { "stem": "failure-escalation", "class": "invariant_effect" },

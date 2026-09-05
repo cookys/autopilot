@@ -1,0 +1,28 @@
+{
+  "status": "done",
+  "worktree": "/home/cookys/projects/codeforge-wt-live",
+  "branch": "feat/live-context-file",
+  "commit": "2c578a6f80625d90cc90fa3fb0f078982d3ba382",
+  "tests": {
+    "cmd": "cargo test",
+    "passed": 857,
+    "failed": 0
+  },
+  "clippy": "clean",
+  "files_changed": [
+    "CHANGELOG.md",
+    "Cargo.toml",
+    "README.md",
+    "src/cli/bootstrap.rs",
+    "src/cli/install.rs",
+    "src/cli/mod.rs",
+    "src/cli/statusline.rs",
+    "src/cli/subagent_statusline.rs",
+    "src/live.rs",
+    "src/main.rs",
+    "tests/fixtures/session-id-vectors.json",
+    "tests/fixtures/statusline-p0.json",
+    "tests/fixtures/subagent-p0.json"
+  ],
+  "notes": "All 6 deliverables shipped in one commit on feat/live-context-file (not merged to main). src/live.rs: resolve_live_base/sanitize_session_id/write_live_json with findmnt + /proc/mounts (CODEFORGE_PROC_MOUNTS override) fallback probing, warn-once via AtomicBool, OnceLock-cached resolution. tempfile promoted from [dev-dependencies] to [dependencies] in Cargo.toml (already present in the graph; no new crate added) so the writer can use it in production code. statusline.rs: read_status_input now also returns the raw serde_json::Value; write_live_context builds the main record from it (schema_version 1, cc_version from top-level 'version', model{id,display_name}, context_window{context_window_size,used_percentage,total_input_tokens,current_usage}) and writes context/<sid>.json; existing rendering tests (11) pass unchanged plus 1 new fixture test. New src/cli/subagent_statusline.rs + `codeforge subagent-statusline` CLI wiring in cli/mod.rs: reads one stdin line, writes context/<sid>.tasks.json (copies id/type/status/description/label/startTime/model/cwd/contextWindowSize/tokenCount/name only when present), prints nothing, always exits 0 (verified manually with invalid/empty stdin). install.rs: new --subagent-statusline opt-in flag + patch_subagent_statusline() (mirrors patch_statusline's merge/force/idempotent semantics), wired only inside the install_statusline branch so default install/--all behaviour is unchanged; bootstrap.rs's InstallOpts literal updated to pass subagent_statusline: false. Shared session-id sanitiser vector fixture written to both /home/cookys/projects/autopilot/hooks/tests/fixtures/session-id-vectors.json and codeforge's tests/fixtures/session-id-vectors.json (byte-identical, 6 vectors: plain uuid, 'a/b:c d', CJK 會議123 -> __123, emoji 😀abc -> _abc, empty -> unknown, 70-char a's -> 64-char a's) and exercised by a shared-vector test. Deliverable-5 test items (a)-(h) all present and passing: (a)(b)(c)(d) mount-resolution scenarios in src/live.rs using a PATH-only-replacement harness (had to fully replace PATH rather than prepend, since the real system findmnt was otherwise still reachable further down PATH and answered ahead of the fixture); (e) sanitiser vectors; (f) writer mode 0600 + no leftover .tmp; (g) statusline fixture (copied from p0/statusline.json into codeforge's own tests/fixtures/) asserts context_window_size == 1000000 plus full schema; (h) subagent fixture (copied from p0/subagent.json) asserts id == 'a9c9b5673eb39f842', tokenCount == 47688, and that write_tasks_context never creates the sibling .json file. `cargo fmt` and `cargo clippy -- -D warnings` (the brief's exact contract command) both clean; also ran `cargo clippy --all-targets -- -D warnings` clean after fixing two str::repeat/repeat_n lints in a test helper. Full `cargo test`: 857 passed, 0 failed (up from the pre-existing baseline plus 4 new tests in live.rs beyond the required set, 1 in statusline.rs, 2 in subagent_statusline.rs, 5 in install.rs). Verified main branch (/home/cookys/projects/codeforge) untouched and clean at 4ec12bf throughout; no cargo install run; ~/.claude/settings.json never touched."
+}

@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.36.1 — statusline → hook live context feed：hook 讀真實窗口與子代理用量，不再推斷（owner 2026-09-05）
+
+owner 抓到兩件事：`context-budget` 在 1M session 的 153k／180k 兩次響 T2 叫我交棒（15%），而 Fable depth-0 自己跑了六次
+WebFetch 做調研，autopilot 沒有任何 gate 擋。查證：hook stdin 沒有 model／window／用量（官方 hooks 文件；#34340 closed
+not-planned、#41689 closed），但 **status line stdin 有** `model.id`、`context_window.context_window_size`、`used_percentage`，
+且 `subagentStatusLine` 每個子代理一列 `tasks[].contextWindowSize`／`tokenCount`（CC ≥ 2.1.205）。這台的 status line 就是 codeforge，
+它只畫不存。設計：`docs/plans/2026-09-05-statusline-live-context-feed.md`（plan loop 兩代：sol@max 9＋4 blocker 全摺入，MiniMax READY，
+`check-phase-review-receipt.js` exit 0；P0 spike 用真 payload 釘死 `tasks[].id === hook agent_id`）。
+
+- **codeforge（別 repo，`f69a52e`）**：`codeforge statusline` 每 tick 寫 `<base>/context/<sid>.json`，新子命令 `subagent-statusline`
+  寫 `<sid>.tasks.json`；兩檔各一個 writer、各自 `written_at`、0600、同目錄 rename。live base 探測順序 `$AUTOPILOT_LIVE_DIR` →
+  `$XDG_RUNTIME_DIR/autopilot` → `/dev/shm` → `/tmp`，**每個候選（含 override）都要 `findmnt` 回 tmpfs|ramfs 才收**，全不過退
+  `~/.autopilot` 並警告一次（owner：live 檔寫 RAM 不寫 SSD，路徑要探測不能假設）。`install --subagent-statusline` opt-in。
+- **`scripts/lib/live-state-dir.js`**（新，PATCH）：Node 版同一套探測、`readLive`（只收 `schema_version` 整數 1、120 s freshness）、
+  normative `session_id` 消毒（Rust／Node 共用 `hooks/tests/fixtures/session-id-vectors.json`）、`modelFamily(id)`
+  （`^claude-([a-z]+)-[0-9]+(-[0-9]+)*(\[[a-z0-9]+\])?$`，不合即 unknown）。
+- **`hooks/context-budget.js`**：有 live 檔就用真窗口（跳過 `inferWindowTokens`），訊息寫 `N% of the ~1000k window (statusline)`；
+  state 檔搬到 RAM base（無 RAM base 維持 `~/.autopilot/context-budget/`）；無 live 檔時 exit／stdout／stderr 與 v2.36.0 byte-identical
+  （fixture 對比測試）。RED 先行：`d4c11998` 30/3 → 修後 33/0。活體：merge 後這條 session 324k 沒再響。
+- **`hooks/foreman-guard.js`**：l4–l6 marker＋`agent_id` 時讀 `<sid>.tasks.json`，`tasks[].id === agent_id` 那列 `tokenCount ≥ t2(row.contextWindowSize)`
+  就 deny 帶交棒指令；0 或 ≥2 列、stale 一律放行並印診斷（沉默不是通過）。BACKLOG「工頭 context 量不到」row 關閉。
+- **`hooks/depth0-delegate-gate.js`**（新 hook，default-on，**不綁 l3–l6 marker**）：depth-0 連續 read 類呼叫（WebFetch／WebSearch／
+  Read／Grep／Glob／read 形 Bash，heredoc 與註解剝除）第 8 次起 stderr 提醒改派 Explore／survey，Agent／Task／Skill 歸零；
+  `block` 模式且 live `model.id` 家族在 `guarded_models`（預設 fable,opus）才在 2× 門檻 deny，無 live 檔永不 block。
+  旋鈕 `AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE=off|warn|block`、config `depth0_delegate_gate.{mode,threshold,guarded_models}`。
+  29 hooks（16 default-on／13 opt-in），`hook-classes.json` 登記、兩份 catalog `hook_classes_sha256` 重釘。
+- **文件**：`references/evidence-discipline.md` §26（harness 在另一通道已公布的值不該用推斷）；BACKLOG T3 row 補註（子代理 deny 已出貨，
+  只剩 depth-0）；plan-loop freeze 的 dispatcher／checker disposition 形狀漂移新 row。
+- **QC**：每個 deliverable 各一席 hetero review 記在 `docs/projects/2026-09-05-statusline-live-context-feed/ledger/p{1,2,3}/`：
+  P1 MiniMax SHIP-AS-IS；P2 MiniMax FIX-THEN-SHIP（codex 鏡像測試路徑，`3f9ad130`）；P3 MiniMax 席 no_verdict（NO-FINDING-PROOF 格式病，
+  換席）→ sol FIX-THEN-SHIP 兩條 🟠（`agent_id` 存在性、garbage env mode，`ae31edb3`）。全套 suite 每個 deliverable 各跑一次，
+  紅的只有 develop 既有四檔（context-window 2、consult-discuss-switch 2、role-admission 1、slash-entry-probe 負載 0-byte）。
+  三個 sonnet hands 全部在「等自己的背景 suite 通知」上停車（P2 四次、P3 五次），depth-0 自掛 waiter 收尾；P3 hands 還覆蓋了
+  自己正在寫的 suite log——下一版該把 `timeout` 前景跑 suite 寫進 hands brief 範本。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.0 — dev-flow 的 hetero 迴圈變預設：plan loop review → 派工 → per-phase hetero review → qc gate（owner 2026-09-04）
 
 owner 最常講的是「叫 autopilot plan loop review hetero」「coding 完成後過 hetero loop review」，但沒有任何 skill description

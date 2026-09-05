@@ -85,8 +85,9 @@ operator configured, with every uncertified seat recorded as such.**
 - The v2.36.7 l4 reviewer-qualification waiver stays; this plan must not remove the `waived` ledger path.
 - Every changed source under `bin/`, `src/` is mirrored to `platforms/codex/plugin/` via
   `scripts/sync-codex-plugin-skills.sh` before commit (the pre-commit ritual enforces it).
-- Version: MINOR is NOT warranted (no new skill/agent); this ships as PATCH `v2.36.8` unless the Board
-  decides the l4 managed rail is a new user-facing surface.
+- Version: PATCH `v2.36.8` (Board 2026-09-07).
+- Citations are provenance, not reading assignments: this plan is a self-contained packet; a reviewer
+  answers the rubric from the plan text and the code lines it quotes, without opening other files.
 
 ## 2.6 Change-policy decisions
 
@@ -252,4 +253,4 @@ No open questions remain; the three answers are binding on P1–P4.
 
 ## Review log
 
-- R0: this document. Manifest and frozen rubric to be written at L-2.5 (`docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md`, `plan-review-manifest` beside it).
+- R0: this document (sha at g1 dispatch recorded in the ledger). Manifest: `docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.plan-review-manifest.json` (sol chair codex/max + MiniMax-M3 evidence skeptic cc-shim/high, 2 families, 2 attempts/seat). Frozen rubric: `docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md` (R1–R13). Ledger: `docs/projects/2026-09-07-l4-host-bootstrap/ledger/plan-review/`.

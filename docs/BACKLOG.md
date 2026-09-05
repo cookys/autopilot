@@ -992,6 +992,12 @@ never an ad hoc descriptive string.
 - **Effort**: S (reader-side option a) / S (codeforge)
 - **Source**: v2.36.2 session live observation, 2026-09-05
 
+### Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation
+- **Trigger**: a second field report of a receipt refused with "attributes … to generation N, which is aborted", or a request to re-finalize without re-collecting.
+- **Context**: v2.36.3 made `review-chain-derive` evidence-only (chain-entry `closed_findings` stamps are output, ignored as input) and the checker refuses a receipt whose `closed_findings` names an aborted generation. The stamps the old derive wrote onto chain.json entries stay on disk (deep-equal with the receipt keeps them consistent) and are now inert, but the only way to get a fresh receipt is `collect` + `finalize` of one more generation — `finalize` refuses a generation that is not pending. Fix shape if wanted: `hetero-review-loop.js refinalize --generation <n>` that re-derives from the existing findings/dispositions of a finalized generation and rewrites receipt + stamps, refusing when any finding/disposition sha no longer matches.
+- **Effort**: S
+- **Source**: 7840hs / llm-playground plan 066 ledger, 2026-09-05
+
 ### depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher
 - **Trigger**: a measured depth-0 Bash latency complaint, or the next revision of `depth0-delegate-gate`.
 - **Context**: plan §4 P3.1 lists `WebFetch|WebSearch|Read|Grep|Glob|Agent|Skill|Task`; the shipped hook also matches `Bash` and classifies read-shaped commands (`grep|rg|find|cat|sed -n|head|tail`) with a duplicated 35-line shell lexer, adding ~17 ms and two `/bin/sh` spawns per depth-0 Bash call (reviewer measurement). Accepted for v2.36.1 (depth-0's own grep bursts were the incident); recorded here so the delta is explicit. Options: keep and share the lexer with `foreman-guard.js`; or drop `Bash` and accept that grep-via-Bash is uncounted.

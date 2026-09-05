@@ -983,6 +983,30 @@ function validateModeA(flags) {
     // Item 4: Call shared review-chain-derive routine
     const derivedState = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
 
+    // v2.36.3 (7840hs): no closure may be attributed to an aborted generation — it produced no
+    // findings, so "closed by absence in generation N" is meaningless for an aborted N. Checked
+    // on the receipt's own closed_findings BEFORE the equality comparison below so a receipt
+    // written by the pre-v2.36.3 finalize (which did exactly this) is refused with a named
+    // reason and the remedy, not a bare mismatch. The re-derived state is asserted too, as a
+    // self-check on the derive routine.
+    const abortedGens = new Set(chain.filter((e) => e.status === 'aborted').map((e) => e.generation));
+    const namesAborted = (list) => (Array.isArray(list) ? list : [])
+      .find((cf) => cf && abortedGens.has(cf.closed_by_generation));
+    // The loop's finalize writes the stamps onto chain ENTRIES (chain[i].closed_findings), not a
+    // top-level receipt field — the 7840hs ledger carries `{id, closed_by_generation: 3}` on its
+    // g2 entry with g3 aborted — so the on-disk chain entries are scanned as well.
+    const badReceiptClosure = namesAborted(receipt.closed_findings)
+      || chainOnDisk.map((e) => namesAborted(e && e.closed_findings)).find(Boolean);
+    if (badReceiptClosure) {
+      console.error(`Receipt/chain closed_findings attributes '${badReceiptClosure.id}' to generation ${badReceiptClosure.closed_by_generation}, which is aborted — an aborted generation reviewed nothing and can close nothing (stamp written before v2.36.3; collect + finalize one more generation to re-derive)`);
+      process.exit(1);
+    }
+    const badDerivedClosure = namesAborted(derivedState.closed_findings);
+    if (badDerivedClosure) {
+      console.error(`Re-derived closed_findings attributes '${badDerivedClosure.id}' to aborted generation ${badDerivedClosure.closed_by_generation} (derive routine defect)`);
+      process.exit(1);
+    }
+
     // Item 1: Require both recorded and re-derived SHIP-AS-IS
     if (receipt.verdict !== 'SHIP-AS-IS' || derivedState.verdict !== 'SHIP-AS-IS') {
       console.error(`Receipt verdict is not SHIP-AS-IS or re-derived verdict mismatch (receipt: '${receipt.verdict}', re-derived: '${derivedState.verdict}')`);

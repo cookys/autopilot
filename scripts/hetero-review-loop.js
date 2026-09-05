@@ -1046,17 +1046,22 @@ async function handleFinalize(flags) {
       }
       let earlierFindings = [];
       let earlierDisps = [];
-      if (fs.existsSync(earlierFindingsPath)) {
-        try {
-          const efData = JSON.parse(fs.readFileSync(earlierFindingsPath, 'utf8'));
-          earlierFindings = Array.isArray(efData.findings) ? efData.findings : [];
-        } catch (_e) {}
+      // v2.36.3: disk evidence is the ONLY closure input (review-chain-derive no longer honours
+      // chain-entry stamps), so an unreadable earlier generation must fail closed — defaulting
+      // to [] would read as "that generation reported nothing" and close every open finding.
+      try {
+        const efData = JSON.parse(fs.readFileSync(earlierFindingsPath, 'utf8'));
+        earlierFindings = Array.isArray(efData.findings) ? efData.findings : [];
+      } catch (e) {
+        console.error(`ERROR: Cannot read findings.json of finalized generation ${g} at ${earlierFindingsPath}: ${e.message}`);
+        process.exit(1);
       }
-      if (fs.existsSync(earlierDispPath)) {
-        try {
-          const edData = JSON.parse(fs.readFileSync(earlierDispPath, 'utf8'));
-          earlierDisps = Array.isArray(edData.findings) ? edData.findings : [];
-        } catch (_e) {}
+      try {
+        const edData = JSON.parse(fs.readFileSync(earlierDispPath, 'utf8'));
+        earlierDisps = Array.isArray(edData.findings) ? edData.findings : [];
+      } catch (e) {
+        console.error(`ERROR: Cannot read dispositions of finalized generation ${g} at ${earlierDispPath}: ${e.message}`);
+        process.exit(1);
       }
       findingsByGeneration.set(g, earlierFindings);
       dispositionsByGeneration.set(g, earlierDisps);

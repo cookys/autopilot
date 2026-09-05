@@ -1135,9 +1135,9 @@ else
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
       "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
-      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
+      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$(agy_effort_clamp "$EFFORT")" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   set +e

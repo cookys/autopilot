@@ -56,3 +56,14 @@ agy_resolve_model_alias() {
   fi
   printf '%s' "$resolved"
 }
+
+# agy_effort_clamp <effort> — agy 1.1.26 REQUIRES `--effort` for gemini-3.8-flash ("--model
+# gemini-3.8-flash requires --effort (available: low, medium, high)", found 2026-09-05 by the
+# provider-readiness live probe on hangar-bridge). The rail vocabulary is low|medium|high|xhigh|max;
+# agy's is low|medium|high, so xhigh/max fold to high. Always prints a valid value.
+agy_effort_clamp() {
+  case "${1:-}" in
+    low|medium|high) printf '%s' "$1" ;;
+    *) printf 'high' ;;
+  esac
+}

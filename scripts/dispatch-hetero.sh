@@ -3208,11 +3208,11 @@ else
   AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
   AGY_PARSED="$(mktemp -t dispatch-hetero-agy-parsed-XXXXXX)"
   AGY_USAGE_JSON="null"
-  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" \
+  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --effort "$8" \
       --dangerously-skip-permissions --output-format json --print-timeout "$5" \
       >"$6" 2>"$7"' \
       _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \
-      "$AGY_ENVELOPE" "$AGY_STDERR"
+      "$AGY_ENVELOPE" "$AGY_STDERR" "$(agy_effort_clamp "$EFFORT")"
   if [ "$AGENT_EXIT" -ne 0 ]; then
     cat "$AGY_STDERR" >> "$LOG"
     printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \

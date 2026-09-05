@@ -215,7 +215,8 @@ assert_contains "$AGY_ARG_TEXT" '--model' "Case 8: AGY model flag composition"
 assert_contains "$AGY_ARG_TEXT" 'Gemini 3.1 Pro (High)' "Case 8: AGY model composition"
 assert_contains "$AGY_ARG_TEXT" '--dangerously-skip-permissions' "Case 8: AGY permission composition"
 assert_not_contains "$AGY_ARG_TEXT" '--runner' "Case 8: no manual runner flag"
-assert_not_contains "$AGY_ARG_TEXT" '--effort' "Case 8: no manual effort flag"
+assert_contains "$AGY_ARG_TEXT" '--effort' "Case 8: AGY effort flag composition (agy 1.1.26 requires it; roster effort, not a manual flag)"
+assert_contains "$AGY_ARG_TEXT" 'ARG=high' "Case 8: AGY effort value is the roster effort"
 assert_not_contains "$AGY_ARG_TEXT" '--endpoint' "Case 8: no manual endpoint flag"
 
 finalize_test

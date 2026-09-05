@@ -1274,7 +1274,7 @@ else
   done
   bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
     --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
-    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" \
+    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$(agy_effort_clamp "$EFFORT")" \
     --dangerously-skip-permissions --output-format json --print-timeout "$TIMEOUT" \
     > "$AGY_OUT" 2> "$AGY_ERR"
   AGY_RC=$?

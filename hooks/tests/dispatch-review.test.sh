@@ -352,6 +352,23 @@ case "$MODE" in
     echo "FINDINGS: the slice does not reverse"
     echo "$END"
     ;;
+  glued_preamble_frame)
+    # grok --output-format plain (cuda R21 qc, 2026-09-05): one sentence of preamble and
+    # the derived BEGIN on the SAME line, no newline between them. The block itself is
+    # complete and correct.
+    printf '%s%s\n' "I'll read the full review prompt and inspect the spec-required surfaces. " "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  glued_preamble_frame_vocab_echo)
+    # Same glued shape, but the preamble itself echoes framing vocabulary — after the
+    # split the preamble line still carries it, so rule 7 must still reject.
+    printf '%s%s\n' "Emitting AUTOPILOT-END framing now: " "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "$END"
+    ;;
   truncated_frame_chrome)
     # A REAL truncated frame (two angle brackets, not three) as leading
     # chrome, followed by a complete valid block. Carries framing vocabulary
@@ -635,6 +652,22 @@ assert_eq "1" "$EXIT" "empty capture exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "empty → no_verdict"
 assert_contains "$OUT" '"verdict": null' "no_verdict has null verdict"
 assert_not_contains "$OUT" 'SHIP-AS-IS' "empty capture is NEVER read as a ship verdict"
+
+# 3g. grok glued-preamble normalization (v2.36.4): preamble + BEGIN on one line is split
+# once before the shared locator, so the complete review is parsed — grok only.
+OUT="$(STUB_MODE=glued_preamble_frame "$SCRIPT" --runner grok --model grok-4.6 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "grok glued preamble+frame: reviewed exit 0"
+assert_contains "$OUT" '"status": "reviewed"' "grok glued preamble+frame: reviewed"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "grok glued preamble+frame: verdict parsed"
+# 3g-neg-1: the split does not launder framing vocabulary left in the preamble (rule 7 holds).
+OUT="$(STUB_MODE=glued_preamble_frame_vocab_echo "$SCRIPT" --runner grok --model grok-4.6 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "grok glued preamble with residual framing vocabulary: no_verdict"
+assert_contains "$OUT" 'framing vocabulary' "grok glued preamble with residual vocabulary: rule 7 names the reason"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "grok glued preamble with residual vocabulary: never a SHIP"
+# 3g-neg-2: the normalization is grok-scoped — the same glued shape on codex is still rule 7.
+OUT="$(STUB_MODE=glued_preamble_frame "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "codex glued preamble+frame: still rejected (normalization is grok-scoped)"
+assert_contains "$OUT" 'framing vocabulary' "codex glued preamble+frame: rule 7"
 
 # 4b. Whole-prompt echo is rejected if the first non-empty line is not the marker.
 OUT="$(STUB_MODE=prompt_echo "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

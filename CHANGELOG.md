@@ -17,8 +17,8 @@
   記成 `closed_by_generation: 3`，3 正是中止那代。兩件跟進：(1) derive 不再把 chain 條目上既有的 `closed_findings` 戳記當輸入
   （戳記是這支程式的輸出，ADR-0001：closure 只從 findings＋dispositions 證據重推導；否則舊碼寫的錯誤戳記會在每次重推導時
   繼續關掉那條 finding，偽造的戳記也能無證據關 finding）；(2) checker 在比對 receipt 之前先斷言 receipt 與重推導的
-  `closed_findings` 都不得把 closure 歸給 aborted 世代，訊息具名並給補救：舊碼寫的 receipt 再 collect＋finalize 一代即可
-  （finalize 拒絕重跑已 finalized 的世代）。derive test 6 案、checker 64 assertions。
+  `closed_findings` 都不得把 closure 歸給 aborted 世代，戳記在 chain 條目上（loop 的真實形狀）或 receipt 上都掃；訊息具名並給補救：舊碼寫的 receipt 再 collect＋finalize 一代即可
+  （finalize 拒絕重跑已 finalized 的世代）。derive test 6 案、checker 66 assertions。finalize 讀不到較早世代的 findings／dispositions 改 fail-closed（原本吞錯當空，現在空就是「全部關掉」）。
 - 兩支腳本 `--help` 寫明規則；codex 鏡像同步。走的是 7840hs 建議的 (a)（checker 豁免＋後續 finalized 條件），沒動 loop 的寫入形狀。
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).

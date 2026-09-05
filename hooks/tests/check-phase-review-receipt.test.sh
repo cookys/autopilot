@@ -982,6 +982,14 @@ assert_exit_code "$C15G_RC" "1" "case 15g: receipt closure attributed to the abo
 assert_contains "$C15G_OUT" "which is aborted" "case 15g: refusal names the aborted attribution and the remedy"
 assert_contains "$C15G_OUT" "one more generation" "case 15g: refusal states the remedy"
 
+# 15g' negative (the loop's real shape): the stamp sits on a CHAIN ENTRY, not on the receipt.
+PAB_G1_ABORTED_STAMPED="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"status\": \"aborted\", \"closed_findings\": [ { \"id\": \"F-stale\", \"closed_by_generation\": 1 } ] }"
+write_pab "[ $PAB_G1_ABORTED_STAMPED, $PAB_G2_FINAL ]"
+C15G2_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15G2_RC=$?
+assert_exit_code "$C15G2_RC" "1" "case 15g': chain-entry stamp attributed to the aborted generation exits 1"
+assert_contains "$C15G2_OUT" "which is aborted" "case 15g': refusal is the named one, not a generic mismatch"
+write_pab "[ $PAB_G1_ABORTED, $PAB_G2_FINAL ]"
+
 # 15f (chain of three, mirrors the field case gen3 aborted between finalized gens): g1 finalized
 # base→head, g2 aborted at head, g3 finalized head→head2 (branch moved on after the abort).
 (

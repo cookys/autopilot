@@ -139,13 +139,18 @@ function normalizeLiveProbeResponse(value) {
 // budget is what lets the model REACH the answer; the gate itself is unchanged,
 // because the response must still normalise to exactly `OK`. 32 buys headroom
 // for a longer reasoning preamble at no meaningful cost for a two-token reply.
+// 32 was still too tight for a thinking model: glm-5.3 on the `GLM` endpoint (anthropic-compatible,
+// measured 2026-09-05) spends its whole 32-token budget inside a `thinking` block, returns
+// stop_reason=max_tokens with no text, and the seat reports `transport_failure` while a direct
+// call with a real budget answers `OK`. 512 lets a reasoning preamble finish; the gate is still
+// the extracted text normalising to exactly `OK` within LIVE_PROBE_MAX_RESPONSE_BYTES.
 const LIVE_PROBE_REQUEST_BODY = {
   schema_version: 1,
   operation: 'provider-readiness-live-probe',
   prompt: 'Respond only with OK.',
   effect: 'read-only',
   tools: 'disabled',
-  max_output_tokens: 32,
+  max_output_tokens: 512,
 };
 const LIVE_PROBE_REQUEST = deepFreeze({
   ...LIVE_PROBE_REQUEST_BODY,

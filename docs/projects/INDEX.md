@@ -13,6 +13,7 @@
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-09-06 | `--allow-seat-gap` 寫下 checker 永遠拒收的世代（無 project dir — Fix-size，7840hs 回報）— collect 的 gap 容忍沒有門檻，checker 預設要全部席次 ⇒ finalized 的席數短少永遠救不回。collect 改與 checker 同源解析門檻，低於門檻記 aborted（seat_gap_below_min）讓下一代從同 base 接 | v2.36.5 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-05 | grok 席前言黏框架被定位器誤殺（無 project dir — Fix-size，cuda 回報）— grok plain 輸出把前言與 BEGIN 框架黏在同一行，共用定位器規則 7 硬拒 ⇒ 完整審查記成 no_verdict（8 次 collect 掉 5 次）。grok 分支在定位器前切一次行，前言仍受 7/8/9 檢查；只在 grok 生效 | v2.36.4 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-05 | 中止的 review 世代卡死 phase receipt（無 project dir — Fix-size，7840hs 回報）— `check-phase-review-receipt` 對 `aborted` 條目一律 exit 1，loop 又照設計會寫出它 ⇒ 永久死鎖；順帶抓到 `review-chain-derive` 把中止那代的空 findings 當成「closure by absence」關掉所有未結 finding。checker 豁免（非末筆、無 head、後代同 base）、derive 跳過中止；紅綠釘死 | v2.36.3 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-05 | v2.36.1 review 遞延 cut 落地 + dispatch-model-guard 漏 `model:` 改 deny（無 project dir — Fix-size）— live 檔窗口要 > 0（`-0k window`／0 退回未縮放天花板）、depth0-delegate-gate 計數上鎖（24 並行掉 1–2）、foreman-guard 0/≥2 列診斷每 agent 每種文字一次、live-state-dir／context-budget 兩個存活突變體各補一案＋injection 殘留清理；搭車：depth-0 派工漏 model 從互動 dialog 改 deny 帶糾正動作（owner dogfood 2026-09-05）。活體觀察 1M session 兩次無「(statusline)」的 T2 進 BACKLOG，state 檔新增 `lastLive` 供歸因 | v2.36.2 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |

@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.36.5 — `--allow-seat-gap` 不再寫下 checker 永遠拒收的世代（7840hs 回報 2026-09-06）
+
+同族第三件（與 aborted 世代、closure-by-absence 同形：collect 寫得進去、checker 事後永遠拒收、無法補救）。plan 066 的 agy 席因 prompt 超過
+`MAX_ARG_STRLEN`（131071）兩代 no_verdict，`--allow-seat-gap` 讓 collect 照常寫下 2/3 席的條目；`check-phase-review-receipt` 的席數門檻
+預設「該條目所有席」⇒「Generation 4 reviewed seats (2) below minimum required (3)」，已 finalized 的席數是歷史事實，再收幾代都救不回。
+
+- **`scripts/hetero-review-loop.js` collect**：`--allow-seat-gap` 只容忍到 receipt 的可信門檻——與 checker 同源（`--min-reviewed-seats <n>`、
+  `AUTOPILOT_MIN_REVIEWED_SEATS`，預設全部席次，同一套 canonical positive integer 文法）。低於門檻不再寫 pending-with-gap，改記
+  `aborted`（reason `seat_gap_below_min`，帶 reviewed/total/floor/source），exit 1，訊息具名數字、門檻來源與補救（下一代從同一 base 收、
+  修席或 `--exclude` 縮 diff、或兩端同時降門檻）。達門檻時 WARN 提醒把同一門檻交給 checker。門檻文法錯在建目錄、派任何席次之前拒絕（review 🟠：原本派完才驗，垃圾值留下有 g<N>/ 無 chain 條目的卡死 phase）。
+  門檻不論有無 gap 都套用（review 🟠：全席 reviewed 但門檻高於席數，原本仍寫 pending）；別名 `--min-seats`／`--min_reviewed_seats` 與 checker 同序。
+- 測試：預設門檻下 1/2 席 ⇒ aborted＋無 head＋下一代照常接續 finalize；`AUTOPILOT_MIN_REVIEWED_SEATS=1` 下同形狀 ⇒ pending-with-gap 並 WARN；
+  0/1 席（既有 2c、7）改斷言 aborted；垃圾門檻拒絕。三個新案在修前紅。
+- 7840hs 另兩點記 BACKLOG：`EXCLUDE_ALLOWLIST` 寫死 autopilot 自己的目錄、消費端 repo 無法用 `--exclude` 縮 payload；agy argv 上限可在
+  collect 前算出、提早報錯而不是燒掉整輪席次。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.4 — grok 席前言黏框架被定位器誤殺（cuda R21 qc 回報 2026-09-05）
 
 cuda 在 revival-world-city-war R21 qc 三席 8 次 collect 裡，grok-4.6 席 5 次被記 no_verdict，raw_log 卻都有完整框架與 VERDICT，

@@ -125,13 +125,27 @@ function saveState(file, st) {
     st.calls += 1;
 
     const liveMain = readLive(live.base, sid, { kind: 'main' });
+    // v2.36.2 diagnostic (state only, no behaviour): record how old the live file was at
+    // hook time, so a T1/T2 that arrives WITHOUT "(statusline)" on a host that has the
+    // writer can be attributed (stale tick vs absent file) after the fact. 2026-09-05:
+    // two inference-path T2s on a 1M session whose live file was fresh seconds later.
+    try {
+      const liveFile = path.join(live.base, 'context', `${sid}.json`);
+      const ageMs = Date.now() - fs.statSync(liveFile).mtimeMs;
+      st.lastLive = { at: new Date().toISOString(), ageMs: Math.round(ageMs), present: liveMain !== null };
+    } catch { st.lastLive = { at: new Date().toISOString(), ageMs: null, present: false }; }
+    // v2.36.2: a window must be > 0 — `-1` produced a "-15300000% of the ~-0k window"
+    // message and `0` silently reverted to the unscaled ceiling while still claiming
+    // "(statusline)". A non-positive window is treated as absent (inference path).
     const liveWindow = liveMain && liveMain.context_window
       && Number.isFinite(liveMain.context_window.context_window_size)
+      && liveMain.context_window.context_window_size > 0
       ? liveMain.context_window.context_window_size : null;
     const liveTotal = liveMain && liveMain.context_window
       && Number.isFinite(liveMain.context_window.total_input_tokens)
       ? liveMain.context_window.total_input_tokens : null;
     const liveUsable = liveWindow !== null && liveTotal !== null;
+    st.lastLive.used = liveUsable; // false also when present but the window/total was rejected (review 🟡)
 
     if (liveUsable) {
       // v2.36.1 (P2): the live file gives the EXACT window — skip inferWindowTokens.

@@ -980,11 +980,17 @@ never an ad hoc descriptive string.
 - **Effort**: S (both repos)
 - **Source**: `docs/projects/_archive/2026-09-05-statusline-live-context-feed/` pre-merge review (opus), 2026-09-05
 
-### Live-file window sizes accepted without `> 0`; depth0 counter unlocked; foreman-guard 0-row diagnostic repeats
-- **Trigger**: any of: a live file with `context_window_size <= 0` observed; a depth-0 parallel read burst undercounted (`reads` lower than calls); a foreman transcript showing the 0-row diagnostic more than once per run.
-- **Context**: three pre-merge-review 🟡 cuts from v2.36.1: (a) `context-budget.js` / `foreman-guard.js` accept `Number.isFinite` windows, so `-1` yields a `-15300000% of the ~-0k window` message and `0` silently reverts to the unscaled 150k ceiling — require `> 0`, else treat as absent; (b) `depth0-delegate-gate.js` read-modify-write on its counter loses updates under parallel tool calls (24 concurrent ⇒ 22–23) — reuse `foreman-guard.js`'s `withLock`; (c) `foreman-guard.js` prints the 0-row diagnostic on every Bash call instead of once — record a flag in its per-agent state. Also 🔵: multi-row `findmnt` output only first row read; `/proc/mounts` unescapes only `\040`; SSD-fallback warning is per-process (= per hook fire) on hosts with neither findmnt nor /proc/mounts (macOS, unverified); sub-200k live window scales tiers down with no test.
+### live-state-dir 🔵 leftovers — multi-row findmnt, `\040`-only unescape, per-process SSD warning, sub-200k window scaling untested
+- **Trigger**: a candidate that `findmnt -T` reports as more than one row; a mountpoint with an escaped character other than space; a host with neither findmnt nor /proc/mounts (macOS, unverified) where the SSD warning is observed once per hook fire; or the next edit to `tiersForKnownWindow`.
+- **Context**: the 🟡 items of the v2.36.1 pre-merge review shipped in v2.36.2; these 🔵 items did not. `fstypeViaFindmnt` reads only the first output row; `fstypeViaProcMounts` unescapes only `\040` (not `\011`/`\012`/`\134`); the "falling back to ~/.autopilot" warning is once per PROCESS, i.e. once per hook fire on a host with no probe; a live window below 200k scales tiers DOWN with no test pinning it.
 - **Effort**: S each
-- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05
+- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05; carried out of the v2.36.2 row
+
+### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
+- **Trigger**: the next observed T2/T1 message without "(statusline)" on a host that has the live writer; or before shortening/lengthening `DEFAULT_MAX_AGE_MS`.
+- **Context**: observed 2026-09-05 in the v2.36.2 session: a 600 s foreground `hooks/tests/run.sh --parallel` was followed by a `context-budget` T2 at 155k with no "(statusline)" clause, while the live file 3 s later was fresh with `context_window_size` 1000000 (16% used). Hypothesis (unverified — no tick log): the status line does not re-render during a long tool call, so `written_at` exceeded 120 s at hook time and `readLive` returned null ⇒ inference path ⇒ false T2 on a 1M window. Options: (a) the reader keeps the last-accepted window in its state file and reuses it when the live file is stale-but-schema-valid (window size does not change mid-session; only the total does), still taking `contextTokens` from the transcript; (b) a longer freshness cap for the `context_window_size` field only; (c) codeforge writes on a timer independent of the render. Second data point, same session: T2 at hook call 50 right after an `Agent` spawn, no long command before it, live file mtime 3 s AFTER the hook fired (189k of 1M) — the tick looks event-driven and the file can be >120 s old at hook time in ordinary interactive flow, not only after long tool calls. v2.36.2 records `lastLive {at, ageMs, used}` in the `context-budget` state file on every call; read `<live-base>/context-budget/<sid>.json` after the next occurrence before touching the cap. Also from the same review, cut: both `withLock` copies (foreman-guard, depth0-delegate-gate) busy-spin the CPU for up to 2 s under contention — replace with `Atomics.wait` backoff when either hook is next touched.
+- **Effort**: S (reader-side option a) / S (codeforge)
+- **Source**: v2.36.2 session live observation, 2026-09-05
 
 ### depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher
 - **Trigger**: a measured depth-0 Bash latency complaint, or the next revision of `depth0-delegate-gate`.
@@ -992,8 +998,3 @@ never an ad hoc descriptive string.
 - **Effort**: S
 - **Source**: v2.36.1 pre-merge review (opus), 2026-09-05; `docs/plans/2026-09-05-statusline-live-context-feed.md` §4 P3.1
 
-### live-state-dir / context-budget test strength — two surviving mutants, one vacuous-off-Linux assertion, injection-test residue
-- **Trigger**: the next edit to `scripts/lib/live-state-dir.js` probe error handling or to the `context-budget.js` live/transcript lag guard; or a `/tmp/injection-*` count above 50.
-- **Context**: v2.36.1 round-2 pre-merge review (opus) mutation results: (a) `notFound: true` (fall back to `/proc/mounts` on any findmnt failure) survives 21/21 because every fake-findmnt rule set has a `'*'` default — add a rule set without it plus a `/proc/mounts` fixture saying tmpfs and assert `ssd-fallback`; (b) the lag guard's `Math.max` collapsed to "trust transcript" survives 35/35 because the older-row fixture uses transcript > live — add the case row older + transcript 130k + live 160k ⇒ 160k; (c) the newer-row test lacks `/\(statusline\)/` so it passes vacuously where `/dev/shm` is absent; (d) the injection test leaks `/tmp/injection-*` dirs whose names carry a `$(touch …)` payload — wrap in `finally { rmSync }`. Also: document `timeout: 2000` in the module header.
-- **Effort**: S
-- **Source**: v2.36.1 pre-merge review round 2 (opus), 2026-09-05

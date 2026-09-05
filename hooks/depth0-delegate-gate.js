@@ -140,6 +140,32 @@ function saveState(file, st) {
   fs.renameSync(tmp, file);
 }
 
+// Exclusive-create lock around load→modify→save so parallel PreToolUse invocations (a
+// depth-0 burst of parallel Reads/Greps) never lose an increment — 24 concurrent fires
+// counted 22–23 unlocked (v2.36.1 pre-merge review). Same shape as foreman-guard.js's
+// withLock; duplicated on purpose (single-crash isolation between the two hooks, like
+// executableText above). Stale locks (>5 s) are broken; a nudge must never wedge on its state.
+function withLock(file, fn) {
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + 2000;
+  for (;;) {
+    let fd = null;
+    try {
+      fd = fs.openSync(lock, 'wx');
+      try { return fn(); } finally { fs.closeSync(fd); try { fs.unlinkSync(lock); } catch { /* gone */ } }
+    } catch (e) {
+      if (!e || e.code !== 'EEXIST') throw e;
+      try {
+        const age = Date.now() - fs.statSync(lock).mtimeMs;
+        if (age > 5000) { fs.unlinkSync(lock); continue; }
+      } catch { /* vanished */ }
+      if (Date.now() > deadline) return fn(); // fail-open: count without the lock rather than block
+      const until = Date.now() + 15;
+      while (Date.now() < until) { /* spin briefly */ }
+    }
+  }
+}
+
 function emitDeny(reason) {
   process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: {
@@ -178,41 +204,46 @@ function classify(tool, input) {
     const sid = getSessionId(payload);
     const dir = stateDir(live);
     const file = path.join(dir, `${sid}.json`);
-    const st = loadState(file);
+    fs.mkdirSync(dir, { recursive: true });
 
-    if (kind === 'delegation') {
-      st.reads = 0;
+    // v2.36.2: the whole load→modify→save runs under the per-session lock; the verdict
+    // (deny / nudge / silent) is computed inside and acted on outside, so the live-file read
+    // for `block` mode — its own I/O — never holds the lock.
+    const verdict = withLock(file, () => {
+      const st = loadState(file);
+      if (kind === 'delegation') {
+        st.reads = 0;
+        saveState(file, st);
+        return { action: 'silent' };
+      }
+      // kind === 'read'
+      st.reads += 1;
+      const reads = st.reads;
+      const threshold = cfg.threshold;
+      const nudge = reads >= threshold && reads % threshold === 0;
+      if (nudge) st.lastFireAt = new Date().toISOString();
+      const action = cfg.mode === 'block' && reads >= 2 * threshold ? 'maybe-block' : (nudge ? 'nudge' : 'silent');
       saveState(file, st);
-      process.exit(0);
-    }
+      return { action, nudge, reads };
+    });
 
-    // kind === 'read'
-    st.reads += 1;
-    const reads = st.reads;
-    const threshold = cfg.threshold;
-
-    if (cfg.mode === 'block' && reads >= 2 * threshold) {
+    if (verdict.action === 'maybe-block') {
       const liveMain = readLive(live.base, sid, { kind: 'main' });
       const modelId = liveMain && liveMain.model && typeof liveMain.model.id === 'string' ? liveMain.model.id : null;
       const family = modelId ? modelFamily(modelId) : 'unknown';
       if (modelId && family !== 'unknown' && cfg.guardedModels.includes(family)) {
-        saveState(file, st);
-        emitDeny(`depth0-delegate-gate: ${reads} consecutive read-class calls at depth-0 on a `
+        emitDeny(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 on a `
           + `guarded model (family "${family}") — delegate to an Explore/survey subagent (model: sonnet) `
           + 'and read only its conclusion.');
         process.exit(0);
       }
+      // unguarded / unknown model past 2x: only the periodic nudge rule applies
     }
 
-    if (reads >= threshold && reads % threshold === 0) {
-      st.lastFireAt = new Date().toISOString();
-      saveState(file, st);
-      process.stderr.write(`depth0-delegate-gate: ${reads} consecutive read-class calls at depth-0 — `
+    if (verdict.nudge) {
+      process.stderr.write(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 — `
         + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion\n');
-      process.exit(0);
     }
-
-    saveState(file, st);
     process.exit(0);
   } catch {
     process.exit(0); // fail-open: a nudge must never wedge a tool call by crashing

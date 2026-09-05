@@ -37,14 +37,38 @@ run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case5-exit"
 assert_eq "" "$__RUN_STDOUT" "case5-silent"
 
-# Case 6: Enabled, model absent → ask with "no model specified"
+# Case 6: Enabled, model absent → DENY (v2.36.2; was ask) with "no model specified" — the
+# model re-dispatches on its own; no permission dialog for the owner to click through.
 printf '%s\n' "- require_engine_header: off" > "$TEST_TMP/config6.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case6-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6-deny (missing model is self-correctable, never a dialog)"
 assert_contains "$__RUN_STDOUT" "no model specified" "case6-reason"
+assert_contains "$__RUN_STDOUT" "re-dispatch" "case6-reason names the corrective action"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# Case 6b: on_missing_model: ask keeps the pre-v2.36.2 dialog
+printf '%s\n' "- on_missing_model: ask" "- require_engine_header: off" > "$TEST_TMP/config6b.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6b.md"
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6b-ask (opt back into the dialog)"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# Case 6c: garbage on_missing_model → deny (fail-closed to the self-correcting decision)
+printf '%s\n' "- on_missing_model: maybe" "- require_engine_header: off" > "$TEST_TMP/config6c.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6c.md"
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6c-deny (garbage → deny)"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# Case 6d: mode: warn + missing model → stderr only, no decision
+printf '%s\n' "- mode: warn" "- require_engine_header: off" > "$TEST_TMP/config6d.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6d.md"
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq "" "$__RUN_STDOUT" "case6d-silent stdout (warn mode)"
+assert_contains "$__RUN_STDERR" "no model specified" "case6d-stderr warning"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # Case 7: Enabled, tool_name Bash → silent (not Agent/Task)

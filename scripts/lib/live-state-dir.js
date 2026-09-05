@@ -10,7 +10,9 @@
 //     (xdg) → /dev/shm/autopilot-<uid> (shm) → /tmp/autopilot-<uid> (tmp). A candidate is accepted
 //     ONLY if `findmnt -T <dir> -o FSTYPE -n` prints tmpfs or ramfs; if findmnt is not on PATH,
 //     fall back to a longest-prefix match against /proc/mounts; if neither settles it the
-//     candidate is rejected. A rejected override is skipped, not fatal — later candidates are
+//     candidate is rejected. findmnt is given 2000 ms (`timeout: 2000`) — a hung probe must not
+//     hold a PreToolUse hook; on timeout the candidate is rejected like any other failure and only
+//     ENOENT (findmnt not on PATH) opens the /proc/mounts fallback. A rejected override is skipped, not fatal — later candidates are
 //     still tried. If every candidate is rejected, the base is ~/.autopilot (SSD) and exactly one
 //     warning line is printed. resolveLiveDir() returns a BASE only — every consumer appends its
 //     own purpose segment (`context/`, `context-budget/`, …).

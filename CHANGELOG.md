@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.36.2 — v2.36.1 review 遞延 cut 落地：live 窗口要 > 0、depth-0 計數上鎖、工頭診斷只印一次、四項測試強度（2026-09-05）
+
+v2.36.1 pre-merge review（opus，兩輪）標 🟡 卻 cut 掉的六件，全部紅綠釘死後收掉；沒有新面向。
+
+- **`hooks/context-budget.js`**：live 檔 `context_window_size` 必須 > 0，否則當沒有 live 檔走推斷路徑——`-1` 原本印
+  「-15300000% of the ~-0k window」，`0` 悄悄退回未縮放的 150k 天花板還掛著「(statusline)」。測試用 transcript 120k／live 153k
+  故意不一致來區分兩條路徑（0 的訊息本來就不印窗口子句，光看文字驗不出）。
+- **`hooks/foreman-guard.js`**：`tasks[]` 列的 `contextWindowSize` 不 > 0 視為沒有窗口訊號（放行、不印診斷）；0／≥2 列的診斷改為
+  每個 agent 每種文字只印一次（原本整趟 run 每次 Bash 都印一行），計數變了（0→2）會再印一次。
+- **`hooks/depth0-delegate-gate.js`**：`reads` 的 load→modify→save 進 `withLock`（與 foreman-guard 同形，刻意複製不 import——
+  兩個 hook 單點崩潰隔離）；24 個並行 Read 原本只數到 22–23，現在 24。`block` 模式的 live 檔讀取留在鎖外。
+- **測試強度**（review round 2 突變結果）：`live-state-dir` 新增「findmnt 在場但全拒、/proc/mounts 卻說 tmpfs ⇒ 仍 ssd-fallback」
+  （殺掉 `notFound: true` 突變體，21/21 存活的原因是每組假 findmnt 都有 `'*'` 預設）；`context-budget` 新增「較舊 transcript 130k、
+  live 160k ⇒ 160k」（殺掉 `Math.max` 塌成 trust-transcript 的突變體，35/35 存活）；newer-row 測試補 `(statusline)` 斷言（無 /dev/shm
+  時原本空過）；injection 測試改 `try/finally rmSync`（`/tmp/injection-*` 帶 `$(touch …)` 名稱的殘留）；模組表頭記 `timeout: 2000`。
+  兩個突變體各自 sed 植入後只有新測試紅，還原後全綠。codex 鏡像 `platforms/codex/plugin/scripts/lib/` 同步。
+- **`hooks/dispatch-model-guard.js`（搭車，owner 2026-09-05 dogfood）**：漏 `model:` 的派工從 `ask` 改 **`deny`**——本版 depth-0
+  派 reviewer 沒帶 model，互動模式跳 permission dialog 要 owner 點；漏 model 從來不是人的判斷（唯一正確動作就是模型自己補
+  `model:` 重派），deny 的 reason 直接把糾正動作送回模型。`on_missing_model: deny|ask|allow`，預設 deny、garbage → deny；
+  guarded engine（要不要花 fable）仍是 `ask`。template／README 同步。
+- **活體觀察（未修，BACKLOG 新 row）**：本 session 跑 600 s 前景 suite 後 `context-budget` 在 155k 響了無「(statusline)」的 T2——
+  live 檔在指令結束後 3 s 內是新的、窗口 1M，推測是長前景指令期間 status line 沒有 tick，120 s freshness 把它判 stale 退回推斷。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.1 — statusline → hook live context feed：hook 讀真實窗口與子代理用量，不再推斷（owner 2026-09-05）
 
 owner 抓到兩件事：`context-budget` 在 1M session 的 153k／180k 兩次響 T2 叫我交棒（15%），而 Fable depth-0 自己跑了六次

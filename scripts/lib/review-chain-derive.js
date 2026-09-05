@@ -105,17 +105,12 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
       }
     }
 
-    // 2. Also honor any pre-existing closed_findings recorded on earlier chain entries
-    if (Array.isArray(entry.closed_findings)) {
-      for (const cf of entry.closed_findings) {
-        if (cf && cf.id) {
-          activeVerified.delete(cf.id);
-          if (!closedMap.has(cf.id)) {
-            closedMap.set(cf.id, cf);
-          }
-        }
-      }
-    }
+    // 2. (removed, v2.36.3) Pre-existing `closed_findings` stamps on chain entries are OUTPUT of
+    // this routine, never input: closure is re-derived from findings + dispositions evidence
+    // alone (ADR-0001, verification over attestation). Honouring stamps let a stamp written
+    // by the pre-v2.36.3 derive — which attributed a closure to an aborted generation — keep
+    // closing the finding on every later re-derivation, and let a forged stamp close a
+    // finding with no evidence at all.
 
     // 3. Process current generation's dispositions
     const dispMap = new Map();

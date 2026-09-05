@@ -62,3 +62,16 @@ test('v2.36.3: finalized / aborted / finalized — the closure is attributed to 
   assert.deepStrictEqual(chain[0].closed_findings, [{ id: 'F1', closed_by_generation: 3 }]);
   assert.strictEqual(chain[1].closed_findings, undefined, 'the aborted record is never stamped with closed_findings');
 });
+
+test('v2.36.3: a stale/forged closed_findings stamp on a chain entry is ignored — closure comes from evidence only', () => {
+  // The field case (7840hs, plan 066): the pre-fix derive stamped g2 with
+  // {id, closed_by_generation: 3} where g3 was the ABORTED generation. Re-deriving must not
+  // honour that stamp: with no later finalized generation the finding is still open.
+  const chain = [
+    { generation: 1, status: 'finalized', closed_findings: [{ id: 'F1', closed_by_generation: 2 }] },
+    { generation: 2, status: 'aborted' },
+  ];
+  const r = deriveReceiptState(chain, new Map([[1, [F1]]]), new Map([[1, [verified('F1')]]]));
+  assert.deepStrictEqual(r.open_findings.map((f) => f.id), ['F1'], 'the stamp must not close F1');
+  assert.deepStrictEqual(r.closed_findings, []);
+});

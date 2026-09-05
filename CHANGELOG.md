@@ -13,6 +13,12 @@
   不能是最後一筆（中止永遠不能代替審查）、不得帶 head、下一代必須從它的 base 接、它的 range.json 若在必須同 base；不讀
   findings／dispositions／seats。其他非 finalized 狀態照舊拒絕。checker 測試 15／15a–15f（最後一筆中止、帶 head、下一代跳 base、
   range base 不符各自 exit 1；finalized／aborted(parse_failed)／finalized 三代鏈 exit 0）。
+- **7840hs 覆核後追加**：他的 ledger 上這個洞真的發動過——gen-2 s1 的 MUST-FIX（tracked-under-ignored 檔案讓 agent_diff 假空）被
+  記成 `closed_by_generation: 3`，3 正是中止那代。兩件跟進：(1) derive 不再把 chain 條目上既有的 `closed_findings` 戳記當輸入
+  （戳記是這支程式的輸出，ADR-0001：closure 只從 findings＋dispositions 證據重推導；否則舊碼寫的錯誤戳記會在每次重推導時
+  繼續關掉那條 finding，偽造的戳記也能無證據關 finding）；(2) checker 在比對 receipt 之前先斷言 receipt 與重推導的
+  `closed_findings` 都不得把 closure 歸給 aborted 世代，訊息具名並給補救：舊碼寫的 receipt 再 collect＋finalize 一代即可
+  （finalize 拒絕重跑已 finalized 的世代）。derive test 6 案、checker 64 assertions。
 - 兩支腳本 `--help` 寫明規則；codex 鏡像同步。走的是 7840hs 建議的 (a)（checker 豁免＋後續 finalized 條件），沒動 loop 的寫入形狀。
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).

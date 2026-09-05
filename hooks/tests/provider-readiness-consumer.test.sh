@@ -972,4 +972,33 @@ assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_positive_ready=true" \
 assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_negative_matrix_zero_dispatch=true" \
   "strict /l5 negative matrix rejects before workflow dispatch"
 
+# v2.36.7: an enforce-mode intake with NO compiled readiness authority is refused by name,
+# with the level and the two legal remedies (shadow or /l5) — never a waiver, never a hint to
+# hand-build an authority.
+L4_OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const { consumeEnforcedProviderReadiness } = require(path.join(process.argv[2], 'src', 'engine', 'campaign-intake'));
+// level is THREADED by the caller, never read from process.env inside the module.
+try {
+  consumeEnforcedProviderReadiness({ adapters: {}, contract: {}, inspection: {}, roster: {}, now: '2026-09-06T00:00:00.000Z', level: 'l4' });
+  console.log('no-throw');
+} catch (error) {
+  console.log(`code=${error.code}`);
+  console.log(`message=${error.message}`);
+}
+// second cause branch: an adapter that returns an incomplete bundle
+try {
+  consumeEnforcedProviderReadiness({ adapters: { providerReadiness: () => ({}) }, contract: {}, inspection: {}, roster: {}, now: '2026-09-06T00:00:00.000Z', level: 'l5' });
+  console.log('no-throw-2');
+} catch (error) {
+  console.log(`message2=${error.message}`);
+}
+NODE
+)"
+assert_contains "$L4_OUT" "message2=enforced campaign intake requires host-owned readiness evidence — the host readiness authority returned an incomplete bundle" "incomplete bundle names its own cause"
+assert_contains "$L4_OUT" "code=provider_readiness_authority_missing" "l4 enforce intake without authority keeps the rejection code"
+assert_contains "$L4_OUT" "AUTOPILOT_LEVEL=l4; only l5/l6 build the strict host bootstrap" "refusal names the level and the cause"
+assert_contains "$L4_OUT" "enforcement_mode to shadow, or run it under /l5" "refusal names the two legal remedies"
+assert_contains "$L4_OUT" "Do not construct a readiness authority by hand" "refusal forbids a hand-built authority"
+
 finalize_test

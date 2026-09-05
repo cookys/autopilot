@@ -1749,6 +1749,57 @@ assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation 
 assert_contains "$OUT" "review_calls=0" "AutopilotEngine implementation loop does not dispatch review when qualification fails"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,reviewer_qualification:blocked" "AutopilotEngine implementation loop records qualification block"
 
+# --- v2.36.7: caller-declared reviewer-qualification WAIVER (l4 default) ------------
+# Under an l4 marker there is no strict provider bootstrap, so reviewer_qualified can never be
+# host-verified; bin/autopilot.js waives the requirement (owner ruling 2026-09-06). The engine
+# must then NOT block, must dispatch the reviewer, and must record the decision in the ledger
+# as `reviewer_qualification: waived` with the caller's reason — never silence.
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const { AutopilotEngine } = require(path.join(process.argv[2], 'src', 'engine', 'autopilot-engine'));
+const diff = process.argv[3];
+let reviewCalls = 0;
+const engine = new AutopilotEngine({
+  resolveReviewLoop() {
+    return {
+      status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model', reviewer_effort: 'xhigh', reviewer_runner: 'test-review-runner',
+        reviewer_qualified: false,
+        implementer_engine: 'test-impl-model', implementer_effort: 'high', implementer_runner: 'test-impl-runner',
+        loop_max_rounds: 1, loop_convergence_verdict: 'SHIP-AS-IS',
+      },
+    };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    throw new Error('dispatcher reached (proves the qualification gate was passed)');
+  },
+});
+const waived = engine.reviewDiff({ diffFile: diff, requireQualifiedReviewer: false,
+  reviewerQualificationWaived: 'l4: no strict provider bootstrap — waived by recorded operator policy' });
+console.log(`w_phase=${waived.phase}`);
+console.log(`w_review_calls=${reviewCalls}`);
+console.log(`w_ledger=${waived.ledger.map((e) => `${e.unit}:${e.status}`).join(',')}`);
+const waivedEntry = waived.ledger.find((e) => e.unit === 'reviewer_qualification');
+console.log(`w_reason_recorded=${!!(waivedEntry && /operator policy/.test(waivedEntry.reason || ''))}`);
+// Negative control: the same input WITHOUT the waiver but with the requirement off records
+// nothing (the old --allow-unqualified-reviewer behaviour), and with the requirement on blocks.
+const plain = engine.reviewDiff({ diffFile: diff, requireQualifiedReviewer: false });
+console.log(`p_ledger_has_qual=${plain.ledger.some((e) => e.unit === 'reviewer_qualification')}`);
+const forced = engine.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true,
+  reviewerQualificationWaived: 'ignored when the requirement is explicit' });
+console.log(`f_phase=${forced.phase}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "reviewer-qualification waiver process exits 0"
+assert_not_contains "$OUT" "w_phase=reviewer_qualification" "waiver: not blocked at reviewer_qualification"
+assert_contains "$OUT" "w_review_calls=1" "waiver: the reviewer is still dispatched"
+assert_contains "$OUT" "reviewer_qualification:waived" "waiver: ledger records the decision"
+assert_contains "$OUT" "w_reason_recorded=true" "waiver: ledger carries the caller's reason"
+assert_contains "$OUT" "p_ledger_has_qual=false" "no waiver + requirement off: no qualification entry (unchanged behaviour)"
+assert_contains "$OUT" "f_phase=reviewer_qualification" "explicit requirement still blocks even if a waiver string is present"
+
 # --- implement-review pre-flight is family-conflict-fallback aware (v2.32.40) ----
 # The rounds:0 reviewer_qualification pre-flight used to hard-block on an
 # UNqualified incumbent reviewer without consulting the fallback ladder, so the

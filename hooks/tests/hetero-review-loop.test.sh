@@ -140,11 +140,55 @@ assert_file_exists "$LEDGER/review-p5/g1/seat-s1.json" "case 5: seat-s1.json wri
 assert_file_absent "$LEDGER/review-p5/chain.json" "case 5: chain.json not written"
 assert_file_absent "$LEDGER/review-p5/g1/findings.json" "case 5: findings.json not written"
 
-# Case 6: same as (5) but with --allow-seat-gap exits 0 and chain.json has pending-with-gap
-C6_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6_RC=$?
-assert_exit_code "$C6_RC" "0" "case 6: exits 0 with --allow-seat-gap"
+# Case 6: same as (5) but with --allow-seat-gap AND a receipt floor the surviving seat count
+# satisfies (AUTOPILOT_MIN_REVIEWED_SEATS=1, the same knob the checker honours) exits 0 and
+# chain.json has pending-with-gap; the WARN names the floor for the checker.
+C6_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=1 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6_RC=$?
+assert_exit_code "$C6_RC" "0" "case 6: exits 0 with --allow-seat-gap at/above the floor"
 assert_file_exists "$LEDGER/review-p6/chain.json" "case 6: chain.json written"
 assert_contains "$(cat "$LEDGER/review-p6/chain.json")" '"status": "pending-with-gap"' "case 6: status is pending-with-gap"
+assert_contains "$C6_OUT" "receipt floor is 1 (AUTOPILOT_MIN_REVIEWED_SEATS)" "case 6: WARN names the floor and its source"
+
+# Case 6b (v2.36.5, 7840hs plan 066): the SAME gap with the DEFAULT floor (all seats) is not
+# written as a pending entry the checker would refuse forever — it is recorded aborted
+# (seat_gap_below_min), exit 1, and the message names counts, floor and the remedy.
+C6B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6B_RC=$?
+assert_exit_code "$C6B_RC" "1" "case 6b: gap below the default floor exits 1"
+C6B_CHAIN=$(cat "$LEDGER/review-p6b/chain.json")
+assert_contains "$C6B_CHAIN" '"status": "aborted"' "case 6b: generation recorded aborted, not pending-with-gap"
+assert_contains "$C6B_CHAIN" '"reason": "seat_gap_below_min"' "case 6b: aborted reason names the seat gap"
+assert_contains "$C6B_CHAIN" '"min_reviewed_seats": 2' "case 6b: the floor is recorded on the entry"
+assert_not_contains "$C6B_CHAIN" '"head"' "case 6b: an aborted entry carries no head"
+assert_contains "$C6B_OUT" "only 1 of 2 seats reviewed, below the receipt floor of 2 (default: all seats)" "case 6b: message names counts and floor"
+assert_contains "$C6B_OUT" "Collect generation 2 from the same base" "case 6b: message names the remedy"
+# 6b': the next generation continues from the aborted base (v2.36.3 chain semantics), and a
+# full-seat result then finalizes normally — the abort never blocks the phase.
+export STUB_SEAT_RESPONSE_SAVE="${STUB_SEAT_RESPONSE:-}"
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+C6B2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6b --generation 2 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C6B2_RC=$?
+assert_exit_code "$C6B2_RC" "0" "case 6b': generation 2 collects from the aborted generation's base"
+assert_contains "$(cat "$LEDGER/review-p6b/chain.json")" '"generation": 2' "case 6b': generation 2 entry appended"
+export STUB_SEAT_RESPONSE="$STUB_SEAT_RESPONSE_SAVE"
+# 6c: a garbage floor is refused BEFORE any generation directory or seat exists (review 🟠: a
+# post-dispatch refusal left g1/ populated with no chain entry — a wedged phase).
+C6C_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=zero node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6C_RC=$?
+assert_exit_code "$C6C_RC" "1" "case 6c: garbage AUTOPILOT_MIN_REVIEWED_SEATS refused"
+assert_contains "$C6C_OUT" "canonical positive integer" "case 6c: refusal names the grammar"
+assert_file_absent "$LEDGER/review-p6c/g1" "case 6c: no generation directory was created (no seat spent, phase not wedged)"
+assert_file_absent "$LEDGER/review-p6c/chain.json" "case 6c: no chain entry written"
+
+# 6d (review 🟠): the floor applies WITHOUT a gap too — every seat reviewed but the configured
+# floor exceeds the seat count ⇒ aborted, never a pending entry the checker refuses forever.
+C6D_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=3 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6d --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C6D_RC=$?
+assert_exit_code "$C6D_RC" "1" "case 6d: 1 of 1 reviewed but floor 3 ⇒ exit 1"
+assert_contains "$(cat "$LEDGER/review-p6d/chain.json")" '"reason": "seat_gap_below_min"' "case 6d: recorded aborted even with no gap"
+assert_contains "$C6D_OUT" "only 1 of 1 seats reviewed, below the receipt floor of 3 (AUTOPILOT_MIN_REVIEWED_SEATS)" "case 6d: message names counts and source"
+
+# 6e (review 🟡): the checker's alias spellings are honoured on collect too
+C6E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6e --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap --min-seats 1 2>&1); C6E_RC=$?
+assert_exit_code "$C6E_RC" "0" "case 6e: --min-seats 1 (checker alias) accepted on collect"
+assert_contains "$(cat "$LEDGER/review-p6e/chain.json")" '"status": "pending-with-gap"' "case 6e: alias floor satisfied ⇒ pending-with-gap"
+assert_contains "$C6E_OUT" "receipt floor is 1 (--min-seats)" "case 6e: WARN names the alias as the source"
 
 # Case 7 (negative control): generation 2 attempted over a PENDING (not finalized) generation-1
 # predecessor is refused, even under a phase literally named "p7" — the removed legacy carve-out
@@ -989,9 +1033,11 @@ assert_exit_code "$T2C_RC_NOGAP" "1" "test 2c: exits 1 when SHIP-AS-IS lacks pro
 assert_contains "$T2C_OUT_NOGAP" "Review seat gap detected on seat(s): s0" "test 2c: gap detected on unproven seat"
 
 T2C_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T2C_RC=$?
-assert_exit_code "$T2C_RC" "0" "test 2c: exits 0 with --allow-seat-gap"
-assert_contains "$(cat "$LEDGER/review-p_test2c/chain.json")" '"status": "pending-with-gap"' "test 2c: chain entry status is pending-with-gap"
-assert_contains "$T2C_OUT" '"proof_present": false' "test 2c: summary records proof_present false"
+# v2.36.5: 0 of 1 seats reviewed is below any floor — the generation is recorded aborted
+# (seat_gap_below_min), never a pending entry the checker would refuse forever.
+assert_exit_code "$T2C_RC" "1" "test 2c: 0 of 1 reviewed with --allow-seat-gap is below the floor ⇒ exit 1"
+assert_contains "$(cat "$LEDGER/review-p_test2c/chain.json")" '"reason": "seat_gap_below_min"' "test 2c: chain entry recorded aborted (seat_gap_below_min)"
+assert_file_exists "$LEDGER/review-p_test2c/g1/seat-s0.json" "test 2c: the unproven seat artifact is still on disk (evidence kept, raw dispatch output)"
 
 # Test 3: chain immutability: run collect once (pending), run again for same generation -> exits 1 without modifying entry
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
@@ -1079,7 +1125,9 @@ chmod +x "$TEST7_STUB"
 export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$TEST7_STUB"
 # Run with --allow-seat-gap so collect doesn't abort early due to gap, allowing us to inspect seat JSON
 T7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test7 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T7_RC=$?
-assert_exit_code "$T7_RC" "0" "test 7: collect exits 0 with --allow-seat-gap"
+# v2.36.5: 0 of 1 reviewed ⇒ aborted (seat_gap_below_min), exit 1; the seat artifact is still written first.
+assert_exit_code "$T7_RC" "1" "test 7: 0 of 1 reviewed is below the floor ⇒ aborted, exit 1"
+assert_contains "$(cat "$LEDGER/review-p_test7/chain.json")" '"reason": "seat_gap_below_min"' "test 7: aborted entry recorded"
 T7_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test7/g1/seat-s0.json")
 assert_contains "$T7_SEAT_OUTPUT" '"verdict": "no_verdict"' "test 7: recorded verdict is no_verdict on non-zero exit"
 assert_contains "$T7_SEAT_OUTPUT" '"status": "no_verdict"' "test 7: recorded status is no_verdict on non-zero exit"

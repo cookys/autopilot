@@ -998,6 +998,24 @@ never an ad hoc descriptive string.
 - **Effort**: S
 - **Source**: 7840hs / llm-playground plan 066 ledger, 2026-09-05
 
+### `hetero-review-loop --exclude` allowlist is autopilot's own tree — consumer repos cannot shrink a review payload
+- **Trigger**: the next consumer-repo report of `Exclude pathspec '…' is not permitted by allowlist` for a data/generated directory, or the next agy-seat payload overflow where `--exclude` was the only lever.
+- **Context**: `EXCLUDE_ALLOWLIST` (hetero-review-loop.js:29-47) hardcodes `platforms/**`, `docs/projects/**`, lockfiles… llm-playground plan 066 needed to exclude `benchmarks/matrix` (139 regenerated shard JSONs, most of the diff) to get the agy prompt under `MAX_ARG_STRLEN` and could not — generation 7 never started. Fix shape: a consumer-declared allowlist via project DI (`.claude/review-loop-config.md` `exclude_allowlist:` rows), constrained to non-code paths (no source extensions, must be a directory or data glob) and recorded in `range.json.excluded` + `full_range_sha256` as today so the exclusion stays visible to the checker. Never a free-form pathspec.
+- **Effort**: S
+- **Source**: 7840hs / llm-playground plan 066, 2026-09-06
+
+### agy seat payload overflow is discovered per seat at dispatch time — the loop could pre-compute it and fail before spending the other seats
+- **Trigger**: the next generation where an agy seat returns no_verdict with `agy_argv_ceiling` in raw_log while the other seats completed.
+- **Context**: `dispatch-review.sh` refuses an agy payload above `MAX_ARG_STRLEN` by design (named reason, no execve failure). The loop only learns this after dispatching every seat, so the whole generation's other seats are spent for nothing when the floor then aborts the generation (v2.36.5). Fix shape: in collect, after the prompt is assembled, compare its byte size against `lib/agy-argv-ceiling.sh` for every agy seat and exit before dispatch with the same named reason and the `--exclude` / prompt-file-runner remedies. Option c from the report (auto-reroute to a prompt-file runner) changes seat identity and is NOT the fix — a seat is a frozen (engine, effort, runner) triple.
+- **Effort**: S
+- **Source**: 7840hs / llm-playground plan 066, 2026-09-06
+
+### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
+- **Trigger**: owner decides to open this; AND eval ON/OFF evidence exists for the affected skills (scorecard-first rule — an unevidenced rewrite of ceo-agent/dev-flow prose is an unevidenced trust change).
+- **Context**: cuda (revival.3d, Codex session, 2026-09-06) after an Astra prompt audit asks upstream to: (1) stop "Boil the Lake"/completeness-principle prose from over-prescribing exhaustive checks — use proportional validation; (2) make a missing TaskCreate adapter read as "bookkeeping unavailable", distinct from a genuinely missing required capability (dev-flow already treats the missing TODO tools as advisory-never-blocker — verify the wording lands that way in ceo-agent too); (3) autonomous reversible candidates should not inherit release-approval gates. Reference cited: OpenAI gpt-6-astra prompting best practices. These are skill-prose changes across ceo-agent / dev-flow / finish-flow; per CLAUDE.md they need the orchestration eval harness ON/OFF before rewriting, and (3) touches the DOA table (owner policy). Not accepted on peer say-so; filed for the owner.
+- **Effort**: M (evals + three skills + codex mirror)
+- **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
+
 ### depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher
 - **Trigger**: a measured depth-0 Bash latency complaint, or the next revision of `depth0-delegate-gate`.
 - **Context**: plan §4 P3.1 lists `WebFetch|WebSearch|Read|Grep|Glob|Agent|Skill|Task`; the shipped hook also matches `Bash` and classifies read-shaped commands (`grep|rg|find|cat|sed -n|head|tail`) with a duplicated 35-line shell lexer, adding ~17 ms and two `/bin/sh` spawns per depth-0 Bash call (reviewer measurement). Accepted for v2.36.1 (depth-0's own grep bursts were the incident); recorded here so the delta is explicit. Options: keep and share the lexer with `foreman-guard.js`; or drop `Bash` and accept that grep-via-Bash is uncounted.

@@ -26,6 +26,24 @@ function writeFileSyncAtomic(targetPath, content) {
   }
 }
 
+// Trusted floor for reviewed seats — the SAME sources check-phase-review-receipt.js honours
+// (--min-reviewed-seats flag, else AUTOPILOT_MIN_REVIEWED_SEATS, else all seats), same grammar.
+const CANONICAL_POSITIVE_INT_RE = /^[1-9][0-9]*$/;
+function resolveMinReviewedSeats(flags, totalSeats) {
+  let raw; let source;
+  if (flags['min-reviewed-seats'] !== undefined) { raw = flags['min-reviewed-seats']; source = '--min-reviewed-seats'; }
+  else if (flags['min-seats'] !== undefined) { raw = flags['min-seats']; source = '--min-seats'; }
+  else if (flags['min_reviewed_seats'] !== undefined) { raw = flags['min_reviewed_seats']; source = '--min_reviewed_seats'; }
+  else if (process.env.AUTOPILOT_MIN_REVIEWED_SEATS !== undefined) { raw = process.env.AUTOPILOT_MIN_REVIEWED_SEATS; source = 'AUTOPILOT_MIN_REVIEWED_SEATS'; }
+  else return { value: totalSeats === null ? null : totalSeats, source: 'default: all seats' };
+  const str = String(raw);
+  if (!CANONICAL_POSITIVE_INT_RE.test(str)) {
+    console.error(`ERROR: Invalid ${source} value '${raw}': must be a canonical positive integer`);
+    process.exit(1);
+  }
+  return { value: parseInt(str, 10), source };
+}
+
 const EXCLUDE_ALLOWLIST = [
   'platforms/**',
   'profiles/*.json',
@@ -86,7 +104,14 @@ Collect flags:
   --spec-file <file>    Task specification file to pass to reviewer
   --exclude <specs>     Comma-separated git pathspecs to exclude from diff
   --timeout <duration>  Timeout for dispatch (default: 20m)
-  --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict
+  --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict — but only
+                        down to the receipt floor (--min-reviewed-seats <n> / AUTOPILOT_MIN_REVIEWED_SEATS,
+                        default: all seats). Below it the generation is recorded aborted
+                        (seat_gap_below_min) instead of a pending entry the checker would refuse forever.
+  --min-reviewed-seats <n>  Reviewed-seat floor (aliases --min-seats, --min_reviewed_seats, env
+                        AUTOPILOT_MIN_REVIEWED_SEATS — the checker's own spellings). Applied to
+                        every generation, gap or not; validated before any seat is dispatched.
+                        Pass the same value to check-phase-review-receipt.js.
 
 Generation numbers are never reused. If a generation is aborted (e.g. the target branch
 moved during collection, or a seat's findings failed to parse), its evidence directory is
@@ -433,6 +458,10 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
 }
 
 async function handleCollect(flags) {
+  // v2.36.5: validate the reviewed-seat floor FIRST — before any generation directory or seat
+  // dispatch exists — so a garbage value costs nothing and cannot leave g<N>/ without a chain
+  // entry (review 🟠). The value is re-resolved after the seats are known (default: all seats).
+  resolveMinReviewedSeats(flags, null);
   const generation = parseInt(flags.generation, 10);
   if (!flags.generation || isNaN(generation) || generation < 1) {
     console.error('ERROR: --generation <n> must be an integer >= 1');
@@ -758,6 +787,39 @@ async function handleCollect(flags) {
     const gapSeats = seatResults.filter((r) => r.status !== 'reviewed').map((r) => r.seat.id);
     console.error(`ERROR: Review seat gap detected on seat(s): ${gapSeats.join(', ')}`);
     process.exit(1);
+  }
+
+  // v2.36.5 (7840hs, plan 066): --allow-seat-gap used to write a pending-with-gap entry no
+  // matter how many seats were lost, while check-phase-review-receipt requires reviewed seats
+  // >= its trusted floor (--min-reviewed-seats / AUTOPILOT_MIN_REVIEWED_SEATS, default ALL
+  // seats of the entry). A finalized generation below that floor is a historical fact the
+  // checker refuses forever and no later generation can repair. The gap is therefore
+  // tolerated only down to the SAME floor, resolved here from the same trusted sources; below
+  // it the generation is recorded `aborted` (reason seat_gap_below_min — a recorded
+  // non-review, v2.36.3 semantics) so the next generation continues from this base.
+  // The floor applies whether or not there was a gap (review 🟠): a configured floor above the
+  // seat count with every seat reviewed would otherwise still write a pending entry the checker
+  // refuses forever.
+  {
+    const reviewedNow = seatResults.filter((r) => r.status === 'reviewed').length;
+    const floor = resolveMinReviewedSeats(flags, seatResults.length);
+    if (reviewedNow < floor.value) {
+      saveChainEntry({
+        generation,
+        base,
+        status: 'aborted',
+        reason: 'seat_gap_below_min',
+        reviewed_seats: reviewedNow,
+        total_seats: seatResults.length,
+        min_reviewed_seats: floor.value,
+        min_reviewed_seats_source: floor.source,
+      });
+      console.error(`ERROR: only ${reviewedNow} of ${seatResults.length} seats reviewed, below the receipt floor of ${floor.value} (${floor.source}); generation ${generation} recorded as aborted (seat_gap_below_min) — check-phase-review-receipt would refuse it forever. Collect generation ${generation + 1} from the same base (fix the failing seat, shrink the diff with --exclude, or lower the floor for BOTH collect and the checker — same flag/env spellings on both).`);
+      process.exit(1);
+    }
+    if (hasGap) {
+      console.error(`WARN: --allow-seat-gap: ${reviewedNow} of ${seatResults.length} seats reviewed; the receipt floor is ${floor.value} (${floor.source}) — pass the same floor to check-phase-review-receipt.`);
+    }
   }
 
   // Write findings.json

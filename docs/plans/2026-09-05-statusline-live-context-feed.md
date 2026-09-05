@@ -1,6 +1,6 @@
 # Plan — statusline → hook live context feed
 
-> Status: draft (L-2, awaiting L-2.5 plan hetero loop review) · Owner: depth-0 · Branch: `feat/v2.36.1-statusline-live-context-feed` (to be created at L-3) · Frame: dev-flow L · Date: 2026-09-05
+> Status: ✅ Shipped in v2.36.1 — merged as d926184e · Owner: depth-0 · Branch: `feat/v2.36.1-statusline-live-context-feed` (to be created at L-3) · Frame: dev-flow L · Date: 2026-09-05
 
 ## 0. Context / thesis
 

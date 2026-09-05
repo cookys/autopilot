@@ -61,6 +61,12 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
 
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i];
+    // v2.36.3: an aborted generation (branch moved during collection, or a seat's findings
+    // failed to parse) produced NO reviewable result — it must contribute nothing. Before this
+    // guard its empty findings set "closed by absence" every open verified finding from the
+    // earlier generations (an abort was an audit escape), in both hetero-review-loop finalize
+    // and check-phase-review-receipt (7840hs report, 2026-09-05).
+    if (entry.status === 'aborted') continue;
     const gen = entry.generation || (i + 1);
 
     const genFindings = getFromGenMap(findingsByGeneration, gen);
@@ -83,6 +89,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
 
         // Update chain entry's closed_findings for the generation that originated this finding
         for (const prevEntry of chain) {
+          if (prevEntry.status === 'aborted') continue; // an aborted record stays minimal (v2.36.3 review 🔵)
           if (prevEntry.generation < gen) {
             if (!Array.isArray(prevEntry.closed_findings)) {
               prevEntry.closed_findings = [];

@@ -91,7 +91,9 @@ Collect flags:
 Generation numbers are never reused. If a generation is aborted (e.g. the target branch
 moved during collection, or a seat's findings failed to parse), its evidence directory is
 left untouched on disk and stays referenced from chain.json; collect the next generation
-number instead — it continues from the aborted generation's base.
+number instead — it continues from the aborted generation's base. An aborted generation
+contributes nothing to finalize (it closes no earlier finding) and check-phase-review-receipt
+accepts it only when a finalized generation follows it (v2.36.3).
 
 Finalize flags:
   --generation <n>      Generation number (integer >= 1)

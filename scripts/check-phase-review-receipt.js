@@ -102,6 +102,12 @@ Flags:
   --rubric-file <file>              Rubric markdown file (optional, resolved automatically if omitted)
   --min-reviewed-seats <n>          Minimum reviewed seats required per generation
   --help, -h                        Show this help message and exit 0
+
+Chain rules (Mode A): every chain entry must be 'finalized' except an 'aborted' one (hetero-review-loop
+wrote it when the branch moved during collection or a seat's findings failed to parse). An aborted entry
+is accepted only as a recorded non-review: it must not be the last entry, it carries no head, the next
+generation continues from its base, and its range.json (if present) names that base. It contributes no
+findings and closes none (review-chain-derive skips it). v2.36.3.
 `);
 }
 
@@ -623,6 +629,11 @@ function validateModeA(flags) {
     const findingsByGeneration = new Map();
     const dispositionsByGeneration = new Map();
 
+    // Continuity is tracked against the last FINALIZED head, not the previous entry: an aborted
+    // generation has no head (nothing advanced) and the loop continues the next generation from
+    // the aborted one's base (hetero-review-loop.js collect, prevEntry.status === 'aborted').
+    let expectedEntryBase = expectedBaseSha;
+
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
       if (entry.generation !== i + 1) {
@@ -630,25 +641,56 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // first entry's base must equal expectedBaseSha, each later entry's base must equal previous entry's head
-      if (i === 0) {
-        if (entry.base !== expectedBaseSha) {
+      // first entry's base must equal expectedBaseSha, each later entry's base must equal the
+      // last finalized head (== the aborted predecessor's base when the predecessor aborted)
+      if (entry.base !== expectedEntryBase) {
+        if (i === 0) {
           console.error(`First chain entry base '${entry.base}' does not match expected phase-base '${expectedBaseSha}'`);
-          process.exit(1);
+        } else {
+          console.error(`Chain broken at generation ${entry.generation}: base '${entry.base}' does not match previous head '${expectedEntryBase}'`);
         }
-      } else {
-        const prevEntry = chain[i - 1];
-        if (entry.base !== prevEntry.head) {
-          console.error(`Chain broken at generation ${entry.generation}: base '${entry.base}' does not match previous head '${prevEntry.head}'`);
-          process.exit(1);
-        }
+        process.exit(1);
       }
 
-      // (3) every entry's status must be "finalized"
+      // (3a) v2.36.3: an aborted generation is a recorded, non-reviewing attempt (7840hs report:
+      // a branch that moved during collection left the phase permanently un-receiptable). It is
+      // accepted ONLY as evidence that nothing was reviewed: it must not be the last entry (the
+      // phase needs a finalized generation after it — an abort can never stand in for a review),
+      // it carries no head (checked above: the successor continues from the same base), and its
+      // range.json, when present, must name the same base. No findings/dispositions/seats are
+      // required or read, and review-chain-derive skips it (it closes nothing).
+      if (entry.status === 'aborted') {
+        if (i === chain.length - 1) {
+          console.error(`Chain entry generation ${entry.generation} is 'aborted' and is the last entry: the phase has no finalized review after the abort`);
+          process.exit(1);
+        }
+        if (Object.prototype.hasOwnProperty.call(entry, 'head')) { // any own head, even "" (review 🔵)
+          console.error(`Chain entry generation ${entry.generation} is 'aborted' but carries a head '${entry.head}' (an aborted generation advances nothing)`);
+          process.exit(1);
+        }
+        const abortedRangePath = path.join(reviewPhaseDir, `g${entry.generation}`, 'range.json');
+        if (fs.existsSync(abortedRangePath)) {
+          let abortedRange;
+          try {
+            abortedRange = JSON.parse(fs.readFileSync(abortedRangePath, 'utf8'));
+          } catch (err) {
+            console.error(`Failed to read or parse range.json for aborted generation ${entry.generation}: ${err.message}`);
+            process.exit(1);
+          }
+          if (abortedRange.base !== entry.base) {
+            console.error(`range.json base mismatch for aborted generation ${entry.generation}`);
+            process.exit(1);
+          }
+        }
+        continue; // expectedEntryBase unchanged: the next generation continues from this base
+      }
+
+      // (3) every other entry's status must be "finalized"
       if (entry.status !== 'finalized') {
         console.error(`Chain entry generation ${entry.generation} status is '${entry.status}' (expected 'finalized')`);
         process.exit(1);
       }
+      expectedEntryBase = entry.head;
 
       // Item 2 / d2-seat-receipt-forgery: seat coverage and the reviewed-seat count are
       // resolved further below, once the per-generation directory (gDir) is known and each

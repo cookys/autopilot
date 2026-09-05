@@ -2,8 +2,9 @@
 /**
  * dispatch-model-guard — PreToolUse/Task|Agent [default-on since v2.35.15; opt-in before]
  * Intercepts subagent dispatch and returns permissionDecision: "ask" when the
- * dispatch would land on a guarded expensive engine (default: fable) or when
- * model is omitted (would silently inherit the session model).
+ * dispatch would land on a guarded expensive engine (default: fable), and "deny"
+ * (v2.36.2; was "ask") when model is omitted (would silently inherit the session
+ * model) — the deny reason tells the model to re-dispatch with model:, no human click.
  * Guards expensive engines during implementation dispatches (default: fable,opus via guarded_models_implementing).
  * Enforces self-declared engine headers on prompt line 1 matching the dispatch model (default: on via require_engine_header).
  *
@@ -34,7 +35,7 @@ if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'off') process.exit(0);
 const DEFAULTS = {
   guarded_models: ['fable'],
   guarded_models_implementing: ['fable', 'opus'],
-  on_missing_model: 'ask',
+  on_missing_model: 'deny', // v2.36.2: was 'ask' — see the comment at the missing-model branch
   require_engine_header: 'on',
   mode: 'ask',
 };
@@ -92,11 +93,11 @@ function loadConfig(cwd) {
     guardedImplementing = tokens.length ? tokens : DEFAULTS.guarded_models_implementing;
   }
 
-  // on_missing_model: ask | allow; garbage → ask (fail-closed)
+  // on_missing_model: deny | ask | allow; garbage → deny (fail-closed)
   let onMissing = DEFAULTS.on_missing_model;
   if (Object.prototype.hasOwnProperty.call(parsed, 'on_missing_model')) {
     const v = String(parsed.on_missing_model || '').trim().toLowerCase();
-    onMissing = (v === 'ask' || v === 'allow') ? v : 'ask';
+    onMissing = (v === 'deny' || v === 'ask' || v === 'allow') ? v : 'deny';
   }
 
   // require_engine_header: on | off; garbage → on (fail-closed)
@@ -211,10 +212,17 @@ try {
     if (config.on_missing_model === 'allow') {
       process.exit(0);
     }
-    handleGuard(
-      'dispatch-model-guard: no model specified — the subagent would inherit the session model (possibly a guarded engine); re-dispatch with an explicit model: (see scripts/resolve-dispatch.sh) or approve',
-      config.mode
-    );
+    // v2.36.2: default is DENY, not ask. A missing model: is never a judgment for the
+    // user — the only correct next action is the model's own re-dispatch with model:
+    // set, and an interactive "ask" turned that into a permission dialog the owner had
+    // to click through (2026-09-05 dogfood: depth-0 spawned a reviewer without model:,
+    // the owner had to intervene). A deny carries the same reason back to the model
+    // and it re-dispatches on its own. `on_missing_model: ask` keeps the old dialog.
+    const reason = 'dispatch-model-guard: no model specified — the subagent would inherit the session model '
+      + '(possibly a guarded engine); re-dispatch NOW with an explicit model: (scripts/resolve-dispatch.sh '
+      + '--role <role>) and an "Engine: <model>" first prompt line';
+    if (config.on_missing_model === 'ask') handleGuard(reason, config.mode);
+    else handleDeny(reason, config.mode);
     process.exit(0);
   }
 

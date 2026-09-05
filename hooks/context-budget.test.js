@@ -408,7 +408,66 @@ test('lag guard: NEWER transcript row ⇒ transcript value used even when the li
   assert.strictEqual(r.status, 0, 'fresher transcript row (130k) is below t2 ⇒ no T2, even though live total (160k) is above it');
   assert.match(r.stderr, /Context budget T1/, 'still ≥ t1 (100k) so T1 fires');
   assert.match(r.stderr, /is 130k tokens/, 'contextTokens must be the fresher transcript value, not the live total');
+  assert.match(r.stderr, /\(statusline\)/, 'the live path must still be the one that ran (guards a vacuous pass where /dev/shm is absent)');
 });
+
+test('lag guard: OLDER transcript row with a LOWER total ⇒ contextTokens = live total (max, not "trust transcript")', () => {
+  // Mutant guard (v2.36.2): collapsing `Math.max(usage.tokens, liveTotal)` to `usage.tokens`
+  // survived 35/35 because the older-row fixture above has transcript > live. This case
+  // is the other arm: older row 130k, live 160k ⇒ 160k ⇒ T2.
+  const liveDir = shmTmp('ctxbud-live-lag-older-lower-');
+  const sid = 'live-sid-lag-older-lower';
+  const writtenAt = new Date();
+  writeLiveMain(liveDir, sid, liveMainFixture({
+    written_at: writtenAt.toISOString(),
+    context_window: {
+      context_window_size: 200_000,
+      used_percentage: 80,
+      total_input_tokens: 160_000, // above t2 (150k)
+      current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 159_068 },
+    },
+  }));
+  const rowTs = new Date(writtenAt.getTime() - 5_000).toISOString();
+  const p = tmpFile([usageLine(10_000, 119_000, 1_000, 10, rowTs)]); // 130k total, older row
+  const r = runHook(
+    { transcript_path: p, session_id: sid },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assert.strictEqual(r.status, 2, 'max(130k older transcript, 160k live) = 160k ≥ 150k t2');
+  assert.match(r.stderr, /is 160k tokens/, 'contextTokens must be the live total, not the older transcript row');
+  assert.match(r.stderr, /\(statusline\)/);
+});
+
+for (const bad of [0, -1]) {
+  test(`live file with context_window_size ${bad} ⇒ treated as absent, inference path used (no "~-0k window")`, () => {
+    // v2.36.2: `Number.isFinite` accepted 0 and negatives — -1 produced a
+    // "-15300000% of the ~-0k window" message, 0 silently reverted to the unscaled ceiling
+    // while still claiming "(statusline)". Require > 0, else fall back to inference.
+    const liveDir = shmTmp(`ctxbud-live-badwin-${bad === 0 ? 'zero' : 'neg'}-`);
+    const sid = `live-sid-badwin-${bad === 0 ? 'zero' : 'neg'}`;
+    writeLiveMain(liveDir, sid, liveMainFixture({
+      context_window: {
+        context_window_size: bad,
+        used_percentage: 75,
+        total_input_tokens: 153_000,
+        current_usage: { input_tokens: 32, cache_creation_input_tokens: 900, cache_read_input_tokens: 152_068 },
+      },
+    }));
+    // The transcript (120k) and the live total (153k) DISAGREE on purpose: the live path would
+    // take the live total and fire T2; the inference path reads the transcript and fires T1
+    // only. (The inference path at a 200K window prints no window clause and pre-fix `0`
+    // printed none either — `win ? … : ''` — so the message text alone cannot discriminate.)
+    const p = tmpFile([usageLine(1_000, 118_000, 1_000, 10)]); // 120k via transcript ⇒ T1 only
+    const r = runHook(
+      { transcript_path: p, session_id: sid },
+      freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+    );
+    assert.strictEqual(r.status, 0, 'inference path at 120k ⇒ T1 only (the live path would have fired T2 off its 153k total)');
+    assert.match(r.stderr, /Context budget T1: context is 120k tokens/, 'the transcript value must be used, not the live total');
+    assert.doesNotMatch(r.stderr, /\(statusline\)/, 'a non-positive window must not be attributed to the statusline');
+    assert.doesNotMatch(r.stderr, /~-|-0k|-\d+%/, 'no negative-window arithmetic may leak into the message');
+  });
+}
 
 test('stale live file (>120s) ⇒ falls back to the inference path', () => {
   const liveDir = shmTmp('ctxbud-live-stale-');

@@ -570,3 +570,33 @@ test('absent live (no AUTOPILOT_LIVE_DIR override, no live file) ⇒ exit/stdout
   const bigR = runHook({ transcript_path: bigP }, freshEnv());
   assert.strictEqual(bigR.status, 0, 'must not exit 2 on a 1M-window session (ratchet inference)');
 });
+
+// v2.36.6 regressions (2026-09-06: T2 fired at 8% real usage right after auto-compaction).
+test('lib: advisor turn usage.iterations — last message iteration wins, not the summed top level', () => {
+  const p = tmpFile([JSON.stringify({ type: 'assistant', timestamp: '2026-09-05T20:03:36.868Z', message: { usage: {
+    input_tokens: 4, cache_creation_input_tokens: 3651, cache_read_input_tokens: 1241031,
+    iterations: [
+      { type: 'message', input_tokens: 2, cache_read_input_tokens: 620467, cache_creation_input_tokens: 97 },
+      { type: 'advisor_message', input_tokens: 624607, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      { type: 'message', input_tokens: 2, cache_read_input_tokens: 620564, cache_creation_input_tokens: 3554 },
+    ] } } })]);
+  assert.strictEqual(readContextTokens(p), 2 + 620564 + 3554);
+});
+
+test('lib: compact_boundary after the last usage row ⇒ null (stale pre-compaction rows are not context)', () => {
+  const p = tmpFile([
+    JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 1, cache_read_input_tokens: 740000, cache_creation_input_tokens: 0 } } }),
+    JSON.stringify({ type: 'system', subtype: 'compact_boundary', timestamp: '2026-09-05T20:09:09.892Z' }),
+    JSON.stringify({ type: 'user', isCompactSummary: true, message: { role: 'user', content: 'summary' } }),
+  ]);
+  assert.strictEqual(readContextTokens(p), null);
+});
+
+test('lib: usage row written after the compact_boundary is returned normally', () => {
+  const p = tmpFile([
+    JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 1, cache_read_input_tokens: 740000, cache_creation_input_tokens: 0 } } }),
+    JSON.stringify({ type: 'system', subtype: 'compact_boundary' }),
+    JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 2, cache_read_input_tokens: 73890, cache_creation_input_tokens: 1946 } } }),
+  ]);
+  assert.strictEqual(readContextTokens(p), 73890 + 1948);
+});

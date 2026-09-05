@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.36.3 — 中止的 review 世代不再讓 phase receipt 永久卡死，也不再悄悄關掉未結 finding（7840hs 回報 2026-09-05）
+
+7840hs（llm-playground plan 066）踩到：collect 期間 commit 讓 branch head 移動，`hetero-review-loop` 照設計把那代寫成 `aborted`
+（無 head、無 findings），下一代照 `--help` 繼續收；審查 14 → 7 → 3 → 0 完全收斂，但 `check-phase-review-receipt.js` 對
+`status !== 'finalized'` 一律 exit 1，機器收據永遠拿不到，且沒有旗標能合法繞過。修的時候發現第二個更嚴重的洞。
+
+- **`scripts/lib/review-chain-derive.js`**：走鏈時跳過 `aborted` 條目。原本 loop finalize 與 checker 都把中止那代（不存在 ⇒ 空的）
+  findings 餵進來，「closure by absence」把前面所有 verified 未結 finding 一次關掉——中止變成規避審查的路徑。新 unit test
+  `review-chain-derive.test.js`（Critical 不會被中止翻成 SHIP-AS-IS；關閉歸到後面那個 finalized 世代），三案在修前紅。
+- **`scripts/check-phase-review-receipt.js`**：鏈的連續性改追「最後一個 finalized head」；`aborted` 條目只當「有紀錄的未審查」收：
+  不能是最後一筆（中止永遠不能代替審查）、不得帶 head、下一代必須從它的 base 接、它的 range.json 若在必須同 base；不讀
+  findings／dispositions／seats。其他非 finalized 狀態照舊拒絕。checker 測試 15／15a–15f（最後一筆中止、帶 head、下一代跳 base、
+  range base 不符各自 exit 1；finalized／aborted(parse_failed)／finalized 三代鏈 exit 0）。
+- 兩支腳本 `--help` 寫明規則；codex 鏡像同步。走的是 7840hs 建議的 (a)（checker 豁免＋後續 finalized 條件），沒動 loop 的寫入形狀。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.2 — v2.36.1 review 遞延 cut 落地：live 窗口要 > 0、depth-0 計數上鎖、工頭診斷只印一次、四項測試強度（2026-09-05）
 
 v2.36.1 pre-merge review（opus，兩輪）標 🟡 卻 cut 掉的六件，全部紅綠釘死後收掉；沒有新面向。

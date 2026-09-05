@@ -909,5 +909,91 @@ assert_contains "$ORDER_OUT" "canonical positive integer" "case 14 negative: ref
 GOOD_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase "$EXCL_PHASE" --branch work --phase-base "$GEN1_HEAD" --repo-root "$SCRATCH_REPO" --min-reviewed-seats "1" 2>&1); GOOD_RC=$?
 assert_exit_code "$GOOD_RC" "0" "case 14: canonical --min-reviewed-seats '1' is accepted and the otherwise-valid run still succeeds"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 15 (v2.36.3, 7840hs report): an ABORTED generation followed by a finalized one is a valid
+# chain. Before the fix `status !== 'finalized'` rejected every aborted entry, so a branch that
+# moved during collection (the loop's own --help example) left the phase permanently
+# un-receiptable. An aborted entry has no head; the next generation continues from its base.
+# ─────────────────────────────────────────────────────────────────────────────
+# Earlier cases advanced the work branch; anchor this block on its CURRENT head.
+PAB_HEAD=$(git -C "$SCRATCH_REPO" rev-parse work)
+PAB_DIFF=$(git -C "$SCRATCH_REPO" diff "$PHASE_BASE" "$PAB_HEAD" | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+write_range_json "pab" "1" "$PHASE_BASE" "$PAB_HEAD" "$PAB_DIFF"   # the aborted attempt's evidence (kept on disk)
+write_range_json "pab" "2" "$PHASE_BASE" "$PAB_HEAD" "$PAB_DIFF"
+PAB_DISP_SHA=$(write_gen_artifacts "pab" "2")
+PAB_FINDINGS_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-pab/g2/findings.json")
+PAB_SEAT_SHA=$(write_seat_artifact "pab" "2" "s0")
+PAB_G1_ABORTED="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"status\": \"aborted\" }"
+PAB_G2_FINAL="{ \"generation\": 2, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } }"
+write_pab() { # <chain-json-array>
+  printf '%s\n' "$1" > "$LEDGER/review-pab/chain.json"
+  write_receipt_json "pab" "{ \"kind\": \"review\", \"phase\": \"pab\", \"branch\": \"work\", \"phase_base_sha\": \"$PHASE_BASE\", \"chain\": $1, \"verdict\": \"SHIP-AS-IS\", \"open_findings\": [], \"resolved_from\": \"test\", \"written_at\": \"2026-09-05T00:00:00Z\" }"
+}
+write_pab "[ $PAB_G1_ABORTED, $PAB_G2_FINAL ]"
+C15_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15_RC=$?
+assert_exit_code "$C15_RC" "0" "case 15: aborted g1 + finalized g2 (same base) exits 0"
+
+# 15a negative: the aborted generation is the LAST entry — an abort never stands in for a review.
+PAB_G1_FINAL="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } }"
+cp "$LEDGER/review-pab/g2/findings.json" "$LEDGER/review-pab/g2/dispositions.json" "$LEDGER/review-pab/g2/seat-s0.json" "$LEDGER/review-pab/g1/"
+write_pab "[ $PAB_G1_FINAL, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"status\": \"aborted\" } ]"
+C15A_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15A_RC=$?
+assert_exit_code "$C15A_RC" "1" "case 15a: aborted generation as the LAST entry exits 1"
+assert_contains "$C15A_OUT" "is the last entry" "case 15a: refusal names the missing finalized review after the abort"
+rm -f "$LEDGER/review-pab/g1/findings.json" "$LEDGER/review-pab/g1/dispositions.json" "$LEDGER/review-pab/g1/seat-s0.json"
+
+# 15b negative: an aborted entry that claims a head (an abort advances nothing).
+write_pab "[ { \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"aborted\" }, $PAB_G2_FINAL ]"
+C15B_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15B_RC=$?
+assert_exit_code "$C15B_RC" "1" "case 15b: aborted entry carrying a head exits 1"
+assert_contains "$C15B_OUT" "advances nothing" "case 15b: refusal names the rule"
+
+# 15b' negative: an empty-string head on an aborted entry is still a head property.
+write_pab "[ { \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"\", \"status\": \"aborted\" }, $PAB_G2_FINAL ]"
+C15B2_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15B2_RC=$?
+assert_exit_code "$C15B2_RC" "1" "case 15b': aborted entry with an empty-string head exits 1"
+
+# 15c negative: the generation after the abort does not continue from the aborted base
+# (an abort must not be usable to skip the diff between the phase base and a moved head).
+write_pab "[ $PAB_G1_ABORTED, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } } ]"
+C15C_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15C_RC=$?
+assert_exit_code "$C15C_RC" "1" "case 15c: successor not continuing from the aborted base exits 1"
+assert_contains "$C15C_OUT" "Chain broken at generation 2" "case 15c: refusal is the continuity check"
+
+# 15d negative: the aborted attempt's range.json names a different base than the chain entry.
+write_pab "[ $PAB_G1_ABORTED, $PAB_G2_FINAL ]"
+write_range_json "pab" "1" "$PAB_HEAD" "$PAB_HEAD" "$PAB_DIFF"
+C15D_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15D_RC=$?
+assert_exit_code "$C15D_RC" "1" "case 15d: aborted range.json base mismatch exits 1"
+assert_contains "$C15D_OUT" "range.json base mismatch for aborted generation 1" "case 15d: refusal names the aborted range"
+
+# 15e positive control: aborted generation with NO range.json at all is still accepted
+# (the abort at the parse-failure path may leave less evidence; the chain entry is the record).
+rm -rf "$LEDGER/review-pab/g1"
+C15E_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15E_RC=$?
+assert_exit_code "$C15E_RC" "0" "case 15e: aborted generation without an evidence dir still exits 0"
+
+# 15f (chain of three, mirrors the field case gen3 aborted between finalized gens): g1 finalized
+# base→head, g2 aborted at head, g3 finalized head→head2 (branch moved on after the abort).
+(
+  cd "$SCRATCH_REPO"
+  git checkout -q work
+  echo "more work" >> file.txt
+  git add file.txt
+  git commit -q -m "c4"
+)
+GEN3_HEAD=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
+DIFF_SHA_23=$(git -C "$SCRATCH_REPO" diff "$PAB_HEAD" "$GEN3_HEAD" | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+write_range_json "pab3" "1" "$PHASE_BASE" "$PAB_HEAD" "$PAB_DIFF"
+write_range_json "pab3" "2" "$PAB_HEAD" "$GEN3_HEAD" "$DIFF_SHA_23"
+write_range_json "pab3" "3" "$PAB_HEAD" "$GEN3_HEAD" "$DIFF_SHA_23"
+P3_D1=$(write_gen_artifacts "pab3" "1"); P3_F1=$(node -e "const c=require('crypto'),f=require('fs');process.stdout.write(c.createHash('sha256').update(f.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-pab3/g1/findings.json"); P3_S1=$(write_seat_artifact "pab3" "1" "s0")
+P3_D3=$(write_gen_artifacts "pab3" "3"); P3_F3=$(node -e "const c=require('crypto'),f=require('fs');process.stdout.write(c.createHash('sha256').update(f.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-pab3/g3/findings.json"); P3_S3=$(write_seat_artifact "pab3" "3" "s0")
+PAB3_CHAIN="[ { \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$P3_D1\", \"findings_sha256\": \"$P3_F1\", \"seat_artifact_sha256\": { \"s0\": \"$P3_S1\" } }, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"status\": \"aborted\", \"reason\": \"parse_failed\" }, { \"generation\": 3, \"base\": \"$PAB_HEAD\", \"head\": \"$GEN3_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$P3_D3\", \"findings_sha256\": \"$P3_F3\", \"seat_artifact_sha256\": { \"s0\": \"$P3_S3\" } } ]"
+printf '%s\n' "$PAB3_CHAIN" > "$LEDGER/review-pab3/chain.json"
+write_receipt_json "pab3" "{ \"kind\": \"review\", \"phase\": \"pab3\", \"branch\": \"work\", \"phase_base_sha\": \"$PHASE_BASE\", \"chain\": $PAB3_CHAIN, \"verdict\": \"SHIP-AS-IS\", \"open_findings\": [], \"resolved_from\": \"test\", \"written_at\": \"2026-09-05T00:00:00Z\" }"
+C15F_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab3 --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15F_RC=$?
+assert_exit_code "$C15F_RC" "0" "case 15f: finalized / aborted (parse_failed) / finalized chain exits 0"
+
 finalize_test
 

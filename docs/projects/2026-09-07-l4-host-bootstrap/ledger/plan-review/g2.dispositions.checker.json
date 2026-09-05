@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "l4-host-provider-readiness-bootstrap-2026-09-07",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "f69f265d7fc5d095b68cf6e13c5529de6c030516d1988f92ead98f446c353380",
+      "candidate_blocker": false,
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded: P3 now enumerates the three KR2 assertions (policy_override.reason === advisory_default; every uncertified seat in policy_override.uncertified_seats; stderr contains the literal POLICY OVERRIDE line) instead of the shorthand \"policy_override record\". Non-blocking per the frozen rubric (R7 is a test-coverage question, not a construct-level defect)."
+    }
+  ]
+}

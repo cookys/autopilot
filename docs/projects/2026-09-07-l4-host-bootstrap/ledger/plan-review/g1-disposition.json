@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "l4-host-provider-readiness-bootstrap-2026-09-07",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "81872848d1cfb4fbb19e102202fc06d746a9aa33db90b2c3c9430ce9d929c313",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Re-derived against provider-bootstrap.js: the VA check (~292) precedes the QC-panel check (~301), so a roster missing both only ever exercises the VA path. KR3 and P3 now require three isolated negative controls parameterized over l5 and l6 — VA missing + QC complete; VA present + empty QC; VA present + qc_panel_seats_complete:false — each asserting strict_l5_provider_roster_incomplete with its own message, plus the bootstrap-level unit twins in provider-readiness-consumer.test.sh. Probes B/C/D/E in the P0 table show each message on the current code."
+    },
+    {
+      "fingerprint": "49826c7d37ca97eb34e1d45b68ef2e219cd4a17d3d5fa6358e4b3403daa24b88",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The thesis sentence 'Nothing is waived' contradicted KR4 / §2.5 / P2, which keep the v2.36.7 reviewer-qualification waiver. §0 now reads: no provider-readiness evidence is waived or fabricated; the reviewer-qualification waiver is a separate, narrower mechanism governed by KR4 and fires only when the bootstrap does not certify the reviewer seat."
+    },
+    {
+      "fingerprint": "3073635623670e54067ba509860706c47e792ca9e8ac5c0e301c62bc1c68a9d4",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. The P0 command shown only ran level l5 with VA and QC removed together, so it could not reproduce the l4 constructor rejection nor separate the QC site. Re-ran five isolated probes on this host (A: l4 constructor → strict_l5_provider_bootstrap_invalid; B: l5 VA missing/QC complete → roster_incomplete VA message; C: l5 VA present/QC empty → roster_incomplete QC message; D: qc_panel_seats_complete:false alone → as C; E: l6 as B). The P0 command block and evidence table in the plan now carry these; the probe script is the P0 ledger artifact."
+    }
+  ]
+}

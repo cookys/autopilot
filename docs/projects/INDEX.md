@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-07 | [l4-host-bootstrap](2026-09-07-l4-host-bootstrap/README.md) — l4 managed runs get the live-probed host readiness bundle with an l4 roster profile (plan frozen g2) | v2.36.8 | `feat/v2.36.8-l4-host-bootstrap` |
 
 ## 已完成 (Completed)
 

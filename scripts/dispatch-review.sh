@@ -638,6 +638,7 @@ BLOCK_FILE="$(mktemp -t dispatch-review-block-XXXXXX)"
 CODEX_OUT=""
 CODEX_ERR=""
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
+GROK_PARSE="" # grok glued-preamble normalized parse target (v2.36.4); trap-reaped like the other rails
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
@@ -680,6 +681,7 @@ cleanup() {
   [ -n "$AGY_OUT" ] && rm -f "$AGY_OUT"
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
+  [ -n "$GROK_PARSE" ] && rm -f "$GROK_PARSE"
   [ -n "$AGY_SALVAGE" ] && rm -f "$AGY_SALVAGE"
   [ -n "$SALVAGE_BLOCK" ] && rm -f "$SALVAGE_BLOCK"
   # Observability: stamp ended_at + final_status (from the exit code, the one source
@@ -965,12 +967,33 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # print a partial `VERDICT: SHIP-AS-IS` line and THEN stall/fail; letting that partial
   # output reach the parser would mark a failed/timed-out run as a SHIP (gpt-5.5 review).
   # The partial output stays in raw_log for debugging; it is never trusted as a verdict.
+  # GLUED-PREAMBLE NORMALIZATION (v2.36.4, cuda R21 qc report 2026-09-05): with
+  # --output-format plain, grok sometimes prints one sentence of preamble ("I'll read the
+  # full review prompt…") and then, on the SAME line with no newline, the derived BEGIN
+  # frame. The shared locator saw a leading line carrying framing vocabulary that was not
+  # byte-exactly the frame → rule 7 hard reject → a complete, correct review recorded as
+  # no_verdict (5 of 8 collects). Split ONCE, at the FIRST line whose `<<<AUTOPILOT-REVIEW-`
+  # sits past column 1 and BEFORE any exact BEGIN line: the preamble becomes its own chrome
+  # line — still subject to rules 7 (any residual vocabulary), 8 (budget) and 9 (leak) —
+  # and the frame becomes the exact line. Nothing after a frame is touched (an echo inside
+  # the block stays for the leak scan / duplicate-BEGIN rule). RAW_LOG keeps the raw bytes.
+  GROK_PARSE="$(mktemp -t dispatch-review-grok-parse-XXXXXX)"
+  awk -v begin="$BEGIN" '
+    { line = $0; sub(/\r$/, "", line) }   # CR-tolerant like the locator, so a CRLF exact BEGIN still closes the window
+    !done && line == begin { done = 1 }
+    !done {
+      i = index($0, "<<<AUTOPILOT-REVIEW-")
+      if (i > 1) { print substr($0, 1, i - 1); print substr($0, i); done = 1; next }
+    }
+    { print }
+  ' "$RAW_LOG" > "$GROK_PARSE"
   if [ "$GROK_RC" -ne 0 ]; then
     printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    SALVAGE_CAPTURE="$RAW_LOG"
+    SALVAGE_CAPTURE="$GROK_PARSE"
     emit_no_verdict "grok exited non-zero (rc=$GROK_RC) — fail-closed, partial output not parsed"
   fi
+  PARSE_INPUT="$GROK_PARSE"
 
 elif [[ "$RUNNER" = "qoderclicn" ]]; then
   QODER_BIN="${BIN:-qoderclicn}"

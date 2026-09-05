@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.36.4 — grok 席前言黏框架被定位器誤殺（cuda R21 qc 回報 2026-09-05）
+
+cuda 在 revival-world-city-war R21 qc 三席 8 次 collect 裡，grok-4.6 席 5 次被記 no_verdict，raw_log 卻都有完整框架與 VERDICT，
+結論與另兩席一致。比對 3 成功／4 失敗：失敗的都是 grok `--output-format plain` 先吐一句前言，**同一行無換行**直接接
+`<<<AUTOPILOT-REVIEW-…>>>`；共用定位器規則 7（前導行含框架詞彙卻不是精確框架行 ⇒ 硬拒）正確 fail-closed，但丟掉了真審查。
+
+- **`scripts/dispatch-review.sh` grok 分支**：擷取 RAW_LOG 後、進定位器前做一次正規化——在第一個「`<<<AUTOPILOT-REVIEW-` 不在第 1 欄、且尚未出現
+  精確 BEGIN 行」的行插入換行；前言成為獨立 chrome 行，仍受規則 7（殘留詞彙）、8（預算）、9（洩漏）檢查，框架成為精確行。框架之後一律不動。
+  只在 grok 分支（cuda 建議 A，不放寬安全欄）；RAW_LOG 保留原始位元組，parse／salvage 走正規化檔。
+- 測試：grok 黏合形狀 reviewed；前言本身含框架詞彙 ⇒ 仍規則 7 且永不 SHIP；同形狀走 codex ⇒ 仍規則 7（證明只在 grok 生效）。正向案在修前紅。
+- cuda 順帶指出 grok-4.6 在 scorecard 只有 implementer 資格，坐 qc reviewer 席是 2026-08-25 的 user-explicit override——未在本版處理，記於此。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.3 — 中止的 review 世代不再讓 phase receipt 永久卡死，也不再悄悄關掉未結 finding（7840hs 回報 2026-09-05）
 
 7840hs（llm-playground plan 066）踩到：collect 期間 commit 讓 branch head 移動，`hetero-review-loop` 照設計把那代寫成 `aborted`

@@ -427,8 +427,11 @@ source (≈300K to start). The prose rules existed; nothing was in the loop.
   `~/.claude/settings.json` `model=…[1m]` must not be the foreman's model.
 - **Cost visibility.** `cost-tracker` (default-on) prints a stderr line when a session's cumulative
   cache-read passes 50M tokens and each doubling after; `context-budget` (default-on) nudges at 100K
-  and directs a handoff at 150K for depth-0. Foreman context itself is not measurable by hook yet
-  (the payload carries the parent transcript) — BACKLOG; the Bash cap is the foreman's ceiling.
+  and directs a handoff at 150K for depth-0 (both scaled to the REAL window when the status-line
+  live file is present, v2.36.1). Foreman context IS measurable since v2.36.1: `foreman-guard`
+  reads the foreman's own `tasks[].tokenCount` from the subagent status line's live file and denies
+  its next Bash at T2 with the handoff directive (`hooks/README.md` § Live context feed). Without
+  the feed (no codeforge, or an older one) the Bash cap stays the only ceiling.
 
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 

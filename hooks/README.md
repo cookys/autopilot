@@ -254,3 +254,31 @@ Ported from [NYCU-Chung/my-claude-devteam](https://github.com/NYCU-Chung/my-clau
 - **mi1 fix**: cost-tracker → opt-out for privacy
 - **mi2 fix**: testing → 8/8 Tier A (was 3/8)
 - **log-error**: rewritten from Bash to Node.js for consistency
+
+## Live context feed (v2.36.1, optional — the hooks degrade safely without it)
+
+Hook stdin never carries the model id, the context window size, or per-subagent usage; the Claude Code
+**status line** does. Three hooks read those values from two tmpfs "live files" that a status-line
+program writes each tick:
+
+| File | Writer | Consumers |
+|---|---|---|
+| `<base>/context/<sid>.json` — `model.id`, `context_window.{context_window_size,used_percentage,total_input_tokens,current_usage}` | `statusLine` command | `context-budget` (real window instead of inference), `depth0-delegate-gate` (model family for `block`) |
+| `<base>/context/<sid>.tasks.json` — one row per running subagent: `id` (= hook `agent_id`), `model`, `contextWindowSize`, `tokenCount`, … | `subagentStatusLine` command | `foreman-guard` (foreman's own context ceiling) |
+
+`<base>` is resolved by [`scripts/lib/live-state-dir.js`](../scripts/lib/live-state-dir.js): `$AUTOPILOT_LIVE_DIR` →
+`$XDG_RUNTIME_DIR/autopilot` → `/dev/shm/autopilot-<uid>` → `/tmp/autopilot-<uid>`, every candidate probed with
+`findmnt` (or `/proc/mounts`) and accepted only when it is `tmpfs`/`ramfs`; if none is RAM-backed the base falls back to
+`~/.autopilot` with one warning. Readers accept `schema_version` 1 only and treat a file older than 120 s as absent.
+
+**Enabling it.** The reference writer is [codeforge](https://github.com/cookys/codeforge) ≥ the 2026-09-05 `main`
+(`feat(live)` merge): `codeforge statusline` writes the main file whenever it is your `statusLine`; run
+`codeforge install --subagent-statusline` once to add the `subagentStatusLine` entry (opt-in; it renders nothing,
+keeps Claude Code's default rows). Any other status-line program can write the same two files — the schema is in
+`docs/plans/2026-09-05-statusline-live-context-feed.md` §2.5. Check: `ls "$XDG_RUNTIME_DIR/autopilot/context/"`
+shows `<session_id>.json` after one tick.
+
+**Without it** (no writer, older codeforge, another host): `context-budget` and `foreman-guard` behave exactly as
+v2.36.0 (inference ratchet, Bash cap only), and `depth0-delegate-gate` warns but never blocks. Silence is never a
+gate pass. Knobs: `AUTOPILOT_LIVE_DIR` (override base, still probed), `AUTOPILOT_CONTEXT_BUDGET_DIR`,
+`AUTOPILOT_DEPTH0_GATE_DIR` (test seams).

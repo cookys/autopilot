@@ -101,6 +101,13 @@ Autopilot coexists with the official OpenAI codex plugin on Claude Code hosts:
 | Write/labor | `dispatch-hetero.sh` (worktree + cgroup + artifact verify) | `rescue --write` (sandbox posture unverified) | Labor stays on autopilot rails until the plugin's write path is spiked |
 | Repo hygiene | — | plugin install writes `.claude/settings.json` in cwd | gitignored since v2.31.19+ (`.claude/settings.json`) |
 
+## CodeForge status-line feed (optional, v2.36.1)
+
+If [codeforge](https://github.com/cookys/codeforge) is your Claude Code `statusLine`, autopilot's context gates
+read the real model window and per-subagent usage from the tmpfs live files it writes (`hooks/README.md` § Live
+context feed). Enable the subagent half with `codeforge install --subagent-statusline`. Nothing else in autopilot
+depends on codeforge: without it every hook keeps its v2.36.0 behaviour.
+
 ## Agent Call Coexistence
 
 Agent Call is an optional transport for already-running persistent local sessions. Autopilot keeps lifecycle and ownership policy; it does not absorb Agent Call's harness adapters.

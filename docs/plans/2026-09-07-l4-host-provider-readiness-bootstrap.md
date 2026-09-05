@@ -1,8 +1,8 @@
 # Plan — l4 host provider-readiness bootstrap
 
-> Status: DRAFT (R0, awaiting plan loop review)
+> Status: R0 frozen for plan loop review (Board answered §8 on 2026-09-07)
 > Owner: cookys (Board) · Author: autopilot-eb session, 2026-09-07
-> Branch: `feat/v2.37.0-l4-host-bootstrap` (not yet created — L-3)
+> Branch: `feat/v2.36.8-l4-host-bootstrap` (not yet created — L-3)
 > Frame: dev-flow L. Owner ruling 2026-09-06 「先 fix 然後完整修好」 — the Fix half shipped in v2.36.7; this is the「完整修好」half.
 > logical_plan_id: `l4-host-provider-readiness-bootstrap`
 
@@ -244,11 +244,11 @@ develop for the new assertions, GREEN on the branch.
 
 ## 8. Open questions (Board)
 
-1. Confirm that an l4 marker driving `engine implement-review` is a supported route (the Codex-platform
-   l4 skill declares it) rather than an accident to be refused. The plan assumes **supported**.
-2. l4 roster profile: implementer + reviewer required; VA and QC panel optional. Or should l4 require a QC
-   panel when the mission is enforce-mode? The plan assumes **optional**.
-3. Version: PATCH `v2.36.8` (assumed) vs MINOR.
+1. ~~Confirm that an l4 marker driving `engine implement-review` is a supported route.~~ **Board 2026-09-07: supported.**
+2. ~~l4 roster profile: VA and QC panel optional, or QC required under enforce?~~ **Board 2026-09-07: optional.**
+3. ~~Version: PATCH vs MINOR.~~ **Board 2026-09-07: PATCH `v2.36.8`.**
+
+No open questions remain; the three answers are binding on P1–P4.
 
 ## Review log
 

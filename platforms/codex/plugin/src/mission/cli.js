@@ -26,7 +26,9 @@ const fs = require('fs');
 const path = require('path');
 const mission = require('../engine/mission-convergence');
 const runtime = require('./runtime');
-const { loadRows, projectCampaign, TERMINAL: CAMPAIGN_TERMINAL } = require('../campaign/cli');
+const {
+  loadRows, projectCampaign, resolveCampaignForClaim, TERMINAL: CAMPAIGN_TERMINAL,
+} = require('../campaign/cli');
 
 const DEFAULT_NOW = '2026-07-27T00:00:00.000Z';
 const DEFAULT_EXPIRY = '2026-07-27T01:00:00.000Z';
@@ -388,7 +390,7 @@ function cmdConsume(flags) {
 function cmdWithdraw(flags) {
   rejectUnknownFlags(
     flags,
-    new Set(['state', 'out', 'claim-id', 'campaign-ledger']),
+    new Set(['state', 'out', 'claim-id', 'campaign-ledger', 'never-started']),
     'withdraw Mission withdraw',
   );
   const state = loadState(requireFlag(flags, 'state'));
@@ -422,14 +424,26 @@ function cmdWithdraw(flags) {
     });
     return 1;
   }
+  // v2.36.6: what does this ledger know about the claim's campaign?
+  //   direct         ⇒ the existing terminal rule below.
+  //   ticket_present ⇒ REFUSE: an intake root for the claim's own contract ticket exists, so the
+  //                    campaign may have run; the v2 claim id cannot be bound to that root
+  //                    (identity gap, BACKLOG) and a never-started release would fake it.
+  //   absent         ⇒ never started in this ledger; releasable ONLY with `--never-started true`
+  //                    (the operator asserts this is the claim's repo ledger — default
+  //                    <git-common-dir>/autopilot/implementation-campaign.jsonl). The release is
+  //                    the ordinary no_effect_release with its own reason; nothing is faked terminal
+  //                    and the asserted ledger is recorded on the emitted record (ADR-0001).
   let projection = null;
+  let resolvedVia = null;
+  let rows;
+  const campaignLedger = requireFlag(flags, 'campaign-ledger');
+  let resolved;
   try {
-    const campaignLedger = requireFlag(flags, 'campaign-ledger');
-    const rows = loadRows(campaignLedger);
-    projection = projectCampaign(rows, claim.campaign_id);
-    if (!projection) {
-      throw new Error('campaign not found');
-    }
+    // An ABSENT ledger file is unreadable, never "never started".
+    if (!fs.existsSync(campaignLedger)) throw new Error(`ledger file does not exist: ${campaignLedger}`);
+    rows = loadRows(campaignLedger);
+    resolved = resolveCampaignForClaim(rows, claim); // throws on a corrupt intake payload
   } catch (error) {
     emit({
       status: 'rejected',
@@ -442,7 +456,66 @@ function cmdWithdraw(flags) {
     });
     return 1;
   }
-  if (!CAMPAIGN_TERMINAL.has(projection.state.phase)) {
+  const intakeRoots = rows.filter((r) => r && r.kind === 'journal' && r.op === 'campaign_intake' && r._rotation_carry !== true).length;
+  const neverStartedAck = String(flags['never-started'] || '').trim().toLowerCase();
+  if (resolved.kind === 'unknown_v2') {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_claim_unguardable',
+      reason: `withdraw: claim ${claimId} is mission-subject-v2 but carries no campaign contract draft ticket — the ledger cannot be checked for its campaign, so it cannot be released as never started`,
+      claim_id: claimId,
+      campaign_id: claim.campaign_id,
+      phase: null,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  if (resolved.kind === 'ticket_present') {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_campaign_ticket_present',
+      reason: `withdraw: claim ${claimId} campaign ${claim.campaign_id} has no intake row under its own id, but ${campaignLedger} holds ${resolved.roots.length} intake root(s) for its contract ticket '${resolved.ticket}' (${resolved.roots.map((r) => `${r.campaign_id}@${r.phase || 'unknown'}`).join(', ')}) — the campaign may have run under the ICC campaign-v1 id; refusing a never-started release. Binding a campaign-v2 claim to its ICC intake needs the intake to journal the mission binding (BACKLOG).`,
+      claim_id: claimId,
+      campaign_id: claim.campaign_id,
+      ledger_roots: resolved.roots,
+      phase: null,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  if (resolved.kind === 'absent') {
+    if (!['true', 'yes', '1'].includes(neverStartedAck)) {
+      emit({
+        status: 'rejected',
+        code: 'mission_withdraw_campaign_not_started',
+        reason: `withdraw: claim ${claimId} campaign ${claim.campaign_id} has no intake row in ${campaignLedger} (${intakeRoots} intake root(s) scanned, none for this claim) — the campaign never started in this ledger. If this ledger is the claim's repo ledger, re-run with --never-started true to release the claim as never started; if not, point --campaign-ledger at the right ledger.`,
+        claim_id: claimId,
+        campaign_id: claim.campaign_id,
+        campaign_ledger: campaignLedger,
+        phase: null,
+        state_hash: mission.stateHash(state),
+      });
+      return 1;
+    }
+    resolvedVia = 'never_started';
+  } else {
+    resolvedVia = 'direct';
+    try {
+      projection = projectCampaign(rows, resolved.campaign_id);
+    } catch (error) {
+      emit({
+        status: 'rejected',
+        code: 'mission_withdraw_campaign_unreadable',
+        reason: `withdraw: claim ${claimId} campaign ${resolved.campaign_id} projection failed: ${error.message || String(error)}`,
+        claim_id: claimId,
+        campaign_id: resolved.campaign_id,
+        phase: null,
+        state_hash: mission.stateHash(state),
+      });
+      return 1;
+    }
+  }
+  if (projection && !CAMPAIGN_TERMINAL.has(projection.state.phase)) {
     emit({
       status: 'rejected',
       code: 'mission_withdraw_campaign_not_terminal',
@@ -479,6 +552,11 @@ function cmdWithdraw(flags) {
     status: 'withdrawn',
     claim_id: claimId,
     campaign_id: claim.campaign_id,
+    ledger_campaign_id: projection ? projection.campaign_id : null,
+    resolved_via: resolvedVia,
+    campaign_phase: projection ? projection.state.phase : null,
+    campaign_ledger: campaignLedger,
+    ledger_intake_roots: intakeRoots,
     graph_node_id: claim.graph_node_id || null,
     state_hash: mission.stateHash(result.state),
     receipt: result.receipt,
@@ -731,7 +809,7 @@ function runMissionCli(argv, options = {}) {
       '  grant   --state <file> --out <file> --idempotency-key <k> --campaign-id <id>',
       '          --contract-digest <sha256> --base-sha <sha> --acceptance-ids <a,b> [--reserved <n>] [--now <iso>]',
       '  consume --state <file> --out <file> --claim-id <id> [--reserved <n>]',
-      '  withdraw --state <file> --out <file> --claim-id <id> --campaign-ledger <file>',
+      '  withdraw --state <file> --out <file> --claim-id <id> --campaign-ledger <file> [--never-started true]',
       '  control --state <file> --out <file> --action <a> --sequence <n> [--authority <auth>] [--now <iso>]',
       '  finalize-abort --state <file> --out <file>',
       '  check   --state <file>',

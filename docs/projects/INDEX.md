@@ -13,6 +13,7 @@
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-09-06 | never-started Mission claim 無合法出口（無 project dir — Fix-size，cuda 回報）— grant 鑄 id 發 claim 後 engine 被 admission 擋、campaign 從未起跑 ⇒ status not_found、withdraw 拒絕。status 回 not_started、withdraw `--never-started true` 合法釋放不偽造 terminal，同 ticket 有 intake root 就拒絕；v1/v2 識別綁定仍開（review 撤回 digest 橋接） | v2.36.6 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-06 | `--allow-seat-gap` 寫下 checker 永遠拒收的世代（無 project dir — Fix-size，7840hs 回報）— collect 的 gap 容忍沒有門檻，checker 預設要全部席次 ⇒ finalized 的席數短少永遠救不回。collect 改與 checker 同源解析門檻，低於門檻記 aborted（seat_gap_below_min）讓下一代從同 base 接 | v2.36.5 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-05 | grok 席前言黏框架被定位器誤殺（無 project dir — Fix-size，cuda 回報）— grok plain 輸出把前言與 BEGIN 框架黏在同一行，共用定位器規則 7 硬拒 ⇒ 完整審查記成 no_verdict（8 次 collect 掉 5 次）。grok 分支在定位器前切一次行，前言仍受 7/8/9 檢查；只在 grok 生效 | v2.36.4 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-05 | 中止的 review 世代卡死 phase receipt（無 project dir — Fix-size，7840hs 回報）— `check-phase-review-receipt` 對 `aborted` 條目一律 exit 1，loop 又照設計會寫出它 ⇒ 永久死鎖；順帶抓到 `review-chain-derive` 把中止那代的空 findings 當成「closure by absence」關掉所有未結 finding。checker 豁免（非末筆、無 head、後代同 base）、derive 跳過中止；紅綠釘死 | v2.36.3 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |

@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.36.6 — never-started Mission claim 有合法出口；`campaign status` 分得出 not_started（cuda revival.3d 回報 2026-09-06）
+
+cuda 的 QUIET-a：`mission grant` 鑄了 `campaign-v2-…` id 發了 claim，engine 嘗試在 dev_flow_admission 被 session marker absent 擋下
+（零副作用），campaign 從未 append ledger；`campaign status` 回 `not_found`，`mission withdraw` 因 ledger 查無 campaign 拒絕——claim 成孤兒，
+沒有任何合法出口。
+
+- **`src/campaign/cli.js`**：`campaign status`／`inspect` 對「id 格式合法、ledger 檔存在、無列」回 `not_started`（帶 ledger 路徑），
+  `not_found` 留給格式非法；ledger 檔不存在不算 not_started。新 `resolveCampaignForClaim(rows, claim)`：直接投影中 ⇒ `direct`；
+  v2 claim 且 ledger 有同一 contract ticket 的 intake root ⇒ `ticket_present`（列出 root 與 phase）；否則 `absent`。intake payload 壞掉一律
+  throw（不會被讀成 absent）；rotation-carry 列照算（segment GC 後可能是活 campaign 唯一的副本）。
+- **`src/mission/cli.js withdraw`**：`direct` ⇒ 照舊 terminal 規則；`ticket_present` ⇒ 拒絕 `mission_withdraw_campaign_ticket_present`
+  （campaign 可能跑過，不得以 never-started 放掉）；`absent` ⇒ `mission_withdraw_campaign_not_started`，只有 `--never-started true`
+  （operator 斷言這本就是 claim repo 的 ledger）才以 `resolved_via: never_started` 走既有 `no_effect_release`——不偽造 terminal，
+  輸出記下被斷言的 `campaign_ledger` 與掃到的 intake root 數（ADR-0001：事後可歸因——**只在 stdout**，durable state 的 release event 仍是 `{claim_id}`，operator 要留下那行輸出；把斷言寫進 event payload 是 schema 變更，跟 intake binding 同一族 follow-up）。v2 claim 沒有 draft ticket ⇒ `mission_withdraw_claim_unguardable`，不當 absent。ledger 檔不存在仍是 unreadable。
+- **沒修的**：v2 claim 與 ICC intake 的識別綁定（claim id 是 subject digest 的 v2、intake 是原始位元組 digest 的 v1，intake 又不記
+  claim binding）。第一版試過用 contract digest 橋接，review（opus）證明兩個 digest 不同、橋接對真 v2 claim 永遠 miss 而 fail-open——
+  已撤回，BACKLOG row 保留並註明正確修法（intake artifact 記 mission binding，schema bump）。
+- 測試：campaign-terminalize e2e（無 intake 的 ledger 無 ack 拒絕、有 ack 釋放且記 ledger；status 合法 id ⇒ not_started、非法 ⇒ not_found）；
+  新 `campaign-claim-resolve.test.sh` 九案（absent／其他 ticket 不算證據／同 ticket ⇒ ticket_present／carry 列照算／去重／壞 payload throw／
+  legacy claim 無 ticket 守門／字串 payload）。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.5 — `--allow-seat-gap` 不再寫下 checker 永遠拒收的世代（7840hs 回報 2026-09-06）
 
 同族第三件（與 aborted 世代、closure-by-absence 同形：collect 寫得進去、checker 事後永遠拒收、無法補救）。plan 066 的 agy 席因 prompt 超過

@@ -8,7 +8,7 @@
 - **autopilot**: `develop` = 兩個 v2.36.3 merge（`27bc8abc` 核心、follow-up：derive 不吃戳記、aborted 歸因具名拒絕、finalize fail-closed）；與 `origin/develop` 同步（`605c9ebe`，push 於 2026-09-05 owner 指示）；working tree 乾淨；fix 分支已刪。
 - **version**: 2.36.5（30 skills，29 hooks：16 default-on／13 opt-in）。
 - **v2.36.5（7840hs 第三件）**：`--allow-seat-gap` 只容忍到 checker 同源的席數門檻，低於門檻記 aborted(seat_gap_below_min)。已 push（origin/develop `4a615d75`），7840hs 已通知。
-- **承接中（owner go）**：cuda revival.3d 第 1 項改範圍為 `campaign status` 區分 not_started ＋ `mission withdraw` 放行 never-run claim（與 BACKLOG「mission withdraw cannot release a mission-subject-v2 claim」同根）；等 v2.36.5 push 後開工。CEO guidance 三點已 declined、立 BACKLOG row 交 owner。
+- **v2.36.6（cuda 第 1 項，owner go）**：`campaign status` 分 `not_started`；`mission withdraw --never-started true` 以 never_started 釋放 absent claim，同 ticket 有 intake root ⇒ `ticket_present` 拒絕，v2 無 draft ⇒ unguardable 拒絕。**v1/v2 識別綁定沒修**（第一版 digest 橋接被 review 證明 fail-open、已撤回；BACKLOG row 保留，正確修法是 intake artifact 記 mission binding、schema bump）。已 merge 到 develop，**未 push**；cuda 待通知（instance 01M1Q87ZB9ZK9N5A3BSSRYMCH7）。CEO guidance 三點已 declined、立 BACKLOG row 交 owner。
 - **v2.36.4（cuda 回報）**：grok plain 輸出前言與 BEGIN 框架同行 ⇒ 定位器規則 7 誤殺；grok 分支在定位器前切一次行。已 push（origin/develop `bfa411d6`），cuda 已通知，等它拉來驗一席。
 - **v2.36.3 內容**：`check-phase-review-receipt` 接受被 finalized 後代夾住的 `aborted` 條目（非末筆、無 head、後代同 base）；`review-chain-derive` 跳過 aborted（原本會把它的空 findings 當 closure by absence 關掉所有未結 finding）。已回覆 7840hs（disposition completed），承諾 push 後再通知。
 - **v2.36.2 內容**：live 窗口 `> 0` 才算訊號（context-budget／foreman-guard）；depth0-delegate-gate 計數上鎖；foreman-guard 0/≥2 列診斷每 agent 每種文字一次；
@@ -25,7 +25,7 @@
 ## 下一步
 
 1. v2.36.5 已 push；cuda 第 1 項 owner 已 go，進行中（見下）。
-2. 開工 cuda 第 1 項（not_started ＋ never-run withdraw），第一個驗證樣本是 cuda QUIET-a 的 claim（勿動）。
+2. owner 說推就 push v2.36.6 並通知 cuda；它的 QUIET-a claim 是第一個驗證樣本（`mission withdraw --campaign-ledger <repo .git>/autopilot/implementation-campaign.jsonl --never-started true`，若拒 ticket_present 就是 campaign 其實跑過）。
 2. BACKLOG 新 row「context-budget falls back to inference after a long foreground tool call」：本 session 1M 窗口兩次無「(statusline)」的 T2（call 36 在 600 s suite 後、call 50 在 Agent spawn 後），下一次發生先讀 `$XDG_RUNTIME_DIR/autopilot/context-budget/<sid>.json` 的 `lastLive` 再動 freshness cap。
 3. 其餘同前：tmpfs 擁有者檢查（多人主機前）、plan-loop disposition 形狀、P5 fleet rollout（cuda 授權）、`normalize_agy_alias`／stale topology cache／g1 `42864072`／ladder auto。
 

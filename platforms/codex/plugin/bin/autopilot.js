@@ -57,6 +57,10 @@ Commands:
                     self-authorize.
                     AUTOPILOT_LEVEL=l5|l6 additionally requires the compiled,
                     host-owned exact-roster provider-readiness trust root.
+                    AUTOPILOT_LEVEL=l4 has no such trust root: reviewer
+                    qualification is WAIVED there (ledger records
+                    reviewer_qualification: waived + reason) unless
+                    --require-qualified-reviewer is passed. v2.36.7.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
@@ -274,6 +278,8 @@ function parseImplementReviewArgs(rawArgs) {
   if (sawRequireQualifiedReviewer && sawAllowUnqualifiedReviewer) {
     return { error: 'flags --require-qualified-reviewer and --allow-unqualified-reviewer cannot be combined' };
   }
+  output.reviewerQualificationExplicit = sawRequireQualifiedReviewer || sawAllowUnqualifiedReviewer;
+  output.reviewerQualificationForced = sawRequireQualifiedReviewer; // the only flag that keeps the l4 block
 
   if (!output.promptFile || !output.branch || !output.base) {
     return { error: 'flags --prompt-file, --branch, --base are required' };
@@ -391,6 +397,20 @@ if (args[0] === 'engine') {
           process.stdout.write(`${JSON.stringify(devFlowAdmissionRejection(admission.reason))}\n`);
           process.exit(1);
         }
+      }
+      // v2.36.7 (owner ruling 2026-09-06, cuda WIZHALL): under an l4 marker there is no strict
+      // provider bootstrap, so `reviewer_qualified` can never be host-verified and the default
+      // requireQualifiedReviewer=true blocked every l4 managed implement-review at
+      // reviewer_qualification. The requirement is WAIVED at l4 (not satisfied): the reviewer
+      // still runs, the ledger records `reviewer_qualification: waived` with this reason, and
+      // an explicit --require-qualified-reviewer still forces the block. l5/l6 unchanged.
+      // Applies whenever the requirement is not explicitly forced: the l4 default AND an
+      // explicit --allow-unqualified-reviewer both get the recorded waiver (review 🟠: the
+      // explicit allow used to be MORE restrictive than the default, because the final
+      // review stage re-imposed the requirement when no waiver string was present).
+      if (level === 'l4' && !parsed.reviewerQualificationForced) {
+        parsed.requireQualifiedReviewer = false;
+        parsed.reviewerQualificationWaived = 'l4: no strict provider bootstrap at this level, so reviewer qualification cannot be host-verified; waived by recorded operator policy (owner ruling 2026-09-06) — pass --require-qualified-reviewer to force the block';
       }
       let strictL5Bootstrap = null;
       if (level === 'l5' || level === 'l6') {

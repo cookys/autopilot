@@ -329,6 +329,19 @@ for lower_level in l3 l4 ''; do
     "lower-level (AUTOPILOT_LEVEL='${lower_level}') managed flow is explicit and never labelled strict L5"
 done
 
+# v2.36.7: an l4 marker WITHOUT either reviewer flag waives the qualification requirement
+# (recorded, not silent); l3 keeps the default requirement.
+OUT="$(AUTOPILOT_LEVEL=l4 node "$CLI" engine implement-review \
+  --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+  --branch loop-branch --base "$BASE_SHA" \
+  --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+assert_not_contains "$OUT" '"phase":"reviewer_qualification"' "l4 default: never blocked at reviewer_qualification"
+OUT="$(AUTOPILOT_LEVEL=l4 node "$CLI" engine implement-review \
+  --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+  --branch loop-branch --base "$BASE_SHA" --require-qualified-reviewer \
+  --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+assert_contains "$OUT" '"phase":"reviewer_qualification"' "l4 + --require-qualified-reviewer: the explicit flag forces the block (positive assertion, review 🟡)"
+
 OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_contains "$OUT" "--resume" "autopilot help documents the --resume flag"
 

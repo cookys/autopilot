@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.36.7 — l4 marker 下 engine implement-review 不再卡在 reviewer_qualification：豁免並記帳（owner 裁定 2026-09-06）
+
+cuda 的 WIZHALL（revival-world-city-war，owner 指定 /l4 配 agy gemini-3.8-flash-low）：`bin/autopilot.js` 只在 l5/l6 建 strict
+provider bootstrap，managed enforce 下那是 `reviewer_qualified` 唯一可信來源，所以 l4 marker 配 engine implement-review 的預設
+`requireQualifiedReviewer=true` **永遠**在 reviewer_qualification 被擋——不是席次沒資格，是這一關在 l4 根本不可能通過。
+owner 原話「直接讓他過身分檢查，不要以後再被擋」，在本 session 拍板選「l4 下自動豁免並記帳」。
+
+- **`bin/autopilot.js`**：`AUTOPILOT_LEVEL=l4` 且沒帶 `--require-qualified-reviewer`／`--allow-unqualified-reviewer` 時，
+  `requireQualifiedReviewer=false` 並附 `reviewerQualificationWaived` 理由字串（l4 無 strict bootstrap、無法 host-verify、
+  記錄的 operator 政策）。任一旗標明示則照旗標；l3／l5／l6 不變。
+- **`src/engine/autopilot-engine.js`**：reviewDiff 與 implementation loop 在原本會 block 的位置改記 ledger
+  `reviewer_qualification: waived {reviewer_qualified:false, reason}`——決定留痕，不是沉默；reviewer 照跑、不同家審查與 mission scope
+  不變。waiver 隨每個 review stage 傳入，final scope 原本強制 `requireQualifiedReviewer=true` 的規則在 waiver 下不再重新施加。
+  沒有 waiver 字串時行為 byte-identical（`--allow-unqualified-reviewer` 仍是零 ledger 條目）。
+- **`src/engine/campaign-intake.js`**（owner 選「先 fix 然後完整修好」）：同一條 rail 的下一關 `provider_readiness_authority_missing`
+  是 ADR-0001 的驗證邊界不是身分檢查，**不豁免**；改為具名拒絕——訊息寫出 level、成因（只有 l5/l6 建 strict host bootstrap）與兩條合法
+  補救（該 rail 的 mission enforcement_mode 設 shadow，或改 /l5 且 roster 在 provider policy 內），並明言不得自造 readiness authority。
+  rejection code 不變、仍在任何 spend 之前。完整修法（替 l4 建有證據的 host bootstrap，L 級）立 BACKLOG 待 plan。
+- 測試：engine（waived 不 block、reviewer 派出、ledger 帶理由；無 waiver 零條目；明示 require 仍 block）、CLI（l4 預設不再
+  `phase: reviewer_qualification`；l4＋`--require-qualified-reviewer` 無 waiver 字樣）。修前紅。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.6 — never-started Mission claim 有合法出口；`campaign status` 分得出 not_started（cuda revival.3d 回報 2026-09-06）
 
 cuda 的 QUIET-a：`mission grant` 鑄了 `campaign-v2-…` id 發了 claim，engine 嘗試在 dev_flow_admission 被 session marker absent 擋下

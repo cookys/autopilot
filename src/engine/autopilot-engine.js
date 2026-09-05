@@ -3277,6 +3277,15 @@ class AutopilotEngine {
       }
     }
 
+    if (!requireQualifiedReviewer && typeof input.reviewerQualificationWaived === 'string'
+        && roster.reviewer_qualified !== true) {
+      // v2.36.7: the requirement was waived by the caller (l4 default); record it where the
+      // block would have been so the ledger shows the decision, not silence.
+      ledger.push(this.ledgerEntry('reviewer_qualification', 'waived', this.now(), {
+        reviewer_qualified: false,
+        reason: input.reviewerQualificationWaived,
+      }));
+    }
     if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {
       const startedAt = this.now();
       ledger.push(
@@ -4842,12 +4851,16 @@ class AutopilotEngine {
           ? 'campaign-final-review'
           : `campaign-review#r${repairGeneration + 1}`
         ),
+        // v2.36.7: a caller-declared waiver rides into every review stage, including
+        // the final one (which otherwise re-imposes the requirement).
+        reviewerQualificationWaived: input.reviewerQualificationWaived,
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
           blindDiscovery: true,
         },
-        requireQualifiedReviewer: scope === 'final' ? true : requireQualifiedReviewer,
+        requireQualifiedReviewer: scope === 'final' && typeof input.reviewerQualificationWaived !== 'string'
+          ? true : requireQualifiedReviewer,
         pinReviewerTuple,
         reservationIdentity,
       });
@@ -8610,6 +8623,13 @@ class AutopilotEngine {
     // A consumed strict-L5 host qualification supersedes the legacy disk
     // scorecard projection. Non-strict flows retain the existing fail-closed
     // reviewer_qualified/fallback-ladder preflight unchanged.
+    if (!requireQualifiedReviewer && typeof input.reviewerQualificationWaived === 'string'
+        && !strictL5ProviderReadiness && !reviewerQualificationViable(roster)) {
+      ledger.push(this.ledgerEntry('reviewer_qualification', 'waived', this.now(), {
+        reviewer_qualified: roster.reviewer_qualified === true,
+        reason: input.reviewerQualificationWaived,
+      }));
+    }
     if (requireQualifiedReviewer
         && !strictL5ProviderReadiness
         && !reviewerQualificationViable(roster)) {
@@ -8805,6 +8825,7 @@ class AutopilotEngine {
             roster,
             resume: input.resume === true,
             observedAt: intakeStartedAt,
+            level: String(process.env.AUTOPILOT_LEVEL || '').toLowerCase(),
           }, trustedMissionAdapters || undefined);
         }
       } catch (error) {
@@ -9625,6 +9646,7 @@ class AutopilotEngine {
           blindDiscovery: true,
         },
         requireQualifiedReviewer,
+        reviewerQualificationWaived: input.reviewerQualificationWaived,
       });
       if (round > 1 && previousReviewForRemediation) {
         const priorFindings = namedReviewFindings(previousReviewForRemediation);

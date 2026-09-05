@@ -5,7 +5,7 @@
 
 ## 現況
 
-- **autopilot**: `develop` = `00986d3c`（merge `6712ba67` + maintenance 表 hash 戳記），比 `origin/develop`（`9b6596fd`）多 4 個 commit，**未 push**（owner 沒說要推）；working tree 乾淨；fix 分支已刪。
+- **autopilot**: `develop` = `00986d3c`（merge `6712ba67` + maintenance 表 hash 戳記），與 `origin/develop` 同步（push 於 2026-09-05，owner 指示）；working tree 乾淨；fix 分支已刪。
 - **version**: 2.36.2（30 skills，29 hooks：16 default-on／13 opt-in）。
 - **v2.36.2 內容**：live 窗口 `> 0` 才算訊號（context-budget／foreman-guard）；depth0-delegate-gate 計數上鎖；foreman-guard 0/≥2 列診斷每 agent 每種文字一次；
   `dispatch-model-guard` 漏 `model:` 預設 **deny**（不再跳 dialog；`on_missing_model: deny|ask|allow`）；四項測試強度；context-budget state 新增 `lastLive {at, ageMs, present, used}`。
@@ -20,7 +20,7 @@
 
 ## 下一步
 
-1. owner 說推再推：`git push origin develop`（先 `git show origin/develop:.claude-plugin/plugin.json` 確認沒人搶 2.36.2）。
+1. 沒有必做項；push 已完成。
 2. BACKLOG 新 row「context-budget falls back to inference after a long foreground tool call」：本 session 1M 窗口兩次無「(statusline)」的 T2（call 36 在 600 s suite 後、call 50 在 Agent spawn 後），下一次發生先讀 `$XDG_RUNTIME_DIR/autopilot/context-budget/<sid>.json` 的 `lastLive` 再動 freshness cap。
 3. 其餘同前：tmpfs 擁有者檢查（多人主機前）、plan-loop disposition 形狀、P5 fleet rollout（cuda 授權）、`normalize_agy_alias`／stale topology cache／g1 `42864072`／ladder auto。
 
@@ -29,7 +29,7 @@
 ```bash
 cd /home/cookys/projects/autopilot
 git status --porcelain && git log --oneline -3                 # 空；00986d3c 6712ba67 1821954a
-git log --oneline origin/develop..develop | wc -l              # 4（未 push）
+git log --oneline origin/develop..develop | wc -l              # 0
 node -p "require('./.claude-plugin/plugin.json').version"      # 2.36.2
 bash scripts/preflight-release.sh | tail -1                     # 8/8
 bash scripts/sync-codex-plugin-skills.sh --check | tail -1      # in sync

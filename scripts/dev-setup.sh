@@ -27,6 +27,7 @@ MODE="setup"
 HARNESS=""
 ALL=0
 INSTALL=0
+FORCE=0
 CHECK=0
 FAILURES=0
 WARNINGS=0
@@ -76,6 +77,7 @@ Usage:
 Options:
   --check       Read-only status checks.
   --install     Permit mutating setup for non-Claude harnesses.
+  --force       Update the Codex plugin even while Codex sessions are running (they must restart).
   --harness H   Select claude, codex, opencode, agy, or grok.
   --all         Select all harnesses.
   -h, --help    Show this help.
@@ -357,16 +359,41 @@ check_codex() {
   check_codex_cli_state
 }
 
+# Live Codex sessions pin PLUGIN_ROOT to the versioned cache directory
+# (~/.codex/plugins/cache/autopilot-local/autopilot/<version>/) at session start. Both
+# `codex plugin remove` (documented: "remove its local cache") AND `codex plugin add` on an
+# already-installed plugin (verified codex-cli 0.153.4, 2026-09-07: the previous version
+# directory is deleted, only the new one remains) replace that directory, so every running
+# session then reports `PostCompact … MODULE_NOT_FOUND …/<old-version>/hooks/post-compact.js`
+# at its next compaction until it is restarted. Refuse to update under live sessions unless
+# the operator says so. Override the process probe in tests via DEV_SETUP_CODEX_PIDS.
+codex_live_session_pids() {
+  if [[ -n "${DEV_SETUP_CODEX_PIDS+x}" ]]; then
+    printf '%s\n' "$DEV_SETUP_CODEX_PIDS"
+    return 0
+  fi
+  pgrep -x codex 2>/dev/null | tr '\n' ' '
+}
+
 setup_codex() {
   have_cmd codex || die "codex CLI not found on PATH"
+  local live
+  live="$(codex_live_session_pids | tr -s ' ' | sed 's/^ //; s/ $//')"
+  if [[ -n "$live" && "${FORCE:-0}" -ne 1 ]]; then
+    die "Codex session(s) running (pid: $live). Updating the plugin replaces the versioned cache directory their PLUGIN_ROOT points at, so they would fail PostCompact with MODULE_NOT_FOUND until restarted. Close them (or start new conversations afterwards) and re-run, or pass --force to update anyway."
+  fi
   "$REPO_DIR/scripts/setup-symlinks.sh"
   "$REPO_DIR/scripts/sync-codex-plugin-skills.sh"
 
   if ! codex plugin marketplace list 2>/dev/null | grep -q '^autopilot-local[[:space:]]'; then
     codex plugin marketplace add "$REPO_DIR/platforms/codex"
   fi
-  codex plugin remove autopilot@autopilot-local >/dev/null 2>&1 || true
+  # `plugin add` upgrades an installed plugin in place (official plugin-creator reference:
+  # cachebuster + add, no remove). A preceding `remove` only added a second cache deletion.
   codex plugin add autopilot@autopilot-local
+  if [[ -n "$live" ]]; then
+    printf 'note: Codex session(s) %s still reference the previous plugin cache; start a new conversation in each.\n' "$live" >&2
+  fi
 }
 
 check_opencode() {
@@ -536,6 +563,10 @@ parse_args() {
         ;;
       --install)
         INSTALL=1
+        shift
+        ;;
+      --force)
+        FORCE=1
         shift
         ;;
       --all)

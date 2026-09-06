@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.36.10 — Codex plugin 更新流程：活躍 session 守衛、不再 remove-then-add（PostCompact MODULE_NOT_FOUND 根因）
+
+本機 Codex session（peer 交接 2026-09-07，codex-cli 0.153.4）：每次更新 autopilot 後，還開著的 Codex 對話在下一次 compaction
+都報 `PostCompact … MODULE_NOT_FOUND …/cache/autopilot-local/autopilot/<舊版>/hooks/post-compact.js`。
+
+- **根因（隔離 CODEX_HOME 實驗證實）**：Codex 把 plugin 複製到 `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/`，session 啟動時把
+  `PLUGIN_ROOT` 釘在那個版本目錄。`codex plugin remove` 明文「remove its local cache」；而 **`codex plugin add` 對已安裝 plugin 的原地升版
+  也會刪掉舊版本目錄**（升版後 cache 只剩新版）。所以 `dev-setup.sh setup_codex` 的 remove-then-add 不是唯一元兇——任何更新都會拔掉活躍
+  session 腳下的目錄，光拿掉 remove 救不了。
+- **`scripts/dev-setup.sh`**：`--harness codex --install` 先偵測活躍 `codex` 進程（`pgrep -x codex`；測試用 `DEV_SETUP_CODEX_PIDS` 注入），
+  有就在任何變更前拒絕並說明原因與後果，新旗標 `--force` 才照做並在最後提醒那些 session 要開新對話；拿掉 `plugin remove`（官方
+  plugin-creator reference：cachebuster＋add，沒有 remove；add 原地升版已驗證）。
+- 測試：`dev-setup.test.sh` 三案（有活躍 session ⇒ exit 1、訊息帶 pid／MODULE_NOT_FOUND／--force、stub 證明沒碰 plugin 指令；`--force` ⇒
+  走 `plugin add`、絕無 `plugin remove`、印重啟提醒；無 session ⇒ 靜默照常）；`codex-plugin-package.test.sh` 在獨立 sandbox 釘住「原地
+  add 升版會刪舊版本目錄、舊 post-compact.js 消失」這個事實（守衛的依據）。`docs/installation.md` 更新列改寫。
+- 未做（peer 建議、未驗證）：`~/.codex/hooks.json` 固定入口直指 repo 的開發用 hook——會與 plugin hook 重複、要另設信任審核；
+  Codex 文件也沒說 hook command 是否經 shell，無法在 command 字串裡加 fallback。列 BACKLOG 待 spike。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (script + tests + docs only).
+
 ## v2.36.9 — dispatch-model-guard 提醒 agent、不再彈窗問使用者（`mode: remind`）；Codex adapter 的 SHADOW 條款改鏡射 canon
 
 owner 2026-09-06：「要用比較貴的 subagent／沒填 model name，現在都跳出來問使用者，反而 block 住；應該提醒完 agent 他自己判斷要不要換」。

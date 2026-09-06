@@ -1,11 +1,11 @@
 ## 目標
 
-接續 **l4 host provider-readiness bootstrap**（L 級，v2.36.8）：D1（P1–P4）已在分支 `feat/v2.36.8-l4-host-bootstrap` 實作並 commit（`d0b95eff`），四套 suite 綠、RED 對照記在 ledger；**pre-merge review（autopilot:reviewer, opus）派出中**。另有 owner 追加的 Fix：`fix/dispatch-model-guard-remind`（worktree `../autopilot-guard-fix`，2 commits）等 v2.36.8 合併後接著出 v2.36.9。
+**v2.36.8（l4 host bootstrap，L 級）與 v2.36.9（dispatch-model-guard remind＋Codex adapter SHADOW）都已合併到本地 `develop`，preflight 8/8，尚未 push（owner 說推才推）。** 剩：push、通知 cuda 跑 P5 WIZHALL dogfood。
 （取代前一版 handoff。）
 
 ## 現況
 
-- **autopilot**：`develop` = `origin/develop` = `c7cc64aa`（docs-only 六筆已推）。分支 `feat/v2.36.8-l4-host-bootstrap` 一筆 `d0b95eff`（29 files, +883/−145），working tree 乾淨；version 已 bump 2.36.8（mirror 同步）。
+- **autopilot**：本地 `develop` 比 `origin/develop`（`c7cc64aa`）多 9 commits：v2.36.8 merge `4b3d6ba7`（review folds `363dbdba`）、archive `7c1aa144`、v2.36.9 merge `e71a6e8c`、release bump `7e2e7963`。version 2.36.9。feature／fix 分支與 worktree 已刪。working tree 乾淨。
 - **D1 內容**：`provider-bootstrap.js` `LEVEL_ROSTER_PROFILE`（l4 VA/QC optional；l5/l6 required）、`deriveStrictL5InvocationPolicy(resolved, level)`、`projectRosterForLevel`（略過的選配席從 collector roster 投影掉，否則 WIZHALL 形狀 roster drift）、`roster_profile {level, omitted_seats}`；`bin/autopilot.js` l4|l5|l6 建 bootstrap、waiver 理由收窄；observation 收 `l4`／`waived`；intake 訊息文字。測試：cli 117／consumer 34／engine 486／observation 78 綠；RED 見 `docs/projects/2026-09-07-l4-host-bootstrap/ledger/p3-red-run.md`；P0 表 `ledger/p0-spike.md`。docs：front-door、portability、installation、BACKLOG 兩列刪、CHANGELOG v2.36.8、project README。
 - **發現（已寫進 docs，不是偏差）**：managed engine 的 terminal-QC 閘（`prepare_implementation_loop`／`min_panel_size`）與 level 無關，`--campaign-contract` run 仍要完整 QC panel；「QC 選配」只是 bootstrap roster 規則。l4 子集 roster 一律記 `policy_override`（含 0 uncertified 的 `(none)` stderr 行，pre-existing 語意，KR3 byte-identical 優先）。
 - **Fix 分支 `fix/dispatch-model-guard-remind`**（自 develop，worktree `../autopilot-guard-fix`）：`bbdb0b84` guard 預設 `mode: remind`（貴引擎 → deny 帶提醒，agent 自己決定：換便宜模型或首行 `Engine: <model> (intentional: <why>)` 靜默放行；`mode: ask`／`on_missing_model: ask` 仍可回對話框；guard test 76 綠）＋ `83de0a94` Codex adapter `lifecycle.md` SHADOW 條款改成鏡射 CC canon（cuda codex-astra 回報；package test 118 綠）。**未加 CHANGELOG／未 bump**——合併時補 v2.36.9。
@@ -19,10 +19,10 @@
 
 ## 下一步
 
-1. 收 reviewer 報告（agent 名稱在 TaskList；15 分鐘沒動就 SendMessage 催）；Major 以上修在同分支、重跑四套 suite；PASS 後 `TaskUpdate #4 completed`。
-2. finish-flow L-5：`git checkout develop && git merge --no-ff feat/v2.36.8-l4-host-bootstrap`；`bash scripts/preflight-release.sh`（8/8）；INDEX 進行中列移到已完成、project README 標 done（或 archive）；**owner 說推才 push**。
-3. v2.36.9：`git merge --no-ff fix/dispatch-model-guard-remind`，CHANGELOG 加 v2.36.9 節（guard remind＋adapter SHADOW），`node scripts/sync-version.js --version 2.36.9 --hook-count 29 --skill-count 30`，`bash scripts/sync-codex-plugin-skills.sh`，preflight，commit；`git worktree remove ../autopilot-guard-fix`。
-4. push 後 fleet 通知 cuda WIZHALL 跑 P5（用 `fleet send --to cuda --instance <id>`；`fleet reply` 對 ephemeral 訊息會 403，改 `--repo`／`--instance`）。
+1. ~~review~~ 完成：SHIP-AS-IS，4 項 minor/suggestion 已折入（`363dbdba`）。
+2. ~~finish-flow L-5~~ 完成（archive `docs/projects/_archive/2026-09-07-l4-host-bootstrap/`）。
+3. ~~v2.36.9~~ 完成。
+4. **push**：先 `git fetch origin && git show origin/develop:.claude-plugin/plugin.json | grep version`（讓號規則）；正常則 `git push origin develop`。push 後 fleet 通知 cuda WIZHALL 跑 P5（用 `fleet send --to cuda --instance <id>`；`fleet reply` 對 ephemeral 訊息會 403，改 `--repo`／`--instance`）。
 5. 等待中：cuda QUIET-a claim（v2.36.6）、7840hs receipt 重跑（v2.36.3）。
 
 ## 驗證方式

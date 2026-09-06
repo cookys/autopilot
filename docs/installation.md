@@ -257,7 +257,7 @@ To enable the **session-handoff** snapshot feature (write a machine handoff on `
 
 ### Enabling opt-in hooks
 
-The 15 **opt-in** hooks (Tier B — branch-protection, commit-secret-scan, large-file-warner, config-protection, mcp-health, accumulator, test-runner, design-quality, cost-tracker, session-summary, check-console, batch-format, dispatch-model-guard, context-budget, orchestrator-edit-gate) are wired in the plugin's `hooks.json` but **default-OFF**. As of v2.26.2 you enable them via `~/.autopilot/config.json` — **not** by copying anything into your `settings.json` (where `${CLAUDE_PLUGIN_ROOT}` would not expand):
+The 13 **opt-in** hooks (Tier B — accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, design-quality, exec-boundary, large-file-warner, mcp-health, orchestrator-edit-gate, session-summary, test-runner; `scripts/check-hook-inventory.js` is the source of truth) are wired in the plugin's `hooks.json` but **default-OFF**. As of v2.26.2 you enable them via `~/.autopilot/config.json` — **not** by copying anything into your `settings.json` (where `${CLAUDE_PLUGIN_ROOT}` would not expand):
 
 ```json
 { "hooks": { "branch-protection": true, "commit-secret-scan": true, "test-runner": true } }

@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.36.11 — turn-end「未 commit 工作」提醒 hook（`dirty-protected-paths`，Claude Stop；Codex Stop＋SessionEnd）
+
+308 治理缺口回報（2026-09-07）：約 7800 行 WebGPU worker 工作橫跨多個 Codex session 一週沒 commit，沒人發現——commit 節奏只存在
+finish-flow 的文字裡，沒叫 finish-flow 的 session 本來就沒有任何訊號。owner 拍板：補提醒，不補閘。
+
+- **`hooks/dirty-protected-paths.js`**（default-on，第 17 個 Tier A）：Stop 時讀 `git status --porcelain`，只算 `.claude/qc-gate-config.md`
+  `protected_paths` 底下的項目（與 qc-gate 同一份 CSV；沒設定就整棵樹算並在訊息裡講明），行數＝tracked 的 `git diff --numstat HEAD` 增刪
+  ＋ untracked 文字檔行數（≤ 2 MB）。檔數 ≥ `min_files`（3）**或**行數 ≥ `min_lines`（150）就提醒，每 repo × session 每 `interval_minutes`
+  （30）最多一次，狀態放 RAM live dir。輸出只有頂層 `systemMessage`（Claude 顯示給使用者、不阻擋）＋ stderr 同一行，**永不**發 Stop `decision`
+  ——跟到期提醒、advisory coverage 同一原則：大聲、留痕、不擋。旋鈕 `~/.autopilot/config.json` `dirty_tree_reminder{min_files,min_lines,
+  interval_minutes}` 或 `AUTOPILOT_DIRTY_TREE_MIN_FILES/MIN_LINES/INTERVAL_MINUTES`；退出 `AUTOPILOT_DIRTY_TREE_REMINDER=false`。任何錯誤 fail-open。
+- **Codex 套件**：同一支腳本掛在 `Stop` 與 `SessionEnd`（`platforms/codex/hooks/hooks.json`，sync script 新增 mapping；package test 釘住
+  三個事件的精確 manifest）。**Codex 端 live-fire 未驗證**：註冊有測試證據，但「hook 存在不等於 hook 有跑」——本機 codex 配額見底，沒跑
+  hook-probe live；下一個 Codex session 觀察到提醒（或沒有）就是證據，屆時補進 portability reference。
+- 盤點：30 hooks（17 default-on／13 opt-in），`hook-classes.json` 新列（`invariant_effect`，各 profile 都保留）、catalog `hook_classes_sha256`
+  重釘、README badge、CLAUDE.md、`docs/installation.md` 過期的「15 個 opt-in」清單改成真實 13 個。
+- 測試：`hooks/tests/dirty-protected-paths.test.sh` 23 條（乾淨靜默、低於門檻靜默、檔數門檻、非保護路徑不算、行數門檻含 untracked、
+  30 分鐘去重且 per-session、env 門檻、退出、無設定整樹、非 git／垃圾 stdin 皆 exit 0 靜默）；inventory／package／profile 四套同步更新。
+- 未做（owner 問題「hook 是不是要統一做盤點表定期 check 各 harness 支援」）：立 BACKLOG「per-hook × per-harness support matrix」——現況
+  是 portability reference 一列文字＋ `check-hook-inventory` 只管 Claude 接線＋ `harness-maintenance` 管 harness 過期，沒有東西把
+  hook × harness × event × 驗證日期接起來。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (hook + tests + docs only).
+
 ## v2.36.10 — Codex plugin 更新流程：活躍 session 守衛、不再 remove-then-add（PostCompact MODULE_NOT_FOUND 根因）
 
 本機 Codex session（peer 交接 2026-09-07，codex-cli 0.153.4）：每次更新 autopilot 後，還開著的 Codex 對話在下一次 compaction

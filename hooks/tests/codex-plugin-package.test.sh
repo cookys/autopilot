@@ -198,6 +198,7 @@ for (const [sourceRel, destinationRel] of [
   ['platforms/codex/hooks/pre-effect.js', 'hooks/pre-effect.js'],
   ['platforms/codex/hooks/post-compact.js', 'hooks/post-compact.js'],
   ['hooks/orchestrator-edit-gate-lib.js', 'hooks/orchestrator-edit-gate-lib.js'],
+  ['hooks/dirty-protected-paths.js', 'hooks/dirty-protected-paths.js'],
   ['platforms/codex/skill-adapters/lifecycle.md', 'skill-adapters/lifecycle.md'],
 ]) {
   const sourcePath = path.join(root, sourceRel);
@@ -219,7 +220,7 @@ if (!fs.existsSync(hookBaseline)) {
 const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
   ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
 if (JSON.stringify(hookEntries) !== JSON.stringify([
-  '_shared', 'hooks.json', 'orchestrator-edit-gate-lib.js', 'post-compact.js', 'pre-effect.js',
+  '_shared', 'dirty-protected-paths.js', 'hooks.json', 'orchestrator-edit-gate-lib.js', 'post-compact.js', 'pre-effect.js',
 ])) {
   failures.push(`hooks entries ${hookEntries.join(',')}`);
 }
@@ -424,6 +425,7 @@ printf '{"hooks":{"PostCompact":[]}}\n' > "$SYNC_SANDBOX/platforms/codex/hooks/h
 printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js"
+printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/dirty-protected-paths.js"
 mkdir -p "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines"
 cp "$SYNC_SANDBOX/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/claude-hooks.json"
@@ -435,6 +437,8 @@ cp "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
 cp "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js"
+cp "$SYNC_SANDBOX/hooks/dirty-protected-paths.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/dirty-protected-paths.js"
 bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
@@ -640,12 +644,22 @@ print('skills_path', manifest.skills);
 print('hooks_path', manifest.hooks);
 const postCompactGroup = productionHooks.hooks?.PostCompact?.[0];
 const postCompactHook = postCompactGroup?.hooks?.[0];
+// v2.36.11: the production manifest registers PostCompact (fail-closed reconciliation) plus the
+// advisory dirty-protected-paths reminder on Stop + SessionEnd — still no PreToolUse.
+const PRODUCTION_EVENTS = ['PostCompact', 'SessionEnd', 'Stop'];
 print('production_pretooluse_absent',
   !Object.prototype.hasOwnProperty.call(productionHooks.hooks || {}, 'PreToolUse')
-  && Object.keys(productionHooks.hooks || {}).length === 1);
+  && JSON.stringify(Object.keys(productionHooks.hooks || {}).sort()) === JSON.stringify(PRODUCTION_EVENTS));
+const dirtyCmd = 'node "${PLUGIN_ROOT}/hooks/dirty-protected-paths.js"';
+print('production_dirty_tree_exact',
+  ['Stop', 'SessionEnd'].every((ev) => productionHooks.hooks?.[ev]?.length === 1
+    && productionHooks.hooks[ev][0].matcher === ''
+    && productionHooks.hooks[ev][0].hooks?.length === 1
+    && productionHooks.hooks[ev][0].hooks[0].type === 'command'
+    && productionHooks.hooks[ev][0].hooks[0].command === dirtyCmd));
 print('production_postcompact_exact',
   productionHooks.hooks?.PostCompact?.length === 1
-  && Object.keys(productionHooks.hooks).length === 1
+  && JSON.stringify(Object.keys(productionHooks.hooks).sort()) === JSON.stringify(PRODUCTION_EVENTS)
   && postCompactGroup?.matcher === 'manual|auto'
   && postCompactGroup?.hooks?.length === 1
   && postCompactHook?.type === 'command'
@@ -704,6 +718,7 @@ assert_contains "$OUT" "skills_path=./skills/" "Codex plugin skills path is rela
 assert_contains "$OUT" "hooks_path=./hooks/hooks.json" "Codex plugin hooks path is relative"
 assert_contains "$OUT" "production_pretooluse_absent=true" "Codex production manifest leaves the PreToolUse probe unregistered"
 assert_contains "$OUT" "production_postcompact_exact=true" "Codex production manifest declares one exact manual|auto PostCompact adapter"
+assert_contains "$OUT" "production_dirty_tree_exact=true" "Codex production manifest registers the advisory dirty-protected-paths reminder on Stop + SessionEnd (v2.36.11)"
 assert_contains "$OUT" "probe_driver_forces_no_ship=true" "Codex probe driver cannot promote an unregistered hook to D4 READY"
 assert_contains "$OUT" "has_hooks_field=true" "Codex plugin declares production hooks"
 assert_contains "$OUT" "has_apps_field=false" "Codex plugin does not declare apps"

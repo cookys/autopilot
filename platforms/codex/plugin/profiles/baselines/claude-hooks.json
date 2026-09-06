@@ -169,6 +169,16 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-tracker.js"
           }
         ]
+      },
+      {
+        "//": "v2.36.11 default-on: dirty-protected-paths — turn-end reminder when uncommitted work under protected_paths passes min_files/min_lines; systemMessage only, never a Stop decision; AUTOPILOT_DIRTY_TREE_REMINDER=false to opt out.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dirty-protected-paths.js"
+          }
+        ]
       }
     ]
   }

@@ -28,7 +28,7 @@ User-stated requirements ledger: (1)「完整修好」the l4 readiness wall → 
 
 | Node | Deliverable | Phases | Status |
 |---|---|---|---|
-| D1 | l4 bootstrap profile + CLI threading + tests + docs (single branch, one pre-merge review) | P1 P2 P3 P4 | pending |
+| D1 | l4 bootstrap profile + CLI threading + tests + docs (single branch, one pre-merge review) | P1 P2 P3 P4 | done 2026-09-06 — pre-merge review (autopilot:reviewer, opus) SHIP-AS-IS, 0 Critical / 0 Major / 2 Minor / 2 Suggestion, all four folded |
 
 Historical plan headings P0 (spike, done 2026-09-07) and P5 (dogfood, human-gated after merge) are coverage, not execution nodes.
 
@@ -37,7 +37,7 @@ Historical plan headings P0 (spike, done 2026-09-07) and P5 (dogfood, human-gate
 | Phase | Status | Evidence |
 |---|---|---|
 | P0 spike | done 2026-09-07 | plan §4 P0 table (5 probes) |
-| D1 (P1–P4) | pending | — |
+| D1 (P1–P4) | done 2026-09-06 (review SHIP-AS-IS; folds: l4 zero-seat override line → policy note, `status readiness` level threading, KR5 dead observables asserted, front-door reviewer-qualified note) | `ledger/p0-spike.md` (probe table, CLI done-when), `ledger/p3-red-run.md` (RED on develop, GREEN on branch: consumer 34 · observation 78 · engine 486 · cli 117) |
 | P5 dogfood | pending (after merge) | cuda report |
 
-Last updated: 2026-09-07
+Last updated: 2026-09-06 (D1 reviewed and merged; P5 dogfood pending on cuda)

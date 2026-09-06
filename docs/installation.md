@@ -89,13 +89,15 @@ enforcement remains `NOT_READY/NO-SHIP`. Managed Codex implementers independentl
 credentials-only `CODEX_HOME` with the parent thread identity removed, so controller plugin/config/
 session state is not inherited by the child.
 
-For an ordinary strict-L5/L6 invocation, set `AUTOPILOT_LEVEL=l5` (or `l6`) and use the managed
+For an ordinary strict invocation, set `AUTOPILOT_LEVEL=l4`, `l5` or `l6` and use the managed
 `engine implement-review` command. The CLI resolves the target repository's exact implementer,
-reviewer, verification-author, QC, and configured fallback roster, requires byte-equal coverage by
-the compiled six-claim provider policy, then builds fresh in-process qualification and live-probe
+reviewer, verification-author, QC, and configured fallback roster (at `l4` the verification-author
+seat and the QC panel are optional — included when present; `l5`/`l6` require both), checks coverage
+by the compiled six-claim provider policy (advisory: uncertified seats are recorded under
+`policy_override`, never blocked), then builds fresh in-process qualification and live-probe
 closures. Readiness is consumed before workflow dispatch and its policy, claim, roster, and
 observation digests are recorded in campaign control. There is intentionally no flag, environment
-receipt, work-order field, or serialized callback that can replace those closures. L3/L4 and the
+receipt, work-order field, or serialized callback that can replace those closures. L3 and the
 temporary legacy rail remain explicitly non-strict and never emit strict-L5 readiness provenance.
 
 Codex hook maintenance still uses the separate warning-only `platforms/codex/hook-probe` package.

@@ -259,7 +259,62 @@ function resolvedTuple(role, runner, model, effort, rawEndpoint, family, label) 
   }, label);
 }
 
-function deriveStrictL5InvocationPolicy(resolved) {
+// Per-level roster profile (v2.36.8, docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md
+// P1). l5/l6 keep the frozen D4 shape: the verification-author seat and a complete QC panel are
+// REQUIRED (`strict_l5_provider_roster_incomplete` otherwise). l4 is implementer + reviewer (plus
+// the configured fallback ladder); the VA seat and the QC panel are OPTIONAL — included only when
+// present and complete, skipped otherwise. This is a roster-shape rule, not a coverage gate:
+// canonical-policy coverage stays advisory at every level (Board 2026-08-16).
+const STRICT_LEVELS = Object.freeze(['l4', 'l5', 'l6']);
+const LEVEL_ROSTER_PROFILE = deepFreeze({
+  l4: { verification_author: 'optional', qc_panel: 'optional' },
+  l5: { verification_author: 'required', qc_panel: 'required' },
+  l6: { verification_author: 'required', qc_panel: 'required' },
+});
+
+function rosterProfileFor(level) {
+  const profile = LEVEL_ROSTER_PROFILE[level];
+  if (!profile) {
+    fail(
+      'strict_l5_provider_bootstrap_invalid',
+      'strict /l4|l5|l6 bootstrap accepts only a host cwd and level (l4, l5 or l6)',
+    );
+  }
+  return profile;
+}
+
+function qcPanelResolved(resolved) {
+  return resolved.qc_panel_seats_complete === true
+    && Array.isArray(resolved.qc_panel_seats)
+    && resolved.qc_panel_seats.length > 0;
+}
+
+// The readiness collector (`buildSelectedRoster`) projects every configured seat, including
+// unresolved QC names, so a profile that SKIPS an optional seat must hand the collector a roster
+// without it — otherwise the live roster drifts from the derived invocation policy. Required
+// seats are never touched here; l5/l6 pass through byte-identical.
+function projectRosterForLevel(resolved, level) {
+  const profile = rosterProfileFor(level);
+  const omitted = [];
+  let projected = resolved;
+  if (profile.verification_author === 'optional' && resolved.verification_author_present !== true) {
+    omitted.push('verification_author');
+    projected = { ...projected, verification_author_present: false };
+  }
+  if (profile.qc_panel === 'optional' && !qcPanelResolved(resolved)) {
+    omitted.push('qc_panel');
+    projected = {
+      ...projected,
+      qc_panel: [],
+      qc_panel_seats: [],
+      qc_panel_seats_complete: false,
+    };
+  }
+  return { roster: projected, omitted_seats: omitted };
+}
+
+function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
+  const profile = rosterProfileFor(level);
   if (!isRecord(resolved)) {
     fail('strict_l5_provider_roster_unavailable', 'strict /l5 review roster is unavailable');
   }
@@ -290,34 +345,38 @@ function deriveStrictL5InvocationPolicy(resolved) {
     },
   ];
   if (resolved.verification_author_present !== true) {
-    fail(
-      'strict_l5_provider_roster_incomplete',
-      'strict /l5 requires the verification-author seat',
-    );
-  }
-  seats.push({
-    seat_id: 'verification_author',
-    tuple: resolvedTuple(
-      'verification_author',
-      resolved.verification_author_runner,
-      resolved.verification_author_engine,
-      resolved.verification_author_effort,
-      resolved.verification_author_endpoint,
-      resolved.verification_author_family,
-      'strict /l5 verification-author tuple',
-    ),
-  });
-
-  if (resolved.qc_panel_seats_complete !== true
-      || !Array.isArray(resolved.qc_panel_seats)
-      || resolved.qc_panel_seats.length === 0) {
-    fail('strict_l5_provider_roster_incomplete', 'strict /l5 exact QC roster is incomplete');
-  }
-  for (const [index, seat] of resolved.qc_panel_seats.entries()) {
+    if (profile.verification_author === 'required') {
+      fail(
+        'strict_l5_provider_roster_incomplete',
+        'strict /l5 requires the verification-author seat',
+      );
+    }
+  } else {
     seats.push({
-      seat_id: `qc:${index + 1}`,
-      tuple: normalizeStrictTuple(seat, `strict /l5 QC tuple ${index + 1}`),
+      seat_id: 'verification_author',
+      tuple: resolvedTuple(
+        'verification_author',
+        resolved.verification_author_runner,
+        resolved.verification_author_engine,
+        resolved.verification_author_effort,
+        resolved.verification_author_endpoint,
+        resolved.verification_author_family,
+        'strict /l5 verification-author tuple',
+      ),
     });
+  }
+
+  if (!qcPanelResolved(resolved)) {
+    if (profile.qc_panel === 'required') {
+      fail('strict_l5_provider_roster_incomplete', 'strict /l5 exact QC roster is incomplete');
+    }
+  } else {
+    for (const [index, seat] of resolved.qc_panel_seats.entries()) {
+      seats.push({
+        seat_id: `qc:${index + 1}`,
+        tuple: normalizeStrictTuple(seat, `strict /l5 QC tuple ${index + 1}`),
+      });
+    }
   }
 
   const fallbackRows = resolved.fallback_ladder === undefined
@@ -490,10 +549,10 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
   if (!isRecord(options)
       || Object.keys(options).some((key) => key !== 'cwd' && key !== 'level')
       || (options.cwd !== undefined && typeof options.cwd !== 'string')
-      || (options.level !== undefined && options.level !== 'l5' && options.level !== 'l6')) {
+      || (options.level !== undefined && !STRICT_LEVELS.includes(options.level))) {
     fail(
       'strict_l5_provider_bootstrap_invalid',
-      'strict /l5|l6 bootstrap accepts only a host cwd and level (l5 or l6)',
+      'strict /l4|l5|l6 bootstrap accepts only a host cwd and level (l4, l5 or l6)',
     );
   }
   const strictLevel = options.level || 'l5';
@@ -514,7 +573,9 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     }
     resolved = result.result;
   }
-  const matched = deriveStrictL5InvocationPolicy(resolved);
+  const matched = deriveStrictL5InvocationPolicy(resolved, strictLevel);
+  const projection = projectRosterForLevel(resolved, strictLevel);
+  resolved = projection.roster;
   const authorizedProviderTuples = new Set(
     matched.invocation_policy.map((entry) => providerTupleKey(entry.tuple)),
   );
@@ -536,7 +597,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     if (!isRecord(request) || !isRecord(request.roster)) {
       fail('strict_l5_provider_roster_unavailable', 'strict /l5 invocation roster is missing');
     }
-    const requested = deriveStrictL5InvocationPolicy(request.roster);
+    const requested = deriveStrictL5InvocationPolicy(request.roster, strictLevel);
     if (requested.roster_digest !== matched.roster_digest) {
       fail('strict_l5_provider_roster_drift', 'strict /l5 invocation roster changed after bootstrap');
     }
@@ -588,6 +649,10 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     claim_ids: [...matched.claim_ids],
     roster_digest: matched.roster_digest,
     strict_level: strictLevel,
+    roster_profile: {
+      level: strictLevel,
+      omitted_seats: [...projection.omitted_seats],
+    },
   });
 }
 
@@ -615,10 +680,10 @@ function consumeStrictL5ProviderReadiness(authority, bundle, context = {}) {
   if (bundle.observation_digest !== bundle.receipt.observation_digest) {
     fail('strict_l5_provider_observation_drift', 'strict /l5 readiness observation digest drifted');
   }
-  if (bundle.strict_level !== state.strictLevel) {
-    fail('strict_l5_provider_level_drift', 'strict /l5|l6 readiness bundle level drifted');
+  if (bundle.strict_level !== state.strictLevel || !STRICT_LEVELS.includes(bundle.strict_level)) {
+    fail('strict_l5_provider_level_drift', 'strict /l4|l5|l6 readiness bundle level drifted');
   }
-  const requested = deriveStrictL5InvocationPolicy(context.roster);
+  const requested = deriveStrictL5InvocationPolicy(context.roster, state.strictLevel);
   if (requested.roster_digest !== state.matched.roster_digest) {
     fail('strict_l5_provider_roster_drift', 'strict /l5 consume roster drifted');
   }
@@ -643,6 +708,7 @@ function consumeStrictL5ProviderReadiness(authority, bundle, context = {}) {
 }
 
 module.exports = {
+  LEVEL_ROSTER_PROFILE,
   STRICT_L5_CLAIM_IDS,
   STRICT_L5_PROVIDER_POLICY,
   STRICT_L5_PROVIDER_POLICY_DIGEST,

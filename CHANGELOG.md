@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.36.8 — l4 也建 host provider-readiness bootstrap：l4 roster profile，enforce-mode intake 拿到真的 `strict_level: "l4"` bundle（owner「完整修好」的下半場）
+
+v2.36.7 只把 l4 的 `provider_readiness_authority_missing` 改成具名拒絕；這版把牆拆掉。`bin/autopilot.js` 現在對
+`AUTOPILOT_LEVEL=l4|l5|l6` 都建 `createStrictL5ProviderBootstrap`，走**同一條** `collectProviderReadinessBundle` live probe
+（ADR-0001：不豁免、不偽造，只是讓 l4 也能取得證據）。plan：`docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md`
+（plan loop g2 凍結、Board 三題已答：l4 route supported／VA、QC 選配／PATCH）。
+
+- **`src/readiness/provider-bootstrap.js`**：新 `LEVEL_ROSTER_PROFILE`——l4 = implementer＋reviewer 必要、verification-author 席與
+  QC panel **選配**（在場就納入、不在就略過）；l5／l6 = 兩者**必要**，行為 byte-identical（`strict_l5_provider_roster_incomplete`
+  三條不變量各自有隔離負對照）。`deriveStrictL5InvocationPolicy(resolved, level)` 帶 level；建構子收 `l4`；bundle／receipt
+  `strict_level` 記真實 level，level-drift 檢查收 l4。略過的選配席會從交給 collector 的 roster 投影掉（`qc_panel` 名單在、seat 未解析
+  的 WIZHALL 形狀否則會 roster drift）；bootstrap 回傳 `roster_profile: {level, omitted_seats}` 留痕。冷凍的 D4 claim set 不動；
+  l4 子集 roster 不是 byte-canonical，所以一律記 `policy_override`（advisory，Board 2026-08-16），未認證席列在 `uncertified_seats`、
+  stderr `POLICY OVERRIDE` 照印。
+- **`bin/autopilot.js`**：l4 建 bootstrap、注入 `providerReadinessAuthority`／`qualificationProvider` 與 l5/l6 相同；v2.36.7 的
+  reviewer 豁免保留但語意收窄——bootstrap 的 bundle 被 consume 就認證 reviewer 席、ledger **沒有** `waived`；只有 bootstrap 沒認證
+  reviewer 時 waived 才落帳（KR4）。usage 文字同步。
+- **`src/engine/engine-lifecycle-observation.js`**：`OBSERVABLE_LEGACY_LEVELS` 收 `l4`、`OBSERVABLE_ENGINE_STATUSES` 收 `waived`
+  （l4 run 的 lifecycle observation 不再把 waived 雜湊成 unknown）。**`src/engine/campaign-intake.js`**：拒絕訊息改「only l4/l5/l6
+  build the strict host bootstrap」、補救改「/l4, /l5 or /l6」，code 不變。
+- 測試（每條先在 develop 紅，紀錄 `docs/projects/2026-09-07-l4-host-bootstrap/ledger/p3-red-run.md`）：CLI L4 fixture（VA 缺、
+  QC 完整 ⇒ ready、`strict_level:"l4"`、到達 `campaign_intake`、無 waived）＋ advisory case（stderr 行、`advisory_default`、席位具名）
+  ＋ l5／l6 各兩條 CLI 隔離負對照；consumer 單元（profile 表、兩席派生、WIZHALL 形狀 bundle consume、第三條負對照、l4↔l5 bundle
+  互不相認）；engine KR4（認證 ⇒ 無 waived；無 bootstrap ⇒ waived 仍在；`--require-qualified-reviewer` 兩種情況）；observation KR5。
+- 已知邊界（不是本版偏差）：managed engine 的 terminal-QC 閘（`prepare_implementation_loop`、`min_panel_size`）與 level 無關，任何
+  `--campaign-contract` run 仍要完整 QC panel；「QC 選配」是 bootstrap roster 形狀規則。docs：front-door foreman 段、
+  `references/multi-agent-portability.md`、`docs/installation.md`；BACKLOG 兩列收線。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (reference doc only; no skill files touched).
+
 ## v2.36.7 — l4 marker 下 engine implement-review 不再卡在 reviewer_qualification：豁免並記帳（owner 裁定 2026-09-06）
 
 cuda 的 WIZHALL（revival-world-city-war，owner 指定 /l4 配 agy gemini-3.8-flash-low）：`bin/autopilot.js` 只在 l5/l6 建 strict

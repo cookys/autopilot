@@ -141,12 +141,18 @@ CEO (depth 0, this session)
     reviewer is absent, false, or unknown. `--require-qualified-reviewer` is accepted
     for explicitness/backward compatibility; use `--allow-unqualified-reviewer` only
     as an explicit emergency escape hatch and record the decision in the run summary.
-    **At `/l4` the requirement is WAIVED by default** (v2.36.7, owner ruling): l4 compiles
-    no strict provider bootstrap, so `reviewer_qualified` can never be host-verified there;
-    the ledger records `reviewer_qualification: waived` + the reason and the reviewer still
-    runs. Pass `--require-qualified-reviewer` to force the block. The real l4 wall is the
-    next gate, enforce-mode `campaign_intake` (`provider_readiness_authority_missing`):
-    set that rail's mission `enforcement_mode` to shadow or run it under `/l5`.
+    **`/l4` compiles the same live-probed, host-owned provider bootstrap as `/l5`/`/l6`**
+    (v2.36.8) with the **l4 roster profile**: implementer + reviewer required, the
+    verification-author seat and the QC panel optional (included when present, skipped
+    otherwise). Seats outside the frozen policy run under the advisory override (stderr
+    `POLICY OVERRIDE`, `policy_override` recorded, `claim_id: null`) — recorded, never
+    blocked. The consumed bundle certifies the reviewer, so the v2.36.7 waiver fires only
+    when the bootstrap does NOT certify the reviewer: then the ledger records
+    `reviewer_qualification: waived` + the reason and the reviewer still runs; pass
+    `--require-qualified-reviewer` to force the block instead. Enforce-mode
+    `campaign_intake` now receives a real `strict_level: "l4"` readiness bundle. Note the
+    managed engine's level-independent terminal-QC gate (`prepare_implementation_loop`,
+    `min_panel_size`) still needs a complete QC panel for any `--campaign-contract` run.
   - **Named endpoints are declarative, not hand-typed.** When the resolved config
     (`scripts/resolve-review-loop.sh`) emits a non-empty `implementer_endpoint` /
     `reviewer_endpoint`, pass it straight through as `--endpoint <name>` to

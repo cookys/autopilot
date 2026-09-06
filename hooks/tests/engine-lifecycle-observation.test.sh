@@ -451,4 +451,96 @@ assert_contains "$OUT" "resume_impl_review=0:1" "resume path skips redispatch an
 assert_contains "$OUT" "resume_precheck_seen=true" "resume precheck is mirrored into the observation ledger"
 assert_contains "$OUT" "resume_implementation_seen=true" "synthetic resume implementation is mirrored into the observation ledger"
 
+# --- v2.36.8 KR5: l4 is an observable legacy level; `waived` is an intact engine status ------
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const {
+  normalizeEngineLifecycleObservationConfig,
+} = require(path.join(root, 'src', 'engine', 'engine-lifecycle-observation'));
+const POLICY_HASH = 'a'.repeat(64);
+const base = { engineRunId: 'engine-run-1', invocationId: 'invocation-1', policyHash: POLICY_HASH };
+for (const level of ['l4', 'l5', 'l6']) {
+  const config = normalizeEngineLifecycleObservationConfig({ ...base, legacyLevel: level });
+  console.log(`level_${level}=${config.legacy_level}`);
+}
+try {
+  normalizeEngineLifecycleObservationConfig({ ...base, legacyLevel: 'l3' });
+  console.log('level_l3=accepted');
+} catch (error) {
+  console.log(`level_l3=${error.message}`);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "KR5 observation level probe exits 0"
+assert_contains "$OUT" "level_l4=l4" "KR5: l4 is accepted as a legacy observation level"
+assert_contains "$OUT" "level_l5=l5" "KR5: l5 still accepted"
+assert_contains "$OUT" "level_l6=l6" "KR5: l6 still accepted"
+assert_contains "$OUT" "level_l3=lifecycleObservation.legacyLevel must be l4, l5 or l6" "KR5: l3 is still rejected, naming the accepted set"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const [root, tmp] = process.argv.slice(2);
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine', 'autopilot-engine'));
+const promptFile = path.join(tmp, 'kr5-prompt.txt');
+fs.writeFileSync(promptFile, 'kr5 prompt\n', 'utf8');
+const calls = [];
+let head = null;
+const digest = (value) => crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+const observer = {
+  open(request) {
+    calls.push({ kind: 'open', request });
+    return { engine_run_id: request.engine_run_id, invocation_id: request.invocation_id, envelope_hash: request.envelope_hash, observation_head: head };
+  },
+  appendIfHead(request) {
+    calls.push({ kind: 'append', request });
+    head = digest(`append|${head}|${request.sequence}|${request.record_hash}`);
+    return { engine_run_id: request.engine_run_id, invocation_id: request.invocation_id, sequence: request.sequence, previous_observation_head: request.expected_observation_head, record_hash: request.record_hash, observation_head: head };
+  },
+  close(request) {
+    calls.push({ kind: 'close', request });
+    head = digest(`close|${head}|${request.sequence}|${request.terminal_hash}`);
+    return { engine_run_id: request.engine_run_id, invocation_id: request.invocation_id, sequence: request.sequence, previous_observation_head: request.expected_observation_head, terminal_hash: request.terminal_hash, observation_head: head };
+  },
+};
+const engine = new AutopilotEngine({
+  lifecycleObserver: observer,
+  clock: () => '2026-09-07T00:00:00.000Z',
+  reviewLoopResolver() {
+    return { status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: {
+      reviewer_engine: 'review-model', reviewer_effort: 'high', reviewer_runner: 'review-runner',
+      reviewer_qualified: false,
+      implementer_engine: 'implementation-model', implementer_effort: 'high', implementer_runner: 'implementer-runner',
+      loop_max_rounds: 1, loop_convergence_verdict: 'SHIP-AS-IS',
+    } };
+  },
+  implementationDispatcher() { throw new Error('stop after the qualification decision'); },
+  reviewDispatcher() { throw new Error('unreached'); },
+});
+const result = engine.runLegacyImplementationReviewLoop({
+  promptFile, branch: 'kr5-loop', base: '1111111111111111111111111111111111111111',
+  requireQualifiedReviewer: false,
+  reviewerQualificationWaived: 'l4: waived by recorded operator policy',
+  lifecycleObservation: {
+    engineRunId: 'engine-run-kr5', invocationId: 'invocation-kr5', legacyLevel: 'l4',
+    policyHash: crypto.createHash('sha256').update('kr5').digest('hex'),
+  },
+});
+const wire = JSON.stringify(calls);
+// Records serialize with canonical (sorted) keys: ..."status":"waived",...,"unit":"reviewer_qualification".
+const waivedOnWire = /"status":"waived"[^}]*"unit":"reviewer_qualification"/.test(wire);
+console.log(`kr5_engine_waived=${result.ledger.some((e) => e.unit === 'reviewer_qualification' && e.status === 'waived')}`);
+console.log(`kr5_open_level=${calls[0] && calls[0].request.envelope ? calls[0].request.envelope.legacy_level : 'none'}`);
+console.log(`kr5_waived_on_wire=${waivedOnWire}`);
+console.log(`kr5_status_hash_present=${/"status_hash"/.test(wire)}`);
+console.log(`kr5_observation=${result.lifecycle_observation ? result.lifecycle_observation.status : 'none'}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "KR5 waived-status probe exits 0"
+assert_contains "$OUT" "kr5_engine_waived=true" "KR5 precondition: the engine ledger carries reviewer_qualification:waived"
+assert_contains "$OUT" "kr5_open_level=l4" "KR5: the observation envelope binds the l4 legacy level"
+assert_contains "$OUT" "kr5_waived_on_wire=true" "KR5: waived serializes intact (not hashed as unknown) on the observation wire"
+
 finalize_test

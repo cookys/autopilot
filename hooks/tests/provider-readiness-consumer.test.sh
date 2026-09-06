@@ -626,6 +626,7 @@ const assert = require('assert');
 const path = require('path');
 const root = process.argv[2];
 const {
+  LEVEL_ROSTER_PROFILE,
   STRICT_L5_CLAIM_IDS,
   STRICT_L5_PROVIDER_POLICY,
   STRICT_L5_PROVIDER_POLICY_DIGEST,
@@ -782,6 +783,166 @@ assert.throws(
   }),
   (error) => error && error.code === 'strict_l5_provider_bootstrap_invalid',
 );
+
+// ---- v2.36.8: per-level roster profile (plan 2026-09-07 P1/P3) ------------------------
+// l4: implementer + reviewer required, VA seat and QC panel optional; l5/l6 unchanged.
+assert.deepStrictEqual(LEVEL_ROSTER_PROFILE, {
+  l4: { verification_author: 'optional', qc_panel: 'optional' },
+  l5: { verification_author: 'required', qc_panel: 'required' },
+  l6: { verification_author: 'required', qc_panel: 'required' },
+});
+assert(Object.isFrozen(LEVEL_ROSTER_PROFILE) && Object.isFrozen(LEVEL_ROSTER_PROFILE.l4));
+const l4Roster = {
+  ...clone(resolved),
+  verification_author_present: false,
+  verification_author_engine: '',
+  verification_author_runner: '',
+  verification_author_effort: '',
+  verification_author_endpoint: '',
+  verification_author_family: 'unknown',
+  qc_panel_seats: [],
+  qc_panel_seats_complete: false,
+};
+// P1 done-when: the l4 derivation lists exactly the implementer and reviewer seats.
+const l4Policy = deriveStrictL5InvocationPolicy(l4Roster, 'l4');
+assert.deepStrictEqual(
+  l4Policy.invocation_policy.map((entry) => entry.seat_id),
+  ['implementer', 'reviewer'],
+);
+assert.strictEqual(l4Policy.policy_digest, STRICT_L5_PROVIDER_POLICY_DIGEST);
+assert.deepStrictEqual(l4Policy.claim_ids, STRICT_L5_CLAIM_IDS);
+// A subset roster is not byte-canonical, so policy_override is recorded (advisory, never a
+// gate); both seats here are certified so uncertified_seats is empty.
+assert.strictEqual(l4Policy.policy_override.reason, 'advisory_default');
+assert.deepStrictEqual(l4Policy.policy_override.uncertified_seats, []);
+// The default level stays l5: the same roster without a level still fails the VA rule.
+assert.throws(
+  () => deriveStrictL5InvocationPolicy(l4Roster),
+  (error) => error && error.code === 'strict_l5_provider_roster_incomplete',
+);
+// KR2b: every uncertified seat is listed by seat_id + tuple.
+const l4Drifted = deriveStrictL5InvocationPolicy(
+  { ...l4Roster, reviewer_engine: 'unknown-reviewer-model' },
+  'l4',
+);
+assert.strictEqual(l4Drifted.policy_override.reason, 'advisory_default');
+assert.deepStrictEqual(
+  l4Drifted.policy_override.uncertified_seats.map((entry) => [entry.seat_id, entry.tuple.model]),
+  [['reviewer', 'unknown-reviewer-model']],
+);
+assert.strictEqual(
+  l4Drifted.invocation_policy.find((entry) => entry.seat_id === 'reviewer').claim_id,
+  null,
+);
+// Optional means "included when present": a full roster under l4 keeps all six seats.
+assert.deepStrictEqual(
+  deriveStrictL5InvocationPolicy(clone(resolved), 'l4').invocation_policy.map((e) => e.tuple.role),
+  ['implementer', 'qc', 'qc', 'qc', 'reviewer', 'verification_author'],
+);
+
+// The l4 bootstrap issues and consumes a real bundle stamped l4. The roster keeps the
+// operator's QC panel NAMES (the WIZHALL shape: names configured, seats unresolved) —
+// the bootstrap projects the skipped optional seats out of the collector input so the
+// live roster cannot drift from the derived policy.
+const l4Bootstrap = createStrictL5ProviderBootstrap({ cwd: root, level: 'l4' }, {
+  resolvedRoster: { ...l4Roster, qc_panel: ['gpt-5.6-sol', 'GLM-5.2', 'MiniMax-M3'] },
+  collectReadiness: readyCollector,
+  now: () => NOW,
+});
+assert.strictEqual(l4Bootstrap.strict_level, 'l4');
+assert.deepStrictEqual(l4Bootstrap.roster_profile, {
+  level: 'l4',
+  omitted_seats: ['verification_author', 'qc_panel'],
+});
+assert.deepStrictEqual(l4Bootstrap.roster.qc_panel, []);
+assert.strictEqual(l4Bootstrap.roster.verification_author_present, false);
+const l4Bundle = l4Bootstrap.providerReadinessAuthority({ roster: l4Bootstrap.roster });
+assert.strictEqual(l4Bundle.strict_level, 'l4');
+assert.deepStrictEqual(l4Bundle.roster.map((seat) => seat.seat_id), ['implementer', 'reviewer']);
+// The engine hands the authority its OWN resolved roster (names still present): same digest.
+const l4BundleAgain = l4Bootstrap.providerReadinessAuthority({
+  roster: { ...l4Roster, qc_panel: ['gpt-5.6-sol', 'GLM-5.2', 'MiniMax-M3'] },
+});
+assert.strictEqual(l4BundleAgain, l4Bundle);
+const l4Consumed = consumeStrictL5ProviderReadiness(
+  l4Bootstrap.providerReadinessAuthority,
+  l4Bundle,
+  { roster: l4Roster, now: NOW },
+);
+assert.strictEqual(l4Consumed.status, 'ready');
+assert.strictEqual(l4Consumed.strict_level, 'l4');
+assert.strictEqual(l4Consumed.selections.length, 2);
+assert.strictEqual(l4Consumed.policy_digest, STRICT_L5_PROVIDER_POLICY_DIGEST);
+// A full roster under l4 omits nothing (l5/l6 never omit by construction).
+assert.deepStrictEqual(
+  createStrictL5ProviderBootstrap({ cwd: root, level: 'l4' }, {
+    resolvedRoster: clone(resolved), collectReadiness: readyCollector, now: () => NOW,
+  }).roster_profile.omitted_seats,
+  [],
+);
+assert.deepStrictEqual(bootstrap.roster_profile, { level: 'l5', omitted_seats: [] });
+assert.deepStrictEqual(l6Bootstrap.roster_profile, { level: 'l6', omitted_seats: [] });
+// Level coherence: an l4-issued bundle is foreign to an l5 authority (and vice versa) —
+// the issued-bundle identity check fires before the level comparison, so the observable
+// code is serialized_replay, exactly as for the l5↔l6 pair above.
+assert.throws(
+  () => consumeStrictL5ProviderReadiness(
+    bootstrap.providerReadinessAuthority,
+    l4Bundle,
+    { roster: bootstrap.roster, now: NOW },
+  ),
+  (error) => error && error.code === 'strict_l5_provider_serialized_replay',
+);
+assert.throws(
+  () => consumeStrictL5ProviderReadiness(
+    l4Bootstrap.providerReadinessAuthority,
+    bundle,
+    { roster: l4Roster, now: NOW },
+  ),
+  (error) => error && error.code === 'strict_l5_provider_serialized_replay',
+);
+// An l5-shaped roster consumed through the l4 authority drifts (different derived digest).
+assert.throws(
+  () => consumeStrictL5ProviderReadiness(
+    l4Bootstrap.providerReadinessAuthority,
+    l4Bundle,
+    { roster: clone(resolved), now: NOW },
+  ),
+  (error) => error && error.code === 'strict_l5_provider_roster_drift',
+);
+
+// KR3 — three ISOLATED negative controls per strict level, each varying one thing:
+// (i) VA missing, QC complete; (ii) VA present, QC panel empty; (iii) VA present, seats
+// present but qc_panel_seats_complete:false. Removing VA and QC together would prove
+// nothing about the QC invariant (the VA check fires first).
+for (const level of ['l5', 'l6']) {
+  const expectIncomplete = (roster, needle, label) => {
+    assert.throws(
+      () => createStrictL5ProviderBootstrap({ cwd: root, level }, {
+        resolvedRoster: roster, collectReadiness: readyCollector, now: () => NOW,
+      }),
+      (error) => error && error.code === 'strict_l5_provider_roster_incomplete'
+        && error.message.includes(needle),
+      `${level} ${label}`,
+    );
+  };
+  expectIncomplete(
+    { ...clone(resolved), verification_author_present: false },
+    'requires the verification-author seat',
+    '(i) VA missing',
+  );
+  expectIncomplete(
+    { ...clone(resolved), qc_panel_seats: [], qc_panel_seats_complete: false },
+    'exact QC roster is incomplete',
+    '(ii) QC panel empty',
+  );
+  expectIncomplete(
+    { ...clone(resolved), qc_panel_seats_complete: false },
+    'exact QC roster is incomplete',
+    '(iii) QC flag false',
+  );
+}
+console.log('strict_l4_profile=true');
 assert.strictEqual(consumed.selections.length, 6);
 assert.strictEqual(bundle.observation_digest, bundle.receipt.observation_digest);
 
@@ -971,16 +1132,18 @@ assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_positive_ready=true" \
   "strict /l5 accepts a fresh host-owned exact-roster readiness bundle"
 assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_negative_matrix_zero_dispatch=true" \
   "strict /l5 negative matrix rejects before workflow dispatch"
+assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_l4_profile=true" \
+  "v2.36.8: l4 roster profile derives, issues and consumes an l4 bundle; l5/l6 invariants pinned by isolated controls"
 
 # v2.36.7: an enforce-mode intake with NO compiled readiness authority is refused by name,
-# with the level and the two legal remedies (shadow or /l5) — never a waiver, never a hint to
+# with the level and the two legal remedies (shadow, or a level that compiles the bootstrap) — never a waiver, never a hint to
 # hand-build an authority.
 L4_OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const { consumeEnforcedProviderReadiness } = require(path.join(process.argv[2], 'src', 'engine', 'campaign-intake'));
 // level is THREADED by the caller, never read from process.env inside the module.
 try {
-  consumeEnforcedProviderReadiness({ adapters: {}, contract: {}, inspection: {}, roster: {}, now: '2026-09-06T00:00:00.000Z', level: 'l4' });
+  consumeEnforcedProviderReadiness({ adapters: {}, contract: {}, inspection: {}, roster: {}, now: '2026-09-06T00:00:00.000Z', level: 'l3' });
   console.log('no-throw');
 } catch (error) {
   console.log(`code=${error.code}`);
@@ -997,8 +1160,8 @@ NODE
 )"
 assert_contains "$L4_OUT" "message2=enforced campaign intake requires host-owned readiness evidence — the host readiness authority returned an incomplete bundle" "incomplete bundle names its own cause"
 assert_contains "$L4_OUT" "code=provider_readiness_authority_missing" "l4 enforce intake without authority keeps the rejection code"
-assert_contains "$L4_OUT" "AUTOPILOT_LEVEL=l4; only l5/l6 build the strict host bootstrap" "refusal names the level and the cause"
-assert_contains "$L4_OUT" "enforcement_mode to shadow, or run it under /l5" "refusal names the two legal remedies"
+assert_contains "$L4_OUT" "AUTOPILOT_LEVEL=l3; only l4/l5/l6 build the strict host bootstrap" "refusal names the level and the cause (l4 compiles the bootstrap since v2.36.8)"
+assert_contains "$L4_OUT" "enforcement_mode to shadow, or run it under /l4, /l5 or /l6" "refusal names the two legal remedies"
 assert_contains "$L4_OUT" "Do not construct a readiness authority by hand" "refusal forbids a hand-built authority"
 
 finalize_test

@@ -55,12 +55,14 @@ Commands:
                     Non-empty review findings require a separately supplied
                     depth-0 disposition authority; reviewer output cannot
                     self-authorize.
-                    AUTOPILOT_LEVEL=l5|l6 additionally requires the compiled,
-                    host-owned exact-roster provider-readiness trust root.
-                    AUTOPILOT_LEVEL=l4 has no such trust root: reviewer
-                    qualification is WAIVED there (ledger records
+                    AUTOPILOT_LEVEL=l4|l5|l6 additionally requires the compiled,
+                    host-owned exact-roster provider-readiness trust root
+                    (l4 roster profile: implementer + reviewer required, VA
+                    seat and QC panel optional; l5/l6 require both). At l4,
+                    reviewer qualification is WAIVED only when that bootstrap
+                    does not certify the reviewer seat (ledger records
                     reviewer_qualification: waived + reason) unless
-                    --require-qualified-reviewer is passed. v2.36.7.
+                    --require-qualified-reviewer is passed. v2.36.8.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
@@ -407,12 +409,18 @@ if (args[0] === 'engine') {
       // explicit --allow-unqualified-reviewer both get the recorded waiver (review 🟠: the
       // explicit allow used to be MORE restrictive than the default, because the final
       // review stage re-imposed the requirement when no waiver string was present).
+      // v2.36.8: l4 now compiles the strict bootstrap below (l4 roster profile). When that
+      // bootstrap's live readiness is consumed it certifies the reviewer seat and the engine
+      // records NO waiver; the waiver string only lands in the ledger when the bootstrap does
+      // not certify the reviewer (engine-side condition, KR4).
       if (level === 'l4' && !parsed.reviewerQualificationForced) {
         parsed.requireQualifiedReviewer = false;
-        parsed.reviewerQualificationWaived = 'l4: no strict provider bootstrap at this level, so reviewer qualification cannot be host-verified; waived by recorded operator policy (owner ruling 2026-09-06) — pass --require-qualified-reviewer to force the block';
+        parsed.reviewerQualificationWaived = 'l4: the host provider bootstrap did not certify the reviewer seat for this run, so reviewer qualification is not host-verified; waived by recorded operator policy (owner ruling 2026-09-06) — pass --require-qualified-reviewer to force the block';
       }
       let strictL5Bootstrap = null;
-      if (level === 'l5' || level === 'l6') {
+      // v2.36.8: l4 joins l5/l6 — same live-probed, host-owned readiness bundle, with the l4
+      // roster profile (implementer + reviewer required; VA seat and QC panel optional).
+      if (level === 'l4' || level === 'l5' || level === 'l6') {
         try {
           strictL5Bootstrap = createStrictL5ProviderBootstrap({
             cwd: parsed.cwd || process.cwd(),

@@ -1800,6 +1800,107 @@ assert_contains "$OUT" "w_reason_recorded=true" "waiver: ledger carries the call
 assert_contains "$OUT" "p_ledger_has_qual=false" "no waiver + requirement off: no qualification entry (unchanged behaviour)"
 assert_contains "$OUT" "f_phase=reviewer_qualification" "explicit requirement still blocks even if a waiver string is present"
 
+# --- v2.36.8 KR4: l4 bootstrap ↔ reviewer-qualification waiver interplay --------------------
+# When the l4 host bootstrap's live readiness is consumed it certifies the reviewer seat and
+# the ledger shows NO `waived` entry (the requirement is host-verified, as at l5/l6). When no
+# bootstrap certifies the reviewer (no authority injected), the v2.36.7 waived entry remains.
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/kr4-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+fs.writeFileSync(prompt, 'kr4 prompt\n', 'utf8');
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine', 'autopilot-engine'));
+const { createStrictL5ProviderBootstrap } = require(path.join(root, 'src', 'readiness', 'provider-bootstrap'));
+const { resolveReviewLoopJson } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
+const { buildSelectedRoster } = require(path.join(root, 'src', 'readiness', 'status'));
+const { qualifyExactRoleNow } = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
+const { createProviderReadinessReceipt } = require(path.join(root, 'src', 'readiness', 'receipt'));
+const NOW = '2026-09-07T00:00:00.000Z';
+const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], { cwd: root, env: process.env });
+const l4Roster = {
+  ...resolvedResult.result,
+  verification_author_present: false,
+  verification_author_engine: '', verification_author_runner: '', verification_author_effort: '',
+  verification_author_endpoint: '', verification_author_family: 'unknown',
+  reviewer_qualified: false,
+  loop_max_rounds: 1,
+};
+const observation = (tuple, axis, ttl) => ({
+  schema_version: 1, artifact_type: 'provider_axis_observation', tuple, axis, status: 'ready',
+  observed_at: NOW, ttl_seconds: ttl,
+  evidence_class: axis === 'qualification' ? 'host-injected-exact-role' : (axis === 'transport' ? 'safe-surface' : 'live-probe'),
+  reason: null,
+});
+const readyCollector = (options) => {
+  const ttl = options.resolvedRoster.provider_readiness_receipt_ttl_seconds;
+  const roster = buildSelectedRoster(options.resolvedRoster, options.now, ttl);
+  for (const seat of roster) {
+    for (const candidate of [seat, ...seat.fallbacks]) {
+      candidate.observations = {
+        transport: observation(candidate.tuple, 'transport', ttl),
+        live: observation(candidate.tuple, 'live', ttl),
+        qualification: qualifyExactRoleNow(options.qualificationProvider, candidate.tuple, options.now, ttl),
+      };
+    }
+  }
+  const policy = { receipt_ttl_seconds: ttl, fallback_family_constraint: options.resolvedRoster.provider_readiness_fallback_family_constraint };
+  return { receipt: createProviderReadinessReceipt({ roster, policy, now: options.now }), roster, policy };
+};
+const bootstrap = createStrictL5ProviderBootstrap({ cwd: root, level: 'l4' }, {
+  resolvedRoster: l4Roster, collectReadiness: readyCollector, now: () => NOW,
+});
+const WAIVER = 'l4: the host provider bootstrap did not certify the reviewer seat for this run — waived by recorded operator policy';
+const makeEngine = (extra) => new AutopilotEngine({
+  clock: () => NOW,
+  reviewLoopResolver() {
+    return { status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { ...l4Roster } };
+  },
+  implementationDispatcher() { throw new Error('stop after readiness'); },
+  reviewDispatcher() { throw new Error('stop after readiness'); },
+  ...extra,
+});
+const run = (engine, extra = {}) => engine.runLegacyImplementationReviewLoop({
+  promptFile: prompt, branch: 'kr4-loop', base: '1111111111111111111111111111111111111111',
+  requireQualifiedReviewer: false, reviewerQualificationWaived: WAIVER, ...extra,
+});
+const certified = run(makeEngine({
+  providerReadinessAuthority: bootstrap.providerReadinessAuthority,
+  qualificationProvider: bootstrap.qualificationProvider,
+}));
+const summarize = (label, result) => {
+  const units = result.ledger.map((e) => `${e.unit}:${e.status}`);
+  console.log(`${label}_ledger=${units.join(',')}`);
+  console.log(`${label}_has_waived=${units.includes('reviewer_qualification:waived')}`);
+  console.log(`${label}_readiness=${units.includes('strict_l5_provider_readiness:ready')}`);
+  console.log(`${label}_phase=${result.phase}`);
+  const ready = result.ledger.find((e) => e.unit === 'strict_l5_provider_readiness');
+  console.log(`${label}_level=${result.strict_l5_provider_readiness ? result.strict_l5_provider_readiness.strict_level : (ready && ready.strict_level) || 'n/a'}`);
+};
+summarize('cert', certified);
+const uncertified = run(makeEngine({}));
+summarize('uncert', uncertified);
+// Explicit requirement without a certifying bootstrap still blocks (v2.36.7 rule kept).
+const forced = run(makeEngine({}), { requireQualifiedReviewer: true });
+console.log(`forced_phase=${forced.phase}`);
+// Explicit requirement WITH the certifying l4 bootstrap is host-verified: not blocked.
+const forcedCertified = run(makeEngine({
+  providerReadinessAuthority: bootstrap.providerReadinessAuthority,
+  qualificationProvider: bootstrap.qualificationProvider,
+}), { requireQualifiedReviewer: true });
+console.log(`forced_cert_phase=${forcedCertified.phase}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "KR4 interplay process exits 0"
+assert_contains "$OUT" "cert_readiness=true" "KR4: the l4 bootstrap bundle is consumed (strict_l5_provider_readiness:ready)"
+assert_contains "$OUT" "cert_has_waived=false" "KR4: a certifying l4 bootstrap leaves NO reviewer_qualification:waived entry"
+assert_not_contains "$OUT" "cert_phase=reviewer_qualification" "KR4: certified run is not blocked at reviewer_qualification"
+assert_not_contains "$OUT" "cert_phase=provider_readiness" "KR4: certified run is not blocked at provider_readiness"
+assert_contains "$OUT" "uncert_has_waived=true" "KR4: without a certifying bootstrap the v2.36.7 waived entry remains"
+assert_contains "$OUT" "uncert_readiness=false" "KR4: without a bootstrap no readiness entry is fabricated"
+assert_contains "$OUT" "forced_phase=reviewer_qualification" "KR4: --require-qualified-reviewer without a certifying bootstrap still blocks"
+assert_not_contains "$OUT" "forced_cert_phase=reviewer_qualification" "KR4: --require-qualified-reviewer with the certifying l4 bootstrap is host-verified"
+
 # --- implement-review pre-flight is family-conflict-fallback aware (v2.32.40) ----
 # The rounds:0 reviewer_qualification pre-flight used to hard-block on an
 # UNqualified incumbent reviewer without consulting the fallback ladder, so the

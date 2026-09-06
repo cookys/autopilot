@@ -13,7 +13,7 @@ v2.36.7 只把 l4 的 `provider_readiness_authority_missing` 改成具名拒絕�
   `strict_level` 記真實 level，level-drift 檢查收 l4。略過的選配席會從交給 collector 的 roster 投影掉（`qc_panel` 名單在、seat 未解析
   的 WIZHALL 形狀否則會 roster drift）；bootstrap 回傳 `roster_profile: {level, omitted_seats}` 留痕。冷凍的 D4 claim set 不動；
   l4 子集 roster 不是 byte-canonical，所以一律記 `policy_override`（advisory，Board 2026-08-16），未認證席列在 `uncertified_seats`、
-  stderr `POLICY OVERRIDE` 照印。
+  stderr `POLICY OVERRIDE` 照印；全席認證但非 byte-canonical（l4 子集）改印一行 `policy note`（review 🟡：原本每次 l4 派生都印零席 OVERRIDE 成噪音）。`src/status/cli.js` readiness 診斷依 `AUTOPILOT_LEVEL` 派生（review 🟡）。
 - **`bin/autopilot.js`**：l4 建 bootstrap、注入 `providerReadinessAuthority`／`qualificationProvider` 與 l5/l6 相同；v2.36.7 的
   reviewer 豁免保留但語意收窄——bootstrap 的 bundle 被 consume 就認證 reviewer 席、ledger **沒有** `waived`；只有 bootstrap 沒認證
   reviewer 時 waived 才落帳（KR4）。usage 文字同步。

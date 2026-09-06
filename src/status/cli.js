@@ -479,7 +479,11 @@ function runStatusCli(argv, {
     let bootstrap = null;
     try {
       const { createStrictL5ProviderBootstrap } = require('../readiness/provider-bootstrap');
-      bootstrap = createStrictL5ProviderBootstrap({ cwd });
+      // v2.36.8: derive under the host's actual level so an l4 roster (VA / QC optional)
+      // is diagnosed the way an l4 invocation would decide; unset or other → l5 default.
+      const envLevel = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
+      const level = ['l4', 'l5', 'l6'].includes(envLevel) ? envLevel : undefined;
+      bootstrap = createStrictL5ProviderBootstrap({ cwd, ...(level ? { level } : {}) });
     } catch {
       bootstrap = null;
     }

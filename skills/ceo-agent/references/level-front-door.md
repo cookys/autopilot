@@ -150,7 +150,11 @@ CEO (depth 0, this session)
     when the bootstrap does NOT certify the reviewer: then the ledger records
     `reviewer_qualification: waived` + the reason and the reviewer still runs; pass
     `--require-qualified-reviewer` to force the block instead. Enforce-mode
-    `campaign_intake` now receives a real `strict_level: "l4"` readiness bundle. Note the
+    `campaign_intake` now receives a real `strict_level: "l4"` readiness bundle. A consumed
+    bundle marks the reviewer seat qualified for that invocation even when its seat is
+    uncertified (`claim_id: null`) — advisory coverage semantics inherited from l5/l6
+    (Board 2026-08-16), so `--require-qualified-reviewer` is satisfied by host readiness,
+    not by a capability claim. Note the
     managed engine's level-independent terminal-QC gate (`prepare_implementation_loop`,
     `min_panel_size`) still needs a complete QC panel for any `--campaign-contract` run.
   - **Named endpoints are declarative, not hand-typed.** When the resolved config

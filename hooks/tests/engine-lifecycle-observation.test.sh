@@ -542,5 +542,7 @@ assert_eq "0" "$EXIT" "KR5 waived-status probe exits 0"
 assert_contains "$OUT" "kr5_engine_waived=true" "KR5 precondition: the engine ledger carries reviewer_qualification:waived"
 assert_contains "$OUT" "kr5_open_level=l4" "KR5: the observation envelope binds the l4 legacy level"
 assert_contains "$OUT" "kr5_waived_on_wire=true" "KR5: waived serializes intact (not hashed as unknown) on the observation wire"
+assert_contains "$OUT" "kr5_status_hash_present=false" "KR5: no status was hashed as unknown on the wire"
+assert_contains "$OUT" "kr5_observation=observed" "KR5: the l4 run closes a complete observation"
 
 finalize_test

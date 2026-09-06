@@ -462,14 +462,23 @@ function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
     || sorted.length !== policy.length
     || certifiedClaimIds.size !== policy.length;
   const reason = overrideReason.length > 0 ? overrideReason : 'advisory_default';
-  if (drifted) {
+  if (drifted && uncertified.length > 0) {
     // stderr, every derivation, never once-per-process: a warning that scrolls
     // past on the first run and stays silent afterwards is how a deviation
     // stops being a decision and starts being invisible.
     const seats = uncertified.map((entry) => `${entry.seat_id}=${entry.tuple.runner}/${entry.tuple.model}`);
     process.stderr.write(
       `strict /l5 POLICY OVERRIDE — ${uncertified.length} seat(s) run without a capability claim: `
-      + `${seats.join(', ') || '(none)'} — reason: ${reason}\n`,
+      + `${seats.join(', ')} — reason: ${reason}\n`,
+    );
+  } else if (drifted) {
+    // v2.36.8: every seat is certified but the roster is not the byte-canonical policy
+    // (an l4 subset, or a short panel). Still recorded as policy_override so downstream
+    // can tell it from a canonical bundle, but it is not an OVERRIDE — say what it is
+    // instead of printing a zero-seat override line on every l4 derivation.
+    process.stderr.write(
+      `strict /l5 policy note — roster is a ${sorted.length}-of-${policy.length} subset of the frozen policy, `
+      + `every seat certified — reason: ${reason}\n`,
     );
   }
   return deepFreeze({

@@ -8,12 +8,12 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-09-07 | [l4-host-bootstrap](2026-09-07-l4-host-bootstrap/README.md) — l4 managed runs get the live-probed host readiness bundle with an l4 roster profile (plan frozen g2) | v2.36.8 | `feat/v2.36.8-l4-host-bootstrap` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-09-06 | [l4-host-bootstrap](_archive/2026-09-07-l4-host-bootstrap/README.md) — l4 managed runs get the same live-probed host readiness bundle as l5/l6 with an l4 roster profile (implementer + reviewer required; VA seat and QC panel optional); `strict_level: "l4"`; advisory coverage recorded, nothing waived; v2.36.7 waiver fires only when the bootstrap does not certify the reviewer; observation accepts l4/waived. Plan frozen g2 (sol chair + MiniMax); pre-merge review SHIP-AS-IS (4 minor/suggestion folded); RED-first tests in ledger. P5 WIZHALL dogfood on cuda pending | v2.36.8 | 4b3d6ba7 | [plan](../plans/2026-09-07-l4-host-provider-readiness-bootstrap.md) |
 | 2026-09-06 | l4 marker 下 engine implement-review 永遠卡 reviewer_qualification（無 project dir — Fix-size，owner 裁定）— l4 沒有 strict bootstrap，reviewer_qualified 不可能被 host-verify；改為豁免並在 ledger 記 waived 帶理由，旗標明示則照旗標。下一關 provider_readiness 屬 ADR-0001 邊界不豁免，改具名拒絕並指路（shadow 或 /l5）；完整 l4 host bootstrap 立 BACKLOG L 級 | v2.36.7 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-06 | never-started Mission claim 無合法出口（無 project dir — Fix-size，cuda 回報）— grant 鑄 id 發 claim 後 engine 被 admission 擋、campaign 從未起跑 ⇒ status not_found、withdraw 拒絕。status 回 not_started、withdraw `--never-started true` 合法釋放不偽造 terminal，同 ticket 有 intake root 就拒絕；v1/v2 識別綁定仍開（review 撤回 digest 橋接） | v2.36.6 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-06 | `--allow-seat-gap` 寫下 checker 永遠拒收的世代（無 project dir — Fix-size，7840hs 回報）— collect 的 gap 容忍沒有門檻，checker 預設要全部席次 ⇒ finalized 的席數短少永遠救不回。collect 改與 checker 同源解析門檻，低於門檻記 aborted（seat_gap_below_min）讓下一代從同 base 接 | v2.36.5 | (fix branch → develop) | [CHANGELOG](../../CHANGELOG.md) |

@@ -1,8 +1,8 @@
 # Plan — l4 host provider-readiness bootstrap
 
-> Status: R0 frozen for plan loop review (Board answered §8 on 2026-09-07)
+> Status: ✅ Shipped in v2.36.8 — merged as 4b3d6ba7 (2026-09-06); P5 dogfood pending on cuda
 > Owner: cookys (Board) · Author: autopilot-eb session, 2026-09-07
-> Branch: `feat/v2.36.8-l4-host-bootstrap` (not yet created — L-3)
+> Branch: `feat/v2.36.8-l4-host-bootstrap` (merged, deleted)
 > Frame: dev-flow L. Owner ruling 2026-09-06 「先 fix 然後完整修好」 — the Fix half shipped in v2.36.7; this is the「完整修好」half.
 > logical_plan_id: `l4-host-provider-readiness-bootstrap`
 

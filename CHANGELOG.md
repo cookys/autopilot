@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.36.9 — dispatch-model-guard 提醒 agent、不再彈窗問使用者（`mode: remind`）；Codex adapter 的 SHADOW 條款改鏡射 canon
+
+owner 2026-09-06：「要用比較貴的 subagent／沒填 model name，現在都跳出來問使用者，反而 block 住；應該提醒完 agent 他自己判斷要不要換」。
+
+- **`hooks/dispatch-model-guard.js`**：預設 `mode` 從 `ask` 改 **`remind`**——命中貴引擎（預設 `fable`；實作型派工含 `opus`）回 native
+  `permissionDecision: "deny"`，理由把決定權交還派工的 agent：改便宜模型重派（`scripts/resolve-dispatch.sh --role`），或保留引擎並在
+  首行寫 `Engine: <model> (intentional: <why>)`，guard 就靜默放行（stderr 一行 note）。ack 只認 Engine 首行，prompt 內文的 `(intentional…)`
+  不算。沒填 model 維持 v2.36.2 的 deny＋重派理由。`mode: ask`、`on_missing_model: ask` 仍可選回對話框；`warn`／`off` 不變；亂值 → `remind`
+  （fail-closed 但不彈窗）。測試 76（新增：預設 remind＝deny 帶提醒、ack 放行、ack 不在首行不算、`mode: ask` 還原對話框）。docs：hooks/README
+  兩處、`project-config-template/dispatch-guard-config.md`、front-door 一行。
+- **`platforms/codex/skill-adapters/lifecycle.md`**（cuda codex-astra 2026-09-06 回報）：原句「continue only when READY」在 shadow 模式讀成
+  停機，與 CC canon（dev-flow／ceo-agent：`SHADOW` 觀察限定、記 `admitted`／`would_block` 後走非 managed 流程）矛盾。改成鏡射 canon：READY 才走
+  managed engine route；SHADOW 走一般流程不宣稱 enforce receipt、不呼叫 managed route（managed CLI 會拒非 READY marker）；shadow→enforce 是該 repo
+  owner 的政策決定。七個 Codex thin-shell 鏡像重生。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (reference doc one line; adapter file is Codex-side).
+
 ## v2.36.8 — l4 也建 host provider-readiness bootstrap：l4 roster profile，enforce-mode intake 拿到真的 `strict_level: "l4"` bundle（owner「完整修好」的下半場）
 
 v2.36.7 只把 l4 的 `provider_readiness_authority_missing` 改成具名拒絕；這版把牆拆掉。`bin/autopilot.js` 現在對

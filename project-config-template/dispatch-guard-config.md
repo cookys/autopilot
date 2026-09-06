@@ -4,15 +4,19 @@
 > Resolved in-process by [`hooks/dispatch-model-guard.js`](../hooks/dispatch-model-guard.js)
 > (opt-in PreToolUse hook on `Task|Agent`). Override path via
 > `$DISPATCH_GUARD_CONFIG_OVERRIDE`. Sibling of the spend-control discipline in
-> `scripts/resolve-dispatch.sh`: this hook mechanically asks when a subagent
-> dispatch would land on a guarded expensive engine or omit `model:` entirely.
+> `scripts/resolve-dispatch.sh`: this hook mechanically reminds the dispatching agent when a
+> subagent dispatch would land on a guarded expensive engine or omit `model:` entirely.
 
 This is the **expensive-model dispatch forcing function**: an omitted `model:`
 silently inherits the session model (which may be Fable-class), and an explicit
 `fable` / `claude-fable-5` lands on a high-cost engine without a second look. The
-hook returns a native PreToolUse `permissionDecision: "ask"` so the operator
-approves deliberately — or re-dispatches with a cheaper explicit model. Fail-open
-on unreadable payloads (spend control, not a security boundary).
+hook returns a native PreToolUse `permissionDecision: "deny"` whose reason hands the
+decision to the **dispatching agent** (default `mode: remind`, v2.36.9): re-dispatch
+with a cheaper explicit model, or keep the engine and mark line 1
+`Engine: <model> (intentional: <why>)`, which the guard then allows silently. No human
+dialog is opened (owner ruling 2026-09-06: the dialog blocked the session; the agent
+should judge). `mode: ask` opts back into the interactive dialog. Fail-open on
+unreadable payloads (spend control, not a security boundary).
 
 ## Settings (one `key: value` per line; first match wins)
 
@@ -20,7 +24,7 @@ on unreadable payloads (spend control, not a security boundary).
 - guarded_models_implementing: fable,opus
 - on_missing_model: deny
 - require_engine_header: on
-- mode: ask
+- mode: remind
 
 ## Field reference
 
@@ -30,11 +34,11 @@ on unreadable payloads (spend control, not a security boundary).
 | `guarded_models_implementing` | comma-separated tokens | Case-insensitive substring match against `tool_input.model`, applied ONLY when the dispatch is implementation-shaped (`tool_input.mode` is absent or not `"plan"`); union'd with `guarded_models`. Empty/garbage → default `fable,opus`. |
 | `on_missing_model` | `deny` \| `ask` \| `allow` | When `model` is omitted, this decides outright BEFORE `require_engine_header` runs (there is nothing for the header to match against): `deny` = native DENY whose reason tells the model to re-dispatch with `model:` (default since v2.36.2 — a missing model is never a human judgment, and an interactive `ask` made the owner click through a dialog); `ask` = permission ASK (the pre-v2.36.2 dialog); `allow` = pass through. Garbage → `deny` (fail-closed). |
 | `require_engine_header` | `on` \| `off` | Only evaluated when `model` is present. When `on` (default), the dispatch prompt's first non-empty line must be `Engine: <model>…` matching `tool_input.model`, or the dispatch is denied (not asked — mechanical, nothing for a human to approve). Garbage → `on` (fail-closed). |
-| `mode` | `ask` \| `warn` \| `off` | `ask` = native permission ASK; `warn` = advisory stderr only; `off` = inert. Garbage → `ask` (fail-closed). |
+| `mode` | `remind` \| `ask` \| `warn` \| `off` | `remind` (default since v2.36.9) = native DENY carrying the reminder and the two legal re-dispatches; a dispatch whose Engine header carries `(intentional: …)` is allowed silently; `ask` = native permission ASK (the pre-v2.36.9 dialog); `warn` = advisory stderr only; `off` = inert. Garbage → `remind` (fail-closed, no dialog). |
 
 ## Defaults & fail-closed
 
-Unknown / missing / unparseable config keys → **`mode: ask`**, **`on_missing_model: deny`**,
+Unknown / missing / unparseable config keys → **`mode: remind`**, **`on_missing_model: deny`**,
 **`guarded_models: fable`**, **`guarded_models_implementing: fable,opus`**,
 **`require_engine_header: on`**. Set `mode: warn` to calibrate before enforcing, or
 `mode: off` / leave the opt-in hook disabled to skip entirely.

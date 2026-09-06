@@ -170,7 +170,7 @@ Mechanical sources:
 - `implementer_ladder: auto` in `review-loop-config.md` expands the host topology written by `scripts/resolve-dispatch-topology.js` (cached at `~/.autopilot/topology.json`; `--check` detects drift).
 - Rung 0 is the first attempt for every unit class now (`ladder_start_rung_judgment` restores the old rung-1-first behavior for `judgment`-class units only).
 - `scripts/resolve-dispatch.sh` implementer default is `sonnet`; the new role `hands` resolves to `haiku`.
-- `dispatch-model-guard` (hook) asks for confirmation before dispatching `fable`/`opus` for any implementation-shaped dispatch (i.e. `mode` != `plan`), and denies any dispatch whose prompt's first line is not `Engine: <model>…` matching the dispatch's `model:` argument.
+- `dispatch-model-guard` (hook) reminds the dispatching agent (a deny carrying the reason, never a human dialog — v2.36.9) before dispatching `fable`/`opus` for any implementation-shaped dispatch (i.e. `mode` != `plan`); the agent decides — re-dispatch cheaper, or mark line 1 `Engine: <model> (intentional: <why>)` to proceed. It denies any dispatch whose prompt's first line is not `Engine: <model>…` matching the dispatch's `model:` argument.
 - Every foreman's DONE line includes the parallel section of the full suite (`hooks/tests/run.sh --parallel 4`) whenever the deliverable touches a shared contract (resolver fields, schema, template defaults) — a deliverable's own tests never see the fixtures it drifts (v2.36.0: 25 files; `references/evidence-discipline.md` §24–25).
 - `hooks/cost-fuse.js` (PreToolUse, default-on, warn mode) trips when brain-tier spend crosses USD 150/host/day (configurable via `cost_fuse` in `~/.autopilot/config.json`); `scripts/cost-digest.js` is the ledger view for that spend.
 

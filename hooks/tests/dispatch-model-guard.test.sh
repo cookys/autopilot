@@ -8,27 +8,28 @@ AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off run_hook dispatch-model-guard.js "$PAYLO
 assert_eq 0 "$__RUN_EXIT" "case1-exit"
 assert_eq "" "$__RUN_STDOUT" "case1-silent (opt-out env)"
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case1b-default-on fires without any enable flag"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case1b-default-on fires without any enable flag (remind = deny with reminder, v2.36.9)"
+assert_contains "$__RUN_STDOUT" "intentional" "case1b-reminder names the acknowledgement path"
 
-# Case 2: Enabled, model fable → ask
+# Case 2: Enabled, model fable → remind (deny carrying the reminder; v2.36.9, was ask)
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case2-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case2-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case2-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "fable" "case2-reason"
 
 # Case 3: Enabled, model claude-fable-5 → ask (substring match)
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"claude-fable-5","prompt":"Engine: claude-fable-5@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case3-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case3-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case3-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "claude-fable-5" "case3-reason"
 
 # Case 4: Enabled, model FABLE (uppercase) → ask (case-insensitive)
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"FABLE","prompt":"Engine: FABLE@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case4-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case4-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case4-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "FABLE" "case4-reason"
 
 # Case 5: Enabled, model haiku → silent
@@ -71,6 +72,28 @@ assert_eq "" "$__RUN_STDOUT" "case6d-silent stdout (warn mode)"
 assert_contains "$__RUN_STDERR" "no model specified" "case6d-stderr warning"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
+# Case 6e (v2.36.9): guarded engine ACKNOWLEDGED on the Engine header → allowed silently
+# (stderr note only). The agent judged; no dialog, no deny.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: plan critique needs the strongest reader)\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "case6e-exit"
+assert_eq "" "$__RUN_STDOUT" "case6e-silent stdout (acknowledged expensive dispatch proceeds)"
+assert_contains "$__RUN_STDERR" "acknowledged as intentional" "case6e-stderr note"
+
+# Case 6f (v2.36.9): the acknowledgement must sit on the Engine header line — an
+# "intentional" further down the prompt does not count.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable\nThis is (intentional: really).\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6f-deny (ack not on line 1)"
+
+# Case 6g (v2.36.9): mode: ask opts back into the interactive dialog for guarded engines
+printf '%s\n' "- mode: ask" > "$TEST_TMP/config6g.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6g.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6g-ask (opt back into the dialog)"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
 # Case 7: Enabled, tool_name Bash → silent (not Agent/Task)
 PAYLOAD='{"tool_name":"Bash","tool_input":{"model":"fable"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
@@ -89,7 +112,7 @@ export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config9.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case9a-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case9a-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case9a-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "opus" "case9a-reason"
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
@@ -139,13 +162,13 @@ assert_eq "" "$__RUN_STDOUT" "case12-stdout-silent"
 assert_contains "$__RUN_STDERR" "dispatch-model-guard" "case12-stderr-carries-warn-advisory"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# Case 13: Config garbage mode: yolo → model fable asks (fail-closed)
+# Case 13: Config garbage mode: yolo → model fable reminded/denied (fail-closed, no dialog)
 printf '%s\n' "- mode: yolo" > "$TEST_TMP/config13.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config13.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case13-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case13-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case13-remind (deny with reminder, never a dialog)"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # Case 14: mode: "plan", model: "opus" → allowed (no ask/deny)
@@ -160,13 +183,13 @@ assert_eq "" "$__RUN_STDOUT" "case14-silent (plan-mode opus allowed)"
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus@agy effort=low\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case15a-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case15a-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case15a-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "opus" "case15a-reason"
 
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"default","prompt":"Engine: opus@agy effort=low\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case15b-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case15b-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case15b-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "opus" "case15b-reason"
 
 # Case 16: mode: "plan", model: "fable" → still asks
@@ -174,7 +197,7 @@ assert_contains "$__RUN_STDOUT" "opus" "case15b-reason"
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","mode":"plan","prompt":"Engine: fable@agy effort=low\nPlan this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case16-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case16-ask"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case16-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "fable" "case16-reason"
 
 # Case 17: tool_input.prompt first line is "Engine: sonnet@agy effort=low" and model: "sonnet" → allowed

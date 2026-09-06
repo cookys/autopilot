@@ -785,6 +785,25 @@ NODE
   assert_eq "$EXIT" "0" "Codex prompt-input debug works from a non-repo cwd"
   assert_contains "$PROMPT_OUT" "autopilot:dev-flow" "Installed Codex plugin exposes dev-flow to model-visible prompt input"
   assert_contains "$PROMPT_OUT" "autopilot:harness-maintenance" "Installed Codex plugin exposes harness-maintenance to model-visible prompt input"
+
+  # Cache-replacement fact the dev-setup live-session guard relies on (2026-09-07): an in-place
+  # `plugin add` upgrade DELETES the previous version directory — a running session whose
+  # PLUGIN_ROOT points there loses its hooks. Pinned in a separate sandbox with a mutable
+  # marketplace copy so the repo payload is never touched.
+  UPG_HOME="$TEST_TMP/codex-upgrade-home"
+  UPG_MK="$TEST_TMP/codex-upgrade-mk"
+  mkdir -p "$UPG_HOME/.codex"
+  cp -r "$MARKETPLACE_ROOT/." "$UPG_MK/"
+  HOME="$UPG_HOME" CODEX_HOME="$UPG_HOME/.codex" codex plugin marketplace add "$UPG_MK" >/dev/null 2>&1
+  HOME="$UPG_HOME" CODEX_HOME="$UPG_HOME/.codex" codex plugin add autopilot@autopilot-local >/dev/null 2>&1
+  UPG_CACHE="$UPG_HOME/.codex/plugins/cache/autopilot-local/autopilot"
+  UPG_V1="$(ls "$UPG_CACHE" 2>/dev/null | head -1)"
+  node -e 'const fs=require("fs");const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p,"utf8"));j.version="9.9.9";fs.writeFileSync(p,JSON.stringify(j,null,2)+"\n")' "$UPG_MK/plugin/.codex-plugin/plugin.json"
+  HOME="$UPG_HOME" CODEX_HOME="$UPG_HOME/.codex" codex plugin add autopilot@autopilot-local >/dev/null 2>&1
+  UPG_AFTER="$(ls "$UPG_CACHE" 2>/dev/null | tr '\n' ' ')"
+  assert_contains "$UPG_AFTER" "9.9.9" "in-place plugin add installs the new version directory"
+  assert_not_contains "$UPG_AFTER" "$UPG_V1" "in-place plugin add deletes the previous version directory (live sessions lose PLUGIN_ROOT — dev-setup guards this)"
+  assert_file_absent "$UPG_CACHE/$UPG_V1/hooks/post-compact.js" "previous version's post-compact.js is gone after upgrade (the MODULE_NOT_FOUND site)"
 fi
 
 finalize_test

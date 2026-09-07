@@ -492,6 +492,40 @@ exit 9
 EOF
 chmod +x "$STUB_QODERCN_NONZERO"
 
+# OpenCode --format json shape: newline-delimited JSON events, final assistant text in
+# the last {"type":"text",...} event's .part.text (probe-verified 2026-09-07, opencode
+# 1.18.27 — see scripts/dispatch-review.sh header comment). Mirrors the plain-text
+# qoderclicn stub above but wraps the wrapped block inside the real NDJSON envelope so
+# the dedicated Node extraction scriptlet in the opencode branch is actually exercised.
+STUB_OPENCODE_JSON="$TEST_TMP/opencode-json-marker"
+cat > "$STUB_OPENCODE_JSON" <<'EOF'
+#!/usr/bin/env bash
+[ -z "${OPENCODE_ARGV_FILE:-}" ] || printf '%s\n' "$@" > "$OPENCODE_ARGV_FILE"
+PROMPT="$(cat)"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -n "$begin" ] && [ -n "$end" ] || exit 0
+TEXT="$(printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed\n%s\n' "$begin" "$end")"
+echo '{"type":"step_start","timestamp":1,"sessionID":"ses_fixture","part":{"id":"prt_0","messageID":"msg_0","sessionID":"ses_fixture","type":"step-start"}}'
+TEXT="$TEXT" node -e 'process.stdout.write(JSON.stringify({type:"text",timestamp:2,sessionID:"ses_fixture",part:{id:"prt_1",messageID:"msg_0",sessionID:"ses_fixture",type:"text",text:process.env.TEXT}})+"\n")'
+echo '{"type":"step_finish","timestamp":3,"sessionID":"ses_fixture","part":{"id":"prt_2","reason":"stop","messageID":"msg_0","sessionID":"ses_fixture","type":"step-finish","tokens":{"total":1,"input":1,"output":1,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0}}'
+EOF
+chmod +x "$STUB_OPENCODE_JSON"
+
+# Same well-formed-block-then-die combination as qoderclicn above, NDJSON-wrapped.
+STUB_OPENCODE_NONZERO="$TEST_TMP/opencode-json-nonzero"
+cat > "$STUB_OPENCODE_NONZERO" <<'EOF'
+#!/usr/bin/env bash
+PROMPT="$(cat)"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -n "$begin" ] && [ -n "$end" ] || exit 0
+TEXT="$(printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed\n%s\n' "$begin" "$end")"
+TEXT="$TEXT" node -e 'process.stdout.write(JSON.stringify({type:"text",timestamp:2,sessionID:"ses_fixture",part:{id:"prt_1",messageID:"msg_0",sessionID:"ses_fixture",type:"text",text:process.env.TEXT}})+"\n")'
+exit 9
+EOF
+chmod +x "$STUB_OPENCODE_NONZERO"
+
 STUB_SPAWN_MARKER="$TEST_TMP/spawn-marker-runner"
 cat > "$STUB_SPAWN_MARKER" <<'EOF'
 #!/usr/bin/env bash
@@ -923,6 +957,55 @@ assert_eq "1" "$EXIT" "qoderclicn well-formed block + nonzero exit: exit 1 (fail
 assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn well-formed block + nonzero exit → no_verdict"
 assert_contains "$OUT" "qoder exited non-zero (rc=9)" "qoderclicn well-formed block + nonzero exit names the exit code"
 assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn well-formed block + nonzero exit never authorizes shipping"
+
+# 5b'. opencode path: prompt via STDIN, scratch cwd, --format json NDJSON parsed (the
+# dedicated Node scriptlet extracts the last {"type":"text"} event's .part.text before
+# the shared plain-text VERDICT parser runs — see scripts/dispatch-review.sh header).
+OPENCODE_ARGV_FILE="$TEST_TMP/opencode.argv"; export OPENCODE_ARGV_FILE
+rm -f "$OPENCODE_ARGV_FILE"
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode reviewed exit 0"
+assert_contains "$OUT" '"runner": "opencode"' "opencode runner provenance"
+assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "opencode verdict parsed out of the NDJSON text event"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" 'run --dir' "opencode receives run --dir"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--agent plan' "opencode reviewer runs under the read-only plan agent"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--format json' "opencode requests JSON event output"
+assert_not_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant max' "opencode default effort is not the raw 'max' token"
+
+# opencode: empty capture (binary present, no output at all) fails closed, same as
+# every other rail — format-agnostic, the shared STUB_EMPTY covers this.
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "opencode empty capture exit is no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "opencode empty capture fails closed"
+
+# opencode: rejection when the binary is missing — both the "--bin does not resolve"
+# and "--bin points at a non-executable path" preconditions, mirroring the kimi rail.
+OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$TEST_TMP/no-such-opencode-binary" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "opencode missing --bin path is a precondition"
+assert_contains "$OUT" '"status": "precondition_failed"' "opencode missing binary fails closed before spawn"
+assert_contains "$OUT" 'not executable' "opencode missing binary names the failure"
+
+# opencode: a well-formed SHIP-AS-IS block lands on stdout (wrapped in NDJSON) and THEN
+# the process exits non-zero (rc=9) — engine answered correctly then crashed on
+# teardown. Same fail-closed contract as qoderclicn/kimi above: the well-formed block
+# is NOT accepted despite being intact.
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_NONZERO" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "opencode well-formed block + nonzero exit: exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "opencode well-formed block + nonzero exit → no_verdict"
+assert_contains "$OUT" "opencode exited non-zero (rc=9)" "opencode well-formed block + nonzero exit names the exit code"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "opencode well-formed block + nonzero exit never authorizes shipping"
+
+# opencode: effort clamp — autopilot's 'max' maps to opencode's '--variant xhigh'
+# (same clamp as the dispatch-hetero.sh implementer rail; opencode has no 'max' tier).
+rm -f "$OPENCODE_ARGV_FILE"
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" --effort max 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode --effort max reviewed exit 0"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant xhigh' "opencode clamps 'max' effort to '--variant xhigh'"
+
+# opencode: scratch cwd is created (--dir), used, and reaped — never the repo (the
+# shared spawn-marker stub only proves it was invoked; the cwd's own removal is
+# structural in the branch, same as kimi/qoderclicn's "CWD=... ; CWD=\"\"" pattern above).
+unset OPENCODE_ARGV_FILE
 
 # 5c. Blind review requires no-tools containment and hides the caller escape sentinel.
 OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

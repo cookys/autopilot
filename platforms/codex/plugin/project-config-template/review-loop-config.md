@@ -161,7 +161,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `reviewer_fallback_preference` | HUMAN-ordered engine ids the family-conflict fallback prefers over raw ladder order (every candidate still passes all guards: cross-family, runner allowlist, calibrated codex effort). Empty = ladder order (alphabetical within capability ties — set this if the strongest cross-family reviewer must win the high-risk seat) | comma list of scorecard engine ids (e.g. `claude-opus, MiniMax-M3`), or empty |
 | `reviewer_fallback_preference_low_risk` | preference list applied when computed `review_risk=low` (cheap calibrated leg for cheap rounds); empty = use `reviewer_fallback_preference` | comma list, or empty |
 | `skill_mode` | 是否把 skill pack（選定 SKILL.md 內容）傳輸進 hetero implementer prompt（`references/hetero-dispatch.md` § Skill transport）。2026-07 A/B：reviewer 席 H2 已被推翻——implementer 席才是它的戰場；resolver 輸出 `skill_mode_requested`/`skill_mode_effective` | `off`（預設）/ `prompt-pack` |
-| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| qoderclicn` (QoderCN/Qwen; read-intent, explicit) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| claude-native` (first-party Claude Code ambient auth) `\| kimi` (Kimi Code CLI; `kimi-code/k3`, read-only scratch cwd) `\| auto` |
+| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| qoderclicn` (QoderCN/Qwen; read-intent, explicit) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| claude-native` (first-party Claude Code ambient auth) `\| kimi` (Kimi Code CLI; `kimi-code/k3`, read-only scratch cwd) `\| opencode` (OpenCode CLI; `--agent plan` + scratch cwd, best-effort — see Gotchas) `\| auto` |
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|qoderclicn\|cc-shim\|pi` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, `*qwen*`/`*qoder*`→fail-loud requiring explicit `qoderclicn`, else agy; **`qoderclicn`, `cc-shim`, and `pi` must be set EXPLICITLY** (see Gotchas) |
@@ -359,6 +359,23 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   emits an advisory and rejects a missing tag. This is telemetry, not automatic demotion or
   authority, and independent verification remains required. **GLM-5.2** is endpoint-verified but
   was 529-overloaded under load — re-Spike before trusting.
+- **`opencode` as a reviewer (v2.36.x, probe-verified 2026-09-07 on opencode 1.18.27).**
+  `opencode run --dir <scratch> --pure --agent plan --variant <effort> --format json`,
+  prompt on STDIN, model ids are `provider/model` (e.g.
+  `opencode-go/muse-spark-1.3-contributor`). `--agent plan` denies `edit`, but a live
+  adversarial probe showed it does **NOT** block bash/tool execution (asked it to run
+  `hostname`; it ran the real command and returned the real hostname) — so this is
+  **best-effort read-only, NOT a hard sandbox**, same tier as `kimi`/`cursor`/`grok`:
+  scratch cwd is the actual containment (never the repo, since the diff is text in the
+  prompt). It therefore stays OUT of `AUTOPILOT_BLIND_DISCOVERY`'s no-tools allowlist,
+  and `scripts/qualification-review-provider.js`'s stricter exam-integrity threshold
+  refuses the `opencode` CLI kind entirely (same doctrine as its `cursor` refusal). To
+  use: `reviewer_runner: opencode` + `reviewer_engine: <provider/model>`, or a
+  `qc_panel` seat with `qc_panel_runners` containing `opencode`. `--format json` streams
+  newline-delimited events; the rail extracts the final assistant text from the last
+  `{"type":"text",...}` event's `.part.text` via a Node built-in scriptlet before the
+  shared VERDICT parser runs (same normalize-before-parse shape as the kimi salvage).
+  `--bin` overrides the binary (else PATH), same as every other rail.
 - The implementer's own passing tests are **not** the criterion — keep
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the

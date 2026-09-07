@@ -218,7 +218,7 @@ assert_contains "$(cat "$REPO_ROOT/hooks/tests/review-loop-runner.test.sh")" \
   $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
   "review-loop-runner.test.sh payload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
-  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"allow_same_runner_dual_seat"' \
+  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat"' \
   "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/consult_resolved_from/discuss_dispatch in schema order"
 
 # contract-parity.test.sh and autopilot-cli.test.sh build their roster object

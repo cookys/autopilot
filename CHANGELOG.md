@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.36.12 — kimi 可坐 plan reviewer／plan deep reviewer／verification-author 席（308 需求，owner 裁定 2026-09-07）
+
+308 要把 kimi-code/k3 排進 review-loop 的 reviewer／qc 席，卡在 `resolve-review-loop.sh` 對 `plan_deep_reviewer_runner: kimi` 回
+`invalid plan_deep_reviewer_runner`。`dispatch-review.sh` 的 kimi rail（2026-07-28）與 `reviewer_runner`、`qc_panel_runners`、consult／discuss
+allowlist 早就收 kimi，漏的是三個 case 清單與 plan-review driver。
+
+- **`scripts/resolve-review-loop.sh`**：`plan_reviewer_runner`、`plan_deep_reviewer_runner`、`verification_author_runner` 三個 case 加 `kimi`
+  （VA 路徑 `dispatch-author.sh`＋`dispatch-author-kimi.js` 已完整接線，測試釘住），錯誤訊息的清單同步。`qc_panel_runners` 本來就收，加一條單席
+  正例釘住。**`schemas/review-loop-contract.schema.json`** 三個 enum 加 `kimi`（JS contract validator 從 schema 讀）。
+- **`scripts/dispatch-plan-review.js`** `RUNNERS` 加 `kimi`；driver 對所有 runner 一律走 `dispatch-author.sh`，無需分支。BACKLOG「dispatch-plan-review
+  RUNNERS lacks kimi」列收線——它的 trigger 是 owner 裁定解除 plan-review driver 的 reuse-unchanged 凍結，這次的裁定就是。
+- 測試（先紅：resolver 6 條 exit 3、plan-review 2 條 invalid tuple）：resolver 414、dispatch-plan-review 268 綠；bogus runner 仍 exit 3。
+- 資格：coverage advisory 不變——kimi 席沒成績單也能坐，stderr `POLICY OVERRIDE`＋`policy_override` 留痕；要成績單走 `engine-qualify.sh reviewer`
+  （`qualification-review-provider.js` 已有 `QRP_CLI_KIND=kimi`）。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (resolver/schema/driver + tests only).
+
 ## v2.36.11 — turn-end「未 commit 工作」提醒 hook（`dirty-protected-paths`，Claude Stop；Codex Stop＋SessionEnd）
 
 308 治理缺口回報（2026-09-07）：約 7800 行 WebGPU worker 工作橫跨多個 Codex session 一週沒 commit，沒人發現——commit 節奏只存在

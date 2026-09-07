@@ -22,6 +22,20 @@ rule-inventory 把兩個 skill 的每一行 prose 當 rule 清點;改動任何�
 
 驗證:`catalog --check` rc=0 + 兩個測試檔串行綠 + 全套件。
 
+### 改寫既有行(不是純新增)時多一步(2026-09-07 ladder P4 試出)
+
+把 ceo-agent/dev-flow 的某一行**改字**(而非插入新行),那一行若在 P0 guided baseline 裡,`catalog --check` 會報
+`PROFILE_GUIDED_COMPATIBILITY_DRIFT: guided compatibility lost baseline rule <content_hash>`。處置:
+
+1. 用**舊** migration 找那個 hash 是哪一行:`git show HEAD:profiles/rule-migration.json` 內 `mappings[].source.content_hash`。
+2. 用**新** migration 找改寫後那行(與伴隨新增行)的 `content_hash` 當 successor。
+3. `profiles/guided-baseline-dispositions.json` 追加 `{content_hash, disposition:"rewritten", successor_hashes:[…], rationale}`
+   (rationale 要寫 P0 路徑:行號、改了什麼、沒改什麼);`removed` 才不帶 successor。
+4. `profile-catalog.json` 的 `guided_dispositions_sha256` 換成新檔 sha;四檔(inventory/migration/catalog/dispositions)cp 到 codex mirror。
+5. checker **一次只報一條** lost rule——補一條、重跑、再補,直到 rc=0。
+
+另:migration 的 category 總數從 `mappings[].category` 數;`canonical_rule_count` 就是測試釘值要改的數字。
+
 ## 附:新增一個 hook 時的釘值清單(2026-09-07 `dirty-protected-paths` 試出)
 
 改的不是 SKILL.md prose 而是 hook 接線時,鏈是另一條,順序:

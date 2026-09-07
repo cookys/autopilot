@@ -28,7 +28,7 @@ User-stated requirements ledger: (1)「擴大解決未知問題的能力」→ w
 
 | Node | Deliverable | Phases | Status |
 |---|---|---|---|
-| D1 | ladder signals + probe + knob + skill wiring + docs, single branch, plan loop at L-2.5, one pre-merge review | P0 P1 P2 P3 P4 P5 P6 | in progress |
+| D1 | ladder signals + probe + knob + skill wiring + docs, single branch, plan loop at L-2.5, one pre-merge review | P0 P1 P2 P3 P4 P5 P6 | phases done; pre-merge review pending (finish-flow) |
 
 Plan headings P0–P6 are coverage inside D1, not execution nodes.
 
@@ -38,11 +38,11 @@ Plan headings P0–P6 are coverage inside D1, not execution nodes.
 |---|---|---|
 | L-2.5 plan review | done 2026-09-07 — G1 CONDITIONAL (8 blockers folded, 1 nb rejected), G2 cap CONDITIONAL→depth-0 adjudicated (7 folded), checker rc=0 | `ledger/plan-review/g2.adjudicated.json`, `g2.dispositions.checker.json`, `plan.g2-reviewed.md` |
 | P0 reconcile definitions | done 2026-09-07 (c02308ab, survey wording corrected again by G1 R8 in 0c32af13) | debugger PUA handoff rows; survey Boundary + Signal table; hetero-loops pointer |
-| P1 signals + probe | pending | |
-| P2 knob + budgets + receipt | pending | |
-| P3 inline skill wiring | pending | |
-| P4 foreman integration | pending | |
-| P5 close the loop (learn) | pending | |
-| P6 survey issue-search | pending | |
+| P1 signals + probe | done (6d60f98c) | `hooks/tests/probe-unknown.test.sh` 69 assertions; probe/ledger/bundle |
+| P2 knob + budgets + receipt | done (6917e805) | resolver+schema 88 fields, `check-contract-schema` green; consult guard fix verified live (default `auto` refused before); tests 26+32 |
+| P3 inline skill wiring | done (8272c2bb) | debug/dev-flow/think-tank argv; hetero-dispatch four-site table; profiles 801→806 |
+| P4 foreman integration | done (85119ec3 + 4518761a rail-failed) — dogfood 2026-09-07: foreman round-end loop run by a sonnet agent through the real rails (scope: the round-end call site, not a full /l4 campaign). Seed A (zero-hit term + `--fast-moving`): U1×2 rail-failed (kimi seat, no credential) → U2 survey (researcher+skeptic, "no public data") → receipt → none/budget-exhausted. Seed B (zero-hit alone): U1×2 rail-failed → none, never U2. Re-derived from the ledger by depth 0: 1 climb, 4 rail-failed skips, learn_required 1 | `ledger/dogfood/decisions.jsonl` (5 rows) |
+| P5 close the loop (learn) | done (4518761a) | finish-flow L-5.6/S.1 + learn "From a ladder climb"; dogfood ledger yields `learn_required: 1` |
+| P6 survey issue-search | done (85119ec3) — manual run on `fatal: could not read file '-'` returned the explicit no-public-data marker + labelled reformulated hits | survey SKILL + prompts.md |
 
-Last updated: 2026-09-07 (plan frozen at g2; P0 done; P1 starting)
+Last updated: 2026-09-07 (P0–P6 done; dogfood ledger in; entering finish-flow). Pre-existing on this host, stash-verified: contract-parity + consult-discuss-switch fail on `implementer_ladder[17]` (grok-4.5 rung with empty effort in ~/.autopilot/topology.json).

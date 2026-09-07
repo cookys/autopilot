@@ -47,7 +47,7 @@
  *            [--knowledge-dir <dir>] [--memory-dir <dir>] [--repo-root <dir>]
  *            [--refuted-threshold N] [--strict]
  *     → {unknown_type, signals[], recommend, reason?, skipped_rungs[], heterogeneous_u1,
- *        eligible_max, budget:{u1,u2,u3,used:{U1,U2,U3}}, knob, terms_hits}
+ *        eligible_max, budget:{u1,u2,u3,used:{U1,U2,U3}}, knob, knob_resolved_from: argv|explicit|default|off, terms_hits}
  *     exit 0 always; 2 on usage; with --strict, 2 when recommend ∈ {U2,U3}.
  *   receipt  --ledger <file> --rung Ux --unknown-type <t> --terms a,b,c --signals S1,S3   (--signals "" ⇒ [] = judgment-only climb, visible in report.judgment_only)
  *            [--reason knob-off|budget-exhausted|not-heterogeneous|rail-failed] [--run-id <id>]
@@ -192,7 +192,7 @@ function resolveKnob(opts) {
 // Provenance of the knob/budgets (resolver field unknown_resolved_from: explicit|default|off);
 // surfaced on classify output so a report can tell an owner-set budget from a default.
 function resolveKnobProvenance(opts) {
-  if (opts.knob || opts.budgetU1 !== undefined) return 'argv';
+  if (opts.knob || opts.budgetU1 !== undefined || opts.budgetU2 !== undefined || opts.budgetU3 !== undefined) return 'argv';
   return resolverField('unknown_resolved_from', opts) || 'default';
 }
 

@@ -701,7 +701,7 @@ Phase/P0 task-enumeration rule above.
 | `scripts/plan-rubric-scaffold.js` | Generate structured rubric markdown skeletons from an input plan document for frozen review rubrics. |
 | `scripts/hetero-review-loop.js` | Drive multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipts for review loops. |
 | `scripts/check-phase-review-receipt.js` | Validate phase review receipts against git history and review artifacts or validate plan artifact blocker dispositions. |
-| `scripts/probe-unknown.js` | Unknown-escalation ladder probe: `classify` turns refuted hypotheses / loop non-convergence / stall / zero-hit terms / low consensus into one rung recommendation U0–U4; `receipt` appends the ladder row after a rail returns. Call sites: L-1 step 4 and L-2 consult-before-design (this skill), debug step 4, think-tank Step 5, foreman round end. |
+| `scripts/probe-unknown.js` | Unknown-escalation ladder probe: `classify` turns refuted hypotheses / loop non-convergence / stall / zero-hit terms / low consensus into one rung recommendation U0–U3; `receipt` appends the ladder row after a rail returns. Call sites: L-1 step 4 and L-2 consult-before-design (this skill), debug step 4, think-tank Step 5, foreman round end. |
 
 Before any TaskCreate, branch, worktree, runner, or model effect:
 

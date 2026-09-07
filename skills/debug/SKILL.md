@@ -33,7 +33,7 @@ Differences worth knowing:
 
 | Script | Replaces LLM-judgment for | When invoked |
 |--------|---------------------------|--------------|
-| [`scripts/probe-unknown.js`](../../scripts/probe-unknown.js) | Count refuted hypotheses and the other ladder signals; recommend one rung (U0–U4) | Step 4, after every refuted hypothesis |
+| [`scripts/probe-unknown.js`](../../scripts/probe-unknown.js) | Count refuted hypotheses and the other ladder signals; recommend one rung (U0–U3) | Step 4, after every refuted hypothesis |
 | [`scripts/dispatch-consult.sh`](../../scripts/dispatch-consult.sh) | Ask the consult seat one bounded question, advice only; `--ladder-receipt` stamps the U1 row | Step 4, only on `recommend: U1` |
 | [`scripts/decision-ledger.js`](../../scripts/decision-ledger.js) | `append --kind hypothesis` — every hypothesis and its refutation as a ledger row (the S1 counter) | Steps 3–4 |
 

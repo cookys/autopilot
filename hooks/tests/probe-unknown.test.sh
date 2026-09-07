@@ -146,6 +146,10 @@ node "$PROBE" classify --ledger "$L" --fast-moving "${PIN[@]}" >/dev/null 2>&1; 
 assert_exit_code "$RC" "2" "--fast-moving without --terms is a usage error (no cue without a name)"
 node "$PROBE" classify --ledger "$L" --refuted-threshold two "${PIN[@]}" >/dev/null 2>&1; RC=$?
 assert_exit_code "$RC" "2" "non-integer --refuted-threshold is a usage error"
+OUT="$(node "$PROBE" classify --ledger "$L" "${PIN[@]}")"
+assert_eq "$(printf '%s' "$OUT" | field knob_resolved_from)" "argv" "knob/budgets from argv ⇒ knob_resolved_from argv"
+OUT="$(node "$PROBE" classify --ledger "$L" --consult-resolved-from topology --consult-dispatch auto --knowledge-dir "$TEST_TMP/k" --memory-dir "$TEST_TMP/m" --repo-root "$REPO_ROOT" --budget-u3 4)"
+assert_eq "$(printf '%s' "$OUT" | field knob_resolved_from)" "argv" "a --budget-u3 override alone is still argv provenance"
 OUT="$(node "$PROBE" receipt --ledger "$L" --rung U2 --unknown-type how --terms judged --signals "" --work-unit p13)"
 assert_contains "$OUT" '"signal_ids":[]' "--signals \"\" records an empty signal list (judgment-only climb)"
 assert_eq "$(node "$PROBE" report --ledger "$L" | field judgment_only)" "1" "judgment-only climbs are observable (KR1)"

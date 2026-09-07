@@ -10,9 +10,9 @@ Fable 5.1」（low effort 不搜尋 ⇒ survey 席 effort 下限 medium；compac
 
 - **`scripts/probe-unknown.js`（新）**：`classify` 讀 S1 假設被推翻 ≥2（ledger `hypothesis` rows）、S2 review 不收斂、S3 stall fuse、
   S4 task 名詞零命中（knowledge／memory／repo）或 `--fast-moving`、S5 think-tank 共識 LOW、S6 自報（只是 claim），輸出一個 rung
-  推薦 U0–U4；三條規則：co-signal（S4／S6 單獨最多 U1）、heterogeneity（consult 是 native-fallback 或 off ⇒ 跳過 U1、絕不派）、
+  推薦 U0–U3（U4 是 run 自己的停止，probe 不推）；三條規則：co-signal（S4／S6 單獨最多 U1）、heterogeneity（consult 是 native-fallback 或 off ⇒ 跳過 U1、絕不派）、
   exhaustion（用完的階不重複、不買更高階、全部用完 ⇒ `none/budget-exhausted`、永不因用完升到 U4）。stdout 一個 JSON、任何分類 exit 0、
-  `--strict` 才對 U2–U4 回 2。`receipt` 經 `decision-ledger.js append` 寫一筆 `ladder` row；`report` 出 climbs／skips／`s6_only`／
+  `--strict` 才對 U2／U3 回 2。`receipt` 經 `decision-ledger.js append` 寫一筆 `ladder` row；`report` 出 climbs／skips／`s6_only`／
   `repeat_terms`／`learn_required`。
 - **`scripts/decision-ledger.js`**：telemetry kinds `hypothesis`／`unknown`／`ladder`（免 decision_id，各自欄位驗證）；round-end report
   多一段 Ladder（rows、refuted 數、每階 used、skips、S6-only）。**`build-rehydration-bundle.js`** §4 tail 優先保留當前 round 的 ladder rows。

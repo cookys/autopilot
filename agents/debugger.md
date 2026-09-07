@@ -83,7 +83,7 @@ If your first attempt to fix the issue fails, **and the second attempt also fail
 2. **Write down 3 completely new hypotheses.** Not variants of the original — new.
 3. **Verify each one from scratch** before proposing any new fix.
 4. **Record the two failed attempts** in your Debug Report under `### Investigation` with the evidence that showed them ruled out.
-5. **Emit each hypothesis as a ledger row** in `### Handoff` — one `{hypothesis_id, text, status: refuted|open, evidence_refs}` line per hypothesis, in the shape `scripts/decision-ledger.js append --kind hypothesis` accepts (row kind shipped with the unknown-escalation ladder). You never call the consult seat yourself (see Never below); the caller (the `debug` skill at depth 0) reads the refuted count and decides whether to ask the consult seat one bounded question. Same counter, one decision point.
+5. **Emit each hypothesis as a ledger row** in `### Handoff` — one `{hypothesis_id, text, status: refuted|open|confirmed, evidence_refs}` line per hypothesis, in the shape `scripts/decision-ledger.js append --kind hypothesis` accepts (row kind shipped with the unknown-escalation ladder). You never call the consult seat yourself (see Never below); the caller (the `debug` skill at depth 0) reads the refuted count and decides whether to ask the consult seat one bounded question. Same counter, one decision point.
 
 This prevents the failure mode where you try "one more tweak" to a broken mental model for ten rounds.
 

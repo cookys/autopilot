@@ -29,8 +29,15 @@
   hermetic fixture 化列 BACKLOG；opencode `--variant` 是否真的控制 reasoning effort 只有 CLI help 的宣稱，未做 A/B；probe 各 rail 的 live spend
   都沒有 `timeout`（既有樣式，opencode 跟著沒加），要修一次修全部。
 - `references/evidence-discipline.md` §29：derived cache 與 generator 一致只證明 generator 跑過，不證明 generator 對。
+- **doc-sync（scoped，v2.36.15＋v2.36.16 diff）**：十個確定性 gate 全綠；四個 finder 的 confirmed 修正——ceo-agent DOA 表與
+  `level-front-door.md` 把 U3 寫成「只給 `whether`」，但 probe 的 chain 是 why U1→U2→U3（PUA），改成依 `unknown_type` 分流；dev-flow L-1／L-2
+  兩處 receipt argv 硬寫 `--unknown-type how`，改成回填 classify 的 `unknown_type` 並補 U3 分支；debugger agent 的 hypothesis status 漏 `confirmed`；
+  template `implementer_runner` 允許值補 `cursor|opencode`；probe `--help` runner 清單補齊 roster；`hetero-dispatch.md` Hook points 表路徑寫法統一。
+  profiles hash 鏈重釘（ceo-agent 第 257 行的 rewritten disposition successor 換新 hash；rule 數不變）。README 兩份正文「25 hooks」
+  （badge 早是 30，2026-07-26 起沒人紅）修正並**降進 Layer 1**：`check-readme-parity.js` 新增 prose-count 檢查（正文的 skill／agent／hook
+  數字要等於同檔 badge），紅綠測試各兩條；scripts-inventory 的 dispatch-consult 列補 `--ladder-receipt`；INDEX v2.36.16 列補 merge SHA。
 
-prose-justification: no `skills/*/SKILL.md` line count grew this release (resolver/probe + tests + docs only).
+prose-justification: no `skills/*/SKILL.md` line count grew this release (resolver/probe + tests + docs only; the doc-sync fixes rewrite existing lines in place).
 
 ## v2.36.15 — unknown-escalation ladder：「卡住」變成可量的訊號，按階梯升級（consult → survey → think-tank → owner），每階有預算與 receipt（owner 2026-09-07「擴大解決未知問題的能力」）
 

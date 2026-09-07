@@ -51,6 +51,22 @@ assert_eq "1" "$EXIT" "section-count drift exit 1"
 assert_contains "$OUT" "section count" "section drift names the check"
 restore "README.zh-TW.md"
 
+# 7. PROSE-count drift: the sentence says a hook count the badge does not (the class
+# that sat unnoticed from 2026-07-26 to 2026-09-08: "25 hooks" against hooks-30).
+# Count-agnostic: rewrite the first "<N> hooks" prose occurrence to 1.
+sed -i -E '0,/\b[0-9]+ hooks\b/s//1 hooks/' "$SBX/README.md"
+OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "prose hook-count drift exit 1"
+assert_contains "$OUT" "prose count" "prose drift names the check"
+assert_contains "$OUT" "hooks badge" "prose drift names the badge it disagrees with"
+restore "README.md"
+
+sed -i -E '0,/[0-9]+ 個 skill/s//1 個 skill/' "$SBX/README.zh-TW.md"
+OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "zh prose skill-count drift exit 1"
+assert_contains "$OUT" "README.zh-TW.md" "zh prose drift names the file"
+restore "README.zh-TW.md"
+
 # 6. post-restore clean re-check → exit 0 (restores held)
 node "$SCRIPT" >/dev/null 2>&1
 assert_eq "0" "$?" "post-restore clean exit 0"

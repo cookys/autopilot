@@ -11,6 +11,7 @@
   2. `probe-engine-capability.sh` 少 opencode binary／live 分支（v2.36.13 加 rail 時沒跟），並列入 effort consumer（dispatcher 餵 `--variant`）；live 驗 `opencode-go/muse-spark-1.3-contributor` effort low → available。
   3. switch test 的 pinned pre-D6 resolver 解析不了 `plan_review: auto`／`implementer_ladder: auto`（2026-09-04 起的值）⇒ OLD 輸出空、parity 比空集合；改共用一份兩行重寫的 parity template，consult_* 四欄允許 D6 自身的 topology 填值漂移，added-keys 補 `ladder_start_rung_judgment`，migration negative 放寬為「指名任一缺欄」。
 - **本機 host 狀態**：`~/.autopilot/topology.json` 已用修後 script 重建（備份 `topology.json.bak-legacy-effort-20260907`）。`contract-parity`／switch 兩支測試仍讀真主機 cache——BACKLOG 新條目（hermetic fixture 化）。
+- **doc-sync 已做（2026-09-08，scoped，兩版 diff）**：十個確定性 gate 全綠；四個 finder 的 confirmed 修正全部落地（U3 依 `unknown_type` 分流、dev-flow receipt 回填 unknown_type、README「25 hooks」等）；「正文數字 vs badge」這一類已降進 Layer 1（`check-readme-parity.js` prose-count 檢查）。細節見 CHANGELOG v2.36.16 doc-sync 段。
 - **證據**：`resolve-dispatch-topology` 46、`resolve-review-loop` 417、switch 58、`contract-parity` 42、`probe-runner-coverage` 23、`probe-engine-capability` 8；全套見下方驗證方式。`references/evidence-discipline.md` §29 新增。
 
 ## 已決事項(不重議)

@@ -903,7 +903,7 @@ node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <run> \
 
 - `U1` ⇒ `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <type> --ladder-signals <ids from classify> --ladder-work-unit <run>`.
 - `U2` ⇒ dispatch `autopilot:survey` (or its `issue-search` mode for a `why` unknown) **in the background**, keep the round moving on independent work, and when the result is read: `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <type> --terms <terms> --signals <ids> --work-unit <run>`.
-- `U3` (`whether` only) ⇒ `autopilot:think-tank`, then `receipt … --rung U3 --signals S5`.
+- `U3` ⇒ by the classify output's `unknown_type`: `whether` (S5) → `autopilot:think-tank`; `why` (S1/S2/S3 — the `--convergence`/`--stall` inputs above make this a live outcome here) → `autopilot:debugger` PUA; then `receipt … --rung U3 --unknown-type <type> --signals <ids from classify>`.
 - The probe never recommends U4 by itself (a spent budget is `none`, never an escalation). U4 is the run's own stop — the stall fuse (§8) or a DOA boundary — and when that stop fires the foreman attaches `ladder_receipts:` (the ledger rows) to the `[ESCALATION]`, so the owner sees the concrete, reviewable climbs, not a summary.
 - `none` ⇒ continue; the probe's `reason` (`budget-exhausted` / `not-heterogeneous` / `knob-off`) is printed in the report's Ladder section. Exhaustion never buys a higher rung and never escalates.
 

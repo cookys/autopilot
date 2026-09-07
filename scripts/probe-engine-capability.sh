@@ -25,7 +25,8 @@ Usage:
     [--store <path>] [--now <ISO>] [--role <role>]
 
 Options:
-  --runner <r>       Specify runner name (e.g. codex, agy, grok, qoderclicn, cursor, cc-shim).
+  --runner <r>       Runner name: codex, agy, grok, qoderclicn, cursor, kimi, opencode, cc-shim,
+                     claude-native, anthropic-compatible (the dispatch-review.sh roster).
   --model <m>        Specify model name.
   --effort <e>       Exact effort partition written into the capability row.
   --endpoint <v>     Exact endpoint wallet name, or @none for explicit endpoint:null.

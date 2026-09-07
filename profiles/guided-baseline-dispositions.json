@@ -245,7 +245,7 @@
       "disposition": "rewritten",
       "successor_hashes": [
         "7587701a19aff7009a5900a8f051e70a9ae0212c39913fb930dfeb84f44e75c8",
-        "272167994357e38de1e615f8cea44e8e8562a601ab6faff2b94148217dbbabbc"
+        "52b1c23f248208a87f6ab4269e43b480b021e6fdc307c8d977b90fc3bf75e36a"
       ],
       "rationale": "P0 skills/ceo-agent/SKILL.md:256 (CEO Autonomous DOA row: Research | Whether to run survey, what topic). Unknown-escalation ladder P4 (plan docs/plans/2026-09-07-unknown-escalation-ladder.md, v2.36.15): the research decision is no longer a free judgment call — survey is invoked only when scripts/probe-unknown.js classify recommends U2 with budget left, and a judgment-only wish is recorded as a ledger note. Successors at current :256 (rewritten Research row) and :257 (new Unknown-escalation DOA row listing the rungs the CEO may climb). What changed is the trigger, not the CEO ownership of the research decision."
     },

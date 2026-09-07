@@ -292,7 +292,7 @@ Ask if anything is absolutely off-limits. If none, use default DOA.
 |---------------|----------|
 | Tech selection | zstd vs deflate, which library |
 | Research | Invoke `autopilot:survey` only when the unknown-escalation ladder probe says `recommend: U2` with budget left; a judgment-only research wish is recorded as a ledger `note`, never dispatched |
-| Unknown escalation | Climb U1–U2 when `scripts/probe-unknown.js classify` recommends them (read-only, budgeted per `review-loop-config.md`); U3 for `whether` unknowns only; U4 is a Board escalation, never a CEO decision |
+| Unknown escalation | Climb U1–U2 when `scripts/probe-unknown.js classify` recommends them (read-only, budgeted per `review-loop-config.md`); U3 by `unknown_type` (`whether` → think-tank, `why` → debugger PUA); U4 is a Board escalation, never a CEO decision |
 | Team composition | Agent count, roles, parallel vs sequential |
 | Implementation path | Phase order, file structure, API design |
 | Error recovery | Build failure fix, test failure handling |

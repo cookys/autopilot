@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.36.13 — opencode 可當 reviewer／qc 席（`dispatch-review.sh` 新 rail；308 需求，owner 裁定 2026-09-07）
+
+308 要用 `opencode-go/muse-spark-1.3-contributor` 坐 qc reviewer；之前 `dispatch-review.sh` 直接拒 `--runner opencode`，hetero-dispatch 表標
+implementer-only。查證：pi 的 implementer-only 有結構原因（RPC duplex 監督），opencode 沒有——`opencode run` headless 讀 STDIN、`--dir`、
+`--pure`、`--format json`，implementer rail 2026-09-03 已驗證。
+
+- **`scripts/dispatch-review.sh`**：新 `opencode` rail——scratch cwd、prompt 走 STDIN（無 ARG_MAX 牆）、`run --dir <scratch> --pure -m <model>
+  --agent plan --variant <effort> --format json`（`max`→`xhigh`）、Node scriptlet 把 NDJSON 事件流的最後一段 assistant 文字抽出來餵共用
+  VERDICT parser、非零 rc fail-closed、暫存檔 EXIT 回收；usage／JSON 文件／`--bin` 同其他 rail。
+- **read-only 姿態是 best-effort，不是沙箱**（live 對抗探針 2026-09-07，opencode 1.18.27）：`--agent plan` 的 permission 只 deny `edit`，
+  叫它跑 `hostname` 它照跑並回真主機名。與 kimi／grok／cursor 同一層級，文件如實標註。
+- **allowlists**：`resolve-review-loop.sh` reviewer／plan／deep／VA／consult／discuss／`qc_panel_runners` 加 `opencode`；schema 七個 enum 同步
+  （`check-contract-schema.js` 三方一致）；`dispatch-plan-review.js` RUNNERS 加 `opencode`。與 v2.36.12 的 kimi 對齊在同一批行合併，結果是聯集。
+- **`qualification-review-provider.js`**：新增 `opencode` kind 但**一律拒絕**（與 `cursor` 同一原則）：exam 的完整性門檻要真的 tool-deny，
+  `--agent plan` 不是；opencode 席目前只能以 advisory coverage 坐（stderr `POLICY OVERRIDE`＋`policy_override` 留痕），要考試得等 opencode 出
+  真的 deny-all 機制並重跑對抗探針。
+- 測試（先紅 13 條）：`dispatch-review.test.sh` 382（NDJSON stub：verdict 解析、空輸出 no_verdict、缺 binary precondition、好 block 但非零 rc
+  no_verdict、effort clamp、argv 形狀）；resolver 414、plan-review 268、contract-schema parity。docs：`references/hetero-dispatch.md` opencode
+  列 reviewer ✅（best-effort 註記）、`project-config-template/review-loop-config.md` reviewer_runner 列＋Gotchas 配方。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (dispatch rail + tests + reference docs only).
+
 ## v2.36.12 — kimi 可坐 plan reviewer／plan deep reviewer／verification-author 席（308 需求，owner 裁定 2026-09-07）
 
 308 要把 kimi-code/k3 排進 review-loop 的 reviewer／qc 席，卡在 `resolve-review-loop.sh` 對 `plan_deep_reviewer_runner: kimi` 回

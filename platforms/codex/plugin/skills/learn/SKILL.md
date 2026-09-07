@@ -137,6 +137,8 @@ Examples:
 /learn env Script path wrong — use relative path from project root
 ```
 
+**From a ladder climb** (unknown-escalation ladder, plan `docs/plans/2026-09-07-unknown-escalation-ladder.md` P5): when `finish-flow` L-5.6 / S.1 finds a `learn_required` entry in `node scripts/probe-unknown.js report --ledger <ledger>`, the entry is pre-filled from that row — `terms` become the knowledge entry's title keywords (verbatim, so the next `probe-unknown.js classify --terms …` lookup hits), `unknown_type` picks the category (`how` → the approach and its source; `why` → the root cause and the refuted hypotheses from the ledger; `whether` → the decision and the consensus map), and the row's `dispatch_run_id` / rung is cited as provenance. One climb = one entry; the same terms climbing again in a later session is the KR4 repeat signal that says the entry was not findable.
+
 ---
 
 ## Session Learning Summary (L-size)

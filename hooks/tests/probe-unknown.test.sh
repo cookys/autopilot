@@ -104,6 +104,18 @@ OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p7 --terms $NOVEL "${PIN
 assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "S4-only with consult off ⇒ none (U2 not signal-eligible)"
 assert_eq "$(printf '%s' "$OUT" | field reason)" "not-heterogeneous" "consult off names not-heterogeneous"
 
+# ── rail-failed: consumes the rung budget, is a skip (never learn), so a dead seat is not re-recommended forever ──
+append hypothesis '{"hypothesis_id":"h5","text":"x","status":"refuted","work_unit":"p12"}'
+append hypothesis '{"hypothesis_id":"h6","text":"y","status":"refuted","work_unit":"p12"}'
+node "$PROBE" receipt --ledger "$L" --rung U1 --unknown-type why --terms dead --signals S1 --work-unit p12 --reason rail-failed >/dev/null
+node "$PROBE" receipt --ledger "$L" --rung U1 --unknown-type why --terms dead --signals S1 --work-unit p12 --reason rail-failed >/dev/null
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p12 "${PIN[@]}")"
+assert_eq "$(printf '%s' "$OUT" | field budget.used.U1)" "2" "rail-failed rows consume the U1 budget"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "after two failed U1 attempts the signal-eligible U2 is recommended, not U1 again"
+OUT="$(node "$PROBE" report --ledger "$L")"
+assert_eq "$(printf '%s' "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.learn_required.filter(c=>c.terms.includes("dead")).length)})')" "0" "rail-failed rows never become a learn trigger"
+assert_eq "$(printf '%s' "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.skips.filter(c=>c.reason==="rail-failed").length)})')" "2" "rail-failed rows are reported as skips"
+
 # ── S5 / S6 ──
 OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p8 --consensus LOW "${PIN[@]}")"
 assert_eq "$(printf '%s' "$OUT" | field unknown_type)" "whether" "consensus LOW ⇒ unknown-whether"
@@ -132,7 +144,7 @@ assert_exit_code "$RC" "2" "usage error exits 2"
 
 # ── report ──
 OUT="$(node "$PROBE" report --ledger "$L")"
-assert_eq "$(printf '%s' "$OUT" | field skips.length)" "1" "report separates skips"
+assert_eq "$(printf '%s' "$OUT" | field skips.length)" "3" "report separates skips (1 knob-off + 2 rail-failed)"
 assert_eq "$(printf '%s' "$OUT" | field s6_only.length)" "1" "report lists S6-only climbs (R16)"
 assert_contains "$(printf '%s' "$OUT" | field repeat_terms)" '"cache"' "repeat_terms groups by term (KR4)"
 assert_eq "$(printf '%s' "$OUT" | field judgment_only)" "0" "no judgment-only climbs in this fixture"
@@ -145,7 +157,7 @@ assert_eq "$(printf '%s' "$OUT" | field ledgers.length)" "2" "--project-dir aggr
 # ── ledger round-end report: Ladder section ──
 OUT="$(node "$LEDGER" report --ledger "$L")"
 assert_contains "$OUT" "## Ladder" "round-end report has a Ladder section"
-assert_contains "$OUT" "refuted hypotheses: 4" "refuted count rendered"
+assert_contains "$OUT" "refuted hypotheses: 6" "refuted count rendered"
 assert_contains "$OUT" "skip U0 reason=knob-off" "skips rendered"
 assert_contains "$OUT" "S6-only climbs (self-reported unknown, no mechanical co-signal): U1 terms=proto" "S6-only subset rendered"
 

@@ -180,8 +180,12 @@ unknown-whether U0→U1→U3→U4. Three rules the probe enforces, stated once h
   when the task has a project dir, else `~/.autopilot/ladder/<first 12 hex of sha256(git common dir)>.jsonl`.
 - **Receipt writer (R14)**: every U1/U2/U3 dispatch appends exactly one `ladder` row after the rail returns —
   U1 via `dispatch-consult.sh --ladder-receipt`, U2/U3 via `probe-unknown.js receipt` at the call site. A row at
-  rung ≥ 1 without `reason` ∈ {knob-off, budget-exhausted, not-heterogeneous} is by definition a climb that
+  rung ≥ 1 without `reason` ∈ {knob-off, budget-exhausted, not-heterogeneous, rail-failed} is by definition a climb that
   consumed an outside source, and is the learn trigger in P5; there is no separate `resolved` attestation.
+- **Rail-failed rule (P4 dogfood finding, post-freeze bounded change)**: when a rail dies after the probe recommended
+  a rung (transport / protocol / qualification failure), the site writes the row with `reason: rail-failed`
+  (`dispatch-consult.sh --ladder-receipt` does it on its own failure paths). Such a row **consumes the rung's
+  budget** but is never a climb — without it a consult seat with no credentials was recommended on every round.
 
 **Files**:
 
@@ -300,3 +304,4 @@ What would guarantee failure:
 - Manifest: `docs/plans/2026-09-07-unknown-escalation-ladder.plan-review-manifest.json` (grok-4.6 xhigh chair, MiniMax-M3 high skeptic, sol optional). Rubric: `docs/plans/2026-09-07-unknown-escalation-ladder.rubric.md` (R1–R16). Ledger: `docs/projects/2026-09-07-unknown-escalation-ladder/ledger/plan-review/`.
 - G1 2026-09-07 (`g1.stdout.json`): CONDITIONAL; grok + MiniMax delivered, sol died exit 3 twice (codex quota). 8 candidate blockers (R10 co-signal, R8 knob semantics + P0 wording, R5 consult guard, R12 pre-dispatch heterogeneity, R13 budgets, R3 ledger shapes, R14 terms + rehydrate target, R9 four call sites) — all accepted and folded; 8 non-blocking (R2 CLI, R16 s6_only ×2, R13 wording ×2, R8 off/on ×2, R10 false-positive observable) — 7 folded, 1 (R13 per-task vs per-work-unit) rejected with rationale: owner ruling Q2 was given with the per-phase explanation, and the work unit is now stated once in P2. Dispositions: `g1-disposition.json`. R5 verified live: default config resolves a kimi consult seat yet `dispatch-consult.sh` exits `switch_off`.
 - G2 2026-09-07 (`g2.stdout.json`, generation cap, `policy: generation_cap_requires_depth_0_adjudication`): MiniMax READY, grok CONDITIONAL with 5 candidate blockers (R10 P4 seed was S4-only, R12 L-2 consult bypassed the probe, R9 U2/U3 climbs had no receipt writer and argv was elided, R14 `resolved` had no writer, R11 exhaustion→U4 could halt a foreman) and 2 non-blocking (R8 C2/CEO step 7 still taught judgment-only survey, R2 receipt double stdout). Depth-0 adjudication: all 7 accepted and folded — §3 gains the ledger-location, receipt-writer and exhaustion-never-U4 rules; P3/P4 spell full argv per site and a receipt after every rail; P5 keys learn on the receipt row; `resolved` removed from the ladder shape. Zero rejected, zero deferred. Dispositions: `g2-disposition.json`; re-derivation `g2.adjudicated.json`; checker input `g2.dispositions.checker.json`; frozen bytes `plan.g2-reviewed.md`.
+- Post-freeze bounded change 2026-09-07 (implementation, not review): `rail-failed` skip reason added (§3) after the P4 dogfood design showed the host's first consult seat (kimi, no credential) would be re-recommended every round; the reviewed contract (exhaustion never buys a rung, skips never learn) is unchanged.

@@ -33,6 +33,10 @@
  *                  hard signal persists (S3 tripped or S2 TRIP): the owner must see it.
  *   knob           unknown_escalation off ⇒ recommend none, reason knob-off (one knob-off
  *                  ladder row per work unit is appended so the skip is visible).
+ *   rail-failed    a ladder row with reason rail-failed (written by dispatch-consult.sh
+ *                  --ladder-receipt on a transport/protocol/qualification failure, or by the
+ *                  caller after a failed survey/think-tank rail) consumes that rung's budget
+ *                  without counting as a climb — a dead seat is retried at most budget times.
  *
  * Modes (stdout is always exactly one JSON object; diagnostics on stderr):
  *   classify --ledger <file> [--work-unit <id>] [--round <n>] [--terms a,b,c] [--fast-moving]
@@ -45,7 +49,7 @@
  *        eligible_max, budget:{u1,u2,u3,used:{U1,U2,U3}}, knob, terms_hits}
  *     exit 0 always; 2 on usage; with --strict, 2 when recommend ∈ {U2,U3,U4}.
  *   receipt  --ledger <file> --rung Ux --unknown-type <t> --terms a,b,c --signals S1,S3
- *            [--reason knob-off|budget-exhausted|not-heterogeneous] [--run-id <id>]
+ *            [--reason knob-off|budget-exhausted|not-heterogeneous|rail-failed] [--run-id <id>]
  *            [--heterogeneous true|false] [--work-unit <id>] [--round <n>]
  *     → runs decision-ledger.js append --kind ladder (one writer, existing lock),
  *       captures its stdout and prints exactly the appended row.
@@ -71,7 +75,12 @@ const SCRIPT_DIR = __dirname;
 const RUNGS = ['U0', 'U1', 'U2', 'U3', 'U4'];
 const CHAINS = { how: ['U1', 'U2'], why: ['U1', 'U2', 'U3'], whether: ['U1', 'U3'] };
 const DEFAULT_BUDGETS = { U1: 2, U2: 1, U3: 1 };
-const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous']);
+// Skip reasons: the first three mean the rung was never attempted; `rail-failed` means the rung was
+// attempted and the rail itself failed (transport, protocol, qualification) — it CONSUMES budget so a
+// dead seat cannot be recommended forever, but it is not a climb (no outside source was consumed, so
+// it never triggers learn). Found by the P4 dogfood: a consult seat without credentials would otherwise
+// be recommended on every round.
+const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
 const STRICT_SET = new Set(['U2', 'U3', 'U4']);
 
 function usage(message) {
@@ -295,7 +304,7 @@ function classify(opts) {
   const heterogeneousU1 = consult.dispatch !== 'off' && consult.resolvedFrom !== 'native-fallback';
 
   const used = { U1: 0, U2: 0, U3: 0 };
-  for (const r of rows) if (r.kind === 'ladder' && !r.reason && used[r.rung] !== undefined) used[r.rung] += 1;
+  for (const r of rows) if (r.kind === 'ladder' && (!r.reason || r.reason === 'rail-failed') && used[r.rung] !== undefined) used[r.rung] += 1;
 
   const out = {
     schema_version: 1,
@@ -431,7 +440,7 @@ function report(opts) {
     for (const r of readRows(ledger)) {
       if (!r || r.kind !== 'ladder') continue;
       const entry = { ledger, rung: r.rung, unknown_type: r.unknown_type, terms: r.terms || [], signal_ids: r.signal_ids || [], signal_coverage: (r.signal_ids || []).length, work_unit: r.work_unit || null, heterogeneous: r.heterogeneous, dispatch_run_id: r.dispatch_run_id || null, ts: r.ts || null };
-      if (r.reason) { entry.reason = r.reason; skips.push(entry); } else climbs.push(entry);
+      if (r.reason) { entry.reason = r.reason; skips.push(entry); } else climbs.push(entry); // rail-failed rows are skips: budget spent, nothing learned
     }
   }
   const judgmentOnly = climbs.filter((c) => c.signal_coverage === 0);

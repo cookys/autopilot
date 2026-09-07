@@ -111,6 +111,30 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Ladder receipt helper (plan P2/P4): after the transport was attempted, record the
+# attempt in the decision ledger. On success the row is a climb; on a transport /
+# protocol / verdict failure it carries reason=rail-failed so the probe consumes the
+# rung's budget instead of recommending a dead seat forever (P4 dogfood finding).
+ladder_receipt() { # <reason-or-empty>
+  local reason="$1"
+  [ -n "$LADDER_RECEIPT" ] || return 0
+  if [ -z "$LADDER_TERMS" ] || [ -z "$LADDER_UNKNOWN_TYPE" ]; then
+    echo "dispatch-consult: --ladder-receipt requires --ladder-terms and --ladder-unknown-type — receipt NOT written" >&2
+    return 0
+  fi
+  local hetero="true"; [ "${CONSULT_RESOLVED_FROM:-}" = "native-fallback" ] && hetero="false"
+  local -a args=(receipt --ledger "$LADDER_RECEIPT" --rung U1 --unknown-type "$LADDER_UNKNOWN_TYPE" --terms "$LADDER_TERMS" --signals "${LADDER_SIGNALS:-S6}" --heterogeneous "$hetero" --run-id "consult-$(date -u +%Y%m%dT%H%M%SZ)-$$")
+  [ -n "$reason" ] && args+=(--reason "$reason")
+  [ -n "$LADDER_WORK_UNIT" ] && args+=(--work-unit "$LADDER_WORK_UNIT")
+  [ -n "$LADDER_ROUND" ] && args+=(--round "$LADDER_ROUND")
+  local err
+  err="$(mktemp "${TMPDIR:-/tmp}/dispatch-consult-receipt.XXXXXX")"
+  if ! node "$SCRIPT_DIR/probe-unknown.js" "${args[@]}" >/dev/null 2>"$err"; then
+    echo "dispatch-consult: ladder receipt refused: $(cat "$err" 2>/dev/null)" >&2
+  fi
+  rm -f "$err"
+}
+
 emit() {
   local status="$1" engine="$2" runner="$3" effort="$4" endpoint="$5" response_json="$6" error="$7" exit_code="$8"
   local endpoint_json="null"
@@ -249,11 +273,13 @@ AUTHOR_RAW_LOG="$(printf '%s' "$AUTHOR_OUT" | node -e 'let s="";process.stdin.on
 
 if [ "$AUTHOR_RC" -ne 0 ] || [ "$AUTHOR_STATUS" != "authored" ]; then
   echo "dispatch-consult: transport did not produce an authored result (status=${AUTHOR_STATUS:-unknown}, exit=$AUTHOR_RC)" >&2
+  ladder_receipt "rail-failed"
   emit "transport_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "transport status=${AUTHOR_STATUS:-unknown}" 5
 fi
 
 [ -n "$AUTHOR_RAW_LOG" ] && [ -r "$AUTHOR_RAW_LOG" ] || {
   echo "dispatch-consult: authored result carried no readable raw_log" >&2
+  ladder_receipt "rail-failed"
   emit "transport_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "no raw_log from transport" 5
 }
 RESPONSE_TEXT="$(cat "$AUTHOR_RAW_LOG")"
@@ -275,6 +301,7 @@ process.stdout.write(hit || "");
 ' "$CORPUS_MANIFEST" "$AUTHOR_RAW_LOG" 2>/dev/null || true)"
 if [ -n "$VERDICT_HIT" ]; then
   echo "dispatch-consult: response rejected — carries a loop-convergence verdict token: $VERDICT_HIT" >&2
+  ladder_receipt "rail-failed"
   emit "verdict_rejected" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "verdict token present: $VERDICT_HIT" 5
 fi
 
@@ -321,25 +348,11 @@ process.stdout.write("");
 
 if [ -n "$VALIDATION" ]; then
   echo "dispatch-consult: $VALIDATION" >&2
+  ladder_receipt "rail-failed"
   emit "protocol_violation" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "$VALIDATION" 5
 fi
 
-# ── 7. Ladder receipt (additive, success path only). heterogeneous is false on a
-# claude-native fallback seat — a same-family "outside opinion" is recorded as
-# such so the probe's report and P5 learn trigger can tell them apart.
-if [ -n "$LADDER_RECEIPT" ]; then
-  if [ -z "$LADDER_TERMS" ] || [ -z "$LADDER_UNKNOWN_TYPE" ]; then
-    echo "dispatch-consult: --ladder-receipt requires --ladder-terms and --ladder-unknown-type — advice delivered, receipt NOT written" >&2
-  else
-    _hetero="true"; [ "$CONSULT_RESOLVED_FROM" = "native-fallback" ] && _hetero="false"
-    _receipt_args=(receipt --ledger "$LADDER_RECEIPT" --rung U1 --unknown-type "$LADDER_UNKNOWN_TYPE" --terms "$LADDER_TERMS" --signals "${LADDER_SIGNALS:-S6}" --heterogeneous "$_hetero" --run-id "consult-$(date -u +%Y%m%dT%H%M%SZ)-$$")
-    [ -n "$LADDER_WORK_UNIT" ] && _receipt_args+=(--work-unit "$LADDER_WORK_UNIT")
-    [ -n "$LADDER_ROUND" ] && _receipt_args+=(--round "$LADDER_ROUND")
-    if ! node "$SCRIPT_DIR/probe-unknown.js" "${_receipt_args[@]}" >/dev/null 2>"$AUTHOR_RAW_LOG.receipt.err"; then
-      echo "dispatch-consult: ladder receipt refused: $(cat "$AUTHOR_RAW_LOG.receipt.err" 2>/dev/null)" >&2
-    fi
-    rm -f "$AUTHOR_RAW_LOG.receipt.err"
-  fi
-fi
+# ── 7. Ladder receipt (additive, success path). ──
+ladder_receipt ""
 
 emit "advised" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "$RESPONSE_TEXT" "" 0

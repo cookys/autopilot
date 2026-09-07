@@ -81,10 +81,19 @@ assert_eq "0" "$RC" "native-fallback consult still advised (the probe, not this 
 assert_contains "$(tail -1 "$L")" '"heterogeneous":false' "native-fallback ⇒ heterogeneous false on the row"
 assert_eq "2" "$(wc -l < "$L" | tr -d ' ')" "second row appended, never rewritten"
 
+# ── 4b. transport failure with --ladder-receipt ⇒ one rail-failed row (budget consumed, not a climb) ──
+DEAD="$TEST_TMP/dead-author.sh"; printf '#!/usr/bin/env bash\nexit 97\n' > "$DEAD"; chmod +x "$DEAD"
+OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" "$SCRIPT" --question-file "$Q" --artifact "$ART" --dispatch-author-bin "$DEAD" --ladder-receipt "$L" --ladder-terms cache --ladder-unknown-type why --ladder-work-unit p3 2>/dev/null)"; RC=$?
+assert_eq "5" "$RC" "dead transport still exits 5"
+assert_contains "$OUT" '"status": "transport_failed"' "dead transport status unchanged"
+assert_eq "3" "$(wc -l < "$L" | tr -d ' ')" "a rail-failed row was appended"
+assert_contains "$(tail -1 "$L")" '"reason":"rail-failed"' "row carries reason rail-failed"
+assert_contains "$(tail -1 "$L")" '"rung":"U1"' "rail-failed row is at U1"
+
 # ── 5. --ladder-receipt without terms/type ⇒ advice delivered, no row, stderr says so ──
 OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" "$SCRIPT" --question-file "$Q" --artifact "$ART" --dispatch-author-bin "$STUB" --ladder-receipt "$L" 2>"$TEST_TMP/5.err")"; RC=$?
 assert_eq "0" "$RC" "missing ladder metadata never fails the consult"
 assert_contains "$(cat "$TEST_TMP/5.err")" "receipt NOT written" "stderr names the skipped receipt"
-assert_eq "2" "$(wc -l < "$L" | tr -d ' ')" "no row without terms/type"
+assert_eq "3" "$(wc -l < "$L" | tr -d ' ')" "no row without terms/type"
 
 finalize_test

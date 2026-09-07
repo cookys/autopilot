@@ -34,7 +34,8 @@
  * rationale like `note`, each validated against its own required-field set. A
  * `ladder` row is written once per rung dispatch by probe-unknown.js receipt or
  * dispatch-consult.sh --ladder-receipt; a `reason` of knob-off | budget-exhausted |
- * not-heterogeneous marks a skip, not a climb.
+ * not-heterogeneous marks a skip, not a climb; `rail-failed` marks an attempted rung
+ * whose rail died (budget consumed, nothing learned).
  * All rows carry {schema_version:1, ts, kind}.
  *
  * Usage:
@@ -58,7 +59,7 @@ const KINDS = new Set(['decision', 'dispatch', 'pick', 'refreeze', 'veto', 'note
 const TELEMETRY_KINDS = new Set(['note', 'hypothesis', 'unknown', 'ladder']);
 const RUNGS = ['U0', 'U1', 'U2', 'U3', 'U4'];
 const UNKNOWN_TYPES = ['how', 'why', 'whether'];
-const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous']);
+const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
 const LADDER_KINDS = new Set(['hypothesis', 'unknown', 'ladder']);
 
 function isNonEmptyString(v) { return typeof v === 'string' && v.trim().length > 0; }
@@ -243,7 +244,7 @@ function report(opts) {
   const climbs = ladderRows.filter((r) => !r.reason);
   const skips = ladderRows.filter((r) => r.reason);
   const used = {};
-  for (const c of climbs) used[c.rung] = (used[c.rung] || 0) + 1;
+  for (const c of ladderRows) if (!c.reason || c.reason === 'rail-failed') used[c.rung] = (used[c.rung] || 0) + 1;
   lines.push(`- refuted hypotheses: ${refuted}`);
   lines.push(`- climbs used per rung: ${RUNGS.slice(1, 4).map((r) => `${r}=${used[r] || 0}`).join(' ')}`);
   if (ladderRows.length === 0) lines.push('- (no ladder rows this round)');

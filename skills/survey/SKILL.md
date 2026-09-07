@@ -28,7 +28,7 @@ Two independent agents (researcher + skeptic) search in parallel, bringing diffe
 
 - **Produce recommendation, marked as suggestion** -- attach reasoning and preconditions so user can judge applicability
 - **No code** -- research only
-- **No auto-trigger in participatory modes** -- signal only suggests, user confirms. In just-results modes (`ceo-agent`, `/l3`+, a foreman) the caller may invoke without confirmation and records the decision (decision ledger or CEO Report); the unknown-escalation ladder probe (plan `docs/plans/2026-09-07-unknown-escalation-ladder.md`, ships with the ladder) is the signal source there, not this table
+- **No judgment-only auto-trigger** -- a survey runs without a Proceed prompt only when the unknown-escalation ladder probe (plan `docs/plans/2026-09-07-unknown-escalation-ladder.md`, ships with the ladder) recommends U2 with budget left, in every mode; the caller records the climb in the decision ledger. Judgment-only suggestions, knob-off and budget-exhausted cases keep the suggest-then-confirm template above
 
 ## Flow
 

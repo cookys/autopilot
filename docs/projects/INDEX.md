@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-09-07 | [unknown-escalation-ladder](2026-09-07-unknown-escalation-ladder/README.md) | v2.36.15 | `feat/v2.36.15-unknown-escalation-ladder` |
 
 ## 已完成 (Completed)
 

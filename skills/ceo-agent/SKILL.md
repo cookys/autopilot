@@ -253,7 +253,8 @@ Ask if anything is absolutely off-limits. If none, use default DOA.
 | Decision Type | Examples |
 |---------------|----------|
 | Tech selection | zstd vs deflate, which library |
-| Research | Whether to run survey, what topic |
+| Research | Invoke `autopilot:survey` only when the unknown-escalation ladder probe says `recommend: U2` with budget left; a judgment-only research wish is recorded as a ledger `note`, never dispatched |
+| Unknown escalation | Climb U1–U2 when `scripts/probe-unknown.js classify` recommends them (read-only, budgeted per `review-loop-config.md`); U3 for `whether` unknowns only; U4 is a Board escalation, never a CEO decision |
 | Team composition | Agent count, roles, parallel vs sequential |
 | Implementation path | Phase order, file structure, API design |
 | Error recovery | Build failure fix, test failure handling |
@@ -332,7 +333,7 @@ When encountering these, pause and propose:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board
 6. Produce CEO Reports per involvement level
-7. Need research? → Autonomously invoke autopilot:survey
+7. Need research? → run `node scripts/probe-unknown.js classify --ledger <ledger> --terms <nouns>`; invoke `autopilot:survey` only on `recommend: U2` with budget left, then `probe-unknown.js receipt --rung U2`; a judgment-only wish becomes a ledger `note`, not a dispatch
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
 9. Need parallel execution? → Pick the first AVAILABLE entry from `.claude/dispatch-config.md` → Parallel Dispatch. If no config file exists, or `superpowers:dispatching-parallel-agents` is listed but the plugin is not installed, fall back to `native` — issue multiple `Task` tool calls in a single response. (dev-flow session rules inject team config either way.)
    - For L-size parallel dispatch: use Seven-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)

@@ -49,6 +49,8 @@ precondition or abort receipt; do not invent another lifecycle authority.
 
 # /l4 — CEO autonomy, dispatched foreman
 
+> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run; `[ESCALATION]` only on `recommend: U4`) — see `ceo-agent/references/level-front-door.md` §6.
+
 Terse front-door into `autopilot:ceo-agent` at **Level 4**: dispatch **ONE**
 background, worktree-isolated sub-orchestrator "foreman" that runs dev-flow
 unattended; the CEO holds the **depth-0 control loop** and the **authoritative

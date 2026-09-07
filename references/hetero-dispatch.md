@@ -688,11 +688,21 @@ executable consumer, `scripts/dispatch-discuss.js` (plan D9), called from
 `skills/think-tank/SKILL.md`. It resolves and dispatches the same way — own switch
 resolution, `dispatch-author.sh`'s raw-prompt rail, a closed production schema, advisory only.
 
-### Hook points
+### Hook points — the four canonical unknown-escalation ladder call sites
 
-- debug: after two failed hypotheses in the Debug Cycle, ask the consult seat one bounded question.
-- think-tank: Step 3.5 already dispatches the discuss seat; consult is the single-question sibling of that same seat family, for a narrower ask.
-- dev-flow: for an L-size design decision, consult before step L-2, per skills/dev-flow/references/hetero-loops.md.
+The consult seat is rung U1 of the unknown-escalation ladder (plan
+`docs/plans/2026-09-07-unknown-escalation-ladder.md`). It is never called unconditionally: every
+site runs `scripts/probe-unknown.js classify` first and acts only on `recommend`; every U1/U2/U3
+dispatch appends one `ladder` row (`dispatch-consult.sh --ladder-receipt` for U1,
+`probe-unknown.js receipt` for U2/U3). This list is canonical; the SKILLs spell the same argv.
+
+| Site | classify argv | Rungs it can spawn |
+|---|---|---|
+| `debug` step 4 (after every refuted `hypothesis` row) | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <task> --terms <error nouns>` | U1 `dispatch-consult.sh … --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type why --ladder-signals S1`; U2 survey `issue-search` + `receipt --rung U2`; U3 `autopilot:debugger` PUA + `receipt --rung U3` |
+| `dev-flow` L-1 step 4 and L-2 consult-before-design | `node scripts/probe-unknown.js classify --ledger <ledger> --terms <task / design nouns>` | U1 `dispatch-consult.sh … --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type how`; U2 survey + `receipt --rung U2` |
+| `think-tank` Step 5 (consensus LOW) | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <decision> --consensus LOW --terms <decision nouns>` | U1 consult (`--ladder-unknown-type whether --ladder-signals S5`); U3 `think-tank-dialectic` + `receipt --rung U3 --signals S5` |
+| `ceo-agent` foreman round end (`references/level-front-door.md`) | `node scripts/probe-unknown.js classify --ledger <round ledger> --work-unit <run> --convergence <convergence.json> --stall <stall.json> --terms <round nouns>` | U1 consult; U2 background survey + `receipt --rung U2`; U3 (`whether` only) think-tank + `receipt --rung U3`; U4 `[ESCALATION]` with the ledger receipts |
+
 - quality-pipeline: never consults a seat that is already sitting in the resolved qc_panel — the resolver's exclusion enforces this mechanically, no extra code needed here.
 
 ## Codex-plugin consult (optional)

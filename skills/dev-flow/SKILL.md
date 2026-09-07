@@ -62,6 +62,9 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
 4. Knowledge and digest review:
    Check .claude/knowledge/ for relevant prior learnings.
    Check for unprocessed session digests.
+   Ladder probe (unknown-escalation ladder, plan `docs/plans/2026-09-07-unknown-escalation-ladder.md`): run
+   `node scripts/probe-unknown.js classify --ledger <ledger> --terms <key nouns from the task brief>` and act only on `recommend` — U0: read the local hits it lists; U1: `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type how`; U2: survey, then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type how --terms <terms> --signals <ids>`; none: continue.
+   Ledger: `<project>/ledger/decisions.jsonl` (the probe's default when the flag is omitted is `~/.autopilot/ladder/<repo-hash>.jsonl`).
 
 5. Draft plan overlap check:
    ls docs/plans/*.md 2>/dev/null  (or project-configured path)
@@ -431,6 +434,7 @@ scope boundary. Do not ask the user to enumerate dimensions — that's CEO tacti
 ### L-2. Plan
 - User provides plan → use it directly, skip Plan Mode.
 - Needs design → EnterPlanMode → design → ExitPlanMode → user approval.
+- Consult before design (receipted; this is the ladder's U1 spawn, not an unconditional call): run `node scripts/probe-unknown.js classify --ledger <ledger> --terms <design nouns>`; call `bash scripts/dispatch-consult.sh --question-file <design-question> --artifact <plan-draft> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type how` **only on `recommend: U1`**. If the probe skipped U1 (`reason: not-heterogeneous`, or `consult_dispatch: off`) follow `recommend` instead — U2 survey followed by `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type how --terms <terms> --signals <ids>`, or none — and never invoke `dispatch-consult.sh`. Rail details: [references/hetero-loops.md#consult-before-design](references/hetero-loops.md#consult-before-design).
 - Save plan to: `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
 ### L-2.5. Plan hetero loop review
@@ -697,6 +701,7 @@ Phase/P0 task-enumeration rule above.
 | `scripts/plan-rubric-scaffold.js` | Generate structured rubric markdown skeletons from an input plan document for frozen review rubrics. |
 | `scripts/hetero-review-loop.js` | Drive multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipts for review loops. |
 | `scripts/check-phase-review-receipt.js` | Validate phase review receipts against git history and review artifacts or validate plan artifact blocker dispositions. |
+| `scripts/probe-unknown.js` | Unknown-escalation ladder probe: `classify` turns refuted hypotheses / loop non-convergence / stall / zero-hit terms / low consensus into one rung recommendation U0–U4; `receipt` appends the ladder row after a rail returns. Call sites: L-1 step 4 and L-2 consult-before-design (this skill), debug step 4, think-tank Step 5, foreman round end. |
 
 Before any TaskCreate, branch, worktree, runner, or model effect:
 

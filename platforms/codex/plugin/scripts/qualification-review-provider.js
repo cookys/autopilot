@@ -31,7 +31,17 @@
  *                                 QRP_CLI_KIND=cursor → ALWAYS REFUSES. cursor-agent
  *                                 exposes no verified tool-deny/sandbox mechanism —
  *                                 see the callCli() cursor branch for the full
- *                                 reasoning and the R-3 citation.)
+ *                                 reasoning and the R-3 citation.
+ *                                 QRP_CLI_KIND=opencode → ALWAYS REFUSES. `opencode
+ *                                 run --agent plan` LOOKS like a read-only posture
+ *                                 (its permission set denies `edit`) but a live
+ *                                 adversarial probe (2026-09-07, opencode 1.18.27:
+ *                                 asked it to run `hostname` via its bash tool) ran
+ *                                 the command and returned the REAL host's
+ *                                 hostname — `--agent plan` only denies `edit`, not
+ *                                 tool/bash execution, so it is not a deny mechanism
+ *                                 this adapter can rely on. See the callCli()
+ *                                 opencode branch.)
  *
  * ⚠️ agy takes NO --effort. Probed 2026-08-20 (agy 1.1.16) across three model
  * families: `--effort low|medium|high` → "--effort is not supported for <model>",
@@ -134,7 +144,7 @@ const MAX_DIFF_BYTES = 2 * 1024 * 1024;
 // the generic "QRP_CLI_KIND must be one of" message. Kept as one list so the
 // validation message and the dispatch switch can never disagree about what is
 // supported.
-const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi', 'grok', 'qoderclicn', 'cursor'];
+const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi', 'grok', 'qoderclicn', 'cursor', 'opencode'];
 // A credential-only QRP_CLI_HOME seed is ~16 KB; 8 MB leaves room for a config
 // tree while still refusing a real home.
 const CLI_HOME_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
@@ -833,6 +843,27 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
       + 'AppArmor-gated/unavailable, and --mode ask is overridden by the --force that headless -p '
       + 'requires — refusing to spawn cursor flag-armed and uncontained. This kind will refuse EVERY '
       + 'case until cursor-agent ships a real catch-all deny or a portable sandbox surviving --force.',
+    );
+  } else if (kind === 'opencode') {
+    // REFUSAL, not containment — same doctrine as the cursor branch above.
+    // `opencode run --agent plan` (the posture scripts/dispatch-review.sh's
+    // reviewer rail uses, best-effort, NOT claimed as a hard sandbox there
+    // either) denies `edit` via its permission set, but a live adversarial
+    // probe (2026-09-07, opencode 1.18.27) asked it to run `hostname` through
+    // its bash tool and it DID — tool_use event, real exit 0, the actual
+    // host's hostname in the output. `--agent plan` only gates `edit`; it has
+    // no `--tools ""` / `--deny "*"` equivalent this adapter could force. Per
+    // this file's own safety contract: refuse rather than expose the host.
+    // This branch NEVER builds args and NEVER spawns. Lifting this refusal
+    // requires a real deny-all mechanism for opencode (a future CLI flag, or
+    // an agent profile that also denies bash/tool execution) plus a fresh
+    // adversarial probe proving it holds.
+    throw new Error(
+      'opencode has no verified tool-deny/sandbox mechanism — CONFIRMED by live '
+      + 'adversarial probing 2026-09-07 (opencode 1.18.27: `--agent plan` denies edit '
+      + 'but let a `hostname` bash-tool call run and return the real host hostname) — '
+      + 'refusing to spawn opencode flag-armed and uncontained. This kind will refuse '
+      + 'EVERY case until opencode ships a real catch-all deny.',
     );
   } else if (kind === 'codex') {
     sidecar = path.join(

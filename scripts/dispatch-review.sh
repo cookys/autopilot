@@ -30,7 +30,7 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
@@ -100,9 +100,28 @@
 #   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
 #   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
 #   (P12); cursor-agent rejects both flags with "error: unknown option".
+#   opencode runner: drives the OpenCode CLI (`opencode run`). Probe-verified 2026-09-07
+#   (opencode 1.18.27): `--dir <scratch-cwd>` anchors the run outside the repo (the diff
+#   is TEXT in the prompt, this rail needs no repo access at all — scratch cwd is the
+#   ACTUAL containment, same as kimi/cursor below); `--agent plan` denies `edit` for
+#   every path except its own plan-file directory (verified via `opencode agent list`,
+#   NOT the implementer rail's default `build` agent) but is BEST-EFFORT, NOT a hard
+#   sandbox: a live adversarial probe (asked it to run `hostname`) showed `--agent plan`
+#   does NOT block bash/tool execution — the model ran the command and returned the real
+#   host's hostname. So opencode stays OUT of the AUTOPILOT_BLIND_DISCOVERY no-tools
+#   allowlist, same tier as kimi/grok/cursor (see qualification-review-provider.js's
+#   opencode kind, which refuses entirely for the stricter exam-integrity threshold).
+#   `--pure` disables external plugins; the prompt is read from STDIN (no positional
+#   message ⇒ no ARG_MAX wall, same as qoderclicn/cursor); `--format json` streams
+#   newline-delimited JSON events — the final assistant text is the LAST
+#   `{"type":"text",...}` event's `.part.text` (probe-verified: one complete text event
+#   per assistant turn, not incremental deltas — extracted via a Node built-in
+#   scriptlet, same normalize-before-parse shape as the kimi salvage). `--variant`
+#   carries reasoning effort (autopilot's `max` clamps to `xhigh`, same mapping as the
+#   dispatch-hetero.sh implementer rail — see there for the effort-tier probe).
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
 #     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "...",
 #     "usage": { ... }|null }
@@ -264,8 +283,8 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, or cursor (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
 if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
   case "$RUNNER" in
     qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
@@ -651,6 +670,10 @@ KIMI_CLEAN="" # normalized kimi stdout; reaped on EXIT if interrupted
 CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
 CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
+OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
+OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
+OPENCODE_ERR=""   # opencode stderr chrome
+OPENCODE_CLEAN="" # extracted final-assistant-text scratch file; reaped on EXIT if interrupted
 AGY_CWD=""
 AGY_OUT=""
 AGY_ERR=""
@@ -677,6 +700,10 @@ cleanup() {
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD"
   [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
+  [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
+  [ -n "$OPENCODE_OUT" ] && rm -f "$OPENCODE_OUT"
+  [ -n "$OPENCODE_ERR" ] && rm -f "$OPENCODE_ERR"
+  [ -n "$OPENCODE_CLEAN" ] && rm -f "$OPENCODE_CLEAN"
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD"
   [ -n "$AGY_OUT" ] && rm -f "$AGY_OUT"
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
@@ -1151,6 +1178,79 @@ elif [[ "$RUNNER" = "kimi" ]]; then
     emit_no_verdict "kimi exited non-zero (rc=$KIMI_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$KIMI_OUT"
+elif [[ "$RUNNER" = "opencode" ]]; then
+  # OpenCode CLI reviewer rail — see header comment for the probe evidence (2026-09-07,
+  # opencode 1.18.27). Prefer explicit --bin, else PATH (well-known install paths for
+  # opencode vary too much across platforms to hardcode one, unlike kimi's single
+  # ~/.kimi-code/bin/kimi convention).
+  if [[ -n "${BIN:-}" ]]; then
+    OPENCODE_BIN="$BIN"
+  elif command -v opencode >/dev/null 2>&1; then
+    OPENCODE_BIN="$(command -v opencode)"
+  else
+    die_precondition "opencode binary not found (install OpenCode CLI; PATH or --bin)"
+  fi
+  case "$OPENCODE_BIN" in
+    /*) ;;
+    *)  # only resolve relative *paths* (./opencode), never bare name "opencode" → $PWD/opencode
+        if [[ -f "$OPENCODE_BIN" || -f "./$OPENCODE_BIN" ]]; then
+          OPENCODE_BIN="$(cd "$(dirname "$OPENCODE_BIN")" 2>/dev/null && pwd)/$(basename "$OPENCODE_BIN")" || true
+        else
+          die_precondition "opencode --bin must be absolute or on PATH (got: $OPENCODE_BIN)"
+        fi
+        case "$OPENCODE_BIN" in /*) ;; *) die_precondition "could not resolve opencode --bin to absolute path: ${BIN:-opencode}" ;; esac ;;
+  esac
+  [[ -x "$OPENCODE_BIN" ]] || die_precondition "opencode binary not executable: $OPENCODE_BIN"
+  OPENCODE_OUT="$(mktemp -t dispatch-review-opencode-out-XXXXXX)"
+  OPENCODE_ERR="$(mktemp -t dispatch-review-opencode-err-XXXXXX)"
+  OPENCODE_CWD="$(mktemp -d -t dispatch-review-opencodecwd-XXXXXX)"
+  OPENCODE_VARIANT="$EFFORT"; [ "$OPENCODE_VARIANT" = "max" ] && OPENCODE_VARIANT="xhigh"
+  # --agent plan denies `edit` (best-effort, NOT a hard sandbox — see header comment:
+  # a live probe showed it does not block bash/tool execution). --dir anchors the run
+  # at the scratch cwd (the ACTUAL containment, never the repo). Prompt via STDIN (no
+  # ARG_MAX wall). --format json for machine-parseable events.
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$3" --agent plan --variant "$4" --format json < "$5"' \
+      _ "$OPENCODE_CWD" "$OPENCODE_BIN" "$MODEL" "$OPENCODE_VARIANT" "$PROMPT_FILE" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+  OPENCODE_RC=$?
+  wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  rm -rf "$OPENCODE_CWD"; OPENCODE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  cat "$OPENCODE_OUT" > "$RAW_LOG"
+  printf '\n--- opencode stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$OPENCODE_ERR" >> "$RAW_LOG"
+  # --format json is newline-delimited JSON events, not the plain VERDICT text every other
+  # rail's parser expects — extract the LAST {"type":"text",...} event's .part.text (the
+  # final assistant message; probe-verified one complete event per turn, no incremental
+  # deltas, so "last" is correct and concatenation would duplicate). Runs BEFORE the rc
+  # check, same ordering rationale as the kimi salvage (a non-zero rc still gets a fair
+  # shot at the fail-closed no_verdict salvage path below on whatever text did land).
+  OPENCODE_CLEAN="$(mktemp -t dispatch-review-opencode-clean-XXXXXX)"
+  node -e '
+    const fs = require("fs");
+    let raw;
+    try { raw = fs.readFileSync(process.argv[1], "utf8"); } catch { process.exit(0); }
+    let last = "";
+    for (const line of raw.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      let ev;
+      try { ev = JSON.parse(t); } catch { continue; }
+      if (ev && ev.type === "text" && ev.part && typeof ev.part.text === "string") {
+        last = ev.part.text;
+      }
+    }
+    process.stdout.write(last);
+  ' "$OPENCODE_OUT" > "$OPENCODE_CLEAN" 2>/dev/null
+  if [ -s "$OPENCODE_CLEAN" ]; then
+    cat "$OPENCODE_CLEAN" > "$OPENCODE_OUT"
+  fi
+  rm -f "$OPENCODE_CLEAN"; OPENCODE_CLEAN=""
+  if [ "$OPENCODE_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: opencode exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$OPENCODE_RC" "$([ "$OPENCODE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    SALVAGE_CAPTURE="$OPENCODE_OUT"
+    emit_no_verdict "opencode exited non-zero (rc=$OPENCODE_RC) — fail-closed, partial output not parsed"
+  fi
+  PARSE_INPUT="$OPENCODE_OUT"
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
@@ -1284,7 +1384,7 @@ else
   # "do not ship" — a precondition exit would be indistinguishable from a bad invocation.
   AGY_PROMPT_BYTES=$(wc -c < "$PROMPT_FILE")
   if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_PROMPT_BYTES" "the review prompt" \
-      "narrow --diff (fewer files / smaller range) or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor)")"; then
+      "narrow --diff (fewer files / smaller range) or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)")"; then
     emit_no_verdict "$AGY_CEILING_REASON"
   fi
   AGY_BWRAP_ARGS=(--ro-bind / / --dev /dev --proc /proc)

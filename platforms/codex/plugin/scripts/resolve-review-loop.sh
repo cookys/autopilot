@@ -327,9 +327,9 @@ else
     exit 3
   fi
   case "$VER_AUTH_RUNNER" in
-    codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor) ;;
+    codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor|opencode) ;;
     *)
-      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor): $VER_AUTH_RUNNER" >&2
+      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor|opencode): $VER_AUTH_RUNNER" >&2
       exit 3
       ;;
   esac
@@ -423,11 +423,11 @@ case "$HETERO_REVIEW" in auto|on|off) ;; *)
   echo "resolve-review-loop: invalid hetero_review (must be auto|on|off): $HETERO_REVIEW" >&2
   exit 3
 esac
-case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;; *)
+case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *)
   echo "resolve-review-loop: invalid plan_reviewer_runner: $PLAN_REV_RUNNER" >&2
   exit 3
 esac
-case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;; *)
+case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *)
   echo "resolve-review-loop: invalid plan_deep_reviewer_runner: $PLAN_DEEP_RUNNER" >&2
   exit 3
 esac
@@ -455,7 +455,7 @@ for _seat in consult discuss; do
     discuss) _s_eng="$DISCUSS_ENGINE"; _s_eff="$DISCUSS_EFFORT"; _s_run="$DISCUSS_RUNNER"; _s_ep="$DISCUSS_ENDPOINT" ;;
   esac
   case "$_s_run" in
-    ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
+    ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
     *) echo "resolve-review-loop: invalid ${_seat}_runner: $_s_run" >&2; exit 3 ;;
   esac
   case "$_s_eff" in
@@ -686,7 +686,7 @@ fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
     case "${QC_PANEL_RUNNERS[$_i]}" in
-      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
+      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
       *) QC_PANEL_SEATS_COMPLETE="false" ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
@@ -717,9 +717,9 @@ fi
 # Runner identity selects the actual transport. Unknown or blank explicit values
 # fail loudly: silently substituting a different runner misattributes the review.
 case "$REV_RUNNER" in
-  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
+  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
   *)
-    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor): ${REV_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode): ${REV_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac

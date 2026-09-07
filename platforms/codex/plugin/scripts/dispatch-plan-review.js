@@ -87,6 +87,7 @@ const RUNNERS = new Set([
   'qoderclicn',
   'kimi',
   'cursor',
+  'opencode',
 ]);
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 

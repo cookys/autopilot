@@ -118,7 +118,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "x-shell-validated": true,
       "x-shell-var": "REV_RUNNER"
@@ -346,7 +347,8 @@
         "anthropic-compatible",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ]
     },
     "verification_author_effort": {
@@ -452,7 +454,8 @@
               "claude-native",
               "qoderclicn",
               "kimi",
-              "cursor"
+              "cursor",
+              "opencode"
             ]
           },
           "model": {
@@ -571,7 +574,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ]
     },
     "plan_reviewer_endpoint": {
@@ -604,7 +608,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ]
     },
     "plan_deep_reviewer_endpoint": {
@@ -701,7 +706,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "description": "Runner for the consult seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
     },
@@ -736,7 +742,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "description": "Runner for the discuss seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
     },

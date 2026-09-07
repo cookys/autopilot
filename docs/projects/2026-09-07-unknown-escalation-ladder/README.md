@@ -1,6 +1,6 @@
 # Unknown-escalation ladder
 
-> Plan: [`docs/plans/2026-09-07-unknown-escalation-ladder.md`](../../plans/2026-09-07-unknown-escalation-ladder.md) (R0; plan review pending in `ledger/plan-review/`)
+> Plan: [`docs/plans/2026-09-07-unknown-escalation-ladder.md`](../../plans/2026-09-07-unknown-escalation-ladder.md) (frozen at g2 2026-09-07, `ledger/plan-review/`, checker exit 0)
 > Branch: `feat/v2.36.15-unknown-escalation-ladder` · Target: v2.36.15 (PATCH: new script + knob + reference, no new skill/agent) · Size: L
 > Owner rulings 2026-09-07: ladder is a switch, default on in every mode; budgets are climb counts per work unit (U1=2, U2=1, U3=1); knob name `unknown_escalation`; self-reported unknowns cap at U1 (recommended default, not yet ruled).
 
@@ -36,8 +36,8 @@ Plan headings P0–P6 are coverage inside D1, not execution nodes.
 
 | Phase | Status | Evidence |
 |---|---|---|
-| L-2.5 plan review | pending | `ledger/plan-review/` |
-| P0 reconcile definitions | pending | |
+| L-2.5 plan review | done 2026-09-07 — G1 CONDITIONAL (8 blockers folded, 1 nb rejected), G2 cap CONDITIONAL→depth-0 adjudicated (7 folded), checker rc=0 | `ledger/plan-review/g2.adjudicated.json`, `g2.dispositions.checker.json`, `plan.g2-reviewed.md` |
+| P0 reconcile definitions | done 2026-09-07 (c02308ab, survey wording corrected again by G1 R8 in 0c32af13) | debugger PUA handoff rows; survey Boundary + Signal table; hetero-loops pointer |
 | P1 signals + probe | pending | |
 | P2 knob + budgets + receipt | pending | |
 | P3 inline skill wiring | pending | |
@@ -45,4 +45,4 @@ Plan headings P0–P6 are coverage inside D1, not execution nodes.
 | P5 close the loop (learn) | pending | |
 | P6 survey issue-search | pending | |
 
-Last updated: 2026-09-07 (project opened; plan R0 committed)
+Last updated: 2026-09-07 (plan frozen at g2; P0 done; P1 starting)

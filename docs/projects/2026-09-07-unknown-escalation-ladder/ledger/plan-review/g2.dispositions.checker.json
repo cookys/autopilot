@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "unknown-escalation-ladder-2026-09-07",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "aac379061de420f00cde09d34de9dc782e0e58039176bebc39d737d5b0607c61",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. P4/KR3 dogfood now seeds per the co-signal rule (zero-hit terms plus --fast-moving or plus a refuted-hypothesis pair) and adds a negative seed (zero-hit alone ⇒ U0/U1, no survey); the round end acts only on classify.recommend and the DOA table lists allowed rungs, not a climb-if-budget-left rule; P1 tests include S4-only inside a foreman-shaped ledger ⇒ never U2."
+    },
+    {
+      "fingerprint": "ec176daab5751bdcf394067904c195359327394917fcae02c7381354ec92e391",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. dev-flow L-2 is now a ladder U1 spawn: classify with the site argv first, dispatch-consult.sh only on recommend U1; a skipped U1 (not-heterogeneous / consult_dispatch off) follows recommend (U2 survey + receipt, or none) and never invokes dispatch-consult.sh — the same gate as debug step 4."
+    },
+    {
+      "fingerprint": "ecfc8713c8d8f0dc52680670bcf052987133eb17af38da51ef87b163d1a077bb",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. §3 gains the receipt-writer rule (every U1/U2/U3 dispatch appends one ladder row after the rail returns: U1 via --ladder-receipt, U2/U3 via probe-unknown.js receipt) and a shared ledger-location rule so every site can spell --ledger; P3 spells full classify + receipt argv for debug, dev-flow L-1/L-2 and think-tank (which now runs classify and climbs U3 only on recommend U3 with budget left); P4 spells the foreman round-end argv and receipts the background survey; P3/P4 acceptance greps the argv strings and requires the dogfood U2 row to come from the survey path."
+    },
+    {
+      "fingerprint": "a9c239e487f171c76a0b5d17fd10aaade037083759bd0aa0eb20dfe2f3a60dcd",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded with the preferred repair: the ladder row itself (rung ≥ 1, reason not in {knob-off, budget-exhausted, not-heterogeneous}) written by receipt-on-dispatch is the learn trigger; the resolved field and --resolved flag are removed from the shape and the receipt CLI; P5 and C7 key on that row and P5 acceptance requires the row to be produced by the receipt command, not hand-written, with a negative case for budget-exhausted-only ledgers."
+    },
+    {
+      "fingerprint": "a4d6f42d18c6087ed49b82399a052abc8c9a03ba2a58055025d05cd9ddeaf792",
+      "candidate_blocker": true,
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Exhaustion always recommends none with reason budget-exhausted (§3, P2, P1 fixture: exhausted ⇒ none, not U4); U4 is reserved for an unresolved unknown the signals say the owner must see; P4 emits [ESCALATION] only on recommend U4."
+    },
+    {
+      "fingerprint": "a30db259322f454baf7448bc6b3c9cc3c976fe102f11b84d57e076e942674261",
+      "candidate_blocker": false,
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: §0.5 C2 resolution rewritten to the P0/Q1 rule (probe-recommended U2 with budget, every mode; judgment-only keeps confirm and is never an autonomous dispatch); ceo-agent step 7 and the files-table line now say invoke survey only on recommend U2 with budget left and record judgment-only wishes as a ledger note without dispatching."
+    },
+    {
+      "fingerprint": "3e052ac428e29236197e95bae8c8cea46977aff9ba149fbd10c8b3207bdcfc74",
+      "candidate_blocker": false,
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P1 receipt captures the child append stdout and prints exactly one JSON object (the appended row); child output is never forwarded; classify/receipt/report each emit one object with diagnostics on stderr."
+    }
+  ]
+}

@@ -1,0 +1,377 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "unknown-escalation-ladder",
+  "logical_plan_id": "unknown-escalation-ladder-2026-09-07",
+  "session_id": "6e53d2af-d5da-441e-bd3e-7a91f97a7aee",
+  "session_key": "e44b0df39a284afcafc50523c9b608cd7e94a11b6b32bcf6dbcbc3e6d800f23e",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "22ba6997d6babf2c1187c3f5c0650d26170294535d885c0bd41da24cfb6c6ce0",
+  "manifest_sha256": "0ce421ba62bef3a709300db231f524ac18422a3d2222bd6f04881e995fd6bb8d",
+  "plan_sha256": "a69d266aa2cc36f587144a15bf02402fe91e408f40bb872a1c09a48c2bcb6864",
+  "growth_ratio": {
+    "numerator": 12717,
+    "denominator": 10810
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "grok_architecture_chair",
+      "target_id": "grok_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "5855e39090686776422428091692b7020c0abaddfcc03a924be93c2292bc7d3b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "69c5b21f8aabf0b62078340fef24cbdd6dc1fc6875abfc3d350f9c168dc84af2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-9sIJSV",
+          "digest": "69c5b21f8aabf0b62078340fef24cbdd6dc1fc6875abfc3d350f9c168dc84af2"
+        },
+        "receipt_digest": "5ddc4f5869bd2d831cb0fa6221f2d92c0037d5a35b9e46851f386ee96c251cde"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "086643fd1f9790a2a2f6fe9f0e47ec242fd5766a425e8ef8f523a81eaa2f0105"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-U4XxAm",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "adcb1298847332aef951bb80fb750d8965eb57eb2c7c047c185eacae46822ef7"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_third_seat",
+      "target_id": "sol_third_seat",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "a9e20c08516e73aeabc73756ce54abe115c0c5cff3d7c20da013e0afe651fd04"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "d4e9b9ffa99c3e87dd701e4c8a3e72a1d0c3dfcd1a1911a5e1ffbb4fd2693740"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_third_seat",
+      "target_id": "sol_third_seat",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "024e239fd915752ba16a2af18dab88889cdce5c6c1715f7f05bcbadfbb393f0d"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "f4fb7b681664375c0a669b0efc0d498dc2e0cce2c7fa27c99d3939d17befd249"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "grok_architecture_chair",
+      "target_id": "grok_architecture_chair",
+      "family": "xai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 co-signal rule, PLAN §2 KR3, PLAN §4 P4 foreman round-end and dogfood",
+      "claim": "The G1 co-signal fold is contradicted by P4/KR3, which still treat an S4-only zero-hit seed as a U2 climb and describe the foreman round-end as climbing U1-U2 whenever budget remains.",
+      "evidence": "Section 3 co-signal rule: S4 alone recommends at most U1; U2 needs S4 plus one of S1/S2/S3/S5, or S4 with --fast-moving. P4 acceptance: one /l4 run on a seeded unknown whose key terms have zero knowledge hits shows a U2 ladder row inside a foreman round. That seed is S4-only. P4 round-end text runs classify, then U1-U2 within CEO DOA when budget left, without only when recommend is U1 or U2. KR3 is verified by the same U2 dogfood. Together this reopens the R10 every-new-noun survey path at the KR3 site.",
+      "evidence_reference": "PLAN §3 Co-signal rule (R10); PLAN §2 KR3; PLAN §4 P4 level-front-door round-end sequence and KR3 dogfood acceptance; FROZEN_RUBRIC R10",
+      "repair": "P4/KR3 dogfood must seed S4 plus a second signal or an explicit --fast-moving cue, not zero-hit terms alone. Round-end acts only on classify.recommend; the DOA table lists which rungs are allowed, not a climb-if-budget-left rule. P1 and P4 tests: S4-only inside a foreman round is U0 or U1, never U2.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "aac379061de420f00cde09d34de9dc782e0e58039176bebc39d737d5b0607c61",
+      "disposition_rationale": "Accepted and folded. P4/KR3 dogfood now seeds per the co-signal rule (zero-hit terms plus --fast-moving or plus a refuted-hypothesis pair) and adds a negative seed (zero-hit alone ⇒ U0/U1, no survey); the round end acts only on classify.recommend and the DOA table lists allowed rungs, not a climb-if-budget-left rule; P1 tests include S4-only inside a foreman-shaped ledger ⇒ never U2."
+    },
+    {
+      "rubric_id": "R12",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 heterogeneity rule, PLAN §4 P3 L-2, PLAN §3 files table skills/dev-flow/SKILL.md, skills/dev-flow/references/hetero-loops.md Consult before design",
+      "claim": "The C5 skip is specified on the probe, but the primary U1 call site is still an unconditional consult-before-design dispatch, so native-fallback consult still runs.",
+      "evidence": "Section 3 heterogeneity rule: before any U1 spawn, consult_resolved_from native-fallback or consult_dispatch off means recommend U2, skipped_rungs [U1], and dispatch-consult.sh is never invoked. P3 L-2 adds consult before design (receipted) replacing the reference-only rule, with no classify gate and no skipped-U1 path. The files table says L-2 gains the consult-before-design step with receipt (C3). Live hetero-loops.md Consult before design already tells every L-size task to call dispatch-consult.sh with --question-file and --artifact before the L-2 design decision. That U1 spawn does not read consult_resolved_from, so C5/R12 never fire on the common consult.",
+      "evidence_reference": "PLAN §3 Heterogeneity rule (R12); PLAN §4 P3 skills/dev-flow/SKILL.md L-2; PLAN §3 Files skills/dev-flow/SKILL.md row; skills/dev-flow/references/hetero-loops.md Consult before design; FROZEN_RUBRIC R12",
+      "repair": "L-2 is a ladder U1 spawn: run classify with the site argv, then call dispatch-consult.sh only on recommend U1. If the probe skipped U1 (not-heterogeneous or consult_dispatch off), L-2 must not invoke dispatch-consult.sh; follow recommend (U2 survey when that is the skip, else none). Same gate as debug step 4.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "ec176daab5751bdcf394067904c195359327394917fcae02c7381354ec92e391",
+      "disposition_rationale": "Accepted and folded. dev-flow L-2 is now a ladder U1 spawn: classify with the site argv first, dispatch-consult.sh only on recommend U1; a skipped U1 (not-heterogeneous / consult_dispatch off) follows recommend (U2 survey + receipt, or none) and never invokes dispatch-consult.sh — the same gate as debug step 4."
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §4 P2 receipt-on-dispatch, PLAN §4 P3 debug/think-tank/L-2, PLAN §4 P4 dogfood, PLAN §3 files hetero-dispatch.md four call sites",
+      "claim": "Canonical sites still do not all run classify with a fully spelled argv and persist a kind ladder row on U2/U3 dispatch, so KR1 cannot observe those climbs and the probe-wired-but-never-called failure remains.",
+      "evidence": "P2 receipt-on-dispatch exists only as dispatch-consult.sh --ladder-receipt after a successful U1 emit. P3 debug on U2 runs survey issue-search and on U3 dispatches the debugger PUA, with no receipt command. P3 think-tank appends kind unknown on LOW consensus and leaves the dialectic U3 climb unchanged: no classify, no kind ladder row, no budget or knob check. P3 L-2 has no classify argv. P3 acceptance claims each inline SKILL spells full argv (--ledger, --terms where present), but debug uses an ellipsis --ledger … and think-tank has no classify line. P4 dogfood requires a U2 ladder row inside a foreman round, yet P4 never calls receipt after survey. KR1 is measured from receipts with signal not judgment-only; U2/U3 autonomous climbs have no writer.",
+      "evidence_reference": "PLAN §4 P2 dispatch-consult.sh --ladder-receipt; PLAN §4 P3 debug step 4, think-tank, acceptance; PLAN §4 P4 KR3 dogfood; PLAN §3 Files references/hetero-dispatch.md Hook points; PLAN §2 KR1; FROZEN_RUBRIC R9",
+      "repair": "Each of the four sites spells a full classify argv in the SKILL or front-door line. Every U1/U2/U3 dispatch appends kind ladder: U1 via --ladder-receipt, U2/U3 via probe-unknown.js receipt with signal_ids after the existing rail returns. Think-tank runs classify and climbs U3 only on recommend U3 with budget left. P3/P4 acceptance greps those argv strings and requires one U2 row produced by the survey path, not by a hand-edited fixture.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "ecfc8713c8d8f0dc52680670bcf052987133eb17af38da51ef87b163d1a077bb",
+      "disposition_rationale": "Accepted and folded. §3 gains the receipt-writer rule (every U1/U2/U3 dispatch appends one ladder row after the rail returns: U1 via --ladder-receipt, U2/U3 via probe-unknown.js receipt) and a shared ledger-location rule so every site can spell --ledger; P3 spells full classify + receipt argv for debug, dev-flow L-1/L-2 and think-tank (which now runs classify and climbs U3 only on recommend U3 with budget left); P4 spells the foreman round-end argv and receipts the background survey; P3/P4 acceptance greps the argv strings and requires the dogfood U2 row to come from the survey path."
+    },
+    {
+      "rubric_id": "R14",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §0.5 C7, PLAN §3 ladder row shape, PLAN §4 P1 receipt --resolved, PLAN §4 P5 finish-flow learn",
+      "claim": "P5 makes learn mandatory on resolved true at rung >= 1, but no phase names a writer for that field, so the close-the-loop never fires.",
+      "evidence": "C7 still keys learn on resolved_at_rung >= 1. The §3 ladder shape is resolved: bool, and P1 receipt has optional --resolved. P3, P4, and P6 never say which call site passes --resolved, after which rail return, or with which test. P5: if probe-unknown.js report shows any resolved true row at rung >= 1, autopilot:learn is mandatory. Unset bools stay false, so L-5.6 remains if warranted. KR4 can count climbs, but the next S4 lookup still misses because learn is not actually forced. That is the R14 nothing-is-written-back failure.",
+      "evidence_reference": "PLAN §0.5 C7; PLAN §3 Files decision-ledger.js ladder shape; PLAN §4 P1 receipt [--resolved]; PLAN §4 P5; FROZEN_RUBRIC R14",
+      "repair": "Pick one writer and use it in P5. Preferred: receipt-on-dispatch for rung >= 1 (except reason knob-off, budget-exhausted, or not-heterogeneous) is the learn trigger, and finish-flow does not require a second --resolved attestation; align C7 to that. Alternative: name the site, argv, and fixture that set resolved true after the caller uses the rail result. P5 acceptance must use a row from that writer, not a hand-edited resolved true.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "a9c239e487f171c76a0b5d17fd10aaade037083759bd0aa0eb20dfe2f3a60dcd",
+      "disposition_rationale": "Accepted and folded with the preferred repair: the ladder row itself (rung ≥ 1, reason not in {knob-off, budget-exhausted, not-heterogeneous}) written by receipt-on-dispatch is the learn trigger; the resolved field and --resolved flag are removed from the shape and the receipt CLI; P5 and C7 key on that row and P5 acceptance requires the row to be produced by the receipt command, not hand-written, with a negative case for budget-exhausted-only ledgers."
+    },
+    {
+      "rubric_id": "R11",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 exhaustion rule, PLAN §4 P1 budget-exhausted fixture, PLAN §4 P2 exhaustion, PLAN §4 P4 U4 [ESCALATION]",
+      "claim": "Budget exhaustion may recommend U4, and P4 maps U4 to [ESCALATION], so spending a budget can halt a foreman run.",
+      "evidence": "Section 3 exhaustion rule: a spent rung emits reason budget-exhausted and the recommendation becomes none or U4, never a more expensive rung. P2 repeats none or U4. P1 tests: budget exhausted implies none/U4 never higher. P4: U4 implies [ESCALATION] with ladder_receipts. C8 cites level-front-door: the run stops at DOA, irreversible, or input, and [ESCALATION] is that stop. KR5/R11: the ladder never blocks, no hook Stop, no non-zero halt, remind-only, --strict opt-in only. Turning a spent integer budget into owner escalation is a phase halt in the name of the ladder, not a signal that the owner must see.",
+      "evidence_reference": "PLAN §3 Exhaustion rule (R13); PLAN §4 P1 budget exhausted fixture; PLAN §4 P2 Exhaustion; PLAN §4 P4 U4 [ESCALATION]; PLAN §0.5 C8; PLAN §2 KR5; FROZEN_RUBRIC R11",
+      "repair": "Exhaustion always recommend none with reason budget-exhausted; the Ladder section prints used/left. Never recommend U4 from exhaustion. U4 is only when signals say the owner must see an unresolved unknown. P1 fixture: exhausted => none, not U4. P4 [ESCALATION] only when recommend is U4.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "a4d6f42d18c6087ed49b82399a052abc8c9a03ba2a58055025d05cd9ddeaf792",
+      "disposition_rationale": "Accepted and folded. Exhaustion always recommends none with reason budget-exhausted (§3, P2, P1 fixture: exhausted ⇒ none, not U4); U4 is reserved for an unresolved unknown the signals say the owner must see; P4 emits [ESCALATION] only on recommend U4."
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN §0.5 C2 resolution, PLAN §3 files table skills/ceo-agent/SKILL.md step 7, PLAN §4 P0 survey Boundary, PLAN §4 P4 step 7",
+      "claim": "The G1 R8 fold fixed P0, but C2 and the ceo-agent step 7 line still teach judgment-only auto survey, which is the pre-ruling participatory split.",
+      "evidence": "P0 now: a survey runs without a Proceed prompt only when the probe recommends U2 with budget left, in every mode; judgment-only, knob-off, and budget-exhausted keep the confirm template. Q1/C6 match that. Section 0.5 C2 resolution still says reword to no auto-trigger in participatory modes, and in just-results the caller may invoke without confirmation. Files table ceo-agent step 7 becomes probe says U2 or judgment (recorded). P4 step 7 is reworded to cite the probe but does not retract the judgment disjunct. An implementer of C2 or P4 can reintroduce autonomous judgment-only survey in just-results, which P0 forbids.",
+      "evidence_reference": "PLAN §0.5 C2; PLAN §0.5 C6; PLAN §3 Files skills/ceo-agent/SKILL.md; PLAN §4 P0 survey Boundary; PLAN §4 P4 step 7; PLAN §8 Q1; FROZEN_RUBRIC R8",
+      "repair": "Rewrite the C2 resolution to match P0/Q1 (probe-recommended U2 with budget, every mode; judgment-only keeps confirm and is not an autonomous dispatch). CEO step 7: invoke survey only when recommend is U2 with budget left; record judgment-only suggestions without dispatching.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "a30db259322f454baf7448bc6b3c9cc3c976fe102f11b84d57e076e942674261",
+      "disposition_rationale": "Folded: §0.5 C2 resolution rewritten to the P0/Q1 rule (probe-recommended U2 with budget, every mode; judgment-only keeps confirm and is never an autonomous dispatch); ceo-agent step 7 and the files-table line now say invoke survey only on recommend U2 with budget left and record judgment-only wishes as a ledger note without dispatching."
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN §4 P1 probe-unknown.js receipt, scripts/decision-ledger.js append stdout",
+      "claim": "receipt shells out to decision-ledger.js append, which already prints one JSON object on stdout, so receipt can emit two objects and fail the one-JSON contract.",
+      "evidence": "decision-ledger.js append writes JSON.stringify(full) to stdout after taking the lock. P1 receipt runs decision-ledger.js append and never writes the file itself, but does not say to capture or suppress child stdout. R2 and §2.5: new scripts emit one JSON object on stdout and human lines on stderr. classify is specified that way; receipt is not. A naive spawn of append plus a second print yields two JSON objects on the first receipt test.",
+      "evidence_reference": "PLAN §2.5 Global Constraints; PLAN §4 P1 receipt; scripts/decision-ledger.js append() stdout write; FROZEN_RUBRIC R2",
+      "repair": "receipt captures append stdout and prints exactly one JSON object (the appended ladder row or a wrapper). Do not forward child stdout. classify, receipt, and report each emit one object; diagnostics stay on stderr.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "3e052ac428e29236197e95bae8c8cea46977aff9ba149fbd10c8b3207bdcfc74",
+      "disposition_rationale": "Folded: P1 receipt captures the child append stdout and prints exactly one JSON object (the appended row); child output is never forwarded; classify/receipt/report each emit one object with diagnostics on stderr."
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "a30db259322f454baf7448bc6b3c9cc3c976fe102f11b84d57e076e942674261",
+      "rubric_id": "R8",
+      "affected_surface": "PLAN §0.5 C2 resolution, PLAN §3 files table skills/ceo-agent/SKILL.md step 7, PLAN §4 P0 survey Boundary, PLAN §4 P4 step 7",
+      "claim": "The G1 R8 fold fixed P0, but C2 and the ceo-agent step 7 line still teach judgment-only auto survey, which is the pre-ruling participatory split.",
+      "evidence_reference": "PLAN §0.5 C2; PLAN §0.5 C6; PLAN §3 Files skills/ceo-agent/SKILL.md; PLAN §4 P0 survey Boundary; PLAN §4 P4 step 7; PLAN §8 Q1; FROZEN_RUBRIC R8",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3e052ac428e29236197e95bae8c8cea46977aff9ba149fbd10c8b3207bdcfc74",
+      "rubric_id": "R2",
+      "affected_surface": "PLAN §4 P1 probe-unknown.js receipt, scripts/decision-ledger.js append stdout",
+      "claim": "receipt shells out to decision-ledger.js append, which already prints one JSON object on stdout, so receipt can emit two objects and fail the one-JSON contract.",
+      "evidence_reference": "PLAN §2.5 Global Constraints; PLAN §4 P1 receipt; scripts/decision-ledger.js append() stdout write; FROZEN_RUBRIC R2",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-07T09:23:11.381Z",
+  "depth0_adjudication": {
+    "adjudicated_at": "2026-09-07T09:25:14.524Z",
+    "source_artifact": "g2.stdout.json",
+    "dispositions": "g2-disposition.json",
+    "reviewed_plan_copy": "plan.g2-reviewed.md",
+    "note": "generation cap reached; 5 blockers + 2 non-blocking all accepted and folded into the plan after review (zero rejected, zero deferred); checker run against the reviewed bytes"
+  }
+}

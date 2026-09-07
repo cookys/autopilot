@@ -48,7 +48,7 @@
  *            [--refuted-threshold N] [--strict]
  *     → {unknown_type, signals[], recommend, reason?, skipped_rungs[], heterogeneous_u1,
  *        eligible_max, budget:{u1,u2,u3,used:{U1,U2,U3}}, knob, terms_hits}
- *     exit 0 always; 2 on usage; with --strict, 2 when recommend ∈ {U2,U3,U4}.
+ *     exit 0 always; 2 on usage; with --strict, 2 when recommend ∈ {U2,U3}.
  *   receipt  --ledger <file> --rung Ux --unknown-type <t> --terms a,b,c --signals S1,S3   (--signals "" ⇒ [] = judgment-only climb, visible in report.judgment_only)
  *            [--reason knob-off|budget-exhausted|not-heterogeneous|rail-failed] [--run-id <id>]
  *            [--heterogeneous true|false] [--work-unit <id>] [--round <n>]
@@ -82,7 +82,7 @@ const DEFAULT_BUDGETS = { U1: 2, U2: 1, U3: 1 };
 // it never triggers learn). Found by the P4 dogfood: a consult seat without credentials would otherwise
 // be recommended on every round.
 const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
-const STRICT_SET = new Set(['U2', 'U3', 'U4']);
+const STRICT_SET = new Set(['U2', 'U3']); // U4 is never emitted by classify
 
 function usage(message) {
   process.stderr.write(`probe-unknown: ${message}\n`);
@@ -189,6 +189,13 @@ function resolveKnob(opts) {
   return v;
 }
 
+// Provenance of the knob/budgets (resolver field unknown_resolved_from: explicit|default|off);
+// surfaced on classify output so a report can tell an owner-set budget from a default.
+function resolveKnobProvenance(opts) {
+  if (opts.knob || opts.budgetU1 !== undefined) return 'argv';
+  return resolverField('unknown_resolved_from', opts) || 'default';
+}
+
 function resolveBudgets(opts) {
   const out = {};
   for (const [rung, flag, field] of [['U1', 'budgetU1', 'unknown_budget_u1'], ['U2', 'budgetU2', 'unknown_budget_u2'], ['U3', 'budgetU3', 'unknown_budget_u3']]) {
@@ -213,7 +220,9 @@ function listMarkdown(dir, limit = 400) {
   const out = [];
   if (!dir || !fs.existsSync(dir)) return out;
   const stack = [dir];
-  while (stack.length && out.length < limit) {
+  let capped = false;
+  while (stack.length) {
+    if (out.length >= limit) { capped = true; break; }
     const d = stack.pop();
     let entries = [];
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (err) { continue; }
@@ -222,7 +231,7 @@ function listMarkdown(dir, limit = 400) {
       if (e.isDirectory()) { if (!e.name.startsWith('.') || e.name === '.claude') stack.push(p); } else if (/\.(md|json|jsonl)$/i.test(e.name)) out.push(p);
     }
   }
-  if (out.length >= limit) process.stderr.write(`probe-unknown: S4 corpus cap (${limit} files) reached under ${dir} — a zero-hit term may be a false novelty\n`);
+  if (capped) process.stderr.write(`probe-unknown: S4 corpus cap (${limit} files) reached under ${dir} — a zero-hit term may be a false novelty\n`);
   return out;
 }
 
@@ -323,6 +332,7 @@ function classify(opts) {
     eligible_max: eligibleMax,
     budget: { u1: budgets.U1, u2: budgets.U2, u3: budgets.U3, used },
     knob,
+    knob_resolved_from: resolveKnobProvenance(opts),
     terms_hits: termsHits,
   };
 

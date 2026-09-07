@@ -55,7 +55,7 @@ If unsure, start with `debug`. If evidence points to a performance root cause, s
    - `U1` → `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type why --ladder-signals S1 --ladder-work-unit <task>` (advice only, never a verified fix)
    - `U2` → survey `issue-search` with the exact error string, then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type why --terms <terms> --signals S1 --work-unit <task>`
    - `U3` → dispatch `autopilot:debugger` (PUA mode), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U3 --unknown-type why --terms <terms> --signals S1 --work-unit <task>`
-   - `U4` → stop and show the owner the ledger; `none` → keep verifying (a `reason` of `budget-exhausted` / `not-heterogeneous` / `knob-off` names why nothing is recommended)
+   - `none` → keep verifying (the probe never recommends U4; when you stop for the owner, show the ledger) (a `reason` of `budget-exhausted` / `not-heterogeneous` / `knob-off` names why nothing is recommended)
    Ledger: `<project>/ledger/decisions.jsonl`, or the probe's default `~/.autopilot/ladder/<repo-hash>.jsonl` when no project exists.
 5. Fix root cause (not symptoms)
 6. Verify fix with same tool + same test

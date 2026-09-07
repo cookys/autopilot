@@ -34,6 +34,9 @@
 #                       is the probe's signal_ids (omit ⇒ [] = judgment-only climb, never
 #                       fabricated). Failure paths after the probe recommended U1 — transport,
 #                       protocol, verdict, qualification — write the row with reason=rail-failed.
+#                       The blind-evidence refusal (exit 4) deliberately writes NO row: it is a
+#                       defect in the caller's own payload, pre-transport and zero-spend; burning
+#                       budget there would hide the bug the refusal exists to surface.
 #
 # SWITCH SEMANTICS (two-knob matrix, plan §3): this rail is live when
 #   consult_dispatch resolves to `on` (explicit tuple) OR `auto` with a resolved

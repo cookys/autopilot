@@ -19,11 +19,11 @@ Fable 5.1」（low effort 不搜尋 ⇒ survey 席 effort 下限 medium；compac
 - **knob `unknown_escalation: auto|on|off`**（預設 auto＝開，owner 裁定）＋ `unknown_budget_u1/u2/u3`（每工作單位爬階次數，預設 2/1/1；
   L/H 每 phase、S/Fix 整個 task、`/l4`–`/l6` 整個 run）；`on` 缺預算 exit 3、非整數 exit 3、`off` 出 capability_warnings。schema 88 欄位三向一致。
 - **`scripts/dispatch-consult.sh`**：guard 修正——出貨預設 `consult_dispatch: auto` 解析出席位後仍被當 off 拒絕（plan review G1 R5，實機證實），
-  現在 resolved `auto` 即 live；`--ladder-receipt` 成功後寫 U1 row（native-fallback 標 `heterogeneous:false`），transport／protocol／verdict
+  現在 resolved `auto` 即 live；`--ladder-receipt` 成功後寫 U1 row（native-fallback 標 `heterogeneous:false`），transport／protocol／verdict／qualification
   失敗路徑寫 `reason: rail-failed` row——**吃預算但不算 climb**，否則沒憑證的席位每 round 都會被再推薦（P4 dogfood 抓到）。
 - **四個 canonical call site**（`references/hetero-dispatch.md` Hook points 表）：debug step 4（假設寫進 ledger，probe 數）、dev-flow L-1
   step 4 與 L-2 consult-before-design（改成 receipted、只在 `recommend: U1` 才派）、think-tank Step 5 共識 LOW、foreman round end
-  （`level-front-door.md` §6；只依 `recommend` 行動，U4 才 `[ESCALATION]` 並附 `ladder_receipts:`）。CEO DOA 多「Unknown escalation」列；
+  （`level-front-door.md` §6；只依 `recommend` 行動；probe 永不推 U4——run 自己的停止（stall fuse／DOA）把 `ladder_receipts:` 掛上 `[ESCALATION]`）。CEO DOA 多「Unknown escalation」列；
   step 7「Need research?」改為 probe 推 U2 才派 survey，judgment-only 的想法記 ledger note 不派。
 - **survey `issue-search` 模式**：錯誤字串原文第一筆 query、skeptic 查版本適用、「matches our version?」欄、一輪；兩席 effort 下限 medium。
 - **finish-flow L-5.6／S.1**：`probe-unknown.js report` 有 `learn_required` climb ⇒ `autopilot:learn` MANDATORY，用 row 的 terms／unknown_type
@@ -31,7 +31,7 @@ Fable 5.1」（low effort 不搜尋 ⇒ survey 席 effort 下限 medium；compac
 - 矛盾修正（plan §0.5 C1–C8）：debugger PUA 兩次失敗「自己寫三個假設」vs debug skill「找顧問」（agent 交 hypothesis rows、呼叫端決定）；
   survey「No auto-trigger」絕對句 vs CEO 自主 survey（改為 probe 推薦才免確認）；consult-before-design 只在 reference 沒進步驟清單；
   survey 訊號表以 `TBD` 為訊號但 plan-template 禁 `TBD`。
-- 測試：`probe-unknown` 69、`resolve-review-loop-unknown-escalation` 26、`dispatch-consult-ladder` 32（hermetic topology）；switch test step 6
+- 測試：`probe-unknown` 74、`resolve-review-loop-unknown-escalation` 26、`dispatch-consult-ladder` 37（hermetic topology）；switch test step 6
   改成「auto 是 live」；profiles 鏈重釘 801→807 rules（兩條 P0 guided-baseline 行改寫有 disposition）。
 - **未做**：per-tool-call hook（call site 是四處，receipts 顯示漏掉再加）、brainstorm 席、Q3（S6 自報單獨能否過 U1）維持「不能」；
   完整 `/l4` campaign dogfood——P4 dogfood 是 foreman round-end call site 走真 rail（consult 席死 ×2 → survey → receipt；負對照零命中不帶

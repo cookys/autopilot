@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.36.16 — develop 三個既有紅測試歸零：topology 對 legacy 席位吐空 effort（不是 cache 過期）、probe 看不見 opencode、switch test 的凍結 baseline 解析不了現行 template（2026-09-07）
+
+前版 handoff 把 `contract-parity`／`resolve-review-loop-consult-discuss-switch` 兩紅歸因「本機 topology.json cache 過期」。實查：重跑 `resolve-dispatch-topology.js`
+仍吐兩個 `grok-4.5@grok` rung 帶 `effort: ""`——implementer 路徑對 legacy（無 effort 分區）席位直接 emit 空字串，而 reviewer／consult／discuss 路徑早就
+預設 `high`（Case 12 釘住）；空字串不在 review-loop contract 的 `implementer_effort` enum，於是每一台有 legacy 席位的主機 `implementer_ladder: auto` 都過不了 JS validator。
+`--check` rc=0 只證明 cache 與現行 script 一致，不證明 script 對。
+
+- **`scripts/resolve-dispatch-topology.js`**：implementer ladder 對 legacy 席位 emit `effort: "high"`（rung 名維持 `engine@runner` 保留分區可追溯），與其他角色同規則；
+  排序後依 `(engine, effort, runner)` 去重——superseded legacy row 與後繼 row 同時 `current`、或 legacy 席位與明確 `/high` 席位同 dispatch identity，都只留一階，
+  且 exact-tuple 席位勝出（legacy 排最後）。本機 ladder 19 → 17，`grok-4.5/high@grok`（event 143）保留、兩個空 effort 消失。
+- **`scripts/resolve-review-loop.sh`** `implementer_ladder: auto` 讀取端：effort 也過 enum（與 runner 檢查同 exit 3 協定），訊息指名 rung 與修法
+  「stale topology（pre-v2.36.16 對 legacy 席位 emit ""）；重跑 `scripts/resolve-dispatch-topology.js`」——之前只有 JS validator 在下游報 `implementer_ladder[17]`，看不出是哪一階、為什麼。
+- **`scripts/probe-engine-capability.sh`**：v2.36.13 加 opencode rail 時 probe 沒跟（`probe-runner-coverage` 就是為這種漂移設的紅，develop 上一直紅）。補 binary-presence
+  （PATH，與 dispatcher 無 `--bin` 時同解析）＋ live-spend（prompt 走 STDIN、`run --dir <scratch> --pure --agent plan`、只在指定 effort 時 `--variant`，max→xhigh 抄 dispatcher）；
+  opencode 加進 effort consumer 集合（dispatcher 自 v2.36.13 起就餵 `--variant "$EFFORT"`，probe 若不承認，帶 effort 的 tuple 永遠 non-authorizing）。
+  live 驗證：`opencode-go/muse-spark-1.3-contributor` effort low → `available`（一次微量 spend，寫在 scratch `--store`，不進預設 capability store；
+  reviewer 另以 PATH stub 抓到 argv 與 dispatcher 逐旗一致）。
+- pre-merge review（opus）MUST-FIX 折入：legacy rung 改標 `high` 後排序仍照原始空 effort 排最後 ⇒ 主機同時有 `max`／`xhigh` 席位時 climb 會降級；
+  改依 emitted effort 排名、同 effort legacy 排後（Case 13 加 max／high 席位釘住）。switch test parity 改把 `consult_dispatch` 也釘 off，拿掉 consult_* 放行。
+- **`hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh`**（測試修，非 code）：pinned pre-D6 resolver 對現行 shipped template 直接 exit 3
+  （`plan_review: auto`、`implementer_ladder: auto` 是 2026-09-04 之後的值），OLD 輸出空字串 ⇒ parity 比了空集合。改為兩個 resolver 共用一份「shipped template
+  只重寫這兩行」的實體檔（config_path 仍相同），consult_engine/effort/runner/endpoint 允許 D6 自身引入的 topology 填值漂移；added-keys 補 `ladder_start_rung_judgment`；
+  migration negative 由「指名 consult_dispatch」放寬為「指名任一缺欄、絕不靜默通過」（validator 現在先報 `ladder_start_rung_judgment`）。
+- 測試：`resolve-dispatch-topology` +Case 13（legacy implementer 席位 emit high、去重、無空 effort）46；`resolve-review-loop` +(c4) 空 effort rung exit 3 具名 417；
+  `probe-runner-coverage` 23／0；switch 58；`contract-parity` 42。
+- **未做**：`contract-parity`／switch 兩支仍讀 `~/.autopilot/topology.json` 真主機狀態（本機 cache 已重建，備份 `topology.json.bak-legacy-effort-20260907`）——
+  hermetic fixture 化列 BACKLOG；opencode `--variant` 是否真的控制 reasoning effort 只有 CLI help 的宣稱，未做 A/B；probe 各 rail 的 live spend
+  都沒有 `timeout`（既有樣式，opencode 跟著沒加），要修一次修全部。
+- `references/evidence-discipline.md` §29：derived cache 與 generator 一致只證明 generator 跑過，不證明 generator 對。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (resolver/probe + tests + docs only).
+
 ## v2.36.15 — unknown-escalation ladder：「卡住」變成可量的訊號，按階梯升級（consult → survey → think-tank → owner），每階有預算與 receipt（owner 2026-09-07「擴大解決未知問題的能力」）
 
 現況：上網調研、hetero engine、顧問席三條求助路徑各自有觸發條件，但全部鍵在「已知形狀」（size、verdict、憑記憶數失敗次數）；

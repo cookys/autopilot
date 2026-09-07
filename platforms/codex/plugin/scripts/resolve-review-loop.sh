@@ -794,12 +794,14 @@ if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   # Exit protocol: 0 + JSON array on stdout = valid non-empty ladder; 2 = topology
   # file exists but implementer_ladder is empty/absent (keep implicit rung, warn);
   # 1 = no readable/parseable topology file at all (keep implicit rung, warn);
-  # 3 + error message on stdout = a rung's runner failed the same enum check the
-  # comma-list path applies (a stale topology file must not smuggle an invalid
-  # runner past the resolver).
+  # 3 + error message on stdout = a rung's runner or effort failed the same enum
+  # check the comma-list path applies (a stale topology file must not smuggle an
+  # invalid rung past the resolver — the JS contract validator would reject the
+  # whole output anyway, this just names the rung and the fix).
   _auto_ladder="$(node -e '
 const fs = require("fs");
 const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","qoderclicn","cursor","opencode"]);
+const VALID_EFFORTS = new Set(["low","medium","high","xhigh","max"]);
 const file = process.argv[1];
 let raw;
 try {
@@ -826,6 +828,14 @@ for (const r of rungs) {
     process.stdout.write(
       "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): " +
       r.engine + "/" + r.effort + "@" + r.runner
+    );
+    process.exit(3);
+  }
+  if (!VALID_EFFORTS.has(r.effort)) {
+    process.stdout.write(
+      "invalid implementer_ladder effort (must be low|medium|high|xhigh|max): " +
+      r.engine + "/" + String(r.effort) + "@" + r.runner +
+      " — stale topology (pre-v2.36.16 emitted \"\" for legacy seats); rerun scripts/resolve-dispatch-topology.js"
     );
     process.exit(3);
   }

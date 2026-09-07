@@ -402,19 +402,30 @@ function deriveTopology(repoRoot, options = {}) {
         baselineEventId = c.event_id;
       }
 
+      // Legacy (pre-effort-partition) scorecard rows carry no effort. The emitted
+      // rung keeps the `engine@runner` name so the seat stays traceable to its
+      // legacy partition, but `effort` is defaulted to 'high' — the same rule the
+      // reviewer/consult/discuss path applies (see emittedEffort above). An empty
+      // effort is not in the review-loop contract's implementer_effort enum, so
+      // '' here made resolve-review-loop.sh's `implementer_ladder: auto` output fail
+      // validation on every host with a legacy seat (2026-09-07).
+      const emittedEffort = effort || 'high';
       const rungName = effort ? `${engine}/${effort}@${runner}` : `${engine}@${runner}`;
       const rungObj = {
         rung: rungName,
         engine,
-        effort: effort || '',
+        effort: emittedEffort,
         runner,
       };
       if (baselineEventId !== undefined) {
         rungObj.baseline_event_id = baselineEventId;
       }
 
+      const seatKey = `${engine}\u0000${emittedEffort}\u0000${runner}`;
+
       qualifiedSeats.push({
         rungObj,
+        seatKey,
         effort: effort || '',
         latency: rowLatency,
         engine,
@@ -422,15 +433,32 @@ function deriveTopology(repoRoot, options = {}) {
       });
     }
 
+    // Rank by the EMITTED effort so a legacy seat (emitted 'high') sits among the
+    // other 'high' rungs, never above 'xhigh'/'max' — the ladder is climbed
+    // top-down on red repairs and a legacy rung that sorted last would turn an
+    // escalation into a de-escalation. Legacy sorts after explicit at the same
+    // effort so the exact-tuple seat wins the dedupe below.
     qualifiedSeats.sort((a, b) => {
-      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
-      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
+      const rankA = EFFORT_RANK[a.rungObj.effort] || 99;
+      const rankB = EFFORT_RANK[b.rungObj.effort] || 99;
       if (rankA !== rankB) return rankA - rankB;
+      const legacyA = a.effort ? 0 : 1;
+      const legacyB = b.effort ? 0 : 1;
+      if (legacyA !== legacyB) return legacyA - legacyB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
     });
 
-    let implementerLadder = qualifiedSeats.map((s) => s.rungObj);
+    // Two scorecard rows can resolve to the same dispatch identity: a superseded
+    // legacy row and its successor both still `current`, or a legacy no-effort
+    // seat (emitted as 'high') next to an explicit `/high` seat. One identity is
+    // one rung — a duplicate would just re-dispatch the same implementer on climb.
+    // Dedupe AFTER the sort so the explicit-effort (exact-tuple) seat wins over
+    // the legacy one, which sorts last.
+    const seenSeats = new Set();
+    let implementerLadder = qualifiedSeats
+      .filter((s) => (seenSeats.has(s.seatKey) ? false : (seenSeats.add(s.seatKey), true)))
+      .map((s) => s.rungObj);
     if (excludeSet.size > 0) {
       implementerLadder = implementerLadder.filter(
         (r) => !seatMatchesExcluded(r.engine, r.effort, r.runner, excludeSet)

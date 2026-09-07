@@ -1468,6 +1468,48 @@ printf -- '- plan_review: on\n- plan_reviewer_engine: claude-fable-5\n- plan_rev
 assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_BOGUS_RUNNER_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
   "plan_reviewer_runner bogus exits 3"
 
+# plan_reviewer_runner / plan_deep_reviewer_runner: kimi is a first-class review
+# transport (dispatch-review.sh --runner kimi) but the plan-chair and plan-deep-chair
+# seat allowlists omitted it (308 request 2026-09-07). Both must resolve exit 0 with
+# the field echoed back, and a garbage runner must still exit 3 (checked above).
+PLAN_KIMI_CFG="$TEST_TMP/rl-plan-kimi-runner.md"
+printf -- '- plan_review: on\n- plan_reviewer_engine: kimi-code/k3\n- plan_reviewer_runner: kimi\n- plan_reviewer_effort: high\n' > "$PLAN_KIMI_CFG"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_KIMI_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "plan_reviewer_runner kimi exits 0"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_KIMI_CFG" bash "$SCRIPT" --field plan_reviewer_runner)" \
+  "plan_reviewer_runner kimi honored"
+
+PLAN_DEEP_KIMI_CFG="$TEST_TMP/rl-plan-deep-kimi-runner.md"
+printf -- '- plan_review: on\n- plan_reviewer_engine: claude-fable-5\n- plan_reviewer_runner: claude-native\n- plan_reviewer_effort: high\n- plan_deep_reviewer_engine: kimi-code/k3\n- plan_deep_reviewer_runner: kimi\n- plan_deep_reviewer_effort: high\n' > "$PLAN_DEEP_KIMI_CFG"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_DEEP_KIMI_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "plan_deep_reviewer_runner kimi exits 0"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_DEEP_KIMI_CFG" bash "$SCRIPT" --field plan_deep_reviewer_runner)" \
+  "plan_deep_reviewer_runner kimi honored"
+
+# qc_panel_runners: kimi already resolves complete (regression test in section 7b2
+# above); this is a second, minimal single-seat case for the plan/deep/VA parity story.
+QC_KIMI_MIN_CFG="$TEST_TMP/rl-qc-kimi-min.md"
+printf -- '- qc_panel: kimi-code/k3\n- qc_panel_runners: kimi\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$QC_KIMI_MIN_CFG"
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QC_KIMI_MIN_CFG" bash "$SCRIPT" --field qc_panel_seats_complete)" \
+  "single-seat qc_panel_runners kimi resolves complete"
+
+# verification_author_runner: kimi is fully wired on the VA dispatch path
+# (dispatch-author.sh --runner kimi -> dispatch-author-kimi.js -> src/runners/kimi.js,
+# contract-pinned by hooks/tests/dispatch-author-kimi.test.sh), so the resolver's
+# verification_author_runner allowlist must accept it too.
+VA_KIMI_CFG="$TEST_TMP/rl-va-kimi.md"
+printf -- '- verification_author_present: true\n- verification_author_engine: kimi-code/k3\n- verification_author_runner: kimi\n- verification_author_effort: high\n' > "$VA_KIMI_CFG"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VA_KIMI_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "verification_author_runner kimi exits 0"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VA_KIMI_CFG" bash "$SCRIPT" --field verification_author_runner)" \
+  "verification_author_runner kimi honored"
+
+# garbage verification_author_runner still exits 3 (no weakening of validation)
+VA_BOGUS_CFG="$TEST_TMP/rl-va-bogus.md"
+printf -- '- verification_author_present: true\n- verification_author_engine: bogus-model\n- verification_author_runner: bogus\n- verification_author_effort: high\n' > "$VA_BOGUS_CFG"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VA_BOGUS_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "verification_author_runner bogus still exits 3"
+
 
 # --- Consult exclusion ---
 TOPO_CONSULT_EXCL="$TEST_TMP/topo-consult-excl.json"

@@ -1,8 +1,8 @@
 # Plan — Unknown-escalation ladder (turning "I'm stuck" into a measured signal)
 
-> Status: 📝 Draft R0 — not yet plan-reviewed; owner discussion pending
+> Status: ✅ Shipped in v2.36.15 — merged as 6ac62767 (2026-09-07); plan frozen at g2, pre-merge review ×3 folded
 > Owner: cookys (Board) · Author: autopilot session, 2026-09-07
-> Branch: none yet (proposed `feat/unknown-escalation-ladder`)
+> Branch: `feat/v2.36.15-unknown-escalation-ladder` (merged, deleted)
 > Frame: dev-flow L (six S/Fix phases behind one plan). Owner question 2026-09-07 「應該怎樣設計以擴大解決未知問題的能力」.
 > logical_plan_id: `unknown-escalation-ladder`
 

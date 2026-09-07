@@ -28,7 +28,7 @@ User-stated requirements ledger: (1)「擴大解決未知問題的能力」→ w
 
 | Node | Deliverable | Phases | Status |
 |---|---|---|---|
-| D1 | ladder signals + probe + knob + skill wiring + docs, single branch, plan loop at L-2.5, one pre-merge review | P0 P1 P2 P3 P4 P5 P6 | phases done; pre-merge review pending (finish-flow) |
+| D1 | ladder signals + probe + knob + skill wiring + docs, single branch, plan loop at L-2.5, one pre-merge review | P0 P1 P2 P3 P4 P5 P6 | done 2026-09-07 — pre-merge review autopilot:reviewer (opus) ×3: 5+2+3 MUST-FIX all folded, blocking tier zero; merged 6ac62767 |
 
 Plan headings P0–P6 are coverage inside D1, not execution nodes.
 
@@ -45,4 +45,4 @@ Plan headings P0–P6 are coverage inside D1, not execution nodes.
 | P5 close the loop (learn) | done (4518761a) | finish-flow L-5.6/S.1 + learn "From a ladder climb"; dogfood ledger yields `learn_required: 1` |
 | P6 survey issue-search | done (85119ec3) — manual run on `fatal: could not read file '-'` returned the explicit no-public-data marker + labelled reformulated hits | survey SKILL + prompts.md |
 
-Last updated: 2026-09-07 (P0–P6 done; dogfood ledger in; entering finish-flow). Pre-existing on this host, stash-verified: contract-parity + consult-discuss-switch fail on `implementer_ladder[17]` (grok-4.5 rung with empty effort in ~/.autopilot/topology.json).
+Last updated: 2026-09-07 (shipped v2.36.15, merge 6ac62767; archived). Full suite at tip: 327 files, reds only the develop-pre-existing contract-parity / consult-discuss-switch (host topology) / probe-runner-coverage (opencode probe branches) plus one parallel-run flake (opencode-v2-plugin passes standalone and on develop). Pre-existing on this host, stash-verified: contract-parity + consult-discuss-switch fail on `implementer_ladder[17]` (grok-4.5 rung with empty effort in ~/.autopilot/topology.json).

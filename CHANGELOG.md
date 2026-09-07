@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.36.15 — unknown-escalation ladder：「卡住」變成可量的訊號，按階梯升級（consult → survey → think-tank → owner），每階有預算與 receipt（owner 2026-09-07「擴大解決未知問題的能力」）
+
+現況：上網調研、hetero engine、顧問席三條求助路徑各自有觸發條件，但全部鍵在「已知形狀」（size、verdict、憑記憶數失敗次數）；
+最自主的 `/l4`–`/l6` foreman 反而沒有任何調研或 consult 步驟，卡住只能燒到 stall fuse。這版把「不確定」變成六個確定性訊號、
+一條有預算的階梯，並在結案時強制回寫 knowledge。plan：`docs/plans/2026-09-07-unknown-escalation-ladder.md`（G1 8 blocker／G2 5 blocker
+全折入，checker rc=0）。設計輸入：OpenAI GPT-6 Astra prompting guide（唯讀可逆先做、帶具體結果再問）、Anthropic「Prompting Claude
+Fable 5.1」（low effort 不搜尋 ⇒ survey 席 effort 下限 medium；compaction 要保留試過什麼 ⇒ ladder rows 進 rehydration tail）。
+
+- **`scripts/probe-unknown.js`（新）**：`classify` 讀 S1 假設被推翻 ≥2（ledger `hypothesis` rows）、S2 review 不收斂、S3 stall fuse、
+  S4 task 名詞零命中（knowledge／memory／repo）或 `--fast-moving`、S5 think-tank 共識 LOW、S6 自報（只是 claim），輸出一個 rung
+  推薦 U0–U3（U4 是 run 自己的停止，probe 不推）；三條規則：co-signal（S4／S6 單獨最多 U1）、heterogeneity（consult 是 native-fallback 或 off ⇒ 跳過 U1、絕不派）、
+  exhaustion（用完的階不重複、不買更高階、全部用完 ⇒ `none/budget-exhausted`、永不因用完升到 U4）。stdout 一個 JSON、任何分類 exit 0、
+  `--strict` 才對 U2／U3 回 2。`receipt` 經 `decision-ledger.js append` 寫一筆 `ladder` row；`report` 出 climbs／skips／`s6_only`／
+  `repeat_terms`／`learn_required`。
+- **`scripts/decision-ledger.js`**：telemetry kinds `hypothesis`／`unknown`／`ladder`（免 decision_id，各自欄位驗證）；round-end report
+  多一段 Ladder（rows、refuted 數、每階 used、skips、S6-only）。**`build-rehydration-bundle.js`** §4 tail 優先保留當前 round 的 ladder rows。
+- **knob `unknown_escalation: auto|on|off`**（預設 auto＝開，owner 裁定）＋ `unknown_budget_u1/u2/u3`（每工作單位爬階次數，預設 2/1/1；
+  L/H 每 phase、S/Fix 整個 task、`/l4`–`/l6` 整個 run）；`on` 缺預算 exit 3、非整數 exit 3、`off` 出 capability_warnings。schema 88 欄位三向一致。
+- **`scripts/dispatch-consult.sh`**：guard 修正——出貨預設 `consult_dispatch: auto` 解析出席位後仍被當 off 拒絕（plan review G1 R5，實機證實），
+  現在 resolved `auto` 即 live；`--ladder-receipt` 成功後寫 U1 row（native-fallback 標 `heterogeneous:false`），transport／protocol／verdict／qualification
+  失敗路徑寫 `reason: rail-failed` row——**吃預算但不算 climb**，否則沒憑證的席位每 round 都會被再推薦（P4 dogfood 抓到）。
+- **四個 canonical call site**（`references/hetero-dispatch.md` Hook points 表）：debug step 4（假設寫進 ledger，probe 數）、dev-flow L-1
+  step 4 與 L-2 consult-before-design（改成 receipted、只在 `recommend: U1` 才派）、think-tank Step 5 共識 LOW、foreman round end
+  （`level-front-door.md` §6；只依 `recommend` 行動；probe 永不推 U4——run 自己的停止（stall fuse／DOA）把 `ladder_receipts:` 掛上 `[ESCALATION]`）。CEO DOA 多「Unknown escalation」列；
+  step 7「Need research?」改為 probe 推 U2 才派 survey，judgment-only 的想法記 ledger note 不派。
+- **survey `issue-search` 模式**：錯誤字串原文第一筆 query、skeptic 查版本適用、「matches our version?」欄、一輪；兩席 effort 下限 medium。
+- **finish-flow L-5.6／S.1**：`probe-unknown.js report` 有 `learn_required` climb ⇒ `autopilot:learn` MANDATORY，用 row 的 terms／unknown_type
+  預填（learn SKILL「From a ladder climb」）。
+- 矛盾修正（plan §0.5 C1–C8）：debugger PUA 兩次失敗「自己寫三個假設」vs debug skill「找顧問」（agent 交 hypothesis rows、呼叫端決定）；
+  survey「No auto-trigger」絕對句 vs CEO 自主 survey（改為 probe 推薦才免確認）；consult-before-design 只在 reference 沒進步驟清單；
+  survey 訊號表以 `TBD` 為訊號但 plan-template 禁 `TBD`。
+- 測試：`probe-unknown` 74、`resolve-review-loop-unknown-escalation` 26、`dispatch-consult-ladder` 37（hermetic topology）；switch test step 6
+  改成「auto 是 live」；profiles 鏈重釘 801→807 rules（兩條 P0 guided-baseline 行改寫有 disposition）。
+- **未做**：per-tool-call hook（call site 是四處，receipts 顯示漏掉再加）、brainstorm 席、Q3（S6 自報單獨能否過 U1）維持「不能」；
+  完整 `/l4` campaign dogfood——P4 dogfood 是 foreman round-end call site 走真 rail（consult 席死 ×2 → survey → receipt；負對照零命中不帶
+  `--fast-moving` 永不到 U2），不是整場 campaign。
+- prose-justification: dev-flow +4 guided +1 topology（L-1 probe、L-2 receipted consult、Available Scripts 列）；ceo-agent +1 core（DOA 列）＋
+  兩行改寫（Research 列、step 7）把 judgment 觸發換成 probe 觸發；每行都指名 script 與 argv。
+
 ## v2.36.14 — kimi reviewer rail：超過 argv 上限的 prompt 在 spend 前具名拒絕，不再 rc=126 死掉（308 回報 2026-09-07）
 
 308 第一次實戰 kimi 席：133 KB diff＋10 KB spec ⇒ 145 KB prompt，rail 用 `-p "$(cat prompt)"` 一整串 argv 送進 kimi，Linux 單一 argv 上限

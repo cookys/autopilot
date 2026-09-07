@@ -28,7 +28,7 @@ Two independent agents (researcher + skeptic) search in parallel, bringing diffe
 
 - **Produce recommendation, marked as suggestion** -- attach reasoning and preconditions so user can judge applicability
 - **No code** -- research only
-- **No auto-trigger** -- signal only suggests, user confirms
+- **No judgment-only auto-trigger** -- a survey runs without a Proceed prompt only when the unknown-escalation ladder probe (plan `docs/plans/2026-09-07-unknown-escalation-ladder.md`, ships with the ladder) recommends U2 with budget left, in every mode; the caller records the climb in the decision ledger. Judgment-only suggestions, knob-off and budget-exhausted cases keep the suggest-then-confirm template above
 
 ## Flow
 
@@ -41,9 +41,11 @@ Extract from user input:
 
 If input is vague (e.g. "look into cache"), ask one clarifying round before dispatch.
 
+**Mode `issue-search`** (unknown-escalation ladder rung U2 for a `why` unknown — a bug that resisted two hypotheses): the input is an exact error / finding string plus the runtime and version tuple, not a topic. The researcher searches the literal string **as written** (at least one query verbatim — familiarity with the error is not a reason to skip the search), the skeptic checks whether each hit applies to *our* version; the report's Options table gains a "matches our version?" column. Budget: one round, no second generation; if nothing matches, the explicit "no public data" marker is the result and the caller climbs or stops per the probe. Callers: `debug` step 4, the foreman round end. After the report, the caller stamps the climb: `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type why --terms <terms> --signals <ids>`.
+
 ### Step 2: Parallel Dispatch
 
-**Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Survey agents map to `researcher` → default: `model: "sonnet"` (needs web search tools, so NOT plan mode).
+**Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Survey agents map to `researcher` → default: `model: "sonnet"` (needs web search tools, so NOT plan mode). **Effort floor: `medium`** for both seats in every mode — at `low` effort a model answers from memory instead of searching (Anthropic "Prompting Claude Fable 5.1", search triggering at low effort), which turns a survey into a recollection.
 
 Spawn researcher + skeptic **simultaneously**. Skeptic does NOT wait for researcher -- independent search finds different angles.
 
@@ -53,14 +55,14 @@ Agent tool:
   subagent_type: "general-purpose"
   model: "sonnet"              # from model-routing config (researcher role)
   run_in_background: true
-  prompt: -> references/prompts.md #Researcher
+  prompt: -> references/prompts.md #Researcher   (issue-search mode: #Issue-search Researcher)
 
 Agent tool:
   name: "survey-skeptic"
   subagent_type: "general-purpose"
   model: "sonnet"              # from model-routing config (researcher role)
   run_in_background: true
-  prompt: -> references/prompts.md #Skeptic
+  prompt: -> references/prompts.md #Skeptic      (issue-search mode: add the #Issue-search Skeptic addendum)
 ```
 
 > Full agent prompts with variable substitution: [references/prompts.md](references/prompts.md)
@@ -131,6 +133,6 @@ Present report, clearly mark "decision is yours". If user wants to dive deeper i
 |--------|---------|
 | Tech selection | "X or Y?", "which library?" |
 | Architecture decision | "canonical approach for this?" |
-| Uncertainty | "TBD", "undecided", "pending" in plans |
+| Novelty / no consensus | Computed, not phrased: the unknown-escalation ladder probe reports `unknown_type: how` (task terms with zero knowledge/memory/repo hits, or an unrecognised / fast-moving name) or `whether` (think-tank consensus LOW). A plan that reaches review carries no `TBD` (plan-template placeholder scan), so plan wording is not a signal |
 | New domain | Tech/protocol/pattern team hasn't used |
 | User bias | "I think X is good" -- worth verifying with survey |

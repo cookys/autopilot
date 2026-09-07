@@ -889,6 +889,24 @@ node scripts/decision-ledger.js report --ledger <ledger> --round R \
   [--stall <stall.json>] [--critic <critic.json>]
 ```
 
+#### Ladder probe at the round boundary (unknown-escalation ladder)
+
+Right after the report, run the probe over the same ledger and act **only on `recommend`** — the
+DOA table lists which rungs the foreman may climb, it is not a climb-if-budget-left rule
+(plan `docs/plans/2026-09-07-unknown-escalation-ladder.md` P4; budgets from
+`review-loop-config.md`, work unit = the whole run):
+
+```bash
+node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <run> \
+  --convergence <convergence.json> --stall <stall.json> --terms <round nouns>
+```
+
+- `U1` ⇒ `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <type> --ladder-signals <ids from classify> --ladder-work-unit <run>`.
+- `U2` ⇒ dispatch `autopilot:survey` (or its `issue-search` mode for a `why` unknown) **in the background**, keep the round moving on independent work, and when the result is read: `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <type> --terms <terms> --signals <ids> --work-unit <run>`.
+- `U3` (`whether` only) ⇒ `autopilot:think-tank`, then `receipt … --rung U3 --signals S5`.
+- The probe never recommends U4 by itself (a spent budget is `none`, never an escalation). U4 is the run's own stop — the stall fuse (§8) or a DOA boundary — and when that stop fires the foreman attaches `ladder_receipts:` (the ledger rows) to the `[ESCALATION]`, so the owner sees the concrete, reviewable climbs, not a summary.
+- `none` ⇒ continue; the probe's `reason` (`budget-exhausted` / `not-heterogeneous` / `knob-off`) is printed in the report's Ladder section. Exhaustion never buys a higher rung and never escalates.
+
 Vetoes are the operator's asynchronous authority: `decision-ledger.js veto --id
 <decision_id>` refuses every later round that declares that decision in
 `based_on_decisions` (enforced by `check-blueprint-conformance.js preflight`,

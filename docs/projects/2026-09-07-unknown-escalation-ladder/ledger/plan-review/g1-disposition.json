@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "unknown-escalation-ladder-2026-09-07",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "4f157a089feffb388b4efcb81797d4d32ad1cf1774fff4ed96e8371257470827",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. §3 now states the co-signal rule once (S4 alone ⇒ at most U1; U2 needs S4 plus S1/S2/S3/S5 or --fast-moving); P1 classify implements it with named fixtures (S4-only never U2; S4+S1 and S4+--fast-moving ⇒ U2); P3 L-1 no longer says \"then U2 survey\"."
+    },
+    {
+      "fingerprint": "a956978ef9c90a1b37068e72fab791e493bae9c7c819cd2d4efafc6bafee022e",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. P0 survey wording replaced with the default-on rule (probe-recommended U2 runs without a Proceed prompt in every mode; judgment-only/knob-off/budget-exhausted keep the confirm template) and skills/survey/SKILL.md re-edited to match. P2 matrix: on ⇒ budgets required (resolver exit 3, probe never exits 3); auto ⇒ 2/1/1; off ⇒ capability_warnings + a knob-off ladder row in the same JSONL ledger; hetero-review-loop.js opt-out (plan_review|hetero_review only) is no longer referenced."
+    },
+    {
+      "fingerprint": "f5bec1dbcebb3e70d8bc5e044cd55a7b360b9e703edbafd2162dd4eb93a3c6b3",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded; re-derived live 2026-09-07: resolve-review-loop.sh prints consult_dispatch=auto, consult_resolved_from=topology, consult_engine=kimi-code-k3, and dispatch-consult.sh still exits switch_off. P2 now (a) fixes the != on guard to accept a resolved auto with a regression test and (b) makes --ladder-receipt additive after the success emit; --question-file/--artifact/blind-evidence untouched; two-knob matrix stated in §3 and the USAGE block."
+    },
+    {
+      "fingerprint": "ef2cfd9f4b0c04b5dbeb01448f6507c1a7f051a111aabc091b03e2d24aefc5aa",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. §3 heterogeneity rule: the probe reads consult_resolved_from (resolver --field, or --consult-resolved-from for fixtures) before any U1; native-fallback or consult_dispatch off ⇒ recommend U2 with skipped_rungs [U1], reason not-heterogeneous, heterogeneous_u1 false, and dispatch-consult.sh is never invoked. P1 argv and fixture added."
+    },
+    {
+      "fingerprint": "ffb26e57609757d3a5024a88fa5a5d9a2545da6919084fe7f867405e958bc15f",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded, with one owner-ruled exception. Single source of budgets is P2 (2/1/1 climb counts; files table \"calls or minutes\" removed; §6 repointed). Exhaustion now emits budget-exhausted and recommends none/U4, never a higher rung. /l4–/l6 work unit is the whole run. L/H stays per phase: the owner ruling Q2 was given on 2026-09-07 with the per-phase explanation, phases are independently-shippable chunks with their own unknowns, and the round-end Ladder section prints used/left so total spend is visible; cost-fuse is documented as a backstop only."
+    },
+    {
+      "fingerprint": "f5aab57ff9b75fad48b33747c7808169b2ecc5f4862d7a06e42bbed6a8420515",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The three kinds are telemetry like note (exempt from decision_id/rationale) with per-kind required fields validated in append; probe receipt shells out to decision-ledger.js append (one writer, existing lock); knob-off writes a ladder row with reason knob-off into the same JSONL file, no receipt-<phase>.json."
+    },
+    {
+      "fingerprint": "6752d5c2d5f5c68f759f3e87c47aa14b292b61f25ccff5a02c3f444b0b6a6ae5",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. ladder rows now carry terms[] and unknown_type (and reason); P5 and KR4 read/group by them. compaction-rehydrate.js is out of the plan; the rehydration target is build-rehydration-bundle.js section 4 (ledger tail) with current-round hypothesis/unknown/ladder rows prioritised inside the frozen five-section layout and cap."
+    },
+    {
+      "fingerprint": "74d7dc0096178e1bc6c79a3212ca78af0b72659433052bc341cf207a1fcb9770",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Four canonical call sites (debug, dev-flow L-1/L-2, think-tank, ceo-agent/foreman round end) stated in the files table, §7 and hetero-dispatch.md Hook points; P3 acceptance now requires per-site full argv and lists the four sites; P4 dogfood remains the proof that the foreman site fires."
+    },
+    {
+      "fingerprint": "3e0931968667f6c9d9977e6317f9eba38c05b5c60fe06dafd7b36963115ffddf",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: --json dropped; classify/receipt/report always print one JSON object on stdout with diagnostics on stderr; exit 2 on usage, 0 on any classification; --strict exits 2 when recommend is in the named set {U2, U3, U4}."
+    },
+    {
+      "fingerprint": "c8fac9b460be7210d3fbee195b1dc383adaf3eb9aa6b8c1aa4230f43f8d8600f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: report gains s6_only[]; the ledger Ladder section lists the S6-only subset; P1 fixture: unknown row with no S1–S5 co-signal ⇒ at most U1 and appears only in s6_only."
+    },
+    {
+      "fingerprint": "12259576c683e5b90b2b3aafe311d7c97e0e41a2f59cc6feddf04641c24f7316",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: §6 risk row now states defaults U1=2/U2=1/U3=1 per owner ruling Q2 and points at P2 as the single source."
+    },
+    {
+      "fingerprint": "9008be09d84d83c67b8c08eb76958f519d9da00ca089746e5286aea88d90a3e4",
+      "disposition": "rejected",
+      "rationale": "Rejected with rationale: R13 wording \"per-task integers\" was the author's pre-ruling draft; the owner ruled Q2 on 2026-09-07 with the per-work-unit (per-phase for L/H) explanation. The functional intent the rubric protects — an integer budget in config gates climbs, spend visible — is preserved and now stated once in P2 with the /l4–/l6 unit fixed to the whole run. Re-wording the plan back to \"per-task\" would contradict the ruling."
+    },
+    {
+      "fingerprint": "666a8f9e4031e431df086fede1e8f2c3a4f4519b66afe29aabad54686e0b7e65",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P2 off-state enumerates both outputs — resolver capability_warnings line plus the knob-off ladder row — and no longer routes through hetero-review-loop.js opt-out."
+    },
+    {
+      "fingerprint": "f6bead25a79a8744c8787f706cec5021fd79f0a5a59e59e1e5d011426a7678e8",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P2 states on ⇒ unknown_budget_u1/u2/u3 must be present integers (resolver exit 3), auto ⇒ defaults 2/1/1, missing knob ⇒ auto; test file named."
+    },
+    {
+      "fingerprint": "1e7d1d16960dd6ccd56b37dc65108cc748069ded1af78be70e8693f7b65a6f77",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: §3 and P1 describe the Ladder section with the S6-only subset explicitly."
+    },
+    {
+      "fingerprint": "f79ddfcff1e49dbdd70e338a957327b24a4d770d9237999300035b58388b73bf",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: report climbs carry signal_coverage (signals per climb) as the false-positive observable; s4_only-style single-signal climbs are visible from it."
+    }
+  ]
+}

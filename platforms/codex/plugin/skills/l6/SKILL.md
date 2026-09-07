@@ -49,6 +49,8 @@ precondition or abort receipt; do not invent another lifecycle authority.
 
 # /l6 — CEO autonomy, foreman + full-dispatch verification
 
+> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/level-front-door.md` §6.
+
 Terse front-door into `autopilot:ceo-agent` at **Level 6**: identical to `/l5`
 except verification AUTHORING is ALSO leaf-dispatched to a heterogeneous engine;
 depth-0 remains pure orchestration.

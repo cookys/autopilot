@@ -239,6 +239,23 @@
         "a99c3a5a5bad3893e7e0f4cc85133ceacc79b63c7eaf245f23734ccca12a197f"
       ],
       "rationale": "P0 skills/dev-flow/SKILL.md:611. D3 cut 4 (dev-flow hetero loops as default, 2026-09-04): line content changed as part of the dev-flow/ceo-agent hetero-review-loop wiring edit; successor at current :603 (\"If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](re...). Auto-resolved offset repin — see commit for full diff context."
+    },
+    {
+      "content_hash": "a10834ec2c70cd50267e873c774c59f87b2b015c6292b3cc34d93d5153586d96",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "7587701a19aff7009a5900a8f051e70a9ae0212c39913fb930dfeb84f44e75c8",
+        "272167994357e38de1e615f8cea44e8e8562a601ab6faff2b94148217dbbabbc"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:256 (CEO Autonomous DOA row: Research | Whether to run survey, what topic). Unknown-escalation ladder P4 (plan docs/plans/2026-09-07-unknown-escalation-ladder.md, v2.36.15): the research decision is no longer a free judgment call — survey is invoked only when scripts/probe-unknown.js classify recommends U2 with budget left, and a judgment-only wish is recorded as a ledger note. Successors at current :256 (rewritten Research row) and :257 (new Unknown-escalation DOA row listing the rungs the CEO may climb). What changed is the trigger, not the CEO ownership of the research decision."
+    },
+    {
+      "content_hash": "08b32721cd3ba4ede27f672ab43d49f04abddd15319ad1ada918b7e43cf38fab",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "8f5123be591f3e163ed530b56a3212af99a2316ff550373c09c033281f52b3bb"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:335 (Execution step 7: Need research? -> Autonomously invoke autopilot:survey). Unknown-escalation ladder P4 (plan docs/plans/2026-09-07-unknown-escalation-ladder.md, v2.36.15; G2 R8): the autonomous survey is now gated on scripts/probe-unknown.js classify recommending U2 with budget left and receipted afterwards; a judgment-only research wish is recorded as a ledger note, not dispatched. Successor at current :336 (re-hashed after the pre-merge review spelled the full receipt argv). The step still exists and is still CEO-autonomous; only its trigger changed from judgment to the probe."
     }
   ]
 }

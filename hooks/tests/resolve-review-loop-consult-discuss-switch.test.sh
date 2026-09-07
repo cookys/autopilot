@@ -133,6 +133,8 @@ const expectedAdded = [
   'discuss_dispatch',
   'hetero_review', 'hetero_review_resolved_from',
   'plan_review_resolved_from',
+  // unknown-escalation ladder knob (v2.36.15, plan 2026-09-07-unknown-escalation-ladder P2)
+  'unknown_escalation', 'unknown_budget_u1', 'unknown_budget_u2', 'unknown_budget_u3', 'unknown_resolved_from',
 ].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);
@@ -216,7 +218,7 @@ assert_contains "$(cat "$REPO_ROOT/hooks/tests/review-loop-runner.test.sh")" \
   $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
   "review-loop-runner.test.sh payload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
-  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"allow_same_runner_dual_seat"' \
+  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat"' \
   "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/consult_resolved_from/discuss_dispatch in schema order"
 
 # contract-parity.test.sh and autopilot-cli.test.sh build their roster object
@@ -338,9 +340,16 @@ assert_not_contains "$MIGRATION_OUT" "SILENTLY-PASSED" "migration negative never
 # now landed (Wave 2 of docs/plans/2026-08-28-consult-discuss-qualification.md).
 # Both wrappers own switch resolution themselves (round-2 finding [6]), so
 # there is a real entry point to drive here: invoke each directly, with the
-# shipped (both-off) template, against a fail-hard shadow dispatch-author.sh
-# that records an invocation marker and exits 99 if ever spawned. Both must
-# exit non-zero BEFORE any transport spawn.
+# shipped template, against a fail-hard shadow dispatch-author.sh that records
+# an invocation marker and exits 99 if ever spawned.
+#   consult: the shipped template says consult_dispatch: auto, and since
+#   2026-09-07 (unknown-escalation ladder P2, G1 R5) a resolved `auto` is LIVE —
+#   the previous guard accepted only the literal `on`, so the shipped default
+#   never dispatched. With an empty topology ladder the resolver falls back to
+#   claude-native, and the rail must reach the transport (marker present, then
+#   exit non-zero because the shadow fails hard). It must NOT refuse switch_off.
+#   discuss: discuss_dispatch stays off in the template ⇒ exits non-zero BEFORE
+#   any transport spawn.
 SHADOW_AUTHOR_MARKER="$TEST_TMP/step6-shadow-invoked"
 SHADOW_AUTHOR_BIN="$TEST_TMP/step6-shadow-dispatch-author.sh"
 cat > "$SHADOW_AUTHOR_BIN" <<EOF
@@ -354,13 +363,15 @@ STEP6_Q="$TEST_TMP/step6-question.txt"
 printf 'a bounded question\n' > "$STEP6_Q"
 STEP6_ARTIFACT="$TEST_TMP/step6-artifact.diff"
 printf 'diff --git a/x b/x\n+line\n' > "$STEP6_ARTIFACT"
-CONSULT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" "$REPO_ROOT/scripts/dispatch-consult.sh" \
-  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" 2>&1 >/dev/null)"
-CONSULT_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" "$REPO_ROOT/scripts/dispatch-consult.sh" \
-  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" >/dev/null 2>&1; echo $?)"
-assert_neq "0" "$CONSULT_EXIT" "shipped-template (consult_dispatch off) dispatch-consult.sh exits non-zero"
-assert_contains "$CONSULT_OUT" "consult_dispatch" "dispatch-consult.sh off-path message names consult_dispatch"
-assert_file_absent "$SHADOW_AUTHOR_MARKER" "dispatch-consult.sh with the shipped template never spawns the shadow transport"
+STEP6_TOPO_EMPTY="$TEST_TMP/step6-topology-empty.json"
+printf '%s\n' '{ "schema_version": 1, "generated_at": "2026-09-07T00:00:00.000Z", "host": "test-host", "consult_ladder": [] }' > "$STEP6_TOPO_EMPTY"
+CONSULT_STDOUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" AUTOPILOT_TOPOLOGY_FILE="$STEP6_TOPO_EMPTY" "$REPO_ROOT/scripts/dispatch-consult.sh" \
+  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" 2>/dev/null)"
+CONSULT_EXIT=$?
+assert_neq "0" "$CONSULT_EXIT" "shipped-template dispatch-consult.sh exits non-zero against the fail-hard shadow"
+assert_not_contains "$CONSULT_STDOUT" '"status": "switch_off"' "shipped-template (consult_dispatch auto) is LIVE — never refused as switch_off (G1 R5 guard fix)"
+assert_file_exists "$SHADOW_AUTHOR_MARKER" "dispatch-consult.sh with the shipped template reaches the transport (auto is live)"
+rm -f "$SHADOW_AUTHOR_MARKER"
 
 STEP6_BUNDLE="$TEST_TMP/step6-bundle.json"
 cat > "$STEP6_BUNDLE" <<'JSON'

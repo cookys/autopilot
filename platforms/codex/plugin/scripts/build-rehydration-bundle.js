@@ -99,7 +99,37 @@ function ledgerTail(ledgerFile) {
       rows.push(JSON.parse(line));
     } catch (err) { /* skip malformed telemetry */ }
   }
-  return rows.slice(-LEDGER_TAIL_ROWS);
+  return ledgerTailSelect(rows);
+}
+
+// Section-4 selection: the last LEDGER_TAIL_ROWS rows, except that every
+// unknown-escalation-ladder row (kind hypothesis|unknown|ladder) belonging to the
+// most recent ladder round is kept even when it is older than the window —
+// oldest non-ladder rows are dropped first to make room. Still at most
+// LEDGER_TAIL_ROWS rows, still one section, original order preserved
+// (plan docs/plans/2026-09-07-unknown-escalation-ladder.md P1, Fable-guide
+// compaction rule: what was tried and set aside must survive the summary).
+const LADDER_KINDS = new Set(['hypothesis', 'unknown', 'ladder']);
+function ledgerTailSelect(rows) {
+  if (rows.length <= LEDGER_TAIL_ROWS) return rows.slice();
+  const ladderRows = rows.filter((r) => r && LADDER_KINDS.has(r.kind));
+  const rounds = ladderRows.map((r) => (Number.isFinite(r.round) ? r.round : null)).filter((r) => r !== null);
+  const currentRound = rounds.length ? Math.max(...rounds) : null;
+  const mustKeep = new Set();
+  ladderRows.forEach((r) => {
+    if (currentRound === null || r.round === currentRound || r.round === undefined) mustKeep.add(r);
+  });
+  const selected = [];
+  const tail = rows.slice(-LEDGER_TAIL_ROWS);
+  const keepOutsideTail = rows.filter((r) => mustKeep.has(r) && !tail.includes(r));
+  // Fill from the newest backwards: must-keep rows first, then the rest of the tail.
+  const budget = LEDGER_TAIL_ROWS;
+  const chosen = new Set(keepOutsideTail.slice(-budget));
+  for (let i = rows.length - 1; i >= 0 && chosen.size < budget; i -= 1) {
+    if (!chosen.has(rows[i])) chosen.add(rows[i]);
+  }
+  for (const r of rows) if (chosen.has(r)) selected.push(r);
+  return selected.slice(-LEDGER_TAIL_ROWS);
 }
 
 function ownedProcesses(manifestDir) {

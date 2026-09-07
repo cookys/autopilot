@@ -116,6 +116,17 @@ DEF_DISCUSS_ENDPOINT=""
 # this field plumbing only defines/reads the switch itself.
 DEF_CONSULT_DISPATCH="auto"
 DEF_DISCUSS_DISPATCH="off"
+# unknown_escalation (unknown-escalation ladder, plan
+# docs/plans/2026-09-07-unknown-escalation-ladder.md P2): whether
+# scripts/probe-unknown.js may recommend and receipt climbs. Same tri-state
+# shape as consult_dispatch. DEFAULT auto = ON (owner ruling 2026-09-07: a
+# switch, default on in every mode) with budgets 2/1/1; `on` requires the three
+# budgets explicitly (exit 3 otherwise); `off` ⇒ capability_warnings line, the
+# probe recommends none with reason knob-off. The knob value is never rewritten.
+DEF_UNKNOWN_ESCALATION="auto"
+DEF_UNKNOWN_BUDGET_U1="2"
+DEF_UNKNOWN_BUDGET_U2="1"
+DEF_UNKNOWN_BUDGET_U3="1"
 DEF_HETERO_REVIEW="auto"
 # Board ruling 2026-08-27: dual-seat occupancy by an UNQUALIFIED (override-admitted)
 # runner is configurable but DEFAULT CLOSED. See the schema description for why the
@@ -409,6 +420,10 @@ DISCUSS_RUNNER="$(read_field "$CONFIG" discuss_runner "$DEF_DISCUSS_RUNNER")"
 DISCUSS_ENDPOINT="$(read_field "$CONFIG" discuss_endpoint "$DEF_DISCUSS_ENDPOINT")"
 CONSULT_DISPATCH="$(read_field "$CONFIG" consult_dispatch "$DEF_CONSULT_DISPATCH")"
 DISCUSS_DISPATCH="$(read_field "$CONFIG" discuss_dispatch "$DEF_DISCUSS_DISPATCH")"
+UNKNOWN_ESCALATION="$(read_field "$CONFIG" unknown_escalation "$DEF_UNKNOWN_ESCALATION")"
+UNKNOWN_BUDGET_U1_RAW="$(read_field "$CONFIG" unknown_budget_u1 "")"
+UNKNOWN_BUDGET_U2_RAW="$(read_field "$CONFIG" unknown_budget_u2 "")"
+UNKNOWN_BUDGET_U3_RAW="$(read_field "$CONFIG" unknown_budget_u3 "")"
 ALLOW_DUAL_SEAT="$(read_field "$CONFIG" allow_same_runner_dual_seat "$DEF_ALLOW_DUAL_SEAT")"
 PLAN_MAX_GENERATIONS="$(read_field "$CONFIG" plan_review_max_generations "$DEF_PLAN_MAX_GENERATIONS")"
 PLAN_MAX_WALL_SECONDS="$(read_field "$CONFIG" plan_review_max_wall_seconds "$DEF_PLAN_MAX_WALL_SECONDS")"
@@ -495,6 +510,41 @@ case "$DISCUSS_DISPATCH" in
     echo "resolve-review-loop: invalid discuss_dispatch (must be off|on): $DISCUSS_DISPATCH" >&2
     exit 3
     ;;
+esac
+case "$UNKNOWN_ESCALATION" in
+  auto|on|off) ;;
+  *)
+    echo "resolve-review-loop: invalid unknown_escalation (must be auto|on|off): $UNKNOWN_ESCALATION" >&2
+    exit 3
+    ;;
+esac
+# unknown_escalation budgets: `on` requires all three explicit non-negative
+# integers; `auto` fills 2/1/1 for any that are missing; a present value must be
+# a non-negative integer under every knob value (a knob-off budget typo is still
+# a typo).
+_unknown_budget_check() { # name raw default -> prints resolved value or exits 3
+  local name="$1" raw="$2" def="$3"
+  if [[ -z "$raw" ]]; then
+    if [[ "$UNKNOWN_ESCALATION" == "on" ]]; then
+      echo "resolve-review-loop: unknown_escalation=on requires $name (a non-negative integer)" >&2
+      exit 3
+    fi
+    printf '%s' "$def"
+    return
+  fi
+  if [[ ! "$raw" =~ ^[0-9]+$ ]]; then
+    echo "resolve-review-loop: invalid $name (must be a non-negative integer): $raw" >&2
+    exit 3
+  fi
+  printf '%s' "$raw"
+}
+UNKNOWN_BUDGET_U1="$(_unknown_budget_check unknown_budget_u1 "$UNKNOWN_BUDGET_U1_RAW" "$DEF_UNKNOWN_BUDGET_U1")" || exit 3
+UNKNOWN_BUDGET_U2="$(_unknown_budget_check unknown_budget_u2 "$UNKNOWN_BUDGET_U2_RAW" "$DEF_UNKNOWN_BUDGET_U2")" || exit 3
+UNKNOWN_BUDGET_U3="$(_unknown_budget_check unknown_budget_u3 "$UNKNOWN_BUDGET_U3_RAW" "$DEF_UNKNOWN_BUDGET_U3")" || exit 3
+case "$UNKNOWN_ESCALATION" in
+  on) UNKNOWN_RESOLVED_FROM="explicit" ;;
+  off) UNKNOWN_RESOLVED_FROM="off" ;;
+  *) UNKNOWN_RESOLVED_FROM="default" ;;
 esac
 
 # consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
@@ -735,6 +785,9 @@ esac
 # Optional implementer_ladder: comma list of engine/effort@runner, or 'auto'. Absent/empty
 # ⇒ [] (the three implementer_* fields remain the single implicit rung).
 CAP_WARNINGS_JSON="[]"
+if [[ "$UNKNOWN_ESCALATION" == "off" ]]; then
+  CAP_WARNINGS_JSON='["unknown_escalation off: the unknown-escalation ladder will not recommend or receipt climbs (probe-unknown.js reports reason knob-off)"]'
+fi
 IMPL_LADDER_JSON="[]"
 if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
@@ -2329,6 +2382,11 @@ if [[ -n "$FIELD" ]]; then
     discuss_endpoint) printf '%s\n' "$DISCUSS_ENDPOINT" ;;
     consult_dispatch) printf '%s\n' "$CONSULT_DISPATCH" ;;
     discuss_dispatch) printf '%s\n' "$DISCUSS_DISPATCH" ;;
+    unknown_escalation) printf '%s\n' "$UNKNOWN_ESCALATION" ;;
+    unknown_budget_u1) printf '%s\n' "$UNKNOWN_BUDGET_U1" ;;
+    unknown_budget_u2) printf '%s\n' "$UNKNOWN_BUDGET_U2" ;;
+    unknown_budget_u3) printf '%s\n' "$UNKNOWN_BUDGET_U3" ;;
+    unknown_resolved_from) printf '%s\n' "$UNKNOWN_RESOLVED_FROM" ;;
     allow_same_runner_dual_seat) printf '%s\n' "$ALLOW_DUAL_SEAT" ;;
     plan_review_max_generations) printf '%s\n' "$PLAN_MAX_GENERATIONS" ;;
     plan_review_max_wall_seconds) printf '%s\n' "$PLAN_MAX_WALL_SECONDS" ;;
@@ -2427,11 +2485,12 @@ READINESS_ARGS=(
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
 )
-SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
 SEATS_ARGS=(
   "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
   "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
   "$CONSULT_DISPATCH" "$CONSULT_RESOLVED_FROM" "$DISCUSS_DISPATCH"
+  "$UNKNOWN_ESCALATION" "$UNKNOWN_BUDGET_U1" "$UNKNOWN_BUDGET_U2" "$UNKNOWN_BUDGET_U3" "$UNKNOWN_RESOLVED_FROM"
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'

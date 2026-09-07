@@ -655,3 +655,20 @@ deletes the previous version directory as well. Dropping `remove` would have fix
 Prevention: `dev-setup.sh` detects live `codex` processes and refuses without `--force`; the package test pins the
 "upgrade deletes the old version dir" fact in a sandbox so the guard's premise cannot rot silently.
 
+
+## 29. A derived cache that matches its generator proves the generator ran, not that the generator is right
+
+**Incident (2026-09-07, v2.36.16).** Two resolver tests sat red on develop for three days. The handoff attributed
+them to a stale `~/.autopilot/topology.json` ("rebuild the cache; host state, owner decides") and
+`resolve-dispatch-topology.js --check` returned 0, which read as "the cache is fine". Re-running the generator
+produced the same two `effort: ""` rungs: the implementer path emitted an empty effort for legacy seats while the
+reviewer path had defaulted to `high` since Case 12. `--check` compares the file to what the script would write
+now — a wrong script and its faithful cache agree perfectly.
+
+> **A consistency check between an artifact and its generator is evidence about the artifact, never about the
+> generator.** Before filing a red as "host state", regenerate from source and diff; if the fresh output carries the
+> same defect, the defect is in the code and the cache is a witness, not a suspect.
+
+Prevention: the producer now emits a contract-valid effort and dedupes identities; the consumer names the rung and
+the fix on a stale cache instead of failing an index deep in the validator; Case 13 pins the legacy-seat emission so
+the two role paths cannot drift apart again silently.

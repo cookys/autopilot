@@ -185,6 +185,12 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Effort**: S
 - **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D1.md`
 
+### `contract-parity` / `resolve-review-loop-consult-discuss-switch` tests read the real `~/.autopilot/topology.json`
+- **Trigger**: the next time either test goes red on one host and green on another with the same tree (2026-09-07: red on this host for three days because the host cache carried two legacy `effort: ""` rungs; the fix landed in v2.36.16 but the *test* still depends on host state — the consult-seat drift allowance in the switch parity is host-dependent for the same reason)
+- **Context**: both tests resolve the shipped template with `implementer_ladder: auto` / `consult_dispatch: auto`, so the resolver reads whatever topology cache the host has. `resolve-review-loop.test.sh` already shows the hermetic pattern (`AUTOPILOT_TOPOLOGY_FILE` pointed at a fixture per case); port it. Related: the stale-cache item above (regenerate-or-warn) would shrink the blast radius but not the test's host dependence
+- **Effort**: S
+- **Source**: v2.36.16 (2026-09-07), CHANGELOG「未做」
+
 ### `hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename
 - **Trigger**: two collects for the same phase ever run concurrently (today callers serialise by generation)
 - **Context**: a lost chain entry would self-recover on retry, never forge a gate pass; MiniMax CUT/FOLLOW-UP on the D2 review 2026-09-04

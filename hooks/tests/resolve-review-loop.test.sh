@@ -262,6 +262,23 @@ BOGUS_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$BOGUS_TOPO_FILE" REVIEW_LOOP_CONFIG_
 assert_exit_code "$BOGUS_TOPO_RC" 3 "implementer_ladder: auto with a bogus rung runner exits 3"
 assert_contains "$BOGUS_TOPO_ERR" "invalid implementer_ladder runner" "bogus auto rung runner error matches comma-list message shape"
 
+# (c4) implementer_ladder: auto + topology file has a rung with an empty effort (what
+# resolve-dispatch-topology.js emitted for legacy no-effort seats before v2.36.16)
+# -> exit 3 naming the rung and the fix, instead of the JS contract validator
+# rejecting the whole output later with only an index.
+STALE_TOPO_FILE="$TEST_TMP/topo-stale-effort-fixture.json"
+cat > "$STALE_TOPO_FILE" <<'JSON'
+{
+  "implementer_ladder": [
+    { "rung": "grok-4.5@grok", "engine": "grok-4.5", "effort": "", "runner": "grok", "baseline_event_id": 138 }
+  ]
+}
+JSON
+STALE_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>&1 1>/dev/null)"; STALE_TOPO_RC=$?
+assert_exit_code "$STALE_TOPO_RC" 3 "implementer_ladder: auto with an empty-effort rung exits 3"
+assert_contains "$STALE_TOPO_ERR" "invalid implementer_ladder effort (must be low|medium|high|xhigh|max): grok-4.5/@grok" "empty-effort auto rung error names the rung"
+assert_contains "$STALE_TOPO_ERR" "rerun scripts/resolve-dispatch-topology.js" "empty-effort auto rung error names the fix"
+
 # (d) default ladder_start_rung_judgment is 0 when absent from config, 1 when 1, falls back to 0 for garbage
 JUDG_DEF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" 2>/dev/null)"
 assert_eq "0" "$(json_get "$JUDG_DEF_OUT" ladder_start_rung_judgment)" "ladder_start_rung_judgment defaults to 0 when absent"

@@ -28,7 +28,7 @@ Two independent agents (researcher + skeptic) search in parallel, bringing diffe
 
 - **Produce recommendation, marked as suggestion** -- attach reasoning and preconditions so user can judge applicability
 - **No code** -- research only
-- **No auto-trigger** -- signal only suggests, user confirms
+- **No auto-trigger in participatory modes** -- signal only suggests, user confirms. In just-results modes (`ceo-agent`, `/l3`+, a foreman) the caller may invoke without confirmation and records the decision (decision ledger or CEO Report); the unknown-escalation ladder probe (plan `docs/plans/2026-09-07-unknown-escalation-ladder.md`, ships with the ladder) is the signal source there, not this table
 
 ## Flow
 
@@ -131,6 +131,6 @@ Present report, clearly mark "decision is yours". If user wants to dive deeper i
 |--------|---------|
 | Tech selection | "X or Y?", "which library?" |
 | Architecture decision | "canonical approach for this?" |
-| Uncertainty | "TBD", "undecided", "pending" in plans |
+| Novelty / no consensus | Computed, not phrased: the unknown-escalation ladder probe reports `unknown_type: how` (task terms with zero knowledge/memory/repo hits, or an unrecognised / fast-moving name) or `whether` (think-tank consensus LOW). A plan that reaches review carries no `TBD` (plan-template placeholder scan), so plan wording is not a signal |
 | New domain | Tech/protocol/pattern team hasn't used |
 | User bias | "I think X is good" -- worth verifying with survey |

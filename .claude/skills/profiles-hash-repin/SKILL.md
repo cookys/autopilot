@@ -21,3 +21,23 @@ rule-inventory 把兩個 skill 的每一行 prose 當 rule 清點;改動任何�
 6. per-skill ratchet:CHANGELOG 該版節要有 `prose-justification:` 行,否則 preflight gate 8 擋。
 
 驗證:`catalog --check` rc=0 + 兩個測試檔串行綠 + 全套件。
+
+## 附:新增一個 hook 時的釘值清單(2026-09-07 `dirty-protected-paths` 試出)
+
+改的不是 SKILL.md prose 而是 hook 接線時,鏈是另一條,順序:
+
+1. `hooks/hooks.json` 接線(+ Codex 端 `platforms/codex/hooks/hooks.json` 若要掛,再加 `sync-codex-plugin-skills.sh`
+   的 source/dest mapping 與 `check_exact_directory_entries "hooks" …` 清單)。
+2. `profiles/hook-classes.json` 加一列(`invariant_effect` 或 `guidance`),否則 `build-profile-payload.js build`
+   報 `PROFILE_HOOK_DRIFT: hook classes must classify every wired hook exactly once`。
+3. `profiles/profile-catalog.json` 的 `hook_classes_sha256` 換成 `sha256sum profiles/hook-classes.json`,否則
+   `catalog --check` 報 `PROFILE_SOURCE_DRIFT: hook classes does not match the profile catalog`。
+4. 數字:`sync-version.js --hook-count N`(plugin.json / marketplace.json 描述)、README 兩份 badge `hooks-N`
+   (sync-version **不改 badge**,要手動 sed)、`hooks/README.md` 頂部句與 `## Tier A — Default-On (N hooks)` 標頭、
+   CLAUDE.md「N hooks (M default-on」;`hooks/tests/check-hook-inventory.test.sh` 寫死的 16/17 要跟著動。
+5. `hooks/tests/codex-plugin-package.test.sh` 的 sandbox 只 seed 指定檔案:新 hook 要加進 mapping 表、
+   exact-entries 清單與 seed/cp 兩段,否則「support payload drift」假紅。
+6. 三檔(hook-classes / catalog / hooks.json)cp 到 `platforms/codex/plugin/`——跑 sync script 即可。
+
+驗證:`node scripts/check-hook-inventory.js --check` rc=0、`catalog --check` rc=0、`codex-plugin-package` 綠。
+

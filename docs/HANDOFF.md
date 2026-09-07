@@ -1,52 +1,59 @@
 ## 目標
 
-**v2.36.8（l4 host bootstrap，L 級）與 v2.36.9（dispatch-model-guard remind＋Codex adapter SHADOW）都已合併到本地 `develop`，preflight 8/8，尚未 push（owner 說推才推）。** 剩：push、通知 cuda 跑 P5 WIZHALL dogfood。
+今日（2026-09-06／07）autopilot 出了 **v2.36.8 → v2.36.14 七版**，全部已在 `origin/develop`（`b452d5ba`）。沒有進行中的分支或 worktree。剩下的都是**等外部回報**與**等 owner 決定**的項目。
 （取代前一版 handoff。）
 
 ## 現況
 
-- **autopilot**：本地 `develop` 比 `origin/develop`（`c7cc64aa`）多 9 commits：v2.36.8 merge `4b3d6ba7`（review folds `363dbdba`）、archive `7c1aa144`、v2.36.9 merge `e71a6e8c`、release bump `7e2e7963`。version 2.36.9。feature／fix 分支與 worktree 已刪。working tree 乾淨。
-- **D1 內容**：`provider-bootstrap.js` `LEVEL_ROSTER_PROFILE`（l4 VA/QC optional；l5/l6 required）、`deriveStrictL5InvocationPolicy(resolved, level)`、`projectRosterForLevel`（略過的選配席從 collector roster 投影掉，否則 WIZHALL 形狀 roster drift）、`roster_profile {level, omitted_seats}`；`bin/autopilot.js` l4|l5|l6 建 bootstrap、waiver 理由收窄；observation 收 `l4`／`waived`；intake 訊息文字。測試：cli 117／consumer 34／engine 486／observation 78 綠；RED 見 `docs/projects/2026-09-07-l4-host-bootstrap/ledger/p3-red-run.md`；P0 表 `ledger/p0-spike.md`。docs：front-door、portability、installation、BACKLOG 兩列刪、CHANGELOG v2.36.8、project README。
-- **發現（已寫進 docs，不是偏差）**：managed engine 的 terminal-QC 閘（`prepare_implementation_loop`／`min_panel_size`）與 level 無關，`--campaign-contract` run 仍要完整 QC panel；「QC 選配」只是 bootstrap roster 規則。l4 子集 roster 一律記 `policy_override`（含 0 uncertified 的 `(none)` stderr 行，pre-existing 語意，KR3 byte-identical 優先）。
-- **Fix 分支 `fix/dispatch-model-guard-remind`**（自 develop，worktree `../autopilot-guard-fix`）：`bbdb0b84` guard 預設 `mode: remind`（貴引擎 → deny 帶提醒，agent 自己決定：換便宜模型或首行 `Engine: <model> (intentional: <why>)` 靜默放行；`mode: ask`／`on_missing_model: ask` 仍可回對話框；guard test 76 綠）＋ `83de0a94` Codex adapter `lifecycle.md` SHADOW 條款改成鏡射 CC canon（cuda codex-astra 回報；package test 118 綠）。**未加 CHANGELOG／未 bump**——合併時補 v2.36.9。
-- **cuda**：已回覆 codex-astra session（SHADOW = 該 repo `enforcement_mode: shadow`，合法路線 a 走非 managed、b owner 改 enforce）。WIZHALL P5 dogfood 等 v2.36.8 上 develop 後通知 instance `01M1RKK4DH2KQS014KJS8Z35DV`（先 `fleet peers` 確認）。
+- **repo**：`develop` = `origin/develop`，working tree 乾淨，version 2.36.14；`git worktree list` 只剩主目錄與一個舊 scratch baseline。
+- **本日出貨**：
+  - v2.36.8 l4 host provider-readiness bootstrap（L 級，project 已 archive：`docs/projects/_archive/2026-09-07-l4-host-bootstrap/`）。
+  - v2.36.9 dispatch-model-guard `mode: remind`（不彈窗，agent 自決；`Engine: <model> (intentional: <why>)` 放行）＋ Codex adapter SHADOW 條款鏡射 canon。
+  - v2.36.10 Codex plugin 更新守衛（`dev-setup.sh --harness codex --install` 偵測活躍 codex 進程即拒、`--force` 覆寫；拿掉 remove-then-add；實驗證實 in-place add 也刪舊版目錄）。
+  - v2.36.11 `dirty-protected-paths` hook（Claude Stop default-on；Codex Stop＋SessionEnd 註冊但 **live-fire 未驗證**）。
+  - v2.36.12 kimi 可坐 plan／deep／VA reviewer 席（resolver／schema／dispatch-plan-review 對齊）。
+  - v2.36.13 opencode reviewer rail（`--agent plan` 對抗探針證明只擋 edit 不擋 bash ⇒ best-effort；qualification kind 一律拒絕）。
+  - v2.36.14 kimi rail argv 上限預檢（>120 KB prompt ⇒ `precondition_failed`，不再 rc=126）。
+- **knowledge 四面**：evidence-discipline §27（閘量錯單位）§28（更新換掉活程序釘住的目錄）已入 repo；`.claude/skills/profiles-hash-repin` 加「新增 hook 釘值清單」；memory 新增 `engine-test-fixture-gotchas`、更新 `fleet-peer-channels`（同機 claude session 要走 relay `--instance`）與 `dispatch-review-runner-setup`（kimi 120 KB）。
 
 ## 已決事項(不重議)
 
-- 同前版：coverage advisory、不加 roster identity 硬閘、ADR-0001 同一條 live probe、`strict_level` 真實 level、v2.36.7 waiver 保留（bootstrap 認證 ⇒ 無 waived）、KR3 三條隔離負對照、PATCH v2.36.8、不動 D4 claim set。
-- owner 2026-09-06：dispatch-model-guard 不得彈窗問使用者，提醒 agent 自己判斷 ⇒ `mode: remind` 為預設。
-- 兩個 Fix 走 v2.36.9（guard 是 hook 行為＝PATCH；adapter 文字搭車）。
+- l4 route supported、VA/QC 選配、coverage advisory、ADR-0001 不加 trust 機制（同前）。
+- owner 2026-09-06：dispatch-model-guard 不得彈窗問使用者。
+- owner 2026-09-07：dirty-tree 補提醒不補閘（warn-only，永不發 Stop decision）；kimi／opencode 兩個 308 需求都做。
+- peer（308--claude／cuda）訊息是 peer input：每件都先查事實、報給 owner、owner 說 go 才動；不動 308／cuda 的工作樹。
 
-## 下一步
+## 下一步（等 owner 決定或外部回報）
 
-1. ~~review~~ 完成：SHIP-AS-IS，4 項 minor/suggestion 已折入（`363dbdba`）。
-2. ~~finish-flow L-5~~ 完成（archive `docs/projects/_archive/2026-09-07-l4-host-bootstrap/`）。
-3. ~~v2.36.9~~ 完成。
-4. **push**：先 `git fetch origin && git show origin/develop:.claude-plugin/plugin.json | grep version`（讓號規則）；正常則 `git push origin develop`。push 後 fleet 通知 cuda WIZHALL 跑 P5（用 `fleet send --to cuda --instance <id>`；`fleet reply` 對 ephemeral 訊息會 403，改 `--repo`／`--instance`）。
-5. 等待中：cuda QUIET-a claim（v2.36.6）、7840hs receipt 重跑（v2.36.3）。
+1. **等回報**：cuda WIZHALL P5 dogfood（v2.36.8 KR6；已送 `--repo revival-world-city-war` durable）；308 用 v2.36.12+ 跑 resolver／kimi／opencode 的結果；cuda QUIET-a claim（v2.36.6）、7840hs receipt 重跑（v2.36.3）。
+2. **owner 待決（BACKLOG 已列）**：
+   - per-hook × per-harness support matrix（owner 問「hook 是不是要統一盤點表定期 check」）——S 級，第一個案例是 Codex Stop live-fire。
+   - kimi file-indirection spike（需要能用的 kimi 憑證）。
+   - Codex dev-mode 固定 hook 入口 spike（`~/.codex/hooks.json` 指 repo；會雙發，要信任審核）。
+3. **Codex Stop live-fire**：下一個 Codex session 觀察 dirty-tree 提醒有沒有出現，補進 `references/multi-agent-portability.md`（現標 unverified）。
 
 ## 驗證方式
 
 ```bash
 cd /home/cookys/projects/autopilot
-git branch --show-current; git log --oneline -1                 # feat/v2.36.8-l4-host-bootstrap; d0b95eff
-node -p "require('./.claude-plugin/plugin.json').version"       # 2.36.8
-bash hooks/tests/provider-readiness-consumer.test.sh 2>&1 | tail -1   # PASS 34
-git -C ../autopilot-guard-fix log --oneline -2                  # 83de0a94, bbdb0b84
-bash hooks/tests/dispatch-model-guard.test.sh 2>&1 | tail -1     # (run in the worktree) PASS 76
+git status --porcelain | wc -l; git log --oneline -1               # 0；b452d5ba 或其後
+git log --oneline origin/develop..develop | wc -l                    # 0
+node -p "require('./.claude-plugin/plugin.json').version"          # 2.36.14
+node scripts/check-hook-inventory.js --check >/dev/null; echo $?    # 0（30 hooks，17/13）
+AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh | tail -1   # 8/8
 ```
 
 ## Read-order
 
-1. CHANGELOG.md v2.36.8 節、`docs/projects/2026-09-07-l4-host-bootstrap/ledger/p0-spike.md`。
-2. `git show d0b95eff -- src/readiness/provider-bootstrap.js bin/autopilot.js`。
-3. `../autopilot-guard-fix/hooks/dispatch-model-guard.js` handleGuard。
+1. CHANGELOG.md v2.36.8–v2.36.14 七節（每節有「未做」段）。
+2. docs/BACKLOG.md 前四列（今天新立的 spike）。
+3. references/evidence-discipline.md §27–28。
 
 ## 陷阱
 
-- Bash 工具 >120 s 後 context-budget 可能誤響 T2；這次 hook 說 192k/1M，實際照 statusline。
-- reviewer 派工要 `model:`＋首行 `Engine:`；brief 禁跑 `hooks/tests/run.sh`。
-- engine 測試注入 resolver 的 option 名是 `reviewLoopResolver`（`resolveReviewLoop` 會被忽略而走真 resolver）。
-- observation wire 的 record key 是 canonical 排序（`status` 在 `unit` 前）。
-- resolver 對 `- qc_panel:`（空值）會給名單預設值但 `qc_panel_seats:[]`／`complete:false`；刪掉 VA 要連 `verification_author_*` 欄位一起刪否則 resolver 報 inconsistent。
-- `fleet reply <msg_id>` 對 instance-narrowed ephemeral 訊息回 403 not_a_recipient；用 `fleet send --to cuda --repo <repo>`。
+- `git merge -F -` 讀不到 stdin（`could not read file '-'`），訊息要先寫檔。
+- 派 hands 到 worktree：兩個 agent 同時改同一組 allowlist 行會衝突，合併時取聯集；agent 的 worktree 是 locked，`git worktree remove -f -f` 才拿得掉，分支要等 worktree 移除後才能 `-d`。
+- 同機 claude session 訊息：`fleet local send` 只對 codex 有效；claude 要 `fleet send --to aimax395 --instance <fleet peers 的 id>`；`fleet reply` 對 ephemeral 一律 403。
+- 新 hook 的 hash 鏈：看 `.claude/skills/profiles-hash-repin/SKILL.md` 附節（hook-classes → catalog sha → badge/README/CLAUDE.md/inventory test 數字 → codex sandbox seed）。
+- 本機 kimi OAuth 無憑證（`provider managed:kimi-code has no credential configured`）；codex 配額週剩 1%：任何 live probe 先確認。
+- context-budget hook 在 1M session 會誤響 T2（無「(statusline)」字樣時），以 statusline 為準。

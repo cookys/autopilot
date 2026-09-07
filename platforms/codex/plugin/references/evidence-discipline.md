@@ -625,3 +625,33 @@ there. An inference-based gate is a claim about the harness; the harness's own J
 **Corollary recorded the same day.** A status-line writer that "only draws" is a measurement that is thrown away
 every tick. If a channel already receives the truth, persist it where the acting component can read it — in RAM
 (`$XDG_RUNTIME_DIR`, probed with `findmnt`, never assumed) when it is rewritten every tick.
+
+## 27. A gate that measures the wrong unit passes the request straight into the wall behind it
+
+**Incident (2026-09-07, v2.36.14).** `dispatch-review.sh`'s kimi rail passed the prompt as one `-p` argv string
+with a comment reading "ARG_MAX risk accepted with context-window gate upstream". The context-window gate counts
+tokens; the wall is Linux `MAX_ARG_STRLEN` (128 KiB per argv string, unrelated to `ARG_MAX`). A 145 KB prompt
+cleared the token gate and died in `execve` with rc=126, surfaced as an opaque `no_verdict`. The risk had been
+"accepted" by the wrong instrument.
+
+> **An accepted risk must name the unit the wall is measured in, and the gate that guards it must measure that
+> unit.** Tokens do not bound bytes; bytes do not bound argv strings.
+
+Prevention: the rail measures prompt bytes before spend and fails closed naming the kernel limit and the remedies;
+the test proves the guard with a 150 KB stub prompt (the stub itself would die on the same wall, which is the
+evidence).
+
+## 28. An update that replaces the artifact a live process has pinned breaks every live process, remove-then-add or not
+
+**Incident (2026-09-07, v2.36.10).** Every Codex plugin update left running Codex sessions failing `PostCompact`
+with `MODULE_NOT_FOUND …/cache/<plugin>/<old-version>/hooks/post-compact.js`. The suspected cause was
+`dev-setup.sh`'s remove-then-add; the isolated-`CODEX_HOME` experiment showed the in-place `plugin add` upgrade
+deletes the previous version directory as well. Dropping `remove` would have fixed nothing.
+
+> **Reproduce the replacement in isolation before blaming the visible step.** The fix that follows from the
+> hypothesis (drop `remove`) and the fix that follows from the measurement (refuse to update while sessions
+> that pinned the directory are alive) are different fixes.
+
+Prevention: `dev-setup.sh` detects live `codex` processes and refuses without `--force`; the package test pins the
+"upgrade deletes the old version dir" fact in a sandbox so the guard's premise cannot rot silently.
+

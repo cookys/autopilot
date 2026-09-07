@@ -10,6 +10,8 @@ LEDGER="$REPO_ROOT/scripts/decision-ledger.js"
 BUNDLE="$REPO_ROOT/scripts/build-rehydration-bundle.js"
 L="$TEST_TMP/ledger.jsonl"
 mkdir -p "$TEST_TMP/k" "$TEST_TMP/m"
+# A genuinely novel term: random so no repo/knowledge/memory file (including this test) can contain it.
+NOVEL="novel$(date +%s%N | tail -c 9)$RANDOM"
 # Every flag the probe would otherwise ask the resolver for is pinned, so the test never
 # depends on the host's review-loop config or topology.
 PIN=(--knob auto --consult-resolved-from topology --consult-dispatch auto --budget-u1 2 --budget-u2 1 --budget-u3 1 --knowledge-dir "$TEST_TMP/k" --memory-dir "$TEST_TMP/m" --repo-root "$REPO_ROOT")
@@ -71,19 +73,19 @@ assert_eq "$(printf '%s' "$OUT" | field recommend)" "U4" "chain climbed + stall 
 assert_contains "$(printf '%s' "$OUT" | field signals)" '"S3"' "S3 reported from stall JSON"
 
 # ── S4 co-signal rule (R10) ──
-OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p3 --terms zzqx-novel "${PIN[@]}")"
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p3 --terms $NOVEL "${PIN[@]}")"
 assert_eq "$(printf '%s' "$OUT" | field unknown_type)" "how" "zero-hit term ⇒ unknown-how"
 assert_eq "$(printf '%s' "$OUT" | field eligible_max)" "U1" "S4 alone ⇒ at most U1"
 assert_eq "$(printf '%s' "$OUT" | field recommend)" "U1" "S4 alone recommends U1"
-node "$PROBE" receipt --ledger "$L" --rung U1 --unknown-type how --terms zzqx-novel --signals S4 --work-unit p3 >/dev/null
-node "$PROBE" receipt --ledger "$L" --rung U1 --unknown-type how --terms zzqx-novel --signals S4 --work-unit p3 >/dev/null
-OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p3 --terms zzqx-novel "${PIN[@]}")"
+node "$PROBE" receipt --ledger "$L" --rung U1 --unknown-type how --terms $NOVEL --signals S4 --work-unit p3 >/dev/null
+node "$PROBE" receipt --ledger "$L" --rung U1 --unknown-type how --terms $NOVEL --signals S4 --work-unit p3 >/dev/null
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p3 --terms $NOVEL "${PIN[@]}")"
 assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "S4-only with U1 spent ⇒ none, never U2 (R10)"
-OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p3 --terms zzqx-novel --fast-moving "${PIN[@]}")"
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p3 --terms $NOVEL --fast-moving "${PIN[@]}")"
 assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "S4 + --fast-moving ⇒ U2"
 append hypothesis '{"hypothesis_id":"h3","text":"x","status":"refuted","work_unit":"p4"}'
 append hypothesis '{"hypothesis_id":"h4","text":"y","status":"refuted","work_unit":"p4"}'
-OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p4 --terms zzqx-novel "${PIN[@]}")"
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p4 --terms $NOVEL "${PIN[@]}")"
 assert_contains "$(printf '%s' "$OUT" | field signals)" '"S4"' "S4 present alongside S1"
 assert_eq "$(printf '%s' "$OUT" | field eligible_max)" "U3" "S4 + S1 ⇒ U2 eligible (why chain reaches U3)"
 # a term with a local hit is not novel
@@ -93,12 +95,12 @@ assert_eq "$(printf '%s' "$OUT" | field recommend)" "U0" "all terms hit locally 
 assert_eq "$(printf '%s' "$OUT" | field terms_hits.zzqx-known.knowledge_or_memory)" "1" "knowledge hit counted"
 
 # ── heterogeneity rule (R12): native-fallback skips U1 before any spawn ──
-OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p7 --terms zzqx-novel --fast-moving "${PIN[@]}" --consult-resolved-from native-fallback)"
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p7 --terms $NOVEL --fast-moving "${PIN[@]}" --consult-resolved-from native-fallback)"
 assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "native-fallback ⇒ U2"
 assert_eq "$(printf '%s' "$OUT" | field skipped_rungs)" '["U1"]' "U1 skipped"
 assert_eq "$(printf '%s' "$OUT" | field reason)" "not-heterogeneous" "skip reason named"
 assert_eq "$(printf '%s' "$OUT" | field heterogeneous_u1)" "false" "heterogeneous_u1 false"
-OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p7 --terms zzqx-novel "${PIN[@]}" --consult-dispatch off)"
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p7 --terms $NOVEL "${PIN[@]}" --consult-dispatch off)"
 assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "S4-only with consult off ⇒ none (U2 not signal-eligible)"
 assert_eq "$(printf '%s' "$OUT" | field reason)" "not-heterogeneous" "consult off names not-heterogeneous"
 
@@ -113,17 +115,17 @@ assert_eq "$(printf '%s' "$OUT" | field eligible_max)" "U1" "S6 alone caps at U1
 node "$PROBE" receipt --ledger "$L" --rung U1 --unknown-type how --terms proto --signals S6 --work-unit p9 >/dev/null
 
 # ── knob off ⇒ none, reason knob-off, one ladder row in the same JSONL ──
-OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p10 --terms zzqx-novel "${PIN[@]}" --knob off)"; RC=$?
+OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p10 --terms $NOVEL "${PIN[@]}" --knob off)"; RC=$?
 assert_exit_code "$RC" "0" "knob off exits 0"
 assert_eq "$(printf '%s' "$OUT" | field reason)" "knob-off" "knob off names its reason"
-node "$PROBE" classify --ledger "$L" --work-unit p10 --terms zzqx-novel "${PIN[@]}" --knob off >/dev/null
+node "$PROBE" classify --ledger "$L" --work-unit p10 --terms $NOVEL "${PIN[@]}" --knob off >/dev/null
 assert_eq "$(grep -c '"reason":"knob-off"' "$L")" "1" "knob-off row written once, into the same ledger"
 assert_file_absent "$TEST_TMP/receipt-p10.json" "no second receipt file"
 
 # ── --strict: exit 2 only for U2/U3/U4 ──
-node "$PROBE" classify --ledger "$L" --work-unit p11 --terms zzqx-novel --fast-moving "${PIN[@]}" --consult-resolved-from native-fallback --strict >/dev/null; RC=$?
+node "$PROBE" classify --ledger "$L" --work-unit p11 --terms $NOVEL --fast-moving "${PIN[@]}" --consult-resolved-from native-fallback --strict >/dev/null; RC=$?
 assert_exit_code "$RC" "2" "--strict exits 2 on U2"
-node "$PROBE" classify --ledger "$L" --work-unit p11 --terms zzqx-novel "${PIN[@]}" --strict >/dev/null; RC=$?
+node "$PROBE" classify --ledger "$L" --work-unit p11 --terms $NOVEL "${PIN[@]}" --strict >/dev/null; RC=$?
 assert_exit_code "$RC" "0" "--strict exits 0 on U1"
 node "$PROBE" classify --ledger "$L" --bogus 1 >/dev/null 2>&1; RC=$?
 assert_exit_code "$RC" "2" "usage error exits 2"

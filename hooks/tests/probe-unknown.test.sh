@@ -69,7 +69,8 @@ assert_eq "$(printf '%s' "$OUT" | field reason)" "budget-exhausted" "exhaustion 
 # U4 only when a hard signal persists after the whole chain
 printf '%s\n' '{"tripped":true,"consecutive_zero_product":3,"threshold":3,"violations":[]}' > "$TEST_TMP/stall.json"
 OUT="$(node "$PROBE" classify --ledger "$L" --work-unit p1 --stall "$TEST_TMP/stall.json" "${PIN[@]}")"
-assert_eq "$(printf '%s' "$OUT" | field recommend)" "U4" "chain climbed + stall tripped ⇒ U4"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "chain climbed + stall tripped ⇒ still none: classify never emits U4 (R11)"
+assert_eq "$(printf '%s' "$OUT" | field reason)" "budget-exhausted" "…with reason budget-exhausted"
 assert_contains "$(printf '%s' "$OUT" | field signals)" '"S3"' "S3 reported from stall JSON"
 
 # ── S4 co-signal rule (R10) ──
@@ -141,13 +142,20 @@ node "$PROBE" classify --ledger "$L" --work-unit p11 --terms $NOVEL "${PIN[@]}" 
 assert_exit_code "$RC" "0" "--strict exits 0 on U1"
 node "$PROBE" classify --ledger "$L" --bogus 1 >/dev/null 2>&1; RC=$?
 assert_exit_code "$RC" "2" "usage error exits 2"
+node "$PROBE" classify --ledger "$L" --fast-moving "${PIN[@]}" >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "--fast-moving without --terms is a usage error (no cue without a name)"
+node "$PROBE" classify --ledger "$L" --refuted-threshold two "${PIN[@]}" >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "non-integer --refuted-threshold is a usage error"
+OUT="$(node "$PROBE" receipt --ledger "$L" --rung U2 --unknown-type how --terms judged --signals "" --work-unit p13)"
+assert_contains "$OUT" '"signal_ids":[]' "--signals \"\" records an empty signal list (judgment-only climb)"
+assert_eq "$(node "$PROBE" report --ledger "$L" | field judgment_only)" "1" "judgment-only climbs are observable (KR1)"
 
 # ── report ──
 OUT="$(node "$PROBE" report --ledger "$L")"
 assert_eq "$(printf '%s' "$OUT" | field skips.length)" "3" "report separates skips (1 knob-off + 2 rail-failed)"
 assert_eq "$(printf '%s' "$OUT" | field s6_only.length)" "1" "report lists S6-only climbs (R16)"
 assert_contains "$(printf '%s' "$OUT" | field repeat_terms)" '"cache"' "repeat_terms groups by term (KR4)"
-assert_eq "$(printf '%s' "$OUT" | field judgment_only)" "0" "no judgment-only climbs in this fixture"
+assert_eq "$(printf '%s' "$OUT" | field judgment_only)" "1" "exactly the --signals \"\" climb is judgment-only"
 assert_contains "$(printf '%s' "$OUT" | field climbs.0.signal_coverage)" "1" "signal_coverage per climb (R10 observable)"
 assert_eq "$(printf '%s' "$OUT" | field learn_required.length)" "$(printf '%s' "$OUT" | field climbs.length)" "every rung≥1 climb is a learn trigger (R14)"
 mkdir -p "$TEST_TMP/proj/a/ledger" "$TEST_TMP/proj/b/ledger"; cp "$L" "$TEST_TMP/proj/a/ledger/decisions.jsonl"; cp "$L" "$TEST_TMP/proj/b/ledger/decisions.jsonl"
@@ -172,11 +180,13 @@ cat > "$TEST_TMP/contract.json" <<'JSON'
 JSON
 OUT="$(node "$BUNDLE" build --contract "$TEST_TMP/contract.json" --ledger "$B" 2>/dev/null || true)"
 if [ -n "$OUT" ]; then
+  echo "rehydration assertion branch: real build"
   assert_contains "$OUT" "keep-term" "current-round ladder row survives the tail"
   assert_contains "$OUT" "keep-h" "current-round hypothesis row survives the tail"
   assert_not_contains "$OUT" '"old"' "older-round ladder row is not force-kept"
   assert_eq "$(printf '%s' "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).sections["4_ledger_tail"].length))')" "20" "tail still 20 rows"
 else
+  echo "rehydration assertion branch: selector fallback (build produced no bundle)"
   # build needs a fuller contract on this host; assert the selector directly.
   OUT="$(node -e '
 const src=require("fs").readFileSync(process.argv[1],"utf8");

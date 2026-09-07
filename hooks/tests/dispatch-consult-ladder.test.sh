@@ -90,10 +90,20 @@ assert_eq "3" "$(wc -l < "$L" | tr -d ' ')" "a rail-failed row was appended"
 assert_contains "$(tail -1 "$L")" '"reason":"rail-failed"' "row carries reason rail-failed"
 assert_contains "$(tail -1 "$L")" '"rung":"U1"' "rail-failed row is at U1"
 
+# ── 4c. qualification failure (resolver D7 refuses the seat) with --ladder-receipt ⇒ rail-failed row ──
+CFG_UNQUAL="$TEST_TMP/unqual.md"; printf -- '- consult_engine: unqualified-model\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$CFG_UNQUAL"
+OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_UNQUAL" "$SCRIPT" --question-file "$Q" --artifact "$ART" --dispatch-author-bin "$STUB" --ladder-receipt "$L" --ladder-terms cache --ladder-unknown-type why --ladder-work-unit p4 2>/dev/null)"; RC=$?
+assert_eq "3" "$RC" "unqualified seat still exits 3"
+assert_contains "$OUT" '"status": "qualification_failed"' "status qualification_failed unchanged"
+assert_eq "4" "$(wc -l < "$L" | tr -d ' ')" "qualification failure appended a rail-failed row (budget consumed)"
+assert_contains "$(tail -1 "$L")" '"reason":"rail-failed"' "row reason rail-failed"
+# no --ladder-signals ⇒ empty list, never a fabricated S6
+assert_contains "$(tail -1 "$L")" '"signal_ids":[]' "omitted --ladder-signals ⇒ signal_ids [] (no fabricated S6)"
+
 # ── 5. --ladder-receipt without terms/type ⇒ advice delivered, no row, stderr says so ──
 OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" "$SCRIPT" --question-file "$Q" --artifact "$ART" --dispatch-author-bin "$STUB" --ladder-receipt "$L" 2>"$TEST_TMP/5.err")"; RC=$?
 assert_eq "0" "$RC" "missing ladder metadata never fails the consult"
 assert_contains "$(cat "$TEST_TMP/5.err")" "receipt NOT written" "stderr names the skipped receipt"
-assert_eq "3" "$(wc -l < "$L" | tr -d ' ')" "no row without terms/type"
+assert_eq "4" "$(wc -l < "$L" | tr -d ' ')" "no row without terms/type"
 
 finalize_test

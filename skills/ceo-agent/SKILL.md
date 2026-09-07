@@ -333,7 +333,7 @@ When encountering these, pause and propose:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board
 6. Produce CEO Reports per involvement level
-7. Need research? → run `node scripts/probe-unknown.js classify --ledger <ledger> --terms <nouns>`; invoke `autopilot:survey` only on `recommend: U2` with budget left, then `probe-unknown.js receipt --rung U2`; a judgment-only wish becomes a ledger `note`, not a dispatch
+7. Need research? → run `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <run> --terms <nouns>`; invoke `autopilot:survey` only on `recommend: U2` with budget left, then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <type> --terms <terms> --signals <ids from classify> --work-unit <run>`; a judgment-only wish becomes a ledger `note`, not a dispatch
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
 9. Need parallel execution? → Pick the first AVAILABLE entry from `.claude/dispatch-config.md` → Parallel Dispatch. If no config file exists, or `superpowers:dispatching-parallel-agents` is listed but the plugin is not installed, fall back to `native` — issue multiple `Task` tool calls in a single response. (dev-flow session rules inject team config either way.)
    - For L-size parallel dispatch: use Seven-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)

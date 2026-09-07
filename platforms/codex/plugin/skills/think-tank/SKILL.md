@@ -151,7 +151,7 @@ node scripts/decision-ledger.js append --ledger <ledger> --kind unknown --json '
 node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <decision> --consensus LOW --terms <decision nouns>
 ```
 
-Act only on `recommend`: `U3` with budget left ⇒ escalate to `autopilot:think-tank-dialectic` (the existing LOW-consensus + irreversible rule, now receipted), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U3 --unknown-type whether --terms <terms> --signals S5 --work-unit <decision>`; `U1` ⇒ one bounded question via `bash scripts/dispatch-consult.sh --question-file <q> --artifact <brief> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type whether --ladder-signals S5`; `none` ⇒ deliver the brief as is (the probe's `reason` says why).
+Act only on `recommend`: `U3` with budget left ⇒ escalate to `autopilot:think-tank-dialectic` (the existing LOW-consensus + irreversible rule, now receipted), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U3 --unknown-type whether --terms <terms> --signals S5 --work-unit <decision>`; `U1` ⇒ one bounded question via `bash scripts/dispatch-consult.sh --question-file <q> --artifact <brief> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type whether --ladder-signals S5 --ladder-work-unit <decision>`; `none` ⇒ deliver the brief as is (the probe's `reason` says why).
 
 ## Output Requirements
 

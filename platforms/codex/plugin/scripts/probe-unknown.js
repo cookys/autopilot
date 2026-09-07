@@ -12,7 +12,7 @@
  *   S1 refuted hypotheses ≥ --refuted-threshold (default 2)   — kind:hypothesis rows
  *   S2 review loop not converging                             — --convergence <json> from check-loop-convergence.js (verdict TRIP)
  *   S3 stall fuse tripped                                     — --stall <json> from check-stall-fuse.js check
- *   S4 novelty: a --terms term with zero hits in knowledge/memory/repo, or --fast-moving
+ *   S4 novelty: a --terms term with zero hits in knowledge/memory/repo, or --fast-moving (needs ≥1 term)
  *   S5 decision without consensus                             — --consensus LOW (think-tank Decision Brief)
  *   S6 self-report                                            — kind:unknown rows (claim: caps at U1 alone)
  *
@@ -29,8 +29,9 @@
  *                  recommended only when the signals make it eligible — exhaustion never
  *                  buys it. When every eligible rung is spent: recommend none,
  *                  reason budget-exhausted. Never U4 from exhaustion.
- *   U4             only when every eligible rung has been climbed at least once and a
- *                  hard signal persists (S3 tripped or S2 TRIP): the owner must see it.
+ *   U4             classify NEVER emits U4. The owner rung is reached by the caller's own
+ *                  stop (stall fuse §8 / DOA boundary), which attaches the ladder receipts;
+ *                  a spent budget is `none`, never an escalation (G2 R11).
  *   knob           unknown_escalation off ⇒ recommend none, reason knob-off (one knob-off
  *                  ladder row per work unit is appended so the skip is visible).
  *   rail-failed    a ladder row with reason rail-failed (written by dispatch-consult.sh
@@ -48,7 +49,7 @@
  *     → {unknown_type, signals[], recommend, reason?, skipped_rungs[], heterogeneous_u1,
  *        eligible_max, budget:{u1,u2,u3,used:{U1,U2,U3}}, knob, terms_hits}
  *     exit 0 always; 2 on usage; with --strict, 2 when recommend ∈ {U2,U3,U4}.
- *   receipt  --ledger <file> --rung Ux --unknown-type <t> --terms a,b,c --signals S1,S3
+ *   receipt  --ledger <file> --rung Ux --unknown-type <t> --terms a,b,c --signals S1,S3   (--signals "" ⇒ [] = judgment-only climb, visible in report.judgment_only)
  *            [--reason knob-off|budget-exhausted|not-heterogeneous|rail-failed] [--run-id <id>]
  *            [--heterogeneous true|false] [--work-unit <id>] [--round <n>]
  *     → runs decision-ledger.js append --kind ladder (one writer, existing lock),
@@ -120,7 +121,7 @@ function parseArgs(argv) {
       case '--knowledge-dir': opts.knowledgeDir = value; break;
       case '--memory-dir': opts.memoryDir = value; break;
       case '--repo-root': opts.repoRoot = value; break;
-      case '--refuted-threshold': opts.refutedThreshold = Number(value); break;
+      case '--refuted-threshold': opts.refutedThreshold = Number(value); if (!Number.isInteger(opts.refutedThreshold) || opts.refutedThreshold < 1) usage('--refuted-threshold must be a positive integer'); break;
       case '--rung': opts.rung = value; break;
       case '--unknown-type': opts.unknownType = value; break;
       case '--signals': opts.signals = value.split(',').map((t) => t.trim()).filter(Boolean); break;
@@ -206,6 +207,8 @@ function resolveConsult(opts) {
 }
 
 // ── S4 term lookup ───────────────────────────────────────────────────────────
+// Corpus cap: the S4 lookup reads at most `limit` files per directory tree. When the cap is hit
+// a term may be a false zero-hit, so the cap is reported on stderr rather than silently applied.
 function listMarkdown(dir, limit = 400) {
   const out = [];
   if (!dir || !fs.existsSync(dir)) return out;
@@ -219,6 +222,7 @@ function listMarkdown(dir, limit = 400) {
       if (e.isDirectory()) { if (!e.name.startsWith('.') || e.name === '.claude') stack.push(p); } else if (/\.(md|json|jsonl)$/i.test(e.name)) out.push(p);
     }
   }
+  if (out.length >= limit) process.stderr.write(`probe-unknown: S4 corpus cap (${limit} files) reached under ${dir} — a zero-hit term may be a false novelty\n`);
   return out;
 }
 
@@ -336,7 +340,6 @@ function classify(opts) {
   const chain = CHAINS[unknownType];
   const maxIdx = RUNGS.indexOf(eligibleMax);
   let anyEligible = false;
-  let allEligibleClimbed = true;
   for (const rung of chain) {
     if (RUNGS.indexOf(rung) > maxIdx) break;
     if (rung === 'U1' && !heterogeneousU1) {
@@ -344,7 +347,6 @@ function classify(opts) {
       continue;
     }
     anyEligible = true;
-    if (used[rung] === 0) allEligibleClimbed = false;
     if (used[rung] < budgets[rung]) {
       out.recommend = rung;
       if (out.skipped_rungs.length) out.reason = 'not-heterogeneous';
@@ -357,11 +359,10 @@ function classify(opts) {
     out.reason = 'not-heterogeneous';
     return finish(out, opts);
   }
-  if (allEligibleClimbed && (has('S3') || has('S2'))) {
-    out.recommend = 'U4';
-    out.reason_detail = 'every eligible rung climbed and a hard signal persists — the owner must see this';
-    return finish(out, opts);
-  }
+  // Every signal-eligible rung is spent. The frozen contract (plan §3, G2 R11): exhaustion
+  // is always `none` — never a higher rung, never U4. classify never emits U4 at all; the
+  // owner escalation is the stall fuse / DOA boundary the foreman already has, to which it
+  // attaches the ladder receipts (level-front-door.md §6).
   out.recommend = 'none';
   out.reason = 'budget-exhausted';
   return finish(out, opts);
@@ -464,6 +465,7 @@ function report(opts) {
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.mode === 'classify' && opts.fastMoving && !(opts.terms && opts.terms.length)) usage('--fast-moving needs at least one --terms term (a cue without a name is not evidence)');
   if (opts.mode === 'classify') classify(opts);
   else if (opts.mode === 'receipt') receipt(opts);
   else report(opts);

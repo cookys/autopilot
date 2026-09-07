@@ -253,9 +253,9 @@
       "content_hash": "08b32721cd3ba4ede27f672ab43d49f04abddd15319ad1ada918b7e43cf38fab",
       "disposition": "rewritten",
       "successor_hashes": [
-        "94307c25d155f61226869eea2814421bdc1738e082d53bc051a170648a07ed17"
+        "8f5123be591f3e163ed530b56a3212af99a2316ff550373c09c033281f52b3bb"
       ],
-      "rationale": "P0 skills/ceo-agent/SKILL.md:335 (Execution step 7: Need research? -> Autonomously invoke autopilot:survey). Unknown-escalation ladder P4 (plan docs/plans/2026-09-07-unknown-escalation-ladder.md, v2.36.15; G2 R8): the autonomous survey is now gated on scripts/probe-unknown.js classify recommending U2 with budget left and receipted afterwards; a judgment-only research wish is recorded as a ledger note, not dispatched. Successor at current :336. The step still exists and is still CEO-autonomous; only its trigger changed from judgment to the probe."
+      "rationale": "P0 skills/ceo-agent/SKILL.md:335 (Execution step 7: Need research? -> Autonomously invoke autopilot:survey). Unknown-escalation ladder P4 (plan docs/plans/2026-09-07-unknown-escalation-ladder.md, v2.36.15; G2 R8): the autonomous survey is now gated on scripts/probe-unknown.js classify recommending U2 with budget left and receipted afterwards; a judgment-only research wish is recorded as a ledger note, not dispatched. Successor at current :336 (re-hashed after the pre-merge review spelled the full receipt argv). The step still exists and is still CEO-autonomous; only its trigger changed from judgment to the probe."
     }
   ]
 }

@@ -30,7 +30,10 @@
 #                       native-fallback) to that decision ledger through
 #                       scripts/probe-unknown.js receipt. Additive: no other
 #                       behaviour changes; refusal paths never write a row.
-#                       Requires --ladder-terms and --ladder-unknown-type.
+#                       Requires --ladder-terms and --ladder-unknown-type; --ladder-signals
+#                       is the probe's signal_ids (omit ⇒ [] = judgment-only climb, never
+#                       fabricated). Failure paths after the probe recommended U1 — transport,
+#                       protocol, verdict, qualification — write the row with reason=rail-failed.
 #
 # SWITCH SEMANTICS (two-knob matrix, plan §3): this rail is live when
 #   consult_dispatch resolves to `on` (explicit tuple) OR `auto` with a resolved
@@ -123,7 +126,7 @@ ladder_receipt() { # <reason-or-empty>
     return 0
   fi
   local hetero="true"; [ "${CONSULT_RESOLVED_FROM:-}" = "native-fallback" ] && hetero="false"
-  local -a args=(receipt --ledger "$LADDER_RECEIPT" --rung U1 --unknown-type "$LADDER_UNKNOWN_TYPE" --terms "$LADDER_TERMS" --signals "${LADDER_SIGNALS:-S6}" --heterogeneous "$hetero" --run-id "consult-$(date -u +%Y%m%dT%H%M%SZ)-$$")
+  local -a args=(receipt --ledger "$LADDER_RECEIPT" --rung U1 --unknown-type "$LADDER_UNKNOWN_TYPE" --terms "$LADDER_TERMS" --signals "${LADDER_SIGNALS}" --heterogeneous "$hetero" --run-id "consult-$(date -u +%Y%m%dT%H%M%SZ)-$$")
   [ -n "$reason" ] && args+=(--reason "$reason")
   [ -n "$LADDER_WORK_UNIT" ] && args+=(--work-unit "$LADDER_WORK_UNIT")
   [ -n "$LADDER_ROUND" ] && args+=(--round "$LADDER_ROUND")
@@ -166,6 +169,7 @@ RESOLVE_ERR_TEXT="$(cat "$RESOLVE_ERR" 2>/dev/null)"
 rm -f "$RESOLVE_ERR"
 if [ "$RESOLVE_RC" -ne 0 ]; then
   [ -n "$RESOLVE_ERR_TEXT" ] && echo "$RESOLVE_ERR_TEXT" >&2
+  ladder_receipt "rail-failed"
   emit "qualification_failed" "" "" "" "" "" "resolve-review-loop.sh exited $RESOLVE_RC: ${RESOLVE_ERR_TEXT:-no message}" 3
 fi
 
@@ -191,6 +195,7 @@ CONSULT_EFFORT="$(json_field consult_effort)"
 CONSULT_ENDPOINT="$(json_field consult_endpoint)"
 if [ -z "$CONSULT_ENGINE" ] || [ -z "$CONSULT_RUNNER" ] || [ -z "$CONSULT_EFFORT" ]; then
   echo "dispatch-consult: consult_dispatch=on but the consult seat did not resolve engine/runner/effort — refusing" >&2
+  ladder_receipt "rail-failed"
   emit "qualification_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "consult seat unresolved" 3
 fi
 

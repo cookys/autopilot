@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.36.14 — kimi reviewer rail：超過 argv 上限的 prompt 在 spend 前具名拒絕，不再 rc=126 死掉（308 回報 2026-09-07）
+
+308 第一次實戰 kimi 席：133 KB diff＋10 KB spec ⇒ 145 KB prompt，rail 用 `-p "$(cat prompt)"` 一整串 argv 送進 kimi，Linux 單一 argv 上限
+MAX_ARG_STRLEN 128 KiB（與 ARG_MAX 2 MB 無關）⇒ execve 失敗 rc=126「Argument list too long」，rail 只回 `no_verdict` 與不透明的 rc。
+rail 註解本來寫「ARG_MAX 風險接受、靠上游 context-window gate」——token 閘過了，位元組閘沒有。
+
+- **`scripts/dispatch-review.sh`** kimi rail：探針證實 kimi 0.39.1 只收 `-p <string>`（無 `--prompt-file`；`-p ''` 拒絕、`-p -` 當字面）。
+  現在在建 scratch cwd 之前量 prompt 位元組數，超過 `AUTOPILOT_KIMI_ARGV_LIMIT`（預設 120000）就 `precondition_failed`，訊息寫出位元組數、
+  核心上限與兩條補救（縮 review_diff_scope／拆 diff，或改坐讀 prompt 檔的 runner：codex、grok、qoderclicn、cursor、opencode）。零 spend。
+- 測試：`dispatch-review.test.sh` 389——超限 ⇒ exit 2、`precondition_failed`、訊息含 MAX_ARG_STRLEN 與 runner 補救、絕無「Argument list
+  too long」；限內 prompt 照常 reviewed。（拉高 seam 當正對照做不到：stub 自己也是被 exec 的，同樣會撞 rc=126——這本身就是牆的證據。）
+- 未做：file-indirection（prompt 寫進 scratch cwd、`-p` 只叫它去讀）可能解除上限，但本機 kimi OAuth 沒憑證無法 live 驗證，且改變信任形狀
+  ——列 BACKLOG spike。docs：`project-config-template/review-loop-config.md` reviewer_runner 列 kimi 註記。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (dispatch rail + tests only).
+
 ## v2.36.13 — opencode 可當 reviewer／qc 席（`dispatch-review.sh` 新 rail；308 需求，owner 裁定 2026-09-07）
 
 308 要用 `opencode-go/muse-spark-1.3-contributor` 坐 qc reviewer；之前 `dispatch-review.sh` 直接拒 `--runner opencode`，hetero-dispatch 表標

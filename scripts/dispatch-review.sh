@@ -1132,11 +1132,22 @@ elif [[ "$RUNNER" = "kimi" ]]; then
         case "$KIMI_BIN" in /*) ;; *) die_precondition "could not resolve kimi --bin to absolute path: ${BIN:-kimi}" ;; esac ;;
   esac
   [[ -x "$KIMI_BIN" ]] || die_precondition "kimi binary not executable: $KIMI_BIN"
+  # kimi 0.39 takes the prompt ONLY as the -p argv string: no --prompt-file, and -p '' / -p -
+  # are rejected / taken literally (probed 2026-09-07). Linux caps ONE argv string at
+  # MAX_ARG_STRLEN (128 KiB, independent of ARG_MAX), so an oversized prompt makes execve fail
+  # with rc=126 "Argument list too long" AFTER the context-window gate passed (308 report
+  # 2026-09-07: 133 KB diff + 10 KB spec ⇒ 145 KB prompt ⇒ no_verdict with an opaque rc).
+  # Fail closed HERE, before spend, with the real cause and the two remedies. Headroom below
+  # the kernel limit covers the rest of the argv/env block. Test seam: AUTOPILOT_KIMI_ARGV_LIMIT.
+  KIMI_PROMPT_BYTES="$(wc -c < "$PROMPT_FILE" | tr -d ' ')"
+  KIMI_ARGV_LIMIT="${AUTOPILOT_KIMI_ARGV_LIMIT:-120000}"
+  if [ "$KIMI_PROMPT_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
+    die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but kimi accepts the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)"
+  fi
   KIMI_OUT="$(mktemp -t dispatch-review-kimi-out-XXXXXX)"
   KIMI_ERR="$(mktemp -t dispatch-review-kimi-err-XXXXXX)"
   KIMI_CWD="$(mktemp -d -t dispatch-review-kimicwd-XXXXXX)"
-  # -p requires the prompt as an argument (no --prompt-file). Large diffs: cat into -p;
-  # ARG_MAX risk accepted with context-window gate upstream.
+  # -p requires the prompt as an argument (no --prompt-file); size guarded above.
   timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p "$(cat "$3")" -m "$4" --output-format text' \
       _ "$KIMI_CWD" "$KIMI_BIN" "$PROMPT_FILE" "$MODEL" > "$KIMI_OUT" 2> "$KIMI_ERR"
   KIMI_RC=$?

@@ -228,6 +228,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
+| 2026-09-07 | kimi reviewer rail 超過 argv 上限（MAX_ARG_STRLEN 128 KiB）的 prompt 在 spend 前具名拒絕，不再 rc=126 no_verdict（308 實戰回報）— 探針證實 kimi 0.39.1 無 prompt-file／stdin；file-indirection 列 BACKLOG spike | v2.36.14 | (develop) |
 | 2026-09-07 | opencode 可當 reviewer／qc 席（308 需求）— dispatch-review 新 rail（STDIN、scratch cwd、NDJSON 文字抽取）、七處 allowlist＋schema、plan-review RUNNERS；`--agent plan` 對抗探針證明只擋 edit 不擋 bash ⇒ best-effort、qualification kind 一律拒絕；先紅 13 後綠 382 | v2.36.13 | (feature branch → develop) |
 | 2026-09-07 | kimi 可坐 plan／deep／VA reviewer 席（308 需求）— resolver 三個 case＋schema enum＋dispatch-plan-review RUNNERS 加 kimi；BACKLOG 該列收線；先紅後綠 | v2.36.12 | (fix branch → develop) |
 | 2026-09-07 | turn-end 未 commit 工作提醒 hook `dirty-protected-paths`（308 回報 7800 行一週沒 commit；owner：補提醒不補閘）— Claude Stop default-on、Codex Stop＋SessionEnd 註冊（live-fire 未驗證）；只 `systemMessage` 永不 `decision`；protected_paths 門檻、30 分鐘去重；30 hooks（17/13）、hook-classes 與 catalog 重釘 | v2.36.11 | (develop) |

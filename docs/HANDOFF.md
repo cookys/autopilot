@@ -1,11 +1,11 @@
 ## 目標
 
-2026-09-07 出貨 **v2.36.16**（Fix 級）：把 handoff 前版列的「develop 既有三個紅」歸零。**尚未 push**（origin/develop 仍在 v2.36.14 `b452d5ba`；v2.36.15 ladder 與本版都只在本機 `develop`）。前一版 handoff 的「等回報／等 owner 決定」項目未變，照抄在下方。
+2026-09-07 出貨 **v2.36.16**（Fix 級）：把 handoff 前版列的「develop 既有三個紅」歸零。**已 push**（2026-09-08，owner 指示；`origin/develop` = `2e4c61e3`，v2.36.15 ladder 的 19 個 commit 與本版一起上去，推前 origin 仍是 2.36.14，無讓號情形）。前一版 handoff 的「等回報／等 owner 決定」項目未變，照抄在下方。
 （取代前一版 handoff。）
 
 ## 現況
 
-- **repo**：`develop` 領先 `origin/develop`（v2.36.15 的 19 個 commit ＋ 本版），working tree 乾淨，version 2.36.16。
+- **repo**：`develop` 與 `origin/develop` 同步（`2e4c61e3`），working tree 乾淨，version 2.36.16。
 - **本日出貨（v2.36.16）**：三個紅的真因**都不是** handoff 前版寫的「cache 過期」：
   1. `resolve-dispatch-topology.js` implementer 路徑對 legacy（無 effort 分區）席位 emit `effort: ""`（重算仍吐，`--check` rc=0 只證 cache 與 script 一致）→ 改 emit `high`（同 reviewer 路徑 Case 12）＋排序後去重、exact-tuple 席位勝出；本機 ladder 19→17。`resolve-review-loop.sh` auto 讀取端 effort 過 enum、exit 3 指名 rung 與「重跑 topology」。
   2. `probe-engine-capability.sh` 少 opencode binary／live 分支（v2.36.13 加 rail 時沒跟），並列入 effort consumer（dispatcher 餵 `--variant`）；live 驗 `opencode-go/muse-spark-1.3-contributor` effort low → available。
@@ -23,7 +23,7 @@
 
 ## 下一步（等 owner 決定或外部回報）
 
-1. **push**：`git push origin develop`（先 `git show origin/develop:.claude-plugin/plugin.json` 確認仍是 2.36.14；若別的 session 已推 2.36.15／16，依讓號規則 rebase 重標）。pre-push qc-gate 要 merge commit 末段 `QC-Verdict` trailer，已在。
+1. ~~push~~ **已完成**（2026-09-08）。下次出貨前照舊先 `git show origin/develop:.claude-plugin/plugin.json` 對版號，避免與並行 session 撞號。
 2. **前版待辦不變**：cuda WIZHALL P5 dogfood、308 用 v2.36.12+ 跑 resolver／kimi／opencode 的結果、cuda QUIET-a claim、7840hs receipt 重跑；BACKLOG 的 per-hook × per-harness matrix、kimi file-indirection spike、Codex dev-mode hook 入口 spike；Codex Stop live-fire 觀察。
 3. **ladder 後續觀察**：第一個真實（非 dogfood）climb 出現時，看 `probe-unknown.js report` 的 `judgment_only`／`s6_only`／`repeat_terms`（KR1／KR4）；finish-flow L-5.6 是否真的把 learn 變 MANDATORY。
 4. **其他主機**：任何有 legacy 席位的主機在拿到 v2.36.16 後要重跑 `scripts/resolve-dispatch-topology.js`，否則 `implementer_ladder: auto` 會 exit 3（訊息會指名）。

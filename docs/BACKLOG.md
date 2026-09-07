@@ -203,12 +203,6 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Effort**: S
 - **Source**: same ledger dir as above
 
-### `dispatch-plan-review.js` RUNNERS lacks `kimi` while `dispatch-review.sh` supports it
-- **Trigger**: an owner ruling that amends the frozen "reuse unchanged" invariant for the plan-review driver
-- **Context**: D0 of the dev-flow hetero loops plan had to seat GLM instead of kimi-code/k3 (consult-qualified, event 182); cut from that slice by plan-review R6
-- **Effort**: S
-- **Source**: `docs/plans/2026-09-04-dev-flow-hetero-loops-default.md` §3 "Not changed"
-
 ### scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`
 - **Trigger**: any seat resolver that matches runner tokens exactly (topology `--role plan_reviewer` normalises it today)
 - **Context**: a qualified seat silently drops out of auto-derived panels when the recorded runner spelling differs from the dispatch runner enum

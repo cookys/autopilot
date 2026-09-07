@@ -345,6 +345,7 @@
         "cc-shim",
         "anthropic-compatible",
         "qoderclicn",
+        "kimi",
         "cursor"
       ]
     },
@@ -569,6 +570,7 @@
         "anthropic-compatible",
         "claude-native",
         "qoderclicn",
+        "kimi",
         "cursor"
       ]
     },
@@ -601,6 +603,7 @@
         "anthropic-compatible",
         "claude-native",
         "qoderclicn",
+        "kimi",
         "cursor"
       ]
     },

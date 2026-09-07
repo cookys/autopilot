@@ -338,6 +338,27 @@ assert_neq "$(json_field "$AUTHOR_RECORD" cwd)" "$CANONICAL_PLAN_REPO" \
 assert_eq "$(json_field "$AUTHOR_RECORD" cwd)" "$(json_field "$AUTHOR_RECORD" prompt_dir)" \
   "non-Codex author child cwd remains its private prompt directory"
 
+# RUNNERS accepts kimi (308 request 2026-09-07): dispatch-review.sh already supports
+# --runner kimi and dispatch-author.sh fully wires it (dispatch-author-kimi.js ->
+# src/runners/kimi.js), but the plan-review manifest's RUNNERS allowlist omitted it,
+# so any manifest seat pinned to kimi failed manifest normalization ("invalid exact
+# tuple") before ever reaching a runner. A seat that clears normalization and reaches
+# the intercepted author probe proves RUNNERS.has('kimi') now passes.
+KIMI_PROBE_MANIFEST="$TEST_TMP/kimi-probe-manifest.json"
+node - "$MANIFEST" "$KIMI_PROBE_MANIFEST" <<'NODE'
+const fs = require('fs');
+const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const kimiSeat = { ...source.seats[0], id: 'kimi-probe', runner: 'kimi', model: 'kimi-code/k3', family: 'moonshot', fallbacks: [] };
+const kimi = { ...source, logical_plan_id: 'kimi-cwd-probe', seats: [kimiSeat], minimum_distinct_families: 1 };
+fs.writeFileSync(process.argv[3], `${JSON.stringify(kimi, null, 2)}\n`);
+NODE
+
+rm -f "$AUTHOR_PROBE_LOG"
+OUT="$(run_author_probe "$PLAN_REPO_ALIAS" kimi-probe "$KIMI_PROBE_MANIFEST")"; EXIT=$?
+assert_exit_code "$EXIT" "0" "kimi-runner seat clears manifest normalization and dispatches"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+assert_eq "$(json_field "$AUTHOR_RECORD" runner)" "kimi" "kimi-runner probe selects kimi"
+
 # P1: the closed manifest schema and runtime accept 1/2/4 seats, reject five and duplicate IDs.
 node "$SCHEMA_CHECK" --schema "$REPO_ROOT/schemas/plan-review-manifest.schema.json" \
   --document "$MANIFEST" >/dev/null

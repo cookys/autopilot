@@ -23,6 +23,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ---
 
+### `probe-unknown.js classify` spawns `resolve-review-loop.sh` up to seven times per call — memoize one resolver invocation
+- **Trigger**: a foreman round-end ledger or `cost-tracker` sample showing `probe-unknown.js classify` taking ≥ 10 s wall time, or a round that runs classify ≥ 3 times (each resolver spawn is a full config + topology resolution with a 15 s timeout).
+- **Context**: v2.36.15 P1/P2 read `unknown_escalation`, the three budgets, `consult_dispatch`, `consult_resolved_from` and `unknown_resolved_from` through separate `resolve-review-loop.sh --field` calls (`scripts/probe-unknown.js` resolverField). The resolver already emits all seven in one JSON; one `resolve-review-loop.sh` run parsed once would replace them. Correctness is unaffected (every call site pins the flags in tests); this is cost only. Raised by the pre-merge reviewer (delta pass 3) as CUT/FOLLOW-UP.
+- **Effort**: S
+- **Source**: pre-merge review of `feat/v2.36.15-unknown-escalation-ladder`, 2026-09-07.
+
 ### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
 - **Trigger**: a host with a working `kimi login` (this host's managed:kimi-code OAuth has no credential as of 2026-09-07, so the probe could not run), or Kimi Code CLI shipping `--prompt-file` / stdin prompt input (0.39.1 has neither: `-p ''` is rejected, `-p -` is taken literally).
 - **Context**: v2.36.14 fails closed pre-spend when the kimi prompt exceeds ~120 KB (Linux MAX_ARG_STRLEN, 308 hit rc=126 on a 145 KB prompt). The unblocking alternative is file indirection: write the prompt into the scratch cwd and pass a short `-p "read ./autopilot-review-prompt.md and follow it"`; kimi is an agent with a read tool, so it should work, but it is UNVERIFIED and changes the trust shape (the model must choose to read the file; a summarising model silently reviews less). Spike: live probe with a nonce inside the file, then a 140 KB real diff; ship only behind the size threshold with the raw log recording the indirection.

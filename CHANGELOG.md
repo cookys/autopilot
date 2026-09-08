@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.36.19 — 「機制 vs 指引」通則進 CLAUDE.md；L-4 階段閘變成真的擋得住；Boil-the-Lake 的 eval 預先註冊完成（owner 裁示 2026-09-08）
+
+- **新規則「機制 vs 指引」**（`CLAUDE.md` Skill evolution rules，緊接成績單前置）：成績單前置管的是**改變 skill 要求什麼**，不管**讓已經要求的事真的發生**。
+  把既有的閘變成真的擋得住是機制變更，不需要 eval——「被動 markdown 清單會被跳過」這個問題，這個 repo 蓋 finish-flow 的時候就已經回答過了。
+  改變閘要求什麼才是指引變更，需要證據。判準是字面的、不是判斷題：把改動前後的要求清單列出來，沒有增減就是機制。
+  配一條操作要求：**機制變更不得同時改動要求文字**；兩者都要就分兩次提交，各自過各自的門檻。
+- **L-4 Phase advance gate 有強制機制了**（`skills/dev-flow/SKILL.md`）：五項檢查改為 TaskCreate 成階段任務的子任務，逐字命名，未勾選的項目變成看得見的未完成任務
+  而不是被略過的一行。**五項要求一字未改**——這正是上面那條新規則的第一次適用。profiles 鏈重釘（guided 415→420，canonical 807→812，兩處 drift guard 釘值同步）。
+- **Boil-the-Lake 的 eval 從「要設計」變成「按下去就能跑」**：
+  - `evals/orchestration/EXPERIMENT-completeness-proportionality.md`（新）——**預先註冊**的判準：浪費降 ≥50% **且** 逃逸零增加才採用比例原則；
+    逃逸只要增加就維持現狀（逃逸是否決權不是加權項）；兩臂浪費差距 <20% 判定為**無資訊**，而且明令這個結果不得被說成「沒差別所以改了也安全」。
+  - 兩個對照 pack：`completeness-maximal`（現行文字逐字複製，測的是真正出貨的東西）與 `completeness-proportional`，長度 187 vs 193 字，在 ±10% 護欄內。
+  - `run-orchestration-eval.sh` 新增 `--pack` 與 `--contract`：原本的 ON/OFF 兩臂**同時**差在 pack 與 required-artifacts contract，那對原實驗是對的、對這個實驗是錯的。
+    兩個旗標不給就與先前位元相同（兩支既有 runner 測試 rc=0 驗證）。
+  - 兩個能分辨的任務：`t18-proportional-waste`（瑣碎可逆改動，量鏡像測試）與 `t19-edge-case-escape`（明顯修法會在非正數 size 上無限迴圈，holdout 只存在於 oracle）。
+    收下之前先用手寫的「最省」與「最完整」兩份候選解各跑一次 oracle 驗證真的分得開：t18 最完整的那份 FAIL、t19 最省的那份 FAIL。**兩臂各贏一題**，
+    若某一臂全贏，量到的就是臂而不是取捨。
+- **已知限制（寫進實驗文件）**：runner 只把 `fidelity_ok` 與 `decoy_respected` 兩個布林送進 `score.js`，數值事實只留在各 run 的 `oracle.log`，要人工彙總。
+  且 `decoy_respected` 在兩個任務裡**語意不同**（t18 是 waste_bounded、t19 是 edge_case_held），所以 score.js 那一欄跨任務平均會得到沒有意義的數字，文件裡加了警告。
+- **未做**：實驗本身尚未執行，等 owner 批准；`skills/ceo-agent/SKILL.md` 與 `skills/dev-flow/SKILL.md` 的 Boil-the-Lake 文字一字未動。
+
+prose-justification: `skills/dev-flow/SKILL.md` +5 guided（L-4 強制機制段），這是新規則明文允許的機制變更，要求清單未改；其餘為 eval 資產與 reference。
+
+---
+
 ## v2.36.18 — 廠商指引分家族：survey effort 下限只綁 anthropic、implementer rung 帶 family、compaction 摘要照六類、verdict 行契約講死（2026-09-08 兩份 prompt guide 交叉盤點）
 
 現況：OpenAI 與 Anthropic 的最新 prompt guide 在數個維度上給的是**相反**的指示，而 autopilot 把同一套 prose 與同一個 effort 語彙送給兩家的席位。

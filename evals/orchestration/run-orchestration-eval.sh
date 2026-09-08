@@ -10,6 +10,14 @@ RUNNER=""
 MODEL=""
 OUT_DIR=""
 REINJECT_FILE=""
+# --pack / --contract exist so a SECOND experiment can reuse this harness without
+# disturbing the original one. The ON/OFF arms answer "do the quality-floor assets
+# help?", where the arms differ in BOTH the pack and the required-artifacts contract.
+# A prose A/B (e.g. maximal vs proportional validation) needs the opposite: arms that
+# differ in ONE thing only. Passing --pack for both arms and --contract on for both
+# holds everything else equal. Unset ⇒ byte-identical behaviour to before.
+PACK_FILE=""
+CONTRACT_MODE=""
 
 # Parse arguments
 while [ $# -gt 0 ]; do
@@ -20,14 +28,23 @@ while [ $# -gt 0 ]; do
     --model) MODEL="$2"; shift 2 ;;
     --out) OUT_DIR="$2"; shift 2 ;;
     --reinject) REINJECT_FILE="$2"; shift 2 ;;
+    --pack) PACK_FILE="$2"; shift 2 ;;
+    --contract) CONTRACT_MODE="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$RUNNER" ] || [ -z "$MODEL" ]; then
-  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>]" >&2
+  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--pack <file>] [--contract on|off]" >&2
   exit 2
 fi
+# Default the two overrides to the arm-derived values so an unflagged run is unchanged.
+if [ -z "$CONTRACT_MODE" ]; then CONTRACT_MODE="$ARM"; fi
+if [ -n "$PACK_FILE" ] && [ ! -r "$PACK_FILE" ]; then
+  echo "ERROR: --pack file not readable: $PACK_FILE" >&2
+  exit 2
+fi
+case "$CONTRACT_MODE" in on|off) ;; *) echo "ERROR: --contract must be on|off (got: $CONTRACT_MODE)" >&2; exit 2 ;; esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TASK_DIR="$REPO_ROOT/evals/orchestration/tasks/$TASK_ID"
@@ -113,7 +130,9 @@ if [ -f "$TASK_DIR/task.md" ]; then
 fi
 
 # 2. Append Pack
-if [ "$ARM" = "on" ]; then
+if [ -n "$PACK_FILE" ]; then
+  cat "$PACK_FILE" >> "$PROMPT_FILE"
+elif [ "$ARM" = "on" ]; then
   cat "$REPO_ROOT/evals/orchestration/packs/on/ASSETS.md" >> "$PROMPT_FILE"
 else
   cat "$REPO_ROOT/evals/orchestration/packs/off/PADDING.md" >> "$PROMPT_FILE"
@@ -121,7 +140,7 @@ fi
 printf "\n\n" >> "$PROMPT_FILE"
 
 # 3. Append required-artifacts contract
-if [ "$ARM" = "on" ]; then
+if [ "$CONTRACT_MODE" = "on" ]; then
   cat << 'EOF' >> "$PROMPT_FILE"
 === REQUIRED-ARTIFACTS CONTRACT ===
 You MUST leave the following artifacts in the repository root:

@@ -233,14 +233,38 @@ ${body}`;
       }
     }
 
-    // LLM-append section — now bonus, not load-bearing
+    // LLM-append section — now bonus, not load-bearing.
+    //
+    // The Transcript Tail above is bounded (TRANSCRIPT_TAIL_N turns /
+    // TRANSCRIPT_BYTE_CAP bytes, newest-first): anything said EARLIER in a long
+    // session — a constraint stated in turn 3, an option ruled out in turn 8 —
+    // can fall outside that window and be gone once compaction runs. This
+    // section is the only place left to catch it. Per Anthropic's "Prompting
+    // Claude Fable 5.1" guide, section "Tell the model what to preserve in
+    // compaction summaries" (platform.claude.com/docs/en/build-with-claude/
+    // prompt-engineering/prompting-claude-fable-5-1), a compaction summary must
+    // explicitly preserve: (1) difficulties/problems encountered, (2) options
+    // considered, (3) anything asked for/decided/agreed/ruled out, or
+    // established as a preference/constraint/boundary — quoted EXACTLY, not
+    // paraphrased, (4) current state of the work, (5) open items / what
+    // remains, (6) exact names, paths, and values.
     stateContent += `
 
 ## LLM Context (Claude-appended, optional supplement)
 <!-- Claude: this section is OPTIONAL. The Transcript Tail above is already
-     captured verbatim by the hook. Use this section ONLY to add hidden
-     context the transcript wouldn't show: in-flight reasoning you haven't
-     verbalized, excluded possibilities, mental decision tree branches. -->
+     captured verbatim by the hook, but only its tail — earlier turns may
+     already be out of the window. Use this section to carry forward, from
+     ANYWHERE in the session (not just the tail), whatever the six categories
+     below need and the tail doesn't already show:
+     1. Difficulties or problems encountered.
+     2. Options considered (including ones ruled out, and why).
+     3. Anything asked for, decided, agreed, ruled out, or established as a
+        preference/constraint/boundary — quote it EXACTLY, do not paraphrase.
+     4. Current state of the work.
+     5. Open items / what remains.
+     6. Exact names, paths, and values (files touched, flags, IDs, numbers).
+     If the tail above already shows a category verbatim, leave this section
+     to the rest; don't restate what's already captured. -->
 `;
 
     // Write state file

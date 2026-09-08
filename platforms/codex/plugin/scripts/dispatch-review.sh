@@ -868,6 +868,7 @@ ${END}
 Framing nonce (do NOT use this raw value as a marker; markers above are derived):
 NONCE=${NONCE}
 
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
 Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
 
 Bounded convergence contract:

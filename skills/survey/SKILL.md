@@ -45,7 +45,7 @@ If input is vague (e.g. "look into cache"), ask one clarifying round before disp
 
 ### Step 2: Parallel Dispatch
 
-**Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Survey agents map to `researcher` → default: `model: "sonnet"` (needs web search tools, so NOT plan mode). **Effort floor: `medium`** for both seats in every mode — at `low` effort a model answers from memory instead of searching (Anthropic "Prompting Claude Fable 5.1", search triggering at low effort), which turns a survey into a recollection.
+**Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Survey agents map to `researcher` → default: `model: "sonnet"` (needs web search tools, so NOT plan mode). **Effort floor: `medium`** on **anthropic-family seats**, both seats, every mode — at `low` effort Claude is less likely to call a search/retrieval tool and more likely to answer from memory (Anthropic "Prompting Claude Fable 5.1"), which turns a survey into a recollection. Do NOT apply this floor to families whose vendor documents low effort as search-capable — e.g. OpenAI's current reasoning guide (developers.openai.com/api/docs/guides/reasoning) lists low effort as "Ideal for use cases requiring tool-use, planning, search, or multi-step decision making" for their latest model; a forced bump there buys nothing and only adds cost/latency.
 
 Spawn researcher + skeptic **simultaneously**. Skeptic does NOT wait for researcher -- independent search finds different angles.
 

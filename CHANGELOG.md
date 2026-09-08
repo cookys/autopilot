@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.36.18 — 廠商指引分家族：survey effort 下限只綁 anthropic、implementer rung 帶 family、compaction 摘要照六類、verdict 行契約講死（2026-09-08 兩份 prompt guide 交叉盤點）
+
+現況：OpenAI 與 Anthropic 的最新 prompt guide 在數個維度上給的是**相反**的指示，而 autopilot 把同一套 prose 與同一個 effort 語彙送給兩家的席位。
+這版把「跟廠商有關的設定綁在 family 上」這條機制往前推一步，並修掉盤點出來、不需要 eval 證據就能動的四項。盤點全文見本節末的來源連結。
+
+- **survey 的 effort 下限改成只對 anthropic 家族生效**（`skills/survey/SKILL.md`）。原文寫「both seats in every mode」，引用的卻是 Anthropic 專屬的發現
+  （low effort 傾向憑記憶不搜尋）。OpenAI 現行 reasoning guide 明確把 low 列為「Ideal for use cases requiring tool-use, planning, search」，
+  所以在 codex 席位強拉一級 effort 只是多花錢多等。兩邊證據都留在行內，各自標明適用範圍。這條是 prose-only，沒有腳本在執行它。
+- **implementer ladder 的 rung 帶 `family`**（`scripts/resolve-dispatch-topology.js`）。reviewer／consult／discuss 早就帶了，implementer 沒有；
+  而本機這條 ladder 橫跨八個家族卻用單一 `EFFORT_RANK` 排序。只加欄位、**不動排序**，`implementer_ladder: auto` 的讀取端仍刻意投影成
+  `{engine, effort, runner}`，contract schema 不碰。排序本身要改，見下方 plan。
+- **compaction 摘要照六類寫**（`hooks/state-checkpoint.js`）。Anthropic 明列六類必須保留，其中「考慮過但排除的選項」與「決定要照原話記」是 autopilot 原本
+  最弱的兩項。改的是 LLM 自由敘述那一段（沒有 schema 可壞），不是凍結的 rehydration bundle 五段式。新增測試八條，先用 stash 驗過拿掉修法會紅七條。
+- **verdict 行的輸出契約講死**（`scripts/dispatch-review.sh` + golden skeleton）。解析器是嚴格行錨定 `^VERDICT: SHIP-AS-IS$`，而 prompt 只給範本、
+  沒禁止裝飾。OpenAI 自陳新模型「tends toward detailed, formatted responses」，所以 `**VERDICT: ...**` 會讓整輪 review 變成 no_verdict。
+  修法刻意是**家族中立**的：把契約講明白，而不是分家族寫風格——放寬解析器會削弱它的反作弊性質。
+- **查核結論：thinking-block 400 風險為零**。Anthropic 對 2026-08-31 後的新帳號，重播前綴不符的 thinking block 會回 400。逐條查 autopilot 自己控制的
+  rail（`dispatch-anthropic-review.js`、cc-shim、claude-native、`dispatch-author`／`dispatch-consult`、`qualification-review-provider.js`、
+  `probe-engine-capability.sh`）：全部是每次呼叫送一份全新的 user-only messages，無 `--resume`／`--continue`，不重播 assistant 內容。不需修改。
+  未定：本機 `claude` CLI 自身在 `-p` 下的 session 預設行為、以及 `pi` RPC 指向 anthropic 供應商時的情形（預設是 minimax）。
+- **`docs/plans/2026-09-08-family-aware-ladder-ordering.md`（新 plan，未執行）**：ladder 排序不要跨 family 比 effort。核心論點是**紅燈後的爬階是去相關問題，
+  不是馬力問題**——同一個 model 換更高 effort 共享同樣的失敗模式，換家族才是有資訊的重試。含 per-family effort 正規化表（每列必須帶證據 URL 與讀取日期）、
+  KR1–KR4、以及三個待決問題（含 opencode 被判為 `unknown` family 該不該分類，因為 `familyOf` 也餵 cross-family panel 判定）。
+- **未做（有意）**：`familyOf` 對 opencode 的分類不動，理由同上；`decision-ledger.js` 沒有「被排除的選項」欄位，加它要動已驗證的 row schema 與 report
+  renderer，列為後續；`skills/handoff/SKILL.md` 的「已決事項」只要求一行理由、不要求原話引用，同樣列為後續；`skills/ceo-agent/SKILL.md` 與
+  `skills/dev-flow/SKILL.md` 的 Boil the Lake 一字未動——依成績單前置規則需要 eval ON/OFF 證據，且 BACKLOG 已有同類項目卡在 owner 決定。
+
+prose-justification: `skills/survey/SKILL.md` 行數不變（單行改寫）；其餘變更在腳本、hook、reference 與新 plan 文件。
+
+---
+
 ## v2.36.17 — 一次確認就跑到底：`/l3`–`/l6` 的開工前報告與 one-confirm-per-run 閘（owner 2026-09-08「開工前問一次＝本 run 以後都做到底不問」）
 
 現況：front-door 是「不問就開跑」，`level-front-door.md` 明文把「想確認一下」排除在 escalation 之外；legacy CEO 則是逐題問四個 startup
@@ -40,7 +71,9 @@
   `check-hook-inventory.test.sh` 的硬編數字改成從 script 輸出導出＋wildcard 注入，否則下一次加 hook 時漂移注入會靜默失效
   （與 `check-readme-parity.test.sh` 同一個教訓）。Codex 鏡像不收這個 hook：它吃 Claude Code 的 permission decision 與 `agent_id`，
   鏡像本來就只帶 `dirty-protected-paths` 那一小組。
-- pre-merge review（opus）折入：MUST-FIX 兩條如上；cut 亦一併做掉——`status` 與 hook 的 mode precedence 統一（原本 env 給garbage 時
+- pre-merge review（opus）折入：MUST-FIX 兩條如上；cut **除一條外**都做掉——**沒做的是「平行首批會跳 N 個對話框」**：
+  每個工具呼叫都需要自己的權限裁決，抑制其餘幾個等於讓它們沒有任何裁決就通過這個閘，吵勝過放行，理由寫在 hook header 的 KNOWN 段。
+  （merge commit 訊息寫「plus every cut item」是過度宣稱，以本節為準。）其餘 cut——`status` 與 hook 的 mode precedence 統一（原本 env 給garbage 時
   hook inert 但 `status` 回報 config 值，那是使用者唯一的可見面）、session id 解析鏈補 `CLAUDE_CODE_SESSION_ID`（實測環境裡有的是它）、
   兩個 `require` 移進 mode 檢查之後（預設關閉的多數人本來每次 Task 白付約 38ms×2）、`hooks/README.md` 陳舊的「(29 as of v2.36.1)」、
   `completeness-scan` 會抓的 `return 0` 樣式、未知旗標具名拒絕、receipt 檔權限 0600、`AUTOPILOT_RUN_APPROVAL_DIR` 補進文件。

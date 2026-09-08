@@ -22,6 +22,7 @@ mkdir -p "$SBX/scripts" \
          "$SBX/skills/think-tank/references"
 
 cp "$REPO_ROOT/scripts/check-canonical-invariants.sh" "$SBX/scripts/"
+cp "$REPO_ROOT/scripts/check-reference-sizes.js" "$SBX/scripts/"
 # Mirror every seeded file at its real relative path.
 cp "$REPO_ROOT/CLAUDE.md"                                              "$SBX/CLAUDE.md"
 cp "$REPO_ROOT/agents/reviewer.md"                                    "$SBX/agents/reviewer.md"
@@ -48,6 +49,15 @@ SEVERITY="🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion"
 OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "aligned tree exit code"
 assert_contains "$OUT" "all canonical invariants hold" "aligned tree message"
+
+# 1b. reference-size negative: oversized reference file → exit 1 naming reference-size
+python3 -c "print('x' * 40 + '\n' * 1300)" > "$SBX/skills/ceo-agent/references/oversized.md"
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "oversized reference file exit code"
+assert_contains "$OUT" "reference-size" "oversized reference file names invariant"
+rm "$SBX/skills/ceo-agent/references/oversized.md"
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "restored reference size exit code"
 
 # 2. --help exits 0 and mentions the ritual
 HELP="$("$SCRIPT" --help 2>&1)"; HEXIT=$?

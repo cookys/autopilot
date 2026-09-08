@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { normalizeEffort } = require('./lib/effort-scale.js');
 const { spawnSync } = require('child_process');
 
 const RUNNER_TOKENS = Object.freeze([
@@ -47,6 +48,53 @@ const CLAUDE_FALLBACK_LADDER = Object.freeze([
   'haiku/medium@claude-native',
   'sonnet/medium@claude-native',
 ]);
+
+// A climb after a red result is a DECORRELATION problem, not a horsepower problem: the rung above
+// a failed one shares the model, the tokenizer and most of the failure mode when it is the same
+// family at the same cost tier, so re-dispatching there burns a repair round to learn nothing new.
+//
+// THE RULE (KR1): consecutive rungs may share a family ONLY when the effort strictly increases —
+// a real within-vendor climb, where the label IS comparable. Same family at the same or lower rank
+// is a no-op climb.
+//
+// WHY THIS IS A CONSTRUCTION AND NOT A POST-PASS. The plan (2026-09-08-family-aware-ladder-ordering
+// §4 P2) specified tie-group family rotation plus a repair sweep. Implementing it showed the sweep
+// spends decorrelation too early: it pulls the nearest different-family rung forward at the FIRST
+// opportunity, even when the adjacency there was already legal, and then has nothing left for a
+// later pair that genuinely needs it. On a real fixture (openai low, openai high x2, google high)
+// the sweep produced one illegal adjacency where a legal ordering existed.
+//
+// So the ladder is built instead of repaired, one rung at a time, and the preference is the
+// counter-intuitive one: when the next cheapest tier already outranks the last rung, take a
+// SAME-family rung first. That adjacency is legal for free, and it saves the scarce
+// different-family rungs for the ties where they are the only thing that can satisfy KR1.
+//
+// Cheapest-first is preserved exactly: every pick comes from the cheapest remaining rank tier, so
+// the ordering only ever reshuffles within a tier. On a single-family host every pick is the
+// same-family one and the ladder is byte-identical to the plain effort ordering.
+function decorrelateAdjacent(ladder) {
+  if (ladder.length < 2) return ladder.slice();
+  const pool = ladder.slice();
+  const rankOf = (r) => normalizeEffort(r.family, r.effort);
+  const out = [pool.shift()];
+  while (pool.length > 0) {
+    const last = out[out.length - 1];
+    const lastRank = rankOf(last);
+    const tierRank = Math.min(...pool.map(rankOf));
+    const inTier = (r) => rankOf(r) === tierRank;
+    let pick;
+    if (tierRank > lastRank) {
+      // A same-family rung here is already a legal climb — spend it, keep the others.
+      pick = pool.find((r) => inTier(r) && r.family === last.family);
+    }
+    if (!pick) pick = pool.find((r) => inTier(r) && r.family !== last.family);
+    // Nothing decorrelated left in this tier: emit the cheapest and accept the repeat.
+    if (!pick) pick = pool.find(inTier);
+    out.push(pick);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  return out;
+}
 
 function normalizeRunner(runner) {
   if (runner === 'codex-cli') return 'codex';
@@ -450,8 +498,8 @@ function deriveTopology(repoRoot, options = {}) {
     // escalation into a de-escalation. Legacy sorts after explicit at the same
     // effort so the exact-tuple seat wins the dedupe below.
     qualifiedSeats.sort((a, b) => {
-      const rankA = EFFORT_RANK[a.rungObj.effort] || 99;
-      const rankB = EFFORT_RANK[b.rungObj.effort] || 99;
+      const rankA = normalizeEffort(a.rungObj.family, a.rungObj.effort);
+      const rankB = normalizeEffort(b.rungObj.family, b.rungObj.effort);
       if (rankA !== rankB) return rankA - rankB;
       const legacyA = a.effort ? 0 : 1;
       const legacyB = b.effort ? 0 : 1;
@@ -475,6 +523,7 @@ function deriveTopology(repoRoot, options = {}) {
         (r) => !seatMatchesExcluded(r.engine, r.effort, r.runner, excludeSet)
       );
     }
+    implementerLadder = decorrelateAdjacent(implementerLadder);
 
     const ladderRunners = new Set(implementerLadder.map((r) => r.runner));
     const candidatesToQualify = RUNNER_TOKENS.filter(

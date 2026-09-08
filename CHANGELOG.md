@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.36.20 — 階梯爬階不再跨家族比 effort：紅燈後的重試是去相關問題，不是馬力問題（plan 2026-09-08 執行，owner go）
+
+implementer ladder 由 `selectImplementerRung` 依索引往上爬，而排序的主鍵是 effort 標籤。兩家廠商現在都說這個標籤跨模型不可比
+（Anthropic 明文「effort level names don't correspond to the same amount of thinking across models」，還要求換模型重跑 sweep），
+而且對 `low` 到底會不會搜尋講的是相反的話。本機這條 ladder 橫跨八個家族，等於幾乎每一組相鄰都在比不可比的單位。
+
+- **規則改成一條相鄰限制，而不是一張跨廠商刻度**：相鄰兩階只有在 **effort 嚴格上升** 時才允許同家族。同家族又同成本層是空爬——
+  同一個 model、同一個 tokenizer、同一套失敗模式——那一輪 repair 學不到任何東西。effort 標籤仍然只當成本代理（那本來就是它的用途，
+  也不是廠商說法否定的部分）。
+- **`scripts/lib/effort-scale.js`（新）**：per-family effort 排名的接縫。**今天每一家都是 identity**，而且這是刻意的：
+  已發表的證據說標籤不可比，那跟「知道兩家的換算率」是兩回事，硬編一個係數等於用更多機制重現同一個缺陷。每一列都要帶出處，
+  測試會拒絕任何不是 `status: measured` 卻偏離 identity 的列。documented 的 per-family 事實（Anthropic 低 effort 抑制搜尋）
+  放在 `notesFor()`，明確與排名分離。
+- **排序改成建構式**：每次都從剩餘最便宜的層挑，而且當該層已經高於前一階時**優先挑同家族**——那個相鄰本來就合法、等於免費，
+  把稀有的異家族階留給真正需要的並列位置。cheapest-first 完全保留（永遠只在同層內重排），單一家族主機位元不變。
+- **plan 的兩處偏離已記錄在 plan 的 Review log**：P1 原本要我給 anthropic 編一個係數，那違反 plan 自己 §2.5 的帶證據要求；
+  P2 原本的「事後補救掃描」在真實 fixture 上會把去相關提前用掉、後面無解，而合法排列其實存在。兩處都是執行才發現計畫寫錯。
+- 測試：`scripts/lib/effort-scale.test.js` 8 條（provenance 必備、非 identity 必須 measured、未知家族退回 identity 不借別家的表、
+  未知標籤排最後不拋例外、documented 事實不得洩進排名）；topology 53 條（新增 KR1 相鄰規則、KR3 首階仍最便宜、KR4 單一家族位元不變）。
+  變異兩發全中且各自隔離：整段去相關拿掉 → Case 15 兩紅；只拿掉「保留稀有家族」那條偏好 → 同樣兩紅，證明那條偏好在承重。
+- **未做**：KR1 在尾端只剩一個家族時無法滿足，這是無解不是缺陷，測試釘的是可達成的形式；`familyOf` 對 opencode 仍回 `unknown`
+  （分類它會連帶影響 cross-family panel 判定，plan §8 Q3 列為獨立變更）；`implementer_ladder: auto` 讀取端仍投影成
+  `{engine, effort, runner}`，contract schema 未動。
+
+prose-justification: no `skills/*/SKILL.md` line count changed this release (script, lib, reference and tests only).
+
+---
+
 ## v2.36.19 — 「機制 vs 指引」通則進 CLAUDE.md；L-4 階段閘變成真的擋得住；Boil-the-Lake 的 eval 預先註冊完成（owner 裁示 2026-09-08）
 
 - **新規則「機制 vs 指引」**（`CLAUDE.md` Skill evolution rules，緊接成績單前置）：成績單前置管的是**改變 skill 要求什麼**，不管**讓已經要求的事真的發生**。

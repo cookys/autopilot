@@ -238,7 +238,7 @@ HARD RULES:
 
 // Brain round-mode prompt. Teaches bundle semantics, the five-field output
 // contract, and the seat's STANDING production governance contract (the rules the
-// live depth-0 seat already operates under — level-front-door §7/§8 vocabulary).
+// live depth-0 seat already operates under — depth0-control-loop §7/§8 vocabulary).
 // Deliberately free of per-case answers and of the generator's oracle-side
 // vocabulary (test-scanned against ORACLE_ONLY_STRINGS).
 const BRAIN_SYSTEM_PROMPT = `You hold the depth-0 orchestrator brain seat of an

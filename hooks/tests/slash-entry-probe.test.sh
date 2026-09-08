@@ -100,15 +100,19 @@ probe() {
 }
 
 probe l3 "/autopilot:l3" \
-  "ceo-agent/references/level-front-door.md"
+  "ceo-agent/references/level-front-door.md" \
+  "ceo-agent/references/depth0-control-loop.md"
 probe l4 "/autopilot:l4" \
-  "ceo-agent/references/level-front-door.md"
+  "ceo-agent/references/level-front-door.md" \
+  "ceo-agent/references/depth0-control-loop.md"
 probe l5 "/autopilot:l5" \
   "skills/l5/references/hetero-impl-loop.md" \
-  "ceo-agent/references/level-front-door.md"
+  "ceo-agent/references/level-front-door.md" \
+  "ceo-agent/references/depth0-control-loop.md"
 probe l6 "/autopilot:l6" \
   "skills/l6/references/full-dispatch-pipeline.md" \
-  "ceo-agent/references/level-front-door.md"
+  "ceo-agent/references/level-front-door.md" \
+  "ceo-agent/references/depth0-control-loop.md"
 probe dialectic "/autopilot:think-tank-dialectic" \
   "think-tank/references/dialectic-mode.md"
 probe hetero-review "/autopilot:hetero-review" \

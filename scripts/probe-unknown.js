@@ -372,7 +372,7 @@ function classify(opts) {
   // Every signal-eligible rung is spent. The frozen contract (plan §3, G2 R11): exhaustion
   // is always `none` — never a higher rung, never U4. classify never emits U4 at all; the
   // owner escalation is the stall fuse / DOA boundary the foreman already has, to which it
-  // attaches the ladder receipts (level-front-door.md §6).
+  // attaches the ladder receipts (depth0-control-loop.md §6).
   out.recommend = 'none';
   out.reason = 'budget-exhausted';
   return finish(out, opts);

@@ -27,6 +27,7 @@ cp "$REPO_ROOT/CLAUDE.md"                                              "$SBX/CLA
 cp "$REPO_ROOT/agents/reviewer.md"                                    "$SBX/agents/reviewer.md"
 cp "$REPO_ROOT/references/blind-dispatch.md"                          "$SBX/references/blind-dispatch.md"
 cp "$REPO_ROOT/skills/ceo-agent/references/level-front-door.md"       "$SBX/skills/ceo-agent/references/level-front-door.md"
+cp "$REPO_ROOT/skills/ceo-agent/references/depth0-control-loop.md"     "$SBX/skills/ceo-agent/references/depth0-control-loop.md"
 cp "$REPO_ROOT/skills/quality-pipeline/_base/prohibited-behaviors.md" "$SBX/skills/quality-pipeline/_base/prohibited-behaviors.md"
 cp "$REPO_ROOT/skills/quality-pipeline/references/code-review.md"     "$SBX/skills/quality-pipeline/references/code-review.md"
 cp "$REPO_ROOT/skills/dev-flow/SKILL.md"                              "$SBX/skills/dev-flow/SKILL.md"

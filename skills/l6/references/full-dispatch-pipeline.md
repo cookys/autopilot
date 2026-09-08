@@ -1,9 +1,10 @@
 # /l6 — full-dispatch verification pipeline (per-level reference)
 
-> Level-specific long-form for the `/l6` shell. Common front-door semantics and the
-> `/l5` hetero loop it extends live in
+> Level-specific long-form for the `/l6` shell. Common front-door semantics live in
 > [`../../ceo-agent/references/level-front-door.md`](../../ceo-agent/references/level-front-door.md)
-> and [`../../l5/references/hetero-impl-loop.md`](../../l5/references/hetero-impl-loop.md) —
+> and [`../../ceo-agent/references/depth0-control-loop.md`](../../ceo-agent/references/depth0-control-loop.md),
+> and the `/l5` hetero loop it extends in
+> [`../../l5/references/hetero-impl-loop.md`](../../l5/references/hetero-impl-loop.md) —
 > read those FIRST. This file covers only what `/l6` adds on top of `/l5`.
 
 ## Live sensing

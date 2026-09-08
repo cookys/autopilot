@@ -682,7 +682,7 @@ done
 
 for contract in \
   "$REPO_ROOT/references/hetero-dispatch.md" \
-  "$REPO_ROOT/skills/ceo-agent/references/level-front-door.md"; do
+  "$REPO_ROOT/skills/ceo-agent/references/depth0-control-loop.md"; do
   CONTRACT_TEXT="$(cat "$contract")"
   assert_contains "$CONTRACT_TEXT" \
     '[[ "$campaign_id" =~ ^campaign-v1-[0-9a-f]{64}$ ]]' \

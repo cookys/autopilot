@@ -672,3 +672,28 @@ now — a wrong script and its faithful cache agree perfectly.
 Prevention: the producer now emits a contract-valid effort and dedupes identities; the consumer names the rung and
 the fix on a stale cache instead of failing an index deep in the validator; Case 13 pins the legacy-seat emission so
 the two role paths cannot drift apart again silently.
+
+
+## 30. A mutation that crashes instead of bypassing the guard is a false green
+
+**Incident (2026-09-08, v2.36.17).** A new hook's receipt required a `pending` record before it
+could mark a run approved. To prove the requirement was load-bearing, the guard line was deleted:
+
+```js
+  const st = readState(file);
+- if (!st || st.run_key !== key || !st.pending_at) return false;
+  writeState(file, { ..., pending_at: st.pending_at, ... });
+```
+
+The suite stayed green at 14/14, which read as "the tests do not cover this". They did. Deleting
+the line left `st` null, so the next statement threw, the hook's fail-open `catch` swallowed it,
+and no receipt was written — the same OBSERVABLE outcome as the guard working. The mutant had
+broken the code in a second way that happened to mask the first. Rewriting it to actually bypass
+the guard (tolerating a null `st` and writing anyway) turned exactly the two intended tests red.
+
+> **A mutation is evidence only when the mutant fails the way you intended.** Before reading a
+> surviving mutant as a coverage gap, check that it changed the behaviour under test rather than
+> triggering an error path that produces the same result.
+
+Prevention: when a mutant survives in a module with a broad `catch`, re-run it with the error
+path disabled, or assert on the state the guard protects rather than only on the outward decision.

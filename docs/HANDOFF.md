@@ -12,6 +12,7 @@
   3. switch test 的 pinned pre-D6 resolver 解析不了 `plan_review: auto`／`implementer_ladder: auto`（2026-09-04 起的值）⇒ OLD 輸出空、parity 比空集合；改共用一份兩行重寫的 parity template，consult_* 四欄允許 D6 自身的 topology 填值漂移，added-keys 補 `ladder_start_rung_judgment`，migration negative 放寬為「指名任一缺欄」。
 - **本機 host 狀態**：`~/.autopilot/topology.json` 已用修後 script 重建（備份 `topology.json.bak-legacy-effort-20260907`）。`contract-parity`／switch 兩支測試仍讀真主機 cache——BACKLOG 新條目（hermetic fixture 化）。
 - **doc-sync 已做（2026-09-08，scoped，兩版 diff）**：十個確定性 gate 全綠；四個 finder 的 confirmed 修正全部落地（U3 依 `unknown_type` 分流、dev-flow receipt 回填 unknown_type、README「25 hooks」等）；「正文數字 vs badge」這一類已降進 Layer 1（`check-readme-parity.js` prose-count 檢查）。細節見 CHANGELOG v2.36.16 doc-sync 段。
+- **2026-09-08 續作 v2.36.17（已 merge `134fe2e8`，未 push）**：owner 要的「開工前問一次、本 run 之後做到底」。新 hook `run-approval-gate`（wired default-on 但預設 inert，`run_approval.mode=ask-once` 才啟動）把 run 的第一個 depth-0 `Task`／`Agent` 轉成一次 permission ask；receipt 是 pending→approved 兩段，Post 沒有對應的 ask 就不寫。新 script `run-approval.js` 只合併寫機器本機 config、只寫 mode。prose 在 `level-front-door.md`（開工前報告、armed hook、收尾問句）。14 測試＋5 變異；reviewer MUST-FIX ×2 全折入；preflight 8/8。`references/evidence-discipline.md` §30 新增（假綠變異）。
 - **證據**：`resolve-dispatch-topology` 46、`resolve-review-loop` 417、switch 58、`contract-parity` 42、`probe-runner-coverage` 23、`probe-engine-capability` 8；全套見下方驗證方式。`references/evidence-discipline.md` §29 新增。
 
 ## 已決事項(不重議)

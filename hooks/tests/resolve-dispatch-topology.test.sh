@@ -472,4 +472,26 @@ NODE
 )"
 assert_eq "0" "$EMPTY_EFFORT_13" "Case 13: no implementer rung carries an empty effort"
 
+# -----------------------------------------------------------------------------
+# Case 14: implementer ladder rungs carry `family`, derived by the SAME
+# familyOf() helper (and same value) the reviewer/consult/discuss path uses for
+# the identical engine name — producer-side field, not yet plumbed through the
+# review-loop contract. Uses vendor-shaped engine names so familyOf() resolves
+# to something other than the 'unknown' fallback.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-5" "agy" "high" 10.0 "qualified" 401
+write_scorecard_row "gemini-2" "agy" "low" 5.0 "qualified" 402
+
+OUT="$(node "$SCRIPT" --json --out "$TOPOLOGY_OUT" --role implementer 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 14: exit 0"
+
+FAMILIES_14="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(JSON.stringify(topo.implementer_ladder.map((r) => [r.engine, r.family])));
+NODE
+)"
+assert_eq '[["gemini-2","google"],["gpt-5","openai"]]' "$FAMILIES_14" \
+  "Case 14: implementer rungs carry the correct family per engine (same familyOf() mapping as reviewer/consult/discuss)"
+
 finalize_test

@@ -411,11 +411,22 @@ function deriveTopology(repoRoot, options = {}) {
       // validation on every host with a legacy seat (2026-09-07).
       const emittedEffort = effort || 'high';
       const rungName = effort ? `${engine}/${effort}@${runner}` : `${engine}@${runner}`;
+      // family is attached here (producer-side only) via the SAME familyOf() helper
+      // and value the reviewer/consult/discuss path uses for this engine. Effort is
+      // not comparable cross-family — vendors document "low"/"medium"/etc.
+      // differently and prompt style varies by family — so anything that wants to
+      // reason per-family (rather than by the single cross-family EFFORT_RANK this
+      // file sorts on today) needs the field to exist on the rung first. This does
+      // NOT change ordering, and the review-loop contract / `implementer_ladder:
+      // auto` reader intentionally still projects rungs down to
+      // {engine, effort, runner} and must keep doing so — plumbing family through
+      // that path is a separate, later change.
       const rungObj = {
         rung: rungName,
         engine,
         effort: emittedEffort,
         runner,
+        family: familyOf(engine),
       };
       if (baselineEventId !== undefined) {
         rungObj.baseline_event_id = baselineEventId;

@@ -72,6 +72,52 @@ Deleting an **already-merged** feature branch during finish-flow cleanup (L-5.7 
 H-9.5 — merged-status verified first) is likewise within CEO DOA; the "Delete
 files/branches" escalation row in `SKILL.md` covers unmerged or protected branches.
 
+### One confirmation per run (opt-in, v2.36.17)
+
+The section above is the default: a front-door run never stops to ask "should I continue?".
+Some owners want one gate anyway — approve the whole thing once at the start, then let it run
+to the end without further checkpoints. That is what `run_approval` buys, and it is **off**
+until configured:
+
+```bash
+node <plugin>/scripts/run-approval.js persist --mode ask-once   # turn it on (machine-local)
+node <plugin>/scripts/run-approval.js status                     # {mode, source, config_path}
+```
+
+When it is on, depth-0 does two things at the top of a run:
+
+1. **Print the pre-flight report BEFORE the first dispatch.** It is the one moment the owner
+   can still redirect cheaply, so it states what the run will actually do, not what it hopes
+   to achieve: the size verdict, the branch and worktree it will create, the admitted
+   deliverables, which engine each one goes to, the file scope it expects to touch, and —
+   the load-bearing line — **the irreversible operations it intends to perform inside DOA
+   without asking again** (merge to `develop`, branch deletion, worktree teardown).
+2. **Dispatch normally.** `hooks/run-approval-gate.js` turns that first `Task`/`Agent` call
+   into a permission `ask`. The owner's answer to that dialog is the approval; approving it
+   covers the rest of the run and the gate goes silent.
+
+The receipt is never a model claim that consent was given: the ask writes a `pending` record
+and only `PostToolUse` promotes it, so a model cannot mint approval by asserting it, and a
+`PostToolUse` with no matching ask (the knob flipping mid-call, say) records nothing. What it
+proves is "this gate asked and the call then ran" — not that a dialog was rendered and
+answered, since the hook is never told the permission outcome. A host that auto-allows `Task`
+would still execute it. That bound is stated rather than closed; closing it needs the host to
+report the decision back.
+
+A denial leaves no receipt, so the next dispatch asks again. The approval is bound to the
+marker's `level:started_at`, so a second front-door command in the same session is a new run
+and is approved on its own — **and so is a `--solo`/`precondition_failed` degradation**, which
+re-runs `session-mode.js set` and therefore asks again. That is intended: the owner approved a
+run that would offload to a foreman, and an inline `/l3` is a different run than the one
+described to them.
+
+**Approval does not widen authority.** Project red lines, irreversible operations outside DOA,
+quota death and the stall fuse still stop the run exactly as they do without the knob. This
+gate removes the ordinary checkpoints and nothing else — the same asymmetry as `-x`, which may
+add red lines for a run but can never remove a project one.
+
+**Headless runs must leave it off**: `ask` is auto-denied without a human to answer it.
+
 ### Economy mode — when the session model is premium or usage-capped
 
 When depth-0 runs on a scarce top-tier model, the orchestrator's spend should narrow
@@ -527,12 +573,17 @@ root-run, state-path, or grant fields.
 ### -1. Session-mode marker + depth-0 context discipline (v2.32.27)
 
 At `/l3` through `/l6` entry, depth-0 runs the admitted command above (`clear` happens in
-finish-flow closing). The marker preserves its existing `level`, `repo_root`, `started_at`, and
-`expires_at` fields and adds the admission/entry topology binding when Mission is configured. It
-arms two opt-in hooks:
+finish-flow closing). The marker carries `level`, `repo_root`, `started_at`, and `expires_at`, and adds the
+admission/entry topology binding when Mission is configured. **Every `set` mints a fresh
+`started_at`** (`scripts/session-mode.js` stamps `new Date()` unconditionally) — including
+the mid-run `--fallback solo|precondition_failed` re-set below, which is why a degraded run
+is a new run to anything keyed on it. It
+arms these hooks:
 
 - **orchestrator-edit-gate**: depth-0 Edit/Write of product files is a protocol
   violation — dispatch instead. Subagents/foremen pass (hook payload identity).
+- **run-approval-gate** (only when `run_approval.mode=ask-once`): turns the run's FIRST
+  depth-0 `Task`/`Agent` into a one-time permission ask. See "One confirmation per run".
 - **context-budget**: measures the REAL context size. Once T1 (100k) has fired,
   depth-0 MUST checkpoint + `autopilot:handoff` at the next deliverable boundary
   (after a merged unit / qc verdict) and continue in a fresh session — context
@@ -1095,6 +1146,16 @@ one row per step:
   measured later; it selects no engine. See `scripts/probe-diff-domain.sh`.
 - The ledger makes success criterion #3 (depth-0 gate distinct from first-pass)
   and #6 (provenance present) verifiable from the report alone.
+
+**After the ledger, ask once whether this run's posture should become the default** — one
+line, not a flow: "把這次的 run_approval 設定存成預設嗎？". On yes, run
+`node <plugin>/scripts/run-approval.js persist --mode <mode>`; on anything else, say nothing
+further and end. The question exists so a posture that worked can be kept without editing
+config by hand, and it is deliberately the ONLY thing that gets written: red lines, the DOA
+boundary and the irreversible-operation carve-outs are never persisted from a run outcome.
+One good run is evidence about that run, and the moment right after a success is exactly when
+an owner is most inclined to agree to anything — so the write is capped at the mode, stays in
+machine-local `~/.autopilot/config.json`, and never touches a version-controlled config.
 
 ## Gotchas
 

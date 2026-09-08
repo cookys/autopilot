@@ -483,6 +483,12 @@ If deferral passes: add to BACKLOG with context + trigger condition, mark phase 
 - [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b> --phase-base "$(cat <project>/ledger/phase-<p>.base)"` exits 0 (SHIP-AS-IS chain or explicit opt-out)
 - [ ] Project docs: progress row updated to reflect phase completion
 
+**Forcing function**: TaskCreate the five items above as discrete sub-tasks of the phase task, named
+verbatim, so an unchecked item is a visible open task instead of a line that was skimmed past. Same
+rationale as L-5: a passive markdown checklist gets skipped, which is the reason `finish-flow` exists
+at all. This changes nothing about what the gate requires — the five items are unchanged — it only
+makes each one individually trackable.
+
 **CEO mode**: CEO verifies all prerequisites. No user confirmation needed for passing gates.
 
 ### L-5. Completion (MANDATORY — via finish-flow forcing function)

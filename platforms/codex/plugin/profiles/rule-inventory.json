@@ -23,8 +23,8 @@
       "category": "guided",
       "owner": {
         "path": "skills/dev-flow/SKILL.md",
-        "start_line": 518,
-        "end_line": 518
+        "start_line": 524,
+        "end_line": 524
       },
       "aliases": [
         {
@@ -344,7 +344,7 @@
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "242312512465f331759b56f2059db15130286738a912c326aaf6db053bc1dc70",
+      "sha256": "700c388e60514b21bb274ea94676fee5b8bc10b9dee6f75b2da1555c4302849e",
       "segments": [
         {
           "id": "dev.discovery-routing",
@@ -464,151 +464,151 @@
           "id": "dev.finish-guidance",
           "category": "guided",
           "start_line": 485,
-          "end_line": 496
+          "end_line": 502
         },
         {
           "id": "dev.finish-autonomy",
           "category": "autonomous",
-          "start_line": 497,
-          "end_line": 498
+          "start_line": 503,
+          "end_line": 504
         },
         {
           "id": "dev.staging-topology",
           "category": "topology",
-          "start_line": 499,
-          "end_line": 507
+          "start_line": 505,
+          "end_line": 513
         },
         {
           "id": "dev.hotfix-scaffolding",
           "category": "guided",
-          "start_line": 508,
-          "end_line": 533
+          "start_line": 514,
+          "end_line": 539
         },
         {
           "id": "dev.session-end",
           "category": "guided",
-          "start_line": 534,
-          "end_line": 601
+          "start_line": 540,
+          "end_line": 607
         },
         {
           "id": "dev.context-health",
           "category": "guided",
-          "start_line": 602,
-          "end_line": 607
+          "start_line": 608,
+          "end_line": 613
         },
         {
           "id": "dev.doc-sync-guidance",
           "category": "guided",
-          "start_line": 608,
-          "end_line": 611
+          "start_line": 614,
+          "end_line": 617
         },
         {
           "id": "dev.skill-routing",
           "category": "topology",
-          "start_line": 612,
-          "end_line": 614
+          "start_line": 618,
+          "end_line": 620
         },
         {
           "id": "dev.completeness-assurance",
           "category": "assurance",
-          "start_line": 615,
-          "end_line": 625
+          "start_line": 621,
+          "end_line": 631
         },
         {
           "id": "dev.antipattern-sizing",
           "category": "topology",
-          "start_line": 626,
-          "end_line": 626
+          "start_line": 632,
+          "end_line": 632
         },
         {
           "id": "dev.antipattern-autonomy",
           "category": "autonomous",
-          "start_line": 627,
-          "end_line": 627
-        },
-        {
-          "id": "dev.antipattern-quality",
-          "category": "assurance",
-          "start_line": 628,
-          "end_line": 628
-        },
-        {
-          "id": "dev.antipattern-guidance",
-          "category": "guided",
-          "start_line": 629,
-          "end_line": 632
-        },
-        {
-          "id": "dev.antipattern-goal",
-          "category": "core",
           "start_line": 633,
           "end_line": 633
         },
         {
-          "id": "dev.antipattern-continuation",
-          "category": "guided",
+          "id": "dev.antipattern-quality",
+          "category": "assurance",
           "start_line": 634,
           "end_line": 634
         },
         {
+          "id": "dev.antipattern-guidance",
+          "category": "guided",
+          "start_line": 635,
+          "end_line": 638
+        },
+        {
+          "id": "dev.antipattern-goal",
+          "category": "core",
+          "start_line": 639,
+          "end_line": 639
+        },
+        {
+          "id": "dev.antipattern-continuation",
+          "category": "guided",
+          "start_line": 640,
+          "end_line": 640
+        },
+        {
           "id": "dev.antipattern-user-control",
           "category": "core",
-          "start_line": 635,
-          "end_line": 635
+          "start_line": 641,
+          "end_line": 641
         },
         {
           "id": "dev.antipattern-process",
           "category": "guided",
-          "start_line": 636,
-          "end_line": 646
+          "start_line": 642,
+          "end_line": 652
         },
         {
           "id": "dev.antipattern-scope",
           "category": "core",
-          "start_line": 647,
-          "end_line": 649
+          "start_line": 653,
+          "end_line": 655
         },
         {
           "id": "dev.preimplementation-gate",
           "category": "guided",
-          "start_line": 650,
-          "end_line": 664
+          "start_line": 656,
+          "end_line": 670
         },
         {
           "id": "dev.override-boundary",
           "category": "core",
-          "start_line": 665,
-          "end_line": 679
+          "start_line": 671,
+          "end_line": 685
         },
         {
           "id": "dev.profile-guided-compatibility",
           "category": "guided",
-          "start_line": 681,
-          "end_line": 685
+          "start_line": 687,
+          "end_line": 691
         },
         {
           "id": "dev.profile-session-invariant",
           "category": "core",
-          "start_line": 686,
-          "end_line": 686
+          "start_line": 692,
+          "end_line": 692
         },
         {
           "id": "dev.profile-runtime-lane",
           "category": "topology",
-          "start_line": 687,
-          "end_line": 687
+          "start_line": 693,
+          "end_line": 693
         },
         {
           "id": "dev.profile-runtime-evidence",
           "category": "assurance",
-          "start_line": 688,
-          "end_line": 688
+          "start_line": 694,
+          "end_line": 694
         },
         {
           "id": "dev.mission-routing",
           "category": "topology",
-          "start_line": 690,
-          "end_line": 732
+          "start_line": 696,
+          "end_line": 738
         }
       ]
     }

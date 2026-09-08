@@ -23,6 +23,7 @@
     { "stem": "mcp-health", "class": "invariant_effect" },
     { "stem": "orchestrator-edit-gate", "class": "invariant_effect" },
     { "stem": "reload-watch", "class": "invariant_effect" },
+    { "stem": "run-approval-gate", "class": "invariant_effect" },
     { "stem": "session-handoff", "class": "invariant_effect" },
     { "stem": "session-start", "class": "host_only" },
     { "stem": "session-summary", "class": "invariant_effect" },

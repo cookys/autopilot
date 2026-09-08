@@ -1,5 +1,60 @@
 # Changelog
 
+## v2.36.17 — 一次確認就跑到底：`/l3`–`/l6` 的開工前報告與 one-confirm-per-run 閘（owner 2026-09-08「開工前問一次＝本 run 以後都做到底不問」）
+
+現況：front-door 是「不問就開跑」，`level-front-door.md` 明文把「想確認一下」排除在 escalation 之外；legacy CEO 則是逐題問四個 startup
+問句、中途還可能停。兩端之間沒有「開頭確認一次、之後不再打斷」這一檔。這版補上，**預設關閉**，開了才有行為。
+
+- **`hooks/run-approval-gate.js`（新，wired default-on 但預設 inert）**：`/l3`–`/l6` run 的**第一個** depth-0 `Task`／`Agent` 轉成一次
+  permission `ask`，人按下去之後整個 run 不再問。四個條件全中才動作：knob 為 `ask-once`、payload **沒有** `agent_id`（子代理永不被問，
+  沒人在看）、session-mode marker 活著且 level 是 l3–l6、這個 run 還沒有 receipt。
+- **receipt 是 pending→approved 兩段，不是模型說有批准**：PreToolUse 出 `ask` 並寫一筆 `pending`，PostToolUse 只把既有 pending 升級成
+  approved；沒有 pending 就不寫（pre-merge review MUST-FIX：原版 PostToolUse 無條件寫，而 knob 由**本版新增的收尾問句**打開時，
+  正好會讓一個在途 Task 的 Pre／Post 跨越開關切換，憑空產生一筆從未問過的批准）。模型無法用敘述偽造同意；被拒絕就沒有 receipt，下次照問。
+  **憑證證明的是「這個閘問過，且該次呼叫接著執行了」，不是「dialog 被回答了」**——hook 拿不到 permission 結果，若 host 用 allowlist 或
+  bypass 直接放行，呼叫仍會在 ask 發出後執行。這個界線寫在 hook header、hooks/README 與 front-door 文件裡，不用 trust 機制去補（ADR-0001）。
+  **為什麼要做成 hook 而不是 skill 文字**：全自動 posture 本來就是被設計成會跳過「要不要繼續」這種提示，用 prose 叫它停等於叫它做它被設計成不做的事。
+- **run 的身分是 marker 的 `level:started_at`**：同一個 session 再下一次 front-door 指令會產生新的 `started_at`，就是新的 run、要重新批准。
+  `--fallback solo|precondition_failed` 的**中途降級**同樣重蓋 `started_at`，所以也會重問——這是**刻意的**：owner 批准的是一個會把工作
+  offload 給 foreman 的 run，降級後真正要跑的是 inline `/l3`，那是另一個描述。順帶修掉 `level-front-door.md` 一句與
+  `session-mode.js` 矛盾的敘述（原文說 `set` 會保留既有 `started_at`，實際上每次 `set` 都重蓋；那句話現在是這個閘的立足點，錯著很危險）。
+  這正好是 owner 說的「直到下一 run 啟動」，用既有狀態表達，不新發明一套壽命。marker 的 24h TTL 與 session 綁定同時是批准的上限，
+  過期是回到「會問」而不是變成無限授權。
+- **批准不擴權**：紅線、DOA 邊界外的不可逆操作、quota 死亡、stall fuse 照樣停。這個閘只拿掉一般的中途確認。與 `-x` 同一條不對稱原則
+  ——一個 run 可以加紅線，永遠不能移除專案紅線。
+- **`scripts/run-approval.js`（新）**：`status` 讀、`persist --mode` 寫。寫的是**合併**進機器本機的 `~/.autopilot/config.json`
+  （該檔還放 hook 開關、cost fuse、context budget，整份覆寫會靜默弄丟），**不寫任何進版控的 config**——自動把偏好寫回 `.claude/`
+  等於在使用者的下一個 diff 塞東西，還會跟並行 session 撞。config 損毀時具名拒絕，不覆寫。
+- **`level-front-door.md` 三處**：新小節「One confirmation per run」（開工前報告要列 size／branch／worktree／admitted deliverables／
+  每個 deliverable 派給誰／預期檔案範圍／**DOA 內打算自己做掉的不可逆操作清單**——最後一項是 owner 唯一能攔的地方）；marker 小節多列
+  這個 armed hook；run-summary 段尾加「要把這次設定存成預設嗎？」一行問句（只寫 mode，紅線／DOA／不可逆例外永不由 run 結果寫回：
+  一次成功是關於那一次 run 的證據，而剛成功的那一刻正是 owner 最容易點頭的時候）。
+- **headless 明講**：`claude -p` 下 `ask` 會被自動拒（沒有人可以回答），所以無人值守的 front-door run 必須維持 knob 關閉。寫進 hooks/README.md。
+- 測試：`hooks/run-approval-gate.test.js` 14 條（inert 預設、garbage mode 不啟動、Task／Agent 都攔、子代理不問（presence 非 truthiness）、
+  無／過期／非 run level marker 皆 inert、非目標工具 inert、**asked-once**（receipt 後三次不再問）、拒絕不算批准、下一個 run 重問、
+  payload 與 state 損毀 fail-open 且不假設已批准、**Post 沒有對應的 ask 不得產生 receipt**、**knob 中途打開不得產生幽靈批准**、
+  平行首批各自 ask 但只留一筆 pending）。變異全中且各自隔離：receipt 不寫 → 2 紅、子代理不跳過 → 1 紅、run key 少 `started_at` → 1 紅、
+  Pre 不寫 pending → 3 紅、Post 不要求 pending → 2 紅。（最後一發第一次寫成「刪掉守衛那一行」時是**假綠**：`st` 變 null 後拋例外被
+  fail-open 吞掉，等於換一種壞法而不是繞過守衛；改成真正繞過才轉紅。變異體本身也要驗它壞在正確的地方。）
+- 數字連鎖：hook 30→31（default-on 17→18），`hooks/README.md` 標頭與 Tier A 列、CLAUDE.md、兩份 README badge 與正文、plugin 描述。
+  `check-hook-inventory.test.sh` 的硬編數字改成從 script 輸出導出＋wildcard 注入，否則下一次加 hook 時漂移注入會靜默失效
+  （與 `check-readme-parity.test.sh` 同一個教訓）。Codex 鏡像不收這個 hook：它吃 Claude Code 的 permission decision 與 `agent_id`，
+  鏡像本來就只帶 `dirty-protected-paths` 那一小組。
+- pre-merge review（opus）折入：MUST-FIX 兩條如上；cut 亦一併做掉——`status` 與 hook 的 mode precedence 統一（原本 env 給garbage 時
+  hook inert 但 `status` 回報 config 值，那是使用者唯一的可見面）、session id 解析鏈補 `CLAUDE_CODE_SESSION_ID`（實測環境裡有的是它）、
+  兩個 `require` 移進 mode 檢查之後（預設關閉的多數人本來每次 Task 白付約 38ms×2）、`hooks/README.md` 陳舊的「(29 as of v2.36.1)」、
+  `completeness-scan` 會抓的 `return 0` 樣式、未知旗標具名拒絕、receipt 檔權限 0600、`AUTOPILOT_RUN_APPROVAL_DIR` 補進文件。
+- **未做／已知限制**：(1) 開工前報告的內容是 prose 指示，沒有機器檢查它真的印了——閘只保證「有人按過」，不保證「有先看到報告」。
+  (2) 閘吃的是 run 的**第一個** `Task`／`Agent`，不分它是實作派工還是 depth-0 為了寫報告而先派的調研 agent；後者會讓 ask 早於報告出現
+  （reason 文字仍說明這是整個 run 的批准，但 owner 看到的資訊比預期少）。要修得讓閘認得「報告已出」，那需要一個機器可驗的報告產物，
+  本版刻意不做。(3) front-door 四份 SKILL.md 沒動，全靠它們 MUST-READ 的 `level-front-door.md`。(4) `/l3` 以外的入口
+  （legacy CEO、dev-flow）不受這個 knob 影響。(5) 本 session 未 live-fire 真實 permission dialog（會卡住無人值守的執行）；
+  已用 hooks.json 的字面指令實跑證明接線與輸出，dialog 本身未驗。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (the new prose lives in `skills/ceo-agent/references/level-front-door.md`, a reference, plus a new hook + script + tests).
+
+---
+
 ## v2.36.16 — develop 三個既有紅測試歸零：topology 對 legacy 席位吐空 effort（不是 cache 過期）、probe 看不見 opencode、switch test 的凍結 baseline 解析不了現行 template（2026-09-07）
 
 前版 handoff 把 `contract-parity`／`resolve-review-loop-consult-discuss-switch` 兩紅歸因「本機 topology.json cache 過期」。實查：重跑 `resolve-dispatch-topology.js`

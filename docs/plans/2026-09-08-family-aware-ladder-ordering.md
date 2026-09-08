@@ -194,5 +194,26 @@ What would guarantee failure:
 
 ## Review log
 
-R0 author: depth-0 (Claude Opus 5), 2026-09-08. Not yet reviewed; this plan is authored for the bounded
-plan-review loop and has no generations recorded.
+R0 author: depth-0 (Claude Opus 5), 2026-09-08. Not put through the bounded plan-review loop; executed
+directly on owner instruction the same day, shipped as v2.36.20.
+
+**Executed with two deviations, both because executing revealed the plan step was wrong:**
+
+1. **P1 does not seed differentiated scales.** The step said to encode anthropic's `low` as "a bigger
+   step down". Writing that number would have violated this plan's own §2.5 ("every entry names how it
+   was established"): the published evidence says the labels are incomparable and that low suppresses
+   search, and neither statement places two vendors' levels on one axis. `scripts/lib/effort-scale.js`
+   therefore ships identity for every family with `status: no-evidence-to-differentiate`, and a test
+   refuses any non-identity scale that is not marked `measured`. The seam is real; its content is not
+   invented.
+2. **P2 is a construction, not a rotation plus a repair sweep.** The sweep as specified spends
+   decorrelation at the first opportunity even when that adjacency was already legal, and then has
+   nothing left for a later pair that needs it — reproduced on the Case 15 fixture, where a legal
+   ordering existed and the sweep did not find it. The ladder is now built one rung at a time from the
+   cheapest remaining tier, preferring a same-family rung when the tier already outranks the previous
+   rung, which keeps the scarce different-family rungs for the ties that need them. Mutation evidence:
+   removing the decorrelation entirely, and removing only that preference, each turn Case 15 red.
+
+KR3 and KR4 hold as written. KR1 holds except where a tail has only one family left, which is
+unsatisfiable rather than a defect; the test asserts the achievable form. KR2 is satisfied by the
+comparator calling `normalizeEffort()` rather than indexing a raw label table.

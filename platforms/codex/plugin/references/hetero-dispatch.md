@@ -167,6 +167,34 @@ ids denote one model, so whoever freezes the manifest owns it.
 uses it must name a runner+model that is separately qualified for the seat's role. `cursor` is not
 (see the § above) — the mechanism exists and is unrouted, which is the honest state.
 
+## What a ladder climb means (v2.36.20)
+
+The implementer ladder is ordered cheapest-first and climbed by index on each red repair round.
+Two vendor facts make a naive climb unsound across a family boundary:
+
+- Anthropic: *"effort level names don't correspond to the same amount of thinking across models"*
+  (`prompting-claude-fable-5-1`, "Consider all effort levels", read 2026-09-08).
+- The vendors disagree on what `low` even does — Anthropic documents it as suppressing search,
+  OpenAI documents it as ideal for tool use and search (`guides/reasoning`, read 2026-09-08).
+
+So `medium@openai` and `medium@anthropic` are two different amounts of thinking wearing one label.
+The ladder therefore does **not** compare effort labels across families to decide what is "stronger".
+It uses the label only as the cost proxy it always was, and enforces one adjacency rule instead:
+
+> Consecutive rungs may share a family **only** when the effort strictly increases.
+
+A same-family rung at the same cost tier is a no-op climb — same model, same tokenizer, same failure
+mode — so a repair round spent there learns nothing. `scripts/resolve-dispatch-topology.js` builds
+the ladder to satisfy that rule, picking from the cheapest remaining tier every time, and preferring
+a same-family rung when the tier already outranks the previous rung so that the scarce
+different-family rungs are saved for the ties that need them. On a single-family host nothing
+changes. Where a tail has only one family left, the rule is unsatisfiable and the order stands.
+
+`scripts/lib/effort-scale.js` is the seam where a measured per-family effort scale would land. It is
+identity for every family today, deliberately: the published evidence says the labels are
+incomparable, which is not the same as knowing the exchange rate between them, and a fabricated
+coefficient would re-create the defect this rule exists to avoid.
+
 ## Reviewer output-token budget
 
 `dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through

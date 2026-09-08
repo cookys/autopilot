@@ -229,8 +229,10 @@ set the execution posture:
 
 Overrides: `-x <csv>` (red lines), `--expand` (scope), `--solo` (autonomy without offload
 — also the degradation fallback when the foreman can't start). Full semantics
-(topology, the P0-verified kill+reap mechanism, run-summary ledger):
-[`references/level-front-door.md`](references/level-front-door.md).
+(topology, the P0-verified kill+reap mechanism):
+[`references/level-front-door.md`](references/level-front-door.md);
+depth-0 control loop and run-summary ledger:
+[`references/depth0-control-loop.md`](references/depth0-control-loop.md).
 
 ## Startup
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.36.21 — level-front-door.md 切成兩半：MUST-READ 的檔案必須真的讀得完（機制變更，要求一字未改）
+
+`skills/ceo-agent/references/level-front-door.md` 長到 1178 行，超過 Claude Code Read 工具整檔讀取的靜默截斷上限
+（約 60–64KB 編號後字元）；1202 份 session transcript 的證據顯示 2026-08-17 之後 81–97% 的整檔讀取被截斷在
+~57–60KB，尾部三節（Phase L、Run-summary ledger、Gotchas）事實上讀不到，要補第二次 offset Read 才拿得回來。
+而 /l3 /l4 /l5 /l6 加上 ceo-agent 全部把這個檔案列為 MUST-READ——要求還在，物理上做不到。
+
+- **純搬移，零 prose 改動**：L533（`## Depth-0 control loop (owned by the CEO, NOT the foreman)`）到 EOF 逐位元搬進新檔
+  `skills/ceo-agent/references/depth0-control-loop.md`（檔頭加一段說明由來）；level-front-door.md 保留 L1–532 加一段
+  pointer。兩半各 43.8KB 編號後字元，都在上限內。byte-identical 用 diff 驗證，不靠自報。
+- **每個 MUST-READ 改列兩個檔**（l3/l4/l5/l6/ceo-agent）：沒有任何 level 讀得比以前少——這是機制變更
+  （同一份要求，變成真的可滿足），不是指引變更，依「機制 vs 指引」通則不需要 eval 證據。目標小節已搬家的 `§`
+  交叉引用全部改指新檔（§6 ladder、§3 qc@depth-0、§ Phase L、§1.b auto-wakeup、§7/§8、Panel aggregation 錨點）；
+  沒搬的（裸跑禁令、Mid-run question discipline、Dispatching the foreman）維持指舊檔。
+- **新閘 `scripts/check-reference-sizes.js`**：`skills/*/references/*.md` 任何一檔超過 **48KB 編號後位元**
+  （Read 工具實際回傳的計量方式：行號位數 + tab + 行內容 + newline）就拒絕，訊息點名檔案、實際大小與上限，
+  仿 `check-claude-md-inventory.js` 的 40KB 上限先例。接進 `check-canonical-invariants.sh`，
+  sandbox 測試加一條 oversized 負例；CLAUDE.md scripts inventory 同步具名。
+- **測試只改路徑不改斷言**：reap-dispatch-branches、dispatch-worktree-lifecycle、check-stall-fuse 三個測試改讀
+  depth0-control-loop.md（被斷言的字串跟著內容搬走了）；slash-entry-probe 對 l3–l6 各加一條 depth0-control-loop.md
+  的預期 Read；check-canonical-invariants 的 sandbox 加 copy 新檔與新閘。
+
+prose-justification: l3/l4/l5/l6/ceo-agent 的 MUST-READ 區塊各多列一個檔名（每個 skill +0–2 行）——同一份要求變成
+真的可滿足；維持單檔的「替代方案」在物理上不可讀，不算縮減 prose 的選項。
+
+---
+
 ## v2.36.20 — 階梯爬階不再跨家族比 effort：紅燈後的重試是去相關問題，不是馬力問題（plan 2026-09-08 執行，owner go）
 
 implementer ladder 由 `selectImplementerRung` 依索引往上爬，而排序的主鍵是 effort 標籤。兩家廠商現在都說這個標籤跨模型不可比

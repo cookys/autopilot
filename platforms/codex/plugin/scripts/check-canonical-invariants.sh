@@ -325,7 +325,7 @@ check_reader_allowlist "unratified-columns" \
 
 # reference #5 — level-front-door references code-review's Panel aggregation section.
 check_reference "level-front-door→code-review/PanelAggregation" \
-  "skills/ceo-agent/references/level-front-door.md" "code-review.md) § \"Panel aggregation\"" \
+  "skills/ceo-agent/references/depth0-control-loop.md" "code-review.md) § \"Panel aggregation\"" \
   "skills/quality-pipeline/references/code-review.md" "## Panel aggregation (multi-reviewer / disjoint-family qc)"
 
 
@@ -342,6 +342,19 @@ check_mirror "model-routing" \
 # lint #1 — the model-routing canonical must stay free of relative links (see
 # check_no_relative_links rationale).
 check_no_relative_links "model-routing" "references/model-routing.md"
+
+# ── reference-size invariant ─────────────────────────────────────────────────────
+# skills/*/references/*.md are MUST-READ whole-file reads; the Read tool silently
+# truncates them past ~60KB numbered. Hard cap 48KB numbered bytes so growth fails
+# loudly here instead of as a silent truncation in a session (level-front-door.md,
+# 2026-09). Details/overrides: scripts/check-reference-sizes.js.
+if ! command -v node >/dev/null 2>&1; then
+  envx "reference-size: node is required to run scripts/check-reference-sizes.js"
+elif node "$REPO/scripts/check-reference-sizes.js" >/dev/null 2>&1; then
+  ok "reference-size: all skills/*/references/*.md under the 48KB numbered cap"
+else
+  bad "reference-size: a skills/*/references/*.md file exceeds the 48KB numbered cap — run node scripts/check-reference-sizes.js"
+fi
 
 echo ""
 if [ "$ENV_ERR" = "1" ]; then

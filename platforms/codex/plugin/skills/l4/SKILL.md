@@ -49,7 +49,7 @@ precondition or abort receipt; do not invent another lifecycle authority.
 
 # /l4 — CEO autonomy, dispatched foreman
 
-> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/level-front-door.md` §6.
+> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/depth0-control-loop.md` §6.
 
 Terse front-door into `autopilot:ceo-agent` at **Level 4**: dispatch **ONE**
 background, worktree-isolated sub-orchestrator "foreman" that runs dev-flow
@@ -90,5 +90,6 @@ also needs an independently witnessed effectful adapter for the exact grant; oth
 level's existing guided dispatch path and report the adaptive row as unverified.
 
 **MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
-(§ The foreman, § Depth-0 control loop, § Run-summary ledger) — dispatch mechanics,
-outcome→action table, and worktree-base rules live there, not here.
+(§ The foreman — dispatch mechanics and worktree-base rules) and
+[`../ceo-agent/references/depth0-control-loop.md`](../ceo-agent/references/depth0-control-loop.md)
+(§ Depth-0 control loop, § Run-summary ledger — outcome→action table). They live there, not here.

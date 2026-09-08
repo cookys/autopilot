@@ -78,12 +78,9 @@ function parseArgs(argv) {
 function readCanonicalCounts() {
   try {
     const canonical = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, '.claude-plugin/plugin.json'), 'utf8'));
-    const sm = (canonical.description || '').match(/(\d+) lifecycle skills/);
     const m = (canonical.description || '').match(/(\d+) hooks \((\d+) default-on, (\d+) opt-in(?:, (\d+) disabled)?\)/);
     if (!m) return null;
     return {
-      skillCount: sm ? parseInt(sm[1], 10) : undefined,
-      hookCount: parseInt(m[1], 10),
       optInCount: parseInt(m[3], 10),
       disabledCount: m[4] !== undefined ? parseInt(m[4], 10) : 0,
     };
@@ -385,8 +382,6 @@ function atomicWrite(file, content) {
     // tiers (v2.20.0 footgun). Fall back to historical literals only if canonical
     // can't be parsed.
     const current = readCanonicalCounts();
-    if (args.skillCount === undefined && current?.skillCount !== undefined) args.skillCount = current.skillCount;
-    if (args.hookCount === undefined && current?.hookCount !== undefined) args.hookCount = current.hookCount;
     if (args.optInCount === undefined) args.optInCount = current ? current.optInCount : 7;
     if (args.disabledCount === undefined) args.disabledCount = current ? current.disabledCount : 0;
     validateArgs(args);

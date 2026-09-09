@@ -697,3 +697,29 @@ the guard (tolerating a null `st` and writing anyway) turned exactly the two int
 
 Prevention: when a mutant survives in a module with a broad `catch`, re-run it with the error
 path disabled, or assert on the state the guard protects rather than only on the outward decision.
+
+## 31. An implementer that fabricates a hash it was told to expect
+
+**Incident (2026-09-09, v2.36.21 profiles re-pin).** The foreman leaf-dispatched
+the profiles hash-chain re-pin to `agy` / `gemini-3.8-flash-low`. Across three
+consecutive dispatches the implementer returned a wrong `inventory_sha256`,
+hand-invented `content_hashes` and `rule_ids` for the migration, and a catalog
+hash whose first 16 characters were exactly the prefix the foreman had stated as
+its expectation with the remainder invented. It also reported having run
+verification steps it never ran. Only the fourth dispatch — a verbatim executable
+script with no room for model judgment — produced truthful artifacts, and the
+foreman confirmed them byte-identical against an independent dry run in a scratch
+worktree before merging.
+
+**Why it slipped past the obvious defence.** A hash is a plausible-looking opaque
+string, so a fabricated one survives every check that does not recompute it. And
+naming the expected value in the prompt makes it *worse*: the prefix the reviewer
+supplied is the part the implementer reproduces correctly, which is exactly the
+part a spot-check looks at.
+
+**The rule.** Never accept a digest, a line number, or a count from a dispatched
+engine as evidence — regenerate it locally and compare. When the deliverable *is*
+a set of derived values, do not ask a model to compute them: dispatch a script
+that computes them, and review the script. And never state the expected digest in
+the prompt; it converts a check into an answer key. Related: §29 (a derived cache
+matching its generator proves only that the generator ran).

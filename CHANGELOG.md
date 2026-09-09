@@ -21,6 +21,7 @@
 - **測試只改路徑不改斷言**：reap-dispatch-branches、dispatch-worktree-lifecycle、check-stall-fuse 三個測試改讀
   depth0-control-loop.md（被斷言的字串跟著內容搬走了）；slash-entry-probe 對 l3–l6 各加一條 depth0-control-loop.md
   的預期 Read；check-canonical-invariants 的 sandbox 加 copy 新檔與新閘。
+- **Profiles hash chain re-pin**：`skills/ceo-agent/SKILL.md` 的 MUST-READ 區塊拆分（新增 `references/depth0-control-loop.md` 引用）使 canonical rules 總數由 812 變為 814（`ceo.harness-and-levels` segment 由 190 增至 192 rules，分類為 `topology`）。更新 `profiles/rule-inventory.json`、`profiles/rule-migration.json`、`profiles/profile-catalog.json`、`profiles/guided-baseline-dispositions.json` 以及 `platforms/codex/plugin/profiles/` 對應鏡像檔；同步更新 `hooks/tests/codex-plugin-package.test.sh` 與 `hooks/tests/profile-context-isolation.test.sh` 斷言至 814。
 
 prose-justification: l3/l4/l5/l6/ceo-agent 的 MUST-READ 區塊各多列一個檔名（每個 skill +0–2 行）——同一份要求變成
 真的可滿足；維持單檔的「替代方案」在物理上不可讀，不算縮減 prose 的選項。

@@ -256,6 +256,24 @@
         "8f5123be591f3e163ed530b56a3212af99a2316ff550373c09c033281f52b3bb"
       ],
       "rationale": "P0 skills/ceo-agent/SKILL.md:335 (Execution step 7: Need research? -> Autonomously invoke autopilot:survey). Unknown-escalation ladder P4 (plan docs/plans/2026-09-07-unknown-escalation-ladder.md, v2.36.15; G2 R8): the autonomous survey is now gated on scripts/probe-unknown.js classify recommending U2 with budget left and receipted afterwards; a judgment-only research wish is recorded as a ledger note, not dispatched. Successor at current :336 (re-hashed after the pre-merge review spelled the full receipt argv). The step still exists and is still CEO-autonomous; only its trigger changed from judgment to the probe."
+    },
+    {
+      "content_hash": "ec9dbd0aec8c3e7c4144a64566e2915c5440b093fcf1781ffe87ca1a6243ca6f",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a270266488e92f45b187da7be254c67cb01c4d21ce2b9a5876123007266424ff",
+        "cdcf0a3c636beba6030b3021de6ad3589d9003266b6106d825f4345d08833a3f"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:195 ([`references/level-front-door.md`](references/level-front-door.md).). Split in v2.36.21: the level-front-door pointer keeps lines 194-195 (topology, kill+reap) and the depth-0 control loop and run-summary ledger move to the new references/depth0-control-loop.md pointer at lines 196-197. Semantics survive across the two split documents."
+    },
+    {
+      "content_hash": "d2834fd70608c8d41dbf84e86242ecf15b219b2b59fe316d4ac85010b26966e3",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "2eaf96b14468ca1e03274dfa5acb9071bd17663f5027bca3e82e88878a89652c",
+        "293f7fcb5f9152b7b07c794e03685b7ab29182dfbd9d4cf1d507d367f317f935"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:194 ((topology, the P0-verified kill+reap mechanism, run-summary ledger):). Split in v2.36.21: the parenthetical loses ', run-summary ledger' (now line 194, successor 2eaf96b1) and the ledger half becomes the new line 196 'depth-0 control loop and run-summary ledger:' (successor 293f7fcb) pointing at references/depth0-control-loop.md. No requirement removed."
     }
   ]
 }

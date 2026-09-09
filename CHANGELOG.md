@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.36.22 — context-budget 記住這個 session 的視窗，不再因為 statusline 停跳而誤報
+
+`hooks/context-budget.js` 的精確視窗來自 statusline 寫的 live 檔，而 statusline 在 session
+等待長時間背景任務時就不再更新。live 檔一過 120 秒的新鮮度門檻，hook 就退回用「觀察到的最大
+用量」反推視窗——那條路徑的校準基準是 200K，於是在 1M 視窗、實際只用了 16–21% 的 session 上
+發出 T2「停止接新工作、立刻寫 handoff」的指令。2026-09-09 本 repo 自己踩到兩次；程式碼裡
+2026-09-05 那條 v2.36.2 診斷註解記的是同一個形狀。
+
+一個 session 的 context 視窗不會變，所以第一次從 live 檔讀到就記進 hook 自己的 state
+（`knownWindow`），之後 live 檔不可用時直接沿用，不再反推。沒看過 live 檔的 session 行為
+完全不變，仍走原本的推論路徑。
+
+- `hooks/context-budget.js` — live 路徑寫入 `st.knownWindow`；fallback 路徑優先採用它
+- `hooks/context-budget-lib.js` — 新的 `windowSource: 'session-window'` 訊息措辭，不把記住的
+  真實數字講成「inferred from observed usage」
+- `hooks/tests/context-budget-window-memory.test.sh` — 新測試（6 assertions）。拿掉修正會紅
+  3 條，其中一條逐字重現線上收到的 `threshold 150k`；第三個 case 釘住「沒看過 live 檔的
+  session 仍會在推論視窗上觸發 T2」，避免修正變成把整個 tier 關掉
+
+prose-justification: 這個版本沒有動任何 `skills/` 或 `references/` 的散文——`git diff --stat -- skills references` 是空的，改動全在 `hooks/` 與 `hooks/tests/`。閘門回報的 +7% 是相對 v2.35.2 基線累積下來的，不是本次造成；基線本身該在後續 release 用 `preflight-release.sh --update-baseline` 重新校準，本次不順手刷掉那筆累積數字。
+
 ## v2.36.21 — level-front-door.md 切成兩半：MUST-READ 的檔案必須真的讀得完（機制變更，要求一字未改）
 
 `skills/ceo-agent/references/level-front-door.md` 長到 1178 行，超過 Claude Code Read 工具整檔讀取的靜默截斷上限

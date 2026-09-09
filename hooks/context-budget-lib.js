@@ -202,7 +202,9 @@ function budgetDecision(state, cfg) {
   // say so — "inferred from observed usage" would be a false claim about a real number.
   const windowClause = cfg.windowSource === 'statusline'
     ? '(statusline)'
-    : 'inferred from observed usage';
+    : cfg.windowSource === 'session-window'
+      ? '(this session\'s window, read from the statusline earlier)'
+      : 'inferred from observed usage';
   const pct = win ? ` = ${Math.round((contextTokens / win) * 100)}% of the ` +
     `~${Math.round(win / 1000)}k window ${windowClause}` : '';
   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {

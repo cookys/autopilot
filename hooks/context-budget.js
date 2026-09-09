@@ -156,6 +156,13 @@ function saveState(file, st) {
       // row predates the live file's own written_at; otherwise the transcript row
       // is at least as fresh, so it is trusted directly).
       const liveCfg = tiersForKnownWindow(cfg, liveWindow);
+      // v2.36.22: a session's context window never changes, so remember it. The live
+      // file is written by the statusline, which stops ticking while the session waits
+      // on a long background task — exactly when a long session is sitting above the
+      // 200K-calibrated ceiling. Without this the stale-file fallback re-derives the
+      // window from observed usage and fires a spurious T2 (2026-09-09: "threshold 150k"
+      // on a 1M window at 21% used; the same shape as the 2026-09-05 note above).
+      st.knownWindow = liveWindow;
       const mustParse = st.lastContext >= liveCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
       let contextTokens = liveTotal;
       if (mustParse) {
@@ -191,7 +198,11 @@ function saveState(file, st) {
       // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
       // window implied by the largest context this session has actually reached.
       // Applied to the mustParse gate too, so the cheap path uses the same tiers.
-      const effCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+      const rememberedWindow = Number.isFinite(st.knownWindow) && st.knownWindow > 0
+        ? st.knownWindow : null;
+      const effCfg = rememberedWindow !== null
+        ? tiersForKnownWindow(cfg, rememberedWindow)
+        : scaleTiers(cfg, inferWindowTokens(st.observedMax));
 
       // Cheap path below T1: parse only every Nth call. Once T1 territory has
       // been seen, parse every call (a burst can overshoot fast).
@@ -203,10 +214,12 @@ function saveState(file, st) {
           // Ratchet: observing N tokens proves the window is > N. Monotonic, so
           // auto-compaction (which lowers current context) cannot walk it back.
           st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
-          const liveCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+          const liveCfg = rememberedWindow !== null
+            ? tiersForKnownWindow(cfg, rememberedWindow)
+            : scaleTiers(cfg, inferWindowTokens(st.observedMax));
           const d = budgetDecision(
             { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
-            liveCfg,
+            rememberedWindow !== null ? { ...liveCfg, windowSource: 'session-window' } : liveCfg,
           );
           if (d.tier === 't1') {
             st.lastT1Call = st.calls;

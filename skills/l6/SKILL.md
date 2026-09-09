@@ -11,7 +11,7 @@ description: >
 
 # /l6 — CEO autonomy, foreman + full-dispatch verification
 
-> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/level-front-door.md` §6.
+> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/depth0-control-loop.md` §6.
 
 Terse front-door into `autopilot:ceo-agent` at **Level 6**: identical to `/l5`
 except verification AUTHORING is ALSO leaf-dispatched to a heterogeneous engine;
@@ -112,4 +112,6 @@ witness grant, tool/effect, identity, and terminal enforcement.
 **MUST-READ**: [`references/full-dispatch-pipeline.md`](references/full-dispatch-pipeline.md)
 (per-unit pipeline, machinery, authoring-rail rationale) and
 [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(front-door semantics, the foreman) and
+[`../ceo-agent/references/depth0-control-loop.md`](../ceo-agent/references/depth0-control-loop.md)
 (loop governance, qc@depth-0, ledger).

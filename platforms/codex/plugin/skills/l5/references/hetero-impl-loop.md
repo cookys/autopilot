@@ -1,10 +1,12 @@
 # /l5 — hetero implementation loop (per-level reference)
 
 > Level-specific long-form for the `/l5` shell. Common front-door semantics
-> (startup presets, foreman topology, depth-0 control loop, qc@depth-0,
-> merge-back, worktree GC, run-summary ledger) live in
-> [`../../ceo-agent/references/level-front-door.md`](../../ceo-agent/references/level-front-door.md) —
-> read that FIRST. This file covers only what `/l5` adds on top of `/l4`.
+> (startup presets, foreman topology) live in
+> [`../../ceo-agent/references/level-front-door.md`](../../ceo-agent/references/level-front-door.md),
+> and the depth-0 half (depth-0 control loop, qc@depth-0, merge-back, worktree GC,
+> run-summary ledger) in
+> [`../../ceo-agent/references/depth0-control-loop.md`](../../ceo-agent/references/depth0-control-loop.md) —
+> read those FIRST. This file covers only what `/l5` adds on top of `/l4`.
 
 ## What /l5 changes vs /l4
 

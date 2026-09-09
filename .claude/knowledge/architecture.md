@@ -213,5 +213,5 @@ state-sharing action, either mechanise the exclusion (a lock keyed on the action
 runner) or expect it to be violated by a well-intentioned participant. Also: a liveness waiter must
 key on a run identity, never on a command-line pattern that any concurrent run would match.
 
-**Related**: `skills/ceo-agent/references/level-front-door.md` § "Depth-0 control loop",
+**Related**: `skills/ceo-agent/references/depth0-control-loop.md` § "Depth-0 control loop",
 `references/evidence-discipline.md` §7 (a pipeline's exit code is the pipe's, not the suite's).

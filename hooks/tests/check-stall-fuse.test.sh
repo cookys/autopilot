@@ -111,7 +111,7 @@ node "$SCRIPT" check --bursts "$TEST_TMP/sol.jsonl" \
 assert_exit_code "$?" "2" "an incompletable strike append fails the instrument closed"
 
 # ── Liveness grep-gate: the canonical round protocol carries BOTH flags on BOTH audits ──
-PROTOCOL="$REPO_ROOT/skills/ceo-agent/references/level-front-door.md"
+PROTOCOL="$REPO_ROOT/skills/ceo-agent/references/depth0-control-loop.md"
 FUSE_WIRED="$(grep -A 1 'check-stall-fuse.js check' "$PROTOCOL" | grep -c 'strike-identity-file.*strike-store')"
 AUDIT_WIRED="$(grep -A 3 'check-blueprint-conformance.js audit' "$PROTOCOL" | grep -c 'strike-identity-file.*strike-store')"
 assert_eq "1" "$FUSE_WIRED" "round protocol wires both strike flags on the fuse check"

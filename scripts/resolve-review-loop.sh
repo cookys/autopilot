@@ -612,7 +612,15 @@ case "$CAPABILITY_STATE" in
 esac
 HARNESS="$(read_field "$CONFIG" independent_harness "$DEF_HARNESS")"
 QC_PANEL_RAW="$(read_field "$CONFIG" qc_panel "$DEF_QC_PANEL")"
+QC_PANEL_METADATA_CONFIGURED="true"
 if config_has_field "$CONFIG" qc_panel; then
+  QC_PANEL_METADATA_CONFIGURED="false"
+  for _qc_metadata_field in qc_panel_runners qc_panel_efforts qc_panel_endpoints; do
+    if config_has_field "$CONFIG" "$_qc_metadata_field"; then
+      QC_PANEL_METADATA_CONFIGURED="true"
+      break
+    fi
+  done
   QC_PANEL_RUNNERS_RAW="$(read_field "$CONFIG" qc_panel_runners "")"
   QC_PANEL_EFFORTS_RAW="$(read_field "$CONFIG" qc_panel_efforts "")"
   QC_PANEL_ENDPOINTS_RAW="$(read_field "$CONFIG" qc_panel_endpoints "")"
@@ -726,26 +734,46 @@ for _raw_name in QC_PANEL_RUNNERS_RAW QC_PANEL_EFFORTS_RAW QC_PANEL_ENDPOINTS_RA
   esac
 done
 
-QC_PANEL_SEATS_COMPLETE="true"
+# A model-only panel intentionally has no exact readiness tuples. It remains a
+# valid legacy review roster, while explicit companion metadata is validated.
+QC_PANEL_SEATS_COMPLETE="$QC_PANEL_METADATA_CONFIGURED"
 QC_PANEL_SEATS_JSON="[]"
-if [[ ${#QC_PANEL_RUNNERS[@]} -ne ${#QC_PANEL[@]} \
+if [[ "$QC_PANEL_METADATA_CONFIGURED" == "true" \
+      && ( ${#QC_PANEL_RUNNERS[@]} -ne ${#QC_PANEL[@]} \
       || ${#QC_PANEL_EFFORTS[@]} -ne ${#QC_PANEL[@]} \
-      || ${#QC_PANEL_ENDPOINTS[@]} -ne ${#QC_PANEL[@]} ]]; then
+      || ${#QC_PANEL_ENDPOINTS[@]} -ne ${#QC_PANEL[@]} ) ]]; then
   QC_PANEL_SEATS_COMPLETE="false"
+  for _qc_array_name in qc_panel_runners qc_panel_efforts qc_panel_endpoints; do
+    case "$_qc_array_name" in
+      qc_panel_runners) _qc_array_length=${#QC_PANEL_RUNNERS[@]} ;;
+      qc_panel_efforts) _qc_array_length=${#QC_PANEL_EFFORTS[@]} ;;
+      qc_panel_endpoints) _qc_array_length=${#QC_PANEL_ENDPOINTS[@]} ;;
+    esac
+    if [[ $_qc_array_length -ne ${#QC_PANEL[@]} ]]; then
+      echo "resolve-review-loop: invalid $_qc_array_name length (must equal qc_panel length ${#QC_PANEL[@]}): $_qc_array_length — qc_panel_seats_complete=false, readiness fails closed" >&2
+    fi
+  done
 fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
     case "${QC_PANEL_RUNNERS[$_i]}" in
       codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
-      *) QC_PANEL_SEATS_COMPLETE="false" ;;
+      *)
+        QC_PANEL_SEATS_COMPLETE="false"
+        echo "resolve-review-loop: invalid qc_panel_runners[$_i] (must be codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode): ${QC_PANEL_RUNNERS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
+        ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
       low|medium|high|xhigh|max) ;;
-      *) QC_PANEL_SEATS_COMPLETE="false" ;;
+      *)
+        QC_PANEL_SEATS_COMPLETE="false"
+        echo "resolve-review-loop: invalid qc_panel_efforts[$_i] (must be low|medium|high|xhigh|max): ${QC_PANEL_EFFORTS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
+        ;;
     esac
     if [[ "${QC_PANEL_ENDPOINTS[$_i]}" != "@none" \
           && ! "${QC_PANEL_ENDPOINTS[$_i]}" =~ ^[A-Za-z0-9_]+$ ]]; then
       QC_PANEL_SEATS_COMPLETE="false"
+      echo "resolve-review-loop: invalid qc_panel_endpoints[$_i] (must be @none|^[A-Za-z0-9_]+$): ${QC_PANEL_ENDPOINTS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
     fi
   done
 fi

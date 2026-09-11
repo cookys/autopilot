@@ -152,6 +152,34 @@ function strikeReasonMessage(row) {
 
 // Consumer of resolve-dispatch-topology.js --resolve-live JSON.
 // The contract never opens the pin store; pin knowledge enters only via this file.
+// A tuple must carry non-empty engine/runner strings. effort/endpoint are
+// optional (absent is valid — some resolvers never populate them), but if
+// present must be strings; endpoint is additionally permitted to be the
+// empty string (the explicit "@none" wallet), never any other falsy value.
+function isCompleteTuple(tuple, reasons, label) {
+  if (!tuple || typeof tuple !== 'object' || Array.isArray(tuple)) {
+    reasons.push(`resolved-live: missing ${label}`);
+    return false;
+  }
+  if (typeof tuple.engine !== 'string' || !tuple.engine.trim()) {
+    reasons.push(`resolved-live: ${label} requires a non-empty engine string`);
+    return false;
+  }
+  if (typeof tuple.runner !== 'string' || !tuple.runner.trim()) {
+    reasons.push(`resolved-live: ${label} requires a non-empty runner string`);
+    return false;
+  }
+  if (hasKey(tuple, 'effort') && typeof tuple.effort !== 'string') {
+    reasons.push(`resolved-live: ${label}.effort must be a string when present`);
+    return false;
+  }
+  if (hasKey(tuple, 'endpoint') && typeof tuple.endpoint !== 'string') {
+    reasons.push(`resolved-live: ${label}.endpoint must be a string when present`);
+    return false;
+  }
+  return true;
+}
+
 function loadResolvedLive(resolvedLivePath, reasons) {
   if (!resolvedLivePath) return null;
   let doc;
@@ -169,20 +197,27 @@ function loadResolvedLive(resolvedLivePath, reasons) {
     reasons.push('resolved-live: missing role');
     return null;
   }
-  if (!doc.preferred_tuple || typeof doc.preferred_tuple !== 'object' || Array.isArray(doc.preferred_tuple)) {
-    reasons.push('resolved-live: missing preferred_tuple');
+  if (!isCompleteTuple(doc.preferred_tuple, reasons, 'preferred_tuple')) {
     return null;
   }
-  if (!doc.effective_tuple || typeof doc.effective_tuple !== 'object' || Array.isArray(doc.effective_tuple)) {
-    reasons.push('resolved-live: missing effective_tuple');
+  if (!isCompleteTuple(doc.effective_tuple, reasons, 'effective_tuple')) {
     return null;
   }
-  if (typeof doc.preferred_tuple.engine !== 'string' || typeof doc.preferred_tuple.runner !== 'string') {
-    reasons.push('resolved-live: preferred_tuple requires engine and runner strings');
+  // substitution_reason is required (KR1's own zero-pin fixture sets it to
+  // null explicitly) and, when not null, must be a non-empty string — never
+  // another falsy value such as false or 0, which resolvedLiveHasSubstitution
+  // used to treat as "no substitution" via bare truthiness.
+  if (!hasKey(doc, 'substitution_reason')) {
+    reasons.push('resolved-live: missing substitution_reason');
     return null;
   }
-  if (typeof doc.effective_tuple.engine !== 'string' || typeof doc.effective_tuple.runner !== 'string') {
-    reasons.push('resolved-live: effective_tuple requires engine and runner strings');
+  if (doc.substitution_reason !== null
+      && (typeof doc.substitution_reason !== 'string' || !doc.substitution_reason.trim())) {
+    reasons.push('resolved-live: substitution_reason must be null or a non-empty string');
+    return null;
+  }
+  if (!hasKey(doc, 'pending_revocation') || !Array.isArray(doc.pending_revocation)) {
+    reasons.push('resolved-live: pending_revocation must be an array');
     return null;
   }
   return doc;
@@ -190,7 +225,7 @@ function loadResolvedLive(resolvedLivePath, reasons) {
 
 function resolvedLiveHasSubstitution(live) {
   if (!live) return false;
-  if (live.substitution_reason) return true;
+  if (typeof live.substitution_reason === 'string' && live.substitution_reason.trim()) return true;
   const preferred = live.preferred_tuple || {};
   const effective = live.effective_tuple || {};
   return preferred.engine !== effective.engine
@@ -1295,7 +1330,46 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
   const resolvedLive = options.resolvedLivePath
     ? loadResolvedLive(options.resolvedLivePath, reasons)
     : null;
-  if (reasons.length === 0) {
+  // KR11 fix: substitution must be decided BEFORE the matched shortcut and
+  // BEFORE the override is consulted. Otherwise a preferred seat with a
+  // qualified scorecard row lets a substituted (and possibly unqualified)
+  // effective_tuple ride through on the PREFERRED seat's evidence, or an
+  // operator's per-invocation override for the preferred seat launders an
+  // unqualified substitute. A substituted dispatch is decided on the
+  // substitute's OWN scorecard evidence, full stop — no operator-pin (pins
+  // admit preferred_tuple only) and no --qualification-override (that
+  // override is per-invocation evidence for the seat the operator named,
+  // not a blank check for whatever the resolver substituted in).
+  const hasSubstitution = Boolean(resolvedLive && resolvedLiveHasSubstitution(resolvedLive));
+
+  if (reasons.length === 0 && hasSubstitution) {
+    const eff = resolvedLive.effective_tuple;
+    const effectiveEngine = { model: eff.engine, runner: eff.runner };
+    const substituteMatched = Array.isArray(scoreRows)
+      ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, effectiveEngine, {
+        outputKind: contract.output && contract.output.kind,
+      }))
+      : null;
+
+    if (substituteMatched) {
+      if (substituteMatched.status === 'provisional') {
+        engineAssurance = 'provisional';
+      }
+    } else {
+      const strikeRow = Array.isArray(scoreRows)
+        ? scoreRows.find((row) => scorecardRowMatchesEngine(row, storeRole, effectiveEngine)
+          && row.admission_status === 'requalify_required')
+        : null;
+
+      if (strikeRow) {
+        reasons.push(strikeReasonMessage(strikeRow));
+      } else {
+        reasons.push(
+          `engine: substitute seat ${eff.engine}/${eff.runner} is not ordinarily admissible (operator-pin admits preferred_tuple only)`,
+        );
+      }
+    }
+  } else if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
       ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine, {
         outputKind: contract.output && contract.output.kind,
@@ -1329,12 +1403,14 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // never reach engineAssurance = 'operator-override'.
         reasons.push(strikeReasonMessage(strikeRow));
       } else {
+        // P2b/KR1: pin knowledge enters ONLY here, from --resolved-live (never by
+        // reading the pin store). KR11: operator-pin applies to preferred_tuple
+        // only — a substituted effective_tuple is handled above, before this
+        // branch is ever reached, so hasSubstitution is guaranteed false here.
+        //
         // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11: a standing
         // operator pin is a third admission path, and is recorded rather than silent.
         // The per-invocation clause still binds every seat that is NOT operator-pinned.
-        // P2b/KR1: pin knowledge enters ONLY here, from --resolved-live (never by
-        // reading the pin store). KR11: operator-pin applies to preferred_tuple
-        // only — a substituted effective_tuple must pass ordinary admission on its own.
         // P7/KR6: the operator's explicit per-invocation override is the only
         // evidence-free admission; absent both evidence and override → refusal.
         // Reaches here only for a seat with NO matching scorecard row at all, or
@@ -1342,7 +1418,6 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // never a strike-blocked seat (excluded above) — so the override's
         // legitimate uses are unaffected.
         const pinAdmitsPreferred = resolvedLive
-          && !resolvedLiveHasSubstitution(resolvedLive)
           && preferredTupleMatchesResolved(resolvedLive, storeRole, resolvedEngine);
         if (pinAdmitsPreferred) {
           engineAssurance = 'operator-pin';
@@ -1362,11 +1437,6 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
               operator: override.operator,
               expires: override.expires,
             };
-          } else if (resolvedLive && resolvedLiveHasSubstitution(resolvedLive)) {
-            const eff = resolvedLive.effective_tuple;
-            reasons.push(
-              `engine: substitute seat ${eff.engine}/${eff.runner} is not ordinarily admissible (operator-pin admits preferred_tuple only)`,
-            );
           } else {
             reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
           }
@@ -1424,20 +1494,32 @@ function parseArgs(argv) {
   let overridePath = '';
   let resolvedLivePath = '';
 
+  // A recognized flag that takes a value must actually get one. Collapsing a
+  // missing operand to '' (via `argv[i + 1] || ''`) is indistinguishable from
+  // the flag being entirely absent, so a typo (e.g. `--resolved-live` as the
+  // last argv token) silently drops pin evidence instead of failing loudly.
+  function requireOperand(flag) {
+    const next = argv[i + 1];
+    if (next === undefined) {
+      usage(2, `${flag} requires a value`);
+    }
+    return next;
+  }
+
   let i = 1;
   while (i < argv.length) {
     const arg = argv[i];
     if (arg === '--contract') {
-      contractPath = argv[i + 1] || '';
+      contractPath = requireOperand('--contract');
       i += 2;
     } else if (arg === '--repo') {
-      repoPath = argv[i + 1] || '';
+      repoPath = requireOperand('--repo');
       i += 2;
     } else if (arg === '--qualification-override') {
-      overridePath = argv[i + 1] || '';
+      overridePath = requireOperand('--qualification-override');
       i += 2;
     } else if (arg === '--resolved-live') {
-      resolvedLivePath = argv[i + 1] || '';
+      resolvedLivePath = requireOperand('--resolved-live');
       i += 2;
     } else if (arg === '--json') {
       wantJson = true;

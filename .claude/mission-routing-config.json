@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
-  "graph_path": "docs/mission-operator-pin-execution-graph.json",
-  "sources_path": "docs/mission-operator-pin-sources.json"
+  "graph_path": "docs/mission-integration-ledger-execution-graph.json",
+  "sources_path": "docs/mission-integration-ledger-sources.json"
 }

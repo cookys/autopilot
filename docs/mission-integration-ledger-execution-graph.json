@@ -1,0 +1,349 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "acceptance_ids": [
+    "p1-apply-style-receipt-comes-from-a-real-writer",
+    "p1-method-enum-admits-apply-style",
+    "p1-receipt-records-source-accepted-and-method",
+    "p1-writer-emits-distinct-source-and-accepted"
+   ],
+   "campaign": {
+    "baseline_churn": 4000,
+    "max_changed_files": 64,
+    "max_extra_churn": 2000,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "profile": "high",
+    "allowed_path_prefixes": [
+     ".claude-plugin/plugin.json",
+     "CHANGELOG.md",
+     "CLAUDE.md",
+     "docs",
+     "hooks",
+     "platforms/codex/plugin",
+     "references",
+     "schemas",
+     "scripts",
+     "src"
+    ],
+    "authorized_creates": [
+     "hooks/tests/integration-receipt-sha-ledger.test.sh",
+     "platforms/codex/plugin/scripts/record-integration.js",
+     "scripts/record-integration.js"
+    ],
+    "output_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "hooks/tests/integration-receipt-sha-ledger.test.sh",
+     "platforms/codex/plugin/scripts/record-integration.js",
+     "schemas/merge-execution-receipt.schema.json",
+     "scripts/record-integration.js",
+     "src/merge/cli.js"
+    ],
+    "required_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "schemas/merge-execution-receipt.schema.json",
+     "src/merge/cli.js"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-12-integration-receipt-sha-ledger.md",
+     "section": "4. Phase"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 4,
+   "id": "p1-integration-receipt-sha-ledger",
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 60,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 6000000,
+    "tool_calls": 175,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-468d1d7742ef453dad4a6257b4b7ef0d3dc9588506f9518c92e9ece79a05ea73"
+   ],
+   "source_rubric_ids": [
+    "R1127502589723331710186300150697024855153129279108479189926115622272197724722",
+    "R13572290613676956732028074648197900316798462528918838551953327247095117221779",
+    "R17178423152734407648247431689086155371264768124463211734238782692309937547260",
+    "R3356657133882380949325322795793218514483487983145543481989692258494551815846",
+    "R42784206506258340958743179350329376718790436094027742936789208146803555105667",
+    "R52162860607336547073285824363504434632017344374378147626621615243766978685256",
+    "R52738756500001069350853427376411896158922996564703341154940755338223100760346",
+    "R57310239663482083010013946882261964854347627009158233457549766182779504616869",
+    "R60572182128675663064647705437256024482191749765514100330061935394568542911984",
+    "R62730029614640247897132242836709917311648068182257493856568826067226044595907",
+    "R65846780348362786795555048417891085964579434015456666431445938858516457483773",
+    "R8683754012858061014462449308507734383395464471353892389966969149755793218080",
+    "R87019376657456946748047812804521209806482110162907208125180976216155564618029",
+    "R95264775239120337529420960116237633946066812529782086586541067634993227335467"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/integration-receipt-sha-ledger.test.sh",
+    "node scripts/check-js-syntax.js",
+    "node scripts/check-claude-md-inventory.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check"
+   ]
+  },
+  {
+   "acceptance_ids": [
+    "p4-panel-arity-mismatch-names-both-lengths",
+    "p4-panel-incomplete-exits-3",
+    "p4-panel-seat-rejection-names-the-value"
+   ],
+   "campaign": {
+    "baseline_churn": 4000,
+    "max_changed_files": 64,
+    "max_extra_churn": 2000,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 1,
+    "max_wall_seconds": 3600,
+    "profile": "high",
+    "allowed_path_prefixes": [
+     ".claude-plugin/plugin.json",
+     "CHANGELOG.md",
+     "CLAUDE.md",
+     "docs",
+     "hooks",
+     "platforms/codex/plugin",
+     "references",
+     "schemas",
+     "scripts",
+     "src"
+    ],
+    "authorized_creates": [
+     "hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh"
+    ],
+    "output_paths": [
+     "hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh",
+     "platforms/codex/plugin/scripts/resolve-review-loop.sh",
+     "scripts/resolve-review-loop.sh"
+    ],
+    "required_paths": [
+     "scripts/resolve-review-loop.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-12-qc-panel-loud-rejection.md",
+     "section": "5. Phase"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 2,
+   "id": "p4-qc-panel-loud-rejection",
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 60,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 6000000,
+    "tool_calls": 175,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-8ffa0e82244ff6e736136d41113ee804362e6ff1e1f075722b33db472241f76d"
+   ],
+   "source_rubric_ids": [
+    "R103403936670385825026347971250070805145511165949728261982376109662690474736728",
+    "R15076399772545054961845377754464272539582394545001618694932314364817295404984",
+    "R18499937665517442512008166885055497596040671560271187054751871791364064768081",
+    "R20790683319182223933961157103358899858710520951616748369815288045546251101314",
+    "R25083894460743450215422768877142753404955525799334855749387100270161694233454",
+    "R40497603760382254225060506607829505764597088348511103693983279399226178890767",
+    "R44595694085324136451147941226957097025850725585890989579184533791998994017188",
+    "R44611847105708546941069814227037324982133740853059980651481624747285206604090",
+    "R48718174393116254396770526910255233095916623838990986737877309565395989269978",
+    "R49369314070640925148255956766799421465893948783261216463878666727587939157524",
+    "R49900566797276728276331006886234021697715927337071024863936050260723960330814",
+    "R52406769204886398594377156506534870963127340437534261045960595193183824851587",
+    "R55101848097887032158500454763710096169291881785734072300868144223570992939366",
+    "R77895082093554253043743083999762871586834612524937953722700260475185820715638"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh",
+    "bash hooks/tests/resolve-review-loop.test.sh",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "git diff --check"
+   ]
+  },
+  {
+   "acceptance_ids": [
+    "p5-bare-dispatch-still-gated",
+    "p5-bounded-sealed-campaign-dispatches-under-live-marker",
+    "p5-strict-campaign-stale-marker-still-refused"
+   ],
+   "campaign": {
+    "baseline_churn": 4000,
+    "max_changed_files": 64,
+    "max_extra_churn": 2000,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "profile": "high",
+    "allowed_path_prefixes": [
+     ".claude-plugin/plugin.json",
+     "CHANGELOG.md",
+     "CLAUDE.md",
+     "docs",
+     "hooks",
+     "platforms/codex/plugin",
+     "references",
+     "schemas",
+     "scripts",
+     "src"
+    ],
+    "authorized_creates": [],
+    "output_paths": [
+     "hooks/tests/dispatch-hetero.test.sh",
+     "platforms/codex/plugin/scripts/dispatch-hetero.sh",
+     "scripts/dispatch-hetero.sh"
+    ],
+    "required_paths": [
+     "hooks/tests/dispatch-hetero.test.sh",
+     "scripts/dispatch-hetero.sh",
+     "scripts/session-mode.js"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-12-bounded-campaign-marker-gate.md",
+     "section": "5. Phase"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 3,
+   "id": "p5-bounded-campaign-marker-gate",
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 60,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 6000000,
+    "tool_calls": 175,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-2338f3c137526ccf3e35be402dde343f01c68561048a9c778da87f85672a2fd8"
+   ],
+   "source_rubric_ids": [
+    "R110959109845825992564947261311707568026952381768017511612784692249902851069458",
+    "R112419851878233495790236309268946864059385206309697846229337059677691554262372",
+    "R11883798331453649975375622680268391141445861405875712704135118196640705242124",
+    "R22624376269957152362684818684708987738455564169909708921647056949590062513657",
+    "R23965105553753078273977785632292654570233121160172309168458680767536198946944",
+    "R28282034132123711302459034091672765937030719781488206607425254689924442645099",
+    "R28848575746900035304333461892874999023938780481674058852354775753301304364676",
+    "R33078704241499841658127712437562541226097382950946602430652495298033564773669",
+    "R42753441901681033124246473839549403802487329493057928986201654201418149370762",
+    "R6572845507234774428896263672224424245706880831153723531171972860498488340022",
+    "R71268231585092978358902202149078112080102619383882730245595238546217064411573",
+    "R73003396121242380680792621710907294597380250174206885610728172572909724919844",
+    "R88798213569060554724630489021807300114779631738908326554565797174999579283390",
+    "R88818019323653466155773707069987766895365796780329600420444310077353671802319",
+    "R9278461506559116431887415668827756836673324333847630162196383299726479206875"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/dispatch-hetero.test.sh",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "git diff --check"
+   ]
+  },
+  {
+   "acceptance_ids": [
+    "p2-inputs-landed-gate-refuses-per-entry",
+    "p3-apply-style-non-ancestor-source-passes",
+    "p3-containment-assertion-is-method-selected"
+   ],
+   "campaign": {
+    "baseline_churn": 4000,
+    "max_changed_files": 64,
+    "max_extra_churn": 2000,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "profile": "high",
+    "allowed_path_prefixes": [
+     ".claude-plugin/plugin.json",
+     "CHANGELOG.md",
+     "CLAUDE.md",
+     "docs",
+     "hooks",
+     "platforms/codex/plugin",
+     "references",
+     "schemas",
+     "scripts",
+     "src"
+    ],
+    "authorized_creates": [
+     "hooks/tests/input-containment-gates.test.sh",
+     "platforms/codex/plugin/scripts/check-containment.js",
+     "platforms/codex/plugin/scripts/check-inputs-landed.js",
+     "scripts/check-containment.js",
+     "scripts/check-inputs-landed.js"
+    ],
+    "output_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "hooks/tests/input-containment-gates.test.sh",
+     "platforms/codex/plugin/scripts/check-containment.js",
+     "platforms/codex/plugin/scripts/check-inputs-landed.js",
+     "scripts/check-containment.js",
+     "scripts/check-inputs-landed.js"
+    ],
+    "required_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "schemas/merge-execution-receipt.schema.json"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-12-input-containment-gates.md",
+     "section": "5. Phase — inputs-landed gate"
+    }
+   },
+   "dependencies": [
+    "p1-integration-receipt-sha-ledger"
+   ],
+   "gate_attempt_budget": 3,
+   "id": "p23-input-containment-gates",
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 60,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 6000000,
+    "tool_calls": 175,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-f6f039426e692d85c80a8fe603fcef4218f8401bb4f743b2071b8cc439f105de"
+   ],
+   "source_rubric_ids": [
+    "R107473631711753378593415032052578542585573020795360725207646979542802046645491",
+    "R109195400077628496173230371162497727573282310832684222453257907375994626681780",
+    "R113788003965956649121775169059289484590245054813742292973338300103984994306346",
+    "R25850363506001765029170100497256223641549619212583843953572810831092631065962",
+    "R25920357505706036825228593021964262608952125541186313183983386497658278234219",
+    "R26207634461425996354891333972534625997250708008859798350300960391637310393127",
+    "R31701746996092016661835291714326547477204791325925664538602099583022829523218",
+    "R32916066316129399519177681295172927226477083797446100257508353997328943915779",
+    "R53557271509075679778363309975007453570884857072300212027499519823186962559806",
+    "R61241256788454145350509505857265242372570906728370767000942489208477992510181",
+    "R6332197033350655197540639790246547732725781121530025740558095107983081380963",
+    "R8130111850518360917088853018114783571363866320469351361700825467251788831014",
+    "R81303262720708990717249782396541994279277341328369147941611318491817983993910",
+    "R86731497467354049030749312115196925405118863328664701347047870434285892744969",
+    "R93447438718051641666286039852939113154990752642912463480594424845682895948541"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/input-containment-gates.test.sh",
+    "node scripts/check-js-syntax.js",
+    "node scripts/check-claude-md-inventory.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-12-integration-receipt-sha-ledger.md",
+      "rubric_path": "plans/2026-09-12-integration-receipt-sha-ledger.rubric.md",
+      "plan_sha256": "468d1d7742ef453dad4a6257b4b7ef0d3dc9588506f9518c92e9ece79a05ea73",
+      "rubric_sha256": "6438e1f68281b4dd051876aa7dcb6a4a5e8dc244a5e572f04321803039417b4d"
+    },
+    {
+      "plan_path": "plans/2026-09-12-qc-panel-loud-rejection.md",
+      "rubric_path": "plans/2026-09-12-qc-panel-loud-rejection.rubric.md",
+      "plan_sha256": "8ffa0e82244ff6e736136d41113ee804362e6ff1e1f075722b33db472241f76d",
+      "rubric_sha256": "017ea29c99361410ab76f400bc290a420d17d93c86a5189ef5318c072a196c95"
+    },
+    {
+      "plan_path": "plans/2026-09-12-bounded-campaign-marker-gate.md",
+      "rubric_path": "plans/2026-09-12-bounded-campaign-marker-gate.rubric.md",
+      "plan_sha256": "2338f3c137526ccf3e35be402dde343f01c68561048a9c778da87f85672a2fd8",
+      "rubric_sha256": "029a9bd71bee9737a7a1be84c9f3e4c17f309400a1f1eed0ec3e6642e5d98114"
+    },
+    {
+      "plan_path": "plans/2026-09-12-input-containment-gates.md",
+      "rubric_path": "plans/2026-09-12-input-containment-gates.rubric.md",
+      "plan_sha256": "f6f039426e692d85c80a8fe603fcef4218f8401bb4f743b2071b8cc439f105de",
+      "rubric_sha256": "e9efbe4434a7f63e018e5589f3e7e4a332fab3b1a92463d9d755627fd89e39b4"
+    }
+  ]
+}

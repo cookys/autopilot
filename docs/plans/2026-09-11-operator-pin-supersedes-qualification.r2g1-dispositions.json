@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "operator-pin-supersedes-qualification-r2",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "c1892fe70563f8dbf38d50e370ce284742aa9dc23beeb55b1fe6099bb024afb0",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Four findings converged on a real self-inflicted contradiction: R2 repaired KR9 to pinned-only but left section 2.6 and the Q4 ruling still describing a global default flip. Both now state that NO default is flipped: DEF_ON_ENGINE_UNAVAILABLE stays ask, substitute is a new enum member only a live pin can select, and a zero-pin host observes no change at all."
+    },
+    {
+      "fingerprint": "419dbb062ccf09a3bddc6b49a6a8c2880ea4edb8cd4c34bdbd86c19ec0940dd2",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The section 3 dispatch-contract row still described the pre-G2 design (contract reads the pin and emits a substitution signal), which is the cycle G2 flagged, left alive by a partial edit. The row now states the contract is a consumer only: it never reads pins.jsonl, never emits a substitution signal, and receives effective_tuple plus pin plus pending_revocation from the KR10 resolver."
+    },
+    {
+      "fingerprint": "4425b31f2c0a31bf45d8e7724eb45cc50ba68ded1b1c29aaa28bf73f21fd3e99",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Re-derived: scripts/lib/jsonl-store.js exports withWriteLock and appendRow and has NO snapshot primitive, so KR6 snapshot semantics and a gate naming appendRow were genuinely contradictory. Resolution: add writeSnapshot (same-directory temp file plus atomic rename) to jsonl-store, use it for pins under withWriteLock, and make the P1 gate require withWriteLock plus writeSnapshot while asserting appendRow is absent from the pin path. A crash-atomicity case is added."
+    },
+    {
+      "fingerprint": "2ce9f322c812a02c9db80b9a6c8e774329a9b06c8b7709a32addc574ef8b8dc4",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The queue is no longer a mailbox: row identity is the seat plus the sorted active strike event-id set, and the round-end selector RECOMPUTES the authoritative fold rather than reading stored state, so the queue is a projection of live evidence. Idempotency and the authoritative-fold guarantee both follow from that shape rather than being asserted over a model that could not deliver them. Residual seat_unusable wording in P3 and P4 was rewritten into resolver terms."
+    },
+    {
+      "fingerprint": "58839cac6ba201002c9d239f7b5429b2676b3cfc95b9dd75ecdc65f596d47c19",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded, including the honesty correction. P9 is renamed Historical-incident acceptance and now states plainly that it is not a discovery test: the live store does not carry the row, the phase writes it, and describing that as real data found in the wild would be a shadow derived from its own answer. What is genuine is the content (real seat, real predicate, real receipt, real effort partition). The acceptance now actually points every command at the copied store, asserts the real store is byte-unchanged, and establishes the live pin the substitution needs."
+    },
+    {
+      "fingerprint": "797dd81c086d4e5f05feca905892245971fdec923b351792a49c4ef682cc7bcc",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. P6 called a Node CLI under bash; corrected to node with its real flags. The remaining phase acceptances are stated as file plus command plus expected exit or assertion text."
+    },
+    {
+      "fingerprint": "855b80c491b717e072a44bb7c01ac2410f425e8f140fbfbe8bb204539ce19f98",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. KR2 is branch-complete (one named case per false-return boundary, enumerated from the pre-change source and captured from an immutable pre-change commit) and the test-first ordering is explicit: the baseline capture and the unpinned assertions are authored before any permissive code."
+    },
+    {
+      "fingerprint": "e9c8e45a0621d3b4999d9b3da87eaca247fd97eae250c364c25cdb333794656a",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Four findings converged on a real self-inflicted contradiction: R2 repaired KR9 to pinned-only but left section 2.6 and the Q4 ruling still describing a global default flip. Both now state that NO default is flipped: DEF_ON_ENGINE_UNAVAILABLE stays ask, substitute is a new enum member only a live pin can select, and a zero-pin host observes no change at all."
+    },
+    {
+      "fingerprint": "942a45de37d41d27d7421ddd2a9626d783f20f1427f597b8ccd170a9062bd4d6",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The queue is no longer a mailbox: row identity is the seat plus the sorted active strike event-id set, and the round-end selector RECOMPUTES the authoritative fold rather than reading stored state, so the queue is a projection of live evidence. Idempotency and the authoritative-fold guarantee both follow from that shape rather than being asserted over a model that could not deliver them. Residual seat_unusable wording in P3 and P4 was rewritten into resolver terms."
+    },
+    {
+      "fingerprint": "272bc1f9ac55569296bd102fb681676e869878169539e3b6cc5735e96cfd3e9c",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. The negation phase no longer samples three mutations: it requires one controlled mutant per shipping gate KR1 through KR10, frozen in hooks/fixtures/negation-matrix.json (gate to mutation site to expected failing assertion), and fails if any shipping gate has no entry, so a later gate cannot ship without a red proof."
+    },
+    {
+      "fingerprint": "d86d95315eb53c17cc5ca121354a9124474736524370b657d67b7042afb1e058",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Re-derived: scripts/lib/jsonl-store.js exports withWriteLock and appendRow and has NO snapshot primitive, so KR6 snapshot semantics and a gate naming appendRow were genuinely contradictory. Resolution: add writeSnapshot (same-directory temp file plus atomic rename) to jsonl-store, use it for pins under withWriteLock, and make the P1 gate require withWriteLock plus writeSnapshot while asserting appendRow is absent from the pin path. A crash-atomicity case is added."
+    },
+    {
+      "fingerprint": "d32a0cc480f576ee8de33c192619c6040069411ab5a5701621ef55d84bd1c69e",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Four findings converged on a real self-inflicted contradiction: R2 repaired KR9 to pinned-only but left section 2.6 and the Q4 ruling still describing a global default flip. Both now state that NO default is flipped: DEF_ON_ENGINE_UNAVAILABLE stays ask, substitute is a new enum member only a live pin can select, and a zero-pin host observes no change at all."
+    },
+    {
+      "fingerprint": "2a61f8c22b6e27bd74ffc6ce54fdb097074370653b493fdb22d101a21ffbcdcb",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Four findings converged on a real self-inflicted contradiction: R2 repaired KR9 to pinned-only but left section 2.6 and the Q4 ruling still describing a global default flip. Both now state that NO default is flipped: DEF_ON_ENGINE_UNAVAILABLE stays ask, substitute is a new enum member only a live pin can select, and a zero-pin host observes no change at all."
+    },
+    {
+      "fingerprint": "45b9014467fa6d11e6fa624a869e9b1548fd158b329f6d28c34d568e4c85909a",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The pin identity is now stated explicitly as (engine, runner, role) only, with effort, endpoint and family derived by the resolver from the canonical ladder and never stored. That resolves the apparent conflict with P9 needing --effort low: the strike identity is effort-partitioned, the pin identity is not, and they are different identities. The snapshot state model is stated with no tombstone and no second schema."
+    },
+    {
+      "fingerprint": "57bc87b8cb4585e044ae4c25112f42cd0c17d15f32f09cd037b423915eeb16b6",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. KR2 is branch-complete (one named case per false-return boundary, enumerated from the pre-change source and captured from an immutable pre-change commit) and the test-first ordering is explicit: the baseline capture and the unpinned assertions are authored before any permissive code."
+    },
+    {
+      "fingerprint": "28ed78e20db106896bac75f82992b4080ea4636d15b9d6cab59c97b2c90f51d1",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The acknowledgement verb is removed entirely: it would have let an operator silence live evidence while the pin and the strike both remained in force, which contradicts the never-suppressible requirement. A row now leaves the report exactly when its evidence leaves the authoritative fold (passing requalification, strike invalidation, or unpin-seat) and by no other means."
+    },
+    {
+      "fingerprint": "ba5cbfa1d56b10056b549be0ffb472cd461b3188bc62c4cffd0c8cfc9b4bf06b",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The queue is no longer a mailbox: row identity is the seat plus the sorted active strike event-id set, and the round-end selector RECOMPUTES the authoritative fold rather than reading stored state, so the queue is a projection of live evidence. Idempotency and the authoritative-fold guarantee both follow from that shape rather than being asserted over a model that could not deliver them. Residual seat_unusable wording in P3 and P4 was rewritten into resolver terms."
+    },
+    {
+      "fingerprint": "9d1647c8c03e93f7a19d7bf02ea31734485338b6058c54586dc1ed5306581ac6",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The queue is no longer a mailbox: row identity is the seat plus the sorted active strike event-id set, and the round-end selector RECOMPUTES the authoritative fold rather than reading stored state, so the queue is a projection of live evidence. Idempotency and the authoritative-fold guarantee both follow from that shape rather than being asserted over a model that could not deliver them. Residual seat_unusable wording in P3 and P4 was rewritten into resolver terms."
+    },
+    {
+      "fingerprint": "5a4ff5f43a32cb34725c5e5cbf15e33b3eab68f7afee03f5654343c78000e014",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The negation phase no longer samples three mutations: it requires one controlled mutant per shipping gate KR1 through KR10, frozen in hooks/fixtures/negation-matrix.json (gate to mutation site to expected failing assertion), and fails if any shipping gate has no entry, so a later gate cannot ship without a red proof."
+    },
+    {
+      "fingerprint": "e988fbf1d949be026d1f5ad13eed08b442e178e932179d936f1929843f70c1a9",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The section 1 table is the re-derivation: each row carries the exact command and what it returns, and the three corrections found this way (quota is a NO-GO reason, the shipped default is ask, the ladder has no quota awareness, no_op is conclusively excluded, quota exclusion is host-corroborated only) are in the table rather than asserted as verified elsewhere."
+    },
+    {
+      "fingerprint": "0f9f8afa76ac5347e488c828172eb233d90cf1d883ea4afaec958d848e14e4db",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. P6 called a Node CLI under bash; corrected to node with its real flags. The remaining phase acceptances are stated as file plus command plus expected exit or assertion text."
+    },
+    {
+      "fingerprint": "df950f9ab029f92f2ea83436a2ffafb9d7321e858271b58dc9f4f0fed3163959",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded, including the honesty correction. P9 is renamed Historical-incident acceptance and now states plainly that it is not a discovery test: the live store does not carry the row, the phase writes it, and describing that as real data found in the wild would be a shadow derived from its own answer. What is genuine is the content (real seat, real predicate, real receipt, real effort partition). The acceptance now actually points every command at the copied store, asserts the real store is byte-unchanged, and establishes the live pin the substitution needs."
+    }
+  ]
+}

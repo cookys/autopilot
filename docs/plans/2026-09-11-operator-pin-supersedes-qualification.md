@@ -98,22 +98,32 @@ unattended when that seat becomes unusable; an autonomously-named seat keeps eve
   written, `pins.jsonl` is unchanged, and after `reset_at` the next dispatch resolves back to the pinned
   seat with no operator action. Verified by advancing the clock over an already-written topology file,
   not by regenerating it.
-- **KR6** — `pin-seat` / `unpin-seat` / `pins` are first-class verbs. The row carries the same six keys
-  as the override row (engine, runner, role, reason, operator, expires) with `expires: null`, validated by
-  its **own** validator against its **own** `pins.jsonl`; the override validator still requires a real
-  calendar date and `loadQualificationOverride` is never called for a pin. **State model** (G2 R6):
-  `pins.jsonl` is a **locked snapshot of active rows only** — at most one row per `(engine, runner, role)`
-  role key. `pin-seat` on an already-pinned role replaces that row; `unpin-seat` removes it. Both rewrite
-  via a same-directory temp file plus atomic rename under `withWriteLock`, so there is no second schema
-  for tombstones and no partially-written snapshot.
+- **KR6** — `pin-seat` / `unpin-seat` / `pins` are first-class verbs, validated by their **own** validator
+  against their **own** `pins.jsonl`; the override validator still requires a real calendar date and
+  `loadQualificationOverride` is never called for a pin. **Row = eight keys**:
+  `(engine, runner, role, effort, endpoint, reason, operator, expires: null)`. *The earlier "same six keys
+  as the override row, with effort derived from the ladder" design is **abandoned as provably impossible**
+  (R2-G2 R6 ×2): KR1's whole point is admitting a seat with **no scorecard row**, and such a seat is by
+  definition **not on the qualified-only ladder**, so there is nothing to derive `effort` / `endpoint`
+  from.* The pin is therefore self-sufficient: it carries the full dispatch identity, which is also
+  exactly what the effort-partitioned strike lookup needs — P9's `--effort low` now **matches** the pin row
+  instead of contradicting it. `family` stays derived: it is a property of the engine, not an operator
+  choice. At most one active row per `role`; a pin on an already-pinned role replaces it.
+  **State model**: `pins.jsonl` is a snapshot of active rows only — no tombstones, no second schema.
+  `pin-seat` and `unpin-seat` both rewrite it through a NEW `jsonl-store.writeSnapshot` (temp file +
+  atomic rename) under `withWriteLock`; `appendRow` cannot express this and is **not** used for pins.
 - **KR7** — `pending_revocation` is **durable and fully specified** (G2 R12): producer = the resolver,
   at the moment it computes the fold; store = the existing decision ledger under a new `kind:
   pending_revocation`; row = `{seat_hash, engine, runner, role, class, predicate_id, cause_class,
-  receipt_ref, observed_at, acknowledged_at}`; idempotency key = the active strike `event_id` set, so a
-  re-run of the same incident appends nothing; rehydration = the round-end report selects rows with
-  `acknowledged_at: null`; acknowledgement = the operator's `unpin-seat` or an explicit
-  `ack-revocation` stamps `acknowledged_at`. Derived from the same authoritative fold admission uses, so
-  invalidated / rejected-writer / duplicate / pre-baseline / future rows can never appear.
+  receipt_ref, observed_at}`; row identity = the seat plus the sorted active strike
+  `event_id` set, so re-running the same incident writes nothing new and a **new** strike produces a new
+  row; rehydration = the round-end report **recomputes the fold** and reports every row whose event-id set
+  is still active, so the queue is a projection of live evidence rather than a mailbox.
+  **There is no acknowledgement verb** (R2 review R11: an ack would let an operator silence live evidence
+  while the pin and the strike both remain in force). A row leaves the report exactly when its evidence
+  leaves the authoritative fold — a passing requalification, a strike invalidation, or `unpin-seat` — and
+  by no other means. Because the fold is the same one admission uses, invalidated / rejected-writer /
+  duplicate / pre-baseline / future rows can never appear.
 - **KR8** — When substitution exhausts the ladder, the run halts with "no engine available", naming the
   exhausted rungs. It never presents an unusable-seat halt as a qualification refusal.
 - **KR9** — `substitute` joins the `on_engine_unavailable` enum and is selected **only when a live pin
@@ -128,6 +138,19 @@ unattended when that seat becomes unusable; an autonomously-named seat keeps eve
   (G2 R11/R13/R15 — in R1 the `seat_unusable` signal was emitted downstream of the component that had to
   consume it, which is unimplementable).
 
+- **KR11 — a pin admits only the seat it names.** `engine_assurance: 'operator-pin'` applies to
+  `preferred_tuple` **only**. A substitute chosen by the resolver must pass **ordinary admission on its own
+  merits** (qualified scorecard row, or its own pin); a rung that cannot is skipped, and if no rung passes
+  the run takes the KR8 honest halt. Red case: pin seat A, mark it unusable, plant an **unqualified** seat
+  B as the next rung → B is skipped, not admitted. (R2-G2 R10: without this, one operator pin silently
+  becomes an admission bypass for an autonomously selected seat — the exact autonomy this plan preserves
+  gates for.)
+- **KR12 — substitution is decided before launch, never mid-flight.** The resolver runs at dispatch
+  preflight; a failure discovered **after** the child launches is classified by the existing outcome path
+  (strike accrual or an excluded cause) and changes the seat on the **next** dispatch, not the current one.
+  Re-entering the resolver mid-flight is explicitly out of scope (§7). Acceptance asserts the **child
+  process argv** carries `effective_tuple`'s engine/runner/effort — proving substitution reaches the
+  process, not just the JSON (R2-G2 R12 ×2).
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
 - Node ≥ 20.10, built-ins only. No new dependency.
@@ -154,10 +177,10 @@ unattended when that seat becomes unusable; an autonomously-named seat keeps eve
 
 ## 2.6 Change-policy decisions
 
-- **Compatibility impact**: **behaviour-changing, opt-in by data**, with one default flip.
-  `--qualification-override` keeps working unchanged; a host with no pin observes no change except
-  KR9's `on_engine_unavailable` default (`ask` → `substitute`), which a host that set the value
-  explicitly does not see. Two frozen Board rulings are **superseded, not reinterpreted** — KR6's
+- **Compatibility impact**: **behaviour-changing, opt-in by data. No default is flipped.**
+  `--qualification-override` keeps working unchanged; `DEF_ON_ENGINE_UNAVAILABLE` stays `ask`; a host with
+  **no pin observes no change at all**, which is KR2's byte-equivalence claim and is asserted, not argued.
+  `substitute` is a new enum member that only a live pin can select (KR9). Two frozen Board rulings are **superseded, not reinterpreted** — KR6's
   `per-invocation` clause and the strike-precedence ruling — recorded here and pointed to at every code
   anchor (P0), including the `platforms/codex/plugin` mirror.
 - **Dependency decision**: `none` — built-ins only; `pins.jsonl` uses `lib/jsonl-store.js`; the durable
@@ -171,11 +194,12 @@ unattended when that seat becomes unusable; an autonomously-named seat keeps eve
 | File | Responsibility |
 |---|---|
 | `scripts/engine-capability-state.js` | NEW verbs `pin-seat` / `unpin-seat` / `pins` over a NEW `pins.jsonl` in the capability store dir, with their own validator (`expires` must be JSON `null`). NEW: extract the authoritative active-strike fold into one shared primitive so admission and `pending_revocation` derive from the same result (KR7). Strike **write** path untouched. |
-| `scripts/dispatch-contract.js` | `isAdmissibleScorecardRow` **unchanged**. The `!matched` branch (L1236-1275) and the strike-precedence branch (L1240-1253) learn the pin: pinned+no-row → `operator-pin`; pinned+ordinary → admit + `pending_revocation`; pinned+critical → `seat_unusable` (substitution signal, not a refusal); unpinned → byte-identical to today. Quota (L1303) likewise becomes `seat_unusable` rather than a NO-GO when pinned. |
+| `scripts/dispatch-contract.js` | **Consumer only — it never reads `pins.jsonl` and never emits a substitution signal** (this is the G2 cycle fix, and R2 review found the old description still living here). `isAdmissibleScorecardRow` unchanged. It receives the resolver's `effective_tuple` + `pin` + `pending_revocation`, and decides: pin present and `effective_tuple == preferred_tuple` → admit as `operator-pin`; pin present with a `substitution_reason` → admit the **substitute** tuple and carry `pending_revocation`; no pin → every branch byte-identical to today, including the L1303 quota NO-GO. |
 | `scripts/resolve-dispatch-topology.js` | Gains a **no-write live-resolution mode** (KR10): given the cached ladder it applies pin + active-strike fold + quota in memory and returns `{preferred_tuple, effective_tuple, substitution_reason, pending_revocation}`. The cached-generation path and ladder order are untouched; the cache stays qualification-only. |
 | `scripts/resolve-review-loop.sh` | `substitute` joins the `on_engine_unavailable` enum and is chosen **only when a live pin exists** (KR9); `DEF_ON_ENGINE_UNAVAILABLE` stays `ask`. Emits `effective_*` alongside the existing `implementer_*` (which keep naming the preferred/pinned seat) so no consumer mistakes a stand-in for a preference. |
 | `scripts/dispatch-hetero.sh`, `scripts/dispatch-review.sh` | Consume the one resolved tuple; surface `pending_revocation` in the dispatch preamble; emit the KR8 honest halt when the ladder is exhausted. |
-| `scripts/decision-ledger.js` | New `kind: pending_revocation` row + the `ack-revocation` verb (KR7). Chosen because it already survives across rounds and reaches the round-end report; no new store. |
+| `scripts/decision-ledger.js` | New `kind: pending_revocation` row (KR7) and a round-end selector that **recomputes the authoritative fold** rather than reading a stored acknowledgement. No ack verb, no new store. |
+| `scripts/lib/jsonl-store.js` | NEW `writeSnapshot(storeFile, rows)` — temp file in the same directory plus atomic rename, called under `withWriteLock`. The store today has only `appendRow`, which cannot express KR6's no-tombstone snapshot (R2 review R1/R6). Existing primitives untouched. |
 | `platforms/codex/plugin/scripts/dispatch-contract.js` | Generated mirror — carries the same superseded-ruling pointer comment (G1 R8: the mirror still holds the stale absolute). |
 | `project-config-template/task-class-config.md`, `.../review-loop-config.md` | Point the prose-only "user-owned candidate preference" block at the pin store; document `substitute`. |
 | `skills/ceo-agent/references/depth0-control-loop.md`, `skills/dev-flow/SKILL.md`, `skills/engine-onboarding/SKILL.md`, `references/strike-decay.md` | **Guidance commit only.** Pinned → dispatch; unpinned → ladder recommends; unusable → substitute and queue the evidence. |
@@ -194,6 +218,9 @@ an applicable anchor from a mention (G2 R7). Add `scripts/check-supersession-anc
 entry it requires a `superseded by owner ruling 2026-09-11` marker within a bounded line window of the named
 symbol, and fails naming any entry without one. Pointer comments ride the mechanism commit; the frozen-plan
 amendment note rides the guidance commit.
+**Protected-region assertion** (R2-G2 R17): `dispatch-hetero.sh`'s strike-writer block
+(`3765-3880`) and `check_mission_enforcement_gate` (`1411`) are §7 out-of-scope; the phase asserts those
+line ranges are byte-unchanged via a pinned sha256 of each extracted region.
 **Acceptance**: `node scripts/check-supersession-anchors.js` → exit 0; deleting any one pointer → exit
 non-zero naming that manifest entry; `git diff --stat` for this step touches only `.js`/`.sh` comments plus
 the new checker and manifest.
@@ -207,15 +234,29 @@ echoed back on the row (G1 R11); a call omitting it exits non-zero naming the mi
 same call with `--expires 2026-12-01` → exit non-zero, stderr names `expires`;
 same call without `--operator` → exit non-zero, stderr names `operator`;
 `unpin-seat` twice → exit 0 both times (idempotent);
-`grep -n 'withWriteLock\|appendRow' scripts/engine-capability-state.js` → the pin mutation path names
-both (G2 R1: a bare "imports jsonl-store" grep is already green today and proves nothing);
+`grep -n 'withWriteLock\|writeSnapshot' scripts/engine-capability-state.js` → the pin mutation path names
+both, and `grep -n 'appendRow' ` over that path is **empty** (a bare "imports jsonl-store" grep is already
+green today and proves nothing; naming `appendRow` would contradict KR6's snapshot model);
+**crash-atomicity case**: kill the process between temp-write and rename → `pins.jsonl` still parses and
+still holds the pre-call row set;
 **concurrency case**: two `pin-seat` calls for different roles launched in parallel → both rows present,
 file parses, neither lost; **replacement case**: `pin-seat` twice on the same role → `pins` returns exactly
 one row for it, carrying the second reason.
 
-**P2 — Zero-pin capture + contract admission (S, dep P1).** Capture the pre-change decision bytes
-**first**, then implement KR1.
-**Acceptance** (`hooks/tests/dispatch-contract-pin.test.sh`, new): a **branch-complete** table with one
+**P2 — Zero-pin capture + the KR10 resolver (S, dep P1).** Capture the pre-change decision bytes
+**first**; then build the no-write resolver (`preferred_tuple` / `effective_tuple` / `substitution_reason`
+/ `pending_revocation`) and its unit tests. **The resolver lands before any contract change** (R2-G2 R10:
+R1 ordered the contract first, which forces pin reads into the admission predicate — the one thing §2.5
+forbids). At this phase the resolver has no consumer; that is intended and is what keeps the seam acyclic.
+**Acceptance**: zero-pin baseline captured and pinned; `node scripts/resolve-dispatch-topology.js
+--resolve-live --role implementer --store "$CAP"` on a store with no pin → `preferred_tuple ==
+effective_tuple`, `substitution_reason: null`, and `topology.json` mtime unchanged (no write).
+
+**P2b — Contract consumes the resolver (S, dep P2).** KR1 + KR2 + KR11.
+**Acceptance** (`hooks/tests/dispatch-contract-pin.test.sh`, new): `grep -n "pins.jsonl\|pin-seat"
+scripts/dispatch-contract.js` → **empty** (the contract never reads the pin store; it consumes the
+resolver's output). KR11 red case: pinned seat A unusable, unqualified seat B as next rung → B skipped,
+not admitted. Plus a **branch-complete** table with one
 named case per `false`-return boundary in `isAdmissibleScorecardRow` and per refusal branch in the
 `!matched` path — not a fixed seven (G2 R10) — enumerated from the pre-change source and captured from an
 immutable pre-change commit, each run through `node scripts/dispatch-contract.js check …` on the **pre-change** build with
@@ -227,18 +268,20 @@ Also assert the frozen registries are untouched (G1 R4):
 `ORDINARY_STRIKE_THRESHOLD` → byte-identical to the pre-change print.
 
 **P3 — Strike fold + pending_revocation (S, dep P2).** Extract the authoritative active-strike fold
-(KR7); emit `pending_revocation` from it; KR3 admits, KR4 emits `seat_unusable`.
+(KR7); the resolver emits `pending_revocation` from it; KR3 admits in place, KR4 returns a substituted `effective_tuple`.
 **Acceptance**: plant three ordinary strikes on a pinned seat → contract exit 0, `pending_revocation`
 has 3 rows each with non-null `receipt_ref`; unpinned → refusal bytes match the P2 baseline exactly.
-Plant one `critical_reexam_trigger` on a pinned seat → `"seat_unusable"` with `predicate_id` present
-(not class-only); unpinned → baseline refusal bytes.
+Plant one `critical_reexam_trigger` on a pinned seat → the resolver returns
+`substitution_reason: critical_strike` with `predicate_id` present in `pending_revocation` (not
+class-only), `preferred_tuple` still the pinned seat; unpinned → baseline refusal bytes.
 Negative cases: an `invalidates_event_id`-invalidated row, a non-allowlisted writer row, a duplicate
 `dedup_key`, a pre-baseline row and a future-dated row each appear in **neither** admission nor
 `pending_revocation`.
 
-**P4 — Substitution path (L, dep P3).** The single `seat_unusable` → substitute path (§1.5) in
-`resolve-dispatch-topology.js` + the `substitute` branch in `resolve-review-loop.sh`; quota awareness;
-KR9 default flip; KR8 honest halt.
+**P4 — Substitution path (L, dep P3).** The single unusable → substitute path (§1.5) inside the KR10
+resolver in `resolve-dispatch-topology.js`, plus the `substitute` enum member in `resolve-review-loop.sh`
+selectable only under a live pin (`DEF_ON_ENGINE_UNAVAILABLE` stays `ask`); quota awareness; KR8 honest
+halt.
 **Acceptance**, split into the two halves G2 R13 showed R1 had conflated —
 *(on-disk, must not change)*: reusing the **already-written** `topology.json` without regenerating it,
 `implementer_ladder` still lists the pinned seat at its pre-exhaustion identity, and `pins.jsonl` is
@@ -259,17 +302,22 @@ no operator; round 2 starts fresh; the round-end report still carries the `pendi
 `predicate_id` and `receipt_ref` intact. Deleting the queue write makes this test red.
 
 **P6 — Dispatcher pass-through (Fix, dep P4/P5).** `dispatch-hetero.sh` + `dispatch-review.sh`.
-**Acceptance**: `bash scripts/dispatch-contract.js check` driven through the dispatcher's own preflight
-on a planted pin → the preamble matches `grep -F '"engine_assurance":"operator-pin"'`;
+**Acceptance**: `node scripts/dispatch-contract.js check --contract <f> --repo <r>` driven through the
+dispatcher's own preflight on a planted pin → stdout matches
+`grep -F '"engine_assurance":"operator-pin"'` (it is a Node CLI, not a shell script).
+**KR12 argv assertion**: run the dispatcher against a pinned-but-unusable seat with the runner replaced by
+a recording stub (`AUTOPILOT_RUNNER_BIN=<stub>`), then assert the recorded argv names `effective_tuple`'s
+engine/runner/effort and **not** the pinned one — substitution must reach the process, not just the JSON
+(R2-G2 R12);
 `AUTOPILOT_QUALIFICATION_OVERRIDE=<file>` on an unpinned seat → the pre-change override behaviour,
 byte-identical to the P2 baseline capture.
 
 **P7 — Negation runs (Fix, dep P2-P6).** The red proof, as its own gate (G1 R14).
-**Acceptance**, each recorded with its non-zero exit and assertion text, then the mutation reverted and
-the suite shown green again: (a) disable the pin lookup in the `!matched` branch → the named KR1
-assertion fails; (b) make the strike branch ignore pin state → the named KR3-unpinned byte comparison
-fails; (c) make `isAdmissibleScorecardRow` return true on `requalify_required` → at least one named KR2
-row goes red.
+**Acceptance**: **one controlled mutant per shipping gate — KR1 through KR10, not a sample of three**
+(R2 review R14). Each is recorded with its non-zero exit and the named assertion that failed, then
+reverted and the suite shown green again. The mapping is frozen in
+`hooks/fixtures/negation-matrix.json` (gate → mutation site → expected failing assertion), and the phase
+fails if any shipping gate has no entry — so a gate added later cannot quietly ship without a red proof.
 
 **P8 — Guidance commit (Fix, dep P0-P7).** All §3 guidance rows, **separate commit**.
 **Acceptance**: a path **classifier** over `git show --name-only` for each commit — every path must match
@@ -296,9 +344,15 @@ node scripts/engine-capability-state.js strike-seat \
 `--effort low` is required: the seat identity is effort-partitioned, and omitting it writes a row that
 never matches the dispatched tuple (G2 R20). `artifact_sha256` is derived from the cited commit, never
 hand-written.
-**Acceptance**: run against a **copy** of the live store first (`cp -r ~/.autopilot/engine-capability $CAP`),
-then for real. The next dispatch to that seat substitutes (§1.5), leaves the pin intact, and surfaces
-`evidence_hash_manipulation` with the receipt to the operator. Operator-run, not a fixture.
+**Acceptance**: `CAP=$(mktemp -d); cp -r ~/.autopilot/engine-capability/. "$CAP"` — every command in this
+phase passes `--store "$CAP"`, and the phase asserts `~/.autopilot/engine-capability` is byte-unchanged at
+the end (R2 review R20: the previous wording never actually pointed the run at the copy). Establish the
+live pin the substitution needs: `pin-seat --engine gemini-3.8-flash-low --runner agy --role implementer
+--operator <owner> --reason 'v2.36.21 owner pin' --store "$CAP"`. Then write the strike above and run the
+dispatch: `effective_tuple` names the next ladder rung with `substitution_reason: critical_strike`,
+`preferred_tuple` still names the pinned seat, `pins.jsonl` is byte-unchanged, and the report carries
+`evidence_hash_manipulation` with the `1488a268` receipt. Only after that passes is the same strike
+written to the real store, as the record of the incident.
 
 ## 5. Test / validation
 
@@ -349,6 +403,9 @@ set; `AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh` 8/8.
   they are conclusively excluded today, so the owner's 「無法完成」 revocation cause has no mechanism. Adding
   one means changing the strike **writer**, which §2.5 freezes for this plan. Recorded as a BACKLOG
   candidate with a stated trigger, not smuggled in here.
+- **Mid-flight re-resolution.** A seat that becomes unusable *after* its child launches keeps running to
+  its outcome; the substitution applies from the next dispatch (KR12). Killing and re-launching mid-run is
+  a different feature with its own partial-work semantics.
 - **Text-only quota failures.** Only host-corroborated quota is excluded from accrual (§1). Trusting a
   runner's own prose about its own failure is what that design deliberately refuses; changing it is a
   separate threat-model decision.
@@ -363,8 +420,12 @@ set; `AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh` 8/8.
   a locally-installed runner+engine; a project-level pin would be read by peers who cannot run that seat.
 - **Q3 — pin granularity**: **RULED — per-role, machine-wide**, matching the existing seat identity
   (engine+runner+role). Revisit only on a real two-project conflict.
-- **Q4 — quota stand-in in scope?**: **RULED — yes, and `on_engine_unavailable` defaults to `substitute`.**
-  `ask` was a second source of the interrupts this plan removes.
+- **Q4 — quota stand-in in scope?**: **RULED — yes.** `ask` was a second source of the interrupts this
+  plan removes. The owner's 2026-09-11 wording was "flip the default"; R2 review then showed a **global**
+  flip contradicts KR2's zero-pin byte equivalence (four independent findings). Narrowed accordingly:
+  `substitute` activates **only under a live pin**, `DEF_ON_ENGINE_UNAVAILABLE` stays `ask`. The owner's
+  intent — a pinned seat never stops to ask — is fully served, since an unpinned host has no seat of the
+  owner's to protect.
 
 No open questions remain. G2 reviews a plan with no unresolved Board input.
 

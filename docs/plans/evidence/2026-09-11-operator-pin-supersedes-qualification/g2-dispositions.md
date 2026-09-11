@@ -48,3 +48,56 @@ equivalence): a host with no pin at all would change behaviour. The repair prese
 exactly — a pinned seat never stops to ask — while restoring the invariant: **`substitute` activates only
 when a live pin is present; a zero-pin host keeps `ask`.** The owner always pins, so the observed
 behaviour is unchanged for them.
+
+---
+
+# R2 lineage — two further generations (2026-09-11)
+
+R2 had never been reviewed (G2 reviewed R1), so a fresh bounded lineage
+(`operator-pin-supersedes-qualification-r2`) was opened. Two generations, terminal at the cap.
+
+| Round | Seat verdicts | findings / blockers |
+|---|---|---|
+| R2-G1 | STOP / STOP / STOP | 22 / 20 |
+| R2-G2 (terminal) | STOP / CONDITIONAL / STOP | 19 / 14 |
+
+**R2-G1** was dominated by contradictions *I* introduced by patching sections individually instead of
+sweeping the whole document: KR9 said "pinned-only" while §2.6 and Q4 still said "global default flip";
+KR10 said the resolver decides while §3's contract row still described the pre-G2 design. Three were
+genuine: `jsonl-store` has no snapshot primitive (re-derived — it exports only `withWriteLock` and
+`appendRow`), the `ack-revocation` verb made live evidence suppressible, and P9 was a shadow derived from
+its own answer. All folded; a four-term consistency sweep now runs after every edit.
+
+**R2-G2** found four real design holes, all folded:
+
+1. **The pin could not expand into a dispatchable tuple** (R6 ×2). The six-key row derived `effort` and
+   `endpoint` from the qualified ladder — but KR1 exists precisely to admit a seat that is **not on that
+   ladder**. The six-key reuse is abandoned as provably impossible; the row is now eight keys carrying the
+   full dispatch identity, which is also what the effort-partitioned strike lookup needs.
+2. **One pin could become a blanket admission bypass** (R10). With a pin present the contract admitted
+   `effective_tuple` — so an autonomously chosen substitute rode in on the operator's pin. New **KR11**:
+   `operator-pin` applies to `preferred_tuple` only; a substitute must pass ordinary admission on its own,
+   and an unqualified rung is skipped, not admitted.
+3. **Substitution might never reach the process** (R12). Nothing asserted the child argv. New **KR12** +
+   a recording-stub acceptance asserting the launched argv names the effective seat, not the pinned one.
+4. **Phase order forced the defect it forbade** (R10). P2 had the contract admitting a pin before the
+   resolver existed, which necessarily puts pin reads inside the admission predicate. The resolver moves
+   to P2; the contract becomes P2b and is gated by `grep pins.jsonl scripts/dispatch-contract.js` → empty.
+
+Also folded: the two-commit allowlists excluded files the mechanism must touch (`resolve-review-loop.sh`)
+and rejected a repo-required prose change (`CLAUDE.md` scripts inventory); a protected-region sha256
+assertion now pins the §7 out-of-scope blocks (`dispatch-hetero.sh` strike writer 3765-3880,
+`check_mission_enforcement_gate` 1411) byte-unchanged.
+
+**Note for audit**: the R2-G2 dispatch was launched with `--session-id undefined` — the extractor read a
+`session_id` key that `state.json` does not have (it stores `session_key`). Verified harmless: lineage
+identity is the `session_key` derived from repo + ticket + logical_plan_id + rubric/manifest seals, and
+the run attached to the same state dir with `next_generation: 2` and the 20 carried blocker fingerprints.
+The label survives in that generation's claim record.
+
+**Stop decision (depth-0)**: no fifth generation. Blocker counts across four rounds were 22 / 17 / 20 / 14
+with three seats never once returning SHIP — the panel's output function emits findings every round, so
+"zero findings" is not a reachable stopping condition and chasing it would hand the freeze decision to the
+chair. The freeze predicate is **zero unrepaired mechanism-level findings**, and the four above were the
+last of them. Remaining hardening moves to the code-stage hetero review, where the artifact under review
+is a real diff rather than plan prose.

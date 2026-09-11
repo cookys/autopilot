@@ -1539,7 +1539,7 @@ cat > "$TOPO_CONSULT_EXCL" <<'JSON'
 }
 JSON
 CONSULT_EXCL_CFG="$TEST_TMP/rl-consult-excl.md"
-printf -- '- consult_dispatch: auto\n- qc_panel: gpt-5.5, claude-opus, gemini-flash\n- qc_panel_runners: codex, claude-native, agy\n- qc_panel_efforts: xhigh, high, high\n- qc_panel_endpoints: @none, @none, @none\n' > "$CONSULT_EXCL_CFG"
+printf -- '- consult_dispatch: auto\n- qc_panel: gpt-5.5, claude-opus, gemini-flash\n- qc_panel_runners: codex, claude-native, agy\n- qc_panel_efforts: xhigh, high, high\n' > "$CONSULT_EXCL_CFG"
 assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_CFG" bash "$SCRIPT" --field consult_engine)" \
   "consult_engine picks consult_ladder[1] when [0] is in qc_panel"
 assert_eq "cc-shim" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_CFG" bash "$SCRIPT" --field consult_runner)" \
@@ -1562,7 +1562,7 @@ cat > "$TOPO_CONSULT_EXCL_ALIAS" <<'JSON'
 }
 JSON
 CONSULT_EXCL_ALIAS_CFG="$TEST_TMP/rl-consult-excl-alias.md"
-printf -- '- consult_dispatch: auto\n- qc_panel: gpt-5.5, claude-opus, gemini-flash\n- qc_panel_runners: codex, claude-native, agy\n- qc_panel_efforts: xhigh, high, high\n- qc_panel_endpoints: @none, @none, @none\n' > "$CONSULT_EXCL_ALIAS_CFG"
+printf -- '- consult_dispatch: auto\n- qc_panel: gpt-5.5, claude-opus, gemini-flash\n- qc_panel_runners: codex, claude-native, agy\n- qc_panel_efforts: xhigh, high, high\n' > "$CONSULT_EXCL_ALIAS_CFG"
 assert_eq "MiniMax-M3" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_ALIAS_CFG" bash "$SCRIPT" --field consult_engine)" \
   "consult_engine picks consult_ladder[1] when [0] (codex-cli) is excluded by a qc_panel_runners entry spelled codex"
 assert_eq "cc-shim" "$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_CONSULT_EXCL_ALIAS" REVIEW_LOOP_CONFIG_OVERRIDE="$CONSULT_EXCL_ALIAS_CFG" bash "$SCRIPT" --field consult_runner)" \

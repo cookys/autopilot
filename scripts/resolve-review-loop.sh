@@ -750,10 +750,9 @@ if [[ "$QC_PANEL_METADATA_CONFIGURED" == "true" \
       qc_panel_endpoints) _qc_array_length=${#QC_PANEL_ENDPOINTS[@]} ;;
     esac
     if [[ $_qc_array_length -ne ${#QC_PANEL[@]} ]]; then
-      echo "resolve-review-loop: invalid $_qc_array_name length (must equal qc_panel length ${#QC_PANEL[@]}): $_qc_array_length" >&2
+      echo "resolve-review-loop: invalid $_qc_array_name length (must equal qc_panel length ${#QC_PANEL[@]}): $_qc_array_length — qc_panel_seats_complete=false, readiness fails closed" >&2
     fi
   done
-  exit 3
 fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
@@ -761,23 +760,20 @@ if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
       codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
       *)
         QC_PANEL_SEATS_COMPLETE="false"
-        echo "resolve-review-loop: invalid qc_panel_runners[$_i] (must be codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode): ${QC_PANEL_RUNNERS[$_i]:-<empty>}" >&2
-        exit 3
+        echo "resolve-review-loop: invalid qc_panel_runners[$_i] (must be codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode): ${QC_PANEL_RUNNERS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
         ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
       low|medium|high|xhigh|max) ;;
       *)
         QC_PANEL_SEATS_COMPLETE="false"
-        echo "resolve-review-loop: invalid qc_panel_efforts[$_i] (must be low|medium|high|xhigh|max): ${QC_PANEL_EFFORTS[$_i]:-<empty>}" >&2
-        exit 3
+        echo "resolve-review-loop: invalid qc_panel_efforts[$_i] (must be low|medium|high|xhigh|max): ${QC_PANEL_EFFORTS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
         ;;
     esac
     if [[ "${QC_PANEL_ENDPOINTS[$_i]}" != "@none" \
           && ! "${QC_PANEL_ENDPOINTS[$_i]}" =~ ^[A-Za-z0-9_]+$ ]]; then
       QC_PANEL_SEATS_COMPLETE="false"
-      echo "resolve-review-loop: invalid qc_panel_endpoints[$_i] (must be @none|^[A-Za-z0-9_]+$): ${QC_PANEL_ENDPOINTS[$_i]:-<empty>}" >&2
-      exit 3
+      echo "resolve-review-loop: invalid qc_panel_endpoints[$_i] (must be @none|^[A-Za-z0-9_]+$): ${QC_PANEL_ENDPOINTS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
     fi
   done
 fi

@@ -411,7 +411,15 @@ function validateModeB(flags) {
       console.error(`Finding '${idVal}' in ${sourceName} candidate_blocker is mandatory and must be a boolean`);
       process.exit(1);
     }
-    if (typeof f.disposition !== 'string' || !allowedDispositions.has(f.disposition)) {
+    // The controller (dispatch-plan-review.js) writes every terminal artifact with
+    // `disposition: null` on its findings — depth-0's adjudication lives in the
+    // separate dispositions file this checker overlays below. So `null` is the
+    // artifact's normal shape, not a defect; every artifact on record before this
+    // change carried it, which meant no plan receipt had ever validated. A string
+    // on the artifact side is still checked when present; the dispositions side
+    // must always carry one.
+    const nullAllowed = sourceName === 'plan artifact' && (f.disposition === null || f.disposition === undefined);
+    if (!nullAllowed && (typeof f.disposition !== 'string' || !allowedDispositions.has(f.disposition))) {
       console.error(`Finding '${idVal}' in ${sourceName} invalid disposition '${f.disposition}'`);
       process.exit(1);
     }

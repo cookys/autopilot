@@ -417,6 +417,15 @@ function sealEdgeReceipt(receipt) {
   return { ...receipt, edge_receipt_digest: canonicalDigest(receipt) };
 }
 
+function integrationLedgerFields(rootRunId, edge, sourceValidation, afterSha, mergeCommit) {
+  return {
+    source_sha: sourceValidation.actual_sha,
+    accepted_sha: edge.mode === 'no-ff' ? mergeCommit : afterSha,
+    integration_method: edge.mode === 'no-ff' ? 'merge' : 'ff',
+    unit_id: `${rootRunId}:edge-${edge.sequence}`,
+  };
+}
+
 function verifyEdgeReceipt(receipt) {
   return isPlainObject(receipt)
     && typeof receipt.edge_receipt_digest === 'string'
@@ -687,6 +696,13 @@ function executeMergeIntent(request) {
         before_sha: beforeSha,
         after_sha: resolveRef(edge.target_worktree, edge.target_ref),
         merge_commit: null,
+        ...integrationLedgerFields(
+          manifest.root_run_id,
+          edge,
+          sourceValidation,
+          resolveRef(edge.target_worktree, edge.target_ref),
+          null,
+        ),
         conflicts,
         error: String(merge.stderr || merge.error || merge.signal || '').trim() || null,
         preservation: {
@@ -719,6 +735,13 @@ function executeMergeIntent(request) {
         before_sha: beforeSha,
         after_sha: resolveRef(edge.target_worktree, edge.target_ref),
         merge_commit: null,
+        ...integrationLedgerFields(
+          manifest.root_run_id,
+          edge,
+          sourceValidation,
+          resolveRef(edge.target_worktree, edge.target_ref),
+          null,
+        ),
         conflicts,
         error: 'preservation restore failed',
         preservation: {
@@ -758,6 +781,9 @@ function executeMergeIntent(request) {
       before_sha: beforeSha,
       after_sha: afterSha,
       merge_commit: mergeCommit,
+      ...integrationLedgerFields(
+        manifest.root_run_id, edge, sourceValidation, afterSha, mergeCommit,
+      ),
       conflicts,
       error: null,
       preservation: {

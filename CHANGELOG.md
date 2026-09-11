@@ -1,5 +1,39 @@
 # Changelog
 
+## v2.36.25 — `--resolve-live`：一個什麼都不寫的解析模式，以及一條不可能失敗的測試
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P2（KR10 的無寫入疊加層 seam）。
+
+- `scripts/resolve-dispatch-topology.js` — 新 `--resolve-live --role <role>`：在記憶體中解析單一角色，
+  印出 `{role, preferred_tuple, effective_tuple, substitution_reason, pending_revocation}`，
+  **任何路徑都不寫檔**。無 pin 時兩個 tuple 相同且等於既有 ladder 的選擇；有 pin 時 `preferred_tuple`
+  逐欄取自 pin 列。替代邏輯不在本版範圍。
+- `hooks/tests/resolve-live-tuple.test.sh` — 15 條斷言。
+
+**QC panel 三家族，第三席再次翻盤**（`gpt-5.6-sol` FIX-THEN-SHIP，`MiniMax-M3` 與 `GLM-5.2` 皆 SHIP-AS-IS）：
+
+1. `--store` 在不帶 `--resolve-live` 時被接受，把原本無效的呼叫變成一次靜默的 legacy 寫入
+   （複現：exit 0 且真的寫出檔案）。現在在進入任何 legacy 分支**之前**就拒絕。
+2. **no-write 斷言只守顯式路徑、只守成功路徑**；而且 case 7 的 `if` 兩個分支都呼叫 `ok`，
+   **永遠不可能失敗**，只是把通過數灌高。改成**遞迴檔案系統快照**（相對路徑、大小、mtime、sha256），
+   套在每一次 `--resolve-live` 呼叫前後，成功與錯誤路徑皆然，並具名指出變動的路徑。
+   逐檔檢查只能找到你想得到要列的東西。
+3. `process.stdout.write` 後緊接 `process.exit(0)` 在 pipe 上可能丟棄未完成的寫入。
+   **本機未重現**（payload 229 bytes、多次 piped 執行皆完整），仍以預防修正——
+   `pending_revocation` 在後續交付項會長大。`main()` 改為正常返回讓 Node 排空 stdout。
+
+紅證由 depth-0 重新推導：把寫入注入 `--resolve-live` 路徑，**六條案例變紅**（1、3、3c、4a、4b、9），
+每條具名指出變動的路徑；還原後 15/15。
+
+**記錄但不處置**：兩席獨立覺得 `--resolve-live` 讀磁碟快取而非即時推導很意外——但 plan KR10 明文要
+cached ladder，live 的是 pin 疊加那層；以及 `plan_reviewer` 的 tuple 形狀無測試覆蓋。皆進 BACKLOG。
+
+**偏差（誠實記錄）**：修補再次由 Claude sonnet 完成。managed campaign rail 的修補死結經第二條獨立
+lineage 確認為**確定性**——第一次實作跑得動，修補必定在 `prepare_implementation` 以
+`MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。詳見 `docs/BACKLOG.md`。
+
+prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）。
+
 ## v2.36.24 — operator pin store：一個宣稱在驗鎖、拿掉鎖卻照樣綠的斷言
 
 `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P1（該 plan 經四代 hetero review 凍結）。

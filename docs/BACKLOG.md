@@ -83,7 +83,22 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   cached, not read from the binary. Anything pinning a runner version (the capability store tracks
   `runner_version`, and this plan proposes using it as a re-measure trigger) must hash the binary
   instead.
-- **UNCONTROLLED VARIABLE — this host was never idle.** The peer asked whether the empty response
+- **RESOLVED: load is eliminated in both directions; the wall is SERVICE-SIDE.** The peer proposed the
+  load hypothesis, then killed it with their own measurements: their host was at load 27 (same
+  magnitude as this host's 29-30) and still returned the tail nonce at 200 KB, and running agy under
+  `systemd-run --scope -p CPUQuota=5%` — starving it far harder than ambient load ever would — also
+  returned it. High ambient load: passes. Severe CPU starvation: passes. Combined with this host's
+  175 KB probe passing under identical load, a load×size interaction is excluded.
+  **Full elimination list**: input (byte-identical payloads, verified by sha256), binary (same file,
+  `sha256 38f130cd…`), agy version, model alias, effort tier, padding compressibility, machine load,
+  CPU availability. What remains — account / plan / region / server-side quota — is entirely on the
+  service side, unobservable from either client.
+  **Stop chasing the root cause.** Which of the four it is does not change the engineering: none is
+  predictable from a dispatch script, and the tail-nonce self-check is equally effective against all
+  of them. The defensible statement is "the wall is a service-side property the client cannot
+  predict, with every client-side, input-side and load-side candidate excluded" — NOT "it is the
+  account".
+- **Superseded note — the earlier load caveat.** The peer asked whether the empty response
   could be a quota/concurrency degradation rather than a stable host property. Checked afterwards:
   load average was 29-30 throughout every probe on this host, from work belonging to OTHER sessions
   (another Claude session's `dispatch-hetero.sh` grok run, plus four ~396%-CPU `las` compute

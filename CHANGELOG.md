@@ -1,5 +1,78 @@
 # Changelog
 
+## v2.36.27 — 一個 pin 准了沒有人 pin 過的席位；以及 strike fold 的投影
+
+兩件事一起出：`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 **P3**（KR3/KR4/KR7），
+以及在 P3 的 QC panel 中被翻出來、**v2.36.26 已經出貨**的一條 admission 繞道。owner 裁示兩條分支同一個
+機制、同一版出。
+
+### 繞道（先講這個，因為它已經在 `origin/develop` 上）
+
+守衛把「`preferred_tuple` 等於契約解析出的引擎」當成「有 pin 的證據」。但 **resolver 不管有沒有 pin
+都會給 `preferred_tuple`**——沒有 pin 時那是 ladder 自己的選擇。於是任何一台把 resolve-live 文件餵給
+契約的機器都會拿到 `GO`、`assurance: "operator-pin"`，以及一筆**操作者從未做過的 `operator_pin` 紀錄**。
+
+**量到的，不是推論的**：v2.36.26 的 KR1 分支對一個**完全沒有 scorecard row、也沒有 pin** 的席位回
+exit 0 + `assurance: operator-pin`。P3 把同一個形狀複製到 KR3 的 strike 分支，於是連 strike 執法也被繞過。
+
+**第三個呼叫點是 panel 沒點名的**：KR4 的 critical-strike 分支只是**間接**被 pin gate 住——靠 resolver
+只在有 pin 時才設的 `substitution_reason`。但 `--resolved-live` 是操作者可提供的輸入，一份自製的、
+帶著那個 reason 的文件就能走到。三處現在共用同一個述詞。
+
+修法是把「有沒有 pin」變成**讀得到的事實**而不是推論出來的：
+
+- `scripts/resolve-dispatch-topology.js` — `--resolve-live` 多發一個 `operator_pin`：pin **列本身**
+  （store 裡的八欄位），沒有 pin 時是 `null`。因為列帶著完整的派工身分，契約可以進一步檢查
+  `preferred_tuple` 是**從這個 pin 推導出來的**，而不只是剛好相等。
+- `scripts/dispatch-contract.js` — `--resolved-live` 驗證要求這個 key：**缺了就是拒絕，絕不當成「大概沒 pin」**。
+  有的話必須是 null，或恰好那八個 key、`expires` 為 null、`role` 與文件的 role 一致。
+  `operatorPinFromLive` 改成回報 **pin**，不是 tuple——讀 tuple 正是「把 ladder 的選擇變成操作者的決定」那一步。
+
+**順便修掉一條把繞道藏起來的缺陷**：resolver 把沒有具名 endpoint 的席位的 `""` 轉成 `null`，
+而契約的驗證要求字串、它自己的註解也寫明 `""` 就是 `@none` wallet（`resolveEndpoint()` 本來就回 `""`）。
+結果是**沒有具名 endpoint 的席位，`--resolve-live → check --resolved-live` 這條路根本走不完**——
+這正是那些席位今天不會誤觸繞道的唯一原因。一行，外加 `resolve-live-tuple.test.sh:154` 鏡像的同一段轉換。
+
+**測試綠著、繞道活著，原因是第五種空洞型態——這次在輸入層不在斷言層。**
+`dispatch-contract-pin.test.sh` 裡每一份 `--resolved-live` fixture 都是為**已 pin** 的席位手工建的，
+而每個未 pin 的紅案**完全不帶那個旗標**。沒有任何測試把「未 pin 的 resolver 文件」交給契約，
+而那正是 GO 路徑實際消費的東西。前四種都是「不可能失敗的斷言」；這一種是**紅案從不走它宣稱在守的那條路**。
+
+兩套測試現在都有那一格：未 pin ＋ `--resolved-live`，斷言 exit 3、pre-change 的拒絕字串在、
+沒有 operator-pin assurance、payload 裡沒有 `operator_pin` key、且與省略旗標時**位元相同**
+（那就是 KR2 主張的 zero-pin 等價）。
+
+**紅證**：把守衛改回只比 tuple、其餘不動，兩個新紅案各自變紅並具名——`KR1 red expected 3 got 1`、
+`KR3 red expected 3 got 1`。做事的是守衛，不是驗證。
+
+**Panel**：`gpt-5.6-sol`(openai) 與 `GLM-5.2`(zhipu) **各自獨立**指出，`MiniMax-M3`(minimax) 回
+SHIP-AS-IS 零 finding。裁決依據是**執行**不是票數：先在候選分支複現，再往上一層對已出貨的 build 複現。
+（`MiniMax-M3` 連續第四個交付項在他家抓到缺陷時回零 finding——這是 scorecard 訊號，交給資格機制，
+本版不手動改 roster。）
+
+### P3 — pending_revocation 是 admission 那個 fold 的投影
+
+- `scripts/engine-scorecard.js` — `foldSeatStrikes` 多回存活列，`computeSeatProjection` 以
+  `active_strike_rows` 呈現；store 目錄改成可傳入的參數（預設維持 module-scope，既有呼叫點行為不變）。
+- `scripts/resolve-dispatch-topology.js` — `--resolve-live` 發出 `pending_revocation`；pin 上有
+  critical strike 時 `substitution_reason: "critical_strike"`（挑替代 rung 是 P4）。
+- `scripts/dispatch-contract.js` — KR3：**已 pin** 且 ordinary strike 超過門檻的席位原地准入並帶著
+  `pending_revocation`；KR4：critical 不拒絕，並指名 `predicate_id` 而非只有 class。
+
+**KR7 的「只有一個 fold」是機械確認的**：`grep -c strikes.jsonl scripts/resolve-dispatch-topology.js` = **0**。
+那句「被作廢的／非白名單 writer 的／重複的／baseline 之前的／未來日期的列永遠不會出現」因此是
+**程式路徑的性質**，不是「兩份拷貝會保持同步」的宣稱。
+
+實作由 `grok-4.5`(xai) 經 managed campaign rail（lineage `356136b9`）完成。depth-0 另外修掉五處
+`if 洩漏; then fail; else assert_eq "1" "1"; fi`——**檔案不存在時 grep 也回非零，一樣走到 else 給綠**。
+把 check payload 指向不存在的路徑，修補前 **41 passed / exit 0**，修補後 11 條具名失敗。
+
+**偏差（誠實記錄）**：修補與本版的繞道修復都由 Claude hands 完成。managed rail 的 repair 死結已知為
+確定性，且本輪新記錄了第三個「狀態機進得去、CLI 出不來」的狀態（`awaiting_disposition`）。
+詳見 `docs/BACKLOG.md`。
+
+prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）。
+
 ## v2.36.26 — 契約消費 live resolver：一個永遠到不了的替代檢查
 
 `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P2b（KR1 + KR2 + KR11）。

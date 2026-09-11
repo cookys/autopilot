@@ -99,19 +99,31 @@ else
   bad "4: count=$count reason=$reason out=$(cat "$OUT")"
 fi
 
-# ── 5: unpin-seat twice — both exit 0; row gone after first ──
+# ── 5: unpin-seat twice — idempotent at the STATE level, not just the exit code.
+# A second call that recreated or corrupted the store would still pass an
+# exit-code-only + row-count-only check, so this seeds a second, unrelated
+# role, captures the full file after the first unpin, and requires the second
+# unpin to leave the file BYTE-IDENTICAL with the unrelated role's row intact.
 reset_pins
 pin_cmd implementer 'owner ruling' >"$OUT" 2>"$ERR"
+pin_cmd reviewer 'unrelated seat' >"$OUT" 2>"$ERR"
 node "$CLI" unpin-seat --role implementer --store "$CAP" >"$OUT" 2>"$ERR"
 ec1=$?
-node "$CLI" pins --role implementer --store "$CAP" >"$OUT" 2>"$ERR"
-count_after=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.length))' "$OUT")
+snapshot1=$(cat "$CAP/pins.jsonl")
 node "$CLI" unpin-seat --role implementer --store "$CAP" >"$OUT" 2>"$ERR"
 ec2=$?
-if [ "$ec1" = "0" ] && [ "$ec2" = "0" ] && [ "$count_after" = "0" ]; then
-  ok "5: unpin-seat twice both exit 0; row gone after first"
+snapshot2=$(cat "$CAP/pins.jsonl")
+unrelated_present=$(node -e '
+  const fs=require("fs");
+  const lines=fs.readFileSync(process.argv[1],"utf8").split(/\r?\n/).filter(l=>l.trim().length>0);
+  const rows=lines.map((l)=>JSON.parse(l));
+  process.stdout.write(rows.some((r)=>r.role==="reviewer") ? "yes" : "no");
+' "$CAP/pins.jsonl")
+if [ "$ec1" = "0" ] && [ "$ec2" = "0" ] && [ "$snapshot1" = "$snapshot2" ] && [ "$unrelated_present" = "yes" ]; then
+  ok "5: unpin-seat twice is byte-identical at the file level; unrelated role's row survives"
 else
-  bad "5: ec1=$ec1 ec2=$ec2 count_after=$count_after"
+  identical=$([ "$snapshot1" = "$snapshot2" ] && echo yes || echo no)
+  bad "5: ec1=$ec1 ec2=$ec2 identical=$identical unrelated_present=$unrelated_present"
 fi
 
 # ── 6: concurrency — two pin-seat DIFFERENT roles in parallel both land ──
@@ -192,19 +204,94 @@ else
   bad "7: crash_ec=$crash_ec still_parses=$still_parses pre_eq_post=$([ "$pre_bytes" = "$post_bytes" ] && echo yes || echo no) err=$(cat "$ERR")"
 fi
 
-# ── 8: appendRow absent from the pin code path; withWriteLock+writeSnapshot present ──
-pin_section=$(awk '/operator pin store \(pins\.jsonl\)/,/end operator pin store/' "$CLI")
-if [ -z "$pin_section" ]; then
-  bad "8: pin store section markers missing from engine-capability-state.js"
+# ── 8: behavioral proof — pinSeat AND unpinSeat each actually take the write
+# lock. A grep over the section's source text passed even when the CODE didn't
+# lock, because the section's own COMMENT mentions withWriteLock/writeSnapshot
+# (reproduced: removing withWriteLock from unpinSeat left the old grep-based
+# test PASSING). Instead: hold $CAP/.lock with a live PID, launch the mutator
+# in the background, and assert it is STILL RUNNING a beat later — a mutator
+# that skips withWriteLock finishes almost instantly and this fails. Then
+# release the lock and confirm the mutator completes and actually applied.
+reset_pins
+pin_cmd implementer 'seed row' >"$OUT" 2>"$ERR"
+
+# -- pinSeat must block on a live-held lock --
+sleep 300 & holder_pid=$!
+printf '%s' "$holder_pid" > "$CAP/.lock"
+pin_cmd reviewer 'should block on lock' >"$CAP/pin8.out" 2>"$CAP/pin8.err" &
+pin_bg_pid=$!
+sleep 0.5
+if kill -0 "$pin_bg_pid" 2>/dev/null; then pin_still_running=yes; else pin_still_running=no; fi
+rm -f "$CAP/.lock"
+kill "$holder_pid" 2>/dev/null; wait "$holder_pid" 2>/dev/null
+wait "$pin_bg_pid"; pin_ec=$?
+pin_landed=$(node -e '
+  const fs=require("fs");
+  const lines=fs.readFileSync(process.argv[1],"utf8").split(/\r?\n/).filter(l=>l.trim().length>0);
+  const rows=lines.map((l)=>JSON.parse(l));
+  process.stdout.write(rows.some((r)=>r.role==="reviewer") ? "yes" : "no");
+' "$CAP/pins.jsonl")
+
+# -- unpinSeat must block on a live-held lock --
+sleep 300 & holder_pid2=$!
+printf '%s' "$holder_pid2" > "$CAP/.lock"
+node "$CLI" unpin-seat --role implementer --store "$CAP" >"$CAP/unpin8.out" 2>"$CAP/unpin8.err" &
+unpin_bg_pid=$!
+sleep 0.5
+if kill -0 "$unpin_bg_pid" 2>/dev/null; then unpin_still_running=yes; else unpin_still_running=no; fi
+rm -f "$CAP/.lock"
+kill "$holder_pid2" 2>/dev/null; wait "$holder_pid2" 2>/dev/null
+wait "$unpin_bg_pid"; unpin_ec=$?
+unpin_landed=$(node -e '
+  const fs=require("fs");
+  const lines=fs.readFileSync(process.argv[1],"utf8").split(/\r?\n/).filter(l=>l.trim().length>0);
+  const rows=lines.map((l)=>JSON.parse(l));
+  process.stdout.write(rows.some((r)=>r.role==="implementer") ? "still-there" : "removed");
+' "$CAP/pins.jsonl")
+
+if [ "$pin_still_running" = "yes" ] && [ "$pin_ec" = "0" ] && [ "$pin_landed" = "yes" ] \
+  && [ "$unpin_still_running" = "yes" ] && [ "$unpin_ec" = "0" ] && [ "$unpin_landed" = "removed" ]; then
+  ok "8: pinSeat and unpinSeat each block on a live-held lock (behavioral, not a token grep)"
 else
-  append_hits=$(printf '%s\n' "$pin_section" | grep -n 'appendRow' || true)
-  lock_hits=$(printf '%s\n' "$pin_section" | grep -n 'withWriteLock' || true)
-  snap_hits=$(printf '%s\n' "$pin_section" | grep -n 'writeSnapshot' || true)
-  if [ -z "$append_hits" ] && [ -n "$lock_hits" ] && [ -n "$snap_hits" ]; then
-    ok "8: pin path uses withWriteLock+writeSnapshot; appendRow absent"
-  else
-    bad "8: append=[$append_hits] lock=[$lock_hits] snap=[$snap_hits]"
-  fi
+  bad "8: pin_still_running=$pin_still_running pin_ec=$pin_ec pin_landed=$pin_landed unpin_still_running=$unpin_still_running unpin_ec=$unpin_ec unpin_landed=$unpin_landed pin_err=$(cat "$CAP/pin8.err" 2>/dev/null) unpin_err=$(cat "$CAP/unpin8.err" 2>/dev/null)"
+fi
+
+# ── 9: unparsable stored row fails LOUD (names the file + 1-based line number)
+# instead of being silently discarded. Reproduced: appending garbage then
+# pin-seat-ing a different role used to make the garbage line vanish from
+# pins.jsonl with nothing reported (readPinRows skipped it; the next
+# writeSnapshot persisted only the survivors).
+reset_pins
+pin_cmd implementer 'valid row' >"$OUT" 2>"$ERR"
+printf 'THIS IS NOT JSON {{{\n' >> "$CAP/pins.jsonl"
+before_bytes=$(cat "$CAP/pins.jsonl")
+line_no=$(wc -l < "$CAP/pins.jsonl" | tr -d ' ')
+
+node "$CLI" pins --store "$CAP" >"$OUT" 2>"$ERR"
+pins_ec=$?
+pins_names_file=$(grep -qF "$CAP/pins.jsonl" "$ERR" && echo yes || echo no)
+pins_names_line=$(grep -q "line $line_no" "$ERR" && echo yes || echo no)
+after1=$(cat "$CAP/pins.jsonl")
+
+pin_cmd reviewer 'attempted pin' >"$OUT" 2>"$ERR"
+pinseat_ec=$?
+pinseat_names_file=$(grep -qF "$CAP/pins.jsonl" "$ERR" && echo yes || echo no)
+pinseat_names_line=$(grep -q "line $line_no" "$ERR" && echo yes || echo no)
+after2=$(cat "$CAP/pins.jsonl")
+
+node "$CLI" unpin-seat --role implementer --store "$CAP" >"$OUT" 2>"$ERR"
+unpinseat_ec=$?
+unpinseat_names_file=$(grep -qF "$CAP/pins.jsonl" "$ERR" && echo yes || echo no)
+unpinseat_names_line=$(grep -q "line $line_no" "$ERR" && echo yes || echo no)
+after3=$(cat "$CAP/pins.jsonl")
+
+if [ "$pins_ec" != "0" ] && [ "$pins_names_file" = "yes" ] && [ "$pins_names_line" = "yes" ] \
+  && [ "$pinseat_ec" != "0" ] && [ "$pinseat_names_file" = "yes" ] && [ "$pinseat_names_line" = "yes" ] \
+  && [ "$unpinseat_ec" != "0" ] && [ "$unpinseat_names_file" = "yes" ] && [ "$unpinseat_names_line" = "yes" ] \
+  && [ "$after1" = "$before_bytes" ] && [ "$after2" = "$before_bytes" ] && [ "$after3" = "$before_bytes" ]; then
+  ok "9: unparsable row fails loud on pins/pin-seat/unpin-seat naming file+line; pins.jsonl byte-unchanged"
+else
+  bad "9: pins_ec=$pins_ec(file=$pins_names_file,line=$pins_names_line) pinseat_ec=$pinseat_ec(file=$pinseat_names_file,line=$pinseat_names_line) unpinseat_ec=$unpinseat_ec(file=$unpinseat_names_file,line=$unpinseat_names_line) err1=$(cat "$ERR")"
 fi
 
 echo "----"

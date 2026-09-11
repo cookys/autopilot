@@ -843,20 +843,30 @@ const PIN_ROW_KEYS = Object.freeze([
   'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires',
 ]);
 
+// Unlike readTextLines' other callers, an unparsable pin row is operator state
+// that would otherwise vanish the moment the next writeSnapshot persists only
+// the survivors — so this reader FAILS LOUD (naming the file + 1-based line
+// number) instead of skipping. Line numbers are computed against the RAW
+// split (blank lines counted, not filtered) so they match what `wc -l` / an
+// editor would show for the actual file.
 function readPinRows(pinsFile) {
-  const lines = readTextLines(pinsFile);
+  if (!fs.existsSync(pinsFile)) return [];
+  const rawLines = fs.readFileSync(pinsFile, 'utf8').split(/\r?\n/);
   const rows = [];
-  for (let i = 0; i < lines.length; i += 1) {
+  for (let i = 0; i < rawLines.length; i += 1) {
+    const line = rawLines[i];
+    if (line.trim().length === 0) continue;
+    const lineNo = i + 1;
+    let row;
     try {
-      const row = JSON.parse(lines[i]);
-      if (!row || typeof row !== 'object' || Array.isArray(row)) {
-        warnMalformedLine(i + 1, 'pin row not an object');
-        continue;
-      }
-      rows.push(row);
+      row = JSON.parse(line);
     } catch (err) {
-      warnMalformedLine(i + 1, err.message);
+      throw new Error(`${pinsFile}: unparsable JSON at line ${lineNo}: ${err.message}`);
     }
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new Error(`${pinsFile}: pin row not an object at line ${lineNo}`);
+    }
+    rows.push(row);
   }
   return rows;
 }

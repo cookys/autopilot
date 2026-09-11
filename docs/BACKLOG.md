@@ -83,6 +83,23 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   cached, not read from the binary. Anything pinning a runner version (the capability store tracks
   `runner_version`, and this plan proposes using it as a re-measure trigger) must hash the binary
   instead.
+- **UNCONTROLLED VARIABLE — this host was never idle.** The peer asked whether the empty response
+  could be a quota/concurrency degradation rather than a stable host property. Checked afterwards:
+  load average was 29-30 throughout every probe on this host, from work belonging to OTHER sessions
+  (another Claude session's `dispatch-hetero.sh` grok run, plus four ~396%-CPU `las` compute
+  processes). Two fresh re-runs of the identical `p200000.ndjson` reproduced `tail_nonce=NO`,
+  `response: ""` — but still under that load, so the hypothesis is **not** ruled out.
+  Partial control that survives: the 175,000 B probe ran under the SAME load and returned the nonce,
+  so load alone does not explain a size-dependent failure — but a load×size interaction cannot be
+  excluded without an idle run. **Anyone re-testing should run `p200000.ndjson` on a genuinely idle
+  host first.** If it returns the nonce when idle, the wall drifts with load, which kills the
+  "measure it once and store it" option entirely and leaves only a per-dispatch self-check.
+- **Preferred fix, sharpened by the peer**: do NOT run a separate probe. Stitch an `INTEGRITY:
+  <nonce>` line into the tail of the REAL payload and require the reviewer's output contract to
+  return it; a missing or wrong nonce is `no_verdict`. That costs zero extra dispatches, and it
+  proves the tail of the payload that was actually reviewed rather than a same-sized synthetic stand-in
+  — which matters here, since byte-identical inputs already behave differently across hosts. It
+  proves the tail arrived, not that the middle was read; the middle is a separate problem.
 - **Honest bound**: this probe still does not distinguish transport truncation from model-side
   context/skim behaviour — only that the tail stops being answerable in that band, on this host. The
   operational consequence is the same either way.

@@ -622,6 +622,9 @@ function validateModeA(flags) {
 
     const findingsByGeneration = new Map();
     const dispositionsByGeneration = new Map();
+    // The base the next reviewable generation must start from: the phase base,
+    // then each finalized generation's head. Aborted generations leave it alone.
+    let expectedNextBase = expectedBaseSha;
 
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
@@ -630,21 +633,35 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // first entry's base must equal expectedBaseSha, each later entry's base must equal previous entry's head
-      if (i === 0) {
-        if (entry.base !== expectedBaseSha) {
-          console.error(`First chain entry base '${entry.base}' does not match expected phase-base '${expectedBaseSha}'`);
+      // An aborted generation (the branch moved under collection, or a seat's
+      // output failed to parse) is a documented, legitimate chain entry: it
+      // stays on disk, is never renumbered, and produced no head — the next
+      // generation "continues from the aborted generation's base"
+      // (hetero-review-loop.js collect). So it is contiguity-neutral here:
+      // it must sit where the chain expected a base, and the next real entry
+      // must start from that same base. It contributes no findings and is
+      // not the last entry a SHIP-AS-IS receipt can rest on.
+      if (entry.status === 'aborted') {
+        if (entry.base !== expectedNextBase) {
+          console.error(`Chain broken at aborted generation ${entry.generation}: base '${entry.base}' does not match expected base '${expectedNextBase}'`);
           process.exit(1);
         }
-      } else {
-        const prevEntry = chain[i - 1];
-        if (entry.base !== prevEntry.head) {
-          console.error(`Chain broken at generation ${entry.generation}: base '${entry.base}' does not match previous head '${prevEntry.head}'`);
+        if (i === chain.length - 1) {
+          console.error(`Chain ends on aborted generation ${entry.generation}; a receipt needs a finalized generation after it`);
           process.exit(1);
         }
+        continue;
       }
 
-      // (3) every entry's status must be "finalized"
+      // first entry's base must equal expectedBaseSha, each later entry's base must equal
+      // the previous NON-ABORTED entry's head (an aborted entry advanced nothing)
+      if (entry.base !== expectedNextBase) {
+        console.error(`Chain broken at generation ${entry.generation}: base '${entry.base}' does not match expected base '${expectedNextBase}'`);
+        process.exit(1);
+      }
+      expectedNextBase = entry.head;
+
+      // (3) every non-aborted entry's status must be "finalized"
       if (entry.status !== 'finalized') {
         console.error(`Chain entry generation ${entry.generation} status is '${entry.status}' (expected 'finalized')`);
         process.exit(1);
@@ -996,7 +1013,7 @@ function validateModeA(flags) {
     }
 
     // (5) the last chain entry's head must equal current git rev-parse <branch> in repoRoot
-    const lastEntry = chain[chain.length - 1];
+    const lastEntry = chain[chain.length - 1]; // never aborted: the loop above refuses a chain ending on one
     const revParseRes = spawnSync('git', ['rev-parse', branch], {
       cwd: repoRoot,
       encoding: 'utf8',

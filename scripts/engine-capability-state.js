@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const process = require('process');
-const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
+const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, writeSnapshot, toEventId, maxEventId } = require('./lib/jsonl-store');
 const {
   BRAIN_CONSTRUCT_SCOPE,
   BRAIN_METHODOLOGY_KIND,
@@ -42,6 +42,9 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js strike-seat --engine <token> --runner <token> --role <token> --class ordinary_strike|critical_reexam_trigger [--predicate-id <id>] --cause-class engine_output|runner_delivery|ambiguous --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token> [--effort <effort>]
+  node scripts/engine-capability-state.js pin-seat --engine <token> --runner <token> --role <token> --effort <effort> --endpoint <name|@none> --reason <text> --operator <who> [--store <path>]
+  node scripts/engine-capability-state.js unpin-seat --role <token> [--store <path>]
+  node scripts/engine-capability-state.js pins [--role <token>] [--store <path>]
 
 Options:
   --file <path>        Read event JSON from file (for record) or classify error from file.
@@ -76,6 +79,8 @@ Options:
   --invalidates-event-id <n>  event_id of the v2 strike row being invalidated (invalidate-strike).
   --proof-artifact-sha256 <hex>  sha256 of the mechanical proof of detector defect (invalidate-strike).
   --proof-detector-id <token>    Detector that produced the proof (invalidate-strike).
+  --reason <text>      Non-empty operator reason for pin-seat (required).
+  --operator <who>     Non-empty operator attribution for pin-seat (required; never defaulted).
 
 Exit codes:
   0 = success
@@ -349,7 +354,10 @@ function resolveStoreConfig(options) {
   // Strike ledger (brain-seat revocation, plan 2026-08-17-brain-seat-exam-suite KR3b):
   // a separately named ledger in the SAME store dir, serialized under the SAME lock.
   const strikesFile = path.join(storeDir, 'strikes.jsonl');
-  return { storeDir, storeFile, evidenceFile, strikesFile, lockFile };
+  // Operator pin store (plan 2026-09-11-operator-pin-supersedes-qualification KR6):
+  // snapshot of active rows only, same directory, same lock as capability/strikes.
+  const pinsFile = path.join(storeDir, 'pins.jsonl');
+  return { storeDir, storeFile, evidenceFile, strikesFile, pinsFile, lockFile };
 }
 
 function readStoreRows(storeFile, silentWarn = false) {
@@ -824,6 +832,137 @@ function normalizeSeatIdentity({ engine, runner, role, effort }) {
 function seatHashOf(seatIdentity) {
   return sha256(canonicalJson(normalizeSeatIdentity(seatIdentity)));
 }
+
+// --- operator pin store (pins.jsonl) ---
+// Own validator, own file. NOT the qualification-override row: expires MUST be
+// JSON null here; the override requires a real calendar date. Do not share a
+// validator between them. Mutations go through withWriteLock + writeSnapshot
+// only — an append-only write cannot express "replace this role with no tombstone".
+
+const PIN_ROW_KEYS = Object.freeze([
+  'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires',
+]);
+
+function readPinRows(pinsFile) {
+  const lines = readTextLines(pinsFile);
+  const rows = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    try {
+      const row = JSON.parse(lines[i]);
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        warnMalformedLine(i + 1, 'pin row not an object');
+        continue;
+      }
+      rows.push(row);
+    } catch (err) {
+      warnMalformedLine(i + 1, err.message);
+    }
+  }
+  return rows;
+}
+
+function normalizePinEndpoint(raw) {
+  if (raw === ENDPOINT_NULL_SELECTOR) return null;
+  if (typeof raw !== 'string' || !ENDPOINT_NAME_RE.test(raw)) {
+    throw new Error('endpoint must be a bounded endpoint name or "@none"');
+  }
+  return raw;
+}
+
+function validatePinRow(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new Error('pin row must be a JSON object');
+  }
+  const keys = Object.keys(row);
+  for (const key of keys) {
+    if (!PIN_ROW_KEYS.includes(key)) {
+      throw new Error(`pin row unknown key: ${key}`);
+    }
+  }
+  for (const key of PIN_ROW_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(row, key)) {
+      throw new Error(`pin row missing key: ${key}`);
+    }
+  }
+  if (keys.length !== PIN_ROW_KEYS.length) {
+    throw new Error(`pin row must have exactly eight keys (got ${keys.length})`);
+  }
+  // Reuse seat-verb validators for engine/runner/role/effort; endpoint reuses
+  // the same ENDPOINT_NAME_RE / @none rule the current verb already uses.
+  normalizeEngineToken(row.engine, 'engine');
+  normalizeSeatToken(row.runner, 'runner');
+  normalizeSeatToken(row.role, 'role');
+  normalizeSeatEffort(row.effort);
+  if (row.endpoint !== null
+      && (typeof row.endpoint !== 'string' || !ENDPOINT_NAME_RE.test(row.endpoint))) {
+    throw new Error('endpoint must be a bounded endpoint name or null');
+  }
+  if (typeof row.reason !== 'string' || row.reason.trim().length === 0) {
+    throw new Error('reason must be a non-empty string');
+  }
+  if (typeof row.operator !== 'string' || row.operator.trim().length === 0) {
+    throw new Error('operator must be a non-empty string');
+  }
+  if (row.expires !== null) {
+    throw new Error('expires must be JSON null');
+  }
+  return {
+    engine: normalizeEngineToken(row.engine, 'engine'),
+    runner: normalizeSeatToken(row.runner, 'runner'),
+    role: normalizeSeatToken(row.role, 'role'),
+    effort: normalizeSeatEffort(row.effort),
+    endpoint: row.endpoint,
+    reason: row.reason.trim(),
+    operator: row.operator.trim(),
+    expires: null,
+  };
+}
+
+function buildPinRow(input) {
+  return validatePinRow({
+    engine: input.engine,
+    runner: input.runner,
+    role: input.role,
+    effort: input.effort,
+    endpoint: normalizePinEndpoint(input.endpoint),
+    reason: input.reason,
+    operator: input.operator,
+    expires: null,
+  });
+}
+
+function pinSeat(config, input) {
+  const row = buildPinRow(input);
+  return withWriteLock({ storeDir: config.storeDir, lockFile: config.lockFile, name: 'capability' }, () => {
+    ensureDir(config.storeDir);
+    const existing = readPinRows(config.pinsFile);
+    const next = existing.filter((entry) => entry.role !== row.role);
+    next.push(row);
+    writeSnapshot(config.pinsFile, next);
+    return row;
+  });
+}
+
+function unpinSeat(config, roleRaw) {
+  const role = normalizeSeatToken(roleRaw, 'role');
+  return withWriteLock({ storeDir: config.storeDir, lockFile: config.lockFile, name: 'capability' }, () => {
+    ensureDir(config.storeDir);
+    const existing = readPinRows(config.pinsFile);
+    const next = existing.filter((entry) => entry.role !== role);
+    writeSnapshot(config.pinsFile, next);
+    return { role, removed: existing.length - next.length };
+  });
+}
+
+function listPins(config, roleRaw) {
+  const rows = readPinRows(config.pinsFile);
+  if (roleRaw === undefined || roleRaw === null || roleRaw === '') {
+    return rows;
+  }
+  const role = normalizeSeatToken(roleRaw, 'role');
+  return rows.filter((entry) => entry.role === role);
+}
+// --- end operator pin store ---
 
 function validateStrikeV2Shape(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) {
@@ -1701,6 +1840,11 @@ function parseCommandLineArgs(argv) {
       'artifact-sha256', 'receipt-ref', 'now', 'store',
     ])],
     ['seat-hash', new Set(['engine', 'runner', 'role', 'effort'])],
+    ['pin-seat', new Set([
+      'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires', 'store',
+    ])],
+    ['unpin-seat', new Set(['role', 'store'])],
+    ['pins', new Set(['role', 'store'])],
   ]);
   const allowed = commandOptions.get(command);
   if (!allowed) return { command, options: {} };
@@ -2023,6 +2167,68 @@ function main() {
       failValidation(`seat-hash: ${error.message}`);
     }
     process.stdout.write(`${JSON.stringify({ seat_hash: hash })}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'pin-seat') {
+    // --operator is the only thing standing between a pin and an anonymous write.
+    if (!Object.prototype.hasOwnProperty.call(options, 'operator')) {
+      failValidation('pin-seat requires --operator');
+    }
+    const required = ['engine', 'runner', 'role', 'effort', 'endpoint', 'reason'];
+    for (const key of required) {
+      if (!Object.prototype.hasOwnProperty.call(options, key)) {
+        failUsage(`pin-seat requires --${key}`);
+      }
+    }
+    // A pin row's expires MUST be JSON null. Any CLI-supplied --expires is a
+    // non-null string and is therefore invalid — reject naming the field.
+    if (Object.prototype.hasOwnProperty.call(options, 'expires')) {
+      failValidation('expires must be JSON null');
+    }
+    const config = resolveStoreConfig(options);
+    let row;
+    try {
+      row = pinSeat(config, {
+        engine: options.engine,
+        runner: options.runner,
+        role: options.role,
+        effort: options.effort,
+        endpoint: options.endpoint,
+        reason: options.reason,
+        operator: options.operator,
+      });
+    } catch (error) {
+      failValidation(`pin-seat: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify(row)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'unpin-seat') {
+    if (!Object.prototype.hasOwnProperty.call(options, 'role')) {
+      failUsage('unpin-seat requires --role');
+    }
+    const config = resolveStoreConfig(options);
+    let result;
+    try {
+      result = unpinSeat(config, options.role);
+    } catch (error) {
+      failValidation(`unpin-seat: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'pins') {
+    const config = resolveStoreConfig(options);
+    let rows;
+    try {
+      rows = listPins(config, options.role);
+    } catch (error) {
+      failValidation(`pins: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify(rows)}\n`);
     process.exit(0);
   }
 

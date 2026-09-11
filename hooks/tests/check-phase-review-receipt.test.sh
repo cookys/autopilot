@@ -576,6 +576,47 @@ EOF
 C11_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11" --dispositions "$DISPOSITIONS_11" 2>&1); C11_RC=$?
 assert_exit_code "$C11_RC" "0" "case 11: valid dispositions exit 0"
 
+# 11p: the artifact shape the controller ACTUALLY writes — `disposition: null` on every
+#      finding (depth-0's adjudication is the separate dispositions file) — with a complete
+#      dispositions file: expect exit 0. Before this case, no real plan receipt had ever
+#      validated (fleet-comms pane-final-mile r2 g2, 2026-09-11: three non-blocking findings,
+#      all null in the artifact, all dispositioned in the file, checker exit 1).
+PLAN_ARTIFACT_11P="$TEST_TMP/plan11p.json"
+DISPOSITIONS_11P="$TEST_TMP/disp11p.json"
+cat << EOF > "$PLAN_ARTIFACT_11P"
+{
+  "artifact_type": "plan_review_artifact",
+  "logical_plan_id": "test-plan-11",
+  "generation": 2,
+  "plan_sha256": "$PLAN11_SHA",
+  "rubric_sha256": "$RUBRIC11_SHA",
+  "findings": [
+    { "fingerprint": "aa11", "candidate_blocker": false, "disposition": null },
+    { "fingerprint": "bb22", "candidate_blocker": true, "disposition": null }
+  ]
+}
+EOF
+cat << EOF > "$DISPOSITIONS_11P"
+{
+  "logical_plan_id": "test-plan-11",
+  "generation": 2,
+  "findings": [
+    { "fingerprint": "aa11", "candidate_blocker": false, "disposition": "accepted_nonblocking", "rationale": "applied at implementation" },
+    { "fingerprint": "bb22", "candidate_blocker": true, "disposition": "rejected", "rationale": "the variant already exists" }
+  ]
+}
+EOF
+C11P_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11P" --dispositions "$DISPOSITIONS_11P" 2>&1); C11P_RC=$?
+assert_exit_code "$C11P_RC" "0" "case 11p: controller-shaped artifact (null dispositions) + complete dispositions file exits 0"
+# 11p negative: null on the DISPOSITIONS side is still refused — that file is where the decision must be.
+cat << EOF > "$TEST_TMP/disp11pn.json"
+{ "logical_plan_id": "test-plan-11", "generation": 2, "findings": [
+    { "fingerprint": "aa11", "candidate_blocker": false, "disposition": null, "rationale": "x" },
+    { "fingerprint": "bb22", "candidate_blocker": true, "disposition": "rejected", "rationale": "y" } ] }
+EOF
+C11PN_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11P" --dispositions "$TEST_TMP/disp11pn.json" 2>&1); C11PN_RC=$?
+assert_exit_code "$C11PN_RC" "1" "case 11p negative: null disposition in the dispositions file still exits 1"
+
 # 11n (negative control): d2-plan-candidate-blocker-fail-open — a plan-artifact finding that
 # omits candidate_blocker entirely must fail closed (it must not silently evade the
 # blocker-specific disposition checks by being treated as an implicit non-blocker): expect exit 1.

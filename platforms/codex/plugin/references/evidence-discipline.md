@@ -781,3 +781,38 @@ deliverable; refuse any `if/else` whose arms both report success; and for absenc
 demonstrate a case where the key IS present, or the absence proves nothing. The orchestrator's own
 verification caught none of these — all three came from the decorrelated panel seat, which is the
 argument for `min_panel_size` being a floor rather than a budget.
+
+## 34. A check that prints only its verdict cannot be distinguished from one that read nothing
+
+A pass and a question never asked look identical when the output is a verdict alone.
+Print the values the comparison actually read, beside the verdict, always.
+
+**2026-09-12, reported by a peer session within ten minutes of discussing §33.** A shell
+loop compared two commits by `git patch-id`, splitting each pair with `set -- $pair`.
+Under zsh that does not word-split, so both sides of every comparison were the empty
+string, and the script cheerfully printed `same patch? YES` three times. The conclusion
+it supported — that an accepted commit was a re-application of a hands commit — was
+false, and the run that produced it was green. It was caught only because the author
+happened to look at the inputs; had the script printed YES/NO and nothing else, the
+wrong answer would have shipped with a table behind it.
+
+This is the read-side twin of §33. §33 is an assertion whose *predicate* cannot fail;
+this is an assertion whose *operands* were never populated. The predicate is fine —
+`[ "$a" = "$b" ]` is a real comparison — and it is comparing two things that do not
+exist. Every guard in §33 (mutate the source, watch a named assertion move) passes here
+too, because mutating the source changes neither empty string.
+
+Two rules follow, and the first is cheap enough that there is no reason not to:
+
+- **Emit the operands.** `same patch? YES (a=<sha> b=<sha>)` would have been unmissable.
+  A comparison that prints only its verdict is not reviewable and not reproducible.
+- **Assert the operands are non-empty before comparing them.** An empty-string equality
+  is the degenerate case of the same defect the negative-control helper had
+  (`hooks/tests/pending-revocation-fold.test.sh`, v2.36.27): a `grep` miss on a file
+  that does not exist is also a comparison against nothing. Both were repaired the same
+  way — prove the thing being read exists and carries what you are searching within,
+  and only then treat a non-match as evidence.
+
+The family now has five members across four deliverables of one plan plus this one, from
+two different repositories and two different authors. Treat "my check is green" as
+meaning nothing until you can say what it read.

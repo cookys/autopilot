@@ -71,7 +71,7 @@ SHIP-AS-IS 零 finding。裁決依據是**執行**不是票數：先在候選分
 確定性，且本輪新記錄了第三個「狀態機進得去、CLI 出不來」的狀態（`awaiting_disposition`）。
 詳見 `docs/BACKLOG.md`。
 
-prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）。
+prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）。`references/evidence-discipline.md` 新增 §34，記錄「只印判決不印運算元的檢查，與什麼都沒讀的檢查長得一模一樣」——本輪第五個同族實例，且來自另一個 repo 的另一位作者，正是該檔存在的理由。
 
 ## v2.36.26 — 契約消費 live resolver：一個永遠到不了的替代檢查
 

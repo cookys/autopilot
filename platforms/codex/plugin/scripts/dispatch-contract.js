@@ -95,6 +95,14 @@ function exitGo(unitId, contractSha, specSha, resolvedEngine, options = {}) {
   if (options.operator_pin) {
     payload.operator_pin = options.operator_pin;
   }
+  // P3 / KR3+KR4: pending_revocation is a projection of the resolver fold.
+  // Present whenever the resolver supplied it (including the empty array).
+  if (Object.prototype.hasOwnProperty.call(options, 'pending_revocation')) {
+    payload.pending_revocation = options.pending_revocation;
+  }
+  if (typeof options.substitution_reason === 'string' && options.substitution_reason.trim()) {
+    payload.substitution_reason = options.substitution_reason;
+  }
 
   console.log(JSON.stringify(payload));
   process.exit(0);
@@ -239,6 +247,22 @@ function preferredTupleMatchesResolved(live, storeRole, resolvedEngine) {
   if (normalizeStoreRole(live.role) !== storeRole) return false;
   return live.preferred_tuple.engine === resolvedEngine.model
     && live.preferred_tuple.runner === resolvedEngine.runner;
+}
+
+function tuplesEqual(a, b) {
+  if (!a || !b) return false;
+  return a.engine === b.engine
+    && a.runner === b.runner
+    && a.effort === b.effort
+    && a.endpoint === b.endpoint;
+}
+
+function operatorPinFromLive(live) {
+  return {
+    engine: live.preferred_tuple.engine,
+    runner: live.preferred_tuple.runner,
+    role: live.role,
+  };
 }
 
 function usageError(message) {
@@ -1325,6 +1349,8 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
   let engineAssurance = null;
   let qualificationOverride = null;
   let operatorPin = null;
+  let pendingRevocation = undefined;
+  let substitutionReasonOut = undefined;
   // Fail-closed on a malformed --resolved-live before any admission shortcut.
   // Absent the flag, every path below is byte-identical to the pre-pin build.
   const resolvedLive = options.resolvedLivePath
@@ -1344,6 +1370,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
 
   if (reasons.length === 0 && hasSubstitution) {
     const eff = resolvedLive.effective_tuple;
+    const preferred = resolvedLive.preferred_tuple;
     const effectiveEngine = { model: eff.engine, runner: eff.runner };
     const substituteMatched = Array.isArray(scoreRows)
       ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, effectiveEngine, {
@@ -1355,13 +1382,36 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
       if (substituteMatched.status === 'provisional') {
         engineAssurance = 'provisional';
       }
+      // Carry fold projection through when the resolver named a reason (KR4/KR5).
+      if (Array.isArray(resolvedLive.pending_revocation)) {
+        pendingRevocation = resolvedLive.pending_revocation;
+      }
+      if (typeof resolvedLive.substitution_reason === 'string'
+          && resolvedLive.substitution_reason.trim()) {
+        substitutionReasonOut = resolvedLive.substitution_reason;
+      }
     } else {
       const strikeRow = Array.isArray(scoreRows)
         ? scoreRows.find((row) => scorecardRowMatchesEngine(row, storeRole, effectiveEngine)
           && row.admission_status === 'requalify_required')
         : null;
 
-      if (strikeRow) {
+      // P3 / KR4: critical_strike on a PINNED seat with effective still equal to
+      // preferred (substitute rung is P4 — out of scope). Admit preferred in
+      // place; do not refuse. A real different-rung substitute that is itself
+      // strike-blocked still refuses (KR11: pin admits preferred only).
+      const pinAdmitsPreferred = preferredTupleMatchesResolved(
+        resolvedLive, storeRole, resolvedEngine,
+      );
+      if (strikeRow
+          && pinAdmitsPreferred
+          && resolvedLive.substitution_reason === 'critical_strike'
+          && tuplesEqual(preferred, eff)) {
+        engineAssurance = 'operator-pin';
+        operatorPin = operatorPinFromLive(resolvedLive);
+        pendingRevocation = resolvedLive.pending_revocation;
+        substitutionReasonOut = 'critical_strike';
+      } else if (strikeRow) {
         reasons.push(strikeReasonMessage(strikeRow));
       } else {
         reasons.push(
@@ -1401,7 +1451,19 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // 'qualified', never an override. loadQualificationOverride is
         // deliberately never called on this branch, so a strike-blocked seat can
         // never reach engineAssurance = 'operator-override'.
-        reasons.push(strikeReasonMessage(strikeRow));
+        //
+        // P3 / KR3: PINNED + ordinary strikes at/over threshold → admit in place
+        // with pending_revocation from the resolver fold. Critical on a pin is
+        // handled via substitution_reason (hasSubstitution branch above).
+        const pinAdmitsPreferred = resolvedLive
+          && preferredTupleMatchesResolved(resolvedLive, storeRole, resolvedEngine);
+        if (pinAdmitsPreferred && !strikeRow.critical_trigger) {
+          engineAssurance = 'operator-pin';
+          operatorPin = operatorPinFromLive(resolvedLive);
+          pendingRevocation = resolvedLive.pending_revocation;
+        } else {
+          reasons.push(strikeReasonMessage(strikeRow));
+        }
       } else {
         // P2b/KR1: pin knowledge enters ONLY here, from --resolved-live (never by
         // reading the pin store). KR11: operator-pin applies to preferred_tuple
@@ -1421,11 +1483,10 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
           && preferredTupleMatchesResolved(resolvedLive, storeRole, resolvedEngine);
         if (pinAdmitsPreferred) {
           engineAssurance = 'operator-pin';
-          operatorPin = {
-            engine: resolvedLive.preferred_tuple.engine,
-            runner: resolvedLive.preferred_tuple.runner,
-            role: resolvedLive.role,
-          };
+          operatorPin = operatorPinFromLive(resolvedLive);
+          if (Array.isArray(resolvedLive.pending_revocation)) {
+            pendingRevocation = resolvedLive.pending_revocation;
+          }
         } else {
           const override = loadQualificationOverride(
             options.overridePath, storeRole, resolvedEngine, reasons,
@@ -1480,7 +1541,17 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
     reasons.push('engine: campaign projection disagrees with resolved runner/model');
   }
 
-  return { reasons, specSha, headSha, baseAtHead, engineAssurance, qualificationOverride, operatorPin };
+  return {
+    reasons,
+    specSha,
+    headSha,
+    baseAtHead,
+    engineAssurance,
+    qualificationOverride,
+    operatorPin,
+    pendingRevocation,
+    substitutionReasonOut,
+  };
 }
 
 function parseArgs(argv) {
@@ -1643,6 +1714,12 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
       : {}),
     ...(policy.operatorPin
       ? { operator_pin: policy.operatorPin }
+      : {}),
+    ...(policy.pendingRevocation !== undefined
+      ? { pending_revocation: policy.pendingRevocation }
+      : {}),
+    ...(policy.substitutionReasonOut
+      ? { substitution_reason: policy.substitutionReasonOut }
       : {}),
   });
 })();

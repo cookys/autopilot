@@ -1757,12 +1757,34 @@ function findSeatBaseline(
   return best;
 }
 
+// Project a surviving countable strike into the pending_revocation row shape
+// (plan 2026-09-11 KR7). Exactly these nine keys; rejected rows never reach here.
+function pendingRevocationRowFromStrike(row) {
+  return {
+    seat_hash: row.seat_hash,
+    engine: row.engine,
+    runner: row.runner,
+    role: row.role,
+    class: row.class,
+    predicate_id: row.predicate_id === undefined ? null : row.predicate_id,
+    cause_class: row.cause_class,
+    receipt_ref: row.receipt_ref,
+    observed_at: row.observed_at,
+  };
+}
+
 // Fold, in the frozen-contract order (§2.7.5, plan 2026-08-22-no-confidence-decay):
 // countable-strike validation -> invalidation subtraction -> dedup -> tallies.
 // `schema_version: 1` rows (legacy brain-seat strikes) are ignored entirely —
 // they feed brainSeatStatus in engine-capability-state.js only.
-function foldSeatStrikes(seatHashValue, baselineQMs, nowMs) {
-  const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
+//
+// `storeDir` defaults to module-scope CAPABILITY_DIR so existing callers keep
+// byte-identical behaviour; resolve-live threads an explicit dir so the fold
+// and pins.jsonl share one isolated store (KR7: one fold, no second reader).
+// Surviving rows (after invalidation subtraction + dedup) are returned as
+// `rows` — the sole producer of pending_revocation.
+function foldSeatStrikes(seatHashValue, baselineQMs, nowMs, storeDir = CAPABILITY_DIR) {
+  const strikesFile = path.join(storeDir, 'strikes.jsonl');
   const lines = fs.existsSync(strikesFile)
     ? fs.readFileSync(strikesFile, 'utf8').split(/\r?\n/).filter((l) => l.trim().length > 0)
     : [];
@@ -1793,7 +1815,7 @@ function foldSeatStrikes(seatHashValue, baselineQMs, nowMs) {
   // missing receipt, malformed artifact hash, invalid class/predicate, or a
   // timestamp outside the (baseline, now] window can never inflate the count
   // — every such row is EXCLUDED and tallied into rejected_strikes.
-  const countable = new Map(); // event_id -> { class, dedup_key }
+  const countable = new Map(); // event_id -> { class, dedup_key, row }
   for (const row of parsedRows) {
     if (row.kind !== 'strike') continue;
     const eid = toEventId(row.event_id);
@@ -1817,7 +1839,7 @@ function foldSeatStrikes(seatHashValue, baselineQMs, nowMs) {
       rejected += 1;
       continue;
     }
-    countable.set(eid, { class: row.class, dedup_key: row.dedup_key });
+    countable.set(eid, { class: row.class, dedup_key: row.dedup_key, row });
   }
 
   // Invalidation subtraction (contract step 3): only an allowlisted writer
@@ -1878,13 +1900,18 @@ function foldSeatStrikes(seatHashValue, baselineQMs, nowMs) {
 
   let strikesSincePass = 0;
   let criticalTrigger = false;
+  const survivors = [];
   for (const [eid, info] of countable.entries()) {
     if (!keepIds.has(eid)) continue;
     if (info.class === 'critical_reexam_trigger') criticalTrigger = true;
     else if (info.class === 'ordinary_strike') strikesSincePass += 1;
+    survivors.push({ eid, info });
   }
+  // Deterministic order: ascending event_id (same as dedup's "lowest wins").
+  survivors.sort((a, b) => a.eid - b.eid);
+  const rows = survivors.map((s) => pendingRevocationRowFromStrike(s.info.row));
 
-  return { strikesSincePass, criticalTrigger, rejected };
+  return { strikesSincePass, criticalTrigger, rejected, rows };
 }
 
 function strikeEnforcementMode() {
@@ -1893,7 +1920,10 @@ function strikeEnforcementMode() {
 
 // The ONLY admission authority (frozen contract §2.7.5). Computed fresh at
 // read time from the append-only stores — never mutates a stored row.
-function computeSeatProjection(engine, runner, role, nowMs, effort = undefined) {
+// Optional `storeDir` selects the strikes.jsonl directory (defaults to
+// CAPABILITY_DIR). `active_strike_rows` is the post-fold survivor set — the
+// sole pending_revocation producer (plan 2026-09-11 KR7 / P3).
+function computeSeatProjection(engine, runner, role, nowMs, effort = undefined, storeDir = CAPABILITY_DIR) {
   const seatHashValue = seatIdentityHash(engine, runner, role, effort);
   const partition = readStorePartition(true);
   const baseline = findSeatBaseline(
@@ -1911,12 +1941,14 @@ function computeSeatProjection(engine, runner, role, nowMs, effort = undefined) 
     rejected_strikes: 0,
   };
 
+  let activeStrikeRows = [];
   if (baseline) {
-    const fold = foldSeatStrikes(seatHashValue, baseline.instantMs, nowMs);
+    const fold = foldSeatStrikes(seatHashValue, baseline.instantMs, nowMs, storeDir);
     projection.strikes_since_pass = fold.strikesSincePass;
     projection.critical_trigger = fold.criticalTrigger;
     projection.rejected_strikes = fold.rejected;
     projection.would_requalify = projection.strikes_since_pass >= ORDINARY_STRIKE_THRESHOLD;
+    activeStrikeRows = fold.rows;
     if (projection.critical_trigger
         || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
       projection.admission_status = 'requalify_required';
@@ -1944,6 +1976,7 @@ function computeSeatProjection(engine, runner, role, nowMs, effort = undefined) 
     baseline_event_id: baseline ? baseline.event_id : null,
     baseline_qualified_at: baseline ? baseline.qualified_at : null,
     projection,
+    active_strike_rows: activeStrikeRows,
   };
 }
 
@@ -2490,6 +2523,9 @@ if (require.main === module) {
 // resolve-scaffold-tier.js's own comment at its require site).
 module.exports = {
   computeSeatProjection,
+  // Authoritative active-strike fold (plan 2026-09-11 KR7 / P3). Resolver
+  // pending_revocation is a projection of this result — never a second reader.
+  foldSeatStrikes,
   seatIdentityHash,
   engineToken,
   seatToken,

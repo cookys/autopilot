@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "autopilot-kimi-implementer-rail-2026-09-11",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "b784634d6ef72a80be4ad539557090d2a033c34dd10ae1b50e8963d08e20c49d",
+      "candidate_blocker": false,
+      "disposition": "accepted_nonblocking",
+      "rationale": "Applied at implementation: the hands brief instructs mirroring every registration site the opencode rail commit 3949e2ab touched (git show --stat), which includes the cleanup arm; \u00a72.5 R4 already names cleanup. The frozen plan text is left as reviewed."
+    },
+    {
+      "fingerprint": "2d9bc2bec433c84283872f62b14ec4f20738090af65db6a6488a80918df69062",
+      "candidate_blocker": false,
+      "disposition": "accepted_nonblocking",
+      "rationale": "Applied at implementation: the hands brief requires `bash scripts/sync-codex-plugin-skills.sh` before each commit, and the repo's pre-commit ritual (sync-codex-plugin-skills --check) refuses a commit with mirror drift \u2014 it fired earlier today on this very host. Acceptance evidence will include the mirror diff being empty."
+    }
+  ]
+}

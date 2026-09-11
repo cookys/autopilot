@@ -119,6 +119,10 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   context/skim behaviour — only that the tail stops being answerable in that band, on this host. The
   operational consequence is the same either way.
 - **Why removing the ceiling would be a regression, not a fix**: today an over-size agy prompt fails CLOSED and loudly (execve fails, the rail records `no_verdict`, nobody mistakes it for a review). A silently truncated stream-json prompt fails OPEN: the reviewer reads the first ~175 KB of a diff and returns a confident verdict on the part it saw. A hetero review loop's whole purpose is defeated by a reviewer that cannot tell you it only read half.
+- **Reproducer kept in-repo**: [`hooks/fixtures/agy-payload-probe/`](../hooks/fixtures/agy-payload-probe/)
+  — the deterministic generator, the runner, the expected payload digests, and the two methodology
+  errors the design prevents. It lived in `/tmp` during the investigation; reconstructing it is
+  exactly where both hosts went wrong, so it is version-controlled next to the row it supports.
 - **Candidate**: keep `agy_argv_ceiling_assert` as a hard gate, add a stream-json transport behind it with its own empirically-derived ceiling (start conservative, e.g. 150 KB), and make the probe above a regression test with the nonce at the tail — never assert on `status` alone. Splitting the unit remains the correct answer above that.
 - **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is Fix each.
 - **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; `scripts/lib/agy-argv-ceiling.sh`, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.

@@ -166,7 +166,7 @@ function usage(code = 2) {
     '  --resolve-live           Resolve one role in memory; print preferred/effective tuple JSON; never writes\n' +
     '  --out <path>             Custom output file path (default: $AUTOPILOT_TOPOLOGY_FILE or ~/.autopilot/topology.json)\n' +
     '  --role <roles>           Comma-separated or repeatable role filter (implementer, plan_reviewer, reviewer, consult, discuss; default: all five). Required (exactly one) with --resolve-live\n' +
-    '  --store <dir>            Capability store directory for pins.jsonl lookup (with --resolve-live; default: $ENGINE_CAPABILITY_DIR or ~/.autopilot/engine-capability)\n' +
+    '  --store <dir>            Capability store directory for pins.jsonl lookup (--resolve-live only; default: $ENGINE_CAPABILITY_DIR or ~/.autopilot/engine-capability)\n' +
     '  --exclude-seats <seats>  Comma-separated list of engine/effort@runner seats to exclude\n' +
     '  --asking-family <family> Family name for consult/discuss ladder sorting (default: anthropic)\n' +
     '  -h, --help               Print this help message\n'
@@ -854,6 +854,14 @@ function main() {
     }
   }
 
+  // Defect 1: --store only means anything with --resolve-live. Reject it BEFORE
+  // entering any legacy branch (isCheck, or the unconditional-write path) so no
+  // file is written on the way to the error.
+  if (storeArg && !isResolveLive) {
+    process.stderr.write('--store is only valid with --resolve-live\n');
+    process.exit(2);
+  }
+
   let selectedRoles;
   if (roleArgs.length === 0) {
     selectedRoles = new Set(VALID_ROLES);
@@ -918,7 +926,10 @@ function main() {
     };
     const result = resolveLiveTuple(repoRoot, liveRole, outPath, storeArg, liveDeriveOptions);
     process.stdout.write(`${JSON.stringify(result)}\n`);
-    process.exit(0);
+    // Defect 3: no process.exit(0) here — let main() return so Node drains the
+    // stdout write before the process exits. On a pipe, an immediate exit()
+    // can discard a still-pending write; returning normally lets libuv flush.
+    return;
   }
 
   if (isCheck) {

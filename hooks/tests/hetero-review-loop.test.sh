@@ -1040,6 +1040,10 @@ T2G_CHK_OUT=$(node "$REPO_ROOT/scripts/check-phase-review-receipt.js" --repo-roo
 assert_exit_code "$T2G_CHK_RC" "0" "test 2g: receipt checker accepts a chain that passes through an aborted generation (was: exit 1, 'expected finalized')"
 
 # Test 2h (negative control): a chain that ENDS on an aborted generation is not a receipt.
+# The g1 directory is NOT dead scaffold: the checker requires each chain entry's
+# evidence directory to exist before it classifies the entry, so without it the
+# refusal is "missing directory", not the "aborted last entry" this test is for.
+mkdir -p "$LEDGER/review-p_test2h/g1"
 cat << 'EOF' > "$LEDGER/review-p_test2h/chain.json"
 [ { "generation": 1, "base": "PHASE_BASE_PLACEHOLDER", "status": "aborted", "reason": "parse_failed" } ]
 EOF

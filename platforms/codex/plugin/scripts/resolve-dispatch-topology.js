@@ -163,13 +163,124 @@ function usage(code = 2) {
     'Options:\n' +
     '  --json                   Emit topology JSON to stdout (default: write to file only)\n' +
     '  --check                  Diff recomputed topology against on-disk file, exit non-zero on mismatch\n' +
+    '  --resolve-live           Resolve one role in memory; print preferred/effective tuple JSON; never writes\n' +
     '  --out <path>             Custom output file path (default: $AUTOPILOT_TOPOLOGY_FILE or ~/.autopilot/topology.json)\n' +
-    '  --role <roles>           Comma-separated or repeatable role filter (implementer, plan_reviewer, reviewer, consult, discuss; default: all five)\n' +
+    '  --role <roles>           Comma-separated or repeatable role filter (implementer, plan_reviewer, reviewer, consult, discuss; default: all five). Required (exactly one) with --resolve-live\n' +
+    '  --store <dir>            Capability store directory for pins.jsonl lookup (with --resolve-live; default: $ENGINE_CAPABILITY_DIR or ~/.autopilot/engine-capability)\n' +
     '  --exclude-seats <seats>  Comma-separated list of engine/effort@runner seats to exclude\n' +
     '  --asking-family <family> Family name for consult/discuss ladder sorting (default: anthropic)\n' +
     '  -h, --help               Print this help message\n'
   );
   process.exit(code);
+}
+
+function ladderKeyForRole(role) {
+  if (role === 'plan_reviewer') return 'plan_review_panel';
+  return `${role}_ladder`;
+}
+
+function tupleFromLadderRung(rung) {
+  if (!rung || typeof rung !== 'object') {
+    return { engine: null, runner: null, effort: null, endpoint: null };
+  }
+  const endpointRaw = rung.endpoint;
+  const endpoint = (typeof endpointRaw === 'string' && endpointRaw.length > 0)
+    ? endpointRaw
+    : null;
+  return {
+    engine: rung.engine == null ? null : rung.engine,
+    runner: rung.runner == null ? null : rung.runner,
+    effort: rung.effort == null ? null : rung.effort,
+    endpoint,
+  };
+}
+
+function loadTopologyNoWrite(repoRoot, outPath, deriveOptions) {
+  if (fs.existsSync(outPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(outPath, 'utf8'));
+    } catch (err) {
+      process.stderr.write(`Topology file invalid JSON at ${outPath}: ${err.message}\n`);
+      process.exit(1);
+    }
+  }
+  return deriveTopology(repoRoot, deriveOptions);
+}
+
+// Read the active pin for a role via the existing pins verb — do not re-validate
+// pin rows here (KR6 owns that in engine-capability-state.js).
+function readPinForRole(repoRoot, role, storeArg) {
+  const capScript = path.join(repoRoot, 'scripts', 'engine-capability-state.js');
+  const args = [capScript, 'pins', '--role', role];
+  if (storeArg) {
+    args.push('--store', storeArg);
+  }
+  const res = spawnSync(process.execPath, args, {
+    env: process.env,
+    encoding: 'utf8',
+  });
+  if (res.status !== 0) {
+    const detail = (res.stderr || res.stdout || '').trim();
+    process.stderr.write(
+      detail.length > 0
+        ? `${detail}\n`
+        : `pins lookup failed for role ${role} (exit ${res.status})\n`
+    );
+    process.exit(res.status || 1);
+  }
+  let rows;
+  try {
+    rows = JSON.parse((res.stdout || '').trim() || '[]');
+  } catch (err) {
+    process.stderr.write(`pins output invalid JSON: ${err.message}\n`);
+    process.exit(1);
+  }
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  return rows[0];
+}
+
+function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
+  const topology = loadTopologyNoWrite(repoRoot, outPath, deriveOptions);
+  const ladderKey = ladderKeyForRole(role);
+  const ladder = Array.isArray(topology[ladderKey]) ? topology[ladderKey] : [];
+  const ladderTuple = tupleFromLadderRung(ladder[0]);
+
+  const pin = readPinForRole(repoRoot, role, storeArg);
+  let preferred_tuple;
+  let effective_tuple;
+  // Substitution when a pinned seat is unusable is a later deliverable.
+  const substitution_reason = null;
+
+  if (pin) {
+    preferred_tuple = {
+      engine: pin.engine,
+      runner: pin.runner,
+      effort: pin.effort,
+      endpoint: Object.prototype.hasOwnProperty.call(pin, 'endpoint') ? pin.endpoint : null,
+    };
+    effective_tuple = {
+      engine: preferred_tuple.engine,
+      runner: preferred_tuple.runner,
+      effort: preferred_tuple.effort,
+      endpoint: preferred_tuple.endpoint,
+    };
+  } else {
+    preferred_tuple = ladderTuple;
+    effective_tuple = {
+      engine: ladderTuple.engine,
+      runner: ladderTuple.runner,
+      effort: ladderTuple.effort,
+      endpoint: ladderTuple.endpoint,
+    };
+  }
+
+  return {
+    role,
+    preferred_tuple,
+    effective_tuple,
+    substitution_reason,
+    pending_revocation: [],
+  };
 }
 
 function resolveOutputPath(outArg) {
@@ -700,7 +811,9 @@ function main() {
   const argv = process.argv.slice(2);
   let asJson = false;
   let isCheck = false;
+  let isResolveLive = false;
   let outArg = null;
+  let storeArg = null;
   let roleArgs = [];
   let excludeSeatsArg = null;
   let askingFamily = 'anthropic';
@@ -711,9 +824,15 @@ function main() {
       asJson = true;
     } else if (arg === '--check') {
       isCheck = true;
+    } else if (arg === '--resolve-live') {
+      isResolveLive = true;
     } else if (arg === '--out') {
       if (i + 1 >= argv.length) usage(2);
       outArg = argv[i + 1];
+      i += 1;
+    } else if (arg === '--store') {
+      if (i + 1 >= argv.length) usage(2);
+      storeArg = argv[i + 1];
       i += 1;
     } else if (arg === '--role') {
       if (i + 1 >= argv.length) usage(2);
@@ -769,6 +888,38 @@ function main() {
     excludeSet,
     askingFamily,
   };
+
+  // KR10 no-write live resolution: must return BEFORE the unconditional write below.
+  if (isResolveLive) {
+    if (roleArgs.length === 0) {
+      process.stderr.write('--resolve-live requires --role\n');
+      process.exit(2);
+    }
+    const liveRoles = [];
+    for (const rArg of roleArgs) {
+      const parts = rArg.split(',').map((s) => s.trim()).filter(Boolean);
+      for (const p of parts) liveRoles.push(p);
+    }
+    if (liveRoles.length !== 1) {
+      process.stderr.write('--resolve-live requires exactly one --role\n');
+      process.exit(2);
+    }
+    const liveRole = liveRoles[0];
+    if (!VALID_ROLES.includes(liveRole)) {
+      process.stderr.write(
+        `Invalid --role for --resolve-live: ${liveRole} (expected one of ${VALID_ROLES.join(', ')})\n`
+      );
+      process.exit(2);
+    }
+    const liveDeriveOptions = {
+      roles: new Set([liveRole]),
+      excludeSet,
+      askingFamily,
+    };
+    const result = resolveLiveTuple(repoRoot, liveRole, outPath, storeArg, liveDeriveOptions);
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    process.exit(0);
+  }
 
   if (isCheck) {
     if (!fs.existsSync(outPath)) {

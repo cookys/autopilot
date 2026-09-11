@@ -14,7 +14,7 @@ P0 起全部階段。**P0/P1/P2/P2b 已出貨**（最新 v2.36.26）。
 | v2.36.25 | P2 | `--resolve-live`：無寫入解析模式，回傳 preferred/effective tuple + `substitution_reason` + `pending_revocation` |
 | v2.36.26 | P2b | 契約消費 resolver：admission 移到 `effective_tuple`、替代在 matched 捷徑之前決定、`--resolved-live` 全稱驗證 |
 
-全套 334 支綠（綁分支的 worktree；detached worktree 會讓 `next-touch-validation` 假紅）。
+全套 335 支綠（綁分支的 worktree；detached worktree 會讓 `next-touch-validation` 假紅）。
 
 ## D3 已出貨（v2.36.26）
 
@@ -92,6 +92,14 @@ argv 上限、建議拿掉天花板;**本機複驗結果相反**——175K 過�
 - detached worktree 會讓 `next-touch-validation` 假紅（`git symbolic-ref --short HEAD` 無頭必失敗）。
   驗證用 worktree 一律 `-b <branch>`。
 - 管線會吞退出碼：`node ... | head` 回報的是 `head` 的狀態。判成敗要分開捕獲。
+- **主 checkout 有活的 `l5` marker 時，dispatch 類測試會以 `precondition_failed` 假紅**
+  （`active session-mode=l5 blocks non-strict dispatch (repo=<主 checkout 路徑>)`）。
+  2026-09-11 全套在主 checkout 跑出 `context-window` 與 `dispatch-author-claude-native` 兩紅，
+  兩支在綁分支的 worktree 皆綠。marker 綁 `repo_root` 字串，worktree 換了路徑就不適用。
+  **不要為了讓套件變綠去刪 marker**——那跟手寫 input bundle 同一個形狀。驗證一律走 worktree。
+- **新增測試檔可能成為別支測試釘住的 population 成員。**`resolve-review-loop-consult-discuss-switch`
+  釘了 `git grep -l 'reviewer_engine:' -- hooks/` 的檔數；新檔帶 roster fixture 就會讓它紅。
+  修法是**列舉 delta 對照 origin/develop 確認是真成員**再移動釘值，不是排除掉新檔。
 
 ## 驗證方式
 

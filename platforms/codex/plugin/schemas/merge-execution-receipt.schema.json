@@ -119,6 +119,10 @@
         "before_sha",
         "after_sha",
         "merge_commit",
+        "source_sha",
+        "accepted_sha",
+        "integration_method",
+        "unit_id",
         "conflicts",
         "error",
         "preservation",
@@ -138,6 +142,16 @@
         },
         "after_sha": { "$ref": "#/$defs/gitOid" },
         "merge_commit": { "$ref": "#/$defs/gitOid" },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "accepted_sha": { "$ref": "#/$defs/gitOid" },
+        "integration_method": {
+          "type": "string",
+          "enum": ["merge", "ff", "cherry-pick", "rebase", "squash", "apply+fresh-commit"]
+        },
+        "unit_id": { "type": "string", "minLength": 1 },
         "conflicts": {
           "type": "array",
           "uniqueItems": true,

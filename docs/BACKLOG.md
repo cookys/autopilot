@@ -23,6 +23,25 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ---
 
+### agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT
+- **Trigger**: the next agy-rail dispatch refused by `agy_argv_ceiling_assert`, or any work that proposes routing `dispatch-review.sh` / `dispatch-hetero.sh` / `dispatch-author.sh` through stream-json.
+- **Context**: a peer host (twgs-revival, 2026-09-11) reported that agy 1.2.0's `--input-format stream-json` reads NDJSON from stdin and so bypasses the 131072-byte `MAX_ARG_STRLEN` argv wall, measured at 208951 bytes with `status: SUCCESS`, and suggested the payload ceiling could be removed. **Re-derived on this host (agy 1.2.1) with a trailing-nonce probe — the transport claim holds, the conclusion does not.** Each probe put a unique token at the very END of the payload and asked for it back, so a partial read cannot answer:
+
+| payload | tail token returned | `result.status` |
+|---|---|---|
+| 49,595 B | yes | SUCCESS |
+| 140,047 B (above the argv wall) | yes | SUCCESS |
+| 175,145 B | yes | SUCCESS |
+| 200,344 B | **no** | SUCCESS |
+| 207,103 B | **no** (model volunteered "repeated many times and truncated") | SUCCESS |
+
+- **The finding**: stream-json genuinely buys a real window above the argv wall — 140 KB and 175 KB both deliver intact where argv fails at 131072. But somewhere between **175 KB and 200 KB** the tail stops being readable, and the run still reports `status: SUCCESS` with a fluent answer about the beginning of the payload. The peer's 208,951-byte measurement was above that line; `status: SUCCESS` measured transport, not delivery.
+- **Honest bound**: this probe does not distinguish transport truncation from model-side context/skim behaviour — only that the tail stops being answerable in that band. The operational consequence is the same either way.
+- **Why removing the ceiling would be a regression, not a fix**: today an over-size agy prompt fails CLOSED and loudly (execve fails, the rail records `no_verdict`, nobody mistakes it for a review). A silently truncated stream-json prompt fails OPEN: the reviewer reads the first ~175 KB of a diff and returns a confident verdict on the part it saw. A hetero review loop's whole purpose is defeated by a reviewer that cannot tell you it only read half.
+- **Candidate**: keep `agy_argv_ceiling_assert` as a hard gate, add a stream-json transport behind it with its own empirically-derived ceiling (start conservative, e.g. 150 KB), and make the probe above a regression test with the nonce at the tail — never assert on `status` alone. Splitting the unit remains the correct answer above that.
+- **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is Fix each.
+- **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; `scripts/lib/agy-argv-ceiling.sh`, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.
+
 ### Pin store hardening: fsync, orphaned temp files, and re-validation of stored rows
 - **Trigger**: a report of a `pins.jsonl` lost or corrupted by power loss (not a process kill), a store directory accumulating `.pins.jsonl.tmp.*` litter, or the first consumer that reads the pin store without going through `readPinRows`.
 - **Context**: the QC panel (GLM-5.2, 2026-09-11) raised four Suggestion-level items against the v1 pin store, all reproduced at depth 0 and all hardening rather than regressions. (a) `writeSnapshot` does `writeFileSync` → `renameSync` with no `fsync` of the temp file or the directory, so a power loss — not the process-level interruption the spec covers — can still roll the file back; `appendRow` has the same posture, so this is a store-wide question, not a pin-specific one. (b) A SIGKILL inside the write→rename window orphans `.pins.jsonl.tmp.<pid>.<hrtime>`; the `catch → unlinkSync` only cleans thrown errors. Verified: the litter never corrupts `pins.jsonl`, since readers open that path only. (c) `readPinRows` now fails loudly on an unparsable line (v2.36.24) but still does not schema-validate a row it CAN parse, so a hand-edited row with a date in `expires` or a ninth key is read back and persisted through the next snapshot. No CLI input can produce one, and the file is 0600 operator-owned. (d) `listPins` treats `--role ''` as absent and returns everything, matching the existing falsy-option idiom.

@@ -150,6 +150,33 @@ function appendRow(storeFile, row) {
   fs.appendFileSync(storeFile, line, { mode: 0o600 });
 }
 
+// Replace the whole store file with `rows` as one JSONL document (one canonical
+// JSON object per line, trailing newline). Writes to a same-directory temp file
+// then renameSync onto storeFile so a crash between those steps leaves the
+// previous contents intact. Does NOT take the lock — callers wrap with
+// withWriteLock, same as appendRow.
+function writeSnapshot(storeFile, rows) {
+  if (!Array.isArray(rows)) {
+    throw new Error('writeSnapshot rows must be an array');
+  }
+  const dir = path.dirname(storeFile);
+  ensureDir(dir);
+  const tmp = path.join(
+    dir,
+    `.${path.basename(storeFile)}.tmp.${process.pid}.${process.hrtime.bigint()}`,
+  );
+  const body = rows.length === 0
+    ? ''
+    : `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`;
+  try {
+    fs.writeFileSync(tmp, body, { mode: 0o600 });
+    fs.renameSync(tmp, storeFile);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* best-effort temp cleanup */ }
+    throw err;
+  }
+}
+
 function toEventId(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
@@ -175,6 +202,7 @@ module.exports = {
   releaseLock,
   withWriteLock,
   appendRow,
+  writeSnapshot,
   toEventId,
   maxEventId,
 };

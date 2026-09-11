@@ -23,6 +23,16 @@ mkdir -p "$SBX/scripts" \
 
 cp "$REPO_ROOT/scripts/check-canonical-invariants.sh" "$SBX/scripts/"
 cp "$REPO_ROOT/scripts/check-reference-sizes.js" "$SBX/scripts/"
+cp "$REPO_ROOT/scripts/check-supersession-anchors.js" "$SBX/scripts/"
+# Supersession-anchor gate seeds: the manifest names exact files, so the sandbox must
+# carry them or the gate fails for a reason that has nothing to do with the case under
+# test. Seeding (rather than letting the gate skip on a missing manifest) is deliberate:
+# a gate that goes quiet when its config is absent is the blindness this repo has been
+# bitten by before.
+mkdir -p "$SBX/hooks/fixtures" "$SBX/platforms/codex/plugin/scripts"
+cp "$REPO_ROOT/hooks/fixtures/supersession-anchors.json"              "$SBX/hooks/fixtures/"
+cp "$REPO_ROOT/scripts/dispatch-contract.js"                          "$SBX/scripts/dispatch-contract.js"
+cp "$REPO_ROOT/platforms/codex/plugin/scripts/dispatch-contract.js"   "$SBX/platforms/codex/plugin/scripts/dispatch-contract.js"
 # Mirror every seeded file at its real relative path.
 cp "$REPO_ROOT/CLAUDE.md"                                              "$SBX/CLAUDE.md"
 cp "$REPO_ROOT/agents/reviewer.md"                                    "$SBX/agents/reviewer.md"

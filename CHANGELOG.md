@@ -1,5 +1,71 @@
 # Changelog
 
+## v2.36.24 — operator pin store：一個宣稱在驗鎖、拿掉鎖卻照樣綠的斷言
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P1（該 plan 經四代 hetero review 凍結）。
+新增常設 operator pin 的儲存層——「使用者指定的席位直接照派」那條規則的地基。
+
+- `scripts/lib/jsonl-store.js` — 新 `writeSnapshot(storeFile, rows)`：同目錄暫存檔 + `renameSync`，
+  中斷的寫入不會留下半截檔案。既有 export 零刪除行。
+- `scripts/engine-capability-state.js` — 新 `pin-seat` / `unpin-seat` / `pins`，over 新的 `pins.jsonl`。
+  列是**八欄位**（engine, runner, role, effort, endpoint, reason, operator, expires），`expires` 必須是
+  JSON `null`；`--operator` 必填、不得預設。每個 role 至多一列活的，替換無墓碑、無第二套 schema。
+  pin 路徑**不共用** qualification-override 的 validator（後者的 `expires` 是必填日期，共用會改到沒有
+  pin 的機器）。
+- `hooks/tests/engine-capability-pin.test.sh` — 9 條斷言。
+
+**派工拓樸**：實作由 `grok-4.5`(xai) 經 managed campaign rail 完成；QC panel 三家族
+（`MiniMax-M3` minimax、`GLM-5.2` zhipu、`gpt-5.6-sol` openai）。
+
+**第三席一個人翻盤。** 前兩席都給 SHIP-AS-IS，depth-0 自己的驗證也全綠；`min_panel_size: 3` 逼出的
+第三席找出三條真缺陷，每條都在 depth-0 複現後才採納：
+
+1. **test 8 宣稱驗證「pin 路徑使用 `withWriteLock`」，實際上是 grep 到了區段自己的註解。** 把
+   `unpinSeat` 的鎖拿掉，該斷言照樣綠。改成行為斷言：持有鎖檔後背景啟動兩個 mutator，斷言各自仍被阻塞，
+   釋放後確認變更確實落地——它能指認**是哪一個** mutator 掉了鎖，這是 grep 永遠做不到的。
+2. **`readPinRows` 會靜默跳過無法解析的列**，下一次 `writeSnapshot` 只保留倖存者，於是操作者的資料
+   無聲消失。改成失敗並指名檔案與 1-based 行號；`pins`/`pin-seat`/`unpin-seat` 三者皆 exit 1 且
+   `pins.jsonl` 逐位元未變。
+3. **冪等測試只看第二次的退出碼**，第二次 unpin 若重建或破壞檔案也會通過。改成種一個無關 role、
+   比對完整檔案內容。
+
+三條紅證由 depth-0 以**保留行為的變異**重新推導（`withWriteLock` 換成立即呼叫，mutator 照常運作、
+只是沒有鎖），不採信實作者自報。過程中兩次挑錯變異點的教訓寫進
+`references/evidence-discipline.md` §32。
+
+**偏差（誠實記錄）**：修補未經 hetero 引擎，由 Claude sonnet 完成——managed campaign rail 在
+`prepare_implementation` 以 `MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。本版因此
+不是純 L5。rail 缺陷與 panel 的四條 🔵 硬化項一併進 `docs/BACKLOG.md`。
+
+prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）；
+`references/evidence-discipline.md` 新增 §32 是事故記錄，該檔的用途就是累積這類條目。
+
+## v2.36.23 — 被取代的 Board 裁決必須帶指標；宣告不碰的區段要驗，不能只是聲稱
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0。兩條 2026-08 的 Board 裁決在
+2026-09-11 被 owner 取代，但它們的原文還留在 `dispatch-contract.js` 的註解裡，讀起來像現行規則——
+下一個讀到的人會照著失效的規則做判斷。
+
+- `hooks/fixtures/supersession-anchors.json`（新）— 凍結**適用**的錨點清單。用 grep 不行：它分不出
+  「陳述該裁決的錨點」和「順口提到的字」，而且鏡像的用字一旦漂移就會被漏掉。六個錨點，源檔與
+  codex 鏡像各三。
+- `scripts/check-supersession-anchors.js`（新）— 每個錨點的具名符號附近 N 行內必須有 dated marker，
+  沒有就具名失敗；清單過期（符號找不到）也是失敗，不是跳過。同一份 manifest 另外釘住 plan 宣告
+  **不碰**的區段（`dispatch-hetero.sh` 的 strike writer 3765-3880、`check_mission_enforcement_gate`）
+  的 sha256——「沒動到」從此是驗出來的，不是聲稱的。`--update-digests` 供刻意重立基準用。
+- 接進 `scripts/check-canonical-invariants.sh`。
+- `hooks/tests/supersession-anchors.test.sh`（新）— 5 條斷言，其中 4 條是紅測：缺指標、清單過期、
+  保護區段被改、digest 未登記一律失敗。寫測試時抓到 checker 自己兩個 bug（`path.join` 把絕對路徑
+  接到 repo 底下、讀不到檔案時拋 stack 而非具名失敗），都已修。
+
+三處註解加上 SUPERSEDED IN PART 指標，講清楚哪一半還有效：對**自動挑選**的席位，原裁決一字不改；
+被取代的只有它對**operator 指名席位**的適用。
+
+prose-justification: 本版新增的 prose 是三段 code 註解指標（共 14 行）、CLAUDE.md 一個 script 名、
+scripts-inventory 一列，以及 CHANGELOG／INDEX 條目。註解指標無法用機器取代——它要解決的問題正是
+「讀到失效裁決原文的人不會去查 manifest」；把它壓縮就等於恢復原本的陷阱。`skills/` 與
+`references/` 的散文一字未動（`git diff --stat -- skills references` 為空）。
+
 ## v2.36.22 — context-budget 記住這個 session 的視窗，不再因為 statusline 停跳而誤報
 
 `hooks/context-budget.js` 的精確視窗來自 statusline 寫的 live 檔，而 statusline 在 session

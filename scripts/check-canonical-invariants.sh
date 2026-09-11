@@ -356,6 +356,20 @@ else
   bad "reference-size: a skills/*/references/*.md file exceeds the 48KB numbered cap — run node scripts/check-reference-sizes.js"
 fi
 
+# ── supersession-anchor invariant ────────────────────────────────────────────────
+# A code comment that states a Board ruling which has since been superseded is a trap
+# for the next reader: it reads as current. Every such site is frozen in
+# hooks/fixtures/supersession-anchors.json and must carry a dated pointer. The same
+# manifest pins the regions a plan declared out of scope, so an "untouched" claim is
+# verified rather than trusted. Details: scripts/check-supersession-anchors.js.
+if ! command -v node >/dev/null 2>&1; then
+  envx "supersession-anchors: node is required to run scripts/check-supersession-anchors.js"
+elif node "$REPO/scripts/check-supersession-anchors.js" >/dev/null 2>&1; then
+  ok "supersession-anchors: every superseded ruling carries a dated pointer; protected regions unchanged"
+else
+  bad "supersession-anchors: a superseded ruling lacks its pointer, or a protected region changed — run node scripts/check-supersession-anchors.js"
+fi
+
 echo ""
 if [ "$ENV_ERR" = "1" ]; then
   echo "❌ environment error — a seeded path is wrong (fix the seed table)" >&2

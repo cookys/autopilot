@@ -723,3 +723,33 @@ a set of derived values, do not ask a model to compute them: dispatch a script
 that computes them, and review the script. And never state the expected digest in
 the prompt; it converts a check into an answer key. Related: §29 (a derived cache
 matching its generator proves only that the generator ran).
+
+## 32. A mutant that goes red for the wrong reason hides the finding you were looking for
+
+**Incident (2026-09-11, the operator pin store).** §30 covers the mutant that survives because it
+broke the code a second way. This is its mirror, and it cost a wrong conclusion in both directions
+inside one review.
+
+First, a *surviving* mutant read as a coverage gap. To test that `writeSnapshot` is atomic, the
+`fs.renameSync` call was deleted. The suite stayed green, which looked like proof that the atomicity
+assertion was vacuous. It was not: with no rename, nothing is ever written to the target, so the
+assertion "the file still holds its prior contents" is satisfied trivially. The correct mutant —
+write straight to the target instead of temp+rename — turned that assertion red immediately. A
+correct implementation was one step away from being reported as untested.
+
+Then a *failing* mutant read as coverage. To test that the pin path takes the write lock,
+`withWriteLock(opts, fn)` had its head replaced with `(() => {` — leaving the closing `})` intact,
+so the callback became an arrow function that was never invoked. The mutator stopped working
+entirely and three assertions went red. "The suite went red" reads as "the lock is covered" — but
+the assertion that claims to cover the lock **stayed green**, and the three that failed were about
+the pin landing at all. The real finding (that assertion was a `grep` matching the section's own
+comment, and passes with the lock removed) only appeared once the mutant preserved behaviour:
+`withWriteLock` replaced by an immediate call, so the mutator still pins, just without the lock.
+
+> **Read which assertion moved, never whether the suite moved.** A mutant is evidence only when the
+> assertion under test is the one that changes state. A red suite whose relevant assertion stayed
+> green is the same non-evidence as a green suite whose mutant crashed.
+
+Prevention: name the assertion the mutant is supposed to break before running it, and require that
+exact assertion to flip. A mutant that removes a property must leave every other behaviour intact —
+if unrelated assertions move, the mutant is malformed, not informative.

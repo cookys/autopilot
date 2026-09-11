@@ -813,6 +813,34 @@ Two rules follow, and the first is cheap enough that there is no reason not to:
   way — prove the thing being read exists and carries what you are searching within,
   and only then treat a non-match as evidence.
 
-The family now has five members across four deliverables of one plan plus this one, from
-two different repositories and two different authors. Treat "my check is green" as
-meaning nothing until you can say what it read.
+**A third rule, and it is not a corollary of the second.** Reported by the same session
+hours later, after applying the two rules above to the gate they had built to stop this
+very family — and finding the gate was itself an instance:
+
+- **A parser that dies must not be readable as valid-but-empty input.**
+
+Their `check-inputs-landed.sh` had an embedded Python heredoc with a quoting error. The
+interpreter raised SyntaxError, `mapfile` read zero lines, and the gate printed
+`OK: all 0 declared input(s) are contained in HEAD.` and exited 0. That `--manifest`
+path is the entire purpose of the gate, and its commit message claimed it gated phase
+inputs; only the positional-argument path had ever been run.
+
+Rule 2 does not catch this. They *had* `|| fail` on the `mapfile`, and it never fired,
+because `mapfile` reading zero lines from a failed pipeline **succeeds**. The SyntaxError
+did reach stderr — three lines above the success message. Embedding the parse inside the
+shell makes "the parser died" and "the input was empty" indistinguishable at the shell
+level, so no amount of checking the emptiness afterwards helps: by then both look the
+same. The fix is structural — move the parse into its own program and check its exit
+code explicitly. Theirs now exits 2 on zero inputs, a missing `inputs` key, a non-list,
+or an entry without a sha, with the exact regression pinned by a test.
+
+Two things about that incident are worth keeping. The gate was written specifically to
+prevent a false-negative existence check, and it shipped as one — **building the guard is
+not the same as running it**, which is this file's oldest lesson arriving from a new
+direction. And the repair itself broke the other code path (a literal tab written as
+`\t`) and was caught immediately, by the tests the first version did not have.
+
+The family now has six members across four deliverables of one plan, a peer repository,
+and a guard built to stop the family. Treat "my check is green" as meaning nothing until
+you can say what it read, that the operands were populated, and that the thing which
+produced them exited zero.

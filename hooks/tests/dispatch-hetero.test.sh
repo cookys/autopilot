@@ -925,8 +925,8 @@ assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
 
-# 12a. A sealed v1 campaign is not itself a strict leaf projection. Under L6 it
-# must fail before the runner instead of treating prompt text as authority.
+# 12a. A sealed bounded campaign without a Mission projection is its own
+# authority under a live L6 session marker (supersedes 8d7e61c2, 2026-07-28).
 CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
 CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.seal.json"
 CAMPAIGN_BASE="$(git -C "$SBX" rev-parse develop)"
@@ -962,6 +962,7 @@ OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
 assert_eq "0" "$EXIT" "sealed v1 campaign remains compatible outside strict governance"
 assert_file_exists "$TEST_TMP/captured_prompt.txt" \
   "legacy v1 shadow/off campaign still reaches its runner"
+git -C "$SBX" branch -D feat/campaign-boundary >/dev/null 2>&1 || true
 
 printf '%s\n' \
   "{\"level\":\"l6\",\"repo_root\":\"$(cd "$SBX" && pwd -P)\",\"started_at\":\"2026-07-28T00:00:00Z\",\"expires_at\":\"2099-01-01T00:00:00Z\"}" \
@@ -972,11 +973,9 @@ OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
   --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
   --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "sealed v1 campaign cannot bypass active L6 strict projection"
-assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
-  "sealed v1 campaign names the active strict admission requirement"
-assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
-  "sealed v1 campaign rejection spawns no runner"
+assert_eq "0" "$EXIT" "sealed bounded campaign dispatches under a live L6 marker"
+assert_file_exists "$TEST_TMP/captured_prompt.txt" \
+  "sealed bounded campaign under live L6 reaches its runner"
 
 # 12b. A contract changed after intake is rejected before the runner or worktree exists.
 rm -f "$TEST_TMP/captured_prompt.txt"
@@ -1032,12 +1031,25 @@ assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo
   "forged campaign seal spawns no runner"
 
 # 12f. The new campaign admission path does not weaken the prompt-only session gate.
+rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
   "$SCRIPT" --branch feat/campaign-non-strict --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-strict dispatch remains blocked under active L6"
 assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
   "non-strict L6 diagnostic names the required authority"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "bare dispatch under live L6 spawns no runner"
+
+# The marker-to-campaign admission bridge is a second, independent gate. Its
+# dedicated strict fixture plants a foreign marker with a stale graph digest
+# and must still fail before the runner even though 12a now bypasses only the
+# session-mode gate for a bounded non-Mission campaign.
+BRIDGE_OUT="$(bash "$REPO_ROOT/hooks/tests/mission-routing-campaign-bridge.test.sh" 2>&1)"; BRIDGE_EXIT=$?
+assert_eq "0" "$BRIDGE_EXIT" \
+  "strict campaign with stale-digest marker remains refused by marker bridge: $BRIDGE_OUT"
+assert_contains "$BRIDGE_OUT" "PASS [mission-routing-campaign-bridge]" \
+  "dedicated marker bridge oracle remains green"
 
 # 12g. A malformed marker in the authoritative namespace fails closed.
 MALFORMED_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode-malformed"

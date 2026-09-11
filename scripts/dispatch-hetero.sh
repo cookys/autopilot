@@ -951,6 +951,36 @@ NODE
   done
 }
 
+# A sealed bounded campaign is its own authority under a live session marker.
+# This deliberately supersedes the absolute rule asserted by 8d7e61c2 on
+# 2026-07-28. Consult the canonical JavaScript predicate instead of growing a
+# second shell interpretation of the closed campaign schema.
+sealed_bounded_campaign_without_mission_projection() {
+  local projection_state="" projection_rc=0
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] \
+    && [ -n "$CAMPAIGN_CONTRACT_SHA256" ] \
+    && [ -n "$CAMPAIGN_SEAL_FILE" ] \
+    || return 1
+  projection_state="$(
+    node - "$SELF_DIR/session-mode.js" "$CAMPAIGN_CONTRACT_FILE" <<'NODE' 2>&1
+'use strict';
+const [sessionModePath, campaignContract] = process.argv.slice(2);
+try {
+  const { campaignCarriesMissionProjection } = require(sessionModePath);
+  process.stdout.write(
+    campaignCarriesMissionProjection(campaignContract) ? 'PROJECTED' : 'BOUNDED',
+  );
+} catch (error) {
+  process.stdout.write(error.message || String(error));
+  process.exit(3);
+}
+NODE
+  )" || projection_rc=$?
+  [ "$projection_rc" -eq 0 ] \
+    || die_precondition "campaign mission projection check failed: $projection_state"
+  [ "$projection_state" = "BOUNDED" ]
+}
+
 run_strict_contract_preflight() {
   local contract_check_out="" contract_check_json=""
   local verdict strict_model strict_runner contract_base contract_wall_seconds checker_reasons
@@ -1914,7 +1944,11 @@ if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
   run_campaign_projection_preflight
 fi
 if [ "$CAMPAIGN_PROJECTION_BOUND" -ne 1 ]; then
-  check_session_mode_gate
+  # The contract checker above has already re-derived the supplied digest and
+  # verified its seal. Only that all-three-input boundary may skip this gate.
+  if ! sealed_bounded_campaign_without_mission_projection; then
+    check_session_mode_gate
+  fi
   check_mission_enforcement_gate
 else
   # Sealed strict projection is present: still bind active L5/L6 (and L3

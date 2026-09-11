@@ -2525,7 +2525,6 @@ module.exports = {
   computeSeatProjection,
   // Authoritative active-strike fold (plan 2026-09-11 KR7 / P3). Resolver
   // pending_revocation is a projection of this result — never a second reader.
-  foldSeatStrikes,
   seatIdentityHash,
   engineToken,
   seatToken,

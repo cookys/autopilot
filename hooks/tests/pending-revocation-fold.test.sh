@@ -317,8 +317,11 @@ run_check "$KR3_RED_CUR" \
   node "$CONTRACT_CLI" check --contract "$CONTRACT" --repo "$MINI_REPO" --json
 assert_eq "$?" "3" "KR3 red current exits 3"
 assert_contains "$(cat "$KR3_RED_CUR")" "$REFUSAL_ORDINARY" "KR3 unpinned: refusal string PRESENT"
-if cmp -s "$KR3_RED_PRE" "$KR3_RED_CUR"; then
-  assert_eq "1" "1" "KR3 red stdout byte-identical to pre-change"
+# Two empty files also compare equal, so byte-identity is only meaningful once
+# both sides are known to carry the refusal they are being compared for.
+assert_contains "$(cat "$KR3_RED_PRE")" "$REFUSAL_ORDINARY" "KR3 red pre-change stdout carries the refusal"
+if [ -s "$KR3_RED_PRE" ] && [ -s "$KR3_RED_CUR" ] && cmp -s "$KR3_RED_PRE" "$KR3_RED_CUR"; then
+  assert_eq "$(wc -c < "$KR3_RED_PRE")" "$(wc -c < "$KR3_RED_CUR")" "KR3 red stdout byte-identical to pre-change"
 else
   fail "KR3 red stdout diverged from pre-change"
   diff -u "$KR3_RED_PRE" "$KR3_RED_CUR" >&2 || true
@@ -369,8 +372,11 @@ run_check "$KR4_RED_CUR" \
   ENGINE_SCORECARD_DIR="$ENGINE_SCORECARD_DIR" ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
   node "$CONTRACT_CLI" check --contract "$CONTRACT" --repo "$MINI_REPO" --json
 assert_contains "$(cat "$KR4_RED_CUR")" "$REFUSAL_CRITICAL" "KR4 unpinned: refusal string PRESENT"
-if cmp -s "$KR4_RED_PRE" "$KR4_RED_CUR"; then
-  assert_eq "1" "1" "KR4 red stdout byte-identical to pre-change"
+# Two empty files also compare equal, so byte-identity is only meaningful once
+# both sides are known to carry the refusal they are being compared for.
+assert_contains "$(cat "$KR4_RED_PRE")" "$REFUSAL_CRITICAL" "KR4 red pre-change stdout carries the refusal"
+if [ -s "$KR4_RED_PRE" ] && [ -s "$KR4_RED_CUR" ] && cmp -s "$KR4_RED_PRE" "$KR4_RED_CUR"; then
+  assert_eq "$(wc -c < "$KR4_RED_PRE")" "$(wc -c < "$KR4_RED_CUR")" "KR4 red stdout byte-identical to pre-change"
 else
   fail "KR4 red stdout diverged from pre-change"
   diff -u "$KR4_RED_PRE" "$KR4_RED_CUR" >&2 || true
@@ -387,16 +393,20 @@ assert_absent_from_fold_and_admission() {
   local live_file="$3"
   local check_file="$4"
 
-  if grep -F "$planted_receipt" "$live_file" >/dev/null 2>&1; then
-    fail "$case_name: planted row $planted_receipt leaked into resolve-live pending_revocation"
-  else
-    assert_eq "1" "1" "$case_name: planted row absent from pending_revocation"
-  fi
-  if grep -F "$planted_receipt" "$check_file" >/dev/null 2>&1; then
-    fail "$case_name: planted row $planted_receipt leaked into contract check output"
-  else
-    assert_eq "1" "1" "$case_name: planted row absent from admission/check output"
-  fi
+  # A bare "grep did not match" is NOT evidence of absence: grep also exits
+  # non-zero on a missing or empty file, so the else branch would score a pass
+  # for a payload that was never produced. Prove the payload exists and is the
+  # right document FIRST; only then is a non-match informative.
+  assert_file_exists "$live_file" "$case_name: resolve-live payload was written"
+  assert_file_exists "$check_file" "$case_name: contract check payload was written"
+  assert_contains "$(cat "$live_file")" '"pending_revocation"' \
+    "$case_name: resolve-live payload carries pending_revocation (grep target is real)"
+  assert_contains "$(cat "$check_file")" '"verdict"' \
+    "$case_name: contract check payload carries a verdict (grep target is real)"
+  assert_not_contains "$(cat "$live_file")" "$planted_receipt" \
+    "$case_name: planted row absent from pending_revocation"
+  assert_not_contains "$(cat "$check_file")" "$planted_receipt" \
+    "$case_name: planted row absent from admission/check output"
 }
 
 # --- neg-invalidated: row invalidated by invalidates_event_id ---

@@ -54,6 +54,22 @@ live 文件都要加 `operator_pin` 欄位，已 pin 的案例填物件，再加
 這不是「不可能失敗的斷言」，是**紅案從不餵入 GO 路徑實際消費的那個輸入**。前四種都是斷言層的，
 這一種在輸入層——找空洞時要連「紅案走的是不是同一條路徑」一起問。
 
+## 接手第二件事：openclaw 回報的 l5 marker gate（owner 2026-09-12 已授權，排在後面）
+
+繞道修完、D4 出貨之後做這個，不要平行開。細節在 `docs/BACKLOG.md` 的
+`PEER-REPORTED … bounded non-Mission campaigns` 那列（commit `1cb55127`）。
+
+一句話：`check_session_mode_gate` 要求一份 bounded contract 不會帶的 strict projection，
+於是 `/l5` 自己啟動的 campaign 被 `/l5` 自己的 marker 擋死。v2.34.8 在 admission 側修過同一類
+（`session-mode.js campaignCarriesMissionProjection`），dispatcher 側沒跟上。
+
+**授權的是動手，不是跳過證據**：那列的每一項都是 peer 在別台機器上的觀察，本機一行都沒複驗。
+**先在本機複現**，讓本機的執行結果——而不是那份回報——定義要修的缺陷。
+
+**而且它和本檔上面那條 marker 陷阱不是同一個機制**（那條是 `check_marker_campaign_admission_bridge`
+比對 digest；這條是 strict-projection gate 拒絕 bounded contract），**修一個不會修到另一個**。
+測試矩陣要同時涵蓋「bounded campaign + 活的 l5 marker」與「strict campaign + 舊 graph 的殘留 marker」。
+
 ## D4 已完成的部分（分支上）
 
 | commit | 內容 |

@@ -36,7 +36,26 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 | 207,103 B | **no** (model volunteered "repeated many times and truncated") | SUCCESS |
 
 - **The finding**: stream-json genuinely buys a real window above the argv wall — 140 KB and 175 KB both deliver intact where argv fails at 131072. But somewhere between **175 KB and 200 KB** the tail stops being readable, and the run still reports `status: SUCCESS` with a fluent answer about the beginning of the payload. The peer's 208,951-byte measurement was above that line; `status: SUCCESS` measured transport, not delivery.
-- **Honest bound**: this probe does not distinguish transport truncation from model-side context/skim behaviour — only that the tail stops being answerable in that band. The operational consequence is the same either way.
+- **Cross-host disagreement, and what it eliminates.** The peer re-ran the tail-nonce design on their host (agy **1.2.0**) and saw the tail returned at 199,976 B, 208,944 B, 249,984 B, 319,980 B and **449,940 B** — no wall at all. Controlled locally afterwards on agy **1.2.1**, using the REAL model id (`agy models` lists `gemini-3.8-flash-high|medium|low`; there is no bare `gemini-3.8-flash`, and the first probes here wrongly passed one with `--effort`):
+
+| local probe (agy 1.2.1, `gemini-3.8-flash-high`) | tail token |
+|---|---|
+| 175,145 B, repeated-pangram padding | returned |
+| 200,344 B, repeated-pangram padding | **not returned** |
+| 199,166 B, varied random-word padding | **not returned** |
+
+  So on this host the wall is real and is NOT explained by model alias, effort tier, or padding
+  compressibility. The remaining difference against the peer is the **agy version** (1.2.1 vs 1.2.0)
+  — a plausible regression, unverified from here.
+- **Consequence for the fix, sharpened by the peer**: if the wall moves with the model AND the agy
+  version, a constant in a dispatch script is the wrong shape entirely — it would silently regress on
+  a roster change or an agy upgrade, both of which happen without anyone touching the rail. The
+  threshold belongs **per seat**, measured by the tail-nonce probe during `engine-onboarding` /
+  qualification and stored beside the seat's other capability facts, with a re-measure trigger on
+  runner-version change (the capability store already tracks `runner_version`).
+- **Honest bound**: this probe does not distinguish transport truncation from model-side context/skim
+  behaviour — only that the tail stops being answerable in that band. The operational consequence is
+  the same either way.
 - **Why removing the ceiling would be a regression, not a fix**: today an over-size agy prompt fails CLOSED and loudly (execve fails, the rail records `no_verdict`, nobody mistakes it for a review). A silently truncated stream-json prompt fails OPEN: the reviewer reads the first ~175 KB of a diff and returns a confident verdict on the part it saw. A hetero review loop's whole purpose is defeated by a reviewer that cannot tell you it only read half.
 - **Candidate**: keep `agy_argv_ceiling_assert` as a hard gate, add a stream-json transport behind it with its own empirically-derived ceiling (start conservative, e.g. 150 KB), and make the probe above a regression test with the nonce at the tail — never assert on `status` alone. Splitting the unit remains the correct answer above that.
 - **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is Fix each.

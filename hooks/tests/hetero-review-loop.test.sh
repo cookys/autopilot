@@ -973,6 +973,43 @@ assert_eq "$T2E_CHAIN_LEN" "2" "test 2e: chain.json has both the aborted g1 entr
 T2E_G1_STATUS=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).find((c) => c.generation === 1).status);' "$LEDGER/review-p_test2/chain.json")
 assert_eq "$T2E_G1_STATUS" "aborted" "test 2e: g1 entry in chain.json is still status aborted, unmodified (referenced, not overwritten)"
 
+# Test 2f: base inheritance is explicit, not implied — g2 starts from the aborted g1's base.
+T2F_G1_BASE=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).find((c) => c.generation === 1).base);' "$LEDGER/review-p_test2/chain.json")
+T2F_G2_BASE=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).find((c) => c.generation === 2).base);' "$LEDGER/review-p_test2/chain.json")
+assert_eq "$T2F_G2_BASE" "$T2F_G1_BASE" "test 2f: g2.base equals the aborted g1's base (nothing advanced)"
+assert_eq "$T2F_G2_BASE" "$PHASE_BASE" "test 2f: and that base is the phase base"
+
+# Test 2g (reader side): a chain that PASSES THROUGH an aborted generation is a valid receipt.
+# Found live on fleet-comms Phase 6 (2026-09-11): g1 aborted because the branch moved during
+# collection, g2 finalized SHIP-AS-IS, and the checker refused the receipt with
+# "Chain entry generation 1 status is 'aborted' (expected 'finalized')" — contradicting the
+# writer's own documented semantics (tests 2d/2e/4 above). The aborted entry must be
+# contiguity-neutral: it sits where a base was expected, contributes nothing, and the next
+# finalized entry inherits its base.
+cat << 'EOF' > "$TEST_TMP/disp_test2_g2.json"
+{ "schema_version": 1, "phase": "p_test2", "generation": 2, "findings": [] }
+EOF
+T2G_FIN_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 2 --branch work --dispositions "$TEST_TMP/disp_test2_g2.json" 2>&1); T2G_FIN_RC=$?
+assert_exit_code "$T2G_FIN_RC" "0" "test 2g: finalizing g2 after an aborted g1 exits 0"
+assert_file_exists "$LEDGER/receipt-p_test2.json" "test 2g: receipt written"
+T2G_CHK_OUT=$(node "$REPO_ROOT/scripts/check-phase-review-receipt.js" --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --branch work --phase-base "$PHASE_BASE" 2>&1); T2G_CHK_RC=$?
+assert_exit_code "$T2G_CHK_RC" "0" "test 2g: receipt checker accepts a chain that passes through an aborted generation (was: exit 1, 'expected finalized')"
+
+# Test 2h (negative control): a chain that ENDS on an aborted generation is not a receipt.
+mkdir -p "$LEDGER/review-p_test2h/g1"
+cat << 'EOF' > "$LEDGER/review-p_test2h/chain.json"
+[ { "generation": 1, "base": "PHASE_BASE_PLACEHOLDER", "status": "aborted", "reason": "parse_failed" } ]
+EOF
+sed -i "s/PHASE_BASE_PLACEHOLDER/$PHASE_BASE/" "$LEDGER/review-p_test2h/chain.json"
+cp "$LEDGER/receipt-p_test2.json" "$LEDGER/receipt-p_test2h.json"
+node -e '
+const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); r.phase="p_test2h";
+r.chain=JSON.parse(fs.readFileSync(process.argv[2])); fs.writeFileSync(process.argv[1], JSON.stringify(r,null,2));
+' "$LEDGER/receipt-p_test2h.json" "$LEDGER/review-p_test2h/chain.json"
+T2H_OUT=$(node "$REPO_ROOT/scripts/check-phase-review-receipt.js" --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2h --branch work --phase-base "$PHASE_BASE" 2>&1); T2H_RC=$?
+assert_exit_code "$T2H_RC" "1" "test 2h: a chain ending on an aborted generation is refused"
+assert_contains "$T2H_OUT" "aborted" "test 2h: the refusal names the aborted generation"
+
 # Test 2b: SHIP-AS-IS with findings "none" and non-empty no_finding_proof succeeds with 0 findings and pending status
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 T2B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2B_RC=$?

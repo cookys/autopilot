@@ -1,5 +1,45 @@
 # Changelog
 
+## v2.36.24 — operator pin store：一個宣稱在驗鎖、拿掉鎖卻照樣綠的斷言
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P1（該 plan 經四代 hetero review 凍結）。
+新增常設 operator pin 的儲存層——「使用者指定的席位直接照派」那條規則的地基。
+
+- `scripts/lib/jsonl-store.js` — 新 `writeSnapshot(storeFile, rows)`：同目錄暫存檔 + `renameSync`，
+  中斷的寫入不會留下半截檔案。既有 export 零刪除行。
+- `scripts/engine-capability-state.js` — 新 `pin-seat` / `unpin-seat` / `pins`，over 新的 `pins.jsonl`。
+  列是**八欄位**（engine, runner, role, effort, endpoint, reason, operator, expires），`expires` 必須是
+  JSON `null`；`--operator` 必填、不得預設。每個 role 至多一列活的，替換無墓碑、無第二套 schema。
+  pin 路徑**不共用** qualification-override 的 validator（後者的 `expires` 是必填日期，共用會改到沒有
+  pin 的機器）。
+- `hooks/tests/engine-capability-pin.test.sh` — 9 條斷言。
+
+**派工拓樸**：實作由 `grok-4.5`(xai) 經 managed campaign rail 完成；QC panel 三家族
+（`MiniMax-M3` minimax、`GLM-5.2` zhipu、`gpt-5.6-sol` openai）。
+
+**第三席一個人翻盤。** 前兩席都給 SHIP-AS-IS，depth-0 自己的驗證也全綠；`min_panel_size: 3` 逼出的
+第三席找出三條真缺陷，每條都在 depth-0 複現後才採納：
+
+1. **test 8 宣稱驗證「pin 路徑使用 `withWriteLock`」，實際上是 grep 到了區段自己的註解。** 把
+   `unpinSeat` 的鎖拿掉，該斷言照樣綠。改成行為斷言：持有鎖檔後背景啟動兩個 mutator，斷言各自仍被阻塞，
+   釋放後確認變更確實落地——它能指認**是哪一個** mutator 掉了鎖，這是 grep 永遠做不到的。
+2. **`readPinRows` 會靜默跳過無法解析的列**，下一次 `writeSnapshot` 只保留倖存者，於是操作者的資料
+   無聲消失。改成失敗並指名檔案與 1-based 行號；`pins`/`pin-seat`/`unpin-seat` 三者皆 exit 1 且
+   `pins.jsonl` 逐位元未變。
+3. **冪等測試只看第二次的退出碼**，第二次 unpin 若重建或破壞檔案也會通過。改成種一個無關 role、
+   比對完整檔案內容。
+
+三條紅證由 depth-0 以**保留行為的變異**重新推導（`withWriteLock` 換成立即呼叫，mutator 照常運作、
+只是沒有鎖），不採信實作者自報。過程中兩次挑錯變異點的教訓寫進
+`references/evidence-discipline.md` §32。
+
+**偏差（誠實記錄）**：修補未經 hetero 引擎，由 Claude sonnet 完成——managed campaign rail 在
+`prepare_implementation` 以 `MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。本版因此
+不是純 L5。rail 缺陷與 panel 的四條 🔵 硬化項一併進 `docs/BACKLOG.md`。
+
+prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）；
+`references/evidence-discipline.md` 新增 §32 是事故記錄，該檔的用途就是累積這類條目。
+
 ## v2.36.23 — 被取代的 Board 裁決必須帶指標；宣告不碰的區段要驗，不能只是聲稱
 
 `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0。兩條 2026-08 的 Board 裁決在

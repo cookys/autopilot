@@ -1,0 +1,94 @@
+{
+  "acceptance": {
+    "contract_hash": "e5319760b2a75614f6795558236e94310f53f9e3982786d24794657a169b98b7",
+    "criteria_hash": "03ca11f465aac7736f3ac411ed58220e9114bebbd517c2bc6f7dd6e43d6b8082",
+    "required_evidence": [
+      "mirror-parity",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": []
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "project-default",
+    "data_egress": "local-only",
+    "data_egress_source": "project-default",
+    "guidance_profile": "guided",
+    "guidance_source": "project-default",
+    "topology_preference": "auto",
+    "topology_source": "project-default"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Land the four-deliverable integration-ledger and silent-gate graph: an integration receipt recording source_sha/accepted_sha/integration_method plus a writer that can emit apply-style integrations, method-selected containment gates, a loud qc-panel seat rejection, and the supersession of the 2026-07-28 bounded-campaign session-mode rule.",
+    "requirements_hash": "f01a70166e19310bd1cbe709dfd6752500dba9e114ca46a04c5253c35af393b3",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        "docs",
+        "hooks",
+        "platforms",
+        "schemas",
+        "scripts",
+        "src"
+      ],
+      "domains": [
+        "autopilot",
+        "dispatch",
+        "integration"
+      ],
+      "languages": [
+        "javascript",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "dada729c4f443b7d2125858fbb71d123f4127813f6f09fb9208b26e365ee4763",
+  "mission_lineage_id": "lineage-v1-ab8c8feb44205a0a977c078d8f073c6cd420fb739faf04eda23a98c34bbc7ab7",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_authority_id": "d235d586a6c5b6d0c7d13d50e16749a010251bef87e737198304b3b484008ce1",
+  "task_id": "integration-ledger-and-marker-gates"
+}

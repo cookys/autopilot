@@ -4,6 +4,12 @@
 
 SCHEMA="$REPO_ROOT/schemas/merge-execution-receipt.schema.json"
 
+# edgeReceipt consumer inventory (rubric R12): src/merge/cli.js produces and
+# digest-checks receipts; src/status/task-status.js has an exact-key reader;
+# scripts/validate-json-schema.js validates the schema; merge-execute.test.sh
+# and status-task.test.sh exercise the producer and reader. This campaign node
+# owns the schema/writers only; exact-key reader migration is separately scoped.
+
 # A real no-ff merge must record the source tip and the newly-created merge commit.
 MERGE_REPO="$TEST_TMP/merge-repo"
 MERGE_SOURCE_WT="$TEST_TMP/merge-source"

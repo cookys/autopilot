@@ -2890,6 +2890,7 @@ function implRunnerBinFlag(runner) {
     case 'qoderclicn': return '--qoder-bin';
     case 'cursor': return '--cursor-bin';
     case 'opencode': return '--opencode-bin';
+    case 'kimi': return '--kimi-bin';
     default: return null;
   }
 }

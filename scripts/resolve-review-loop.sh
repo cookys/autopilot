@@ -776,9 +776,9 @@ esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
 case "$IMPL_RUNNER" in
-  auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode) ;;
+  auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi) ;;
   *)
-    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): ${IMPL_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi): ${IMPL_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac

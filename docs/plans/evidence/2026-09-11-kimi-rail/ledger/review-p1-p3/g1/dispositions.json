@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "phase": "p1-p3",
+  "generation": 1,
+  "findings": [
+    {
+      "id": "59bbe97b392c5a68738fc59915885db77d6a38013e93fbdc87b114c08ac45137",
+      "disposition": "refuted",
+      "rationale": "The mirror IS in the change set: `git diff --stat develop..HEAD -- platforms/codex/plugin` shows the regenerated mirror files in commits 6af4d2ea/a93ae744, `diff scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh` is empty, and `sync-codex-plugin-skills.sh --check` passes. The reviewer could not see it because this collect was run with `--exclude platforms/codex/plugin` to keep the reviewed diff at 57 KB instead of double \u2014 the exclusion is recorded in range.json. A blind spot of the review setup, not of the change."
+    },
+    {
+      "id": "05295ee3cc6056142f1135cdad161e2b5c95c43d4c167ca8bb54ba629f7f5c2b",
+      "disposition": "deferred",
+      "rationale": "Correct observation; the gate over-counts by the trailing newline(s) that $(cat) strips, so it only ever fails toward refusal. Trigger: an exact-bytes receipt requirement, which nothing asks for today."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "runner": "qoderclicn",
+  "model": "GLM-5.3",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [kimi-rail-mirror-sync] MUST-FIX The change modifies `scripts/dispatch-hetero.sh` but the diff contains no corresponding update to its byte-identical mirror `platforms/codex/plugin/scripts/dispatch-hetero.sh` (the mirror's existence and parity requirement are asserted by the diff's own evidence file and frozen constraint R6 / §2.5 \"Mirrors under platforms/codex/plugin/ are re-synced\"). Impact: the repo's pre-commit ritual (`sync-codex-plugin-skills --check`) refuses commits with mirror drift, so this change cannot be committed as shown, and shipping it leaves the plugin copy of the runner stale (dispatch-hetero without the kimi arm). Smallest remediation: run `bash scripts/sync-codex-plugin-skills.sh` and include the regenerated mirror file(s) in this change set, so the parity claim in `docs/plans/evidence/2026-09-11-kimi-rail/README.md` is backed by the diff itself.\n🔵 [kimi-rail-argv-trailing-bytes] CUT/FOLLOW-UP The run arm passes `-p \"$(cat \"$3\")\"`, which strips trailing newlines from the combined prompt while the pre-spend gate counts full file bytes; the mismatch only ever over-counts (fails toward refusal), so it is safe and excluded from this version — noting only in case a future exact-bytes receipt is ever required.",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-fFK6Tt",
+  "error": null,
+  "usage": null
+}

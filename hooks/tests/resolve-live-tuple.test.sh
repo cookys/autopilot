@@ -151,8 +151,11 @@ fi
 EXPECTED_TUPLE=$(node - "$TOPO" <<'NODE'
 const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
 const rung = (topo.implementer_ladder || [])[0] || null;
+// Mirrors the resolver's ladder coercion: '' is the canonical "no named
+// endpoint" partition, not null (v2.36.27 -- the null form could never pass the
+// contract's --resolved-live string validation).
 const endpoint = (rung && typeof rung.endpoint === 'string' && rung.endpoint.length > 0)
-  ? rung.endpoint : null;
+  ? rung.endpoint : '';
 const tuple = rung
   ? { engine: rung.engine, runner: rung.runner, effort: rung.effort, endpoint }
   : { engine: null, runner: null, effort: null, endpoint: null };
@@ -174,7 +177,7 @@ const fs = require('fs');
 const live = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const expected = JSON.parse(process.argv[3]);
 const keys = Object.keys(live).sort().join(',');
-const wantKeys = 'effective_tuple,pending_revocation,preferred_tuple,role,substitution_reason';
+const wantKeys = 'effective_tuple,operator_pin,pending_revocation,preferred_tuple,role,substitution_reason';
 let ok = true;
 const reasons = [];
 if (keys !== wantKeys) { ok = false; reasons.push(`keys=${keys}`); }

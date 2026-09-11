@@ -1,122 +1,146 @@
 ## 目標
 
-實作 `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md`（四代 hetero review 後凍結）的
-P0 起全部階段。**P0/P1/P2/P2b 已出貨**（最新 v2.36.26）。
+實作 `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0 起全部階段。
+**P0/P1/P2/P2b 已出貨**（v2.36.23–26，在 `origin/develop`）。**D4（plan P3）實作完成、未出貨**，
+分支 `feat/d4-strike-fold-pending-revocation`，HEAD `3faffd27`，工作樹乾淨。
 
-**下一件事是 D4（plan 的 P3）**：strike fold + pending_revocation（KR3/KR4/KR7）。
+停在這裡是因為 context 到 T2（751k/1000k）。
 
-## 已出貨
+## 接手第一件事：修一條已出貨的 admission 繞道（owner 2026-09-11 已裁示）
 
-| 版本 | 交付項 | 內容 |
-|---|---|---|
-| v2.36.23 | P0 | supersession anchor manifest + `check-supersession-anchors.js`；被取代的 Board 裁決必須帶 dated 指標，plan 宣告不碰的區段用 sha256 釘住 |
-| v2.36.24 | P1 | operator pin store：`jsonl-store.writeSnapshot` + `pin-seat`/`unpin-seat`/`pins`，八欄位列、`expires` 必為 null、`--operator` 必填、每 role 至多一列無墓碑 |
-| v2.36.25 | P2 | `--resolve-live`：無寫入解析模式，回傳 preferred/effective tuple + `substitution_reason` + `pending_revocation` |
-| v2.36.26 | P2b | 契約消費 resolver：admission 移到 `effective_tuple`、替代在 matched 捷徑之前決定、`--resolved-live` 全稱驗證 |
+**這是最重要的一段，先讀完再動手。**
 
-全套 335 支綠（綁分支的 worktree；detached worktree 會讓 `next-touch-validation` 假紅）。
+已出貨的 **v2.36.26 可以被繞過**。未 pin、且（a）完全沒有 scorecard row 或（b）ordinary strike
+超過門檻的席位，只要餵一份 `--resolved-live` 文件，契約就回 `GO` + `assurance: operator-pin`，
+並**憑空生出一筆 `operator_pin`**。兩份執行證據都在
+`docs/plans/evidence/2026-09-11-operator-pin-supersedes-qualification/d4-qc-panel.md`。
 
-## D3 已出貨（v2.36.26）
+**根因（一句話）**：`pinAdmitsPreferred = resolvedLive && preferredTupleMatchesResolved(...)`
+把「preferred tuple 等於解析出的引擎」當成「有 pin 的證據」。但**未 pin 時 resolver 一樣會給
+preferred_tuple**（那是 ladder 的選擇）。兩條分支都這樣寫：
+- `scripts/dispatch-contract.js:1482`（D3/P2b，KR1，**已出貨**）
+- `scripts/dispatch-contract.js:1458`（D4/KR3，本分支）
 
-分支 `fix/d3-contract-admission-repair` 已合回 develop。實作 `grok-4.5`（`mission/bc88318c9bcc/d3-contract-admission-a1`）、
-三家族 panel、Claude sonnet 修補、71 assertions、紅證 depth-0 重推，全部完成並記在 CHANGELOG v2.36.26。
+對照組：**KR4 那條是對的**——resolver 只在 `if (pin && critical_trigger)` 時才設
+`substitution_reason = 'critical_strike'`（`resolve-dispatch-topology.js:305`），所以它是
+transitively pin-gated。KR3/KR1 少了對應的閘。
 
-### D3 的 panel 是這輪最值得讀的一段
+### owner 裁示：兩條分支一起修，隨 D4 出一個版
 
-三席分歧：sol 與 GLM 都 FIX-THEN-SHIP 指向同一個洞，**MiniMax SHIP-AS-IS 並明確反駁**。
-depth-0 判 sol/GLM 對，**依據不是票數是呼叫點枚舉**：`resolvedLiveHasSubstitution` 只有兩個
-call site，都在 `!matched` 分支內 ⇒ preferred 席位有合格 row 時，替代永遠不被考慮。
-MiniMax 的推理假設 `isAdmissibleScorecardRow` 檢查替代席的 row，但它比對的是契約**解析**的
-引擎，也就是 preferred 席位。
+### 修法（設計已定，尚未動工）
 
-**這是本輪唯一一次 panel 找到的是程式的洞而非測試瑕疵**（D1/D2 找到的都是空洞斷言）。
+1. **resolver 發出顯式的 pin**：`resolve-dispatch-topology.js` 已經有 `pin` 變數。在 `--resolve-live`
+   的回傳裡加 `operator_pin`——有 pin 時是 `{engine, runner, role, operator, reason}`，沒有時是 `null`。
+2. **契約要求它**：`isCompleteTuple` 旁邊的 `--resolved-live` 驗證加上「`operator_pin` 必須存在，
+   且為 null 或五個字串欄位的物件」。**兩條分支**的 `pinAdmitsPreferred` 都改成
+   `resolvedLive.operator_pin && preferredTupleMatchesResolved(...)`。
+3. **`operatorPinFromLive` 改讀 pin 本身**（`dispatch-contract.js:260` 現在讀的是 `preferred_tuple`，
+   那正是它誤把 ladder 選擇當成 operator 意圖的地方）。
+4. **順便修 endpoint**：resolver 送 `endpoint: null`，契約的 `isCompleteTuple` 拒絕非字串
+   （`dispatch-contract.js:184`）。**沒有具名 endpoint 的席位，整條 `--resolve-live → check
+   --resolved-live` 走不通**。resolver 改送 `""`（契約註解明說那是 `@none` wallet）。
+   **動之前先 `grep -n endpoint hooks/tests/resolve-live-tuple.test.sh`**——若那裡釘了 null，
+   那條斷言要一起移，並在 commit 說明。
+5. **紅案（這是 D3 漏掉的那一格）**：未 pin + `--resolved-live`，兩種都要——無 row（P2b）與
+   三條 ordinary strike（KR3）。各自斷言 exit 3、pre-change 的拒絕字串在、輸出裡**沒有** `operator_pin`。
 
-另外：**GLM 那席回 `no_verdict`**（framing 被 chrome 破壞，v2.34.7 家族），判決本體完好，
-從 `raw_log` 撈回來才拿到那條 MUST-FIX。**丟掉 no_verdict 的席位就是丟掉一條發現。**
+**爆炸半徑（誠實說）**：`hooks/tests/dispatch-contract-pin.test.sh` 要重做 fixture——每份手工的
+live 文件都要加 `operator_pin` 欄位，已 pin 的案例填物件，再加上兩個未 pin 紅案。
 
-## 下一步：D4 起
+### D3 的測試為什麼沒抓到——第五種空洞型態
 
-plan 的 §4 剩下（P2b 已出貨）：strike fold + pending_revocation（KR3/KR4/KR7）→ 替代路徑（KR5/KR8/KR9/KR12）
-→ negation + guidance + release（P7/P8/P9）。
+`dispatch-contract-pin.test.sh` 裡**每一份 `--resolved-live` fixture 都是為已 pin 的席位手工建的**，
+而**每個未 pin 的紅案完全不帶 `--resolved-live`**。沒有任何測試把「未 pin 的 resolver 文件」交給契約。
+這不是「不可能失敗的斷言」，是**紅案從不餵入 GO 路徑實際消費的那個輸入**。前四種都是斷言層的，
+這一種在輸入層——找空洞時要連「紅案走的是不是同一條路徑」一起問。
 
-**一個 mission 一個 deliverable**：governance `max_graph_depth: 2`、aggregate `max_gate_attempts: 12`、
-且**一個 plan id 只能對應一個 graph node**。plan 的九個階段是 provenance，不是 DAG——不要試圖一次塞進去。
+## 接手第二件事：openclaw 回報的 l5 marker gate（owner 2026-09-12 已授權，排在後面）
 
-## 這輪最重要的發現
+繞道修完、D4 出貨之後做這個，不要平行開。細節在 `docs/BACKLOG.md` 的
+`PEER-REPORTED … bounded non-Mission campaigns` 那列（commit `1cb55127`）。
 
-**三家族 panel 的第三席，兩次都一個人翻盤。** D1 和 D2 各是：MiniMax SHIP-AS-IS、GLM SHIP-AS-IS、
-`gpt-5.6-sol` FIX-THEN-SHIP ×3。而且兩次都抓到**一條不可能失敗的測試**：
+一句話：`check_session_mode_gate` 要求一份 bounded contract 不會帶的 strict projection，
+於是 `/l5` 自己啟動的 campaign 被 `/l5` 自己的 marker 擋死。v2.34.8 在 admission 側修過同一類
+（`session-mode.js campaignCarriesMissionProjection`），dispatcher 側沒跟上。
 
-- D1 test 8：`grep withWriteLock` 匹配到的是區段自己的**註解**，拿掉鎖照樣綠
-- D2 case 7：`if ...; then ok; else ok; fi`，兩個分支都通過
+**授權的是動手，不是跳過證據**：那列的每一項都是 peer 在別台機器上的觀察，本機一行都沒複驗。
+**先在本機複現**，讓本機的執行結果——而不是那份回報——定義要修的缺陷。
 
-**三個交付項、三個不同引擎、三條不可能失敗的斷言**（D3 那條是
-`assert_not_contains ... '"assurance":"operator-pin"'`——NO-GO payload 本來就不帶 `assurance`）。
-這是規律不是巧合:**寫測試就會產出這種東西**。所以 `min_panel_size: 3` 與紅證都不可省。
-修法的演進：D1 是把 grep 換成行為斷言（逐條修）；D2 是**遞迴檔案系統快照**（掃整棵樹，任何變動具名失敗）
-——列舉只能找到你想得到要列的東西。
+**而且它和本檔上面那條 marker 陷阱不是同一個機制**（那條是 `check_marker_campaign_admission_bridge`
+比對 digest；這條是 strict-projection gate 拒絕 bounded contract），**修一個不會修到另一個**。
+測試矩陣要同時涵蓋「bounded campaign + 活的 l5 marker」與「strict campaign + 舊 graph 的殘留 marker」。
 
-## 陷阱（rail）
+## D4 已完成的部分（分支上）
 
-- **managed rail 跑得動實作，跑不動修補。** 兩條獨立 lineage 確認為確定性：第二次（修補）必定在
-  `prepare_implementation` 以 `MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死，claim 兩條路都撤不掉
-  （`withdraw --never-started` 因已啟動被拒；`mission control --abort` 要 CLI 給不了的認證轉接器）。
-  **實務後果：只要 review 判出要修，該輪就不可能是純 L5。** 修補改派 Claude hands。
-- **修補的 grant 必須在實作 merge 之後拿**——契約在 grant 當下釘死 `base_sha`。D1/D2 各撞一次。
-- `--mission-prepared <receipt>` 是原子 state store 的開關；缺了就 `mission_state_store_required`。
-- `--campaign-ledger` 必須是 canonical 的 `.git/autopilot/implementation-campaign.jsonl`。
-- **blocked intake 有時釋放 claim 有時不釋放**（`mission_grant_ref_mismatch` 不釋放），錯誤訊息講的是
-  「base 過期」不是「上次拒絕沒收尾」。
-- 未追蹤檔也算 dirty，spend 前就擋。
-- 圖一改 digest 就變 → legacy disposition 要重綁 → marker 要重設，三件連動。
-- authority envelope 只收 `authority_status: "shadow"`；mission 綁定欄位是**推導**的，不得由呼叫端給。
-- `l5` marker 清不掉（rail 從未寫出 task-status 需要的 input bundle）。**不要手寫那個檔案去滿足閘門**
-  ——那是製造閘門要檢查的證據。marker 24 小時後自然過期。
+| commit | 內容 |
+|---|---|
+| `ae40d340` | mission 執行圖換成 D4 節點（digest `96318e7c`） |
+| `62a58071` | BACKLOG：出一個 L5 交付項會把 repo 鎖住 24h |
+| `674afe47` | BACKLOG：`awaiting_disposition` 是第三個無 CLI 出口的狀態 |
+| `de2af3f5` | grok-4.5 實作 |
+| `7f5ae517` | merge（含 depth-0 的 git-artifact 驗證） |
+| `07dc63ad` | depth-0 修補：空洞斷言、多餘 export、`.pre.js` gitignore |
+| `3faffd27` | QC panel 裁決證據 |
 
-## 已驗證但未動工的外部情報
+**KR7 的單一 fold 成立**（機械確認）：`grep -c strikes.jsonl scripts/resolve-dispatch-topology.js` = **0**，
+rows 走 `computeSeatProjection().active_strike_rows`。
 
-`docs/BACKLOG.md` 有兩列關於 agy payload 上限（2026-09-11）。摘要：peer 報 stream-json 繞開
-argv 上限、建議拿掉天花板;**本機複驗結果相反**——175K 過、200K 靜默截斷且 status 仍 SUCCESS。
-後續交換資料後又發現:(a) `agy --version` 讀的是**快取字串不是 binary 身分**（同一個 sha256
-的 binary 在 update 前後報不同版本）——這直接影響 capability store 用 `runner_version` 當重考
-觸發器的正確性;(b) 同版同 model 下兩台主機行為仍不同,所以牆可能是**部署屬性**（帳號/區域）。
-結論:閾值不能是常數、也不能只是 per-seat（scorecard 跨機共用），可能得 rail 自己做尾端 nonce
-自檢。**rail 一行未動**，這是 peer input 不是授權。
+**測試**：`hooks/tests/pending-revocation-fold.test.sh` 63 assertions 綠。
+兩條紅證：(a) 把 check payload 指向不存在的檔案——**修補前 41 passed / exit 0**，修補後 11 條具名失敗；
+(b) 讓被拒絕的 row 洩漏——16 條具名失敗，每條指名洩漏的 row。
+
+## 出貨清單（修完繞道之後）
+
+下一個版號是 **v2.36.27**（推前先 `git show origin/develop:.claude-plugin/plugin.json` 對號）。
+CHANGELOG 要單獨一段講「修正已出貨的 v2.36.26 繞道」。INDEX 列、`sync-version.js`、`sync-all.sh`、
+`preflight-release.sh` 8/8（版號 commit **之後**才會過第 6 項）。
+
+## 陷阱（這輪新學到的，rail）
+
+- **出一個 L5 交付項會把 repo 鎖住 24 小時**。marker bridge（`dispatch-hetero.sh:1265`）會掃**整個**
+  session-mode marker 目錄，任何一張活的、graph digest 不同的 marker 都讓派工 `precondition_failed`。
+  一個 plan id 對一個 graph node，所以出完一個必然改 digest。`session-mode.js clear` 要
+  `--task-status-receipt`，而那份 input bundle **全 repo 沒有任何產出者**（只有 reader，
+  `src/status/task-runtime.js:97`）。2026-09-11 經 owner 裁示手動刪掉 D3 的 marker
+  （備份在當時的 scratchpad）。**這是 workaround 不是慣例**，機制解法寫在 BACKLOG。
+  **你自己這張 marker（`d1423f91…`，l5，到期 2026-09-12T13:08Z）在 D4 出貨後會變成下一個交付項的障礙。**
+- **managed campaign 有三個「狀態機進得去、CLI 出不來」的狀態**：repair 死結、
+  `mission_grant_ref_mismatch` 不釋放 claim、以及新記的 `awaiting_disposition`
+  （合法 disposition + `--resume` 被 `campaign_intake` 拒絕，連 `campaign status` 都回同一個字串）。
+- **`AUTOPILOT_ROOT_RUN_ID` 必填**，值是 contract 的 `mission_runtime.root_run_id`。漏了會在
+  `prepare_implementation` blocked，**而且那次 block 會釋放 claim**，要重取 grant。
+- **grant 要在最後一個 commit 之後才拿**（契約釘死 `base_sha`），brief 裡的 in-run baseline SHA
+  要跟著 attempt base 一起重標。
+- 三家族 panel 從 `qc_panel_seats` 派：codex/gpt-5.6-sol/max、cc-shim/GLM-5.2/high@glm、
+  cc-shim/MiniMax-M3/high@minimax。67KB diff 給 20m。**seat JSON 後面別 append 東西**，
+  會讓 `require()` 解析失敗（用 `head -1`）。
 
 ## 陷阱（自己）
 
-- **變異測試要挑對變異點。** 本輪三次挑錯：拿掉 `renameSync`（等於永不寫入，剛好滿足斷言）、
-  把 `withWriteLock(opts,fn)` 的頭換掉尾巴沒換（程式壞掉、無關斷言紅）、字面 anchor 被新註解打斷。
-  已寫成 `references/evidence-discipline.md` §32：**看哪一條斷言動了，不是套件動了沒**。
-- `pkill -f` 在 Bash 工具裡會比對到自己的指令列，把自己殺掉（exit 144）。用 PID。
-- detached worktree 會讓 `next-touch-validation` 假紅（`git symbolic-ref --short HEAD` 無頭必失敗）。
-  驗證用 worktree 一律 `-b <branch>`。
-- 管線會吞退出碼：`node ... | head` 回報的是 `head` 的狀態。判成敗要分開捕獲。
-- **主 checkout 有活的 `l5` marker 時，dispatch 類測試會以 `precondition_failed` 假紅**
-  （`active session-mode=l5 blocks non-strict dispatch (repo=<主 checkout 路徑>)`）。
-  2026-09-11 全套在主 checkout 跑出 `context-window` 與 `dispatch-author-claude-native` 兩紅，
-  兩支在綁分支的 worktree 皆綠。marker 綁 `repo_root` 字串，worktree 換了路徑就不適用。
-  **不要為了讓套件變綠去刪 marker**——那跟手寫 input bundle 同一個形狀。驗證一律走 worktree。
-- **新增測試檔可能成為別支測試釘住的 population 成員。**`resolve-review-loop-consult-discuss-switch`
-  釘了 `git grep -l 'reviewer_engine:' -- hooks/` 的檔數；新檔帶 roster fixture 就會讓它紅。
-  修法是**列舉 delta 對照 origin/develop 確認是真成員**再移動釘值，不是排除掉新檔。
+- **panel 說的要自己跑過才算**。這輪 sol/GLM 的 MUST-FIX 屬實（PROBE B 確認），但**第一次 probe
+  沒打到守衛**——被更早的 endpoint 驗證擋掉，於是又挖出一條兩席都沒找到的缺陷。
+  跑不出預期結果時，先看是不是根本沒走到那條路徑。
+- **不要在 commit 訊息裡把加強講成補洞**。這輪寫了「`cmp` 兩處也是空洞」，實跑後發現現實情境被
+  上游的 `assert_contains` 擋住，訊息已改正。宣稱之前先跑變異。
+- **`MiniMax-M3` 連續第四次在別家抓到缺陷時回 SHIP-AS-IS 零 finding**。這是 scorecard 訊號，
+  交給資格機制處理，不要手動改 roster。
 
 ## 驗證方式
 
 ```bash
 cd /home/cookys/projects/autopilot
-git status --porcelain                                        # 空
-node -p "require('./.claude-plugin/plugin.json').version"      # 2.36.26
-bash hooks/tests/engine-capability-pin.test.sh | tail -1       # 9 passed, 0 failed
-bash hooks/tests/resolve-live-tuple.test.sh | tail -1          # 15 passed, 0 failed（約 90s）
-bash hooks/tests/dispatch-contract-pin.test.sh | tail -1        # 71 passed, 0 failed
-node scripts/check-supersession-anchors.js; echo $?            # 0
-AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh | tail -1   # 8/8
+git status --porcelain                                          # 空
+git log --oneline -1                                            # 3faffd27
+bash hooks/tests/pending-revocation-fold.test.sh | tail -1      # 63 passed, 0 failed
+grep -c "strikes.jsonl" scripts/resolve-dispatch-topology.js    # 0
+node scripts/check-supersession-anchors.js; echo $?             # 0
+bash scripts/sync-codex-plugin-skills.sh --check; echo $?       # 0
 ```
 
 ## Read-order
 
-1. `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` §4（階段）與 §8（已裁示）。
-2. `references/evidence-discipline.md` §32。
-3. `docs/BACKLOG.md` 的兩條 2026-09-11 列（pin store 硬化、campaign intake 缺陷）。
-4. `docs/plans/evidence/2026-09-11-operator-pin-supersedes-qualification/`（四代 review 的裁決明細）。
+1. 本檔「接手第一件事」整段。
+2. `docs/plans/evidence/2026-09-11-operator-pin-supersedes-qualification/d4-qc-panel.md`（PROBE B/C 的實跑輸出）。
+3. `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` §2（KR1/KR3/KR4/KR11）與 §2.5（硬約束）。
+4. `docs/BACKLOG.md` 的 managed-campaign 那列與 L5-24h 那列。
+5. `references/evidence-discipline.md` §32。

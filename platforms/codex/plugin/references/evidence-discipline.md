@@ -781,3 +781,66 @@ deliverable; refuse any `if/else` whose arms both report success; and for absenc
 demonstrate a case where the key IS present, or the absence proves nothing. The orchestrator's own
 verification caught none of these — all three came from the decorrelated panel seat, which is the
 argument for `min_panel_size` being a floor rather than a budget.
+
+## 34. A check that prints only its verdict cannot be distinguished from one that read nothing
+
+A pass and a question never asked look identical when the output is a verdict alone.
+Print the values the comparison actually read, beside the verdict, always.
+
+**2026-09-12, reported by a peer session within ten minutes of discussing §33.** A shell
+loop compared two commits by `git patch-id`, splitting each pair with `set -- $pair`.
+Under zsh that does not word-split, so both sides of every comparison were the empty
+string, and the script cheerfully printed `same patch? YES` three times. The conclusion
+it supported — that an accepted commit was a re-application of a hands commit — was
+false, and the run that produced it was green. It was caught only because the author
+happened to look at the inputs; had the script printed YES/NO and nothing else, the
+wrong answer would have shipped with a table behind it.
+
+This is the read-side twin of §33. §33 is an assertion whose *predicate* cannot fail;
+this is an assertion whose *operands* were never populated. The predicate is fine —
+`[ "$a" = "$b" ]` is a real comparison — and it is comparing two things that do not
+exist. Every guard in §33 (mutate the source, watch a named assertion move) passes here
+too, because mutating the source changes neither empty string.
+
+Two rules follow, and the first is cheap enough that there is no reason not to:
+
+- **Emit the operands.** `same patch? YES (a=<sha> b=<sha>)` would have been unmissable.
+  A comparison that prints only its verdict is not reviewable and not reproducible.
+- **Assert the operands are non-empty before comparing them.** An empty-string equality
+  is the degenerate case of the same defect the negative-control helper had
+  (`hooks/tests/pending-revocation-fold.test.sh`, v2.36.27): a `grep` miss on a file
+  that does not exist is also a comparison against nothing. Both were repaired the same
+  way — prove the thing being read exists and carries what you are searching within,
+  and only then treat a non-match as evidence.
+
+**A third rule, and it is not a corollary of the second.** Reported by the same session
+hours later, after applying the two rules above to the gate they had built to stop this
+very family — and finding the gate was itself an instance:
+
+- **A parser that dies must not be readable as valid-but-empty input.**
+
+Their `check-inputs-landed.sh` had an embedded Python heredoc with a quoting error. The
+interpreter raised SyntaxError, `mapfile` read zero lines, and the gate printed
+`OK: all 0 declared input(s) are contained in HEAD.` and exited 0. That `--manifest`
+path is the entire purpose of the gate, and its commit message claimed it gated phase
+inputs; only the positional-argument path had ever been run.
+
+Rule 2 does not catch this. They *had* `|| fail` on the `mapfile`, and it never fired,
+because `mapfile` reading zero lines from a failed pipeline **succeeds**. The SyntaxError
+did reach stderr — three lines above the success message. Embedding the parse inside the
+shell makes "the parser died" and "the input was empty" indistinguishable at the shell
+level, so no amount of checking the emptiness afterwards helps: by then both look the
+same. The fix is structural — move the parse into its own program and check its exit
+code explicitly. Theirs now exits 2 on zero inputs, a missing `inputs` key, a non-list,
+or an entry without a sha, with the exact regression pinned by a test.
+
+Two things about that incident are worth keeping. The gate was written specifically to
+prevent a false-negative existence check, and it shipped as one — **building the guard is
+not the same as running it**, which is this file's oldest lesson arriving from a new
+direction. And the repair itself broke the other code path (a literal tab written as
+`\t`) and was caught immediately, by the tests the first version did not have.
+
+The family now has six members across four deliverables of one plan, a peer repository,
+and a guard built to stop the family. Treat "my check is green" as meaning nothing until
+you can say what it read, that the operands were populated, and that the thing which
+produced them exited zero.

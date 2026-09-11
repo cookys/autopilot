@@ -184,9 +184,14 @@ function tupleFromLadderRung(rung) {
     return { engine: null, runner: null, effort: null, endpoint: null };
   }
   const endpointRaw = rung.endpoint;
+  // '' is the canonical "no named endpoint" partition ("@none" on the
+  // capability-state side) and resolveEndpoint() already returns it, so the
+  // topology seats carry ''. Coercing it to null here was drift: the contract's
+  // --resolved-live validator requires a string, so an endpoint-less seat could
+  // never complete the resolve-live -> check --resolved-live flow at all.
   const endpoint = (typeof endpointRaw === 'string' && endpointRaw.length > 0)
     ? endpointRaw
-    : null;
+    : '';
   return {
     engine: rung.engine == null ? null : rung.engine,
     runner: rung.runner == null ? null : rung.runner,
@@ -239,6 +244,14 @@ function readPinForRole(repoRoot, role, storeArg) {
   return rows[0];
 }
 
+function resolveCapabilityStoreDir(storeArg) {
+  if (storeArg) return path.resolve(storeArg);
+  if (process.env.ENGINE_CAPABILITY_DIR) {
+    return path.resolve(process.env.ENGINE_CAPABILITY_DIR);
+  }
+  return path.join(os.homedir(), '.autopilot', 'engine-capability');
+}
+
 function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
   const topology = loadTopologyNoWrite(repoRoot, outPath, deriveOptions);
   const ladderKey = ladderKeyForRole(role);
@@ -248,8 +261,9 @@ function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
   const pin = readPinForRole(repoRoot, role, storeArg);
   let preferred_tuple;
   let effective_tuple;
-  // Substitution when a pinned seat is unusable is a later deliverable.
-  const substitution_reason = null;
+  // Substitution when a pinned seat is unusable is a later deliverable (P4).
+  // P3 only names the reason; effective_tuple may still equal preferred_tuple.
+  let substitution_reason = null;
 
   if (pin) {
     preferred_tuple = {
@@ -274,12 +288,42 @@ function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
     };
   }
 
+  // KR7: pending_revocation is a projection of the SAME fold admission uses.
+  // Never open the strike store here — call into engine-scorecard.js.
+  const scorecard = require(path.join(repoRoot, 'scripts', 'engine-scorecard.js'));
+  const storeDir = resolveCapabilityStoreDir(storeArg);
+  const effort = preferred_tuple && typeof preferred_tuple.effort === 'string'
+    ? preferred_tuple.effort
+    : undefined;
+  const seatFold = scorecard.computeSeatProjection(
+    preferred_tuple.engine,
+    preferred_tuple.runner,
+    role,
+    Date.now(),
+    effort,
+    storeDir,
+  );
+  const pending_revocation = Array.isArray(seatFold.active_strike_rows)
+    ? seatFold.active_strike_rows
+    : [];
+
+  if (pin && seatFold.projection && seatFold.projection.critical_trigger) {
+    substitution_reason = 'critical_strike';
+  }
+
   return {
     role,
+    // The pin ROW as read, or null. The contract may not infer "a pin exists"
+    // from preferred_tuple: the resolver emits a preferred_tuple either way
+    // (unpinned, it is the ladder's own choice), so tuple equality is not pin
+    // evidence. Emitting the row makes pin presence an explicit fact the
+    // consumer can require, and lets it verify preferred_tuple was DERIVED
+    // from the pin rather than merely equal to it.
+    operator_pin: pin ? { ...pin } : null,
     preferred_tuple,
     effective_tuple,
     substitution_reason,
-    pending_revocation: [],
+    pending_revocation,
   };
 }
 

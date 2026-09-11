@@ -48,3 +48,10 @@ docs/projects/_archive/2026-07-09-m3-band-tasks/runs/
 
 # codeforge local capture (signals/L1 store) — local knowledge, not versioned
 .codeforge/
+
+# in-run pre-change baselines written by hooks/tests/pending-revocation-fold.test.sh.
+# They must sit in scripts/ so the extracted build's __dirname-relative requires
+# (../src, ../hooks) still resolve, and an EXIT trap removes them — but a run killed
+# before the trap would otherwise leave an untracked file, and an untracked file is
+# dirty, which blocks the next managed dispatch before it spends anything.
+scripts/*.pre.js

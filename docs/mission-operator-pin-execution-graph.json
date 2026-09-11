@@ -25,7 +25,17 @@
           "src"
         ],
         "authorized_creates": [
-          "hooks/tests/dispatch-contract-pin.test.sh"
+          "hooks/tests/dispatch-contract-pin.test.sh",
+          "hooks/tests/fixtures/zero-pin-baseline/f1-engine-mismatch.json",
+          "hooks/tests/fixtures/zero-pin-baseline/f3-failed-status.json",
+          "hooks/tests/fixtures/zero-pin-baseline/f4-provisional-bad-observed.json",
+          "hooks/tests/fixtures/zero-pin-baseline/f5-provisional-wrong-output-kind.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r1-strike-critical.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r1-strike-ordinary.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r2-no-row.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r3-override-unreadable.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r4-override-bad-schema.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r5-override-expired.json"
         ],
         "baseline_churn": 4000,
         "max_changed_files": 64,
@@ -35,6 +45,16 @@
         "max_wall_seconds": 3600,
         "output_paths": [
           "hooks/tests/dispatch-contract-pin.test.sh",
+          "hooks/tests/fixtures/zero-pin-baseline/f1-engine-mismatch.json",
+          "hooks/tests/fixtures/zero-pin-baseline/f3-failed-status.json",
+          "hooks/tests/fixtures/zero-pin-baseline/f4-provisional-bad-observed.json",
+          "hooks/tests/fixtures/zero-pin-baseline/f5-provisional-wrong-output-kind.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r1-strike-critical.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r1-strike-ordinary.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r2-no-row.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r3-override-unreadable.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r4-override-bad-schema.json",
+          "hooks/tests/fixtures/zero-pin-baseline/r5-override-expired.json",
           "platforms/codex/plugin/scripts/dispatch-contract.js",
           "scripts/dispatch-contract.js"
         ],

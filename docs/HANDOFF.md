@@ -1,13 +1,9 @@
 ## 目標
 
 實作 `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md`（四代 hetero review 後凍結）的
-P0 起全部階段。**P0/P1/P2 已出貨並推上 `origin/develop`**（`e2495ae4`，v2.36.25）。
+P0 起全部階段。**P0/P1/P2/P2b 已出貨**（最新 v2.36.26）。
 
-**D3 已完成但未出貨**：實作 + panel + 修補都做完，commit 在 `fix/d3-contract-admission-repair`
-（`654f741d`），**尚未 merge develop、尚未版號、尚未 CHANGELOG/INDEX、尚未跑全套**。
-接手第一件事就是把 D3 收尾（見下方「D3 收尾清單」）。
-
-停在這裡是因為 context 到 T2（751k/1000k）。
+**下一件事是 D4（plan 的 P3）**：strike fold + pending_revocation（KR3/KR4/KR7）。
 
 ## 已出貨
 
@@ -16,19 +12,14 @@ P0 起全部階段。**P0/P1/P2 已出貨並推上 `origin/develop`**（`e2495ae
 | v2.36.23 | P0 | supersession anchor manifest + `check-supersession-anchors.js`；被取代的 Board 裁決必須帶 dated 指標，plan 宣告不碰的區段用 sha256 釘住 |
 | v2.36.24 | P1 | operator pin store：`jsonl-store.writeSnapshot` + `pin-seat`/`unpin-seat`/`pins`，八欄位列、`expires` 必為 null、`--operator` 必填、每 role 至多一列無墓碑 |
 | v2.36.25 | P2 | `--resolve-live`：無寫入解析模式，回傳 preferred/effective tuple + `substitution_reason` + `pending_revocation` |
+| v2.36.26 | P2b | 契約消費 resolver：admission 移到 `effective_tuple`、替代在 matched 捷徑之前決定、`--resolved-live` 全稱驗證 |
 
 全套 334 支綠（綁分支的 worktree；detached worktree 會讓 `next-touch-validation` 假紅）。
 
-## D3 收尾清單（接手第一件事）
+## D3 已出貨（v2.36.26）
 
-分支 `fix/d3-contract-admission-repair`，HEAD `654f741d`，工作樹乾淨。已完成：
-
-- grok-4.5 實作（`mission/bc88318c9bcc/d3-contract-admission-a1`）已 merge 進 feature 分支
-- 三家族 panel 跑完並裁決（見下）
-- 修補由 Claude sonnet 完成並驗過：71 assertions、紅證 depth-0 重推、canonical invariants 綠
-
-**還沒做**：全套測試、版號（下一個是 **v2.36.26**）、CHANGELOG、INDEX 列、merge develop、push、reap。
-版號前先 `git show origin/develop:.claude-plugin/plugin.json` 對號。
+分支 `fix/d3-contract-admission-repair` 已合回 develop。實作 `grok-4.5`（`mission/bc88318c9bcc/d3-contract-admission-a1`）、
+三家族 panel、Claude sonnet 修補、71 assertions、紅證 depth-0 重推，全部完成並記在 CHANGELOG v2.36.26。
 
 ### D3 的 panel 是這輪最值得讀的一段
 
@@ -45,7 +36,7 @@ MiniMax 的推理假設 `isAdmissibleScorecardRow` 檢查替代席的 row，但�
 
 ## 下一步：D4 起
 
-plan 的 §4 剩下：strike fold + pending_revocation（KR3/KR4/KR7）→ 替代路徑（KR5/KR8/KR9/KR12）
+plan 的 §4 剩下（P2b 已出貨）：strike fold + pending_revocation（KR3/KR4/KR7）→ 替代路徑（KR5/KR8/KR9/KR12）
 → negation + guidance + release（P7/P8/P9）。
 
 **一個 mission 一個 deliverable**：governance `max_graph_depth: 2`、aggregate `max_gate_attempts: 12`、
@@ -107,9 +98,10 @@ argv 上限、建議拿掉天花板;**本機複驗結果相反**——175K 過�
 ```bash
 cd /home/cookys/projects/autopilot
 git status --porcelain                                        # 空
-node -p "require('./.claude-plugin/plugin.json').version"      # 2.36.25
+node -p "require('./.claude-plugin/plugin.json').version"      # 2.36.26
 bash hooks/tests/engine-capability-pin.test.sh | tail -1       # 9 passed, 0 failed
 bash hooks/tests/resolve-live-tuple.test.sh | tail -1          # 15 passed, 0 failed（約 90s）
+bash hooks/tests/dispatch-contract-pin.test.sh | tail -1        # 71 passed, 0 failed
 node scripts/check-supersession-anchors.js; echo $?            # 0
 AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh | tail -1   # 8/8
 ```

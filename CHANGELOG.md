@@ -1,5 +1,58 @@
 # Changelog
 
+## v2.36.26 — 契約消費 live resolver：一個永遠到不了的替代檢查
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P2b（KR1 + KR2 + KR11）。
+契約端開始消費 P2 那個無寫入的 resolver——**契約自己從不讀 pin store**。
+
+- `scripts/dispatch-contract.js` — 新 `--resolved-live <json>`：admission 改在 `effective_tuple` 上進行。
+  替代（substitution）**在 matched 捷徑之前**就決定，因此替代席位一律用它自己的證據過 admission。
+  `--resolved-live` 的驗證是**全稱**的：tuple 欄位必須齊全且為非空字串、`substitution_reason` 必須是
+  null 或非空字串（裸真值判斷會放行 `false`）、`pending_revocation` 必須是陣列、缺 operand 直接硬失敗
+  而不是退化成「沒給這個旗標」。
+- `hooks/tests/dispatch-contract-pin.test.sh` — 71 條斷言，含 branch-complete 的拒絕表。
+
+**派工拓樸**：實作由 `grok-4.5`(xai) 經 managed campaign rail（lineage `bc88318c`）完成；
+QC panel 三家族（`MiniMax-M3` minimax、`GLM-5.2` zhipu、`gpt-5.6-sol` openai）。
+
+**三席分歧，裁決依據是呼叫點枚舉不是票數。** sol 與 GLM 都 FIX-THEN-SHIP 指向同一個洞，
+MiniMax SHIP-AS-IS 並以一條詳細、看似合理的追蹤把它論證掉——它主張替代席位只能走 matched 分支、
+因此必然通過一般 admission。depth-0 不數票：`resolvedLiveHasSubstitution` **恰好兩個呼叫點，
+都在 `!matched` 分支內**，所以 preferred 席位只要有合格 row，替代就永遠不被考慮。MiniMax 的追蹤
+假設 `isAdmissibleScorecardRow` 檢查替代席的 row，但它比對的是契約**解析**出來的引擎，也就是
+preferred 席位。這正是 KR11 存在要擋的繞道，而且走的是一條沒有測試的路徑：config 指名被 pin 的席位、
+resolver 回報有替代、該席位有合格 row → 拿 preferred 的證據給 GO，實際派的卻是 `effective_tuple`。
+既有的 KR11 測試漏掉它，是因為 fixture 的 `implementer_engine` 指著替代席位本身，於是那裡的
+`resolvedEngine` 剛好就是替代席。
+
+修正順帶結構性地關掉 sol 的第二條發現：替代分支從不呼叫 `loadQualificationOverride`，
+所以 preferred 席位的 override 無法漂白一個不合格的替代席。
+
+**GLM 那席回 `no_verdict`**（v2.34.7 的 framing 家族，chrome 破壞了包裹塊），但判決本體完好，
+從 `raw_log` 撈回來才拿到那條 MUST-FIX。**丟掉 no_verdict 的席位就是丟掉一條發現**——
+已寫進 `skills/quality-pipeline/references/code-review.md`。
+
+**第三條不可能失敗的斷言，三個交付項連續三條。** GLM 指出的
+`assert_not_contains … '"assurance":"operator-pin"'` 永遠不可能紅，因為 NO-GO payload 在結構上
+本來就不帶那個 key。前兩條分別是 D1 的「grep 到自己的註解」與 D2 的「`if` 兩個分支都 `ok`」。
+**這是規律不是巧合：寫測試就會產出這種東西。**
+
+已提交的 zero-pin baselines 一併刪除：它們每次執行都被覆寫、從未被斷言、每跑一次就弄髒工作樹，
+而且**本質上無法斷言**——`contract_sha256` 雜湊的契約內嵌一個每次新生的 mini-repo commit sha。
+非循環的檢查保留了下來：baseline 由 `git show <PRE_SHA>:dispatch-contract.js` 現場執行、
+在同一次執行內比對。
+
+**v2.36.23 的 supersession-anchor 閘門在這裡抓到第一次真實漂移**：實作者在 dated 指標與被取代的
+宣稱之間插了四行說明，把指標推出六行窗外。指標存在的理由是「讀到過期宣稱的人不會錯過它」，
+所以修法是恢復相鄰，不是放寬窗口——新的說明移到指標區塊上方。
+
+紅證由 depth-0 重推：強制 `hasSubstitution` 為 false，Defect-1 測試變紅並具名
+「qualified preferred + unqualified substitute must NO-GO: expected 3, got 0」；還原後 71 條全綠。
+
+prose-justification: 本版對 `skills/` 散文淨增兩行，皆為 `quality-pipeline/references/code-review.md`
+的 review 紀律——`no_verdict` 席位在丟棄前必須先讀 raw log、以及席位分歧時以重新推導裁決而非計票。
+兩條都是本輪付出代價才學到的，且直接對應 panel 的實際失效模式。
+
 ## v2.36.25 — `--resolve-live`：一個什麼都不寫的解析模式，以及一條不可能失敗的測試
 
 `docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P2（KR10 的無寫入疊加層 seam）。

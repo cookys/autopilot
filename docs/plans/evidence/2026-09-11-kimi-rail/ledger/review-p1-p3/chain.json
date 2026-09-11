@@ -1,0 +1,26 @@
+[
+  {
+    "generation": 1,
+    "base": "e60d6f66",
+    "head": "8ddcab600b97006ece8a3f83ef65e214b79cc205",
+    "seats": [
+      {
+        "id": "s0",
+        "status": "reviewed"
+      }
+    ],
+    "reviewed_seats": 1,
+    "total_seats": 1,
+    "reviewed_seats_count": 1,
+    "total_seats_count": 1,
+    "status": "finalized",
+    "diff_sha256": "5337d6b82f2ddea8a33a73c94280b09bb340f877ea623c96ba829dfcb396d11b",
+    "full_range_sha256": "3722a00ed3492efc7dd6b4937f50f3ef51623ebb28fecf0a755e079892dd5628",
+    "findings_sha256": "236bde6bcc8771f2fc6a69bb47956c6b771cf833ce8b4ba45620756c72b3ecac",
+    "seat_artifact_sha256": {
+      "s0": "13b51fe5a7c641984cca780bd32a84e1a26d95ae4248421c6e4212af7440b501"
+    },
+    "dispositions_path": "review-p1-p3/g1/dispositions.json",
+    "dispositions_sha256": "e6292cda8ffcaa8948de06fcb85b7a07b076c736f5ae7e50a654f3a26dec0e90"
+  }
+]

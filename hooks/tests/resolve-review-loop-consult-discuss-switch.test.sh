@@ -285,7 +285,7 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # — a real Population B member (not a frozen-fixture false positive). Bound
 # moves 27 -> 28.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "28" "$POP_B_COUNT" "Population B file bound is pinned at 28 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture and campaign-boundary-receipt-e2e.test.sh added 2026-08-30)"
+assert_eq "29" "$POP_B_COUNT" "Population B file bound is pinned at 29 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, and dispatch-contract-pin.test.sh added 2026-09-11)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the
@@ -308,11 +308,15 @@ assert_eq "28" "$POP_B_COUNT" "Population B file bound is pinned at 28 (git grep
 # contract.test.sh, hooks/tests/dispatch-consult-hermetic.test.sh, hooks/tests/
 # dispatch-contract.test.sh) — everything else in Population B still resolves
 # through the default (now auto for consult_dispatch, off for discuss_dispatch).
+# RECOUNTED (2026-09-11, plan P2b): hooks/tests/dispatch-contract-pin.test.sh
+# joins both counts — its mini-repo rosters carry genuine `- reviewer_engine:`
+# lines and pin consult_dispatch/discuss_dispatch off, exactly like the
+# dispatch-contract.test.sh fixture it was modelled on. 28 -> 29 and 3 -> 4.
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
 POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "3" "$POP_B_EXPLICIT_SWITCH" "three of Population B's 28 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
+assert_eq "4" "$POP_B_EXPLICIT_SWITCH" "four of Population B's 29 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'

@@ -39,7 +39,7 @@ function usage(code, message = '') {
   }
 
   console.log('Usage:');
-  console.log('  node scripts/dispatch-contract.js check --contract <file> --repo <dir> --json');
+  console.log('  node scripts/dispatch-contract.js check --contract <file> --repo <dir> --json [--resolved-live <file>] [--qualification-override <file>]');
   process.exit(code);
 }
 
@@ -85,8 +85,15 @@ function exitGo(unitId, contractSha, specSha, resolvedEngine, options = {}) {
   if (options.assurance === 'operator-override') {
     payload.assurance = 'operator-override';
   }
+  // Operator pin (plan 2026-09-11 P2b / KR1): standing preference recorded, never silent.
+  if (options.assurance === 'operator-pin') {
+    payload.assurance = 'operator-pin';
+  }
   if (options.qualification_override) {
     payload.qualification_override = options.qualification_override;
+  }
+  if (options.operator_pin) {
+    payload.operator_pin = options.operator_pin;
   }
 
   console.log(JSON.stringify(payload));
@@ -141,6 +148,97 @@ function strikeReasonMessage(row) {
     return 'engine: seat requires requalification (critical_reexam_trigger)';
   }
   return `engine: seat requires requalification (${row.strikes_since_pass} ordinary strikes since last pass)`;
+}
+
+// Consumer of resolve-dispatch-topology.js --resolve-live JSON.
+// The contract never opens the pin store; pin knowledge enters only via this file.
+// A tuple must carry non-empty engine/runner strings. effort/endpoint are
+// optional (absent is valid — some resolvers never populate them), but if
+// present must be strings; endpoint is additionally permitted to be the
+// empty string (the explicit "@none" wallet), never any other falsy value.
+function isCompleteTuple(tuple, reasons, label) {
+  if (!tuple || typeof tuple !== 'object' || Array.isArray(tuple)) {
+    reasons.push(`resolved-live: missing ${label}`);
+    return false;
+  }
+  if (typeof tuple.engine !== 'string' || !tuple.engine.trim()) {
+    reasons.push(`resolved-live: ${label} requires a non-empty engine string`);
+    return false;
+  }
+  if (typeof tuple.runner !== 'string' || !tuple.runner.trim()) {
+    reasons.push(`resolved-live: ${label} requires a non-empty runner string`);
+    return false;
+  }
+  if (hasKey(tuple, 'effort') && typeof tuple.effort !== 'string') {
+    reasons.push(`resolved-live: ${label}.effort must be a string when present`);
+    return false;
+  }
+  if (hasKey(tuple, 'endpoint') && typeof tuple.endpoint !== 'string') {
+    reasons.push(`resolved-live: ${label}.endpoint must be a string when present`);
+    return false;
+  }
+  return true;
+}
+
+function loadResolvedLive(resolvedLivePath, reasons) {
+  if (!resolvedLivePath) return null;
+  let doc;
+  try {
+    doc = JSON.parse(fs.readFileSync(resolvedLivePath, 'utf8'));
+  } catch (err) {
+    reasons.push('resolved-live: file unreadable or invalid JSON');
+    return null;
+  }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    reasons.push('resolved-live: must be a JSON object');
+    return null;
+  }
+  if (typeof doc.role !== 'string' || !doc.role.trim()) {
+    reasons.push('resolved-live: missing role');
+    return null;
+  }
+  if (!isCompleteTuple(doc.preferred_tuple, reasons, 'preferred_tuple')) {
+    return null;
+  }
+  if (!isCompleteTuple(doc.effective_tuple, reasons, 'effective_tuple')) {
+    return null;
+  }
+  // substitution_reason is required (KR1's own zero-pin fixture sets it to
+  // null explicitly) and, when not null, must be a non-empty string — never
+  // another falsy value such as false or 0, which resolvedLiveHasSubstitution
+  // used to treat as "no substitution" via bare truthiness.
+  if (!hasKey(doc, 'substitution_reason')) {
+    reasons.push('resolved-live: missing substitution_reason');
+    return null;
+  }
+  if (doc.substitution_reason !== null
+      && (typeof doc.substitution_reason !== 'string' || !doc.substitution_reason.trim())) {
+    reasons.push('resolved-live: substitution_reason must be null or a non-empty string');
+    return null;
+  }
+  if (!hasKey(doc, 'pending_revocation') || !Array.isArray(doc.pending_revocation)) {
+    reasons.push('resolved-live: pending_revocation must be an array');
+    return null;
+  }
+  return doc;
+}
+
+function resolvedLiveHasSubstitution(live) {
+  if (!live) return false;
+  if (typeof live.substitution_reason === 'string' && live.substitution_reason.trim()) return true;
+  const preferred = live.preferred_tuple || {};
+  const effective = live.effective_tuple || {};
+  return preferred.engine !== effective.engine
+    || preferred.runner !== effective.runner
+    || preferred.effort !== effective.effort
+    || preferred.endpoint !== effective.endpoint;
+}
+
+function preferredTupleMatchesResolved(live, storeRole, resolvedEngine) {
+  if (!live || !live.preferred_tuple) return false;
+  if (normalizeStoreRole(live.role) !== storeRole) return false;
+  return live.preferred_tuple.engine === resolvedEngine.model
+    && live.preferred_tuple.runner === resolvedEngine.runner;
 }
 
 function usageError(message) {
@@ -1226,7 +1324,52 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
 
   let engineAssurance = null;
   let qualificationOverride = null;
-  if (reasons.length === 0) {
+  let operatorPin = null;
+  // Fail-closed on a malformed --resolved-live before any admission shortcut.
+  // Absent the flag, every path below is byte-identical to the pre-pin build.
+  const resolvedLive = options.resolvedLivePath
+    ? loadResolvedLive(options.resolvedLivePath, reasons)
+    : null;
+  // KR11 fix: substitution must be decided BEFORE the matched shortcut and
+  // BEFORE the override is consulted. Otherwise a preferred seat with a
+  // qualified scorecard row lets a substituted (and possibly unqualified)
+  // effective_tuple ride through on the PREFERRED seat's evidence, or an
+  // operator's per-invocation override for the preferred seat launders an
+  // unqualified substitute. A substituted dispatch is decided on the
+  // substitute's OWN scorecard evidence, full stop — no operator-pin (pins
+  // admit preferred_tuple only) and no --qualification-override (that
+  // override is per-invocation evidence for the seat the operator named,
+  // not a blank check for whatever the resolver substituted in).
+  const hasSubstitution = Boolean(resolvedLive && resolvedLiveHasSubstitution(resolvedLive));
+
+  if (reasons.length === 0 && hasSubstitution) {
+    const eff = resolvedLive.effective_tuple;
+    const effectiveEngine = { model: eff.engine, runner: eff.runner };
+    const substituteMatched = Array.isArray(scoreRows)
+      ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, effectiveEngine, {
+        outputKind: contract.output && contract.output.kind,
+      }))
+      : null;
+
+    if (substituteMatched) {
+      if (substituteMatched.status === 'provisional') {
+        engineAssurance = 'provisional';
+      }
+    } else {
+      const strikeRow = Array.isArray(scoreRows)
+        ? scoreRows.find((row) => scorecardRowMatchesEngine(row, storeRole, effectiveEngine)
+          && row.admission_status === 'requalify_required')
+        : null;
+
+      if (strikeRow) {
+        reasons.push(strikeReasonMessage(strikeRow));
+      } else {
+        reasons.push(
+          `engine: substitute seat ${eff.engine}/${eff.runner} is not ordinarily admissible (operator-pin admits preferred_tuple only)`,
+        );
+      }
+    }
+  } else if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
       ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine, {
         outputKind: contract.output && contract.output.kind,
@@ -1260,6 +1403,11 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // never reach engineAssurance = 'operator-override'.
         reasons.push(strikeReasonMessage(strikeRow));
       } else {
+        // P2b/KR1: pin knowledge enters ONLY here, from --resolved-live (never by
+        // reading the pin store). KR11: operator-pin applies to preferred_tuple
+        // only — a substituted effective_tuple is handled above, before this
+        // branch is ever reached, so hasSubstitution is guaranteed false here.
+        //
         // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11: a standing
         // operator pin is a third admission path, and is recorded rather than silent.
         // The per-invocation clause still binds every seat that is NOT operator-pinned.
@@ -1269,18 +1417,29 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // one whose row is `provisional`-but-inadmissible-for-this-output-kind —
         // never a strike-blocked seat (excluded above) — so the override's
         // legitimate uses are unaffected.
-        const override = loadQualificationOverride(
-          options.overridePath, storeRole, resolvedEngine, reasons,
-        );
-        if (override) {
-          engineAssurance = 'operator-override';
-          qualificationOverride = {
-            reason: override.reason,
-            operator: override.operator,
-            expires: override.expires,
+        const pinAdmitsPreferred = resolvedLive
+          && preferredTupleMatchesResolved(resolvedLive, storeRole, resolvedEngine);
+        if (pinAdmitsPreferred) {
+          engineAssurance = 'operator-pin';
+          operatorPin = {
+            engine: resolvedLive.preferred_tuple.engine,
+            runner: resolvedLive.preferred_tuple.runner,
+            role: resolvedLive.role,
           };
         } else {
-          reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+          const override = loadQualificationOverride(
+            options.overridePath, storeRole, resolvedEngine, reasons,
+          );
+          if (override) {
+            engineAssurance = 'operator-override';
+            qualificationOverride = {
+              reason: override.reason,
+              operator: override.operator,
+              expires: override.expires,
+            };
+          } else {
+            reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+          }
         }
       }
     } else if (matched.status === 'provisional') {
@@ -1321,7 +1480,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
     reasons.push('engine: campaign projection disagrees with resolved runner/model');
   }
 
-  return { reasons, specSha, headSha, baseAtHead, engineAssurance, qualificationOverride };
+  return { reasons, specSha, headSha, baseAtHead, engineAssurance, qualificationOverride, operatorPin };
 }
 
 function parseArgs(argv) {
@@ -1333,18 +1492,34 @@ function parseArgs(argv) {
   let repoPath = '';
   let wantJson = false;
   let overridePath = '';
+  let resolvedLivePath = '';
+
+  // A recognized flag that takes a value must actually get one. Collapsing a
+  // missing operand to '' (via `argv[i + 1] || ''`) is indistinguishable from
+  // the flag being entirely absent, so a typo (e.g. `--resolved-live` as the
+  // last argv token) silently drops pin evidence instead of failing loudly.
+  function requireOperand(flag) {
+    const next = argv[i + 1];
+    if (next === undefined) {
+      usage(2, `${flag} requires a value`);
+    }
+    return next;
+  }
 
   let i = 1;
   while (i < argv.length) {
     const arg = argv[i];
     if (arg === '--contract') {
-      contractPath = argv[i + 1] || '';
+      contractPath = requireOperand('--contract');
       i += 2;
     } else if (arg === '--repo') {
-      repoPath = argv[i + 1] || '';
+      repoPath = requireOperand('--repo');
       i += 2;
     } else if (arg === '--qualification-override') {
-      overridePath = argv[i + 1] || '';
+      overridePath = requireOperand('--qualification-override');
+      i += 2;
+    } else if (arg === '--resolved-live') {
+      resolvedLivePath = requireOperand('--resolved-live');
       i += 2;
     } else if (arg === '--json') {
       wantJson = true;
@@ -1366,7 +1541,12 @@ function parseArgs(argv) {
     usage(2, '--json is required');
   }
 
-  return { contractPath, repoPath: path.resolve(repoPath), overridePath };
+  return {
+    contractPath,
+    repoPath: path.resolve(repoPath),
+    overridePath,
+    resolvedLivePath,
+  };
 }
 
 // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11: "never a silent third
@@ -1415,7 +1595,9 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
     usage(2, 'Invalid local schema payload');
   }
 
-  const { contractPath, repoPath, overridePath } = parseArgs(process.argv.slice(2));
+  const {
+    contractPath, repoPath, overridePath, resolvedLivePath,
+  } = parseArgs(process.argv.slice(2));
   const parsed = checkSchemaCompliance(contractPath, repoPath);
 
   if (!parsed.loaded) {
@@ -1433,7 +1615,10 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
   const reasons = [];
 
   resolveEngine(repoPath, reasons, resolvedEngine, contract.go.required_engine_role);
-  const policy = checkPolicy(contract, repoPath, contractSha, resolvedEngine, { overridePath });
+  const policy = checkPolicy(contract, repoPath, contractSha, resolvedEngine, {
+    overridePath,
+    resolvedLivePath,
+  });
 
   reasons.push(...policy.reasons);
 
@@ -1455,6 +1640,9 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
     assurance: policy.engineAssurance || null,
     ...(policy.qualificationOverride
       ? { qualification_override: policy.qualificationOverride }
+      : {}),
+    ...(policy.operatorPin
+      ? { operator_pin: policy.operatorPin }
       : {}),
   });
 })();

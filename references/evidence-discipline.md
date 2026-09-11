@@ -753,3 +753,31 @@ comment, and passes with the lock removed) only appeared once the mutant preserv
 Prevention: name the assertion the mutant is supposed to break before running it, and require that
 exact assertion to flip. A mutant that removes a property must leave every other behaviour intact —
 if unrelated assertions move, the mutant is malformed, not informative.
+
+## 33. An assertion that cannot fail is the default output of writing tests, not an aberration
+
+**Incident (2026-09-11, three deliverables of one plan).** Three bounded deliverables, three
+different implementer engines, three test suites written to briefs that explicitly demanded red
+proofs. Each shipped exactly one assertion that could not fail, and in all three cases a decorrelated
+review seat — never the author, never the orchestrator's own verification — found it:
+
+| deliverable | the assertion | why it could not fail |
+|---|---|---|
+| pin store | `grep withWriteLock` over the pin code section | the section's own COMMENT contains the token |
+| live resolver | `if …; then ok "7: …"; else ok "7: …"; fi` | both arms report success |
+| contract admission | `assert_not_contains <body> '"assurance":"operator-pin"'` | a NO-GO payload structurally never carries that key |
+
+None of the three is careless. Each is a plausible way to express the intended property, and each
+passes on the day it is written. The first survives because source text is not behaviour; the second
+because an `if` with two success arms still reads like a check; the third because asserting the
+ABSENCE of a key is vacuous whenever the surrounding shape guarantees the key is absent.
+
+> **Treat "at least one assertion here cannot fail" as the prior, not the exception.** The suite's
+> pass count is quoted as evidence, so a vacuous assertion does not merely fail to help — it inflates
+> the number that gets reported.
+
+Prevention, in order of strength: require a red proof per *assertion group* rather than per
+deliverable; refuse any `if/else` whose arms both report success; and for absence-assertions, first
+demonstrate a case where the key IS present, or the absence proves nothing. The orchestrator's own
+verification caught none of these — all three came from the decorrelated panel seat, which is the
+argument for `min_panel_size` being a floor rather than a budget.

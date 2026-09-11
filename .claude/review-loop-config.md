@@ -164,3 +164,8 @@
 > low risk → claude-haiku (calibrated cheap leg — ~10s rounds). Without the
 > preference lists, alphabetical ladder order would put haiku on high-risk
 > duty, which is too weak for that seat.
+
+- unknown_escalation: auto
+- unknown_budget_u1: 2
+- unknown_budget_u2: 1
+- unknown_budget_u3: 1

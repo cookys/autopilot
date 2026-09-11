@@ -30,7 +30,7 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
@@ -100,9 +100,28 @@
 #   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
 #   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
 #   (P12); cursor-agent rejects both flags with "error: unknown option".
+#   opencode runner: drives the OpenCode CLI (`opencode run`). Probe-verified 2026-09-07
+#   (opencode 1.18.27): `--dir <scratch-cwd>` anchors the run outside the repo (the diff
+#   is TEXT in the prompt, this rail needs no repo access at all — scratch cwd is the
+#   ACTUAL containment, same as kimi/cursor below); `--agent plan` denies `edit` for
+#   every path except its own plan-file directory (verified via `opencode agent list`,
+#   NOT the implementer rail's default `build` agent) but is BEST-EFFORT, NOT a hard
+#   sandbox: a live adversarial probe (asked it to run `hostname`) showed `--agent plan`
+#   does NOT block bash/tool execution — the model ran the command and returned the real
+#   host's hostname. So opencode stays OUT of the AUTOPILOT_BLIND_DISCOVERY no-tools
+#   allowlist, same tier as kimi/grok/cursor (see qualification-review-provider.js's
+#   opencode kind, which refuses entirely for the stricter exam-integrity threshold).
+#   `--pure` disables external plugins; the prompt is read from STDIN (no positional
+#   message ⇒ no ARG_MAX wall, same as qoderclicn/cursor); `--format json` streams
+#   newline-delimited JSON events — the final assistant text is the LAST
+#   `{"type":"text",...}` event's `.part.text` (probe-verified: one complete text event
+#   per assistant turn, not incremental deltas — extracted via a Node built-in
+#   scriptlet, same normalize-before-parse shape as the kimi salvage). `--variant`
+#   carries reasoning effort (autopilot's `max` clamps to `xhigh`, same mapping as the
+#   dispatch-hetero.sh implementer rail — see there for the effort-tier probe).
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
 #     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "...",
 #     "usage": { ... }|null }
@@ -264,8 +283,8 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, or cursor (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
 if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
   case "$RUNNER" in
     qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
@@ -638,6 +657,7 @@ BLOCK_FILE="$(mktemp -t dispatch-review-block-XXXXXX)"
 CODEX_OUT=""
 CODEX_ERR=""
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
+GROK_PARSE="" # grok glued-preamble normalized parse target (v2.36.4); trap-reaped like the other rails
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
@@ -650,6 +670,10 @@ KIMI_CLEAN="" # normalized kimi stdout; reaped on EXIT if interrupted
 CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
 CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
+OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
+OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
+OPENCODE_ERR=""   # opencode stderr chrome
+OPENCODE_CLEAN="" # extracted final-assistant-text scratch file; reaped on EXIT if interrupted
 AGY_CWD=""
 AGY_OUT=""
 AGY_ERR=""
@@ -676,10 +700,15 @@ cleanup() {
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD"
   [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
+  [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
+  [ -n "$OPENCODE_OUT" ] && rm -f "$OPENCODE_OUT"
+  [ -n "$OPENCODE_ERR" ] && rm -f "$OPENCODE_ERR"
+  [ -n "$OPENCODE_CLEAN" ] && rm -f "$OPENCODE_CLEAN"
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD"
   [ -n "$AGY_OUT" ] && rm -f "$AGY_OUT"
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
+  [ -n "$GROK_PARSE" ] && rm -f "$GROK_PARSE"
   [ -n "$AGY_SALVAGE" ] && rm -f "$AGY_SALVAGE"
   [ -n "$SALVAGE_BLOCK" ] && rm -f "$SALVAGE_BLOCK"
   # Observability: stamp ended_at + final_status (from the exit code, the one source
@@ -839,6 +868,7 @@ ${END}
 Framing nonce (do NOT use this raw value as a marker; markers above are derived):
 NONCE=${NONCE}
 
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
 Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
 
 Bounded convergence contract:
@@ -965,12 +995,33 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # print a partial `VERDICT: SHIP-AS-IS` line and THEN stall/fail; letting that partial
   # output reach the parser would mark a failed/timed-out run as a SHIP (gpt-5.5 review).
   # The partial output stays in raw_log for debugging; it is never trusted as a verdict.
+  # GLUED-PREAMBLE NORMALIZATION (v2.36.4, cuda R21 qc report 2026-09-05): with
+  # --output-format plain, grok sometimes prints one sentence of preamble ("I'll read the
+  # full review prompt…") and then, on the SAME line with no newline, the derived BEGIN
+  # frame. The shared locator saw a leading line carrying framing vocabulary that was not
+  # byte-exactly the frame → rule 7 hard reject → a complete, correct review recorded as
+  # no_verdict (5 of 8 collects). Split ONCE, at the FIRST line whose `<<<AUTOPILOT-REVIEW-`
+  # sits past column 1 and BEFORE any exact BEGIN line: the preamble becomes its own chrome
+  # line — still subject to rules 7 (any residual vocabulary), 8 (budget) and 9 (leak) —
+  # and the frame becomes the exact line. Nothing after a frame is touched (an echo inside
+  # the block stays for the leak scan / duplicate-BEGIN rule). RAW_LOG keeps the raw bytes.
+  GROK_PARSE="$(mktemp -t dispatch-review-grok-parse-XXXXXX)"
+  awk -v begin="$BEGIN" '
+    { line = $0; sub(/\r$/, "", line) }   # CR-tolerant like the locator, so a CRLF exact BEGIN still closes the window
+    !done && line == begin { done = 1 }
+    !done {
+      i = index($0, "<<<AUTOPILOT-REVIEW-")
+      if (i > 1) { print substr($0, 1, i - 1); print substr($0, i); done = 1; next }
+    }
+    { print }
+  ' "$RAW_LOG" > "$GROK_PARSE"
   if [ "$GROK_RC" -ne 0 ]; then
     printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    SALVAGE_CAPTURE="$RAW_LOG"
+    SALVAGE_CAPTURE="$GROK_PARSE"
     emit_no_verdict "grok exited non-zero (rc=$GROK_RC) — fail-closed, partial output not parsed"
   fi
+  PARSE_INPUT="$GROK_PARSE"
 
 elif [[ "$RUNNER" = "qoderclicn" ]]; then
   QODER_BIN="${BIN:-qoderclicn}"
@@ -1082,11 +1133,22 @@ elif [[ "$RUNNER" = "kimi" ]]; then
         case "$KIMI_BIN" in /*) ;; *) die_precondition "could not resolve kimi --bin to absolute path: ${BIN:-kimi}" ;; esac ;;
   esac
   [[ -x "$KIMI_BIN" ]] || die_precondition "kimi binary not executable: $KIMI_BIN"
+  # kimi 0.39 takes the prompt ONLY as the -p argv string: no --prompt-file, and -p '' / -p -
+  # are rejected / taken literally (probed 2026-09-07). Linux caps ONE argv string at
+  # MAX_ARG_STRLEN (128 KiB, independent of ARG_MAX), so an oversized prompt makes execve fail
+  # with rc=126 "Argument list too long" AFTER the context-window gate passed (308 report
+  # 2026-09-07: 133 KB diff + 10 KB spec ⇒ 145 KB prompt ⇒ no_verdict with an opaque rc).
+  # Fail closed HERE, before spend, with the real cause and the two remedies. Headroom below
+  # the kernel limit covers the rest of the argv/env block. Test seam: AUTOPILOT_KIMI_ARGV_LIMIT.
+  KIMI_PROMPT_BYTES="$(wc -c < "$PROMPT_FILE" | tr -d ' ')"
+  KIMI_ARGV_LIMIT="${AUTOPILOT_KIMI_ARGV_LIMIT:-120000}"
+  if [ "$KIMI_PROMPT_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
+    die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but kimi accepts the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)"
+  fi
   KIMI_OUT="$(mktemp -t dispatch-review-kimi-out-XXXXXX)"
   KIMI_ERR="$(mktemp -t dispatch-review-kimi-err-XXXXXX)"
   KIMI_CWD="$(mktemp -d -t dispatch-review-kimicwd-XXXXXX)"
-  # -p requires the prompt as an argument (no --prompt-file). Large diffs: cat into -p;
-  # ARG_MAX risk accepted with context-window gate upstream.
+  # -p requires the prompt as an argument (no --prompt-file); size guarded above.
   timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p "$(cat "$3")" -m "$4" --output-format text' \
       _ "$KIMI_CWD" "$KIMI_BIN" "$PROMPT_FILE" "$MODEL" > "$KIMI_OUT" 2> "$KIMI_ERR"
   KIMI_RC=$?
@@ -1128,6 +1190,79 @@ elif [[ "$RUNNER" = "kimi" ]]; then
     emit_no_verdict "kimi exited non-zero (rc=$KIMI_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$KIMI_OUT"
+elif [[ "$RUNNER" = "opencode" ]]; then
+  # OpenCode CLI reviewer rail — see header comment for the probe evidence (2026-09-07,
+  # opencode 1.18.27). Prefer explicit --bin, else PATH (well-known install paths for
+  # opencode vary too much across platforms to hardcode one, unlike kimi's single
+  # ~/.kimi-code/bin/kimi convention).
+  if [[ -n "${BIN:-}" ]]; then
+    OPENCODE_BIN="$BIN"
+  elif command -v opencode >/dev/null 2>&1; then
+    OPENCODE_BIN="$(command -v opencode)"
+  else
+    die_precondition "opencode binary not found (install OpenCode CLI; PATH or --bin)"
+  fi
+  case "$OPENCODE_BIN" in
+    /*) ;;
+    *)  # only resolve relative *paths* (./opencode), never bare name "opencode" → $PWD/opencode
+        if [[ -f "$OPENCODE_BIN" || -f "./$OPENCODE_BIN" ]]; then
+          OPENCODE_BIN="$(cd "$(dirname "$OPENCODE_BIN")" 2>/dev/null && pwd)/$(basename "$OPENCODE_BIN")" || true
+        else
+          die_precondition "opencode --bin must be absolute or on PATH (got: $OPENCODE_BIN)"
+        fi
+        case "$OPENCODE_BIN" in /*) ;; *) die_precondition "could not resolve opencode --bin to absolute path: ${BIN:-opencode}" ;; esac ;;
+  esac
+  [[ -x "$OPENCODE_BIN" ]] || die_precondition "opencode binary not executable: $OPENCODE_BIN"
+  OPENCODE_OUT="$(mktemp -t dispatch-review-opencode-out-XXXXXX)"
+  OPENCODE_ERR="$(mktemp -t dispatch-review-opencode-err-XXXXXX)"
+  OPENCODE_CWD="$(mktemp -d -t dispatch-review-opencodecwd-XXXXXX)"
+  OPENCODE_VARIANT="$EFFORT"; [ "$OPENCODE_VARIANT" = "max" ] && OPENCODE_VARIANT="xhigh"
+  # --agent plan denies `edit` (best-effort, NOT a hard sandbox — see header comment:
+  # a live probe showed it does not block bash/tool execution). --dir anchors the run
+  # at the scratch cwd (the ACTUAL containment, never the repo). Prompt via STDIN (no
+  # ARG_MAX wall). --format json for machine-parseable events.
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$3" --agent plan --variant "$4" --format json < "$5"' \
+      _ "$OPENCODE_CWD" "$OPENCODE_BIN" "$MODEL" "$OPENCODE_VARIANT" "$PROMPT_FILE" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+  OPENCODE_RC=$?
+  wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  rm -rf "$OPENCODE_CWD"; OPENCODE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  cat "$OPENCODE_OUT" > "$RAW_LOG"
+  printf '\n--- opencode stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$OPENCODE_ERR" >> "$RAW_LOG"
+  # --format json is newline-delimited JSON events, not the plain VERDICT text every other
+  # rail's parser expects — extract the LAST {"type":"text",...} event's .part.text (the
+  # final assistant message; probe-verified one complete event per turn, no incremental
+  # deltas, so "last" is correct and concatenation would duplicate). Runs BEFORE the rc
+  # check, same ordering rationale as the kimi salvage (a non-zero rc still gets a fair
+  # shot at the fail-closed no_verdict salvage path below on whatever text did land).
+  OPENCODE_CLEAN="$(mktemp -t dispatch-review-opencode-clean-XXXXXX)"
+  node -e '
+    const fs = require("fs");
+    let raw;
+    try { raw = fs.readFileSync(process.argv[1], "utf8"); } catch { process.exit(0); }
+    let last = "";
+    for (const line of raw.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      let ev;
+      try { ev = JSON.parse(t); } catch { continue; }
+      if (ev && ev.type === "text" && ev.part && typeof ev.part.text === "string") {
+        last = ev.part.text;
+      }
+    }
+    process.stdout.write(last);
+  ' "$OPENCODE_OUT" > "$OPENCODE_CLEAN" 2>/dev/null
+  if [ -s "$OPENCODE_CLEAN" ]; then
+    cat "$OPENCODE_CLEAN" > "$OPENCODE_OUT"
+  fi
+  rm -f "$OPENCODE_CLEAN"; OPENCODE_CLEAN=""
+  if [ "$OPENCODE_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: opencode exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$OPENCODE_RC" "$([ "$OPENCODE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    SALVAGE_CAPTURE="$OPENCODE_OUT"
+    emit_no_verdict "opencode exited non-zero (rc=$OPENCODE_RC) — fail-closed, partial output not parsed"
+  fi
+  PARSE_INPUT="$OPENCODE_OUT"
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
@@ -1261,7 +1396,7 @@ else
   # "do not ship" — a precondition exit would be indistinguishable from a bad invocation.
   AGY_PROMPT_BYTES=$(wc -c < "$PROMPT_FILE")
   if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_PROMPT_BYTES" "the review prompt" \
-      "narrow --diff (fewer files / smaller range) or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor)")"; then
+      "narrow --diff (fewer files / smaller range) or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)")"; then
     emit_no_verdict "$AGY_CEILING_REASON"
   fi
   AGY_BWRAP_ARGS=(--ro-bind / / --dev /dev --proc /proc)

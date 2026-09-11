@@ -116,6 +116,17 @@ DEF_DISCUSS_ENDPOINT=""
 # this field plumbing only defines/reads the switch itself.
 DEF_CONSULT_DISPATCH="auto"
 DEF_DISCUSS_DISPATCH="off"
+# unknown_escalation (unknown-escalation ladder, plan
+# docs/plans/2026-09-07-unknown-escalation-ladder.md P2): whether
+# scripts/probe-unknown.js may recommend and receipt climbs. Same tri-state
+# shape as consult_dispatch. DEFAULT auto = ON (owner ruling 2026-09-07: a
+# switch, default on in every mode) with budgets 2/1/1; `on` requires the three
+# budgets explicitly (exit 3 otherwise); `off` ⇒ capability_warnings line, the
+# probe recommends none with reason knob-off. The knob value is never rewritten.
+DEF_UNKNOWN_ESCALATION="auto"
+DEF_UNKNOWN_BUDGET_U1="2"
+DEF_UNKNOWN_BUDGET_U2="1"
+DEF_UNKNOWN_BUDGET_U3="1"
 DEF_HETERO_REVIEW="auto"
 # Board ruling 2026-08-27: dual-seat occupancy by an UNQUALIFIED (override-admitted)
 # runner is configurable but DEFAULT CLOSED. See the schema description for why the
@@ -327,9 +338,9 @@ else
     exit 3
   fi
   case "$VER_AUTH_RUNNER" in
-    codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|cursor) ;;
+    codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor|opencode) ;;
     *)
-      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|cursor): $VER_AUTH_RUNNER" >&2
+      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor|opencode): $VER_AUTH_RUNNER" >&2
       exit 3
       ;;
   esac
@@ -409,6 +420,10 @@ DISCUSS_RUNNER="$(read_field "$CONFIG" discuss_runner "$DEF_DISCUSS_RUNNER")"
 DISCUSS_ENDPOINT="$(read_field "$CONFIG" discuss_endpoint "$DEF_DISCUSS_ENDPOINT")"
 CONSULT_DISPATCH="$(read_field "$CONFIG" consult_dispatch "$DEF_CONSULT_DISPATCH")"
 DISCUSS_DISPATCH="$(read_field "$CONFIG" discuss_dispatch "$DEF_DISCUSS_DISPATCH")"
+UNKNOWN_ESCALATION="$(read_field "$CONFIG" unknown_escalation "$DEF_UNKNOWN_ESCALATION")"
+UNKNOWN_BUDGET_U1_RAW="$(read_field "$CONFIG" unknown_budget_u1 "")"
+UNKNOWN_BUDGET_U2_RAW="$(read_field "$CONFIG" unknown_budget_u2 "")"
+UNKNOWN_BUDGET_U3_RAW="$(read_field "$CONFIG" unknown_budget_u3 "")"
 ALLOW_DUAL_SEAT="$(read_field "$CONFIG" allow_same_runner_dual_seat "$DEF_ALLOW_DUAL_SEAT")"
 PLAN_MAX_GENERATIONS="$(read_field "$CONFIG" plan_review_max_generations "$DEF_PLAN_MAX_GENERATIONS")"
 PLAN_MAX_WALL_SECONDS="$(read_field "$CONFIG" plan_review_max_wall_seconds "$DEF_PLAN_MAX_WALL_SECONDS")"
@@ -423,11 +438,11 @@ case "$HETERO_REVIEW" in auto|on|off) ;; *)
   echo "resolve-review-loop: invalid hetero_review (must be auto|on|off): $HETERO_REVIEW" >&2
   exit 3
 esac
-case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *)
+case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *)
   echo "resolve-review-loop: invalid plan_reviewer_runner: $PLAN_REV_RUNNER" >&2
   exit 3
 esac
-case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *)
+case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *)
   echo "resolve-review-loop: invalid plan_deep_reviewer_runner: $PLAN_DEEP_RUNNER" >&2
   exit 3
 esac
@@ -455,7 +470,7 @@ for _seat in consult discuss; do
     discuss) _s_eng="$DISCUSS_ENGINE"; _s_eff="$DISCUSS_EFFORT"; _s_run="$DISCUSS_RUNNER"; _s_ep="$DISCUSS_ENDPOINT" ;;
   esac
   case "$_s_run" in
-    ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
+    ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
     *) echo "resolve-review-loop: invalid ${_seat}_runner: $_s_run" >&2; exit 3 ;;
   esac
   case "$_s_eff" in
@@ -495,6 +510,41 @@ case "$DISCUSS_DISPATCH" in
     echo "resolve-review-loop: invalid discuss_dispatch (must be off|on): $DISCUSS_DISPATCH" >&2
     exit 3
     ;;
+esac
+case "$UNKNOWN_ESCALATION" in
+  auto|on|off) ;;
+  *)
+    echo "resolve-review-loop: invalid unknown_escalation (must be auto|on|off): $UNKNOWN_ESCALATION" >&2
+    exit 3
+    ;;
+esac
+# unknown_escalation budgets: `on` requires all three explicit non-negative
+# integers; `auto` fills 2/1/1 for any that are missing; a present value must be
+# a non-negative integer under every knob value (a knob-off budget typo is still
+# a typo).
+_unknown_budget_check() { # name raw default -> prints resolved value or exits 3
+  local name="$1" raw="$2" def="$3"
+  if [[ -z "$raw" ]]; then
+    if [[ "$UNKNOWN_ESCALATION" == "on" ]]; then
+      echo "resolve-review-loop: unknown_escalation=on requires $name (a non-negative integer)" >&2
+      exit 3
+    fi
+    printf '%s' "$def"
+    return
+  fi
+  if [[ ! "$raw" =~ ^[0-9]+$ ]]; then
+    echo "resolve-review-loop: invalid $name (must be a non-negative integer): $raw" >&2
+    exit 3
+  fi
+  printf '%s' "$raw"
+}
+UNKNOWN_BUDGET_U1="$(_unknown_budget_check unknown_budget_u1 "$UNKNOWN_BUDGET_U1_RAW" "$DEF_UNKNOWN_BUDGET_U1")" || exit 3
+UNKNOWN_BUDGET_U2="$(_unknown_budget_check unknown_budget_u2 "$UNKNOWN_BUDGET_U2_RAW" "$DEF_UNKNOWN_BUDGET_U2")" || exit 3
+UNKNOWN_BUDGET_U3="$(_unknown_budget_check unknown_budget_u3 "$UNKNOWN_BUDGET_U3_RAW" "$DEF_UNKNOWN_BUDGET_U3")" || exit 3
+case "$UNKNOWN_ESCALATION" in
+  on) UNKNOWN_RESOLVED_FROM="explicit" ;;
+  off) UNKNOWN_RESOLVED_FROM="off" ;;
+  *) UNKNOWN_RESOLVED_FROM="default" ;;
 esac
 
 # consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
@@ -686,7 +736,7 @@ fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
     case "${QC_PANEL_RUNNERS[$_i]}" in
-      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
+      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
       *) QC_PANEL_SEATS_COMPLETE="false" ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
@@ -717,9 +767,9 @@ fi
 # Runner identity selects the actual transport. Unknown or blank explicit values
 # fail loudly: silently substituting a different runner misattributes the review.
 case "$REV_RUNNER" in
-  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
+  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
   *)
-    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor): ${REV_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode): ${REV_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
@@ -735,18 +785,23 @@ esac
 # Optional implementer_ladder: comma list of engine/effort@runner, or 'auto'. Absent/empty
 # ⇒ [] (the three implementer_* fields remain the single implicit rung).
 CAP_WARNINGS_JSON="[]"
+if [[ "$UNKNOWN_ESCALATION" == "off" ]]; then
+  CAP_WARNINGS_JSON='["unknown_escalation off: the unknown-escalation ladder will not recommend or receipt climbs (probe-unknown.js reports reason knob-off)"]'
+fi
 IMPL_LADDER_JSON="[]"
 if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
   # Exit protocol: 0 + JSON array on stdout = valid non-empty ladder; 2 = topology
   # file exists but implementer_ladder is empty/absent (keep implicit rung, warn);
   # 1 = no readable/parseable topology file at all (keep implicit rung, warn);
-  # 3 + error message on stdout = a rung's runner failed the same enum check the
-  # comma-list path applies (a stale topology file must not smuggle an invalid
-  # runner past the resolver).
+  # 3 + error message on stdout = a rung's runner or effort failed the same enum
+  # check the comma-list path applies (a stale topology file must not smuggle an
+  # invalid rung past the resolver — the JS contract validator would reject the
+  # whole output anyway, this just names the rung and the fix).
   _auto_ladder="$(node -e '
 const fs = require("fs");
 const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","qoderclicn","cursor","opencode"]);
+const VALID_EFFORTS = new Set(["low","medium","high","xhigh","max"]);
 const file = process.argv[1];
 let raw;
 try {
@@ -773,6 +828,14 @@ for (const r of rungs) {
     process.stdout.write(
       "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): " +
       r.engine + "/" + r.effort + "@" + r.runner
+    );
+    process.exit(3);
+  }
+  if (!VALID_EFFORTS.has(r.effort)) {
+    process.stdout.write(
+      "invalid implementer_ladder effort (must be low|medium|high|xhigh|max): " +
+      r.engine + "/" + String(r.effort) + "@" + r.runner +
+      " — stale topology (pre-v2.36.16 emitted \"\" for legacy seats); rerun scripts/resolve-dispatch-topology.js"
     );
     process.exit(3);
   }
@@ -2329,6 +2392,11 @@ if [[ -n "$FIELD" ]]; then
     discuss_endpoint) printf '%s\n' "$DISCUSS_ENDPOINT" ;;
     consult_dispatch) printf '%s\n' "$CONSULT_DISPATCH" ;;
     discuss_dispatch) printf '%s\n' "$DISCUSS_DISPATCH" ;;
+    unknown_escalation) printf '%s\n' "$UNKNOWN_ESCALATION" ;;
+    unknown_budget_u1) printf '%s\n' "$UNKNOWN_BUDGET_U1" ;;
+    unknown_budget_u2) printf '%s\n' "$UNKNOWN_BUDGET_U2" ;;
+    unknown_budget_u3) printf '%s\n' "$UNKNOWN_BUDGET_U3" ;;
+    unknown_resolved_from) printf '%s\n' "$UNKNOWN_RESOLVED_FROM" ;;
     allow_same_runner_dual_seat) printf '%s\n' "$ALLOW_DUAL_SEAT" ;;
     plan_review_max_generations) printf '%s\n' "$PLAN_MAX_GENERATIONS" ;;
     plan_review_max_wall_seconds) printf '%s\n' "$PLAN_MAX_WALL_SECONDS" ;;
@@ -2427,11 +2495,12 @@ READINESS_ARGS=(
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
 )
-SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
 SEATS_ARGS=(
   "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
   "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
   "$CONSULT_DISPATCH" "$CONSULT_RESOLVED_FROM" "$DISCUSS_DISPATCH"
+  "$UNKNOWN_ESCALATION" "$UNKNOWN_BUDGET_U1" "$UNKNOWN_BUDGET_U2" "$UNKNOWN_BUDGET_U3" "$UNKNOWN_RESOLVED_FROM"
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'

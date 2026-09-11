@@ -289,6 +289,28 @@ test('AUTOPILOT_DEPTH0_GATE_DIR overrides the state directory', () => {
   assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json')));
 });
 
+test('24 concurrent read-class calls are all counted (load→modify→save is locked)', async () => {
+  // v2.36.2: the unlocked read-modify-write lost updates under parallel tool calls
+  // (24 concurrent ⇒ 22–23 counted, review round 1). Same `withLock` as foreman-guard.js.
+  const { spawn } = require('child_process');
+  const env = freshEnv();
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-parallel-'));
+  const N = 24;
+  const runs = [];
+  for (let i = 0; i < N; i += 1) {
+    runs.push(new Promise((resolve, reject) => {
+      const child = spawn('node', [HOOK], { env: { ...process.env, ...env, AUTOPILOT_DEPTH0_GATE_DIR: stateDir } });
+      child.on('error', reject);
+      child.on('close', (code) => resolve(code));
+      child.stdin.end(JSON.stringify(payload('Read')));
+    }));
+  }
+  const codes = await Promise.all(runs);
+  assert.ok(codes.every((c) => c === 0), `every fire exits 0 (got ${codes.join(',')})`);
+  const st = JSON.parse(fs.readFileSync(path.join(stateDir, 'd0-test-session.json'), 'utf8'));
+  assert.strictEqual(st.reads, N, `all ${N} reads counted, none lost to a concurrent write`);
+});
+
 test('subagent fire with empty or null agent_id is still skipped (presence, not truthiness)', () => {
   const env = freshEnv();
   for (const v of ['', null]) {

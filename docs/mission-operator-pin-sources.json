@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-11-operator-pin-supersedes-qualification.md",
+      "rubric_path": "plans/2026-09-11-operator-pin-supersedes-qualification.rubric.md",
+      "plan_sha256": "7574c5c3d096e1a87fd0894787f07654c9a334559064625e39f8b4b5934cd134",
+      "rubric_sha256": "fe1db3dc0020cf12c780adf54e7e7af15475862b962a4e00e009773a0bbe4c12"
+    }
+  ]
+}

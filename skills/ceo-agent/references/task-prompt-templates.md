@@ -170,6 +170,8 @@ excluded:
   - [possibility ruled out, with evidence]
 request:
   - [specific information or decision needed from CEO]
+ladder_receipts:            # optional — present when the run stopped (stall fuse / DOA) with unknown-escalation ladder rows in its ledger:
+  - <ledger path>#<rung> <unknown_type> terms=<a,b> signals=<S1,S3>   # one line per ladder row
 ```
 
 CEO receives this and decides: retry with more context, reassign to different

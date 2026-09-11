@@ -102,6 +102,12 @@ Flags:
   --rubric-file <file>              Rubric markdown file (optional, resolved automatically if omitted)
   --min-reviewed-seats <n>          Minimum reviewed seats required per generation
   --help, -h                        Show this help message and exit 0
+
+Chain rules (Mode A): every chain entry must be 'finalized' except an 'aborted' one (hetero-review-loop
+wrote it when the branch moved during collection or a seat's findings failed to parse). An aborted entry
+is accepted only as a recorded non-review: it must not be the last entry, it carries no head, the next
+generation continues from its base, and its range.json (if present) names that base. It contributes no
+findings and closes none (review-chain-derive skips it). v2.36.3.
 `);
 }
 
@@ -622,9 +628,11 @@ function validateModeA(flags) {
 
     const findingsByGeneration = new Map();
     const dispositionsByGeneration = new Map();
-    // The base the next reviewable generation must start from: the phase base,
-    // then each finalized generation's head. Aborted generations leave it alone.
-    let expectedNextBase = expectedBaseSha;
+
+    // Continuity is tracked against the last FINALIZED head, not the previous entry: an aborted
+    // generation has no head (nothing advanced) and the loop continues the next generation from
+    // the aborted one's base (hetero-review-loop.js collect, prevEntry.status === 'aborted').
+    let expectedEntryBase = expectedBaseSha;
 
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
@@ -633,39 +641,56 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // An aborted generation (the branch moved under collection, or a seat's
-      // output failed to parse) is a documented, legitimate chain entry: it
-      // stays on disk, is never renumbered, and produced no head — the next
-      // generation "continues from the aborted generation's base"
-      // (hetero-review-loop.js collect). So it is contiguity-neutral here:
-      // it must sit where the chain expected a base, and the next real entry
-      // must start from that same base. It contributes no findings and is
-      // not the last entry a SHIP-AS-IS receipt can rest on.
-      if (entry.status === 'aborted') {
-        if (entry.base !== expectedNextBase) {
-          console.error(`Chain broken at aborted generation ${entry.generation}: base '${entry.base}' does not match expected base '${expectedNextBase}'`);
-          process.exit(1);
+      // first entry's base must equal expectedBaseSha, each later entry's base must equal the
+      // last finalized head (== the aborted predecessor's base when the predecessor aborted)
+      if (entry.base !== expectedEntryBase) {
+        if (i === 0) {
+          console.error(`First chain entry base '${entry.base}' does not match expected phase-base '${expectedBaseSha}'`);
+        } else {
+          console.error(`Chain broken at generation ${entry.generation}: base '${entry.base}' does not match previous head '${expectedEntryBase}'`);
         }
-        if (i === chain.length - 1) {
-          console.error(`Chain ends on aborted generation ${entry.generation}; a receipt needs a finalized generation after it`);
-          process.exit(1);
-        }
-        continue;
-      }
-
-      // first entry's base must equal expectedBaseSha, each later entry's base must equal
-      // the previous NON-ABORTED entry's head (an aborted entry advanced nothing)
-      if (entry.base !== expectedNextBase) {
-        console.error(`Chain broken at generation ${entry.generation}: base '${entry.base}' does not match expected base '${expectedNextBase}'`);
         process.exit(1);
       }
-      expectedNextBase = entry.head;
 
-      // (3) every non-aborted entry's status must be "finalized"
+      // (3a) v2.36.3: an aborted generation is a recorded, non-reviewing attempt (7840hs report:
+      // a branch that moved during collection left the phase permanently un-receiptable). It is
+      // accepted ONLY as evidence that nothing was reviewed: it must not be the last entry (the
+      // phase needs a finalized generation after it — an abort can never stand in for a review),
+      // it carries no head (checked above: the successor continues from the same base), and its
+      // range.json, when present, must name the same base. No findings/dispositions/seats are
+      // required or read, and review-chain-derive skips it (it closes nothing).
+      if (entry.status === 'aborted') {
+        if (i === chain.length - 1) {
+          console.error(`Chain entry generation ${entry.generation} is 'aborted' and is the last entry: the phase has no finalized review after the abort`);
+          process.exit(1);
+        }
+        if (Object.prototype.hasOwnProperty.call(entry, 'head')) { // any own head, even "" (review 🔵)
+          console.error(`Chain entry generation ${entry.generation} is 'aborted' but carries a head '${entry.head}' (an aborted generation advances nothing)`);
+          process.exit(1);
+        }
+        const abortedRangePath = path.join(reviewPhaseDir, `g${entry.generation}`, 'range.json');
+        if (fs.existsSync(abortedRangePath)) {
+          let abortedRange;
+          try {
+            abortedRange = JSON.parse(fs.readFileSync(abortedRangePath, 'utf8'));
+          } catch (err) {
+            console.error(`Failed to read or parse range.json for aborted generation ${entry.generation}: ${err.message}`);
+            process.exit(1);
+          }
+          if (abortedRange.base !== entry.base) {
+            console.error(`range.json base mismatch for aborted generation ${entry.generation}`);
+            process.exit(1);
+          }
+        }
+        continue; // expectedEntryBase unchanged: the next generation continues from this base
+      }
+
+      // (3) every other entry's status must be "finalized"
       if (entry.status !== 'finalized') {
         console.error(`Chain entry generation ${entry.generation} status is '${entry.status}' (expected 'finalized')`);
         process.exit(1);
       }
+      expectedEntryBase = entry.head;
 
       // Item 2 / d2-seat-receipt-forgery: seat coverage and the reviewed-seat count are
       // resolved further below, once the per-generation directory (gDir) is known and each
@@ -958,6 +983,30 @@ function validateModeA(flags) {
     // Item 4: Call shared review-chain-derive routine
     const derivedState = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
 
+    // v2.36.3 (7840hs): no closure may be attributed to an aborted generation — it produced no
+    // findings, so "closed by absence in generation N" is meaningless for an aborted N. Checked
+    // on the receipt's own closed_findings BEFORE the equality comparison below so a receipt
+    // written by the pre-v2.36.3 finalize (which did exactly this) is refused with a named
+    // reason and the remedy, not a bare mismatch. The re-derived state is asserted too, as a
+    // self-check on the derive routine.
+    const abortedGens = new Set(chain.filter((e) => e.status === 'aborted').map((e) => e.generation));
+    const namesAborted = (list) => (Array.isArray(list) ? list : [])
+      .find((cf) => cf && abortedGens.has(cf.closed_by_generation));
+    // The loop's finalize writes the stamps onto chain ENTRIES (chain[i].closed_findings), not a
+    // top-level receipt field — the 7840hs ledger carries `{id, closed_by_generation: 3}` on its
+    // g2 entry with g3 aborted — so the on-disk chain entries are scanned as well.
+    const badReceiptClosure = namesAborted(receipt.closed_findings)
+      || chainOnDisk.map((e) => namesAborted(e && e.closed_findings)).find(Boolean);
+    if (badReceiptClosure) {
+      console.error(`Receipt/chain closed_findings attributes '${badReceiptClosure.id}' to generation ${badReceiptClosure.closed_by_generation}, which is aborted — an aborted generation reviewed nothing and can close nothing (stamp written before v2.36.3; collect + finalize one more generation to re-derive)`);
+      process.exit(1);
+    }
+    const badDerivedClosure = namesAborted(derivedState.closed_findings);
+    if (badDerivedClosure) {
+      console.error(`Re-derived closed_findings attributes '${badDerivedClosure.id}' to aborted generation ${badDerivedClosure.closed_by_generation} (derive routine defect)`);
+      process.exit(1);
+    }
+
     // Item 1: Require both recorded and re-derived SHIP-AS-IS
     if (receipt.verdict !== 'SHIP-AS-IS' || derivedState.verdict !== 'SHIP-AS-IS') {
       console.error(`Receipt verdict is not SHIP-AS-IS or re-derived verdict mismatch (receipt: '${receipt.verdict}', re-derived: '${derivedState.verdict}')`);
@@ -1013,7 +1062,7 @@ function validateModeA(flags) {
     }
 
     // (5) the last chain entry's head must equal current git rev-parse <branch> in repoRoot
-    const lastEntry = chain[chain.length - 1]; // never aborted: the loop above refuses a chain ending on one
+    const lastEntry = chain[chain.length - 1];
     const revParseRes = spawnSync('git', ['rev-parse', branch], {
       cwd: repoRoot,
       encoding: 'utf8',

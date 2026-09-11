@@ -74,6 +74,40 @@ if (enSec !== zhSec) {
   errors.push(`section count: README.md=${enSec} vs zh-TW=${zhSec} (## / ### header exists in one file only)`);
 }
 
+// Prose counts must agree with the file's OWN badge. The badges are bumped by
+// sync-version.js on every release; the prose sentences ("30 skills, 3 methodology
+// agents, 25 hooks") are not, and README.md carried "25 hooks" against a hooks-30
+// badge from 2026-07-26 to 2026-09-08 with nothing red (doc-sync sweep, v2.36.16).
+// Only the three roster nouns are checked; any other number in prose is out of scope.
+const PROSE_COUNTS = [
+  // [badge name, regex; group 1 = the number]
+  ['skills', /\b(\d+)\s+(?:lifecycle\s+)?skills?\b/g],
+  ['skills', /(\d+)\s*個\s*skills?/g],
+  ['hooks', /\b(\d+)\s+hooks?\b/g],
+  ['hooks', /(\d+)\s*個\s*(?:runtime\s*強制\s*)?hooks?/g],
+  ['agents', /\b(\d+)\s+methodology\s+agents?\b/g],
+  ['agents', /(\d+)\s*個\s*方法論\s*agents?/g],
+];
+function proseCountDrift(label, text, badgeMap) {
+  const lines = text.split('\n');
+  for (const [badge, re] of PROSE_COUNTS) {
+    const want = badgeMap.get(badge);
+    if (want === undefined) continue;
+    lines.forEach((line, i) => {
+      if (line.includes('img.shields.io')) return; // the badge row itself
+      let m;
+      re.lastIndex = 0;
+      while ((m = re.exec(line)) !== null) {
+        if (m[1] !== want) {
+          errors.push(`prose count: ${label}:${i + 1} says "${m[0].trim()}" but the ${badge} badge says ${want}`);
+        }
+      }
+    });
+  }
+}
+proseCountDrift('README.md', enText, enB);
+proseCountDrift('README.zh-TW.md', zhText, zhB);
+
 if (errors.length) {
   console.error('README parity drift:\n');
   for (const e of errors) console.error(`  ✗ ${e}`);
@@ -81,4 +115,4 @@ if (errors.length) {
   console.error('    (period-accurate historical prose numbers are out of scope — badges + structure only)');
   process.exit(1);
 }
-console.log(`✓ README.md ↔ README.zh-TW.md in parity (${enB.size} badges + ${enSec} sections)`);
+console.log(`✓ README.md ↔ README.zh-TW.md in parity (${enB.size} badges + ${enSec} sections + prose counts)`);

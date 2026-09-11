@@ -439,4 +439,114 @@ NODE
 )"
 assert_eq "high" "$SECOND_EFFORT_12" "Case 12: legacy seat emitted with effort 'high', never ''"
 
+# -----------------------------------------------------------------------------
+# Case 13: implementer ladder — a legacy (no-effort) qualified seat must be emitted
+# with effort 'high' (same rule as the reviewer path, Case 12) while keeping the
+# `engine@runner` rung name; '' is outside the review-loop contract's
+# implementer_effort enum and made `implementer_ladder: auto` fail validation on
+# every host with a legacy seat (2026-09-07). Two rows resolving to the same seat
+# (a superseded legacy row + its successor, both still current) collapse to ONE rung.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "engine-legacy" "agy" "" 20.0 "qualified" 301
+write_scorecard_row "engine-legacy" "agy" "" 20.0 "qualified" 302
+write_scorecard_row "engine-low" "agy" "low" 15.0 "qualified" 303
+write_scorecard_row "engine-max" "agy" "max" 30.0 "qualified" 304
+write_scorecard_row "engine-high" "agy" "high" 25.0 "qualified" 305
+
+OUT="$(node "$SCRIPT" --json --out "$TOPOLOGY_OUT" --role implementer 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 13: exit 0"
+
+LADDER_13="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(JSON.stringify(topo.implementer_ladder.map((r) => [r.rung, r.effort])));
+NODE
+)"
+assert_eq '[["engine-low/low@agy","low"],["engine-high/high@agy","high"],["engine-legacy@agy","high"],["engine-max/max@agy","max"]]' "$LADDER_13" \
+  "Case 13: legacy implementer seat emitted once, rung name engine@runner, effort 'high' (never ''), ranked by its emitted effort (after explicit high, never above max)"
+
+EMPTY_EFFORT_13="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(String(topo.implementer_ladder.filter((r) => !r.effort).length));
+NODE
+)"
+assert_eq "0" "$EMPTY_EFFORT_13" "Case 13: no implementer rung carries an empty effort"
+
+# -----------------------------------------------------------------------------
+# Case 14: implementer ladder rungs carry `family`, derived by the SAME
+# familyOf() helper (and same value) the reviewer/consult/discuss path uses for
+# the identical engine name — producer-side field, not yet plumbed through the
+# review-loop contract. Uses vendor-shaped engine names so familyOf() resolves
+# to something other than the 'unknown' fallback.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-5" "agy" "high" 10.0 "qualified" 401
+write_scorecard_row "gemini-2" "agy" "low" 5.0 "qualified" 402
+
+OUT="$(node "$SCRIPT" --json --out "$TOPOLOGY_OUT" --role implementer 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 14: exit 0"
+
+FAMILIES_14="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(JSON.stringify(topo.implementer_ladder.map((r) => [r.engine, r.family])));
+NODE
+)"
+assert_eq '[["gemini-2","google"],["gpt-5","openai"]]' "$FAMILIES_14" \
+  "Case 14: implementer rungs carry the correct family per engine (same familyOf() mapping as reviewer/consult/discuss)"
+
+# -----------------------------------------------------------------------------
+# Case 15 (KR1 + KR3): a climb must change something. Two same-family seats at the
+# same effort are a no-op climb — same vendor, same tier — so the nearest
+# different-family rung is pulled forward between them. The FIRST rung must still
+# be the globally cheapest (cheapest-first is not traded away for decorrelation).
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-5a" "agy" "high" 10.0 "qualified" 401
+write_scorecard_row "gpt-5b" "agy" "high" 20.0 "qualified" 402
+write_scorecard_row "gemini-1" "agy" "high" 30.0 "qualified" 403
+write_scorecard_row "gpt-5c" "agy" "low" 40.0 "qualified" 404
+
+OUT="$(node "$SCRIPT" --json --out "$TOPOLOGY_OUT" --role implementer 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 15: exit 0"
+
+ORDER_15="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.implementer_ladder.map((r) => `${r.engine}:${r.family}:${r.effort}`).join(' '));
+NODE
+)"
+assert_eq "gpt-5c:openai:low gpt-5a:openai:high gemini-1:google:high gpt-5b:openai:high" "$ORDER_15" \
+  "Case 15: cheapest rung first, then the different-family rung is interleaved between the two same-family high seats"
+
+KR1_15="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const R = { low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
+const l = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8')).implementer_ladder;
+const bad = [];
+for (let i = 0; i + 1 < l.length; i += 1) {
+  const a = l[i]; const b = l[i + 1];
+  if (a.family === b.family && !(R[b.effort] > R[a.effort])) bad.push(`${i}:${a.family}`);
+}
+process.stdout.write(bad.join(',') || 'kr1-ok');
+NODE
+)"
+assert_eq "kr1-ok" "$KR1_15" "Case 15: no adjacent pair shares a family without a strictly higher effort"
+
+# -----------------------------------------------------------------------------
+# Case 16 (KR4): a single-family host must be byte-identical to the pure
+# effort ordering — decorrelation has nothing to trade and must not reshuffle.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-one" "agy" "low" 10.0 "qualified" 501
+write_scorecard_row "gpt-two" "agy" "medium" 20.0 "qualified" 502
+write_scorecard_row "gpt-three" "agy" "high" 30.0 "qualified" 503
+
+OUT="$(node "$SCRIPT" --json --out "$TOPOLOGY_OUT" --role implementer 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 16: exit 0"
+ORDER_16="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.implementer_ladder.map((r) => r.engine).join(' '));
+NODE
+)"
+assert_eq "gpt-one gpt-two gpt-three" "$ORDER_16" \
+  "Case 16: single-family ladder keeps the plain cheapest-first order"
+
 finalize_test

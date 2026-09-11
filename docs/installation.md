@@ -89,13 +89,15 @@ enforcement remains `NOT_READY/NO-SHIP`. Managed Codex implementers independentl
 credentials-only `CODEX_HOME` with the parent thread identity removed, so controller plugin/config/
 session state is not inherited by the child.
 
-For an ordinary strict-L5/L6 invocation, set `AUTOPILOT_LEVEL=l5` (or `l6`) and use the managed
+For an ordinary strict invocation, set `AUTOPILOT_LEVEL=l4`, `l5` or `l6` and use the managed
 `engine implement-review` command. The CLI resolves the target repository's exact implementer,
-reviewer, verification-author, QC, and configured fallback roster, requires byte-equal coverage by
-the compiled six-claim provider policy, then builds fresh in-process qualification and live-probe
+reviewer, verification-author, QC, and configured fallback roster (at `l4` the verification-author
+seat and the QC panel are optional — included when present; `l5`/`l6` require both), checks coverage
+by the compiled six-claim provider policy (advisory: uncertified seats are recorded under
+`policy_override`, never blocked), then builds fresh in-process qualification and live-probe
 closures. Readiness is consumed before workflow dispatch and its policy, claim, roster, and
 observation digests are recorded in campaign control. There is intentionally no flag, environment
-receipt, work-order field, or serialized callback that can replace those closures. L3/L4 and the
+receipt, work-order field, or serialized callback that can replace those closures. L3 and the
 temporary legacy rail remain explicitly non-strict and never emit strict-L5 readiness provenance.
 
 Codex hook maintenance still uses the separate warning-only `platforms/codex/hook-probe` package.
@@ -220,7 +222,7 @@ Activates `.githooks/pre-commit` which runs `sync-version.js --check` and `sync-
 |-----------|-------------|-------|
 | **a local clone** (dev mode, [below](#development)) | `git pull --ff-only` (shell), then `/reload-plugins` (Claude Code) | **Recommended for tracking latest** — no reinstall, pulls apply instantly |
 | **release / marketplace only** (no clone) | clean reinstall ([below](#release--marketplace-reinstall-no-clone)) | `/plugin update` may not detect new versions |
-| **Codex local package** | `git pull --ff-only`, then `./scripts/sync-codex-plugin-skills.sh`, `codex plugin remove autopilot@autopilot-local`, and `codex plugin add autopilot@autopilot-local` | The repo-local marketplace points at your clone; reinstall refreshes Codex's plugin cache |
+| **Codex local package** | `git pull --ff-only`, then `./scripts/dev-setup.sh --harness codex --install` (= `sync-codex-plugin-skills.sh` + `codex plugin add autopilot@autopilot-local`; no `remove`) | `plugin add` upgrades in place. **Both `add` and `remove` replace the versioned cache directory a running Codex session's `PLUGIN_ROOT` points at** (verified codex-cli 0.153.4), so live sessions then fail `PostCompact` with `MODULE_NOT_FOUND` until restarted — `dev-setup.sh` refuses to update while `codex` processes run unless `--force`; start a new conversation in each afterwards |
 | **Grok Build host plugin** | `git pull --ff-only` (if local clone), then `grok plugin update` and `grok inspect`; re-run `grok plugin install <path> --trust` if skills look stale | Local installs record `source_path`; do not assume Claude `/reload-plugins` applies |
 
 > **Why not just `/plugin update`?** Claude Code pins a plugin to its install-time commit, and `/plugin update` often does **not** detect new versions ([anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462)). Dev mode sidesteps this entirely: your clone *is* the plugin, so `git pull --ff-only` (then `/reload-plugins` in Claude Code) is the whole update. If you want to follow autopilot closely, set up [dev mode](#development) once and updating becomes a one-liner.
@@ -255,7 +257,7 @@ To enable the **session-handoff** snapshot feature (write a machine handoff on `
 
 ### Enabling opt-in hooks
 
-The 15 **opt-in** hooks (Tier B — branch-protection, commit-secret-scan, large-file-warner, config-protection, mcp-health, accumulator, test-runner, design-quality, cost-tracker, session-summary, check-console, batch-format, dispatch-model-guard, context-budget, orchestrator-edit-gate) are wired in the plugin's `hooks.json` but **default-OFF**. As of v2.26.2 you enable them via `~/.autopilot/config.json` — **not** by copying anything into your `settings.json` (where `${CLAUDE_PLUGIN_ROOT}` would not expand):
+The 13 **opt-in** hooks (Tier B — accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, design-quality, exec-boundary, large-file-warner, mcp-health, orchestrator-edit-gate, session-summary, test-runner; `scripts/check-hook-inventory.js` is the source of truth) are wired in the plugin's `hooks.json` but **default-OFF**. As of v2.26.2 you enable them via `~/.autopilot/config.json` — **not** by copying anything into your `settings.json` (where `${CLAUDE_PLUGIN_ROOT}` would not expand):
 
 ```json
 { "hooks": { "branch-protection": true, "commit-secret-scan": true, "test-runner": true } }

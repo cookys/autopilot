@@ -25,7 +25,8 @@ Usage:
     [--store <path>] [--now <ISO>] [--role <role>]
 
 Options:
-  --runner <r>       Specify runner name (e.g. codex, agy, grok, qoderclicn, cursor, cc-shim).
+  --runner <r>       Runner name: codex, agy, grok, qoderclicn, cursor, kimi, opencode, cc-shim,
+                     claude-native, anthropic-compatible (the dispatch-review.sh roster).
   --model <m>        Specify model name.
   --effort <e>       Exact effort partition written into the capability row.
   --endpoint <v>     Exact endpoint wallet name, or @none for explicit endpoint:null.
@@ -236,6 +237,20 @@ case "$RUNNER" in
       RUNNER_VERSION="$("$KIMI_BIN" --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
+  opencode)
+    # OpenCode CLI reviewer/implementer rail (dispatch-review.sh, v2.36.13). The
+    # dispatcher resolves --bin first, then PATH; this probe has no --bin input, so
+    # PATH is the whole resolution here (opencode has no single well-known install
+    # path to fall back to, unlike kimi). Missing branch = the generic fallthrough,
+    # which is exactly the silent drift probe-runner-coverage.test.sh guards.
+    if command -v opencode >/dev/null 2>&1; then
+      OPENCODE_BIN="$(command -v opencode)"
+      BINARY_FOUND=1
+      RUNNER_VERSION="$("$OPENCODE_BIN" --version 2>&1 | head -n 1 || echo "unknown")"
+    else
+      OPENCODE_BIN=""
+    fi
+    ;;
   anthropic-compatible)
     # NOT a binary runner: dispatch-review.sh drives dispatch-anthropic-review.js
     # over HTTP. Its real preconditions are `node` plus that script, so those are
@@ -294,20 +309,21 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
   # cc-shim/anthropic-compatible transport; exporting ANTHROPIC_* around
   # Codex/Grok/Qoder does not observe their endpoint tuple.
   #
-  # Effort: only codex / grok / qoderclicn consume it — verified by reading the
-  # dispatcher, not by assumption (dispatch-review.sh: codex `-c
+  # Effort: only codex / grok / qoderclicn / opencode consume it — verified by
+  # reading the dispatcher, not by assumption (dispatch-review.sh: codex `-c
   # model_reasoning_effort`, grok `--reasoning-effort`, qoderclicn
-  # `--reasoning-effort`; agy/cc-shim/anthropic-compatible/claude-native/kimi
-  # never receive it, and dispatch-anthropic-review.js has no effort parameter
-  # at all).  An effort-bearing tuple on a non-consuming runner is unobserved,
-  # so it must stay non-authorizing rather than be stamped available.
+  # `--reasoning-effort`, opencode `--variant` with max→xhigh;
+  # agy/cc-shim/anthropic-compatible/claude-native/kimi/cursor never receive it,
+  # and dispatch-anthropic-review.js has no effort parameter at all).  An
+  # effort-bearing tuple on a non-consuming runner is unobserved, so it must
+  # stay non-authorizing rather than be stamped available.
   case "$RUNNER" in
     cc-shim|anthropic-compatible) _ENDPOINT_CONSUMER=1 ;;
     *)                            _ENDPOINT_CONSUMER=0 ;;
   esac
   case "$RUNNER" in
-    codex|grok|qoderclicn) _EFFORT_CONSUMER=1 ;;
-    *)                     _EFFORT_CONSUMER=0 ;;
+    codex|grok|qoderclicn|opencode) _EFFORT_CONSUMER=1 ;;
+    *)                              _EFFORT_CONSUMER=0 ;;
   esac
   if [ "$ENDPOINT_SET" -eq 1 ] && [ "$ENDPOINT" != "@none" ] \
       && [ "$_ENDPOINT_CONSUMER" -eq 0 ]; then
@@ -451,6 +467,22 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       # -p is the non-interactive path; no --auto/--plan (they cannot combine with -p).
       ( cd "$PROBE_CWD" && "$KIMI_BIN" -m "$MODEL" -p "Respond only with OK" ) \
         >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      ;;
+    opencode)
+      # $OPENCODE_BIN resolved in the binary-presence case above (PATH, same as the
+      # dispatcher without --bin). Mirror the dispatch-review.sh rail: prompt on STDIN,
+      # `run --dir <scratch> --pure --agent plan`, and `--variant` only when an exact
+      # effort is requested (max→xhigh, the dispatcher's own mapping). No --auto.
+      if [ -n "$EFFORT" ]; then
+        _ov="$EFFORT"; [ "$_ov" = "max" ] && _ov="xhigh"
+        ( cd "$PROBE_CWD" && printf 'Respond only with OK\n' | "$OPENCODE_BIN" run --dir "$PROBE_CWD" --pure \
+            -m "$MODEL" --agent plan --variant "$_ov" ) \
+          >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      else
+        ( cd "$PROBE_CWD" && printf 'Respond only with OK\n' | "$OPENCODE_BIN" run --dir "$PROBE_CWD" --pure \
+            -m "$MODEL" --agent plan ) \
+          >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      fi
       ;;
     anthropic-compatible)
       # HTTP transport, no CLI to spend through. The endpoint resolution above already

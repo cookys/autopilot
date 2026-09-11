@@ -59,6 +59,12 @@ assert_contains "$CAPTURED" "You are a code reviewer." "prompt must contain revi
 assert_contains "$CAPTURED" "<<<AUTOPILOT-REVIEW-" "prompt must contain BEGIN marker prefix"
 assert_contains "$CAPTURED" "<<<AUTOPILOT-END-" "prompt must contain END marker prefix"
 assert_contains "$CAPTURED" "VERDICT: SHIP-AS-IS or FIX-THEN-SHIP" "prompt must contain verdict contract"
+# The parser anchors on `^VERDICT: <token>$`, so a decorated verdict (bold, backticks,
+# a bullet) is silently unparseable and costs a whole review round as no_verdict. The
+# prompt must therefore SAY the line is literal — vendors differ in how much they
+# format by default, so it cannot be assumed (v2.36.18).
+assert_contains "$CAPTURED" "no bold markers, no backticks, no code fence" "prompt forbids decorating the VERDICT line"
+assert_contains "$CAPTURED" "discarded as no_verdict" "prompt states the cost of a decorated verdict"
 assert_contains "$CAPTURED" "FINDINGS: one finding per line" "prompt must contain findings contract"
 assert_contains "$CAPTURED" "NO-FINDING-PROOF: checked=" \
   "prompt must require a machine-parseable no-finding proof"

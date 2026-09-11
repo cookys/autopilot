@@ -295,6 +295,105 @@ assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e
 assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' \
   "strict L6 executable fixture records canonical claim provenance"
 
+# L4 twin (v2.36.8, docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md KR1/KR4):
+# the SAME live-probed, host-owned bootstrap compiles under an l4 marker with the l4 roster
+# profile (implementer + reviewer required; verification-author seat and QC panel optional).
+# The fixture roster has NO verification-author seat; the managed engine's level-independent
+# terminal-QC gate (prepare_implementation_loop, min_panel_size) still needs a complete QC
+# panel, so the panel stays configured. Observables: readiness ready, receipt level l4, the
+# run reaches campaign_intake (the wall v2.36.7 could only name), and NO
+# reviewer_qualification:waived entry — the bootstrap certified the reviewer (KR4).
+STRICT_L4_CFG="$TEST_TMP/strict-l4-review-loop.md"
+sed -e 's/^- verification_author_present: true/- verification_author_present: false/' \
+  -e '/^- verification_author_\(engine\|runner\|effort\|endpoint\|family\)/d' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$STRICT_L4_CFG"
+D4_REPO="$TEST_TMP/d4-repo"
+git clone -q --no-local "$REPO_ROOT" "$D4_REPO"
+
+OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+  NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+  AUTOPILOT_LEVEL=l4 REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_L4_CFG" \
+  node "$CLI" engine implement-review \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" --cwd "$D4_REPO" \
+    --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "strict L4 executable fixture reaches the engine after fresh readiness"
+assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
+  "strict L4 executable fixture consumes a fresh host-owned readiness bundle (KR1)"
+assert_contains "$OUT" '"strict_level":"l4"' \
+  "strict L4 executable fixture receipt carries the actual level, not an l5 literal"
+assert_contains "$OUT" '"phase":"campaign_intake"' \
+  "strict L4 executable fixture reaches campaign intake (the v2.36.7 wall is gone)"
+assert_not_contains "$OUT" '"rejection_code":"provider_readiness_authority_missing"' \
+  "strict L4 executable fixture is never refused for a missing readiness authority"
+assert_not_contains "$OUT" '"unit":"reviewer_qualification"' \
+  "strict L4: the bootstrap certified the reviewer, so no waived ledger entry (KR4)"
+assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' \
+  "strict L4 executable fixture records the frozen policy digest (D4 claim set untouched)"
+
+# KR2 — advisory path under l4: an uncertified reviewer seat derives with the loud stderr
+# POLICY OVERRIDE line, reason advisory_default, the uncertified seat named, and readiness
+# still ready. (uncertified_seats[] itself is asserted at unit level in
+# provider-readiness-consumer.test.sh; the CLI observable is the stderr line.)
+STRICT_L4_DRIFT_CFG="$TEST_TMP/strict-l4-drift-review-loop.md"
+sed 's/reviewer_engine: MiniMax-M3/reviewer_engine: unknown-reviewer-model/' \
+  "$STRICT_L4_CFG" > "$STRICT_L4_DRIFT_CFG"
+OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+  NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+  AUTOPILOT_LEVEL=l4 REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_L4_DRIFT_CFG" \
+  node "$CLI" engine implement-review \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" --cwd "$D4_REPO" \
+    --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+assert_contains "$OUT" 'POLICY OVERRIDE' \
+  "strict L4 CLI warns loudly on an advisory derivation (KR2c: stderr line present)"
+assert_contains "$OUT" 'reason: advisory_default' \
+  "strict L4 CLI records advisory_default when no override reason is configured (KR2a)"
+assert_contains "$OUT" 'reviewer=cc-shim/unknown-reviewer-model' \
+  "strict L4 CLI names the uncertified reviewer seat in the override line (KR2b)"
+assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
+  "strict L4 CLI proceeds to readiness under advisory policy"
+assert_contains "$OUT" '"strict_level":"l4"' \
+  "strict L4 advisory run still stamps the actual level"
+
+# KR3 — l5/l6 roster invariants are pinned by ISOLATED negative controls, each varying
+# exactly one thing (g1 chair R3/R9): (i) VA missing with the QC panel complete;
+# (ii) VA present with an unresolved (empty-seat) QC panel. The third invariant
+# (qc_panel_seats_complete:false with seats present) cannot be produced from a config file
+# and is pinned at unit level in provider-readiness-consumer.test.sh. All before spend.
+STRICT_QC_EMPTY_CFG="$TEST_TMP/strict-qc-empty-review-loop.md"
+sed -e '/^- qc_panel/d' "$REPO_ROOT/.claude/review-loop-config.md" > "$STRICT_QC_EMPTY_CFG"
+printf -- '- qc_panel:\n' >> "$STRICT_QC_EMPTY_CFG"
+for strict_level in l5 l6; do
+  OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+    NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+    AUTOPILOT_LEVEL="$strict_level" REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_L4_CFG" \
+    node "$CLI" engine implement-review \
+      --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+      --branch loop-branch --base "$BASE_SHA" --cwd "$D4_REPO" \
+      --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+  assert_contains "$OUT" '"rejection_code":"strict_l5_provider_roster_incomplete"' \
+    "KR3(i) $strict_level: a VA-less roster with a complete QC panel is refused before spend"
+  assert_contains "$OUT" 'requires the verification-author seat' \
+    "KR3(i) $strict_level: the refusal names the verification-author seat"
+  assert_contains "$OUT" '"dispatcher_called":false' \
+    "KR3(i) $strict_level: refused before any dispatch"
+  OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+    NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+    AUTOPILOT_LEVEL="$strict_level" REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_QC_EMPTY_CFG" \
+    node "$CLI" engine implement-review \
+      --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+      --branch loop-branch --base "$BASE_SHA" --cwd "$D4_REPO" \
+      --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+  assert_contains "$OUT" '"rejection_code":"strict_l5_provider_roster_incomplete"' \
+    "KR3(ii) $strict_level: VA present with an unresolved QC panel is refused before spend"
+  assert_contains "$OUT" 'exact QC roster is incomplete' \
+    "KR3(ii) $strict_level: the refusal names the QC roster"
+  assert_contains "$OUT" '"dispatcher_called":false' \
+    "KR3(ii) $strict_level: refused before any dispatch"
+done
+
 # Advisory semantics (2026-08-16 retirement plan P4): a non-canonical roster is
 # no longer a pre-spend rejection. Derivation proceeds with a loud stderr
 # POLICY OVERRIDE warning (reason advisory_default), the uncertified seat runs
@@ -320,7 +419,7 @@ assert_not_contains "$OUT" '"rejection_code":"strict_l5_provider_unknown_tuple"'
 assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L5 CLI proceeds to readiness under advisory policy"
 
-for lower_level in l3 l4 ''; do
+for lower_level in l3 ''; do
   OUT="$(AUTOPILOT_LEVEL="$lower_level" node "$CLI" engine implement-review \
     --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
     --branch loop-branch --base "$BASE_SHA" --allow-unqualified-reviewer \
@@ -328,6 +427,28 @@ for lower_level in l3 l4 ''; do
   assert_not_contains "$OUT" '"strict_l5_provider_readiness"' \
     "lower-level (AUTOPILOT_LEVEL='${lower_level}') managed flow is explicit and never labelled strict L5"
 done
+
+# v2.36.7 waiver, v2.36.8 interplay: an l4 marker WITHOUT either reviewer flag never blocks at
+# reviewer_qualification. Since v2.36.8 the l4 bootstrap compiles (fixture preload, full
+# roster), certifies the reviewer, and the waiver string therefore never lands in the ledger.
+# With --require-qualified-reviewer the requirement is host-verified by the consumed bundle
+# exactly as at l5/l6, so the run passes qualification instead of blocking; the forced-block
+# path without a certifying bootstrap is pinned at engine level (autopilot-engine.test.sh).
+OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+  AUTOPILOT_LEVEL=l4 node "$CLI" engine implement-review \
+  --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+  --branch loop-branch --base "$BASE_SHA" --cwd "$D6_REPO" \
+  --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+assert_not_contains "$OUT" '"phase":"reviewer_qualification"' "l4 default: never blocked at reviewer_qualification"
+assert_not_contains "$OUT" '"unit":"reviewer_qualification"' "l4 default + certifying bootstrap: no waived entry (KR4)"
+assert_contains "$OUT" '"strict_level":"l4"' "l4 default: the full roster derives under the l4 profile (VA + QC included when present)"
+OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+  AUTOPILOT_LEVEL=l4 node "$CLI" engine implement-review \
+  --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+  --branch loop-branch --base "$BASE_SHA" --cwd "$D6_REPO" --require-qualified-reviewer \
+  --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+assert_not_contains "$OUT" '"phase":"reviewer_qualification"' "l4 + --require-qualified-reviewer: host-verified by the consumed l4 bundle, not blocked"
+assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' "l4 + --require-qualified-reviewer: readiness consumed before the requirement is checked"
 
 OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_contains "$OUT" "--resume" "autopilot help documents the --resume flag"

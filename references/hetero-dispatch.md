@@ -167,6 +167,34 @@ ids denote one model, so whoever freezes the manifest owns it.
 uses it must name a runner+model that is separately qualified for the seat's role. `cursor` is not
 (see the § above) — the mechanism exists and is unrouted, which is the honest state.
 
+## What a ladder climb means (v2.36.20)
+
+The implementer ladder is ordered cheapest-first and climbed by index on each red repair round.
+Two vendor facts make a naive climb unsound across a family boundary:
+
+- Anthropic: *"effort level names don't correspond to the same amount of thinking across models"*
+  (`prompting-claude-fable-5-1`, "Consider all effort levels", read 2026-09-08).
+- The vendors disagree on what `low` even does — Anthropic documents it as suppressing search,
+  OpenAI documents it as ideal for tool use and search (`guides/reasoning`, read 2026-09-08).
+
+So `medium@openai` and `medium@anthropic` are two different amounts of thinking wearing one label.
+The ladder therefore does **not** compare effort labels across families to decide what is "stronger".
+It uses the label only as the cost proxy it always was, and enforces one adjacency rule instead:
+
+> Consecutive rungs may share a family **only** when the effort strictly increases.
+
+A same-family rung at the same cost tier is a no-op climb — same model, same tokenizer, same failure
+mode — so a repair round spent there learns nothing. `scripts/resolve-dispatch-topology.js` builds
+the ladder to satisfy that rule, picking from the cheapest remaining tier every time, and preferring
+a same-family rung when the tier already outranks the previous rung so that the scarce
+different-family rungs are saved for the ties that need them. On a single-family host nothing
+changes. Where a tail has only one family left, the rule is unsatisfiable and the order stands.
+
+`scripts/lib/effort-scale.js` is the seam where a measured per-family effort scale would land. It is
+identity for every family today, deliberately: the published evidence says the labels are
+incomparable, which is not the same as knowing the exchange rate between them, and a fabricated
+coefficient would re-create the defect this rule exists to avoid.
+
 ## Reviewer output-token budget
 
 `dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through
@@ -194,7 +222,7 @@ scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
     [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
 ```
 
-JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, `"pi"`, `"qoderclicn"`, `"cursor"`, or `"unresolved"` per `--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor` — `"unresolved"` appears only on a `precondition_failed` raised BEFORE runner resolution, meaning no rail was selected (e.g. a `--runner auto` refusal of a Cursor-hosted id, or a missing `--branch`); `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, `*qwen*`/`*qwq*` → qoderclicn, else agy; **`auto` never selects `cursor`** — a `cursor-` prefixed model id (or a Cursor-hosted `gpt-5.3-codex-*` id) makes `auto` fail closed with exit 2 naming the explicit runner (`--runner cursor` is required); `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, `"pi"`, `"qoderclicn"`, `"cursor"`, or `"unresolved"` per `--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor` — `"unresolved"` appears only on a `precondition_failed` raised BEFORE runner resolution, meaning no rail was selected (e.g. a `--runner auto` refusal of a Cursor-hosted id, or a missing `--branch`); `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, `*qwen*`/`*qwq*` → qoderclicn, else agy; **`auto` never selects `cursor`** — a `cursor-` prefixed model id (or a Cursor-hosted `gpt-5.3-codex-*` id) makes `auto` fail closed with exit 2 naming the explicit runner (`--runner cursor` is required); `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/depth0-control-loop.md`](../skills/ceo-agent/references/depth0-control-loop.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
 
 ### Outcome states
 
@@ -635,7 +663,7 @@ The engine records the dispatched tuple plus `implementer_ladder_rung` on the
 | `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |
 | `qoderclicn` | Qoder CLI CN → Alibaba `Qwen3.8-Max-Preview` (also gateways GLM-5.2 / DeepSeek-V4 / Kimi / MiniMax-M2.7) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--tools ""`) | needs Qoder CLI CN auth (`~/.qoder-cn`). HONORS `-w`/`--cwd` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; effort → `--reasoning-effort`; `--qoder-bin` test seam. Reviewer splits STDOUT/STDERR (a benign `fatal: not a git repository` on stderr from the non-git scratch cwd stays out of the parse). Auto-selected for `*qwen*`/`*qwq*`. Spike-verified 2026-07-24 (edit-only + `-w` honored, both paths e2e-passed on Qwen3.8-Max-Preview). |
 | `cursor` | Cursor CLI (`cursor-agent`) → ~60 models across five vendors on one OAuth login; this plan's effort mapping covers `cursor-grok-4.6-*` and `gpt-5.3-codex-*` only | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--mode ask`) | needs `cursor-agent` login. HONORS process cwd AND `--workspace <abs>` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; `--trust` MANDATORY headlessly (the run aborts on workspace trust without it). Effort is the **model-id suffix**, not a flag — there is no `--reasoning-effort` on this rail. `--cursor-bin`/`--cursor-fast` test seams (default lane is non-fast). **EXPLICIT-only — `auto` refuses cursor ids and fails closed, never selects cursor.** Reviewer/author rails are bound to `--output-format text`. Deliberately excluded from the blind-review allowlist. **Read-only here is COOPERATIVE, not enforced**: the 2026-08-29 adversarial probe (`docs/plans/evidence/2026-08-29-cursor-containment-probe/`, 18 probes on 2026.08.25-3e8eec8) found `--mode ask` is cooperative and overridden by `--force`, `permissions.deny: ["*"]` silently no-ops, enumerated deny is allow-by-omission (TodoWrite and WebSearch ran uncontained, WebSearch making a real outbound call), and `--sandbox` is AppArmor-gated. The scratch cwd is real containment for the working directory; the process is not otherwise prevented from reaching the host. That is why `qualification-review-provider.js` refuses cursor unconditionally as an exam transport. **NOT yet qualified — no roster admission** (`resolve-review-loop.sh` has no cursor entry; Stage-1 implementer qualification is a separate, deferred phase). |
-| `opencode` | OpenCode CLI (`opencode run`) → any provider/model id in `opencode models` (e.g. `opencode-go/muse-spark-1.3-contributor` on the OpenCode Go plan, `opencode/*-free`) | ✅ EDIT-ONLY + wrapper-commit | ❌ NOT wired (implementer-only; `dispatch-review.sh` rejects `--runner opencode`) | **EXPLICIT-only** (never auto — ids are `provider/model`, no vendor family to match). Spike-verified 2026-09-03 on opencode 1.18.25: `--dir <wt>` anchors edits (grok-shaped, no agy anchor); prompt via STDIN when no positional message; `--pure` drops the operator's external plugins (hermetic exam surface); `--format json` streams events (`step_finish.tokens` carries usage — parsing is BACKLOG, `log_format: plain`, usage `null`). No effort flag on this route — the seat's effort is a label. `--opencode-bin` test seam. Plan: `docs/plans/2026-09-03-opencode-implementer-rail.md`. |
+| `opencode` | OpenCode CLI (`opencode run`) → any provider/model id in `opencode models` (e.g. `opencode-go/muse-spark-1.3-contributor` on the OpenCode Go plan, `opencode/*-free`) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--agent plan`; BEST-EFFORT, see caveat) | **EXPLICIT-only** (never auto — ids are `provider/model`, no vendor family to match). Spike-verified 2026-09-03 on opencode 1.18.25: `--dir <wt>` anchors edits (grok-shaped, no agy anchor); prompt via STDIN when no positional message; `--pure` drops the operator's external plugins (hermetic exam surface); `--format json` streams events (`step_finish.tokens` carries usage — parsing is BACKLOG, `log_format: plain`, usage `null`). No effort flag on this route — the seat's effort is a label. `--opencode-bin` test seam. Plan: `docs/plans/2026-09-03-opencode-implementer-rail.md`. **Reviewer rail** (`dispatch-review.sh --runner opencode`, probe-verified 2026-09-07 on 1.18.27): same `--dir`/`--pure`/STDIN/`--format json` shape, plus `--agent plan` (denies `edit`) and `--variant` for effort (`max` clamps to `xhigh`). Final assistant text is extracted from the last `{"type":"text",...}` NDJSON event's `.part.text`. **`--agent plan` is COOPERATIVE, not enforced**: a live adversarial probe (asked it to run `hostname` via its bash tool) showed it does NOT block tool execution — the real hostname came back. Scratch cwd is the actual containment (never the repo — the diff is text in the prompt). Deliberately excluded from the blind-review allowlist, same tier as `kimi`/`cursor`/`grok`; `qualification-review-provider.js` refuses `opencode` unconditionally as an exam transport (same doctrine as its `cursor` refusal). |
 
 For AUTHORING flows, prefer `anthropic-compatible` when the request is a large single-shot payload where `cc-shim` (Claude Code CLI transport) can stall or fail with 529-style endpoint pathologies. This path runs the same direct `dispatch-anthropic-review.js --raw` transport with `MINIMAX_API_KEY`/`ANTHROPIC_COMPATIBLE_AUTH_TOKEN`, and it resolves credentials by endpoint name the same way as cc-shim when `--endpoint <name>` is supplied.
 
@@ -688,11 +716,21 @@ executable consumer, `scripts/dispatch-discuss.js` (plan D9), called from
 `skills/think-tank/SKILL.md`. It resolves and dispatches the same way — own switch
 resolution, `dispatch-author.sh`'s raw-prompt rail, a closed production schema, advisory only.
 
-### Hook points
+### Hook points — the four canonical unknown-escalation ladder call sites
 
-- debug: after two failed hypotheses in the Debug Cycle, ask the consult seat one bounded question.
-- think-tank: Step 3.5 already dispatches the discuss seat; consult is the single-question sibling of that same seat family, for a narrower ask.
-- dev-flow: for an L-size design decision, consult before step L-2, per skills/dev-flow/references/hetero-loops.md.
+The consult seat is rung U1 of the unknown-escalation ladder (plan
+`docs/plans/2026-09-07-unknown-escalation-ladder.md`). It is never called unconditionally: every
+site runs `scripts/probe-unknown.js classify` first and acts only on `recommend`; every U1/U2/U3
+dispatch appends one `ladder` row (`dispatch-consult.sh --ladder-receipt` for U1,
+`probe-unknown.js receipt` for U2/U3). This list is canonical; the SKILLs spell the same argv.
+
+| Site | classify argv | Rungs it can spawn |
+|---|---|---|
+| `debug` step 4 (after every refuted `hypothesis` row) | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <task> --terms <error nouns>` | U1 `dispatch-consult.sh … --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type why --ladder-signals S1 --ladder-work-unit <task>`; U2 survey `issue-search` + `receipt --rung U2`; U3 `autopilot:debugger` PUA + `receipt --rung U3` |
+| `dev-flow` L-1 step 4 and L-2 consult-before-design | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <phase> --terms <task / design nouns>` (at L-1 no phase exists yet: the task id is the work unit) | U1 `dispatch-consult.sh … --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type how --ladder-signals <ids> --ladder-work-unit <phase>`; U2 survey + `receipt --rung U2 --work-unit <phase>` |
+| `think-tank` Step 5 (consensus LOW) | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <decision> --consensus LOW --terms <decision nouns>` | U1 consult (`--ladder-unknown-type whether --ladder-signals S5 --ladder-work-unit <decision>`); U3 `think-tank-dialectic` + `receipt --rung U3 --signals S5 --work-unit <decision>` |
+| `ceo-agent` foreman round end (`skills/ceo-agent/references/depth0-control-loop.md`) | `node scripts/probe-unknown.js classify --ledger <round ledger> --work-unit <run> --convergence <convergence.json> --stall <stall.json> --terms <round nouns>` | U1 consult (`--ladder-signals <ids> --ladder-work-unit <run>`); U2 background survey + `receipt --rung U2 --work-unit <run>`; U3 (`whether` only) think-tank + `receipt --rung U3 --work-unit <run>`; the probe never emits U4 — the stall fuse / DOA stop attaches `ladder_receipts:` to its `[ESCALATION]` |
+
 - quality-pipeline: never consults a seat that is already sitting in the resolved qc_panel — the resolver's exclusion enforces this mechanically, no extra code needed here.
 
 ## Codex-plugin consult (optional)

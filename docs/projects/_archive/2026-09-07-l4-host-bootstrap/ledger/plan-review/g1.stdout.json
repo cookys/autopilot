@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "l4-host-bootstrap",
+  "logical_plan_id": "l4-host-provider-readiness-bootstrap-2026-09-07",
+  "session_id": "e1e51201-96a3-4978-b527-b98cf1f524d8",
+  "session_key": "5a62206f0198b1fd6bbc67a0a0637375ab9e8b6141fdce8818742a1a1a47234d",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "d91206bf6ec791ea5de0b05ec11997e56d4835b79f7d208b6980c30df707ce53",
+  "manifest_sha256": "3769ab1053b0d9d12348171f0e67072594190bad5d3d3fc376165cc6208a2722",
+  "plan_sha256": "a0c29650264dfa6dd285318ae544d6892d9a4aaba7cd6df6f454f66e12d116b5",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "aba6b9d605d3ef498ff0e21bfe412ffb9c2347e53146de30a8f2fb8f695b48bd"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "73e8e81cf9b3535900a80496f3f033746944a7b036cafd8d17ca5959aec47e2c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-pxs582/stdout",
+          "digest": "73e8e81cf9b3535900a80496f3f033746944a7b036cafd8d17ca5959aec47e2c"
+        },
+        "receipt_digest": "d2f6fc7ed76b5ff72e752958137e210d212ac56fde5468509da5234160778abc"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "79584f3d7a8973d3b3ea1f049cfc679f66f8aafcaa80b6e3bac6cefdbf9f51e7"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-vtHEZS",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "fb9d38e7fde731b673cbbab54aa4d14461f1a8723699ebaf69676accf48d9a8d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2 KR3 and §4 P3 roster-profile negative controls",
+      "claim": "The mandatory negative control does not independently pin the requirement that the QC panel remains required for l5 and l6.",
+      "evidence": "P3 reuses a roster missing both the verification-author seat and the QC panel. Because the existing validation fails first on the missing verification-author seat, this test remains green even if the new profile logic accidentally makes the QC panel optional for l5 or l6. No named negative case supplies a valid VA while omitting or incompletely configuring QC.",
+      "evidence_reference": "PLAN §4 P3 first and second bullets; PLAN §2 KR3; PLAN §4 P1 steps 2 and 3; FROZEN_RUBRIC R3",
+      "repair": "Add parameterized l5 and l6 negative controls that isolate each invariant: missing VA with complete QC, and present VA with absent or incomplete QC. Assert strict_l5_provider_roster_incomplete for every case while retaining the unchanged positive fixtures.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "81872848d1cfb4fbb19e102202fc06d746a9aa33db90b2c3c9430ce9d929c313"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§0 thesis, §2 KR4, §2.5 Global Constraints, and §4 P2",
+      "claim": "The waiver behavior is not stated unambiguously across the plan because the thesis categorically says that nothing is waived while the normative sections require an l4 reviewer-qualification waiver for an uncertified reviewer.",
+      "evidence": "The thesis says 'Nothing is waived', but KR4 requires uncertified reviewer ⇒ waived, §2.5 requires the v2.36.7 waiver path to remain, and P2 retains the waiver block. These statements prescribe opposite behavior unless the thesis is explicitly narrowed to provider-readiness authority.",
+      "evidence_reference": "PLAN §0 final paragraph; PLAN §2 KR4; PLAN §2.5 sixth constraint; PLAN §4 P2 step 1; FROZEN_RUBRIC R5",
+      "repair": "Replace the absolute thesis sentence with a scoped statement such as 'No provider-readiness evidence is waived or fabricated; the existing reviewer-qualification waiver remains governed by KR4.'",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "49826c7d37ca97eb34e1d45b68ef2e219cd4a17d3d5fa6358e4b3403daa24b88"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "implementation-spike",
+      "severity": "blocking",
+      "affected_surface": "§4 P0 spike command and recorded spike conclusion",
+      "claim": "The displayed P0 spike does not reproduce all failure sites that its evidence claims to have enumerated.",
+      "evidence": "The command invokes the bootstrap only with level l5, so it cannot produce the claimed l4 constructor rejection. It also removes VA and QC simultaneously, causing the VA guard to terminate before the QC guard can be exercised. Consequently, the claim that the spike confirmed the constructor, VA, and QC sites is not supported by the shown probe.",
+      "evidence_reference": "PLAN §4 P0 command, Expected today paragraph, Spike run paragraph, and PLAN §4 P1 steps 1 and 3; FROZEN_RUBRIC R9",
+      "repair": "Record separate probes for l4 constructor rejection, l5 with missing VA but complete QC, and l5 with present VA but missing or incomplete QC. Update the P0 ledger and plan evidence with each observed code and cited source site before P1 begins.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_architecture_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3073635623670e54067ba509860706c47e792ca9e8ac5c0e301c62bc1c68a9d4"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "3073635623670e54067ba509860706c47e792ca9e8ac5c0e301c62bc1c68a9d4",
+      "rubric_id": "R9",
+      "affected_surface": "§4 P0 spike command and recorded spike conclusion",
+      "claim": "The displayed P0 spike does not reproduce all failure sites that its evidence claims to have enumerated.",
+      "evidence_reference": "PLAN §4 P0 command, Expected today paragraph, Spike run paragraph, and PLAN §4 P1 steps 1 and 3; FROZEN_RUBRIC R9",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-05T23:37:44.298Z"
+}

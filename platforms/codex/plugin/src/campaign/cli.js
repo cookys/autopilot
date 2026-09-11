@@ -299,6 +299,60 @@ function validateCampaignJournalLease(row, currentLease) {
   }
 }
 
+// v2.36.6 (cuda revival.3d QUIET-a). Resolve what a Mission claim's campaign looks like in
+// THIS ledger, for `mission withdraw`:
+//   { kind: 'direct', campaign_id }              — intake rows keyed by the claim's own id
+//                                                  (legacy/v1 claims: the ledger id IS the claim id)
+//   { kind: 'ticket_present', roots: [{campaign_id, phase}], ticket }
+//                                                — no direct rows, but the claim is
+//                                                  mission-subject-v2 and this ledger holds an
+//                                                  intake root for the SAME contract ticket.
+//                                                  The v2 claim id (`campaign-v2-…`, subject digest)
+//                                                  never keys the ICC intake row (`campaign-v1-…`,
+//                                                  raw byte digest), and the intake journals no
+//                                                  claim binding (createCampaignState keeps only
+//                                                  ticket/profile/limits) — so the ticket is the
+//                                                  strongest journaled fact. It is enough to REFUSE
+//                                                  a never-started release (the campaign may well
+//                                                  have run), never enough to bind the claim to it.
+//   { kind: 'absent' }                           — nothing under the id and (for v2) nothing
+//                                                  under the ticket: never started in this ledger.
+//   { kind: 'unknown_v2' }                       — a v2 claim carrying no contract draft ticket:
+//                                                  cannot be guarded, so never releasable as absent.
+// Throws when an intake payload is unreadable (the caller reports unreadable, never absent —
+// review 🟠: a corrupt row must not read as "never started"). Rotation-carry rows are scanned
+// like any other row: after segment GC they can be the ONLY surviving copy of a live campaign
+// (review 🔴). Duplicates collapse on run_id.
+const CAMPAIGN_ID_SHAPE_RE = /^campaign-v[12]-[0-9a-f]{64}$/;
+function resolveCampaignForClaim(rows, claim) {
+  const claimId = claim && typeof claim.campaign_id === 'string' ? claim.campaign_id : null;
+  if (claimId && projectCampaign(rows, claimId)) return { kind: 'direct', campaign_id: claimId };
+  const draft = claim && claim.campaign_contract_draft && typeof claim.campaign_contract_draft === 'object'
+    ? claim.campaign_contract_draft : null;
+  const ticket = draft && typeof draft.ticket === 'string' && draft.ticket.length > 0 ? draft.ticket : null;
+  const isV2 = claim && (claim.identity_scheme === 'mission-subject-v2' || ticket !== null);
+  if (!isV2) return { kind: 'absent' };
+  // A v2 claim with no draft ticket cannot be guarded — refuse rather than read as absent
+  // (review 🟡; unreachable from shipped mint paths, which always set the draft).
+  if (ticket === null) return { kind: 'unknown_v2' };
+  const byRun = new Map();
+  for (const row of rows) {
+    if (!row || row.kind !== 'journal' || row.op !== 'campaign_intake' || typeof row.run_id !== 'string') continue;
+    const payload = parsePayload(row); // throws on a corrupt payload — propagate
+    const state = payload && payload.initial_state && typeof payload.initial_state === 'object'
+      ? payload.initial_state : null;
+    if (state && state.ticket === ticket) byRun.set(row.run_id, true);
+  }
+  if (byRun.size === 0) return { kind: 'absent' };
+  const roots = [];
+  for (const runId of byRun.keys()) {
+    let phase = null;
+    try { const proj = projectCampaign(rows, runId); phase = proj ? proj.state.phase : null; } catch (_error) { phase = null; }
+    roots.push({ campaign_id: runId, phase });
+  }
+  return { kind: 'ticket_present', roots, ticket };
+}
+
 function projectCampaign(rows, campaignId) {
   const rotationRootFor = (row) => Buffer.from(JSON.stringify(
     Object.fromEntries(Object.entries(row).filter(
@@ -882,7 +936,18 @@ function runCampaignCli(argv, options = {}) {
     return 1;
   }
   if (!projection) {
-    process.stdout.write(`${JSON.stringify({
+    // v2.36.6: a well-formed id with no rows in a READABLE ledger is `not_started`, not
+    // `not_found` — the id was minted (a Mission grant does that deterministically before
+    // any engine run) but nothing ever journaled under it here. `not_found` is kept for a
+    // malformed id. Either way exit 1: the campaign cannot be inspected/resumed.
+    const wellFormed = CAMPAIGN_ID_SHAPE_RE.test(String(parsed.campaignId || ''))
+      && fs.existsSync(parsed.ledger); // an absent ledger says nothing about the campaign
+    process.stdout.write(`${JSON.stringify(wellFormed ? {
+      status: 'not_started',
+      campaign_id: parsed.campaignId,
+      ledger: parsed.ledger,
+      reason: 'no intake row for this campaign id in the ledger — minted but never started here, or a different ledger, or (for a campaign-v2 id) the ICC intake is keyed by its campaign-v1 id; see `mission withdraw` for a Mission claim bound to it',
+    } : {
       status: 'not_found',
       campaign_id: parsed.campaignId,
     })}\n`);
@@ -990,6 +1055,8 @@ module.exports = {
   ledgerScanFiles,
   loadRows,
   parseArgs,
+  resolveCampaignForClaim,
+  CAMPAIGN_ID_SHAPE_RE,
   TERMINAL,
   processLiveness,
   projectCampaign,

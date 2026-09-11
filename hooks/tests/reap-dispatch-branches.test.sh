@@ -927,7 +927,7 @@ test_finish_flow_package_root_resolver
 test_lifecycle_wiring_is_explicit() {
   local finish front
   finish=$(cat "$REPO_ROOT/skills/finish-flow/SKILL.md")
-  front=$(cat "$REPO_ROOT/skills/ceo-agent/references/level-front-door.md")
+  front=$(cat "$REPO_ROOT/skills/ceo-agent/references/depth0-control-loop.md")
   assert_contains "$finish" '--into "$integration_target"' "finish-flow passes derived integration target explicitly"
   assert_contains "$finish" 'resolve_finish_flow_package_root()' "finish-flow ships an executable fail-closed package-root resolver"
   assert_contains "$finish" 'Never substitute the consumer git root or a newest-cache search' "finish-flow forbids consumer-root and newest-cache fallback"

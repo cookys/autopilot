@@ -77,6 +77,11 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-model-guard.js"
+          },
+          {
+            "//": "v2.36.17 wired default-on but INERT until configured: run-approval-gate — one confirmation per /l3-/l6 run, then autonomous to the end of it. Fires only at depth-0 (skipped when payload.agent_id is present) with an active session-mode marker and run_approval.mode=ask-once; the PostToolUse half records the approval receipt (the tool ran ⇒ the human allowed it). Default off; ~/.autopilot/config.json {\"run_approval\":{\"mode\":\"ask-once\"}} or AUTOPILOT_RUN_APPROVAL_MODE to enable.",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/run-approval-gate.js PreToolUse"
           }
         ]
       },
@@ -135,6 +140,16 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/suggest-compact.js"
           }
         ]
+      },
+      {
+        "//": "v2.36.17: run-approval-gate PostToolUse half — the approval RECEIPT. A Task/Agent that reached PostToolUse was allowed by the human at the PreToolUse ask, so this records the run as approved and the gate stays silent for the rest of it. Inert unless run_approval.mode=ask-once.",
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/run-approval-gate.js PostToolUse"
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [
@@ -167,6 +182,16 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-tracker.js"
+          }
+        ]
+      },
+      {
+        "//": "v2.36.11 default-on: dirty-protected-paths — turn-end reminder when uncommitted work under protected_paths passes min_files/min_lines; systemMessage only, never a Stop decision; AUTOPILOT_DIRTY_TREE_REMINDER=false to opt out.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dirty-protected-paths.js"
           }
         ]
       }

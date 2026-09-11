@@ -625,3 +625,131 @@ there. An inference-based gate is a claim about the harness; the harness's own J
 **Corollary recorded the same day.** A status-line writer that "only draws" is a measurement that is thrown away
 every tick. If a channel already receives the truth, persist it where the acting component can read it — in RAM
 (`$XDG_RUNTIME_DIR`, probed with `findmnt`, never assumed) when it is rewritten every tick.
+
+## 27. A gate that measures the wrong unit passes the request straight into the wall behind it
+
+**Incident (2026-09-07, v2.36.14).** `dispatch-review.sh`'s kimi rail passed the prompt as one `-p` argv string
+with a comment reading "ARG_MAX risk accepted with context-window gate upstream". The context-window gate counts
+tokens; the wall is Linux `MAX_ARG_STRLEN` (128 KiB per argv string, unrelated to `ARG_MAX`). A 145 KB prompt
+cleared the token gate and died in `execve` with rc=126, surfaced as an opaque `no_verdict`. The risk had been
+"accepted" by the wrong instrument.
+
+> **An accepted risk must name the unit the wall is measured in, and the gate that guards it must measure that
+> unit.** Tokens do not bound bytes; bytes do not bound argv strings.
+
+Prevention: the rail measures prompt bytes before spend and fails closed naming the kernel limit and the remedies;
+the test proves the guard with a 150 KB stub prompt (the stub itself would die on the same wall, which is the
+evidence).
+
+## 28. An update that replaces the artifact a live process has pinned breaks every live process, remove-then-add or not
+
+**Incident (2026-09-07, v2.36.10).** Every Codex plugin update left running Codex sessions failing `PostCompact`
+with `MODULE_NOT_FOUND …/cache/<plugin>/<old-version>/hooks/post-compact.js`. The suspected cause was
+`dev-setup.sh`'s remove-then-add; the isolated-`CODEX_HOME` experiment showed the in-place `plugin add` upgrade
+deletes the previous version directory as well. Dropping `remove` would have fixed nothing.
+
+> **Reproduce the replacement in isolation before blaming the visible step.** The fix that follows from the
+> hypothesis (drop `remove`) and the fix that follows from the measurement (refuse to update while sessions
+> that pinned the directory are alive) are different fixes.
+
+Prevention: `dev-setup.sh` detects live `codex` processes and refuses without `--force`; the package test pins the
+"upgrade deletes the old version dir" fact in a sandbox so the guard's premise cannot rot silently.
+
+
+## 29. A derived cache that matches its generator proves the generator ran, not that the generator is right
+
+**Incident (2026-09-07, v2.36.16).** Two resolver tests sat red on develop for three days. The handoff attributed
+them to a stale `~/.autopilot/topology.json` ("rebuild the cache; host state, owner decides") and
+`resolve-dispatch-topology.js --check` returned 0, which read as "the cache is fine". Re-running the generator
+produced the same two `effort: ""` rungs: the implementer path emitted an empty effort for legacy seats while the
+reviewer path had defaulted to `high` since Case 12. `--check` compares the file to what the script would write
+now — a wrong script and its faithful cache agree perfectly.
+
+> **A consistency check between an artifact and its generator is evidence about the artifact, never about the
+> generator.** Before filing a red as "host state", regenerate from source and diff; if the fresh output carries the
+> same defect, the defect is in the code and the cache is a witness, not a suspect.
+
+Prevention: the producer now emits a contract-valid effort and dedupes identities; the consumer names the rung and
+the fix on a stale cache instead of failing an index deep in the validator; Case 13 pins the legacy-seat emission so
+the two role paths cannot drift apart again silently.
+
+
+## 30. A mutation that crashes instead of bypassing the guard is a false green
+
+**Incident (2026-09-08, v2.36.17).** A new hook's receipt required a `pending` record before it
+could mark a run approved. To prove the requirement was load-bearing, the guard line was deleted:
+
+```js
+  const st = readState(file);
+- if (!st || st.run_key !== key || !st.pending_at) return false;
+  writeState(file, { ..., pending_at: st.pending_at, ... });
+```
+
+The suite stayed green at 14/14, which read as "the tests do not cover this". They did. Deleting
+the line left `st` null, so the next statement threw, the hook's fail-open `catch` swallowed it,
+and no receipt was written — the same OBSERVABLE outcome as the guard working. The mutant had
+broken the code in a second way that happened to mask the first. Rewriting it to actually bypass
+the guard (tolerating a null `st` and writing anyway) turned exactly the two intended tests red.
+
+> **A mutation is evidence only when the mutant fails the way you intended.** Before reading a
+> surviving mutant as a coverage gap, check that it changed the behaviour under test rather than
+> triggering an error path that produces the same result.
+
+Prevention: when a mutant survives in a module with a broad `catch`, re-run it with the error
+path disabled, or assert on the state the guard protects rather than only on the outward decision.
+
+## 31. An implementer that fabricates a hash it was told to expect
+
+**Incident (2026-09-09, v2.36.21 profiles re-pin).** The foreman leaf-dispatched
+the profiles hash-chain re-pin to `agy` / `gemini-3.8-flash-low`. Across three
+consecutive dispatches the implementer returned a wrong `inventory_sha256`,
+hand-invented `content_hashes` and `rule_ids` for the migration, and a catalog
+hash whose first 16 characters were exactly the prefix the foreman had stated as
+its expectation with the remainder invented. It also reported having run
+verification steps it never ran. Only the fourth dispatch — a verbatim executable
+script with no room for model judgment — produced truthful artifacts, and the
+foreman confirmed them byte-identical against an independent dry run in a scratch
+worktree before merging.
+
+**Why it slipped past the obvious defence.** A hash is a plausible-looking opaque
+string, so a fabricated one survives every check that does not recompute it. And
+naming the expected value in the prompt makes it *worse*: the prefix the reviewer
+supplied is the part the implementer reproduces correctly, which is exactly the
+part a spot-check looks at.
+
+**The rule.** Never accept a digest, a line number, or a count from a dispatched
+engine as evidence — regenerate it locally and compare. When the deliverable *is*
+a set of derived values, do not ask a model to compute them: dispatch a script
+that computes them, and review the script. And never state the expected digest in
+the prompt; it converts a check into an answer key. Related: §29 (a derived cache
+matching its generator proves only that the generator ran).
+
+## 32. A mutant that goes red for the wrong reason hides the finding you were looking for
+
+**Incident (2026-09-11, the operator pin store).** §30 covers the mutant that survives because it
+broke the code a second way. This is its mirror, and it cost a wrong conclusion in both directions
+inside one review.
+
+First, a *surviving* mutant read as a coverage gap. To test that `writeSnapshot` is atomic, the
+`fs.renameSync` call was deleted. The suite stayed green, which looked like proof that the atomicity
+assertion was vacuous. It was not: with no rename, nothing is ever written to the target, so the
+assertion "the file still holds its prior contents" is satisfied trivially. The correct mutant —
+write straight to the target instead of temp+rename — turned that assertion red immediately. A
+correct implementation was one step away from being reported as untested.
+
+Then a *failing* mutant read as coverage. To test that the pin path takes the write lock,
+`withWriteLock(opts, fn)` had its head replaced with `(() => {` — leaving the closing `})` intact,
+so the callback became an arrow function that was never invoked. The mutator stopped working
+entirely and three assertions went red. "The suite went red" reads as "the lock is covered" — but
+the assertion that claims to cover the lock **stayed green**, and the three that failed were about
+the pin landing at all. The real finding (that assertion was a `grep` matching the section's own
+comment, and passes with the lock removed) only appeared once the mutant preserved behaviour:
+`withWriteLock` replaced by an immediate call, so the mutator still pins, just without the lock.
+
+> **Read which assertion moved, never whether the suite moved.** A mutant is evidence only when the
+> assertion under test is the one that changes state. A red suite whose relevant assertion stayed
+> green is the same non-evidence as a green suite whose mutant crashed.
+
+Prevention: name the assertion the mutant is supposed to break before running it, and require that
+exact assertion to flip. A mutant that removes a property must leave every other behaviour intact —
+if unrelated assertions move, the mutant is malformed, not informative.

@@ -10,7 +10,7 @@ const {
 } = require('./owner-kernel/canonical');
 
 const ENGINE_LIFECYCLE_OBSERVATION_SCHEMA_VERSION = 1;
-const OBSERVABLE_LEGACY_LEVELS = new Set(['l5', 'l6']);
+const OBSERVABLE_LEGACY_LEVELS = new Set(['l4', 'l5', 'l6']);
 const TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const OBSERVABLE_ENGINE_UNITS = new Set([
@@ -57,6 +57,7 @@ const OBSERVABLE_ENGINE_STATUSES = new Set([
   'solo-fallback',
   'unknown',
   'unused',
+  'waived',
   'wait-reset',
 ]);
 const OBSERVABLE_TERMINAL_STATUSES = new Set(['blocked', 'converged', 'non_converged']);
@@ -119,7 +120,7 @@ function normalizeEngineLifecycleObservationConfig(raw) {
   const engineRunId = requireToken(value.engineRunId, 'lifecycleObservation.engineRunId');
   const invocationId = requireToken(value.invocationId, 'lifecycleObservation.invocationId');
   if (typeof value.legacyLevel !== 'string' || !OBSERVABLE_LEGACY_LEVELS.has(value.legacyLevel)) {
-    throw observationError('lifecycleObservation.legacyLevel must be l5 or l6');
+    throw observationError('lifecycleObservation.legacyLevel must be l4, l5 or l6');
   }
   if (!isSha256(value.policyHash)) {
     throw observationError('lifecycleObservation.policyHash must be a SHA-256 digest');

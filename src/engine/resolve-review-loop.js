@@ -129,6 +129,13 @@ function validateReviewLoopConfig(value) {
   assertOneOf(value, 'independent_harness', schemaEnum('independent_harness'));
   assertOneOf(value, 'consult_dispatch', schemaEnum('consult_dispatch'));
   assertOneOf(value, 'discuss_dispatch', schemaEnum('discuss_dispatch'));
+  // unknown-escalation ladder knob (plan 2026-09-07-unknown-escalation-ladder P2):
+  // tri-state enum + three non-negative integer climb budgets + provenance enum.
+  assertOneOf(value, 'unknown_escalation', schemaEnum('unknown_escalation'));
+  assertOneOf(value, 'unknown_resolved_from', schemaEnum('unknown_resolved_from'));
+  for (const field of ['unknown_budget_u1', 'unknown_budget_u2', 'unknown_budget_u3']) {
+    assertField(value, field, (v) => Number.isInteger(v) && v >= 0, 'a non-negative integer');
+  }
   // consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
   // misconfiguration, never a silent no-op (plan §4 D6, evidence-discipline
   // §14). Tuple-presence only — the switch-on QUALIFICATION gate over role

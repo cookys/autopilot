@@ -352,6 +352,23 @@ case "$MODE" in
     echo "FINDINGS: the slice does not reverse"
     echo "$END"
     ;;
+  glued_preamble_frame)
+    # grok --output-format plain (cuda R21 qc, 2026-09-05): one sentence of preamble and
+    # the derived BEGIN on the SAME line, no newline between them. The block itself is
+    # complete and correct.
+    printf '%s%s\n' "I'll read the full review prompt and inspect the spec-required surfaces. " "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  glued_preamble_frame_vocab_echo)
+    # Same glued shape, but the preamble itself echoes framing vocabulary — after the
+    # split the preamble line still carries it, so rule 7 must still reject.
+    printf '%s%s\n' "Emitting AUTOPILOT-END framing now: " "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "$END"
+    ;;
   truncated_frame_chrome)
     # A REAL truncated frame (two angle brackets, not three) as leading
     # chrome, followed by a complete valid block. Carries framing vocabulary
@@ -474,6 +491,40 @@ echo "$end"
 exit 9
 EOF
 chmod +x "$STUB_QODERCN_NONZERO"
+
+# OpenCode --format json shape: newline-delimited JSON events, final assistant text in
+# the last {"type":"text",...} event's .part.text (probe-verified 2026-09-07, opencode
+# 1.18.27 — see scripts/dispatch-review.sh header comment). Mirrors the plain-text
+# qoderclicn stub above but wraps the wrapped block inside the real NDJSON envelope so
+# the dedicated Node extraction scriptlet in the opencode branch is actually exercised.
+STUB_OPENCODE_JSON="$TEST_TMP/opencode-json-marker"
+cat > "$STUB_OPENCODE_JSON" <<'EOF'
+#!/usr/bin/env bash
+[ -z "${OPENCODE_ARGV_FILE:-}" ] || printf '%s\n' "$@" > "$OPENCODE_ARGV_FILE"
+PROMPT="$(cat)"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -n "$begin" ] && [ -n "$end" ] || exit 0
+TEXT="$(printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed\n%s\n' "$begin" "$end")"
+echo '{"type":"step_start","timestamp":1,"sessionID":"ses_fixture","part":{"id":"prt_0","messageID":"msg_0","sessionID":"ses_fixture","type":"step-start"}}'
+TEXT="$TEXT" node -e 'process.stdout.write(JSON.stringify({type:"text",timestamp:2,sessionID:"ses_fixture",part:{id:"prt_1",messageID:"msg_0",sessionID:"ses_fixture",type:"text",text:process.env.TEXT}})+"\n")'
+echo '{"type":"step_finish","timestamp":3,"sessionID":"ses_fixture","part":{"id":"prt_2","reason":"stop","messageID":"msg_0","sessionID":"ses_fixture","type":"step-finish","tokens":{"total":1,"input":1,"output":1,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0}}'
+EOF
+chmod +x "$STUB_OPENCODE_JSON"
+
+# Same well-formed-block-then-die combination as qoderclicn above, NDJSON-wrapped.
+STUB_OPENCODE_NONZERO="$TEST_TMP/opencode-json-nonzero"
+cat > "$STUB_OPENCODE_NONZERO" <<'EOF'
+#!/usr/bin/env bash
+PROMPT="$(cat)"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -n "$begin" ] && [ -n "$end" ] || exit 0
+TEXT="$(printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed\n%s\n' "$begin" "$end")"
+TEXT="$TEXT" node -e 'process.stdout.write(JSON.stringify({type:"text",timestamp:2,sessionID:"ses_fixture",part:{id:"prt_1",messageID:"msg_0",sessionID:"ses_fixture",type:"text",text:process.env.TEXT}})+"\n")'
+exit 9
+EOF
+chmod +x "$STUB_OPENCODE_NONZERO"
 
 STUB_SPAWN_MARKER="$TEST_TMP/spawn-marker-runner"
 cat > "$STUB_SPAWN_MARKER" <<'EOF'
@@ -635,6 +686,22 @@ assert_eq "1" "$EXIT" "empty capture exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "empty → no_verdict"
 assert_contains "$OUT" '"verdict": null' "no_verdict has null verdict"
 assert_not_contains "$OUT" 'SHIP-AS-IS' "empty capture is NEVER read as a ship verdict"
+
+# 3g. grok glued-preamble normalization (v2.36.4): preamble + BEGIN on one line is split
+# once before the shared locator, so the complete review is parsed — grok only.
+OUT="$(STUB_MODE=glued_preamble_frame "$SCRIPT" --runner grok --model grok-4.6 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "grok glued preamble+frame: reviewed exit 0"
+assert_contains "$OUT" '"status": "reviewed"' "grok glued preamble+frame: reviewed"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "grok glued preamble+frame: verdict parsed"
+# 3g-neg-1: the split does not launder framing vocabulary left in the preamble (rule 7 holds).
+OUT="$(STUB_MODE=glued_preamble_frame_vocab_echo "$SCRIPT" --runner grok --model grok-4.6 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "grok glued preamble with residual framing vocabulary: no_verdict"
+assert_contains "$OUT" 'framing vocabulary' "grok glued preamble with residual vocabulary: rule 7 names the reason"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "grok glued preamble with residual vocabulary: never a SHIP"
+# 3g-neg-2: the normalization is grok-scoped — the same glued shape on codex is still rule 7.
+OUT="$(STUB_MODE=glued_preamble_frame "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "codex glued preamble+frame: still rejected (normalization is grok-scoped)"
+assert_contains "$OUT" 'framing vocabulary' "codex glued preamble+frame: rule 7"
 
 # 4b. Whole-prompt echo is rejected if the first non-empty line is not the marker.
 OUT="$(STUB_MODE=prompt_echo "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -890,6 +957,55 @@ assert_eq "1" "$EXIT" "qoderclicn well-formed block + nonzero exit: exit 1 (fail
 assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn well-formed block + nonzero exit → no_verdict"
 assert_contains "$OUT" "qoder exited non-zero (rc=9)" "qoderclicn well-formed block + nonzero exit names the exit code"
 assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn well-formed block + nonzero exit never authorizes shipping"
+
+# 5b'. opencode path: prompt via STDIN, scratch cwd, --format json NDJSON parsed (the
+# dedicated Node scriptlet extracts the last {"type":"text"} event's .part.text before
+# the shared plain-text VERDICT parser runs — see scripts/dispatch-review.sh header).
+OPENCODE_ARGV_FILE="$TEST_TMP/opencode.argv"; export OPENCODE_ARGV_FILE
+rm -f "$OPENCODE_ARGV_FILE"
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode reviewed exit 0"
+assert_contains "$OUT" '"runner": "opencode"' "opencode runner provenance"
+assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "opencode verdict parsed out of the NDJSON text event"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" 'run --dir' "opencode receives run --dir"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--agent plan' "opencode reviewer runs under the read-only plan agent"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--format json' "opencode requests JSON event output"
+assert_not_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant max' "opencode default effort is not the raw 'max' token"
+
+# opencode: empty capture (binary present, no output at all) fails closed, same as
+# every other rail — format-agnostic, the shared STUB_EMPTY covers this.
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "opencode empty capture exit is no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "opencode empty capture fails closed"
+
+# opencode: rejection when the binary is missing — both the "--bin does not resolve"
+# and "--bin points at a non-executable path" preconditions, mirroring the kimi rail.
+OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$TEST_TMP/no-such-opencode-binary" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "opencode missing --bin path is a precondition"
+assert_contains "$OUT" '"status": "precondition_failed"' "opencode missing binary fails closed before spawn"
+assert_contains "$OUT" 'not executable' "opencode missing binary names the failure"
+
+# opencode: a well-formed SHIP-AS-IS block lands on stdout (wrapped in NDJSON) and THEN
+# the process exits non-zero (rc=9) — engine answered correctly then crashed on
+# teardown. Same fail-closed contract as qoderclicn/kimi above: the well-formed block
+# is NOT accepted despite being intact.
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_NONZERO" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "opencode well-formed block + nonzero exit: exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "opencode well-formed block + nonzero exit → no_verdict"
+assert_contains "$OUT" "opencode exited non-zero (rc=9)" "opencode well-formed block + nonzero exit names the exit code"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "opencode well-formed block + nonzero exit never authorizes shipping"
+
+# opencode: effort clamp — autopilot's 'max' maps to opencode's '--variant xhigh'
+# (same clamp as the dispatch-hetero.sh implementer rail; opencode has no 'max' tier).
+rm -f "$OPENCODE_ARGV_FILE"
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" --effort max 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode --effort max reviewed exit 0"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant xhigh' "opencode clamps 'max' effort to '--variant xhigh'"
+
+# opencode: scratch cwd is created (--dir), used, and reaped — never the repo (the
+# shared spawn-marker stub only proves it was invoked; the cwd's own removal is
+# structural in the branch, same as kimi/qoderclicn's "CWD=... ; CWD=\"\"" pattern above).
+unset OPENCODE_ARGV_FILE
 
 # 5c. Blind review requires no-tools containment and hides the caller escape sentinel.
 OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -1502,6 +1618,30 @@ assert_eq "$EXIT" "1" "kimi: runner death still exits 1"
 assert_contains "$OUT" '"status": "no_verdict"' "kimi: runner death stays no_verdict"
 assert_contains "$OUT" '"unratified_verdict": "FIX-THEN-SHIP"' \
   "kimi: bullet-prefixed block before death is salvaged (normalized capture)"
+
+# Kimi rail argv wall (308 report 2026-09-07): kimi takes the prompt only as one -p argv
+# string, so a prompt above MAX_ARG_STRLEN (128 KiB) used to reach execve and die rc=126
+# ("Argument list too long") AFTER the context-window gate — an opaque no_verdict. The rail
+# now fails closed BEFORE spend with the cause and remedies. --context-window off isolates
+# the argv check from the token gate; AUTOPILOT_KIMI_ARGV_LIMIT is the test seam.
+BIG_DIFF="$TEST_TMP/kimi-big.diff"
+{ printf 'diff --git a/big.txt b/big.txt\n--- a/big.txt\n+++ b/big.txt\n'; for i in $(seq 1 3000); do printf '+line %05d %s\n' "$i" "$(printf 'x%.0s' $(seq 1 40))"; done; } > "$BIG_DIFF"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
+  "$SCRIPT" --runner kimi --model kimi-code/k3 --diff-file "$BIG_DIFF" --bin "$STUB_VERDICT" --context-window off 2>/dev/null)"; EXIT=$?
+assert_eq "$EXIT" "2" "kimi: oversized prompt is a precondition failure (exit 2), never an rc=126 death"
+assert_contains "$OUT" '"status": "precondition_failed"' "kimi: oversized prompt reports precondition_failed"
+assert_contains "$OUT" 'MAX_ARG_STRLEN' "kimi: refusal names the kernel argv limit"
+assert_contains "$OUT" 'reads a prompt file' "kimi: refusal names the runner remedy"
+assert_not_contains "$OUT" 'Argument list too long' "kimi: the execve failure never happens"
+# Positive control: a prompt under the limit still reaches the runner and reviews. (A raised
+# seam cannot serve as the control: the stub is itself exec'd with the prompt as one argv
+# string, so on Linux it dies with the very rc=126 this guard exists to pre-empt.)
+MID_DIFF="$TEST_TMP/kimi-mid.diff"
+{ printf 'diff --git a/mid.txt b/mid.txt\n--- a/mid.txt\n+++ b/mid.txt\n'; for i in $(seq 1 1500); do printf '+line %05d %s\n' "$i" "$(printf 'x%.0s' $(seq 1 40))"; done; } > "$MID_DIFF"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
+  "$SCRIPT" --runner kimi --model kimi-code/k3 --diff-file "$MID_DIFF" --bin "$STUB_VERDICT" --context-window off 2>/dev/null)"; EXIT=$?
+assert_eq "$EXIT" "0" "kimi: a prompt under the argv limit still reaches the runner"
+assert_contains "$OUT" '"status": "reviewed"' "kimi: under-limit prompt reviews normally"
 
 # Reviewed path stays byte-identical: the key is NOT emitted on success (g2 #7)...
 OUT="$(vbp_json pass)"; EXIT=$?

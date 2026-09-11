@@ -11,6 +11,8 @@ description: >
 
 # /l5 — CEO autonomy, foreman + hetero implementer
 
+> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/depth0-control-loop.md` §6.
+
 Terse front-door into `autopilot:ceo-agent` at **Level 5**: identical to `/l4`
 except the IMPLEMENTER is a heterogeneous engine driven through the canonical
 `engine implement-review --campaign-contract <campaign.json>` path
@@ -79,4 +81,6 @@ the grant, tools, effects, identity, and terminal outcome.
 **MUST-READ**: [`references/hetero-impl-loop.md`](references/hetero-impl-loop.md)
 (this level's loop: roster fields, harness/telemetry, wired runners) and
 [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
-(§ Heterogeneous engine loop details — diff scopes, loop governance).
+(§ Heterogeneous engine loop details — diff scopes) and
+[`../ceo-agent/references/depth0-control-loop.md`](../ceo-agent/references/depth0-control-loop.md)
+(loop governance, qc@depth-0, run-summary ledger).

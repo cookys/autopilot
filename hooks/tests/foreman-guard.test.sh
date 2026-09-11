@@ -219,6 +219,31 @@ write_stale_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"context
 run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
 assert_eq "" "$__RUN_STDOUT" "context-ceiling: stale (>120s) tasks file ⇒ allowed (silence is never a gate)"
 
+# v2.36.2: a non-positive contextWindowSize is not a window — treat the row as carrying no
+# window signal (never a gate), instead of scaling tiers by a -1/0 window.
+for badw in 0 -1; do
+  reset_state
+  write_tasks fg-test-session "[{\"id\":\"agent-1\",\"tokenCount\":190000,\"contextWindowSize\":$badw}]"
+  run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+  assert_eq "" "$__RUN_STDOUT" "context-ceiling: contextWindowSize $badw ⇒ no window signal ⇒ allowed"
+  assert_eq "" "$__RUN_STDERR" "context-ceiling: contextWindowSize $badw ⇒ no diagnostic either"
+done
+
+# v2.36.2: the 0-row diagnostic is printed ONCE per agent per distinct text, not on every Bash
+# call (it was one stderr line per call for the whole run).
+reset_state
+write_tasks fg-test-session '[{"id":"other-agent","tokenCount":190000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_contains "$__RUN_STDERR" '0 tasks[] row' "context-ceiling: 0-row diagnostic on the first call"
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_eq "" "$__RUN_STDERR" "context-ceiling: 0-row diagnostic NOT repeated on the second call"
+assert_eq "" "$__RUN_STDOUT" "context-ceiling: second call still allowed"
+write_tasks fg-test-session '[{"id":"agent-1","tokenCount":10000,"contextWindowSize":200000},{"id":"agent-1","tokenCount":10000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_contains "$__RUN_STDERR" '2 tasks[] row' "context-ceiling: a DIFFERENT diagnostic (2 rows) is printed once"
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_eq "" "$__RUN_STDERR" "context-ceiling: 2-row diagnostic NOT repeated"
+
 # no marker ⇒ the whole hook (context-ceiling included) is untouched
 clear_marker; reset_state
 write_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000}]'

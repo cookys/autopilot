@@ -1,5 +1,645 @@
 # Changelog
 
+## v2.36.25 — `--resolve-live`：一個什麼都不寫的解析模式，以及一條不可能失敗的測試
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P2（KR10 的無寫入疊加層 seam）。
+
+- `scripts/resolve-dispatch-topology.js` — 新 `--resolve-live --role <role>`：在記憶體中解析單一角色，
+  印出 `{role, preferred_tuple, effective_tuple, substitution_reason, pending_revocation}`，
+  **任何路徑都不寫檔**。無 pin 時兩個 tuple 相同且等於既有 ladder 的選擇；有 pin 時 `preferred_tuple`
+  逐欄取自 pin 列。替代邏輯不在本版範圍。
+- `hooks/tests/resolve-live-tuple.test.sh` — 15 條斷言。
+
+**QC panel 三家族，第三席再次翻盤**（`gpt-5.6-sol` FIX-THEN-SHIP，`MiniMax-M3` 與 `GLM-5.2` 皆 SHIP-AS-IS）：
+
+1. `--store` 在不帶 `--resolve-live` 時被接受，把原本無效的呼叫變成一次靜默的 legacy 寫入
+   （複現：exit 0 且真的寫出檔案）。現在在進入任何 legacy 分支**之前**就拒絕。
+2. **no-write 斷言只守顯式路徑、只守成功路徑**；而且 case 7 的 `if` 兩個分支都呼叫 `ok`，
+   **永遠不可能失敗**，只是把通過數灌高。改成**遞迴檔案系統快照**（相對路徑、大小、mtime、sha256），
+   套在每一次 `--resolve-live` 呼叫前後，成功與錯誤路徑皆然，並具名指出變動的路徑。
+   逐檔檢查只能找到你想得到要列的東西。
+3. `process.stdout.write` 後緊接 `process.exit(0)` 在 pipe 上可能丟棄未完成的寫入。
+   **本機未重現**（payload 229 bytes、多次 piped 執行皆完整），仍以預防修正——
+   `pending_revocation` 在後續交付項會長大。`main()` 改為正常返回讓 Node 排空 stdout。
+
+紅證由 depth-0 重新推導：把寫入注入 `--resolve-live` 路徑，**六條案例變紅**（1、3、3c、4a、4b、9），
+每條具名指出變動的路徑；還原後 15/15。
+
+**記錄但不處置**：兩席獨立覺得 `--resolve-live` 讀磁碟快取而非即時推導很意外——但 plan KR10 明文要
+cached ladder，live 的是 pin 疊加那層；以及 `plan_reviewer` 的 tuple 形狀無測試覆蓋。皆進 BACKLOG。
+
+**偏差（誠實記錄）**：修補再次由 Claude sonnet 完成。managed campaign rail 的修補死結經第二條獨立
+lineage 確認為**確定性**——第一次實作跑得動，修補必定在 `prepare_implementation` 以
+`MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。詳見 `docs/BACKLOG.md`。
+
+prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）。
+
+## v2.36.24 — operator pin store：一個宣稱在驗鎖、拿掉鎖卻照樣綠的斷言
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P1（該 plan 經四代 hetero review 凍結）。
+新增常設 operator pin 的儲存層——「使用者指定的席位直接照派」那條規則的地基。
+
+- `scripts/lib/jsonl-store.js` — 新 `writeSnapshot(storeFile, rows)`：同目錄暫存檔 + `renameSync`，
+  中斷的寫入不會留下半截檔案。既有 export 零刪除行。
+- `scripts/engine-capability-state.js` — 新 `pin-seat` / `unpin-seat` / `pins`，over 新的 `pins.jsonl`。
+  列是**八欄位**（engine, runner, role, effort, endpoint, reason, operator, expires），`expires` 必須是
+  JSON `null`；`--operator` 必填、不得預設。每個 role 至多一列活的，替換無墓碑、無第二套 schema。
+  pin 路徑**不共用** qualification-override 的 validator（後者的 `expires` 是必填日期，共用會改到沒有
+  pin 的機器）。
+- `hooks/tests/engine-capability-pin.test.sh` — 9 條斷言。
+
+**派工拓樸**：實作由 `grok-4.5`(xai) 經 managed campaign rail 完成；QC panel 三家族
+（`MiniMax-M3` minimax、`GLM-5.2` zhipu、`gpt-5.6-sol` openai）。
+
+**第三席一個人翻盤。** 前兩席都給 SHIP-AS-IS，depth-0 自己的驗證也全綠；`min_panel_size: 3` 逼出的
+第三席找出三條真缺陷，每條都在 depth-0 複現後才採納：
+
+1. **test 8 宣稱驗證「pin 路徑使用 `withWriteLock`」，實際上是 grep 到了區段自己的註解。** 把
+   `unpinSeat` 的鎖拿掉，該斷言照樣綠。改成行為斷言：持有鎖檔後背景啟動兩個 mutator，斷言各自仍被阻塞，
+   釋放後確認變更確實落地——它能指認**是哪一個** mutator 掉了鎖，這是 grep 永遠做不到的。
+2. **`readPinRows` 會靜默跳過無法解析的列**，下一次 `writeSnapshot` 只保留倖存者，於是操作者的資料
+   無聲消失。改成失敗並指名檔案與 1-based 行號；`pins`/`pin-seat`/`unpin-seat` 三者皆 exit 1 且
+   `pins.jsonl` 逐位元未變。
+3. **冪等測試只看第二次的退出碼**，第二次 unpin 若重建或破壞檔案也會通過。改成種一個無關 role、
+   比對完整檔案內容。
+
+三條紅證由 depth-0 以**保留行為的變異**重新推導（`withWriteLock` 換成立即呼叫，mutator 照常運作、
+只是沒有鎖），不採信實作者自報。過程中兩次挑錯變異點的教訓寫進
+`references/evidence-discipline.md` §32。
+
+**偏差（誠實記錄）**：修補未經 hetero 引擎，由 Claude sonnet 完成——managed campaign rail 在
+`prepare_implementation` 以 `MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。本版因此
+不是純 L5。rail 缺陷與 panel 的四條 🔵 硬化項一併進 `docs/BACKLOG.md`。
+
+prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）；
+`references/evidence-discipline.md` 新增 §32 是事故記錄，該檔的用途就是累積這類條目。
+
+## v2.36.23 — 被取代的 Board 裁決必須帶指標；宣告不碰的區段要驗，不能只是聲稱
+
+`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0。兩條 2026-08 的 Board 裁決在
+2026-09-11 被 owner 取代，但它們的原文還留在 `dispatch-contract.js` 的註解裡，讀起來像現行規則——
+下一個讀到的人會照著失效的規則做判斷。
+
+- `hooks/fixtures/supersession-anchors.json`（新）— 凍結**適用**的錨點清單。用 grep 不行：它分不出
+  「陳述該裁決的錨點」和「順口提到的字」，而且鏡像的用字一旦漂移就會被漏掉。六個錨點，源檔與
+  codex 鏡像各三。
+- `scripts/check-supersession-anchors.js`（新）— 每個錨點的具名符號附近 N 行內必須有 dated marker，
+  沒有就具名失敗；清單過期（符號找不到）也是失敗，不是跳過。同一份 manifest 另外釘住 plan 宣告
+  **不碰**的區段（`dispatch-hetero.sh` 的 strike writer 3765-3880、`check_mission_enforcement_gate`）
+  的 sha256——「沒動到」從此是驗出來的，不是聲稱的。`--update-digests` 供刻意重立基準用。
+- 接進 `scripts/check-canonical-invariants.sh`。
+- `hooks/tests/supersession-anchors.test.sh`（新）— 5 條斷言，其中 4 條是紅測：缺指標、清單過期、
+  保護區段被改、digest 未登記一律失敗。寫測試時抓到 checker 自己兩個 bug（`path.join` 把絕對路徑
+  接到 repo 底下、讀不到檔案時拋 stack 而非具名失敗），都已修。
+
+三處註解加上 SUPERSEDED IN PART 指標，講清楚哪一半還有效：對**自動挑選**的席位，原裁決一字不改；
+被取代的只有它對**operator 指名席位**的適用。
+
+prose-justification: 本版新增的 prose 是三段 code 註解指標（共 14 行）、CLAUDE.md 一個 script 名、
+scripts-inventory 一列，以及 CHANGELOG／INDEX 條目。註解指標無法用機器取代——它要解決的問題正是
+「讀到失效裁決原文的人不會去查 manifest」；把它壓縮就等於恢復原本的陷阱。`skills/` 與
+`references/` 的散文一字未動（`git diff --stat -- skills references` 為空）。
+
+## v2.36.22 — context-budget 記住這個 session 的視窗，不再因為 statusline 停跳而誤報
+
+`hooks/context-budget.js` 的精確視窗來自 statusline 寫的 live 檔，而 statusline 在 session
+等待長時間背景任務時就不再更新。live 檔一過 120 秒的新鮮度門檻，hook 就退回用「觀察到的最大
+用量」反推視窗——那條路徑的校準基準是 200K，於是在 1M 視窗、實際只用了 16–21% 的 session 上
+發出 T2「停止接新工作、立刻寫 handoff」的指令。2026-09-09 本 repo 自己踩到兩次；程式碼裡
+2026-09-05 那條 v2.36.2 診斷註解記的是同一個形狀。
+
+一個 session 的 context 視窗不會變，所以第一次從 live 檔讀到就記進 hook 自己的 state
+（`knownWindow`），之後 live 檔不可用時直接沿用，不再反推。沒看過 live 檔的 session 行為
+完全不變，仍走原本的推論路徑。
+
+- `hooks/context-budget.js` — live 路徑寫入 `st.knownWindow`；fallback 路徑優先採用它
+- `hooks/context-budget-lib.js` — 新的 `windowSource: 'session-window'` 訊息措辭，不把記住的
+  真實數字講成「inferred from observed usage」
+- `hooks/tests/context-budget-window-memory.test.sh` — 新測試（6 assertions）。拿掉修正會紅
+  3 條，其中一條逐字重現線上收到的 `threshold 150k`；第三個 case 釘住「沒看過 live 檔的
+  session 仍會在推論視窗上觸發 T2」，避免修正變成把整個 tier 關掉
+
+prose-justification: 這個版本沒有動任何 `skills/` 或 `references/` 的散文——`git diff --stat -- skills references` 是空的，改動全在 `hooks/` 與 `hooks/tests/`。閘門回報的 +7% 是相對 v2.35.2 基線累積下來的，不是本次造成；基線本身該在後續 release 用 `preflight-release.sh --update-baseline` 重新校準，本次不順手刷掉那筆累積數字。
+
+## v2.36.21 — level-front-door.md 切成兩半：MUST-READ 的檔案必須真的讀得完（機制變更，要求一字未改）
+
+`skills/ceo-agent/references/level-front-door.md` 長到 1178 行，超過 Claude Code Read 工具整檔讀取的靜默截斷上限
+（約 60–64KB 編號後字元）；1202 份 session transcript 的證據顯示 2026-08-17 之後 81–97% 的整檔讀取被截斷在
+~57–60KB，尾部三節（Phase L、Run-summary ledger、Gotchas）事實上讀不到，要補第二次 offset Read 才拿得回來。
+而 /l3 /l4 /l5 /l6 加上 ceo-agent 全部把這個檔案列為 MUST-READ——要求還在，物理上做不到。
+
+- **純搬移，零 prose 改動**：L533（`## Depth-0 control loop (owned by the CEO, NOT the foreman)`）到 EOF 逐位元搬進新檔
+  `skills/ceo-agent/references/depth0-control-loop.md`（檔頭加一段說明由來）；level-front-door.md 保留 L1–532 加一段
+  pointer。兩半各 43.8KB 編號後字元，都在上限內。byte-identical 用 diff 驗證，不靠自報。
+- **每個 MUST-READ 改列兩個檔**（l3/l4/l5/l6/ceo-agent）：沒有任何 level 讀得比以前少——這是機制變更
+  （同一份要求，變成真的可滿足），不是指引變更，依「機制 vs 指引」通則不需要 eval 證據。目標小節已搬家的 `§`
+  交叉引用全部改指新檔（§6 ladder、§3 qc@depth-0、§ Phase L、§1.b auto-wakeup、§7/§8、Panel aggregation 錨點）；
+  沒搬的（裸跑禁令、Mid-run question discipline、Dispatching the foreman）維持指舊檔。
+- **新閘 `scripts/check-reference-sizes.js`**：`skills/*/references/*.md` 任何一檔超過 **48KB 編號後位元**
+  （Read 工具實際回傳的計量方式：行號位數 + tab + 行內容 + newline）就拒絕，訊息點名檔案、實際大小與上限，
+  仿 `check-claude-md-inventory.js` 的 40KB 上限先例。接進 `check-canonical-invariants.sh`，
+  sandbox 測試加一條 oversized 負例；CLAUDE.md scripts inventory 同步具名。
+- **測試只改路徑不改斷言**：reap-dispatch-branches、dispatch-worktree-lifecycle、check-stall-fuse 三個測試改讀
+  depth0-control-loop.md（被斷言的字串跟著內容搬走了）；slash-entry-probe 對 l3–l6 各加一條 depth0-control-loop.md
+  的預期 Read；check-canonical-invariants 的 sandbox 加 copy 新檔與新閘。
+- **Profiles hash chain re-pin**：`skills/ceo-agent/SKILL.md` 的 MUST-READ 區塊拆分（新增 `references/depth0-control-loop.md` 引用）使 canonical rules 總數由 812 變為 814（`ceo.harness-and-levels` segment 由 190 增至 192 rules，分類為 `topology`）。更新 `profiles/rule-inventory.json`、`profiles/rule-migration.json`、`profiles/profile-catalog.json`、`profiles/guided-baseline-dispositions.json` 以及 `platforms/codex/plugin/profiles/` 對應鏡像檔；同步更新 `hooks/tests/codex-plugin-package.test.sh` 與 `hooks/tests/profile-context-isolation.test.sh` 斷言至 814。
+
+prose-justification: l3/l4/l5/l6/ceo-agent 的 MUST-READ 區塊各多列一個檔名（每個 skill +0–2 行）——同一份要求變成
+真的可滿足；維持單檔的「替代方案」在物理上不可讀，不算縮減 prose 的選項。
+
+---
+
+## v2.36.20 — 階梯爬階不再跨家族比 effort：紅燈後的重試是去相關問題，不是馬力問題（plan 2026-09-08 執行，owner go）
+
+implementer ladder 由 `selectImplementerRung` 依索引往上爬，而排序的主鍵是 effort 標籤。兩家廠商現在都說這個標籤跨模型不可比
+（Anthropic 明文「effort level names don't correspond to the same amount of thinking across models」，還要求換模型重跑 sweep），
+而且對 `low` 到底會不會搜尋講的是相反的話。本機這條 ladder 橫跨八個家族，等於幾乎每一組相鄰都在比不可比的單位。
+
+- **規則改成一條相鄰限制，而不是一張跨廠商刻度**：相鄰兩階只有在 **effort 嚴格上升** 時才允許同家族。同家族又同成本層是空爬——
+  同一個 model、同一個 tokenizer、同一套失敗模式——那一輪 repair 學不到任何東西。effort 標籤仍然只當成本代理（那本來就是它的用途，
+  也不是廠商說法否定的部分）。
+- **`scripts/lib/effort-scale.js`（新）**：per-family effort 排名的接縫。**今天每一家都是 identity**，而且這是刻意的：
+  已發表的證據說標籤不可比，那跟「知道兩家的換算率」是兩回事，硬編一個係數等於用更多機制重現同一個缺陷。每一列都要帶出處，
+  測試會拒絕任何不是 `status: measured` 卻偏離 identity 的列。documented 的 per-family 事實（Anthropic 低 effort 抑制搜尋）
+  放在 `notesFor()`，明確與排名分離。
+- **排序改成建構式**：每次都從剩餘最便宜的層挑，而且當該層已經高於前一階時**優先挑同家族**——那個相鄰本來就合法、等於免費，
+  把稀有的異家族階留給真正需要的並列位置。cheapest-first 完全保留（永遠只在同層內重排），單一家族主機位元不變。
+- **plan 的兩處偏離已記錄在 plan 的 Review log**：P1 原本要我給 anthropic 編一個係數，那違反 plan 自己 §2.5 的帶證據要求；
+  P2 原本的「事後補救掃描」在真實 fixture 上會把去相關提前用掉、後面無解，而合法排列其實存在。兩處都是執行才發現計畫寫錯。
+- 測試：`scripts/lib/effort-scale.test.js` 8 條（provenance 必備、非 identity 必須 measured、未知家族退回 identity 不借別家的表、
+  未知標籤排最後不拋例外、documented 事實不得洩進排名）；topology 53 條（新增 KR1 相鄰規則、KR3 首階仍最便宜、KR4 單一家族位元不變）。
+  變異兩發全中且各自隔離：整段去相關拿掉 → Case 15 兩紅；只拿掉「保留稀有家族」那條偏好 → 同樣兩紅，證明那條偏好在承重。
+- **未做**：KR1 在尾端只剩一個家族時無法滿足，這是無解不是缺陷，測試釘的是可達成的形式；`familyOf` 對 opencode 仍回 `unknown`
+  （分類它會連帶影響 cross-family panel 判定，plan §8 Q3 列為獨立變更）；`implementer_ladder: auto` 讀取端仍投影成
+  `{engine, effort, runner}`，contract schema 未動。
+
+prose-justification: no `skills/*/SKILL.md` line count changed this release (script, lib, reference and tests only).
+
+---
+
+## v2.36.19 — 「機制 vs 指引」通則進 CLAUDE.md；L-4 階段閘變成真的擋得住；Boil-the-Lake 的 eval 預先註冊完成（owner 裁示 2026-09-08）
+
+- **新規則「機制 vs 指引」**（`CLAUDE.md` Skill evolution rules，緊接成績單前置）：成績單前置管的是**改變 skill 要求什麼**，不管**讓已經要求的事真的發生**。
+  把既有的閘變成真的擋得住是機制變更，不需要 eval——「被動 markdown 清單會被跳過」這個問題，這個 repo 蓋 finish-flow 的時候就已經回答過了。
+  改變閘要求什麼才是指引變更，需要證據。判準是字面的、不是判斷題：把改動前後的要求清單列出來，沒有增減就是機制。
+  配一條操作要求：**機制變更不得同時改動要求文字**；兩者都要就分兩次提交，各自過各自的門檻。
+- **L-4 Phase advance gate 有強制機制了**（`skills/dev-flow/SKILL.md`）：五項檢查改為 TaskCreate 成階段任務的子任務，逐字命名，未勾選的項目變成看得見的未完成任務
+  而不是被略過的一行。**五項要求一字未改**——這正是上面那條新規則的第一次適用。profiles 鏈重釘（guided 415→420，canonical 807→812，兩處 drift guard 釘值同步）。
+- **Boil-the-Lake 的 eval 從「要設計」變成「按下去就能跑」**：
+  - `evals/orchestration/EXPERIMENT-completeness-proportionality.md`（新）——**預先註冊**的判準：浪費降 ≥50% **且** 逃逸零增加才採用比例原則；
+    逃逸只要增加就維持現狀（逃逸是否決權不是加權項）；兩臂浪費差距 <20% 判定為**無資訊**，而且明令這個結果不得被說成「沒差別所以改了也安全」。
+  - 兩個對照 pack：`completeness-maximal`（現行文字逐字複製，測的是真正出貨的東西）與 `completeness-proportional`，長度 187 vs 193 字，在 ±10% 護欄內。
+  - `run-orchestration-eval.sh` 新增 `--pack` 與 `--contract`：原本的 ON/OFF 兩臂**同時**差在 pack 與 required-artifacts contract，那對原實驗是對的、對這個實驗是錯的。
+    兩個旗標不給就與先前位元相同（兩支既有 runner 測試 rc=0 驗證）。
+  - 兩個能分辨的任務：`t18-proportional-waste`（瑣碎可逆改動，量鏡像測試）與 `t19-edge-case-escape`（明顯修法會在非正數 size 上無限迴圈，holdout 只存在於 oracle）。
+    收下之前先用手寫的「最省」與「最完整」兩份候選解各跑一次 oracle 驗證真的分得開：t18 最完整的那份 FAIL、t19 最省的那份 FAIL。**兩臂各贏一題**，
+    若某一臂全贏，量到的就是臂而不是取捨。
+- **已知限制（寫進實驗文件）**：runner 只把 `fidelity_ok` 與 `decoy_respected` 兩個布林送進 `score.js`，數值事實只留在各 run 的 `oracle.log`，要人工彙總。
+  且 `decoy_respected` 在兩個任務裡**語意不同**（t18 是 waste_bounded、t19 是 edge_case_held），所以 score.js 那一欄跨任務平均會得到沒有意義的數字，文件裡加了警告。
+- **未做**：實驗本身尚未執行，等 owner 批准；`skills/ceo-agent/SKILL.md` 與 `skills/dev-flow/SKILL.md` 的 Boil-the-Lake 文字一字未動。
+
+prose-justification: `skills/dev-flow/SKILL.md` +5 guided（L-4 強制機制段），這是新規則明文允許的機制變更，要求清單未改；其餘為 eval 資產與 reference。
+
+---
+
+## v2.36.18 — 廠商指引分家族：survey effort 下限只綁 anthropic、implementer rung 帶 family、compaction 摘要照六類、verdict 行契約講死（2026-09-08 兩份 prompt guide 交叉盤點）
+
+現況：OpenAI 與 Anthropic 的最新 prompt guide 在數個維度上給的是**相反**的指示，而 autopilot 把同一套 prose 與同一個 effort 語彙送給兩家的席位。
+這版把「跟廠商有關的設定綁在 family 上」這條機制往前推一步，並修掉盤點出來、不需要 eval 證據就能動的四項。盤點全文見本節末的來源連結。
+
+- **survey 的 effort 下限改成只對 anthropic 家族生效**（`skills/survey/SKILL.md`）。原文寫「both seats in every mode」，引用的卻是 Anthropic 專屬的發現
+  （low effort 傾向憑記憶不搜尋）。OpenAI 現行 reasoning guide 明確把 low 列為「Ideal for use cases requiring tool-use, planning, search」，
+  所以在 codex 席位強拉一級 effort 只是多花錢多等。兩邊證據都留在行內，各自標明適用範圍。這條是 prose-only，沒有腳本在執行它。
+- **implementer ladder 的 rung 帶 `family`**（`scripts/resolve-dispatch-topology.js`）。reviewer／consult／discuss 早就帶了，implementer 沒有；
+  而本機這條 ladder 橫跨八個家族卻用單一 `EFFORT_RANK` 排序。只加欄位、**不動排序**，`implementer_ladder: auto` 的讀取端仍刻意投影成
+  `{engine, effort, runner}`，contract schema 不碰。排序本身要改，見下方 plan。
+- **compaction 摘要照六類寫**（`hooks/state-checkpoint.js`）。Anthropic 明列六類必須保留，其中「考慮過但排除的選項」與「決定要照原話記」是 autopilot 原本
+  最弱的兩項。改的是 LLM 自由敘述那一段（沒有 schema 可壞），不是凍結的 rehydration bundle 五段式。新增測試八條，先用 stash 驗過拿掉修法會紅七條。
+- **verdict 行的輸出契約講死**（`scripts/dispatch-review.sh` + golden skeleton）。解析器是嚴格行錨定 `^VERDICT: SHIP-AS-IS$`，而 prompt 只給範本、
+  沒禁止裝飾。OpenAI 自陳新模型「tends toward detailed, formatted responses」，所以 `**VERDICT: ...**` 會讓整輪 review 變成 no_verdict。
+  修法刻意是**家族中立**的：把契約講明白，而不是分家族寫風格——放寬解析器會削弱它的反作弊性質。
+- **查核結論：thinking-block 400 風險為零**。Anthropic 對 2026-08-31 後的新帳號，重播前綴不符的 thinking block 會回 400。逐條查 autopilot 自己控制的
+  rail（`dispatch-anthropic-review.js`、cc-shim、claude-native、`dispatch-author`／`dispatch-consult`、`qualification-review-provider.js`、
+  `probe-engine-capability.sh`）：全部是每次呼叫送一份全新的 user-only messages，無 `--resume`／`--continue`，不重播 assistant 內容。不需修改。
+  未定：本機 `claude` CLI 自身在 `-p` 下的 session 預設行為、以及 `pi` RPC 指向 anthropic 供應商時的情形（預設是 minimax）。
+- **`docs/plans/2026-09-08-family-aware-ladder-ordering.md`（新 plan，未執行）**：ladder 排序不要跨 family 比 effort。核心論點是**紅燈後的爬階是去相關問題，
+  不是馬力問題**——同一個 model 換更高 effort 共享同樣的失敗模式，換家族才是有資訊的重試。含 per-family effort 正規化表（每列必須帶證據 URL 與讀取日期）、
+  KR1–KR4、以及三個待決問題（含 opencode 被判為 `unknown` family 該不該分類，因為 `familyOf` 也餵 cross-family panel 判定）。
+- **未做（有意）**：`familyOf` 對 opencode 的分類不動，理由同上；`decision-ledger.js` 沒有「被排除的選項」欄位，加它要動已驗證的 row schema 與 report
+  renderer，列為後續；`skills/handoff/SKILL.md` 的「已決事項」只要求一行理由、不要求原話引用，同樣列為後續；`skills/ceo-agent/SKILL.md` 與
+  `skills/dev-flow/SKILL.md` 的 Boil the Lake 一字未動——依成績單前置規則需要 eval ON/OFF 證據，且 BACKLOG 已有同類項目卡在 owner 決定。
+
+prose-justification: `skills/survey/SKILL.md` 行數不變（單行改寫）；其餘變更在腳本、hook、reference 與新 plan 文件。
+
+---
+
+## v2.36.17 — 一次確認就跑到底：`/l3`–`/l6` 的開工前報告與 one-confirm-per-run 閘（owner 2026-09-08「開工前問一次＝本 run 以後都做到底不問」）
+
+現況：front-door 是「不問就開跑」，`level-front-door.md` 明文把「想確認一下」排除在 escalation 之外；legacy CEO 則是逐題問四個 startup
+問句、中途還可能停。兩端之間沒有「開頭確認一次、之後不再打斷」這一檔。這版補上，**預設關閉**，開了才有行為。
+
+- **`hooks/run-approval-gate.js`（新，wired default-on 但預設 inert）**：`/l3`–`/l6` run 的**第一個** depth-0 `Task`／`Agent` 轉成一次
+  permission `ask`，人按下去之後整個 run 不再問。四個條件全中才動作：knob 為 `ask-once`、payload **沒有** `agent_id`（子代理永不被問，
+  沒人在看）、session-mode marker 活著且 level 是 l3–l6、這個 run 還沒有 receipt。
+- **receipt 是 pending→approved 兩段，不是模型說有批准**：PreToolUse 出 `ask` 並寫一筆 `pending`，PostToolUse 只把既有 pending 升級成
+  approved；沒有 pending 就不寫（pre-merge review MUST-FIX：原版 PostToolUse 無條件寫，而 knob 由**本版新增的收尾問句**打開時，
+  正好會讓一個在途 Task 的 Pre／Post 跨越開關切換，憑空產生一筆從未問過的批准）。模型無法用敘述偽造同意；被拒絕就沒有 receipt，下次照問。
+  **憑證證明的是「這個閘問過，且該次呼叫接著執行了」，不是「dialog 被回答了」**——hook 拿不到 permission 結果，若 host 用 allowlist 或
+  bypass 直接放行，呼叫仍會在 ask 發出後執行。這個界線寫在 hook header、hooks/README 與 front-door 文件裡，不用 trust 機制去補（ADR-0001）。
+  **為什麼要做成 hook 而不是 skill 文字**：全自動 posture 本來就是被設計成會跳過「要不要繼續」這種提示，用 prose 叫它停等於叫它做它被設計成不做的事。
+- **run 的身分是 marker 的 `level:started_at`**：同一個 session 再下一次 front-door 指令會產生新的 `started_at`，就是新的 run、要重新批准。
+  `--fallback solo|precondition_failed` 的**中途降級**同樣重蓋 `started_at`，所以也會重問——這是**刻意的**：owner 批准的是一個會把工作
+  offload 給 foreman 的 run，降級後真正要跑的是 inline `/l3`，那是另一個描述。順帶修掉 `level-front-door.md` 一句與
+  `session-mode.js` 矛盾的敘述（原文說 `set` 會保留既有 `started_at`，實際上每次 `set` 都重蓋；那句話現在是這個閘的立足點，錯著很危險）。
+  這正好是 owner 說的「直到下一 run 啟動」，用既有狀態表達，不新發明一套壽命。marker 的 24h TTL 與 session 綁定同時是批准的上限，
+  過期是回到「會問」而不是變成無限授權。
+- **批准不擴權**：紅線、DOA 邊界外的不可逆操作、quota 死亡、stall fuse 照樣停。這個閘只拿掉一般的中途確認。與 `-x` 同一條不對稱原則
+  ——一個 run 可以加紅線，永遠不能移除專案紅線。
+- **`scripts/run-approval.js`（新）**：`status` 讀、`persist --mode` 寫。寫的是**合併**進機器本機的 `~/.autopilot/config.json`
+  （該檔還放 hook 開關、cost fuse、context budget，整份覆寫會靜默弄丟），**不寫任何進版控的 config**——自動把偏好寫回 `.claude/`
+  等於在使用者的下一個 diff 塞東西，還會跟並行 session 撞。config 損毀時具名拒絕，不覆寫。
+- **`level-front-door.md` 三處**：新小節「One confirmation per run」（開工前報告要列 size／branch／worktree／admitted deliverables／
+  每個 deliverable 派給誰／預期檔案範圍／**DOA 內打算自己做掉的不可逆操作清單**——最後一項是 owner 唯一能攔的地方）；marker 小節多列
+  這個 armed hook；run-summary 段尾加「要把這次設定存成預設嗎？」一行問句（只寫 mode，紅線／DOA／不可逆例外永不由 run 結果寫回：
+  一次成功是關於那一次 run 的證據，而剛成功的那一刻正是 owner 最容易點頭的時候）。
+- **headless 明講**：`claude -p` 下 `ask` 會被自動拒（沒有人可以回答），所以無人值守的 front-door run 必須維持 knob 關閉。寫進 hooks/README.md。
+- 測試：`hooks/run-approval-gate.test.js` 14 條（inert 預設、garbage mode 不啟動、Task／Agent 都攔、子代理不問（presence 非 truthiness）、
+  無／過期／非 run level marker 皆 inert、非目標工具 inert、**asked-once**（receipt 後三次不再問）、拒絕不算批准、下一個 run 重問、
+  payload 與 state 損毀 fail-open 且不假設已批准、**Post 沒有對應的 ask 不得產生 receipt**、**knob 中途打開不得產生幽靈批准**、
+  平行首批各自 ask 但只留一筆 pending）。變異全中且各自隔離：receipt 不寫 → 2 紅、子代理不跳過 → 1 紅、run key 少 `started_at` → 1 紅、
+  Pre 不寫 pending → 3 紅、Post 不要求 pending → 2 紅。（最後一發第一次寫成「刪掉守衛那一行」時是**假綠**：`st` 變 null 後拋例外被
+  fail-open 吞掉，等於換一種壞法而不是繞過守衛；改成真正繞過才轉紅。變異體本身也要驗它壞在正確的地方。）
+- 數字連鎖：hook 30→31（default-on 17→18），`hooks/README.md` 標頭與 Tier A 列、CLAUDE.md、兩份 README badge 與正文、plugin 描述。
+  `check-hook-inventory.test.sh` 的硬編數字改成從 script 輸出導出＋wildcard 注入，否則下一次加 hook 時漂移注入會靜默失效
+  （與 `check-readme-parity.test.sh` 同一個教訓）。Codex 鏡像不收這個 hook：它吃 Claude Code 的 permission decision 與 `agent_id`，
+  鏡像本來就只帶 `dirty-protected-paths` 那一小組。
+- pre-merge review（opus）折入：MUST-FIX 兩條如上；cut **除一條外**都做掉——**沒做的是「平行首批會跳 N 個對話框」**：
+  每個工具呼叫都需要自己的權限裁決，抑制其餘幾個等於讓它們沒有任何裁決就通過這個閘，吵勝過放行，理由寫在 hook header 的 KNOWN 段。
+  （merge commit 訊息寫「plus every cut item」是過度宣稱，以本節為準。）其餘 cut——`status` 與 hook 的 mode precedence 統一（原本 env 給garbage 時
+  hook inert 但 `status` 回報 config 值，那是使用者唯一的可見面）、session id 解析鏈補 `CLAUDE_CODE_SESSION_ID`（實測環境裡有的是它）、
+  兩個 `require` 移進 mode 檢查之後（預設關閉的多數人本來每次 Task 白付約 38ms×2）、`hooks/README.md` 陳舊的「(29 as of v2.36.1)」、
+  `completeness-scan` 會抓的 `return 0` 樣式、未知旗標具名拒絕、receipt 檔權限 0600、`AUTOPILOT_RUN_APPROVAL_DIR` 補進文件。
+- **未做／已知限制**：(1) 開工前報告的內容是 prose 指示，沒有機器檢查它真的印了——閘只保證「有人按過」，不保證「有先看到報告」。
+  (2) 閘吃的是 run 的**第一個** `Task`／`Agent`，不分它是實作派工還是 depth-0 為了寫報告而先派的調研 agent；後者會讓 ask 早於報告出現
+  （reason 文字仍說明這是整個 run 的批准，但 owner 看到的資訊比預期少）。要修得讓閘認得「報告已出」，那需要一個機器可驗的報告產物，
+  本版刻意不做。(3) front-door 四份 SKILL.md 沒動，全靠它們 MUST-READ 的 `level-front-door.md`。(4) `/l3` 以外的入口
+  （legacy CEO、dev-flow）不受這個 knob 影響。(5) 本 session 未 live-fire 真實 permission dialog（會卡住無人值守的執行）；
+  已用 hooks.json 的字面指令實跑證明接線與輸出，dialog 本身未驗。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (the new prose lives in `skills/ceo-agent/references/level-front-door.md`, a reference, plus a new hook + script + tests).
+
+---
+
+## v2.36.16 — develop 三個既有紅測試歸零：topology 對 legacy 席位吐空 effort（不是 cache 過期）、probe 看不見 opencode、switch test 的凍結 baseline 解析不了現行 template（2026-09-07）
+
+前版 handoff 把 `contract-parity`／`resolve-review-loop-consult-discuss-switch` 兩紅歸因「本機 topology.json cache 過期」。實查：重跑 `resolve-dispatch-topology.js`
+仍吐兩個 `grok-4.5@grok` rung 帶 `effort: ""`——implementer 路徑對 legacy（無 effort 分區）席位直接 emit 空字串，而 reviewer／consult／discuss 路徑早就
+預設 `high`（Case 12 釘住）；空字串不在 review-loop contract 的 `implementer_effort` enum，於是每一台有 legacy 席位的主機 `implementer_ladder: auto` 都過不了 JS validator。
+`--check` rc=0 只證明 cache 與現行 script 一致，不證明 script 對。
+
+- **`scripts/resolve-dispatch-topology.js`**：implementer ladder 對 legacy 席位 emit `effort: "high"`（rung 名維持 `engine@runner` 保留分區可追溯），與其他角色同規則；
+  排序後依 `(engine, effort, runner)` 去重——superseded legacy row 與後繼 row 同時 `current`、或 legacy 席位與明確 `/high` 席位同 dispatch identity，都只留一階，
+  且 exact-tuple 席位勝出（legacy 排最後）。本機 ladder 19 → 17，`grok-4.5/high@grok`（event 143）保留、兩個空 effort 消失。
+- **`scripts/resolve-review-loop.sh`** `implementer_ladder: auto` 讀取端：effort 也過 enum（與 runner 檢查同 exit 3 協定），訊息指名 rung 與修法
+  「stale topology（pre-v2.36.16 對 legacy 席位 emit ""）；重跑 `scripts/resolve-dispatch-topology.js`」——之前只有 JS validator 在下游報 `implementer_ladder[17]`，看不出是哪一階、為什麼。
+- **`scripts/probe-engine-capability.sh`**：v2.36.13 加 opencode rail 時 probe 沒跟（`probe-runner-coverage` 就是為這種漂移設的紅，develop 上一直紅）。補 binary-presence
+  （PATH，與 dispatcher 無 `--bin` 時同解析）＋ live-spend（prompt 走 STDIN、`run --dir <scratch> --pure --agent plan`、只在指定 effort 時 `--variant`，max→xhigh 抄 dispatcher）；
+  opencode 加進 effort consumer 集合（dispatcher 自 v2.36.13 起就餵 `--variant "$EFFORT"`，probe 若不承認，帶 effort 的 tuple 永遠 non-authorizing）。
+  live 驗證：`opencode-go/muse-spark-1.3-contributor` effort low → `available`（一次微量 spend，寫在 scratch `--store`，不進預設 capability store；
+  reviewer 另以 PATH stub 抓到 argv 與 dispatcher 逐旗一致）。
+- pre-merge review（opus）MUST-FIX 折入：legacy rung 改標 `high` 後排序仍照原始空 effort 排最後 ⇒ 主機同時有 `max`／`xhigh` 席位時 climb 會降級；
+  改依 emitted effort 排名、同 effort legacy 排後（Case 13 加 max／high 席位釘住）。switch test parity 改把 `consult_dispatch` 也釘 off，拿掉 consult_* 放行。
+- **`hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh`**（測試修，非 code）：pinned pre-D6 resolver 對現行 shipped template 直接 exit 3
+  （`plan_review: auto`、`implementer_ladder: auto` 是 2026-09-04 之後的值），OLD 輸出空字串 ⇒ parity 比了空集合。改為兩個 resolver 共用一份「shipped template
+  只重寫這兩行」的實體檔（config_path 仍相同），consult_engine/effort/runner/endpoint 允許 D6 自身引入的 topology 填值漂移；added-keys 補 `ladder_start_rung_judgment`；
+  migration negative 由「指名 consult_dispatch」放寬為「指名任一缺欄、絕不靜默通過」（validator 現在先報 `ladder_start_rung_judgment`）。
+- 測試：`resolve-dispatch-topology` +Case 13（legacy implementer 席位 emit high、去重、無空 effort）46；`resolve-review-loop` +(c4) 空 effort rung exit 3 具名 417；
+  `probe-runner-coverage` 23／0；switch 58；`contract-parity` 42。
+- **未做**：`contract-parity`／switch 兩支仍讀 `~/.autopilot/topology.json` 真主機狀態（本機 cache 已重建，備份 `topology.json.bak-legacy-effort-20260907`）——
+  hermetic fixture 化列 BACKLOG；opencode `--variant` 是否真的控制 reasoning effort 只有 CLI help 的宣稱，未做 A/B；probe 各 rail 的 live spend
+  都沒有 `timeout`（既有樣式，opencode 跟著沒加），要修一次修全部。
+- `references/evidence-discipline.md` §29：derived cache 與 generator 一致只證明 generator 跑過，不證明 generator 對。
+- **doc-sync（scoped，v2.36.15＋v2.36.16 diff）**：十個確定性 gate 全綠；四個 finder 的 confirmed 修正——ceo-agent DOA 表與
+  `level-front-door.md` 把 U3 寫成「只給 `whether`」，但 probe 的 chain 是 why U1→U2→U3（PUA），改成依 `unknown_type` 分流；dev-flow L-1／L-2
+  兩處 receipt argv 硬寫 `--unknown-type how`，改成回填 classify 的 `unknown_type` 並補 U3 分支；debugger agent 的 hypothesis status 漏 `confirmed`；
+  template `implementer_runner` 允許值補 `cursor|opencode`；probe `--help` runner 清單補齊 roster；`hetero-dispatch.md` Hook points 表路徑寫法統一。
+  profiles hash 鏈重釘（ceo-agent 第 257 行的 rewritten disposition successor 換新 hash；rule 數不變）。README 兩份正文「25 hooks」
+  （badge 早是 30，2026-07-26 起沒人紅）修正並**降進 Layer 1**：`check-readme-parity.js` 新增 prose-count 檢查（正文的 skill／agent／hook
+  數字要等於同檔 badge），紅綠測試各兩條；scripts-inventory 的 dispatch-consult 列補 `--ladder-receipt`；INDEX v2.36.16 列補 merge SHA。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (resolver/probe + tests + docs only; the doc-sync fixes rewrite existing lines in place).
+
+## v2.36.15 — unknown-escalation ladder：「卡住」變成可量的訊號，按階梯升級（consult → survey → think-tank → owner），每階有預算與 receipt（owner 2026-09-07「擴大解決未知問題的能力」）
+
+現況：上網調研、hetero engine、顧問席三條求助路徑各自有觸發條件，但全部鍵在「已知形狀」（size、verdict、憑記憶數失敗次數）；
+最自主的 `/l4`–`/l6` foreman 反而沒有任何調研或 consult 步驟，卡住只能燒到 stall fuse。這版把「不確定」變成六個確定性訊號、
+一條有預算的階梯，並在結案時強制回寫 knowledge。plan：`docs/plans/2026-09-07-unknown-escalation-ladder.md`（G1 8 blocker／G2 5 blocker
+全折入，checker rc=0）。設計輸入：OpenAI GPT-6 Astra prompting guide（唯讀可逆先做、帶具體結果再問）、Anthropic「Prompting Claude
+Fable 5.1」（low effort 不搜尋 ⇒ survey 席 effort 下限 medium；compaction 要保留試過什麼 ⇒ ladder rows 進 rehydration tail）。
+
+- **`scripts/probe-unknown.js`（新）**：`classify` 讀 S1 假設被推翻 ≥2（ledger `hypothesis` rows）、S2 review 不收斂、S3 stall fuse、
+  S4 task 名詞零命中（knowledge／memory／repo）或 `--fast-moving`、S5 think-tank 共識 LOW、S6 自報（只是 claim），輸出一個 rung
+  推薦 U0–U3（U4 是 run 自己的停止，probe 不推）；三條規則：co-signal（S4／S6 單獨最多 U1）、heterogeneity（consult 是 native-fallback 或 off ⇒ 跳過 U1、絕不派）、
+  exhaustion（用完的階不重複、不買更高階、全部用完 ⇒ `none/budget-exhausted`、永不因用完升到 U4）。stdout 一個 JSON、任何分類 exit 0、
+  `--strict` 才對 U2／U3 回 2。`receipt` 經 `decision-ledger.js append` 寫一筆 `ladder` row；`report` 出 climbs／skips／`s6_only`／
+  `repeat_terms`／`learn_required`。
+- **`scripts/decision-ledger.js`**：telemetry kinds `hypothesis`／`unknown`／`ladder`（免 decision_id，各自欄位驗證）；round-end report
+  多一段 Ladder（rows、refuted 數、每階 used、skips、S6-only）。**`build-rehydration-bundle.js`** §4 tail 優先保留當前 round 的 ladder rows。
+- **knob `unknown_escalation: auto|on|off`**（預設 auto＝開，owner 裁定）＋ `unknown_budget_u1/u2/u3`（每工作單位爬階次數，預設 2/1/1；
+  L/H 每 phase、S/Fix 整個 task、`/l4`–`/l6` 整個 run）；`on` 缺預算 exit 3、非整數 exit 3、`off` 出 capability_warnings。schema 88 欄位三向一致。
+- **`scripts/dispatch-consult.sh`**：guard 修正——出貨預設 `consult_dispatch: auto` 解析出席位後仍被當 off 拒絕（plan review G1 R5，實機證實），
+  現在 resolved `auto` 即 live；`--ladder-receipt` 成功後寫 U1 row（native-fallback 標 `heterogeneous:false`），transport／protocol／verdict／qualification
+  失敗路徑寫 `reason: rail-failed` row——**吃預算但不算 climb**，否則沒憑證的席位每 round 都會被再推薦（P4 dogfood 抓到）。
+- **四個 canonical call site**（`references/hetero-dispatch.md` Hook points 表）：debug step 4（假設寫進 ledger，probe 數）、dev-flow L-1
+  step 4 與 L-2 consult-before-design（改成 receipted、只在 `recommend: U1` 才派）、think-tank Step 5 共識 LOW、foreman round end
+  （`level-front-door.md` §6；只依 `recommend` 行動；probe 永不推 U4——run 自己的停止（stall fuse／DOA）把 `ladder_receipts:` 掛上 `[ESCALATION]`）。CEO DOA 多「Unknown escalation」列；
+  step 7「Need research?」改為 probe 推 U2 才派 survey，judgment-only 的想法記 ledger note 不派。
+- **survey `issue-search` 模式**：錯誤字串原文第一筆 query、skeptic 查版本適用、「matches our version?」欄、一輪；兩席 effort 下限 medium。
+- **finish-flow L-5.6／S.1**：`probe-unknown.js report` 有 `learn_required` climb ⇒ `autopilot:learn` MANDATORY，用 row 的 terms／unknown_type
+  預填（learn SKILL「From a ladder climb」）。
+- 矛盾修正（plan §0.5 C1–C8）：debugger PUA 兩次失敗「自己寫三個假設」vs debug skill「找顧問」（agent 交 hypothesis rows、呼叫端決定）；
+  survey「No auto-trigger」絕對句 vs CEO 自主 survey（改為 probe 推薦才免確認）；consult-before-design 只在 reference 沒進步驟清單；
+  survey 訊號表以 `TBD` 為訊號但 plan-template 禁 `TBD`。
+- 測試：`probe-unknown` 74、`resolve-review-loop-unknown-escalation` 26、`dispatch-consult-ladder` 37（hermetic topology）；switch test step 6
+  改成「auto 是 live」；profiles 鏈重釘 801→807 rules（兩條 P0 guided-baseline 行改寫有 disposition）。
+- **未做**：per-tool-call hook（call site 是四處，receipts 顯示漏掉再加）、brainstorm 席、Q3（S6 自報單獨能否過 U1）維持「不能」；
+  完整 `/l4` campaign dogfood——P4 dogfood 是 foreman round-end call site 走真 rail（consult 席死 ×2 → survey → receipt；負對照零命中不帶
+  `--fast-moving` 永不到 U2），不是整場 campaign。
+- prose-justification: dev-flow +4 guided +1 topology（L-1 probe、L-2 receipted consult、Available Scripts 列）；ceo-agent +1 core（DOA 列）＋
+  兩行改寫（Research 列、step 7）把 judgment 觸發換成 probe 觸發；每行都指名 script 與 argv。
+
+## v2.36.14 — kimi reviewer rail：超過 argv 上限的 prompt 在 spend 前具名拒絕，不再 rc=126 死掉（308 回報 2026-09-07）
+
+308 第一次實戰 kimi 席：133 KB diff＋10 KB spec ⇒ 145 KB prompt，rail 用 `-p "$(cat prompt)"` 一整串 argv 送進 kimi，Linux 單一 argv 上限
+MAX_ARG_STRLEN 128 KiB（與 ARG_MAX 2 MB 無關）⇒ execve 失敗 rc=126「Argument list too long」，rail 只回 `no_verdict` 與不透明的 rc。
+rail 註解本來寫「ARG_MAX 風險接受、靠上游 context-window gate」——token 閘過了，位元組閘沒有。
+
+- **`scripts/dispatch-review.sh`** kimi rail：探針證實 kimi 0.39.1 只收 `-p <string>`（無 `--prompt-file`；`-p ''` 拒絕、`-p -` 當字面）。
+  現在在建 scratch cwd 之前量 prompt 位元組數，超過 `AUTOPILOT_KIMI_ARGV_LIMIT`（預設 120000）就 `precondition_failed`，訊息寫出位元組數、
+  核心上限與兩條補救（縮 review_diff_scope／拆 diff，或改坐讀 prompt 檔的 runner：codex、grok、qoderclicn、cursor、opencode）。零 spend。
+- 測試：`dispatch-review.test.sh` 389——超限 ⇒ exit 2、`precondition_failed`、訊息含 MAX_ARG_STRLEN 與 runner 補救、絕無「Argument list
+  too long」；限內 prompt 照常 reviewed。（拉高 seam 當正對照做不到：stub 自己也是被 exec 的，同樣會撞 rc=126——這本身就是牆的證據。）
+- 未做：file-indirection（prompt 寫進 scratch cwd、`-p` 只叫它去讀）可能解除上限，但本機 kimi OAuth 沒憑證無法 live 驗證，且改變信任形狀
+  ——列 BACKLOG spike。docs：`project-config-template/review-loop-config.md` reviewer_runner 列 kimi 註記。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (dispatch rail + tests only).
+
+## v2.36.13 — opencode 可當 reviewer／qc 席（`dispatch-review.sh` 新 rail；308 需求，owner 裁定 2026-09-07）
+
+308 要用 `opencode-go/muse-spark-1.3-contributor` 坐 qc reviewer；之前 `dispatch-review.sh` 直接拒 `--runner opencode`，hetero-dispatch 表標
+implementer-only。查證：pi 的 implementer-only 有結構原因（RPC duplex 監督），opencode 沒有——`opencode run` headless 讀 STDIN、`--dir`、
+`--pure`、`--format json`，implementer rail 2026-09-03 已驗證。
+
+- **`scripts/dispatch-review.sh`**：新 `opencode` rail——scratch cwd、prompt 走 STDIN（無 ARG_MAX 牆）、`run --dir <scratch> --pure -m <model>
+  --agent plan --variant <effort> --format json`（`max`→`xhigh`）、Node scriptlet 把 NDJSON 事件流的最後一段 assistant 文字抽出來餵共用
+  VERDICT parser、非零 rc fail-closed、暫存檔 EXIT 回收；usage／JSON 文件／`--bin` 同其他 rail。
+- **read-only 姿態是 best-effort，不是沙箱**（live 對抗探針 2026-09-07，opencode 1.18.27）：`--agent plan` 的 permission 只 deny `edit`，
+  叫它跑 `hostname` 它照跑並回真主機名。與 kimi／grok／cursor 同一層級，文件如實標註。
+- **allowlists**：`resolve-review-loop.sh` reviewer／plan／deep／VA／consult／discuss／`qc_panel_runners` 加 `opencode`；schema 七個 enum 同步
+  （`check-contract-schema.js` 三方一致）；`dispatch-plan-review.js` RUNNERS 加 `opencode`。與 v2.36.12 的 kimi 對齊在同一批行合併，結果是聯集。
+- **`qualification-review-provider.js`**：新增 `opencode` kind 但**一律拒絕**（與 `cursor` 同一原則）：exam 的完整性門檻要真的 tool-deny，
+  `--agent plan` 不是；opencode 席目前只能以 advisory coverage 坐（stderr `POLICY OVERRIDE`＋`policy_override` 留痕），要考試得等 opencode 出
+  真的 deny-all 機制並重跑對抗探針。
+- 測試（先紅 13 條）：`dispatch-review.test.sh` 382（NDJSON stub：verdict 解析、空輸出 no_verdict、缺 binary precondition、好 block 但非零 rc
+  no_verdict、effort clamp、argv 形狀）；resolver 414、plan-review 268、contract-schema parity。docs：`references/hetero-dispatch.md` opencode
+  列 reviewer ✅（best-effort 註記）、`project-config-template/review-loop-config.md` reviewer_runner 列＋Gotchas 配方。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (dispatch rail + tests + reference docs only).
+
+## v2.36.12 — kimi 可坐 plan reviewer／plan deep reviewer／verification-author 席（308 需求，owner 裁定 2026-09-07）
+
+308 要把 kimi-code/k3 排進 review-loop 的 reviewer／qc 席，卡在 `resolve-review-loop.sh` 對 `plan_deep_reviewer_runner: kimi` 回
+`invalid plan_deep_reviewer_runner`。`dispatch-review.sh` 的 kimi rail（2026-07-28）與 `reviewer_runner`、`qc_panel_runners`、consult／discuss
+allowlist 早就收 kimi，漏的是三個 case 清單與 plan-review driver。
+
+- **`scripts/resolve-review-loop.sh`**：`plan_reviewer_runner`、`plan_deep_reviewer_runner`、`verification_author_runner` 三個 case 加 `kimi`
+  （VA 路徑 `dispatch-author.sh`＋`dispatch-author-kimi.js` 已完整接線，測試釘住），錯誤訊息的清單同步。`qc_panel_runners` 本來就收，加一條單席
+  正例釘住。**`schemas/review-loop-contract.schema.json`** 三個 enum 加 `kimi`（JS contract validator 從 schema 讀）。
+- **`scripts/dispatch-plan-review.js`** `RUNNERS` 加 `kimi`；driver 對所有 runner 一律走 `dispatch-author.sh`，無需分支。BACKLOG「dispatch-plan-review
+  RUNNERS lacks kimi」列收線——它的 trigger 是 owner 裁定解除 plan-review driver 的 reuse-unchanged 凍結，這次的裁定就是。
+- 測試（先紅：resolver 6 條 exit 3、plan-review 2 條 invalid tuple）：resolver 414、dispatch-plan-review 268 綠；bogus runner 仍 exit 3。
+- 資格：coverage advisory 不變——kimi 席沒成績單也能坐，stderr `POLICY OVERRIDE`＋`policy_override` 留痕；要成績單走 `engine-qualify.sh reviewer`
+  （`qualification-review-provider.js` 已有 `QRP_CLI_KIND=kimi`）。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (resolver/schema/driver + tests only).
+
+## v2.36.11 — turn-end「未 commit 工作」提醒 hook（`dirty-protected-paths`，Claude Stop；Codex Stop＋SessionEnd）
+
+308 治理缺口回報（2026-09-07）：約 7800 行 WebGPU worker 工作橫跨多個 Codex session 一週沒 commit，沒人發現——commit 節奏只存在
+finish-flow 的文字裡，沒叫 finish-flow 的 session 本來就沒有任何訊號。owner 拍板：補提醒，不補閘。
+
+- **`hooks/dirty-protected-paths.js`**（default-on，第 17 個 Tier A）：Stop 時讀 `git status --porcelain`，只算 `.claude/qc-gate-config.md`
+  `protected_paths` 底下的項目（與 qc-gate 同一份 CSV；沒設定就整棵樹算並在訊息裡講明），行數＝tracked 的 `git diff --numstat HEAD` 增刪
+  ＋ untracked 文字檔行數（≤ 2 MB）。檔數 ≥ `min_files`（3）**或**行數 ≥ `min_lines`（150）就提醒，每 repo × session 每 `interval_minutes`
+  （30）最多一次，狀態放 RAM live dir。輸出只有頂層 `systemMessage`（Claude 顯示給使用者、不阻擋）＋ stderr 同一行，**永不**發 Stop `decision`
+  ——跟到期提醒、advisory coverage 同一原則：大聲、留痕、不擋。旋鈕 `~/.autopilot/config.json` `dirty_tree_reminder{min_files,min_lines,
+  interval_minutes}` 或 `AUTOPILOT_DIRTY_TREE_MIN_FILES/MIN_LINES/INTERVAL_MINUTES`；退出 `AUTOPILOT_DIRTY_TREE_REMINDER=false`。任何錯誤 fail-open。
+- **Codex 套件**：同一支腳本掛在 `Stop` 與 `SessionEnd`（`platforms/codex/hooks/hooks.json`，sync script 新增 mapping；package test 釘住
+  三個事件的精確 manifest）。**Codex 端 live-fire 未驗證**：註冊有測試證據，但「hook 存在不等於 hook 有跑」——本機 codex 配額見底，沒跑
+  hook-probe live；下一個 Codex session 觀察到提醒（或沒有）就是證據，屆時補進 portability reference。
+- 盤點：30 hooks（17 default-on／13 opt-in），`hook-classes.json` 新列（`invariant_effect`，各 profile 都保留）、catalog `hook_classes_sha256`
+  重釘、README badge、CLAUDE.md、`docs/installation.md` 過期的「15 個 opt-in」清單改成真實 13 個。
+- 測試：`hooks/tests/dirty-protected-paths.test.sh` 23 條（乾淨靜默、低於門檻靜默、檔數門檻、非保護路徑不算、行數門檻含 untracked、
+  30 分鐘去重且 per-session、env 門檻、退出、無設定整樹、非 git／垃圾 stdin 皆 exit 0 靜默）；inventory／package／profile 四套同步更新。
+- 未做（owner 問題「hook 是不是要統一做盤點表定期 check 各 harness 支援」）：立 BACKLOG「per-hook × per-harness support matrix」——現況
+  是 portability reference 一列文字＋ `check-hook-inventory` 只管 Claude 接線＋ `harness-maintenance` 管 harness 過期，沒有東西把
+  hook × harness × event × 驗證日期接起來。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (hook + tests + docs only).
+
+## v2.36.10 — Codex plugin 更新流程：活躍 session 守衛、不再 remove-then-add（PostCompact MODULE_NOT_FOUND 根因）
+
+本機 Codex session（peer 交接 2026-09-07，codex-cli 0.153.4）：每次更新 autopilot 後，還開著的 Codex 對話在下一次 compaction
+都報 `PostCompact … MODULE_NOT_FOUND …/cache/autopilot-local/autopilot/<舊版>/hooks/post-compact.js`。
+
+- **根因（隔離 CODEX_HOME 實驗證實）**：Codex 把 plugin 複製到 `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/`，session 啟動時把
+  `PLUGIN_ROOT` 釘在那個版本目錄。`codex plugin remove` 明文「remove its local cache」；而 **`codex plugin add` 對已安裝 plugin 的原地升版
+  也會刪掉舊版本目錄**（升版後 cache 只剩新版）。所以 `dev-setup.sh setup_codex` 的 remove-then-add 不是唯一元兇——任何更新都會拔掉活躍
+  session 腳下的目錄，光拿掉 remove 救不了。
+- **`scripts/dev-setup.sh`**：`--harness codex --install` 先偵測活躍 `codex` 進程（`pgrep -x codex`；測試用 `DEV_SETUP_CODEX_PIDS` 注入），
+  有就在任何變更前拒絕並說明原因與後果，新旗標 `--force` 才照做並在最後提醒那些 session 要開新對話；拿掉 `plugin remove`（官方
+  plugin-creator reference：cachebuster＋add，沒有 remove；add 原地升版已驗證）。
+- 測試：`dev-setup.test.sh` 三案（有活躍 session ⇒ exit 1、訊息帶 pid／MODULE_NOT_FOUND／--force、stub 證明沒碰 plugin 指令；`--force` ⇒
+  走 `plugin add`、絕無 `plugin remove`、印重啟提醒；無 session ⇒ 靜默照常）；`codex-plugin-package.test.sh` 在獨立 sandbox 釘住「原地
+  add 升版會刪舊版本目錄、舊 post-compact.js 消失」這個事實（守衛的依據）。`docs/installation.md` 更新列改寫。
+- 未做（peer 建議、未驗證）：`~/.codex/hooks.json` 固定入口直指 repo 的開發用 hook——會與 plugin hook 重複、要另設信任審核；
+  Codex 文件也沒說 hook command 是否經 shell，無法在 command 字串裡加 fallback。列 BACKLOG 待 spike。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (script + tests + docs only).
+
+## v2.36.9 — dispatch-model-guard 提醒 agent、不再彈窗問使用者（`mode: remind`）；Codex adapter 的 SHADOW 條款改鏡射 canon
+
+owner 2026-09-06：「要用比較貴的 subagent／沒填 model name，現在都跳出來問使用者，反而 block 住；應該提醒完 agent 他自己判斷要不要換」。
+
+- **`hooks/dispatch-model-guard.js`**：預設 `mode` 從 `ask` 改 **`remind`**——命中貴引擎（預設 `fable`；實作型派工含 `opus`）回 native
+  `permissionDecision: "deny"`，理由把決定權交還派工的 agent：改便宜模型重派（`scripts/resolve-dispatch.sh --role`），或保留引擎並在
+  首行寫 `Engine: <model> (intentional: <why>)`，guard 就靜默放行（stderr 一行 note）。ack 只認 Engine 首行，prompt 內文的 `(intentional…)`
+  不算。沒填 model 維持 v2.36.2 的 deny＋重派理由。`mode: ask`、`on_missing_model: ask` 仍可選回對話框；`warn`／`off` 不變；亂值 → `remind`
+  （fail-closed 但不彈窗）。測試 76（新增：預設 remind＝deny 帶提醒、ack 放行、ack 不在首行不算、`mode: ask` 還原對話框）。docs：hooks/README
+  兩處、`project-config-template/dispatch-guard-config.md`、front-door 一行。
+- **`platforms/codex/skill-adapters/lifecycle.md`**（cuda codex-astra 2026-09-06 回報）：原句「continue only when READY」在 shadow 模式讀成
+  停機，與 CC canon（dev-flow／ceo-agent：`SHADOW` 觀察限定、記 `admitted`／`would_block` 後走非 managed 流程）矛盾。改成鏡射 canon：READY 才走
+  managed engine route；SHADOW 走一般流程不宣稱 enforce receipt、不呼叫 managed route（managed CLI 會拒非 READY marker）；shadow→enforce 是該 repo
+  owner 的政策決定。七個 Codex thin-shell 鏡像重生。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (reference doc one line; adapter file is Codex-side).
+
+## v2.36.8 — l4 也建 host provider-readiness bootstrap：l4 roster profile，enforce-mode intake 拿到真的 `strict_level: "l4"` bundle（owner「完整修好」的下半場）
+
+v2.36.7 只把 l4 的 `provider_readiness_authority_missing` 改成具名拒絕；這版把牆拆掉。`bin/autopilot.js` 現在對
+`AUTOPILOT_LEVEL=l4|l5|l6` 都建 `createStrictL5ProviderBootstrap`，走**同一條** `collectProviderReadinessBundle` live probe
+（ADR-0001：不豁免、不偽造，只是讓 l4 也能取得證據）。plan：`docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md`
+（plan loop g2 凍結、Board 三題已答：l4 route supported／VA、QC 選配／PATCH）。
+
+- **`src/readiness/provider-bootstrap.js`**：新 `LEVEL_ROSTER_PROFILE`——l4 = implementer＋reviewer 必要、verification-author 席與
+  QC panel **選配**（在場就納入、不在就略過）；l5／l6 = 兩者**必要**，行為 byte-identical（`strict_l5_provider_roster_incomplete`
+  三條不變量各自有隔離負對照）。`deriveStrictL5InvocationPolicy(resolved, level)` 帶 level；建構子收 `l4`；bundle／receipt
+  `strict_level` 記真實 level，level-drift 檢查收 l4。略過的選配席會從交給 collector 的 roster 投影掉（`qc_panel` 名單在、seat 未解析
+  的 WIZHALL 形狀否則會 roster drift）；bootstrap 回傳 `roster_profile: {level, omitted_seats}` 留痕。冷凍的 D4 claim set 不動；
+  l4 子集 roster 不是 byte-canonical，所以一律記 `policy_override`（advisory，Board 2026-08-16），未認證席列在 `uncertified_seats`、
+  stderr `POLICY OVERRIDE` 照印；全席認證但非 byte-canonical（l4 子集）改印一行 `policy note`（review 🟡：原本每次 l4 派生都印零席 OVERRIDE 成噪音）。`src/status/cli.js` readiness 診斷依 `AUTOPILOT_LEVEL` 派生（review 🟡）。
+- **`bin/autopilot.js`**：l4 建 bootstrap、注入 `providerReadinessAuthority`／`qualificationProvider` 與 l5/l6 相同；v2.36.7 的
+  reviewer 豁免保留但語意收窄——bootstrap 的 bundle 被 consume 就認證 reviewer 席、ledger **沒有** `waived`；只有 bootstrap 沒認證
+  reviewer 時 waived 才落帳（KR4）。usage 文字同步。
+- **`src/engine/engine-lifecycle-observation.js`**：`OBSERVABLE_LEGACY_LEVELS` 收 `l4`、`OBSERVABLE_ENGINE_STATUSES` 收 `waived`
+  （l4 run 的 lifecycle observation 不再把 waived 雜湊成 unknown）。**`src/engine/campaign-intake.js`**：拒絕訊息改「only l4/l5/l6
+  build the strict host bootstrap」、補救改「/l4, /l5 or /l6」，code 不變。
+- 測試（每條先在 develop 紅，紀錄 `docs/projects/2026-09-07-l4-host-bootstrap/ledger/p3-red-run.md`）：CLI L4 fixture（VA 缺、
+  QC 完整 ⇒ ready、`strict_level:"l4"`、到達 `campaign_intake`、無 waived）＋ advisory case（stderr 行、`advisory_default`、席位具名）
+  ＋ l5／l6 各兩條 CLI 隔離負對照；consumer 單元（profile 表、兩席派生、WIZHALL 形狀 bundle consume、第三條負對照、l4↔l5 bundle
+  互不相認）；engine KR4（認證 ⇒ 無 waived；無 bootstrap ⇒ waived 仍在；`--require-qualified-reviewer` 兩種情況）；observation KR5。
+- 已知邊界（不是本版偏差）：managed engine 的 terminal-QC 閘（`prepare_implementation_loop`、`min_panel_size`）與 level 無關，任何
+  `--campaign-contract` run 仍要完整 QC panel；「QC 選配」是 bootstrap roster 形狀規則。docs：front-door foreman 段、
+  `references/multi-agent-portability.md`、`docs/installation.md`；BACKLOG 兩列收線。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (reference doc only; no skill files touched).
+
+## v2.36.7 — l4 marker 下 engine implement-review 不再卡在 reviewer_qualification：豁免並記帳（owner 裁定 2026-09-06）
+
+cuda 的 WIZHALL（revival-world-city-war，owner 指定 /l4 配 agy gemini-3.8-flash-low）：`bin/autopilot.js` 只在 l5/l6 建 strict
+provider bootstrap，managed enforce 下那是 `reviewer_qualified` 唯一可信來源，所以 l4 marker 配 engine implement-review 的預設
+`requireQualifiedReviewer=true` **永遠**在 reviewer_qualification 被擋——不是席次沒資格，是這一關在 l4 根本不可能通過。
+owner 原話「直接讓他過身分檢查，不要以後再被擋」，在本 session 拍板選「l4 下自動豁免並記帳」。
+
+- **`bin/autopilot.js`**：`AUTOPILOT_LEVEL=l4` 且沒帶 `--require-qualified-reviewer`／`--allow-unqualified-reviewer` 時，
+  `requireQualifiedReviewer=false` 並附 `reviewerQualificationWaived` 理由字串（l4 無 strict bootstrap、無法 host-verify、
+  記錄的 operator 政策）。任一旗標明示則照旗標；l3／l5／l6 不變。
+- **`src/engine/autopilot-engine.js`**：reviewDiff 與 implementation loop 在原本會 block 的位置改記 ledger
+  `reviewer_qualification: waived {reviewer_qualified:false, reason}`——決定留痕，不是沉默；reviewer 照跑、不同家審查與 mission scope
+  不變。waiver 隨每個 review stage 傳入，final scope 原本強制 `requireQualifiedReviewer=true` 的規則在 waiver 下不再重新施加。
+  沒有 waiver 字串時行為 byte-identical（`--allow-unqualified-reviewer` 仍是零 ledger 條目）。
+- **`src/engine/campaign-intake.js`**（owner 選「先 fix 然後完整修好」）：同一條 rail 的下一關 `provider_readiness_authority_missing`
+  是 ADR-0001 的驗證邊界不是身分檢查，**不豁免**；改為具名拒絕——訊息寫出 level、成因（只有 l5/l6 建 strict host bootstrap）與兩條合法
+  補救（該 rail 的 mission enforcement_mode 設 shadow，或改 /l5 且 roster 在 provider policy 內），並明言不得自造 readiness authority。
+  rejection code 不變、仍在任何 spend 之前。完整修法（替 l4 建有證據的 host bootstrap，L 級）立 BACKLOG 待 plan。
+- 測試：engine（waived 不 block、reviewer 派出、ledger 帶理由；無 waiver 零條目；明示 require 仍 block）、CLI（l4 預設不再
+  `phase: reviewer_qualification`；l4＋`--require-qualified-reviewer` 無 waiver 字樣）。修前紅。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
+## v2.36.6 — never-started Mission claim 有合法出口；`campaign status` 分得出 not_started（cuda revival.3d 回報 2026-09-06）
+
+cuda 的 QUIET-a：`mission grant` 鑄了 `campaign-v2-…` id 發了 claim，engine 嘗試在 dev_flow_admission 被 session marker absent 擋下
+（零副作用），campaign 從未 append ledger；`campaign status` 回 `not_found`，`mission withdraw` 因 ledger 查無 campaign 拒絕——claim 成孤兒，
+沒有任何合法出口。
+
+- **`src/campaign/cli.js`**：`campaign status`／`inspect` 對「id 格式合法、ledger 檔存在、無列」回 `not_started`（帶 ledger 路徑），
+  `not_found` 留給格式非法；ledger 檔不存在不算 not_started。新 `resolveCampaignForClaim(rows, claim)`：直接投影中 ⇒ `direct`；
+  v2 claim 且 ledger 有同一 contract ticket 的 intake root ⇒ `ticket_present`（列出 root 與 phase）；否則 `absent`。intake payload 壞掉一律
+  throw（不會被讀成 absent）；rotation-carry 列照算（segment GC 後可能是活 campaign 唯一的副本）。
+- **`src/mission/cli.js withdraw`**：`direct` ⇒ 照舊 terminal 規則；`ticket_present` ⇒ 拒絕 `mission_withdraw_campaign_ticket_present`
+  （campaign 可能跑過，不得以 never-started 放掉）；`absent` ⇒ `mission_withdraw_campaign_not_started`，只有 `--never-started true`
+  （operator 斷言這本就是 claim repo 的 ledger）才以 `resolved_via: never_started` 走既有 `no_effect_release`——不偽造 terminal，
+  輸出記下被斷言的 `campaign_ledger` 與掃到的 intake root 數（ADR-0001：事後可歸因——**只在 stdout**，durable state 的 release event 仍是 `{claim_id}`，operator 要留下那行輸出；把斷言寫進 event payload 是 schema 變更，跟 intake binding 同一族 follow-up）。v2 claim 沒有 draft ticket ⇒ `mission_withdraw_claim_unguardable`，不當 absent。ledger 檔不存在仍是 unreadable。
+- **沒修的**：v2 claim 與 ICC intake 的識別綁定（claim id 是 subject digest 的 v2、intake 是原始位元組 digest 的 v1，intake 又不記
+  claim binding）。第一版試過用 contract digest 橋接，review（opus）證明兩個 digest 不同、橋接對真 v2 claim 永遠 miss 而 fail-open——
+  已撤回，BACKLOG row 保留並註明正確修法（intake artifact 記 mission binding，schema bump）。
+- 測試：campaign-terminalize e2e（無 intake 的 ledger 無 ack 拒絕、有 ack 釋放且記 ledger；status 合法 id ⇒ not_started、非法 ⇒ not_found）；
+  新 `campaign-claim-resolve.test.sh` 九案（absent／其他 ticket 不算證據／同 ticket ⇒ ticket_present／carry 列照算／去重／壞 payload throw／
+  legacy claim 無 ticket 守門／字串 payload）。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
+## v2.36.5 — `--allow-seat-gap` 不再寫下 checker 永遠拒收的世代（7840hs 回報 2026-09-06）
+
+同族第三件（與 aborted 世代、closure-by-absence 同形：collect 寫得進去、checker 事後永遠拒收、無法補救）。plan 066 的 agy 席因 prompt 超過
+`MAX_ARG_STRLEN`（131071）兩代 no_verdict，`--allow-seat-gap` 讓 collect 照常寫下 2/3 席的條目；`check-phase-review-receipt` 的席數門檻
+預設「該條目所有席」⇒「Generation 4 reviewed seats (2) below minimum required (3)」，已 finalized 的席數是歷史事實，再收幾代都救不回。
+
+- **`scripts/hetero-review-loop.js` collect**：`--allow-seat-gap` 只容忍到 receipt 的可信門檻——與 checker 同源（`--min-reviewed-seats <n>`、
+  `AUTOPILOT_MIN_REVIEWED_SEATS`，預設全部席次，同一套 canonical positive integer 文法）。低於門檻不再寫 pending-with-gap，改記
+  `aborted`（reason `seat_gap_below_min`，帶 reviewed/total/floor/source），exit 1，訊息具名數字、門檻來源與補救（下一代從同一 base 收、
+  修席或 `--exclude` 縮 diff、或兩端同時降門檻）。達門檻時 WARN 提醒把同一門檻交給 checker。門檻文法錯在建目錄、派任何席次之前拒絕（review 🟠：原本派完才驗，垃圾值留下有 g<N>/ 無 chain 條目的卡死 phase）。
+  門檻不論有無 gap 都套用（review 🟠：全席 reviewed 但門檻高於席數，原本仍寫 pending）；別名 `--min-seats`／`--min_reviewed_seats` 與 checker 同序。
+- 測試：預設門檻下 1/2 席 ⇒ aborted＋無 head＋下一代照常接續 finalize；`AUTOPILOT_MIN_REVIEWED_SEATS=1` 下同形狀 ⇒ pending-with-gap 並 WARN；
+  0/1 席（既有 2c、7）改斷言 aborted；垃圾門檻拒絕。三個新案在修前紅。
+- 7840hs 另兩點記 BACKLOG：`EXCLUDE_ALLOWLIST` 寫死 autopilot 自己的目錄、消費端 repo 無法用 `--exclude` 縮 payload；agy argv 上限可在
+  collect 前算出、提早報錯而不是燒掉整輪席次。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
+## v2.36.4 — grok 席前言黏框架被定位器誤殺（cuda R21 qc 回報 2026-09-05）
+
+cuda 在 revival-world-city-war R21 qc 三席 8 次 collect 裡，grok-4.6 席 5 次被記 no_verdict，raw_log 卻都有完整框架與 VERDICT，
+結論與另兩席一致。比對 3 成功／4 失敗：失敗的都是 grok `--output-format plain` 先吐一句前言，**同一行無換行**直接接
+`<<<AUTOPILOT-REVIEW-…>>>`；共用定位器規則 7（前導行含框架詞彙卻不是精確框架行 ⇒ 硬拒）正確 fail-closed，但丟掉了真審查。
+
+- **`scripts/dispatch-review.sh` grok 分支**：擷取 RAW_LOG 後、進定位器前做一次正規化——在第一個「`<<<AUTOPILOT-REVIEW-` 不在第 1 欄、且尚未出現
+  精確 BEGIN 行」的行插入換行；前言成為獨立 chrome 行，仍受規則 7（殘留詞彙）、8（預算）、9（洩漏）檢查，框架成為精確行。框架之後一律不動。
+  只在 grok 分支（cuda 建議 A，不放寬安全欄）；RAW_LOG 保留原始位元組，parse／salvage 走正規化檔。
+- 測試：grok 黏合形狀 reviewed；前言本身含框架詞彙 ⇒ 仍規則 7 且永不 SHIP；同形狀走 codex ⇒ 仍規則 7（證明只在 grok 生效）。正向案在修前紅。
+- cuda 順帶指出 grok-4.6 在 scorecard 只有 implementer 資格，坐 qc reviewer 席是 2026-08-25 的 user-explicit override——未在本版處理，記於此。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
+## v2.36.3 — 中止的 review 世代不再讓 phase receipt 永久卡死，也不再悄悄關掉未結 finding（7840hs 回報 2026-09-05）
+
+7840hs（llm-playground plan 066）踩到：collect 期間 commit 讓 branch head 移動，`hetero-review-loop` 照設計把那代寫成 `aborted`
+（無 head、無 findings），下一代照 `--help` 繼續收；審查 14 → 7 → 3 → 0 完全收斂，但 `check-phase-review-receipt.js` 對
+`status !== 'finalized'` 一律 exit 1，機器收據永遠拿不到，且沒有旗標能合法繞過。修的時候發現第二個更嚴重的洞。
+
+- **`scripts/lib/review-chain-derive.js`**：走鏈時跳過 `aborted` 條目。原本 loop finalize 與 checker 都把中止那代（不存在 ⇒ 空的）
+  findings 餵進來，「closure by absence」把前面所有 verified 未結 finding 一次關掉——中止變成規避審查的路徑。新 unit test
+  `review-chain-derive.test.js`（Critical 不會被中止翻成 SHIP-AS-IS；關閉歸到後面那個 finalized 世代），三案在修前紅。
+- **`scripts/check-phase-review-receipt.js`**：鏈的連續性改追「最後一個 finalized head」；`aborted` 條目只當「有紀錄的未審查」收：
+  不能是最後一筆（中止永遠不能代替審查）、不得帶 head、下一代必須從它的 base 接、它的 range.json 若在必須同 base；不讀
+  findings／dispositions／seats。其他非 finalized 狀態照舊拒絕。checker 測試 15／15a–15f（最後一筆中止、帶 head、下一代跳 base、
+  range base 不符各自 exit 1；finalized／aborted(parse_failed)／finalized 三代鏈 exit 0）。
+- **7840hs 覆核後追加**：他的 ledger 上這個洞真的發動過——gen-2 s1 的 MUST-FIX（tracked-under-ignored 檔案讓 agent_diff 假空）被
+  記成 `closed_by_generation: 3`，3 正是中止那代。兩件跟進：(1) derive 不再把 chain 條目上既有的 `closed_findings` 戳記當輸入
+  （戳記是這支程式的輸出，ADR-0001：closure 只從 findings＋dispositions 證據重推導；否則舊碼寫的錯誤戳記會在每次重推導時
+  繼續關掉那條 finding，偽造的戳記也能無證據關 finding）；(2) checker 在比對 receipt 之前先斷言 receipt 與重推導的
+  `closed_findings` 都不得把 closure 歸給 aborted 世代，戳記在 chain 條目上（loop 的真實形狀）或 receipt 上都掃；訊息具名並給補救：舊碼寫的 receipt 再 collect＋finalize 一代即可
+  （finalize 拒絕重跑已 finalized 的世代）。derive test 6 案、checker 66 assertions。finalize 讀不到較早世代的 findings／dispositions 改 fail-closed（原本吞錯當空，現在空就是「全部關掉」）。
+- 兩支腳本 `--help` 寫明規則；codex 鏡像同步。走的是 7840hs 建議的 (a)（checker 豁免＋後續 finalized 條件），沒動 loop 的寫入形狀。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
+## v2.36.2 — v2.36.1 review 遞延 cut 落地：live 窗口要 > 0、depth-0 計數上鎖、工頭診斷只印一次、四項測試強度（2026-09-05）
+
+v2.36.1 pre-merge review（opus，兩輪）標 🟡 卻 cut 掉的六件，全部紅綠釘死後收掉；沒有新面向。
+
+- **`hooks/context-budget.js`**：live 檔 `context_window_size` 必須 > 0，否則當沒有 live 檔走推斷路徑——`-1` 原本印
+  「-15300000% of the ~-0k window」，`0` 悄悄退回未縮放的 150k 天花板還掛著「(statusline)」。測試用 transcript 120k／live 153k
+  故意不一致來區分兩條路徑（0 的訊息本來就不印窗口子句，光看文字驗不出）。
+- **`hooks/foreman-guard.js`**：`tasks[]` 列的 `contextWindowSize` 不 > 0 視為沒有窗口訊號（放行、不印診斷）；0／≥2 列的診斷改為
+  每個 agent 每種文字只印一次（原本整趟 run 每次 Bash 都印一行），計數變了（0→2）會再印一次。
+- **`hooks/depth0-delegate-gate.js`**：`reads` 的 load→modify→save 進 `withLock`（與 foreman-guard 同形，刻意複製不 import——
+  兩個 hook 單點崩潰隔離）；24 個並行 Read 原本只數到 22–23，現在 24。`block` 模式的 live 檔讀取留在鎖外。
+- **測試強度**（review round 2 突變結果）：`live-state-dir` 新增「findmnt 在場但全拒、/proc/mounts 卻說 tmpfs ⇒ 仍 ssd-fallback」
+  （殺掉 `notFound: true` 突變體，21/21 存活的原因是每組假 findmnt 都有 `'*'` 預設）；`context-budget` 新增「較舊 transcript 130k、
+  live 160k ⇒ 160k」（殺掉 `Math.max` 塌成 trust-transcript 的突變體，35/35 存活）；newer-row 測試補 `(statusline)` 斷言（無 /dev/shm
+  時原本空過）；injection 測試改 `try/finally rmSync`（`/tmp/injection-*` 帶 `$(touch …)` 名稱的殘留）；模組表頭記 `timeout: 2000`。
+  兩個突變體各自 sed 植入後只有新測試紅，還原後全綠。codex 鏡像 `platforms/codex/plugin/scripts/lib/` 同步。
+- **`hooks/dispatch-model-guard.js`（搭車，owner 2026-09-05 dogfood）**：漏 `model:` 的派工從 `ask` 改 **`deny`**——本版 depth-0
+  派 reviewer 沒帶 model，互動模式跳 permission dialog 要 owner 點；漏 model 從來不是人的判斷（唯一正確動作就是模型自己補
+  `model:` 重派），deny 的 reason 直接把糾正動作送回模型。`on_missing_model: deny|ask|allow`，預設 deny、garbage → deny；
+  guarded engine（要不要花 fable）仍是 `ask`。template／README 同步。
+- **活體觀察（未修，BACKLOG 新 row）**：本 session 跑 600 s 前景 suite 後 `context-budget` 在 155k 響了無「(statusline)」的 T2——
+  live 檔在指令結束後 3 s 內是新的、窗口 1M，推測是長前景指令期間 status line 沒有 tick，120 s freshness 把它判 stale 退回推斷。
+
+prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
+
 ## v2.36.1 — statusline → hook live context feed：hook 讀真實窗口與子代理用量，不再推斷（owner 2026-09-05）
 
 owner 抓到兩件事：`context-budget` 在 1M session 的 153k／180k 兩次響 T2 叫我交棒（15%），而 Fable depth-0 自己跑了六次

@@ -23,6 +23,53 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ---
 
+### Pin store hardening: fsync, orphaned temp files, and re-validation of stored rows
+- **Trigger**: a report of a `pins.jsonl` lost or corrupted by power loss (not a process kill), a store directory accumulating `.pins.jsonl.tmp.*` litter, or the first consumer that reads the pin store without going through `readPinRows`.
+- **Context**: the QC panel (GLM-5.2, 2026-09-11) raised four Suggestion-level items against the v1 pin store, all reproduced at depth 0 and all hardening rather than regressions. (a) `writeSnapshot` does `writeFileSync` → `renameSync` with no `fsync` of the temp file or the directory, so a power loss — not the process-level interruption the spec covers — can still roll the file back; `appendRow` has the same posture, so this is a store-wide question, not a pin-specific one. (b) A SIGKILL inside the write→rename window orphans `.pins.jsonl.tmp.<pid>.<hrtime>`; the `catch → unlinkSync` only cleans thrown errors. Verified: the litter never corrupts `pins.jsonl`, since readers open that path only. (c) `readPinRows` now fails loudly on an unparsable line (v2.36.24) but still does not schema-validate a row it CAN parse, so a hand-edited row with a date in `expires` or a ninth key is read back and persisted through the next snapshot. No CLI input can produce one, and the file is 0600 operator-owned. (d) `listPins` treats `--role ''` as absent and returns everything, matching the existing falsy-option idiom.
+- **Effort**: S each; (a) is the only one that changes a shared primitive and should be decided for `jsonl-store.js` as a whole.
+- **Source**: depth-0 QC panel on the operator pin store, 2026-09-11.
+
+### Managed campaign intake: a rejected intake sometimes releases the Mission claim and sometimes strands it
+- **Trigger**: the next managed `engine implement-review` run that hits `attempt_blocked_by_open_claim` naming a claim from a rejection that already reported failure, or any work on `src/engine/campaign-intake.js`'s rejection paths.
+- **Context**: measured 2026-09-11 across five attempts on one lineage. `mission_state_store_required` and `campaign_ledger_path_mismatch` both run `releaseAfterRejection`, so the claim is freed and the next `mission grant` mints a new attempt. `mission_grant_ref_mismatch` does NOT: the claim stays live, and the next grant fails with `attempt_blocked_by_open_claim … is stale for head <sha>`. That message describes the symptom (a stale base) and not the cause (a prior rejection that did not clean up), so the operator's first instinct is to investigate the base rather than the previous rejection. Recovery is `mission withdraw --never-started true`, which works only while the claim never started.
+- **Worse case in the same run**: a campaign that reached `prepare_implementation` and then failed internally with `MUTATION_FAILURE_EVIDENCE_REQUIRED` (`src/engine/implementation-campaign.js:926` — the state machine refuses to record its own failure without digest-bound evidence) leaves the claim **active and unwithdrawable**: `withdraw --never-started true` is rejected because the claim did start, and `mission control --action abort_requested` needs a host-injected authenticated control adapter the CLI does not provide. The node is stuck at `status: active` with no CLI exit. This is the same family as the 2026-08-30 "stuck IMPLEMENTING unresumable" row.
+- **The repair deadlock is deterministic, not a one-off** (measured 2026-09-11 on TWO independent lineages, two different deliverables): the FIRST implementation campaign on a lineage runs to `dispatch_implementation: committed`, and the SECOND — the bounded repair after review — blocks at `prepare_implementation` with `MUTATION_FAILURE_EVIDENCE_REQUIRED` every time, leaving a claim that `withdraw --never-started` refuses (it did start) and that `mission control --action abort_requested` cannot reach (it needs a host-injected authenticated control adapter the CLI does not provide). Practical consequence today: **a managed L5 campaign can implement but cannot repair**, so every review-driven repair falls back to a non-hetero implementer and the run stops being a pure L5.
+- **A second, cheaper trap in the same flow**: the repair grant must be taken AFTER the implementation is merged, because the contract pins `base_sha` at grant time. Granting first and merging second yields `grant_ref claim base_sha does not match intake base`, costs a withdraw, and is easy to repeat — hit once per deliverable on both lineages.
+- **Effort**: S for the release-path consistency; the stuck-active case needs a CLI-reachable abort and is larger.
+- **Source**: /l5 dogfood on the operator pin store, 2026-09-11 — D1 (5 attempts, 3 lost to this class) and D2 (3 attempts, repair deadlocked identically).
+
+### The implementer ladder's cost ordering is nearly degenerate — 11 of 17 rungs share one effort tier
+- **Trigger**: the next time a climb picks a seat whose price is wildly out of line with the rung below it, or any work that wants the ladder to mean "cheaper first" in dollars rather than in label order.
+- **Context**: measured on this host 2026-09-08 (`~/.autopilot/topology.json`, 17 rungs): indices 5–16 are ALL `high`, so within that region the ordering falls through to `latency.sample_wall_time_s` then engine name. `claude-opus-5` and `MiniMax-M3` therefore sort as the same cost tier despite very different real prices, and a climb inside that region changes only the model, never the effort. `scripts/resolve-dispatch-topology.js:5-11` is honest that this is a proxy ("Cheapest-first — there is no reliable price data; effort rank"), but a key that puts two thirds of the rows in one bucket has stopped discriminating regardless of whether its semantics are right. This is a SECOND, more mundane problem than the cross-vendor incomparability fixed in v2.36.20: that one was about the label meaning different things per vendor, this one is about the label barely varying at all.
+- **The cost field is worse than empty — it is zero.** Measured 2026-09-08 across `~/.autopilot/engine-scorecard/scorecard.jsonl` (66 rows): 47 carry `cost: {source: "unknown", usd_per_mtok_input: 0, usd_per_mtok_output: 0}`, 9 carry the same `source` with `null`, and 10 have no cost block. **All 17 current ladder rungs are in the zero group.** `source: unknown` is honest, but pairing it with `0` is a footgun with a specific shape: a consumer that guards on `value != null` passes, arithmetic silently succeeds, and every seat ties at free — so an ordering built on it would look like it worked and would in fact be ordering by the tiebreak. The correct encoding for an unknown price is `null` or absence; any consumer must gate on `cost.source`, never on the number.
+- **Candidate**: fix the encoding first (unknown price ⇒ `null`, and one accessor that refuses to return a number when `source === 'unknown'`), THEN decide whether to order on it. `latency.sample_wall_time_s` IS genuinely populated and is the only real per-seat signal available today. Do NOT hand-write a price table — same failure shape as a hand-maintained effort translation table (`scripts/lib/effort-scale.js` header, and `scripts/lib/grok-effort.sh`'s month-long stale-clamp scar).
+- **Effort**: S for the zero-vs-null encoding fix alone; M if the ordering change follows (the v2.36.20 KR tests must keep holding)
+- **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
+
+### `probe-unknown.js classify` spawns `resolve-review-loop.sh` up to seven times per call — memoize one resolver invocation
+- **Trigger**: a foreman round-end ledger or `cost-tracker` sample showing `probe-unknown.js classify` taking ≥ 10 s wall time, or a round that runs classify ≥ 3 times (each resolver spawn is a full config + topology resolution with a 15 s timeout).
+- **Context**: v2.36.15 P1/P2 read `unknown_escalation`, the three budgets, `consult_dispatch`, `consult_resolved_from` and `unknown_resolved_from` through separate `resolve-review-loop.sh --field` calls (`scripts/probe-unknown.js` resolverField). The resolver already emits all seven in one JSON; one `resolve-review-loop.sh` run parsed once would replace them. Correctness is unaffected (every call site pins the flags in tests); this is cost only. Raised by the pre-merge reviewer (delta pass 3) as CUT/FOLLOW-UP.
+- **Effort**: S
+- **Source**: pre-merge review of `feat/v2.36.15-unknown-escalation-ladder`, 2026-09-07.
+
+### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
+- **Trigger**: a host with a working `kimi login` (this host's managed:kimi-code OAuth has no credential as of 2026-09-07, so the probe could not run), or Kimi Code CLI shipping `--prompt-file` / stdin prompt input (0.39.1 has neither: `-p ''` is rejected, `-p -` is taken literally).
+- **Context**: v2.36.14 fails closed pre-spend when the kimi prompt exceeds ~120 KB (Linux MAX_ARG_STRLEN, 308 hit rc=126 on a 145 KB prompt). The unblocking alternative is file indirection: write the prompt into the scratch cwd and pass a short `-p "read ./autopilot-review-prompt.md and follow it"`; kimi is an agent with a read tool, so it should work, but it is UNVERIFIED and changes the trust shape (the model must choose to read the file; a summarising model silently reviews less). Spike: live probe with a nonce inside the file, then a 140 KB real diff; ship only behind the size threshold with the raw log recording the indirection.
+- **Effort**: S (probe) + Fix
+- **Source**: 308 report 2026-09-07, run review-1788751167-2077044-2d7b.
+
+### Per-hook × per-harness support matrix with verification dates (hook inventory that is periodically re-checked)
+- **Trigger**: the next hook that is registered on a second harness (Codex `Stop`/`SessionEnd` for `dirty-protected-paths` is the first, v2.36.11, and its Codex live-fire is unverified), or a `harness-maintenance` run that finds a hook-event claim older than 60 days.
+- **Context**: owner question 2026-09-07 「那些 hook 是不是要統一做個盤點表定期 check 所有 harness 是否支援」. Today the facts are split: `references/multi-agent-portability.md` has one "Hook event names" row per harness (prose, last-verified date at file top), `scripts/check-hook-inventory.js` checks Claude wiring vs tiers, `scripts/platform-capability-claims.js` + `harness-maintenance` track harness capability staleness — but nothing joins hook stem × harness × event × evidence date. Shape: `hooks/harness-support.json` (stem → {harness → {event, registered, verified_at, evidence}}), a checker that (i) fails when a wired hook has no row, (ii) warns when `verified_at` is older than N days, (iii) is read by `harness-maintenance`; evidence for a row = a hook-probe run (Codex hook-probe package / Claude test) that shows the event actually fired — a hook existing is not a hook running.
+- **Effort**: S (matrix + checker + one probe per harness event)
+- **Source**: owner 2026-09-07 during the dirty-tree hook ship; `references/evidence-discipline.md` (script existing ≠ running).
+
+### Codex dev-mode hook entry that survives plugin cache replacement (`~/.codex/hooks.json` → repo path)
+- **Trigger**: a second report of `PostCompact MODULE_NOT_FOUND` on a host that ran `dev-setup.sh --harness codex --install` with `--force`, or a Codex release that documents whether hook `command` strings run through a shell (then a self-contained fallback in the command string becomes possible).
+- **Context**: v2.36.10 guards the update (refuse under live sessions) but cannot make a live session survive it: Codex pins `PLUGIN_ROOT` to `~/.codex/plugins/cache/…/<version>/`, and both `plugin add` (in-place upgrade) and `plugin remove` delete that directory. The peer proposal is a user-level `~/.codex/hooks.json` PostCompact entry pointing at the repo checkout (stable path), which would duplicate the plugin hook (double fire) unless the plugin-side entry is dropped from the dev install, and would need its own trust review (official hooks doc supports `~/.codex/hooks.json`; nothing says a hook command is shell-interpreted, so no `[ -f … ] || fallback` in the command string). Spike: measure double-fire, decide dev-only vs shipped, verify with the hook-probe package.
+- **Effort**: S (spike) + Fix
+- **Source**: local Codex session hand-off via agent-call 2026-09-07; `hooks/tests/codex-plugin-package.test.sh` upgrade case.
+
 ### Apply two-tier + pooled verdict to reviewer/implementer/owner/verification_author/brain
 - **Trigger**: a role's own eval corpus + scorecard-first ON/OFF evidence exists — a frozen, sealed
   case corpus for that role plus an OC characterization against it, produced the same way
@@ -155,6 +202,12 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Effort**: S
 - **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D1.md`
 
+### `contract-parity` / `resolve-review-loop-consult-discuss-switch` tests read the real `~/.autopilot/topology.json`
+- **Trigger**: the next time either test goes red on one host and green on another with the same tree (2026-09-07: red on this host for three days because the host cache carried two legacy `effort: ""` rungs; the fix landed in v2.36.16 but the *test* still depends on host state — the consult-seat drift allowance in the switch parity is host-dependent for the same reason)
+- **Context**: both tests resolve the shipped template with `implementer_ladder: auto` / `consult_dispatch: auto`, so the resolver reads whatever topology cache the host has. `resolve-review-loop.test.sh` already shows the hermetic pattern (`AUTOPILOT_TOPOLOGY_FILE` pointed at a fixture per case); port it. Related: the stale-cache item above (regenerate-or-warn) would shrink the blast radius but not the test's host dependence
+- **Effort**: S
+- **Source**: v2.36.16 (2026-09-07), CHANGELOG「未做」
+
 ### `hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename
 - **Trigger**: two collects for the same phase ever run concurrently (today callers serialise by generation)
 - **Context**: a lost chain entry would self-recover on retry, never forge a gate pass; MiniMax CUT/FOLLOW-UP on the D2 review 2026-09-04
@@ -184,12 +237,6 @@ process. Not urgent: the lock itself is flock-based and does release on death.
 - **Context**: sha256 of empty matches a receipt claiming the empty-file hash; the resolver's `off` re-derivation is the real boundary (MiniMax CUT/FOLLOW-UP)
 - **Effort**: S
 - **Source**: same ledger dir as above
-
-### `dispatch-plan-review.js` RUNNERS lacks `kimi` while `dispatch-review.sh` supports it
-- **Trigger**: an owner ruling that amends the frozen "reuse unchanged" invariant for the plan-review driver
-- **Context**: D0 of the dev-flow hetero loops plan had to seat GLM instead of kimi-code/k3 (consult-qualified, event 182); cut from that slice by plan-review R6
-- **Effort**: S
-- **Source**: `docs/plans/2026-09-04-dev-flow-hetero-loops-default.md` §3 "Not changed"
 
 ### scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`
 - **Trigger**: any seat resolver that matches runner tokens exactly (topology `--role plan_reviewer` normalises it today)
@@ -854,12 +901,6 @@ never an ad hoc descriptive string.
 - **Effort**: Fix
 - **Source**: l6-verdict-stability-p1-20260829T1804Z campaign attempt 2; debugger replay 2026-08-29.
 
-### L6 managed campaigns can never satisfy `reviewer_qualification` — strict provider-readiness bootstrap compiles for `l5` only
-- **Trigger**: next `/l6` run on any repo with `mission_convergence.enforcement_mode: enforce` (reproduced 2026-08-29: attempt 1b blocked at rounds 0 for every seat).
-- **Context**: `bin/autopilot.js:396-399` builds `createStrictL5ProviderBootstrap` only when `AUTOPILOT_LEVEL === 'l5'`; managed dev-flow admission (`scripts/session-mode.js:349`) requires `marker.level === AUTOPILOT_LEVEL`; so an `l6` marker gets neither the readiness authority nor `reviewer_qualified` and the disk-scorecard path is `untrusted_telemetry` by design. Workaround used: session marker set to `l5` (deviation recorded). Fix: gate the bootstrap on `l5|l6` and let `provider-bootstrap.js strict_level` carry the actual level.
-- **Effort**: Fix
-- **Source**: l6-verdict-stability-p1 attempt 1b/1c, 2026-08-29.
-
 ### `dispatch-author.sh` success predicate is "non-empty stdout" — truncated / tool-narrating output reports `authored`
 - **Trigger**: already fired twice (2026-08-29, qoderclicn/Qwen3.8-Max-Preview: a 100-byte preamble ending at `[` and a 130 KB mid-file draft with 36 text-form ```` ```tool ```` fences both returned `status:authored`, exit 0, `final_status:null`).
 - **Context**: header line 102 / `emit_result "authored"` at :1222 treat any bytes as an artifact. Needs a positive completion check (declared terminal marker, `bash -n`/parse for the declared kind, zero tool-fence narration) and a `truncated` status; manifests also record `parent_run_id/root_run_id: null, depth: 0` despite exported lineage.
@@ -943,12 +984,11 @@ never an ad hoc descriptive string.
 - **Effort**: S
 - **Source**: D7 foreman 2026-08-30.
 
-### `mission withdraw` cannot release a `mission-subject-v2` claim against a real ICC campaign ledger
-- **Trigger**: any operator calling `mission withdraw --campaign-ledger <real ICC ledger>` on a claim minted by `grantMissionCampaign` (the production `mission grant --repo --prepared --node` CLI path, which always uses `identity_scheme: 'mission-subject-v2'`).
-- **Context**: `missionCampaignIdFor` (`src/engine/mission-campaign-identity.js`) mints `campaign-v2-<sha256>` ids for every mission-managed claim. `mission withdraw`'s ledger lookup (`cmdWithdraw` → `projectCampaign(rows, claim.campaign_id)` in `src/campaign/cli.js`) requires the ledger's intake `initial_state.campaign_id` to equal that exact string, but `validateInitialCampaignState` (`src/engine/implementation-campaign.js`) hard-requires ICC's own `campaign_id` to match `^campaign-v1-[0-9a-f]{64}$` — a real ICC campaign can never carry a `campaign-v2-...` id. The two id spaces are mutually exclusive, so no real ICC-ledger-backed campaign can ever satisfy `mission withdraw`'s lookup for a v2-identity claim today.
-- **Discovered**: while building the U4 fixture (`hooks/tests/mission-convergence.test.sh`'s `withdraw-interplay-*` block) for BACKLOG "`mission grant` silently replays a stale claim…" — worked around there by using a legacy (non-v2) identity claim, which is orthogonal to and unaffected by the v1/v2 mismatch. Not verified whether real managed-campaign production traffic has actually hit this (U1's own withdraw usage in the 2026-08-30/31 rail-debt campaign also used non-v2 claims), but it is reachable from the documented CLI contract as written.
-- **Effort**: S–M (either mint an ICC-side v2 alias, or teach `projectCampaign`/`validateInitialCampaignState` to accept both id shapes, or have mission's withdraw path translate identity schemes before the ledger lookup).
-- **Source**: U4 foreman, 2026-08-31.
+### `mission withdraw` cannot bind a `mission-subject-v2` claim to its ICC campaign — the intake journals no mission binding
+- **Trigger**: any operator calling `mission withdraw --campaign-ledger <real ICC ledger>` on a claim minted by `grantMissionCampaign` (`identity_scheme: 'mission-subject-v2'`) whose campaign DID run; or the next time `campaign-intake.js`'s intake artifact schema is touched.
+- **Context**: the claim id is `campaign-v2-<domain sha of the subject>` (`src/engine/mission-campaign-identity.js`); the ICC intake row is keyed `campaign-v1-<sha of repo, ticket, raw contract bytes>` (`src/engine/campaign-intake.js` ~1664) and `createCampaignState` keeps only ticket/profile/limits — no claim id, no `mission_grant_ref`, no subject digest reaches the ledger. **v2.36.6** did NOT close this (a contract-digest bridge was tried and reviewed as inert: subject digest ≠ raw byte digest); it added the never-started exit (`--never-started true`, refused when the ledger holds any intake root for the claim's own ticket — `mission_withdraw_campaign_ticket_present`). Fix shape: journal `mission_claim_id` + `mission_campaign_id` on the intake artifact (`INTAKE_ARTIFACT_KEYS` is exact-keys in both `campaign-intake.js` and `campaign/cli.js`, so this is a schema bump with a compat read for old rows), then resolve by that exact fact and apply the terminal rule.
+- **Effort**: S–M (schema bump + two validators + compat + e2e with a real v2 grant fixture)
+- **Source**: U4 foreman 2026-08-31; cuda revival.3d QUIET-a 2026-09-06; v2.36.6 pre-merge review (opus) 🔴 C1.
 
 ### v2.35.5 qc-panel 🔵 follow-ups (managed-campaign rail debt, 2026-08-31)
 - **Trigger**: next touch of the named files.
@@ -975,11 +1015,42 @@ never an ad hoc descriptive string.
 - **Effort**: S (both repos)
 - **Source**: `docs/projects/_archive/2026-09-05-statusline-live-context-feed/` pre-merge review (opus), 2026-09-05
 
-### Live-file window sizes accepted without `> 0`; depth0 counter unlocked; foreman-guard 0-row diagnostic repeats
-- **Trigger**: any of: a live file with `context_window_size <= 0` observed; a depth-0 parallel read burst undercounted (`reads` lower than calls); a foreman transcript showing the 0-row diagnostic more than once per run.
-- **Context**: three pre-merge-review 🟡 cuts from v2.36.1: (a) `context-budget.js` / `foreman-guard.js` accept `Number.isFinite` windows, so `-1` yields a `-15300000% of the ~-0k window` message and `0` silently reverts to the unscaled 150k ceiling — require `> 0`, else treat as absent; (b) `depth0-delegate-gate.js` read-modify-write on its counter loses updates under parallel tool calls (24 concurrent ⇒ 22–23) — reuse `foreman-guard.js`'s `withLock`; (c) `foreman-guard.js` prints the 0-row diagnostic on every Bash call instead of once — record a flag in its per-agent state. Also 🔵: multi-row `findmnt` output only first row read; `/proc/mounts` unescapes only `\040`; SSD-fallback warning is per-process (= per hook fire) on hosts with neither findmnt nor /proc/mounts (macOS, unverified); sub-200k live window scales tiers down with no test.
+### live-state-dir 🔵 leftovers — multi-row findmnt, `\040`-only unescape, per-process SSD warning, sub-200k window scaling untested
+- **Trigger**: a candidate that `findmnt -T` reports as more than one row; a mountpoint with an escaped character other than space; a host with neither findmnt nor /proc/mounts (macOS, unverified) where the SSD warning is observed once per hook fire; or the next edit to `tiersForKnownWindow`.
+- **Context**: the 🟡 items of the v2.36.1 pre-merge review shipped in v2.36.2; these 🔵 items did not. `fstypeViaFindmnt` reads only the first output row; `fstypeViaProcMounts` unescapes only `\040` (not `\011`/`\012`/`\134`); the "falling back to ~/.autopilot" warning is once per PROCESS, i.e. once per hook fire on a host with no probe; a live window below 200k scales tiers DOWN with no test pinning it.
 - **Effort**: S each
-- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05
+- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05; carried out of the v2.36.2 row
+
+### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
+- **Trigger**: the next observed T2/T1 message without "(statusline)" on a host that has the live writer; or before shortening/lengthening `DEFAULT_MAX_AGE_MS`.
+- **Context**: observed 2026-09-05 in the v2.36.2 session: a 600 s foreground `hooks/tests/run.sh --parallel` was followed by a `context-budget` T2 at 155k with no "(statusline)" clause, while the live file 3 s later was fresh with `context_window_size` 1000000 (16% used). Hypothesis (unverified — no tick log): the status line does not re-render during a long tool call, so `written_at` exceeded 120 s at hook time and `readLive` returned null ⇒ inference path ⇒ false T2 on a 1M window. Options: (a) the reader keeps the last-accepted window in its state file and reuses it when the live file is stale-but-schema-valid (window size does not change mid-session; only the total does), still taking `contextTokens` from the transcript; (b) a longer freshness cap for the `context_window_size` field only; (c) codeforge writes on a timer independent of the render. Second data point, same session: T2 at hook call 50 right after an `Agent` spawn, no long command before it, live file mtime 3 s AFTER the hook fired (189k of 1M) — the tick looks event-driven and the file can be >120 s old at hook time in ordinary interactive flow, not only after long tool calls. v2.36.2 records `lastLive {at, ageMs, used}` in the `context-budget` state file on every call; read `<live-base>/context-budget/<sid>.json` after the next occurrence before touching the cap. Also from the same review, cut: both `withLock` copies (foreman-guard, depth0-delegate-gate) busy-spin the CPU for up to 2 s under contention — replace with `Atomics.wait` backoff when either hook is next touched.
+- **Effort**: S (reader-side option a) / S (codeforge)
+- **Source**: v2.36.2 session live observation, 2026-09-05
+
+### Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation
+- **Trigger**: a second field report of a receipt refused with "attributes … to generation N, which is aborted", or a request to re-finalize without re-collecting.
+- **Context**: v2.36.3 made `review-chain-derive` evidence-only (chain-entry `closed_findings` stamps are output, ignored as input) and the checker refuses a receipt whose `closed_findings` names an aborted generation. The stamps the old derive wrote onto chain.json entries stay on disk (deep-equal with the receipt keeps them consistent) and are now inert, but the only way to get a fresh receipt is `collect` + `finalize` of one more generation — `finalize` refuses a generation that is not pending. Fix shape if wanted: `hetero-review-loop.js refinalize --generation <n>` that re-derives from the existing findings/dispositions of a finalized generation and rewrites receipt + stamps, refusing when any finding/disposition sha no longer matches.
+- **Effort**: S
+- **Source**: 7840hs / llm-playground plan 066 ledger, 2026-09-05
+
+### `hetero-review-loop --exclude` allowlist is autopilot's own tree — consumer repos cannot shrink a review payload
+- **Trigger**: the next consumer-repo report of `Exclude pathspec '…' is not permitted by allowlist` for a data/generated directory, or the next agy-seat payload overflow where `--exclude` was the only lever.
+- **Context**: `EXCLUDE_ALLOWLIST` (hetero-review-loop.js:29-47) hardcodes `platforms/**`, `docs/projects/**`, lockfiles… llm-playground plan 066 needed to exclude `benchmarks/matrix` (139 regenerated shard JSONs, most of the diff) to get the agy prompt under `MAX_ARG_STRLEN` and could not — generation 7 never started. Fix shape: a consumer-declared allowlist via project DI (`.claude/review-loop-config.md` `exclude_allowlist:` rows), constrained to non-code paths (no source extensions, must be a directory or data glob) and recorded in `range.json.excluded` + `full_range_sha256` as today so the exclusion stays visible to the checker. Never a free-form pathspec.
+- **Effort**: S
+- **Source**: 7840hs / llm-playground plan 066, 2026-09-06
+
+### agy seat payload overflow is discovered per seat at dispatch time — the loop could pre-compute it and fail before spending the other seats
+- **Trigger**: the next generation where an agy seat returns no_verdict with `agy_argv_ceiling` in raw_log while the other seats completed.
+- **Context**: `dispatch-review.sh` refuses an agy payload above `MAX_ARG_STRLEN` by design (named reason, no execve failure). The loop only learns this after dispatching every seat, so the whole generation's other seats are spent for nothing when the floor then aborts the generation (v2.36.5). Fix shape: in collect, after the prompt is assembled, compare its byte size against `lib/agy-argv-ceiling.sh` for every agy seat and exit before dispatch with the same named reason and the `--exclude` / prompt-file-runner remedies. Option c from the report (auto-reroute to a prompt-file runner) changes seat identity and is NOT the fix — a seat is a frozen (engine, effort, runner) triple.
+- **Effort**: S
+- **Source**: 7840hs / llm-playground plan 066, 2026-09-06
+
+### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
+- **Trigger**: owner decides to open this; AND eval ON/OFF evidence exists for the affected skills (scorecard-first rule — an unevidenced rewrite of ceo-agent/dev-flow prose is an unevidenced trust change).
+- **Context**: cuda (revival.3d, Codex session, 2026-09-06) after an Astra prompt audit asks upstream to: (1) stop "Boil the Lake"/completeness-principle prose from over-prescribing exhaustive checks — use proportional validation; (2) make a missing TaskCreate adapter read as "bookkeeping unavailable", distinct from a genuinely missing required capability (dev-flow already treats the missing TODO tools as advisory-never-blocker — verify the wording lands that way in ceo-agent too); (3) autonomous reversible candidates should not inherit release-approval gates. Reference cited: OpenAI gpt-6-astra prompting best practices. These are skill-prose changes across ceo-agent / dev-flow / finish-flow; per CLAUDE.md they need the orchestration eval harness ON/OFF before rewriting, and (3) touches the DOA table (owner policy). Not accepted on peer say-so; filed for the owner.
+- **Effort**: M (evals + three skills + codex mirror)
+- **Ready to run (2026-09-08)**: the eval half is built and pre-registered — `evals/orchestration/EXPERIMENT-completeness-proportionality.md` carries the decision rule (waste −50% AND zero increase in escapes, else keep the current prose), two length-matched arms, and two discriminating tasks. The runner gained `--pack`/`--contract` so both arms differ in exactly one block. What remains is owner approval and the runs; the design no longer needs to be invented first.
+- **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 
 ### depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher
 - **Trigger**: a measured depth-0 Bash latency complaint, or the next revision of `depth0-delegate-gate`.

@@ -191,8 +191,10 @@ set the execution posture:
 
 Overrides: `-x <csv>` (red lines), `--expand` (scope), `--solo` (autonomy without offload
 — also the degradation fallback when the foreman can't start). Full semantics
-(topology, the P0-verified kill+reap mechanism, run-summary ledger):
-[`references/level-front-door.md`](references/level-front-door.md).
+(topology, the P0-verified kill+reap mechanism):
+[`references/level-front-door.md`](references/level-front-door.md);
+depth-0 control loop and run-summary ledger:
+[`references/depth0-control-loop.md`](references/depth0-control-loop.md).
 
 ## Startup
 
@@ -253,7 +255,8 @@ Ask if anything is absolutely off-limits. If none, use default DOA.
 | Decision Type | Examples |
 |---------------|----------|
 | Tech selection | zstd vs deflate, which library |
-| Research | Whether to run survey, what topic |
+| Research | Invoke `autopilot:survey` only when the unknown-escalation ladder probe says `recommend: U2` with budget left; a judgment-only research wish is recorded as a ledger `note`, never dispatched |
+| Unknown escalation | Climb U1–U2 when `scripts/probe-unknown.js classify` recommends them (read-only, budgeted per `review-loop-config.md`); U3 by `unknown_type` (`whether` → think-tank, `why` → debugger PUA); U4 is a Board escalation, never a CEO decision |
 | Team composition | Agent count, roles, parallel vs sequential |
 | Implementation path | Phase order, file structure, API design |
 | Error recovery | Build failure fix, test failure handling |
@@ -332,7 +335,7 @@ When encountering these, pause and propose:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board
 6. Produce CEO Reports per involvement level
-7. Need research? → Autonomously invoke autopilot:survey
+7. Need research? → run `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <run> --terms <nouns>`; invoke `autopilot:survey` only on `recommend: U2` with budget left, then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <type> --terms <terms> --signals <ids from classify> --work-unit <run>`; a judgment-only wish becomes a ledger `note`, not a dispatch
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
 9. Need parallel execution? → Pick the first AVAILABLE entry from `.claude/dispatch-config.md` → Parallel Dispatch. If no config file exists, or `superpowers:dispatching-parallel-agents` is listed but the plugin is not installed, fall back to `native` — issue multiple `Task` tool calls in a single response. (dev-flow session rules inject team config either way.)
    - For L-size parallel dispatch: use Seven-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)

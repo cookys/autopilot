@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "l4-host-bootstrap",
+  "logical_plan_id": "l4-host-provider-readiness-bootstrap-2026-09-07",
+  "session_id": "e1e51201-96a3-4978-b527-b98cf1f524d8",
+  "session_key": "5a62206f0198b1fd6bbc67a0a0637375ab9e8b6141fdce8818742a1a1a47234d",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_2_terminal",
+  "rubric_sha256": "d91206bf6ec791ea5de0b05ec11997e56d4835b79f7d208b6980c30df707ce53",
+  "manifest_sha256": "3769ab1053b0d9d12348171f0e67072594190bad5d3d3fc376165cc6208a2722",
+  "plan_sha256": "43060d6abcbffd6b88e7e3020b28154bf6229385d0e3cc5b46527c60772edfca",
+  "growth_ratio": {
+    "numerator": 19757,
+    "denominator": 18073
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "c2b9dd1eebe7528c3716b7b053f3e546c65a4f40569affd30074dd04665aadee"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-Ykguxq/stdout",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "e3fc965e69c205480e71d6254599e7fdebdc3f67382359ed48273a89ca385aa6"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "964214db27f8246603774ff6a38d17f62b21ef6153108e9c01278968c0d7eab2"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "59b618b21028d47e94c89f480d2627c2728d2b41a0de8e0fd291e49a06e69550",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-GypPDk",
+          "digest": "59b618b21028d47e94c89f480d2627c2728d2b41a0de8e0fd291e49a06e69550"
+        },
+        "receipt_digest": "93a0ee91062c1a29b23cc1d38f33949cea1f78707ec71440049602527ab0b896"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_architecture_chair",
+      "target_id": "sol_architecture_chair",
+      "family": "openai",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P3 L4 executable fixture advisory-case assertion list",
+      "claim": "P3 names the advisory case as 'the policy_override record' rather than enumerating the three required assertions (reason advisory_default, uncertified seats listed, stderr POLICY OVERRIDE line) called for by KR2",
+      "evidence": "§4 P3 L4 executable fixture clause reads 'assert status:\"ready\", strict_level:\"l4\", and (advisory case) the policy_override record.' §2 KR2 requires 'policy_override.reason = advisory_default, each uncertified seat listed, and the stderr POLICY OVERRIDE line present.' A zero-context implementer reading only P3 does not see the three specific assertions required to prove the advisory path.",
+      "evidence_reference": "Plan §4 P3 L4 executable fixture vs §2 KR2",
+      "repair": "In the P3 L4 fixture clause, replace the 'policy_override record' shorthand with the three explicit assertions: (a) policy_override.reason == \"advisory_default\"; (b) every uncertified seat is present in policy_override.uncertified_seats; (c) captured stderr contains the literal 'POLICY OVERRIDE' line.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "f69f265d7fc5d095b68cf6e13c5529de6c030516d1988f92ead98f446c353380",
+      "disposition_rationale": "Accepted and folded: P3 now enumerates the three KR2 assertions (policy_override.reason === advisory_default; every uncertified seat in policy_override.uncertified_seats; stderr contains the literal POLICY OVERRIDE line) instead of the shorthand \"policy_override record\". Non-blocking per the frozen rubric (R7 is a test-coverage question, not a construct-level defect)."
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "f69f265d7fc5d095b68cf6e13c5529de6c030516d1988f92ead98f446c353380",
+      "rubric_id": "R7",
+      "affected_surface": "P3 L4 executable fixture advisory-case assertion list",
+      "claim": "P3 names the advisory case as 'the policy_override record' rather than enumerating the three required assertions (reason advisory_default, uncertified seats listed, stderr POLICY OVERRIDE line) called for by KR2",
+      "evidence_reference": "Plan §4 P3 L4 executable fixture vs §2 KR2",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-05T23:44:23.858Z",
+  "depth0_adjudication": {
+    "adjudicated_at": "2026-09-05T23:45:06.202Z",
+    "source_artifact": "g2.stdout.json",
+    "dispositions": "g2-disposition.json",
+    "reviewed_plan_copy": "plan.g2-reviewed.md",
+    "note": "generation cap reached; the single non-blocking R7 finding accepted_nonblocking and folded into the plan after review; checker run against the reviewed bytes"
+  }
+}

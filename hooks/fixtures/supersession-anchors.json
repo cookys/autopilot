@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "marker": "superseded by owner ruling 2026-09-11",
+  "window_lines": 6,
+  "note": "Each entry names a code site that states one of the two Board rulings superseded on 2026-09-11 (plan docs/plans/2026-09-11-operator-pin-supersedes-qualification.md). A raw grep cannot tell an applicable anchor from a passing mention, so the applicable set is frozen here. Generated mirrors are listed explicitly, never globbed.",
+  "anchors": [
+    {
+      "id": "contract-strike-precedence",
+      "file": "scripts/dispatch-contract.js",
+      "symbol": "FINDING 5 fix (2026-08-22 review repair, Board ruling): strike-blocked",
+      "superseded_ruling": "strike-precedence-2026-08-22"
+    },
+    {
+      "id": "contract-no-third-path",
+      "file": "scripts/dispatch-contract.js",
+      "symbol": "P7/KR6: the operator's explicit per-invocation override is the only",
+      "superseded_ruling": "autonomous-brain-KR6"
+    },
+    {
+      "id": "contract-loader-doc",
+      "file": "scripts/dispatch-contract.js",
+      "symbol": "First-use qualification override (autonomous-brain P7, KR6)",
+      "superseded_ruling": "autonomous-brain-KR6"
+    },
+    {
+      "id": "mirror-strike-precedence",
+      "file": "platforms/codex/plugin/scripts/dispatch-contract.js",
+      "symbol": "FINDING 5 fix (2026-08-22 review repair, Board ruling): strike-blocked",
+      "superseded_ruling": "strike-precedence-2026-08-22"
+    },
+    {
+      "id": "mirror-no-third-path",
+      "file": "platforms/codex/plugin/scripts/dispatch-contract.js",
+      "symbol": "P7/KR6: the operator's explicit per-invocation override is the only",
+      "superseded_ruling": "autonomous-brain-KR6"
+    },
+    {
+      "id": "mirror-loader-doc",
+      "file": "platforms/codex/plugin/scripts/dispatch-contract.js",
+      "symbol": "First-use qualification override (autonomous-brain P7, KR6)",
+      "superseded_ruling": "autonomous-brain-KR6"
+    }
+  ],
+  "protected_regions": [
+    {
+      "id": "hetero-strike-writer",
+      "file": "scripts/dispatch-hetero.sh",
+      "start_marker": "# cause_class mapping — derived ONLY from the host's own classification of OUTCOME_STATUS,",
+      "end_marker": "# classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the",
+      "why": "§7 out of scope: this plan reads strike rows, it never changes how they are written",
+      "sha256": "74626462bac648a90dbcdc97d5630ce5c962025a3d6e09c7fdd7effc21027906",
+      "bytes": 6044
+    },
+    {
+      "id": "mission-enforcement-gate",
+      "file": "scripts/dispatch-hetero.sh",
+      "start_marker": "check_mission_enforcement_gate() {",
+      "end_marker": "mission_mode=\"$(",
+      "why": "§7 out of scope: mission mode is a different axis from qualification",
+      "sha256": "17e3fe8e78cbfcabf9fa9d633fc6641355dd09a1a463b8596c922b7024c5d376",
+      "bytes": 358
+    }
+  ]
+}

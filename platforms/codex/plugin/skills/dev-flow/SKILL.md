@@ -28,11 +28,17 @@ described as receiving or exporting a `CODEX_THREAD_ID` binding. The marker is a
 CLI/Engine admission artifact; it is not a production hook admission proof. A marker from another
 explicitly bound session is not reusable when the managed CLI validates it.
 
-Continue only when the emitted marker contains `mission_routing.status: "READY"`, `admitted: true`, and
-`would_block: false`. Managed implementation then follows the existing Mission admission, sealed
-campaign, and `AUTOPILOT_LEVEL=<level> node
+Read the emitted marker's `mission_routing` exactly as the canonical skills do (dev-flow /
+ceo-agent Mission routing sections): `READY` (with `admitted: true`, `would_block: false`) is the
+only enforce-mode admission — only then does managed implementation follow the existing Mission
+admission, sealed campaign, and `AUTOPILOT_LEVEL=<level> node
 "<plugin-root>/bin/autopilot.js" engine implement-review ...`
-route. Repairs attach to and resume that same engine/campaign lineage. A Codex implementer launched
+route. `SHADOW` (the repo's `mission-routing-config.json` has `enforcement_mode: shadow`) is
+observation only: record `admitted` / `would_block` honestly in the run summary and continue
+through the ordinary non-managed workflow without claiming an enforced receipt or grant, and
+without calling the managed engine route (the managed CLI rejects a non-READY marker). `LEGACY`
+means the project's Mission policy is off. Switching a repo from shadow to enforce is that repo
+owner's policy decision, not a gate to be bypassed. Repairs attach to and resume that same engine/campaign lineage. A Codex implementer launched
 inside that route receives a credentials-only isolated `CODEX_HOME`, never the controller plugin or
 configuration.
 
@@ -94,6 +100,9 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
 4. Knowledge and digest review:
    Check .claude/knowledge/ for relevant prior learnings.
    Check for unprocessed session digests.
+   Ladder probe (unknown-escalation ladder, plan `docs/plans/2026-09-07-unknown-escalation-ladder.md`): run
+   `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <phase> --terms <key nouns from the task brief>` and act only on `recommend` — U0: read the local hits it lists; U1: `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <unknown_type from classify> --ladder-signals <ids from classify> --ladder-work-unit <phase>`; U2: survey (`issue-search` mode for a `why` unknown), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <unknown_type> --terms <terms> --signals <ids> --work-unit <phase>`; U3 (reachable when earlier refuted `hypothesis` rows make the unknown `why`): `autopilot:debugger` PUA for `why`, `autopilot:think-tank` for `whether`, then the same `receipt` with `--rung U3`; none: continue. At L-1 no phase exists yet: use the task id as `<phase>` here; from L-2 on use the phase id (budgets count per phase for L/H).
+   Ledger: `<project>/ledger/decisions.jsonl` (the probe's default when the flag is omitted is `~/.autopilot/ladder/<repo-hash>.jsonl`).
 
 5. Draft plan overlap check:
    ls docs/plans/*.md 2>/dev/null  (or project-configured path)
@@ -463,6 +472,7 @@ scope boundary. Do not ask the user to enumerate dimensions — that's CEO tacti
 ### L-2. Plan
 - User provides plan → use it directly, skip Plan Mode.
 - Needs design → EnterPlanMode → design → ExitPlanMode → user approval.
+- Consult before design (receipted; this is the ladder's U1 spawn, not an unconditional call): run `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <phase> --terms <design nouns>`; call `bash scripts/dispatch-consult.sh --question-file <design-question> --artifact <plan-draft> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <unknown_type from classify> --ladder-signals <ids from classify> --ladder-work-unit <phase>` **only on `recommend: U1`**. If the probe skipped U1 (`reason: not-heterogeneous`, or `consult_dispatch: off`) follow `recommend` instead — U2 survey followed by `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <unknown_type> --terms <terms> --signals <ids> --work-unit <phase>`, U3 as in L-1 step 4, or none — and never invoke `dispatch-consult.sh`. Rail details: [references/hetero-loops.md#consult-before-design](references/hetero-loops.md#consult-before-design).
 - Save plan to: `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
 ### L-2.5. Plan hetero loop review
@@ -510,6 +520,12 @@ If deferral passes: add to BACKLOG with context + trigger condition, mark phase 
 - [ ] Completeness scan: no placeholder markers or stub implementations
 - [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b> --phase-base "$(cat <project>/ledger/phase-<p>.base)"` exits 0 (SHIP-AS-IS chain or explicit opt-out)
 - [ ] Project docs: progress row updated to reflect phase completion
+
+**Forcing function**: TaskCreate the five items above as discrete sub-tasks of the phase task, named
+verbatim, so an unchecked item is a visible open task instead of a line that was skimmed past. Same
+rationale as L-5: a passive markdown checklist gets skipped, which is the reason `finish-flow` exists
+at all. This changes nothing about what the gate requires — the five items are unchanged — it only
+makes each one individually trackable.
 
 **CEO mode**: CEO verifies all prerequisites. No user confirmation needed for passing gates.
 
@@ -729,6 +745,7 @@ Phase/P0 task-enumeration rule above.
 | `scripts/plan-rubric-scaffold.js` | Generate structured rubric markdown skeletons from an input plan document for frozen review rubrics. |
 | `scripts/hetero-review-loop.js` | Drive multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipts for review loops. |
 | `scripts/check-phase-review-receipt.js` | Validate phase review receipts against git history and review artifacts or validate plan artifact blocker dispositions. |
+| `scripts/probe-unknown.js` | Unknown-escalation ladder probe: `classify` turns refuted hypotheses / loop non-convergence / stall / zero-hit terms / low consensus into one rung recommendation U0–U3; `receipt` appends the ladder row after a rail returns. Call sites: L-1 step 4 and L-2 consult-before-design (this skill), debug step 4, think-tank Step 5, foreman round end. |
 
 Before any TaskCreate, branch, worktree, runner, or model effect:
 

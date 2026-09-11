@@ -77,4 +77,4 @@ stderr line naming the total and the session — user-visible at depth-0, which 
 ## Out of scope
 - Measuring subagent context (needs CC payload support) — BACKLOG.
 - Changing `model=[1m]` in users' settings — documented in the front-door as an operator setting, not
-  enforced (dispatch-model-guard's `on_missing_model: ask` is the enforcement for inheritance).
+  enforced (dispatch-model-guard's `on_missing_model: ask` is the enforcement for inheritance (v2.36.2: the default became `deny` — same enforcement, no dialog)).

@@ -262,6 +262,23 @@ BOGUS_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$BOGUS_TOPO_FILE" REVIEW_LOOP_CONFIG_
 assert_exit_code "$BOGUS_TOPO_RC" 3 "implementer_ladder: auto with a bogus rung runner exits 3"
 assert_contains "$BOGUS_TOPO_ERR" "invalid implementer_ladder runner" "bogus auto rung runner error matches comma-list message shape"
 
+# (c4) implementer_ladder: auto + topology file has a rung with an empty effort (what
+# resolve-dispatch-topology.js emitted for legacy no-effort seats before v2.36.16)
+# -> exit 3 naming the rung and the fix, instead of the JS contract validator
+# rejecting the whole output later with only an index.
+STALE_TOPO_FILE="$TEST_TMP/topo-stale-effort-fixture.json"
+cat > "$STALE_TOPO_FILE" <<'JSON'
+{
+  "implementer_ladder": [
+    { "rung": "grok-4.5@grok", "engine": "grok-4.5", "effort": "", "runner": "grok", "baseline_event_id": 138 }
+  ]
+}
+JSON
+STALE_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>&1 1>/dev/null)"; STALE_TOPO_RC=$?
+assert_exit_code "$STALE_TOPO_RC" 3 "implementer_ladder: auto with an empty-effort rung exits 3"
+assert_contains "$STALE_TOPO_ERR" "invalid implementer_ladder effort (must be low|medium|high|xhigh|max): grok-4.5/@grok" "empty-effort auto rung error names the rung"
+assert_contains "$STALE_TOPO_ERR" "rerun scripts/resolve-dispatch-topology.js" "empty-effort auto rung error names the fix"
+
 # (d) default ladder_start_rung_judgment is 0 when absent from config, 1 when 1, falls back to 0 for garbage
 JUDG_DEF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" 2>/dev/null)"
 assert_eq "0" "$(json_get "$JUDG_DEF_OUT" ladder_start_rung_judgment)" "ladder_start_rung_judgment defaults to 0 when absent"
@@ -522,7 +539,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
@@ -1467,6 +1484,48 @@ PLAN_BOGUS_RUNNER_CFG="$TEST_TMP/rl-plan-bogus-runner.md"
 printf -- '- plan_review: on\n- plan_reviewer_engine: claude-fable-5\n- plan_reviewer_runner: bogus\n- plan_reviewer_effort: high\n' > "$PLAN_BOGUS_RUNNER_CFG"
 assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_BOGUS_RUNNER_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
   "plan_reviewer_runner bogus exits 3"
+
+# plan_reviewer_runner / plan_deep_reviewer_runner: kimi is a first-class review
+# transport (dispatch-review.sh --runner kimi) but the plan-chair and plan-deep-chair
+# seat allowlists omitted it (308 request 2026-09-07). Both must resolve exit 0 with
+# the field echoed back, and a garbage runner must still exit 3 (checked above).
+PLAN_KIMI_CFG="$TEST_TMP/rl-plan-kimi-runner.md"
+printf -- '- plan_review: on\n- plan_reviewer_engine: kimi-code/k3\n- plan_reviewer_runner: kimi\n- plan_reviewer_effort: high\n' > "$PLAN_KIMI_CFG"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_KIMI_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "plan_reviewer_runner kimi exits 0"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_KIMI_CFG" bash "$SCRIPT" --field plan_reviewer_runner)" \
+  "plan_reviewer_runner kimi honored"
+
+PLAN_DEEP_KIMI_CFG="$TEST_TMP/rl-plan-deep-kimi-runner.md"
+printf -- '- plan_review: on\n- plan_reviewer_engine: claude-fable-5\n- plan_reviewer_runner: claude-native\n- plan_reviewer_effort: high\n- plan_deep_reviewer_engine: kimi-code/k3\n- plan_deep_reviewer_runner: kimi\n- plan_deep_reviewer_effort: high\n' > "$PLAN_DEEP_KIMI_CFG"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_DEEP_KIMI_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "plan_deep_reviewer_runner kimi exits 0"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_DEEP_KIMI_CFG" bash "$SCRIPT" --field plan_deep_reviewer_runner)" \
+  "plan_deep_reviewer_runner kimi honored"
+
+# qc_panel_runners: kimi already resolves complete (regression test in section 7b2
+# above); this is a second, minimal single-seat case for the plan/deep/VA parity story.
+QC_KIMI_MIN_CFG="$TEST_TMP/rl-qc-kimi-min.md"
+printf -- '- qc_panel: kimi-code/k3\n- qc_panel_runners: kimi\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$QC_KIMI_MIN_CFG"
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QC_KIMI_MIN_CFG" bash "$SCRIPT" --field qc_panel_seats_complete)" \
+  "single-seat qc_panel_runners kimi resolves complete"
+
+# verification_author_runner: kimi is fully wired on the VA dispatch path
+# (dispatch-author.sh --runner kimi -> dispatch-author-kimi.js -> src/runners/kimi.js,
+# contract-pinned by hooks/tests/dispatch-author-kimi.test.sh), so the resolver's
+# verification_author_runner allowlist must accept it too.
+VA_KIMI_CFG="$TEST_TMP/rl-va-kimi.md"
+printf -- '- verification_author_present: true\n- verification_author_engine: kimi-code/k3\n- verification_author_runner: kimi\n- verification_author_effort: high\n' > "$VA_KIMI_CFG"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VA_KIMI_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "verification_author_runner kimi exits 0"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VA_KIMI_CFG" bash "$SCRIPT" --field verification_author_runner)" \
+  "verification_author_runner kimi honored"
+
+# garbage verification_author_runner still exits 3 (no weakening of validation)
+VA_BOGUS_CFG="$TEST_TMP/rl-va-bogus.md"
+printf -- '- verification_author_present: true\n- verification_author_engine: bogus-model\n- verification_author_runner: bogus\n- verification_author_effort: high\n' > "$VA_BOGUS_CFG"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VA_BOGUS_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
+  "verification_author_runner bogus still exits 3"
 
 
 # --- Consult exclusion ---

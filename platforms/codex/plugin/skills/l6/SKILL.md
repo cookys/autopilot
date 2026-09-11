@@ -28,11 +28,17 @@ described as receiving or exporting a `CODEX_THREAD_ID` binding. The marker is a
 CLI/Engine admission artifact; it is not a production hook admission proof. A marker from another
 explicitly bound session is not reusable when the managed CLI validates it.
 
-Continue only when the emitted marker contains `mission_routing.status: "READY"`, `admitted: true`, and
-`would_block: false`. Managed implementation then follows the existing Mission admission, sealed
-campaign, and `AUTOPILOT_LEVEL=<level> node
+Read the emitted marker's `mission_routing` exactly as the canonical skills do (dev-flow /
+ceo-agent Mission routing sections): `READY` (with `admitted: true`, `would_block: false`) is the
+only enforce-mode admission — only then does managed implementation follow the existing Mission
+admission, sealed campaign, and `AUTOPILOT_LEVEL=<level> node
 "<plugin-root>/bin/autopilot.js" engine implement-review ...`
-route. Repairs attach to and resume that same engine/campaign lineage. A Codex implementer launched
+route. `SHADOW` (the repo's `mission-routing-config.json` has `enforcement_mode: shadow`) is
+observation only: record `admitted` / `would_block` honestly in the run summary and continue
+through the ordinary non-managed workflow without claiming an enforced receipt or grant, and
+without calling the managed engine route (the managed CLI rejects a non-READY marker). `LEGACY`
+means the project's Mission policy is off. Switching a repo from shadow to enforce is that repo
+owner's policy decision, not a gate to be bypassed. Repairs attach to and resume that same engine/campaign lineage. A Codex implementer launched
 inside that route receives a credentials-only isolated `CODEX_HOME`, never the controller plugin or
 configuration.
 
@@ -42,6 +48,8 @@ branch/session, or a replacement graph. If an exact mapping is unavailable, stop
 precondition or abort receipt; do not invent another lifecycle authority.
 
 # /l6 — CEO autonomy, foreman + full-dispatch verification
+
+> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/depth0-control-loop.md` §6.
 
 Terse front-door into `autopilot:ceo-agent` at **Level 6**: identical to `/l5`
 except verification AUTHORING is ALSO leaf-dispatched to a heterogeneous engine;
@@ -142,4 +150,6 @@ witness grant, tool/effect, identity, and terminal enforcement.
 **MUST-READ**: [`references/full-dispatch-pipeline.md`](references/full-dispatch-pipeline.md)
 (per-unit pipeline, machinery, authoring-rail rationale) and
 [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(front-door semantics, the foreman) and
+[`../ceo-agent/references/depth0-control-loop.md`](../ceo-agent/references/depth0-control-loop.md)
 (loop governance, qc@depth-0, ledger).

@@ -85,6 +85,11 @@
     "consult_dispatch",
     "consult_resolved_from",
     "discuss_dispatch",
+    "unknown_escalation",
+    "unknown_budget_u1",
+    "unknown_budget_u2",
+    "unknown_budget_u3",
+    "unknown_resolved_from",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
     "override_admitted_seats"
@@ -118,7 +123,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "x-shell-validated": true,
       "x-shell-var": "REV_RUNNER"
@@ -345,7 +351,9 @@
         "cc-shim",
         "anthropic-compatible",
         "qoderclicn",
-        "cursor"
+        "kimi",
+        "cursor",
+        "opencode"
       ]
     },
     "verification_author_effort": {
@@ -451,7 +459,8 @@
               "claude-native",
               "qoderclicn",
               "kimi",
-              "cursor"
+              "cursor",
+              "opencode"
             ]
           },
           "model": {
@@ -569,7 +578,9 @@
         "anthropic-compatible",
         "claude-native",
         "qoderclicn",
-        "cursor"
+        "kimi",
+        "cursor",
+        "opencode"
       ]
     },
     "plan_reviewer_endpoint": {
@@ -601,7 +612,9 @@
         "anthropic-compatible",
         "claude-native",
         "qoderclicn",
-        "cursor"
+        "kimi",
+        "cursor",
+        "opencode"
       ]
     },
     "plan_deep_reviewer_endpoint": {
@@ -698,7 +711,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "description": "Runner for the consult seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
     },
@@ -733,7 +747,8 @@
         "claude-native",
         "qoderclicn",
         "kimi",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "description": "Runner for the discuss seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
     },
@@ -770,6 +785,41 @@
       "x-shell-validated": true,
       "x-shell-var": "DISCUSS_DISPATCH",
       "description": "Whether the discuss rail (scripts/dispatch-discuss.js) is live. DEFAULT OFF. off = today's behavior exactly — discuss_* stays declared but not consumed. on requires a non-empty discuss seat tuple and, once D7 lands, a role-qualification row or matching override for that seat."
+    },
+    "unknown_escalation": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "UNKNOWN_ESCALATION",
+      "description": "Whether the unknown-escalation ladder (scripts/probe-unknown.js) may recommend and receipt climbs. off = probe recommends none with reason knob-off (one knob-off ladder row per work unit) and the resolver emits a capability_warnings line; on = the three unknown_budget_u* fields must be present non-negative integers (else exit 3); auto (default, owner ruling 2026-09-07: a switch, default on) = budgets default to 2/1/1. The knob's own value is never rewritten. Plan docs/plans/2026-09-07-unknown-escalation-ladder.md."
+    },
+    "unknown_budget_u1": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Climbs allowed to rung U1 (consult seat) per work unit — one dev-flow phase for L/H, the whole task for S/Fix, the whole run for /l4–/l6. Default 2."
+    },
+    "unknown_budget_u2": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Climbs allowed to rung U2 (web research: survey / issue-search) per work unit. Default 1."
+    },
+    "unknown_budget_u3": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Climbs allowed to rung U3 (think-tank / debugger PUA) per work unit. Default 1."
+    },
+    "unknown_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "default",
+        "off"
+      ],
+      "description": "How the ladder budgets were resolved: explicit (unknown_escalation on, budgets from config), default (auto, 2/1/1 or config-supplied values), off."
     },
     "allow_same_runner_dual_seat": {
       "type": "string",
@@ -873,6 +923,11 @@
     "consult_dispatch",
     "consult_resolved_from",
     "discuss_dispatch",
+    "unknown_escalation",
+    "unknown_budget_u1",
+    "unknown_budget_u2",
+    "unknown_budget_u3",
+    "unknown_resolved_from",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
     "override_admitted_seats"

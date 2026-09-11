@@ -1,0 +1,627 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "unknown-escalation-ladder",
+  "logical_plan_id": "unknown-escalation-ladder-2026-09-07",
+  "session_id": "6e53d2af-d5da-441e-bd3e-7a91f97a7aee",
+  "session_key": "e44b0df39a284afcafc50523c9b608cd7e94a11b6b32bcf6dbcbc3e6d800f23e",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "22ba6997d6babf2c1187c3f5c0650d26170294535d885c0bd41da24cfb6c6ce0",
+  "manifest_sha256": "0ce421ba62bef3a709300db231f524ac18422a3d2222bd6f04881e995fd6bb8d",
+  "plan_sha256": "5b2d3000eb9e591325cccb78539d195e8d30672abac17f89033ca949b465c114",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "grok_architecture_chair",
+      "target_id": "grok_architecture_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "9117ab9a16f2a8143093fa3d81b4171f4ca1b66514f9fcb6bd7a990cf9abca9e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9a854db172ac47a4ef0a82150959cd79fe2ad2ce0d68628abdc2c008d332556b",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-gKcGyf",
+          "digest": "9a854db172ac47a4ef0a82150959cd79fe2ad2ce0d68628abdc2c008d332556b"
+        },
+        "receipt_digest": "aceb8b838a2ecc7a556921072896da7fc5bdd2690cf8fd78fdef38685a14d858"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "65c0f78aa803402d135261898a1867edd113bc1ff50225e295a633d6b03866ae"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "56886b2ac4acdbcb2170064fcc8f9852f453a86892845133d135a978006c11e6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-5EJRT7",
+          "digest": "56886b2ac4acdbcb2170064fcc8f9852f453a86892845133d135a978006c11e6"
+        },
+        "receipt_digest": "2d1d0ab90f743ef38c22956c2602dfbefcea55ad03745feaf5e4282aa3570a76"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_third_seat",
+      "target_id": "sol_third_seat",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "5284fcad6b5ba4d3da721ce88062e22d617a26f734e225b4f7a4c83869a6c83f"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "813d0a268a382a5ca3e84ab7a76b55eb992949cee2d6991b3429bcc4e8cfffc8"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_third_seat",
+      "target_id": "sol_third_seat",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "b2410096b8cc61225d2abd2b8a7ed0d3875466c6bf34948d426094125453b047"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "6d12e1fbf1822160a79ec158ad05e4a2e38150e67f380e6a9f1b243c3b2bd33d"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "grok_architecture_chair",
+      "target_id": "grok_architecture_chair",
+      "family": "xai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_evidence_skeptic",
+      "target_id": "minimax_evidence_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 routing by kind, PLAN §4 P1 classify, PLAN §4 P3 L-1, PLAN §6 S4 mitigation",
+      "claim": "Unknown-how routing and the L-1 skill step auto-climb to U2 on S4 novelty alone, which is the failure mode R10 exists to forbid.",
+      "evidence": "Section 3 routes unknown-how as U0 then U1 then U2 then U4. P3 L-1 says unknown_type how implies U1 consult now, then U2 survey within budget. Frozen R10 and §6 require S4 alone to recommend only U0 or U1, with U2 only when S4 is paired with S1/S2/S3/S5 or an S4 fast-moving-name cue. P1 classify lists flags and the output object but never states that co-signal gate, so P1 would implement the §3 chain and every new-noun task could buy a survey.",
+      "evidence_reference": "PLAN §3 Routing by kind; PLAN §4 P3 skills/dev-flow/SKILL.md L-1 step 4; PLAN §6 Signals fire on every task; FROZEN_RUBRIC R10",
+      "repair": "One rule in §3, P1, and P3: S4-only recommend U0 or U1; recommend U2 only when S4 plus one of S1/S2/S3/S5, or S4 with an explicit --fast-moving cue. Delete L-1's then-U2-survey sentence. P1 tests: S4-only fixture expect U0 or U1, never U2; S4+S1 and S4 plus --fast-moving expect U2.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4f157a089feffb388b4efcb81797d4d32ad1cf1774fff4ed96e8371257470827"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §4 P0 survey Boundary, PLAN §4 P2 knob/budget/opt-out, PLAN §8 Q1",
+      "claim": "unknown_escalation is not specified as a consult_dispatch tri-state copy, and P0 would freeze the opposite participatory rule from the owner default-on ruling.",
+      "evidence": "Frozen R8: off writes an opt-out receipt plus capability_warnings; on requires explicit budgets; auto is default-on with defaults; the switch is default on in participatory and just-results alike. Owner Q1 says U2 climbs without asking within budget. P0 rewords survey to no auto-trigger in participatory modes, user confirms. P2 says missing budgets never exit 3, which is the opposite of on-requires-explicit-budgets. P2 routes off through hetero-review-loop.js opt-out --knob unknown_escalation, but that command only accepts plan_review or hetero_review and writes receipt-<phase>.json, not the consult_dispatch consumer path (status switch_off plus resolver capability_warnings).",
+      "evidence_reference": "FROZEN_RUBRIC R8; PLAN §4 P0 survey Boundary; PLAN §4 P2; PLAN §8 Q1; scripts/hetero-review-loop.js handleOptOut knob allowlist (plan_review|hetero_review); project-config-template/review-loop-config.md consult_dispatch row",
+      "repair": "P0: when unknown_escalation is auto or on and the probe recommends U2 with budget left, invoke survey without a second Proceed prompt in participatory modes too; keep user-confirm only for judgment-only suggestions and for knob-off or budget-exhausted. P2 resolver matrix: off writes a decision-ledger opt-out row plus capability_warnings, probe recommend none, exit 0; on with missing or non-integer budgets is a resolver usage error (exit 3) and the probe still never exits 3; auto fills Q2 defaults. Do not call hetero-review-loop opt-out for this knob.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a956978ef9c90a1b37068e72fab791e493bae9c7c819cd2d4efafc6bafee022e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 Files dispatch-consult.sh, PLAN §4 P2 --ladder-receipt, PLAN §4 P3 U1 argv",
+      "claim": "Specified U1 dispatch cannot go through dispatch-consult.sh unchanged and still fire on the shipped default config.",
+      "evidence": "P2/P3 show the U1 command as dispatch-consult.sh --ladder-receipt only. The live script requires --question-file and at least one --artifact, runs check-blind-evidence.sh, and treats consult_dispatch anything other than the string on as switch_off exit 2, including the template default auto. Adding --ladder-receipt is already a contract change. Leaving the auto-equals-off guard means default unknown_escalation=auto still never reaches a consult seat, so R8 default-on is a lie for U1 unless the plan names the two-knob matrix and the consumer fix.",
+      "evidence_reference": "PLAN §3 Files dispatch-consult.sh row; PLAN §4 P2; PLAN §4 P3 debug step 4; scripts/dispatch-consult.sh USAGE block and consult_dispatch != on guard; FROZEN_RUBRIC R5 R8",
+      "repair": "Keep --question-file, --artifact, and blind-evidence; --ladder-receipt is additive after success only. Name the two-knob matrix: U1 is eligible only when unknown_escalation is auto or on and consult_dispatch is auto or on. P2 must pick one and test it: either treat consult_dispatch auto as live in dispatch-consult.sh (resolver already expanded the tuple) or classify skips U1 unless consult_dispatch resolved is the string on. Do not add a parallel U1 transport.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f5bec1dbcebb3e70d8bc5e044cd55a7b360b9e703edbafd2162dd4eb93a3c6b3"
+    },
+    {
+      "rubric_id": "R12",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §0.5 C5, PLAN §3 C5 skip rule, PLAN §4 P1 classify, PLAN §4 P2 receipt-on-dispatch",
+      "claim": "heterogeneous false is stamped after a successful U1 dispatch, so native-fallback consult still runs and the C5 skip never happens.",
+      "evidence": "C5 and frozen R12 require skip U1 straight to U2 when the consult is not heterogeneous. P2 sets heterogeneous from resolved_from != native-fallback after a successful dispatch-consult.sh run. That is after the same-family call C5 says is not outside anything. P1 classify emits heterogeneous_u1 with no argv, no resolver call, and no --consult-resolved-from, so the native-fallback skip fixture listed in the files table has no input to drive it.",
+      "evidence_reference": "PLAN §0.5 C5; PLAN §3 C5 rule skipped_rungs [U1] reason not-heterogeneous; PLAN §4 P1 classify output; PLAN §4 P2 dispatch-consult.sh --ladder-receipt; FROZEN_RUBRIC R12; scripts/resolve-review-loop.sh consult_dispatch auto native-fallback",
+      "repair": "Before any U1 spawn, classify or the caller reads resolve-review-loop.sh consult_resolved_from. If native-fallback (or consult_dispatch off), recommend U2 with skipped_rungs [U1], reason not-heterogeneous, heterogeneous false, and do not invoke dispatch-consult.sh. P1 accepts --consult-resolved-from for fixtures.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ef2cfd9f4b0c04b5dbeb01448f6507c1a7f051a111aabc091b03e2d24aefc5aa"
+    },
+    {
+      "rubric_id": "R13",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 budget fields, PLAN §4 P2 work-unit and exhaustion rule, PLAN §6 Foreman climbs, PLAN §8 Q2",
+      "claim": "Budget accounting is internally contradictory, and exhaustion is specified to buy a more expensive rung, so foreman spend is not capped.",
+      "evidence": "Frozen R13 and §6 say per-task integers default 1 each. Owner Q2 and P2 say climb counts per work unit with defaults U1=2, U2=1, U3=1. The files table still says calls or minutes. Work unit is one dev-flow phase for L/H (an L task multiplies by six phases), the whole task for S/Fix, and an undefined round-set for /l4-/l6. P2 says exhausting a rung moves the recommendation to the next rung, so two spent U1 consults purchase a U2 survey (two agents) rather than stopping. hooks/cost-fuse.js meters brain-tier PreToolUse spend, not child consult or survey dispatches.",
+      "evidence_reference": "FROZEN_RUBRIC R13; PLAN §3 Files unknown_budget_u1/u2/u3 (calls or minutes); PLAN §4 P2; PLAN §6 Foreman climbs cost money silently; PLAN §8 Q2; hooks/cost-fuse.js",
+      "repair": "Single source matching Q2: climb counts; template unknown_budget_u1=2, unknown_budget_u2=1, unknown_budget_u3=1. Work unit is the whole task, including one /l4-/l6 run, not per L-phase and not an undefined round-set. Exhaustion emits reason budget-exhausted and recommends none or U4, never a more expensive rung. cost-fuse stays a backstop; the round-end Ladder section prints climbs used and left per rung.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ffb26e57609757d3a5024a88fa5a5d9a2545da6919084fe7f867405e958bc15f"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 new ledger kinds, PLAN §4 P1 decision-ledger.js, PLAN §4 P2 opt-out receipt",
+      "claim": "The planned row shapes cannot be appended to the existing decision ledger, and the off-path writes a second receipt file.",
+      "evidence": "scripts/decision-ledger.js KINDS is decision, dispatch, pick, refreeze, veto, note. append requires decision_id and rationale for every kind except veto and note. Planned hypothesis, unknown, and ladder objects omit those fields, so append will usage-exit on the first P1 fixture. P2 off-path writes hetero-review-loop.js receipt-<phase>.json under a review ledger directory, a second store beside the JSONL decision ledger. Frozen R3 requires append-only JSONL rows in the existing decision ledger file only.",
+      "evidence_reference": "scripts/decision-ledger.js KINDS set and append(); PLAN §3 Files hypothesis/unknown/ladder shapes; PLAN §4 P1 add three row kinds; PLAN §4 P2 hetero-review-loop.js opt-out; FROZEN_RUBRIC R3",
+      "repair": "Extend KINDS and either give hypothesis/unknown/ladder the same append exception as note, or require decision_id plus rationale on every new row. probe-unknown.js receipt must call decision-ledger.js append (one writer, existing lock). Knob-off writes kind ladder (or unknown) with reason knob-off into that same JSONL file, never receipt-<phase>.json.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f5aab57ff9b75fad48b33747c7808169b2ecc5f4862d7a06e42bbed6a8420515"
+    },
+    {
+      "rubric_id": "R14",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §3 ladder row shape, PLAN §4 P1 compaction-rehydrate.js, PLAN §4 P5 learn pre-fill",
+      "claim": "A resolved climb cannot be written back so the next S4 hits, because the ladder row has no terms and P1 patches the wrong rehydrate script.",
+      "evidence": "P5 requires learn pre-filled with the receipt's terms and unknown_type. The §3 ladder shape is rung, signal_ids, dispatch_run_id, resolved, heterogeneous — no terms, no unknown_type. P1 tells compaction-rehydrate.js to re-inject ladder rows, but that script is continuation identity and work-order state, not session knowledge. The ledger tail already lives in build-rehydration-bundle.js section 4 (last 20 rows). hooks/state-checkpoint.js writes a transcript tail to compaction-state.md and does not read the decision ledger. Without terms on the row, P5 and KR4 have nothing to group or pre-fill.",
+      "evidence_reference": "PLAN §3 Files decision-ledger.js ladder shape; PLAN §4 P1 compaction-rehydrate.js bullet; PLAN §4 P5; FROZEN_RUBRIC R14; scripts/compaction-rehydrate.js header; scripts/build-rehydration-bundle.js section 4; hooks/state-checkpoint.js",
+      "repair": "Add terms (from classify --terms) and unknown_type to kind ladder. P5 reads those fields. Do not modify compaction-rehydrate.js. If the last-20 tail can drop early-round climbs, extend build-rehydration-bundle.js to always include current-round hypothesis/unknown/ladder rows; optionally inject a short Ladder block from state-checkpoint. KR4 report groups by terms.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6752d5c2d5f5c68f759f3e87c47aa14b292b61f25ccff5a02c3f444b0b6a6ae5"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN §4 P3 acceptance, PLAN §4 P4 foreman round-end, PLAN §7 call-site list",
+      "claim": "Canonical probe call sites are specified as three and also as four, so P3 acceptance would exclude the foreman site R9 requires to prove the probe is actually called.",
+      "evidence": "P3 acceptance says hetero-dispatch.md Hook points lists the same three sites and nothing else. Section 7 and P4 add the foreman round-end as a fourth site, and KR3/R9 dogfood requires that site to produce a real U2 row. P1 four-place inventory wiring does not create a call. Exact argv also differs per site (debug --ledger, L-1 --terms, P4 --ledger --convergence --stall) with no one canonical command line, so acceptance cannot check exact argv as written.",
+      "evidence_reference": "PLAN §4 P3 Acceptance; PLAN §4 P4 level-front-door.md round-end; PLAN §7 Out of scope call sites; FROZEN_RUBRIC R9",
+      "repair": "One canonical list of four call sites: debug, dev-flow L-1/L-2, think-tank, and ceo-agent/foreman round-end. P3 acceptance must not say nothing else. Each SKILL or front-door line spells the full argv for that site, including --ledger and --terms when that site has them. P4 dogfood remains the proof the fourth site fired.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "74d7dc0096178e1bc6c79a3212ca78af0b72659433052bc341cf207a1fcb9770"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN §4 P1 probe-unknown.js CLI",
+      "claim": "P1 CLI shape can put human output on stdout and treats all exits as 0, which breaks the global JSON/stderr/exit contract.",
+      "evidence": "P1 classify shows optional --json and exit 0 always. Frozen R2 requires one JSON object on stdout, human lines on stderr, and non-zero only for usage errors or --strict. In this repo an optional --json flag usually means human stdout by default (see decision-ledger.js query). String compare recommend >= U2 is also unspecified for rung ids.",
+      "evidence_reference": "PLAN §4 P1 classify; PLAN §2.5 Global Constraints; FROZEN_RUBRIC R2; scripts/decision-ledger.js query --json",
+      "repair": "Drop --json. classify, receipt, and report always print one JSON object on stdout and diagnostics on stderr. Exit 2 on usage, 0 on any classification, and --strict exits 2 when recommend is U2, U3, or U4 (named set, not string >=).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3e0931968667f6c9d9977e6317f9eba38c05b5c60fe06dafd7b36963115ffddf"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN §4 P1 report JSON and decision-ledger Ladder section",
+      "claim": "S6-alone is capped at U1 in prose, but the report contracts that must make gaming visible omit the separate S6-only listing.",
+      "evidence": "Section 3 S6 and §6 say S6 alone caps at U1 and the round-end report lists S6-only climbs separately. P1 report JSON is climbs, judgment_only, repeat_terms. The ledger Ladder section is ladder rows plus refuted-hypothesis count. Q3 stays open; the plan already proceeds on no, so no owner wait is required to add the listing.",
+      "evidence_reference": "PLAN §3 S6; PLAN §4 P1 report; PLAN §6 Self-reported unknowns; PLAN §8 Q3; FROZEN_RUBRIC R16",
+      "repair": "Keep the cap (Q3 default no). Add s6_only as an array on probe-unknown.js report and a S6-only line to the ledger Ladder section. P1 fixture: an unknown row with no S1-S5 co-signal recommends at most U1 and appears only in s6_only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_architecture_chair",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c8fac9b460be7210d3fbee195b1dc383adaf3eb9aa6b8c1aa4230f43f8d8600f"
+    },
+    {
+      "rubric_id": "R13",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §6 Risks row Foreman climbs cost money silently and §4 P2 budget implementation",
+      "claim": "The plan's §6 Risks text quotes R13 mitigation verbatim with 'default 1 each', but §4 P2 implements 'unknown_budget_u1: 2, unknown_budget_u2: 1, unknown_budget_u3: 1'. The §8 Q2 owner ruling documents the U1=2 deviation with rationale, but the §6 risk statement is internally inconsistent with §4 P2 implementation.",
+      "evidence": "Plan §6 Risks row Foreman climbs cost money silently literally states: 'Mitigation: budgets are per-task integers in config, default 1 each; cost-fuse hook and the round ledger already surface spend.' Plan §4 P2 specifies 'unknown_budget_u1: 2, unknown_budget_u2: 1, unknown_budget_u3: 1'. Plan §8 Q2 records: 'budgets are climb counts per work unit; defaults U1=2, U2=1, U3=1 (owner asked whether 1 is too few; U1 raised to 2, rationale in P2)'",
+      "evidence_reference": "Plan §6 Risks (verbatim R13 quote), Plan §4 P2 (P2 implementation), Plan §8 Q2 (owner ruling)",
+      "repair": "Update Plan §6 Risks row Foreman climbs cost money silently to explicitly note the owner ruling override. Replace 'default 1 each' with 'defaults U1=2, U2=1, U3=1 per owner ruling 2026-09-07 Q2 (raised U1 from 1 to accommodate the common consult then new evidence then one more bounded question pattern; rationale in P2)'. This makes §6 consistent with §4 P2 implementation.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "12259576c683e5b90b2b3aafe311d7c97e0e41a2f59cc6feddf04641c24f7316"
+    },
+    {
+      "rubric_id": "R13",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §4 P2 budget scope definition",
+      "claim": "R13 specifies budgets as per-task integers but Plan §4 P2 defines budgets as per work unit with mode-specific definitions (one dev-flow phase for L/H, the whole task for S/Fix, one foreman round-set for /l4-/l6). This is a semantic deviation from the rubric's wording even though the integer-budget-in-config intent is preserved.",
+      "evidence": "R13 text: 'budgets are per-task integers in config, default 1 each'. Plan §4 P2: 'A budget counts climbs to that rung per work unit: one dev-flow phase for L/H, the whole task for S/Fix, one foreman round-set for /l4-/l6.'",
+      "evidence_reference": "Plan §4 P2 budget scope definition; R13 frozen rubric wording",
+      "repair": "Either align Plan §4 P2 wording with R13 ('per-task integers') and treat work-unit scoping as an implementation detail, or update §2.5 Global Constraints to explicitly acknowledge per work unit scoping as a mode-specific interpretation of per-task. The functional intent (integer budget gates climbs) is preserved either way.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9008be09d84d83c67b8c08eb76958f519d9da00ca089746e5286aea88d90a3e4"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §2.5 Global Constraints and §4 P2 off-state behavior",
+      "claim": "R8 specifies that off state requires opt-out receipt AND capability_warnings. Plan §4 P2 mentions only opt-out receipt (via hetero-review-loop.js opt-out) but does not enumerate capability_warnings as a separate output for off state. The plan's §2.5 binds to R8's tri-state semantics verbatim, so the §4 P2 implementation should match.",
+      "evidence": "R8 text: 'off ⇒ opt-out receipt + capability_warnings'. Plan §4 P2: 'When the knob resolves off, the opt-out receipt is written (via hetero-review-loop.js opt-out --knob unknown_escalation) and the probe reports recommend: none, reason: knob-off.' Plan §2.5 Global Constraints quotes R8 verbatim including the capability_warnings clause.",
+      "evidence_reference": "Plan §2.5 Global Constraints (R8 verbatim quote); Plan §4 P2 off-state behavior; R8 frozen rubric",
+      "repair": "Update Plan §4 P2 off-state behavior to enumerate both outputs: opt-out receipt AND capability_warnings. Make explicit that hetero-review-loop.js opt-out path emits the capability_warnings field as part of the off-state receipt, or add a separate capability_warnings emit point in P2. The byte-for-byte copy claim in §2.5 needs §4 P2 to enumerate both outputs.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "666a8f9e4031e431df086fede1e8f2c3a4f4519b66afe29aabad54686e0b7e65"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §4 P2 on-state behavior",
+      "claim": "R8 specifies that on state requires explicit budgets required. Plan §4 P2 does not explicitly state this requirement for the on state. The plan's P2 budgets are documented as defaults (U1=2, U2=1, U3=1) but does not say what 'on' requires vs what 'auto' provides — no validation rule, no fallback behavior, no warning when on is set without explicit budgets.",
+      "evidence": "R8 text: 'on ⇒ explicit budgets required'. Plan §4 P2: 'unknown_escalation: auto (default on), unknown_budget_u1: 2, unknown_budget_u2: 1, unknown_budget_u3: 1' — does not distinguish on vs auto behavior regarding budget requirement or validation.",
+      "evidence_reference": "Plan §4 P2 on/auto state; R8 frozen rubric",
+      "repair": "Clarify Plan §4 P2 to state: when unknown_escalation is on, the config MUST specify unknown_budget_u1/u2/u3 explicitly (otherwise resolve-review-loop.sh should reject, warn, or fall back with a documented behavior); when auto, defaults U1=2, U2=1, U3=1 apply. The byte-for-byte copy claim in §2.5 needs explicit implementation of 'on ⇒ explicit budgets required'.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f6bead25a79a8744c8787f706cec5021fd79f0a5a59e59e1e5d011426a7678e8"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §4 P1 round-end report structure",
+      "claim": "R16 specifies that the round-end report lists S6-only climbs separately. Plan §6 Risks row Self-reported unknowns game the ladder mentions this mitigation, but §4 P1 specifies the round-end report structure as 'a Ladder section (rows of kind: ladder in this round, plus refuted-hypothesis count)' without explicit S6-only subset listing.",
+      "evidence": "R16 text: 'the round-end report lists S6-only climbs separately'. Plan §4 P1: 'decision-ledger.js: add the three row kinds with schema validation in append; round-end report prints a Ladder section (rows of kind: ladder in this round, plus refuted-hypothesis count). Existing rows unaffected (schema_version stays 1; kinds are additive).' Plan §6 Risks explicitly states: 'the round-end report lists S6-only climbs separately.'",
+      "evidence_reference": "Plan §4 P1 round-end report structure; Plan §6 Risks (R16 verbatim); R16 frozen rubric",
+      "repair": "Update Plan §4 P1 to explicitly state that the Ladder section includes an S6-only subset, for example: 'round-end report prints a Ladder section (rows of kind: ladder in this round, plus refuted-hypothesis count, plus an S6-only subset listing climbs where the only signal was kind: unknown self-report so audit can spot gaming)'",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1e7d1d16960dd6ccd56b37dc65108cc748069ded1af78be70e8693f7b65a6f77"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §4 P1 probe-unknown.js report output schema",
+      "claim": "R10 specifies that the report exposes the false-positive rate. Plan §4 P1 specifies the report output schema as '{climbs: [...], judgment_only: n, repeat_terms: {...}}' without an explicit false-positive rate field. Thresholds argv-overridable is implemented (--refuted-threshold 2, --stall-threshold 3, --convergence-generations 2).",
+      "evidence": "R10 text: 'thresholds are argv-overridable and the report exposes the false-positive rate'. Plan §4 P1: 'report --ledger <file>|--project-dir <dir> → {climbs: [...], judgment_only: n, repeat_terms: {...}} for KR1/KR4.'",
+      "evidence_reference": "Plan §4 P1 report output schema; R10 frozen rubric",
+      "repair": "Update Plan §4 P1 report output schema to include false-positive rate observability. Options: add 'false_positive_rate: float' computed from climbs where signal coverage is below a threshold, or add 'signal_coverage: {climb_id: n_signals}' so the false-positive rate is derivable downstream. Either approach makes R10's requirement explicit and KR1/KR4 measurable.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_evidence_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f79ddfcff1e49dbdd70e338a957327b24a4d770d9237999300035b58388b73bf"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "3e0931968667f6c9d9977e6317f9eba38c05b5c60fe06dafd7b36963115ffddf",
+      "rubric_id": "R2",
+      "affected_surface": "PLAN §4 P1 probe-unknown.js CLI",
+      "claim": "P1 CLI shape can put human output on stdout and treats all exits as 0, which breaks the global JSON/stderr/exit contract.",
+      "evidence_reference": "PLAN §4 P1 classify; PLAN §2.5 Global Constraints; FROZEN_RUBRIC R2; scripts/decision-ledger.js query --json",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c8fac9b460be7210d3fbee195b1dc383adaf3eb9aa6b8c1aa4230f43f8d8600f",
+      "rubric_id": "R16",
+      "affected_surface": "PLAN §4 P1 report JSON and decision-ledger Ladder section",
+      "claim": "S6-alone is capped at U1 in prose, but the report contracts that must make gaming visible omit the separate S6-only listing.",
+      "evidence_reference": "PLAN §3 S6; PLAN §4 P1 report; PLAN §6 Self-reported unknowns; PLAN §8 Q3; FROZEN_RUBRIC R16",
+      "disposition": null
+    },
+    {
+      "fingerprint": "12259576c683e5b90b2b3aafe311d7c97e0e41a2f59cc6feddf04641c24f7316",
+      "rubric_id": "R13",
+      "affected_surface": "Plan §6 Risks row Foreman climbs cost money silently and §4 P2 budget implementation",
+      "claim": "The plan's §6 Risks text quotes R13 mitigation verbatim with 'default 1 each', but §4 P2 implements 'unknown_budget_u1: 2, unknown_budget_u2: 1, unknown_budget_u3: 1'. The §8 Q2 owner ruling documents the U1=2 deviation with rationale, but the §6 risk statement is internally inconsistent with §4 P2 implementation.",
+      "evidence_reference": "Plan §6 Risks (verbatim R13 quote), Plan §4 P2 (P2 implementation), Plan §8 Q2 (owner ruling)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9008be09d84d83c67b8c08eb76958f519d9da00ca089746e5286aea88d90a3e4",
+      "rubric_id": "R13",
+      "affected_surface": "Plan §4 P2 budget scope definition",
+      "claim": "R13 specifies budgets as per-task integers but Plan §4 P2 defines budgets as per work unit with mode-specific definitions (one dev-flow phase for L/H, the whole task for S/Fix, one foreman round-set for /l4-/l6). This is a semantic deviation from the rubric's wording even though the integer-budget-in-config intent is preserved.",
+      "evidence_reference": "Plan §4 P2 budget scope definition; R13 frozen rubric wording",
+      "disposition": null
+    },
+    {
+      "fingerprint": "666a8f9e4031e431df086fede1e8f2c3a4f4519b66afe29aabad54686e0b7e65",
+      "rubric_id": "R8",
+      "affected_surface": "Plan §2.5 Global Constraints and §4 P2 off-state behavior",
+      "claim": "R8 specifies that off state requires opt-out receipt AND capability_warnings. Plan §4 P2 mentions only opt-out receipt (via hetero-review-loop.js opt-out) but does not enumerate capability_warnings as a separate output for off state. The plan's §2.5 binds to R8's tri-state semantics verbatim, so the §4 P2 implementation should match.",
+      "evidence_reference": "Plan §2.5 Global Constraints (R8 verbatim quote); Plan §4 P2 off-state behavior; R8 frozen rubric",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f6bead25a79a8744c8787f706cec5021fd79f0a5a59e59e1e5d011426a7678e8",
+      "rubric_id": "R8",
+      "affected_surface": "Plan §4 P2 on-state behavior",
+      "claim": "R8 specifies that on state requires explicit budgets required. Plan §4 P2 does not explicitly state this requirement for the on state. The plan's P2 budgets are documented as defaults (U1=2, U2=1, U3=1) but does not say what 'on' requires vs what 'auto' provides — no validation rule, no fallback behavior, no warning when on is set without explicit budgets.",
+      "evidence_reference": "Plan §4 P2 on/auto state; R8 frozen rubric",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1e7d1d16960dd6ccd56b37dc65108cc748069ded1af78be70e8693f7b65a6f77",
+      "rubric_id": "R16",
+      "affected_surface": "Plan §4 P1 round-end report structure",
+      "claim": "R16 specifies that the round-end report lists S6-only climbs separately. Plan §6 Risks row Self-reported unknowns game the ladder mentions this mitigation, but §4 P1 specifies the round-end report structure as 'a Ladder section (rows of kind: ladder in this round, plus refuted-hypothesis count)' without explicit S6-only subset listing.",
+      "evidence_reference": "Plan §4 P1 round-end report structure; Plan §6 Risks (R16 verbatim); R16 frozen rubric",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f79ddfcff1e49dbdd70e338a957327b24a4d770d9237999300035b58388b73bf",
+      "rubric_id": "R10",
+      "affected_surface": "Plan §4 P1 probe-unknown.js report output schema",
+      "claim": "R10 specifies that the report exposes the false-positive rate. Plan §4 P1 specifies the report output schema as '{climbs: [...], judgment_only: n, repeat_terms: {...}}' without an explicit false-positive rate field. Thresholds argv-overridable is implemented (--refuted-threshold 2, --stall-threshold 3, --convergence-generations 2).",
+      "evidence_reference": "Plan §4 P1 report output schema; R10 frozen rubric",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-07T08:57:58.753Z"
+}

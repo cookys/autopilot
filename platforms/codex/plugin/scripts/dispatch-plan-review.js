@@ -85,7 +85,9 @@ const RUNNERS = new Set([
   'anthropic-compatible',
   'claude-native',
   'qoderclicn',
+  'kimi',
   'cursor',
+  'opencode',
 ]);
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 

@@ -325,7 +325,7 @@ check_reader_allowlist "unratified-columns" \
 
 # reference #5 — level-front-door references code-review's Panel aggregation section.
 check_reference "level-front-door→code-review/PanelAggregation" \
-  "skills/ceo-agent/references/level-front-door.md" "code-review.md) § \"Panel aggregation\"" \
+  "skills/ceo-agent/references/depth0-control-loop.md" "code-review.md) § \"Panel aggregation\"" \
   "skills/quality-pipeline/references/code-review.md" "## Panel aggregation (multi-reviewer / disjoint-family qc)"
 
 
@@ -342,6 +342,33 @@ check_mirror "model-routing" \
 # lint #1 — the model-routing canonical must stay free of relative links (see
 # check_no_relative_links rationale).
 check_no_relative_links "model-routing" "references/model-routing.md"
+
+# ── reference-size invariant ─────────────────────────────────────────────────────
+# skills/*/references/*.md are MUST-READ whole-file reads; the Read tool silently
+# truncates them past ~60KB numbered. Hard cap 48KB numbered bytes so growth fails
+# loudly here instead of as a silent truncation in a session (level-front-door.md,
+# 2026-09). Details/overrides: scripts/check-reference-sizes.js.
+if ! command -v node >/dev/null 2>&1; then
+  envx "reference-size: node is required to run scripts/check-reference-sizes.js"
+elif node "$REPO/scripts/check-reference-sizes.js" >/dev/null 2>&1; then
+  ok "reference-size: all skills/*/references/*.md under the 48KB numbered cap"
+else
+  bad "reference-size: a skills/*/references/*.md file exceeds the 48KB numbered cap — run node scripts/check-reference-sizes.js"
+fi
+
+# ── supersession-anchor invariant ────────────────────────────────────────────────
+# A code comment that states a Board ruling which has since been superseded is a trap
+# for the next reader: it reads as current. Every such site is frozen in
+# hooks/fixtures/supersession-anchors.json and must carry a dated pointer. The same
+# manifest pins the regions a plan declared out of scope, so an "untouched" claim is
+# verified rather than trusted. Details: scripts/check-supersession-anchors.js.
+if ! command -v node >/dev/null 2>&1; then
+  envx "supersession-anchors: node is required to run scripts/check-supersession-anchors.js"
+elif node "$REPO/scripts/check-supersession-anchors.js" >/dev/null 2>&1; then
+  ok "supersession-anchors: every superseded ruling carries a dated pointer; protected regions unchanged"
+else
+  bad "supersession-anchors: a superseded ruling lacks its pointer, or a protected region changed — run node scripts/check-supersession-anchors.js"
+fi
 
 echo ""
 if [ "$ENV_ERR" = "1" ]; then

@@ -125,13 +125,27 @@ function saveState(file, st) {
     st.calls += 1;
 
     const liveMain = readLive(live.base, sid, { kind: 'main' });
+    // v2.36.2 diagnostic (state only, no behaviour): record how old the live file was at
+    // hook time, so a T1/T2 that arrives WITHOUT "(statusline)" on a host that has the
+    // writer can be attributed (stale tick vs absent file) after the fact. 2026-09-05:
+    // two inference-path T2s on a 1M session whose live file was fresh seconds later.
+    try {
+      const liveFile = path.join(live.base, 'context', `${sid}.json`);
+      const ageMs = Date.now() - fs.statSync(liveFile).mtimeMs;
+      st.lastLive = { at: new Date().toISOString(), ageMs: Math.round(ageMs), present: liveMain !== null };
+    } catch { st.lastLive = { at: new Date().toISOString(), ageMs: null, present: false }; }
+    // v2.36.2: a window must be > 0 — `-1` produced a "-15300000% of the ~-0k window"
+    // message and `0` silently reverted to the unscaled ceiling while still claiming
+    // "(statusline)". A non-positive window is treated as absent (inference path).
     const liveWindow = liveMain && liveMain.context_window
       && Number.isFinite(liveMain.context_window.context_window_size)
+      && liveMain.context_window.context_window_size > 0
       ? liveMain.context_window.context_window_size : null;
     const liveTotal = liveMain && liveMain.context_window
       && Number.isFinite(liveMain.context_window.total_input_tokens)
       ? liveMain.context_window.total_input_tokens : null;
     const liveUsable = liveWindow !== null && liveTotal !== null;
+    st.lastLive.used = liveUsable; // false also when present but the window/total was rejected (review 🟡)
 
     if (liveUsable) {
       // v2.36.1 (P2): the live file gives the EXACT window — skip inferWindowTokens.
@@ -142,6 +156,13 @@ function saveState(file, st) {
       // row predates the live file's own written_at; otherwise the transcript row
       // is at least as fresh, so it is trusted directly).
       const liveCfg = tiersForKnownWindow(cfg, liveWindow);
+      // v2.36.22: a session's context window never changes, so remember it. The live
+      // file is written by the statusline, which stops ticking while the session waits
+      // on a long background task — exactly when a long session is sitting above the
+      // 200K-calibrated ceiling. Without this the stale-file fallback re-derives the
+      // window from observed usage and fires a spurious T2 (2026-09-09: "threshold 150k"
+      // on a 1M window at 21% used; the same shape as the 2026-09-05 note above).
+      st.knownWindow = liveWindow;
       const mustParse = st.lastContext >= liveCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
       let contextTokens = liveTotal;
       if (mustParse) {
@@ -177,7 +198,11 @@ function saveState(file, st) {
       // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
       // window implied by the largest context this session has actually reached.
       // Applied to the mustParse gate too, so the cheap path uses the same tiers.
-      const effCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+      const rememberedWindow = Number.isFinite(st.knownWindow) && st.knownWindow > 0
+        ? st.knownWindow : null;
+      const effCfg = rememberedWindow !== null
+        ? tiersForKnownWindow(cfg, rememberedWindow)
+        : scaleTiers(cfg, inferWindowTokens(st.observedMax));
 
       // Cheap path below T1: parse only every Nth call. Once T1 territory has
       // been seen, parse every call (a burst can overshoot fast).
@@ -189,10 +214,12 @@ function saveState(file, st) {
           // Ratchet: observing N tokens proves the window is > N. Monotonic, so
           // auto-compaction (which lowers current context) cannot walk it back.
           st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
-          const liveCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+          const liveCfg = rememberedWindow !== null
+            ? tiersForKnownWindow(cfg, rememberedWindow)
+            : scaleTiers(cfg, inferWindowTokens(st.observedMax));
           const d = budgetDecision(
             { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
-            liveCfg,
+            rememberedWindow !== null ? { ...liveCfg, windowSource: 'session-window' } : liveCfg,
           );
           if (d.tier === 't1') {
             st.lastT1Call = st.calls;

@@ -50,3 +50,41 @@ Output:
 - If you discover alternatives missed by mainstream discussion, list them with rationale
 - All sources with URL + one-sentence summary
 ```
+
+## Issue-search Researcher Prompt
+
+Replace `{error_string}`, `{runtime_tuple}` (e.g. `node 24.16 / autopilot 2.36.15 / linux`), `{context}` (one paragraph: what was being done, the two refuted hypotheses).
+
+```
+You are investigating whether anyone has hit and resolved this exact failure:
+
+    {error_string}
+
+Runtime: {runtime_tuple}
+Context: {context}
+
+Use WebSearch. Your FIRST query must contain the error string verbatim, quoted, as written above —
+do not paraphrase it, do not drop version numbers or identifiers from it. Only after that verbatim
+query may you reformulate (strip paths, generalise identifiers, add the runtime name).
+Recognising the error is not the same as knowing its current fix: search even if it looks familiar.
+
+Collect up to 5 hits. For each:
+  - URL + one-sentence summary
+  - The runtime/version the hit reports (exact, or "unstated")
+  - The fix or workaround it describes, in one sentence
+  - Whether the hit is a maintainer/official source, a postmortem, or a forum answer
+
+If no hit matches the verbatim string, say so explicitly: "no public data for the verbatim string";
+then report the closest reformulated hits separately, clearly labelled as reformulated.
+```
+
+## Issue-search Skeptic addendum
+
+Append to the Skeptic Prompt in issue-search mode:
+
+```
+For every hit the researcher may find, check version applicability against {runtime_tuple}: does the
+fix apply to our runtime, or to an older/newer one? Mark each "matches our version? yes / no /
+unstated". A workaround that only applies to another version is a risk, not a fix. Search
+specifically for "still broken in {runtime_tuple}" and regressions of the described fix.
+```

@@ -81,7 +81,7 @@
 
 **Solution**: Make cleanup a terminal invariant. After merge, enumerate worktrees, verify the worktree is inactive and clean, prove the exact branch tip is contained by the authoritative integration target, remove the worktree, then use the preserve-first reaper or `git branch -d`. Re-enumerate worktrees and refs before reporting completion. Never use an unchecked `git branch -D`.
 
-**Related**: `scripts/reap-dispatch-branches.sh`, `skills/finish-flow/SKILL.md` L-5.6/L-5.7, and `skills/ceo-agent/references/level-front-door.md` worktree GC.
+**Related**: `scripts/reap-dispatch-branches.sh`, `skills/finish-flow/SKILL.md` L-5.6/L-5.7, and `skills/ceo-agent/references/depth0-control-loop.md` worktree GC.
 
 ## 9. `grep --exclude-dir=.git` proves nothing about a commit anchored by a receipt
 

@@ -17,7 +17,7 @@ Phase L is deliberately **two halves** — they cannot be one thing:
 | Half | Where | What it owns |
 |------|-------|--------------|
 | **(A) Deterministic engine** | [`scripts/dispatch-batch.sh`](../scripts/dispatch-batch.sh) | git/artifact/merge/telemetry/reap — the testable safety machinery. This doc. |
-| **(B) LLM control loop** | [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md) § "Phase L" | the depth-0 loop that holds N agentIds, `Monitor`s for completion, `TaskStop`s on abort, GCs worktrees. Harness-only primitives the shell cannot call. |
+| **(B) LLM control loop** | [`skills/ceo-agent/references/depth0-control-loop.md`](../skills/ceo-agent/references/depth0-control-loop.md) § "Phase L" | the depth-0 loop that holds N agentIds, `Monitor`s for completion, `TaskStop`s on abort, GCs worktrees. Harness-only primitives the shell cannot call. |
 
 A shell script **cannot invoke the Agent/Task tool**, so the actual parallel
 dispatch of N Claude workers is prose, not code. The script owns everything that

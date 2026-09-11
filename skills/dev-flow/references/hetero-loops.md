@@ -25,7 +25,7 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 
 ## Consult before design
 
-For an L-size task, before the step-L-2 design decision, write the design question and relevant artifacts to files and call `bash scripts/dispatch-consult.sh --question-file <path> --artifact <path>` to get one bounded outside opinion before committing to the design.
+Canonical call site is dev-flow step L-2 (the receipted consult sub-step); this section documents the rail, it is not a second statement of the rule. For an L-size task, before the step-L-2 design decision, write the design question and relevant artifacts to files and call `bash scripts/dispatch-consult.sh --question-file <path> --artifact <path>` to get one bounded outside opinion before committing to the design.
 
 ## L-2.5 Plan Hetero Review Gate & Frozen Rubrics
 

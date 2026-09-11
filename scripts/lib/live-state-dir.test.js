@@ -158,13 +158,38 @@ test('resolveLiveDir: accepted tmpfs override wins over everything else', () => 
   assert.strictEqual(r.base, overrideDir);
 });
 
+test('resolveLiveDir: findmnt PRESENT but rejecting every candidate ⇒ ssd-fallback even when /proc/mounts says tmpfs', () => {
+  // Mutant guard (v2.36.2): `notFound` must be true ONLY for ENOENT. A findmnt that runs and
+  // says "not a mount point" (exit 1, no '*' default in the fake) must NOT fall back to
+  // /proc/mounts — otherwise a /proc/mounts row claiming tmpfs would accept a candidate
+  // findmnt already rejected. Every other fake-findmnt rule set here carries a '*' default,
+  // which is why the `notFound: true` mutant survived round-2 mutation testing.
+  const bindir = mkTmp('findmnt-reject-all-');
+  makeFakeFindmnt(bindir, {}); // no '*' ⇒ exit 1 for every target
+  const fixtureDir = mkTmp('procmounts-tmpfs-');
+  const procMounts = path.join(fixtureDir, 'mounts');
+  fs.writeFileSync(procMounts, ['rootfs / ext4 rw 0 0', 'tmpfs /dev/shm tmpfs rw 0 0', 'tmpfs /tmp tmpfs rw 0 0'].join('\n'));
+  const warnings = [];
+  const r = resolveLiveDir({
+    env: {},
+    execFile: execFileWithPath(bindir),
+    procMountsPath: procMounts,
+    warn: (m) => warnings.push(m),
+  });
+  assert.strictEqual(r.source, 'ssd-fallback', 'findmnt ran and rejected ⇒ /proc/mounts must not be consulted');
+  assert.strictEqual(warnings.length, 1);
+});
+
 test('resolveLiveDir: candidate dir name with shell metacharacters is probed literally, never executed', () => {
   const tmpRoot = mkTmp('injection-');
+  const bindir = mkTmp('findmnt-injection-');
+  // v2.36.2: always reap — the dir name carries a `$(touch …)` payload and leaked under
+  // os.tmpdir() as /tmp/injection-* on every run (review round 2).
+  try {
   const marker = path.join(tmpRoot, 'INJECTED_MARKER');
   const overrideDir = path.join(tmpRoot, 'weird-$(touch ' + marker + ')-dir');
   fs.mkdirSync(overrideDir, { recursive: true }); // a literal directory name, no shell involved
 
-  const bindir = mkTmp('findmnt-injection-');
   const bin = path.join(bindir, 'findmnt');
   const receipt = path.join(tmpRoot, 'receipt.txt');
   // Records argv[3] (the target) verbatim, then always answers tmpfs.
@@ -184,6 +209,10 @@ process.stdout.write('tmpfs\\n');
   assert.strictEqual(r.base, overrideDir);
   assert.strictEqual(fs.existsSync(marker), false, 'the injected `touch` must never run');
   assert.strictEqual(fs.readFileSync(receipt, 'utf8'), overrideDir, 'target passed to findmnt literally');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    fs.rmSync(bindir, { recursive: true, force: true });
+  }
 });
 
 // ---- sanitizeSessionId: shared vector file ----

@@ -182,7 +182,8 @@ function checkContextCeiling(payload) {
     };
   }
   const row = rows[0];
-  const w = Number.isFinite(row.contextWindowSize) ? row.contextWindowSize : null;
+  // v2.36.2: a non-positive window is no window (was accepted, scaling tiers by -1/0).
+  const w = Number.isFinite(row.contextWindowSize) && row.contextWindowSize > 0 ? row.contextWindowSize : null;
   const tokenCount = Number.isFinite(row.tokenCount) ? row.tokenCount : null;
   if (w === null || tokenCount === null) return {};
   const tiers = tiersForKnownWindow(loadContextBudgetTiers(), w);
@@ -314,6 +315,10 @@ function decide(payload, cfg, st, ceiling = {}) {
       const r = decide(payload, cfg, st, ceiling);
       if (Number.isInteger(r.count)) st.bash_calls = r.count; // every Bash attempt is counted
       if (r.deny) { st.denied += 1; st.last_denied_rule = r.rule; }
+      // v2.36.2: the ambiguous-rows diagnostic is printed once per agent per distinct text
+      // (it repeated on every Bash call of a run). A changed count (0 → 2) prints again.
+      if (r.diagnostic && st.last_diagnostic === r.diagnostic) r.diagnostic = null;
+      else if (r.diagnostic) st.last_diagnostic = r.diagnostic;
       saveState(file, st);
       return r;
     });

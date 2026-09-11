@@ -1243,6 +1243,12 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         : null;
 
       if (strikeRow) {
+        // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11 (plan
+        // docs/plans/2026-09-11-operator-pin-supersedes-qualification.md): the rule
+        // below still governs an AUTONOMOUSLY chosen seat, but an operator-pinned seat
+        // with ordinary strikes is admitted with pending_revocation, and one with a
+        // critical strike is SUBSTITUTED rather than refused. The ruling's target was a
+        // brain choosing silently, not an operator naming a seat.
         // FINDING 5 fix (2026-08-22 review repair, Board ruling): strike-blocked
         // MUST be detected before the operator override is even consulted. An
         // evidence-free override bypassing a `requalify_required` seat is exactly
@@ -1254,6 +1260,9 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // never reach engineAssurance = 'operator-override'.
         reasons.push(strikeReasonMessage(strikeRow));
       } else {
+        // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11: a standing
+        // operator pin is a third admission path, and is recorded rather than silent.
+        // The per-invocation clause still binds every seat that is NOT operator-pinned.
         // P7/KR6: the operator's explicit per-invocation override is the only
         // evidence-free admission; absent both evidence and override → refusal.
         // Reaches here only for a seat with NO matching scorecard row at all, or
@@ -1360,6 +1369,10 @@ function parseArgs(argv) {
   return { contractPath, repoPath: path.resolve(repoPath), overridePath };
 }
 
+// SUPERSEDED IN PART — superseded by owner ruling 2026-09-11: "never a silent third
+// path" is preserved (a pin is recorded and surfaced), but "per-invocation" is not —
+// an operator pin stands until the operator removes it. This loader still serves the
+// per-invocation override, which is unchanged.
 // First-use qualification override (autonomous-brain P7, KR6): the operator's
 // explicit per-invocation artifact is the ONLY evidence-free path — Board
 // ruling: standing exam pass OR per-invocation override, never a silent third

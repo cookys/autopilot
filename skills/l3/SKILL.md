@@ -29,7 +29,8 @@ Hard rules:
   reviewers, and retries remain coverage/gates inside those deliverables.
 
 **MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
-(§ Default dispatch topology, front-door semantics) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md)
+(§ Default dispatch topology, front-door semantics), [`../ceo-agent/references/depth0-control-loop.md`](../ceo-agent/references/depth0-control-loop.md)
+(§ Depth-0 control loop, § Run-summary ledger) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md)
 (DOA, Prime Directives, quality gates).
 
 

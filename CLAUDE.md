@@ -6,7 +6,7 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 29 hooks (16 default-on,
+Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 31 hooks (18 default-on,
 13 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
 
 ## Scripts inventory (prefer over LLM judgment)
@@ -23,7 +23,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js`
 
-**Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js` `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `agent-liveness-check.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
+**Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js` `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `run-approval.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `agent-liveness-check.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
 
 **Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `qualification-review-provider.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-todo-tools-pin.js` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js` `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js` `build-qualification-defaults.js` `adopt-qualification-defaults.js` `lib/qualification-feed.js` `qualification-sweep.sh` `lib/qualification-asset-seals.js` `lib/qualification-applicability-scope.js` `lib/qualify-stage-credentials.sh`
 
@@ -35,13 +35,13 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Task tree & risk** — `tree.js` `risk-counter.js`
 
-**Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-claude-md-inventory.js` `check-contract-schema.js` `check-hook-inventory.js` `check-js-syntax.js` `check-l1-cache-key-parity.js` `check-optin-changelog.js` `check-readme-parity.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh`
+**Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-reference-sizes.js` `check-supersession-anchors.js` `check-claude-md-inventory.js` `check-contract-schema.js` `check-hook-inventory.js` `check-js-syntax.js` `check-l1-cache-key-parity.js` `check-optin-changelog.js` `check-readme-parity.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh`
 
 **Setup & install** — `dev-setup.sh` `dev-update.sh` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js`
 
 **Skills tooling, evals & measurement** — `cost-digest.js` `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh`
 
-**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js` `lib/live-state-dir.js`
+**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/effort-scale.js` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js` `lib/live-state-dir.js`
 
 
 ## When adding a new script
@@ -72,6 +72,7 @@ Rule of thumb: **if it parses JSON or could run under agy, write it in Node; oth
 
 - **童子軍規則 (boy-scout)**: any touch of a skill trims it toward contract-card shape — canonical definition + review checklist: [`references/skill-contract-card.md`](references/skill-contract-card.md). The north-star gate (prose↓ engine↑, incl. the per-skill ratchet) watches per release.
 - **成績單前置 (scorecard-first)**: rewriting or deleting any skill requires prior eval ON/OFF evidence (evals/orchestration harness); an unevidenced rewrite = unevidenced trust.
+- **機制 vs 指引 (mechanism-vs-guidance)**: scorecard-first gates changes to *what a skill asks for*, not changes to *whether something it already asks for actually happens*. Making an already-stated gate genuinely block is a **mechanism** change and needs no eval — `finish-flow` exists precisely because a passive markdown checklist gets skipped, and that question is already answered. Changing what the gate demands is a **guidance** change and does need eval evidence. The test is literal, not a judgement call: list the requirements before and after, and if the list is unchanged it is mechanism. A mechanism change **must not** also edit the requirement text; when both are wanted, ship them as two commits so each meets its own bar.
 
 ## Severity vocabulary
 

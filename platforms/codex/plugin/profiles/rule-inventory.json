@@ -23,14 +23,14 @@
       "category": "guided",
       "owner": {
         "path": "skills/dev-flow/SKILL.md",
-        "start_line": 514,
-        "end_line": 514
+        "start_line": 524,
+        "end_line": 524
       },
       "aliases": [
         {
           "path": "skills/ceo-agent/SKILL.md",
-          "start_line": 323,
-          "end_line": 323
+          "start_line": 326,
+          "end_line": 326
         }
       ]
     },
@@ -39,14 +39,14 @@
       "category": "guided",
       "owner": {
         "path": "skills/dev-flow/SKILL.md",
-        "start_line": 241,
-        "end_line": 254
+        "start_line": 244,
+        "end_line": 257
       },
       "aliases": [
         {
           "path": "skills/ceo-agent/SKILL.md",
-          "start_line": 355,
-          "end_line": 366
+          "start_line": 358,
+          "end_line": 369
         }
       ]
     },
@@ -55,14 +55,14 @@
       "category": "guided",
       "owner": {
         "path": "skills/dev-flow/SKILL.md",
-        "start_line": 225,
-        "end_line": 227
+        "start_line": 228,
+        "end_line": 230
       },
       "aliases": [
         {
           "path": "skills/ceo-agent/SKILL.md",
-          "start_line": 379,
-          "end_line": 381
+          "start_line": 382,
+          "end_line": 384
         }
       ]
     },
@@ -71,14 +71,14 @@
       "category": "guided",
       "owner": {
         "path": "skills/dev-flow/SKILL.md",
-        "start_line": 260,
-        "end_line": 260
+        "start_line": 263,
+        "end_line": 263
       },
       "aliases": [
         {
           "path": "skills/dev-flow/SKILL.md",
-          "start_line": 292,
-          "end_line": 292
+          "start_line": 295,
+          "end_line": 295
         }
       ]
     }
@@ -86,7 +86,7 @@
   "sources": [
     {
       "path": "skills/ceo-agent/SKILL.md",
-      "sha256": "3e8c59b4997700dcfd31f278fbc3b937d0a28bc7e19114927d1255e946855c5d",
+      "sha256": "b5c97aebfe9f7959893858d2942f891dc0ab3feb27b42d64d95a03d031508f14",
       "segments": [
         {
           "id": "ceo.discovery-routing",
@@ -140,211 +140,211 @@
           "id": "ceo.harness-and-levels",
           "category": "topology",
           "start_line": 145,
-          "end_line": 195
+          "end_line": 197
         },
         {
           "id": "ceo.objective-and-acceptance",
           "category": "core",
-          "start_line": 196,
-          "end_line": 210
+          "start_line": 198,
+          "end_line": 212
         },
         {
           "id": "ceo.involvement-question",
           "category": "guided",
-          "start_line": 211,
-          "end_line": 230
+          "start_line": 213,
+          "end_line": 232
         },
         {
           "id": "ceo.scope-and-red-lines",
           "category": "core",
-          "start_line": 231,
-          "end_line": 273
+          "start_line": 233,
+          "end_line": 276
         },
         {
           "id": "ceo.escalation-format",
           "category": "guided",
-          "start_line": 274,
-          "end_line": 285
+          "start_line": 277,
+          "end_line": 288
         },
         {
           "id": "ceo.execution-scaffolding",
           "category": "guided",
-          "start_line": 286,
-          "end_line": 329
+          "start_line": 289,
+          "end_line": 332
         },
         {
           "id": "ceo.autonomous-loop",
           "category": "autonomous",
-          "start_line": 330,
-          "end_line": 335
+          "start_line": 333,
+          "end_line": 338
         },
         {
           "id": "ceo.parallel-topology",
           "category": "topology",
-          "start_line": 336,
-          "end_line": 339
+          "start_line": 339,
+          "end_line": 342
         },
         {
           "id": "ceo.autonomous-finish",
           "category": "autonomous",
-          "start_line": 340,
-          "end_line": 345
+          "start_line": 343,
+          "end_line": 348
         },
         {
           "id": "ceo.scope-detection",
           "category": "guided",
-          "start_line": 346,
-          "end_line": 381
+          "start_line": 349,
+          "end_line": 384
         },
         {
           "id": "ceo.scope-escalation",
           "category": "core",
-          "start_line": 382,
-          "end_line": 390
+          "start_line": 385,
+          "end_line": 393
         },
         {
           "id": "ceo.circuit-and-quality",
           "category": "assurance",
-          "start_line": 391,
-          "end_line": 407
+          "start_line": 394,
+          "end_line": 410
         },
         {
           "id": "ceo.disclosure",
           "category": "core",
-          "start_line": 408,
-          "end_line": 416
+          "start_line": 411,
+          "end_line": 419
         },
         {
           "id": "ceo.tree-topology",
           "category": "topology",
-          "start_line": 417,
-          "end_line": 462
+          "start_line": 420,
+          "end_line": 465
         },
         {
           "id": "ceo.antipattern-header",
           "category": "guided",
-          "start_line": 463,
-          "end_line": 466
+          "start_line": 466,
+          "end_line": 469
         },
         {
           "id": "ceo.antipattern-autonomy",
           "category": "autonomous",
-          "start_line": 467,
-          "end_line": 467
-        },
-        {
-          "id": "ceo.antipattern-disclosure",
-          "category": "core",
-          "start_line": 468,
-          "end_line": 468
-        },
-        {
-          "id": "ceo.antipattern-evidence",
-          "category": "assurance",
-          "start_line": 469,
+          "start_line": 470,
           "end_line": 470
         },
         {
-          "id": "ceo.antipattern-scope",
+          "id": "ceo.antipattern-disclosure",
           "category": "core",
           "start_line": 471,
           "end_line": 471
         },
         {
-          "id": "ceo.antipattern-recovery",
+          "id": "ceo.antipattern-evidence",
           "category": "assurance",
           "start_line": 472,
-          "end_line": 472
+          "end_line": 473
+        },
+        {
+          "id": "ceo.antipattern-scope",
+          "category": "core",
+          "start_line": 474,
+          "end_line": 474
+        },
+        {
+          "id": "ceo.antipattern-recovery",
+          "category": "assurance",
+          "start_line": 475,
+          "end_line": 475
         },
         {
           "id": "ceo.antipattern-process",
           "category": "guided",
-          "start_line": 473,
-          "end_line": 478
-        },
-        {
-          "id": "ceo.antipattern-scope-authority",
-          "category": "core",
-          "start_line": 479,
-          "end_line": 479
-        },
-        {
-          "id": "ceo.antipattern-quality",
-          "category": "assurance",
-          "start_line": 480,
+          "start_line": 476,
           "end_line": 481
         },
         {
-          "id": "ceo.antipattern-scope-mode",
+          "id": "ceo.antipattern-scope-authority",
           "category": "core",
           "start_line": 482,
           "end_line": 482
         },
         {
+          "id": "ceo.antipattern-quality",
+          "category": "assurance",
+          "start_line": 483,
+          "end_line": 484
+        },
+        {
+          "id": "ceo.antipattern-scope-mode",
+          "category": "core",
+          "start_line": 485,
+          "end_line": 485
+        },
+        {
           "id": "ceo.antipattern-guidance",
           "category": "guided",
-          "start_line": 483,
-          "end_line": 491
+          "start_line": 486,
+          "end_line": 494
         },
         {
           "id": "ceo.antipattern-tree",
           "category": "topology",
-          "start_line": 492,
-          "end_line": 497
+          "start_line": 495,
+          "end_line": 500
         },
         {
           "id": "ceo.profile-projection-core",
           "category": "core",
-          "start_line": 500,
-          "end_line": 504
+          "start_line": 503,
+          "end_line": 507
         },
         {
           "id": "ceo.profile-guided-slice",
           "category": "guided",
-          "start_line": 505,
-          "end_line": 506
+          "start_line": 508,
+          "end_line": 509
         },
         {
           "id": "ceo.profile-autonomous-objective",
           "category": "autonomous",
-          "start_line": 507,
-          "end_line": 508
+          "start_line": 510,
+          "end_line": 511
         },
         {
           "id": "ceo.profile-session-invariant",
           "category": "core",
-          "start_line": 509,
-          "end_line": 514
+          "start_line": 512,
+          "end_line": 517
         },
         {
           "id": "ceo.profile-runtime-lane",
           "category": "topology",
-          "start_line": 515,
-          "end_line": 515
+          "start_line": 518,
+          "end_line": 518
         },
         {
           "id": "ceo.profile-runtime-evidence",
           "category": "assurance",
-          "start_line": 516,
-          "end_line": 517
+          "start_line": 519,
+          "end_line": 520
         },
         {
           "id": "ceo.profile-runtime-compatibility",
           "category": "topology",
-          "start_line": 518,
-          "end_line": 520
+          "start_line": 521,
+          "end_line": 523
         },
         {
           "id": "ceo.mission-routing",
           "category": "topology",
-          "start_line": 522,
-          "end_line": 542
+          "start_line": 525,
+          "end_line": 545
         }
       ]
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "cd67a215f831b8cb6c762f119a0e1e585044837070730e58ce21cfaddb9ef1a7",
+      "sha256": "700c388e60514b21bb274ea94676fee5b8bc10b9dee6f75b2da1555c4302849e",
       "segments": [
         {
           "id": "dev.discovery-routing",
@@ -362,253 +362,253 @@
           "id": "dev.session-start",
           "category": "guided",
           "start_line": 29,
-          "end_line": 114
+          "end_line": 117
         },
         {
           "id": "dev.session-routing",
           "category": "topology",
-          "start_line": 115,
-          "end_line": 134
+          "start_line": 118,
+          "end_line": 137
         },
         {
           "id": "dev.session-quality",
           "category": "assurance",
-          "start_line": 135,
-          "end_line": 138
+          "start_line": 138,
+          "end_line": 141
         },
         {
           "id": "dev.session-background-wait",
           "category": "guided",
-          "start_line": 139,
-          "end_line": 154
+          "start_line": 142,
+          "end_line": 157
         },
         {
           "id": "dev.session-end-guidance",
           "category": "guided",
-          "start_line": 155,
-          "end_line": 162
+          "start_line": 158,
+          "end_line": 165
         },
         {
           "id": "dev.sizing-routing",
           "category": "topology",
-          "start_line": 163,
-          "end_line": 185
+          "start_line": 166,
+          "end_line": 188
         },
         {
           "id": "dev.verification-contract",
           "category": "assurance",
-          "start_line": 186,
-          "end_line": 205
+          "start_line": 189,
+          "end_line": 208
         },
         {
           "id": "dev.scope-detection",
           "category": "guided",
-          "start_line": 206,
-          "end_line": 229
+          "start_line": 209,
+          "end_line": 232
         },
         {
           "id": "dev.scope-escalation",
           "category": "core",
-          "start_line": 230,
-          "end_line": 235
+          "start_line": 233,
+          "end_line": 238
         },
         {
           "id": "dev.small-workflow",
           "category": "guided",
-          "start_line": 236,
-          "end_line": 284
+          "start_line": 239,
+          "end_line": 287
         },
         {
           "id": "dev.fix-workflow",
           "category": "guided",
-          "start_line": 285,
-          "end_line": 305
+          "start_line": 288,
+          "end_line": 308
         },
         {
           "id": "dev.large-task-forcing",
           "category": "guided",
-          "start_line": 306,
-          "end_line": 353
+          "start_line": 309,
+          "end_line": 356
         },
         {
           "id": "dev.intent-and-acceptance",
           "category": "core",
-          "start_line": 354,
-          "end_line": 374
+          "start_line": 357,
+          "end_line": 377
         },
         {
           "id": "dev.intent-confirmation-guidance",
           "category": "guided",
-          "start_line": 375,
-          "end_line": 427
+          "start_line": 378,
+          "end_line": 430
         },
         {
           "id": "dev.plan-and-setup",
           "category": "guided",
-          "start_line": 428,
-          "end_line": 439
+          "start_line": 431,
+          "end_line": 443
         },
         {
           "id": "dev.phase-guidance",
           "category": "guided",
-          "start_line": 440,
-          "end_line": 470
+          "start_line": 444,
+          "end_line": 474
         },
         {
           "id": "dev.phase-assurance",
           "category": "assurance",
-          "start_line": 471,
-          "end_line": 480
+          "start_line": 475,
+          "end_line": 484
         },
         {
           "id": "dev.finish-guidance",
           "category": "guided",
-          "start_line": 481,
-          "end_line": 492
+          "start_line": 485,
+          "end_line": 502
         },
         {
           "id": "dev.finish-autonomy",
           "category": "autonomous",
-          "start_line": 493,
-          "end_line": 494
+          "start_line": 503,
+          "end_line": 504
         },
         {
           "id": "dev.staging-topology",
           "category": "topology",
-          "start_line": 495,
-          "end_line": 503
+          "start_line": 505,
+          "end_line": 513
         },
         {
           "id": "dev.hotfix-scaffolding",
           "category": "guided",
-          "start_line": 504,
-          "end_line": 529
+          "start_line": 514,
+          "end_line": 539
         },
         {
           "id": "dev.session-end",
           "category": "guided",
-          "start_line": 530,
-          "end_line": 597
+          "start_line": 540,
+          "end_line": 607
         },
         {
           "id": "dev.context-health",
           "category": "guided",
-          "start_line": 598,
-          "end_line": 603
+          "start_line": 608,
+          "end_line": 613
         },
         {
           "id": "dev.doc-sync-guidance",
           "category": "guided",
-          "start_line": 604,
-          "end_line": 607
+          "start_line": 614,
+          "end_line": 617
         },
         {
           "id": "dev.skill-routing",
           "category": "topology",
-          "start_line": 608,
-          "end_line": 610
+          "start_line": 618,
+          "end_line": 620
         },
         {
           "id": "dev.completeness-assurance",
           "category": "assurance",
-          "start_line": 611,
-          "end_line": 621
+          "start_line": 621,
+          "end_line": 631
         },
         {
           "id": "dev.antipattern-sizing",
           "category": "topology",
-          "start_line": 622,
-          "end_line": 622
+          "start_line": 632,
+          "end_line": 632
         },
         {
           "id": "dev.antipattern-autonomy",
           "category": "autonomous",
-          "start_line": 623,
-          "end_line": 623
+          "start_line": 633,
+          "end_line": 633
         },
         {
           "id": "dev.antipattern-quality",
           "category": "assurance",
-          "start_line": 624,
-          "end_line": 624
+          "start_line": 634,
+          "end_line": 634
         },
         {
           "id": "dev.antipattern-guidance",
           "category": "guided",
-          "start_line": 625,
-          "end_line": 628
+          "start_line": 635,
+          "end_line": 638
         },
         {
           "id": "dev.antipattern-goal",
           "category": "core",
-          "start_line": 629,
-          "end_line": 629
+          "start_line": 639,
+          "end_line": 639
         },
         {
           "id": "dev.antipattern-continuation",
           "category": "guided",
-          "start_line": 630,
-          "end_line": 630
+          "start_line": 640,
+          "end_line": 640
         },
         {
           "id": "dev.antipattern-user-control",
           "category": "core",
-          "start_line": 631,
-          "end_line": 631
+          "start_line": 641,
+          "end_line": 641
         },
         {
           "id": "dev.antipattern-process",
           "category": "guided",
-          "start_line": 632,
-          "end_line": 642
+          "start_line": 642,
+          "end_line": 652
         },
         {
           "id": "dev.antipattern-scope",
           "category": "core",
-          "start_line": 643,
-          "end_line": 645
+          "start_line": 653,
+          "end_line": 655
         },
         {
           "id": "dev.preimplementation-gate",
           "category": "guided",
-          "start_line": 646,
-          "end_line": 660
+          "start_line": 656,
+          "end_line": 670
         },
         {
           "id": "dev.override-boundary",
           "category": "core",
-          "start_line": 661,
-          "end_line": 675
+          "start_line": 671,
+          "end_line": 685
         },
         {
           "id": "dev.profile-guided-compatibility",
           "category": "guided",
-          "start_line": 677,
-          "end_line": 681
+          "start_line": 687,
+          "end_line": 691
         },
         {
           "id": "dev.profile-session-invariant",
           "category": "core",
-          "start_line": 682,
-          "end_line": 682
+          "start_line": 692,
+          "end_line": 692
         },
         {
           "id": "dev.profile-runtime-lane",
           "category": "topology",
-          "start_line": 683,
-          "end_line": 683
+          "start_line": 693,
+          "end_line": 693
         },
         {
           "id": "dev.profile-runtime-evidence",
           "category": "assurance",
-          "start_line": 684,
-          "end_line": 684
+          "start_line": 694,
+          "end_line": 694
         },
         {
           "id": "dev.mission-routing",
           "category": "topology",
-          "start_line": 686,
-          "end_line": 727
+          "start_line": 696,
+          "end_line": 738
         }
       ]
     }

@@ -26,11 +26,17 @@ described as receiving or exporting a `CODEX_THREAD_ID` binding. The marker is a
 CLI/Engine admission artifact; it is not a production hook admission proof. A marker from another
 explicitly bound session is not reusable when the managed CLI validates it.
 
-Continue only when the emitted marker contains `mission_routing.status: "READY"`, `admitted: true`, and
-`would_block: false`. Managed implementation then follows the existing Mission admission, sealed
-campaign, and `AUTOPILOT_LEVEL=<level> node
+Read the emitted marker's `mission_routing` exactly as the canonical skills do (dev-flow /
+ceo-agent Mission routing sections): `READY` (with `admitted: true`, `would_block: false`) is the
+only enforce-mode admission — only then does managed implementation follow the existing Mission
+admission, sealed campaign, and `AUTOPILOT_LEVEL=<level> node
 "<plugin-root>/bin/autopilot.js" engine implement-review ...`
-route. Repairs attach to and resume that same engine/campaign lineage. A Codex implementer launched
+route. `SHADOW` (the repo's `mission-routing-config.json` has `enforcement_mode: shadow`) is
+observation only: record `admitted` / `would_block` honestly in the run summary and continue
+through the ordinary non-managed workflow without claiming an enforced receipt or grant, and
+without calling the managed engine route (the managed CLI rejects a non-READY marker). `LEGACY`
+means the project's Mission policy is off. Switching a repo from shadow to enforce is that repo
+owner's policy decision, not a gate to be bypassed. Repairs attach to and resume that same engine/campaign lineage. A Codex implementer launched
 inside that route receives a credentials-only isolated `CODEX_HOME`, never the controller plugin or
 configuration.
 
@@ -223,8 +229,10 @@ set the execution posture:
 
 Overrides: `-x <csv>` (red lines), `--expand` (scope), `--solo` (autonomy without offload
 — also the degradation fallback when the foreman can't start). Full semantics
-(topology, the P0-verified kill+reap mechanism, run-summary ledger):
-[`references/level-front-door.md`](references/level-front-door.md).
+(topology, the P0-verified kill+reap mechanism):
+[`references/level-front-door.md`](references/level-front-door.md);
+depth-0 control loop and run-summary ledger:
+[`references/depth0-control-loop.md`](references/depth0-control-loop.md).
 
 ## Startup
 
@@ -285,7 +293,8 @@ Ask if anything is absolutely off-limits. If none, use default DOA.
 | Decision Type | Examples |
 |---------------|----------|
 | Tech selection | zstd vs deflate, which library |
-| Research | Whether to run survey, what topic |
+| Research | Invoke `autopilot:survey` only when the unknown-escalation ladder probe says `recommend: U2` with budget left; a judgment-only research wish is recorded as a ledger `note`, never dispatched |
+| Unknown escalation | Climb U1–U2 when `scripts/probe-unknown.js classify` recommends them (read-only, budgeted per `review-loop-config.md`); U3 by `unknown_type` (`whether` → think-tank, `why` → debugger PUA); U4 is a Board escalation, never a CEO decision |
 | Team composition | Agent count, roles, parallel vs sequential |
 | Implementation path | Phase order, file structure, API design |
 | Error recovery | Build failure fix, test failure handling |
@@ -364,7 +373,7 @@ When encountering these, pause and propose:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board
 6. Produce CEO Reports per involvement level
-7. Need research? → Autonomously invoke autopilot:survey
+7. Need research? → run `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <run> --terms <nouns>`; invoke `autopilot:survey` only on `recommend: U2` with budget left, then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <type> --terms <terms> --signals <ids from classify> --work-unit <run>`; a judgment-only wish becomes a ledger `note`, not a dispatch
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
 9. Need parallel execution? → Pick the first AVAILABLE entry from `.claude/dispatch-config.md` → Parallel Dispatch. If no config file exists, or `superpowers:dispatching-parallel-agents` is listed but the plugin is not installed, fall back to `native` — issue multiple `Task` tool calls in a single response. (dev-flow session rules inject team config either way.)
    - For L-size parallel dispatch: use Seven-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)

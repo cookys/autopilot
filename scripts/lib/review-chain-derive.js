@@ -61,6 +61,12 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
 
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i];
+    // v2.36.3: an aborted generation (branch moved during collection, or a seat's findings
+    // failed to parse) produced NO reviewable result — it must contribute nothing. Before this
+    // guard its empty findings set "closed by absence" every open verified finding from the
+    // earlier generations (an abort was an audit escape), in both hetero-review-loop finalize
+    // and check-phase-review-receipt (7840hs report, 2026-09-05).
+    if (entry.status === 'aborted') continue;
     const gen = entry.generation || (i + 1);
 
     const genFindings = getFromGenMap(findingsByGeneration, gen);
@@ -83,6 +89,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
 
         // Update chain entry's closed_findings for the generation that originated this finding
         for (const prevEntry of chain) {
+          if (prevEntry.status === 'aborted') continue; // an aborted record stays minimal (v2.36.3 review 🔵)
           if (prevEntry.generation < gen) {
             if (!Array.isArray(prevEntry.closed_findings)) {
               prevEntry.closed_findings = [];
@@ -98,17 +105,12 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
       }
     }
 
-    // 2. Also honor any pre-existing closed_findings recorded on earlier chain entries
-    if (Array.isArray(entry.closed_findings)) {
-      for (const cf of entry.closed_findings) {
-        if (cf && cf.id) {
-          activeVerified.delete(cf.id);
-          if (!closedMap.has(cf.id)) {
-            closedMap.set(cf.id, cf);
-          }
-        }
-      }
-    }
+    // 2. (removed, v2.36.3) Pre-existing `closed_findings` stamps on chain entries are OUTPUT of
+    // this routine, never input: closure is re-derived from findings + dispositions evidence
+    // alone (ADR-0001, verification over attestation). Honouring stamps let a stamp written
+    // by the pre-v2.36.3 derive — which attributed a closure to an aborted generation — keep
+    // closing the finding on every later re-derivation, and let a forged stamp close a
+    // finding with no evidence at all.
 
     // 3. Process current generation's dispositions
     const dispMap = new Map();

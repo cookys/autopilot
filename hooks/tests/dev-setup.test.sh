@@ -110,6 +110,44 @@ assert_contains "$OUT" "strict read-only mode" "codex check skips active CLI pro
 assert_file_absent "$TEST_TMP/codex-stub-marker" "codex check does not call codex plugin subcommands"
 assert_not_contains "$OUT" "Sync and install" "codex check does not run install path"
 
+# --- Codex update under live sessions (2026-09-07, peer report: PostCompact MODULE_NOT_FOUND
+# after every plugin update). Both `plugin add` (in-place upgrade) and `plugin remove` replace
+# the versioned cache dir a running session's PLUGIN_ROOT points at. dev-setup must refuse
+# BEFORE any mutation unless --force, and must never call `plugin remove` any more.
+cat > "$STUB_BIN/codex" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  --version) echo "codex-cli test"; exit 0 ;;
+  plugin)
+    echo "codex $*" >> "$CODEX_STUB_MARKER"
+    if [[ "$2" == "marketplace" && "$3" == "list" ]]; then echo "autopilot-local  /x"; fi
+    exit 0
+    ;;
+  *) exit 42 ;;
+esac
+SH
+chmod +x "$STUB_BIN/codex"
+LIVE_MARKER="$TEST_TMP/codex-live-marker"
+OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$LIVE_MARKER" DEV_SETUP_CODEX_PIDS="4242 4243" bash "$SCRIPT" --harness codex --install 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "codex --install refuses while Codex sessions are running"
+assert_contains "$OUT" "pid: 4242 4243" "refusal names the live Codex pids"
+assert_contains "$OUT" "MODULE_NOT_FOUND" "refusal explains the PostCompact breakage it prevents"
+assert_contains "$OUT" "--force" "refusal names the override"
+assert_file_absent "$LIVE_MARKER" "refusal happens before any codex plugin mutation"
+
+FORCE_MARKER="$TEST_TMP/codex-force-marker"
+OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$FORCE_MARKER" DEV_SETUP_CODEX_PIDS="4242" bash "$SCRIPT" --harness codex --install --force 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "codex --install --force proceeds under live sessions"
+assert_contains "$(cat "$FORCE_MARKER")" "codex plugin add autopilot@autopilot-local" "forced update installs via plugin add"
+assert_not_contains "$(cat "$FORCE_MARKER")" "plugin remove" "update never runs plugin remove (add upgrades in place; remove only deletes the cache twice)"
+assert_contains "$OUT" "still reference the previous plugin cache" "forced update tells the operator to restart live sessions"
+
+QUIET_MARKER="$TEST_TMP/codex-quiet-marker"
+OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$QUIET_MARKER" DEV_SETUP_CODEX_PIDS="" bash "$SCRIPT" --harness codex --install 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "codex --install proceeds when no Codex session is running"
+assert_not_contains "$(cat "$QUIET_MARKER")" "plugin remove" "quiet update never runs plugin remove"
+assert_not_contains "$OUT" "still reference" "quiet update prints no restart note"
+
 cat > "$STUB_BIN/opencode2" <<'SH'
 #!/usr/bin/env bash
 echo "opencode2 v0.0.0-next-mismatch"

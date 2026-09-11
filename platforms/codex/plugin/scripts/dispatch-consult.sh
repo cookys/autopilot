@@ -20,6 +20,30 @@
 # USAGE:
 #   scripts/dispatch-consult.sh --question-file <path> --artifact <path> [--artifact <path> ...]
 #       [--repo-root <path>] [--timeout <dur>] [--dispatch-author-bin <path>]
+#       [--ladder-receipt <ledger.jsonl> --ladder-terms a,b,c --ladder-unknown-type how|why|whether
+#        [--ladder-signals S1,S4] [--ladder-work-unit <id>] [--ladder-round <n>]]
+#
+#   --ladder-receipt    unknown-escalation ladder (plan
+#                       docs/plans/2026-09-07-unknown-escalation-ladder.md P2):
+#                       after a SUCCESSFUL dispatch only, append one `ladder` row
+#                       (rung U1, heterogeneous = consult_resolved_from !=
+#                       native-fallback) to that decision ledger through
+#                       scripts/probe-unknown.js receipt. Additive: no other
+#                       behaviour changes; refusal paths never write a row.
+#                       Requires --ladder-terms and --ladder-unknown-type; --ladder-signals
+#                       is the probe's signal_ids (omit ⇒ [] = judgment-only climb, never
+#                       fabricated). Failure paths after the probe recommended U1 — transport,
+#                       protocol, verdict, qualification — write the row with reason=rail-failed.
+#                       The blind-evidence refusal (exit 4) deliberately writes NO row: it is a
+#                       defect in the caller's own payload, pre-transport and zero-spend; burning
+#                       budget there would hide the bug the refusal exists to surface.
+#
+# SWITCH SEMANTICS (two-knob matrix, plan §3): this rail is live when
+#   consult_dispatch resolves to `on` (explicit tuple) OR `auto` with a resolved
+#   seat tuple (resolve-review-loop.sh expanded it from topology, or fell back
+#   to claude-native). `off` refuses with switch_off. Before 2026-09-07 the
+#   guard accepted only the literal `on`, so the shipped default (`auto`)
+#   never dispatched — the probe's U1 rung depends on this fix (G1 R5).
 #
 #   --question-file   the original bounded question (REQUIRED). Baseline text —
 #                      defines the goal, never an implementer's account of it.
@@ -64,6 +88,12 @@ REPO_ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$SCRIPT_DIR/lib/json-emit.sh"
 
 QUESTION_FILE=""
+LADDER_RECEIPT=""
+LADDER_TERMS=""
+LADDER_UNKNOWN_TYPE=""
+LADDER_SIGNALS=""
+LADDER_WORK_UNIT=""
+LADDER_ROUND=""
 declare -a ARTIFACTS=()
 REPO_ROOT="$PWD"
 TIMEOUT="${AUTOPILOT_CONSULT_TIMEOUT:-5m}"
@@ -77,9 +107,39 @@ while [ $# -gt 0 ]; do
     --timeout) [ $# -ge 2 ] || { echo "dispatch-consult: missing value for $1" >&2; exit 2; }; TIMEOUT="$2"; shift 2 ;;
     --dispatch-author-bin) [ $# -ge 2 ] || { echo "dispatch-consult: missing value for $1" >&2; exit 2; }; AUTHOR_BIN="$2"; shift 2 ;;
     -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
+    --ladder-receipt) [ $# -ge 2 ] || die_usage "missing value for --ladder-receipt"; LADDER_RECEIPT="$2"; shift 2 ;;
+    --ladder-terms) [ $# -ge 2 ] || die_usage "missing value for --ladder-terms"; LADDER_TERMS="$2"; shift 2 ;;
+    --ladder-unknown-type) [ $# -ge 2 ] || die_usage "missing value for --ladder-unknown-type"; LADDER_UNKNOWN_TYPE="$2"; shift 2 ;;
+    --ladder-signals) [ $# -ge 2 ] || die_usage "missing value for --ladder-signals"; LADDER_SIGNALS="$2"; shift 2 ;;
+    --ladder-work-unit) [ $# -ge 2 ] || die_usage "missing value for --ladder-work-unit"; LADDER_WORK_UNIT="$2"; shift 2 ;;
+    --ladder-round) [ $# -ge 2 ] || die_usage "missing value for --ladder-round"; LADDER_ROUND="$2"; shift 2 ;;
     *) echo "dispatch-consult: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+# Ladder receipt helper (plan P2/P4): after the transport was attempted, record the
+# attempt in the decision ledger. On success the row is a climb; on a transport /
+# protocol / verdict failure it carries reason=rail-failed so the probe consumes the
+# rung's budget instead of recommending a dead seat forever (P4 dogfood finding).
+ladder_receipt() { # <reason-or-empty>
+  local reason="$1"
+  [ -n "$LADDER_RECEIPT" ] || return 0
+  if [ -z "$LADDER_TERMS" ] || [ -z "$LADDER_UNKNOWN_TYPE" ]; then
+    echo "dispatch-consult: --ladder-receipt requires --ladder-terms and --ladder-unknown-type — receipt NOT written" >&2
+    return 0
+  fi
+  local hetero="true"; [ "${CONSULT_RESOLVED_FROM:-}" = "native-fallback" ] && hetero="false"
+  local -a args=(receipt --ledger "$LADDER_RECEIPT" --rung U1 --unknown-type "$LADDER_UNKNOWN_TYPE" --terms "$LADDER_TERMS" --signals "${LADDER_SIGNALS}" --heterogeneous "$hetero" --run-id "consult-$(date -u +%Y%m%dT%H%M%SZ)-$$")
+  [ -n "$reason" ] && args+=(--reason "$reason")
+  [ -n "$LADDER_WORK_UNIT" ] && args+=(--work-unit "$LADDER_WORK_UNIT")
+  [ -n "$LADDER_ROUND" ] && args+=(--round "$LADDER_ROUND")
+  local err
+  err="$(mktemp "${TMPDIR:-/tmp}/dispatch-consult-receipt.XXXXXX")"
+  if ! node "$SCRIPT_DIR/probe-unknown.js" "${args[@]}" >/dev/null 2>"$err"; then
+    echo "dispatch-consult: ladder receipt refused: $(cat "$err" 2>/dev/null)" >&2
+  fi
+  rm -f "$err"
+}
 
 emit() {
   local status="$1" engine="$2" runner="$3" effort="$4" endpoint="$5" response_json="$6" error="$7" exit_code="$8"
@@ -112,6 +172,7 @@ RESOLVE_ERR_TEXT="$(cat "$RESOLVE_ERR" 2>/dev/null)"
 rm -f "$RESOLVE_ERR"
 if [ "$RESOLVE_RC" -ne 0 ]; then
   [ -n "$RESOLVE_ERR_TEXT" ] && echo "$RESOLVE_ERR_TEXT" >&2
+  ladder_receipt "rail-failed"
   emit "qualification_failed" "" "" "" "" "" "resolve-review-loop.sh exited $RESOLVE_RC: ${RESOLVE_ERR_TEXT:-no message}" 3
 fi
 
@@ -125,7 +186,8 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
 }
 
 CONSULT_DISPATCH="$(json_field consult_dispatch)"
-if [ "$CONSULT_DISPATCH" != "on" ]; then
+CONSULT_RESOLVED_FROM="$(json_field consult_resolved_from)"
+if [ "$CONSULT_DISPATCH" != "on" ] && [ "$CONSULT_DISPATCH" != "auto" ]; then
   echo "dispatch-consult: consult_dispatch is off — refusing (no transport dispatched)" >&2
   emit "switch_off" "" "" "" "" "" "consult_dispatch is off" 2
 fi
@@ -136,6 +198,7 @@ CONSULT_EFFORT="$(json_field consult_effort)"
 CONSULT_ENDPOINT="$(json_field consult_endpoint)"
 if [ -z "$CONSULT_ENGINE" ] || [ -z "$CONSULT_RUNNER" ] || [ -z "$CONSULT_EFFORT" ]; then
   echo "dispatch-consult: consult_dispatch=on but the consult seat did not resolve engine/runner/effort — refusing" >&2
+  ladder_receipt "rail-failed"
   emit "qualification_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "consult seat unresolved" 3
 fi
 
@@ -218,11 +281,13 @@ AUTHOR_RAW_LOG="$(printf '%s' "$AUTHOR_OUT" | node -e 'let s="";process.stdin.on
 
 if [ "$AUTHOR_RC" -ne 0 ] || [ "$AUTHOR_STATUS" != "authored" ]; then
   echo "dispatch-consult: transport did not produce an authored result (status=${AUTHOR_STATUS:-unknown}, exit=$AUTHOR_RC)" >&2
+  ladder_receipt "rail-failed"
   emit "transport_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "transport status=${AUTHOR_STATUS:-unknown}" 5
 fi
 
 [ -n "$AUTHOR_RAW_LOG" ] && [ -r "$AUTHOR_RAW_LOG" ] || {
   echo "dispatch-consult: authored result carried no readable raw_log" >&2
+  ladder_receipt "rail-failed"
   emit "transport_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "no raw_log from transport" 5
 }
 RESPONSE_TEXT="$(cat "$AUTHOR_RAW_LOG")"
@@ -244,6 +309,7 @@ process.stdout.write(hit || "");
 ' "$CORPUS_MANIFEST" "$AUTHOR_RAW_LOG" 2>/dev/null || true)"
 if [ -n "$VERDICT_HIT" ]; then
   echo "dispatch-consult: response rejected — carries a loop-convergence verdict token: $VERDICT_HIT" >&2
+  ladder_receipt "rail-failed"
   emit "verdict_rejected" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "verdict token present: $VERDICT_HIT" 5
 fi
 
@@ -290,7 +356,11 @@ process.stdout.write("");
 
 if [ -n "$VALIDATION" ]; then
   echo "dispatch-consult: $VALIDATION" >&2
+  ladder_receipt "rail-failed"
   emit "protocol_violation" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "$VALIDATION" 5
 fi
+
+# ── 7. Ladder receipt (additive, success path). ──
+ladder_receipt ""
 
 emit "advised" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "$RESPONSE_TEXT" "" 0

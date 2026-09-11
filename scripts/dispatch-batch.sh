@@ -8,7 +8,7 @@
 # testable safety machinery of an unattended fan-out. It does NOT (and CANNOT)
 # invoke the Agent/Task tool: dispatching N Claude workers + holding their
 # agentIds + Monitor/TaskStop is harness-only, so the LLM control loop lives as
-# PROSE in skills/ceo-agent/references/level-front-door.md § "Phase L". This
+# PROSE in skills/ceo-agent/references/depth0-control-loop.md § "Phase L". This
 # script is the half the harness cannot fake: it verifies by GIT ARTIFACTS
 # (commit existence + tree cleanliness + actual-touched files), never by an
 # agent's self-report — the same artifact-rail as scripts/dispatch-hetero.sh and
@@ -56,7 +56,7 @@
 #              path). --abort reaps ALL units' worker process groups; --unit <id>
 #              reaps just the one stalled unit. Uses a TERM-to-process-GROUP kill
 #              (Agent-tool homogeneous workers are instead reaped by the
-#              orchestrator's TaskStop — see level-front-door.md § Phase L).
+#              orchestrator's TaskStop — see depth0-control-loop.md § Phase L).
 #
 # UNITS FILE FORMAT (one unit per line; blank lines + '#' comments ignored):
 #   JSON-lines:  {"id":"ui","scope":"src/ui/**,src/ui/x.ts","base":"develop"}

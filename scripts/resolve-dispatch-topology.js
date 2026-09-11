@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { normalizeEffort } = require('./lib/effort-scale.js');
 const { spawnSync } = require('child_process');
 
 const RUNNER_TOKENS = Object.freeze([
@@ -47,6 +48,53 @@ const CLAUDE_FALLBACK_LADDER = Object.freeze([
   'haiku/medium@claude-native',
   'sonnet/medium@claude-native',
 ]);
+
+// A climb after a red result is a DECORRELATION problem, not a horsepower problem: the rung above
+// a failed one shares the model, the tokenizer and most of the failure mode when it is the same
+// family at the same cost tier, so re-dispatching there burns a repair round to learn nothing new.
+//
+// THE RULE (KR1): consecutive rungs may share a family ONLY when the effort strictly increases —
+// a real within-vendor climb, where the label IS comparable. Same family at the same or lower rank
+// is a no-op climb.
+//
+// WHY THIS IS A CONSTRUCTION AND NOT A POST-PASS. The plan (2026-09-08-family-aware-ladder-ordering
+// §4 P2) specified tie-group family rotation plus a repair sweep. Implementing it showed the sweep
+// spends decorrelation too early: it pulls the nearest different-family rung forward at the FIRST
+// opportunity, even when the adjacency there was already legal, and then has nothing left for a
+// later pair that genuinely needs it. On a real fixture (openai low, openai high x2, google high)
+// the sweep produced one illegal adjacency where a legal ordering existed.
+//
+// So the ladder is built instead of repaired, one rung at a time, and the preference is the
+// counter-intuitive one: when the next cheapest tier already outranks the last rung, take a
+// SAME-family rung first. That adjacency is legal for free, and it saves the scarce
+// different-family rungs for the ties where they are the only thing that can satisfy KR1.
+//
+// Cheapest-first is preserved exactly: every pick comes from the cheapest remaining rank tier, so
+// the ordering only ever reshuffles within a tier. On a single-family host every pick is the
+// same-family one and the ladder is byte-identical to the plain effort ordering.
+function decorrelateAdjacent(ladder) {
+  if (ladder.length < 2) return ladder.slice();
+  const pool = ladder.slice();
+  const rankOf = (r) => normalizeEffort(r.family, r.effort);
+  const out = [pool.shift()];
+  while (pool.length > 0) {
+    const last = out[out.length - 1];
+    const lastRank = rankOf(last);
+    const tierRank = Math.min(...pool.map(rankOf));
+    const inTier = (r) => rankOf(r) === tierRank;
+    let pick;
+    if (tierRank > lastRank) {
+      // A same-family rung here is already a legal climb — spend it, keep the others.
+      pick = pool.find((r) => inTier(r) && r.family === last.family);
+    }
+    if (!pick) pick = pool.find((r) => inTier(r) && r.family !== last.family);
+    // Nothing decorrelated left in this tier: emit the cheapest and accept the repeat.
+    if (!pick) pick = pool.find(inTier);
+    out.push(pick);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  return out;
+}
 
 function normalizeRunner(runner) {
   if (runner === 'codex-cli') return 'codex';
@@ -115,13 +163,124 @@ function usage(code = 2) {
     'Options:\n' +
     '  --json                   Emit topology JSON to stdout (default: write to file only)\n' +
     '  --check                  Diff recomputed topology against on-disk file, exit non-zero on mismatch\n' +
+    '  --resolve-live           Resolve one role in memory; print preferred/effective tuple JSON; never writes\n' +
     '  --out <path>             Custom output file path (default: $AUTOPILOT_TOPOLOGY_FILE or ~/.autopilot/topology.json)\n' +
-    '  --role <roles>           Comma-separated or repeatable role filter (implementer, plan_reviewer, reviewer, consult, discuss; default: all five)\n' +
+    '  --role <roles>           Comma-separated or repeatable role filter (implementer, plan_reviewer, reviewer, consult, discuss; default: all five). Required (exactly one) with --resolve-live\n' +
+    '  --store <dir>            Capability store directory for pins.jsonl lookup (--resolve-live only; default: $ENGINE_CAPABILITY_DIR or ~/.autopilot/engine-capability)\n' +
     '  --exclude-seats <seats>  Comma-separated list of engine/effort@runner seats to exclude\n' +
     '  --asking-family <family> Family name for consult/discuss ladder sorting (default: anthropic)\n' +
     '  -h, --help               Print this help message\n'
   );
   process.exit(code);
+}
+
+function ladderKeyForRole(role) {
+  if (role === 'plan_reviewer') return 'plan_review_panel';
+  return `${role}_ladder`;
+}
+
+function tupleFromLadderRung(rung) {
+  if (!rung || typeof rung !== 'object') {
+    return { engine: null, runner: null, effort: null, endpoint: null };
+  }
+  const endpointRaw = rung.endpoint;
+  const endpoint = (typeof endpointRaw === 'string' && endpointRaw.length > 0)
+    ? endpointRaw
+    : null;
+  return {
+    engine: rung.engine == null ? null : rung.engine,
+    runner: rung.runner == null ? null : rung.runner,
+    effort: rung.effort == null ? null : rung.effort,
+    endpoint,
+  };
+}
+
+function loadTopologyNoWrite(repoRoot, outPath, deriveOptions) {
+  if (fs.existsSync(outPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(outPath, 'utf8'));
+    } catch (err) {
+      process.stderr.write(`Topology file invalid JSON at ${outPath}: ${err.message}\n`);
+      process.exit(1);
+    }
+  }
+  return deriveTopology(repoRoot, deriveOptions);
+}
+
+// Read the active pin for a role via the existing pins verb — do not re-validate
+// pin rows here (KR6 owns that in engine-capability-state.js).
+function readPinForRole(repoRoot, role, storeArg) {
+  const capScript = path.join(repoRoot, 'scripts', 'engine-capability-state.js');
+  const args = [capScript, 'pins', '--role', role];
+  if (storeArg) {
+    args.push('--store', storeArg);
+  }
+  const res = spawnSync(process.execPath, args, {
+    env: process.env,
+    encoding: 'utf8',
+  });
+  if (res.status !== 0) {
+    const detail = (res.stderr || res.stdout || '').trim();
+    process.stderr.write(
+      detail.length > 0
+        ? `${detail}\n`
+        : `pins lookup failed for role ${role} (exit ${res.status})\n`
+    );
+    process.exit(res.status || 1);
+  }
+  let rows;
+  try {
+    rows = JSON.parse((res.stdout || '').trim() || '[]');
+  } catch (err) {
+    process.stderr.write(`pins output invalid JSON: ${err.message}\n`);
+    process.exit(1);
+  }
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  return rows[0];
+}
+
+function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
+  const topology = loadTopologyNoWrite(repoRoot, outPath, deriveOptions);
+  const ladderKey = ladderKeyForRole(role);
+  const ladder = Array.isArray(topology[ladderKey]) ? topology[ladderKey] : [];
+  const ladderTuple = tupleFromLadderRung(ladder[0]);
+
+  const pin = readPinForRole(repoRoot, role, storeArg);
+  let preferred_tuple;
+  let effective_tuple;
+  // Substitution when a pinned seat is unusable is a later deliverable.
+  const substitution_reason = null;
+
+  if (pin) {
+    preferred_tuple = {
+      engine: pin.engine,
+      runner: pin.runner,
+      effort: pin.effort,
+      endpoint: Object.prototype.hasOwnProperty.call(pin, 'endpoint') ? pin.endpoint : null,
+    };
+    effective_tuple = {
+      engine: preferred_tuple.engine,
+      runner: preferred_tuple.runner,
+      effort: preferred_tuple.effort,
+      endpoint: preferred_tuple.endpoint,
+    };
+  } else {
+    preferred_tuple = ladderTuple;
+    effective_tuple = {
+      engine: ladderTuple.engine,
+      runner: ladderTuple.runner,
+      effort: ladderTuple.effort,
+      endpoint: ladderTuple.endpoint,
+    };
+  }
+
+  return {
+    role,
+    preferred_tuple,
+    effective_tuple,
+    substitution_reason,
+    pending_revocation: [],
+  };
 }
 
 function resolveOutputPath(outArg) {
@@ -402,19 +561,41 @@ function deriveTopology(repoRoot, options = {}) {
         baselineEventId = c.event_id;
       }
 
+      // Legacy (pre-effort-partition) scorecard rows carry no effort. The emitted
+      // rung keeps the `engine@runner` name so the seat stays traceable to its
+      // legacy partition, but `effort` is defaulted to 'high' — the same rule the
+      // reviewer/consult/discuss path applies (see emittedEffort above). An empty
+      // effort is not in the review-loop contract's implementer_effort enum, so
+      // '' here made resolve-review-loop.sh's `implementer_ladder: auto` output fail
+      // validation on every host with a legacy seat (2026-09-07).
+      const emittedEffort = effort || 'high';
       const rungName = effort ? `${engine}/${effort}@${runner}` : `${engine}@${runner}`;
+      // family is attached here (producer-side only) via the SAME familyOf() helper
+      // and value the reviewer/consult/discuss path uses for this engine. Effort is
+      // not comparable cross-family — vendors document "low"/"medium"/etc.
+      // differently and prompt style varies by family — so anything that wants to
+      // reason per-family (rather than by the single cross-family EFFORT_RANK this
+      // file sorts on today) needs the field to exist on the rung first. This does
+      // NOT change ordering, and the review-loop contract / `implementer_ladder:
+      // auto` reader intentionally still projects rungs down to
+      // {engine, effort, runner} and must keep doing so — plumbing family through
+      // that path is a separate, later change.
       const rungObj = {
         rung: rungName,
         engine,
-        effort: effort || '',
+        effort: emittedEffort,
         runner,
+        family: familyOf(engine),
       };
       if (baselineEventId !== undefined) {
         rungObj.baseline_event_id = baselineEventId;
       }
 
+      const seatKey = `${engine}\u0000${emittedEffort}\u0000${runner}`;
+
       qualifiedSeats.push({
         rungObj,
+        seatKey,
         effort: effort || '',
         latency: rowLatency,
         engine,
@@ -422,20 +603,38 @@ function deriveTopology(repoRoot, options = {}) {
       });
     }
 
+    // Rank by the EMITTED effort so a legacy seat (emitted 'high') sits among the
+    // other 'high' rungs, never above 'xhigh'/'max' — the ladder is climbed
+    // top-down on red repairs and a legacy rung that sorted last would turn an
+    // escalation into a de-escalation. Legacy sorts after explicit at the same
+    // effort so the exact-tuple seat wins the dedupe below.
     qualifiedSeats.sort((a, b) => {
-      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
-      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
+      const rankA = normalizeEffort(a.rungObj.family, a.rungObj.effort);
+      const rankB = normalizeEffort(b.rungObj.family, b.rungObj.effort);
       if (rankA !== rankB) return rankA - rankB;
+      const legacyA = a.effort ? 0 : 1;
+      const legacyB = b.effort ? 0 : 1;
+      if (legacyA !== legacyB) return legacyA - legacyB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
     });
 
-    let implementerLadder = qualifiedSeats.map((s) => s.rungObj);
+    // Two scorecard rows can resolve to the same dispatch identity: a superseded
+    // legacy row and its successor both still `current`, or a legacy no-effort
+    // seat (emitted as 'high') next to an explicit `/high` seat. One identity is
+    // one rung — a duplicate would just re-dispatch the same implementer on climb.
+    // Dedupe AFTER the sort so the explicit-effort (exact-tuple) seat wins over
+    // the legacy one, which sorts last.
+    const seenSeats = new Set();
+    let implementerLadder = qualifiedSeats
+      .filter((s) => (seenSeats.has(s.seatKey) ? false : (seenSeats.add(s.seatKey), true)))
+      .map((s) => s.rungObj);
     if (excludeSet.size > 0) {
       implementerLadder = implementerLadder.filter(
         (r) => !seatMatchesExcluded(r.engine, r.effort, r.runner, excludeSet)
       );
     }
+    implementerLadder = decorrelateAdjacent(implementerLadder);
 
     const ladderRunners = new Set(implementerLadder.map((r) => r.runner));
     const candidatesToQualify = RUNNER_TOKENS.filter(
@@ -612,7 +811,9 @@ function main() {
   const argv = process.argv.slice(2);
   let asJson = false;
   let isCheck = false;
+  let isResolveLive = false;
   let outArg = null;
+  let storeArg = null;
   let roleArgs = [];
   let excludeSeatsArg = null;
   let askingFamily = 'anthropic';
@@ -623,9 +824,15 @@ function main() {
       asJson = true;
     } else if (arg === '--check') {
       isCheck = true;
+    } else if (arg === '--resolve-live') {
+      isResolveLive = true;
     } else if (arg === '--out') {
       if (i + 1 >= argv.length) usage(2);
       outArg = argv[i + 1];
+      i += 1;
+    } else if (arg === '--store') {
+      if (i + 1 >= argv.length) usage(2);
+      storeArg = argv[i + 1];
       i += 1;
     } else if (arg === '--role') {
       if (i + 1 >= argv.length) usage(2);
@@ -645,6 +852,14 @@ function main() {
       process.stderr.write(`Unknown argument: ${arg}\n`);
       usage(2);
     }
+  }
+
+  // Defect 1: --store only means anything with --resolve-live. Reject it BEFORE
+  // entering any legacy branch (isCheck, or the unconditional-write path) so no
+  // file is written on the way to the error.
+  if (storeArg && !isResolveLive) {
+    process.stderr.write('--store is only valid with --resolve-live\n');
+    process.exit(2);
   }
 
   let selectedRoles;
@@ -681,6 +896,41 @@ function main() {
     excludeSet,
     askingFamily,
   };
+
+  // KR10 no-write live resolution: must return BEFORE the unconditional write below.
+  if (isResolveLive) {
+    if (roleArgs.length === 0) {
+      process.stderr.write('--resolve-live requires --role\n');
+      process.exit(2);
+    }
+    const liveRoles = [];
+    for (const rArg of roleArgs) {
+      const parts = rArg.split(',').map((s) => s.trim()).filter(Boolean);
+      for (const p of parts) liveRoles.push(p);
+    }
+    if (liveRoles.length !== 1) {
+      process.stderr.write('--resolve-live requires exactly one --role\n');
+      process.exit(2);
+    }
+    const liveRole = liveRoles[0];
+    if (!VALID_ROLES.includes(liveRole)) {
+      process.stderr.write(
+        `Invalid --role for --resolve-live: ${liveRole} (expected one of ${VALID_ROLES.join(', ')})\n`
+      );
+      process.exit(2);
+    }
+    const liveDeriveOptions = {
+      roles: new Set([liveRole]),
+      excludeSet,
+      askingFamily,
+    };
+    const result = resolveLiveTuple(repoRoot, liveRole, outPath, storeArg, liveDeriveOptions);
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    // Defect 3: no process.exit(0) here — let main() return so Node drains the
+    // stdout write before the process exits. On a pipe, an immediate exit()
+    // can discard a still-pending write; returning normally lets libuv flush.
+    return;
+  }
 
   if (isCheck) {
     if (!fs.existsSync(outPath)) {

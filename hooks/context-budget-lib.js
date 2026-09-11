@@ -102,9 +102,29 @@ function usageRowOf(line) {
   const u = obj && obj.message && obj.message.usage;
   if (!u || typeof u !== 'object') return null;
   const n = (v) => (Number.isFinite(v) ? v : 0);
-  const total = n(u.input_tokens) + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens);
+  const sumOf = (x) => n(x.input_tokens) + n(x.cache_read_input_tokens) + n(x.cache_creation_input_tokens);
+  // v2.36.6: a turn that ran the advisor tool carries `usage.iterations` and its top-level
+  // cache_read_input_tokens is the SUM over every sub-request (message + advisor_message +
+  // message), i.e. roughly double the real context (2026-09-06: 1,244,686 "tokens" on a
+  // 1M window at 620k). The last `type: 'message'` iteration is the actual final request.
+  let src = u;
+  if (Array.isArray(u.iterations)) {
+    for (let i = u.iterations.length - 1; i >= 0; i--) {
+      const it = u.iterations[i];
+      if (it && typeof it === 'object' && (it.type === undefined || it.type === 'message')) { src = it; break; }
+    }
+  }
+  const total = sumOf(src);
   if (total <= 0) return null;
   return { tokens: total, timestamp: typeof obj.timestamp === 'string' ? obj.timestamp : null };
+}
+
+function isCompactBoundary(line) {
+  if (!line.includes('compact_boundary')) return false;
+  try {
+    const o = JSON.parse(line);
+    return !!o && o.type === 'system' && o.subtype === 'compact_boundary';
+  } catch { return false; }
 }
 
 // Back-compat: tokens-only view of usageRowOf (pre-v2.36.1 callers/tests).
@@ -132,6 +152,10 @@ function scanLastUsageRow(tpath, opts = {}) {
       for (let i = usable.length - 1; i >= 0; i--) {
         const t = usable[i].trim();
         if (!t) continue;
+        // v2.36.6: a compact_boundary reached before any usage row means every usage row
+        // behind it describes the PRE-compaction context. Report "no signal" instead of
+        // the stale (possibly window-sized) number (2026-09-06: T2 fired at 8% real usage).
+        if (isCompactBoundary(t)) return null;
         const row = usageRowOf(t);
         if (row !== null) return row;
       }
@@ -178,7 +202,9 @@ function budgetDecision(state, cfg) {
   // say so — "inferred from observed usage" would be a false claim about a real number.
   const windowClause = cfg.windowSource === 'statusline'
     ? '(statusline)'
-    : 'inferred from observed usage';
+    : cfg.windowSource === 'session-window'
+      ? '(this session\'s window, read from the statusline earlier)'
+      : 'inferred from observed usage';
   const pct = win ? ` = ${Math.round((contextTokens / win) * 100)}% of the ` +
     `~${Math.round(win / 1000)}k window ${windowClause}` : '';
   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {

@@ -1277,13 +1277,24 @@ function releaseCampaignAdmission(input = {}, adapters = {}) {
   };
 }
 
-function consumeEnforcedProviderReadiness({ adapters, contract, inspection, roster, now }) {
+function consumeEnforcedProviderReadiness({ adapters, contract, inspection, roster, now, level }) {
   const bundle = typeof adapters.providerReadiness === 'function'
     ? adapters.providerReadiness({ contract, inspection, roster, now }) : null;
   if (!bundle || !bundle.receipt || !bundle.roster || !bundle.policy) {
+    // v2.36.7 (owner ruling 2026-09-06): name the cause and the two legal remedies. The
+    // authority is compiled only by the l4/l5/l6 strict host bootstrap (bin/autopilot.js); an l3
+    // (or unset) level has none, so an enforce-mode intake under it can only be refused — this
+    // is ADR-0001's verification boundary, never an identity check to be waived, and never
+    // something a consuming repo should construct by hand.
+    // `level` is threaded by the caller (engine input), never read from the environment here —
+    // this module is input-determined (review 🟡).
+    const levelLabel = typeof level === 'string' && level.length > 0 ? level : '(unset)';
+    const cause = typeof adapters.providerReadiness !== 'function'
+      ? `no provider-readiness authority was compiled for this run (AUTOPILOT_LEVEL=${levelLabel}; only l4/l5/l6 build the strict host bootstrap)`
+      : 'the host readiness authority returned an incomplete bundle';
     throw new CampaignIntakeError(
       'provider_readiness_authority_missing',
-      'enforced campaign intake requires host-owned readiness evidence',
+      `enforced campaign intake requires host-owned readiness evidence — ${cause}. Remedies: set this rail's mission enforcement_mode to shadow, or run it under /l4, /l5 or /l6 so the host bootstrap compiles. Do not construct a readiness authority by hand.`,
     );
   }
   const result = consumeProviderReadinessBeforeSpend(bundle.receipt, {
@@ -1584,6 +1595,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
         inspection,
         roster: input.roster,
         now,
+        level: typeof input.level === 'string' ? input.level : undefined,
       });
     } catch (error) {
       return releaseAfterRejection(rejected(

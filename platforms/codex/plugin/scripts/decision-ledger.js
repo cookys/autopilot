@@ -26,6 +26,16 @@
  *   refreeze  {decision_id, round, old_digest, new_digest, reason}
  *   veto      {target_decision_id, reason}          (operator-authored)
  *   note      {round, text}                          (non-decision telemetry)
+ *   hypothesis {hypothesis_id, text, status: open|refuted|confirmed, evidence_refs[], round?, work_unit?}
+ *   unknown    {type: how|why|whether, rationale, round?, work_unit?}   (agent self-report — a claim, S6)
+ *   ladder     {rung: U0..U4, unknown_type, terms[], signal_ids[], heterogeneous, reason?, dispatch_run_id?, round?, work_unit?}
+ * The last three are unknown-escalation-ladder telemetry (plan
+ * docs/plans/2026-09-07-unknown-escalation-ladder.md): exempt from decision_id /
+ * rationale like `note`, each validated against its own required-field set. A
+ * `ladder` row is written once per rung dispatch by probe-unknown.js receipt or
+ * dispatch-consult.sh --ladder-receipt; a `reason` of knob-off | budget-exhausted |
+ * not-heterogeneous marks a skip, not a climb; `rail-failed` marks an attempted rung
+ * whose rail died (budget consumed, nothing learned).
  * All rows carry {schema_version:1, ts, kind}.
  *
  * Usage:
@@ -45,7 +55,42 @@ const fs = require('fs');
 const path = require('path');
 const { appendRow, ensureDir, withWriteLock } = require('./lib/jsonl-store');
 
-const KINDS = new Set(['decision', 'dispatch', 'pick', 'refreeze', 'veto', 'note']);
+const KINDS = new Set(['decision', 'dispatch', 'pick', 'refreeze', 'veto', 'note', 'hypothesis', 'unknown', 'ladder']);
+const TELEMETRY_KINDS = new Set(['note', 'hypothesis', 'unknown', 'ladder']);
+const RUNGS = ['U0', 'U1', 'U2', 'U3', 'U4'];
+const UNKNOWN_TYPES = ['how', 'why', 'whether'];
+const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
+const LADDER_KINDS = new Set(['hypothesis', 'unknown', 'ladder']);
+
+function isNonEmptyString(v) { return typeof v === 'string' && v.trim().length > 0; }
+function isStringArray(v) { return Array.isArray(v) && v.every((x) => typeof x === 'string'); }
+
+// Per-kind required fields for the ladder telemetry kinds. Returns an error
+// message or null. Extra fields pass through untouched (same as every kind).
+function validateLadderRow(kind, row) {
+  if (kind === 'hypothesis') {
+    if (!isNonEmptyString(row.hypothesis_id)) return 'hypothesis rows require hypothesis_id';
+    if (!isNonEmptyString(row.text)) return 'hypothesis rows require text';
+    if (!['open', 'refuted', 'confirmed'].includes(row.status)) return 'hypothesis.status must be open|refuted|confirmed';
+    if (row.evidence_refs !== undefined && !isStringArray(row.evidence_refs)) return 'hypothesis.evidence_refs must be a string array';
+    return null;
+  }
+  if (kind === 'unknown') {
+    if (!UNKNOWN_TYPES.includes(row.type)) return 'unknown.type must be how|why|whether';
+    if (!isNonEmptyString(row.rationale)) return 'unknown rows require a rationale (it is a self-reported claim)';
+    return null;
+  }
+  if (kind === 'ladder') {
+    if (!RUNGS.includes(row.rung)) return 'ladder.rung must be U0..U4';
+    if (![...UNKNOWN_TYPES, 'none'].includes(row.unknown_type)) return 'ladder.unknown_type must be how|why|whether|none';
+    if (!isStringArray(row.terms)) return 'ladder.terms must be a string array';
+    if (!isStringArray(row.signal_ids)) return 'ladder.signal_ids must be a string array';
+    if (typeof row.heterogeneous !== 'boolean') return 'ladder.heterogeneous must be boolean';
+    if (row.reason !== undefined && !SKIP_REASONS.has(row.reason)) return `ladder.reason must be one of ${[...SKIP_REASONS].join('|')}`;
+    return null;
+  }
+  return null;
+}
 
 function usage(message) {
   process.stderr.write(`decision-ledger: ${message}\n`);
@@ -101,7 +146,11 @@ function append(opts) {
     usage('--json must be a JSON object');
   }
   if (!row || typeof row !== 'object' || Array.isArray(row)) usage('--json must be a JSON object');
-  if (opts.kind !== 'veto' && opts.kind !== 'note') {
+  if (LADDER_KINDS.has(opts.kind)) {
+    const err = validateLadderRow(opts.kind, row);
+    if (err) usage(err);
+  }
+  if (opts.kind !== 'veto' && !TELEMETRY_KINDS.has(opts.kind)) {
     if (typeof row.decision_id !== 'string' || !row.decision_id.trim()) {
       usage('decision rows require a decision_id');
     }
@@ -188,6 +237,21 @@ function report(opts) {
   lines.push('## 待你拍板(ask-first queue — 絕不代決)');
   if (askFirst.length === 0) lines.push('- (empty)');
   for (const a of askFirst) lines.push(`- [${a.decision_id}] ${a.rationale}`);
+  lines.push('');
+  lines.push('## Ladder (unknown-escalation climbs this round)');
+  const ladderRows = inRound.filter((r) => r.kind === 'ladder');
+  const refuted = inRound.filter((r) => r.kind === 'hypothesis' && r.status === 'refuted').length;
+  const climbs = ladderRows.filter((r) => !r.reason);
+  const skips = ladderRows.filter((r) => r.reason);
+  const used = {};
+  for (const c of ladderRows) if (!c.reason || c.reason === 'rail-failed') used[c.rung] = (used[c.rung] || 0) + 1;
+  lines.push(`- refuted hypotheses: ${refuted}`);
+  lines.push(`- climbs used per rung: ${RUNGS.slice(1, 4).map((r) => `${r}=${used[r] || 0}`).join(' ')}`);
+  if (ladderRows.length === 0) lines.push('- (no ladder rows this round)');
+  for (const c of climbs) lines.push(`- ${c.rung} ${c.unknown_type} [${(c.signal_ids || []).join(',')}] terms=${(c.terms || []).join(',')}${c.heterogeneous === false ? ' (not heterogeneous)' : ''}${c.dispatch_run_id ? ` run=${c.dispatch_run_id}` : ''}`);
+  for (const k of skips) lines.push(`- skip ${k.rung} reason=${k.reason} terms=${(k.terms || []).join(',')}`);
+  const s6Only = climbs.filter((c) => Array.isArray(c.signal_ids) && c.signal_ids.length > 0 && c.signal_ids.every((id) => id === 'S6'));
+  lines.push(`- S6-only climbs (self-reported unknown, no mechanical co-signal): ${s6Only.length === 0 ? 'none' : s6Only.map((c) => `${c.rung} terms=${(c.terms || []).join(',')}`).join('; ')}`);
   lines.push('');
   lines.push('## Stall status');
   lines.push(stall

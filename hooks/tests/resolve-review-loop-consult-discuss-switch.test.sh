@@ -100,22 +100,45 @@ assert_eq "0" "$NEW_EXIT" "this branch's resolver exits 0 on the shipped templat
 
 # For the byte-for-byte KEY/VALUE parity comparison (1-3), resolve the OLD
 # (pinned pre-D6) resolver against the SAME physical config file as the NEW
-# resolver — the current branch's shipped template. The old resolver has no
-# case arm for consult_dispatch/discuss_dispatch, so it silently ignores those
-# two extra lines exactly as it would for any field it doesn't know about;
-# using the same file eliminates an incidental config_path difference that
-# would otherwise be an artifact of comparing two different physical files,
-# not a real behavioral difference. OLD_JSON (resolved against OLD_TEMPLATE,
-# the genuine pre-widening file) is kept for the migration-negative (§5) below.
-OLD_JSON_PARITY="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" bash "$OLD_SCRIPT" 2>/dev/null)"
-export OLD_JSON OLD_JSON_PARITY NEW_JSON
+# resolver. The old resolver has no case arm for consult_dispatch/discuss_dispatch,
+# so it silently ignores those two extra lines exactly as it would for any field
+# it doesn't know about; using the same file eliminates an incidental config_path
+# difference that would otherwise be an artifact of comparing two different
+# physical files, not a real behavioral difference. OLD_JSON (resolved against
+# OLD_TEMPLATE, the genuine pre-widening file) is kept for the migration-negative
+# (§5) below.
+#
+# That shared file is the shipped template with TWO lines rewritten: since
+# 2026-09-04 (31c22802) the template ships `plan_review: auto` and
+# `implementer_ladder: auto`, values the frozen pre-D6 resolver rejects outright
+# (`invalid plan_review (must be on|off)`, `invalid implementer_ladder item`), so
+# feeding it the shipped template verbatim yields an EMPTY old output and a parity
+# check that compares nothing (that is how this assertion sat red on develop from
+# 2026-09-04 to 2026-09-07). `plan_review: off` and an empty ladder are values both
+# resolvers accept and resolve identically (no plan seat, `[]`). Every other line is
+# byte-identical.
+PARITY_TEMPLATE="$OLD_ROOT/parity-template.md"
+# consult_dispatch is also pinned to `off` here: with `auto` the NEW resolver fills
+# consult_engine/effort/runner/endpoint from the host topology (the D6 feature), which
+# would make the byte-parity below host-dependent. "auto is live" is asserted on the
+# shipped-template output (NEW_JSON) further down and by the dispatch-consult
+# transport checks, so nothing is lost by turning it off for the parity file.
+sed -e 's/^- plan_review: auto$/- plan_review: off/' -e 's/^- implementer_ladder: auto$/- implementer_ladder:/' -e 's/^- consult_dispatch: auto$/- consult_dispatch: off/' "$SHIPPED_TEMPLATE" > "$PARITY_TEMPLATE"
+assert_contains "$(cat "$PARITY_TEMPLATE")" "- plan_review: off" "parity template carries plan_review: off (a value the frozen resolver can parse)"
+assert_not_contains "$(cat "$PARITY_TEMPLATE")" "- implementer_ladder: auto" "parity template drops implementer_ladder: auto (the frozen resolver has no auto expansion)"
+OLD_JSON_PARITY="$(REVIEW_LOOP_CONFIG_OVERRIDE="$PARITY_TEMPLATE" bash "$OLD_SCRIPT" 2>/dev/null)"; OLD_PARITY_EXIT=$?
+NEW_JSON_PARITY="$(REVIEW_LOOP_CONFIG_OVERRIDE="$PARITY_TEMPLATE" bash "$SCRIPT" 2>/dev/null)"; NEW_PARITY_EXIT=$?
+assert_eq "0" "$OLD_PARITY_EXIT" "pinned pre-D6 resolver exits 0 on the parity template"
+assert_eq "0" "$NEW_PARITY_EXIT" "this branch's resolver exits 0 on the parity template"
+export OLD_JSON OLD_JSON_PARITY NEW_JSON NEW_JSON_PARITY
 PARITY_OUT="$(node <<'NODE'
 const oldJson = JSON.parse(process.env.OLD_JSON_PARITY);
-const newJson = JSON.parse(process.env.NEW_JSON);
+const newJson = JSON.parse(process.env.NEW_JSON_PARITY);
 const problems = [];
 
 // (2) every key present in the OLD output is present in the NEW output with a
-// byte-identical value.
+// byte-identical value (the parity template pins consult_dispatch: off, so the
+// consult seat fields are '' on both sides on every host).
 for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   const newVal = newJson[key];
@@ -132,13 +155,21 @@ const expectedAdded = [
   'consult_dispatch', 'consult_resolved_from',
   'discuss_dispatch',
   'hetero_review', 'hetero_review_resolved_from',
+  // implementer-ladder start-rung judgment flag (emitted unconditionally since the
+  // ladder shipped; the frozen pre-D6 resolver never emits it)
+  'ladder_start_rung_judgment',
   'plan_review_resolved_from',
+  // unknown-escalation ladder knob (v2.36.15, plan 2026-09-07-unknown-escalation-ladder P2)
+  'unknown_escalation', 'unknown_budget_u1', 'unknown_budget_u2', 'unknown_budget_u3', 'unknown_resolved_from',
 ].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);
 }
-if (newJson.consult_dispatch !== 'auto') problems.push('consult_dispatch-not-auto');
-if (newJson.discuss_dispatch !== 'off') problems.push('discuss_dispatch-not-off');
+// The default-value checks read the SHIPPED template's output (NEW_JSON), not the
+// parity file, which pins consult_dispatch to off on purpose.
+const shippedJson = JSON.parse(process.env.NEW_JSON);
+if (shippedJson.consult_dispatch !== 'auto') problems.push('consult_dispatch-not-auto');
+if (shippedJson.discuss_dispatch !== 'off') problems.push('discuss_dispatch-not-off');
 
 console.log(problems.length === 0 ? 'parity-ok' : problems.join('\n'));
 NODE
@@ -216,7 +247,7 @@ assert_contains "$(cat "$REPO_ROOT/hooks/tests/review-loop-runner.test.sh")" \
   $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
   "review-loop-runner.test.sh payload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
-  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"allow_same_runner_dual_seat"' \
+  '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat"' \
   "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/consult_resolved_from/discuss_dispatch in schema order"
 
 # contract-parity.test.sh and autopilot-cli.test.sh build their roster object
@@ -330,7 +361,13 @@ try {
 }
 NODE
 )"
-assert_contains "$MIGRATION_OUT" "missing field: consult_dispatch" "pre-widening roster JSON fails loudly, naming the missing consult_dispatch field"
+# The validator reports the FIRST missing field in its check order; fields added
+# after D6 (ladder_start_rung_judgment, v2.36.x) are checked before consult_dispatch,
+# so the named field moves as the contract grows. The property under test is
+# "fails loudly naming a missing field" — never which one comes first. That
+# consult_dispatch itself is still required is pinned field-specifically by the
+# three-way schema check above (`required.has('consult_dispatch')`).
+assert_contains "$MIGRATION_OUT" "missing field: " "pre-widening roster JSON fails loudly, naming a missing field"
 assert_not_contains "$MIGRATION_OUT" "SILENTLY-PASSED" "migration negative never silently passes"
 
 # ── 6. Behavioral parity through the real wrapper entry points ─────────────
@@ -338,9 +375,16 @@ assert_not_contains "$MIGRATION_OUT" "SILENTLY-PASSED" "migration negative never
 # now landed (Wave 2 of docs/plans/2026-08-28-consult-discuss-qualification.md).
 # Both wrappers own switch resolution themselves (round-2 finding [6]), so
 # there is a real entry point to drive here: invoke each directly, with the
-# shipped (both-off) template, against a fail-hard shadow dispatch-author.sh
-# that records an invocation marker and exits 99 if ever spawned. Both must
-# exit non-zero BEFORE any transport spawn.
+# shipped template, against a fail-hard shadow dispatch-author.sh that records
+# an invocation marker and exits 99 if ever spawned.
+#   consult: the shipped template says consult_dispatch: auto, and since
+#   2026-09-07 (unknown-escalation ladder P2, G1 R5) a resolved `auto` is LIVE —
+#   the previous guard accepted only the literal `on`, so the shipped default
+#   never dispatched. With an empty topology ladder the resolver falls back to
+#   claude-native, and the rail must reach the transport (marker present, then
+#   exit non-zero because the shadow fails hard). It must NOT refuse switch_off.
+#   discuss: discuss_dispatch stays off in the template ⇒ exits non-zero BEFORE
+#   any transport spawn.
 SHADOW_AUTHOR_MARKER="$TEST_TMP/step6-shadow-invoked"
 SHADOW_AUTHOR_BIN="$TEST_TMP/step6-shadow-dispatch-author.sh"
 cat > "$SHADOW_AUTHOR_BIN" <<EOF
@@ -354,13 +398,15 @@ STEP6_Q="$TEST_TMP/step6-question.txt"
 printf 'a bounded question\n' > "$STEP6_Q"
 STEP6_ARTIFACT="$TEST_TMP/step6-artifact.diff"
 printf 'diff --git a/x b/x\n+line\n' > "$STEP6_ARTIFACT"
-CONSULT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" "$REPO_ROOT/scripts/dispatch-consult.sh" \
-  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" 2>&1 >/dev/null)"
-CONSULT_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" "$REPO_ROOT/scripts/dispatch-consult.sh" \
-  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" >/dev/null 2>&1; echo $?)"
-assert_neq "0" "$CONSULT_EXIT" "shipped-template (consult_dispatch off) dispatch-consult.sh exits non-zero"
-assert_contains "$CONSULT_OUT" "consult_dispatch" "dispatch-consult.sh off-path message names consult_dispatch"
-assert_file_absent "$SHADOW_AUTHOR_MARKER" "dispatch-consult.sh with the shipped template never spawns the shadow transport"
+STEP6_TOPO_EMPTY="$TEST_TMP/step6-topology-empty.json"
+printf '%s\n' '{ "schema_version": 1, "generated_at": "2026-09-07T00:00:00.000Z", "host": "test-host", "consult_ladder": [] }' > "$STEP6_TOPO_EMPTY"
+CONSULT_STDOUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" AUTOPILOT_TOPOLOGY_FILE="$STEP6_TOPO_EMPTY" "$REPO_ROOT/scripts/dispatch-consult.sh" \
+  --question-file "$STEP6_Q" --artifact "$STEP6_ARTIFACT" --dispatch-author-bin "$SHADOW_AUTHOR_BIN" 2>/dev/null)"
+CONSULT_EXIT=$?
+assert_neq "0" "$CONSULT_EXIT" "shipped-template dispatch-consult.sh exits non-zero against the fail-hard shadow"
+assert_not_contains "$CONSULT_STDOUT" '"status": "switch_off"' "shipped-template (consult_dispatch auto) is LIVE — never refused as switch_off (G1 R5 guard fix)"
+assert_file_exists "$SHADOW_AUTHOR_MARKER" "dispatch-consult.sh with the shipped template reaches the transport (auto is live)"
+rm -f "$SHADOW_AUTHOR_MARKER"
 
 STEP6_BUNDLE="$TEST_TMP/step6-bundle.json"
 cat > "$STEP6_BUNDLE" <<'JSON'

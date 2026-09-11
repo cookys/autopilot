@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 /**
  * dispatch-model-guard — PreToolUse/Task|Agent [default-on since v2.35.15; opt-in before]
- * Intercepts subagent dispatch and returns permissionDecision: "ask" when the
- * dispatch would land on a guarded expensive engine (default: fable) or when
- * model is omitted (would silently inherit the session model).
+ * Intercepts subagent dispatch. Default mode `remind` (v2.36.9; was `ask`): when the
+ * dispatch would land on a guarded expensive engine (default: fable) it returns
+ * permissionDecision: "deny" whose reason REMINDS the dispatching agent and hands the
+ * decision back to it — re-dispatch with a cheaper model, or keep the engine and mark the
+ * Engine header `(intentional: <why>)`, which the guard then allows silently. No human
+ * dialog either way (owner ruling 2026-09-06: the ask dialog blocked the session; the
+ * agent should judge). "deny" (v2.36.2; was "ask") when model is omitted (would silently
+ * inherit the session model) — the reason tells the agent to re-dispatch with model:.
+ * `mode: ask` opts back into the interactive dialog.
  * Guards expensive engines during implementation dispatches (default: fable,opus via guarded_models_implementing).
  * Enforces self-declared engine headers on prompt line 1 matching the dispatch model (default: on via require_engine_header).
  *
@@ -34,9 +40,9 @@ if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'off') process.exit(0);
 const DEFAULTS = {
   guarded_models: ['fable'],
   guarded_models_implementing: ['fable', 'opus'],
-  on_missing_model: 'ask',
+  on_missing_model: 'deny', // v2.36.2: was 'ask' — see the comment at the missing-model branch
   require_engine_header: 'on',
-  mode: 'ask',
+  mode: 'remind', // v2.36.9: was 'ask' — remind the agent, never open a dialog
 };
 
 function parseConfigText(text) {
@@ -92,11 +98,11 @@ function loadConfig(cwd) {
     guardedImplementing = tokens.length ? tokens : DEFAULTS.guarded_models_implementing;
   }
 
-  // on_missing_model: ask | allow; garbage → ask (fail-closed)
+  // on_missing_model: deny | ask | allow; garbage → deny (fail-closed)
   let onMissing = DEFAULTS.on_missing_model;
   if (Object.prototype.hasOwnProperty.call(parsed, 'on_missing_model')) {
     const v = String(parsed.on_missing_model || '').trim().toLowerCase();
-    onMissing = (v === 'ask' || v === 'allow') ? v : 'ask';
+    onMissing = (v === 'deny' || v === 'ask' || v === 'allow') ? v : 'deny';
   }
 
   // require_engine_header: on | off; garbage → on (fail-closed)
@@ -106,11 +112,11 @@ function loadConfig(cwd) {
     requireEngineHeader = (v === 'on' || v === 'off') ? v : 'on';
   }
 
-  // mode: ask | warn | off; garbage → ask (fail-closed)
+  // mode: remind | ask | warn | off; garbage → remind (fail-closed, no dialog)
   let mode = DEFAULTS.mode;
   if (Object.prototype.hasOwnProperty.call(parsed, 'mode')) {
     const v = String(parsed.mode || '').trim().toLowerCase();
-    mode = (v === 'ask' || v === 'warn' || v === 'off') ? v : 'ask';
+    mode = (v === 'remind' || v === 'ask' || v === 'warn' || v === 'off') ? v : 'remind';
   }
 
   return {
@@ -146,13 +152,31 @@ function emitDeny(reason) {
   process.exit(0);
 }
 
-function handleGuard(reason, mode) {
+// The agent acknowledges an expensive dispatch by marking the Engine header, e.g.
+// `Engine: fable (intentional: plan-mode critique needs the strongest reader)`.
+const INTENTIONAL_RE = /\(intentional\b[^)]*\)/i;
+
+function handleGuard(reason, mode, { acknowledged = false } = {}) {
   if (mode === 'warn') {
     process.stderr.write(reason + '\n');
     process.exit(0);
   }
-  // mode === 'ask' (default path)
-  emitAsk(reason);
+  if (mode === 'ask') {
+    emitAsk(reason);
+  }
+  // mode === 'remind' (default since v2.36.9): the decision belongs to the dispatching
+  // agent, not to a human dialog. An acknowledged dispatch proceeds silently (stderr
+  // note only); an unacknowledged one is denied with the reminder and the two legal
+  // re-dispatches spelled out.
+  if (acknowledged) {
+    process.stderr.write(reason + ' — acknowledged as intentional, allowing\n');
+    process.exit(0);
+  }
+  emitDeny(
+    reason
+    + '. Your call: re-dispatch with a cheaper model (scripts/resolve-dispatch.sh --role <role>), '
+    + 'or keep this engine and mark line 1 "Engine: <model> (intentional: <why>)" to proceed without a dialog',
+  );
 }
 
 function handleDeny(reason, mode) {
@@ -211,23 +235,33 @@ try {
     if (config.on_missing_model === 'allow') {
       process.exit(0);
     }
-    handleGuard(
-      'dispatch-model-guard: no model specified — the subagent would inherit the session model (possibly a guarded engine); re-dispatch with an explicit model: (see scripts/resolve-dispatch.sh) or approve',
-      config.mode
-    );
+    // v2.36.2: default is DENY, not ask. A missing model: is never a judgment for the
+    // user — the only correct next action is the model's own re-dispatch with model:
+    // set, and an interactive "ask" turned that into a permission dialog the owner had
+    // to click through (2026-09-05 dogfood: depth-0 spawned a reviewer without model:,
+    // the owner had to intervene). A deny carries the same reason back to the model
+    // and it re-dispatches on its own. `on_missing_model: ask` keeps the old dialog.
+    const reason = 'dispatch-model-guard: no model specified — the subagent would inherit the session model '
+      + '(possibly a guarded engine); re-dispatch NOW with an explicit model: (scripts/resolve-dispatch.sh '
+      + '--role <role>) and an "Engine: <model>" first prompt line';
+    // on_missing_model: ask is the explicit opt-in to the dialog, so it asks even under
+    // the default remind mode (warn stays advisory).
+    if (config.on_missing_model === 'ask') handleGuard(reason, config.mode === 'remind' ? 'ask' : config.mode);
+    else handleDeny(reason, config.mode);
     process.exit(0);
+  }
+
+  const promptRaw = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
+  let firstLine = null;
+  for (const line of promptRaw.split('\n')) {
+    if (line.trim().length > 0) {
+      firstLine = line;
+      break;
+    }
   }
 
   // require_engine_header check (model present)
   if (config.require_engine_header === 'on') {
-    const promptRaw = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
-    let firstLine = null;
-    for (const line of promptRaw.split('\n')) {
-      if (line.trim().length > 0) {
-        firstLine = line;
-        break;
-      }
-    }
 
     let headerMatch = false;
     if (firstLine !== null) {
@@ -257,9 +291,13 @@ try {
 
   const hit = effectiveGuarded.some((token) => model.includes(token));
   if (hit) {
+    const acknowledged = firstLine !== null
+      && /^Engine:/.test(firstLine)
+      && INTENTIONAL_RE.test(firstLine);
     handleGuard(
-      `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine — approve, or re-dispatch with a cheaper model per scripts/resolve-dispatch.sh`,
-      config.mode
+      `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine`,
+      config.mode,
+      { acknowledged },
     );
   }
   process.exit(0);

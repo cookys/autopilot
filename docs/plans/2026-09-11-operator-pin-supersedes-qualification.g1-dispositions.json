@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "operator-pin-supersedes-qualification-2026-09-11",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "58e4eb869160eb7006ac462f4ff4103d2e8f2a9c6beea576b62729e6d26edb44",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Independently re-derived: dispatch-contract.js:1303 makes quota a NO-GO reason; resolve-review-loop.sh:97 sets DEF_ON_ENGINE_UNAVAILABLE=ask; resolve-dispatch-topology.js contains zero occurrences of quota. R0 section 1 row 2 was factually wrong. R1 rewrites the table with a per-row re-derivation command, marks the stand-in as new work, and the owner ruled it into scope (Q4) with the default flipped to substitute (KR9)."
+    },
+    {
+      "fingerprint": "6ab6fcf8c667a92e87ccb744ebea291d0199eb7dbfddc38e333400e108d63c83",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. isAdmissibleScorecardRow stays pin-unaware and keeps returning false on requalify_required (new section 2.5 constraint); pins are handled only in the !matched / strike-precedence branch after that false. KR2 becomes a seven-shape byte-for-byte capture of every pre-change inadmissible row, authored before any permissive code, and P7(c) proves an early-true mutation goes red."
+    },
+    {
+      "fingerprint": "2856206342f2beaa3bfd46fd2d558b7dea08a5ab134dbb6e228637c2d5557921",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and resolved by the owner ruling rather than by the proposed gate. The owner rejected refusing on a pinned seat because it defeats unattended operation. R1 section 1.5 unifies quota exhaustion and critical strike into one substitute-and-continue path: the run keeps going on the next ladder rung, the pin is retained, and the evidence is queued durably (KR7, P5 multi-round headless test). KR8 makes ladder exhaustion an honest halt."
+    },
+    {
+      "fingerprint": "369ae93518153cacb7da62e728d441aa380f08d7aba43d32e5554182c2a46703",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. expires:null is illegal for the override validator and relaxing it would change zero-pin override admission. R1 KR6: same six keys, own validator, own pins.jsonl; loadQualificationOverride is never called for a pin. pinned_at is dropped from KR1 rather than widening the frozen row. Q2/Q3 ruled by the owner (machine-level, per-role) so P1 is unblocked."
+    },
+    {
+      "fingerprint": "e143795629d201884fbed269c8084d9fb60a6ed40590a87e87030daecfc33799",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. R1 splits P0 across the two commits: code-anchor pointer comments ride the mechanism commit, the frozen-plan amendment note rides the guidance commit. P8 asserts disjointness mechanically via git show --stat on each side, and the generated Codex mirror is named on the mechanism side."
+    },
+    {
+      "fingerprint": "50826eb81143d71f5c66121100cd7d731f0ceff12603510dd662b7d6a25d7361",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The shipped strikeReasonMessage names only the class, so R1 KR4 requires predicate_id on the payload. P9 is marked an operator-run acceptance against a copy of the live store first, then the real one, with the expected outcome fixed by the Q1 ruling: substitute, retain the pin, surface evidence_hash_manipulation with its receipt."
+    },
+    {
+      "fingerprint": "ff71d21e31ea539fa9b7ce360f80be47f86464b6621f8b8bb36bd8f2fa0a0707",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The persistence surfaces named in R0 were wrong. R1 P4 asserts against the already-written topology.json without regenerating it, requires implementer_ladder to still list the pinned seat at its pre-exhaustion identity and resolve-review-loop implementer_* not to be rewritten to the stand-in; decision-ledger and next-pick remain negative controls. Section 2.5 makes the pin a non-persisted live overlay."
+    },
+    {
+      "fingerprint": "3963d41a3c3bc7a7f2d96e5444661be2f72347a1cfbc0ebaadb31d5227152826",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. Every phase acceptance in R1 names the file, the exact command and the expected output or exit code, including the fixture store variable, the grep pattern and the cleanup."
+    },
+    {
+      "fingerprint": "5772d7a088a54b9cbacb215973f1df826418dc7f23472bfb931b4b196e5d201e",
+      "disposition": "rejected",
+      "rationale": "Refuted (ADR-0001). The finding asks for a reviewer-attestation acceptance: reviewers record in the review log that they re-derived an anchor or judged a risk adequately gated. A recorded claim by a reviewer is attestation, which this repo does not treat as evidence. The underlying need is accepted in a different shape: depth-0 re-derives each cited anchor and the plan records the re-derivation COMMAND and its output (R1 section 1 table). That is how the section 1 quota error was actually found, and no reviewer attestation would have found it."
+    },
+    {
+      "fingerprint": "8f6439cfd199b55dc953278ad561c778689e6312479faac71844a957232391e5",
+      "disposition": "rejected",
+      "rationale": "Refuted (ADR-0001). The finding asks for a reviewer-attestation acceptance: reviewers record in the review log that they re-derived an anchor or judged a risk adequately gated. A recorded claim by a reviewer is attestation, which this repo does not treat as evidence. The underlying need is accepted in a different shape: depth-0 re-derives each cited anchor and the plan records the re-derivation COMMAND and its output (R1 section 1 table). That is how the section 1 quota error was actually found, and no reviewer attestation would have found it."
+    },
+    {
+      "fingerprint": "9e3ba3f65ecf16c9b0e8a5d6348a0a5d2f19dac814b293664c27a4e0ef84585d",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. KR2 is no longer the refusal string alone: P2 captures pre-change decision bytes across the full matrix (qualified admit, each inadmissible shape, no-row, ordinary and critical strike, valid and invalid override, quota states) into a pinned fixture directory, and every one must be byte-identical after the change."
+    },
+    {
+      "fingerprint": "39d0d2a4383f944d91f97e1a17c1e2dbd5a229c6e5c02150a2f7eb0e673dacbb",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. R1 P1 acceptance requires grep -n for the jsonl-store import in engine-capability-state.js, so the stated reuse is asserted rather than assumed."
+    },
+    {
+      "fingerprint": "536922d6ab190e1d2ac649c99d3f6f64a2decf9dd1c357cb769d624a7e0d7343",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. R1 P2 acceptance prints the four frozen registries before and after and requires byte-identity, so freezing is verified rather than declared in prose."
+    },
+    {
+      "fingerprint": "052ce11c3628f2aba59af7754099b4d149502bba8778157061f28e4f9f520098",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. isAdmissibleScorecardRow stays pin-unaware and keeps returning false on requalify_required (new section 2.5 constraint); pins are handled only in the !matched / strike-precedence branch after that false. KR2 becomes a seven-shape byte-for-byte capture of every pre-change inadmissible row, authored before any permissive code, and P7(c) proves an early-true mutation goes red."
+    },
+    {
+      "fingerprint": "aaf0550e93b175dc2d2fbbad899412806877dc7de4d2eb10fa415d6c9d35c70c",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. R1 KR7 derives pending_revocation from the same authoritative active-strike fold admission uses, with P3 negative cases for invalidated, rejected-writer, duplicate, pre-baseline and future rows. Operator attribution is a required --operator flag echoed onto the row, with a P1 sub-test asserting refusal when omitted. Critical-strike recovery is no longer contradictory: it substitutes, the pin survives, and the operator decides later."
+    },
+    {
+      "fingerprint": "90e4c09e9cab4755891ab3066509e5f1d70bd01d3019e1bec1d3b2ad4ff0e15f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. The negation runs become their own phase (P7) with three named mutations, each recorded with its non-zero exit and assertion text and then reverted with the suite shown green again, rather than living as section 5 prose."
+    },
+    {
+      "fingerprint": "dc725ed8680797df3aec492a4574d5a79171f03ff4a5e8b3c3865ec3ec00588b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted and folded. Every phase acceptance in R1 names the file, the exact command and the expected output or exit code, including the fixture store variable, the grep pattern and the cleanup."
+    },
+    {
+      "fingerprint": "df139c46135a7ad1d5ebbb4f4dc466cc8b9203c988e8f366ae41623e0db505c3",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. expires:null is illegal for the override validator and relaxing it would change zero-pin override admission. R1 KR6: same six keys, own validator, own pins.jsonl; loadQualificationOverride is never called for a pin. pinned_at is dropped from KR1 rather than widening the frozen row. Q2/Q3 ruled by the owner (machine-level, per-role) so P1 is unblocked."
+    },
+    {
+      "fingerprint": "a6f963265218ea33f82a0f4889483601bb04b2e31747ce65e5f35d20baa66f65",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. R1 section 2.5 mandates one canonical live resolution path consumed and cross-checked by every dispatcher and the contract; no dispatcher reads the pin store independently. The overlay shape is what lets a fresh pin take effect without a cache round-trip."
+    },
+    {
+      "fingerprint": "a0726fd1eee01f4b732251b8d7fce0dd55d94e57e98308abe75b8f33a8304ffb",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The persistence surfaces named in R0 were wrong. R1 P4 asserts against the already-written topology.json without regenerating it, requires implementer_ladder to still list the pinned seat at its pre-exhaustion identity and resolve-review-loop implementer_* not to be rewritten to the stand-in; decision-ledger and next-pick remain negative controls. Section 2.5 makes the pin a non-persisted live overlay."
+    },
+    {
+      "fingerprint": "4e6e4e3667b428252b5e7db531bdbaaffa34a700d11e485679385230270ceb33",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. R1 KR7 derives pending_revocation from the same authoritative active-strike fold admission uses, with P3 negative cases for invalidated, rejected-writer, duplicate, pre-baseline and future rows. Operator attribution is a required --operator flag echoed onto the row, with a P1 sub-test asserting refusal when omitted. Critical-strike recovery is no longer contradictory: it substitutes, the pin survives, and the operator decides later."
+    },
+    {
+      "fingerprint": "a8fc6d84ee8f5384e24aa5b83a12cd21b27768a24c83a9bd4c8ab8f2686a57f3",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and resolved by the owner ruling rather than by the proposed gate. The owner rejected refusing on a pinned seat because it defeats unattended operation. R1 section 1.5 unifies quota exhaustion and critical strike into one substitute-and-continue path: the run keeps going on the next ladder rung, the pin is retained, and the evidence is queued durably (KR7, P5 multi-round headless test). KR8 makes ladder exhaustion an honest halt."
+    },
+    {
+      "fingerprint": "a79befc5f0ce6fb2e5d2b134efb963cdb68ad505cd10ca5d52f49b58be865a72",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. R1 KR7 derives pending_revocation from the same authoritative active-strike fold admission uses, with P3 negative cases for invalidated, rejected-writer, duplicate, pre-baseline and future rows. Operator attribution is a required --operator flag echoed onto the row, with a P1 sub-test asserting refusal when omitted. Critical-strike recovery is no longer contradictory: it substitutes, the pin survives, and the operator decides later."
+    },
+    {
+      "fingerprint": "1d968891861754cf89c3f473ace06543ac1fcce2ff4c8489cb5b5706521e2181",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. KR2 is no longer the refusal string alone: P2 captures pre-change decision bytes across the full matrix (qualified admit, each inadmissible shape, no-row, ordinary and critical strike, valid and invalid override, quota states) into a pinned fixture directory, and every one must be byte-identical after the change."
+    },
+    {
+      "fingerprint": "f71131a4664ff990cac50bce7364421a5a228341318bc8edecc4c974a23e40d0",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. isAdmissibleScorecardRow stays pin-unaware and keeps returning false on requalify_required (new section 2.5 constraint); pins are handled only in the !matched / strike-precedence branch after that false. KR2 becomes a seven-shape byte-for-byte capture of every pre-change inadmissible row, authored before any permissive code, and P7(c) proves an early-true mutation goes red."
+    },
+    {
+      "fingerprint": "54e9011d8b32dd60ad856c29c7b6919e7dea5b909677ab8939b67c3d3e4800d9",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. R1 P0 replaces the single-site literal grep with a semantic scan over per-invocation, only evidence-free and strike-precedence wording across scripts/, platforms/codex/plugin/scripts/ and docs/plans/, and requires a dated pointer beside every hit including the Codex mirror."
+    },
+    {
+      "fingerprint": "a3fdc4ae59f27e0b0451d9a364661eae54e507c0e86dd2b3ab6f68ae616fbb3a",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. R1 splits P0 across the two commits: code-anchor pointer comments ride the mechanism commit, the frozen-plan amendment note rides the guidance commit. P8 asserts disjointness mechanically via git show --stat on each side, and the generated Codex mirror is named on the mechanism side."
+    },
+    {
+      "fingerprint": "c2e6a42da088ea844d8303621df4b0f780abbb9970ae7745baa6ed1d74af5e30",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Independently re-derived: dispatch-contract.js:1303 makes quota a NO-GO reason; resolve-review-loop.sh:97 sets DEF_ON_ENGINE_UNAVAILABLE=ask; resolve-dispatch-topology.js contains zero occurrences of quota. R0 section 1 row 2 was factually wrong. R1 rewrites the table with a per-row re-derivation command, marks the stand-in as new work, and the owner ruled it into scope (Q4) with the default flipped to substitute (KR9)."
+    },
+    {
+      "fingerprint": "d96ae29d994c63c2dcada7b859b8489fd3e011aa60e2a722284bee9ab19d6644",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The negation runs become their own phase (P7) with three named mutations, each recorded with its non-zero exit and assertion text and then reverted with the suite shown green again, rather than living as section 5 prose."
+    },
+    {
+      "fingerprint": "e5f6cf6795c166467f600c29e2d010843a3dd215e3839cb36a14a751eb341bdc",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. Every phase acceptance in R1 names the file, the exact command and the expected output or exit code, including the fixture store variable, the grep pattern and the cleanup."
+    },
+    {
+      "fingerprint": "4bd948b647582aba40afe511795b1960698f68aade76ece5af043c8b7dba8481",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and folded. The shipped strikeReasonMessage names only the class, so R1 KR4 requires predicate_id on the payload. P9 is marked an operator-run acceptance against a copy of the live store first, then the real one, with the expected outcome fixed by the Q1 ruling: substitute, retain the pin, surface evidence_hash_manipulation with its receipt."
+    }
+  ]
+}

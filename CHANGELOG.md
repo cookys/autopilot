@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.36.28 — sealed bounded campaign 在 live marker 下自帶權威
+
+這一版明確 **supersede** `8d7e61c2` 在 2026-07-28 設下的規則：當
+`--campaign-contract`、`--campaign-contract-sha256`、`--campaign-seal` 三者齊全，且已驗 seal 的
+bounded contract 不帶 `mission_runtime` / `campaign_projection`，dispatcher 只跳過
+`check_session_mode_gate`。判斷直接重用 `scripts/session-mode.js` 的
+`campaignCarriesMissionProjection`，不在 shell 裡另養一份 schema predicate。
+
+裸 dispatch 仍以原字串拒絕；strict projected campaign 仍會通過獨立的
+`check_marker_campaign_admission_bridge`，stale `mission_graph_digest` 依舊在 runner 前被拒絕。
+`dispatch-hetero.test.sh` 的綠案要求 capture stub 檔案實際存在，不以 exit 0 代替 dispatcher-called 證據。
+
 ## v2.36.27 — 一個 pin 准了沒有人 pin 過的席位；以及 strike fold 的投影
 
 兩件事一起出：`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 **P3**（KR3/KR4/KR7），

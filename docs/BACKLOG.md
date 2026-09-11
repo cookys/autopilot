@@ -1026,3 +1026,38 @@ never an ad hoc descriptive string.
 - **Trigger**: next time a namespaced-alias runner (kimi today; any vendor that namespaces tomorrow) is routed by role, or the next edit to `valid_token`.
 - **Guardrails**: widening the character class is the obvious fix, but the row is interpolated into shell — `/` is safe, quoting is not optional, and the set must stay a closed allow-list, never a deny-list. And whatever the class becomes, an **ignored override row should be an error, not a warning**: silently falling back to a different vendor's model is the failure mode, not the unparsed row.
 - **Adjacent**: `kimi -m kimi-code/k3-256k -p …` (the config's own default) returns **no answer at all** in headless print mode — only the resume line — while `kimi-code/k3` answers normally. Probed 2026-09-08. Anything that routes to kimi headlessly should pin `k3` until that is understood.
+
+## `consult_dispatch` has no seat left once the qc panel excludes everything
+
+- **Size**: S
+- **Context**: On `cookys-openclaw`, `resolve-review-loop.sh` emits
+  `consult_dispatch: auto` with `consult_resolved_from: native-fallback` and the
+  warning *"no qualified consult seat on this host after qc_panel exclusion —
+  falling back to sonnet/high@claude-native"*. `scripts/dispatch-consult.sh`
+  then refuses outright: `consult_dispatch is off — refusing (no transport
+  dispatched)`. Measured 2026-09-11 in `~/projects/fleet-comms`.
+- **Why it matters**: the consult seat exists so depth-0 can ask a *different
+  family* a design question. Falling back to `claude-native` resolves it to the
+  same model that is asking — the one configuration that cannot answer the
+  question the seat was created for — and the script is right to refuse rather
+  than pretend. But the caller is then left with no supported route at all, and
+  the natural workaround is to invoke a runner by hand, which is exactly the
+  bypass the seat was meant to remove. On this host the qc panel is
+  `gpt-5.6-sol` / `GLM-5.3` / `Qwen3.8-Max`, which excludes every hetero engine
+  that has a working structured path; the only engine left over is `grok`,
+  whose *review* parser is incompatible but whose **prose answers are fine** —
+  and prose is all a consult needs.
+- **Trigger**: next time a consult is dispatched on a host whose qc panel
+  covers its whole roster, or the next edit to the consult resolution in
+  `resolve-review-loop.sh`.
+- **Guardrails**: do not solve it by letting a qc-panel seat double as the
+  consult — the panel's independence is the thing being protected. The shape
+  that fits is a **consult-only fallback list** of engines that are
+  decorrelated but not panel members, with parse requirements relaxed to
+  "returns text" rather than "returns a verdict". And the warning should name
+  which engines were excluded and why, so the operator can see that the answer
+  is "your panel ate your roster" rather than "nothing is installed".
+- **Worked around on 2026-09-11 by** calling `grok --model grok-4.5 -p` directly
+  with the question and the relevant files quoted into the prompt. It produced
+  the argument that decided the design, so the seat's *value* is not in doubt —
+  only its routing.

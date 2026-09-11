@@ -285,7 +285,7 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # — a real Population B member (not a frozen-fixture false positive). Bound
 # moves 27 -> 28.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "29" "$POP_B_COUNT" "Population B file bound is pinned at 29 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, and dispatch-contract-pin.test.sh added 2026-09-11)"
+assert_eq "30" "$POP_B_COUNT" "Population B file bound is pinned at 30 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, and pending-revocation-fold.test.sh added 2026-09-12)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the
@@ -312,11 +312,15 @@ assert_eq "29" "$POP_B_COUNT" "Population B file bound is pinned at 29 (git grep
 # joins both counts — its mini-repo rosters carry genuine `- reviewer_engine:`
 # lines and pin consult_dispatch/discuss_dispatch off, exactly like the
 # dispatch-contract.test.sh fixture it was modelled on. 28 -> 29 and 3 -> 4.
+# RECOUNTED (2026-09-12, plan P3): hooks/tests/pending-revocation-fold.test.sh
+# joins both counts for the same reason. Delta enumerated against origin/develop
+# rather than inferred from the failure: the file-level diff of the Population B
+# grep is exactly this one new path. 29 -> 30 and 4 -> 5.
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
 POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "4" "$POP_B_EXPLICIT_SWITCH" "four of Population B's 29 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
+assert_eq "5" "$POP_B_EXPLICIT_SWITCH" "five of Population B's 30 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'

@@ -318,4 +318,60 @@ for r in implementer fast-worker test-runner researcher hands; do
   assert_not_contains "$OUT" '"model":"opus"'       "legacy role $r must not resolve to opus"
 done
 
+# ── 15. valid_token grammar: one optional slash-separated namespace ──────
+# (docs/plans/2026-09-11-kimi-implementer-rail.md §2.5/KR2 — a namespaced model
+# alias like kimi-code/k3 must be accepted in the model column; anything with
+# more than one slash, or a leading/trailing slash, must still be rejected.)
+
+# (a) accept: kimi-code/k3 (single slash between two valid tokens)
+OVERRIDE_FILE="$OVERRIDE_DIR/namespaced-ok.md"
+cat > "$OVERRIDE_FILE" <<'CFGEOF'
+| Role | Model | Mode |
+|------|-------|------|
+| tree:implementer | kimi-code/k3 | default |
+CFGEOF
+OUT="$(run_dispatch --role implementer --tree)"; EXIT=$?
+assert_eq "0" "$EXIT"                                    "namespaced token: exit code"
+assert_contains "$OUT" '"model":"kimi-code/k3"'           "namespaced token: kimi-code/k3 accepted verbatim"
+assert_contains "$OUT" '"source":"project"'               "namespaced token: source=project (row honored)"
+
+# (b) reject: a/b/c (two slashes — more than one namespace segment)
+OVERRIDE_FILE="$OVERRIDE_DIR/namespaced-abc.md"
+cat > "$OVERRIDE_FILE" <<'CFGEOF'
+| Role | Model | Mode |
+|------|-------|------|
+| tree:implementer | a/b/c | default |
+CFGEOF
+OUT="$(run_dispatch --role implementer --tree 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT"                                    "reject a/b/c: exit code (no crash)"
+assert_not_contains "$OUT" '"model":"a/b/c"'              "reject a/b/c: value NOT honored"
+assert_contains "$OUT" '"source":"default"'               "reject a/b/c: falls back to default (row ignored)"
+assert_contains "$OUT" "warning: ignoring override row"   "reject a/b/c: loud stderr warning"
+
+# (c) reject: /x (leading slash, empty first segment)
+OVERRIDE_FILE="$OVERRIDE_DIR/namespaced-leading-slash.md"
+cat > "$OVERRIDE_FILE" <<'CFGEOF'
+| Role | Model | Mode |
+|------|-------|------|
+| tree:implementer | /x | default |
+CFGEOF
+OUT="$(run_dispatch --role implementer --tree 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT"                                    "reject /x: exit code (no crash)"
+assert_not_contains "$OUT" '"model":"/x"'                 "reject /x: value NOT honored"
+assert_contains "$OUT" '"source":"default"'               "reject /x: falls back to default (row ignored)"
+
+# (d) reject: x/ (trailing slash, empty second segment)
+OVERRIDE_FILE="$OVERRIDE_DIR/namespaced-trailing-slash.md"
+cat > "$OVERRIDE_FILE" <<'CFGEOF'
+| Role | Model | Mode |
+|------|-------|------|
+| tree:implementer | x/ | default |
+CFGEOF
+OUT="$(run_dispatch --role implementer --tree 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT"                                    "reject x/: exit code (no crash)"
+assert_not_contains "$OUT" '"model":"x/"'                 "reject x/: value NOT honored"
+assert_contains "$OUT" '"source":"default"'               "reject x/: falls back to default (row ignored)"
+
+unset OVERRIDE_FILE
+
 finalize_test

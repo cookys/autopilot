@@ -1083,14 +1083,7 @@ never an ad hoc descriptive string.
 - **Trigger**: next plan-review loop, or next edit to either script.
 - **Guardrails**: fix the docs or the tooling, not the caller — a caller that hand-writes dispositions into the artifact to make the receipt pass has forged the record the receipt exists to attest. If the intent is that Mode B applies only to code-loop receipts, say so in `plan-loop.md` and drop the receipt from the plan loop's freeze predicate.
 
-## `resolve-dispatch.sh` cannot express a namespaced model alias
-
-- **Size**: S
-- **Context**: The tree-role override row in `.claude/model-routing-config.md` is validated by `valid_token` in `scripts/resolve-dispatch.sh`, which accepts only `[A-Za-z0-9._-]+`. kimi's model aliases are **namespaced** — `~/.kimi-code/config.toml` defines `kimi-code/k3`, `kimi-code/k3-256k`, `kimi-code/kimi-for-coding`, `kimi-code/kimi-for-coding-highspeed` — so `| tree:sub-orchestrator | kimi-code/k3 | default |` is silently discarded with `warning: ignoring override row … using defaults`, and the dispatch quietly goes to the default (`opus`). The short form is not an escape: `kimi -m k3` answers `Model "k3" is not configured in config.toml`.
-- **Why it matters more than the character class**: the failure is a **silent downgrade to a different vendor**. An operator who writes the row, sees a warning scroll past, and dispatches, gets Claude where they asked for kimi — and the run looks normal. Compare the adjacent stale-tuple entry, where the bad name at least failed loudly.
-- **Trigger**: next time a namespaced-alias runner (kimi today; any vendor that namespaces tomorrow) is routed by role, or the next edit to `valid_token`.
-- **Guardrails**: widening the character class is the obvious fix, but the row is interpolated into shell — `/` is safe, quoting is not optional, and the set must stay a closed allow-list, never a deny-list. And whatever the class becomes, an **ignored override row should be an error, not a warning**: silently falling back to a different vendor's model is the failure mode, not the unparsed row.
-- **Adjacent**: `kimi -m kimi-code/k3-256k -p …` (the config's own default) returns **no answer at all** in headless print mode — only the resume line — while `kimi-code/k3` answers normally. Probed 2026-09-08. Anything that routes to kimi headlessly should pin `k3` until that is understood.
+## ~~`resolve-dispatch.sh` cannot express a namespaced model alias~~ (CLOSED 2026-09-11: `valid_token` widened to `^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?$` — one optional slash-separated namespace, e.g. `kimi-code/k3` — `docs/plans/2026-09-11-kimi-implementer-rail.md`)
 
 ## `consult_dispatch` has no seat left once the qc panel excludes everything
 

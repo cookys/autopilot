@@ -39,7 +39,7 @@ function usage(code, message = '') {
   }
 
   console.log('Usage:');
-  console.log('  node scripts/dispatch-contract.js check --contract <file> --repo <dir> --json');
+  console.log('  node scripts/dispatch-contract.js check --contract <file> --repo <dir> --json [--resolved-live <file>] [--qualification-override <file>]');
   process.exit(code);
 }
 
@@ -85,8 +85,15 @@ function exitGo(unitId, contractSha, specSha, resolvedEngine, options = {}) {
   if (options.assurance === 'operator-override') {
     payload.assurance = 'operator-override';
   }
+  // Operator pin (plan 2026-09-11 P2b / KR1): standing preference recorded, never silent.
+  if (options.assurance === 'operator-pin') {
+    payload.assurance = 'operator-pin';
+  }
   if (options.qualification_override) {
     payload.qualification_override = options.qualification_override;
+  }
+  if (options.operator_pin) {
+    payload.operator_pin = options.operator_pin;
   }
 
   console.log(JSON.stringify(payload));
@@ -141,6 +148,62 @@ function strikeReasonMessage(row) {
     return 'engine: seat requires requalification (critical_reexam_trigger)';
   }
   return `engine: seat requires requalification (${row.strikes_since_pass} ordinary strikes since last pass)`;
+}
+
+// Consumer of resolve-dispatch-topology.js --resolve-live JSON.
+// The contract never opens the pin store; pin knowledge enters only via this file.
+function loadResolvedLive(resolvedLivePath, reasons) {
+  if (!resolvedLivePath) return null;
+  let doc;
+  try {
+    doc = JSON.parse(fs.readFileSync(resolvedLivePath, 'utf8'));
+  } catch (err) {
+    reasons.push('resolved-live: file unreadable or invalid JSON');
+    return null;
+  }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    reasons.push('resolved-live: must be a JSON object');
+    return null;
+  }
+  if (typeof doc.role !== 'string' || !doc.role.trim()) {
+    reasons.push('resolved-live: missing role');
+    return null;
+  }
+  if (!doc.preferred_tuple || typeof doc.preferred_tuple !== 'object' || Array.isArray(doc.preferred_tuple)) {
+    reasons.push('resolved-live: missing preferred_tuple');
+    return null;
+  }
+  if (!doc.effective_tuple || typeof doc.effective_tuple !== 'object' || Array.isArray(doc.effective_tuple)) {
+    reasons.push('resolved-live: missing effective_tuple');
+    return null;
+  }
+  if (typeof doc.preferred_tuple.engine !== 'string' || typeof doc.preferred_tuple.runner !== 'string') {
+    reasons.push('resolved-live: preferred_tuple requires engine and runner strings');
+    return null;
+  }
+  if (typeof doc.effective_tuple.engine !== 'string' || typeof doc.effective_tuple.runner !== 'string') {
+    reasons.push('resolved-live: effective_tuple requires engine and runner strings');
+    return null;
+  }
+  return doc;
+}
+
+function resolvedLiveHasSubstitution(live) {
+  if (!live) return false;
+  if (live.substitution_reason) return true;
+  const preferred = live.preferred_tuple || {};
+  const effective = live.effective_tuple || {};
+  return preferred.engine !== effective.engine
+    || preferred.runner !== effective.runner
+    || preferred.effort !== effective.effort
+    || preferred.endpoint !== effective.endpoint;
+}
+
+function preferredTupleMatchesResolved(live, storeRole, resolvedEngine) {
+  if (!live || !live.preferred_tuple) return false;
+  if (normalizeStoreRole(live.role) !== storeRole) return false;
+  return live.preferred_tuple.engine === resolvedEngine.model
+    && live.preferred_tuple.runner === resolvedEngine.runner;
 }
 
 function usageError(message) {
@@ -1226,6 +1289,12 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
 
   let engineAssurance = null;
   let qualificationOverride = null;
+  let operatorPin = null;
+  // Fail-closed on a malformed --resolved-live before any admission shortcut.
+  // Absent the flag, every path below is byte-identical to the pre-pin build.
+  const resolvedLive = options.resolvedLivePath
+    ? loadResolvedLive(options.resolvedLivePath, reasons)
+    : null;
   if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
       ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine, {
@@ -1263,24 +1332,44 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11: a standing
         // operator pin is a third admission path, and is recorded rather than silent.
         // The per-invocation clause still binds every seat that is NOT operator-pinned.
+        // P2b/KR1: pin knowledge enters ONLY here, from --resolved-live (never by
+        // reading the pin store). KR11: operator-pin applies to preferred_tuple
+        // only — a substituted effective_tuple must pass ordinary admission on its own.
         // P7/KR6: the operator's explicit per-invocation override is the only
         // evidence-free admission; absent both evidence and override → refusal.
         // Reaches here only for a seat with NO matching scorecard row at all, or
         // one whose row is `provisional`-but-inadmissible-for-this-output-kind —
         // never a strike-blocked seat (excluded above) — so the override's
         // legitimate uses are unaffected.
-        const override = loadQualificationOverride(
-          options.overridePath, storeRole, resolvedEngine, reasons,
-        );
-        if (override) {
-          engineAssurance = 'operator-override';
-          qualificationOverride = {
-            reason: override.reason,
-            operator: override.operator,
-            expires: override.expires,
+        const pinAdmitsPreferred = resolvedLive
+          && !resolvedLiveHasSubstitution(resolvedLive)
+          && preferredTupleMatchesResolved(resolvedLive, storeRole, resolvedEngine);
+        if (pinAdmitsPreferred) {
+          engineAssurance = 'operator-pin';
+          operatorPin = {
+            engine: resolvedLive.preferred_tuple.engine,
+            runner: resolvedLive.preferred_tuple.runner,
+            role: resolvedLive.role,
           };
         } else {
-          reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+          const override = loadQualificationOverride(
+            options.overridePath, storeRole, resolvedEngine, reasons,
+          );
+          if (override) {
+            engineAssurance = 'operator-override';
+            qualificationOverride = {
+              reason: override.reason,
+              operator: override.operator,
+              expires: override.expires,
+            };
+          } else if (resolvedLive && resolvedLiveHasSubstitution(resolvedLive)) {
+            const eff = resolvedLive.effective_tuple;
+            reasons.push(
+              `engine: substitute seat ${eff.engine}/${eff.runner} is not ordinarily admissible (operator-pin admits preferred_tuple only)`,
+            );
+          } else {
+            reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+          }
         }
       }
     } else if (matched.status === 'provisional') {
@@ -1321,7 +1410,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
     reasons.push('engine: campaign projection disagrees with resolved runner/model');
   }
 
-  return { reasons, specSha, headSha, baseAtHead, engineAssurance, qualificationOverride };
+  return { reasons, specSha, headSha, baseAtHead, engineAssurance, qualificationOverride, operatorPin };
 }
 
 function parseArgs(argv) {
@@ -1333,6 +1422,7 @@ function parseArgs(argv) {
   let repoPath = '';
   let wantJson = false;
   let overridePath = '';
+  let resolvedLivePath = '';
 
   let i = 1;
   while (i < argv.length) {
@@ -1345,6 +1435,9 @@ function parseArgs(argv) {
       i += 2;
     } else if (arg === '--qualification-override') {
       overridePath = argv[i + 1] || '';
+      i += 2;
+    } else if (arg === '--resolved-live') {
+      resolvedLivePath = argv[i + 1] || '';
       i += 2;
     } else if (arg === '--json') {
       wantJson = true;
@@ -1366,7 +1459,12 @@ function parseArgs(argv) {
     usage(2, '--json is required');
   }
 
-  return { contractPath, repoPath: path.resolve(repoPath), overridePath };
+  return {
+    contractPath,
+    repoPath: path.resolve(repoPath),
+    overridePath,
+    resolvedLivePath,
+  };
 }
 
 // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11: "never a silent third
@@ -1415,7 +1513,9 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
     usage(2, 'Invalid local schema payload');
   }
 
-  const { contractPath, repoPath, overridePath } = parseArgs(process.argv.slice(2));
+  const {
+    contractPath, repoPath, overridePath, resolvedLivePath,
+  } = parseArgs(process.argv.slice(2));
   const parsed = checkSchemaCompliance(contractPath, repoPath);
 
   if (!parsed.loaded) {
@@ -1433,7 +1533,10 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
   const reasons = [];
 
   resolveEngine(repoPath, reasons, resolvedEngine, contract.go.required_engine_role);
-  const policy = checkPolicy(contract, repoPath, contractSha, resolvedEngine, { overridePath });
+  const policy = checkPolicy(contract, repoPath, contractSha, resolvedEngine, {
+    overridePath,
+    resolvedLivePath,
+  });
 
   reasons.push(...policy.reasons);
 
@@ -1455,6 +1558,9 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
     assurance: policy.engineAssurance || null,
     ...(policy.qualificationOverride
       ? { qualification_override: policy.qualificationOverride }
+      : {}),
+    ...(policy.operatorPin
+      ? { operator_pin: policy.operatorPin }
       : {}),
   });
 })();

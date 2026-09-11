@@ -228,7 +228,57 @@ function loadResolvedLive(resolvedLivePath, reasons) {
     reasons.push('resolved-live: pending_revocation must be an array');
     return null;
   }
+  // operator_pin is the ONLY evidence that a pin exists. It is required (absent
+  // is a refusal, never "assume unpinned") and is either null or the pin row as
+  // the store holds it. A tuple can never stand in for it: the resolver emits a
+  // preferred_tuple whether or not a pin exists, so tuple equality proves only
+  // that the contract resolved the same seat the ladder would have picked.
+  if (!hasKey(doc, 'operator_pin')) {
+    reasons.push('resolved-live: missing operator_pin');
+    return null;
+  }
+  if (doc.operator_pin !== null && !isPinRow(doc.operator_pin, doc.role, reasons)) {
+    return null;
+  }
   return doc;
+}
+
+// The frozen eight-key pin row (KR6). expires is `null` by construction -- a pin
+// does not expire -- so a row carrying a date is not a pin and must not admit.
+const PIN_ROW_KEYS = Object.freeze([
+  'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires',
+]);
+
+function isPinRow(pin, docRole, reasons) {
+  if (typeof pin !== 'object' || Array.isArray(pin)) {
+    reasons.push('resolved-live: operator_pin must be null or an object');
+    return false;
+  }
+  const keys = Object.keys(pin).sort();
+  const want = [...PIN_ROW_KEYS].sort();
+  if (keys.length !== want.length || keys.some((k, i) => k !== want[i])) {
+    reasons.push(`resolved-live: operator_pin must carry exactly ${want.join(',')}`);
+    return false;
+  }
+  for (const key of ['engine', 'runner', 'role', 'effort', 'reason', 'operator']) {
+    if (typeof pin[key] !== 'string' || !pin[key].trim()) {
+      reasons.push(`resolved-live: operator_pin.${key} must be a non-empty string`);
+      return false;
+    }
+  }
+  if (typeof pin.endpoint !== 'string') {
+    reasons.push('resolved-live: operator_pin.endpoint must be a string');
+    return false;
+  }
+  if (pin.expires !== null) {
+    reasons.push('resolved-live: operator_pin.expires must be null');
+    return false;
+  }
+  if (normalizeStoreRole(pin.role) !== normalizeStoreRole(docRole)) {
+    reasons.push('resolved-live: operator_pin.role must match the resolved role');
+    return false;
+  }
+  return true;
 }
 
 function resolvedLiveHasSubstitution(live) {
@@ -249,6 +299,20 @@ function preferredTupleMatchesResolved(live, storeRole, resolvedEngine) {
     && live.preferred_tuple.runner === resolvedEngine.runner;
 }
 
+// The operator-pin admission predicate. Pin presence is a FACT read from the
+// document, never inferred from the tuple, and the pinned seat must be the seat
+// the contract actually resolved -- otherwise a pin on one role/seat would admit
+// a different one. Both the KR1 (no scorecard row) and KR3 (strike-blocked)
+// branches go through here; a guard on only one of them is a guard on neither,
+// because the weaker branch is still reachable.
+function pinAdmitsResolvedSeat(live, storeRole, resolvedEngine) {
+  if (!live || !live.operator_pin) return false;
+  if (!preferredTupleMatchesResolved(live, storeRole, resolvedEngine)) return false;
+  const pin = live.operator_pin;
+  return pin.engine === live.preferred_tuple.engine
+    && pin.runner === live.preferred_tuple.runner;
+}
+
 function tuplesEqual(a, b) {
   if (!a || !b) return false;
   return a.engine === b.engine
@@ -257,11 +321,13 @@ function tuplesEqual(a, b) {
     && a.endpoint === b.endpoint;
 }
 
+// Echo the PIN, not the tuple. Reading preferred_tuple here is what let an
+// unpinned run report an operator_pin the operator never made.
 function operatorPinFromLive(live) {
   return {
-    engine: live.preferred_tuple.engine,
-    runner: live.preferred_tuple.runner,
-    role: live.role,
+    engine: live.operator_pin.engine,
+    runner: live.operator_pin.runner,
+    role: live.operator_pin.role,
   };
 }
 
@@ -1400,7 +1466,12 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
       // preferred (substitute rung is P4 — out of scope). Admit preferred in
       // place; do not refuse. A real different-rung substitute that is itself
       // strike-blocked still refuses (KR11: pin admits preferred only).
-      const pinAdmitsPreferred = preferredTupleMatchesResolved(
+      // Third guard site. This branch was only TRANSITIVELY pin-gated -- the
+      // resolver sets substitution_reason 'critical_strike' solely when a pin is
+      // present -- but --resolved-live is operator-supplied input, so a crafted
+      // document naming the reason without a pin reached it. Require the same
+      // explicit evidence the other two branches now require.
+      const pinAdmitsPreferred = pinAdmitsResolvedSeat(
         resolvedLive, storeRole, resolvedEngine,
       );
       if (strikeRow
@@ -1455,8 +1526,9 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // P3 / KR3: PINNED + ordinary strikes at/over threshold → admit in place
         // with pending_revocation from the resolver fold. Critical on a pin is
         // handled via substitution_reason (hasSubstitution branch above).
-        const pinAdmitsPreferred = resolvedLive
-          && preferredTupleMatchesResolved(resolvedLive, storeRole, resolvedEngine);
+        const pinAdmitsPreferred = pinAdmitsResolvedSeat(
+          resolvedLive, storeRole, resolvedEngine,
+        );
         if (pinAdmitsPreferred && !strikeRow.critical_trigger) {
           engineAssurance = 'operator-pin';
           operatorPin = operatorPinFromLive(resolvedLive);
@@ -1479,8 +1551,9 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
         // one whose row is `provisional`-but-inadmissible-for-this-output-kind —
         // never a strike-blocked seat (excluded above) — so the override's
         // legitimate uses are unaffected.
-        const pinAdmitsPreferred = resolvedLive
-          && preferredTupleMatchesResolved(resolvedLive, storeRole, resolvedEngine);
+        const pinAdmitsPreferred = pinAdmitsResolvedSeat(
+          resolvedLive, storeRole, resolvedEngine,
+        );
         if (pinAdmitsPreferred) {
           engineAssurance = 'operator-pin';
           operatorPin = operatorPinFromLive(resolvedLive);

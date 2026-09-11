@@ -316,6 +316,37 @@ run_check "$KR3_RED_CUR" \
   ENGINE_SCORECARD_DIR="$ENGINE_SCORECARD_DIR" ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
   node "$CONTRACT_CLI" check --contract "$CONTRACT" --repo "$MINI_REPO" --json
 assert_eq "$?" "3" "KR3 red current exits 3"
+
+# KR3 red, the case D3's suite never had (v2.36.27): the SAME unpinned store, but
+# the contract is handed the resolver document the real flow produces. The guard
+# used to read tuple equality as proof of a pin, so this path returned GO with a
+# fabricated operator_pin on a host with no pin -- a zero-pin decision change and
+# a strike-enforcement bypass. A red case that omits the input the GO path
+# consumes cannot catch that, however many assertions it carries.
+KR3_NOPIN_LIVE="$TEST_TMP/kr3-red-live.json"
+run_resolve_live "$KR3_NOPIN_LIVE"
+assert_eq "$(json_get "$KR3_NOPIN_LIVE" operator_pin)" "null" \
+  "KR3 red: resolver reports no pin for the unpinned store"
+KR3_NOPIN_CUR="$TEST_TMP/kr3-red-live-cur.json"
+run_check "$KR3_NOPIN_CUR" \
+  env NODE_OPTIONS="" AUTOPILOT_STRIKE_ENFORCEMENT=enforce \
+  ENGINE_SCORECARD_DIR="$ENGINE_SCORECARD_DIR" ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
+  node "$CONTRACT_CLI" check --contract "$CONTRACT" --repo "$MINI_REPO" \
+  --resolved-live "$KR3_NOPIN_LIVE" --json
+assert_eq "$?" "3" "KR3 red: unpinned + --resolved-live must NO-GO"
+assert_contains "$(cat "$KR3_NOPIN_CUR")" "$REFUSAL_ORDINARY" \
+  "KR3 red: refuses with the strike reason, not a pin reason"
+assert_not_contains "$(cat "$KR3_NOPIN_CUR")" '"assurance":"operator-pin"' \
+  "KR3 red: no operator-pin assurance on an unpinned host"
+assert_not_contains "$(cat "$KR3_NOPIN_CUR")" '"operator_pin"' \
+  "KR3 red: no fabricated operator_pin record in the payload"
+if [ -s "$KR3_RED_CUR" ] && [ -s "$KR3_NOPIN_CUR" ] && cmp -s "$KR3_RED_CUR" "$KR3_NOPIN_CUR"; then
+  assert_eq "$(wc -c < "$KR3_RED_CUR")" "$(wc -c < "$KR3_NOPIN_CUR")" \
+    "KR3 red: the live doc changes nothing when there is no pin"
+else
+  fail "KR3 red: an unpinned live doc changed the decision bytes"
+  diff -u "$KR3_RED_CUR" "$KR3_NOPIN_CUR" >&2 || true
+fi
 assert_contains "$(cat "$KR3_RED_CUR")" "$REFUSAL_ORDINARY" "KR3 unpinned: refusal string PRESENT"
 # Two empty files also compare equal, so byte-identity is only meaningful once
 # both sides are known to carry the refusal they are being compared for.

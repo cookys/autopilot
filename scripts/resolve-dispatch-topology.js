@@ -184,9 +184,14 @@ function tupleFromLadderRung(rung) {
     return { engine: null, runner: null, effort: null, endpoint: null };
   }
   const endpointRaw = rung.endpoint;
+  // '' is the canonical "no named endpoint" partition ("@none" on the
+  // capability-state side) and resolveEndpoint() already returns it, so the
+  // topology seats carry ''. Coercing it to null here was drift: the contract's
+  // --resolved-live validator requires a string, so an endpoint-less seat could
+  // never complete the resolve-live -> check --resolved-live flow at all.
   const endpoint = (typeof endpointRaw === 'string' && endpointRaw.length > 0)
     ? endpointRaw
-    : null;
+    : '';
   return {
     engine: rung.engine == null ? null : rung.engine,
     runner: rung.runner == null ? null : rung.runner,
@@ -308,6 +313,13 @@ function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
 
   return {
     role,
+    // The pin ROW as read, or null. The contract may not infer "a pin exists"
+    // from preferred_tuple: the resolver emits a preferred_tuple either way
+    // (unpinned, it is the ladder's own choice), so tuple equality is not pin
+    // evidence. Emitting the row makes pin presence an explicit fact the
+    // consumer can require, and lets it verify preferred_tuple was DERIVED
+    // from the pin rather than merely equal to it.
+    operator_pin: pin ? { ...pin } : null,
     preferred_tuple,
     effective_tuple,
     substitution_reason,

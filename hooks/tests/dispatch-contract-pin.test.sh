@@ -466,6 +466,16 @@ LIVE_PIN="$TEST_TMP/resolved-live-pin.json"
 cat > "$LIVE_PIN" <<'JSON'
 {
   "role": "implementer",
+  "operator_pin": {
+    "engine": "gpt-5.3-codex-spark",
+    "runner": "codex",
+    "role": "implementer",
+    "effort": "high",
+    "endpoint": "",
+    "reason": "owner ruling 2026-09-11",
+    "operator": "cookys",
+    "expires": null
+  },
   "preferred_tuple": {
     "engine": "gpt-5.3-codex-spark",
     "runner": "codex",
@@ -516,6 +526,49 @@ fi
 assert_eq "$(json_get "$KR1_OMIT_CUR" verdict)" "NO-GO"
 assert_contains "$(cat "$KR1_OMIT_CUR")" "no qualified scorecard row"
 
+# === KR1 red (v2.36.27): an UNPINNED live doc must not admit ===
+# The gap that let a bypass ship in v2.36.26: every --resolved-live fixture above
+# is hand-built for a PINNED seat, and every unpinned red case omits the flag
+# entirely, so nothing ever handed the contract an unpinned resolver document --
+# which is exactly what the GO path consumes. The guard read tuple equality as
+# proof of a pin, but the resolver emits preferred_tuple whether or not one
+# exists (unpinned it is the ladder's own choice), so an unpinned host reached
+# GO with assurance operator-pin and a fabricated operator_pin record.
+echo "--- KR1 red: unpinned live doc (operator_pin null) must refuse ---"
+LIVE_NOPIN="$TEST_TMP/resolved-live-nopin.json"
+printf '%s\n' '{
+  "role": "implementer",
+  "operator_pin": null,
+  "preferred_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
+  "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
+  "substitution_reason": null,
+  "pending_revocation": []
+}' > "$LIVE_NOPIN"
+NOPIN_OUT="$TEST_TMP/nopin-out.json"
+run_check "$NOPIN_OUT" \
+  env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/empty" ENGINE_CAPABILITY_DIR="$STORE_BASE/empty" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check \
+  --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" \
+  --resolved-live "$LIVE_NOPIN" --json
+nopin_ec=$?
+assert_eq "$nopin_ec" "3" "KR1 red: unpinned live doc must NO-GO"
+assert_eq "$(json_get "$NOPIN_OUT" verdict)" "NO-GO" "KR1 red: verdict NO-GO"
+assert_contains "$(cat "$NOPIN_OUT")" "no qualified scorecard row" \
+  "KR1 red: refuses for the pre-change reason, not a pin reason"
+assert_not_contains "$(cat "$NOPIN_OUT")" "operator-pin" \
+  "KR1 red: no operator-pin assurance on an unpinned host"
+assert_not_contains "$(cat "$NOPIN_OUT")" '"operator_pin"' \
+  "KR1 red: no fabricated operator_pin record in the payload"
+# Byte-identical to the same fixture with the flag omitted: an unpinned live doc
+# must change nothing at all, which is the zero-pin equivalence KR2 asserts.
+if [ -s "$KR1_OMIT_CUR" ] && [ -s "$NOPIN_OUT" ] && cmp -s "$KR1_OMIT_CUR" "$NOPIN_OUT"; then
+  assert_eq "$(wc -c < "$KR1_OMIT_CUR")" "$(wc -c < "$NOPIN_OUT")" \
+    "KR1 red: unpinned live doc decides byte-identically to omitting the flag"
+else
+  fail "KR1 red: unpinned live doc changed the decision bytes"
+  diff -u "$KR1_OMIT_CUR" "$NOPIN_OUT" >&2 || true
+fi
+
 # === KR11: substitution — unqualified substitute is NO-GO naming it ===
 echo "--- KR11: unqualified substitute → NO-GO naming substitute ---"
 # Point mini-repo config at stand-in B and commit so the dirty-base gate stays green.
@@ -542,6 +595,16 @@ LIVE_SUB="$TEST_TMP/resolved-live-sub.json"
 cat > "$LIVE_SUB" <<'JSON'
 {
   "role": "implementer",
+  "operator_pin": {
+    "engine": "gpt-5.3-codex-spark",
+    "runner": "codex",
+    "role": "implementer",
+    "effort": "high",
+    "endpoint": "",
+    "reason": "owner ruling 2026-09-11",
+    "operator": "cookys",
+    "expires": null
+  },
   "preferred_tuple": {
     "engine": "gpt-5.3-codex-spark",
     "runner": "codex",
@@ -738,6 +801,7 @@ assert_contains "$(cat "$MISS_OUT")" "resolved-live"
 # non-empty string) — silently treating a malformed field as "no pin".
 printf '%s\n' '{
   "role": "implementer",
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
   "preferred_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "substitution_reason": false,
@@ -759,6 +823,7 @@ assert_contains "$(cat "$SUBFALSE_OUT")" "substitution_reason"
 # reason (no match) instead of being refused as malformed input up front.
 printf '%s\n' '{
   "role": "implementer",
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
   "preferred_tuple": {"engine": "", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "substitution_reason": null,
@@ -778,6 +843,7 @@ assert_contains "$(cat "$EMPTYENG_OUT")" "preferred_tuple"
 # pending_revocation not an array
 printf '%s\n' '{
   "role": "implementer",
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
   "preferred_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "substitution_reason": null,
@@ -797,6 +863,7 @@ assert_contains "$(cat "$PENDBAD_OUT")" "pending_revocation"
 # Missing substitution_reason key entirely (not merely falsy — absent).
 printf '%s\n' '{
   "role": "implementer",
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
   "preferred_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "pending_revocation": []

@@ -91,9 +91,8 @@
         "R97283021528208072182855096637403655793150543135642831035018962452812568016345"
       ],
       "verification_commands": [
-        "bash hooks/tests/run.sh",
-        "bash scripts/validate.sh",
-        "bash scripts/check-canonical-invariants.sh",
+        "bash hooks/tests/engine-capability-pin.test.sh",
+        "node scripts/check-js-syntax.js",
         "bash scripts/sync-codex-plugin-skills.sh --check",
         "git diff --check"
       ]

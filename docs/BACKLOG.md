@@ -53,9 +53,39 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   threshold belongs **per seat**, measured by the tail-nonce probe during `engine-onboarding` /
   qualification and stored beside the seat's other capability facts, with a re-measure trigger on
   runner-version change (the capability store already tracks `runner_version`).
-- **Honest bound**: this probe does not distinguish transport truncation from model-side context/skim
-  behaviour — only that the tail stops being answerable in that band. The operational consequence is
-  the same either way.
+- **Input difference is eliminated; the wall is a DEPLOYMENT property** (2026-09-11, final exchange).
+  The peer supplied a deterministic generator (fixed nonce, fixed padding, exact byte count) so both
+  hosts could run byte-identical payloads. Verified: `p175000.ndjson` sha256 `0faa4a59c046…` and
+  `p200000.ndjson` sha256 `38ec8965ccf6…` match across hosts, and the agy binary itself is the same
+  file on both (`sha256 38f130cdd0757e1d…`). Same bytes, same binary, same model id
+  (`gemini-3.8-flash-high`), same probe script:
+
+  | payload | this host | peer host |
+  |---|---|---|
+  | 175,000 B | tail nonce returned | tail nonce returned |
+  | 200,000 B | **not returned, `"response":""`** | tail nonce returned |
+
+  So it is neither the transport, nor the model, nor the runner version, nor the input. What is left
+  is the account / plan / region / quota tier the two hosts run under.
+- **The failure is worse than truncation: it is an EMPTY response reported as SUCCESS.** Under the
+  stricter tail-nonce instruction this host returns `status: SUCCESS` with `response: ""` at 200 KB.
+  A reviewer rail consuming that records a seat that "reviewed" and found nothing — indistinguishable
+  from a clean review. (An earlier, looser probe instead got a fluent answer about the head of the
+  payload, which is the same hazard wearing better clothes.)
+- **Consequence for where the threshold lives**: it cannot be a constant in a dispatch script, and it
+  cannot live in the scorecard either, because the scorecard is shared across hosts and this varies
+  BY HOST at identical seat identity. Either it is measured on the machine and stored machine-locally
+  beside the capability store, or — safer — the rail stops trying to predict it and performs the
+  tail-nonce self-check itself on any over-threshold payload, turning a silent fail-open into one
+  cheap extra probe.
+- **`agy --version` is not version evidence** (peer finding, 2026-09-11): the same binary — byte-identical
+  sha256, untouched mtime — reported `1.2.0` before `agy update` and `1.2.1` after. The string is
+  cached, not read from the binary. Anything pinning a runner version (the capability store tracks
+  `runner_version`, and this plan proposes using it as a re-measure trigger) must hash the binary
+  instead.
+- **Honest bound**: this probe still does not distinguish transport truncation from model-side
+  context/skim behaviour — only that the tail stops being answerable in that band, on this host. The
+  operational consequence is the same either way.
 - **Why removing the ceiling would be a regression, not a fix**: today an over-size agy prompt fails CLOSED and loudly (execve fails, the rail records `no_verdict`, nobody mistakes it for a review). A silently truncated stream-json prompt fails OPEN: the reviewer reads the first ~175 KB of a diff and returns a confident verdict on the part it saw. A hetero review loop's whole purpose is defeated by a reviewer that cannot tell you it only read half.
 - **Candidate**: keep `agy_argv_ceiling_assert` as a hard gate, add a stream-json transport behind it with its own empirically-derived ceiling (start conservative, e.g. 150 KB), and make the probe above a regression test with the nonce at the tail — never assert on `status` alone. Splitting the unit remains the correct answer above that.
 - **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is Fix each.

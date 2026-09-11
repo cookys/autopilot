@@ -156,7 +156,8 @@
         "pi",
         "qoderclicn",
         "cursor",
-        "opencode"
+        "opencode",
+        "kimi"
       ],
       "x-shell-validated": true,
       "x-shell-var": "IMPL_RUNNER"

@@ -20,7 +20,7 @@
 #       [--model gemini-flash-high]          # default (agy alias, resolved against the LIVE
 #                                             # `agy models` inventory); names: `agy models` /
 #                                             # `grok models`. Required for any non-agy runner.
-#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, *qwen*/*qwq*→qoderclicn, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
@@ -32,6 +32,11 @@
 #                                              #   `opencode run` headless; --model is a
 #                                              #   provider/model id from `opencode models`
 #                                              #   (e.g. opencode-go/muse-spark-1.3-contributor).
+#                                              #   kimi (EXPLICIT only, never auto — provider/
+#                                              #   alias ids like kimi-code/k3 have no vendor
+#                                              #   family to match on): Kimi Code CLI (Moonshot),
+#                                              #   `-p` argv-only (no --prompt-file, no STDIN) —
+#                                              #   pre-spend argv-byte gate, see --kimi-bin.
 #                                              #   pi (EXPLICIT only): pi coding agent over RPC
 #                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
 #                                              #   provider default minimax via PI_RPC_PROVIDER).
@@ -65,6 +70,7 @@
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
 #       [--cursor-bin cursor-agent]            # alternate/pinned Cursor CLI (test seam)
 #       [--opencode-bin opencode]              # alternate/pinned OpenCode CLI (test seam)
+#       [--kimi-bin kimi]                      # alternate/pinned Kimi Code CLI (test seam)
 #       [--cursor-fast]                        # cursor: opt into the `-fast` model-id lane
 #                                              #   (default non-fast). Runner-scoped: any other
 #                                              #   --runner is a die_precondition, same posture as
@@ -95,7 +101,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn"|"cursor"|"opencode", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn"|"cursor"|"opencode"|"kimi", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -150,6 +156,7 @@ MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller p
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
 CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
 OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via --opencode-bin
+KIMI_BIN="kimi"            # Kimi Code CLI runner (Moonshot); test seam via --kimi-bin
 KEEP=0
 RETENTION_OWNER=""
 RETENTION_REASON=""
@@ -210,6 +217,12 @@ CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
 CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
 OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
+KIMI_PROMPT_FILE=""    # kimi combined prompt temp; init early so it is SET for the detach declare -p
+KIMI_EDIT_ONLY=""       # kimi EDIT-ONLY directive text, computed once at the pre-spend argv
+                        # gate and reused verbatim by the run arm; init early for declare -p
+                        # (KIMI_ARGV_LIMIT is NOT pre-declared here — it is a user env-override
+                        # knob, `${KIMI_ARGV_LIMIT:-120000}`, and only used before any fork; a
+                        # top-level empty-string init would clobber an inherited env value.)
 CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped, see usage above
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
@@ -778,6 +791,7 @@ emit() { # status commit files ins del worktree error
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
+  [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
   # validates required-field presence, not a closed set). usage is parsed from the HARNESS
@@ -798,7 +812,7 @@ emit() { # status commit files ins del worktree error
     if [ "${IS_CODEX:-0}" -eq 0 ] && [ "${IS_GROK:-0}" -eq 0 ] \
        && [ "${IS_CCSHIM:-0}" -eq 0 ] && [ "${IS_PI:-0}" -eq 0 ] \
        && [ "${IS_QODER:-0}" -eq 0 ] && [ "${IS_CURSOR:-0}" -eq 0 ] \
-       && [ "${IS_OPENCODE:-0}" -eq 0 ]; then
+       && [ "${IS_OPENCODE:-0}" -eq 0 ] && [ "${IS_KIMI:-0}" -eq 0 ]; then
       usage_json="${AGY_USAGE_JSON:-null}"
     else
       local log_format="plain"
@@ -1461,6 +1475,7 @@ die_precondition() {
     [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
     [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
+  [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   fi
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
@@ -1527,6 +1542,7 @@ die_resource_budget() {
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
+  [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
@@ -1555,6 +1571,7 @@ write_manifest() {
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
+  [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
   # grok --output-format json / agy response-only plain log with a separate private
   # native envelope / cc-shim plain).
@@ -1632,6 +1649,7 @@ while [ $# -gt 0 ]; do
     --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
     --cursor-bin) CURSOR_BIN="${2:-}"; shift 2 ;;
     --opencode-bin) OPENCODE_BIN="${2:-}"; shift 2 ;;
+    --kimi-bin) KIMI_BIN="${2:-}"; shift 2 ;;
     --cursor-fast) CURSOR_FAST=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
@@ -1756,6 +1774,7 @@ set_runner_flags() {
   IS_QODER=0
   IS_CURSOR=0
   IS_OPENCODE=0
+  IS_KIMI=0
   case "$RUNNER" in
     codex)   IS_CODEX=1 ;;
     agy)     ;;
@@ -1768,6 +1787,9 @@ set_runner_flags() {
     opencode) IS_OPENCODE=1 ;; # OpenCode CLI (`opencode run`). EXPLICIT only, never auto: its
                                # model ids are provider/model (opencode-go/…, opencode/…) with no
                                # vendor family to match on; the provider prefix is the route.
+    kimi)    IS_KIMI=1 ;;      # Kimi Code CLI (Moonshot). EXPLICIT only, never auto: model
+                               # ids are provider/alias (kimi-code/k3) with no vendor family
+                               # to match on — same rationale as opencode above.
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
       # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
@@ -1800,7 +1822,7 @@ set_runner_flags() {
         IS_QODER=1
       fi
       ;;
-    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode (got: $RUNNER)" ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi (got: $RUNNER)" ;;
   esac
   # Only reached if resolution actually completed (no die_precondition fired above,
   # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
@@ -1931,14 +1953,14 @@ if [ "$IS_CURSOR" -eq 1 ]; then
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ]; then
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   validate_d2_agy_claims
 fi
 
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ]; then
   # `|| die` in the PARENT: agy_resolve_model_alias deliberately never dies inside `$( )`,
   # where die_precondition's JSON would be captured into MODEL instead of exiting.
   MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
@@ -2047,6 +2069,8 @@ elif [ "$IS_CURSOR" -eq 1 ]; then
   command -v "$CURSOR_BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $CURSOR_BIN (install Cursor CLI or pass --cursor-bin)"
 elif [ "$IS_OPENCODE" -eq 1 ]; then
   command -v "$OPENCODE_BIN" >/dev/null 2>&1 || die_precondition "opencode binary not found: $OPENCODE_BIN (install OpenCode CLI or pass --opencode-bin)"
+elif [ "$IS_KIMI" -eq 1 ]; then
+  command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
@@ -2268,6 +2292,7 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   [ "${IS_QODER:-0}" -eq 1 ] && local_runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && local_runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && local_runner="opencode"
+  [ "${IS_KIMI:-0}" -eq 1 ] && local_runner="kimi"
 
   if [[ "$SKILL_MODE" == "auto" ]]; then
     cap_state="$(node "$SELF_DIR/engine-capability-state.js" current --runner "$local_runner" --model "$MODEL" --role implementer 2>/dev/null)"
@@ -2738,10 +2763,11 @@ _wt_lock_fail() {
 # with no vendor error to report. Measured against the same directive the dispatch will send (the
 # WT path is already resolved here; only the worktree itself does not exist yet). `wc -c` on the
 # prompt file slightly OVER-counts, which errs toward refusing a payload that would just barely
-# have fit — the safe direction. Only the agy rail has this wall; every other runner reads a file
-# or STDIN.
+# have fit — the safe direction. Only the agy rail has this wall (below); kimi has its OWN
+# argv-only wall right after it (same shape, different runner) — every OTHER runner reads a
+# file or STDIN.
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ]; then
   # `wc -c` on a PIPE, not ${#var}: ${#} counts CHARACTERS, and the directive contains a
   # multibyte em-dash (and $WT may add more), so a character count UNDER-reports the argv size —
   # the unsafe direction, and exactly the payload band (131072-131073 bytes) the guard exists to
@@ -2750,6 +2776,30 @@ if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
   if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_ARGV_BYTES" "the agy task prompt" \
       "split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, qoderclicn, opencode)")"; then
     die_precondition "$AGY_CEILING_REASON"
+  fi
+fi
+
+# kimi argv-payload ceiling — refuse BEFORE anything is created, so the `precondition_failed`
+# contract ("nothing was created") holds. Copied in shape from dispatch-review.sh's kimi gate
+# (~line 1136-1146): kimi 0.41.0 takes the prompt ONLY as the -p argv string — no --prompt-file,
+# no STDIN (Stage-0 spike 2026-09-11, docs/plans/2026-09-11-kimi-implementer-rail.md §0: `-p ''`
+# is rejected, `-p -` is taken literally) — so the EDIT-ONLY directive plus the task prompt
+# travel as ONE argv string and execve rejects it over Linux's MAX_ARG_STRLEN (131072 bytes),
+# before kimi starts and with no vendor error to report. KIMI_EDIT_ONLY is set here (not inside
+# run_agent) so the byte count matches EXACTLY what the run arm below sends — same directive
+# text, computed once. Test seam: KIMI_ARGV_LIMIT (default 120000, env-overridable).
+if [ "$IS_KIMI" -eq 1 ]; then
+  KIMI_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  KIMI_ARGV_LIMIT="${KIMI_ARGV_LIMIT:-120000}"
+  KIMI_ARGV_BYTES=$(( $(printf '%s' "$KIMI_EDIT_ONLY" | wc -c) + $(wc -c < "$PROMPT_FILE") ))
+  if [ "$KIMI_ARGV_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
+    die_precondition "kimi prompt is ${KIMI_ARGV_BYTES} bytes but kimi accepts the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, qoderclicn, opencode)"
   fi
 fi
 
@@ -2937,6 +2987,7 @@ abort_dispatch() {
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
   [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
+  [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
   [ -n "$AGY_STDERR" ] && rm -f "$AGY_STDERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
@@ -3156,6 +3207,23 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   run_worker bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$4" --variant "$5" --format json < "$3"' \
       _ "$WT" "$OPENCODE_BIN" "$OPENCODE_PROMPT_FILE" "$MODEL" "$OPENCODE_VARIANT"
   rm -f "$OPENCODE_PROMPT_FILE"
+elif [ "$IS_KIMI" -eq 1 ]; then
+  # Kimi Code CLI (Moonshot). Stage-0 spike 2026-09-11 (kimi 0.41.0), see
+  # docs/plans/2026-09-11-kimi-implementer-rail.md §0:
+  #   plain `-p` already edits files in the PROCESS CWD, exit 0, NOT committed by kimi itself
+  #   → wrapper-commit rail, same as grok/qoderclicn/opencode; `-p` CANNOT combine with
+  #   --auto/-y ("Cannot combine --prompt with --auto") and neither is needed since -p already
+  #   edits; prompt travels ONLY as one -p argv string (no --prompt-file, no STDIN — `-p ''` is
+  #   rejected, `-p -` is taken literally) — guarded pre-spend above (KIMI_EDIT_ONLY /
+  #   KIMI_ARGV_LIMIT, same shape as dispatch-review.sh's kimi gate); no effort flag exists on
+  #   this route — EFFORT is a seat label only, same as cc-shim/opencode; --output-format text
+  #   for a clean parseable capture. KIMI_EDIT_ONLY was computed once at the pre-spend gate
+  #   (above) so the run here sends the EXACT bytes that were size-checked.
+  KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"
+  printf '%s' "${KIMI_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$KIMI_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
+      _ "$WT" "$KIMI_BIN" "$KIMI_PROMPT_FILE" "$MODEL"
+  rm -f "$KIMI_PROMPT_FILE"
 elif [ "$IS_CURSOR" -eq 1 ]; then
   # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
   # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:
@@ -3269,7 +3337,7 @@ compute_artifacts() {
 # must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"; [ "$IS_KIMI" -eq 1 ] && _runner_label="kimi"
   git -C "$WT" add -A
   if ! run_strict_staged_precheck; then
     # Staged manifest violation: leave the worktree staged for in-place repair;
@@ -3652,7 +3720,7 @@ run_strict_contract_postchecks() {
 }
 
 # _hetero_runner_token — the single derivation of "which runner is this dispatch using"
-# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER/IS_CURSOR/IS_OPENCODE flags, shared by
+# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER/IS_CURSOR/IS_OPENCODE/IS_KIMI flags, shared by
 # passive_capture and seat_strike_capture (factored out rather than copy-pasted, per repo
 # convention).
 _hetero_runner_token() {
@@ -3664,6 +3732,7 @@ _hetero_runner_token() {
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
+  [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   printf '%s' "$runner"
 }
 
@@ -4121,9 +4190,9 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \

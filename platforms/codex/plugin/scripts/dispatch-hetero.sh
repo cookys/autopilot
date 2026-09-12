@@ -854,6 +854,11 @@ emit() { # status commit files ins del worktree error
     local possibly_effectful_json="false"
     [ -n "${7:-}" ] && boundary_reason_json="\"$(_flat_json_escape "$7")\""
     [ -n "${2:-}" ] && possibly_effectful_json="true"
+    if [ -n "${HANDS_BOUNDARY_CODE:-}" ]; then
+      # Structured code from the hands gates. The substring scan below reads the whole error
+      # text, which carries filenames the worker chose (round 5, 2026-09-13).
+      boundary_code_json="\"${HANDS_BOUNDARY_CODE}\""
+    else
     case "${7:-}" in
       *'outside sealed output surface'*) boundary_code_json="\"unauthorized_output_path\"" ;;
       *'missing from changed files'*) boundary_code_json="\"required_output_missing\"" ;;
@@ -861,6 +866,7 @@ emit() { # status commit files ins del worktree error
       *'budget exceeded'*) boundary_code_json="\"budget_exceeded\"" ;;
       *'missing scope allow'*) boundary_code_json="\"scope_misconfigured\"" ;;
     esac
+    fi
     boundary_reject_fields="$(printf \
       ', "boundary": "rejected", "boundary_code": %s, "boundary_reason": %s, "candidate_ref": %s, "possibly_effectful": %s, "mutation_failed": false, "unknown_status": false' \
       "$boundary_code_json" "$boundary_reason_json" "$commit_json" "$possibly_effectful_json")"
@@ -2889,6 +2895,115 @@ elif [ "$WORKTREE_REUSED" -eq 0 ]; then
     || die_precondition "cannot register worktree bookkeeping exclusion"
 fi
 
+# --- main-checkout boundary (item (E), 2026-09-13) ---------------------------------------
+# Hands run in $WT, never here. But a worktree shares refs and remotes with the main
+# checkout, and git refuses only `checkout` of a branch held elsewhere: `git -C <main>`,
+# `update-ref`, and — the irreversible one — `git push` all work from inside $WT. A peer
+# measured agy committing straight to the main branch because a brief said "commit".
+# Two layers, neither trusting the prompt's "do not push":
+#   prevention — the worker's env sets `protocol.allow=never` (GIT_CONFIG_COUNT env config).
+#     git then refuses EVERY remote transport — file, ssh, https — at the core, before any
+#     hook: `--no-verify` does not bypass it, a tag push does not bypass it, and a
+#     repo-configured pushurl does not bypass it. Measured 2026-09-13 against all three
+#     transports; commit, worktree add and the repo's own pre-commit hook are unaffected.
+#     Two designs were tried and rejected by measurement first: `remote.<r>.pushurl` is
+#     multivalued, so an env value is APPENDED and the push lands on the repo's own pushurl;
+#     `core.hooksPath` + a refusing pre-push is skipped by `--no-verify` and shadows every
+#     other repo hook. Fetch is blocked too, which is correct: the worktree is pinned at
+#     BASE_SHA and hands have no business moving it. Inherited GIT_CONFIG_* entries are
+#     preserved by continuing the index. This is an accident guard, not a sandbox: a worker
+#     that `env -i`s or unsets the variable is evading, and detection is the backstop.
+#   detection — the main checkout is fingerprinted before hands and re-read after, on EVERY
+#     outcome: HEAD, the symbolic-ref target (measured with rev-parse, whose rc separates
+#     "detached" from "could not measure"), every refs/heads/* except this dispatch's own
+#     branch, every refs/tags/* and refs/remotes/* with symref targets, and the index +
+#     worktree dirty inventory. Any delta rejects the round as `main_checkout_mutated`. A
+#     measurement that fails yields UNVERIFIABLE-<nonce> and never compares equal. This
+#     CANNOT attribute: a concurrent operator fetch, edit, or a second dispatch creating its
+#     branch trips it too, and the honest answer is a discarded round with the worktree
+#     retained, not a guess. Re-dispatch once the main checkout is quiescent.
+MAIN_CHECKOUT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+_fp_unverifiable() { printf 'UNVERIFIABLE-%s-%s-%s' "$1" "$$" "$(date +%s%N)"; }
+main_checkout_fingerprint() {
+  local head sym refs dirty
+  [ -n "$MAIN_CHECKOUT" ] || { _fp_unverifiable no-main-checkout; return 0; }
+  head="$(git -C "$MAIN_CHECKOUT" rev-parse HEAD 2>/dev/null)" || { _fp_unverifiable head; return 0; }
+  # rev-parse --symbolic-full-name prints "HEAD" when detached and the refname otherwise,
+  # rc 0 in both; a non-zero rc is a measurement failure, not "detached".
+  sym="$(git -C "$MAIN_CHECKOUT" rev-parse --symbolic-full-name HEAD 2>/dev/null)" || { _fp_unverifiable symref; return 0; }
+  # EVERY ref — refs/replace/* included, since a replacement object can make a later content
+  # check inspect a benign substitute (round 6, 2026-09-13) — except this dispatch's branch.
+  refs="$(git -C "$MAIN_CHECKOUT" for-each-ref --format='%(refname)=%(objectname)=%(symref)' 2>/dev/null)" \
+    || { _fp_unverifiable refs; return 0; }
+  # This dispatch's own branch is expected to move (the wrapper commits on it); nothing else is.
+  refs="$(printf '%s\n' "$refs" | awk -v own="refs/heads/${BRANCH}=" 'index($0, own) != 1')"
+  # Content, not labels: `status --porcelain` shows a path's state, so a second edit to an
+  # already-dirty file, or an overwrite of an IGNORED file (.venv/bin/python), is invisible
+  # to it (review, 2026-09-13). Tracked content: the unstaged and staged diffs. Everything
+  # else on disk, including ignored and untracked: a stat walk — size + mtime of every
+  # regular file under the checkout except .git — so an overwrite, create or delete of any
+  # file changes the digest without hashing node_modules.
+  dirty="$( { git -C "$MAIN_CHECKOUT" diff --no-color 2>/dev/null && git -C "$MAIN_CHECKOUT" diff --no-color --cached 2>/dev/null; } )" \
+    || { _fp_unverifiable dirty; return 0; }
+  # Every entry type, with type, mode and link target: a symlink planted over an empty
+  # ignored directory has no regular file to change (round 5, 2026-09-13).
+  walk="$(find "$MAIN_CHECKOUT" -xdev -path "$MAIN_CHECKOUT/.git" -prune -o -printf '%P\t%y\t%m\t%s\t%T@\t%l\n' 2>/dev/null | LC_ALL=C sort)" \
+    || { _fp_unverifiable walk; return 0; }
+  # Administrative surfaces the walk prunes (round 7, 2026-09-13): the shared config at every
+  # scope (a brief saying "configure the remote" lands here) and the hooks directory.
+  cfg="$(git -C "$MAIN_CHECKOUT" config --list --show-origin --show-scope 2>/dev/null)" || { _fp_unverifiable config; return 0; }
+  gitdir="$(git -C "$MAIN_CHECKOUT" rev-parse --git-common-dir 2>/dev/null)" || { _fp_unverifiable gitdir; return 0; }
+  case "$gitdir" in /*) ;; *) gitdir="$MAIN_CHECKOUT/$gitdir" ;; esac
+  # -H/-L: follow a symlinked hooks dir to the live targets and record link targets (round 8).
+  if [ -e "$gitdir/hooks" ]; then
+    hooks="$(find -L "$gitdir/hooks" -printf '%P\t%y\t%m\t%s\t%T@\t%l\n' 2>/dev/null | LC_ALL=C sort)" || { _fp_unverifiable hooks; return 0; }
+    hooks="$(readlink -f "$gitdir/hooks" 2>/dev/null || printf '?')
+$hooks"
+  else
+    hooks="(no hooks dir)"
+  fi
+  # Index STATE, not just patch text: assume-unchanged / skip-worktree flags and stages change
+  # behaviour without changing any diff (round 8). `ls-files -v` prefixes flagged entries.
+  idx="$(git -C "$MAIN_CHECKOUT" ls-files -s -v 2>/dev/null)" || { _fp_unverifiable index; return 0; }
+  # A mount below the checkout is outside -xdev's reach. Enumerate mounts from
+  # /proc/self/mountinfo (findmnt if present); no enumeration at all is UNVERIFIABLE, not
+  # "no mounts" (round 8).
+  local mounts=""
+  if [ -r /proc/self/mountinfo ]; then
+    mounts="$(awk '{print $5}' /proc/self/mountinfo 2>/dev/null)" || { _fp_unverifiable mounts; return 0; }
+  elif command -v findmnt >/dev/null 2>&1; then
+    mounts="$(findmnt -rn -o TARGET 2>/dev/null)" || { _fp_unverifiable mounts; return 0; }
+  else
+    _fp_unverifiable mounts-unenumerable; return 0
+  fi
+  if printf '%s\n' "$mounts" | grep -q -F -- "$MAIN_CHECKOUT/"; then
+    _fp_unverifiable mount-below-checkout; return 0
+  fi
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$head" "$sym" "$refs" "$dirty" "$walk" "$cfg" "$hooks" "$idx" | sha256sum 2>/dev/null | cut -c1-64 | grep -E '^[0-9a-f]{64}$' \
+    || _fp_unverifiable digest
+}
+MAIN_CHECKOUT_BEFORE="$(main_checkout_fingerprint)"
+_hands_env_i="${GIT_CONFIG_COUNT:-0}"
+case "$_hands_env_i" in ''|*[!0-9]*) _hands_env_i=0 ;; esac
+# `protocol.allow` is only the FALLBACK for protocols without their own `protocol.<name>.allow`;
+# a repo-level `protocol.file.allow=always` (common in repos that test submodules) beats it
+# (measured 2026-09-13: the tag push landed). Env config is command-line scope and wins over
+# repo config, so deny every protocol git knows by name, plus the fallback for any other.
+HANDS_GIT_ENV=()
+# …and every protocol the repo (or the user/system config) has given its OWN allow key —
+# a custom remote helper with `protocol.<helper>.allow=always` would otherwise beat the
+# fallback exactly as protocol.file.allow did (round 5, 2026-09-13).
+_configured_protos="$(git -C "${MAIN_CHECKOUT:-.}" config --get-regexp '^protocol\..*\.allow$' 2>/dev/null | awk '{print $1}' | sed 's/^protocol\.//' | LC_ALL=C sort -u)"
+for _proto in allow file.allow ssh.allow git.allow http.allow https.allow ftp.allow ftps.allow ext.allow $_configured_protos; do
+  HANDS_GIT_ENV+=("GIT_CONFIG_KEY_${_hands_env_i}=protocol.${_proto}" "GIT_CONFIG_VALUE_${_hands_env_i}=never")
+  _hands_env_i=$((_hands_env_i+1))
+done
+# GIT_ALLOW_PROTOCOL is consulted BEFORE protocol.* config: an inherited value would beat every
+# deny above, and an EMPTY value allows nothing — measured 2026-09-13 to block a push even after
+# the repo config gained a fresh `protocol.file.allow=always`. It is set here explicitly so an
+# inherited allowlist cannot leak through and so a worker-added allow key changes nothing.
+HANDS_GIT_ENV=("GIT_ALLOW_PROTOCOL=" "GIT_CONFIG_COUNT=${_hands_env_i}" "${HANDS_GIT_ENV[@]}")
+
 if [ "$WORKTREE_REUSED" -eq 0 ] \
   && ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA"; then
   # `git worktree add -b` creates the branch ref BEFORE the dir, so the ref leaks
@@ -3091,18 +3206,18 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # so run the worker plainly IN-session — its descendants share our session and die/finish
     # with us; there is no nested container to reap on this path.
     CONTAINMENT="setsid"
-    "$@" >"$LOG" 2>&1
+    env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1
     AGENT_EXIT=$?
     return 0
   fi
   if [ "$HAVE_CGROUP" -eq 1 ]; then
     SCOPE_UNIT="hetero-${BRANCH//\//-}-$$.scope"
     CONTAINMENT="cgroup"
-    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- "$@" >"$LOG" 2>&1 &
+    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
     local rp=$!; wait "$rp"; AGENT_EXIT=$?
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
-    setsid --wait "$@" >"$LOG" 2>&1 &
+    setsid --wait env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
     local rp=$!
     # the setsid'd worker is its own session leader; capture its sid (= the child pgid)
     WORKER_SID="$(ps -o pid= --ppid "$rp" 2>/dev/null | tr -d ' ' | head -1)"
@@ -3110,7 +3225,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     wait "$rp"; AGENT_EXIT=$?
   else
     CONTAINMENT="plain"
-    "$@" >"$LOG" 2>&1
+    env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1
     AGENT_EXIT=$?
   fi
   reap_container   # reap on the NORMAL exit path too (catch escaped survivors), set CONTAINED
@@ -3505,6 +3620,47 @@ process.exit(0);
 # (repairable in place) and the run classifies boundary_rejected. Engines that
 # self-commit never pass through here — the post-commit gate remains their
 # authoritative (and tested) backstop.
+# Hands boundary gates — run on EVERY committed round, strict or not (item (E) +
+# 308-db's 2026-09-07 symlink incident, both 2026-09-13). Sets HANDS_BOUNDARY_ERROR.
+#   1. main checkout untouched (fingerprint above)
+#   2. commit content safe: scripts/check-hands-commit.js over BASE_SHA..HEAD_SHA — added
+#      symlinks, added gitlinks, force-added ignored paths. The scope gate is blind to all
+#      three: every such path can be inside the declared output surface.
+# A check that cannot run (rc 3) REJECTS. "Not verified" is not "clean".
+HANDS_BOUNDARY_ERROR=""
+HANDS_BOUNDARY_CODE=""
+# Main-checkout comparison runs on EVERY outcome — including no_op and failure — because
+# the case it exists for is hands committing in the MAIN checkout while the hands HEAD
+# never moves (review finding, 2026-09-13). Gating it on "a worktree commit exists" would
+# skip exactly the incident.
+check_main_checkout_boundary() {
+  HANDS_BOUNDARY_ERROR=""; HANDS_BOUNDARY_CODE=""
+  local after
+  after="$(main_checkout_fingerprint)"
+  case "${MAIN_CHECKOUT_BEFORE}${after}" in *UNVERIFIABLE-*)
+    HANDS_BOUNDARY_CODE="main_checkout_unverified"
+    HANDS_BOUNDARY_ERROR="boundary_rejected: main checkout could not be measured (before=${MAIN_CHECKOUT_BEFORE:0:40} after=${after:0:40}); an unverified boundary is not a clean one — round discarded, worktree retained"
+    return 1 ;;
+  esac
+  if [ "$after" != "$MAIN_CHECKOUT_BEFORE" ]; then
+    HANDS_BOUNDARY_CODE="main_checkout_mutated"
+    HANDS_BOUNDARY_ERROR="boundary_rejected: main checkout mutated during the round (HEAD, branch, or a remote-tracking ref changed under ${MAIN_CHECKOUT:-?}; before=${MAIN_CHECKOUT_BEFORE:0:12} after=${after:0:12}); the rail cannot attribute the change, so the round is discarded with the worktree retained — re-dispatch once the main checkout is quiescent"
+    return 1
+  fi
+  return 0
+}
+run_hands_content_gate() {
+  HANDS_BOUNDARY_ERROR=""; HANDS_BOUNDARY_CODE=""
+  local content_out content_rc
+  content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" 2>&1)" && content_rc=0 || content_rc=$?
+  case "$content_rc" in
+    0) return 0 ;;
+    1) HANDS_BOUNDARY_CODE="unsafe_commit_content"; HANDS_BOUNDARY_ERROR="boundary_rejected: unsafe commit content (added symlink / gitlink / ignored path) — ${content_out}" ;;
+    *) HANDS_BOUNDARY_CODE="content_check_unverified"; HANDS_BOUNDARY_ERROR="boundary_rejected: hands content check could not run (rc ${content_rc}) — treated as NOT verified: ${content_out}" ;;
+  esac
+  return 1
+}
+
 STRICT_PRECOMMIT_REJECTED=0
 run_strict_staged_precheck() {
   local allow_file deny_file staged_out staged_rc out_dir temp_path
@@ -3991,7 +4147,30 @@ classify_outcome() {
   OUTCOME_RESOURCES_CREATED=1
   [ "${WORKTREE_REUSED:-0}" -eq 1 ] && OUTCOME_RESOURCES_CREATED=0
   OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
-  if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+  if ! check_main_checkout_boundary; then
+    passive_capture "boundary_rejected"
+    OUTCOME_STATUS="boundary_rejected"
+    OUTCOME_COMMIT=""; [ "$HEAD_SHA" != "$BASE_SHA" ] && OUTCOME_COMMIT="$HEAD_SHA"
+    OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
+    OUTCOME_ERR="$HANDS_BOUNDARY_ERROR"; OUTCOME_EXIT=1
+    # The main-checkout code wins, but the content verdict is still taken so a retained
+    # candidate is never left unverified (round 6, 2026-09-13).
+    if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+      _main_code="$HANDS_BOUNDARY_CODE"; _main_err="$OUTCOME_ERR"
+      if ! run_hands_content_gate; then
+        OUTCOME_ERR="${_main_err}; ALSO ${HANDS_BOUNDARY_ERROR}"
+      fi
+      HANDS_BOUNDARY_CODE="$_main_code"
+    fi
+  elif [ "$HEAD_SHA" != "$BASE_SHA" ] && ! run_hands_content_gate; then
+    # --- a new commit exists and its CONTENT is unsafe or unverifiable: authoritative on
+    # every committed round, dirty or not, exit code or not (review, 2026-09-13). Precedence:
+    # main-checkout mutation > unsafe content > dirty > non-zero exit > strict postchecks.
+    passive_capture "boundary_rejected"
+    OUTCOME_STATUS="boundary_rejected"
+    OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
+    OUTCOME_ERR="$HANDS_BOUNDARY_ERROR"; OUTCOME_EXIT=1
+  elif [ "$HEAD_SHA" != "$BASE_SHA" ]; then
     # --- a new commit exists ---
     if [ -n "$DIRTY" ]; then
       # committed but left the tree dirty → failure regardless of exit code
@@ -4238,6 +4417,9 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
+    # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
+    # detach boundary as the parent measured it, and the push-blocking env with it.
+    declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
@@ -4246,7 +4428,7 @@ dispatch_detached_run() {
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
-      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks \
+      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

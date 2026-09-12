@@ -1,5 +1,98 @@
 # Changelog
 
+## v2.36.32 — hands 交回來的東西，接收端終於有人在看：主 checkout 邊界與 commit 內容閘
+
+### 兩個 peer、同一個缺陷家族
+
+`chatgpt-tunnel-host`（2026-09-12）順帶提到：`agy` 曾經因為 brief 說「commit」就直接 commit 到主分支。
+`308-db`（2026-09-13）補上機制：hands 的 worktree 帶著 `.venv` 與設計師提案的 symlink，`git add -A`
+全部提交，cherry-pick 進主樹時**把真實的被忽略目錄換成了 symlink**。這與 P6D（2026-08-21）是同一件事。
+兩份湊起來才看得出根因：**接收端對「hands 交回來的 commit」沒有任何一層在看內容**，現有的 scope gate
+只看路徑落在哪裡，從不看 mode——而 symlink 的路徑可以完全在 output_paths 裡。
+
+`hooks/tests/check-hands-commit.test.sh` 把整件事跑一遍而不是描述它：`.gitignore` 寫 `.venv/`，hands 建一個
+叫 `.venv` 的 symlink，`git add -A`。git 的 `dir/` 規則只對目錄生效，symlink 不是目錄，於是進了 commit
+（mode 120000）；`check-disjointness.sh` 對同一個 commit 回 0；接著把那個 commit cherry-pick 進一個**真的有
+`.venv/bin/python` 的 checkout**——目錄變成 symlink，python 消失。三條斷言，三個事實。
+
+### `scripts/check-hands-commit.js`（新）— 內容閘
+
+對 `base..head` 的**範圍**（不是整棵樹）檢查三件事：新增的 symlink、新增的 gitlink、命中 worktree 自身
+ignore 規則的**新增**路徑（只有 `A`；修改一個 base 就帶著的 force-added 檔不算「帶進來」——review 抓到第一版
+把 M/T 也餵進去會誤拒；`--no-index`，否則 force-added 的檔會遮蔽規則）。exit 3 是「檢查沒跑」，**永遠不得
+讀成 clean**——308 第一版就是把 `check-ignore` 對空 stdin 的 128 讀成零命中，拿到一排假 0；本 script 在沒有
+新增路徑時根本不呼叫它。base/head 記錄為解析後的完整 oid（308 的回饋：短 sha 收據會跨 repo 撞名）。
+沒有 allowlist：一個 CLI flag 沒有任何契約接它，就是一條沒人定的政策，review 說得對，砍了。
+
+接在 `dispatch-hetero.sh` 每一個 committed round（strict 與否），以及 `src/merge/cli.js` 整合前——對
+**edge 的 target worktree** 評 ignore 規則（問題是「落地處會不會忽略它」），排在更具體的 collision /
+preservation halt 之後。
+
+### 主 checkout 邊界（item (E)）— 兩層，都不信 prompt 的「不要 push」
+
+worktree 與主 checkout 共用 refs 與 remotes；git 只擋 `checkout` 別處持有的分支，`git -C <main>`、
+`update-ref`、還有不可逆的 `git push` 從 worktree 裡都通。
+
+- **預防**：worker 的 env 對每一個 git 認得的協定各設一條 `protocol.<name>.allow=never`（file、ssh、git、
+  http、https、ftp、ftps、ext）、**加上 repo/user 設定裡任何自訂 `protocol.<helper>.allow` 的 key**（第五輪
+  review：自訂 remote helper 的 allow 同樣蓋過 fallback；22m 用一個 stub helper 證明 env 下它連被叫起都沒有）、
+  加上 fallback `protocol.allow=never`、**再加上 `GIT_ALLOW_PROTOCOL=`（空）**——git 查這個 allowlist 在
+  protocol.* 設定之前，繼承到的值會蓋過所有 deny，而空值什麼都不允許、連 worker 事後自己加的 allow key
+  也無效（第六輪 review，22n 兩者同時成立仍被擋）（`GIT_CONFIG_COUNT` env config，command-line
+  scope，優先於 repo config）。git 在**核心層**拒絕每一種遠端傳輸，在任何 hook 之前：`--no-verify` 繞不過、
+  tag push 繞不過、repo 自己設的 pushurl 繞不過、**repo 自己設的 `protocol.file.allow=always` 也繞不過**（第四
+  輪 review 抓到只設 fallback 會被它蓋掉，量到 tag push 落地後改成逐協定明列）。commit、worktree add、repo
+  自己的 pre-commit hook 不受影響。三個先前的設計都是先量出缺陷才換掉：`remote.<r>.pushurl` 多值附加、
+  `core.hooksPath` 被 `--no-verify` 跳過且遮蔽其他 hook、`url.*.pushInsteadOf` 遇到明確 pushurl 被 git 忽略。
+  fetch 也一併被擋——正確，worktree 釘在 BASE_SHA。這是**意外防護，不是沙箱**：`env -i` 的 worker 是在規避，
+  偵測層是它的後盾。
+- **偵測**：hands 跑之前釘住主 checkout 的 HEAD、symbolic-ref 目標（用 `rev-parse --symbolic-full-name`，
+  它的 rc 分得出「detached」與「量不到」）、除了本次派工自己的分支以外的全部 `refs/heads/*`、`refs/tags/*`、
+  `refs/remotes/*`（含 symref 目標）、以及**內容**而非狀態標籤——tracked 的 unstaged/staged diff 本文，加上 `.git` 以外每個一般檔案的
+  size＋mtime 走訪（第四輪 review：`status --porcelain` 看不到已髒檔案的第二次修改、也看不到被忽略的
+  `.venv/bin/python` 被覆寫；走訪 12k 檔 0.09 秒，不必 hash node_modules；走訪含**每一種 entry 型別**與 symlink 目標——第五輪 review：
+  只走一般檔案會看不到空的被忽略目錄被換成 symlink），再加上 `.git` 裡走訪不到的行政面——每個 scope 的 config（`config --list --show-origin --show-scope`）
+  與 hooks 目錄（第七輪 review：brief 說「設定 remote」會落在這裡；22n 的 worker 自加 allow key 現在本身就被
+  抓到，22p 裝 hook 也拒）；index 狀態（`ls-files -s -v`：assume-unchanged / skip-worktree 旗標不改任何 diff，第八輪）、
+  hooks 目錄是 symlink 時追到真目標（`find -L`＋readlink）；checkout 底下有 mount 時直接
+  `main_checkout_unverified`（`-xdev` 走不進去，說出來不假裝；mount 清單從 `/proc/self/mountinfo`
+  讀，讀不到就是 unverified 不是「沒有 mount」），量不到的 fingerprint 明確拒絕而不是靠 nonce 不相等，**每一種 outcome** 都重讀比對——不只 committed：(E) 的形狀正是 hands 在主 checkout commit 而 worktree
+  HEAD 沒動，鎖在「有 commit 才比」的 gate 會剛好跳過事故本身（review 抓到）。量不到的 fingerprint 是
+  `UNVERIFIABLE-<nonce>`，永遠不相等，連跟另一個 UNVERIFIABLE 也不相等。這一層**無法歸因**：operator 同時
+  `git fetch` 也會觸發，誠實的答案是丟掉一輪重派，不是猜。
+
+兩層各自有斷言：22b 的 stub 用 `--no-verify` push 一個**事先存在的 tag**（沒有 hook 會跑、沒有本地 ref 會動，
+只有核心層的封鎖擋得住），然後從**同一個保留的 worktree**拿掉 worker env 再 push 一次——到了 remote；所以擋住的
+是 env，不是別的原因。22c 從 worktree 動主 checkout 的 remote-tracking ref、22e 只在主 checkout commit、22h 改
+主 checkout 未提交的檔、22i 移動非當前分支、22j 覆寫主 checkout 被忽略的檔、22k 對已髒檔案再改一次、22l 把空的被忽略目錄換成 symlink、22m 走
+repo 自己允許的自訂 helper push、22n 繼承 `GIT_ALLOW_PROTOCOL=file` 加 worker 自加 allow key，都拒；22o 主 checkout
+與內容同時違規時主 checkout 的 code 優先但內容裁定一併帶出；`check-hands-commit.js` 以 `GIT_NO_REPLACE_OBJECTS=1`
+跑 git，`refs/replace/*` 不能讓它看到替身（6d），fingerprint 也涵蓋全部 refs；22g 證明 repo 自己的 pre-commit hook 對自行 commit 的 worker
+仍會觸發。
+
+`boundary_code` 改由 gate 直接給結構化的值，不再從錯誤字串掃子字串——那段字串裡有 worker 自己取的檔名，
+叫 `violates scope` 的 symlink 會拿到錯的 code（第五輪 review）。
+
+review 走了八輪（codex gpt-5.6-sol @ max），每輪都抓到真東西且每條都先在本機重推才動手；
+第八輪之後由 depth-0 裁定出貨——後續的偵測器邊角一律歸入下面那條殘留。
+
+**刻意不修的殘留**（BACKLOG「accepted residuals」條）：同長度就地覆寫被忽略檔再把 mtime 改回來——要抓它得
+hash 每個被忽略的檔。這是意外防護不是沙箱，沒有意外會去還原 mtime。
+
+### 三個自己踩到、由 suite 或 review 抓到的機制缺陷
+
+- detached child 是序列化的函式集合；新 gate 的函式與 pre-hands fingerprint 沒進 `declare` 清單時，child 在
+  `classify_outcome` 裡死掉，既有 21a 紅了才補。fingerprint 必須以 parent 量到的值跨過 detach 邊界。
+- 一次 python 區塊搬移把 `src/merge/cli.js` 的 `executeMergeIntent` / `collidingPaths` 留成兩份，CommonJS 靜默
+  用後面那份，前面那份是引用未定義變數的死碼。merge suite 兩種狀態都綠——這正是「綠燈不等於驗到」。
+- 背景 review 在跑的同時改了 `dispatch-review.sh`（為了另一條修正）：bash 邊讀邊執行，第 1453 行讀到新舊
+  混雜，review 什麼都沒審、exit 0、沒有 verdict。落 memory；308 在 09-07 就踩過同一個。
+
+prose-justification: 本版 prose 增量是 `check-hands-commit.js` 的 header 契約（exit code 語意，特別是 3 ≠
+clean）與 `dispatch-hetero.sh` 兩段邊界註解，皆為規格文字；engine +1 script；斷言數以 suite 輸出為準：check-hands-commit 34、dispatch-hetero
++45、merge-execute +4（第四輪 review 抓到前一版的數字是估的不是數的）。路徑以 NUL 分隔、原始位元組進 check-ignore（含 tab/newline 與
+非 UTF-8 檔名的迴歸案例）。
+
 ## v2.36.31 — onboard 產生的 `Project Paths` 從 onboard 存在起就沒人讀，現在有讀的人了
 
 ### 缺陷不是「skill 寫死 docs/」，是修法做了一半而且完全沒在跑

@@ -368,6 +368,65 @@ NODE
 )"
 assert_contains "$IGNORED_OUT" '"halt_reason":"ignored_or_path_prefix_collision"' \
   "ignored collision is detected explicitly"
+
+# Content gate (2026-09-13): a source that ADDS a symlink named for a directory the target
+# ignores with a trailing slash. Nothing on disk collides (the ignored dir is absent in the
+# target), every path is in scope, and integrating it would plant a link where a real
+# directory belongs. The scope and collision checks are blind to mode; this one is not.
+LINKED="$TEST_TMP/linked"
+git init -q -b target "$LINKED"
+git -C "$LINKED" config user.name "LSM content gate"
+git -C "$LINKED" config user.email "lsm-content@example.invalid"
+printf '.venv/\n' >"$LINKED/.gitignore"
+printf 'base\n' >"$LINKED/base.txt"
+git -C "$LINKED" add .
+git -C "$LINKED" commit -qm base
+git -C "$LINKED" branch source
+LINKED_SOURCE="$TEST_TMP/linked-source"
+git -C "$LINKED" worktree add -q "$LINKED_SOURCE" source
+printf 'edit\n' >"$LINKED_SOURCE/base.txt"
+ln -s /tmp/elsewhere "$LINKED_SOURCE/.venv"
+git -C "$LINKED_SOURCE" add -A
+git -C "$LINKED_SOURCE" commit -qm "hands with link"
+assert_eq "$(git -C "$LINKED_SOURCE" ls-tree HEAD .venv | awk '{print $1}')" "120000" \
+  "content-gate fixture: git add -A committed the symlink despite the .venv/ ignore rule"
+LINKED_BEFORE="$(git -C "$LINKED" rev-parse refs/heads/target)"
+LINKED_OUT="$(node - "$REPO_ROOT" "$LINKED" "$LINKED_SOURCE" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const repo = process.argv[3];
+const sourceWorktree = process.argv[4];
+const { buildMergeIntent, preflightMergeIntent } = require(path.join(root, 'src/status/merge-intent'));
+const { executeMergeIntent } = require(path.join(root, 'src/merge/cli'));
+const sealed = buildMergeIntent({
+  repo,
+  root_run_id: 'lsm-content-gate',
+  edges: [{
+    source_ref: 'refs/heads/source',
+    source_worktree: sourceWorktree,
+    target_ref: 'refs/heads/target',
+    target_worktree: repo,
+    mode: 'ff-only',
+    required_result: 'source-contained',
+  }],
+  forbidden_reverse_edges: [],
+  preservation_policy: { allowed_path_prefixes: [] },
+});
+const receipt = executeMergeIntent({
+  sealed_manifest: sealed,
+  manifest_seal: sealed.seal,
+  preflight: preflightMergeIntent(sealed),
+  approved_preservation: [],
+});
+console.log(JSON.stringify(receipt));
+NODE
+)"
+assert_contains "$LINKED_OUT" '"halt_reason":"source_unsafe_content"' \
+  "content gate halts a source that adds a symlink named for an ignored directory"
+assert_eq "$(git -C "$LINKED" rev-parse refs/heads/target)" "$LINKED_BEFORE" \
+  "content-gate halt leaves the target untouched"
+assert_file_absent "$LINKED/.venv" "no symlink was planted in the target"
 assert_eq "$(git -C "$IGNORED" rev-parse refs/heads/target)" "$IGNORED_BEFORE" \
   "ignored collision halts before target mutation"
 assert_eq "$(cat "$IGNORED/generated.txt")" "ignored local" \

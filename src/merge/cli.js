@@ -432,6 +432,15 @@ function verifyEdgeReceipt(receipt) {
     && edgeReceiptDigest(receipt) === receipt.edge_receipt_digest;
 }
 
+function checkHandsContent(repo, baseSha, headSha) {
+  const script = path.join(__dirname, '..', '..', 'scripts', 'check-hands-commit.js');
+  const r = spawnSync(process.execPath, [script, '--repo', repo, '--base', baseSha, '--head', headSha], {
+    encoding: 'utf8',
+  });
+  const rc = r.status == null ? 3 : r.status;
+  return { ok: rc === 0, rc, stdout: r.stdout || '', stderr: r.stderr || '' };
+}
+
 function validateEndpoint(edge, side, receipts) {
   const expectation = endpointExpectation(edge, side, receipts);
   if (!expectation) return { error: `${side}_predecessor_receipt_invalid` };
@@ -639,6 +648,25 @@ function executeMergeIntent(request) {
       return halted(
         sealed.seal, manifest.root_run_id, receipts,
         'untracked_overlap_not_exactly_restorable', edge.sequence,
+      );
+    }
+    // Content gate (2026-09-13): what the source ADDS relative to the target must carry no
+    // symlink, gitlink, or force-added ignored path. The scope gates upstream check WHERE a
+    // change lands, never its mode — a symlink named for an ignored directory is in scope
+    // and, once integrated, replaces the real directory (308-db 2026-09-07, P6D 2026-08-21).
+    // dispatch-hetero runs the same script on every round; this is the last line, for
+    // sources that did not come through that rail. rc 3 (could not run) halts too.
+    // Ignore rules are the TARGET worktree's: the question is whether the path would be
+    // ignored where it lands, and manifest.repo may be a different checkout from the
+    // edge's target (review finding, 2026-09-13).
+    const content = checkHandsContent(
+      edge.target_worktree, targetValidation.expected_sha, sourceValidation.expected_sha,
+    );
+    if (!content.ok) {
+      return halted(
+        sealed.seal, manifest.root_run_id, receipts,
+        content.rc === 1 ? 'source_unsafe_content' : 'source_content_unverified',
+        edge.sequence,
       );
     }
     if (edge.mode === 'ff-only'

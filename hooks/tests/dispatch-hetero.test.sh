@@ -2040,6 +2040,312 @@ assert_eq "" "$(cd "$SBX" && git rev-parse --verify --quiet refs/heads/feat/argv
 # suite runs REAL fail-closed dispatches, which are exactly the outcomes that
 # make seat_strike_capture fire, so it is the suite most able to leak.
 REAL_CAP_STRIKES_SIZE_AFTER=0
+# 22. Hands boundary gates (item (E) + 308-db's 2026-09-07 symlink incident, 2026-09-13).
+#     Three stubs, three rejections/blocks, all on the NON-strict path — the scope gate
+#     never sees these runs, so the new gate is the only thing standing.
+
+# 22a. Unsafe content: the stub reproduces the incident byte for byte — a symlink named
+#      for a directory the repo ignores with a trailing slash. `git add -A` sweeps it in.
+printf '.venv/\n' > "$SBX/.gitignore"
+git -C "$SBX" add .gitignore; git -C "$SBX" -c user.email=t@t -c user.name=t commit -q -m "ignore .venv/"
+STUB_SYMLINK="$TEST_TMP/agy-symlink"
+cat > "$STUB_SYMLINK" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt
+ln -s /tmp/elsewhere .venv
+git add -A
+git -c user.email=t@t -c user.name=t commit -q -m "hands: with link"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_SYMLINK"; make_agy_stub_versioned "$STUB_SYMLINK"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t22a --prompt-file "$PROMPT" --agy-bin "$STUB_SYMLINK" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22a symlink-named-for-ignored-dir: exit 1"
+assert_contains "$OUT" '"status": "boundary_rejected"' "22a: status boundary_rejected"
+assert_contains "$OUT" '"boundary_code": "unsafe_commit_content"' "22a: boundary_code unsafe_commit_content"
+assert_contains "$OUT" '.venv' "22a: the offending path is named"
+T22A_WT="$(printf '%s' "$OUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const m=d.match(/\{[\s\S]*\}/);process.stdout.write(m?String(JSON.parse(m[0]).worktree||""):"")})')"
+assert_eq "yes" "$([ -n "$T22A_WT" ] && [ -d "$T22A_WT" ] && echo yes || echo no)" "22a: worktree retained for forensics"
+assert_eq "120000" "$(git -C "$SBX" ls-tree t22a .venv | awk '{print $1}')" "22a fixture: git really committed the symlink (incident reproduced)"
+
+# 22b. Push blocked: the stub tries to push its branch and records the push's exit code.
+#      A local bare remote stands in for origin. The legit edit still lands, so the round
+#      is `committed` — the block is prevention, not a rejection.
+BARE="$TEST_TMP/bare-origin.git"; git init -q --bare "$BARE"
+git -C "$SBX" remote add origin "$BARE"
+PUSH_RC_FILE="$TEST_TMP/push-rc.txt"
+STUB_PUSH="$TEST_TMP/agy-push"
+cat > "$STUB_PUSH" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "hands: then push"
+git push --no-verify origin hands-tag >/dev/null 2>&1; echo "$?" > "$PUSH_RC_FILE"   # --no-verify + pre-existing tag: no hook, no local ref movement — only a core-level block stops this
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_PUSH"; make_agy_stub_versioned "$STUB_PUSH"
+git -C "$SBX" tag hands-tag >/dev/null 2>&1   # created BEFORE the round, so it is in the before-fingerprint
+git -C "$SBX" config protocol.file.allow always   # repo-level per-protocol ALLOW: beats a bare protocol.allow=never (review, 2026-09-13)
+OUT="$(cd "$SBX" && env PUSH_RC_FILE="$PUSH_RC_FILE" "$SCRIPT" --branch t22b --prompt-file "$PROMPT" --agy-bin "$STUB_PUSH" --keep-worktree --retain-owner t22b --retain-reason push-control --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22b): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "22b push attempt: round still exit 0 (prevention, not rejection)"
+assert_contains "$OUT" '"status": "committed"' "22b: status committed"
+assert_file_exists "$PUSH_RC_FILE" "22b: stub reached the push"
+assert_neq "0" "$(cat "$PUSH_RC_FILE")" "22b: hands' git push FAILED"
+assert_eq "" "$(git -C "$BARE" for-each-ref refs/tags/hands-tag)" "22b: the --no-verify tag push reached nothing"
+# and the WRAPPER can still push (the env is the worker's, not ours)
+git -C "$SBX" push -q origin develop 2>/dev/null; assert_eq "0" "$?" "22b: the dispatching side's own push is unaffected"
+# The blocker is the ONLY difference: the same push, from the same retained worktree, with
+# the worker env absent, reaches the remote. Without this the previous assertion could pass
+# because the stub's push failed for some unrelated reason.
+T22B_WT="$(printf '%s' "$OUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const m=d.match(/\{[\s\S]*\}/);process.stdout.write(m?String(JSON.parse(m[0]).worktree||""):"")})')"
+git -C "$T22B_WT" push -q --no-verify origin hands-tag 2>/dev/null; assert_eq "0" "$?" "22b control: the identical --no-verify tag push WITHOUT the worker env succeeds — the env was the difference"
+assert_neq "" "$(git -C "$BARE" for-each-ref refs/tags/hands-tag)" "22b control: …and that one did reach the remote"
+git -C "$BARE" update-ref -d refs/tags/hands-tag; git -C "$SBX" tag -d hands-tag >/dev/null 2>&1 || true
+git -C "$SBX" worktree remove --force "$T22B_WT" 2>/dev/null || true
+
+# 22c. Main checkout mutated: the stub reaches across to the main checkout and moves a
+#      remote-tracking ref (the shape a push from the worktree leaves behind).
+STUB_MAIN="$TEST_TMP/agy-main"
+cat > "$STUB_MAIN" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "hands: reaches main"
+git -C "$MAIN_SBX" update-ref refs/remotes/origin/planted "$(git rev-parse HEAD)"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_MAIN"; make_agy_stub_versioned "$STUB_MAIN"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22c --prompt-file "$PROMPT" --agy-bin "$STUB_MAIN" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22c main checkout mutated: exit 1"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22c: boundary_code main_checkout_mutated"
+git -C "$SBX" update-ref -d refs/remotes/origin/planted 2>/dev/null || true
+
+# 22f. Content gate fires on a DIRTY committed round too (review, 2026-09-13): the stub
+#      commits the symlink AND leaves an uncommitted file. Precedence: unsafe content beats
+#      dirty — an unsafe candidate must never be classified as merely "dirty".
+STUB_SYMLINK_DIRTY="$TEST_TMP/agy-symlink-dirty"
+cat > "$STUB_SYMLINK_DIRTY" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt
+ln -s /tmp/elsewhere .venv
+git add -A
+git -c user.email=t@t -c user.name=t commit -q -m "hands: with link"
+echo leftover > leftover.txt
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_SYMLINK_DIRTY"; make_agy_stub_versioned "$STUB_SYMLINK_DIRTY"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t22f --prompt-file "$PROMPT" --agy-bin "$STUB_SYMLINK_DIRTY" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "unsafe_commit_content"' "22f dirty + unsafe: classified unsafe_commit_content, not dirty"
+assert_not_contains "$OUT" '"status": "dirty"' "22f: dirty does not mask unsafe content"
+
+# 22e. THE (E) incident shape: hands commits in the MAIN checkout and leaves the worktree
+#      untouched. No worktree commit exists, so a gate keyed on "a commit exists" would
+#      never look (review finding, 2026-09-13). Must still reject.
+STUB_MAINCOMMIT="$TEST_TMP/agy-maincommit"
+cat > "$STUB_MAINCOMMIT" <<'EOF'
+#!/usr/bin/env bash
+echo escaped > "$MAIN_SBX/escaped.txt"
+git -C "$MAIN_SBX" add escaped.txt
+git -C "$MAIN_SBX" -c user.email=t@t -c user.name=t commit -q -m "hands: committed in MAIN"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_MAINCOMMIT"; make_agy_stub_versioned "$STUB_MAINCOMMIT"
+MAIN_BEFORE_22E="$(git -C "$SBX" rev-parse HEAD)"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22e --prompt-file "$PROMPT" --agy-bin "$STUB_MAINCOMMIT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22e main-only commit, worktree untouched: exit 1"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22e: boundary_code main_checkout_mutated even with no worktree commit"
+assert_not_contains "$OUT" '"status": "no_op"' "22e: NOT classified as a harmless no_op"
+assert_neq "$MAIN_BEFORE_22E" "$(git -C "$SBX" rev-parse HEAD)" "22e fixture: main HEAD really moved (the incident happened)"
+git -C "$SBX" reset -q --hard "$MAIN_BEFORE_22E"   # undo the escaped commit for later cases
+
+# 22g. The repo's OWN pre-commit hook still fires for a self-committing worker: the push
+#      block is core-level (protocol.allow), not a hooksPath override that would shadow
+#      every other hook (review, 2026-09-13).
+mkdir -p "$SBX/.git/hooks"; HOOK_MARK="$TEST_TMP/precommit-fired.txt"; rm -f "$HOOK_MARK"
+printf '#!/bin/sh\necho fired > "%s"\nexit 0\n' "$HOOK_MARK" > "$SBX/.git/hooks/pre-commit"; chmod +x "$SBX/.git/hooks/pre-commit"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t22g --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "22g: cooperative self-committing stub still committed"
+assert_file_exists "$HOOK_MARK" "22g: the repo's own pre-commit hook fired for the worker's commit (no hook shadowing)"
+rm -f "$SBX/.git/hooks/pre-commit"
+
+# 22h. Fingerprint coverage: an UNCOMMITTED edit to a main-checkout file, and a move of a
+#      NON-current branch, each reject (review, 2026-09-13).
+STUB_MAINEDIT="$TEST_TMP/agy-mainedit"
+cat > "$STUB_MAINEDIT" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+echo tampered >> "$MAIN_SBX/README-main.txt"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_MAINEDIT"; make_agy_stub_versioned "$STUB_MAINEDIT"
+echo base > "$SBX/README-main.txt"; git -C "$SBX" add README-main.txt; git -C "$SBX" -c user.email=t@t -c user.name=t commit -q -m "main file"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22h --prompt-file "$PROMPT" --agy-bin "$STUB_MAINEDIT" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22h: uncommitted edit to a main-checkout file rejects"
+git -C "$SBX" checkout -q -- README-main.txt
+STUB_BRANCHMOVE="$TEST_TMP/agy-branchmove"
+cat > "$STUB_BRANCHMOVE" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+git -C "$MAIN_SBX" branch -f other-branch HEAD~1
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_BRANCHMOVE"; make_agy_stub_versioned "$STUB_BRANCHMOVE"
+git -C "$SBX" branch other-branch >/dev/null 2>&1 || true
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22i --prompt-file "$PROMPT" --agy-bin "$STUB_BRANCHMOVE" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22i: moving a NON-current branch rejects"
+git -C "$SBX" branch -D other-branch >/dev/null 2>&1 || true
+
+# 22j. Content-blind fingerprint (review, 2026-09-13): overwriting an IGNORED file in the
+#      main checkout, and a second edit to an ALREADY-dirty main file, must both reject —
+#      `status --porcelain` shows neither.
+printf '.venv/\n' > "$SBX/.gitignore"; git -C "$SBX" add .gitignore; git -C "$SBX" -c user.email=t@t -c user.name=t commit -q -m "ignore" 2>/dev/null || true
+mkdir -p "$SBX/.venv/bin"; echo real > "$SBX/.venv/bin/python"
+STUB_IGNORED="$TEST_TMP/agy-ignored-overwrite"
+cat > "$STUB_IGNORED" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+echo tampered > "$MAIN_SBX/.venv/bin/python"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_IGNORED"; make_agy_stub_versioned "$STUB_IGNORED"
+sleep 1  # mtime resolution guard: the overwrite must be measurably later than the fixture write
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22j --prompt-file "$PROMPT" --agy-bin "$STUB_IGNORED" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22j: overwriting an IGNORED main-checkout file rejects"
+echo real > "$SBX/.venv/bin/python"
+echo already-dirty >> "$SBX/README-main.txt"   # main file dirty BEFORE the round
+STUB_REDIRTY="$TEST_TMP/agy-redirty"
+cat > "$STUB_REDIRTY" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+echo second-edit >> "$MAIN_SBX/README-main.txt"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_REDIRTY"; make_agy_stub_versioned "$STUB_REDIRTY"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22k --prompt-file "$PROMPT" --agy-bin "$STUB_REDIRTY" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22k: a second edit to an ALREADY-dirty main file rejects (content, not status label)"
+git -C "$SBX" checkout -q -- README-main.txt
+
+# 22l. A symlink planted over an EMPTY ignored directory in main: no regular file changes,
+#      git diff sees nothing untracked (round 5, 2026-09-13). The walk must see entry types.
+mkdir -p "$SBX/.venv/empty"
+STUB_LINKMAIN="$TEST_TMP/agy-linkmain"
+cat > "$STUB_LINKMAIN" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+rmdir "$MAIN_SBX/.venv/empty" && ln -s /tmp/elsewhere "$MAIN_SBX/.venv/empty"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_LINKMAIN"; make_agy_stub_versioned "$STUB_LINKMAIN"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22l --prompt-file "$PROMPT" --agy-bin "$STUB_LINKMAIN" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22l: symlink over an empty ignored main directory rejects"
+rm -f "$SBX/.venv/empty"
+
+# 22m. A CUSTOM remote helper the repo has allowed by name: `protocol.<helper>.allow=always`
+#      beats the fallback, so the rail must deny every configured protocol key too.
+#      The helper is a stub `git-remote-hands` that records being invoked and exits 0.
+HELPER_DIR="$TEST_TMP/helper-bin"; mkdir -p "$HELPER_DIR"; HELPER_MARK="$TEST_TMP/helper-invoked.txt"; rm -f "$HELPER_MARK"
+printf '#!/bin/sh\necho invoked > "%s"\nexit 1\n' "$HELPER_MARK" > "$HELPER_DIR/git-remote-hands"; chmod +x "$HELPER_DIR/git-remote-hands"   # records invocation, then fails fast (a real protocol reply would hang git)
+git -C "$SBX" remote add custom hands::anything 2>/dev/null || true
+git -C "$SBX" config protocol.hands.allow always
+STUB_CUSTOMPUSH="$TEST_TMP/agy-custompush"
+cat > "$STUB_CUSTOMPUSH" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+timeout 20 git push --no-verify custom HEAD:refs/heads/x >/dev/null 2>&1; echo "$?" > "$CUSTOM_RC_FILE"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_CUSTOMPUSH"; make_agy_stub_versioned "$STUB_CUSTOMPUSH"
+CUSTOM_RC_FILE="$TEST_TMP/custom-rc.txt"
+OUT="$(cd "$SBX" && env PATH="$HELPER_DIR:$PATH" CUSTOM_RC_FILE="$CUSTOM_RC_FILE" "$SCRIPT" --branch t22m --prompt-file "$PROMPT" --agy-bin "$STUB_CUSTOMPUSH" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"status": "committed"' "22m: the round itself completed (the stub ran to the push)"
+assert_file_exists "$CUSTOM_RC_FILE" "22m: the stub reached the push and recorded its rc"
+assert_neq "0" "$(cat "$CUSTOM_RC_FILE")" "22m: push over a repo-allowed CUSTOM helper is refused"
+assert_file_absent "$HELPER_MARK" "22m: the custom helper was never even invoked"
+# control: without the worker env the helper IS reached
+( cd "$SBX" && PATH="$HELPER_DIR:$PATH" timeout 20 git push --no-verify custom HEAD:refs/heads/x >/dev/null 2>&1 ); assert_file_exists "$HELPER_MARK" "22m control: without the env the custom helper runs"
+git -C "$SBX" config --unset protocol.hands.allow; git -C "$SBX" remote remove custom 2>/dev/null || true
+
+# 22n. Inherited GIT_ALLOW_PROTOCOL=file would beat every protocol.* deny (round 6). And a
+#      worker that adds its own protocol allow key mid-round changes nothing.
+STUB_ALLOWLIST="$TEST_TMP/agy-allowlist"
+cat > "$STUB_ALLOWLIST" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+git config protocol.file.allow always      # worker-added allow key, after the rail enumerated
+git push --no-verify origin hands-tag >/dev/null 2>&1; echo "$?" > "$PUSH_RC_FILE"
+git config --unset protocol.file.allow
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_ALLOWLIST"; make_agy_stub_versioned "$STUB_ALLOWLIST"
+git -C "$SBX" tag hands-tag >/dev/null 2>&1 || true; rm -f "$PUSH_RC_FILE"
+OUT="$(cd "$SBX" && env GIT_ALLOW_PROTOCOL=file PUSH_RC_FILE="$PUSH_RC_FILE" "$SCRIPT" --branch t22n --prompt-file "$PROMPT" --agy-bin "$STUB_ALLOWLIST" 2>&1)"; EXIT=$?
+assert_file_exists "$PUSH_RC_FILE" "22n: the stub reached the push and recorded its rc"
+assert_neq "0" "$(cat "$PUSH_RC_FILE")" "22n: push refused despite inherited GIT_ALLOW_PROTOCOL=file AND a worker-added allow key"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22n: the worker's git config edit in the shared .git is itself detected (config is fingerprinted)"
+assert_eq "" "$(git -C "$BARE" for-each-ref refs/tags/hands-tag)" "22n: nothing reached the remote"
+git -C "$SBX" tag -d hands-tag >/dev/null 2>&1 || true
+
+# 22o. Main mutated AND unsafe content in the same round: main wins the code, but the
+#      content verdict is still carried (round 6).
+STUB_BOTH="$TEST_TMP/agy-both"
+cat > "$STUB_BOTH" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; ln -s /tmp/elsewhere .venv; git add -A; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+git -C "$MAIN_SBX" update-ref refs/remotes/origin/planted2 "$(git rev-parse HEAD)"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_BOTH"; make_agy_stub_versioned "$STUB_BOTH"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22o --prompt-file "$PROMPT" --agy-bin "$STUB_BOTH" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22o: main-checkout code takes precedence"
+assert_contains "$OUT" 'ALSO boundary_rejected: unsafe commit content' "22o: …and the content verdict is carried too"
+git -C "$SBX" update-ref -d refs/remotes/origin/planted2 2>/dev/null || true
+
+# 22p. Installing a hook into the shared .git (round 7): administrative surface, not a file
+#      the walk sees. Must reject.
+STUB_HOOK="$TEST_TMP/agy-hookinstall"
+cat > "$STUB_HOOK" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+printf '#!/bin/sh\nexit 0\n' > "$MAIN_SBX/.git/hooks/post-checkout"; chmod +x "$MAIN_SBX/.git/hooks/post-checkout"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_HOOK"; make_agy_stub_versioned "$STUB_HOOK"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22p --prompt-file "$PROMPT" --agy-bin "$STUB_HOOK" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22p: a hook installed into the shared .git rejects"
+rm -f "$SBX/.git/hooks/post-checkout"
+
+# 22q. Index-only mutation in main (assume-unchanged flag): no diff, no ref, no file changes.
+STUB_IDX="$TEST_TMP/agy-index"
+cat > "$STUB_IDX" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+git -C "$MAIN_SBX" update-index --assume-unchanged README-main.txt
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_IDX"; make_agy_stub_versioned "$STUB_IDX"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22q --prompt-file "$PROMPT" --agy-bin "$STUB_IDX" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22q: an index-only flag change in main (assume-unchanged) rejects"
+git -C "$SBX" update-index --no-assume-unchanged README-main.txt
+
+# 22r. Hooks dir is a SYMLINK; editing a hook in the live target must still be seen.
+REAL_HOOKS="$TEST_TMP/real-hooks"; mkdir -p "$REAL_HOOKS"; rm -rf "$SBX/.git/hooks"; ln -s "$REAL_HOOKS" "$SBX/.git/hooks"
+STUB_HOOK2="$TEST_TMP/agy-hookedit"
+cat > "$STUB_HOOK2" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
+printf '#!/bin/sh\nexit 0\n' > "$REAL_HOOKS/post-merge"; chmod +x "$REAL_HOOKS/post-merge"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_HOOK2"; make_agy_stub_versioned "$STUB_HOOK2"
+OUT="$(cd "$SBX" && env REAL_HOOKS="$REAL_HOOKS" "$SCRIPT" --branch t22r --prompt-file "$PROMPT" --agy-bin "$STUB_HOOK2" 2>&1)"; EXIT=$?
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22r: a hook written through a SYMLINKED hooks dir rejects"
+rm -f "$SBX/.git/hooks"; mkdir -p "$SBX/.git/hooks"
+
+# 22d. Control: the plain cooperative stub is unaffected by the new gates.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t22d --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "22d control: cooperative stub still exit 0 with gates in place"
+assert_contains "$OUT" '"status": "committed"' "22d control: committed"
+
 [ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_AFTER=$(wc -c < "$REAL_CAP_STRIKES")
 assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
   "real ~/.autopilot/engine-capability/strikes.jsonl not written by this suite"

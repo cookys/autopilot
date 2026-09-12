@@ -1,5 +1,71 @@
 # Changelog
 
+## v2.36.29 — 兩道 containment gate；以及一個 pin 到得了 admission、到不了 rail
+
+### containment 是對著正確的物件問問題，而且問法由方法決定
+
+`scripts/check-inputs-landed.js`：斷言每個宣告的 phase input 都是整合目標的祖先，**一次列出全部**
+失敗項目——停在第一個會逼操作者為每個壞掉的 input 各重跑一次。
+
+`scripts/check-containment.js`：merge-back 之後的斷言**由 `integration_method` 選擇**。`merge`/`ff`
+要求 `is-ancestor(source_sha, target)` 成功；`cherry-pick`/`rebase`/`squash`/`apply+fresh-commit`
+要求那個指令**失敗**——而那是對的——改為對 `accepted_sha` 斷言 containment。apply 式額外要求
+`source_sha` 出現在被接受的 commit 訊息裡，並且對 source branch 是否還在**只回報、不執法**。
+
+方法選擇就是這個 deliverable 的全部：無條件的 `is-ancestor` 會重現一次量到的事故——六條 lane 全被讀成
+沒落地，而每一條其實都在 HEAD 裡、只是換了一個新寫的 commit——而且是**帶著 gate 的權威**重現。
+
+決定性的 fixture 由真寫入器產生：apply 式 receipt 來自 `scripts/record-integration.js`（v2.36.28 出貨）
+對真的 `git diff --binary | git apply --index` 加新 commit，不是手寫 JSON；測試並釘死「無條件 source
+祖先檢查會讓這個案子失敗」。唯讀姿態也有斷言：跑完 refs、HEAD、index、worktree 全都沒變。
+
+### 一個 standing pin 可以放行 roster 席位
+
+`resolve-review-loop.sh` 的 roster 關卡先前只認 `AUTOPILOT_QUALIFICATION_OVERRIDE` 這個**每次派工**的
+檔案。operator-pin 計畫 §1 第 2 點自己記下這是缺陷——已經指定過席位的操作者不該為了被服從而每次派工
+手寫一份 JSON。D1–D4 修了 admission 側，roster 側沒修。
+
+現在 standing pin 同等放行，而且訊息說得出**是哪一種**記錄了這個決定：`EVIDENCE-FREE standing
+operator pin` 對比原封不動的 `EVIDENCE-FREE operator override`。兩者都拒絕被讀成 earned qualification，
+都會進 `override_admitted_seats`。pin 回報 `expires standing`，因為它的 `expires` 依設計是 `null`——
+這裡的 TTL 一律 advisory，從不當關卡。
+
+pin 查詢的 store 範圍跟同檔其他讀取完全一致。**第一版不是**，而且是測試抓到的：六條隔離自己 store 的
+斷言，實際上在讀這台機器真實的 pin store。那是「綠燈測試讀到真實 store」那一族，由測試而非審查發現。
+
+### 這一輪的裁決紀律
+
+兩次 QC panel 的結論都**不等於席位的多數**：
+
+- v2.36.28 那輪 MiniMax-M3 開 MUST-FIX 說 codex 鏡像沒同步；重推之下兩個檔 byte-identical、
+  `integrationLedgerFields` 各 4 次、mirror gate rc=0，而且那個 hunk 就在它拿到的 diff 第 684 行。**推翻**。
+- 這一輪三席全 SHIP-AS-IS，但 GLM-5.2 一條 🔵 的排除理由是錯的：它說多邊 receipt 不可達，因為
+  `record-integration.js` 只產單邊。`src/merge/cli.js` 是另一個生產者且**天生多邊**（`cli.js:360`
+  把 receipt edges 綁到 manifest edges，schema 兩端無上限），所以後面的 edge 全部沒驗過就 exit 0。
+  **升級為 🟠 並修掉**，新案子經證實會對原實作變紅（49 過 → 47 過 2 紅）。
+
+第一輪 panel 作廢，錯在 depth-0：給席位的 diff 用 `-- scripts platforms hooks` 產生，排除了 spec 自己
+要求的兩個文件檔。兩席**獨立**開了同一個 MUST-FIX，對他們看到的東西判斷完全正確。舊裁決留檔不刪。
+
+### 這一輪對 rail 本身的量測（都在 `docs/BACKLOG.md`）
+
+- **出貨的 operator-pin admission 在 managed rail 上到不了**：`dispatch-contract.js` 的 pin 分支從
+  `--resolved-live` 文件讀 `operator_pin`，而 `dispatch-hetero.sh` 在 managed 路徑從不傳。pin 存在、
+  store 讀得到、roster 認它、消費它的程式碼已出貨也有測試——唯一要用的那條 rail 碰不到它。這是同族空轉的
+  **第五種形狀，第一個出在接線層**：KR1 的測試直接把 live 文件交給契約，那證明分支能動，卻沒有任何東西
+  斷言有出貨的呼叫端會產生那份文件。
+- `resolve-review-loop.test.sh` 的 ambient fixture 先前直接複製 live 專案設定，所以合法換席就會紅。
+
+### 出貨紀律揭露
+
+prose-justification: 本版 prose 成長全在 `docs/plans/evidence/` 的兩份 QC panel 紀錄與
+`docs/BACKLOG.md` 的新量測，沒有任何 `skills/` 或 `references/` surface 變大。
+
+containment campaign 跑到 `dispatch_implementation: committed`、`campaign_scope: passed`、
+`campaign_verification: passed` 與兩輪 `dispatch_review: reviewed` 才被 rail 擋在 `final_panel`。
+今天走最遠的一次，仍然不是完成的 L5 managed run，也不記成那樣。
+
+
 ## v2.36.28 — 兩份 peer 回報各修一半；還有 rail 自己的三個量測
 
 三個 deliverable 同一版出：兩個來自別台機器的回報，一個來自這台的 dogfood。**兩份回報都有一半是錯的，

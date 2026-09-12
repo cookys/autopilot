@@ -1,0 +1,7 @@
+{"role":"meta","type":"system.version","version":"0.41.0"}
+{"role":"assistant","tool_calls":[{"type":"function","id":"tool_sRXKgQ4aIzBlZ5Z7XeyIkA7q","function":{"name":"Read","arguments":"{\"path\":\"note.txt\"}"}}]}
+{"role":"tool","tool_call_id":"tool_sRXKgQ4aIzBlZ5Z7XeyIkA7q","content":"1\thello"}
+{"role":"assistant","tool_calls":[{"type":"function","id":"tool_XVnL8T3cYLl8hAPiepwmlzJt","function":{"name":"Edit","arguments":"{\"path\":\"note.txt\",\"old_string\":\"hello\",\"new_string\":\"edited by kimi\"}"}}]}
+{"role":"tool","tool_call_id":"tool_XVnL8T3cYLl8hAPiepwmlzJt","content":"Replaced 1 occurrence in note.txt"}
+{"role":"assistant","content":"Done — `note.txt` now contains exactly the single line \"edited by kimi\"."}
+{"role":"meta","type":"session.resume_hint","session_id":"session_ec577d3d-5202-4e36-8e17-8aa4d9ddd3c7","command":"kimi -r session_ec577d3d-5202-4e36-8e17-8aa4d9ddd3c7","content":"To resume this session: kimi -r session_ec577d3d-5202-4e36-8e17-8aa4d9ddd3c7"}

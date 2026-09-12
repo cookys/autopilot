@@ -1,0 +1,7 @@
+# P5 prompt-ceiling probe, 2026-09-12T19:57:15Z, kimi 0.41.0, model kimi-code/k3
+# per-string ceiling: /proc/sys/kernel? MAX_ARG_STRLEN is compile-time = 32*PAGE_SIZE = 131072 bytes; ARG_MAX (total) = 2097152
+100  KB  argv=102353 bytes  rc=0  nonce_echoed=2
+127  KB  argv=130001 bytes  rc=0  nonce_echoed=1
+128  KB  argv=131025 bytes  rc=0  nonce_echoed=2
+129  KB  argv=132049 bytes  rc=127  argument list too long
+200  KB  argv=204753 bytes  rc=127  argument list too long

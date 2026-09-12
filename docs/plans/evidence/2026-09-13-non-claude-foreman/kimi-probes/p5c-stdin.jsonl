@@ -1,0 +1,4 @@
+# P5c: stdin with -p -
+{"role":"meta","type":"system.version","version":"0.41.0"}
+{"role":"assistant","content":"It looks like your message came through as just a dash. What would you like help with? For example, I can look at `note.txt` or `big.txt` in this directory, or help with any coding task."}
+{"role":"meta","type":"session.resume_hint","session_id":"session_da0cab0a-3475-478f-a229-3fd2462f9964","command":"kimi -r session_da0cab0a-3475-478f-a229-3fd2462f9964","content":"To resume this session: kimi -r session_da0cab0a-3475-478f-a229-3fd2462f9964"}

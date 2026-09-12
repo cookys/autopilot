@@ -1,0 +1,6 @@
+# P5b: 300000-byte file, nonce Z13279 at the end
+{"role":"meta","type":"system.version","version":"0.41.0"}
+{"role":"assistant","tool_calls":[{"type":"function","id":"tool_Heio6OycLJ7jaOMOMl9WjbJl","function":{"name":"Read","arguments":"{\"path\":\"big.txt\",\"line_offset\":-50}"}}]}
+{"role":"tool","tool_call_id":"tool_Heio6OycLJ7jaOMOMl9WjbJl","content":"1\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+{"role":"assistant","content":"Z13279"}
+{"role":"meta","type":"session.resume_hint","session_id":"session_0fdc3fa3-d700-4e1c-84d9-f8923dfcb0b1","command":"kimi -r session_0fdc3fa3-d700-4e1c-84d9-f8923dfcb0b1","content":"To resume this session: kimi -r session_0fdc3fa3-d700-4e1c-84d9-f8923dfcb0b1"}

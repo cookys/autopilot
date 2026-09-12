@@ -34,7 +34,9 @@
 - implementer_effort: low
 - implementer_runner: cursor
 
-<!-- 2026-09-12 使用者裁定：implementer 由 grok-4.5 @ grok 改為 grok46 @ cursor low。
+<!-- 2026-09-12 使用者裁定：implementer 由 grok-4.5 @ grok 改為 cursor-grok-4.6-low @ cursor low。
+     model id 要寫 runner 認得的完整字串：readiness probe 原樣把它送進 `cursor-agent --model`，
+     autopilot 別名 `grok46` 會被回 `Cannot use this model`。
      原因是量到的付費牆而非評價：`grok -p` 回 402 Payment Required: Grok Build usage
      balance exhausted，三個 managed campaign 全部停在 strict_l5_provider_not_ready。
      同一個模型族改走 cursor 這條路（不同帳號），所以 implementer_family 仍是 xai，

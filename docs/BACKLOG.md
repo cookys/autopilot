@@ -11,6 +11,16 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 admit it to a bounded plan immediately. Valid conditional triggers require external capability,
 observed evidence/incident thresholds, a new consumer, or an explicitly expanded threat model.
 
+**FIRED queue (order, as of 2026-09-12).** Rows whose trigger has fired are worked in this order;
+each row's own Trigger line carries its evidence bar. The 2026-09-12 integration-ledger and
+containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes at:
+
+1. `chatgpt-tunnel-host` item **(E)** — `agy` committing into the main checkout. Jumps the queue: every other item costs time, this one is irreversible.
+2. `openclaw` strict-projection admission bypass — owner-authorised, reproduce locally first.
+3. `cookys-7840hs` four dispatch-layer defects — reproduce each on this host before designing.
+4. `308-db` item (a), repo-level residue sweep — its own plan.
+5. The four rail defects measured during the 2026-09-12 dogfood (concurrent-dispatch refusal, `output_paths` must enumerate codex mirrors, live-config assertions, unreachable operator-pin admission).
+
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 
 ## Audit snapshot（2026-08-28，post lifecycle-hygiene sweep）
@@ -204,7 +214,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Both halves of this are defensible, which is why it is a design question and not a bug report**: the suite is right that a change to the shipped default implementer is a change worth noticing — it encodes a recorded Board decision. But it means the suite cannot distinguish "somebody broke the resolver" from "an operator legitimately re-pointed a seat because the vendor stopped answering", and the second is now known to happen without warning.
 - **Same family as a lesson already recorded** (`auto` leaking host topology into tests): assertions that read live host or project state make the suite a function of the machine it runs on.
 - **Candidate**: move the default-roster assertions onto a frozen fixture config that mirrors the shipped defaults, and add ONE assertion that the live `.claude/review-loop-config.md` still parses and resolves — so a genuine resolver break still reds, while a seat swap does not. Alternatively keep the live assertion but make its message say "the project config was changed; update this assertion deliberately or revert the config", which is the missing operand today.
-- **Interim, 2026-09-12**: the config swap was reverted so the suite stays green, and the substitute implementer is supplied per dispatch via `REVIEW_LOOP_CONFIG_OVERRIDE` instead of editing the shipped config. That keeps the Board default intact and keeps the paywall workaround out of the repo.
+- **Superseded the same day, and the first interim was wrong.** `REVIEW_LOOP_CONFIG_OVERRIDE` does NOT reach the managed rail: `scripts/dispatch-contract.js:1147` hardcodes a read of `.claude/review-loop-config.md` and sets that variable itself, so the contract check cannot be steered per dispatch (a correct security posture, and it means the shipped config is the only lever). The operator therefore ruled the seat change into the repo: `implementer_engine: cursor-grok-4.6-low`, `implementer_runner: cursor`, family still `xai` so decorrelation is unchanged (`d2bdccba`, rationale in the config's inline comment). The nine assertions were updated to the new seat with the reason inline. **Open item, no trigger date**: revert to `grok-4.5 @ grok` when the Grok Build balance is topped up — and that revert reds the same nine assertions again, which is exactly the defect this row is about.
 - **Effort**: S.
 - **Source**: /l5 dogfood, 2026-09-12, discovered by the suite catching the author's own config edit.
 

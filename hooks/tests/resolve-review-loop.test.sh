@@ -71,7 +71,12 @@ assert_eq "2" "$EXIT" "unknown flag exit code"
 OUT="$(bash "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default exit code"
 assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engine"
-assert_contains "$OUT" '"implementer_engine": "grok-4.5"' "default implementer (grok, Board decision A)"
+# Board decision A named grok-4.5 @ grok. Moved to grok-4.6 via cursor on
+# 2026-09-12 because Grok Build returned 402 Payment Required (balance
+# exhausted) and the rail has no automatic stand-in for a quota wall. Same
+# vendor family, so implementer_family stays xai and every risk-tier assertion
+# below is unchanged. Revert together with the config when the balance returns.
+assert_contains "$OUT" '"implementer_engine": "cursor-grok-4.6-low"' "default implementer (grok-4.6 via cursor; Board decision A seat moved 2026-09-12 on a paywall)"
 assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
 assert_contains "$OUT" '"verification_author_engine": "Qwen3.8-Max-Preview"' "default verification_author_engine"
 assert_contains "$OUT" '"verification_author_runner": "qoderclicn"' "default verification_author_runner"
@@ -515,8 +520,18 @@ assert_eq "2" "$(bash "$SCRIPT" --domain nope >/dev/null 2>&1; echo $?)" "--doma
 # shape. Derive an ambient-minus-brain fixture so those pins keep their original
 # measurement surface (everything except brain_seat_identity_file is untouched).
 AMBIENT_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
+# The implementer_* lines are stripped along with the brain identity. What these
+# assertions are about is capability_state_source / quota_status / capability
+# warnings under an EMPTY store — the project's seat CHOICE is incidental to
+# them. Copying it in made the fixture a function of whichever seat this repo
+# happens to name today: when the implementer moved to a pin-admitted cursor
+# seat on 2026-09-12, an empty store correctly refused that seat and six
+# assertions here went red for a reason that had nothing to do with what they
+# check. Stripping the seat lets the resolver fall back to its built-in default,
+# which is what "ambient" was always meant to mean here.
 if [ -f "$REPO_ROOT/.claude/review-loop-config.md" ]; then
-  grep -v 'brain_seat_identity_file' "$REPO_ROOT/.claude/review-loop-config.md" > "$AMBIENT_NO_BRAIN"
+  grep -v -e 'brain_seat_identity_file' -e '^- implementer_' \
+    "$REPO_ROOT/.claude/review-loop-config.md" > "$AMBIENT_NO_BRAIN"
 else
   : > "$AMBIENT_NO_BRAIN"
 fi

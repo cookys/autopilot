@@ -30,9 +30,18 @@
 - on_family_conflict: fallback
 - reviewer_fallback_preference: GLM-5.2
 - reviewer_fallback_preference_low_risk: GLM-5.2
-- implementer_engine: grok-4.5
-- implementer_effort: high
-- implementer_runner: grok
+- implementer_engine: cursor-grok-4.6-low
+- implementer_effort: low
+- implementer_runner: cursor
+
+<!-- 2026-09-12 使用者裁定：implementer 由 grok-4.5 @ grok 改為 grok46 @ cursor low。
+     原因是量到的付費牆而非評價：`grok -p` 回 402 Payment Required: Grok Build usage
+     balance exhausted，三個 managed campaign 全部停在 strict_l5_provider_not_ready。
+     同一個模型族改走 cursor 這條路（不同帳號），所以 implementer_family 仍是 xai，
+     去相關關係不變。Grok Build 儲值後可改回 grok-4.5 @ grok。
+     註：managed rail 沒有 per-dispatch 覆寫——scripts/dispatch-contract.js:1147 寫死讀
+     這個檔並自己設 REVIEW_LOOP_CONFIG_OVERRIDE，所以環境變數操縱不了契約檢查（這是對的
+     安全姿態），唯一的槓桿就是這個檔。 -->
 - verification_author_present: true
 - verification_author_engine: Qwen3.8-Max-Preview
 - verification_author_runner: qoderclicn

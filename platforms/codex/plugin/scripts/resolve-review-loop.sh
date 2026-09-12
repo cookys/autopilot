@@ -2245,14 +2245,47 @@ const m = doc.overrides.find((o) => o && o.engine === engine && o.runner === run
   && typeof o.operator === "string" && o.operator.trim()
   && isCalendarDate(o.expires) && o.expires >= today);
 if (!m) process.exit(1);
-process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}`);
+process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}\u001foperator override`);
 ' "$_eng" "$_run" "$_role" 2>/dev/null)" || _ovr=""
+  # A STANDING operator pin is the same class of evidence as the per-invocation
+  # override file and admits identically. Rationale: the operator-pin plan
+  # (docs/plans/2026-09-11-operator-pin-supersedes-qualification.md §1 item 2)
+  # names "the only evidence-free path is per-invocation and file-shaped" as a
+  # defect — an operator who has ALREADY named a seat should not hand-author a
+  # JSON artifact per dispatch to be obeyed. D1-D4 closed that on the admission
+  # side (dispatch-contract.js reads operator_pin); this closes the roster side.
+  # A pin carries expires: null by design (TTL is advisory, never a gate), so it
+  # is reported as "standing" rather than with a date.
+  # Scoped exactly like every other capability-store read in this file: an
+  # explicit --store wins, --capability-state off skips the store entirely, and
+  # the caller's ENGINE_CAPABILITY_DIR is inherited. Reading the host's real pin
+  # store while the caller scoped the store elsewhere would make a test that
+  # isolates its store silently consult this machine instead.
+  if [[ -z "$_ovr" && "$CAPABILITY_STATE" == "on" ]]; then
+    _pin_args=(pins --role "${_role%%[*}")
+    [[ -n "$STORE_PATH" ]] && _pin_args+=(--store "$STORE_PATH")
+    _ovr="$(node "$SCRIPT_DIR/engine-capability-state.js" "${_pin_args[@]}" 2>/dev/null | node -e '
+let rows = [];
+try { rows = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
+if (!Array.isArray(rows)) process.exit(1);
+const [engine, runner, role] = process.argv.slice(1);
+const wantRole = role.replace(/\[[0-9]+\]$/, "").replace(/_low_risk$/, "");
+const m = rows.find((o) => o && o.engine === engine && o.runner === runner
+  && o.role === wantRole
+  && typeof o.reason === "string" && o.reason.trim()
+  && typeof o.operator === "string" && o.operator.trim());
+if (!m) process.exit(1);
+process.stdout.write(`${m.reason}\u001fstanding\u001f${m.operator}\u001fstanding operator pin`);
+' "$_eng" "$_run" "$_role" 2>/dev/null)" || _ovr=""
+  fi
   if [[ -z "$_ovr" ]]; then
-    echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) is NOT qualified for any role and has no matching operator override — add an unexpired entry for engine/runner/role '${_role%%[*}' to \$AUTOPILOT_QUALIFICATION_OVERRIDE, or qualify the engine via engine-onboarding. Naming an unqualified runner in a roster is refused, not downgraded." >&2
+    echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) is NOT qualified for any role and has no matching operator override or standing pin — add an unexpired entry for engine/runner/role '${_role%%[*}' to \$AUTOPILOT_QUALIFICATION_OVERRIDE, record a standing pin with 'engine-capability-state.js pin-seat', or qualify the engine via engine-onboarding. Naming an unqualified runner in a roster is refused, not downgraded." >&2
     exit 3
   fi
-  _reason="${_ovr%%$'\x1f'*}"; _rest="${_ovr#*$'\x1f'}"; _expires="${_rest%%$'\x1f'*}"; _operator="${_rest##*$'\x1f'}"
-  echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE operator override (operator: ${_operator}; reason: ${_reason}; expires ${_expires}) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
+  _reason="${_ovr%%$'\x1f'*}"; _rest="${_ovr#*$'\x1f'}"
+  _expires="${_rest%%$'\x1f'*}"; _rest="${_rest#*$'\x1f'}"
+  _operator="${_rest%%$'\x1f'*}"; _ovr_source="${_rest##*$'\x1f'}"
+  echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE ${_ovr_source} (operator: ${_operator}; reason: ${_reason}; expires ${_expires}) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
   # depth-0 panel 🟠 #4: the recording is not decoration — Ruling 1 requires an
   # evidence-free admission to be AUDITABLE, and override_admitted_seats is the
   # record. Falling back to the previous array on failure would let the admission

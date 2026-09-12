@@ -1,0 +1,93 @@
+{
+  "acceptance": {
+    "contract_hash": "f6f039426e692d85c80a8fe603fcef4218f8401bb4f743b2071b8cc439f105de",
+    "criteria_hash": "e9efbe4434a7f63e018e5589f3e7e4a332fab3b1a92463d9d755627fd89e39b4",
+    "required_evidence": [
+      "mirror-parity",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": []
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "project-default",
+    "data_egress": "local-only",
+    "data_egress_source": "project-default",
+    "guidance_profile": "guided",
+    "guidance_source": "project-default",
+    "topology_preference": "auto",
+    "topology_source": "project-default"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Ship two read-only containment gates: check-inputs-landed.js asserting every declared phase input is an ancestor of the integration target and naming every failing entry in one run, and check-containment.js whose post-merge-back assertion is SELECTED BY integration_method so an apply+fresh-commit row with a non-ancestor source_sha passes.",
+    "requirements_hash": "f01a70166e19310bd1cbe709dfd6752500dba9e114ca46a04c5253c35af393b3",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        "docs",
+        "hooks",
+        "platforms",
+        "schemas",
+        "scripts",
+        "src"
+      ],
+      "domains": [
+        "autopilot",
+        "integration"
+      ],
+      "languages": [
+        "javascript",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "6a0a74ca0c838703669433e133bced207a34269f6c95d7fe04dbfea883fc912e",
+  "mission_lineage_id": "lineage-v1-c92ee464f380c65703eebb4140f0824b494ab64d4ff12d3312e555760f234c31",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_authority_id": "35df7abf6e339d560ab39877099b4b1da4de5232740999c54ba48a54b90274f6",
+  "task_id": "input-containment-gates"
+}

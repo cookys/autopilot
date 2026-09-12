@@ -1495,4 +1495,42 @@ assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);const s=o.find(x=>x.ki
   "prod: production-path salvage carries the STOP payload"
 assert_artifact_schema "$OUT" "prod: production-path artifact matches schema"
 
+# --- legacy CLI path applies the same-runner-dual-seat guard (7840hs item 4, 2026-09-13) ---
+# The resolver refuses a reviewer-class seat written into config on the implementer's
+# runner. The legacy --runner/--deep-runner path built its manifest without asking, so the
+# guard had two implementations and only one fired. Fixture config pins the implementer
+# runner so the assertion does not depend on this host's roster.
+DUAL_CFG="$TEST_TMP/dual-seat-config.md"
+cp "$REPO_ROOT/.claude/review-loop-config.md" "$DUAL_CFG"
+python3 - "$DUAL_CFG" <<'PY2'
+import sys,re
+p=sys.argv[1]; s=open(p).read()
+s=re.sub(r'^- implementer_runner:.*$','- implementer_runner: codex',s,flags=re.M)
+s=re.sub(r'^- implementer_engine:.*$','- implementer_engine: gpt-5.6-sol',s,flags=re.M)
+open(p,'w').write(s)
+PY2
+DUAL_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DUAL_CFG" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+  node "$SCRIPT" --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+  --ticket dual-1 --session-id s-dual --generation 1 --state-dir "$STATE_DIR" \
+  --runner cc-shim --model MiniMax-M3 --effort high \
+  --deep-runner codex --deep-model gpt-5.5 --deep-effort high 2>&1)"; DUAL_RC=$?
+assert_neq "0" "$DUAL_RC" "legacy CLI: --deep-runner on the implementer's runner is refused"
+assert_contains "$DUAL_OUT" "runs on the implementer's own runner 'codex'" "legacy CLI: refusal names the runner"
+assert_contains "$DUAL_OUT" "same rule resolve-review-loop.sh applies" "legacy CLI: refusal says it is the resolver's rule"
+DUAL_OUT2="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DUAL_CFG" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+  node "$SCRIPT" --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+  --ticket dual-2 --session-id s-dual2 --generation 1 --state-dir "$STATE_DIR" \
+  --runner cc-shim --model MiniMax-M3 --effort high \
+  --deep-runner agy --deep-model gemini-3.8-flash-medium --deep-effort high 2>&1)"
+assert_not_contains "$DUAL_OUT2" "implementer's own runner" "legacy CLI: a different runner is not refused by the guard"
+# the live config does not carry the key at all (default off); append it rather than sed it
+printf '\n- allow_same_runner_dual_seat: on\n' >> "$DUAL_CFG"
+DUAL_OUT3="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DUAL_CFG" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+  node "$SCRIPT" --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+  --ticket dual-3 --session-id s-dual3 --generation 1 --state-dir "$STATE_DIR" \
+  --runner cc-shim --model MiniMax-M3 --effort high \
+  --deep-runner codex --deep-model gpt-5.5 --deep-effort high 2>&1)"
+assert_not_contains "$DUAL_OUT3" "implementer's own runner 'codex':" "legacy CLI: allow_same_runner_dual_seat: on lifts the refusal"
+assert_contains "$DUAL_OUT3" "allow_same_runner_dual_seat is ON" "legacy CLI: …but says so"
+
 finalize_test

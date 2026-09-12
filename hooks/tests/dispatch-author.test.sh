@@ -372,6 +372,15 @@ assert_eq "2" "$EXIT" "non-cc-shim with --endpoint exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "non-cc-shim endpoint reports precondition_failed"
 assert_contains "$OUT" "--endpoint applies only to --runner anthropic-compatible or cc-shim" "correct runner restriction error message"
 
+# `--endpoint @none` is the roster convention for "native auth" (review-loop-config.md);
+# the resolver reads it as endpoint=null. A CLI-direct caller copying the roster value
+# verbatim must not die at the runner restriction (7840hs, 2026-09-12: both seats dead).
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" --endpoint @none 2>&1)"
+EXIT=$?
+assert_not_contains "$OUT" "--endpoint applies only to" "--endpoint @none is not an endpoint: no runner restriction error"
+assert_not_contains "$OUT" '"status": "precondition_failed"' "--endpoint @none reaches the runner"
+assert_eq "0" "$EXIT" "--endpoint @none: exit 0 with the codex stub"
+
 # --- 8b. anthropic-compatible seam + endpoint gate behavior ---
 STUB_ANTHRO_JS="$TEST_TMP/runner-anthropic-compatible-ok.js"
 cat > "$STUB_ANTHRO_JS" <<'EOF'

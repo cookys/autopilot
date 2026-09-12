@@ -554,7 +554,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"plan_review_same_family_as_depth0":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
@@ -711,13 +711,13 @@ mkdir -p "$CAP_TEST_DIR"
 EMPTY_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
-assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
 
 # B. --capability-state off test
 OFF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
-assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
 
 # C. Record a fresh exhausted/high implementer event
 cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
@@ -750,7 +750,7 @@ assert_contains "$(json_get "$FRESH_OUT" capability_warnings)" "Demoted implemen
 # E. Query expired event (now is 2026-07-02T22:00:00Z -> past 3600s TTL)
 EXPIRED_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T22:00:00Z)"
 assert_eq "unknown" "$(json_get "$EXPIRED_OUT" quota_status)" "expired quota => quota_status is unknown"
-assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
 
 # F. Record an unknown event and verify no demotion/warning.
 # Use an ISOLATED store — CAP_TEST_DIR already holds a fresh EXHAUSTED event for this same
@@ -777,7 +777,7 @@ JSON
 ENGINE_CAPABILITY_DIR="$UNK_STORE" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-unknown.json" > /dev/null
 UNK_OUT="$(ENGINE_CAPABILITY_DIR="$UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
 assert_eq "unknown" "$(json_get "$UNK_OUT" quota_status)" "quota status unknown => quota_status is unknown"
-assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
 
 # G. Native skill warning tests
 cat <<'JSON' > "$TEST_TMP/event-skill-unsupported.json"
@@ -812,7 +812,7 @@ assert_contains "$(json_get "$SKILL_NATIVE_OUT" capability_warnings)" "does not 
 SKILL_AUTO_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "auto" "$(json_get "$SKILL_AUTO_OUT" skill_mode_requested)" "skill_mode_requested matches auto"
 assert_eq "prompt" "$(json_get "$SKILL_AUTO_OUT" skill_mode_effective)" "skill_mode_effective resolves to prompt"
-assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
 
 # G3. Record skill support supported, request skill mode auto -> should resolve to native
 cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
@@ -838,7 +838,7 @@ JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-skill-supported.json" > /dev/null
 SKILL_AUTO_OK_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "native" "$(json_get "$SKILL_AUTO_OK_OUT" skill_mode_effective)" "native supported => skill_mode_effective resolves to native"
-assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
 
 # H. L4 unchanged test
 L4_CFG="$TEST_TMP/l4-cfg.md"
@@ -861,7 +861,7 @@ cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
 JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-claude-exhausted.json" > /dev/null
 L4_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$L4_CFG" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
-assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
+assert_eq '["plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true","hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native","consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]' "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
 
 # 20. reviewer_endpoint / implementer_endpoint (declarative invoke infra)
 # ISOLATED: the repo dogfood config sets reviewer_endpoint=minimax (Board decision A),
@@ -1633,5 +1633,39 @@ MISSPELL_CONSULT_CFG="$TEST_TMP/rl-misspell-consult.md"
 printf -- '- consult_dispatch: Auto\n' > "$MISSPELL_CONSULT_CFG"
 assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MISSPELL_CONSULT_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
   "misspelled consult_dispatch: Auto (case-sensitive) exits 3"
+
+# --- plan_review: auto honours a fully DECLARED chair (7840hs item 3, 2026-09-13) ---
+# Before: the declared plan_reviewer_* keys were read, then the auto block overwrote them
+# from topology / native fallback, so MiniMax-M3@cc-shim resolved to opus@claude-native
+# with a generic warning. The peer's plan got READY with zero findings from that chair.
+DECL_CFG="$TEST_TMP/declared-chair.md"
+cp "$REPO_ROOT/.claude/review-loop-config.md" "$DECL_CFG"
+python3 - "$DECL_CFG" <<'PY2'
+import sys,re
+p=sys.argv[1]; s=open(p).read()
+s=re.sub(r'^- plan_review:.*$','- plan_review: auto',s,flags=re.M)
+s=re.sub(r'^- plan_reviewer_[a-z]+:.*\n','',s,flags=re.M)
+s+='\n- plan_reviewer_engine: MiniMax-M3\n- plan_reviewer_runner: cc-shim\n- plan_reviewer_effort: high\n- plan_reviewer_endpoint: minimax\n'
+open(p,'w').write(s)
+PY2
+DECL_OUT="$(AUTOPILOT_TOPOLOGY_FILE=/nonexistent REVIEW_LOOP_CONFIG_OVERRIDE="$DECL_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_contains "$DECL_OUT" '"plan_review_resolved_from": "config-explicit"' "auto + fully declared chair: resolved_from config-explicit"
+assert_contains "$DECL_OUT" '"plan_reviewer_engine": "MiniMax-M3"' "auto + declared chair: the declared engine is kept"
+assert_contains "$DECL_OUT" '"plan_reviewer_runner": "cc-shim"' "auto + declared chair: the declared runner is kept"
+assert_contains "$DECL_OUT" '"plan_review_same_family_as_depth0": false' "auto + declared cross-family chair: same_family false"
+# a DECLARED claude-native chair is still marked same-family (the mark is about the chair)
+sed -i 's/^- plan_reviewer_runner: cc-shim/- plan_reviewer_runner: claude-native/; s/^- plan_reviewer_engine: MiniMax-M3/- plan_reviewer_engine: opus/' "$DECL_CFG"
+DECL_OUT3="$(AUTOPILOT_TOPOLOGY_FILE=/nonexistent REVIEW_LOOP_CONFIG_OVERRIDE="$DECL_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_contains "$DECL_OUT3" '"plan_review_resolved_from": "config-explicit"' "declared claude-native chair: still config-explicit"
+assert_contains "$DECL_OUT3" '"plan_review_same_family_as_depth0": true' "declared claude-native chair: same_family marked true"
+sed -i 's/^- plan_reviewer_runner: claude-native/- plan_reviewer_runner: cc-shim/; s/^- plan_reviewer_engine: opus/- plan_reviewer_engine: MiniMax-M3/' "$DECL_CFG"
+# partial declaration is replaced — LOUDLY, naming what was declared
+sed -i '/^- plan_reviewer_runner:/d' "$DECL_CFG"
+DECL_ERR="$(AUTOPILOT_TOPOLOGY_FILE=/nonexistent REVIEW_LOOP_CONFIG_OVERRIDE="$DECL_CFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+DECL_OUT2="$(AUTOPILOT_TOPOLOGY_FILE=/nonexistent REVIEW_LOOP_CONFIG_OVERRIDE="$DECL_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_contains "$DECL_ERR" "declared chair IGNORED" "auto + partial chair: the replacement is announced"
+assert_contains "$DECL_ERR" "engine='MiniMax-M3', runner=''" "auto + partial chair: the announcement names what was declared"
+assert_contains "$DECL_OUT2" '"plan_review_resolved_from": "native-fallback"' "auto + partial chair: falls back"
+assert_contains "$DECL_OUT2" '"plan_review_same_family_as_depth0": true' "auto + native fallback: receipt marks same_family true"
 
 finalize_test

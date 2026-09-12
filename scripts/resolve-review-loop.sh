@@ -946,6 +946,7 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
 fi
 
 PLAN_REVIEW_RESOLVED_FROM=""
+PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0=0
 HETERO_REVIEW_RESOLVED_FROM=""
 CONSULT_RESOLVED_FROM=""
 
@@ -977,7 +978,34 @@ process.exit(0);
   _topo_ok=$?
   _topo_json="$_auto_out"
 
-  if [[ "$PLAN_REVIEW" == "auto" ]]; then
+  # Under `auto`, a chair tuple the project DECLARED wins over topology discovery and
+  # over the native fallback. Before 2026-09-13 the declared plan_reviewer_* keys were
+  # read (above) and then silently overwritten here, so a config that named
+  # MiniMax-M3@cc-shim/minimax resolved to opus/high@claude-native with only a generic
+  # warning — and a Claude chair reviewing Claude's plan returns an empty finding list
+  # that is indistinguishable from a clean review (7840hs, 2026-09-12: READY with zero
+  # findings; the repaired seat found three blockers, one overturning a Phase premise).
+  _plan_chair_declared=0
+  if [[ -n "$PLAN_REV_ENGINE" && -n "$PLAN_REV_RUNNER" && -n "$PLAN_REV_EFFORT" ]]; then
+    _plan_chair_declared=1
+  fi
+  _plan_deep_declared=0
+  if [[ -n "$PLAN_DEEP_ENGINE" && -n "$PLAN_DEEP_RUNNER" && -n "$PLAN_DEEP_EFFORT" ]]; then
+    _plan_deep_declared=1
+  fi
+  if [[ "$PLAN_REVIEW" == "auto" && "$_plan_chair_declared" -eq 1 ]]; then
+    PLAN_REVIEW_RESOLVED_FROM="config-explicit"
+    # The same-family mark is about the CHAIR, not about how it was chosen: a declared
+    # claude-native chair against a Claude depth-0 is the same hazard (review, 2026-09-13).
+    [[ "$PLAN_REV_RUNNER" == "claude-native" ]] && PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0=1
+    # deep seat: declared → keep; otherwise leave empty (a single-seat plan review is
+    # valid) rather than back-fill from a topology the chair did not come from.
+  elif [[ "$PLAN_REVIEW" == "auto" ]]; then
+    # A PARTIAL declaration (engine without runner, say) cannot be honoured and is about to
+    # be replaced. Say so, naming what was declared — a silent replacement is the defect.
+    if [[ -n "$PLAN_REV_ENGINE$PLAN_REV_RUNNER$PLAN_REV_EFFORT" ]]; then
+      echo "resolve-review-loop: plan_review auto: plan_reviewer_* is only partially declared (engine='${PLAN_REV_ENGINE:-}', runner='${PLAN_REV_RUNNER:-}', effort='${PLAN_REV_EFFORT:-}') — declared chair IGNORED, resolving from topology/native fallback instead; declare all three to pin the chair" >&2
+    fi
     _seat0_json=""
     _seat1_json=""
     if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
@@ -1037,13 +1065,14 @@ process.exit(1);
       PLAN_REV_RUNNER="claude-native"
       PLAN_REV_ENDPOINT=""
       PLAN_REVIEW_RESOLVED_FROM="native-fallback"
+      PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0=1
       CAP_WARNINGS_JSON="$(node -e '
 let a = [];
 try { a = JSON.parse(process.argv[1]); } catch { a = []; }
 if (!Array.isArray(a)) a = [];
 a.push(process.argv[2]);
 process.stdout.write(JSON.stringify(a));
-' "$CAP_WARNINGS_JSON" "plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+' "$CAP_WARNINGS_JSON" "plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
     fi
   fi
 
@@ -2433,6 +2462,7 @@ if [[ -n "$FIELD" ]]; then
     plan_review) printf '%s\n' "$PLAN_REVIEW" ;;
     hetero_review) printf '%s\n' "$HETERO_REVIEW" ;;
     plan_review_resolved_from) printf '%s\n' "$PLAN_REVIEW_RESOLVED_FROM" ;;
+    plan_review_same_family_as_depth0) [[ "$PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0" -eq 1 ]] && echo true || echo false ;;
     hetero_review_resolved_from) printf '%s\n' "$HETERO_REVIEW_RESOLVED_FROM" ;;
     consult_resolved_from) printf '%s\n' "$CONSULT_RESOLVED_FROM" ;;
     plan_reviewer_engine) printf '%s\n' "$PLAN_REV_ENGINE" ;;
@@ -2564,10 +2594,11 @@ SEATS_ARGS=(
   "$UNKNOWN_ESCALATION" "$UNKNOWN_BUDGET_U1" "$UNKNOWN_BUDGET_U2" "$UNKNOWN_BUDGET_U3" "$UNKNOWN_RESOLVED_FROM"
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
 )
-PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
+PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "plan_review_same_family_as_depth0": %s, "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(
   "$PLAN_REVIEW"
   "$PLAN_REVIEW_RESOLVED_FROM"
+  "$([[ "$PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0" -eq 1 ]] && printf true || printf false)"
   "$HETERO_REVIEW"
   "$HETERO_REVIEW_RESOLVED_FROM"
   "$(json_escape "$PLAN_REV_ENGINE")"

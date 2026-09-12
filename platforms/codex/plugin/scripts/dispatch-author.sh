@@ -162,7 +162,7 @@ while [[ $# -gt 0 ]]; do
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
     --stage)       STAGE="${2:-}"; shift 2 ;;
-    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; ENDPOINT_SUPPLIED=1; shift 2 ;;
+    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; [ -n "$ENDPOINT" ] && ENDPOINT_SUPPLIED=1; shift 2 ;;
     --strict-roster) STRICT_ROSTER=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;

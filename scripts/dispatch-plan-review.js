@@ -644,6 +644,34 @@ function validateManifest(value) {
   };
 }
 
+// The same-runner-dual-seat guard lives in resolve-review-loop.sh and fires when a
+// reviewer-class seat is WRITTEN INTO CONFIG on the implementer's runner. The legacy CLI
+// path here builds its manifest from --runner / --deep-runner without ever asking the
+// resolver, so `--deep-runner grok` against a grok implementer sailed through — one
+// predicate, two implementations, opposite answers on one population (7840hs, 2026-09-12:
+// their plan 067 lost decorrelation this way and nothing said so). Ask the resolver for
+// the implementer runner and the operator's dual-seat decision, and apply the SAME rule.
+function normRunner(r) { return r === 'codex-cli' ? 'codex' : r; }
+function resolverField(field) {
+  const script = path.join(__dirname, 'resolve-review-loop.sh');
+  const r = spawnSync('bash', [script, '--field', field], { encoding: 'utf8' });
+  if (r.status !== 0) return null;
+  return String(r.stdout || '').trim();
+}
+function refuseSameRunnerAsImplementer(seats) {
+  const impl = resolverField('implementer_runner');
+  if (!impl || impl === 'auto') return;
+  const allow = resolverField('allow_same_runner_dual_seat');
+  for (const seat of seats) {
+    if (normRunner(seat.runner) !== normRunner(impl)) continue;
+    if (allow === 'on') {
+      process.stderr.write(`dispatch-plan-review: ⚠ allow_same_runner_dual_seat is ON and the ${seat.role} seat runs on the implementer's runner '${impl}' — no runner decorrelation for this plan review.\n`);
+      continue;
+    }
+    throw new CliError(`plan-review ${seat.role} seat runs on the implementer's own runner '${impl}': one vendor, one auth and one server-side prompt layer is not decorrelation. This is the same rule resolve-review-loop.sh applies to config-declared seats; passing the runner on the CLI does not bypass it. Pick another runner, or set allow_same_runner_dual_seat: on to accept it deliberately.`);
+  }
+}
+
 function legacyManifest(opts) {
   function tuple(id, runner, model, effort, endpoint, role) {
     if (!RUNNERS.has(runner) || !EFFORTS.has(effort)) {
@@ -667,6 +695,12 @@ function legacyManifest(opts) {
   const seats = [
     tuple('chair', opts.runner, opts.model, opts.effort, opts.endpoint, 'chair'),
   ];
+  // `@none` is the roster convention for "native auth, no endpoint". The resolver reads it
+  // as endpoint=null; forwarding it verbatim as --endpoint kills the seat at transport
+  // (7840hs measured both seats dying this way, 2026-09-12). Normalise to the same
+  // 'default' sentinel the literal keyword already gets.
+  if (opts.deepEndpoint === '@none') opts.deepEndpoint = 'default';
+  if (opts.endpoint === '@none') opts.endpoint = 'default';
   const hasDeep = [opts.deepRunner, opts.deepModel, opts.deepEffort, opts.deepEndpoint]
     .some((value) => value !== undefined);
   if (hasDeep) {
@@ -682,6 +716,7 @@ function legacyManifest(opts) {
       'deep',
     ));
   }
+  refuseSameRunnerAsImplementer(seats);
   return {
     schema_version: 1,
     artifact_type: 'plan_review_manifest',

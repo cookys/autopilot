@@ -1,5 +1,49 @@
 # Changelog
 
+## v2.36.33 — 7840hs 回報的四條派工層缺陷，四條都在本機重現後修掉
+
+`cookys-7840hs` 2026-09-12 針對 v2.36.22 回報四條，三條是無聲的。每一條都先在這台機器重現才動手；
+(2) 在 develop 上已經不會硬失敗（`UNKNOWN_WINDOW` 現在 exit 0、`blocked:false`），但缺的那列是真的缺。
+
+### (1) `--endpoint @none` 是文件寫明的慣例，派工層卻拒絕它
+
+roster 用 `@none` 表示「runner 用自己的原生認證」，resolver 會把它正規化成 `endpoint: null`；但把 roster 值
+原樣帶到 CLI 的呼叫者會在 `dispatch-author.sh` / `dispatch-review.sh` / `dispatch-hetero.sh` 的 runner 限制
+處死掉（`--endpoint applies only to --runner …`），`dispatch-plan-review.js` 則把 `--deep-endpoint @none`
+原樣轉發、席位在 transport 層死兩次。重現：codex 席位帶 `@none` → `precondition_failed`。四個入口現在都把
+`@none` 讀成「沒有 endpoint」，跟 resolver 同一個讀法；真正的 endpoint 名字對 codex 仍然拒絕。
+
+### (2) `check-context-window.js` 缺 `grok-4.6`
+
+補上 `'grok-4.6': 500000`，證據基礎跟既有的 `grok-4.5` 列一樣：`signals.json` 帶 `contextWindowTokens` 但**沒有
+model 欄位**，這台 314 個 session 全部 500000，peer 那台 299 個全部 500000，min-wins。**刻意不加**
+`cursor-grok-4.6-low`：cursor 這條 rail 包同一個模型，但這裡沒有任何觀測，wrapper 可能有自己的上限。
+
+### (3) `plan_review: auto` 靜默把明確宣告的 chair 換掉 — 危險的那條
+
+resolver 先讀了 `plan_reviewer_*`，然後 auto 區塊用 topology / native fallback 把它**覆蓋**掉，
+`plan_review_resolved_from` 印 `native-fallback`，原本宣告的席位在報表上消失。本機重現：config 寫
+MiniMax-M3@cc-shim/minimax，結果 opus@claude-native。危險在於 Claude chair 審 Claude 的計畫回空清單，
+**跟乾淨的 review 分不出來**——peer 的計畫 067 拿到 READY 零 finding，換席位後同一份計畫三條 blocker、一條推翻
+整個 Phase 的前提。
+
+修法三件：完整宣告的 chair 在 auto 下直接贏（`plan_review_resolved_from: config-explicit`）；**部分宣告**改為
+印一行「declared chair IGNORED (engine='…', runner='', effort='…')」再走 fallback——宣告了一件事、系統做了
+另一件，這件事要看得見（308-db 的建議）；receipt 多一個 `plan_review_same_family_as_depth0`，native fallback
+的警語明說同族風險。owner 裁定（2026-09-13）：**警告＋標記，不拒絕**——auto 下同族直接 exit 3 會讓沒有
+topology 的主機停在 plan review。
+
+### (4) 去相關 guard 有兩份實作，只有一份會跑
+
+resolver 拒絕 config 裡把 reviewer-class 席位放在 implementer 的 runner 上；但 `dispatch-plan-review.js` 的
+legacy CLI 路徑（`--runner` / `--deep-runner`）從不問 resolver，`--deep-runner grok` 對 grok implementer 直接通
+過——peer 的 067 就是這樣無聲失去去相關。現在 legacy 路徑去問 resolver 的 `implementer_runner` 與
+`allow_same_runner_dual_seat`，套**同一條規則**，拒絕訊息明說「CLI 帶 runner 不能繞」；allow=on 放行但印警告。
+跟本週 session-mode/admission 那條同形：一個 predicate 寫兩次，對同一群體得出相反結論。
+
+prose-justification: 本版 prose 增量集中在 resolver 的兩段註解與 dispatch-plan-review 的 guard 說明，
+皆為規格文字；engine +4 個入口的正規化、+1 條 guard、resolver suite 425、plan-review 274、author 95、resolver 427。
+
 ## v2.36.32 — hands 交回來的東西，接收端終於有人在看：主 checkout 邊界與 commit 內容閘
 
 ### 兩個 peer、同一個缺陷家族

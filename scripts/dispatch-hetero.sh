@@ -1675,7 +1675,7 @@ while [ $# -gt 0 ]; do
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
-    --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; shift 2 ;;
+    --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;

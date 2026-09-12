@@ -254,7 +254,7 @@ while [[ $# -gt 0 ]]; do
     --ledger)    LEDGER="${2:-}"; shift 2 ;;
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
-    --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
+    --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
     -h|--help)   sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac

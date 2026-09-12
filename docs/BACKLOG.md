@@ -15,11 +15,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 each row's own Trigger line carries its evidence bar. The 2026-09-12 integration-ledger and
 containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes at:
 
-1. `chatgpt-tunnel-host` item **(E)** — `agy` committing into the main checkout. Jumps the queue: every other item costs time, this one is irreversible.
-2. `openclaw` strict-projection admission bypass — owner-authorised, reproduce locally first.
-3. `cookys-7840hs` four dispatch-layer defects — reproduce each on this host before designing.
-4. `308-db` item (a), repo-level residue sweep — its own plan.
-5. The four rail defects measured during the 2026-09-12 dogfood (concurrent-dispatch refusal, `output_paths` must enumerate codex mirrors, live-config assertions, unreachable operator-pin admission).
+1. ~~`chatgpt-tunnel-host` item (E)~~ — **SHIPPED v2.36.32** (main-checkout boundary + content gate). Their (A) output namespace and (B) exit-file contract remain general detached-dispatch defects; (B) is the prerequisite for item 4.
+2. ~~`openclaw` main claim~~ — closed in v2.36.28; side effects (a)/(b) remain, unreproduced.
+3. ~~`cookys-7840hs` four defects~~ — **SHIPPED v2.36.33**.
+4. **Non-Claude foreman rail, Shape B** — owner ruled 2026-09-13 (quota is the motive). Prerequisite: the exit-file contract on the general detached rail. Acceptance: the five rail-owned enforcements in `docs/plans/2026-09-13-non-claude-foreman-rail-design.md` §4.
+5. `308-db` item (a), repo-level residue sweep — its own plan.
+6. The four rail defects measured during the 2026-09-12 dogfood (concurrent-dispatch refusal, `output_paths` must enumerate codex mirrors, live-config assertions, unreachable operator-pin admission).
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 

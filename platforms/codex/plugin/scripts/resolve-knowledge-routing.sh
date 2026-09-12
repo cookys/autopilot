@@ -24,9 +24,9 @@
 #   5. Built-in defaults below
 #
 # Two fields are NOT read from the config by default. `backlog_path` and `plans_dir`
-# default to `auto`, which delegates to scripts/project-detect.js — that script already
-# owns the doc/ vs docs/ question and the project_paths block, and re-deriving it here
-# would be a second answer to a settled question. `none` is a real value for both: a
+# default to `auto`, which delegates to scripts/resolve-project-paths.sh — the single
+# answer to "where do this project's documents live" (project config first, detection
+# second). Re-deriving it here would be a second answer to a settled question. `none` is a real value for both: a
 # project that tracks deferred work outside the repo should say so rather than have a
 # skill invent docs/BACKLOG.md.
 #
@@ -102,15 +102,15 @@ DISCIPLINE="$(read_field "$CONFIG" discipline_target "$DEF_DISCIPLINE")"
 BACKLOG="$(read_field "$CONFIG" backlog_path "$DEF_BACKLOG")"
 PLANS="$(read_field "$CONFIG" plans_dir "$DEF_PLANS")"
 
-# --- `auto` delegates to project-detect.js, which already owns project_paths ---
+# --- `auto` delegates to resolve-project-paths.sh (project config first, detection second) ---
 if [[ "$BACKLOG" == "auto" || "$PLANS" == "auto" ]]; then
-  DETECTED="$(node "$SCRIPT_DIR/project-detect.js" --target "$TARGET" 2>/dev/null)" || DETECTED=""
-  if [[ -n "$DETECTED" ]]; then
-    [[ "$BACKLOG" == "auto" ]] && BACKLOG="$(printf '%s' "$DETECTED" \
-      | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write((j.project_paths&&j.project_paths.backlog)||"")}catch(e){}})')"
-    [[ "$PLANS" == "auto" ]] && PLANS="$(printf '%s' "$DETECTED" \
-      | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write((j.project_paths&&j.project_paths.plans_dir)||"")}catch(e){}})')"
-  fi
+  # Delegate to resolve-project-paths.sh rather than reading project-detect.js directly:
+  # that script is the single answer to "where do this project's documents live", and it
+  # consults the project's own scaffolded config before falling back to detection. Two
+  # readers of the same question drift; this one would have ignored a project that declared
+  # its backlog explicitly.
+  [[ "$BACKLOG" == "auto" ]] && BACKLOG="$(bash "$SCRIPT_DIR/resolve-project-paths.sh" --target "$TARGET" --field backlog 2>/dev/null)"
+  [[ "$PLANS" == "auto" ]] && PLANS="$(bash "$SCRIPT_DIR/resolve-project-paths.sh" --target "$TARGET" --field plans_dir 2>/dev/null)"
   # Detection failed or returned nothing: say `none` rather than name a path that may not
   # exist. An invented path is the failure this script exists to prevent.
   [[ "$BACKLOG" == "auto" || -z "$BACKLOG" ]] && BACKLOG="none"

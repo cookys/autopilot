@@ -27,7 +27,8 @@ Run all six collection commands simultaneously using parallel Bash calls. Set `D
 
 Run the six collection commands — **1a** commits+stats, **1b** per-commit file breakdown, **1c** timestamps for session detection, **1d** file hotspots, **1e** project-completion delta, **1f** review-loop lens (`scripts/retro-review-loop.js --days DAYS --json` — the hetero-dispatch/review/debate effort git history can't see) — from [references/data-collection.md](references/data-collection.md), substituting `DAYS`.
 
-**1g** Escalation-ledger scan (quality-floor L4): for each project dir in `docs/projects/` and `docs/projects/_archive/` with a `tree/events.jsonl` touched in the retro window, run `node scripts/tree.js escalations <proj>` and aggregate `escalation_opened` events by `stage`/`why_not_mechanical`; report counts + recurring themes. Recurring (≥2 similar) entries are DEMOTION CANDIDATES — hand them to `skills/distill`'s demotion-drafting step.
+**1g** Escalation-ledger scan (quality-floor L4): for each project dir in the resolved `projects_dir` and `archive_dir`
+(`scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)"`; `none` ⇒ skip this step) with a `tree/events.jsonl` touched in the retro window, run `node scripts/tree.js escalations <proj>` and aggregate `escalation_opened` events by `stage`/`why_not_mechanical`; report counts + recurring themes. Recurring (≥2 similar) entries are DEMOTION CANDIDATES — hand them to `skills/distill`'s demotion-drafting step.
 
 ## Step 2: Compute Metrics
 

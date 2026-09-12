@@ -23,13 +23,18 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    git log --oneline -5
    git status --porcelain | head -20
    git stash list | head -3
-   ls docs/projects/ | grep -v _archive | head
+   <plugin>/scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)"
+   # then, with the resolved projects_dir (`none` ⇒ skip this line):
+   ls <projects_dir> | grep -v _archive | head
    # Also check open task list if the harness shows one
    ```
 
 2. **Determine Handoff Path**:
-   - Active project: `docs/projects/<project>/HANDOFF.md`
-   - No project structure: `docs/HANDOFF.md`
+   - Active project: `<projects_dir>/<project>/HANDOFF.md` — `projects_dir` from step 1's
+     `resolve-project-paths.sh`, **not** a literal `docs/`
+   - `projects_dir: none`, or no active project under it: the **manual route already
+     defined below** — `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`. Do not invent a
+     doc root; a handoff nobody can find is worse than one outside the repo.
    - Repo not writable or no repo: `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`
 
 2.5. **Sweep the session, not just the document** (do this BEFORE drafting step 3):

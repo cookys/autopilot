@@ -1,5 +1,43 @@
 # Changelog
 
+## v2.36.31 — onboard 產生的 `Project Paths` 從 onboard 存在起就沒人讀，現在有讀的人了
+
+### 缺陷不是「skill 寫死 docs/」，是修法做了一半而且完全沒在跑
+
+`scripts/scaffold-config.js` 在 onboard 時就會把 `## Project Paths`（`projects_dir` /
+`plans_dir` / `archive_dir` / `backlog` / `index`）寫進 `.claude/{project-lifecycle,next,dev-flow}-config.md`，
+來源正確地取自 `project-detect.js`。grep 全 repo：**提到那些區塊的只有 `scaffold-config.js` 自己**。
+沒有腳本讀它，沒有 resolver。三個 skill 用 `` !`cat …` `` 把設定注入 context 讓 LLM 用眼睛讀——
+那是指引不是機制，而且那是唯一的消費路徑。
+
+同時，真正在**建或掃**專案文件的 skill 注入的設定裡沒有路徑：`ceo-agent` 把
+「建 `docs/projects/YYYY-MM-DD-<name>/`」標成 MANDATORY，卻只注入 `dispatch-config.md`；
+`finish-flow` 把延後項目寫進 `docs/BACKLOG.md`；`research-to-ship` 寫 plans、projects 與 INDEX；
+`handoff` 與 `retro` 什麼設定都沒注入。
+
+### `scripts/resolve-project-paths.sh`（新）
+
+缺的那條消費路徑。先讀 target 專案自己的 `Project Paths` 區塊，**逐欄位**退回
+`project-detect.js`——半填的設定是常見形狀，一個欄位有宣告不該讓其餘欄位失去偵測。
+`none` 是真答案且必須回報：專案沒有那個位置就說沒有，不要因為 reference doc 曾經提過就建一個。
+
+六個 skill 改成呼叫它。`resolve-knowledge-routing.sh` 的 `backlog_path`/`plans_dir` 也改成委派它，
+不再自己讀 `project-detect.js`——同一個問題兩個讀者必然漂移，而且原本那個會忽略專案明確宣告的 backlog。
+
+**刻意不動的**：`survey` / `learn` / `distill` / `engine-onboarding` / `think-tank` / `finish-flow`
+裡的 `docs/plans/2026-…-*.md` 是指向**本 repo 自己**計畫書的出處引用。那裡寫死是對的，套 resolver
+會把引用打斷。這條界線寫在 `docs/BACKLOG.md` 的同名條目裡，因為接手的人最容易在這裡誤傷。
+
+prose-justification: 這一版新增的 prose 是 `scripts/resolve-project-paths.sh` 的 header 契約與
+`hooks/tests/resolve-project-paths.test.sh` 的斷言說明，兩者都是**規格文字**；skill 側則是六處
+字面路徑換成 resolver 呼叫，淨行數接近持平而具體性提高。北極星要的方向沒有反轉：這一版把
+「LLM 用眼睛讀設定」換成「腳本回答」，engine +（1 支 script、28 條斷言）。
+
+### 一個自己踩到的機制教訓
+
+第一版的 `resolve_one` 用 `$( )` 呼叫，於是它對 `SOURCE` 的賦值掉在 subshell 裡——**回傳的路徑全對，
+provenance 說謊**（`source: none`）。測試抓到的不是路徑而是那個欄位。值對不代表出處對。
+
 ## v2.36.30 — durable content 的落點改成由消費端專案解析，不再是這個 repo 的擺設
 
 ### 問題：reference doc 寫的是 autopilot 自己的路徑

@@ -58,10 +58,10 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 All scripts: `<script> --help` for usage; deterministic exit codes; JSON output where applicable. If a user project ships its own script with the same contract, prefer the project version.
 ### Shadow QC panel (task-tree engine)
 
-When `docs/projects/<proj>/tree/` exists AND the review target is a verdict-bearing node (report has non-null `verdict`), the dispatcher MUST run `scripts/qc-panel.js` in parallel with the authoritative reviewer (Amendment 4: a silently-dead shadow fails the gate). Convention: `--proj` is the active project's directory name under `docs/projects/` (no auto-detection — an omitted `--proj` means the shadow silently doesn't run, so the dispatcher owns supplying it). The existing reviewer flow REMAINS authoritative — this is shadow-only (KR5: zero behavior change for non-opted-in users; the wiring is conditional on the tree existing).
+When `<projects_dir>/<proj>/tree/` exists AND the review target is a verdict-bearing node (report has non-null `verdict`), the dispatcher MUST run `scripts/qc-panel.js` in parallel with the authoritative reviewer (Amendment 4: a silently-dead shadow fails the gate). `projects_dir` comes from `scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)" --field projects_dir` — a literal `docs/projects/` is wrong in any project that keeps its documents elsewhere, and the failure is silent in exactly the way this shadow exists to prevent. Convention: `--proj` is the active project's directory name under that resolved directory (no auto-detection — an omitted `--proj` means the shadow silently doesn't run, so the dispatcher owns supplying it). The existing reviewer flow REMAINS authoritative — this is shadow-only (KR5: zero behavior change for non-opted-in users; the wiring is conditional on the tree existing).
 
 ```
-IF docs/projects/<proj>/tree/ exists AND node report has verdict != null:
+IF <projects_dir>/<proj>/tree/ exists AND node report has verdict != null:
   Run scripts/qc-panel.js --report <node-report.json> \
       --artifacts <artifact-paths> --out <panel-out-dir> \
       --proj <proj> --node <node-id>

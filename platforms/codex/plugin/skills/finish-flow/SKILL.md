@@ -166,7 +166,7 @@ After all 7 completed → mark the parent L-5 task (from L-1) completed.
 | # | Subject | Description + verification output |
 |---|---------|-----------------------------------|
 | S.1 | Retry check | Did I retry any non-trivial operation 2+ times? If yes → invoke `autopilot:learn`. Also run `node scripts/probe-unknown.js report --ledger <ledger>`: any `learn_required` climb (ladder row at rung ≥ 1, no skip reason) makes `autopilot:learn` MANDATORY, pre-filled with the climb's `terms` + `unknown_type`. Output: yes/no, and if yes, knowledge entry path. |
-| S.2 | Deferred items | Anything postponed → append to `docs/BACKLOG.md` with context + trigger condition. Output: `tail` of BACKLOG showing the new entry (or "none" if none). |
+| S.2 | Deferred items | Anything postponed → append to the resolved `backlog` (`scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)" --field backlog`; **never** a literal `docs/BACKLOG.md`) with context + trigger condition. `backlog: none` ⇒ report that this project has no backlog file and hand the items to the user; do not create one. Output: `tail` of that file showing the new entry (or "none" if none). |
 | S.3 | Confirm commit on correct branch | `git log -1 --format="%H %s"` on the expected branch. Output: commit hash + branch name. |
 
 ## Enforcement Rules

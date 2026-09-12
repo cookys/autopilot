@@ -44,7 +44,9 @@ topic needs deep, multi-source, fact-checked synthesis, use `deep-research` inst
 **Gate**: present the synthesized findings → "research enough to plan, or dig deeper / redirect?"
 
 ### Phase 2 — Write the plan  · follow [`references/plan-template.md`](../../references/plan-template.md)
-Author a concrete plan to `docs/plans/<YYYY-MM-DD>-<slug>.md` using the **plan-authoring template** —
+Author a concrete plan to `<plans_dir>/<YYYY-MM-DD>-<slug>.md` — `plans_dir` from
+`scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)"`, never a literal
+`docs/plans/`; `none` ⇒ ask where plans live before writing one using the **plan-authoring template** —
 file-structure map, bite-sized phases with dev-flow sizes (S/L/H/Fix) + acceptance, every step concrete
 (actual command/code/expected output, never "improve X"), scope cut, test plan, risks + inversion, and
 open questions only the user can answer. Run the template's self-review (scope coverage / placeholder
@@ -83,8 +85,11 @@ the repo/ticket/session tuple does not reset the review.
 instead asks the user to choose split/spike/risk/scope reset.
 
 ### Phase 4 — Expand into a tracked project  · delegate → `autopilot:project-lifecycle`
-Bootstrap the project the dev-flow way: `docs/projects/<YYYY-MM-DD>-<slug>/README.md` (OKR, phases,
-success criteria) + a row in `docs/projects/INDEX.md` + a feature branch off the default branch.
+Bootstrap the project the dev-flow way, using the resolved `projects_dir` and `index` (same
+resolver call as above): `<projects_dir>/<YYYY-MM-DD>-<slug>/README.md` (OKR, phases,
+success criteria) + a row in `<index>` + a feature branch off the default branch. Either
+field `none` ⇒ ask where the project record should live before writing; never compose a
+`none/…` path and never create the directory the reference doc happens to name.
 
 ### Phase 5 — Execute per dev-flow  · delegate → `autopilot:dev-flow`
 Run `autopilot:dev-flow` on the project, phase by phase: scope audit → phase tasks → implement →

@@ -334,7 +334,10 @@ When encountering these, pause and propose:
    Detection section). CEO mode does NOT exempt this — "I'll track scope mentally" is
    exactly the failure mode the TaskCreate exists to prevent.
 3. IF L-size:
-   a. Create project dir (docs/projects/YYYY-MM-DD-<name>/)     ← MANDATORY, not optional
+   a. Create project dir (<projects_dir>/YYYY-MM-DD-<name>/)    ← MANDATORY, not optional
+      projects_dir from `scripts/resolve-project-paths.sh --target <repo>`; never literal docs/.
+      `projects_dir: none` ⇒ STOP and ask the user where projects live; a mandatory step
+      with no location is a question, not a `none/…` path.
    b. Write README.md with OKR, phases, success criteria
    c. Update INDEX.md
    c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is

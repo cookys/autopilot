@@ -1,5 +1,102 @@
 # Changelog
 
+## v2.36.28 — 兩份 peer 回報各修一半；還有 rail 自己的三個量測
+
+三個 deliverable 同一版出：兩個來自別台機器的回報，一個來自這台的 dogfood。**兩份回報都有一半是錯的，
+而那一半正好決定要做什麼**，所以修正寫在計畫裡當第一級內容，不是註腳。
+
+### 整合收據記下「產出什麼、接受了什麼、怎麼接受的」
+
+`308-db` 說「兩份收據都沒記下被接受的 commit」。**太重了**：`$defs.edgeReceipt` 本來就要求
+`source_validation.actual_sha` 和 `after_sha`/`merge_commit`，git-merge 那條邊的那一對一直都在。
+
+真正缺的三件是：`mode` 只有 `no-ff`/`ff-only` 兩個值，**收據是拒絕 apply 式整合這個事件**，不是少一個
+欄位；`source_ref` 是 ref 名字，回答不了「哪個 deliverable 產出這個 commit」；而且只有 `src/merge/cli.js`
+會寫收據，他們六條 lane 全部是手動落地的，一份收據都沒有。
+
+新增 `source_sha`、`accepted_sha`、`integration_method`（封閉 enum，含 `apply+fresh-commit`）、`unit_id`，
+四個都必填。**`mode` 完全沒動**——它是 merge 策略的*輸入*（`src/merge/cli.js:665-667` 直接轉成
+`git merge --no-ff`/`--ff-only`），`integration_method` 是*結果*，兩個不同的軸。
+
+新增 `scripts/record-integration.js`，記錄 merge rail 以外做的整合。**這是刻意放進這個 deliverable 而
+不是留給下游的**：只加 enum 不加寫入器，`apply+fresh-commit` 就是一個沒有生產者的形狀，下游那個決定性
+測試只能吃手寫 fixture——正是 D4 admission bypass 綠著出貨的同一種空轉，而且會是刻意蓋進去的。
+
+驗證是真的：真 merge 斷言兩個 SHA **不同**（把兩個都從同一個變數填的寫入器可以通過每一項 schema 檢查、
+並完整重現原本的缺陷）；真的跑 `git diff --binary | git apply --index` 加一個新 commit，用真的寫入器
+記錄，schema 驗過，並斷言 source **不是** accepted 的祖先；還斷言寫入器是唯讀的——refs、HEAD、index、
+worktree 跑完全都沒變。負面 fixture 從真寫入器的輸出衍生，只有被攻擊的欄位不同。
+
+### qc-panel 的席位驗證會說出它拒絕了什麼
+
+`scripts/resolve-review-loop.sh` 有**四個**（回報者數到三個）站點把 `QC_PANEL_SEATS_COMPLETE` 設成
+`false` 而**什麼都不印**：companion array 長度不一致，以及每席的 runner、effort、endpoint。於是
+`qc_panel_seats` 序列化成 `[]`、`cross_family_satisfied` 變 false、下游 `--enforce` BLOCK 而沒有任何東西
+指出原因——同一支檔案三十行以下的 `reviewer_runner` 早就會印出被拒值加完整允許集合。
+
+四個站點現在都印被拒值與允許集合，並附上結果 `qc_panel_seats_complete=false, readiness fails closed`。
+
+**這裡推翻了一個 depth-0 的計畫決定**。計畫原本裁定無條件 `exit 3`，理由是同檔其他 config 驗證都這樣。
+但 `project-config-template/review-loop-config.md:191` 對這一類寫的是相反的契約——「fails closed
+instead of guessing」——而 `exit 3` 會讓每個「宣告了 runners/efforts 卻沒宣告 endpoints」的 consuming
+repo 在升級時直接壞掉。回報的缺陷是**沉默**，不是太晚失敗。rubric 埋的引信也響了：implementer 為了
+讓既有測試通過去補了兩個 fixture。推翻之後全套從 416/1-failed 變成 417 全過。
+
+實作者另外做對一件沒人要求的事：區分「完全沒宣告 companion metadata」（合法的 legacy model-only panel）
+與「宣告了但不對齊」（錯誤）。保留。
+
+### 有封印的 bounded campaign 在活的 session marker 下就是自己的授權
+
+**這是推翻 `8d7e61c2`（2026-07-28）的裁定，不是修 bug。** 那個 commit 和
+`hooks/tests/dispatch-hetero.test.sh:975` 正面斷言「sealed v1 campaign cannot bypass active L6 strict
+projection」，而那支檔案今天 232 assertions 全綠。
+
+不帶 `mission_runtime` 的 bounded contract 永遠不會通過 `--strict-contract`，所以
+`run_campaign_projection_preflight` 提早返回、`CAMPAIGN_PROJECTION_BOUND` 停在 0、
+`check_session_mode_gate` 在 repo 有任何 l5/l6 marker 活著的期間一律拒絕它。
+
+它和 `scripts/session-mode.js:291` `campaignCarriesMissionProjection` 矛盾——那邊把**同一群 contract**
+從 admission 側挖掉了，理由是封閉的 bounded contract schema 沒有地方放 projection，那是
+「a deny that no fixture and no caller could ever satisfy」。那段註解還說 dispatch-hetero
+「已經畫了這條線，其餘一律導去 session-mode gate」：描述路由是對的，沒注意到那個目的地是永久拒絕。
+
+推翻的依據**不是** marker 沒有退場路徑（那是另一列 BACKLOG、另一個機制），而是這個條件對這群 contract
+**在構造上就不可能滿足**。而且這個狀態走得到：`session-mode.js set --level l5` 在一個完全沒有 Mission
+設定的沙盒 repo 回 `ok: true`。
+
+skip 只落在 `CAMPAIGN_PROJECTION_BOUND -ne 1` 那一支，所以 `else` 支的
+`check_marker_campaign_admission_bridge`（第二道、獨立的 gate）沒被碰，`check_mission_enforcement_gate`
+照跑，而且 predicate 是在 contract preflight 重新推導過 digest、驗過封印之後才問，並且呼叫
+canonical 的 JavaScript 述詞而不是在 shell 裡長出第二份對封閉 schema 的解讀。
+
+### 這一輪關於 rail 自己的量測（都在 `docs/BACKLOG.md`）
+
+- **graph 模型了 controller 做不到的併行**：`mission grant` 不吭聲地發了三張 claim，三個 dispatch 起來，
+  一個進到實作、兩個死在 `canonical Mission state changed between intake and controller persistence`
+  且 `rounds: 0`；單獨重派其中一個、同一份 contract 同一張 claim，立刻通過同一道 gate。失敗發生在
+  readiness probe 之後、動工之前。worktree 占用上限**不是**瓶頸——它按 root run id 計數，那層本來就
+  準備好併行了。
+- **`output_paths` 必須列出每一個 codex 鏡像**：否則 implementer 會被自己的 `verify_cmd`
+  （`sync-codex-plugin-skills.sh --check`）要求去碰契約禁止的路徑。寫了九個檔、整輪作廢。這在
+  `mission-execution-graph-check.js` 是零成本可以先擋的。
+- **`resolve-review-loop.test.sh` 斷言在活的專案設定上**：grok 席位撞到付費牆（`402 Payment Required:
+  Grok Build usage balance exhausted`）而必須換席時，那一次設定編輯讓全套從 417 變成 408/9-failed。
+  測試抓到出貨預設變了是對的，但它分不出「resolver 壞了」和「operator 因為廠商不回應而正當換席」。
+
+### 出貨紀律揭露
+
+prose-justification: 這一版的 prose 成長全部落在 `docs/plans/2026-09-12-*.md`（四份計畫加四份 rubric）
+與 `docs/BACKLOG.md`（五列新量測），不在任何 skill 或 reference 的 surface 上。rail 強制一個節點一份
+plan 一份 rubric（`checkMissionGraphCoverage` 要求 source plan id 對 node 是 1:1），所以四個並行
+deliverable 在結構上就是四份計畫文件；把它們壓成一份會讓併行在 rail 上不可能表達。engine 同時成長
+1566 行。北極星是 prose↓ engine↑，這一版 prose 的增量是 rail 的結構成本而非指引膨脹。
+
+
+三個 campaign 都在 implementer commit **之後**被 rail 擋下，沒有一個走完 rail 的 review 與 QC panel。
+三份 merge commit 各自寫明這件事，並說明是以 depth-0 審查加契約自己的驗證指令併入的。**沒有一個被記成
+完成的 L5 managed run。**
+
+
 ## v2.36.27 — 一個 pin 准了沒有人 pin 過的席位；以及 strike fold 的投影
 
 兩件事一起出：`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md` 的 **P3**（KR3/KR4/KR7），

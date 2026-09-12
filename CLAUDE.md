@@ -21,7 +21,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Routing & config resolution** — `resolve-dispatch.sh` `resolve-dispatch-topology.js` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
 
-**Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `record-integration.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js`
+**Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `record-integration.js` `check-inputs-landed.js` `check-containment.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js`
 
 **Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js` `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `run-approval.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `agent-liveness-check.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
 

@@ -1,0 +1,98 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "nodes": [
+  {
+   "acceptance_ids": [
+    "p2-inputs-landed-gate-refuses-per-entry",
+    "p3-apply-style-non-ancestor-source-passes",
+    "p3-containment-assertion-is-method-selected"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     ".claude-plugin/plugin.json",
+     "CHANGELOG.md",
+     "CLAUDE.md",
+     "docs",
+     "hooks",
+     "platforms/codex/plugin",
+     "references",
+     "schemas",
+     "scripts",
+     "src"
+    ],
+    "authorized_creates": [
+     "hooks/tests/input-containment-gates.test.sh",
+     "platforms/codex/plugin/scripts/check-containment.js",
+     "platforms/codex/plugin/scripts/check-inputs-landed.js",
+     "scripts/check-containment.js",
+     "scripts/check-inputs-landed.js"
+    ],
+    "baseline_churn": 4000,
+    "max_changed_files": 64,
+    "max_extra_churn": 2000,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "output_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "hooks/tests/input-containment-gates.test.sh",
+     "platforms/codex/plugin/scripts/check-containment.js",
+     "platforms/codex/plugin/scripts/check-inputs-landed.js",
+     "scripts/check-containment.js",
+     "scripts/check-inputs-landed.js"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "schemas/merge-execution-receipt.schema.json",
+     "scripts/record-integration.js"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-12-input-containment-gates.md",
+     "section": "5. Phase — inputs-landed gate"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 12,
+   "id": "p23-input-containment-gates",
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 60,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 6000000,
+    "tool_calls": 175,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-f6f039426e692d85c80a8fe603fcef4218f8401bb4f743b2071b8cc439f105de"
+   ],
+   "source_rubric_ids": [
+    "R107473631711753378593415032052578542585573020795360725207646979542802046645491",
+    "R109195400077628496173230371162497727573282310832684222453257907375994626681780",
+    "R113788003965956649121775169059289484590245054813742292973338300103984994306346",
+    "R25850363506001765029170100497256223641549619212583843953572810831092631065962",
+    "R25920357505706036825228593021964262608952125541186313183983386497658278234219",
+    "R26207634461425996354891333972534625997250708008859798350300960391637310393127",
+    "R31701746996092016661835291714326547477204791325925664538602099583022829523218",
+    "R32916066316129399519177681295172927226477083797446100257508353997328943915779",
+    "R53557271509075679778363309975007453570884857072300212027499519823186962559806",
+    "R61241256788454145350509505857265242372570906728370767000942489208477992510181",
+    "R6332197033350655197540639790246547732725781121530025740558095107983081380963",
+    "R8130111850518360917088853018114783571363866320469351361700825467251788831014",
+    "R81303262720708990717249782396541994279277341328369147941611318491817983993910",
+    "R86731497467354049030749312115196925405118863328664701347047870434285892744969",
+    "R93447438718051641666286039852939113154990752642912463480594424845682895948541"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/input-containment-gates.test.sh",
+    "node scripts/check-js-syntax.js",
+    "node scripts/check-claude-md-inventory.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check"
+   ]
+  }
+ ],
+ "schema_version": 1
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-12-input-containment-gates.md",
+      "rubric_path": "plans/2026-09-12-input-containment-gates.rubric.md",
+      "plan_sha256": "f6f039426e692d85c80a8fe603fcef4218f8401bb4f743b2071b8cc439f105de",
+      "rubric_sha256": "e9efbe4434a7f63e018e5589f3e7e4a332fab3b1a92463d9d755627fd89e39b4"
+    }
+  ]
+}

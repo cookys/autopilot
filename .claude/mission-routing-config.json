@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
-  "graph_path": "docs/mission-integration-ledger-execution-graph.json",
-  "sources_path": "docs/mission-integration-ledger-sources.json"
+  "graph_path": "docs/mission-containment-gates-execution-graph.json",
+  "sources_path": "docs/mission-containment-gates-sources.json"
 }

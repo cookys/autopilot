@@ -85,17 +85,40 @@ The table above is not aspirational. It is a description of a corpus that alread
 
 ## 3. The destination table
 
-Three sinks. Each has a **write contract**, and the contract is the part that gets skipped.
+Four sinks. Each has a **write contract**, and the contract is the part that gets skipped.
 
 | Sink | Content | Write contract |
 |---|---|---|
 | `~/.claude/projects/<slug>/memory/` | Anything carrying a fleet token — the "No" branch of the one question | **Default sink.** Write directly. No promotion, no review. It is machine-local by design and that is correct. |
 | `.claude/knowledge/` | A publishable, generalizable lesson — a fact or gotcha that survives the token deletion | **Promotion.** Write → `git add -f` → show the user the diff → commit **in the same motion**. See §4. |
 | `references/` | Discipline that binds *other skills* — a rule, not a fact | Normal review path: it is a tracked file in a reviewed directory, so the ordinary commit/review flow applies. Typically the [`evidence-discipline.md`](evidence-discipline.md) family. |
+| `docs/BACKLOG.md` | A real problem you are deliberately not fixing now | One row: what breaks, the evidence that it does, and why it is deferred. A deferred problem with no row is a problem that was dropped. |
 
 The `references/` row is the one people miss. The test is **who obeys it**: a fact that a future
 session *looks up* is knowledge; a rule that a future session must *follow* is discipline, and
 discipline belongs in `references/` where a skill can cite it by path.
+
+### 3.1 What to sweep — where durable content actually hides
+
+The table above answers *where it goes*. This answers *where to look*, and it is the half that
+gets skipped: a lesson only reaches a sink if someone notices it is a lesson. Noticing is not a
+feeling — these are the four places it is mechanically findable in a session:
+
+1. **Every correction you made about your own work.** 「原來是…」, 「我搞錯了」, a re-run that
+   passed after one that failed. The delta between the two runs *is* the gotcha; write the delta,
+   not the apology.
+2. **Every operator ruling.** A question you asked and the answer you got sets policy beyond this
+   task whenever the answer was not the obvious default. Record the ruling and the reason, not the
+   question.
+3. **Every command that failed once and then worked.** The wrong invocation is the durable part —
+   the next session will reach for the same wrong one.
+4. **Every problem you saw and chose not to fix.** That is a `docs/BACKLOG.md` row, and it is the
+   only sink whose absence is invisible: nothing later goes red because the row is missing.
+
+Two things that look durable and are not. **A plan, a survey, a project doc** is already a tracked
+file at its own path; it is not loose context needing a sink — if it is unwritten, it is pending
+work, and pending work belongs in the handoff's `## 下一步`. **A one-off fact about this branch,
+this diff, this run** dies with the snapshot, correctly.
 
 ---
 

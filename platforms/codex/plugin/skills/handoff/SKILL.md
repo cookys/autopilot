@@ -32,6 +32,15 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    - No project structure: `docs/HANDOFF.md`
    - Repo not writable or no repo: `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`
 
+2.5. **Sweep the session, not just the document** (do this BEFORE drafting step 3):
+
+   Step 3.5 below walks the document you are about to write. That catches only durable content you
+   already thought to put in it — a gotcha hit at turn 40 and never written down reaches neither.
+   So sweep the **session** first, using the source list in
+   [`references/knowledge-routing.md`](../../references/knowledge-routing.md) §3.1, and route each
+   hit per §3 **now**. Then `## 陷阱` cites what you landed (`[[slug]]` / a path) instead of
+   restating it, and step 3.5 becomes a completeness check rather than the sweep itself.
+
 3. **Generate Document**:
    If `HANDOFF.md` already exists, REPLACE it (a handoff is a snapshot, not a log) and note the replacement in the reply. Write verbatim:
 
@@ -65,7 +74,8 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
 3.5. **Route the durable content out** (a handoff is a snapshot and gets deleted — Resume Mode step 5.
    Anything left only in it is scheduled for destruction):
 
-   Walk the document you just wrote **段-by-段** and ask of each one:
+   Walk the document you just wrote **段-by-段** (step 2.5 already swept the session; this pass
+   catches what the draft itself surfaced) and ask of each one:
 
    > **「這條超出本次交接嗎?」**
 
@@ -80,6 +90,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    | A fact or gotcha (typically from `## 陷阱`) | `learn` skill |
    | A reusable multi-step procedure | `distill` skill |
    | A repo-level rule binding other skills | `references/` — the `evidence-discipline.md` family |
+   | A real problem you are deliberately not fixing now | `docs/BACKLOG.md` — one row, with the evidence |
 
    Call those skills; **do not implement routing logic here.** Handoff's job is to notice that a 段 is
    durable, not to decide where it lands — that decision is the routing doc's, and the write contract

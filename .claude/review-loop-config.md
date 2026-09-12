@@ -30,19 +30,9 @@
 - on_family_conflict: fallback
 - reviewer_fallback_preference: GLM-5.2
 - reviewer_fallback_preference_low_risk: GLM-5.2
-- implementer_engine: gpt-5.6-sol
+- implementer_engine: grok-4.5
 - implementer_effort: high
-- implementer_runner: codex
-
-<!-- 2026-09-12 depth-0 裁定（CEO 授權下，可回退）：implementer 由 grok-4.5 @ grok
-     改為 gpt-5.6-sol @ codex。原因是量到的付費牆，不是評價：
-     `grok -p "reply with the single word OK"` 回
-     `API error (status 402 Payment Required): Grok Build usage balance exhausted`，
-     而 `status readiness --probe` 對 implementer 席的 live 軸給 `transport_failure`，
-     三個 managed campaign 全部停在 `strict_l5_provider_not_ready`、dispatcher_called:false。
-     codex 同時實測 `codex exec` 回 OK。
-     這正是 operator-pin 計畫 §1 表格裡「quota wall gets a stand-in — DOES NOT EXIST，
-     是新工作」那一列：今天 rail 沒有自動替補，只能改設定。grok 儲值後改回來即可。 -->
+- implementer_runner: grok
 - verification_author_present: true
 - verification_author_engine: Qwen3.8-Max-Preview
 - verification_author_runner: qoderclicn

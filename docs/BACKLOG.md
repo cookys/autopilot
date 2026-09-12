@@ -197,6 +197,17 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: Fix for the gate predicate; S including the test matrix case. The lease/release inconsistency is the larger of the two side effects.
 - **Source**: peer report from openclaw via fleet relay, 2026-09-12. Not reproduced on this host.
 
+### `resolve-review-loop.test.sh` asserts on the LIVE project config, so any legitimate seat change reds the suite
+
+- **Trigger**: nine failures of the shape `default implementer (grok, Board decision A): '"implementer_engine": "grok-4.5"' not found in output` after editing `.claude/review-loop-config.md`.
+- **Measured 2026-09-12.** The grok implementer seat hit a hard paywall (`402 Payment Required: Grok Build usage balance exhausted`), so the seat was switched to `gpt-5.6-sol @ codex` to unblock three managed campaigns. That single config edit turned `hooks/tests/resolve-review-loop.test.sh` from 417 passed to 408 passed / 9 failed, because a block of its assertions read **this repo's own `.claude/review-loop-config.md`** and assert the shipped defaults (`implementer_engine`, `implementer_family`, `review_risk`, `required_review_families`, `l1_required`).
+- **Both halves of this are defensible, which is why it is a design question and not a bug report**: the suite is right that a change to the shipped default implementer is a change worth noticing — it encodes a recorded Board decision. But it means the suite cannot distinguish "somebody broke the resolver" from "an operator legitimately re-pointed a seat because the vendor stopped answering", and the second is now known to happen without warning.
+- **Same family as a lesson already recorded** (`auto` leaking host topology into tests): assertions that read live host or project state make the suite a function of the machine it runs on.
+- **Candidate**: move the default-roster assertions onto a frozen fixture config that mirrors the shipped defaults, and add ONE assertion that the live `.claude/review-loop-config.md` still parses and resolves — so a genuine resolver break still reds, while a seat swap does not. Alternatively keep the live assertion but make its message say "the project config was changed; update this assertion deliberately or revert the config", which is the missing operand today.
+- **Interim, 2026-09-12**: the config swap was reverted so the suite stays green, and the substitute implementer is supplied per dispatch via `REVIEW_LOOP_CONFIG_OVERRIDE` instead of editing the shipped config. That keeps the Board default intact and keeps the paywall workaround out of the repo.
+- **Effort**: S.
+- **Source**: /l5 dogfood, 2026-09-12, discovered by the suite catching the author's own config edit.
+
 ### The Mission graph models parallel deliverables that the controller cannot actually run in parallel
 
 - **Trigger**: any graph with two or more independent nodes in one batch, or the next `campaign_intake` rejection reading `canonical Mission state changed between intake and controller persistence`.

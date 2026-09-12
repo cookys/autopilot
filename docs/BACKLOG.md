@@ -207,6 +207,18 @@ containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes
 - **Effort**: Fix for the gate predicate; S including the test matrix case. The lease/release inconsistency is the larger of the two side effects.
 - **Source**: peer report from openclaw via fleet relay, 2026-09-12. Not reproduced on this host.
 
+### `Project Paths` is write-only config — `scaffold-config.js` emits it, nothing reads it, and the skills that create project docs never see it
+
+- **Trigger**: **FIRED — swept 2026-09-12** across all 30 skills after `resolve-knowledge-routing.sh` landed, asking which others name autopilot's own layout.
+- **The mechanism exists and is not wired.** `scripts/scaffold-config.js` generates a `## Project Paths` block (`projects_dir`, `plans_dir`, `archive_dir`, `backlog`, `index`) into `.claude/{project-lifecycle,next,dev-flow}-config.md` at onboarding, correctly sourced from `project-detect.js`. Verified by grep: **`scaffold-config.js` is the only file in the repo that mentions those sections.** No script reads them; there is no `resolve-*` for them. Three skills (`dev-flow`, `next`, `project-lifecycle`) inject their config into context with `` !`cat …` ``, so an LLM may read the paths by eye — that is guidance, not mechanism, and it is the only consumption path that exists.
+- **The skills that actually create project docs inject a config with no paths in it.** `ceo-agent` (`SKILL.md:299`, "Create project dir (docs/projects/YYYY-MM-DD-<name>/) ← MANDATORY") injects only `dispatch-config.md`. `finish-flow` appends deferred items to `docs/BACKLOG.md` (S.2) and archives `docs/projects/` (L-5.5) while injecting `finish-flow-config.md`, which carries no Project Paths section. `research-to-ship` writes `docs/plans/` + `docs/projects/` + `docs/projects/INDEX.md` (`:47,86,87`) injecting only `dispatch-config.md`. `quality-pipeline` keys the qc-panel shadow on `docs/projects/<proj>/tree/`.
+- **Two skills name paths and inject nothing**: `handoff` writes `docs/projects/<project>/HANDOFF.md` and lists `docs/projects/` (`:26,31`); `retro` scans `docs/projects/` and `docs/projects/_archive/` (`:30`).
+- **Not defects, do not "fix" them**: `docs/plans/2026-…-*.md` citations in `survey`, `learn`, `distill`, `engine-onboarding`, `think-tank`, `finish-flow`. Those are provenance pointers to **this** repo's own plan documents — literal paths are correct there, and rewriting them through a resolver would break the citation.
+- **autopilot never dogfoods the path config**: it has no `.claude/project-lifecycle-config.md` and no `.claude/next-config.md`, so the one repo that would notice the block being unread does not generate it.
+- **Candidate**: a `resolve-project-paths.sh` sibling — a thin config-override layer over `project-detect.js`'s `project_paths`, same shape as `resolve-knowledge-routing.sh` (whose `plans_dir` / `backlog_path` already delegate there, and which would then delegate to it instead of duplicating). Then the six skills above call it rather than naming `docs/`. Note the boundary already established: a role that resolves `none` must be reported, never invented.
+- **Effort**: S for the resolver, Fix per skill; six skills.
+- **Source**: 30-skill sweep, 2026-09-12, prompted by the operator after `resolve-knowledge-routing.sh` (v2.36.30).
+
 ### The shared config ladder's tier 3 reads the PLUGIN's `.claude/`, and the installed plugin ships one
 
 - **Trigger**: **FIRED — measured 2026-09-12** while building `resolve-knowledge-routing.sh`; the leak went red on the first foreign-project test before the resolver was fixed.

@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.36.30 — durable content 的落點改成由消費端專案解析，不再是這個 repo 的擺設
+
+### 問題：reference doc 寫的是 autopilot 自己的路徑
+
+`references/knowledge-routing.md` §3 與 `skills/learn/SKILL.md` 把 `.claude/knowledge/`、
+`references/`、`docs/BACKLOG.md` 當字面路徑寫死。其中兩個在消費端專案**不存在**——`references/`
+是這個 plugin 自己放 skill reference 的目錄，別的專案沒有自己的 skill 要被綁；而
+`.claude/knowledge/` 的 `git add -f` 提交契約是**這個 repo 的 `.gitignore` 的事實**，不是通則。
+所以 `handoff` step 2.5 叫 agent「照 §3 路由」時，遞給對方的是我們家的家具：它要嘛自己發明一個
+路徑，要嘛什麼都不寫。
+
+### `scripts/resolve-knowledge-routing.sh`（新）
+
+四個 sink 改成**角色**，路徑由 resolver 回答，跟這個 plugin 其他每一條 per-project 政策同形
+（`resolve-qc-gate.sh` 的 4 層 ladder）。`skills/handoff` step 2.5/3.5 與 `skills/learn` 改成先呼叫
+它，不再寫死目錄。
+
+- `discipline_target` 預設 **`CLAUDE.md`**——「未來 session 必須遵守的規則」正是那個檔的用途。
+  autopilot 自己用 `.claude/knowledge-routing-config.md` 指回 `references/`，那是例外不是預設。
+- `backlog_path` / `plans_dir` 預設 `auto`，**委派給 `project-detect.js`**：`doc/` vs `docs/`
+  與 `project_paths` 早就是它的職責，在這裡重推一次等於同一個問題有兩個答案。
+- **`none` 是真答案。** 專案若把待辦記在 repo 外，resolver 就回 `none`，正確行為是說出來，而不是
+  因為 reference doc 曾經提過就去建一個 `docs/BACKLOG.md`。發明路徑的失敗是無聲的：檔寫了，沒人讀。
+- `knowledge_gitignored` 是**量出來的**，不是假設的。
+
+### 兩個量到的機制缺陷
+
+**`git check-ignore` 不加 `--no-index` 會被已追蹤檔案遮蔽。** `.claude/knowledge/` 裡的檔案正是
+`git add -f` 進去的，所以天真的量法會回報「沒被忽略」——等於否認了當初建立它的那道提交契約。
+
+**共用 ladder 的 tier 3 讀的是 plugin 的 `.claude/`，而安裝出去的 plugin 確實帶著一個。**
+已確認 `~/.claude/plugins/cache/autopilot/autopilot/*/.claude` 存在，所以任何沒有自己設定檔的消費端
+專案會命中 **autopilot 的 dogfood 設定**，tier 4 的出貨模板永遠輪不到。紅燈先跑出來：一個外部 repo
+解析出 `discipline_target: references/`、`source: project-repo`。本 script 因此不用共用 helper，
+自己展開 ladder 並只在 target 就是本 repo 時套用 tier 3。其餘六個 consumer 維持原行為，逐一判定
+是意圖還是意外後再動——登記在 `docs/BACKLOG.md`。
+
+prose-justification: 自 v2.35.2 基線起 prose +1278 行（8%），其中這一版的增量在
+`references/knowledge-routing.md` §3/§3.1 與新的 `project-config-template/knowledge-routing-config.md`。
+兩者都是**契約文字**而非指引散文：§3 的表格現在是 resolver 欄位（`--field`）的規格，設定模板是
+per-project 政策檔的 schema——它們存在的目的正是讓 `handoff`/`learn` 的 skill 正文不再列路徑，
+skill 側因此縮短。北極星要的是 prose↓ engine↑，這裡的取捨是把散在兩個 skill 的字面路徑換成一支
+腳本加一份可解析的規格，engine 同步 +（新 script 與其 15 條斷言的測試）。
+
+### 附帶
+
+`skills/handoff/SKILL.md` step 2.5（v2.36.29 後期加入）本來就掃 session 而非只掃剛寫好的文件；
+這一版讓它掃到的東西有地方可放。計畫書 `docs/plans/2026-09-12-portable-knowledge-routing.md`。
+
 ## v2.36.29 — 兩道 containment gate；以及一個 pin 到得了 admission、到不了 rail
 
 ### containment 是對著正確的物件問問題，而且問法由方法決定

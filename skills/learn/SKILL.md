@@ -32,9 +32,16 @@ Record reusable knowledge so future sessions avoid the same mistakes.
 
    | Answer | Destination | Write contract |
    |---|---|---|
-   | **No** — the identifiers were the content | `~/.claude/projects/<slug>/memory/` | Default sink. Write directly; done. |
-   | **Yes** — a publishable fact or gotcha | `.claude/knowledge/` | **Promotion** (below). Steps 1–5 apply. |
-   | **Yes**, and it binds *other skills* rather than being looked up | `references/` | Normal review path — see the Categories table. |
+   | **No** — the identifiers were the content | the resolved `memory_dir` | Default sink. Write directly; done. |
+   | **Yes** — a publishable fact or gotcha | the resolved `knowledge_dir` | **Promotion** (below) **only when `knowledge_gitignored` is true**; otherwise the ordinary commit path and `-f` is wrong. |
+   | **Yes**, and it binds future sessions rather than being looked up | the resolved `discipline_target` | Normal review path — see the Categories table. |
+
+   Resolve those three for **this** project before writing anything — the defaults below are
+   autopilot's own and a consuming project's differ:
+
+   ```bash
+   <plugin>/scripts/resolve-knowledge-routing.sh --target "$(git rev-parse --show-toplevel)"
+   ```
 
    `.claude/knowledge/` is **deliberately gitignored** (the `.claude/knowledge/` entry in
    `.gitignore` — the `.claude` dir is local state, fail-closed so scratch never leaks into this

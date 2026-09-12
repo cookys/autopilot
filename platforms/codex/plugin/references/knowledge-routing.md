@@ -85,18 +85,26 @@ The table above is not aspirational. It is a description of a corpus that alread
 
 ## 3. The destination table
 
-Four sinks. Each has a **write contract**, and the contract is the part that gets skipped.
+Four sinks, stated as **roles**. The paths below are the shipped defaults; the paths *in this
+project* come from `scripts/resolve-knowledge-routing.sh`, which every routing skill calls instead
+of naming a directory. Each role has a **write contract**, and the contract is the part that gets
+skipped.
 
-| Sink | Content | Write contract |
-|---|---|---|
-| `~/.claude/projects/<slug>/memory/` | Anything carrying a fleet token — the "No" branch of the one question | **Default sink.** Write directly. No promotion, no review. It is machine-local by design and that is correct. |
-| `.claude/knowledge/` | A publishable, generalizable lesson — a fact or gotcha that survives the token deletion | **Promotion.** Write → `git add -f` → show the user the diff → commit **in the same motion**. See §4. |
-| `references/` | Discipline that binds *other skills* — a rule, not a fact | Normal review path: it is a tracked file in a reviewed directory, so the ordinary commit/review flow applies. Typically the [`evidence-discipline.md`](evidence-discipline.md) family. |
-| `docs/BACKLOG.md` | A real problem you are deliberately not fixing now | One row: what breaks, the evidence that it does, and why it is deferred. A deferred problem with no row is a problem that was dropped. |
+| Role (`--field`) | Content | Default | Write contract |
+|---|---|---|---|
+| `memory_dir` | Anything carrying a fleet token — the "No" branch of the one question | `~/.claude/projects/<slug>/memory/` | **Default sink.** Write directly. No promotion, no review. It is machine-local by design and that is correct. |
+| `knowledge_dir` | A publishable, generalizable lesson — a fact or gotcha that survives the token deletion | `.claude/knowledge/` | **Conditional.** The resolver reports `knowledge_gitignored`. `true` → write → `git add -f` → show the user the diff → commit **in the same motion** (§4). `false` → the ordinary commit path, and `-f` is wrong. |
+| `discipline_target` | Discipline that binds future sessions — a rule, not a fact | `CLAUDE.md` | Normal review path. In a repo that ships skills of its own, point this at a reference directory instead: autopilot does, which is why its own resolved value is `references/`. |
+| `backlog_path` | A real problem you are deliberately not fixing now | `auto` → `project-detect.js` | One row: what breaks, the evidence that it does, and why it is deferred. A deferred problem with no row is a problem that was dropped. |
 
-The `references/` row is the one people miss. The test is **who obeys it**: a fact that a future
-session *looks up* is knowledge; a rule that a future session must *follow* is discipline, and
-discipline belongs in `references/` where a skill can cite it by path.
+**`none` is a real answer.** A project that tracks deferred work outside the repo resolves
+`backlog_path: none`, and the correct behaviour is to say so — not to create `docs/BACKLOG.md`
+because the reference doc once named it. Inventing a path is the failure this resolver exists to
+prevent, and it is invisible: the file gets written, nobody reads it.
+
+The `discipline_target` row is the one people miss. The test is **who obeys it**: a fact that a
+future session *looks up* is knowledge; a rule that a future session must *follow* is discipline,
+and discipline belongs where a skill can cite it by path.
 
 ### 3.1 What to sweep — where durable content actually hides
 

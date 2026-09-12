@@ -38,8 +38,17 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    already thought to put in it — a gotcha hit at turn 40 and never written down reaches neither.
    So sweep the **session** first, using the source list in
    [`references/knowledge-routing.md`](../../references/knowledge-routing.md) §3.1, and route each
-   hit per §3 **now**. Then `## 陷阱` cites what you landed (`[[slug]]` / a path) instead of
+   hit per §3 **now**. Then `## 陷阱` cites what you landed (a path, or the memory slug) instead of
    restating it, and step 3.5 becomes a completeness check rather than the sweep itself.
+
+   Resolve the sinks first — **this project's**, which are usually not this plugin's:
+
+   ```bash
+   <plugin>/scripts/resolve-knowledge-routing.sh --target "$(git rev-parse --show-toplevel)"
+   ```
+
+   A role that comes back `none` means the project does not have that sink. Say so and put the
+   content in the handoff; do **not** create the directory the reference doc happens to name.
 
 3. **Generate Document**:
    If `HANDOFF.md` already exists, REPLACE it (a handoff is a snapshot, not a log) and note the replacement in the reply. Write verbatim:
@@ -89,8 +98,8 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    |---|---|
    | A fact or gotcha (typically from `## 陷阱`) | `learn` skill |
    | A reusable multi-step procedure | `distill` skill |
-   | A repo-level rule binding other skills | `references/` — the `evidence-discipline.md` family |
-   | A real problem you are deliberately not fixing now | `docs/BACKLOG.md` — one row, with the evidence |
+   | A rule that binds future sessions rather than being looked up | the resolved `discipline_target` |
+   | A real problem you are deliberately not fixing now | the resolved `backlog_path` — one row, with the evidence |
 
    Call those skills; **do not implement routing logic here.** Handoff's job is to notice that a 段 is
    durable, not to decide where it lands — that decision is the routing doc's, and the write contract

@@ -208,6 +208,16 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S.
 - **Source**: /l5 dogfood, 2026-09-12, discovered by the suite catching the author's own config edit.
 
+### The shipped operator-pin admission is unreachable from the managed rail — it only fires when a caller passes `--resolved-live`
+
+- **Trigger**: `contract checker failed: ["engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)"]` on a seat that HAS a standing pin.
+- **Measured 2026-09-12**, dispatching the containment-gates campaign on an operator-named seat. `engine-capability-state.js pin-seat` recorded the pin, `engine-capability-state.js pins` returned it, and the roster resolver admitted on it (v2.36.29). `dispatch-contract.js` still refused, because its pin branch (KR1, shipped v2.36.27) reads `operator_pin` out of a `--resolved-live` document produced by `resolve-dispatch-topology.js`, and **`dispatch-hetero.sh` never passes `--resolved-live` on the managed path**. So the pin exists, the store returns it, the admission code that consumes it is shipped and tested — and the one rail that matters cannot reach it.
+- **This is the fifth vacuity shape in the same family, and the first in the WIRING rather than the assertion or the input**: KR1's tests hand the contract a live document directly, which is a legitimate unit test and proves the branch works; nothing asserted that any shipped caller produces that document. `grep -n 'resolved-live' scripts/dispatch-hetero.sh` is the check that was never run.
+- **Interim used on 2026-09-12**: `AUTOPILOT_QUALIFICATION_OVERRIDE`, the per-invocation file the refusal message itself names, which `dispatch-hetero.sh:1005` forwards as `--qualification-override`. That works and is sanctioned — and it is exactly the ergonomic defect the operator-pin plan §1 item 2 exists to remove, so using it is a workaround, not the answer.
+- **Candidate**: `dispatch-hetero.sh` runs `resolve-dispatch-topology.js --resolve-live` on the managed path and passes the result as `--resolved-live`, so the pin the operator recorded once is the evidence the contract checker reads. Add the assertion the family demands: a dispatch with a standing pin and NO override file must be admitted, and removing the pin must refuse it.
+- **Effort**: S.
+- **Source**: /l5 dogfood, 2026-09-12 — five grant attempts on one node, each blocked by a different layer of the same seat change.
+
 ### The Mission graph models parallel deliverables that the controller cannot actually run in parallel
 
 - **Trigger**: any graph with two or more independent nodes in one batch, or the next `campaign_intake` rejection reading `canonical Mission state changed between intake and controller persistence`.

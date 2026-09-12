@@ -69,6 +69,10 @@ skip 只落在 `CAMPAIGN_PROJECTION_BOUND -ne 1` 那一支，所以 `else` 支�
 照跑，而且 predicate 是在 contract preflight 重新推導過 digest、驗過封印之後才問，並且呼叫
 canonical 的 JavaScript 述詞而不是在 shell 裡長出第二份對封閉 schema 的解讀。
 
+改完後 `hooks/tests/dispatch-hetero.test.sh` 是 **234 assertions 全綠**（原本斷言舊規則時是 232；
+重寫的那一案加上兩條新斷言：bare dispatch 在活 marker 下不生 runner，以及 marker bridge 的專屬 oracle
+仍然拒絕帶陳舊 digest 的 strict campaign）。順帶修掉 12f 案讀到陳舊 capture 檔而空轉的問題。
+
 ### 這一輪關於 rail 自己的量測（都在 `docs/BACKLOG.md`）
 
 - **graph 模型了 controller 做不到的併行**：`mission grant` 不吭聲地發了三張 claim，三個 dispatch 起來，

@@ -93,12 +93,18 @@ function loadEdge(edgePath) {
     if (parsed.edges.length === 0) {
       throw new Error(`REFUSED: unreadable receipt ${edgePath}: edges is empty`);
     }
-    return parsed.edges[0];
+    // EVERY edge, not edges[0]. src/merge/cli.js emits one edge per manifest
+    // edge (cli.js:360 pins receipt edges to manifest edges) and the schema caps
+    // neither end, so a real merge receipt is routinely multi-edge. Checking
+    // only the first would exit 0 with the rest unverified — a silent partial
+    // check carrying a gate's authority, which is the exact defect this script
+    // exists to prevent.
+    return parsed.edges;
   }
   if (!parsed.integration_method) {
     throw new Error(`REFUSED: unreadable receipt ${edgePath}: missing integration_method`);
   }
-  return parsed;
+  return [parsed];
 }
 
 function ancestorCommand(repo, sha, target) {
@@ -237,8 +243,16 @@ function main(argv = process.argv.slice(2), io = {}) {
       return 0;
     }
     const repo = fs.realpathSync(path.resolve(options.repo));
-    const edge = loadEdge(options.edge);
-    return checkContainment(repo, options.target, edge, stderr, stdout);
+    const edges = loadEdge(options.edge);
+    // Every edge is reported, and the worst outcome wins — the same rule
+    // check-inputs-landed.js applies to inputs: an operator must not have to
+    // re-run once per failing entry to discover them all.
+    let worst = 0;
+    for (const edge of edges) {
+      const code = checkContainment(repo, options.target, edge, stderr, stdout);
+      if (code > worst) worst = code;
+    }
+    return worst;
   } catch (error) {
     stderr.write(`ERROR: ${error.message}\n`);
     usage(stderr);

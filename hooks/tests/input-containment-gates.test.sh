@@ -257,4 +257,43 @@ assert_neq "$APPLY_ON_MERGE" "0" \
 assert_contains "$(cat "$TEST_TMP/apply-on-merge.err")" "not the contained object" \
   "method-selected miss names that source is the wrong object"
 
+# --- multi-edge receipt: EVERY edge is checked, not edges[0] ---
+# src/merge/cli.js pins receipt edges to manifest edges (cli.js:360) and the
+# schema caps neither end, so a real merge receipt is routinely multi-edge.
+# Checking only the first would exit 0 with the rest unverified — a silent
+# partial check with a gate's authority. This case fails against an
+# edges[0]-only implementation, which is what shipped before the QC panel's
+# third seat raised it (and excluded it on the mistaken premise that only the
+# single-edge record-integration.js produces receipts).
+# A commit that is genuinely NOT in HEAD, so the second edge really fails.
+git -C "$MERGE_REPO" checkout -q -b stranded "$MERGE_BASE_SHA"
+echo stranded > "$MERGE_REPO/stranded.txt"
+git -C "$MERGE_REPO" add stranded.txt
+git -C "$MERGE_REPO" commit -qm "stranded lane"
+STRANDED_SHA="$(git -C "$MERGE_REPO" rev-parse HEAD)"
+git -C "$MERGE_REPO" checkout -q -
+node - "$TEST_TMP/merge-receipt.json" "$TEST_TMP/multi-edge.json" "$STRANDED_SHA" <<'NODE'
+const fs = require('fs');
+const [, , src, out, strandedSha] = process.argv;
+const receipt = JSON.parse(fs.readFileSync(src, 'utf8'));
+const good = receipt.edges[0];
+// Second edge, integration_method "merge", whose source_sha is a commit on a
+// branch that was never merged — so is-ancestor(source, HEAD) genuinely fails.
+const bad = { ...good, sequence: 2, unit_id: 'second-lane', source_sha: strandedSha };
+receipt.edges = [good, bad];
+fs.writeFileSync(out, `${JSON.stringify(receipt, null, 2)}\n`);
+NODE
+set +e
+node "$REPO_ROOT/scripts/check-containment.js" \
+  --edge "$TEST_TMP/multi-edge.json" --target HEAD --repo "$MERGE_REPO" \
+  >"$TEST_TMP/multi-edge.out" 2>"$TEST_TMP/multi-edge.err"
+MULTI_EXIT=$?
+set -e
+assert_neq "$MULTI_EXIT" "0" \
+  "p3: a multi-edge receipt whose SECOND edge fails exits non-zero (edges[0]-only would pass)"
+assert_contains "$(cat "$TEST_TMP/multi-edge.out")$(cat "$TEST_TMP/multi-edge.err")" "second-lane" \
+  "p3: the failing later edge is named, not silently skipped"
+assert_contains "$(cat "$TEST_TMP/multi-edge.out")$(cat "$TEST_TMP/multi-edge.err")" "merge-unit" \
+  "p3: the passing first edge is still reported in the same run"
+
 finalize_test

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-14-backlog-entry-schema.md",
+      "rubric_path": "plans/2026-09-14-backlog-entry-schema.rubric.md",
+      "plan_sha256": "21a6fd6ae00e176b9bbf901f2d9675ddbbc1d475960bfc7f926af932136c87be",
+      "rubric_sha256": "9037f7b61cfc3db5bee7c1bf90089f90b3957eb1ac38fa9634ca0c1360474d41"
+    }
+  ]
+}

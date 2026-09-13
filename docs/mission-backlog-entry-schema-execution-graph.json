@@ -1,0 +1,129 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "nodes": [
+  {
+   "acceptance_ids": [
+    "p1-schema-stated-once",
+    "p2-gate-warn-mode-self-test",
+    "p3-di-template-resolver-writers-link"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     ".claude",
+     "CLAUDE.md",
+     "docs",
+     "hooks",
+     "platforms/codex/plugin",
+     "project-config-template",
+     "references",
+     "scripts",
+     "skills"
+    ],
+    "authorized_creates": [
+     ".claude/backlog-config.md",
+     "hooks/tests/check-backlog-entries.test.sh",
+     "platforms/codex/plugin/project-config-template/backlog-config.md",
+     "platforms/codex/plugin/references/backlog-entry.md",
+     "platforms/codex/plugin/scripts/check-backlog-entries.js",
+     "project-config-template/backlog-config.md",
+     "references/backlog-entry.md",
+     "scripts/check-backlog-entries.js"
+    ],
+    "baseline_churn": 6000,
+    "max_changed_files": 64,
+    "max_extra_churn": 3000,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "output_paths": [
+     ".claude/backlog-config.md",
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "hooks/tests/check-backlog-entries.test.sh",
+     "hooks/tests/resolve-project-paths.test.sh",
+     "platforms/codex/plugin/project-config-template/backlog-config.md",
+     "platforms/codex/plugin/references/backlog-entry.md",
+     "platforms/codex/plugin/scripts/check-backlog-entries.js",
+     "platforms/codex/plugin/scripts/resolve-project-paths.sh",
+     "platforms/codex/plugin/scripts/scaffold-config.js",
+     "platforms/codex/plugin/skills/dev-flow/SKILL.md",
+     "platforms/codex/plugin/skills/finish-flow/SKILL.md",
+     "platforms/codex/plugin/skills/handoff/SKILL.md",
+     "platforms/codex/plugin/skills/onboard/SKILL.md",
+     "platforms/codex/plugin/skills/project-lifecycle/references/templates.md",
+     "platforms/codex/plugin/skills/quality-pipeline/SKILL.md",
+     "platforms/codex/plugin/skills/quality-pipeline/references/code-review.md",
+     "project-config-template/backlog-config.md",
+     "references/backlog-entry.md",
+     "scripts/check-backlog-entries.js",
+     "scripts/resolve-project-paths.sh",
+     "scripts/scaffold-config.js",
+     "skills/dev-flow/SKILL.md",
+     "skills/finish-flow/SKILL.md",
+     "skills/handoff/SKILL.md",
+     "skills/onboard/SKILL.md",
+     "skills/project-lifecycle/references/templates.md",
+     "skills/quality-pipeline/SKILL.md",
+     "skills/quality-pipeline/references/code-review.md"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "scripts/resolve-project-paths.sh",
+     "skills/quality-pipeline/references/code-review.md",
+     "docs/BACKLOG.md"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-14-backlog-entry-schema.md",
+     "section": "4. Phases"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 12,
+   "id": "backlog-entry-schema-p123",
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 60,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 6000000,
+    "tool_calls": 200,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-21a6fd6ae00e176b9bbf901f2d9675ddbbc1d475960bfc7f926af932136c87be"
+   ],
+   "source_rubric_ids": [
+    "R107931574683341812832275924576571884379616097038958588895226299261187266427138",
+    "R2104580456713785565307248626460136758769413687289191683707641553491782342680",
+    "R23536905083656755561782122469597711942378470452730513195655856997122566722968",
+    "R26333805754432995555193256991646429899051229626289443636474175983757065043905",
+    "R29590874602106708465810471114062344183690230342437767731778695292354483463056",
+    "R40060266466938269955618688016057167400632637711997871469261962817156488957987",
+    "R41538815543071885715625589158330263738008199134311988268359416336527093113889",
+    "R53959336388880900571437712086026879224428852761039870624358425246934375979339",
+    "R57064221032618834082061748247082551231188860588344871322965799885090575561343",
+    "R57197011081118253077172619445835754348887335236623780749861101912859055067398",
+    "R58715484097438720091702272300518956943235000967798703330708930318800308368333",
+    "R6081261536861550071842405323621530832269435306407066746247332722235188081747",
+    "R6910479530630663452485839088928424598879122283196810078211633389360660187212",
+    "R72780516700644393497253659120829320847646009311662108409892610330568587618845",
+    "R86507950096726745678852087878696414735995609242780769193175856172231645575563",
+    "R88012143317921037771037000787049694063334295704313630140716942900737807528681",
+    "R9356954305717926034287105701142057481210646516501943710505701494560678524617",
+    "R97425400977444961205055489846853315258227756014824022221642048884795583960783"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/check-backlog-entries.test.sh",
+    "node scripts/check-backlog-entries.js --self-test",
+    "bash hooks/tests/resolve-project-paths.test.sh",
+    "node scripts/check-js-syntax.js",
+    "node scripts/check-claude-md-inventory.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-reference-sizes.js"
+   ]
+  }
+ ],
+ "schema_version": 1
+}

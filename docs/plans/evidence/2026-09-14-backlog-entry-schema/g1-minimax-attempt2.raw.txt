@@ -1,0 +1,223 @@
+```json
+{
+  "verdict": "STOP",
+  "finddings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "references/backlog-entry.md (Pointer rule) and scripts/check-backlog-entries.js",
+      "claim": "Pointer rule: path under pointer_roots that EXISTS, or id matching id_pattern; dangling pointer is a violation, not a warning.",
+      "evidence": "Phase 1 says 'Pointer: a path under one of pointer_roots that EXISTS, or an id matching id_pattern; none allowed only when the whole entry is ≤ 600 B'. Phase 2's check codes include pointer_missing and pointer_unresolved (path absent or outside pointer_roots). The plan, however, defines entry cap as 900 B ('Entry cap: 900 B total') while R3 of the rubric fixes the threshold at 'above the 600 B entry cap'. The two numbers disagree, and the rule that Pointer is required 'above the 600 B entry cap' is not the rule the plan states.",
+      "evidence_reference": "Phase 1 'Pointer | 200 | a path under one of pointer_roots that EXISTS, or an id matching id_pattern; none allowed only when the whole entry is ≤ 600 B' and 'Entry cap: 900 B total'; rubric R3 'Pointer is required above the 600 B entry cap'.",
+      "repair": "Rewrite the schema so the threshold is one number used consistently: either declare the entry cap 600 B (matching R3 and the 600 B pointer-required rule) or raise the pointer-required threshold to 900 B and re-justify against R3. Update Phase 2's pointer_required check, the Open Question 1, and every phase text that cites 600 B vs 900 B.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R11",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 4 (migration + autopilot dogfood) and CHANGELOG.md",
+      "claim": "Autopilot's own backlog (233 KB) is migrated in this plan and the gate flips to block on it in the same release; the residual allowlist count is recorded in the CHANGELOG.",
+      "evidence": "Phase 4 states: 'migrate docs/BACKLOG.md (233 KB, ~150 entries), commit the sidecars, run the gate in block mode with .claude/backlog-debt.json holding whatever the migration could not fix mechanically ... and record the debt count so the next release can only lower it.' The dogfood step is described but the migration is treated as part of the plan's execution, not as a phase that produces the recorded count. The plan does not commit to a concrete release-numbered change in CHANGELOG.md that captures (a) the pre-migration size, (b) the post-migration size, and (c) the residual allowlist count, in the same release as the block-mode flip. The rubric requires the count to be recorded in the CHANGELOG; the plan leaves this as 'the next release can only lower it'.",
+      "evidence_reference": "Phase 4 'Migration + autopilot dogfood' acceptance: 'post-migration docs/BACKLOG.md ≤ 40 KB; the gate blocks on a deliberately added fat row; allowlist count recorded; next-pick.js parse still extracts every active row'. Missing: an explicit CHANGELOG entry naming the release in which the migration, the block-mode flip, and the recorded residual allowlist count co-occur.",
+      "repair": "Add an explicit Phase 4 sub-task: 'Update CHANGELOG.md in the same release as the block-mode flip with the following fields: release tag; pre-migration docs/BACKLOG.md byte count; post-migration byte count; residual entries in .claude/backlog-debt.json; pointer-mode=block.' Make this a precondition of the Phase 4 acceptance gate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 4 migrate-backlog-entries.js and the risk mitigation",
+      "claim": "RISK — sessions route around the gate by pasting the same prose into a sidecar per sentence. Mitigation named: one sidecar per entry from migration; plan/project preferred as pointer target.",
+      "evidence": "The risk paragraph in §6 says the mitigation is 'migrate creates one per entry, and the schema names the plan/project as the preferred target.' Phase 4 implements 'docs/backlog/<slug>.md' as the default sidecar destination and only allows plan/project when 'the entry already links one and the plan is the natural home — a --pointer-map file lets the operator pre-assign.' The migration does not enforce one-sidecar-per-entry for future writes — the gate accepts any pointer under pointer_roots, including arbitrarily many sentence-sized sidecars — and the schema text does not name plan/project as the preferred target (it lists targets 'in order of preference' in prose only, with no gate check that fails a new docs/backlog/<slug>.md sidecar when a plan exists). The mitigation named in the rubric is therefore not present in the plan.",
+      "evidence_reference": "Phase 1 'Pointer targets in order of preference: an existing plan (docs/plans/…), an existing project (docs/projects/…), a ticket id, an evidence sidecar docs/backlog/<slug>.md created for this row.' Phase 4 'move the rest verbatim into docs/backlog/<slug>.md with a header ... set Pointer to it (or to an existing plan when the entry already links one and the plan is the natural home — a --pointer-map file lets the operator pre-assign).' Risk §6 'What must not happen is a sidecar per sentence: migrate creates one per entry, and the schema names the plan/project as the preferred target.'",
+      "repair": "Make the gate enforce preference: when a row points to docs/backlog/<slug>.md and a plan or project exists whose title/slug matches the entry, emit pointer_preference_violated (warn in Phase 3, block in Phase 4 unless --pointer-map overrides). Add a per-entry sidecar count assertion in the migration manifest: assert that no more than one sidecar was created per source entry. State in the schema that plan/project is the preferred pointer target, not merely 'in order of preference'.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "references/backlog-entry.md field table and Phase 2 check codes",
+      "claim": "Every field has a byte cap (UTF-8 bytes, measured by the gate) or a closed value set; the plan names the numbers, not 'reasonable'.",
+      "evidence": "Phase 1's field table gives caps for Title (120), Trigger (240), Source (160), Pointer (200), Context (240) but lists Status with cap '—' and Effort with cap '—' justified only as 'dev-flow sizes; M kept for next-pick.js compatibility'. The closed value sets are stated in prose ('open · fired · shipped · dropped' for Status; 'S · Fix · M · L · H' for Effort) but they are not enumerated in the field table alongside the byte caps, so a reader of the schema cannot tell from one place which values are permitted — they have to cross-reference prose. R2 requires either a cap or a closed value set per field; the plan satisfies this in substance but does not surface both at once in the field table.",
+      "evidence_reference": "Phase 1 'Fields (every style carries the same six; order fixed in heading style):' table with 'Status | —' and 'Effort | —'; prose 'Status: open · fired <YYYY-MM-DD> · shipped <version or sha> · dropped <YYYY-MM-DD>' and 'Effort: S · Fix · M · L · H (dev-flow sizes; M kept for next-pick.js compatibility)'.",
+      "repair": "In references/backlog-entry.md, replace the '—' in the Status and Effort rows with the closed value sets, e.g. 'Status | — | one of: open, fired <YYYY-MM-DD>, shipped <version-or-sha>, dropped <YYYY-MM-DD>' and 'Effort | — | one of: S, Fix, M, L, H'. Keep the rest of the table structure unchanged so the single-statement rule of R1 still holds.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/check-backlog-entries.js parser and Phase 2 test plan",
+      "claim": "The gate parses all three styles (heading / table / checklist) and treats an unparseable block as a violation, never a skip.",
+      "evidence": "Phase 2 lists 'unparseable_entry' as a violation code and states 'a block the parser cannot classify is a violation, never skipped — an unparseable row is how evidence hides.' The test plan in Phase 2 adds an entry 'with a fenced code block is extra_content' but does not include a test for an unparseable block in each of the three styles. The acceptance criterion is 'suite green; node scripts/check-backlog-entries.js --self-test exits 0; run on docs/BACKLOG.md reports (not yet blocks) the current debt count' — there is no explicit test that an unparseable block in heading/table/checklist style is rejected with unparseable_entry. Without that test, the rubric's red-first requirement (R7) cannot be met, and the parser could silently skip blocks the way Phase 2 says it must not.",
+      "evidence_reference": "Phase 2 'unparseable_entry (a block the parser cannot classify is a violation, never skipped — an unparseable row is how evidence hides)' and the test list 'three style fixtures; every code red-first; the ratchet ... pointer resolution relative to the repo root, not cwd; UTF-8 caps ... an entry with a fenced code block is extra_content'.",
+      "repair": "Add to the Phase 2 test plan an explicit case per style (heading, table, checklist) where a block is constructed to be unparseable (e.g. a heading without any - **Field**: value bullets; a table row missing the required columns; a checklist line without an indented - Field: value pair). Assert that each fires unparseable_entry and that --self-test exits non-zero when those fixtures are mutated to look parseable. Make this part of the Phase 2 acceptance gate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "project-config-template/backlog-config.md and resolve-project-paths.sh backlog_config",
+      "claim": "DI: backlog-config.md template + resolve-project-paths.sh backlog_config + onboard scaffold; caps may only be lowered by a consumer config.",
+      "evidence": "Phase 3 says 'per-field cap overrides that may only be LOWER than the schema's (the gate refuses a higher one with config_raises_cap)'. The closed value set for the per-field override is named ('LOWER than the schema's') and a violation code (config_raises_cap) is named, but the gate's check list in Phase 2 does not include config_raises_cap; it lists missing_field, cap_exceeded, bad_status, bad_effort, pointer_missing, pointer_unresolved, pointer_required, duplicate_title, duplicate_id, extra_content, done_not_moved, unparseable_entry. Without config_raises_cap in the check list, the gate cannot refuse a higher cap, and the rubric's 'caps may only be lowered' rule has no mechanism behind it.",
+      "evidence_reference": "Phase 2 'Checks, each a stable code: missing_field, cap_exceeded (field, bytes, cap), bad_status, bad_effort, pointer_missing, pointer_unresolved (path absent or outside pointer_roots), pointer_required (entry > 600 B with none), duplicate_title, duplicate_id, extra_content, done_not_moved, unparseable_entry'. Phase 3 'per-field cap overrides that may only be LOWER than the schema's (the gate refuses a higher one with config_raises_cap)'.",
+      "repair": "Add config_raises_cap to the Phase 2 stable check codes list, with the same JSON output shape (code, field, detail). Specify that the check fires when any per-field cap in backlog-config.md exceeds the schema's cap, and that it is treated as a violation in both warn and block modes (because it is a configuration error, not a content one).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "skills/dev-flow, skills/finish-flow, skills/quality-pipeline, skills/handoff, skills/code-review, skills/project-lifecycle and Phase 3 acceptance",
+      "claim": "Every writer skill line (dev-flow x4, finish-flow x3, quality-pipeline, handoff, code-review, project-lifecycle) is enumerated with its location and replaced by one linking sentence; grep 'context + trigger' returns zero after Phase 3.",
+      "evidence": "Phase 3 says 'Writer lines (dev-flow x4, finish-flow x3, quality-pipeline, handoff, code-review, project-lifecycle templates) each become one sentence that links references/backlog-entry.md; finish-flow S.2 and quality-pipeline call the gate on the resolved backlog with the resolved config.' The file-structure map enumerates dev-flow :281, :476, :555, :584 (4 lines) and finish-flow S.2 / L-5.6 / H-9.6 (3 lines), but does not enumerate the exact line numbers for the quality-pipeline, handoff, code-review, or project-lifecycle writer lines that need replacement. The acceptance is 'grep -rn context + trigger skills/ returns zero' — this only proves removal of the trigger prompt, not that every writer cites the schema. Code-review line 321-332 is named but only the 'no trigger → rejected' sentence is preserved; the rest of that block's writer guidance is not enumerated.",
+      "evidence_reference": "File-structure map rows for skills/dev-flow/SKILL.md (:281, :476, :555, :584), skills/finish-flow/SKILL.md S.2 / L-5.6 / H-9.6, skills/quality-pipeline/SKILL.md, skills/handoff/SKILL.md step 3.5 table, skills/project-lifecycle/references/templates.md. Code-review row says 'Replace the local format block with a link to the schema; keep the no trigger → rejected sentence as a quote' but does not enumerate which bullet lines inside that range are being replaced.",
+      "repair": "Add an enumeration table to Phase 3 that names every writer line being changed: file path, line range or anchor, current text fragment, replacement (one sentence linking references/backlog-entry.md). Cover dev-flow x4 (already enumerated), finish-flow x3 (already enumerated), quality-pipeline (pre-merge checklist line and any 'context + trigger' reference), handoff step 3.5 table row, code-review :321-332 (every line in the block, not just the kept sentence), project-lifecycle templates.md backlog header. Make Phase 3 acceptance depend on each row being modified, not on the grep alone.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R12",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase ordering and §5 Test / validation",
+      "claim": "Mechanism vs guidance is respected: gate + migration + resolver are mechanism; the schema/writer text is guidance and ships with the §5 eval evidence, not before.",
+      "evidence": "Phase 1 is labeled 'S, guidance; ships with §5 eval evidence' and Phase 3 is labeled 'S, mechanism for the resolver/scaffold; guidance for the skill lines'. Phase 3's acceptance includes 'every writer links the reference' — meaning the writer guidance (skill text) is being shipped in Phase 3 itself, not after §5 eval evidence. The §5 guidance eval description says 'Ship Phase 1/3 only with ON beating OFF on both' but Phase 3's writer-link change is not gated on the eval result; the gate (mechanism) is described as shipping in warn mode in Phase 2 without guidance, then Phase 3 ships writer changes whose success criterion is the grep test, not the §5 eval. The rubric requires the guidance to ship with §5 eval evidence, not before; the plan's ordering merges Phase 3's writer changes before §5 evidence is collected.",
+      "evidence_reference": "Phase 1 'S, guidance; ships with §5 eval evidence'. Phase 3 'S, mechanism for the resolver/scaffold; guidance for the skill lines' and acceptance 'grep -rn context + trigger skills/ returns zero; every writer links the reference'. §5 'Ship Phase 1/3 only with ON beating OFF on both.' Dependencies '1 → 2 → 3 → 4 → 5 (2 can be built in parallel with 1's eval; 4 needs 2 and 3).'",
+      "repair": "Restructure Phase 3 into two sub-phases: Phase 3a (mechanism only — backlog-config.md template, resolve-project-paths.sh backlog_config, scaffold-config.js, onboard scaffold) ships in parallel with §5 eval; Phase 3b (writer lines: dev-flow x4, finish-flow x3, quality-pipeline, handoff, code-review, project-lifecycle) ships only after §5 eval shows ON > OFF. Make the grep-zero acceptance contingent on the eval result.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 4 and §6 Risk 'What would guarantee failure'",
+      "claim": "RISK — the gate ships in warn and never flips. Mitigation named: Phase 4 flips autopilot in the same release; a consumer's choice is recorded in its config.",
+      "evidence": "§6 lists 'What would guarantee failure: shipping the gate in warn forever. Phase 4 flips autopilot to block in the same release; a consumer that never flips is their choice, recorded in their config.' Phase 4 describes 'run the gate in block mode with .claude/backlog-debt.json holding whatever the migration could not fix mechanically ... wire the gate into finish-flow/quality-pipeline' but does not state the release identifier (tag, version, or date) in which the flip occurs, nor does it require an explicit CI/pre-merge step that proves finish-flow/quality-pipeline invokes the gate in block mode. The 'same release' claim is rhetorical; there is no release-binding artifact in the plan. The consumer-side recording is named (backlog-config.md has mode: warn|block) but the plan does not require consumers to record the date of that decision or to revisit it.",
+      "evidence_reference": "§6 'Phase 4 flips autopilot to block in the same release; a consumer that never flips is their choice, recorded in their config.' Phase 4 acceptance 'post-migration docs/BACKLOG.md ≤ 40 KB; the gate blocks on a deliberately added fat row; allowlist count recorded; next-pick.js parse still extracts every active row'. backlog-config.md fields in file-structure map: 'style, pointer_roots, id_pattern, mode: warn|block, allowlist_path, done_retention_days'.",
+      "repair": "Name the release tag in which the autopilot block-mode flip occurs (e.g. 'the next release after Phase 4 acceptance'). Add a CI/pre-merge check that runs scripts/check-backlog-entries.js in block mode against docs/BACKLOG.md and fails the merge on any new violation not in .claude/backlog-debt.json. Add a decided_at field to backlog-config.md so consumer flip dates are recorded.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/migrate-backlog-entries.js and Phase 4 manifest",
+      "claim": "Migration preserves bytes: moved text's sha256 is verified in the sidecar before preserved: true; --dry-run is the default.",
+      "evidence": "Phase 4 says '--dry-run default; emits the rewritten backlog + sidecars + a manifest with byte counts and sha256 of moved text' and 'sha256(moved text) must appear in the sidecar; the script verifies before reporting preserved: true'. The plan does not specify the order of operations: when does the sha256 land in the sidecar relative to the verification? If the sidecar is written and then verified, that is forward verification (good); if the sha256 is computed first and embedded in the sidecar, then read back and compared, that is a round-trip (better). The plan does not say. Also, the manifest is described as 'byte counts and sha256 of moved text' — there is no field that says whether the sidecar's stored sha256 matches the source's sha256, so an operator reading the manifest cannot tell which entries are preserved vs which are presumed preserved.",
+      "evidence_reference": "Phase 4 'Manifest: per entry, bytes before/after, sha256 of the moved text, target path. --apply writes; default prints the manifest and the would-be diff.' and 'sha256(moved text) must appear in the sidecar; the script verifies before reporting preserved: true (same posture as repo-residue-sweep.js preserve).'",
+      "repair": "Specify the round-trip: compute sha256(source text); write sidecar containing the text plus a '<!-- sha256: <hex> -->' marker; read sidecar back; compute sha256 of the embedded text; assert equality before emitting preserved: true. Add a manifest field 'sha256_verified: true|false' per entry, defaulting to false until the round-trip succeeds.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "references/backlog-entry.md Pointer rule and scripts/check-backlog-entries.js pointer_required check",
+      "claim": "Evidence (numbers, logs, stacks, narratives) is defined as belonging at the pointer; the row cap makes this mechanical, not advisory.",
+      "evidence": "Phase 1 defines evidence as 'any of measurement numbers, log excerpts, call stacks, decision narratives, or more than one sentence of context' and says it 'lives at the pointer.' The mechanism for this is the 600 B / 900 B entry cap plus the pointer_required check. Because the row cap (900 B) is larger than the pointer-required threshold (600 B), there is a 300 B window in which an entry may be over the pointer-required threshold yet still under the cap and thus admissible without a pointer. In that window, the schema says evidence must live at the pointer, but the gate does not enforce it because pointer_required only fires above 600 B for 'none' — an entry with a non-resolving pointer in the 300 B window is allowed by cap_exceeded/pointer_unresolved but does not trigger pointer_required. The 'mechanical, not advisory' claim requires that evidence cannot fit in a row without forcing a pointer; the current numbers leave a gap.",
+      "evidence_reference": "Phase 1 'Entry cap: 900 B total' and 'Pointer: ... none allowed only when the whole entry is ≤ 600 B'. Phase 2 pointer_required 'entry > 600 B with none'.",
+      "repair": "Align the entry cap with the pointer-required threshold so that any entry whose evidence does not fit must have a pointer: either lower the entry cap to 600 B, or raise the pointer-required rule to apply whenever the entry contains any of (measurement number, log excerpt, call stack, decision narrative, more than one sentence of Context). Specify the rule in one place and apply it mechanically in the gate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/check-backlog-entries.js output JSON shape",
+      "claim": "The schema is stated exactly ONCE (references/backlog-entry.md); every other file links it and quotes only field names. A second field list anywhere fails.",
+      "evidence": "Phase 2 specifies the gate's output JSON: 'violations:[{code, title, field, detail, allowed}]'. The 'field' element implies the gate carries field-name knowledge outside the schema file (the parser must know which substring is the Title vs Trigger vs Source vs Pointer to populate 'field'). The field-name list is therefore restated inside scripts/check-backlog-entries.js — that is a second statement of the field list. R1 requires that the schema be stated exactly once and that every other file link it and quote only field names; the plan's gate implementation will re-enumerate the field names rather than read them from references/backlog-entry.md.",
+      "evidence_reference": "Phase 2 'Output JSON: {mode, backlog, style, entries, bytes, violations:[{code, title, field, detail, allowed}], new_count, allowed_count, exit}'. Phase 1 'Fields (every style carries the same six; order fixed in heading style)'.",
+      "repair": "Make scripts/check-backlog-entries.js load the field definitions from references/backlog-entry.md (e.g. parse the field table or a small YAML/JSON block beside it that mirrors the table). The gate should not hardcode field names; it should derive them. The 'field' element of each violation is populated from that single source. If a second file restates the field names, R1 fails — so the gate must not be that second file.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/check-backlog-entries.js --update-allowlist and Phase 2 acceptance",
+      "claim": "The allowlist ratchets down only: a run that would add an entry fails; --update-allowlist can only remove.",
+      "evidence": "Phase 2 says 'A run that would ADD an entry to it fails; --update-allowlist may only remove entries whose violations are gone.' and '--update-allowlist rewrites the file keeping only (fingerprint, code) pairs still violating — it can never add.' The test plan adds 'the ratchet (a run that would add to the allowlist fails; --update-allowlist removes a fixed entry and refuses to add)' but does not specify what happens when --update-allowlist is invoked while no violations exist (does it exit 0 with no-op, or does it exit non-zero as a safety?). It also does not address what happens when the existing allowlist contains a (fingerprint, code) pair whose underlying row was deleted entirely — does the orphan pair survive (which would be a kind of accumulation) or get removed? The plan leaves the ratchet semantics under-specified at the edge cases.",
+      "evidence_reference": "Phase 2 'Allowlist: ... --update-allowlist rewrites the file keeping only (fingerprint, code) pairs still violating — it can never add.' and test plan 'the ratchet (a run that would add to the allowlist fails; --update-allowlist removes a fixed entry and refuses to add)'.",
+      "repair": "Specify: (a) --update-allowlist with zero violations exits 0 and writes an empty allowlist; (b) --update-allowlist with an allowlist containing pairs whose fingerprints no longer appear in the backlog removes those pairs; (c) the ratchet is enforced by computing the symmetric difference (existing minus current-violating) and refusing to write if any addition is required. Add these as test cases.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/check-backlog-entries.test.sh and --self-test semantics",
+      "claim": "--self-test exists and can fail: every violation code fires on its embedded fixture and nowhere else.",
+      "evidence": "Phase 2 says '--self-test: runs the parser and every check against embedded fixtures (one per style, one violation per code) and exits 0 only when each code fires exactly where expected — the test that the gate can fail.' This is the right shape, but the plan does not say what happens when a fixture is mutated (e.g. a field cap is raised past the violation). Does --self-test detect the mutation and exit non-zero? The acceptance is 'suite green; node scripts/check-backlog-entries.js --self-test exits 0' — but the green-on-default-fixtures case is the easy case. The 'fires on its embedded fixture and nowhere else' clause requires that each code fires only for its designated fixture and not for any other fixture; the plan does not state this as a test assertion. Also, the parser's three styles mean each code may need three fixtures (one per style) — Phase 2 says 'one per style, one violation per code' which is ambiguous: does it mean one fixture per (style, code) pair, or one fixture per code that covers all three styles?",
+      "evidence_reference": "Phase 2 '--self-test: runs the parser and every check against embedded fixtures (one per style, one violation per code) and exits 0 only when each code fires exactly where expected — the test that the gate can fail.' Phase 2 acceptance 'suite green; node scripts/check-backlog-entries.js --self-test exits 0'.",
+      "repair": "Clarify that the fixture set is one fixture per (style, code) pair — i.e. 12 codes x 3 styles = 36 fixtures, plus the negative cases where a fixture from one code is fed to a different code's check and must not fire. Add a --self-test assertion that the set of codes fired equals the set of codes expected per fixture. Add a test that mutating a fixture (e.g. shortening the violating field below cap) causes --self-test to exit non-zero.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R13",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 4 acceptance and references for next-pick.js",
+      "claim": "next-pick.js parse keeps working on migrated entries (Effort/Source field names unchanged).",
+      "evidence": "Phase 4 says 'next-pick.js parse still extracts every active row (its parser reads Effort/Source — unchanged names).' The plan asserts field names are unchanged but does not include a test that runs next-pick.js against the migrated docs/BACKLOG.md and confirms the output is identical (or substantively identical) to the pre-migration output for active rows. The acceptance criterion is silent on this verification; without it, R13 cannot be confirmed at plan-execution time.",
+      "evidence_reference": "Phase 4 acceptance 'post-migration docs/BACKLOG.md ≤ 40 KB; the gate blocks on a deliberately added fat row; allowlist count recorded; next-pick.js parse still extracts every active row (its parser reads Effort/Source — unchanged names)'.",
+      "repair": "Add to Phase 4 acceptance: capture the pre-migration output of next-pick.js against docs/BACKLOG.md (a snapshot of selected rows), run migration, run next-pick.js against the migrated file, and assert that the set of selected active rows is identical (or that any difference is enumerated and justified). Include the snapshot in the migration manifest.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R14",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 5 and KR5 / consumer compatibility",
+      "claim": "Compatibility with a consumer register now rule is shown: registering = one row with a pointer; no rule in the plan requires a consumer to delay registration.",
+      "evidence": "Phase 5 says 'Their register now rule is rewritten by them as register = one row with a pointer — the gate makes the pointer non-optional above 600 B, so the rule and the schema cannot conflict.' The plan claims no rule in the plan requires a consumer to delay registration, but the gate's pointer_required check fires above 600 B with 'none' — meaning a consumer that wants to register a one-liner under 600 B is fine, but a consumer that wants to register anything above 600 B must create a pointer target before the row can be admitted. That is a delay mechanism (the consumer must create the pointer file first). The plan does not show that this delay is acceptable to a 'register now' workflow — it merely asserts it. The rubric requires the compatibility to be shown, not asserted.",
+      "evidence_reference": "Phase 5 'revival.3d's check-docs-hygiene keeps its 200 KiB total as a backstop; the per-entry gate is the primary. Their register now rule is rewritten by them as register = one row with a pointer — the gate makes the pointer non-optional above 600 B, so the rule and the schema cannot conflict.' KR5 'registering is one row with a pointer; the gate proves the pointer exists, so a row is never the only copy of anything.'",
+      "repair": "Show, not assert: include in Phase 5 a worked example of a 'register now' scenario where the consumer creates a one-line pointer file (e.g. docs/projects/<id>.md with a single header) and a row pointing to it, both admitted by the gate. Demonstrate that the row can be written before the project body is filled in, as long as the pointer exists and resolves. If the gate cannot admit a row pointing to a stub file, state that as a known incompatibility and let the consumer decide.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R17",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/check-backlog-entries.js, scripts/migrate-backlog-entries.js and Phase 2 test plan",
+      "claim": "Node >= 20.10 built-ins only; no markdown library; no trust machinery (ADR-0001).",
+      "evidence": "Phase 2.5 says 'Node >= 20.10, built-ins only, for every new script (it may run in a consumer with no jq/python).' The constraint is stated but the plan does not list the built-ins to be used (node:fs, node:path, node:crypto for sha256, node:readline for line-by-line parsing). The Phase 2 acceptance does not include a check that scripts/check-backlog-entries.js and scripts/migrate-backlog-entries.js do not require any module from node_modules (or any --experimental flag). ADR-0001 is referenced by name in §2.5 ('No trust machinery (ADR-0001)') but the ADR is not cited by file path, and there is no test that the gate re-derives every check from the file and the filesystem (the rubric's wording).",
+      "evidence_reference": "Phase 2.5 'Node >= 20.10, built-ins only, for every new script' and 'No trust machinery (ADR-0001): the gate re-derives every check from the file and the filesystem; it stores no attestations.' Phase 2 acceptance and tests do not include a 'no external dependencies' check.",
+      "repair": "Add to Phase 2 acceptance: (a) a grep that scripts/check-backlog-entries.js and scripts/migrate-backlog-entries.js contain only require() calls for node: built-ins or relative paths; (b) a test that the scripts run successfully with NODE_PATH=/dev/null or with --no-warnings to confirm no implicit fetch from node_modules; (c) a citation of ADR-0001 by file path so the reader can verify the 'no trust machinery' rule. Confirm that sha256 is computed via node:crypto, not via a third-party hash.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "R18",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§8 Open questions",
+      "claim": "Open questions are only ones the Board can answer (threshold, retention, pre-commit placement), each with the plan's proposed default.",
+      "evidence": "§8 lists three open questions: (1) pointer threshold 600 B vs always required; (2) done_retention_days default 30 vs delete-on-ship; (3) gate placement finish-flow/quality-pipeline vs pre-commit. Each has a proposed default. However, R3 of the rubric fixes the threshold at 'above the 600 B entry cap' — meaning the 600 B threshold is not an open question for the Board; it is the rubric's number. Listing it as open in §8 contradicts R3. The other two questions (retention, pre-commit) are legitimately Board-level. The plan should not list a question whose answer is fixed by the rubric as open.",
+      "evidence_reference": "§8 '1. Pointer requirement threshold: 600 B with none allowed below it, or pointer always required? (Plan proposes 600 B so a one-line thought can still be registered without creating a file.)' Rubric R3 'Pointer is required above the 600 B entry cap'.",
+      "repair": "Remove question 1 from §8 (the 600 B threshold is fixed by R3) or convert it to a confirmation question ('Confirm: 600 B with none allowed below it, per R3'). Keep questions 2 and 3 as Board-level. Update the Phase 1 schema text to align the 600 B / 900 B numbers so that the threshold is not under debate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    }
+  ]
+}
+```

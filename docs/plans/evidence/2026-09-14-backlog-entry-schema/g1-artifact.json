@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "backlog-entry-schema",
+  "logical_plan_id": "backlog-entry-schema-2026-09-14",
+  "session_id": "bes-20260914",
+  "session_key": "f7b1d9dba51db9a77259443a31dd0a63c39d18a07a10089bfc768bb043940fd7",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "required_seat_transport_exhausted",
+  "rubric_sha256": "9037f7b61cfc3db5bee7c1bf90089f90b3957eb1ac38fa9634ca0c1360474d41",
+  "manifest_sha256": "efc93eeb59010ab0fa13e42a51089903a32334cee0347ff4acefb13733da75ec",
+  "plan_sha256": "cef22ca001f6821131670c2a93679290cbdb70e309ef188e14e06dd42c7c0990",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "transport_exhausted",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "cdd4a3e96ebfab3e006485ed7d3507de27e48a1ed5b61d119483a8d8acd5203b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sZCttv",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "887808bc0f66422d64f9c72e042236c7bba2d66639abe03771d0a110a3c8a4d7"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "c94d5c3d4149edcd6d70b46494b2db5af9fa291d47821a3fe6db756f267e1607"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0e9fea6fca8326ed24a64cf699b6df5319d97b99c4690fa9e830abc548bdf98f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-7E2U6o",
+          "digest": "0e9fea6fca8326ed24a64cf699b6df5319d97b99c4690fa9e830abc548bdf98f"
+        },
+        "receipt_digest": "9b2f5bc48802ef0ef99794d91646d02664efab3d236d80f8ec935dfd142fd58b"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "190b30f3d2bd979d8b95d4cb4d58521bc6d84aedba0187d06b67bf0dc0026dab"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a16f36e8cc232f7267edc7e592e27874db27265c83b2a0adffa751c216f6bb92",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-SkEcwl",
+          "digest": "a16f36e8cc232f7267edc7e592e27874db27265c83b2a0adffa751c216f6bb92"
+        },
+        "receipt_digest": "f15474039866036d05270f0cfd70bcc29130cf22bd6b3c3560dfbf4db1784b41"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-13T22:29:00.740Z",
+  "unratified_observations": [
+    {
+      "kind": "completed_seat_review",
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY",
+      "findings": []
+    }
+  ]
+}

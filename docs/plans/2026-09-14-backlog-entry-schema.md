@@ -1,6 +1,6 @@
 # Plan — a backlog entry is one pointer, not a work journal: schema, DI, gate, migration
 
-> Status: R0 authored 2026-09-14 · Owner: cookys (opened on operator go) · Branch: develop · Frame: design plan
+> Status: G1 reviewed + folded 2026-09-14 (frozen at depth 0) · Owner: cookys (opened on operator go) · Branch: develop · Frame: design plan
 > requested by `cuda` for `revival.3d` (BACKLOG row "PEER-REPORTED (cuda, for revival.3d): a backlog ENTRY has no schema…");
 > autopilot writes the schema and lands it here first, consumers adopt the same one.
 
@@ -98,11 +98,11 @@ prose; writers cannot tell where a note should go.
 | Field | Cap (bytes) | Rule |
 |---|---|---|
 | `Title` | 120 | one line; no trailing period; unique within the file (case-insensitive) |
-| `Status` | — | `open` · `fired <YYYY-MM-DD>` · `shipped <version or sha>` · `dropped <YYYY-MM-DD>` |
+| `Status` | 64 | `open` · `fired <YYYY-MM-DD>` · `shipped <version or sha>` · `dropped <YYYY-MM-DD>` — closed head word plus one token; the rendered value is capped like any other field (G1 fold, MiniMax R2) |
 | `Trigger` | 240 | one line; for `fired` rows the date replaces the condition |
 | `Effort` | — | `S` · `Fix` · `M` · `L` · `H` (dev-flow sizes; `M` kept for `next-pick.js` compatibility) |
 | `Source` | 160 | who/what surfaced it: commit, review run, peer + date, retro |
-| `Pointer` | 200 | a path under one of `pointer_roots` that EXISTS, or an id matching `id_pattern`; `none` allowed only when the whole entry is ≤ 600 B |
+| `Pointer` | 200 | a path under one of `pointer_roots` that EXISTS, or an id matching `id_pattern`; `none` allowed only when the whole entry is ≤ 600 B (the *pointer threshold*; distinct from the 900 B *entry cap* below — G1 fold, MiniMax R3) |
 | `Context` (optional) | 240 | one line problem statement |
 
 **Entry cap**: 900 B total; nothing but the six/seven fields — no free bullets, no sub-lists, no code
@@ -126,8 +126,10 @@ Pointer targets in order of preference: an existing plan (`docs/plans/…`), an 
 `done_not_moved` violations; the archive verb (project-lifecycle) or `--update-allowlist` is not the
 fix — deleting the row is (history is in git and at the pointer).
 
-Acceptance: the reference exists; `check-claude-md-inventory`/`check-reference-sizes` pass; every
-field name appears in exactly one file (grep proves the single-statement rule).
+Acceptance: the reference exists; `check-claude-md-inventory`/`check-reference-sizes` pass; the
+single-statement rule is a concrete grep, not a sentence: `grep -rnE '^\| \`?(Title|Status|Trigger|Effort|Source|Pointer|Context)\`? \|' references skills project-config-template docs/BACKLOG.md`
+returns hits ONLY in `references/backlog-entry.md` (a field *name* in a writer's example row such as
+`- **Status**: open` is a usage, not a second table, and is allowed) (G1 fold, MiniMax R1).
 
 ### Phase 2 — the gate (S/M, mechanism)
 
@@ -196,9 +198,14 @@ Dogfood: migrate `docs/BACKLOG.md` (233 KB, ~150 entries), commit the sidecars, 
 mechanically (e.g. rows whose pointer is a plan that does not exist yet), wire the gate into
 `finish-flow`/`quality-pipeline`, and record the debt count so the next release can only lower it.
 
+CHANGELOG sub-task (same version header as the `block` flip — G1 fold, MiniMax R11): the release
+note states the pre-migration byte count, the post-migration byte count, the number of sidecars
+created, and the residual `.claude/backlog-debt.json` entry count; every later release restates
+the count so the ratchet is visible in history.
+
 Acceptance: post-migration `docs/BACKLOG.md` ≤ 40 KB; the gate blocks on a deliberately added fat
-row; allowlist count recorded; `next-pick.js parse` still extracts every active row (its parser
-reads Effort/Source — unchanged names).
+row; the CHANGELOG sub-task above is present; `next-pick.js parse` still extracts every active row
+(its parser reads Effort/Source — unchanged names).
 
 ### Phase 5 — hand the schema to consumers (S, docs)
 
@@ -255,6 +262,27 @@ Dependencies: 1 → 2 → 3 → 4 → 5 (2 can be built in parallel with 1's eva
 
 ## Review log
 
-- R0: author (this session), 2026-09-14. Bounded review identity not yet assigned; plan-review
-  manifest to be written beside this file before readiness review (`references/plan-template.md`
-  § Bounded review identity).
+- R0: author (this session), 2026-09-14.
+- Bounded identity: `logical_plan_id = backlog-entry-schema-2026-09-14`; manifest
+  `docs/plans/2026-09-14-backlog-entry-schema.plan-review-manifest.json` (GLM-5.2 architecture chair +
+  MiniMax-M3 operations skeptic, both anthropic-compatible; roster's sol@codex / grok seats not used —
+  codex quota unknown, grok 402); frozen rubric `docs/plans/2026-09-14-backlog-entry-schema.rubric.md`
+  (sha256 `9037f7b6…`), plan sha256 at review `cef22ca0…`.
+- G1 (2026-09-14, session `bes-20260914`): policy verdict **CONDITIONAL / `required_seat_transport_exhausted`**,
+  terminal. GLM: transport success, strict parse, **READY, zero findings**. MiniMax: transport success
+  ×2, parser `invalid` ×2 (attempt 1: unescaped quote at byte 8758; attempt 2: fenced ```json with a
+  `finddings` key and every rubric marked blocking — the MEMORY-recorded format disease). Raw logs
+  `/tmp/dispatch-author-log-7E2U6o`, `-SkEcwl`. Depth-0 read both raw bodies and adjudicated by
+  re-derivation:
+  - **R2 accept-and-fold** — `Status` had no rendered cap; now 64 B.
+  - **R3 accept-and-fold** — 600 B (pointer threshold) vs 900 B (entry cap) read as a conflict; the
+    table now names both and the rubric's "600 B entry cap" wording is the rubric's error, recorded here.
+  - **R11 accept-and-fold** — CHANGELOG sub-task with the four numbers under the flip's version header.
+  - **R1 accept-and-fold** (non-blocking) — single-statement acceptance is now a concrete grep with
+    the usage-vs-table distinction.
+  - **R9 refute** — attempt 1 itself concludes "no current change required"; attempt 2's blocking mark
+    carries no new evidence.
+  - Remaining attempt-2 "blocking" rows (R4–R8, R10, R12–R18) restate the rubric line as the claim with
+    no gap named — refuted as format noise, not findings.
+  - Freeze predicate met at depth 0: zero unrepaired construct/mechanism findings, zero deferred. No G2
+    dispatched (the policy stop is terminal and every substantive claim is folded).

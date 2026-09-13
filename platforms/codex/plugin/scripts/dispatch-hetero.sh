@@ -3385,7 +3385,15 @@ else
   AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
   AGY_PARSED="$(mktemp -t dispatch-hetero-agy-parsed-XXXXXX)"
   AGY_USAGE_JSON="null"
-  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --effort "$8" \
+  # --new-project is the MECHANISM behind the directive above. Measured 2026-09-13 (308-8f's
+  # rail probe, reproduced here in a scratch repo): without it, agy -p in a fresh worktree path
+  # RESUMES a prior conversation keyed by an ancestor path in ~/.gemini/antigravity-cli/cache/
+  # last_conversations.json (`/tmp` → an old conversation) and inherits that conversation's
+  # repository memory — relative paths and `git commit` then land in a DIFFERENT checkout
+  # (308's main tree; here, autopilot's own main checkout), while the file tool still reports
+  # the process cwd. With --new-project the session starts clean and every edit and commit
+  # lands in "$1". Evidence: docs/plans/evidence/2026-09-13-agy-worktree-escape/.
+  run_worker bash -c 'cd "$1" && exec "$2" --new-project -p "$3" --model "$4" --effort "$8" \
       --dangerously-skip-permissions --output-format json --print-timeout "$5" \
       >"$6" 2>"$7"' \
       _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \

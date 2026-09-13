@@ -899,14 +899,16 @@ assert_contains "$OUT" '"skills_injected": []' "provenance shows empty skills in
 STUB_CAPTURE_PROMPT="$TEST_TMP/agy-capture-prompt"
 cat > "$STUB_CAPTURE_PROMPT" <<EOF
 #!/usr/bin/env bash
-prompt=""
+prompt=""; newproject=0
 while [ \$# -gt 0 ]; do
   case "\$1" in
     -p) prompt="\$2"; shift 2 ;;
+    --new-project) newproject=1; shift ;;
     *) shift ;;
   esac
 done
 echo "\$prompt" > "$TEST_TMP/captured_prompt.txt"
+echo "\$newproject" > "$TEST_TMP/captured_newproject.txt"
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: capture-prompt"
@@ -924,6 +926,10 @@ assert_contains "$OUT" '"skills_injected": ["autopilot:dev-flow"]' "skills injec
 assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
+# 11b. agy is launched with --new-project: without it agy resumes a conversation keyed by an
+# ancestor path and commits into THAT conversation's repository (308-8f rail probe, reproduced
+# 2026-09-13 — autopilot's own main checkout took a stray `probe2` commit from a scratch worktree).
+assert_eq "1" "$(cat "$TEST_TMP/captured_newproject.txt")" "agy argv carries --new-project (mechanism behind the worktree anchor)"
 
 # 12a. A sealed bounded campaign without a Mission projection is its own
 # authority under a live L6 session marker (supersedes 8d7e61c2, 2026-07-28).

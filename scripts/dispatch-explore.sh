@@ -180,7 +180,9 @@ else
   RUN_SH="$(mktemp -t dispatch-explore-agy-XXXXXX)"
   {
     printf '#!/usr/bin/env bash\n'
-    printf 'exec %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+    # --new-project: without it agy resumes a conversation keyed by an ancestor path and reads
+    # THAT conversation's repository, not this one (measured 2026-09-13; see dispatch-hetero.sh).
+    printf 'exec %q --new-project -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
       "$AGY_BIN" "$PROMPT_BUILT" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"

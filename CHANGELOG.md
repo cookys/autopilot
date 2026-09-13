@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.36.37 — agy hand 從 worktree 逃到主 checkout：本機重現，`--new-project` 修掉
+
+`308-8f` 2026-09-13 實測 `dispatch-foreman.sh`：kimi 工頭沒問題，但 `dispatch-hetero.sh --runner agy` 派的 hand
+兩次都 commit 到 308 主 checkout 的 `feat/homeforge`，不是它的 worktree（boundary 事後抓到，汙染已發生）。
+本機在 scratch repo 的 linked worktree 重現：同型 prompt 把 commit 打進**這個 repo 的主 checkout**（立刻
+`reset --keep` 退掉）；`env -i` 也一樣，不是環境變數。機制：agy 用 `last_conversations.json` 以路徑找上次對話，
+新 worktree 沒條目就沿祖先路徑續接舊對話、繼承它記得的 repo，`run_command` 就在那裡跑；process cwd 只到
+file tool。`--new-project` 讓 session 從乾淨開始，同一 prompt 落回 worktree；之後同路徑不加旗標也對（條目已建）
+——所以只有「第一次進新 worktree」會炸，而每個 hand 都是第一次。證據：
+`docs/plans/evidence/2026-09-13-agy-worktree-escape/`。
+
+- `scripts/dispatch-hetero.sh`、`scripts/dispatch-explore.sh`：agy 啟動加 `--new-project`（機制；prompt 裡的
+  絕對路徑 directive 保留當指引）。`dispatch-review.sh` 的 agy 路徑本來就在 bwrap 裡帶自己的 cwd，不動。
+- `hooks/tests/dispatch-hetero.test.sh` 釘住旗標（拿掉就紅，280）。
+- `scripts/dispatch-foreman.sh` 補 +x（peer 得用 `bash` 跑）。
+
+沒做：`--runner grok` 是否同樣逃逸未測；預防面仍是 accident guard，不是 sandbox。
+
 ## v2.36.36 — 2026-09-12 dogfood 量到的四條軌道缺陷
 
 四條都是 /l5 dogfood 當天付過代價的：一條在付了實作回合之後才拒、一條讓平行圖在執行時序列化失敗、

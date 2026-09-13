@@ -33,6 +33,22 @@ containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes
 - **ACP transport not used.** `-p`/`-c` is proven and file-based; ACP would give session fork/list. Revisit only if a resume path needs it.
 - **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
 
+### PEER-REPORTED (308-8f): an agy hand commits to the MAIN checkout from inside its worktree — REPRODUCED, FIXED v2.36.37
+
+- **Trigger**: **FIRED — reported 2026-09-13 with evidence, reproduced here the same hour.** `dispatch-foreman.sh` probe on 308: kimi foreman behaved; `dispatch-hetero.sh --runner agy` built `/tmp/hetero-hands-…` but agy committed to 308's `feat/homeforge` twice. Boundary caught it after the fact (`boundary_rejected` / `main_checkout_mutated`); the peer reset the main tree by hand and moved the work to `/l4`.
+- **Root cause (measured, `docs/plans/evidence/2026-09-13-agy-worktree-escape/`)**: agy resumes a conversation keyed by an ancestor path (`last_conversations.json`) when the worktree path has no entry, inheriting that conversation's repository memory; `run_command` runs there. Reproducing it in a scratch repo put a stray commit on THIS repo's main checkout (reset immediately). Not an env var: `env -i` reproduces.
+- **Fix**: `--new-project` on the agy launch in `dispatch-hetero.sh` and `dispatch-explore.sh` (mechanism; the prompt directive stays as guidance). `hooks/tests/dispatch-hetero.test.sh` pins the flag (red without it).
+- **Residual**: every dispatch now creates an agy project/conversation entry under `~/.gemini` (residue, not a hazard). `--runner grok` was not tested for the same escape (peer's P1–P5 grok hands never showed it). The prevention remains an accident guard: a runner that resolves its workspace from somewhere else is caught by the boundary, not stopped.
+- **Also**: `scripts/dispatch-foreman.sh` shipped without +x (peer ran it with `bash`); fixed.
+- **Source**: `308-8f` cross-session report 2026-09-13; evidence in 308 `a096548e`.
+
+### Dev mode layer ③ (marketplace clone) as a symlink — spike before changing dev-setup
+
+- **Trigger**: **NOT FIRED — operator question 2026-09-13** after `/reload-plugins` loaded v2.34.5 skills because `~/.claude/plugins/marketplaces/autopilot` had not been pulled since 2026-08-07 (the same shape as the 2026-07-17 incident in `docs/installation.md` § Dev-mode update).
+- **Question**: could ③ be a symlink to the dev clone like ① is, removing the pull step? Unverified either way: whether Claude Code runs git operations inside ③ on `/plugin marketplace update` (it would then operate on the working tree), and whether `/reload-plugins` accepts a symlinked marketplace dir. The registry's `lastUpdated` for the autopilot marketplace has not moved since 2026-06-04, which suggests Claude Code does not touch it on its own.
+- **Spike**: symlink ③ on this host, run `/reload-plugins` and `/plugin marketplace update autopilot`, record what each does to the dev repo (`git status`, reflog). If clean, `dev-setup.sh` creates the symlink and `dev-update.sh` drops the pull.
+- **Effort**: S.
+
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 
 ## Audit snapshot（2026-08-28，post lifecycle-hygiene sweep）

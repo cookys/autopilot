@@ -113,6 +113,14 @@ AP_BACKLOG="$(bash "$R" --target "$REPO_ROOT" --field backlog)"
 eq "foreign target: does not inherit autopilot's backlog ($AP_BACKLOG)" "none" "$(bash "$R" --target "$BARE" --field backlog)"
 eq "foreign target: does not inherit autopilot's projects_dir" "none" "$(bash "$R" --target "$BARE" --field projects_dir)"
 
+# 8. backlog_config is the target's .claude/backlog-config.md or none.
+eq "bare repo: backlog_config is none" "none" "$(bash "$R" --target "$BARE" --field backlog_config)"
+mkdir -p "$P/.claude"
+printf '# x\n' > "$P/.claude/backlog-config.md"
+eq "declared backlog_config when the file exists" ".claude/backlog-config.md" "$(f backlog_config)"
+rm -f "$P/.claude/backlog-config.md"
+eq "absent backlog_config is none" "none" "$(f backlog_config)"
+
 # 7. Envelope.
 node -e 'JSON.parse(process.argv[1])' "$(bash "$R" --target "$REPO_ROOT")" \
   && ok "emitted JSON parses" || no "emitted JSON parses" "valid JSON" "unparseable"

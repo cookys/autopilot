@@ -150,7 +150,7 @@ A finding is a *claim to check*, not a command. **Severity alone does not author
 1. **Verify the claim** against the codebase. Open cited `file:line`; confirm it. Reviewers confabulate — unreproducible = false positive, not a task. (Consumer half of the Fact-driven Red Line.) Mechanical form: adjudication table (`scripts/adjudicate-findings.js`) — statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`. `gate --ids` remains the backward-compatible “is this claim real?” check (`actionable`).
 2. **Classify relevance (disposition)** — required for every surviving Critical/Major before repair. Exactly one of:
    - `must-fix-now` — names a frozen acceptance/rubric ID or allowed task surface **and** the concrete harm of deferral;
-   - `follow-up` — context + trigger (backlog / next ticket; does **not** enter this repair loop);
+   - `follow-up` — one backlog row per [`references/backlog-entry.md`](../../../references/backlog-entry.md) (does **not** enter this repair loop);
    - `reject-out-of-scope` — rationale (does not enter repair).
    Record via `adjudicate-findings.js dispose`. Missing, malformed, conflicting, or uncertain disposition **fails closed** — return to depth-0 scope adjudication; never default to “fix it”.
 3. **Blocking completeness** — before fix dispatch **and** before acceptance, run `adjudicate-findings.js completeness --store …`. It enumerates every actionable Critical/Major in the registry (not a caller `--ids` subset), fails on missing or conflicting disposition, and distinguishes `must-fix-now` IDs from follow-up/reject IDs. Subset `repair-gate --ids` alone is never complete.
@@ -321,13 +321,7 @@ Classify into one of four outcomes:
 
 ### Backlog Entry Format
 
-Every backlog entry **must** include a trigger:
-
-```markdown
-- [ ] [Suggestion] Cache rank table query results
-  - Trigger: when optimizing for 10K+ concurrent users
-  - Context: quality-pipeline (code-review) found repeated DB queries in the target module
-```
+Write one row per [`references/backlog-entry.md`](../../../references/backlog-entry.md). Evidence lives at the pointer.
 
 No trigger → rejected.
 

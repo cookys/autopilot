@@ -104,7 +104,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    | A fact or gotcha (typically from `## 陷阱`) | `learn` skill |
    | A reusable multi-step procedure | `distill` skill |
    | A rule that binds future sessions rather than being looked up | the resolved `discipline_target` |
-   | A real problem you are deliberately not fixing now | the resolved `backlog_path` — one row, with the evidence |
+   | A real problem you are deliberately not fixing now | the resolved `backlog_path` — one row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence at the pointer |
 
    Call those skills; **do not implement routing logic here.** Handoff's job is to notice that a 段 is
    durable, not to decide where it lands — that decision is the routing doc's, and the write contract

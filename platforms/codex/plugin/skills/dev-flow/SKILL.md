@@ -316,7 +316,7 @@ prevents "it was obviously S" from silently becoming a multi-module project with
    If yes, invoke `learn` skill to record the finding."
 
 2. Deferred items:
-   If anything was postponed, add to BACKLOG with context + trigger condition.
+   If anything was postponed, add one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence goes to the pointer.
 
 3. Confirm commit:
    Verify the change landed on the correct branch.
@@ -511,7 +511,7 @@ Invoke the `autopilot:hetero-review` skill with the plan file path (runs the pla
 2. Can the goal be achieved without it? If **no**, do NOT defer.
 3. Unsure? **Ask the user.**
 
-If deferral passes: add to BACKLOG with context + trigger condition, mark phase "Deferred" in project docs.
+If deferral passes: add one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence goes to the pointer; mark phase "Deferred" in project docs.
 
 **Phase advance gate** -- all must be true before starting the next phase:
 
@@ -590,7 +590,7 @@ TaskCreate: "H-9: Invoke autopilot:finish-flow"
 ### S-Lite (S and Fix workflows, inline)
 
 1. **Retry check**: retried a non-trivial operation 2+ times? Invoke `learn`.
-2. **Deferred items**: anything postponed -> BACKLOG with context + trigger.
+2. **Deferred items**: anything postponed → one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence at the pointer.
 3. **Confirm commit**: change landed on the correct branch.
 4. **Fix only**: verify ongoing-maintenance entry was written.
 
@@ -619,9 +619,7 @@ complete each item before concluding.
    - None of the above?                        -> skip, do not force it
 
 4. Deferred items:
-   Anything postponed goes to BACKLOG with:
-   - Context: what it is and why it was deferred
-   - Trigger condition: when it should be picked up
+   Anything postponed is one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at the pointer.
    Backlog safety: if the item affects the final goal, do NOT defer.
 
 5. Triggered BACKLOG pickup:

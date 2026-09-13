@@ -32,6 +32,7 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 
 | Script | Replaces LLM-judgment for | When invoked |
 |--------|---------------------------|--------------|
+| [`scripts/check-backlog-entries.js`](../../scripts/check-backlog-entries.js) | Per-entry schema/caps/pointer gate (warn until Phase 4) | After writing a backlog row; pre-merge checklist |
 | [`scripts/completeness-scan.sh`](../../scripts/completeness-scan.sh) | Anti-stub regex pass + new-vs-pre-existing classification | Completeness Gate step |
 | [`scripts/error-path-scan.sh`](../../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error paths) | Completeness Gate step (advisory to review) |
 | [`scripts/secret-scan-diff.js`](../../scripts/secret-scan-diff.js) | L0 attention-slip scan for leaked secrets | Completeness Gate step (blocking) |
@@ -170,12 +171,12 @@ Finding (Suggestion or Minor severity)
 ├── (a) S-size fix (< 5 min, self-contained) → fix now, treat as Major
 ├── (b) False positive / by-design → close with written rationale
 ├── (c) Independent task needing separate analysis → create task with context
-└── (d) Deferred → add to BACKLOG with trigger condition
+└── (d) Deferred → one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); then `node scripts/check-backlog-entries.js --backlog <resolved backlog>` (warn)
 ```
 
 **Rules:**
 - Every finding must reach exactly one of (a)-(d). "Will look at it later" is not a valid outcome.
-- Backlog entries without a trigger condition are rejected (see references/code-review.md).
+- Backlog entries without a trigger condition are rejected (see [`references/backlog-entry.md`](../../references/backlog-entry.md)).
 - If 3+ findings route to (c) in the same review, consider whether scope was underestimated.
 
 ## Self-Regulation (WTF-Likelihood Cap)

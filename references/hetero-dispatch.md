@@ -787,6 +787,35 @@ scripts/dispatch-explore.sh --runner codex|agy --model <name> --prompt-file <fil
 
 > Optional: `sudo apt install bubblewrap` lets codex read under its proper `--sandbox read-only` instead of the bypass — the script auto-detects and switches; nothing else changes.
 
+## A non-Claude foreman — [`scripts/dispatch-foreman.sh`](../scripts/dispatch-foreman.sh)
+
+Shape B of [`docs/plans/2026-09-13-non-claude-foreman-rail-design.md`](../docs/plans/2026-09-13-non-claude-foreman-rail-design.md)
+(owner ruling: quota is the motive). kimi holds the orchestration loop in a dispatcher-created
+worktree and drives hands through the rails above; **the rail, not the prompt, enforces what
+`hooks/foreman-guard.js` enforces for a Claude foreman**, and the verdict stays at depth 0.
+
+```bash
+scripts/dispatch-foreman.sh --brief-file <file> --plan-file <file> [--model kimi-code/k3] [--base <ref>] \
+    [--run-id <id>] [--ledger <path>] [--tool-cap N] [--timeout 3600] [--env-passthrough NAME]...
+# resume after an escalation (same worktree — kimi refuses to resume from another cwd):
+scripts/dispatch-foreman.sh --resume --run-dir <run_dir> --answer-file <file>
+# JSON: status completed|escalated|tool_cap_reached|deadline_expired|foreman_failed|main_checkout_mutated|
+#       main_checkout_unverified|foreman_integrated|unsafe_commit_content|content_check_unverified|precondition_failed
+#       + foreman_branch foreman_head base_sha hands_branches[] report_path handoff_written stream_log tool_calls …
+# exit 0 = completed|escalated · 1 = every other status · 2 = precondition_failed
+```
+
+| Rail-owned enforcement | Mechanism |
+|---|---|
+| Audit log outside the worktree | `<run_dir>/foreman.stream.jsonl` is kimi's stream-json as emitted; brief/plan/protocol/REPORT/HANDOFF/ESCALATION live in the run dir too. kimi's `~/.kimi-code/` store is resume state, not audit |
+| Tool cap (ironlaw #6) | Same knob as `foreman-guard` (`foreman_guard.bash_cap` / `AUTOPILOT_FOREMAN_GUARD_BASH_CAP`, default 40). Each stream line is parsed as JSON (a hand's leaked stdout is a non-JSON line and is skipped); assistant `tool_calls` named `Bash` are counted; call N > cap kills the process group and runs ONE `kimi -c` handoff turn (own cap 5). The rail never writes HANDOFF.md itself — `handoff_written=false` is the honest answer |
+| Verdict at depth 0 | `scripts/lib/main-checkout-boundary.sh` (the ONE implementation shared with `dispatch-hetero.sh`) fingerprints the main checkout before/after; only `refs/heads/foreman/<run>` and `refs/heads/hands/<run>/*` may move. A merge commit or a non-descendant head on the foreman branch is `foreman_integrated`; foreman commits pass `check-hands-commit.js`. Hands branches are listed from git, never from the report |
+| Env | Allowlist (`PATH HOME TERM LANG LC_* TMPDIR XDG_* KIMI_* AUTOPILOT_*` + `--env-passthrough`) plus `HANDS_GIT_ENV` (push/fetch blocked for every child). `egress_policy: "unbounded"` — network egress is not bounded (kimi has MCP http/sse) and the result says so |
+| Containment | `setsid` session; the kill targets its process group. Hands dispatched with ledger coords are their own sessions by the detach contract and survive by design |
+| Waiting | The protocol tells the foreman to wait with [`scripts/wait-dispatch-results.js`](../scripts/wait-dispatch-results.js) (`--ledger <path> --expect <run_id>.<stage>`), the wait side of the exit-file contract every detached rail already lands — never a shell poll loop |
+
+Not wired into `/l5` yet: routing a level's foreman through this rail is a skill change with its own bar (a second PATCH).
+
 ## Role-prompt reuse (engine-neutral bodies)
 
 [`.opencode/agent-bodies/*.body.md`](../.opencode/agent-bodies/) are frontmatter-free role prompts generated for OpenCode — but plain markdown is engine-neutral. Feeding `reviewer.body.md` + a diff to `agy -p` yields a methodology-carrying heterogeneous reviewer with zero new files. (The directory is named for its primary consumer; this secondary use is intentional.)

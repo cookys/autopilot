@@ -1,5 +1,52 @@
 # Changelog
 
+## v2.36.34 — 非 Claude 工頭軌（Shape B）：kimi 握迴圈，軌道自己執法
+
+owner 2026-09-13 裁定 B（配額是動機）。設計文件 `docs/plans/2026-09-13-non-claude-foreman-rail-design.md` §4
+列的五條「軌道要自己扛」的執法，每一條都是機制加測試，不是 prompt 條款；建置計畫與量測在
+`docs/plans/2026-09-13-foreman-rail-b-build.md`。動手前先量（kimi 0.41.0，證據在
+`docs/plans/evidence/2026-09-13-non-claude-foreman/kimi-probes/`）：`-r` 換目錄會被拒（P6）、允許清單環境
+下能跑且原生 Read/Write 可達 cwd 外（P7）、setsid 整組殺掉不留孤兒且 `-c` 同目錄能接回被殺的 session（P8）、
+Bash 工具繼承 `GIT_ALLOW_PROTOCOL=` 與 `GIT_CONFIG_*`（P9）。真 kimi 跑過一次 smoke：`completed`、
+`main_checkout_boundary: verified`（`live1-*`）。
+
+### `scripts/dispatch-foreman.sh`（新）
+
+kimi 在派工者建立的 worktree（`foreman/<run_id>`）內跑 `-p`，brief／plan／protocol 以檔案交付，`-p` 字串
+不到 1 KB。軌道執法：(1) stream-json 稽核檔落在 worktree **外**的 run dir，REPORT／HANDOFF／ESCALATION 也是；
+(2) Bash 工具呼叫上限讀 `foreman-guard` 同一個旋鈕（`foreman_guard.bash_cap` / `AUTOPILOT_FOREMAN_GUARD_BASH_CAP`，
+預設 40），每行 stream 當 JSON 解析——hand 漏出的原始 stdout 是非 JSON 行，substring grep 會多算——
+第 N > cap 次就殺整個 process group，再用 `kimi -c` 同目錄跑**一次** handoff 回合（自己的上限 5）；軌道永遠
+不代寫 HANDOFF.md，`handoff_written=false` 才是誠實答案；(3) 主 checkout 前後指紋（共用的
+`scripts/lib/main-checkout-boundary.sh`），只允許 `refs/heads/foreman/<run>` 與 `refs/heads/hands/<run>/*` 移動，
+工頭分支出現 merge commit 或不是 base 的後代就 `foreman_integrated`，工頭自己的 commit 走
+`check-hands-commit.js`，hands 分支清單從 git 讀不從報告讀；(4) 環境走允許清單（`PATH HOME TERM LANG LC_*
+TMPDIR XDG_* KIMI_* AUTOPILOT_*` + `--env-passthrough`）加 `HANDS_GIT_ENV` 推送封鎖，網路出口沒有機制，
+結果誠實寫 `egress_policy: "unbounded"`；(5) setsid 容器，殺的是 process group；帶 ledger 座標派出去的 hands
+依 detach 契約自成 session，殺工頭不殺 hands。逾時同樣殺＋handoff 回合，`deadline_expired`；ESCALATION.md
+→ `escalated`、worktree 保留，`--resume --answer-file` 在同一個 worktree 接回。`--ledger` 下走
+`dispatch-detach.sh` 同一套 R1 detach，結果落 `<ledger>.results/<run>.foreman.{result.json,exit}`。
+測試 `hooks/tests/dispatch-foreman.test.sh`（100 assertions，PATH stub kimi，只靠 `KIMI_*` 驅動——這本身就是
+允許清單生效的證據；含一次真的巢狀 `dispatch-hetero.sh` 在工頭環境下落 commit）。
+
+### `scripts/wait-dispatch-results.js`（新）— `chatgpt-tunnel-host` 的 (B)
+
+exit-file 契約其實早就在（`dispatch-detach.sh`、`dispatch-hetero.sh` 的 `EXIT_FILE`），缺的是等待端。
+`--ledger <path> --expect <run_id>.<stage>…` 等到每個 `.exit` 落地，逾時 exit 1 並點名沒落地的；hand 自己的
+exit code 是 `done[]` 裡的資料，不是這支的 exit。工頭 protocol 指名用它，不准 shell 迴圈 poll。測試 20。
+
+### `scripts/lib/main-checkout-boundary.sh`（抽出）
+
+`_fp_unverifiable` / `main_checkout_fingerprint` / `build_hands_git_env` 從 `dispatch-hetero.sh` 原樣搬出，
+兩條軌道共用同一份實作（v2.36.32 八輪 review 的成果不複製第二份）；新增 `MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES`
+讓工頭軌宣告 hands 命名空間。`dispatch-hetero.test.sh` 279 條在任何工頭程式碼存在前先跑綠。
+
+沒做、寫在 BACKLOG「Foreman rail residuals」：cgroup 容器、出口封鎖、inline hands 會隨工頭死、`-p`+`--auto`、
+ACP。`/l5` 改走這條軌是 skill 變更，另一個 PATCH。
+
+prose-justification: 本版 prose 增量（+29 行，自基線 +8%）是 `references/hetero-dispatch.md` 新的
+「A non-Claude foreman」契約段——六條軌道執法各對應一個機制與測試案例——沒有任何 SKILL.md 變動。
+
 ## v2.36.33 — 7840hs 回報的四條派工層缺陷，四條都在本機重現後修掉
 
 `cookys-7840hs` 2026-09-12 針對 v2.36.22 回報四條，三條是無聲的。每一條都先在這台機器重現才動手；

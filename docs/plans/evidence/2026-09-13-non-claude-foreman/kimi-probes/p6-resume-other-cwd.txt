@@ -1,0 +1,6 @@
+{"role":"meta","type":"system.version","version":"0.41.0"}
+Session "session_2c0e59fb-a569-4d1e-9c4e-e9992e76bf9c" was created under a different directory.
+  cd "/tmp/claude-1000/-home-cookys-projects-autopilot/d1423f91-4e83-43b9-ae77-3de0367aa10a/scratchpad/kimi-probe/ws" && kimi -r session_2c0e59fb-a569-4d1e-9c4e-e9992e76bf9c
+
+error: failed to run prompt: Session "session_2c0e59fb-a569-4d1e-9c4e-e9992e76bf9c" was created under a different directory.
+See log: /home/cookys/.kimi-code/logs/kimi-code.log

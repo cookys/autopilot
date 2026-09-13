@@ -18,9 +18,20 @@ containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes
 1. ~~`chatgpt-tunnel-host` item (E)~~ — **SHIPPED v2.36.32** (main-checkout boundary + content gate). Their (A) output namespace and (B) exit-file contract remain general detached-dispatch defects; (B) is the prerequisite for item 4.
 2. ~~`openclaw` main claim~~ — closed in v2.36.28; side effects (a)/(b) remain, unreproduced.
 3. ~~`cookys-7840hs` four defects~~ — **SHIPPED v2.36.33**.
-4. **Non-Claude foreman rail, Shape B** — owner ruled 2026-09-13 (quota is the motive). Prerequisite: the exit-file contract on the general detached rail. Acceptance: the five rail-owned enforcements in `docs/plans/2026-09-13-non-claude-foreman-rail-design.md` §4.
+4. ~~**Non-Claude foreman rail, Shape B**~~ — **SHIPPED v2.36.34** (`scripts/dispatch-foreman.sh`, `scripts/wait-dispatch-results.js` for `chatgpt-tunnel-host` (B), `scripts/lib/main-checkout-boundary.sh`; build plan `docs/plans/2026-09-13-foreman-rail-b-build.md`). Residuals in the row "Foreman rail residuals" below. `/l5` routing through the rail is a separate PATCH.
 5. `308-db` item (a), repo-level residue sweep — its own plan.
 6. The four rail defects measured during the 2026-09-12 dogfood (concurrent-dispatch refusal, `output_paths` must enumerate codex mirrors, live-config assertions, unreachable operator-pin admission).
+
+### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
+
+- **Trigger**: **NOT FIRED — recorded at ship time, 2026-09-13.** Fires when a real foreman run trips one of them.
+- **Containment is `setsid`, not cgroup.** `dispatch-hetero.sh`'s `run_worker` has a `systemd-run --scope` branch that proves an empty cgroup; the foreman rail kills the process group only. A foreman that `setsid`s its own child escapes the cap kill. Follow-up: share the cgroup branch the way the boundary lib is shared.
+- **Egress is unbounded and the result says so** (`egress_policy: "unbounded"`). kimi has MCP http/sse; nothing at the rail bounds outbound traffic. A mechanism needs a measured design (network namespace? proxy env?) — not a prompt clause.
+- **Hands dispatched inline die with the foreman.** The protocol tells the foreman to pass `--ledger/--run-id` so hands detach; a foreman that ignores it loses in-flight hands at the cap kill. The rail cannot tell the two apart from outside.
+- **Tool cap counts `Bash` only** — the same scope as `foreman-guard`. Native `Write`/`Edit` calls are uncounted in both implementations; whether that is a gap belongs to the guard, not this rail.
+- **`-p` + `--auto` unmeasured** (peer says the CLI refuses the pair; bare `-p` already runs tools, so nothing depends on it).
+- **ACP transport not used.** `-p`/`-c` is proven and file-based; ACP would give session fork/list. Revisit only if a resume path needs it.
+- **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 
@@ -219,7 +230,7 @@ containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes
 
 ### A non-Claude engine cannot sit in the foreman seat — no rail exists, and the request is now from two independent peers
 
-- **Trigger**: **NOT FIRED — awaiting this session's operator.** Requested by `308-db` 2026-09-12, relayed as an owner ruling. A peer's relay of an owner decision is not authorisation here, however accurate: the channel cannot distinguish "the owner said so" from "the owner said so about this scope". Surfaced to the operator the same day; reply sent, and a send receipt is not a read receipt. Do not start on the strength of this row.
+- **Trigger**: **FIRED 2026-09-13 — the operator authorised Shape B directly ("B 真工頭（配額是動機）"); shipped v2.36.34.** (Earlier: requested by `308-db` 2026-09-12, relayed as an owner ruling.) A peer's relay of an owner decision is not authorisation here, however accurate: the channel cannot distinguish "the owner said so" from "the owner said so about this scope". Surfaced to the operator the same day; reply sent, and a send receipt is not a read receipt. Do not start on the strength of this row.
 - **Requested by**: `308-db`, 2026-09-12. They explicitly scope round 1 to a **design document only**, explicitly ask that kimi's capabilities be re-derived here rather than copied from their inference, and state they will not touch this repo.
 - **Context**: there is no supported path for a non-Claude engine to hold the control loop. `skills/l4/SKILL.md:22` states l4 is all-Claude and routes a heterogeneous implementer to l5; `scripts/dispatch-hetero.sh`'s contract is only-IMPLEMENTS with the verdict retained at depth 0. That is an implementer rail, not a foreman rail — the capability is absent, not disabled.
 - **Peer's measured facts, NOT re-derived here**: `kimi --model kimi-code/k3 -p "<prompt>"` exits 0 with a response (CLI 0.41.0); prompt is read only from `-p/--prompt` (a positional or `kimi run` gives `unknown command`); the 2026-09-07 "managed provider has no credential" note is superseded. `agy --model gemini-3.8-flash-medium -p "…"` exits 0 (CLI 1.2.1) and needs nothing new, since dispatch-hetero already supports that seat.

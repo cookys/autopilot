@@ -147,7 +147,7 @@ the foreman one. Shape A is not built.
 
 ## 7. Open items marked 未驗證
 
-- kimi child processes inherit `GIT_CONFIG_*` (env-config push block) — needs one probe.
+- ~~kimi child processes inherit `GIT_CONFIG_*` (env-config push block) — needs one probe.~~ **Measured** (P9, evidence README): the `Bash` tool sees `GIT_ALLOW_PROTOCOL=` and the `GIT_CONFIG_*` entries. Round 2 built the rail: [`2026-09-13-foreman-rail-b-build.md`](2026-09-13-foreman-rail-b-build.md).
 - `-p` with `--auto`/`-y` refusal — peer-reported, not re-run.
 - kimi behaviour when a tool call is denied/killed mid-stream — needed for the rail-side cap.
 - Whether ACP's `session/prompt` accepts embedded file context large enough to replace the

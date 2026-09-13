@@ -302,6 +302,59 @@ assert_contains "$json" '"engine_assurance": "operator-override"'
 assert_file_exists "$RUN_MARKER_PATH"
 
 
+echo "--- R3c: standing operator pin, empty scorecard, NO override → admitted via --resolved-live (the managed path now produces it) ---"
+PIN_CAPS_DIR="$TEST_TMP/pin-caps"
+mkdir -p "$PIN_CAPS_DIR"
+cp -r "$ENGINE_CAPS_DIR"/. "$PIN_CAPS_DIR"/   # same quota evidence as the other cases; only the pin is new
+ENGINE_CAPABILITY_DIR="$PIN_CAPS_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" pin-seat \
+  --engine gpt-5.3-codex-spark --runner codex --role implementer --effort high --endpoint @none \
+  --reason 'R3c standing pin' --operator cookys --store "$PIN_CAPS_DIR" >/dev/null 2>&1 \
+  || fail "R3c: pin-seat failed"
+CASE_TMP="$TEST_TMP/case-r3c"
+mkdir -p "$CASE_TMP"
+rm -f "$RUN_MARKER_PATH"
+out=$(ENGINE_SCORES_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  ENGINE_SCORECARD_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  ENGINE_CAPS_DIR="$PIN_CAPS_DIR" \
+  AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/topology-r3c.json" \
+  run_dispatch "t4c" --strict-contract --contract-file "$VALID_CONTRACT")
+rc=$?
+assert_eq "$rc" 0 "R3c: pinned seat admitted without an override file (out tail: $(printf '%s' "$out" | tail -c 400))"
+json=$(get_last_json "$out")
+assert_contains "$json" '"status": "committed"' "R3c: committed"
+assert_contains "$json" '"engine_assurance": "operator-pin"' "R3c: assurance is the pin, not an override"
+assert_contains "$out" 'resolved-live: implementer via resolve-dispatch-topology.js (standing pin present)' "R3c: the rail says it produced the document"
+assert_file_exists "$RUN_MARKER_PATH"
+# and removing the pin refuses again — the admission is the pin's, not the wiring's
+rm -f "$PIN_CAPS_DIR/pins.jsonl"
+CASE_TMP="$TEST_TMP/case-r3d"
+mkdir -p "$CASE_TMP"
+rm -f "$RUN_MARKER_PATH"
+out=$(ENGINE_SCORES_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  ENGINE_SCORECARD_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  ENGINE_CAPS_DIR="$PIN_CAPS_DIR" \
+  AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/topology-r3d.json" \
+  run_dispatch "t4d" --strict-contract --contract-file "$VALID_CONTRACT")
+rc=$?
+assert_eq "$rc" 2 "R3d: pin removed → precondition_failed"
+assert_contains "$out" 'resolved-live: no standing pin for implementer' "R3d: without a pin the document is not handed over"
+assert_contains "$out" 'no qualified scorecard row' "R3d: refusal names the missing evidence (tail: $(printf '%s' "$out" | grep -o '"error": .*' | cut -c1-300 | head -1))"
+assert_file_absent "$RUN_MARKER_PATH"
+# AUTOPILOT_RESOLVED_LIVE=off restores the pre-wiring bytes: the pin exists but is not consulted
+ENGINE_CAPABILITY_DIR="$PIN_CAPS_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" pin-seat \
+  --engine gpt-5.3-codex-spark --runner codex --role implementer --effort high --endpoint @none \
+  --reason 'R3e standing pin' --operator cookys --store "$PIN_CAPS_DIR" >/dev/null 2>&1
+CASE_TMP="$TEST_TMP/case-r3e"
+mkdir -p "$CASE_TMP"
+rm -f "$RUN_MARKER_PATH"
+out=$(ENGINE_SCORES_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  ENGINE_SCORECARD_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  ENGINE_CAPS_DIR="$PIN_CAPS_DIR" \
+  AUTOPILOT_RESOLVED_LIVE=off \
+  run_dispatch "t4e" --strict-contract --contract-file "$VALID_CONTRACT")
+rc=$?
+assert_eq "$rc" 2 "R3e: resolved-live off → the pin is unreachable again (documented knob)"
+
 echo "--- R4: Disagreement on --base ---"
 CASE_TMP="$TEST_TMP/case-r4a"
 mkdir -p "$CASE_TMP"

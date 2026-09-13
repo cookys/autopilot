@@ -5792,6 +5792,9 @@ class AutopilotEngine {
       exactMissionClaim = refreshed.claims[priorClaim.claim_id];
       return exactMissionState;
     };
+    // Sticky across persists: a re-adoption at the first persistence is part of this
+    // controller's history, and every later persist rewrites the durable body.
+    let missionStateReadopted = null;
     const persistControllerWorkOrder = (nextController, lifecyclePatch = null) => {
       const commonDir = resolveGitCommonDir(loopCwd);
       if (!commonDir) {
@@ -5872,13 +5875,55 @@ class AutopilotEngine {
             err.code = 'controller_mission_state_reobserve_failed';
             throw err;
           }
-          if (missionStateHash(reobservedMissionState)
+          // The canonical Mission state is one document every campaign intake reads and
+          // rewrites, so a SIBLING campaign persisting its claim between this one's intake
+          // and this point changes the hash without touching anything this campaign depends
+          // on. Measured 2026-09-12: three independent batch-1 nodes granted, one survived,
+          // two rejected here with rounds 0, and a serial re-run of a rejected node passed at
+          // once. Re-adopt through the same authority refresh the controller uses
+          // mid-execution: it adopts the live state only when the Mission identity and THIS
+          // campaign's claim are unchanged and throws controller_mission_identity_drift /
+          // controller_mission_claim_* otherwise — so the guard still refuses everything it
+          // refused before, minus the sibling. Bounded: a document that keeps moving is
+          // refused as before.
+          let readoptAttempts = 0;
+          while (missionStateHash(reobservedMissionState)
               !== missionStateHash(exactMissionState)) {
-            const err = new Error(
-              'canonical Mission state changed between intake and controller persistence',
-            );
-            err.code = 'controller_mission_state_cas_drift';
-            throw err;
+            readoptAttempts += 1;
+            if (readoptAttempts > 3) {
+              const err = new Error(
+                'canonical Mission state changed between intake and controller persistence',
+              );
+              err.code = 'controller_mission_state_cas_drift';
+              throw err;
+            }
+            const intakeStateDigest = missionStateHash(exactMissionState);
+            let refreshed;
+            try {
+              refreshed = refreshExactMissionAuthority();
+            } catch (error) {
+              const err = new Error(
+                `canonical Mission state changed between intake and controller persistence and could not be re-adopted: ${error.message || String(error)}`,
+              );
+              err.code = error.code || 'controller_mission_state_cas_drift';
+              throw err;
+            }
+            missionStateReadopted = {
+              reason: 'sibling_campaign_persisted_between_intake_and_persistence',
+              intake_state_digest: missionStateReadopted
+                ? missionStateReadopted.intake_state_digest : intakeStateDigest,
+              readopted_state_digest: missionStateHash(refreshed),
+              attempts: readoptAttempts,
+            };
+            try {
+              reobservedMissionState = this.missionCampaignStore.load();
+            } catch (error) {
+              const err = new Error(
+                `canonical Mission state reobservation failed: ${error.message || String(error)}`,
+              );
+              err.code = 'controller_mission_state_reobserve_failed';
+              throw err;
+            }
           }
           missionPath = fs.realpathSync(storeStatePath);
           missionStateAuthority = 'canonical_file_store';
@@ -5906,6 +5951,7 @@ class AutopilotEngine {
           ? exactMissionState.mission_graph_digest : null,
         mission_state_digest: exactMissionState
           ? missionStateHash(exactMissionState) : null,
+        mission_state_readopted: missionStateReadopted,
         mission_state_authority: missionStateAuthority,
         mission_claim_id: exactMissionClaim ? exactMissionClaim.claim_id : null,
         mission_campaign_id: exactMissionClaim ? exactMissionClaim.campaign_id : null,

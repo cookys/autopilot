@@ -1011,8 +1011,42 @@ run_strict_contract_preflight() {
   if [ -n "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ]; then
     contract_check_args+=(--qualification-override "$AUTOPILOT_QUALIFICATION_OVERRIDE")
   fi
+  # A standing operator pin reaches the checker ONLY through a --resolved-live document
+  # (dispatch-contract.js never opens the pin store). Until 2026-09-13 nothing on the managed
+  # path produced that document, so the pin the operator recorded once was unreachable from
+  # the one rail that matters (BACKLOG "operator-pin admission is unreachable"). Resolve the
+  # contract's role live here; a resolver failure is reported and the check proceeds without
+  # the document — byte-identical to the pre-pin behaviour, never a fabricated doc.
+  RESOLVED_LIVE_FILE=""; RESOLVED_LIVE_NOTE=""
+  local contract_role live_role
+  contract_role="$(extract_file_json_value "$CONTRACT_FILE" role 2>/dev/null || true)"
+  case "$contract_role" in
+    implementer|reviewer) live_role="$contract_role" ;;
+    *) live_role="" ;;
+  esac
+  if [ -n "$live_role" ] && [ "${AUTOPILOT_RESOLVED_LIVE:-auto}" != "off" ]; then
+    RESOLVED_LIVE_FILE="$(mktemp -t 'dispatch-hetero-resolved-live-XX''XX''XX')" || RESOLVED_LIVE_FILE=""
+    if [ -n "$RESOLVED_LIVE_FILE" ] \
+      && node "$SELF_DIR/resolve-dispatch-topology.js" --resolve-live --role "$live_role" >"$RESOLVED_LIVE_FILE" 2>"$RESOLVED_LIVE_FILE.err"; then
+      # The document is handed over ONLY when it carries a standing pin. Without one it adds
+      # nothing the checker needs, and on a host whose ladder is empty its preferred_tuple has
+      # no engine — the checker would then refuse EVERY seat, qualified ones included.
+      if node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(j&&j.operator_pin&&typeof j.operator_pin==="object"?0:1)' "$RESOLVED_LIVE_FILE" 2>/dev/null; then
+        contract_check_args+=(--resolved-live "$RESOLVED_LIVE_FILE")
+        RESOLVED_LIVE_NOTE="resolved-live: $live_role via resolve-dispatch-topology.js (standing pin present)"
+      else
+        RESOLVED_LIVE_NOTE="resolved-live: no standing pin for $live_role; contract checked without the document"
+        rm -f "$RESOLVED_LIVE_FILE" "$RESOLVED_LIVE_FILE.err"; RESOLVED_LIVE_FILE=""
+      fi
+    else
+      RESOLVED_LIVE_NOTE="resolved-live unavailable ($(tr '\n' ' ' < "${RESOLVED_LIVE_FILE:-/dev/null}.err" 2>/dev/null | cut -c1-200)); contract checked without it"
+      rm -f "$RESOLVED_LIVE_FILE" "$RESOLVED_LIVE_FILE.err"; RESOLVED_LIVE_FILE=""
+    fi
+  fi
+  [ -n "$RESOLVED_LIVE_NOTE" ] && printf 'dispatch-hetero: %s\n' "$RESOLVED_LIVE_NOTE" >&2
   contract_check_out="$(node "$SELF_DIR/dispatch-contract.js" "${contract_check_args[@]}" 2>&1)"
   rc=$?
+  rm -f "${RESOLVED_LIVE_FILE:+$RESOLVED_LIVE_FILE}" "${RESOLVED_LIVE_FILE:+$RESOLVED_LIVE_FILE.err}" 2>/dev/null
 
   contract_check_json="$(printf '%s' "$contract_check_out" | extract_last_json)"
   if [ "$rc" -ne 0 ] || [ -z "$contract_check_json" ]; then

@@ -266,11 +266,16 @@ function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
   let substitution_reason = null;
 
   if (pin) {
+    // A pin recorded without --endpoint stores `endpoint: null`. The tuple convention (and
+    // dispatch-contract.js's --resolved-live validator) is '' for "no named endpoint" — null
+    // was refused as `endpoint must be a string when present`, so a pinned seat with no
+    // endpoint could never be admitted through this document (2026-09-13, sixth vacuity in
+    // the operator-pin family: the shipped pin row could not pass the shipped checker).
     preferred_tuple = {
       engine: pin.engine,
       runner: pin.runner,
-      effort: pin.effort,
-      endpoint: Object.prototype.hasOwnProperty.call(pin, 'endpoint') ? pin.endpoint : null,
+      effort: typeof pin.effort === 'string' ? pin.effort : undefined,
+      endpoint: typeof pin.endpoint === 'string' ? pin.endpoint : '',
     };
     effective_tuple = {
       engine: preferred_tuple.engine,

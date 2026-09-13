@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.36.36 — 2026-09-12 dogfood 量到的四條軌道缺陷
+
+四條都是 /l5 dogfood 當天付過代價的：一條在付了實作回合之後才拒、一條讓平行圖在執行時序列化失敗、
+一條讓合法換席位把測試弄紅、一條讓 owner 記下的 pin 在唯一重要的軌道上碰不到。
+
+### 並行派工的 CAS 拒絕改為重新採納（`src/engine/autopilot-engine.js`）
+
+canonical Mission state 是一份每個 campaign intake 都讀寫的文件，兄弟 campaign 在本 campaign intake 與
+controller persistence 之間寫入，hash 就變了——但本 campaign 依賴的東西一樣都沒動。2026-09-12：三個獨立
+節點同時 grant，一個活、兩個在 `controller_execution_authority` 以 rounds 0 被拒，單獨重跑同一節點立刻過。
+現在 hash 不同時走 controller 執行中已在用的 `refreshExactMissionAuthority()`（上限 3 次）：Mission identity
+與本 claim 沒變就採納 live state，並在 durable body 記 `mission_state_readopted`（intake／readopted digest、
+attempts）；identity 或 claim 變了仍然拒，訊息點名哪個欄位。`mission-runtime-v2.test.sh` 在 intake 與
+persistence 之間做一次**真的**兄弟 CAS 寫入（103）。
+
+### `output_paths` 缺 codex mirror 在 graph-check 時就拒（`mission-execution-graph-check.js --mirror-roots`）
+
+mirror 集合是 repo 屬性，圖的作者只列自己想到的檔案；以前的拒絕來自 boundary，在模型做完工作之後。
+`scripts/sync-codex-plugin-skills.sh --mirror-roots-json` 把 mirror 集合印成資料，graph-check 帶
+`--mirror-roots` 時，`campaign.output_paths` 裡任何在 mirrored dir 下的路徑都必須同時列出
+`platforms/codex/plugin/<path>`（精確路徑，prefix 不算）。引擎本體不寫死任何 autopilot 路徑。
+
+### `resolve-review-loop.test.sh` 的 roster 斷言改讀凍結 fixture
+
+九條斷言讀的是 repo 自己的 `.claude/review-loop-config.md`，vendor 付費牆逼出的合法換席位就讓套件紅。
+§3／§4 改讀 `hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md`（凍結時的 byte 複本），live
+config 只留一條「仍能解析、`config_path` 是 repo 絕對路徑」的斷言，訊息指名 config 是 operand。
+
+### 常設 operator pin 終於能從 managed 軌道抵達 contract checker（`dispatch-hetero.sh`）
+
+`dispatch-contract.js` 只從 `--resolved-live` 文件讀 pin，managed 軌道從沒產生過它。現在
+`run_strict_contract_preflight` 跑 `resolve-dispatch-topology.js --resolve-live --role <contract role>`，
+文件帶常設 pin 時才交給 checker（沒 pin 就不交：ladder 為空的主機上文件會沒有 engine，checker 會連合格席位
+都拒）；`AUTOPILOT_RESOLVED_LIVE=off` 回到舊行為。接線時又掉出兩個空轉：pin 用 `--endpoint @none` 記下
+的是 `endpoint: null`，resolver 原樣放進 tuple、checker 要求字串——出貨的 pin row 過不了出貨的 checker。
+resolver 現在把 null 正規化成 `''`，checker 接受 pin row 的 null。`dispatch-hetero-contract.test.sh`
+R3c（有 pin 無 override → `operator-pin`）／R3d（拔掉 pin → 拒）／R3e（knob off → 拒）（74），
+`resolve-live-tuple.test.sh` 3c2（16）。
+
 ## v2.36.35 — repo 層級的殘留清掃：308 的 51 個 worktree 不是任何 run 的
 
 `308-db` 2026-09-12 回報 (a)：殘留記帳只看得到自己建的資源——51 個 worktree（15 個 dirty）、88 條分支

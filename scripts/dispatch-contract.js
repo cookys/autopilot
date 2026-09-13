@@ -266,8 +266,13 @@ function isPinRow(pin, docRole, reasons) {
       return false;
     }
   }
-  if (typeof pin.endpoint !== 'string') {
-    reasons.push('resolved-live: operator_pin.endpoint must be a string');
+  // The pin store writes `endpoint: null` for the explicit "@none" wallet (engine-capability-
+  // state.js normalises the "@none" argument to null). Refusing null here
+  // meant a pin recorded through the shipped CLI could never be admitted through the shipped
+  // checker (2026-09-13, sixth vacuity in this family — the test fixtures all wrote ""). A
+  // string (including "") or null is a pin row; anything else is not.
+  if (pin.endpoint !== null && typeof pin.endpoint !== 'string') {
+    reasons.push('resolved-live: operator_pin.endpoint must be a string or null (@none)');
     return false;
   }
   if (pin.expires !== null) {

@@ -68,7 +68,21 @@ assert_eq "2" "$EXIT" "unknown flag exit code"
 # required_review_families=2, l1_required=true — BY DESIGN (resolve-review-loop.sh
 # §"Derive source trust"). Restore the gpt seats (reviewer gpt-5.5 / implementer
 # gpt-5.3-codex-spark, low-risk baseline) after the codex pool resets ~2026-07-23.
-OUT="$(bash "$SCRIPT" 2>&1)"; EXIT=$?
+#
+# FROZEN FIXTURE (2026-09-13, BACKLOG "resolve-review-loop.test.sh asserts on the LIVE
+# project config"): the roster assertions below read hooks/tests/fixtures/
+# review-loop-config.frozen-2026-09-13.md, a byte copy of the shipped dogfood config at
+# freeze time, so a legitimate seat swap in .claude/review-loop-config.md (a vendor
+# paywall, 2026-09-12) no longer reds nine assertions that were never about the resolver.
+# The LIVE config keeps exactly one assertion — it must still parse and resolve — with a
+# message that names the operand.
+FROZEN_CFG="$REPO_ROOT/hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md"
+LIVE_OUT="$(bash "$SCRIPT" 2>&1)"; LIVE_EXIT=$?
+assert_eq "0" "$LIVE_EXIT" "LIVE .claude/review-loop-config.md still resolves (exit 0). If this reds after a deliberate seat change, the project config is the operand — fix the config or the resolver, not this assertion"
+assert_contains "$LIVE_OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "LIVE config is the one resolved by default (absolute repo path)"
+printf '%s' "$LIVE_OUT" | grep '^{' | tail -n1 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s);})' 2>/dev/null \
+  && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "LIVE config output is parseable JSON"
+OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$FROZEN_CFG" bash "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default exit code"
 assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engine"
 # Board decision A named grok-4.5 @ grok. Moved to grok-4.6 via cursor on
@@ -84,7 +98,7 @@ assert_contains "$OUT" '"verification_author_effort": "high"' "default verificat
 assert_contains "$OUT" '"verification_author_endpoint": ""' "default verification_author_endpoint"
 assert_contains "$OUT" '"verification_author_family": "alibaba"' "default derived verification_author_family"
 assert_contains "$OUT" '"implementer_family": "xai"' "default derived implementer_family"
-assert_contains "$OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "default config_path is repo dogfood absolute path"
+assert_contains "$OUT" '"config_path": "'"$FROZEN_CFG"'"' "config_path is the frozen fixture's absolute path"
 assert_contains "$OUT" '"loop_convergence_verdict": "SHIP-AS-IS"' "default convergence verdict"
 assert_contains "$OUT" '"review_risk": "high"' "default review_risk (xai impl → low-trust → high by design)"
 assert_contains "$OUT" '"required_review_families": 2' "default required_review_families"
@@ -95,7 +109,7 @@ assert_contains "$OUT" 'MiniMax-M3 diff-only reviewer limitation: 5/6 recorded c
 
 # A2 perturbation: deleting the exact-seat caveat makes the roster fail closed.
 NO_MINIMAX_CAVEAT_CFG="$TEST_TMP/no-minimax-caveat.md"
-sed '/^[[:space:]]*- reviewer_limitation:/d' "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_CAVEAT_CFG"
+sed '/^[[:space:]]*- reviewer_limitation:/d' "$FROZEN_CFG" > "$NO_MINIMAX_CAVEAT_CFG"
 NO_CAVEAT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_CAVEAT_CFG" bash "$SCRIPT" 2>&1)"
 NO_CAVEAT_EXIT=$?
 assert_eq "3" "$NO_CAVEAT_EXIT" "MiniMax exact seat is rejected when its limitation tag is removed"
@@ -106,7 +120,7 @@ assert_contains "$NO_CAVEAT_OUT" "requires reviewer_limitation=minimax-false-cen
 NO_MINIMAX_GUARD_FIELDS_CFG="$TEST_TMP/no-minimax-guard-fields.md"
 sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
   -e '/^[[:space:]]*- reviewer_limitation_required:/d' \
-  "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_GUARD_FIELDS_CFG"
+  "$FROZEN_CFG" > "$NO_MINIMAX_GUARD_FIELDS_CFG"
 NO_GUARD_FIELDS_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_GUARD_FIELDS_CFG" bash "$SCRIPT" 2>&1)"
 NO_GUARD_FIELDS_EXIT=$?
 assert_eq "3" "$NO_GUARD_FIELDS_EXIT" "MiniMax exact seat rejects caveat removal even when required flag is deleted"
@@ -115,30 +129,30 @@ assert_contains "$NO_GUARD_FIELDS_OUT" "requires reviewer_limitation=minimax-fal
 MINIMAX_FALSE_REQUIRED_CFG="$TEST_TMP/minimax-false-required.md"
 sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
   -e 's/^[[:space:]]*- reviewer_limitation_required:.*/- reviewer_limitation_required: false/' \
-  "$REPO_ROOT/.claude/review-loop-config.md" > "$MINIMAX_FALSE_REQUIRED_CFG"
+  "$FROZEN_CFG" > "$MINIMAX_FALSE_REQUIRED_CFG"
 FALSE_REQUIRED_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$MINIMAX_FALSE_REQUIRED_CFG" bash "$SCRIPT" 2>&1)"
 FALSE_REQUIRED_EXIT=$?
 assert_eq "3" "$FALSE_REQUIRED_EXIT" "MiniMax exact seat rejects caveat removal when required flag is false"
 assert_contains "$FALSE_REQUIRED_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "false MiniMax required flag cannot silence diagnosis"
 
-# 4. --field accessors
-# DOGFOOD PIN (Board decision A roster — see §3 rationale).
-assert_eq "MiniMax-M3" "$(bash "$SCRIPT" --field reviewer_engine)" "--field reviewer_engine"
-assert_eq "high" "$(bash "$SCRIPT" --field reviewer_effort)" "--field reviewer_effort"
-assert_eq "on" "$(bash "$SCRIPT" --field independent_harness)" "--field independent_harness"
-assert_eq "high" "$(bash "$SCRIPT" --field review_risk)" "--field review_risk (xai impl → high by design)"
-assert_eq "2" "$(bash "$SCRIPT" --field required_review_families)" "--field required_review_families"
-assert_eq "true" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
-assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cross_family_required"
-assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
-assert_eq "true" "$(bash "$SCRIPT" --field verification_author_present)" "--field verification_author_present"
-assert_eq "$(bash "$SCRIPT" --field verification_author_engine)" "Qwen3.8-Max-Preview" "--field verification_author_engine"
-assert_eq "$(bash "$SCRIPT" --field verification_author_runner)" "qoderclicn" "--field verification_author_runner"
-assert_eq "high" "$(bash "$SCRIPT" --field verification_author_effort)" "--field verification_author_effort"
-assert_eq "$(bash "$SCRIPT" --field verification_author_endpoint)" "" "--field verification_author_endpoint"
-assert_eq "$(bash "$SCRIPT" --field verification_author_family)" "alibaba" "--field verification_author_family"
-assert_eq "xai" "$(bash "$SCRIPT" --field implementer_family)" "--field implementer_family"
-assert_eq "$REPO_ROOT/.claude/review-loop-config.md" "$(bash "$SCRIPT" --field config_path)" "--field config_path"
+# 4. --field accessors (frozen fixture — see §3)
+F() { REVIEW_LOOP_CONFIG_OVERRIDE="$FROZEN_CFG" bash "$SCRIPT" "$@"; }
+assert_eq "MiniMax-M3" "$(F --field reviewer_engine)" "--field reviewer_engine"
+assert_eq "high" "$(F --field reviewer_effort)" "--field reviewer_effort"
+assert_eq "on" "$(F --field independent_harness)" "--field independent_harness"
+assert_eq "high" "$(F --field review_risk)" "--field review_risk (xai impl → high by design)"
+assert_eq "2" "$(F --field required_review_families)" "--field required_review_families"
+assert_eq "true" "$(F --field l1_required)" "--field l1_required"
+assert_eq "true" "$(F --field cross_family_required)" "--field cross_family_required"
+assert_eq "true" "$(F --field cross_family_satisfied)" "--field cross_family_satisfied"
+assert_eq "true" "$(F --field verification_author_present)" "--field verification_author_present"
+assert_eq "$(F --field verification_author_engine)" "Qwen3.8-Max-Preview" "--field verification_author_engine"
+assert_eq "$(F --field verification_author_runner)" "qoderclicn" "--field verification_author_runner"
+assert_eq "high" "$(F --field verification_author_effort)" "--field verification_author_effort"
+assert_eq "$(F --field verification_author_endpoint)" "" "--field verification_author_endpoint"
+assert_eq "$(F --field verification_author_family)" "alibaba" "--field verification_author_family"
+assert_eq "xai" "$(F --field implementer_family)" "--field implementer_family"
+assert_eq "$FROZEN_CFG" "$(F --field config_path)" "--field config_path"
 EMPTY_SCDIR="$TEST_TMP/empty-scorecard"
 mkdir -p "$EMPTY_SCDIR"
 assert_eq "false" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "--field reviewer_qualified returns false when no reviewer scorecard row"

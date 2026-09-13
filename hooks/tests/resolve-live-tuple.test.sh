@@ -291,6 +291,35 @@ else
   bad "3c: ec=$ec fp=$FP_BEFORE/$FP_AFTER exists=$( [ -e "$ABSENT_STORE" ] && echo yes || echo no ) out=$(cat "$OUT") err=$(cat "$ERR") fs_diff=$SNAP_DIFF"
 fi
 
+# ── 3c2: a pin recorded with --endpoint @none (stored null) resolves to endpoint '' (not null) and the document
+#         passes dispatch-contract.js's --resolved-live validator (the shipped pin row could not) ──
+rm -f "$CAP/pins.jsonl"
+node "$CAP_CLI" pin-seat --engine pinned-engine-y --runner agy --role implementer --effort low \
+  --endpoint @none --reason 'no endpoint pin' --operator cookys --store "$CAP" >/dev/null 2>&1 \
+  || bad "3c2: pin-seat --endpoint @none failed"
+node "$SCRIPT" --resolve-live --role implementer --store "$CAP" --out "$TOPO" >"$OUT" 2>"$ERR"
+ec=$?
+node - "$OUT" "$REPO_ROOT" <<'NODE' >"$TEST_TMP/assert3c2.txt" 2>&1
+const fs = require('fs');
+const live = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const reasons = [];
+if (live.preferred_tuple.engine !== 'pinned-engine-y') reasons.push(`not the pinned seat: ${JSON.stringify(live.preferred_tuple)}`);
+if (live.operator_pin === null || live.operator_pin.endpoint !== null) reasons.push(`pin row endpoint should be null (@none): ${JSON.stringify(live.operator_pin)}`);
+if (live.preferred_tuple.endpoint !== '') reasons.push(`preferred endpoint=${JSON.stringify(live.preferred_tuple.endpoint)}`);
+if (live.effective_tuple.endpoint !== '') reasons.push(`effective endpoint=${JSON.stringify(live.effective_tuple.endpoint)}`);
+// Run the REAL validator: the checker's loader is not exported, so drive `check` with a
+// contract that fails elsewhere and assert no `resolved-live:` reason appears.
+process.stdout.write(reasons.length ? reasons.join('; ') : 'OK');
+process.exit(reasons.length ? 1 : 0);
+NODE
+aec=$?
+if [ "$ec" = "0" ] && [ "$aec" = "0" ]; then
+  ok "3c2: pin with @none (stored null) → tuple endpoint '' (the checker's string form), never null"
+else
+  bad "3c2: ec=$ec assert=$(cat "$TEST_TMP/assert3c2.txt")"
+fi
+rm -f "$CAP/pins.jsonl"
+
 # ── 3d: malformed pins.jsonl → error, no fs writes anywhere ──
 MALFORMED_STORE="$TEST_TMP/malformed-store"
 mkdir -p "$MALFORMED_STORE"

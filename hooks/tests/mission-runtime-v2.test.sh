@@ -1336,6 +1336,116 @@ if (runtime) {
     && !fs.existsSync(brokenSentinel));
   fs.writeFileSync(checkpointPath, checkpointBytes);
 
+  // A SIBLING campaign persisting between this campaign's intake and its controller
+  // persistence changes the canonical Mission state hash without touching this claim or
+  // the Mission identity (measured 2026-09-12: three independent nodes granted, two
+  // rejected with rounds 0). The controller must re-adopt the live state, not refuse.
+  const siblingLoads = { count: 0 };
+  const siblingStore = Object.create(store);
+  siblingStore.load = function siblingLoad() {
+    siblingLoads.count += 1;
+    // The second observation is the controller's reobservation at persistence. Right before
+    // it, a sibling REALLY persists (CAS through the same store): the on-disk state moves
+    // by one control_sequence, so every later observation — this campaign's and the next
+    // cases' — sees one consistent document, exactly as two concurrent intakes would.
+    if (siblingLoads.count === 2) {
+      const before = store.load();
+      const next = JSON.parse(JSON.stringify(before));
+      next.control_sequence = (next.control_sequence || 0) + 1;
+      if (store.save(before, next) !== true) throw new Error('sibling CAS write failed');
+    }
+    return store.load();
+  };
+  const siblingEngine = new AutopilotEngine({
+    cwd: controllerRecoveryWt,
+    clock: () => '2026-07-28T00:00:01.800Z',
+    missionCampaignStore: siblingStore,
+    missionAdapterFactory: () => ({
+      missionClaim: () => ({
+        owner: 'mission',
+        status: 'claimed',
+        claim_id: granted.payload.claim_id,
+      }),
+      // no releaseMission: keep the claim live for the cases that follow
+    }),
+    campaignIntake() {
+      return preparedControlForEngine();
+    },
+    campaignEventAppender: (input) => intentOnlyAppender(input),
+    implementationDispatcher() {
+      return zeroEffectLeaf;
+    },
+  });
+  const siblingResult = siblingEngine.runImplementationReviewLoop(loopInput);
+  check('controller-readopts-sibling-advanced-mission-state',
+    siblingLoads.count >= 2
+    && siblingResult.phase !== 'controller_execution_authority'
+    && !/between intake and controller persistence/.test(siblingResult.reason || ''));
+  const readoptedRecords = workOrder.listWorkOrders(common, controllerRootRunId)
+    .filter((entry) => entry.work_order
+      && entry.work_order.role === 'controller'
+      && entry.work_order.graph_node === controllerGraphNode
+      && entry.work_order.attempt === controllerAttempt);
+  let readoptedDurable = null;
+  try {
+    readoptedDurable = readoptedRecords.length === 1
+      ? JSON.parse(fs.readFileSync(readoptedRecords[0].work_order.paths.durable, 'utf8'))
+      : null;
+  } catch (_error) {
+    readoptedDurable = null;
+  }
+  check('controller-readoption-recorded-in-durable-body',
+    readoptedDurable
+    && readoptedDurable.mission_state_readopted
+    && readoptedDurable.mission_state_readopted.reason
+      === 'sibling_campaign_persisted_between_intake_and_persistence'
+    && /^[0-9a-f]{64}$/.test(readoptedDurable.mission_state_readopted.intake_state_digest || '')
+    && /^[0-9a-f]{64}$/.test(readoptedDurable.mission_state_readopted.readopted_state_digest || '')
+    && readoptedDurable.mission_state_readopted.intake_state_digest
+      !== readoptedDurable.mission_state_readopted.readopted_state_digest
+    && readoptedDurable.mission_state_readopted.attempts === 1
+    && readoptedDurable.mission_state_digest
+      === readoptedDurable.mission_state_readopted.readopted_state_digest);
+  // …but a change to the Mission IDENTITY between intake and persistence is still refused:
+  // the re-adoption goes through the same authority refresh, which names the drifted field.
+  const driftLoads = { count: 0 };
+  const driftStore = Object.create(store);
+  driftStore.load = function driftLoad() {
+    driftLoads.count += 1;
+    const live = store.load();
+    // Every observation after intake sees the drifted identity: the attach path's first
+    // observation stays real, so the refusal under test is the persistence guard's.
+    if (driftLoads.count >= 2) live.task_authority_id = 'e'.repeat(64);
+    return live;
+  };
+  const driftEngine = new AutopilotEngine({
+    cwd: controllerRecoveryWt,
+    clock: () => '2026-07-28T00:00:01.850Z',
+    missionCampaignStore: driftStore,
+    missionAdapterFactory: () => ({
+      missionClaim: () => ({
+        owner: 'mission',
+        status: 'claimed',
+        claim_id: granted.payload.claim_id,
+      }),
+    }),
+    campaignIntake() {
+      return preparedControlForEngine();
+    },
+    campaignEventAppender() {
+      throw new Error('identity drift must not start composition');
+    },
+    implementationDispatcher() {
+      throw new Error('identity drift must not dispatch implementation');
+    },
+  });
+  const driftResult = driftEngine.runImplementationReviewLoop(loopInput);
+  check('controller-still-refuses-mission-identity-drift-at-persistence',
+    driftResult.status === 'blocked'
+    && driftResult.phase === 'controller_execution_authority'
+    && /could not be re-adopted/.test(driftResult.reason || '')
+    && /task_authority_id changed/.test(driftResult.reason || ''));
+
   // Real managed composition path: constructor-owned Mission store + default
   // releaseCampaignAdmission. Adapters are built exactly once at intake and
   // the same object is threaded into release (never rebuilt).
@@ -2292,6 +2402,9 @@ for id in \
   durable-zero-effect-lease-marked-dead durable-zero-effect-emits-mission-no-effect-release \
   durable-zero-effect-stagnation-unchanged durable-zero-effect-graph-restored-pending \
   durable-zero-effect-no-terminal-reconcile durable-zero-effect-non-terminal-result \
+  controller-readopts-sibling-advanced-mission-state \
+  controller-readoption-recorded-in-durable-body \
+  controller-still-refuses-mission-identity-drift-at-persistence \
   controller-zero-effect-exact-aborted-disposition \
   durable-zero-effect-permits-next-graph-attempt \
   engine-terminal-ready-through-production-composition \

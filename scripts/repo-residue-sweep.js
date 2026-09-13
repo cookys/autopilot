@@ -149,11 +149,13 @@ function classifyWorktrees(repo, mainPath, integrationSha) {
     else { try { ageMs = now - fs.statSync(p).mtimeMs; } catch { ageMs = null; } }
     row.age_days = ageMs === null ? null : Math.round(ageMs / 864000) / 100;
     if (row.lock_held === true) { row.class = 'live'; row.reason = 'worktree lock is held by a running rail'; rows.push(row); continue; }
+    // A lock file whose state cannot be measured (no flock binary) is not "not held": the
+    // worktree is unverifiable and reap never touches that class.
+    if (row.lock_held === null) { row.class = 'unverifiable'; row.reason = 'lock file present but flock unavailable: liveness unknowable'; rows.push(row); continue; }
     const st = git(p, ['status', '--porcelain', '--untracked-files=all', '--ignored=no']);
     if (!st.ok) { row.class = 'unverifiable'; row.reason = `git status failed: ${st.err.trim()}`; rows.push(row); continue; }
     const lines = st.out ? st.out.split('\n').filter((l) => l && !/^\?\? \.autopilot-worktree(\.lock)?$/.test(l)) : [];
     row.dirty_lines = lines.length;
-    if (row.lock_held === null) row.reason = 'flock unavailable: liveness unknowable; ';
     if (lines.length > 0) { row.class = 'dirty'; row.reason += `${lines.length} uncommitted path(s)`; rows.push(row); continue; }
     row.integrated = wt.head ? isAncestor(repo, wt.head, integrationSha) : null;
     if (row.integrated === null) { row.class = 'unverifiable'; row.reason += 'merge-base could not run'; }

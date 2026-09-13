@@ -9,7 +9,7 @@ Caps are UTF-8 **bytes** (not characters). The gate (`scripts/check-backlog-entr
 Every style carries the same fields. `Context` is the only optional field.
 
 | Title | 120 | one line; unique per file case-insensitively; no trailing period |
-| Status | 64 | `open` · `fired <YYYY-MM-DD>` · `shipped <version-or-sha>` · `dropped <YYYY-MM-DD>` |
+| Status | 64 | `open` · `fired <YYYY-MM-DD>` · `shipped <version-or-sha> <YYYY-MM-DD>` · `dropped <YYYY-MM-DD>` — done rows carry the date so retention can be measured |
 | Trigger | 240 | one line; for `fired` rows the date replaces the condition |
 | Effort | — | `S` · `Fix` · `M` · `L` · `H` |
 | Source | 160 | who/what surfaced it |

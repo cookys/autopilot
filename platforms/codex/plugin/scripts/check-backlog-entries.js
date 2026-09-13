@@ -36,7 +36,9 @@ const DEFAULT_CAPS = {
 };
 const POINTER_THRESHOLD = 600;
 const DEFAULT_ROOTS = ['docs/plans/', 'docs/projects/', 'docs/backlog/'];
-const STATUS_RE = /^(open|fired \d{4}-\d{2}-\d{2}|dropped \d{4}-\d{2}-\d{2}|shipped \S+)$/;
+// `shipped` carries the ship date as well as the version/sha: done_not_moved is measured from a
+// date, and a version alone has none (depth-0 probe, 2026-09-14).
+const STATUS_RE = /^(open|fired \d{4}-\d{2}-\d{2}|dropped \d{4}-\d{2}-\d{2}|shipped \S+ \d{4}-\d{2}-\d{2})$/;
 const CODES = [
   'missing_field', 'cap_exceeded', 'bad_status', 'bad_effort',
   'pointer_missing', 'pointer_unresolved', 'pointer_required',
@@ -152,7 +154,11 @@ function parseConfigFile(filePath) {
   for (const line of capLines) {
     const m = line.match(/^\s*-\s+caps\.(\w+)\s*:\s*(\d+)\s*$/i)
       || line.match(/^\s*-\s+(Title|Status|Trigger|Source|Pointer|Context|entry)\s*:\s*(\d+)\s*$/i);
-    if (m) cfg.caps[m[1]] = Number(m[2]);
+    if (m) {
+      const canonical = KNOWN_FIELDS.find((f) => f.toLowerCase() === m[1].toLowerCase())
+        || (m[1].toLowerCase() === 'entry' ? 'entry' : null);
+      if (canonical) cfg.caps[canonical] = Number(m[2]);
+    }
   }
   return cfg;
 }
@@ -346,8 +352,28 @@ function daysAgo(iso, now) {
   return Math.floor((now - t) / 86400000);
 }
 
+// A block written in ANOTHER style than the file declares must surface as `unparseable_entry`,
+// never vanish: a `### Title` entry appended to a table or checklist backlog is invisible to
+// parseTable/parseChecklist by construction (GLM review, 2026-09-14). Heading mode already
+// reports orphans; this is the same rule for the other two grammars.
+function foreignEntryLines(text, style) {
+  const out = [];
+  const lines = text.split(/\r?\n/);
+  let inItem = false;
+  for (const line of lines) {
+    if (style === 'checklist' && /^-\s+\[[ xX]\]\s+/.test(line)) { inItem = true; continue; }
+    if (/^\s*###\s+\S/.test(line)) { out.push(line); inItem = false; continue; }
+    if (/^\s*-\s+\*\*[A-Za-z]+\*\*\s*:/.test(line)) { out.push(line); continue; }
+    if (style === 'table' && /^\s*-\s+(Title|Status|Trigger|Effort|Source|Pointer|Context)\s*:/.test(line)) { out.push(line); continue; }
+    if (style === 'checklist' && !inItem && /^\s*-\s+(Title|Status|Trigger|Effort|Source|Pointer|Context)\s*:/.test(line)) { out.push(line); continue; }
+    if (style === 'checklist' && !line.trim()) inItem = false;
+  }
+  return out.map((line) => ({ unparseable: true, text: line, title: '' }));
+}
+
 function collectEntries(text, style) {
   const out = [];
+  if (style === 'table' || style === 'checklist') out.push(...foreignEntryLines(text, style));
   if (style === 'table') {
     const { header, rows } = parseTable(text);
     if (!header) {
@@ -827,6 +853,31 @@ function runSelfTest() {
       'heading',
       miniHeading({ ...base, Status: 'dropped 2020-01-01' }),
       ['done_not_moved']
+    );
+    add(
+      'done_not_moved-shipped',
+      'heading',
+      miniHeading({ ...base, Status: 'shipped v1.0.0 2020-01-01' }),
+      ['done_not_moved']
+    );
+    add('bad_status-shipped-undated', 'heading', miniHeading({ ...base, Status: 'shipped v1.0.0' }), ['bad_status']);
+    add(
+      'unparseable_entry-heading-in-table',
+      'table',
+      '| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |\n' +
+      '| --- | --- | --- | --- | --- | --- | --- | --- |\n' +
+      '| 0001 | Gate self-test row | open | when the fixture runs | S | self-test | docs/plans/ok.md | one line |\n' +
+      '\n### Sneaked heading entry\n- **Status**: open\n- **Trigger**: t\n- **Effort**: S\n- **Source**: s\n- **Pointer**: docs/plans/ok.md\n',
+      ['unparseable_entry'],
+      { style: 'table', id_pattern: '^\\d{4}$' }
+    );
+    add(
+      'unparseable_entry-heading-in-checklist',
+      'checklist',
+      '- [ ] [Minor] Gate self-test row\n  - Status: open\n  - Trigger: when the fixture runs\n  - Effort: S\n  - Source: self-test\n  - Pointer: docs/plans/ok.md\n' +
+      '\n### Sneaked heading entry\n- **Status**: open\n- **Trigger**: t\n- **Effort**: S\n- **Source**: s\n- **Pointer**: docs/plans/ok.md\n',
+      ['unparseable_entry'],
+      { style: 'checklist' }
     );
 
     add(

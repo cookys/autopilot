@@ -18,6 +18,9 @@ file tool。`--new-project` 讓 session 從乾淨開始，同一 prompt 落回 w
 
 沒做：`--runner grok` 是否同樣逃逸未測；預防面仍是 accident guard，不是 sandbox。
 
+prose-justification: 本版對 prose 面沒有增量（自 v2.35.2 基線的 +8% 是 v2.36.34 的 hetero-dispatch 工頭契約段，
+該版已註明）；本版只動 scripts 註解、測試與 evidence 目錄。
+
 ## v2.36.36 — 2026-09-12 dogfood 量到的四條軌道缺陷
 
 四條都是 /l5 dogfood 當天付過代價的：一條在付了實作回合之後才拒、一條讓平行圖在執行時序列化失敗、

@@ -53,6 +53,7 @@ n=0; while [ -e "$KIMI_STUB_DIR/argv.$n" ]; do n=$((n+1)); done
 printf '%s\n' "$@" > "$KIMI_STUB_DIR/argv.$n"
 env | LC_ALL=C sort > "$KIMI_STUB_DIR/env.$n"
 pwd > "$KIMI_STUB_DIR/cwd.$n"
+echo "$$" > "$KIMI_STUB_DIR/pid.$n"
 mode="$KIMI_STUB_MODE"; cont=0
 for a in "$@"; do [ "$a" = "-c" ] && cont=1; done
 [ "$cont" -eq 1 ] && [ -n "${KIMI_STUB_CONTINUE_MODE:-}" ] && mode="$KIMI_STUB_CONTINUE_MODE"
@@ -176,7 +177,10 @@ WT3="$(field "$OUT" worktree)"
 [ -d "$WT3" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: worktree retained after cap"
 # the spinning stub is dead (its process group was killed)
 sleep 0.5
-if pgrep -f "KIMI_STUB_DIR=$SD" >/dev/null 2>&1; then fail "3: stub still running after cap kill"; else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)); fi
+STUB_PID="$(cat "$SD/pid.0")"
+if kill -0 "$STUB_PID" 2>/dev/null; then fail "3: stub pid $STUB_PID still alive after cap kill"; else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)); fi
+# and the assertion can fail: a live pid from THIS shell is seen alive by the same probe
+kill -0 "$$" 2>/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: liveness probe control"
 STREAM_LINES="$(wc -l < "$RD/foreman.stream.jsonl")"
 [ "$STREAM_LINES" -lt 40 ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: stream stopped growing after kill ($STREAM_LINES lines)"
 

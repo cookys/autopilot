@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.36.35 — repo 層級的殘留清掃：308 的 51 個 worktree 不是任何 run 的
+
+`308-db` 2026-09-12 回報 (a)：殘留記帳只看得到自己建的資源——51 個 worktree（15 個 dirty）、88 條分支
+（65 條帶未整合 commit），大多是工頭經 `dispatch-hetero` 或手工建的，`max_leaf_worktrees_per_root` 與
+`zero_residue` 從來沒看過它們；三個 dirty worktree 裡有 staged 但沒 commit 的原始碼，別處都沒有。他們手工
+匯出 patch，並明說沒有任何東西保證這件事。計畫：`docs/plans/2026-09-13-repo-residue-sweep.md`。
+
+### `scripts/repo-residue-sweep.js`（新）
+
+repo 全域、不是 per-run。`scan` 把每個 linked worktree 分成 live（`.autopilot-worktree.lock` 被持有，
+`flock -n` 失敗）／missing-dir／dirty（`status --porcelain` 有任何一行）／clean-integrated（HEAD 是整合 ref
+的祖先）／clean-unintegrated，每條分支分成 checked-out／integrated／unintegrated（帶 ahead 數與最後 commit
+日期）——全部從 git 事實判，不讀 marker 的自述。`preserve` 對 dirty worktree 寫出 staged／unstaged／
+HEAD→worktree 三份 `--binary` patch、untracked 的 tar 與 manifest（sha256），patch 在暫存 index 裡對
+worktree 自己的 HEAD 跑 `git apply --check`、tar 列回來比對清單，全部過了才叫 `preserved: true`。
+`reap --yes` 只移 missing-dir 與 clean-integrated；dirty 只在 `--preserve-dir` 底下有這個 worktree＋HEAD 的
+manifest、bytes 的 sha256 現在重驗相符、而且 worktree 自 preserve 後沒再變動時才移；integrated 且沒被
+checkout 的分支在 `pin-evidence-anchors.js apply --exclude-ref` 成功後才刪；live、unintegrated、沒保存的 dirty
+永遠不碰。`--older-than-days` 只縮小候選集。不擴充 `reap-dispatch-worktrees.sh`：那是 per-root 的生命週期證明，
+混在一起會削弱它。測試 `hooks/tests/repo-residue-sweep.test.sh`（44：五種 worktree 類別、無保存不移、篡改
+worktree 與篡改保存檔各被拒、年齡只縮不放）。本 repo 實跑 `scan`：1 個 clean-unintegrated worktree、
+10 條 integrated、4 條 unintegrated。
+
 ## v2.36.34 — 非 Claude 工頭軌（Shape B）：kimi 握迴圈，軌道自己執法
 
 owner 2026-09-13 裁定 B（配額是動機）。設計文件 `docs/plans/2026-09-13-non-claude-foreman-rail-design.md` §4

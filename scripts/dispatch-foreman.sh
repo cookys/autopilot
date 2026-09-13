@@ -242,10 +242,11 @@ depth 0 (the dispatcher that started you), and it is reached from git, not from 
   push are blocked at git level; an attempt is recorded, not forgiven.
 - Inputs (read-only): \`$RUN_DIR/brief.md\`, \`$RUN_DIR/plan.md\`.
 - Hands: dispatch implementation through
-  \`$SELF_DIR/dispatch-hetero.sh --branch hands/$RUN_ID/<unit> --base $BASE_SHA --ledger $RUN_DIR/hands.ledger --run-id <unit> ...\`
+  \`$SELF_DIR/dispatch-hetero.sh --branch hands/$RUN_ID/<unit> --base $BASE_SHA --ledger $RUN_DIR/hands.ledger --run-id <unit> --stage implement ...\`
   (every hand branch MUST start with \`hands/$RUN_ID/\`; any other ref you create rejects the
-  whole run). Review through \`$SELF_DIR/dispatch-review.sh\`. Wait for detached hands with
-  \`node $SELF_DIR/wait-dispatch-results.js --ledger $RUN_DIR/hands.ledger --expect <unit>.<stage>\`
+  whole run; the three ledger flags together make the hand detach, so it survives you). Review
+  through \`$SELF_DIR/dispatch-review.sh\`. Wait for detached hands with
+  \`node $SELF_DIR/wait-dispatch-results.js --ledger $RUN_DIR/hands.ledger --expect <unit>.implement\`
   — never poll with a shell loop.
 - Budget: at most $TOOL_CAP Bash tool calls in this turn. At the cap you are stopped; a
   handoff turn follows. Write \`$RUN_DIR/HANDOFF.md\` yourself BEFORE the cap when you can see it
@@ -360,8 +361,10 @@ if [ -n "$FOREMAN_HEAD" ] && [ "$FOREMAN_HEAD" != "$BASE_SHA" ]; then
   elif [ "$(git rev-list --merges --count "$BASE_SHA..$FOREMAN_HEAD" 2>/dev/null || echo 1)" != "0" ]; then
     GATE_STATUS="foreman_integrated"; GATE_ERR="foreman branch contains a merge commit — integration is depth 0's, not the foreman's"
   else
-    FOREMAN_COMMITS="$(git rev-list --count "$BASE_SHA..$FOREMAN_HEAD" 2>/dev/null || echo 0)"
+    FOREMAN_COMMITS="$(git rev-list --count "$BASE_SHA..$FOREMAN_HEAD" 2>/dev/null)" || FOREMAN_COMMITS=""
     _gate_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$FOREMAN_HEAD" 2>&1)"; _gate_rc=$?
+    # A count that could not be measured is not 0 and not 1: it is unverified, like a gate that could not run.
+    [ -n "$FOREMAN_COMMITS" ] || { _gate_rc=3; _gate_out="git rev-list --count failed for $BASE_SHA..$FOREMAN_HEAD"; FOREMAN_COMMITS=0; }
     case "$_gate_rc" in
       0) ;;
       1|2) GATE_STATUS="unsafe_commit_content"; GATE_ERR="$(printf '%s' "$_gate_out" | tr '\n' ' ' | cut -c1-400)" ;;

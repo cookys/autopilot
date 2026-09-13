@@ -19,7 +19,7 @@ containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes
 2. ~~`openclaw` main claim~~ — closed in v2.36.28; side effects (a)/(b) remain, unreproduced.
 3. ~~`cookys-7840hs` four defects~~ — **SHIPPED v2.36.33**.
 4. ~~**Non-Claude foreman rail, Shape B**~~ — **SHIPPED v2.36.34** (`scripts/dispatch-foreman.sh`, `scripts/wait-dispatch-results.js` for `chatgpt-tunnel-host` (B), `scripts/lib/main-checkout-boundary.sh`; build plan `docs/plans/2026-09-13-foreman-rail-b-build.md`). Residuals in the row "Foreman rail residuals" below. `/l5` routing through the rail is a separate PATCH.
-5. `308-db` item (a), repo-level residue sweep — its own plan.
+5. ~~`308-db` item (a), repo-level residue sweep~~ — **SHIPPED v2.36.35** (`scripts/repo-residue-sweep.js`, plan `docs/plans/2026-09-13-repo-residue-sweep.md`).
 6. The four rail defects measured during the 2026-09-12 dogfood (concurrent-dispatch refusal, `output_paths` must enumerate codex mirrors, live-config assertions, unreachable operator-pin admission).
 
 ### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
@@ -204,7 +204,7 @@ containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes
 - **(a) residue accounting only sees resources it created.** 308 currently registers 51 worktrees (15 dirty) and 88 branches (65 carrying commits not in HEAD), most created by foremen via `dispatch-hetero` or by hand, none inside the managed leaf lifecycle — so `max_leaf_worktrees_per_root` and `zero_residue` never saw any of them. A repo-level sweep would beat the per-run one. **Dirty worktrees are the urgent half**: a stale branch at least records the work as a commit, while three of theirs hold staged-but-never-committed renderer source that exists nowhere else.
 - **(b) the qc-panel seat allowlist fails silently — CONFIRMED HERE, with one correction to the report.** Their specific instance is already fixed: `kimi` and `opencode` ARE on the qc-panel runner allowlist in this repo (`scripts/resolve-review-loop.sh:739`); they read the 2.34.5 plugin cache. **The structural complaint holds and is live**: all three validations in that loop (runner, effort, endpoint) set `QC_PANEL_SEATS_COMPLETE="false"` with **no message at all**, so `qc_panel_seats` empties, `cross_family_satisfied` goes false, and `--enforce` BLOCKs with nothing naming the cause. The plan seat next to it (line 445) exits 3 with an explicit message for the same class of input. Make the panel path as loud.
 - **(a) is now preserved, not lost — and the peer is explicit that this was luck.** 2026-09-12 they exported staged/unstaged patches for all 15 dirty worktrees to `308-preserved-worktrees-20260912/` with a manifest (6 non-empty, 440K), then found the content was already in HEAD anyway. Nothing was lost; nothing guaranteed that, and they said so themselves. That is the argument for the repo-level sweep, not against it.
-- **Effort**: P1 Fix (schema + writer; three fields, see the shape above), P2 S, P3 S, (a) L and probably its own plan, (b) Fix.
+- **Effort**: P1 Fix (schema + writer; three fields, see the shape above), P2 S, P3 S, (a) L and probably its own plan — **(a) shipped v2.36.35 as `scripts/repo-residue-sweep.js`**, (b) Fix.
 - **Source**: cross-session report from `308-db`, 2026-09-12, after a two-day measurement phase measured a build whose inputs were never verified present.
 
 ### PEER-REPORTED (openclaw): an active l5 marker deadlocks the bounded campaign /l5 itself launched — MAIN CLAIM CLOSED v2.36.28, two side effects open

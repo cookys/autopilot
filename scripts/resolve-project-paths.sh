@@ -15,6 +15,7 @@
 #   scripts/resolve-project-paths.sh                 # JSON for $PWD
 #   scripts/resolve-project-paths.sh --target <dir>  # …for another repo
 #   scripts/resolve-project-paths.sh --field backlog
+#   scripts/resolve-project-paths.sh --field backlog_config
 #
 # Precedence per field (first that answers wins):
 #   1. $PROJECT_PATHS_CONFIG_OVERRIDE
@@ -32,7 +33,7 @@
 # says the project has no such location; it does not create one because a reference doc
 # once named `docs/`. An invented path fails silently: the file is written, nobody reads it.
 #
-# Output: JSON {projects_dir, plans_dir, archive_dir, backlog, index, source, target}
+# Output: JSON {projects_dir, plans_dir, archive_dir, backlog, backlog_config, index, source, target}
 #   source ∈ {override, project-lifecycle-config, next-config, dev-flow-config, detected, none}
 #     — the source of the FIRST field that answered; individual fields may differ, so a
 #       field's own value is authoritative, not the aggregate label.
@@ -137,12 +138,18 @@ for v in PROJECTS PLANS ARCHIVE BACKLOG INDEX; do
   [[ -z "${!v}" ]] && printf -v "$v" '%s' 'none'
 done
 
+BACKLOG_CONFIG="none"
+if [[ -f "$TARGET/.claude/backlog-config.md" ]]; then
+  BACKLOG_CONFIG=".claude/backlog-config.md"
+fi
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     projects_dir) printf '%s\n' "$PROJECTS" ;;
     plans_dir) printf '%s\n' "$PLANS" ;;
     archive_dir) printf '%s\n' "$ARCHIVE" ;;
     backlog) printf '%s\n' "$BACKLOG" ;;
+    backlog_config) printf '%s\n' "$BACKLOG_CONFIG" ;;
     index) printf '%s\n' "$INDEX" ;;
     source) printf '%s\n' "$SOURCE" ;;
     target) printf '%s\n' "$TARGET" ;;
@@ -151,6 +158,6 @@ if [[ -n "$FIELD" ]]; then
   exit 0
 fi
 
-printf '{ "projects_dir": "%s", "plans_dir": "%s", "archive_dir": "%s", "backlog": "%s", "index": "%s", "source": "%s", "target": "%s" }\n' \
+printf '{ "projects_dir": "%s", "plans_dir": "%s", "archive_dir": "%s", "backlog": "%s", "backlog_config": "%s", "index": "%s", "source": "%s", "target": "%s" }\n' \
   "$(json_escape "$PROJECTS")" "$(json_escape "$PLANS")" "$(json_escape "$ARCHIVE")" \
-  "$(json_escape "$BACKLOG")" "$(json_escape "$INDEX")" "$SOURCE" "$(json_escape "$TARGET")"
+  "$(json_escape "$BACKLOG")" "$(json_escape "$BACKLOG_CONFIG")" "$(json_escape "$INDEX")" "$SOURCE" "$(json_escape "$TARGET")"

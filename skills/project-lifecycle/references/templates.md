@@ -74,3 +74,7 @@ When two phases collapse into one (scope shrank, or they share an implementation
 - **Naming**: keep the lower number; note the absorbed phase in the title — e.g. `phase-2-data-isolation.md` absorbing the queue work becomes `phase-2-data-isolation-and-queue.md`, with a one-line "merged from former Phase 2.1" note at the top.
 - **Sub-phases**: use a decimal (`phase-2.1-queue-migration.md`) only for work discovered mid-phase that warrants its own file; otherwise fold it into the parent phase's Tasks list.
 - **Traceability**: never silently delete a phase file — if a phase is dropped, record it as "out of scope" in README rather than removing the record.
+
+## BACKLOG.md
+
+Header cites [`references/backlog-entry.md`](../../../references/backlog-entry.md). Do not restate the field list here; each row is an index pointer, not a work journal.

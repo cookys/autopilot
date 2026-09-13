@@ -80,8 +80,8 @@ FROZEN_CFG="$REPO_ROOT/hooks/tests/fixtures/review-loop-config.frozen-2026-09-13
 LIVE_OUT="$(bash "$SCRIPT" 2>&1)"; LIVE_EXIT=$?
 assert_eq "0" "$LIVE_EXIT" "LIVE .claude/review-loop-config.md still resolves (exit 0). If this reds after a deliberate seat change, the project config is the operand — fix the config or the resolver, not this assertion"
 assert_contains "$LIVE_OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "LIVE config is the one resolved by default (absolute repo path)"
-printf '%s' "$LIVE_OUT" | grep '^{' | tail -n1 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s);})' 2>/dev/null \
-  && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "LIVE config output is parseable JSON"
+LIVE_JSON_OK="$(printf '%s' "$LIVE_OUT" | grep '^{' | tail -n1 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{JSON.parse(s);process.stdout.write("parsed");}catch{process.stdout.write("unparseable");}})' 2>/dev/null)"
+assert_eq "parsed" "$LIVE_JSON_OK" "LIVE config output is parseable JSON"
 OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$FROZEN_CFG" bash "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default exit code"
 assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engine"

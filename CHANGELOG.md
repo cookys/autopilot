@@ -39,6 +39,10 @@ resolver 現在把 null 正規化成 `''`，checker 接受 pin row 的 null。`d
 R3c（有 pin 無 override → `operator-pin`）／R3d（拔掉 pin → 拒）／R3e（knob off → 拒）（74），
 `resolve-live-tuple.test.sh` 3c2（16）。
 
+prose-justification: 本版對 prose 面沒有增量（+0 行；自 v2.35.2 基線的 +8% 是 v2.36.34 的
+`references/hetero-dispatch.md` 工頭契約段，已在該版註明）；本版動的是 dev-flow SKILL.md 的一列 scripts 表格
+（`--mirror-roots` 用法）。
+
 ## v2.36.35 — repo 層級的殘留清掃：308 的 51 個 worktree 不是任何 run 的
 
 `308-db` 2026-09-12 回報 (a)：殘留記帳只看得到自己建的資源——51 個 worktree（15 個 dirty）、88 條分支

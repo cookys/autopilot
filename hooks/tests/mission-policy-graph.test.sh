@@ -536,6 +536,43 @@ const checked = graphChecker.inspect({
   sources: sourcesPath,
 });
 assert.equal(checked.status, 'READY');
+assert.equal(checked.mirror_rule, null);
+// --mirror-roots: a node writing under a mirrored dir must own the mirror path too, refused
+// at graph-check time (free) instead of at the boundary after a paid round (BACKLOG 2026-09-12).
+const mirrorRootsPath = path.join(tmp, 'mirror-roots.json');
+fs.writeFileSync(mirrorRootsPath, JSON.stringify({ root: 'platforms/codex/plugin', dirs: ['src', 'scripts'] }));
+assert.throws(
+  () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }),
+  /output_paths must enumerate every codex mirror: graph\.nodes\[0\]\(source-a\)\.campaign\.output_paths lacks the codex mirror of src\/output\.js \(platforms\/codex\/plugin\/src\/output\.js\)/,
+);
+const mirroredGraph = clone(checkerGraph);
+for (const { campaign: c } of mirroredGraph.nodes) {
+  c.output_paths = [...c.output_paths, ...c.output_paths.map((p) => `platforms/codex/plugin/${p}`)];
+  c.allowed_path_prefixes = [...c.allowed_path_prefixes, 'platforms/codex/plugin/'];
+  c.max_changed_files = Math.max(c.max_changed_files, c.output_paths.length);
+}
+fs.writeFileSync(graphPath, JSON.stringify(mirroredGraph));
+const mirrored = graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath });
+assert.equal(mirrored.status, 'READY');
+assert.deepEqual(mirrored.mirror_rule, { root: 'platforms/codex/plugin', dirs: ['src', 'scripts'], status: 'satisfied' });
+// a path outside every mirrored dir needs no mirror; a mirror path itself is never re-mirrored
+const unmirroredDirGraph = clone(mirroredGraph);
+unmirroredDirGraph.nodes[0].campaign.output_paths = ['docs/x.md'];
+unmirroredDirGraph.nodes[0].campaign.allowed_path_prefixes = ['docs/', 'src/'];
+fs.writeFileSync(graphPath, JSON.stringify(unmirroredDirGraph));
+assert.equal(graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }).status, 'READY');
+// prefix-only membership (srcfoo/…) is not under src/
+const prefixTrapGraph = clone(mirroredGraph);
+prefixTrapGraph.nodes[0].campaign.output_paths = ['srcfoo/x.js'];
+prefixTrapGraph.nodes[0].campaign.allowed_path_prefixes = ['srcfoo/', 'src/'];
+fs.writeFileSync(graphPath, JSON.stringify(prefixTrapGraph));
+assert.equal(graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }).status, 'READY');
+// malformed mirror roots refuse
+fs.writeFileSync(mirrorRootsPath, JSON.stringify({ root: '/abs', dirs: ['src'] }));
+assert.throws(() => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }), /mirror roots must be/);
+fs.writeFileSync(mirrorRootsPath, JSON.stringify({ root: 'platforms/codex/plugin', dirs: ['platforms/codex/plugin/src'] }));
+assert.throws(() => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }), /must not nest/);
+fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
 const omittedSourceGraph = clone(checkerGraph);
 omittedSourceGraph.nodes.pop();
 fs.writeFileSync(graphPath, JSON.stringify(omittedSourceGraph));

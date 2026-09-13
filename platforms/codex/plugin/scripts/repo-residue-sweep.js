@@ -189,7 +189,7 @@ function classifyBranches(repo, worktrees, integrationSha, integrationBranch) {
 }
 
 function sha256File(p) { return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); }
-function safeName(p) { return p.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+/, '').slice(-120); }
+function safeName(p) { const n = p.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+/, '').slice(-120); return n || crypto.createHash('sha256').update(p).digest('hex').slice(0, 16); }
 
 // Verify a patch applies to the worktree's HEAD tree in a scratch index (never the live index).
 function patchAppliesToHead(wt, head, patchPath, cached) {
@@ -229,9 +229,9 @@ function preserveWorktree(repo, row, outRoot) {
   if (combined) { const v = patchAppliesToHead(wt, row.head, combined, true); parts['head-to-worktree.patch'].applies_to_head = v; if (v !== true) verified = false; }
   if (unstaged) parts['unstaged.patch'].note = 'relative to the index; head-to-worktree.patch is the verified whole';
   // untracked files: list from git, archive with tar, list the archive back
-  const unt = git(wt, ['ls-files', '--others', '--exclude-standard', '-z']);
-  const untracked = unt.ok ? unt.out.split('\0').filter((f) => f && f !== '.autopilot-worktree' && f !== '.autopilot-worktree.lock') : null;
-  if (untracked === null) { parts['untracked.tar'] = { ok: false, error: unt.err.trim() }; verified = false; }
+  const untracked = listUntracked(wt);
+  let untrackedDigests = null;
+  if (untracked === null) { parts['untracked.tar'] = { ok: false, error: 'git ls-files --others failed' }; verified = false; }
   else if (untracked.length > 0) {
     const listFile = path.join(dir, 'untracked.list');
     fs.writeFileSync(listFile, untracked.join('\0'));
@@ -246,9 +246,33 @@ function preserveWorktree(repo, row, outRoot) {
       if (missing.length) verified = false;
     }
   } else parts['untracked.tar'] = { ok: true, count: 0 };
-  const manifest = { schema: 'repo-residue-preserve/1', worktree: wt, branch: row.branch, head: row.head, dirty_lines: row.dirty_lines, preserved_at: new Date().toISOString(), parts, preserved: verified };
+  // Per-file digests of every untracked path: `git diff HEAD` never sees untracked files and the
+  // tar's own sha256 does not change when a NEW untracked file appears later, so reap re-derives
+  // this inventory and refuses on any difference (review round 2, 2026-09-13).
+  if (untracked !== null) untrackedDigests = untrackedInventory(wt, untracked);
+  const manifest = { schema: 'repo-residue-preserve/2', worktree: wt, branch: row.branch, head: row.head, dirty_lines: row.dirty_lines, preserved_at: new Date().toISOString(), parts, untracked_inventory: untrackedDigests, preserved: verified && untrackedDigests !== null };
   fs.writeFileSync(path.join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return { dir, preserved: verified, manifest };
+}
+
+function listUntracked(wt) {
+  const unt = git(wt, ['ls-files', '--others', '--exclude-standard', '-z']);
+  if (!unt.ok) return null;
+  return unt.out.split('\0').filter((f) => f && f !== '.autopilot-worktree' && f !== '.autopilot-worktree.lock').sort();
+}
+// {path: sha256} for every untracked path; a directory entry or unreadable file is recorded as such.
+function untrackedInventory(wt, untracked) {
+  const inv = {};
+  for (const f of untracked) {
+    const p = path.join(wt, f);
+    try {
+      const st = fs.lstatSync(p);
+      if (st.isSymbolicLink()) inv[f] = `symlink:${fs.readlinkSync(p)}`;
+      else if (st.isFile()) inv[f] = sha256File(p);
+      else inv[f] = `type:${st.mode.toString(8)}`;
+    } catch { return null; }
+  }
+  return inv;
 }
 
 function findPreserveRecord(preserveDir, row) {
@@ -267,6 +291,14 @@ function findPreserveRecord(preserveDir, row) {
       const cur = crypto.createHash('sha256').update(st.ok ? `${st.out}\n` : 'x').digest('hex');
       const rec = m.parts['head-to-worktree.patch'] && m.parts['head-to-worktree.patch'].sha256;
       if (!st.ok || cur !== rec) return { dir: path.join(preserveDir, d), valid: false, why: 'worktree changed since it was preserved' };
+      // untracked inventory: names AND contents, re-derived now
+      if (!m.untracked_inventory || typeof m.untracked_inventory !== 'object') return { dir: path.join(preserveDir, d), valid: false, why: 'preserve record has no untracked inventory (pre-v2 record); re-run preserve' };
+      const nowList = listUntracked(row.path);
+      const nowInv = nowList === null ? null : untrackedInventory(row.path, nowList);
+      if (nowInv === null) return { dir: path.join(preserveDir, d), valid: false, why: 'untracked inventory could not be re-derived' };
+      const a = JSON.stringify(Object.entries(m.untracked_inventory).sort());
+      const b = JSON.stringify(Object.entries(nowInv).sort());
+      if (a !== b) return { dir: path.join(preserveDir, d), valid: false, why: 'untracked files changed since it was preserved' };
       return { dir: path.join(preserveDir, d), valid: true };
     }
   }

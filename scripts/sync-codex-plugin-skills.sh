@@ -11,6 +11,7 @@
 # Usage:
 #   scripts/sync-codex-plugin-skills.sh          # rebuild committed mirror
 #   scripts/sync-codex-plugin-skills.sh --check  # read-only drift check
+#   scripts/sync-codex-plugin-skills.sh --mirror-roots-json  # the mirror set as JSON (for graph checks)
 
 set -euo pipefail
 
@@ -24,6 +25,13 @@ case "${1:-}" in
     ;;
   --check)
     MODE="check"
+    ;;
+  --mirror-roots-json)
+    # The mirror set as data, for graph authoring tools: {"root": "<mirror root>", "dirs": [...]}.
+    # mission-execution-graph-check.js --mirror-roots consumes it so a node's output_paths must
+    # name the codex mirror of every path under a mirrored dir BEFORE any implementation round is
+    # paid for (BACKLOG 2026-09-12: the boundary rejection arrived after the model did the work).
+    MODE="mirror-roots-json"
     ;;
   -h|--help)
     sed -n '2,11p' "$0"
@@ -47,6 +55,17 @@ DIRS=(
   "scripts"
   "project-config-template"
 )
+
+if [ "$MODE" = "mirror-roots-json" ]; then
+  printf '{"root":"platforms/codex/plugin","dirs":['
+  _first=1
+  for _d in "${DIRS[@]}"; do
+    [ "$_first" -eq 1 ] || printf ','
+    printf '"%s"' "$_d"; _first=0
+  done
+  printf ']}\n'
+  exit 0
+fi
 
 PROJECTED_SKILLS=(
   "dev-flow"

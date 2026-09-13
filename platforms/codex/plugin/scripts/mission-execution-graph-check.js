@@ -12,7 +12,13 @@ function usage() {
   return [
     'Usage:',
     '  mission-execution-graph-check.js --graph <json> --governance <json>',
-    '    --sources <frozen-source-manifest.json>',
+    '    --sources <frozen-source-manifest.json> [--mirror-roots <json>]',
+    '',
+    '  --mirror-roots {"root": "<mirror root>", "dirs": [...]} (scripts/sync-codex-plugin-skills.sh',
+    '    --mirror-roots-json): every node output_path under a mirrored dir must be accompanied by',
+    '    its <root>/<path> mirror in the same output_paths. The mirror set is a REPO property;',
+    '    the graph author enumerates what they are thinking about. Refusing here is free; the',
+    '    boundary rejection after a paid implementation round is not (BACKLOG 2026-09-12).',
   ].join('\n');
 }
 
@@ -22,6 +28,7 @@ function parse(argv) {
     ['--graph', 'graph'],
     ['--governance', 'governance'],
     ['--sources', 'sources'],
+    ['--mirror-roots', 'mirrorRoots'],
   ]);
   for (let index = 0; index < argv.length; index += 2) {
     const key = allowed.get(argv[index]);
@@ -162,11 +169,52 @@ function loadSourceCoverageManifest(manifestPath) {
   };
 }
 
+function loadMirrorRoots(file) {
+  const value = readJson(file, 'mirror roots');
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || typeof value.root !== 'string' || value.root.length === 0 || value.root.startsWith('/')
+      || value.root.includes('..') || !Array.isArray(value.dirs) || value.dirs.length === 0
+      || value.dirs.some((d) => typeof d !== 'string' || d.length === 0 || d.startsWith('/') || d.includes('..'))
+      || Object.keys(value).some((key) => !new Set(['root', 'dirs']).has(key))) {
+    throw new Error('mirror roots must be {"root": "<relative dir>", "dirs": [<relative dir>, ...]}');
+  }
+  const root = value.root.replace(/\/+$/, '');
+  const dirs = value.dirs.map((d) => d.replace(/\/+$/, ''));
+  if (dirs.some((d) => d === root || d.startsWith(`${root}/`) || root.startsWith(`${d}/`))) {
+    throw new Error('mirror roots: root and dirs must not nest');
+  }
+  return { root, dirs };
+}
+
+// A node that may write under a mirrored dir must also own the mirror path, or the round is
+// discarded at the boundary AFTER the implementation was paid for. Exact-path rule: prefix
+// membership is not enough anywhere else in this checker and is not enough here.
+function checkOutputPathMirrors(graph, mirrorRoots) {
+  const missing = [];
+  for (const [index, node] of (graph.nodes || []).entries()) {
+    const label = `graph.nodes[${index}]${node && node.id ? `(${node.id})` : ''}`;
+    const campaign = node && node.campaign && typeof node.campaign === 'object' ? node.campaign : null;
+    const outputs = campaign && Array.isArray(campaign.output_paths) ? campaign.output_paths : [];
+    const set = new Set(outputs);
+    for (const out of outputs) {
+      if (typeof out !== 'string') continue;
+      if (out === mirrorRoots.root || out.startsWith(`${mirrorRoots.root}/`)) continue;
+      const dir = mirrorRoots.dirs.find((d) => out === d || out.startsWith(`${d}/`));
+      if (!dir) continue;
+      const mirror = `${mirrorRoots.root}/${out}`;
+      if (!set.has(mirror)) missing.push(`${label}.campaign.output_paths lacks the codex mirror of ${out} (${mirror})`);
+    }
+  }
+  if (missing.length > 0) throw new Error(`output_paths must enumerate every codex mirror: ${missing.join('; ')}`);
+}
+
 function inspect(options) {
   const governance = readJson(options.governance, 'governance');
   const graph = readJson(options.graph, 'graph');
   const missionPolicy = resolveMissionPolicy(governance);
   const coverage = loadSourceCoverageManifest(options.sources);
+  const mirrorRoots = options.mirrorRoots ? loadMirrorRoots(options.mirrorRoots) : null;
+  if (mirrorRoots) checkOutputPathMirrors(graph, mirrorRoots);
   const result = checkMissionGraphCoverage(graph, coverage, missionPolicy);
   const reservationTotals = Object.fromEntries([
     'campaigns',
@@ -188,6 +236,7 @@ function inspect(options) {
     calculated_depth: result.calculated_depth,
     calculated_batches: result.calculated_batches,
     reservation_totals: reservationTotals,
+    mirror_rule: mirrorRoots ? { root: mirrorRoots.root, dirs: mirrorRoots.dirs, status: 'satisfied' } : null,
     coverage: result.coverage ? {
       ...result.coverage,
       authoring_unit_count: coverage.authoringUnitIds.length,
@@ -211,4 +260,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { contentBoundRubricId, inspect, loadSourceCoverageManifest };
+module.exports = { contentBoundRubricId, inspect, loadSourceCoverageManifest, loadMirrorRoots, checkOutputPathMirrors };

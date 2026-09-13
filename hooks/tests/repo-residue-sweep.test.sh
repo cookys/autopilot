@@ -69,6 +69,17 @@ echo more >> "$TEST_TMP/wt-dirty-one/a.txt"
 OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --preserve-dir "$PRES")"
 [ -d "$TEST_TMP/wt-dirty-one" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: changed-since-preserve worktree kept"
 assert_contains "$OUT" 'worktree changed since it was preserved' "reap: names the drift"
+# a NEW untracked file after preserve (invisible to `git diff HEAD` and to the tar's sha256) → kept
+node "$SCRIPT" preserve --repo "$SBX" --out "$PRES" >/dev/null
+echo late > "$TEST_TMP/wt-dirty-one/late.txt"
+OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --preserve-dir "$PRES")"
+[ -d "$TEST_TMP/wt-dirty-one" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: new untracked file after preserve → kept"
+assert_contains "$OUT" 'untracked files changed since it was preserved' "reap: names the untracked drift"
+# an EDITED untracked file after preserve → kept
+node "$SCRIPT" preserve --repo "$SBX" --out "$PRES" >/dev/null
+echo edited > "$TEST_TMP/wt-dirty-one/late.txt"
+OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --preserve-dir "$PRES")"
+[ -d "$TEST_TMP/wt-dirty-one" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: edited untracked file after preserve → kept"
 # re-preserve, then reap removes it
 node "$SCRIPT" preserve --repo "$SBX" --out "$PRES" >/dev/null
 OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --preserve-dir "$PRES")"; RC=$?

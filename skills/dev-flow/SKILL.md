@@ -703,7 +703,7 @@ Phase/P0 task-enumeration rule above.
 | Script | Purpose |
 |---|---|
 | `scripts/mission-routing-admission.js` | Resolve project Mission policy and admit the authoritative bounded graph/source coverage before L-size TaskCreate or execution topology effects. |
-| `scripts/mission-execution-graph-check.js` | Validate graph limits, exact source/rubric coverage, critical path, batches, gate attempts, aggregate reservations, and ICC campaign projection bounds. |
+| `scripts/mission-execution-graph-check.js` | Validate graph limits, exact source/rubric coverage, critical path, batches, gate attempts, aggregate reservations, and ICC campaign projection bounds. In a repo with a codex mirror, pass `--mirror-roots <(scripts/sync-codex-plugin-skills.sh --mirror-roots-json)` so an `output_paths` entry under a mirrored dir must name its mirror too. |
 | `scripts/plan-rubric-scaffold.js` | Generate structured rubric markdown skeletons from an input plan document for frozen review rubrics. |
 | `scripts/hetero-review-loop.js` | Drive multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipts for review loops. |
 | `scripts/check-phase-review-receipt.js` | Validate phase review receipts against git history and review artifacts or validate plan artifact blocker dispositions. |

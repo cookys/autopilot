@@ -179,8 +179,11 @@ WT3="$(field "$OUT" worktree)"
 sleep 0.5
 STUB_PID="$(cat "$SD/pid.0")"
 if kill -0 "$STUB_PID" 2>/dev/null; then fail "3: stub pid $STUB_PID still alive after cap kill"; else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)); fi
-# and the assertion can fail: a live pid from THIS shell is seen alive by the same probe
-kill -0 "$$" 2>/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: liveness probe control"
+# control: the same probe sees a real background process alive, then dead after a kill
+sleep 30 & CTRL_PID=$!
+kill -0 "$CTRL_PID" 2>/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: liveness probe control (alive)"
+kill "$CTRL_PID" 2>/dev/null; wait "$CTRL_PID" 2>/dev/null
+kill -0 "$CTRL_PID" 2>/dev/null && fail "3: liveness probe control (dead)" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 STREAM_LINES="$(wc -l < "$RD/foreman.stream.jsonl")"
 [ "$STREAM_LINES" -lt 40 ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: stream stopped growing after kill ($STREAM_LINES lines)"
 

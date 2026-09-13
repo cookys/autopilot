@@ -14,13 +14,13 @@ repo 全域、不是 per-run。`scan` 把每個 linked worktree 分成 live（`.
 的祖先）／clean-unintegrated，每條分支分成 checked-out／integrated／unintegrated（帶 ahead 數與最後 commit
 日期）——全部從 git 事實判，不讀 marker 的自述。`preserve` 對 dirty worktree 寫出 staged／unstaged／
 HEAD→worktree 三份 `--binary` patch、untracked 的 tar 與 manifest（sha256），patch 在暫存 index 裡對
-worktree 自己的 HEAD 跑 `git apply --check`、tar 列回來比對清單，全部過了才叫 `preserved: true`。
+worktree 自己的 HEAD 跑 `git apply --check`、tar 列回來比對清單，untracked 每個檔案的 sha256 也記進 manifest（`git diff HEAD` 看不到 untracked，tar 的 sha256 在事後新增檔案時也不會變——review round 2 抓到的中央風險），全部過了才叫 `preserved: true`。
 `reap --yes` 只移 missing-dir 與 clean-integrated；dirty 只在 `--preserve-dir` 底下有這個 worktree＋HEAD 的
-manifest、bytes 的 sha256 現在重驗相符、而且 worktree 自 preserve 後沒再變動時才移；integrated 且沒被
+manifest、bytes 的 sha256 現在重驗相符、tracked diff 與 untracked 清單＋內容現在重算都相同時才移；integrated 且沒被
 checkout 的分支在 `pin-evidence-anchors.js apply --exclude-ref` 成功後才刪；live、unintegrated、沒保存的 dirty
 永遠不碰。`--older-than-days` 只縮小候選集。不擴充 `reap-dispatch-worktrees.sh`：那是 per-root 的生命週期證明，
-混在一起會削弱它。測試 `hooks/tests/repo-residue-sweep.test.sh`（44：五種 worktree 類別、無保存不移、篡改
-worktree 與篡改保存檔各被拒、年齡只縮不放）。本 repo 實跑 `scan`：1 個 clean-unintegrated worktree、
+混在一起會削弱它。測試 `hooks/tests/repo-residue-sweep.test.sh`（47：五種 worktree 類別、無保存不移、篡改
+worktree、事後新增／改動 untracked、篡改保存檔各被拒、年齡只縮不放）。本 repo 實跑 `scan`：1 個 clean-unintegrated worktree、
 10 條 integrated、4 條 unintegrated。
 
 ## v2.36.34 — 非 Claude 工頭軌（Shape B）：kimi 握迴圈，軌道自己執法

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_disposition_authority",
+  "authority": "depth-0",
+  "actor_id": "depth-0:autopilot-78:session_012wxv5Et2kvudeZjpqy537y",
+  "campaign_id": "campaign-v1-304a99775566db184721efa3b64d6a0cc3331b467d36bea2dea564bbde2fc739",
+  "contract_digest": "70fe1532c50256ab76b83c3a74e0c307157980d2b0f9e29564f135188e8824d0",
+  "reviews": [
+    {
+      "review_digest": "e3ba19dcaab4846948e7a93c48334a58a95082a961d5f9fb99b074a00572d926",
+      "decisions": [
+        {
+          "finding_id": "kv-regex-class",
+          "evidence": {
+            "kind": "refuted",
+            "probe_cmd": "node -e 'eval(kv source); console.log(kv(\"- mode: warn\\n- allowlist_path: .claude/backlog-debt.json\",\"mode\"), kv(\"- allowlist_path: .claude/backlog-debt.json\",\"allowlist_path\"))' && node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md --config <cfg with 'mode: block'>; echo exit=$?",
+            "expected_signature": "claimed: values containing 'n' fail to parse (mode stays warn, allowlist_path null); block config ignored → exit 0",
+            "observed_output": "warn .claude/backlog-debt.json\nexit=1 (block config honoured: the fat backlog exits 1). The regular-string fragment '`?([^`\\\\n]+)`?' yields the regex class [^`\\n] = not-backtick, not-newline.",
+            "mutation_desc": "replace the fragment with '`?([^`\\\\\\\\n]+)`?' so the class becomes [^`\\\\n] (not backslash, not literal n) — the shape the finding claims is shipped",
+            "mutation_probe_output": "kv('- mode: warn','mode') → 'war' (the literal n is now excluded), proving the shipped code does not have the claimed class and the probe detects it when it does"
+          },
+          "disposition": null
+        },
+        {
+          "finding_id": "assert-not-contains-undeclared",
+          "evidence": {
+            "kind": "refuted",
+            "probe_cmd": "grep -c '^assert_not_contains()' hooks/tests/lib.sh; bash -c '. hooks/tests/lib.sh; type assert_not_contains'; bash hooks/tests/check-backlog-entries.test.sh",
+            "expected_signature": "claimed: helper undefined → suite aborts at the ratchet step",
+            "observed_output": "1\nassert_not_contains is a function\nPASS [check-backlog-entries] 29 assertions (independent run in a detached worktree at 37630d5e)",
+            "mutation_desc": "comment out assert_not_contains in a scratch copy of lib.sh and run the suite",
+            "mutation_probe_output": "the suite errors 'assert_not_contains: command not found' at the ratchet step — the probe is sensitive; the shipped lib.sh defines the helper at line 249 (brief listed the two helpers as examples, not an exhaustive allowlist)"
+          },
+          "disposition": null
+        },
+        {
+          "finding_id": "self-test-dead-code",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "scripts/check-backlog-entries.js:runSelfTest (unused `unseen` and `hit`)"
+            ],
+            "confirmed_by": "depth-0:autopilot-78"
+          },
+          "disposition": {
+            "disposition": "reject-out-of-scope",
+            "rationale": "cosmetic dead locals in the self-test harness; no acceptance criterion or rubric line covers it; --self-test still fails on a mutated fixture (test \"mutated self-test fixture exits 2\" is green), so the property the code exists for holds"
+          }
+        },
+        {
+          "finding_id": "mirror-files-in-diff",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "scripts/sync-codex-plugin-skills.sh --check → \"Codex plugin payload in sync\" at 37630d5e"
+            ],
+            "confirmed_by": "depth-0:autopilot-78"
+          },
+          "disposition": {
+            "disposition": "reject-out-of-scope",
+            "rationale": "mirror copies are part of the sealed output_paths by contract (graph-check --mirror-roots); the --check gate was re-run at depth 0 and is green"
+          }
+        }
+      ]
+    }
+  ]
+}

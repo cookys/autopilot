@@ -1,0 +1,30 @@
+{
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "reason": "non-empty review findings require bound depth-0 adjudication authority",
+  "rounds": 1,
+  "verdict": "FIX-THEN-SHIP",
+  "commit": "37630d5ef62a99f1b54908564b72c1db6ea28bb7",
+  "review": {
+    "runner": "cc-shim",
+    "model": "MiniMax-M3",
+    "status": "reviewed",
+    "verdict": "FIX-THEN-SHIP",
+    "findings": "🟠 [kv-regex-class] MUST-FIX scripts/check-backlog-entries.js:131 — the `kv` regex character class `' `?([^`\\\\n]+)`? '` resolves to `[^`\\<n>]` (not backtick, not backslash, not literal `n`) instead of `[^`\\n]` (not backtick, not newline). Concrete impact: every supplied config with `n`/`\\`/backtick in a value fails to parse — e.g. the shipped default `.claude/backlog-config.md` sets `mode: warn` and `allowlist_path: .claude/backlog-debt.json`, both of which contain `n`; the script silently keeps the built-in default (`mode:'warn'`, `allowlist_path:null`), so a future config that tries to flip `mode: block` will be ignored with no diagnostic. Smallest remediation: change the inner regular-string fragment to `' `?([^`\\n]+)`? '` (let `\\n` be the actual newline) in both `scripts/check-backlog-entries.js` and `platforms/codex/plugin/scripts/check-backlog-entries.js`.\n🟠 [assert-not-contains-undeclared] MUST-FIX hooks/tests/check-backlog-entries.test.sh:175 — the ratchet \"removed fixed code\" assertion calls `assert_not_contains`, but the spec explicitly enumerates only `assert_eq` and `assert_contains` as the test helpers sourced from `lib.sh`. Concrete impact: if lib.sh does not already define that helper, the suite aborts at the ratchet step and `bash hooks/tests/check-backlog-entries.test.sh` fails the \"verification you must leave green\" gate. Smallest remediation: either add `assert_not_contains` to `hooks/tests/lib.sh` (mirror of `assert_contains` with inverted grep status) or rewrite that single assertion using `! assert_contains \"$(cat \"$al\")\" \"missing_field\" \"removed fixed code\"` semantics via `grep -q` and `assert_eq`.\n🔵 [self-test-dead-code] CUT/FOLLOW-UP scripts/check-backlog-entries.js — `runSelfTest` computes `unseen` and the inner-loop `hit` and never reads them; not a defect for ship, just noise.\n🔵 [mirror-files-in-diff] CUT/FOLLOW-UP — the diff carries both `scripts/...` and `platforms/codex/plugin/...` copies of every changed file; the spec mandates \"run `sync-codex-plugin-skills.sh` … never hand-edit mirrors\", so as long as the included `scripts/sync-codex-plugin-skills.sh --check` passes (mirrors are byte-identical to sources here) this is acceptable, but reviewers should re-run that --check gate before merging rather than trusting the in-diff duplication.",
+    "no_finding_proof": null,
+    "raw_log": "/tmp/dispatch-review-log-XGe5fX",
+    "error": null,
+    "usage": null
+  },
+  "ledger": [
+    {
+      "unit": "dispatch_review",
+      "status": "reviewed",
+      "started_at": "2026-09-13T23:09:36.151Z",
+      "ended_at": "2026-09-13T23:11:00.496Z",
+      "runner": "cc-shim",
+      "model": "MiniMax-M3",
+      "exit_status": 0
+    }
+  ]
+}

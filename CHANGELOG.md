@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.36.38 — backlog 一列是 pointer 不是工作日誌：schema、gate（warn）、DI、寫入者統一引用
+
+cuda 代 revival.3d 的請求（BACKLOG「PEER-REPORTED (cuda, for revival.3d)」），plan
+`docs/plans/2026-09-14-backlog-entry-schema.md` 過 hetero plan review G1 後由 /l5 managed campaign 實作
+Phase 1–3（Phase 4 遷移＋flip 另一個 mission）。
+
+- `references/backlog-entry.md`（新）：唯一一份 schema——七欄 UTF-8 byte cap（Title 120／Status 64／Trigger 240／
+  Source 160／Pointer 200／Context 240，整列 900，`none` pointer 只在 ≤600 B）、三種 style（heading／table／
+  checklist）、pointer 規則（證據一律外移）、done handling。`shipped` 要帶日期（`shipped <version> <YYYY-MM-DD>`），
+  因為 done_not_moved 量的是日期——depth-0 探針發現原本只帶版本永遠不會到期。
+- `scripts/check-backlog-entries.js`（新）：13 個 violation code、allowlist ratchet 只減不增、`--self-test`（20 案）、
+  exit 0/1/2；別種 style 混進來的 block 是 `unparseable_entry`，不會靜默跳過（GLM 第二家族 review 抓到 table／
+  checklist 模式原本會跳過 `###` 條目，本機探針證實後修）。測試 `hooks/tests/check-backlog-entries.test.sh`（29）。
+  對本 repo 的真 BACKLOG（153 entries、235 KB）跑 warn：747 條違規（pointer_missing 152、cap_exceeded 284、
+  missing_field 148、bad_effort 96、extra_content 54、bad_status 12、unparseable 1）——Phase 4 遷移的起點數字。
+- `project-config-template/backlog-config.md`（新）＋本 repo `.claude/backlog-config.md`（heading、warn）；
+  `resolve-project-paths.sh` 多回 `backlog_config`；`scaffold-config.js` 產範本；onboard 一句。
+- 寫入者（dev-flow ×4、finish-flow ×3、quality-pipeline、handoff、code-review、project-lifecycle templates）改成一句
+  連結 reference；`grep 'context + trigger' skills/` 為 0。finish-flow S.2 與 quality-pipeline 呼叫 gate（warn）。
+
+Rail 事實（dogfood，都登 BACKLOG）：`--campaign-ledger` 不能自訂路徑，intake 拒絕燒掉一次 grant attempt；
+review 有 finding 時 `--resume` 帶 `--campaign-disposition-authority` 回來，rail 把 findings 丟了
+（`campaign review findings are unavailable for disposition binding`）並 terminal stop——本次 disposition 在
+depth-0 以 probe＋mutation 逐條裁決（MiniMax 兩條 MUST-FIX 皆駁回），rail 缺陷另修。`status task` 的
+receipt 仍然沒有東西寫（既有 row），L5 terminal gate 照舊不可滿足。
+
+prose-justification: 本版 prose 增量是 `references/backlog-entry.md`（31 行，schema 唯一陳述）與
+`project-config-template/backlog-config.md`；寫入者 skill 行是「一句連結」取代原本的多句指引，淨減。
+
 ## v2.36.37 — agy hand 從 worktree 逃到主 checkout：本機重現，`--new-project` 修掉
 
 `308-8f` 2026-09-13 實測 `dispatch-foreman.sh`：kimi 工頭沒問題，但 `dispatch-hetero.sh --runner agy` 派的 hand

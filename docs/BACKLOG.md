@@ -51,12 +51,26 @@ containment-gates graphs are SHIPPED (v2.36.28 / v2.36.29), so the queue resumes
 
 ### PEER-REPORTED (cuda, for revival.3d): a backlog ENTRY has no schema, no DI, and no mechanical gate — so backlogs become work journals
 
-- **Trigger**: **FIRED 2026-09-14 — operator said 開，寫 plan.** Plan: `docs/plans/2026-09-14-backlog-entry-schema.md` (R0). Relayed by `cuda` as an owner assignment; started only on the operator's own go in this session.
+- **Trigger**: **FIRED 2026-09-14 — Phases 1–3 SHIPPED v2.36.38** (plan `docs/plans/2026-09-14-backlog-entry-schema.md`, G1-reviewed; gate in warn mode; Phase 4 migration + block flip is the next mission). Relayed by `cuda` as an owner assignment; started only on the operator's own go in this session.
 - **Verified here**: the only entry format lives in `skills/quality-pipeline/references/code-review.md:321-332` (Severity/Trigger/Context, "No trigger → rejected") and is read only by code-review; `docs/BACKLOG.md`'s header adds Effort/Source but is this repo's file, not an injectable rule; `project-config-template/dev-flow-config.md` § Backlog Management carries only a path + auto-add flag; no writer (dev-flow auto-add, finish-flow, archive, handoff, ceo) reads a length cap or a pointer requirement. **This file is 233 KB** — the peer cited 155 KB; today's rows made it worse — with multi-paragraph measured narratives in `Context`, so the defect is in the norm itself, not only in consumers. No written "one row = one pointer into docs/{plans,projects}" intent exists anywhere in skills/references/plans; if that is the design, the plan writes it down for the first time.
 - **Consumer evidence (revival.3d, their measurement)**: 204,743 B against a 200 KiB gate, 208 rows, half the bytes in >200 B notes, 30 rows with no pointer, 12 with dangling pointers, 107 rows untouched >14 days; a consumer rule ("deferred items must be registered at once; handoff does not count") amplifies it because BACKLOG is the only place agents trust not to be overwritten.
 - **Plan must answer**: canonical entry schema with per-field caps and a REQUIRED pointer; where the schema lives as DI (template + consumer override for table/ticket vs checklist styles; onboard scaffolds it); one portable gate script (required fields, caps, pointer exists, duplicate ids, done-not-moved; ratchet allowlist; `--self-test`; called by quality-pipeline/finish-flow); every writer cites the one schema; migration of fat backlogs (this one included) without losing evidence; compatibility with "register now" consumer rules (register = one pointer line).
 - **Effort**: plan S; implementation M (script + template + writer rewiring is mechanism; the schema text itself is guidance and needs the scorecard-first bar where it changes what a skill asks for).
 - **Source**: `cuda` via hangar-bridge, 2026-09-14, msg `msg_01M2E2BHMGERX2963SGAM51YYS`.
+
+### Managed rail: `--resume` with a disposition authority drops the prior findings and terminal-stops the campaign
+
+- **Trigger**: **FIRED — measured 2026-09-14** on mission-3b68ecb09a61 (backlog-entry-schema): round-1 review returned FIX-THEN-SHIP → `awaiting_disposition`; the re-invocation with `--resume --campaign-disposition-authority <valid file>` blocked at `disposition_resume` with `campaign review findings are unavailable for disposition binding`, then emitted `terminal_stop` (resumable:false). The AWAITING_DISPOSITION campaign event carried the findings; the durable controller body had `findings_snapshot: null`, so `resume.findings` was empty.
+- **Context**: the disposition rail is unreachable end-to-end from the CLI — every non-empty review ends the campaign. Depth-0 adjudicated from the run JSON instead and merged on git evidence.
+- **Effort**: S (persist `findings_snapshot` on AWAITING_DISPOSITION and rebind on resume; a test that drives review→disposition→resume with a real authority file).
+- **Source**: this dogfood; evidence `docs/plans/evidence/2026-09-14-backlog-entry-schema/impl-run3-resume-terminal-stop.json`.
+
+### `engine implement-review --campaign-ledger <custom path>` is refused at intake and the refusal burns a grant attempt
+
+- **Trigger**: **FIRED — measured 2026-09-14**: `campaign_ledger_path_mismatch` ("must be the repository-wide canonical Git common-dir ledger"); the claim for attempt 1 was consumed and `mission grant` minted attempt 2.
+- **Context**: the flag exists in `--help` but only one value is accepted; either drop the flag or make intake validate it before the claim is spent.
+- **Effort**: Fix.
+- **Source**: this dogfood.
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 

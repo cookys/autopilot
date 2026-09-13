@@ -286,3 +286,13 @@ Dependencies: 1 → 2 → 3 → 4 → 5 (2 can be built in parallel with 1's eva
     no gap named — refuted as format noise, not findings.
   - Freeze predicate met at depth 0: zero unrepaired construct/mechanism findings, zero deferred. No G2
     dispatched (the policy stop is terminal and every substantive claim is folded).
+- Implementation (2026-09-14, /l5 managed campaign `mission-3b68ecb09a6171ab89ab7d4b`, node
+  `backlog-entry-schema-p123`, attempt 2, base `8a64802f`): implementer cursor/cursor-grok-4.6-low →
+  `37630d5e` (29 files, exactly the sealed output_paths). Review r1 MiniMax-M3 FIX-THEN-SHIP: `kv-regex-class`
+  and `assert-not-contains-undeclared` **refuted** by probe + mutation (evidence dir `impl-disposition-authority.json`),
+  two 🔵 rejected. The rail terminal-stopped on `--resume` (BACKLOG row). Second family GLM-5.2 FIX-THEN-SHIP:
+  `blg-skip-cross-style` **confirmed** (heading entry in a table/checklist file skipped) and repaired; depth-0's own
+  probe found `shipped <version>` carried no date for `done_not_moved` → schema now `shipped <version> <date>`;
+  `caps.<lowercase>` normalised. Repair `7efbc2f3`; merge `8e247018`. Gate on the real backlog: 153 entries,
+  235,390 B, 747 violations (the Phase 4 starting point).
+

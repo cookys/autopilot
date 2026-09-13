@@ -1,0 +1,6 @@
+{
+  "status": "blocked",
+  "phase": "disposition_resume",
+  "reason": "DISPOSITION_RESUMED requires a complete registry and real registry_digest",
+  "adjudication": "\"adjudication\":{\"registry_complete\":false,\"repair_gate_passed\":false,\"reason\":\"campaign review findings are unavailable for disposition binding\",\"must_fix_now\":[],\"follow_up\":[],\"rejected\":[]}"
+}

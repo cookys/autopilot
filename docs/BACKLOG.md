@@ -56,6 +56,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/managed-rail-resume-with-a-disposition-authority-drops-the-prior-findings-and-te.md
 - **Context**: root cause in `campaign-composition.js`, not the engine: writer read the findings JSON string as an array (→ `[]`); resume bound the array to a string-only provider. Both fixed (composition test); CLI e2e 待量.
 
+### PEER-REPORTED (308-8f): main-checkout fingerprint stat-walks untracked files — a foreman's own rail I/O trips it
+- **Status**: open
+- **Trigger**: a caller writes hand result/stderr under its own worktree, or `main_checkout_mutated` fires falsely again
+- **Effort**: S
+- **Source**: `308-8f` via SendMessage 2026-09-14 (TASK-C3); 308 repo `TASK-C3-tracer-second-worker-20260914.md` "rail 坑"
+- **Pointer**: none
+- **Context**: `lib/main-checkout-boundary.sh` stat walk is by design (2026-09-13). Fix: caller-declared exclude paths + doc "rail I/O lands outside the worktree".
+
+### PEER-REPORTED (308-8f): agy flash-medium hand without `--effort medium` only edits — no run_command, no commit
+- **Status**: open
+- **Trigger**: any agy hand dispatched without an explicit effort; re-check `agy_effort_clamp` default in `dispatch-hetero.sh`
+- **Effort**: Fix
+- **Source**: `308-8f` via SendMessage 2026-09-14; dispatcher note in 308's `/tmp/c3-runs/u1-a.stderr.log`
+- **Pointer**: none
+- **Context**: unverified here; if reproduced, default the agy effort per seat in `resolve-dispatch.sh` rather than per caller.
+
 ### Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `[]` snapshot
 - **Status**: open
 - **Trigger**: a review whose findings fail `normalizeFindings` (UNSTRUCTURED/INVALID/DUPLICATE codes) reaches the durable wait on a real run

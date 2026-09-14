@@ -239,6 +239,10 @@ The no-commit case is **split by how the worker ended** so a legitimate no-op ta
 
 The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question_suspected`) at ~20 lines of shell, surfacing the real pain — a silently hung worker — without any new always-on LLM or stream parser in the dispatch path.
 
+#### Wrapper commit subject
+
+The wrapper commit message is exactly `dispatch-hetero(<runner label>): edits on <branch>` (the string `dispatch-hetero.sh` commits). It is an IDENTIFIER of that wrapper commit and NEVER evidence of integration. Landed vs not-landed is answered by `scripts/check-containment.js` and `scripts/check-inputs-landed.js`, not by grepping subjects.
+
 `boundary_rejected` with `boundary_code: main_checkout_mutated` is the main-checkout fingerprint (`scripts/lib/main-checkout-boundary.sh`) seeing ANY ref, HEAD, config, hook, or working-tree delta between the before and after reads. It cannot attribute, so it discards the round. Two consequences the caller owns: **concurrent dispatches on one repo reject each other** — each one's new branch is a ref delta to the others — unless the caller declares the namespace with `--sibling-ref-prefix refs/heads/<ns>/` (repeatable; `refs/heads/` alone is refused; 308-8f, 2026-09-14); and **rail I/O must land outside the checkout** — a result or stderr file written under the main checkout is a stat-walk delta (also 308-8f, still open in BACKLOG). Otherwise serialize dispatches per repo.
 
 ### pi (RPC duplex)

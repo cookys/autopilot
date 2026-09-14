@@ -28,6 +28,7 @@
 //      empty-stdin 128 as zero hits and produced a row of false zeros.
 //
 // Usage: check-hands-commit.js --repo <worktree> --base <sha> --head <sha>
+//        [--expect-wrapper-subject]
 // (No allowlist: a symlink hands adds is rejected, full stop. A sanctioned-symlink policy
 // needs a sealed contract to carry it; a CLI flag nothing wires is a policy nobody set.)
 // Output: JSON {ok, base, head, symlinks:[{path,old_mode,new_mode}], gitlinks:[...],
@@ -37,7 +38,7 @@ const { spawnSync } = require('child_process');
 
 function usage(msg) {
   if (msg) process.stderr.write(`check-hands-commit: ${msg}\n`);
-  process.stderr.write('usage: check-hands-commit.js --repo <worktree> --base <sha> --head <sha>\n');
+  process.stderr.write('usage: check-hands-commit.js --repo <worktree> --base <sha> --head <sha> [--expect-wrapper-subject]\n');
   process.exit(2);
 }
 
@@ -49,6 +50,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === '--repo') opts.repo = next();
   else if (a === '--base') opts.base = next();
   else if (a === '--head') opts.head = next();
+  else if (a === '--expect-wrapper-subject') opts.expectWrapperSubject = true;
   else if (a === '-h' || a === '--help') usage();
   else usage(`unknown argument: ${a}`);
 }
@@ -103,6 +105,19 @@ function emit(code) {
 if (!baseOid || !headOid) {
   out.error = `cannot resolve ${!baseOid ? `base '${opts.base}'` : `head '${opts.head}'`} to a commit`;
   emit(3);
+}
+
+if (opts.expectWrapperSubject) {
+  const subj = git(['log', '-1', '--format=%s', headOid]);
+  if (subj.status !== 0) {
+    out.error = `git log failed (${subj.status}): ${subj.stderr.trim()}`;
+    emit(3);
+  }
+  const subject = display(subj.stdout).replace(/\n$/, '');
+  if (!/^dispatch-hetero\([^)]+\): edits on \S+$/.test(subject)) {
+    out.error = `wrapper subject rejected: ${subject}`;
+    emit(1);
+  }
 }
 
 // --- 1 & 2: modes over the range. diff-tree -r is the mechanism: it reports old and new

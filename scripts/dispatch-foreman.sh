@@ -247,7 +247,9 @@ depth 0 (the dispatcher that started you), and it is reached from git, not from 
   whole run; the three ledger flags together make the hand detach, so it survives you). Review
   through \`$SELF_DIR/dispatch-review.sh\`. Wait for detached hands with
   \`node $SELF_DIR/wait-dispatch-results.js --ledger $RUN_DIR/hands.ledger --expect <unit>.implement\`
-  — never poll with a shell loop.
+  — never poll with a shell loop. Any \`scripts/qc-panel.js\` you run MUST pass
+  \`--out "\$RUN_DIR/panel/<node>"\` — \`--out\` rooted at \`\$RUN_DIR\` is the only
+  accepted form; \`--run-id\` is an optional extra component, never a substitute for \`--out\`.
 - Budget: at most $TOOL_CAP Bash tool calls in this turn. At the cap you are stopped; a
   handoff turn follows. Write \`$RUN_DIR/HANDOFF.md\` yourself BEFORE the cap when you can see it
   coming.

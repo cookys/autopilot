@@ -134,6 +134,7 @@ assert_eq "$(stat -c %a "$RD/brief.md")" "444" "2: brief copied read-only"
 assert_file_exists "$RD/protocol.md" "2: protocol written"
 assert_contains "$(cat "$RD/protocol.md")" "hands/r2/" "2: protocol names the hands namespace"
 assert_contains "$(cat "$RD/protocol.md")" "wait-dispatch-results.js" "2: protocol points at the wait primitive"
+assert_contains "$(cat "$RD/protocol.md")" '--out "$RUN_DIR/panel/' "foreman protocol requires qc-panel --out rooted at RUN_DIR/panel/"
 # argv: -m model, -p under 1 KB, stream-json
 ARGV="$(cat "$SD/argv.0")"
 assert_contains "$ARGV" "kimi-code/k3" "2: model passed"

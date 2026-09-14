@@ -8,9 +8,13 @@
 #       1. ${!override_env_var_NAME} if non-empty and -r  → SOURCE=override
 #       2. $PWD/.claude/<basename> (-r)                   → SOURCE=project-cwd
 #       3. $REPO_ROOT/.claude/<basename> (-r)             → SOURCE=project-repo
+#          (only if git toplevel of $PWD == $REPO_ROOT; else skip to 4)
 #       4. $REPO_ROOT/project-config-template/<basename>  → SOURCE=template
 #       5. none → CONFIG="", SOURCE=<no_config_source_label>
-#     Uses caller-scope $PWD and $REPO_ROOT.
+#     Uses caller-scope $PWD and $REPO_ROOT (no extra parameters).
+#     Tier 3 is dogfood-only: it fires only when the git toplevel of $PWD is the
+#     same directory as $REPO_ROOT. An installed plugin ships `.claude/`; a
+#     foreign repo must never inherit the roster or stale_reaper_age_days: 14.
 #
 #   read_field <config_path> <key> <default> [--whitespace-empty]
 #     Case-insensitive `key: value` / `- key: value` extraction; strip trailing
@@ -42,18 +46,32 @@ resolve_config_ladder() {
   elif [[ -r "$PWD/.claude/${basename}" ]]; then
     CONFIG="$PWD/.claude/${basename}"
     SOURCE="project-cwd"
-  elif [[ -r "$REPO_ROOT/.claude/${basename}" ]]; then
-    CONFIG="$REPO_ROOT/.claude/${basename}"
-    SOURCE="project-repo"
-  elif [[ -r "$REPO_ROOT/project-config-template/${basename}" ]]; then
-    CONFIG="$REPO_ROOT/project-config-template/${basename}"
-    SOURCE="template"
   else
-    # Caller-scope globals (intentionally assigned for the resolve-*.sh consumers).
-    # shellcheck disable=SC2034
-    CONFIG=""
-    # shellcheck disable=SC2034
-    SOURCE="$no_config_label"
+    # Tier 3 is dogfood-only. Compute both sides with git toplevel + realpath
+    # (pwd -P). If $PWD is not inside a git checkout, or the two differ, skip
+    # to tier 4. Label stays project-repo: it is now truly the project's repo.
+    _pwd_top="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)" || _pwd_top=""
+    _repo_real=""
+    _pwd_real=""
+    if [[ -n "$REPO_ROOT" ]]; then
+      _repo_real="$(cd "$REPO_ROOT" && pwd -P 2>/dev/null)" || _repo_real=""
+    fi
+    if [[ -n "$_pwd_top" ]]; then
+      _pwd_real="$(cd "$_pwd_top" && pwd -P 2>/dev/null)" || _pwd_real=""
+    fi
+    if [[ -n "$_pwd_real" && -n "$_repo_real" && "$_pwd_real" == "$_repo_real" && -r "$REPO_ROOT/.claude/${basename}" ]]; then
+      CONFIG="$REPO_ROOT/.claude/${basename}"
+      SOURCE="project-repo"
+    elif [[ -r "$REPO_ROOT/project-config-template/${basename}" ]]; then
+      CONFIG="$REPO_ROOT/project-config-template/${basename}"
+      SOURCE="template"
+    else
+      # Caller-scope globals (intentionally assigned for the resolve-*.sh consumers).
+      # shellcheck disable=SC2034
+      CONFIG=""
+      # shellcheck disable=SC2034
+      SOURCE="$no_config_label"
+    fi
   fi
 }
 

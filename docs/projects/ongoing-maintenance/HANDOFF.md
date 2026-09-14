@@ -1,9 +1,9 @@
 ## 目標
-接續 autopilot 維護。2026-09-14 出貨到 v2.36.42（backlog schema 四 phase、gate 進 pre-commit、disposition resume、`--campaign-ledger` 錯值不燒 grant）；下一步是 BACKLOG 裡最後一條 2026-09-14 managed-rail 缺陷（reviewer no_verdict 釋放 claim，S），或 operator 指名的新工作。
+接續 autopilot 維護。2026-09-14 出貨到 v2.36.43（backlog schema 四 phase、gate 進 pre-commit、三條 managed-rail 缺陷全修：disposition resume、`--campaign-ledger` 不燒 grant、reviewer no_verdict 變 durable wait）。下一步：operator 指名，或 BACKLOG 裡 308-8f 回報的 dispatch-hetero 三條（指紋 stat walk、指紋算所有 refs 讓平行派工互殺、agy hand 要明示 effort）。
 
 ## 現況
-- 分支 `develop` = `origin/develop` @ `201330f9`（merge v2.36.42）。工作樹乾淨；另有一個別的 session 的 detached worktree（`…/7ef6560a…/scratchpad/baseline`），不是本 session 的、別動。
-- DONE 並已推：v2.36.42（`campaign-intake.js` ledger 路徑驗證搬到 Mission claim 之前；reviewer sonnet PASS、一條 sibling 缺陷「非 git `--repo` 也燒 claim」登 BACKLOG）、v2.36.41（disposition resume：根因在 `campaign-composition.js` 字串/陣列錯配、不在 engine；routing test +3；reviewer sonnet PASS、一條後續 gap 登 BACKLOG；**只驗到 composition 層**，CLI `--resume --campaign-disposition-authority` e2e 未量，下個 managed campaign 第一個非空 review 就是量測點，量到才把 BACKLOG row 的「待量」拿掉）、v2.36.38（schema／gate warn／DI／寫入者連結，/l5 mission-3b68ecb09a61）、v2.36.39（`migrate-backlog-entries.js`、真 BACKLOG 遷移 237 KB→104 KB、154 sidecar、allowlist 30、gate flip block，/l5 mission-5c34ed65c6a4 + depth-0 4b）、v2.36.40（gate 進 pre-commit ritual、l5 reference 加 depth-0 11 步 runbook）。
+- 分支 `develop` = `origin/develop` @ `bbf2f768`（merge v2.36.43）。工作樹乾淨；另有一個別的 session 的 detached worktree（`…/7ef6560a…/scratchpad/baseline`），不是本 session 的、別動。
+- DONE 並已推：v2.36.43（reviewer no_verdict → `VERTICAL_VERIFICATION` checkpoint 的 durable wait；分類器 `classifyFullDiffReviewFault` 讀 `raw.reviewResult.result.status`——第一版讀 `raw.status` 在 production 永遠不命中，reviewer 抓到後重寫並加了走真 `engine.reviewDiff` 的測試；同樣只驗到 composition/engine 單元層，CLI e2e 待量）、v2.36.42（`campaign-intake.js` ledger 路徑驗證搬到 Mission claim 之前；reviewer sonnet PASS、一條 sibling 缺陷「非 git `--repo` 也燒 claim」登 BACKLOG）、v2.36.41（disposition resume：根因在 `campaign-composition.js` 字串/陣列錯配、不在 engine；routing test +3；reviewer sonnet PASS、一條後續 gap 登 BACKLOG；**只驗到 composition 層**，CLI `--resume --campaign-disposition-authority` e2e 未量，下個 managed campaign 第一個非空 review 就是量測點，量到才把 BACKLOG row 的「待量」拿掉）、v2.36.38（schema／gate warn／DI／寫入者連結，/l5 mission-3b68ecb09a61）、v2.36.39（`migrate-backlog-entries.js`、真 BACKLOG 遷移 237 KB→104 KB、154 sidecar、allowlist 30、gate flip block，/l5 mission-5c34ed65c6a4 + depth-0 4b）、v2.36.40（gate 進 pre-commit ritual、l5 reference 加 depth-0 11 步 runbook）。
 - IN-FLIGHT：無。session marker 停在 l3（l5 降級），2026-09-15 到期自清；不要手刪。
 - 鬆散端：`stash@{0}`（2026-08-30 evidence-discipline §20/§21 草稿，落地要過 QC review，非本輪產物）。
 - cuda／revival.3d 已收到 v2.36.38–39 通知（送達≠已讀）；他們是 table style，遷移腳本目前只支援 heading。
@@ -17,7 +17,9 @@
 - Review 停止規則：三輪；reviewer MUST-FIX 一律 probe＋mutation 重新推導後才接受或駁回。
 
 ## 下一步
-1. 最後一條 2026-09-14 rail 缺陷：reviewer no_verdict 釋放 claim（S；應重試席位而不是 release）。BACKLOG row「Managed rail: a reviewer no_verdict releases the campaign claim instead of retrying the seat」，證據在 `docs/plans/2026-09-14-backlog-entry-migration.md`。另外 308-8f 2026-09-14 回報兩條 dispatch-hetero 缺陷已登 BACKLOG（指紋 stat walk 誤判、agy hand 要明示 effort），未驗未修。composition 層的 review→wait→resume 測試骨架已在 `implementation-campaign-routing.test.sh`「Disposition resume must rebind」段，可直接抄。
+1. 三條 v2.36.41–43 的 rail 修正都只驗到 composition/engine 單元層：下個 managed campaign 的第一個非空 review／第一個 no_verdict 就是 CLI e2e 量測點，量到才把 BACKLOG rows 的「待量」拿掉。
+2. 308-8f 回報的三條 dispatch-hetero 缺陷（BACKLOG PEER-REPORTED (308-8f) ×3）：指紋算所有 refs 讓同 repo 平行派工互殺（S，`lib/main-checkout-boundary.sh` 排除 rail 自己的分支模式）最值得先做；stat walk 誤判（S）；agy hand 不帶 `--effort` 只 edit（Fix，未驗）。
+3. `autopilot-engine.test.sh` 本機 10 條既有紅燈（strict-l5 bootstrap 讀 live `~/.autopilot/session-mode/_home_cookys_projects_autopilot.json`，該 marker 是 l5、2026-08-05 已過期但還在）——測試不 hermetic，BACKLOG 有 row；判紅先看是不是這 10 條。composition 層的 review→wait→resume 測試骨架已在 `implementation-campaign-routing.test.sh`「Disposition resume must rebind」段，可直接抄。
 2. 若 revival.3d 要用遷移腳本：`scripts/migrate-backlog-entries.js` 加 table style（parser 已在 gate 匯出；`planMigration` 開頭的 `exit 2 not supported yet` 就是入口）。
 3. 30 條 Title >120 B 的 allowlist 殘留：人手改標題（改了 fingerprint 會變，`--update-allowlist` 會自動移除舊 pair）。
 

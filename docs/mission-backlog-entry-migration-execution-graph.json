@@ -1,0 +1,90 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "nodes": [
+  {
+   "acceptance_ids": [
+    "p4a-migration-tool-preserves-bytes",
+    "p4a-dry-run-default",
+    "p4a-real-backlog-dry-run-completes"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "CLAUDE.md",
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/scripts",
+     "references",
+     "scripts"
+    ],
+    "authorized_creates": [
+     "hooks/tests/migrate-backlog-entries.test.sh",
+     "platforms/codex/plugin/scripts/migrate-backlog-entries.js",
+     "scripts/migrate-backlog-entries.js"
+    ],
+    "baseline_churn": 3000,
+    "max_changed_files": 16,
+    "max_extra_churn": 1500,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "output_paths": [
+     "CLAUDE.md",
+     "docs/scripts-inventory.md",
+     "hooks/tests/migrate-backlog-entries.test.sh",
+     "platforms/codex/plugin/scripts/check-backlog-entries.js",
+     "platforms/codex/plugin/scripts/migrate-backlog-entries.js",
+     "scripts/check-backlog-entries.js",
+     "scripts/migrate-backlog-entries.js"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "scripts/check-backlog-entries.js",
+     "references/backlog-entry.md",
+     "docs/BACKLOG.md",
+     "CLAUDE.md",
+     "docs/scripts-inventory.md"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-14-backlog-entry-migration.md",
+     "section": "2. `scripts/migrate-backlog-entries.js` contract (Node ≥ 20.10, built-ins only)"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 12,
+   "id": "backlog-entry-migration-p4a",
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 16,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 4000000,
+    "tool_calls": 150,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-3eb58da96292bad97d915a5f41bcfbc73eac21736577eef30b6de354ebfa67c1"
+   ],
+   "source_rubric_ids": [
+    "R14716056437162826484640124776813110795204104367323377194553572692837345015123",
+    "R23048498259760405996664769654398957622611451115136906764965284458146195140903",
+    "R29376895686740884441802757264683277713321843616288651173922281284643715650176",
+    "R41827932551505366254767566790580010056915152198811099331053290402412505907953",
+    "R43189544120375363889435941503801184184572054415557751663764602030791721008472",
+    "R68117953312067316768169002618702333063587589833748646785894911539318058012243",
+    "R77320631266064412334436777074388292969740910626656697419861701447651872324053",
+    "R90627523495330971338285275591263480814864689227571769657765120106811711827271",
+    "R91280780605606154388137431172825087115076120383886774952475277329497532885060",
+    "R9248818263374375435300617056904257191687974279171831902834233553576254666185"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/migrate-backlog-entries.test.sh",
+    "bash hooks/tests/check-backlog-entries.test.sh",
+    "node scripts/check-backlog-entries.js --self-test",
+    "node scripts/check-js-syntax.js",
+    "node scripts/check-claude-md-inventory.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check"
+   ]
+  }
+ ],
+ "schema_version": 1
+}

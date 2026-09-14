@@ -2,8 +2,8 @@
 接續 autopilot 維護。2026-09-14 出貨到 v2.36.41（backlog schema 四 phase、gate 進 pre-commit、disposition resume 修好）；下一步是 BACKLOG 裡剩下兩條 2026-09-14 managed-rail 缺陷（`--campaign-ledger` 拒絕燒 grant、reviewer no_verdict 釋放 claim），或 operator 指名的新工作。
 
 ## 現況
-- 分支 `develop` = `origin/develop` @ `9fd24051`（merge v2.36.41）。工作樹乾淨，只有主 checkout 一個 worktree。
-- DONE 並已推：v2.36.41（disposition resume：根因在 `campaign-composition.js` 字串/陣列錯配、不在 engine；routing test +3；reviewer sonnet PASS、一條後續 gap 登 BACKLOG）、v2.36.38（schema／gate warn／DI／寫入者連結，/l5 mission-3b68ecb09a61）、v2.36.39（`migrate-backlog-entries.js`、真 BACKLOG 遷移 237 KB→104 KB、154 sidecar、allowlist 30、gate flip block，/l5 mission-5c34ed65c6a4 + depth-0 4b）、v2.36.40（gate 進 pre-commit ritual、l5 reference 加 depth-0 11 步 runbook）。
+- 分支 `develop` = `origin/develop` @ `9fd24051`（merge v2.36.41）。工作樹乾淨；另有一個別的 session 的 detached worktree（`…/7ef6560a…/scratchpad/baseline`），不是本 session 的、別動。
+- DONE 並已推：v2.36.41（disposition resume：根因在 `campaign-composition.js` 字串/陣列錯配、不在 engine；routing test +3；reviewer sonnet PASS、一條後續 gap 登 BACKLOG；**只驗到 composition 層**，CLI `--resume --campaign-disposition-authority` e2e 未量，下個 managed campaign 第一個非空 review 就是量測點，量到才把 BACKLOG row 的「待量」拿掉）、v2.36.38（schema／gate warn／DI／寫入者連結，/l5 mission-3b68ecb09a61）、v2.36.39（`migrate-backlog-entries.js`、真 BACKLOG 遷移 237 KB→104 KB、154 sidecar、allowlist 30、gate flip block，/l5 mission-5c34ed65c6a4 + depth-0 4b）、v2.36.40（gate 進 pre-commit ritual、l5 reference 加 depth-0 11 步 runbook）。
 - IN-FLIGHT：無。session marker 停在 l3（l5 降級），2026-09-15 到期自清；不要手刪。
 - 鬆散端：`stash@{0}`（2026-08-30 evidence-discipline §20/§21 草稿，落地要過 QC review，非本輪產物）。
 - cuda／revival.3d 已收到 v2.36.38–39 通知（送達≠已讀）；他們是 table style，遷移腳本目前只支援 heading。

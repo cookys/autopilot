@@ -54,7 +54,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: this dogfood; evidence `docs/plans/evidence/2026-09-14-backlog-entry-schema/impl-run3-resume-terminal-stop.json`.
 - **Pointer**: docs/backlog/managed-rail-resume-with-a-disposition-authority-drops-the-prior-findings-and-te.md
-- **Context**: root cause in `campaign-composition.js`, not the engine: writer read the findings JSON string as an array (→ `[]`); resume bound the array to a string-only provider. Both fixed; legacy empty snapshots resume.
+- **Context**: root cause in `campaign-composition.js`, not the engine: writer read the findings JSON string as an array (→ `[]`); resume bound the array to a string-only provider. Both fixed (composition test); CLI e2e 待量.
 
 ### Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `[]` snapshot
 - **Status**: open

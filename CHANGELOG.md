@@ -9,7 +9,8 @@
     （只有 finding_id/claim/severity/source 四鍵，resume 時 adjudicator 能重新 normalize），解不開 fail-closed 成 `[]`。
   - 讀回端：resume 把 snapshot **陣列**直接塞進 `review.findings`，disposition provider 的 `reviewFindingIds` 只吃字串 →
     「campaign review findings are unavailable for disposition binding」→ `disposition_resume` blocked。現在綁 `JSON.stringify(snapshot)`；
-    snapshot 為空（修前寫下的 controller）時不覆蓋 `review_payload.findings`，卡住的舊 campaign 不用動 ledger 就能 resume。
+    snapshot 為空（修前寫下的 controller）時不覆蓋 `review_payload.findings`，仍停在 AWAITING_DISPOSITION 的舊 controller 可 resume（composition 層測試；
+    dogfood 那次已 terminal_stop 不在此列）。CLI 端到端 `--resume --campaign-disposition-authority` 尚未量，下個 managed campaign 的第一個非空 review 就是量測點。
 - `hooks/tests/implementation-campaign-routing.test.sh` +3 條：engine 同形 adjudicate adapter（provider + 真 adjudicator）跑
   review → `awaiting_disposition` → 帶 depth-0 authority resume，斷言 snapshot 非空、`DISPOSITION_RESUMED` 發出、進 repair；
   第三條是 `findings_snapshot: []` 的舊 controller。三個 mutant（各回退一半、拿掉空 snapshot guard）各被不同斷言抓到。

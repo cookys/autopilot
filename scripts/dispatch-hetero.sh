@@ -3638,7 +3638,9 @@ check_main_checkout_boundary() {
 run_hands_content_gate() {
   HANDS_BOUNDARY_ERROR=""; HANDS_BOUNDARY_CODE=""
   local content_out content_rc
-  content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" --expect-wrapper-subject 2>&1)" && content_rc=0 || content_rc=$?
+  # No --expect-wrapper-subject here: the wrapper commits ONLY when the worker left the tree
+  # dirty at BASE_SHA (edit-only workers); a worker that commits itself owns the subject.
+  content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" 2>&1)" && content_rc=0 || content_rc=$?
   case "$content_rc" in
     0) return 0 ;;
     1) HANDS_BOUNDARY_CODE="unsafe_commit_content"; HANDS_BOUNDARY_ERROR="boundary_rejected: unsafe commit content (added symlink / gitlink / ignored path) — ${content_out}" ;;

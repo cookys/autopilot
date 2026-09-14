@@ -366,6 +366,159 @@ node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --document "$TEST_TMP/runner-transport-envelope.json" >/dev/null
 assert_exit_code "$?" "0" "shared runner transport envelope matches its closed schema"
 
+# Disposition resume must rebind the findings the AWAITING_DISPOSITION wait
+# persisted (2026-09-14 dogfood, mission-3b68ecb09a61): the durable snapshot was
+# `[]` because the AUTHORITY_REQUIRED fallback read review.findings — a JSON
+# string — through Array.isArray, and the resume binder then handed the array
+# to a provider that only reads the string. Both halves are exercised here with
+# the engine-shaped adjudicate adapter (provider + real adjudicator).
+DISPOSITION_RESUME_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const { runCampaignComposition } = require(path.join(root, 'src', 'engine'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+const { adjudicateCampaignReview } = require(path.join(root, 'src', 'engine', 'campaign-adjudication'));
+const {
+  compileCampaignDispositionProvider,
+} = require(path.join(root, 'src', 'engine', 'campaign-disposition-authority'));
+
+const D = 'a'.repeat(64);
+const CAMPAIGN_ID = `campaign-v1-${'b'.repeat(64)}`;
+const REVIEW_DIGEST = 'c'.repeat(64);
+const finalPanel = () => {
+  const seat = {
+    schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat', seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: '7'.repeat(64), reason: null,
+  };
+  seat.receipt_digest = canonicalDigest(seat);
+  return {
+    reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: '7'.repeat(64),
+    sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [seat],
+  };
+};
+const candidate = {
+  committed: true, commit: '1'.repeat(40), tree_sha: '2'.repeat(40),
+  branch: 'feat/disposition-resume', writer_fence: { receipt_digest: '3'.repeat(64) },
+};
+const rawFinding = {
+  finding_id: 'icc-dr-001',
+  claim: 'MUST-FIX disposition resume drops the persisted findings',
+  severity: '🟠',
+  source: 'fixture',
+};
+// Exactly what the engine's adjudicate adapter does: provider may throw →
+// registry incomplete with the provider's message; otherwise real adjudicator.
+const engineAdjudicate = (provider) => ({ review }) => {
+  let dispositionAuthority = null;
+  if (provider) {
+    try {
+      dispositionAuthority = provider({ review, campaignId: CAMPAIGN_ID, contractDigest: D });
+    } catch (error) {
+      return {
+        registry_complete: false, repair_gate_passed: false, reason: error.message,
+        must_fix_now: [], follow_up: [], rejected: [],
+      };
+    }
+  }
+  return adjudicateCampaignReview({
+    review, convergenceVerdict: 'SHIP-AS-IS', dispositionAuthority,
+    now: '2026-09-14T00:00:00.000Z',
+  });
+};
+const adapters = (provider, sink) => ({
+  preflight: () => ({ passed: true }),
+  implement: () => candidate,
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: '4'.repeat(64) }),
+  review: () => ({
+    reviewed: true, success: true, verdict: 'FIX-THEN-SHIP',
+    findings: JSON.stringify([rawFinding]), review_digest: REVIEW_DIGEST,
+  }),
+  adjudicate: engineAdjudicate(provider),
+  convergence: () => ({ passed: true }),
+  finalPanel,
+  onControllerUpdate: (controller) => sink.controllers.push(JSON.parse(JSON.stringify(controller))),
+  onCampaignEvent: (event) => sink.events.push(event.event_type),
+});
+const authority = {
+  schema_version: 1, artifact_type: 'campaign_disposition_authority', authority: 'depth-0',
+  actor_id: 'owner/root', campaign_id: CAMPAIGN_ID, contract_digest: D,
+  reviews: [{
+    review_digest: REVIEW_DIGEST,
+    decisions: [{
+      finding_id: rawFinding.finding_id,
+      evidence: { kind: 'trace', trace_chain: ['test:disposition-resume'], confirmed_by: 'owner/root' },
+      disposition: {
+        disposition: 'must-fix-now', acceptance_id: 'ICC-DR', deferral_harm: 'stranded campaign',
+      },
+    }],
+  }],
+};
+const provider = compileCampaignDispositionProvider(authority);
+const resumeFrom = (controller, findings) => ({
+  phase: controller.phase,
+  repair_generation: 0,
+  candidate: controller.candidate,
+  controller,
+  verification: controller.verification_receipt,
+  review: controller.review_payload,
+  findings,
+  full_diff_barriers: controller.full_diff_barriers,
+});
+
+// (1) Fresh run, no authority → durable wait persists the RAW finding objects.
+const first = { controllers: [], events: [] };
+const wait = runCampaignComposition(
+  { promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1 },
+  adapters(null, first),
+);
+assert.strictEqual(wait.status, 'awaiting_disposition');
+assert.deepStrictEqual(first.events, ['AWAITING_DISPOSITION']);
+const persisted = first.controllers.at(-1);
+assert.strictEqual(persisted.phase, 'awaiting_disposition');
+assert.deepStrictEqual(persisted.findings_snapshot, [rawFinding]);
+assert.deepStrictEqual(persisted.unresolved_findings, [rawFinding]);
+assert.strictEqual(typeof persisted.review_payload.findings, 'string');
+console.log('awaiting_disposition_snapshot_nonempty=true');
+
+// (2) Resume with a valid depth-0 authority, rebinding the persisted snapshot
+// the way autopilot-engine does (findings_snapshot || unresolved_findings).
+const second = { controllers: [], events: [] };
+const resumed = runCampaignComposition({
+  promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1,
+  controller: persisted,
+  resume: resumeFrom(persisted, persisted.findings_snapshot || persisted.unresolved_findings),
+}, adapters(provider, second));
+assert.notStrictEqual(resumed.phase, 'disposition_resume', resumed.reason);
+assert.strictEqual(second.events[0], 'DISPOSITION_RESUMED');
+assert(resumed.trace.includes('resume_disposition_only'));
+assert(resumed.trace.indexOf('repair') > resumed.trace.indexOf('adjudicate'),
+  'must-fix-now disposition proceeds into repair');
+console.log('disposition_resume_rebinds_snapshot=true');
+
+// (3) Controllers persisted before this fix carry `findings_snapshot: []`; the
+// review_payload findings string is still authoritative and must not be erased.
+const legacy = { ...persisted, findings_snapshot: [], unresolved_findings: [] };
+const third = { controllers: [], events: [] };
+const legacyResumed = runCampaignComposition({
+  promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1,
+  controller: legacy,
+  resume: resumeFrom(legacy, legacy.findings_snapshot),
+}, adapters(provider, third));
+assert.notStrictEqual(legacyResumed.phase, 'disposition_resume', legacyResumed.reason);
+assert.strictEqual(third.events[0], 'DISPOSITION_RESUMED');
+console.log('legacy_empty_snapshot_resumes=true');
+NODE
+)"
+assert_exit_code "$?" "0" "disposition resume process exits zero: $DISPOSITION_RESUME_OUT"
+for key in awaiting_disposition_snapshot_nonempty disposition_resume_rebinds_snapshot \
+  legacy_empty_snapshot_resumes; do
+  assert_contains "$DISPOSITION_RESUME_OUT" "$key=true" "disposition resume proves $key"
+done
+
 SBX="$TEST_TMP/resume-repo"
 mkdir -p "$SBX/.claude" "$SBX/src"
 git -C "$SBX" init -q

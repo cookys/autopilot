@@ -31,6 +31,21 @@ const {
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
+// review.findings is the normalized JSON string ('[]' when clean). Return the raw
+// finding objects (exact 4-key grammar the adjudicator re-normalizes on resume);
+// fail closed to []. On the AUTHORITY_REQUIRED path the string has already been
+// normalized successfully, so [] only occurs for the other malformed-findings
+// codes (which the identityInvalid gate below does not cover — see BACKLOG).
+const rawFindingsList = (raw) => {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== 'string' || raw.trim().length === 0) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+};
 const isCanonicalSha256 = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 const REVIEW_AUTHORITY_KEYS = [
   'schema_version',
@@ -2357,12 +2372,18 @@ function runCampaignComposition(input = {}, adapters = {}) {
 
     } // end !dispositionOnlyResume (verify + full-diff + focused)
 
-    // Resume path may re-bind prior findings awaiting disposition.
-    const reviewForAdjudication = resumeFindings
+    // Resume path may re-bind prior findings awaiting disposition. The
+    // snapshot is a raw finding-object array; every consumer downstream
+    // (disposition provider, adjudicator) reads review.findings as the
+    // normalized JSON string, so bind the canonical string — never the array.
+    // An empty snapshot (pre-fix controllers persisted `[]`) must not erase the
+    // persisted review_payload findings, which remain the authoritative copy.
+    const reviewForAdjudication = Array.isArray(resumeFindings)
+      && resumeFindings.length > 0
       && (resume.phase === AWAITING_DISPOSITION
         || resume.phase === 'AWAITING_DISPOSITION'
         || dispositionOnlyResume)
-      ? { ...lastReview, findings: resumeFindings }
+      ? { ...lastReview, findings: JSON.stringify(resumeFindings) }
       : lastReview;
 
     const adjudication = requireReceipt(adjudicate({
@@ -2413,10 +2434,13 @@ function runCampaignComposition(input = {}, adapters = {}) {
       }
       // Reach here only after identity-invalid error codes were rejected above.
       // Pass an explicit identity verdict — never rely on the removed fail-open default.
+      // AUTHORITY_REQUIRED adjudications carry no `findings`; the fallback is
+      // review.findings, the normalized JSON STRING. classifyMissingDisposition
+      // only reads arrays, so hand it the parsed raw objects — otherwise the
+      // durable snapshot is `[]` and the disposition resume has nothing to bind.
       const missing = classifyMissingDisposition({
         findings: adjudication.findings
-          || (reviewForAdjudication && reviewForAdjudication.findings)
-          || [],
+          || rawFindingsList(reviewForAdjudication && reviewForAdjudication.findings),
         dispositionAuthority: adjudication.disposition_authority || null,
         findingsIdentityOk: true,
       });

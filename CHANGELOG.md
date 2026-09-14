@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.36.41 — managed rail：disposition resume 找回 AWAITING_DISPOSITION 存下的 findings
+
+- `src/engine/campaign-composition.js` 兩處型別錯配，2026-09-14 dogfood（mission-3b68ecb09a61）量到、每個非空 review 都讓 campaign
+  terminal stop、disposition rail 從 CLI 端到端走不通：
+  - 寫入端：`AUTHORITY_REQUIRED` 的 adjudication 沒帶 `findings`，fallback 讀 `review.findings`（normalized JSON **字串**），
+    `classifyMissingDisposition` 只認陣列 → durable `findings_snapshot` / `unresolved_findings` 一律 `[]`。現在解回原始 finding 物件
+    （只有 finding_id/claim/severity/source 四鍵，resume 時 adjudicator 能重新 normalize），解不開 fail-closed 成 `[]`。
+  - 讀回端：resume 把 snapshot **陣列**直接塞進 `review.findings`，disposition provider 的 `reviewFindingIds` 只吃字串 →
+    「campaign review findings are unavailable for disposition binding」→ `disposition_resume` blocked。現在綁 `JSON.stringify(snapshot)`；
+    snapshot 為空（修前寫下的 controller）時不覆蓋 `review_payload.findings`，卡住的舊 campaign 不用動 ledger 就能 resume。
+- `hooks/tests/implementation-campaign-routing.test.sh` +3 條：engine 同形 adjudicate adapter（provider + 真 adjudicator）跑
+  review → `awaiting_disposition` → 帶 depth-0 authority resume，斷言 snapshot 非空、`DISPOSITION_RESUMED` 發出、進 repair；
+  第三條是 `findings_snapshot: []` 的舊 controller。三個 mutant（各回退一半、拿掉空 snapshot guard）各被不同斷言抓到。
+- 註：BACKLOG 原 row 的一句話根因「engine 沒持久化 findings_snapshot」不對——engine 端 rebind 本來就對，錯在 composition。
+
+prose-justification: 本版對 prose 面沒有增量（+0 行，只動 src/engine 與 tests）；自 v2.35.2 基線的 +9% 是 v2.36.34／v2.36.38／v2.36.40
+已各自註明的 reference 與 runbook。
+
 ## v2.36.40 — backlog gate 進 pre-commit ritual；depth-0 managed-campaign 步驟寫進 l5 reference
 
 - `scripts/sync-manifest.json` 多一條 `check-backlog-entries` ritual（觸發：`docs/BACKLOG.md`、`.claude/backlog-config.md`、

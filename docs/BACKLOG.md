@@ -10,7 +10,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`cookys-7840hs` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
-7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41. Next: the remaining 2026-09-14 rail defects (ledger flag, reviewer no_verdict releases the claim).
+7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42. Next: reviewer no_verdict releases the claim (2026-09-14).
 
 ### Managed rail: a reviewer no_verdict releases the campaign claim instead of retrying the seat
 - **Status**: fired 2026-09-14
@@ -72,6 +72,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: unverified here; if reproduced, default the agy effort per seat in `resolve-dispatch.sh` rather than per caller.
 
+### Managed rail: a non-git `--repo` still consumes a Mission claim before intake rejects it
+- **Status**: open
+- **Trigger**: any intake rejection between the Mission claim and `inspectSealedCampaignContract` is measured burning an attempt again
+- **Effort**: Fix
+- **Source**: v2.36.42 pre-merge review (sonnet), 2026-09-14
+- **Pointer**: none
+- **Context**: `projectMissionMode` does not touch git, so the claim runs before repo identity is known. Reject on `canonicalRepoIdentity` throw pre-claim + a non-git fixture.
+
 ### Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `[]` snapshot
 - **Status**: open
 - **Trigger**: a review whose findings fail `normalizeFindings` (UNSTRUCTURED/INVALID/DUPLICATE codes) reaches the durable wait on a real run
@@ -81,7 +89,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: identityInvalid gate in `campaign-composition.js` covers only FINDING_IDENTITY_INVALID; pre-existing. Widen the gate or block non-resumable.
 
 ### `engine implement-review --campaign-ledger <custom path>` is refused at intake and the refusal burns a grant attempt
-- **Status**: fired 2026-09-14
+- **Status**: shipped v2.36.42 2026-09-14
 - **Trigger**: **FIRED — measured 2026-09-14**: `campaign_ledger_path_mismatch` ("must be the repository-wide canonical Git common-dir ledger"); the claim for attempt 1 was consumed and `mission grant` minted attempt 2.
 - **Effort**: Fix
 - **Source**: this dogfood.

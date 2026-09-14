@@ -1,9 +1,9 @@
 ## 目標
-接續 autopilot 維護。2026-09-14 這一輪（backlog entry schema 全四個 phase、gate 進 pre-commit）已全部出貨；下一步是 BACKLOG 裡 2026-09-14 登的三條 managed-rail 缺陷，或 operator 指名的新工作。
+接續 autopilot 維護。2026-09-14 出貨到 v2.36.41（backlog schema 四 phase、gate 進 pre-commit、disposition resume 修好）；下一步是 BACKLOG 裡剩下兩條 2026-09-14 managed-rail 缺陷（`--campaign-ledger` 拒絕燒 grant、reviewer no_verdict 釋放 claim），或 operator 指名的新工作。
 
 ## 現況
-- 分支 `develop` = `origin/develop` @ `587ea527`（docs: record v2.36.40 push SHA）。工作樹乾淨，只有主 checkout 一個 worktree。
-- DONE 並已推：v2.36.38（schema／gate warn／DI／寫入者連結，/l5 mission-3b68ecb09a61）、v2.36.39（`migrate-backlog-entries.js`、真 BACKLOG 遷移 237 KB→104 KB、154 sidecar、allowlist 30、gate flip block，/l5 mission-5c34ed65c6a4 + depth-0 4b）、v2.36.40（gate 進 pre-commit ritual、l5 reference 加 depth-0 11 步 runbook）。
+- 分支 `develop` = `origin/develop` @ `9fd24051`（merge v2.36.41）。工作樹乾淨，只有主 checkout 一個 worktree。
+- DONE 並已推：v2.36.41（disposition resume：根因在 `campaign-composition.js` 字串/陣列錯配、不在 engine；routing test +3；reviewer sonnet PASS、一條後續 gap 登 BACKLOG）、v2.36.38（schema／gate warn／DI／寫入者連結，/l5 mission-3b68ecb09a61）、v2.36.39（`migrate-backlog-entries.js`、真 BACKLOG 遷移 237 KB→104 KB、154 sidecar、allowlist 30、gate flip block，/l5 mission-5c34ed65c6a4 + depth-0 4b）、v2.36.40（gate 進 pre-commit ritual、l5 reference 加 depth-0 11 步 runbook）。
 - IN-FLIGHT：無。session marker 停在 l3（l5 降級），2026-09-15 到期自清；不要手刪。
 - 鬆散端：`stash@{0}`（2026-08-30 evidence-discipline §20/§21 草稿，落地要過 QC review，非本輪產物）。
 - cuda／revival.3d 已收到 v2.36.38–39 通知（送達≠已讀）；他們是 table style，遷移腳本目前只支援 heading。
@@ -17,7 +17,7 @@
 - Review 停止規則：三輪；reviewer MUST-FIX 一律 probe＋mutation 重新推導後才接受或駁回。
 
 ## 下一步
-1. `grep -n 'Status\*\*: fired' docs/BACKLOG.md | head` 看三條 2026-09-14 rail 缺陷 row（disposition resume 丟 findings、`--campaign-ledger` 拒絕燒 grant、reviewer no_verdict 釋放 claim）；最值的是第一條（S）：`src/engine/autopilot-engine.js` AWAITING_DISPOSITION 時持久化 `findings_snapshot`、resume 時 rebind；用 `hooks/tests/mission-runtime-v2.test.sh` 的 sibling-store 手法寫 review→disposition→resume 的真測試。
+1. `grep -n 'Status\*\*: fired' docs/BACKLOG.md | head` 看剩兩條 2026-09-14 rail 缺陷 row：`--campaign-ledger` 拒絕燒 grant（Fix；intake 拒絕前不該 consume claim）、reviewer no_verdict 釋放 claim（S；應重試席位）。composition 層的 review→wait→resume 測試骨架已在 `implementation-campaign-routing.test.sh`「Disposition resume must rebind」段，可直接抄。
 2. 若 revival.3d 要用遷移腳本：`scripts/migrate-backlog-entries.js` 加 table style（parser 已在 gate 匯出；`planMigration` 開頭的 `exit 2 not supported yet` 就是入口）。
 3. 30 條 Title >120 B 的 allowlist 殘留：人手改標題（改了 fingerprint 會變，`--update-allowlist` 會自動移除舊 pair）。
 

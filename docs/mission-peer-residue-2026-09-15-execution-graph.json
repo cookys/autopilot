@@ -1,0 +1,104 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "peer-residue-2026-09-15",
+   "acceptance_ids": [
+    "ladder-tier3-gated",
+    "qc-panel-out-namespaced",
+    "wrapper-subject-frozen"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/references",
+     "platforms/codex/plugin/scripts",
+     "references",
+     "scripts"
+    ],
+    "authorized_creates": [],
+    "baseline_churn": 3000,
+    "max_changed_files": 24,
+    "max_extra_churn": 1500,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "output_paths": [
+     "scripts/lib/resolve-config.sh",
+     "platforms/codex/plugin/scripts/lib/resolve-config.sh",
+     "scripts/resolve-doa.sh",
+     "platforms/codex/plugin/scripts/resolve-doa.sh",
+     "scripts/resolve-review-loop.sh",
+     "platforms/codex/plugin/scripts/resolve-review-loop.sh",
+     "scripts/qc-panel.js",
+     "platforms/codex/plugin/scripts/qc-panel.js",
+     "scripts/dispatch-foreman.sh",
+     "platforms/codex/plugin/scripts/dispatch-foreman.sh",
+     "scripts/dispatch-hetero.sh",
+     "platforms/codex/plugin/scripts/dispatch-hetero.sh",
+     "scripts/check-hands-commit.js",
+     "platforms/codex/plugin/scripts/check-hands-commit.js",
+     "references/hetero-dispatch.md",
+     "platforms/codex/plugin/references/hetero-dispatch.md",
+     "hooks/tests/resolve-config.test.sh",
+     "hooks/tests/resolve-doa.test.sh",
+     "hooks/tests/qc-panel.test.sh",
+     "hooks/tests/dispatch-foreman.test.sh",
+     "hooks/tests/check-hands-commit.test.sh"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "scripts/lib/resolve-config.sh",
+     "scripts/qc-panel.js",
+     "references/hetero-dispatch.md",
+     "scripts/check-hands-commit.js"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md",
+     "section": "1. Config ladder tier 3 \u2014 `scripts/lib/resolve-config.sh`"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 12,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 24,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 4000000,
+    "tool_calls": 150,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-334834b297ab82ba28e5c024f8a052cc0ac2cb72dffabc4bf3e66571f12bd310"
+   ],
+   "source_rubric_ids": [
+    "R14257486287338281213527110064528157191847015746970879207955112243891510882534",
+    "R20701022863550253378645858033643641696750296399003993842577441318076472141275",
+    "R22547739603807563023975197710387967241028012104852182966743243670883346140082",
+    "R23208719203774281922123331334475120226068752148254816370248309064174367807966",
+    "R30796275249069287650727367344207009641871217278270105743773772693858245198004",
+    "R57284412690036067989696854427748324044260746003873773548889620404391230367660",
+    "R57844673331526016788036954666211124330121557162537844719084780225069893593567",
+    "R57990732015760786121918053528884290947921652483663573868744967898981644267854",
+    "R74282308067983786275037191670562992125259898451043471559236548627338033143148",
+    "R78399021243717304360024062879822136007300153193514599926963674499465121819472",
+    "R85647527285272521234487338631106074319830381147415787670251690432447434221130",
+    "R85740145573523563113793331044042975379648602690953948635354565727705342770345"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/resolve-config.test.sh",
+    "bash hooks/tests/resolve-doa.test.sh",
+    "bash hooks/tests/resolve-review-loop.test.sh",
+    "bash hooks/tests/resolve-worktree-teardown.test.sh",
+    "bash hooks/tests/qc-panel.test.sh",
+    "bash hooks/tests/check-hands-commit.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-reference-sizes.js"
+   ]
+  }
+ ]
+}

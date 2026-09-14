@@ -163,7 +163,7 @@ E="$(repo e-cjk)"
 } > "$E/docs/BACKLOG.md"
 out="$(node "$MIG" --backlog "$E/docs/BACKLOG.md" --out-dir "$E/docs/backlog" --apply --json)" || true
 slug_cjk="$(json_field "$(first_json "$out")" entries.0.slug)"
-assert_contains "$slug_cjk" "" "(e) slug non-empty placeholder"
+[ -n "$slug_cjk" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "(e) slug non-empty"
 node -e 'const s=process.argv[1]; process.exit(/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s)?0:1)' "$slug_cjk"
 assert_eq "$?" "0" "(e) CJK slug is filename-valid ($slug_cjk)"
 assert_file_exists "$E/docs/backlog/${slug_cjk}.md"
@@ -214,5 +214,58 @@ node -e 'process.exit(Number(process.argv[1])>=100?0:1)' "$mig"
 assert_eq "$?" "0" "(i) migrate count >= 100 (got $mig)"
 assert_eq "$(json_field "$(first_json "$out")" preserved)" "null" "(i) preserved null"
 assert_file_absent "$I/docs/backlog" "(i) dry-run did not create out-dir"
+
+# ── (j) the real backlog, applied twice: idempotent, every title kept, and the gate is left with
+#        nothing but Title caps and the header block (depth-0 probe 2026-09-14) ──
+J="$(repo j-real-apply)"
+cp "$REPO_ROOT/docs/BACKLOG.md" "$J/docs/BACKLOG.md"
+mkdir -p "$J/docs/plans" "$J/docs/projects"
+titles_before="$(grep -c '^### ' "$J/docs/BACKLOG.md")"
+out="$(node "$MIG" --backlog "$J/docs/BACKLOG.md" --out-dir "$J/docs/backlog" --apply --json 2>/dev/null)"
+assert_eq "$(json_field "$(first_json "$out")" preserved)" "true" "(j) real backlog apply preserved"
+assert_eq "$(grep -c '^### ' "$J/docs/BACKLOG.md")" "$titles_before" "(j) every title survives"
+sidecars_first="$(ls "$J/docs/backlog" | grep -c '\.md$')"
+out2="$(node "$MIG" --backlog "$J/docs/BACKLOG.md" --out-dir "$J/docs/backlog" --apply --json 2>/dev/null)"
+assert_eq "$(json_field "$(first_json "$out2")" totals.moved_bytes)" "0" "(j) second apply on the real backlog moves nothing"
+assert_eq "$(ls "$J/docs/backlog" | grep -c '\.md$')" "$sidecars_first" "(j) second apply creates no new sidecar"
+gate_codes="$(node "$REPO_ROOT/scripts/check-backlog-entries.js" --backlog "$J/docs/BACKLOG.md" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const set=new Set(j.violations.map(v=>v.code+(v.field?":"+v.field:"")));process.stdout.write([...set].sort().join(","))})')"
+assert_eq "$gate_codes" "cap_exceeded:Title,unparseable_entry" "(j) only Title caps and the header block remain (got: $gate_codes)"
+
+# ── (k) a small entry that only lacks Status/Pointer IS migrated; a lone over-cap Title is NOT ──
+K="$(repo k-small)"
+mkdir -p "$K/docs/plans"; touch "$K/docs/plans/x.md"
+long_title="$(printf 'T%.0s' $(seq 1 121))"
+printf '# BACKLOG\n\n### Small row lacking status\n- **Trigger**: when x\n- **Effort**: S\n- **Source**: s\n\n### %s\n- **Status**: open\n- **Trigger**: t\n- **Effort**: S\n- **Source**: s\n- **Pointer**: docs/plans/x.md\n' "$long_title" > "$K/docs/BACKLOG.md"
+out="$(node "$MIG" --backlog "$K/docs/BACKLOG.md" --out-dir "$K/docs/backlog" --apply --json 2>/dev/null)"
+assert_eq "$(json_field "$(first_json "$out")" totals.migrate)" "1" "(k) exactly the small row migrates"
+assert_contains "$(cat "$K/docs/BACKLOG.md")" "- **Status**: open" "(k) Status synthesised"
+assert_contains "$(cat "$K/docs/BACKLOG.md")" "- **Pointer**: docs/backlog/small-row-lacking-status.md" "(k) pointer to the sidecar"
+assert_contains "$(cat "$K/docs/BACKLOG.md")" "### $long_title" "(k) long title untouched"
+
+# ── (l) an existing sidecar on disk is never overwritten: the colliding title takes -2 ──
+L="$(repo l-collide)"
+mkdir -p "$L/docs/backlog"; printf '# hand-curated note\nkeep me\n' > "$L/docs/backlog/fat-row.md"
+printf '# BACKLOG\n\n### Fat row\n- **Status**: open\n- **Trigger**: t\n- **Effort**: S\n- **Source**: s\n- **Pointer**: docs/plans/ok.md\n- extra bullet that forces migration\n' > "$L/docs/BACKLOG.md"
+node "$MIG" --backlog "$L/docs/BACKLOG.md" --out-dir "$L/docs/backlog" --apply --json >/dev/null 2>&1
+assert_eq "$?" "0" "(l) apply with a disk collision exits 0"
+assert_eq "$(cat "$L/docs/backlog/fat-row.md")" "$(printf '# hand-curated note\nkeep me')" "(l) existing sidecar untouched"
+assert_file_exists "$L/docs/backlog/fat-row-2.md" "(l) colliding entry took the -2 slug"
+assert_contains "$(cat "$L/docs/BACKLOG.md")" "docs/backlog/fat-row-2.md" "(l) pointer names the -2 sidecar"
+
+# ── (m) a failure during the rename phase leaves no sidecar or manifest behind ──
+M="$(repo m-rollback)"
+printf '# BACKLOG\n\n### Row a\n- **Status**: open\n- **Trigger**: t\n- **Effort**: S\n- **Source**: s\n- **Pointer**: docs/plans/ok.md\n- extra a\n\n### Row b\n- **Status**: open\n- **Trigger**: t\n- **Effort**: S\n- **Source**: s\n- **Pointer**: docs/plans/ok.md\n- extra b\n' > "$M/docs/BACKLOG.md"
+cp "$M/docs/BACKLOG.md" "$M/before.md"
+# a DIRECTORY where the manifest must land: its rename fails AFTER both sidecars have landed
+mkdir -p "$M/docs/backlog/MIGRATION-$(date +%F).json" "$M/docs/backlog/MIGRATION-$(date -u +%F).json"
+set +e
+node "$MIG" --backlog "$M/docs/BACKLOG.md" --out-dir "$M/docs/backlog" --apply --json >/dev/null 2>"$M/err"
+rc_m=$?
+set -e
+assert_eq "$rc_m" "1" "(m) rename-phase failure exits 1"
+cmp -s "$M/docs/BACKLOG.md" "$M/before.md"; assert_eq "$?" "0" "(m) backlog untouched"
+assert_file_absent "$M/docs/backlog/row-a.md" "(m) the first sidecar that had landed was rolled back"
+assert_file_absent "$M/docs/backlog/row-b.md" "(m) the second sidecar that had landed was rolled back"
+assert_eq "$(ls "$M/docs/backlog" | grep -c '\.md$')" "0" "(m) no sidecar left behind"
 
 finalize_test

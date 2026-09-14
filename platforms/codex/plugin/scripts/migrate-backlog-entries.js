@@ -186,10 +186,16 @@ function normaliseEffort(fields, entryText) {
   return m ? m[1] : 'M';
 }
 
+// Migrate on ANY gate violation except a lone over-cap Title: a title is the entry's identity
+// and moving text cannot shorten it (it goes to the ratchet allowlist instead). This is also the
+// idempotence rule — a migrated row has every other field within schema, so a second run finds
+// nothing but the Title cap and leaves it alone (depth-0 probe 2026-09-14: the first version
+// re-migrated long-titled rows into new sidecars on every run, and skipped small rows that
+// only lacked Status/Pointer).
 function needsMigration(entry, cfg, repoRoot, now) {
   if (!entry || entry.unparseable) return false;
   const vios = checkEntry(entry, cfg, repoRoot, now);
-  return vios.some((v) => v.code === 'cap_exceeded' || v.code === 'extra_content');
+  return vios.some((v) => !(v.code === 'cap_exceeded' && v.field === 'Title'));
 }
 
 function renderEntry(title, fields) {
@@ -262,6 +268,14 @@ function planMigration(text, cfg, repoRoot, opts) {
   const usedSlugs = new Set();
   const outDirArg = opts.outDir || 'docs/backlog';
   const outDirAbs = path.isAbsolute(outDirArg) ? outDirArg : path.join(repoRoot, outDirArg);
+  // A sidecar that already exists on disk (hand-curated, or from an earlier run) is never
+  // overwritten: seed the slug set from the directory so a colliding title takes -N instead
+  // (GLM review MIG-SLUG-DISK-COLLISION, 2026-09-14).
+  try {
+    for (const name of fs.readdirSync(outDirAbs)) {
+      if (name.endsWith('.md')) usedSlugs.add(name.slice(0, -3));
+    }
+  } catch { /* out-dir absent: nothing to seed */ }
 
   const planned = [];
   const outSlices = [];
@@ -354,11 +368,23 @@ function planMigration(text, cfg, repoRoot, opts) {
 
 function applyWrites(backlogPath, newText, sidecars, manifest, outDirAbs, when) {
   const writtenTmp = [];
+  // Every rename target is tracked as well: a failure after the first rename must remove the
+  // sidecars and manifest already in place, or "nothing written on failure" is false
+  // (GLM review MIG-RENAME-ROLLBACK). The backlog is renamed LAST, so it is either the old
+  // bytes or the complete new state.
+  const renamed = [];
   const rollbackTmp = () => {
     for (const t of writtenTmp) {
       try { fs.unlinkSync(t); } catch { /* ignore */ }
     }
+    for (const t of renamed) {
+      try { fs.unlinkSync(t); } catch { /* ignore */ }
+    }
   };
+  if (!sidecars.length) {
+    // Nothing to move: no out-dir, no manifest, no byte-identical rewrite (MIG-EMPTY-APPLY-ARTIFACTS).
+    return { ok: true, preserved: true, noop: true };
+  }
   try {
     fs.mkdirSync(outDirAbs, { recursive: true });
     for (const s of sidecars) {
@@ -390,8 +416,15 @@ function applyWrites(backlogPath, newText, sidecars, manifest, outDirAbs, when) 
     fs.writeFileSync(blTmp, newText);
     writtenTmp.push(blTmp);
 
-    for (const s of sidecars) fs.renameSync(s.tmp, s.abs);
+    for (const s of sidecars) {
+      if (fs.existsSync(s.abs)) throw new Error(`refusing to overwrite existing sidecar ${s.abs}`);
+      fs.renameSync(s.tmp, s.abs);
+      renamed.push(s.abs);
+      writtenTmp.splice(writtenTmp.indexOf(s.tmp), 1);
+    }
     fs.renameSync(manTmp, manAbs);
+    renamed.push(manAbs);
+    writtenTmp.splice(writtenTmp.indexOf(manTmp), 1);
     fs.renameSync(blTmp, backlogPath);
     return { ok: true, preserved: true };
   } catch (e) {
@@ -430,10 +463,13 @@ function main() {
 
   if (!args.apply) {
     planned.manifest.preserved = null;
-    process.stdout.write(JSON.stringify(planned.manifest) + '\n');
+    // Synchronous writes: a 60 KB+ manifest through a pipe followed by process.exit() was
+    // truncated at the 64 KiB pipe buffer (suite case (j), 2026-09-14). fs.writeSync blocks
+    // until the kernel has every byte.
+    fs.writeSync(1, JSON.stringify(planned.manifest) + '\n');
     if (!args.json) {
       const diff = unifiedDiff(text, planned.newText, backlogPath);
-      if (diff) process.stdout.write(diff);
+      if (diff) fs.writeSync(1, diff);
     }
     process.exit(0);
   }
@@ -447,7 +483,7 @@ function main() {
     planned.when
   );
   planned.manifest.preserved = result.preserved;
-  process.stdout.write(JSON.stringify(planned.manifest) + '\n');
+  fs.writeSync(1, JSON.stringify(planned.manifest) + '\n');
   process.exit(result.ok && result.preserved ? 0 : 1);
 }
 

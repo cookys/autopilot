@@ -240,12 +240,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/a-campaign-s-output-paths-must-enumerate-every-codex-mirror-and-the-rejection-ar.md
 
 ### Two L5 deliverables cannot run on one repo inside 24h: the marker bridge scans every marker and `clear` needs a receipt nothing writes
-- **Status**: open
+- **Status**: fired 2026-09-15
 - **Trigger**: the next managed `engine implement-review` blocked at `precondition_failed` with `marker-to-campaign admission bridge failed: marker Mission mission_graph_digest does not match campaign projection`, or any work on…
 - **Effort**: S
 - **Source**: /l5 dogfood on the operator pin plan, 2026-09-11 — D4 blocked three attempts (`AUTOPILOT_ROOT_RUN_ID` missing, then `mission_grant_ref_released`, then the…
 - **Pointer**: docs/backlog/two-l5-deliverables-cannot-run-on-one-repo-inside-24h-the-marker-bridge-scans-ev.md
-- **Context**: measured 2026-09-11 shipping D3 then starting D4 of the operator-pin plan.
+- **Context**: measured 2026-09-11 (operator-pin D3→D4) and again 2026-09-15: a dead session's l3/entry-l5 marker for the shipped migration graph blocked peer-residue attempt 2; moved aside by hand.
 
 ### The implementer ladder's cost ordering is nearly degenerate — 11 of 17 rungs share one effort tier
 - **Status**: open

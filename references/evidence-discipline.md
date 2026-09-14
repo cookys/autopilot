@@ -844,3 +844,35 @@ The family now has six members across four deliverables of one plan, a peer repo
 and a guard built to stop the family. Treat "my check is green" as meaning nothing until
 you can say what it read, that the operands were populated, and that the thing which
 produced them exited zero.
+
+## 35. A fixture shaped like what you assume the pipeline emits proves only that your assumption is self-consistent
+
+**2026-09-14, v2.36.43, caught by the pre-merge reviewer.** The fix for "a reviewer
+`no_verdict` terminal-stops the campaign" added a discriminator in the composition layer
+keyed on `fullDiff.raw.status === 'no_verdict'`, and a test that fed the composition a
+hand-built review adapter returning exactly that shape. Red on HEAD, green on the fix,
+three mutants caught — every guard in this file that runs at the composition layer passed.
+
+The real pipeline never produces that shape. `reviewDiff()` collapses every non-reviewed
+dispatch to `status:'blocked'` and keeps the dispatcher's parsed status only at
+`raw.reviewResult.result.status`. In production the branch was dead; the dogfood incident
+the version was named after would have recurred with the suite green.
+
+This is §33/§34's cousin one layer up: the assertion could fail and the operands were
+populated — by the test author, from an assumption about an adjacent module, instead of
+by the adjacent module. A mock at a module boundary is a claim about the neighbour's
+output contract, and a claim needs the same evidence as any other.
+
+- **When a fixture stands in for a neighbour's output, derive the fixture from the
+  neighbour.** Either call the real neighbour with its own dependencies stubbed one level
+  further out (here: the real `engine.reviewDiff` with a stub `reviewDispatcher`), or
+  build the fixture by reading the neighbour's return site and cite the line. A fixture
+  written from memory of what the neighbour "obviously" returns is the §34 empty operand
+  wearing a plausible value.
+- **A discriminator on a foreign shape needs one test that crosses the boundary.** The
+  composition-level cases still earn their keep (they pin the branch's own behaviour);
+  the boundary-crossing case is what makes them mean something.
+
+**Prevention artifact**: `hooks/tests/autopilot-engine.test.sh` "no_verdict is a
+resumable gate fault" — drives the real `reviewDiff`, asserts the collapsed shape it
+actually emits, then feeds that into the exported classifier.

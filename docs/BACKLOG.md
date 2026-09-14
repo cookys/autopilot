@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39. Next: the rail defects filed 2026-09-14 (disposition resume, ledger flag, reviewer no_verdict releases the claim).
 
+### Managed rail: a reviewer no_verdict releases the campaign claim instead of retrying the seat
+- **Status**: fired 2026-09-14
+- **Trigger**: fired 2026-09-14 — mission-5c34ed65c6a4 round-1 review returned no_verdict (MiniMax format fault); the campaign blocked at full_diff_review and the Mission claim was released, so --resume --prior-status no_verdict met "matching Mission claim is released or terminal"
+- **Effort**: S
+- **Source**: backlog-entry-migration dogfood, 2026-09-14
+- **Pointer**: docs/plans/2026-09-14-backlog-entry-migration.md
+- **Context**: an instrument fault on the reviewer seat should re-administer or swap the seat, not end the campaign
+
 ### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
 - **Status**: open
 - **Trigger**: **NOT FIRED — recorded at ship time, 2026-09-13.** Fires when a real foreman run trips one of them.

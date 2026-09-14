@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-0df02cb6aaf36a5e051a3eaacd18640952dec5a49cd7d58503b29ad2d2d836cf",
+  "claim_id": "claim-v1-9c5969f44fdf6c246ea6d2d3de018edacb29c5e4d67657a94bba176e3f87c44e",
+  "mission_grant_ref": "9d9e64004451175258b229379c4fbaa098e1394264061a7c3bb76d4a2d03a19b",
+  "mission_subject_digest": "c1d4af39008c58c1a49e4845ab670a42c33f557a19d377e8b71b951fad00dc25",
+  "mission_campaign_id": "campaign-v2-6cacd997d848912dd948e6508de3c07554574927b2d7a436968e0be16bc40229",
+  "graph_node_id": "peer-residue-2026-09-15",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/0df02cb6aaf36a5e051a3eaacd18640952dec5a49cd7d58503b29ad2d2d836cf/peer-residue-2026-09-15/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/0df02cb6aaf36a5e051a3eaacd18640952dec5a49cd7d58503b29ad2d2d836cf/peer-residue-2026-09-15/attempt-1/campaign.seal.json",
+  "branch": "mission/0df02cb6aaf3/peer-residue-2026-09-15-a1",
+  "base_sha": "c3f652fc64edf320036fa3ebe5f5bff68a91283d",
+  "state_hash": "d6dfa6338c1c6e8e8f5d73264c9afc22b657cb3fcb2bd47d4e255ea1b2070da3"
+}

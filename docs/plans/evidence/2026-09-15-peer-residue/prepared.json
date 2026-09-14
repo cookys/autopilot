@@ -2,20 +2,20 @@
   "schema_version": 1,
   "artifact_type": "mission_prepare_receipt",
   "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
-  "adoption_key": "bbf3bd00daf70f1d9f0249dbe63dca110693a805270b20e60697bf8b57a632ca",
-  "mission_lineage_id": "lineage-v1-bbf3bd00daf70f1d9f0249dbe63dca110693a805270b20e60697bf8b57a632ca",
-  "task_authority_id": "813fa6b437732c5df856011ef55a0a2d0a1c71bd89c8cc9d4b06dceb99782474",
+  "adoption_key": "0df02cb6aaf36a5e051a3eaacd18640952dec5a49cd7d58503b29ad2d2d836cf",
+  "mission_lineage_id": "lineage-v1-0df02cb6aaf36a5e051a3eaacd18640952dec5a49cd7d58503b29ad2d2d836cf",
+  "task_authority_id": "a62f3220d586a78ce4e11a02197f21dde38b1cac018af0f6a7cf7b9e89525771",
   "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
-  "intent_hash": "c818e50e166d678c2c34357aa1c9fb5fc3c76df11684b3d7839d7970103f7ca0",
+  "intent_hash": "97767ab64e5618f8f0de54c687497f15ef22306707f2f1b5ca6d3ff71df77662",
   "initial_required_acceptance_hashes": [
-    "334834b297ab82ba28e5c024f8a052cc0ac2cb72dffabc4bf3e66571f12bd310",
-    "e6ee44260f2b33b77dec487c7968c5ee61441d538433f7f818526003515f5243"
+    "6788b3d559f508fb019f06a75d7dc19970d5730bbbbf1cd5b565c01a7e49470c",
+    "842aff3743e9064f1ebf3771a779ed4e797ccd9bdcdbbe7aad2fff3dad99c218"
   ],
   "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
-  "mission_graph_digest": "a25555c89e38574bbc47b300567d9d1af8685b91934b0cebf15fe8ddc88eef13",
+  "mission_graph_digest": "70ea44befdf928efed66846f65b872f102b2ef9a4d021a3eaff0cabd00269722",
   "enforcement_mode": "enforce",
-  "state_hash": "1a3e8dd3ee0fdc2160b1c18b0776bc0f387d8738a8b342884657ee0f07705cb9",
+  "state_hash": "6a45e729c4128f0e4c17a839294e55d87fd029faf922a0f6a6b33fc90b8a0818",
   "adopted": false,
-  "prepared_at": "2026-09-14T21:03:26.520Z",
-  "receipt_digest": "0f489f77f85790a682199f4a3010f4b420db0002d878fec41a9620bbf8473e99"
+  "prepared_at": "2026-09-14T21:13:46.323Z",
+  "receipt_digest": "aed6a35e0699dbf8e4d0b7485b8c91f2c161c5501b11d11a7a1af05882b22f52"
 }

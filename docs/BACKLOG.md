@@ -28,7 +28,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md
 
 ### PEER-REPORTED (308-8f): an agy hand commits to the MAIN checkout from inside its worktree — REPRODUCED, FIXED v2.36.37
-- **Status**: fired 2026-09-13
+- **Status**: shipped v2.36.37 2026-09-13
 - **Trigger**: **FIRED — reported 2026-09-13 with evidence, reproduced here the same hour.** `dispatch-foreman.sh` probe on 308: kimi foreman behaved; `dispatch-hetero.sh --runner agy` built `/tmp/hetero-hands-…` but agy committed to 308's…
 - **Effort**: Fix
 - **Source**: `308-8f` cross-session report 2026-09-13; evidence in 308 `a096548e`.
@@ -42,7 +42,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dev-mode-layer-marketplace-clone-as-a-symlink-spike-before-changing-dev-setup.md
 
 ### PEER-REPORTED (cuda, for revival.3d): a backlog ENTRY has no schema, no DI, and no mechanical gate — so backlogs become work journals
-- **Status**: fired 2026-09-14
+- **Status**: shipped v2.36.39 2026-09-14
 - **Trigger**: **FIRED 2026-09-14 — Phases 1–3 SHIPPED v2.36.38** (plan `docs/plans/2026-09-14-backlog-entry-schema.md`, G1-reviewed; gate in warn mode; Phase 4 migration + block flip is the next mission). Relayed by `cuda` as an owner assignment;…
 - **Effort**: S
 - **Source**: `cuda` via hangar-bridge, 2026-09-14, msg `msg_01M2E2BHMGERX2963SGAM51YYS`.
@@ -181,7 +181,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `308-db` ran six Agent-worktree leaves on 2026-09-13; three hit the 40-command bash ceiling **after reconnaissance was complete and before a single line changed**.
 
 ### A non-Claude engine cannot sit in the foreman seat — no rail exists, and the request is now from two independent peers
-- **Status**: fired 2026-09-13
+- **Status**: shipped v2.36.34 2026-09-13
 - **Trigger**: **FIRED 2026-09-13 — the operator authorised Shape B directly ("B 真工頭（配額是動機）"); shipped v2.36.34.** (Earlier: requested by `308-db` 2026-09-12, relayed as an owner ruling.) A peer's relay of an owner decision is…
 - **Effort**: S
 - **Source**: cross-session request from `308-db` via the local Claude session mesh, 2026-09-12. Nothing re-derived on this host yet.

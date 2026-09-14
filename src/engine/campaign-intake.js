@@ -6,6 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const {
+  canonicalRepoIdentity,
   inspectSealedCampaignContract,
   projectMissionMode,
 } = require('../../scripts/implementation-campaign-check');
@@ -1325,6 +1326,34 @@ function runCampaignIntake(input = {}, adapters = {}) {
     ? input.observedAt
     : (typeof adapters.now === 'function' ? adapters.now() : new Date().toISOString());
   const steps = [];
+  // `--campaign-ledger` accepts exactly one value: the canonical Git common-dir
+  // ledger. That is pure argv validation and needs no contract, seal, or Mission
+  // claim — reject it here, BEFORE the claim adapter runs, so a mistyped flag
+  // does not consume a grant attempt (2026-09-14 dogfood: the post-claim check
+  // below released with a no-effect receipt, and `mission grant` minted attempt 2).
+  // The post-claim check stays as the sealed-identity cross-check.
+  if (requestedLedgerPath !== null) {
+    let canonicalLedgerPath = null;
+    try {
+      canonicalLedgerPath = campaignLedgerPathFor(canonicalRepoIdentity(repo));
+    } catch (_error) {
+      canonicalLedgerPath = null;
+    }
+    if (canonicalLedgerPath !== null && requestedLedgerPath !== canonicalLedgerPath) {
+      const rejection = rejected(
+        'campaign_generation',
+        'campaign_ledger_path_mismatch',
+        'campaign ledger path must be the repository-wide canonical Git common-dir ledger',
+      );
+      return {
+        status: 'blocked',
+        reason: rejection.reason,
+        rejection,
+        steps: [rejection],
+        pre_spend_no_effect_receipt: null,
+      };
+    }
+  }
   let rawContractDigest = null;
   if (contractPath) {
     try {

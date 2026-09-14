@@ -3376,6 +3376,35 @@ const alternate = runCampaignIntake({
   ...commonInput,
   ledgerPath: alternatePath,
 }, adapters);
+// A non-canonical --campaign-ledger is argv validation: it must be refused
+// BEFORE the Mission claim adapter runs, so the refusal cannot consume a grant
+// attempt (2026-09-14 dogfood: attempt 1 was claimed then released with a
+// no-effect receipt, and `mission grant` minted attempt 2).
+let ledgerFlagClaimCalls = 0;
+let ledgerFlagReleaseCalls = 0;
+const ledgerFlagRejection = runCampaignIntake({
+  ...commonInput,
+  ledgerPath: alternatePath,
+}, {
+  ...adapters,
+  missionClaim: () => {
+    ledgerFlagClaimCalls += 1;
+    return { owner: 'mission', status: 'claimed', claim_id: 'claim-ledger-flag' };
+  },
+  releaseMission: () => {
+    ledgerFlagReleaseCalls += 1;
+    return { owner: 'mission_release', status: 'released' };
+  },
+});
+console.log(`ledger_flag_rejected_before_claim=${
+  ledgerFlagRejection.status === 'blocked'
+  && ledgerFlagRejection.rejection.code === 'campaign_ledger_path_mismatch'
+  && ledgerFlagClaimCalls === 0
+  && ledgerFlagReleaseCalls === 0
+  && ledgerFlagRejection.steps.length === 1
+  && ledgerFlagRejection.pre_spend_no_effect_receipt === null
+}`);
+console.log(`ledger_flag_claim_calls=${ledgerFlagClaimCalls}`);
 const result = runCampaignIntake({
   ...commonInput,
   ledgerPath,
@@ -3487,6 +3516,10 @@ NODE
 )"
 DEFAULT_INTAKE_EXIT=$?
 assert_exit_code "$DEFAULT_INTAKE_EXIT" "0" "default generation claim writes a durable ledger"
+assert_contains "$DEFAULT_INTAKE_OUT" "ledger_flag_rejected_before_claim=true" \
+  "non-canonical --campaign-ledger is refused before the Mission claim adapter runs"
+assert_contains "$DEFAULT_INTAKE_OUT" "ledger_flag_claim_calls=0" \
+  "non-canonical --campaign-ledger never reaches the Mission claim adapter"
 assert_contains "$DEFAULT_INTAKE_OUT" "alternate_code=campaign_ledger_path_mismatch" \
   "alternate ledger paths cannot create an independent campaign authority"
 assert_contains "$DEFAULT_INTAKE_OUT" "alternate_exists=false" \

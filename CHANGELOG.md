@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.36.42 — managed rail：`--campaign-ledger` 錯值在 Mission claim 之前就拒絕，不再燒 grant attempt
+
+- `src/engine/campaign-intake.js`：`--campaign-ledger` 只接受一個值（canonical Git common-dir ledger），這是純 argv 驗證，
+  不需要 contract／seal／Mission claim。原本的檢查在 claim 之後，拒絕時走 `releaseAfterRejection` 發 no-effect receipt，
+  但 attempt 已被消耗、`mission grant` 會鑄 attempt 2（2026-09-14 dogfood 量到）。現在 intake 一開始就用
+  `canonicalRepoIdentity(repo)` 推 canonical 路徑比對，不合就 `campaign_ledger_path_mismatch` 直接 blocked、
+  `steps` 只有那一條 rejection、沒有 claim 也沒有 release；claim 之後那條檢查保留當 sealed-identity 交叉驗證。
+- `hooks/tests/implementation-campaign-state.test.sh` +2：計數的 missionClaim／releaseMission adapter，斷言錯值路徑下
+  claim 呼叫 0 次、release 0 次、`pre_spend_no_effect_receipt` 為 null。HEAD 上兩條都紅。
+
+prose-justification: 本版對 prose 面沒有增量（+0 行，只動 src/engine 與 tests）；自 v2.35.2 基線的 +9% 是 v2.36.34／v2.36.38／v2.36.40
+已各自註明的 reference 與 runbook。
+
 ## v2.36.41 — managed rail：disposition resume 找回 AWAITING_DISPOSITION 存下的 findings
 
 - `src/engine/campaign-composition.js` 兩處型別錯配，2026-09-14 dogfood（mission-3b68ecb09a61）量到、每個非空 review 都讓 campaign

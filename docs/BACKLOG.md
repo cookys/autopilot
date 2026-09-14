@@ -56,6 +56,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/managed-rail-resume-with-a-disposition-authority-drops-the-prior-findings-and-te.md
 - **Context**: root cause in `campaign-composition.js`, not the engine: writer read the findings JSON string as an array (→ `[]`); resume bound the array to a string-only provider. Both fixed (composition test); CLI e2e 待量.
 
+### PEER-REPORTED (308-8f): parallel dispatch-hetero runs on one repo kill each other — the fingerprint counts every ref
+- **Status**: open
+- **Trigger**: ≥2 concurrent `dispatch-hetero.sh` on one repo; 308 saw 3/3 `main checkout mutated`
+- **Effort**: S
+- **Source**: `308-8f` via SendMessage 2026-09-14 (KR1 c1–c3); 308 homeforge HANDOFF next-step 4
+- **Pointer**: none
+- **Context**: `lib/main-checkout-boundary.sh` excludes only own `BRANCH` + caller prefixes; a sibling's `refs/heads/hands/*` is a delta. Exclude the rail's own branch pattern or document serialize-per-repo.
+
 ### PEER-REPORTED (308-8f): main-checkout fingerprint stat-walks untracked files — a foreman's own rail I/O trips it
 - **Status**: open
 - **Trigger**: a caller writes hand result/stderr under its own worktree, or `main_checkout_mutated` fires falsely again

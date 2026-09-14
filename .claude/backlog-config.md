@@ -15,7 +15,7 @@
 - id_pattern: none
 
 ## Mode
-- mode: warn
+- mode: block
 
 ## Allowlist
 - allowlist_path: .claude/backlog-debt.json

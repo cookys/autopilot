@@ -1,0 +1,13 @@
+# The shared config ladder's tier 3 reads the PLUGIN's `.claude/`, and the installed plugin ships one
+
+Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-09-14
+
+
+- **Trigger**: **FIRED — measured 2026-09-12** while building `resolve-knowledge-routing.sh`; the leak went red on the first foreign-project test before the resolver was fixed.
+- **Context**: `scripts/lib/resolve-config.sh` tier 3 is `$REPO_ROOT/.claude/<basename>`, where `REPO_ROOT` is **autopilot's own root**, not the consuming project's. Verified that the cache-installed plugin ships a `.claude/` directory (`~/.claude/plugins/cache/autopilot/autopilot/2.34.5/.claude`, and the `dev` install too), so for any consuming project that has no config of its own, tier 3 hits **autopilot's dogfood config** and tier 4 (the shipped template) never fires. Reproduced concretely: a foreign repo resolved `discipline_target: references/` — a directory it does not have — with `source: project-repo`.
+- **`resolve-knowledge-routing.sh` does NOT use the shared helper for this reason**; it spells the ladder out and applies tier 3 only when the target is this repo. That fix is local to one script. Every other consumer of the helper — `resolve-qc-gate.sh`, `resolve-doa.sh`, `resolve-review-loop.sh`, `resolve-worktree-teardown.sh`, `resolve-endpoint.sh`, `resolve-dispatch.sh` — still has the original behaviour.
+- **Not automatically a bug for them.** For a dispatch-policy resolver, inheriting the plugin's defaults may be intended, and tier 4 would give a near-identical answer anyway. The defect is specifically that the tier is **silent about which repo answered**: `source: project-repo` reads as "the project's own config" when it is the plugin's. Establish per consumer whether tier 3 across repos is intent or accident before changing the helper — a blanket change would alter six resolvers at once.
+- **Related, and deliberately not fixed** (QC panel 🔵, MiniMax-M3, 2026-09-12, verified): `sync-codex-plugin-skills.sh` does not mirror `.claude/`, so `platforms/codex/plugin/scripts/resolve-knowledge-routing.sh --target platforms/codex/plugin` returns `CLAUDE.md` where the source checkout returns `references/`. Measured and true. It describes a workflow that does not exist — the mirror is a delivery payload, not a working checkout, and a real consumer's `--target` is their own repo, never the mirror root. Adding a `.claude/` file there would ship a file no sync step maintains, which is a worse defect than the one it closes. Revisit only if someone starts developing *inside* the mirror.
+- **Effort**: S to audit, Fix per consumer that turns out to be wrong.
+- **Source**: /l5-adjacent dogfood, 2026-09-12, `docs/plans/2026-09-12-portable-knowledge-routing.md`.
+

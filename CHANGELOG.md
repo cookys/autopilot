@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.36.39 — backlog 遷移完成，本 repo 的 gate 翻成 block
+
+Phase 4 of `docs/plans/2026-09-14-backlog-entry-schema.md`（執行計畫 `docs/plans/2026-09-14-backlog-entry-migration.md`）。
+
+### `scripts/migrate-backlog-entries.js`（新，4a，/l5 campaign）
+
+用 gate 匯出的 parser（不寫第二份文法）；只在**任何** gate 違規（單獨的 Title 超長除外——標題是身分，搬文字縮不了，
+交給 allowlist）時遷移；schema 欄位保留、Status／Effort 依規則合成、其餘原文搬進 `docs/backlog/<slug>.md`
+sidecar（header 帶 `Source: docs/BACKLOG.md@<sha>`）；`--apply` 之前每個 sidecar 從磁碟重讀、搬走的文字逐 byte
+找到才叫 `preserved: true`；預設 dry-run 印 manifest＋diff、不寫；`--apply` tmp＋rename 逐檔，rename 階段失敗
+會把已落地的 sidecar／manifest 一併撤掉；磁碟上已存在的 sidecar 永不覆蓋（slug 從目錄預先種入，rename 前再拒一次）；
+第二次 `--apply` 搬零 byte。GLM 第二家族 review 三條 MUST-FIX（rename rollback、sidecar 覆蓋、空斷言）全部讀碼確認後修；
+depth-0 自己探到的三條（不冪等、小列被跳過、65 KB manifest 經 pipe 被 `process.exit` 截在 64 KiB）一起修。
+測試 45（含真 BACKLOG apply 兩次、碰撞、回滾）。Rail 端：MiniMax 席位 `no_verdict` 直接讓 campaign 釋放 claim
+（新 BACKLOG row）。
+
+### 4b（depth-0）：遷移、allowlist、flip
+
+- `docs/BACKLOG.md`：**237,170 B → 103,643 B**；154 條全部遷移，**154 個 sidecar**（`docs/backlog/`，manifest
+  `MIGRATION-2026-09-14.json`，moved 219,369 B、sha256 全數驗證）；檔頭改成一段指向 schema 的說明＋壓縮後的 FIRED queue。
+- `.claude/backlog-debt.json`：**30 條殘留**（全是 Title > 120 B），只能往下。
+- `.claude/backlog-config.md` `mode: block`：gate 對現況 exit 0（new 0／allowed 30），塞一列胖 row 立刻 exit 1（量過）。
+- 每個 release 起在這裡重述 allowlist 數字：**30**。
+
+prose-justification: 本版 prose 面 +28 行全在 v2.36.38 已計的 reference／範本之外的 skill 一句連結；docs/backlog/ 的
+sidecar 是搬出來的既有文字（BACKLOG 淨減 133 KB），不是新 prose。自 v2.35.2 基線的 +8% 於 v2.36.34 已註明。
+
 ## v2.36.38 — backlog 一列是 pointer 不是工作日誌：schema、gate（warn）、DI、寫入者統一引用
 
 cuda 代 revival.3d 的請求（BACKLOG「PEER-REPORTED (cuda, for revival.3d)」），plan

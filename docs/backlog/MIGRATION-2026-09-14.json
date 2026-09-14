@@ -1,0 +1,1398 @@
+{
+  "preserved": true,
+  "entries": [
+    {
+      "title": "Foreman rail residuals (v2.36.34) — accepted and named, not hidden",
+      "slug": "foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden",
+      "bytes_before": 1551,
+      "bytes_after": 406,
+      "moved_bytes": 1478,
+      "moved_sha256": "3a9ac481bdc8b4b41fde6570eb1d6ba61903586c6df46050b4a996f696020f26",
+      "sidecar": "docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md"
+    },
+    {
+      "title": "PEER-REPORTED (308-8f): an agy hand commits to the MAIN checkout from inside its worktree — REPRODUCED, FIXED v2.36.37",
+      "slug": "peer-reported-308-8f-an-agy-hand-commits-to-the-main-checkout-from-inside-its-wo",
+      "bytes_before": 1713,
+      "bytes_after": 618,
+      "moved_bytes": 1588,
+      "moved_sha256": "ee58287d7bd919119bc008554898bc528456e008cedc50dccbb585542fe1e59b",
+      "sidecar": "docs/backlog/peer-reported-308-8f-an-agy-hand-commits-to-the-main-checkout-from-inside-its-wo.md"
+    },
+    {
+      "title": "Dev mode layer ③ (marketplace clone) as a symlink — spike before changing dev-setup",
+      "slug": "dev-mode-layer-marketplace-clone-as-a-symlink-spike-before-changing-dev-setup",
+      "bytes_before": 1104,
+      "bytes_after": 504,
+      "moved_bytes": 1012,
+      "moved_sha256": "d54214e67f605e68a5228cac575af9d5d1e276461bb73cba932d9221a5ae7423",
+      "sidecar": "docs/backlog/dev-mode-layer-marketplace-clone-as-a-symlink-spike-before-changing-dev-setup.md"
+    },
+    {
+      "title": "PEER-REPORTED (cuda, for revival.3d): a backlog ENTRY has no schema, no DI, and no mechanical gate — so backlogs become work journals",
+      "slug": "peer-reported-cuda-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec",
+      "bytes_before": 2576,
+      "bytes_after": 645,
+      "moved_bytes": 2436,
+      "moved_sha256": "10174aa7ac3160cd50e7ca7d0dbf5f8e94aa7929ba786fe38a2afc8efa1b1ad4",
+      "sidecar": "docs/backlog/peer-reported-cuda-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec.md"
+    },
+    {
+      "title": "Managed rail: `--resume` with a disposition authority drops the prior findings and terminal-stops the campaign",
+      "slug": "managed-rail-resume-with-a-disposition-authority-drops-the-prior-findings-and-te",
+      "bytes_before": 1158,
+      "bytes_after": 778,
+      "moved_bytes": 1043,
+      "moved_sha256": "357b5c0c84cb78e8d317e9a714a2d9a20e57fa3926cfc8be926ce9dc8c4397fe",
+      "sidecar": "docs/backlog/managed-rail-resume-with-a-disposition-authority-drops-the-prior-findings-and-te.md"
+    },
+    {
+      "title": "`engine implement-review --campaign-ledger <custom path>` is refused at intake and the refusal burns a grant attempt",
+      "slug": "engine-implement-review-campaign-ledger-custom-path-is-refused-at-intake-and-the",
+      "bytes_before": 1887,
+      "bytes_after": 683,
+      "moved_bytes": 1766,
+      "moved_sha256": "3b9533eb02fd656e85ea8598f54c66ead499431092d100928e15a0eb62b3daa1",
+      "sidecar": "docs/backlog/engine-implement-review-campaign-ledger-custom-path-is-refused-at-intake-and-the.md"
+    },
+    {
+      "title": "agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT",
+      "slug": "agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a",
+      "bytes_before": 10204,
+      "bytes_after": 880,
+      "moved_bytes": 10078,
+      "moved_sha256": "742252501005595ff640bf493796f73e95fdfa1e30c262c42db7c5f1b186f231",
+      "sidecar": "docs/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md"
+    },
+    {
+      "title": "Pin store hardening: fsync, orphaned temp files, and re-validation of stored rows",
+      "slug": "pin-store-hardening-fsync-orphaned-temp-files-and-re-validation-of-stored-rows",
+      "bytes_before": 1654,
+      "bytes_after": 721,
+      "moved_bytes": 1568,
+      "moved_sha256": "d1b964291f754f059e4edd221e77c06d8417303e33be02b7e9023a0792f3cc75",
+      "sidecar": "docs/backlog/pin-store-hardening-fsync-orphaned-temp-files-and-re-validation-of-stored-rows.md"
+    },
+    {
+      "title": "Managed campaign intake: a rejected intake sometimes releases the Mission claim and sometimes strands it",
+      "slug": "managed-campaign-intake-a-rejected-intake-sometimes-releases-the-mission-claim-a",
+      "bytes_before": 3946,
+      "bytes_after": 720,
+      "moved_bytes": 3837,
+      "moved_sha256": "65f5e3f06e8b21551a8abb192a2dcfceeb28d021c94e966aed1b5a1462df6702",
+      "sidecar": "docs/backlog/managed-campaign-intake-a-rejected-intake-sometimes-releases-the-mission-claim-a.md"
+    },
+    {
+      "title": "PEER-REPORTED (chatgpt-tunnel-host via cuda): a non-Claude foreman rail — and two contract defects that are not really about foremen",
+      "slug": "peer-reported-chatgpt-tunnel-host-via-cuda-a-non-claude-foreman-rail-and-two-con",
+      "bytes_before": 4090,
+      "bytes_after": 723,
+      "moved_bytes": 3951,
+      "moved_sha256": "de0e6b8ec69ae770d601ad4e7c9377745687898cf990f6dc5efb3e059683777b",
+      "sidecar": "docs/backlog/peer-reported-chatgpt-tunnel-host-via-cuda-a-non-claude-foreman-rail-and-two-con.md"
+    },
+    {
+      "title": "PEER-REPORTED (7840hs, unverified locally): four dispatch-layer defects, three of them silent",
+      "slug": "peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the",
+      "bytes_before": 4887,
+      "bytes_after": 682,
+      "moved_bytes": 4789,
+      "moved_sha256": "37e6f761b1c425df333415ade4fb15fff48962cd56047f470fb359f7984c4382",
+      "sidecar": "docs/backlog/peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the.md"
+    },
+    {
+      "title": "PEER-REPORTED (308 dogfood): acceptance records no accepted SHA, so containment cannot be checked mechanically",
+      "slug": "peer-reported-308-dogfood-acceptance-records-no-accepted-sha-so-containment-cann",
+      "bytes_before": 6303,
+      "bytes_after": 687,
+      "moved_bytes": 6188,
+      "moved_sha256": "23c0c2333d4f25bfdeb92079fc59c12df73b36a997b7cb1d01a1a9e685c453c5",
+      "sidecar": "docs/backlog/peer-reported-308-dogfood-acceptance-records-no-accepted-sha-so-containment-cann.md"
+    },
+    {
+      "title": "PEER-REPORTED (openclaw): an active l5 marker deadlocks the bounded campaign /l5 itself launched — MAIN CLAIM CLOSED v2.36.28, two side effects open",
+      "slug": "peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its",
+      "bytes_before": 4518,
+      "bytes_after": 430,
+      "moved_bytes": 4363,
+      "moved_sha256": "d280a470e4f30fa5b16853645524f8f30fc284cd0faa49fc0cdb29ba52c45ed4",
+      "sidecar": "docs/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md"
+    },
+    {
+      "title": "Reconnaissance and implementation share one leaf bash budget, so a leaf can exhaust it before touching code",
+      "slug": "reconnaissance-and-implementation-share-one-leaf-bash-budget-so-a-leaf-can-exhau",
+      "bytes_before": 1134,
+      "bytes_after": 651,
+      "moved_bytes": 1022,
+      "moved_sha256": "66827e3770acd0a613a281a6ab9ba66379238f1ef200ae0bb4088097713cb4e2",
+      "sidecar": "docs/backlog/reconnaissance-and-implementation-share-one-leaf-bash-budget-so-a-leaf-can-exhau.md"
+    },
+    {
+      "title": "A non-Claude engine cannot sit in the foreman seat — no rail exists, and the request is now from two independent peers",
+      "slug": "a-non-claude-engine-cannot-sit-in-the-foreman-seat-no-rail-exists-and-the-reques",
+      "bytes_before": 3054,
+      "bytes_after": 763,
+      "moved_bytes": 2929,
+      "moved_sha256": "37d3961c215a7d7debfcdbdce7c84bb88982c3134e5669d4207f9798d89af629",
+      "sidecar": "docs/backlog/a-non-claude-engine-cannot-sit-in-the-foreman-seat-no-rail-exists-and-the-reques.md"
+    },
+    {
+      "title": "`Project Paths` is write-only config — `scaffold-config.js` emits it, nothing reads it, and the skills that create project docs never see it",
+      "slug": "project-paths-is-write-only-config-scaffold-config-js-emits-it-nothing-reads-it",
+      "bytes_before": 2998,
+      "bytes_after": 583,
+      "moved_bytes": 2851,
+      "moved_sha256": "710be67c421221f5e0bd07efaf0d471baed5cfbd54a1691fa750f5b4b4bd9a49",
+      "sidecar": "docs/backlog/project-paths-is-write-only-config-scaffold-config-js-emits-it-nothing-reads-it.md"
+    },
+    {
+      "title": "Main-checkout boundary: accepted residuals of an accident guard that is not a sandbox",
+      "slug": "main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san",
+      "bytes_before": 1573,
+      "bytes_after": 779,
+      "moved_bytes": 1483,
+      "moved_sha256": "7439ab63faff92e914adf15a2c53cfa8c089ca00126414a69308ab8ae03b799f",
+      "sidecar": "docs/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md"
+    },
+    {
+      "title": "The shared config ladder's tier 3 reads the PLUGIN's `.claude/`, and the installed plugin ships one",
+      "slug": "the-shared-config-ladder-s-tier-3-reads-the-plugin-s-claude-and-the-installed-pl",
+      "bytes_before": 2698,
+      "bytes_after": 712,
+      "moved_bytes": 2594,
+      "moved_sha256": "6d19c21da42342618850bf4c20b7805bf034c43d8d095091cd381e97eaf47e7d",
+      "sidecar": "docs/backlog/the-shared-config-ladder-s-tier-3-reads-the-plugin-s-claude-and-the-installed-pl.md"
+    },
+    {
+      "title": "`resolve-review-loop.test.sh` asserts on the LIVE project config, so any legitimate seat change reds the suite",
+      "slug": "resolve-review-loop-test-sh-asserts-on-the-live-project-config-so-any-legitimate",
+      "bytes_before": 3317,
+      "bytes_after": 580,
+      "moved_bytes": 3202,
+      "moved_sha256": "28a9407a1460347eca4e46034d61e8683b4441a300b21b211af1c22d2d314934",
+      "sidecar": "docs/backlog/resolve-review-loop-test-sh-asserts-on-the-live-project-config-so-any-legitimate.md"
+    },
+    {
+      "title": "The shipped operator-pin admission is unreachable from the managed rail — it only fires when a caller passes `--resolved-live`",
+      "slug": "the-shipped-operator-pin-admission-is-unreachable-from-the-managed-rail-it-only",
+      "bytes_before": 2970,
+      "bytes_after": 660,
+      "moved_bytes": 2837,
+      "moved_sha256": "f72f80366fa177cd106edb66fb80bfd996c304f486ffdcecc9530d585ee6c91d",
+      "sidecar": "docs/backlog/the-shipped-operator-pin-admission-is-unreachable-from-the-managed-rail-it-only.md"
+    },
+    {
+      "title": "The Mission graph models parallel deliverables that the controller cannot actually run in parallel",
+      "slug": "the-mission-graph-models-parallel-deliverables-that-the-controller-cannot-actual",
+      "bytes_before": 3329,
+      "bytes_after": 645,
+      "moved_bytes": 3226,
+      "moved_sha256": "9752a80069d82b4571b19541d7636b59c2a91630e13e9c8f611d3ba751222a2f",
+      "sidecar": "docs/backlog/the-mission-graph-models-parallel-deliverables-that-the-controller-cannot-actual.md"
+    },
+    {
+      "title": "A campaign's `output_paths` must enumerate every codex mirror, and the rejection arrives after the model has done the work",
+      "slug": "a-campaign-s-output-paths-must-enumerate-every-codex-mirror-and-the-rejection-ar",
+      "bytes_before": 1962,
+      "bytes_after": 451,
+      "moved_bytes": 1835,
+      "moved_sha256": "ed984e74edcd1af8efc0cce9fade19a14e3d14c17e539e4a877e61fcbc8903e8",
+      "sidecar": "docs/backlog/a-campaign-s-output-paths-must-enumerate-every-codex-mirror-and-the-rejection-ar.md"
+    },
+    {
+      "title": "Two L5 deliverables cannot run on one repo inside 24h: the marker bridge scans every marker and `clear` needs a receipt nothing writes",
+      "slug": "two-l5-deliverables-cannot-run-on-one-repo-inside-24h-the-marker-bridge-scans-ev",
+      "bytes_before": 2811,
+      "bytes_after": 783,
+      "moved_bytes": 2672,
+      "moved_sha256": "1585c5beb40fef81c9d710ce963a93d3558667f8a53801d7d2e40fab287d03b6",
+      "sidecar": "docs/backlog/two-l5-deliverables-cannot-run-on-one-repo-inside-24h-the-marker-bridge-scans-ev.md"
+    },
+    {
+      "title": "The implementer ladder's cost ordering is nearly degenerate — 11 of 17 rungs share one effort tier",
+      "slug": "the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share",
+      "bytes_before": 2712,
+      "bytes_after": 791,
+      "moved_bytes": 2607,
+      "moved_sha256": "bf77f5792989dade93291b8cae7fd0685dc5890f209fadeb7a3be0506b9b25d0",
+      "sidecar": "docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md"
+    },
+    {
+      "title": "`probe-unknown.js classify` spawns `resolve-review-loop.sh` up to seven times per call — memoize one resolver invocation",
+      "slug": "probe-unknown-js-classify-spawns-resolve-review-loop-sh-up-to-seven-times-per-ca",
+      "bytes_before": 1004,
+      "bytes_after": 866,
+      "moved_bytes": 877,
+      "moved_sha256": "c33adb218524fc202118b9369ae220c9623767cae7429f4c13e074cb49e8a8a1",
+      "sidecar": "docs/backlog/probe-unknown-js-classify-spawns-resolve-review-loop-sh-up-to-seven-times-per-ca.md"
+    },
+    {
+      "title": "kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)",
+      "slug": "kimi-reviewer-rail-file-indirection-for-prompts-above-the-argv-wall-needs-a-live",
+      "bytes_before": 1145,
+      "bytes_after": 727,
+      "moved_bytes": 1032,
+      "moved_sha256": "0b989d8990ef244f1384110e57b2ea2f6b489c623c841b9389f903a832d36a26",
+      "sidecar": "docs/backlog/kimi-reviewer-rail-file-indirection-for-prompts-above-the-argv-wall-needs-a-live.md"
+    },
+    {
+      "title": "Per-hook × per-harness support matrix with verification dates (hook inventory that is periodically re-checked)",
+      "slug": "per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that",
+      "bytes_before": 1510,
+      "bytes_after": 779,
+      "moved_bytes": 1394,
+      "moved_sha256": "e8dc57c0552cb1e0b2618450f9d18d8067e285a5a09cd3cca3bb737d109251a6",
+      "sidecar": "docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md"
+    },
+    {
+      "title": "Codex dev-mode hook entry that survives plugin cache replacement (`~/.codex/hooks.json` → repo path)",
+      "slug": "codex-dev-mode-hook-entry-that-survives-plugin-cache-replacement-codex-hooks-jso",
+      "bytes_before": 1349,
+      "bytes_after": 888,
+      "moved_bytes": 1242,
+      "moved_sha256": "f976839c4624b6e6c93ee4ad8f8970218090144ea02adfc9a6f1ab89ec49f7e2",
+      "sidecar": "docs/backlog/codex-dev-mode-hook-entry-that-survives-plugin-cache-replacement-codex-hooks-jso.md"
+    },
+    {
+      "title": "Apply two-tier + pooled verdict to reviewer/implementer/owner/verification_author/brain",
+      "slug": "apply-two-tier-pooled-verdict-to-reviewer-implementer-owner-verification-author",
+      "bytes_before": 1275,
+      "bytes_after": 517,
+      "moved_bytes": 1183,
+      "moved_sha256": "eb4309c5164d3362c26ae65e8f136516d41c57f428c679a3b9ba65bca9a80103",
+      "sidecar": "docs/backlog/apply-two-tier-pooled-verdict-to-reviewer-implementer-owner-verification-author.md"
+    },
+    {
+      "title": "Codex payload install-time generation（2026-08-02 residual spike：NO-GO）",
+      "slug": "codex-payload-install-time-generation-2026-08-02-residual-spike-no-go",
+      "bytes_before": 1551,
+      "bytes_after": 873,
+      "moved_bytes": 1470,
+      "moved_sha256": "90e848f178382aad0e4fe0ee175e521d6194b75e12a30c1056bd4f8ee84c90c8",
+      "sidecar": "docs/backlog/codex-payload-install-time-generation-2026-08-02-residual-spike-no-go.md"
+    },
+    {
+      "title": "Release-time payload branch（B）重啟條件",
+      "slug": "release-time-payload-branch-b",
+      "bytes_before": 541,
+      "bytes_after": 603,
+      "moved_bytes": 490,
+      "moved_sha256": "94473ad2428d6e409423c4ae2b30775d90bb1f8119bfc776361bf192ecc62590",
+      "sidecar": "docs/backlog/release-time-payload-branch-b.md"
+    },
+    {
+      "title": "🔵 suite oracle lock: a killed full-suite run leaves the next one refused (observed 2026-09-02)",
+      "slug": "suite-oracle-lock-a-killed-full-suite-run-leaves-the-next-one-refused-observed-2",
+      "bytes_before": 1260,
+      "bytes_after": 299,
+      "moved_bytes": 1158,
+      "moved_sha256": "9a4f0ab32c6f265dc62aae5f9ff72a9c69c4cb02faca3b9f4ebf16f0f8f11e82",
+      "sidecar": "docs/backlog/suite-oracle-lock-a-killed-full-suite-run-leaves-the-next-one-refused-observed-2.md"
+    },
+    {
+      "title": "<Topic title>",
+      "slug": "topic-title",
+      "bytes_before": 307,
+      "bytes_after": 320,
+      "moved_bytes": 289,
+      "moved_sha256": "9df45e664b7a64dd19ff7a5efe8b0a69e04ac9f449ef04453b7c9d3a2ed455cd",
+      "sidecar": "docs/backlog/topic-title.md"
+    },
+    {
+      "title": "Promote the depth-0 hetero-run watcher to a shipped dispatch-watch script",
+      "slug": "promote-the-depth-0-hetero-run-watcher-to-a-shipped-dispatch-watch-script",
+      "bytes_before": 670,
+      "bytes_after": 649,
+      "moved_bytes": 592,
+      "moved_sha256": "08eb96d9827bfe44029676954eb0d0424ecb067b5d0c44a2e2865d7fd59b4a57",
+      "sidecar": "docs/backlog/promote-the-depth-0-hetero-run-watcher-to-a-shipped-dispatch-watch-script.md"
+    },
+    {
+      "title": "Lint hands diffs for fixture literals leaking into production code",
+      "slug": "lint-hands-diffs-for-fixture-literals-leaking-into-production-code",
+      "bytes_before": 360,
+      "bytes_after": 477,
+      "moved_bytes": 289,
+      "moved_sha256": "a4f144c287e54b2e115847168daae15ed5c8d972a350f8fe4970fd86cb4dcc5a",
+      "sidecar": "docs/backlog/lint-hands-diffs-for-fixture-literals-leaking-into-production-code.md"
+    },
+    {
+      "title": "check-phase-review-receipt: min-reviewed-seats enforcement test on a multi-seat fixture",
+      "slug": "check-phase-review-receipt-min-reviewed-seats-enforcement-test-on-a-multi-seat-f",
+      "bytes_before": 326,
+      "bytes_after": 457,
+      "moved_bytes": 234,
+      "moved_sha256": "f5e96d43d7eafe8b088609bccb9d8c85c36aad1cbc9896c5e2299ac3476ad02a",
+      "sidecar": "docs/backlog/check-phase-review-receipt-min-reviewed-seats-enforcement-test-on-a-multi-seat-f.md"
+    },
+    {
+      "title": "hetero-review-loop: confirm finalize always emits severity in open_findings (checker now requires deep equality on id/severity/disposition)",
+      "slug": "hetero-review-loop-confirm-finalize-always-emits-severity-in-open-findings-check",
+      "bytes_before": 533,
+      "bytes_after": 664,
+      "moved_bytes": 389,
+      "moved_sha256": "8cf4374209a2b237099927a606dc2cc5051e5e2e0b427c0277a91c3de0ef6429",
+      "sidecar": "docs/backlog/hetero-review-loop-confirm-finalize-always-emits-severity-in-open-findings-check.md"
+    },
+    {
+      "title": "resolve-review-loop.sh: audit every remaining runner comparison for codex-cli/codex canonicalisation",
+      "slug": "resolve-review-loop-sh-audit-every-remaining-runner-comparison-for-codex-cli-cod",
+      "bytes_before": 414,
+      "bytes_after": 545,
+      "moved_bytes": 309,
+      "moved_sha256": "c4df1ed712a414f2fe8646fc63025a659546099e4a2884e3d167fadc8ada6cbc",
+      "sidecar": "docs/backlog/resolve-review-loop-sh-audit-every-remaining-runner-comparison-for-codex-cli-cod.md"
+    },
+    {
+      "title": "hetero-review-loop: charset guard on seat ids before path.join",
+      "slug": "hetero-review-loop-charset-guard-on-seat-ids-before-path-join",
+      "bytes_before": 353,
+      "bytes_after": 465,
+      "moved_bytes": 286,
+      "moved_sha256": "00c3b62901a2aeaa5c372ee22b0d2403d3d88c1335dbefa9eabc9effb503268c",
+      "sidecar": "docs/backlog/hetero-review-loop-charset-guard-on-seat-ids-before-path-join.md"
+    },
+    {
+      "title": "check-phase-review-receipt: a head moved only by commits touching allowlisted excluded paths should still validate",
+      "slug": "check-phase-review-receipt-a-head-moved-only-by-commits-touching-allowlisted-exc",
+      "bytes_before": 810,
+      "bytes_after": 728,
+      "moved_bytes": 691,
+      "moved_sha256": "e8b19aad2cbe6dbeb36b4021c32535d6312cd8c73aaf0adec3dc4a78c727d06b",
+      "sidecar": "docs/backlog/check-phase-review-receipt-a-head-moved-only-by-commits-touching-allowlisted-exc.md"
+    },
+    {
+      "title": "hetero-review-loop / check-phase-review-receipt: hoist EXCLUDE_ALLOWLIST and isPathspecAllowed into scripts/lib",
+      "slug": "hetero-review-loop-check-phase-review-receipt-hoist-exclude-allowlist-and-ispath",
+      "bytes_before": 465,
+      "bytes_after": 596,
+      "moved_bytes": 349,
+      "moved_sha256": "6b66da88becb4ad438b5e6a116468a7ecf2286aeaf2e9a89b5b148ce79ff093c",
+      "sidecar": "docs/backlog/hetero-review-loop-check-phase-review-receipt-hoist-exclude-allowlist-and-ispath.md"
+    },
+    {
+      "title": "review-chain-derive.js documents \"no side effects\" but mutates the chain entries it receives",
+      "slug": "review-chain-derive-js-documents-no-side-effects-but-mutates-the-chain-entries-i",
+      "bytes_before": 312,
+      "bytes_after": 443,
+      "moved_bytes": 215,
+      "moved_sha256": "a779a384468a35a7acadd5b4b8d4d06beed2163b2f7fd288b63f3c3f70aecb91",
+      "sidecar": "docs/backlog/review-chain-derive-js-documents-no-side-effects-but-mutates-the-chain-entries-i.md"
+    },
+    {
+      "title": "check-phase-review-receipt: open_findings comparison ignores severity; reviewed_seats/total_seats not cross-checked against seat artifacts",
+      "slug": "check-phase-review-receipt-open-findings-comparison-ignores-severity-reviewed-se",
+      "bytes_before": 379,
+      "bytes_after": 510,
+      "moved_bytes": 236,
+      "moved_sha256": "f4ec9167242cb9963dba20d039b1e8638291a635cbb32021a13a828c50ef64b0",
+      "sidecar": "docs/backlog/check-phase-review-receipt-open-findings-comparison-ignores-severity-reviewed-se.md"
+    },
+    {
+      "title": "resolve-review-loop.test.sh capability-warning assertion messages still say \"no warning\" while expecting the topology fallback lines",
+      "slug": "resolve-review-loop-test-sh-capability-warning-assertion-messages-still-say-no-w",
+      "bytes_before": 308,
+      "bytes_after": 439,
+      "moved_bytes": 171,
+      "moved_sha256": "fd2462b683d5687d9864d85dd1621f1b64b5e01eae9ead9b3993343ba1651a74",
+      "sidecar": "docs/backlog/resolve-review-loop-test-sh-capability-warning-assertion-messages-still-say-no-w.md"
+    },
+    {
+      "title": "`normalize_agy_alias()` rewrites config-side seat names before the qc-exclusion match in `consult_dispatch: auto`",
+      "slug": "normalize-agy-alias-rewrites-config-side-seat-names-before-the-qc-exclusion-matc",
+      "bytes_before": 666,
+      "bytes_after": 711,
+      "moved_bytes": 548,
+      "moved_sha256": "bbc2051e7290e4ab9c49bddcb37efb6b906247e3b5137c0ff253bca82cd7d41e",
+      "sidecar": "docs/backlog/normalize-agy-alias-rewrites-config-side-seat-names-before-the-qc-exclusion-matc.md"
+    },
+    {
+      "title": "`resolve-review-loop.sh` `auto` knobs read a stale `~/.autopilot/topology.json` and fall back natively",
+      "slug": "resolve-review-loop-sh-auto-knobs-read-a-stale-autopilot-topology-json-and-fall",
+      "bytes_before": 662,
+      "bytes_after": 665,
+      "moved_bytes": 555,
+      "moved_sha256": "75e8d7506dc0cdb9342532459adaad085064c881c23bd30f0b921ae855d77d35",
+      "sidecar": "docs/backlog/resolve-review-loop-sh-auto-knobs-read-a-stale-autopilot-topology-json-and-fall.md"
+    },
+    {
+      "title": "`contract-parity` / `resolve-review-loop-consult-discuss-switch` tests read the real `~/.autopilot/topology.json`",
+      "slug": "contract-parity-resolve-review-loop-consult-discuss-switch-tests-read-the-real-a",
+      "bytes_before": 1000,
+      "bytes_after": 754,
+      "moved_bytes": 882,
+      "moved_sha256": "62757faafa24cfd07c6073308eec606f3c2cd25eabe2773de68cbd3f21892a9f",
+      "sidecar": "docs/backlog/contract-parity-resolve-review-loop-consult-discuss-switch-tests-read-the-real-a.md"
+    },
+    {
+      "title": "`hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename",
+      "slug": "hetero-review-loop-js-collect-appends-to-chain-json-without-a-lock-or-atomic-ren",
+      "bytes_before": 467,
+      "bytes_after": 598,
+      "moved_bytes": 377,
+      "moved_sha256": "56af36edf6a07bb71d9be8d1dfba8d5a0d8ad22bfdc9f98b79def8723d43d0bc",
+      "sidecar": "docs/backlog/hetero-review-loop-js-collect-appends-to-chain-json-without-a-lock-or-atomic-ren.md"
+    },
+    {
+      "title": "`hetero-review-loop.js` opt-out knob parser character class parses `*->` as a range",
+      "slug": "hetero-review-loop-js-opt-out-knob-parser-character-class-parses-as-a-range",
+      "bytes_before": 371,
+      "bytes_after": 497,
+      "moved_bytes": 283,
+      "moved_sha256": "edceea0f7259774cfc86dead674a2d83c51a27ec45935a41bd72044816285929",
+      "sidecar": "docs/backlog/hetero-review-loop-js-opt-out-knob-parser-character-class-parses-as-a-range.md"
+    },
+    {
+      "title": "`hetero-review-loop.js` exports the STUB_SEAT_ID test seam into the real dispatch-review.sh environment",
+      "slug": "hetero-review-loop-js-exports-the-stub-seat-id-test-seam-into-the-real-dispatch",
+      "bytes_before": 326,
+      "bytes_after": 456,
+      "moved_bytes": 218,
+      "moved_sha256": "9eaf737b650f725cdfab8a6ddad3219cb8828613cef8c69e694bee873357e988",
+      "sidecar": "docs/backlog/hetero-review-loop-js-exports-the-stub-seat-id-test-seam-into-the-real-dispatch.md"
+    },
+    {
+      "title": "`finalize` closes an earlier verified finding by absence in a later generation",
+      "slug": "finalize-closes-an-earlier-verified-finding-by-absence-in-a-later-generation",
+      "bytes_before": 405,
+      "bytes_after": 532,
+      "moved_bytes": 322,
+      "moved_sha256": "e5bb70d6569409e5cee95ff95b6e81cb92cbaa8b62da774edfa057b5c87b1b0d",
+      "sidecar": "docs/backlog/finalize-closes-an-earlier-verified-finding-by-absence-in-a-later-generation.md"
+    },
+    {
+      "title": "Opt-out receipt with a non-existent config path hashes the empty buffer",
+      "slug": "opt-out-receipt-with-a-non-existent-config-path-hashes-the-empty-buffer",
+      "bytes_before": 414,
+      "bytes_after": 536,
+      "moved_bytes": 338,
+      "moved_sha256": "a4833fe98cc5da55d43f23b63c2e7d63609a29235af0ad8c1a20cb3b4e45e9ab",
+      "sidecar": "docs/backlog/opt-out-receipt-with-a-non-existent-config-path-hashes-the-empty-buffer.md"
+    },
+    {
+      "title": "scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`",
+      "slug": "scorecard-runner-token-drift-sol-s-reviewer-row-is-recorded-under-codex-cli-not",
+      "bytes_before": 469,
+      "bytes_after": 599,
+      "moved_bytes": 373,
+      "moved_sha256": "d2d837c954d3a021c53fc9cc62b9f2596683d36151947cb6e2fccd9ef77f66b1",
+      "sidecar": "docs/backlog/scorecard-runner-token-drift-sol-s-reviewer-row-is-recorded-under-codex-cli-not.md"
+    },
+    {
+      "title": "~~Foreman context is not measurable by hook — `context-budget` only sees the parent transcript~~ (CLOSED 2026-09-05, v2.36.1: `subagentStatusLine` `tasks[].tokenCount` is the per-agent usage field; `foreman-guard.js` denies at T2 from the tmpfs live file — `docs/plans/2026-09-05-statusline-live-context-feed.md`)",
+      "slug": "foreman-context-is-not-measurable-by-hook-context-budget-only-sees-the-parent-tr",
+      "bytes_before": 1369,
+      "bytes_after": 823,
+      "moved_bytes": 1047,
+      "moved_sha256": "7f1a58c40d11fe62389f1746c096abdeb7a2276c6cd60491d6e8fbcf40a969ff",
+      "sidecar": "docs/backlog/foreman-context-is-not-measurable-by-hook-context-budget-only-sees-the-parent-tr.md"
+    },
+    {
+      "title": "autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting",
+      "slug": "autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno",
+      "bytes_before": 989,
+      "bytes_after": 824,
+      "moved_bytes": 861,
+      "moved_sha256": "95f561fc92f1025a4ad1966bc4aeb4352bc34926d14ec00a8e5238e7dce59784",
+      "sidecar": "docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md"
+    },
+    {
+      "title": "`adopt-qualification-defaults.js list` prints `event undefined — null` for legacy feed rows",
+      "slug": "adopt-qualification-defaults-js-list-prints-event-undefined-null-for-legacy-feed",
+      "bytes_before": 810,
+      "bytes_after": 766,
+      "moved_bytes": 712,
+      "moved_sha256": "9a0ccc7d1a6b955c5a75cdd906c1100b977a0300d6aeefb177a65084dda5ddee",
+      "sidecar": "docs/backlog/adopt-qualification-defaults-js-list-prints-event-undefined-null-for-legacy-feed.md"
+    },
+    {
+      "title": "Feed listing prints the pre-effort `seat_hash` ⚠ once per row — consider one consolidated notice",
+      "slug": "feed-listing-prints-the-pre-effort-seat-hash-once-per-row-consider-one-consolida",
+      "bytes_before": 759,
+      "bytes_after": 677,
+      "moved_bytes": 654,
+      "moved_sha256": "ce1abcb50f4c737b28e2d76f5428f81395c9a83052abfbd214ad3a8dd2339c81",
+      "sidecar": "docs/backlog/feed-listing-prints-the-pre-effort-seat-hash-once-per-row-consider-one-consolida.md"
+    },
+    {
+      "title": "`--runner opencode` usage stays `null` — parse `step_finish.tokens` from the `--format json` event stream",
+      "slug": "runner-opencode-usage-stays-null-parse-step-finish-tokens-from-the-format-json-e",
+      "bytes_before": 807,
+      "bytes_after": 673,
+      "moved_bytes": 695,
+      "moved_sha256": "49531e497f4edc2121db4b8cc4367de7ee74f24bf401feacce88f436a0a008ee",
+      "sidecar": "docs/backlog/runner-opencode-usage-stays-null-parse-step-finish-tokens-from-the-format-json-e.md"
+    },
+    {
+      "title": "`resolve-review-loop-consult-discuss-gate` case (xix) mutates the canonical evals corpus — move it to a scratch copy and un-serialize",
+      "slug": "resolve-review-loop-consult-discuss-gate-case-xix-mutates-the-canonical-evals-co",
+      "bytes_before": 1002,
+      "bytes_after": 879,
+      "moved_bytes": 862,
+      "moved_sha256": "6130e9534f35642e1acbc96ba604e6e32d5526e629e3f2b501f476cb2b962874",
+      "sidecar": "docs/backlog/resolve-review-loop-consult-discuss-gate-case-xix-mutates-the-canonical-evals-co.md"
+    },
+    {
+      "title": "`autopilot endpoints test` hardcodes `claude-3-haiku-20240307` — a local server that validates model ids returns 404 and the probe reads as broken auth",
+      "slug": "autopilot-endpoints-test-hardcodes-claude-3-haiku-20240307-a-local-server-that-v",
+      "bytes_before": 807,
+      "bytes_after": 709,
+      "moved_bytes": 649,
+      "moved_sha256": "bb4ba0af2a6e1c28820e3a6a40a8937897e6a72636e80b7302e8f0dd0c260aed",
+      "sidecar": "docs/backlog/autopilot-endpoints-test-hardcodes-claude-3-haiku-20240307-a-local-server-that-v.md"
+    },
+    {
+      "title": "`src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller",
+      "slug": "src-engine-local-deployment-js-carries-its-own-transport-rule-tls-outside-loopba",
+      "bytes_before": 904,
+      "bytes_after": 714,
+      "moved_bytes": 747,
+      "moved_sha256": "a47b45336ebd4ef85f25b039f8265d22c183b4ca17b1943979a838948ad68425",
+      "sidecar": "docs/backlog/src-engine-local-deployment-js-carries-its-own-transport-rule-tls-outside-loopba.md"
+    },
+    {
+      "title": "`dispatch-review` raw-log deviation 採信判準必要但不充分 —— 回音的 prompt 樣板可冒充 verdict",
+      "slug": "dispatch-review-raw-log-deviation-prompt-verdict",
+      "bytes_before": 1616,
+      "bytes_after": 802,
+      "moved_bytes": 1497,
+      "moved_sha256": "ab9d67e7e27a5f53f07e7abb8d9699976ea8af8bf5e1f891bbaf270c3ce5dc60",
+      "sidecar": "docs/backlog/dispatch-review-raw-log-deviation-prompt-verdict.md"
+    },
+    {
+      "title": "Contract-first escalation and local-repair gates — P6D incident follow-up",
+      "slug": "contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up",
+      "bytes_before": 1772,
+      "bytes_after": 759,
+      "moved_bytes": 1692,
+      "moved_sha256": "a2ce21772da333931b1412fc396385007b461b4893c001f5e4462f9f8d3be800",
+      "sidecar": "docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md"
+    },
+    {
+      "title": "Foreman model is hardcoded as `opus` in /l4–/l6 prose; routing config already overrides it",
+      "slug": "foreman-model-is-hardcoded-as-opus-in-l4-l6-prose-routing-config-already-overrid",
+      "bytes_before": 2140,
+      "bytes_after": 552,
+      "moved_bytes": 2043,
+      "moved_sha256": "7f05857801e3fb0c7ff50bbab8f76b62ebd07dc744a3c0d62a5175c4b03a0e2c",
+      "sidecar": "docs/backlog/foreman-model-is-hardcoded-as-opus-in-l4-l6-prose-routing-config-already-overrid.md"
+    },
+    {
+      "title": "`probe-runner-coverage` parallel-only flake — fork-pressure suspected, residue ruled out",
+      "slug": "probe-runner-coverage-parallel-only-flake-fork-pressure-suspected-residue-ruled",
+      "bytes_before": 854,
+      "bytes_after": 524,
+      "moved_bytes": 759,
+      "moved_sha256": "1dfb23de0a2e3ed4e96376c35c0137663e8176ba3e19961f114fd51b4c899f4f",
+      "sidecar": "docs/backlog/probe-runner-coverage-parallel-only-flake-fork-pressure-suspected-residue-ruled.md"
+    },
+    {
+      "title": "Suite reaper — symlinked-TMPDIR hosts fall back to rm -rf (git-worktree-remove path never engages)",
+      "slug": "suite-reaper-symlinked-tmpdir-hosts-fall-back-to-rm-rf-git-worktree-remove-path",
+      "bytes_before": 521,
+      "bytes_after": 490,
+      "moved_bytes": 416,
+      "moved_sha256": "d3d72a7df7b4768eb3132b4f83b4c6d470ecefd87237c44c3e835140b38bea60",
+      "sidecar": "docs/backlog/suite-reaper-symlinked-tmpdir-hosts-fall-back-to-rm-rf-git-worktree-remove-path.md"
+    },
+    {
+      "title": "Implementer suite hardening backlog (pre-merge review round-1 cut list)",
+      "slug": "implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list",
+      "bytes_before": 1621,
+      "bytes_after": 789,
+      "moved_bytes": 1545,
+      "moved_sha256": "002ed0b8e89394c58ab15f2ef6afbc3849a8e4d06b6c14634e0cbfad7db198c7",
+      "sidecar": "docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md"
+    },
+    {
+      "title": "agy output envelope invalid on create-a-new-file responses (blocks agy implementer qualification)",
+      "slug": "agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente",
+      "bytes_before": 1246,
+      "bytes_after": 866,
+      "moved_bytes": 1144,
+      "moved_sha256": "3245c720df3e30859ebc0ab06cf433621aa6a9f7d340e57fa78f09948ae9d38e",
+      "sidecar": "docs/backlog/agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md"
+    },
+    {
+      "title": "`validate-json-schema.js` 拒絕所有非整數數字 —— 任何帶小數的 JSON 文件都驗不了",
+      "slug": "validate-json-schema-js-json",
+      "bytes_before": 1657,
+      "bytes_after": 705,
+      "moved_bytes": 1549,
+      "moved_sha256": "84ea7e08fb11e1b77e1de46cbc3959a94e6dbf79a21ff6006dffad82d3d84f93",
+      "sidecar": "docs/backlog/validate-json-schema-js-json.md"
+    },
+    {
+      "title": "v2.34.37 first-pass review 的 cut list —— 六個「不是錯,但名字比保證大」的小項",
+      "slug": "v2-34-37-first-pass-review-cut-list",
+      "bytes_before": 2874,
+      "bytes_after": 813,
+      "moved_bytes": 2770,
+      "moved_sha256": "2bcd00224b708ead766b2eae4ab94c283e3c6a9424db735b5d8c6a5026841fc1",
+      "sidecar": "docs/backlog/v2-34-37-first-pass-review-cut-list.md"
+    },
+    {
+      "title": "`engine-qualify-impl.test.js` 單次無法重現的紅(1/24 solo,訊息未捕獲)",
+      "slug": "engine-qualify-impl-test-js-1-24-solo",
+      "bytes_before": 1558,
+      "bytes_after": 715,
+      "moved_bytes": 1472,
+      "moved_sha256": "2c57e8121d4b7fa39b330ea5287ed34c90a0995a532bb2bd40464087876dce8f",
+      "sidecar": "docs/backlog/engine-qualify-impl-test-js-1-24-solo.md"
+    },
+    {
+      "title": "Brain-seat sittings in the shipped qualification defaults (v2 artifact)",
+      "slug": "brain-seat-sittings-in-the-shipped-qualification-defaults-v2-artifact",
+      "bytes_before": 1235,
+      "bytes_after": 694,
+      "moved_bytes": 1159,
+      "moved_sha256": "1f7006d475a860926b75bfab131ce6868b894bffcf3785af329c07f9067e23ee",
+      "sidecar": "docs/backlog/brain-seat-sittings-in-the-shipped-qualification-defaults-v2-artifact.md"
+    },
+    {
+      "title": "Durable repair-lock — 解鎖路徑先行,鎖才准回來(P6D KR3 的第二階段)",
+      "slug": "durable-repair-lock-p6d-kr3",
+      "bytes_before": 1510,
+      "bytes_after": 767,
+      "moved_bytes": 1422,
+      "moved_sha256": "487523daea21f548d6152b1020a73606eaa01ea661311c575dd78d69ca09cdd1",
+      "sidecar": "docs/backlog/durable-repair-lock-p6d-kr3.md"
+    },
+    {
+      "title": "~~Contract-first escalation and local-repair gates~~ — 2/3 classes SHIPPED v2.34.32; class (a) REMAINS OPEN",
+      "slug": "contract-first-escalation-and-local-repair-gates-2-3-classes-shipped-v2-34-32-cl",
+      "bytes_before": 1360,
+      "bytes_after": 687,
+      "moved_bytes": 1246,
+      "moved_sha256": "2b7b9fa0aca1ec2021e0ad462a1cc4e9117897b815c8de8b398d2bfbe9e00fd3",
+      "sidecar": "docs/backlog/contract-first-escalation-and-local-repair-gates-2-3-classes-shipped-v2-34-32-cl.md"
+    },
+    {
+      "title": "Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）",
+      "slug": "skill-contract-card-rewrites-under-g2-minimax-r8",
+      "bytes_before": 977,
+      "bytes_after": 613,
+      "moved_bytes": 903,
+      "moved_sha256": "aa268e6f7aeac853d190d97f5183dda35f7a17d56eb897164782688d96fb8076",
+      "sidecar": "docs/backlog/skill-contract-card-rewrites-under-g2-minimax-r8.md"
+    },
+    {
+      "title": "dev-flow card re-attempt — instrument repair first (V2-vacuous verdict 2026-08-18)",
+      "slug": "dev-flow-card-re-attempt-instrument-repair-first-v2-vacuous-verdict-2026-08-18",
+      "bytes_before": 1563,
+      "bytes_after": 808,
+      "moved_bytes": 1474,
+      "moved_sha256": "dd5b382af0839becc3f71fe424a607d14be9cb4a2d18dfd1a172a3daca5bf42f",
+      "sidecar": "docs/backlog/dev-flow-card-re-attempt-instrument-repair-first-v2-vacuous-verdict-2026-08-18.md"
+    },
+    {
+      "title": "Panel progress view — reviewer-cut cosmetic residuals (v2.34.31 round-1)",
+      "slug": "panel-progress-view-reviewer-cut-cosmetic-residuals-v2-34-31-round-1",
+      "bytes_before": 1323,
+      "bytes_after": 833,
+      "moved_bytes": 1244,
+      "moved_sha256": "9259f8631fb7c2cee42d6226aca66cf422415df2037aacfb1f4802f55d83d2c8",
+      "sidecar": "docs/backlog/panel-progress-view-reviewer-cut-cosmetic-residuals-v2-34-31-round-1.md"
+    },
+    {
+      "title": "Arm the ordinary-strike threshold (currently shadow-only) — DATED REVIEW REQUIRED",
+      "slug": "arm-the-ordinary-strike-threshold-currently-shadow-only-dated-review-required",
+      "bytes_before": 1351,
+      "bytes_after": 763,
+      "moved_bytes": 1263,
+      "moved_sha256": "29b18a0dc5b076999234be3acdc94e3a465fe6913826a23b1b21fde73358608c",
+      "sidecar": "docs/backlog/arm-the-ordinary-strike-threshold-currently-shadow-only-dated-review-required.md"
+    },
+    {
+      "title": "Strike-decay deferrals — the five mechanisms the panel cut from the first instrument",
+      "slug": "strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume",
+      "bytes_before": 1806,
+      "bytes_after": 712,
+      "moved_bytes": 1715,
+      "moved_sha256": "67a81a2c0390e4d5b7b3a0beaeed7d2af16b7043a5f386c26deffa5ec7cf1921",
+      "sidecar": "docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md"
+    },
+    {
+      "title": "Capability-claim identity is coupled to its observation timestamp",
+      "slug": "capability-claim-identity-is-coupled-to-its-observation-timestamp",
+      "bytes_before": 1071,
+      "bytes_after": 632,
+      "moved_bytes": 1001,
+      "moved_sha256": "4122c8fc122e2d03bd692505b97cb72c182235e647f3440be117e3cd83aa7e27",
+      "sidecar": "docs/backlog/capability-claim-identity-is-coupled-to-its-observation-timestamp.md"
+    },
+    {
+      "title": "Vacuous red case in the guided-disposition suite (alien-hash branch)",
+      "slug": "vacuous-red-case-in-the-guided-disposition-suite-alien-hash-branch",
+      "bytes_before": 1035,
+      "bytes_after": 667,
+      "moved_bytes": 962,
+      "moved_sha256": "073b70febb3c6807935d34453f4891588cce06f2912314a6e9e2ec9659eea8b9",
+      "sidecar": "docs/backlog/vacuous-red-case-in-the-guided-disposition-suite-alien-hash-branch.md"
+    },
+    {
+      "title": "dev-flow F4 ledger rule — re-measure before deciding (F6 leg RESOLVED 2026-08-18)",
+      "slug": "dev-flow-f4-ledger-rule-re-measure-before-deciding-f6-leg-resolved-2026-08-18",
+      "bytes_before": 1479,
+      "bytes_after": 793,
+      "moved_bytes": 1391,
+      "moved_sha256": "a3daa490a3ed4ee1bc6dc8ce16977d49b3f5fdf472c34592dcce2bde1eb71b22",
+      "sidecar": "docs/backlog/dev-flow-f4-ledger-rule-re-measure-before-deciding-f6-leg-resolved-2026-08-18.md"
+    },
+    {
+      "title": "Outcome-shaped quality-gate enforcer (opt-in) — replaces the rejected invocation check",
+      "slug": "outcome-shaped-quality-gate-enforcer-opt-in-replaces-the-rejected-invocation-che",
+      "bytes_before": 1278,
+      "bytes_after": 594,
+      "moved_bytes": 1185,
+      "moved_sha256": "4c12c40b55bff91cf9b7d5a45eda5de52ffb5c60f16b6c52e8e677e01d3ddf0b",
+      "sidecar": "docs/backlog/outcome-shaped-quality-gate-enforcer-opt-in-replaces-the-rejected-invocation-che.md"
+    },
+    {
+      "title": "Scaffold-tier effect A/B measurement（four-layer D6 promised row — repaired 2026-08-18）",
+      "slug": "scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08",
+      "bytes_before": 936,
+      "bytes_after": 768,
+      "moved_bytes": 839,
+      "moved_sha256": "aa0485c473efcabc6c83e10c416d6d622410453a2fcde2869897efe4ea3c00f2",
+      "sidecar": "docs/backlog/scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08.md"
+    },
+    {
+      "title": "cc-shim framing chrome leaks via `generate_session_title` (v2.34.7 fix incomplete)",
+      "slug": "cc-shim-framing-chrome-leaks-via-generate-session-title-v2-34-7-fix-incomplete",
+      "bytes_before": 1133,
+      "bytes_after": 669,
+      "moved_bytes": 1046,
+      "moved_sha256": "bf90849a16f221963e06f5319edede641d53863517647f2f3e6fabc95bc33ec8",
+      "sidecar": "docs/backlog/cc-shim-framing-chrome-leaks-via-generate-session-title-v2-34-7-fix-incomplete.md"
+    },
+    {
+      "title": "Qualification CLI transport — runtime identity capture",
+      "slug": "qualification-cli-transport-runtime-identity-capture",
+      "bytes_before": 1241,
+      "bytes_after": 695,
+      "moved_bytes": 1180,
+      "moved_sha256": "5ac16bb6d59fed29f1d4930781f5463b471977a2481e02178b8dfc6251263225",
+      "sidecar": "docs/backlog/qualification-cli-transport-runtime-identity-capture.md"
+    },
+    {
+      "title": "Broker payload format token rename (unified_diff misnomer)",
+      "slug": "broker-payload-format-token-rename-unified-diff-misnomer",
+      "bytes_before": 810,
+      "bytes_after": 658,
+      "moved_bytes": 747,
+      "moved_sha256": "81dc3c8ff5f8bae99bb2f48bac3bd8a21eddf0d7720fd20f446624ec001a79c3",
+      "sidecar": "docs/backlog/broker-payload-format-token-rename-unified-diff-misnomer.md"
+    },
+    {
+      "title": "Roster qualification — remaining legs (explorer suite; brain re-sit) — implementer leg SHIPPED v2.34.34",
+      "slug": "roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg",
+      "bytes_before": 3012,
+      "bytes_after": 799,
+      "moved_bytes": 2900,
+      "moved_sha256": "96800cdc8caf5737239ace30704bfaf6b5284f2b31ba186e97e70d2275bf12c6",
+      "sidecar": "docs/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md"
+    },
+    {
+      "title": "Governance CLI UX polish（experience-critic findings, v2.34.13 dogfood）",
+      "slug": "governance-cli-ux-polish-experience-critic-findings-v2-34-13-dogfood",
+      "bytes_before": 935,
+      "bytes_after": 598,
+      "moved_bytes": 856,
+      "moved_sha256": "8cf524176690c731f6a80200a47c793435737c2e89d3398973b71e5c3250572c",
+      "sidecar": "docs/backlog/governance-cli-ux-polish-experience-critic-findings-v2-34-13-dogfood.md"
+    },
+    {
+      "title": "OpenCode `debug skill` truncation — restore portability check 16 to hard-fail",
+      "slug": "opencode-debug-skill-truncation-restore-portability-check-16-to-hard-fail",
+      "bytes_before": 763,
+      "bytes_after": 702,
+      "moved_bytes": 679,
+      "moved_sha256": "085cec89811f7d15ff282f89522c1cf3c07642974982cdcdbe14db6536d3f29e",
+      "sidecar": "docs/backlog/opencode-debug-skill-truncation-restore-portability-check-16-to-hard-fail.md"
+    },
+    {
+      "title": "t14 long-horizon per-turn verification gate",
+      "slug": "t14-long-horizon-per-turn-verification-gate",
+      "bytes_before": 633,
+      "bytes_after": 519,
+      "moved_bytes": 585,
+      "moved_sha256": "25025b12e587499cf3a76bce14eb3a1cd603988b7f1ed349b56de90d2df0034a",
+      "sidecar": "docs/backlog/t14-long-horizon-per-turn-verification-gate.md"
+    },
+    {
+      "title": "Mission graph scheduler 與 portfolio optimization",
+      "slug": "mission-graph-scheduler-portfolio-optimization",
+      "bytes_before": 881,
+      "bytes_after": 747,
+      "moved_bytes": 826,
+      "moved_sha256": "dcb0d83ee7f38ed11517e80289e539ca0397ab139fa0569594d80f7d0c521514",
+      "sidecar": "docs/backlog/mission-graph-scheduler-portfolio-optimization.md"
+    },
+    {
+      "title": "Mission authority store 與 cross-harness enforcement hardening",
+      "slug": "mission-authority-store-cross-harness-enforcement-hardening",
+      "bytes_before": 894,
+      "bytes_after": 807,
+      "moved_bytes": 826,
+      "moved_sha256": "539d0d5466ce2f268e6731694b29afc1254e729550665a0b960a16beffe27cd9",
+      "sidecar": "docs/backlog/mission-authority-store-cross-harness-enforcement-hardening.md"
+    },
+    {
+      "title": "Every gate needs a negative control — the caution needs a routine behind it",
+      "slug": "every-gate-needs-a-negative-control-the-caution-needs-a-routine-behind-it",
+      "bytes_before": 1914,
+      "bytes_after": 788,
+      "moved_bytes": 1832,
+      "moved_sha256": "74e41787cb66eeef74988745848f8d0c5b272cabed2f2e356d24c675712aa0ae",
+      "sidecar": "docs/backlog/every-gate-needs-a-negative-control-the-caution-needs-a-routine-behind-it.md"
+    },
+    {
+      "title": "Test-integrity L0 cannot see an early `exit 0` spliced into a shell suite",
+      "slug": "test-integrity-l0-cannot-see-an-early-exit-0-spliced-into-a-shell-suite",
+      "bytes_before": 2005,
+      "bytes_after": 524,
+      "moved_bytes": 1927,
+      "moved_sha256": "6c2cf831b4f78ab8e18de633de73d736510667bcb54ae01205a8f164e5e4153a",
+      "sidecar": "docs/backlog/test-integrity-l0-cannot-see-an-early-exit-0-spliced-into-a-shell-suite.md"
+    },
+    {
+      "title": "`check-test-integrity.sh` warn → block needs an accuracy record first",
+      "slug": "check-test-integrity-sh-warn-block-needs-an-accuracy-record-first",
+      "bytes_before": 1234,
+      "bytes_after": 535,
+      "moved_bytes": 1158,
+      "moved_sha256": "2b0b18c3edf168d0596841799a23be4d7d0006ff359617e94c66dcdcac877fc3",
+      "sidecar": "docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md"
+    },
+    {
+      "title": "Engine and CLI have no session-mode fallback for bounded non-Mission campaigns",
+      "slug": "engine-and-cli-have-no-session-mode-fallback-for-bounded-non-mission-campaigns",
+      "bytes_before": 3823,
+      "bytes_after": 815,
+      "moved_bytes": 3740,
+      "moved_sha256": "c20e0e4e696822a0e3fb4c6e98f3e4f484cf742f5dba36c48707c8fe3dab563b",
+      "sidecar": "docs/backlog/engine-and-cli-have-no-session-mode-fallback-for-bounded-non-mission-campaigns.md"
+    },
+    {
+      "title": "Mission runtime retires superseded adoptions at closeout, not after the fact",
+      "slug": "mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact",
+      "bytes_before": 928,
+      "bytes_after": 703,
+      "moved_bytes": 847,
+      "moved_sha256": "21d819109223d9c9bfc19f387bd5e528495579cf3a0090ae9ab10b384550b1a9",
+      "sidecar": "docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md"
+    },
+    {
+      "title": "`reap-dispatch-branches.sh scan` cannot see branches that carry no `root_run_id`",
+      "slug": "reap-dispatch-branches-sh-scan-cannot-see-branches-that-carry-no-root-run-id",
+      "bytes_before": 876,
+      "bytes_after": 689,
+      "moved_bytes": 791,
+      "moved_sha256": "c6223da995e9300b520e2134d394bdb35149fa54955a0d8f0574ddd67b4bf49b",
+      "sidecar": "docs/backlog/reap-dispatch-branches-sh-scan-cannot-see-branches-that-carry-no-root-run-id.md"
+    },
+    {
+      "title": "`prune_tmp_residue` covers 7 prefixes; 25 scripts create `/tmp` dirs",
+      "slug": "prune-tmp-residue-covers-7-prefixes-25-scripts-create-tmp-dirs",
+      "bytes_before": 2260,
+      "bytes_after": 566,
+      "moved_bytes": 2187,
+      "moved_sha256": "3433c1624a1ea4860c47e67ffd5142247d6224a2f2a1ee9c80ef0135dbcba2a4",
+      "sidecar": "docs/backlog/prune-tmp-residue-covers-7-prefixes-25-scripts-create-tmp-dirs.md"
+    },
+    {
+      "title": "`next-touch-validation.test.sh` asserts against un-versioned local Mission state",
+      "slug": "next-touch-validation-test-sh-asserts-against-un-versioned-local-mission-state",
+      "bytes_before": 4176,
+      "bytes_after": 686,
+      "moved_bytes": 4091,
+      "moved_sha256": "cd9e0e9efc1305ed8df01da952c8ff522512e90693d4eaac8099f4d4e30df57c",
+      "sidecar": "docs/backlog/next-touch-validation-test-sh-asserts-against-un-versioned-local-mission-state.md"
+    },
+    {
+      "title": "Dispatch-branch lifecycle — SHA-256 `check --ack` residual",
+      "slug": "dispatch-branch-lifecycle-sha-256-check-ack-residual",
+      "bytes_before": 389,
+      "bytes_after": 489,
+      "moved_bytes": 324,
+      "moved_sha256": "c91c0309ed35a05b2638fb53978fecb855856d20f20acac25c493a58d61a2f41",
+      "sidecar": "docs/backlog/dispatch-branch-lifecycle-sha-256-check-ack-residual.md"
+    },
+    {
+      "title": "context-budget T3 deny tier — calibration and obedience evidence",
+      "slug": "context-budget-t3-deny-tier-calibration-and-obedience-evidence",
+      "bytes_before": 667,
+      "bytes_after": 587,
+      "moved_bytes": 596,
+      "moved_sha256": "944752bcf86d318aeac21bdbd6dfc4fa46c71f9f90f9a55b08b1a2d653c88c5c",
+      "sidecar": "docs/backlog/context-budget-t3-deny-tier-calibration-and-obedience-evidence.md"
+    },
+    {
+      "title": "skills frontmatter `tier:` 欄位（B4 step 2 — 分層進 frontmatter）",
+      "slug": "skills-frontmatter-tier-b4-step-2-frontmatter",
+      "bytes_before": 685,
+      "bytes_after": 755,
+      "moved_bytes": 606,
+      "moved_sha256": "931033744c127767542fd9b1adaad297579d8aa7caa6e33a207f7546166f2071",
+      "sidecar": "docs/backlog/skills-frontmatter-tier-b4-step-2-frontmatter.md"
+    },
+    {
+      "title": "certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集",
+      "slug": "certified-clean-evals-clean-diff-specificity-certified",
+      "bytes_before": 980,
+      "bytes_after": 775,
+      "moved_bytes": 826,
+      "moved_sha256": "bb57c95baba301366cb76c547996964169b444bea96bcfd5b8e2f66b00534755",
+      "sidecar": "docs/backlog/certified-clean-evals-clean-diff-specificity-certified.md"
+    },
+    {
+      "title": "Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain",
+      "slug": "domain-aware-routing-consume-the-work-domain-telemetry-to-route-reviewer-impleme",
+      "bytes_before": 1140,
+      "bytes_after": 839,
+      "moved_bytes": 1030,
+      "moved_sha256": "ddfcaca205608b2002dfbbd21f0d14fe94b181ce9fcb0e9f5070e285efb89e52",
+      "sidecar": "docs/backlog/domain-aware-routing-consume-the-work-domain-telemetry-to-route-reviewer-impleme.md"
+    },
+    {
+      "title": "L1 block-mode override re-enable — needs a REAL isolation boundary (cgroup is NOT enough)",
+      "slug": "l1-block-mode-override-re-enable-needs-a-real-isolation-boundary-cgroup-is-not-e",
+      "bytes_before": 1674,
+      "bytes_after": 582,
+      "moved_bytes": 1578,
+      "moved_sha256": "e41055814700dec70f93db5ea389c83917d31fa6a39b5cfcd08082024bfea053",
+      "sidecar": "docs/backlog/l1-block-mode-override-re-enable-needs-a-real-isolation-boundary-cgroup-is-not-e.md"
+    },
+    {
+      "title": "qc-panel refute pass — graduate from shadow to gating (calibration-gated)",
+      "slug": "qc-panel-refute-pass-graduate-from-shadow-to-gating-calibration-gated",
+      "bytes_before": 1338,
+      "bytes_after": 807,
+      "moved_bytes": 1258,
+      "moved_sha256": "2530795009c90aac93fe29a326f50f47b5d16b3ea7b50e2bd9290bcdd326828e",
+      "sidecar": "docs/backlog/qc-panel-refute-pass-graduate-from-shadow-to-gating-calibration-gated.md"
+    },
+    {
+      "title": "`/l5` hetero-parallel width fan-out (machinery built, deliberately unwired)",
+      "slug": "l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired",
+      "bytes_before": 1330,
+      "bytes_after": 658,
+      "moved_bytes": 1250,
+      "moved_sha256": "68dcb9635fcc355d13000d6d67b33823d876922da3b126ac6e5acc5fe7da5910",
+      "sidecar": "docs/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md"
+    },
+    {
+      "title": "Leaf-level output compaction for dispatched implementer / qc shell commands (rtk-style)",
+      "slug": "leaf-level-output-compaction-for-dispatched-implementer-qc-shell-commands-rtk-st",
+      "bytes_before": 3707,
+      "bytes_after": 665,
+      "moved_bytes": 3615,
+      "moved_sha256": "dacbfde89f43ce01c363f2b2803fc740c1c38d339b3619fa2cdd2d632c06bd11",
+      "sidecar": "docs/backlog/leaf-level-output-compaction-for-dispatched-implementer-qc-shell-commands-rtk-st.md"
+    },
+    {
+      "title": "M3-band fixtures（t15-t17）若供對抗性 implementer 情境重用，需 process-isolation 邊界",
+      "slug": "m3-band-fixtures-t15-t17-implementer-process-isolation",
+      "bytes_before": 1537,
+      "bytes_after": 862,
+      "moved_bytes": 1432,
+      "moved_sha256": "3bd36b116b8fac16dcf9e1b6b46ec6ecd15197b00020567c291e7a52835e4c27",
+      "sidecar": "docs/backlog/m3-band-fixtures-t15-t17-implementer-process-isolation.md"
+    },
+    {
+      "title": "First local runner capability semantics（availability/load，不是 quota）",
+      "slug": "first-local-runner-capability-semantics-availability-load-quota",
+      "bytes_before": 550,
+      "bytes_after": 630,
+      "moved_bytes": 468,
+      "moved_sha256": "9ff18dbd51890880f330addbaa91d4719db21dde16b6f82520d7036e1d9d005e",
+      "sidecar": "docs/backlog/first-local-runner-capability-semantics-availability-load-quota.md"
+    },
+    {
+      "title": "broader shared-config containment / per-worktree isolation（2026-07-17, follow-up）",
+      "slug": "broader-shared-config-containment-per-worktree-isolation-2026-07-17-follow-up",
+      "bytes_before": 1334,
+      "bytes_after": 501,
+      "moved_bytes": 1244,
+      "moved_sha256": "16b73afe48f3cb7554e4ec9f9c04ca4846f4aec475843df758f0d20db0b8b219",
+      "sidecar": "docs/backlog/broader-shared-config-containment-per-worktree-isolation-2026-07-17-follow-up.md"
+    },
+    {
+      "title": "Durable merge execution crash recovery",
+      "slug": "durable-merge-execution-crash-recovery",
+      "bytes_before": 537,
+      "bytes_after": 485,
+      "moved_bytes": 494,
+      "moved_sha256": "c203711ca219fbdbb55de1212dd6a682cbbe2dca5ea0e793f1b567030c607336",
+      "sidecar": "docs/backlog/durable-merge-execution-crash-recovery.md"
+    },
+    {
+      "title": "Bind dirty content continuity from preflight to execution",
+      "slug": "bind-dirty-content-continuity-from-preflight-to-execution",
+      "bytes_before": 579,
+      "bytes_after": 546,
+      "moved_bytes": 517,
+      "moved_sha256": "9df4b33124b60b51c9d5ca3534bc7644e078fb73e03b1d9e5307b782e5335a98",
+      "sidecar": "docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md"
+    },
+    {
+      "title": "Recover stale backlog admission locks safely",
+      "slug": "recover-stale-backlog-admission-locks-safely",
+      "bytes_before": 558,
+      "bytes_after": 512,
+      "moved_bytes": 509,
+      "moved_sha256": "e738e232690311ce670081b21431e75b28920d8524751465bad15fde54400105",
+      "sidecar": "docs/backlog/recover-stale-backlog-admission-locks-safely.md"
+    },
+    {
+      "title": "Controller helper API fail-closed hardening",
+      "slug": "controller-helper-api-fail-closed-hardening",
+      "bytes_before": 825,
+      "bytes_after": 587,
+      "moved_bytes": 777,
+      "moved_sha256": "6661e7682ef0cab71afea4ea63f467f707d5cf49a31f6b6d17f8206ca1a2fca1",
+      "sidecar": "docs/backlog/controller-helper-api-fail-closed-hardening.md"
+    },
+    {
+      "title": "Boundary outcome and root dispatch semantics",
+      "slug": "boundary-outcome-and-root-dispatch-semantics",
+      "bytes_before": 737,
+      "bytes_after": 569,
+      "moved_bytes": 688,
+      "moved_sha256": "41c95af5895082224433386156dd36224603ebdd529e1ba1eb4a5f20b926b095",
+      "sidecar": "docs/backlog/boundary-outcome-and-root-dispatch-semantics.md"
+    },
+    {
+      "title": "Portable byte and Work Order lifecycle hardening",
+      "slug": "portable-byte-and-work-order-lifecycle-hardening",
+      "bytes_before": 734,
+      "bytes_after": 570,
+      "moved_bytes": 681,
+      "moved_sha256": "eebec478304dd563de97318f072ba03f89d345be15ae07635808186e0ba9cb3f",
+      "sidecar": "docs/backlog/portable-byte-and-work-order-lifecycle-hardening.md"
+    },
+    {
+      "title": "Durable resume and review authority binding",
+      "slug": "durable-resume-and-review-authority-binding",
+      "bytes_before": 657,
+      "bytes_after": 582,
+      "moved_bytes": 609,
+      "moved_sha256": "78453906f5a320e2860833e80ad955ff1d4885ea68793b0ca8f4a9c4b170a509",
+      "sidecar": "docs/backlog/durable-resume-and-review-authority-binding.md"
+    },
+    {
+      "title": "Mission graph and campaign capacity boundary hardening",
+      "slug": "mission-graph-and-campaign-capacity-boundary-hardening",
+      "bytes_before": 733,
+      "bytes_after": 575,
+      "moved_bytes": 674,
+      "moved_sha256": "dd9360061c632a4b6dc874eacbd71a0d1794b4fa45c56b44534c374fd58ef83f",
+      "sidecar": "docs/backlog/mission-graph-and-campaign-capacity-boundary-hardening.md"
+    },
+    {
+      "title": "Orphan leaf liveness and resource reconstruction",
+      "slug": "orphan-leaf-liveness-and-resource-reconstruction",
+      "bytes_before": 705,
+      "bytes_after": 541,
+      "moved_bytes": 652,
+      "moved_sha256": "629c9376704ddd44c53adfd5acff05018c5b3291ea354aca856e7c27bad956e4",
+      "sidecar": "docs/backlog/orphan-leaf-liveness-and-resource-reconstruction.md"
+    },
+    {
+      "title": "Terminal status and receipt trust boundary",
+      "slug": "terminal-status-and-receipt-trust-boundary",
+      "bytes_before": 763,
+      "bytes_after": 582,
+      "moved_bytes": 716,
+      "moved_sha256": "c25fb7c70b446802886d1f1d6f21317ee5c918aa54c32cb2ac9ef3af5f29f239",
+      "sidecar": "docs/backlog/terminal-status-and-receipt-trust-boundary.md"
+    },
+    {
+      "title": "Shared sealed zero-diff validator",
+      "slug": "shared-sealed-zero-diff-validator",
+      "bytes_before": 3445,
+      "bytes_after": 515,
+      "moved_bytes": 3407,
+      "moved_sha256": "3fc38b2d876ea8c1a82316310066462c224435177e1e8c002d297ddd7d010330",
+      "sidecar": "docs/backlog/shared-sealed-zero-diff-validator.md"
+    },
+    {
+      "title": "HETO task-return detection can miss completed work",
+      "slug": "heto-task-return-detection-can-miss-completed-work",
+      "bytes_before": 565,
+      "bytes_after": 662,
+      "moved_bytes": 510,
+      "moved_sha256": "c25a1eafea1138a2cc312656550ec2bcee58167457434b2935ff6f518cdde38c",
+      "sidecar": "docs/backlog/heto-task-return-detection-can-miss-completed-work.md"
+    },
+    {
+      "title": "No route for external field experience contributed INTO autopilot itself",
+      "slug": "no-route-for-external-field-experience-contributed-into-autopilot-itself",
+      "bytes_before": 993,
+      "bytes_after": 498,
+      "moved_bytes": 916,
+      "moved_sha256": "19cd2606737e5ca6d3562cc87d011c6dd4f41a999478c873dd6c245f5a023699",
+      "sidecar": "docs/backlog/no-route-for-external-field-experience-contributed-into-autopilot-itself.md"
+    },
+    {
+      "title": "`peer-coordination` skill — ruled in, blocked on a spike sweep",
+      "slug": "peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep",
+      "bytes_before": 7564,
+      "bytes_after": 501,
+      "moved_bytes": 7495,
+      "moved_sha256": "1a3ad8ebba57d43880c4dedad5cf829a8f2175bfec420160fa4e7bd849a52884",
+      "sidecar": "docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md"
+    },
+    {
+      "title": "Managed-campaign controller cannot record `BOUNDARY_REJECTED` — lease-fenced by its own synthesized stage identity",
+      "slug": "managed-campaign-controller-cannot-record-boundary-rejected-lease-fenced-by-its",
+      "bytes_before": 1294,
+      "bytes_after": 849,
+      "moved_bytes": 1173,
+      "moved_sha256": "47f505d8b06f888bf76579aa523e2e9574b9628e4eb400e22c2f9bcda50a722e",
+      "sidecar": "docs/backlog/managed-campaign-controller-cannot-record-boundary-rejected-lease-fenced-by-its.md"
+    },
+    {
+      "title": "`dispatch-author.sh` success predicate is \"non-empty stdout\" — truncated / tool-narrating output reports `authored`",
+      "slug": "dispatch-author-sh-success-predicate-is-non-empty-stdout-truncated-tool-narratin",
+      "bytes_before": 835,
+      "bytes_after": 721,
+      "moved_bytes": 713,
+      "moved_sha256": "c0053f9fa7e270fa072c50d454ac1debcaef7eb8cea6a8f5c0358c3b8654996b",
+      "sidecar": "docs/backlog/dispatch-author-sh-success-predicate-is-non-empty-stdout-truncated-tool-narratin.md"
+    },
+    {
+      "title": "Verification-author seats on agy / cc-shim / anthropic-compatible are structurally NO-GO under the exact-tuple quota gate",
+      "slug": "verification-author-seats-on-agy-cc-shim-anthropic-compatible-are-structurally-n",
+      "bytes_before": 940,
+      "bytes_after": 787,
+      "moved_bytes": 814,
+      "moved_sha256": "185d9e873f5177021bdda7d8c30a27c691e3f6c3c408fcdad517c2f033f64ac0",
+      "sidecar": "docs/backlog/verification-author-seats-on-agy-cc-shim-anthropic-compatible-are-structurally-n.md"
+    },
+    {
+      "title": "No supported withdraw for a never-granted DRAFT Mission adoption; graph revisions mint unbounded lineages",
+      "slug": "no-supported-withdraw-for-a-never-granted-draft-mission-adoption-graph-revisions",
+      "bytes_before": 1165,
+      "bytes_after": 843,
+      "moved_bytes": 1055,
+      "moved_sha256": "d64460d107a97ae8380d9e61606cc25351239209a2d83d1c37a3c89f4c35f51c",
+      "sidecar": "docs/backlog/no-supported-withdraw-for-a-never-granted-draft-mission-adoption-graph-revisions.md"
+    },
+    {
+      "title": "`hooks/tests/run.sh` is red on `develop` — sealed campaign `verify_cmd` is unsatisfiable",
+      "slug": "hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable",
+      "bytes_before": 945,
+      "bytes_after": 703,
+      "moved_bytes": 850,
+      "moved_sha256": "10551a5f2787cf9e686a86460f36a53fc9925c42cd1601140ed7b44fb5b6c1b5",
+      "sidecar": "docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md"
+    },
+    {
+      "title": "Campaign bridge resolves lease identity from `campaignControl.initial_state` — correct today only because every append refreshes it",
+      "slug": "campaign-bridge-resolves-lease-identity-from-campaigncontrol-initial-state-corre",
+      "bytes_before": 1023,
+      "bytes_after": 883,
+      "moved_bytes": 885,
+      "moved_sha256": "5bead47492006499c8e6a77b90a435caaacd5b629cd9ba69305a41fcfdade24f",
+      "sidecar": "docs/backlog/campaign-bridge-resolves-lease-identity-from-campaigncontrol-initial-state-corre.md"
+    },
+    {
+      "title": "`hooks/tests/run.sh` TIMEOUT marker collides with a suite that self-exits 124/137",
+      "slug": "hooks-tests-run-sh-timeout-marker-collides-with-a-suite-that-self-exits-124-137",
+      "bytes_before": 517,
+      "bytes_after": 507,
+      "moved_bytes": 431,
+      "moved_sha256": "1beed7606ace23c0b74e44f5b67cbdf78dda011c1fceb6f6afcc554cd1aa3d14",
+      "sidecar": "docs/backlog/hooks-tests-run-sh-timeout-marker-collides-with-a-suite-that-self-exits-124-137.md"
+    },
+    {
+      "title": "Killed/dead managed campaign stuck at IMPLEMENTING with a held lease has no operator remedy",
+      "slug": "killed-dead-managed-campaign-stuck-at-implementing-with-a-held-lease-has-no-oper",
+      "bytes_before": 1085,
+      "bytes_after": 820,
+      "moved_bytes": 989,
+      "moved_sha256": "797898935f8ce4f68189ea80ef3f6f954524c05e5ba6a650a58aa3b09124aab4",
+      "sidecar": "docs/backlog/killed-dead-managed-campaign-stuck-at-implementing-with-a-held-lease-has-no-oper.md"
+    },
+    {
+      "title": "`mission grant` silently replays a stale claim when the node holds an open `active_claim_id` — SHIPPED in U4 (branch `u4-grantblock-20260831`)",
+      "slug": "mission-grant-silently-replays-a-stale-claim-when-the-node-holds-an-open-active",
+      "bytes_before": 2725,
+      "bytes_after": 786,
+      "moved_bytes": 2576,
+      "moved_sha256": "8bac70b07aa99caddff306747188f32407c91e0356eb94b37b030b54596a8990",
+      "sidecar": "docs/backlog/mission-grant-silently-replays-a-stale-claim-when-the-node-holds-an-open-active.md"
+    },
+    {
+      "title": "No operator-level release for a claim whose campaign died without a terminal receipt (second instance)",
+      "slug": "no-operator-level-release-for-a-claim-whose-campaign-died-without-a-terminal-rec",
+      "bytes_before": 1166,
+      "bytes_after": 812,
+      "moved_bytes": 1059,
+      "moved_sha256": "c6c88d4618b30b54e3e29aa793c4bcf981990c2d0da25bb9fbf0f99720ae9ba8",
+      "sidecar": "docs/backlog/no-operator-level-release-for-a-claim-whose-campaign-died-without-a-terminal-rec.md"
+    },
+    {
+      "title": "A managed campaign whose wall expires leaves no terminal summary and no journal disposition",
+      "slug": "a-managed-campaign-whose-wall-expires-leaves-no-terminal-summary-and-no-journal",
+      "bytes_before": 1021,
+      "bytes_after": 796,
+      "moved_bytes": 925,
+      "moved_sha256": "f5c260527c2b40c00d6e807d4a771d1d0fba4057b4b32e0a9fb2673a8226a0f3",
+      "sidecar": "docs/backlog/a-managed-campaign-whose-wall-expires-leaves-no-terminal-summary-and-no-journal.md"
+    },
+    {
+      "title": "3600 s wall cap is the schema maximum and too small for an implement+review campaign on a real deliverable — SHIPPED in U3 (branch `u3-wallcap-20260831`), ceiling 14400 by CEO decision 2026-08-31",
+      "slug": "3600-s-wall-cap-is-the-schema-maximum-and-too-small-for-an-implement-review-camp",
+      "bytes_before": 861,
+      "bytes_after": 712,
+      "moved_bytes": 659,
+      "moved_sha256": "cd61dc8b893b1d1a28450d0a16cf7441412a75df632154d2f028d7ec8ac861c1",
+      "sidecar": "docs/backlog/3600-s-wall-cap-is-the-schema-maximum-and-too-small-for-an-implement-review-camp.md"
+    },
+    {
+      "title": "Qualification recipes seed staged credentials only when the staged file is absent — rotating OAuth runners reuse stale material",
+      "slug": "qualification-recipes-seed-staged-credentials-only-when-the-staged-file-is-absen",
+      "bytes_before": 1225,
+      "bytes_after": 678,
+      "moved_bytes": 1091,
+      "moved_sha256": "acccb630f245a06ca8d7fee3508f7a7045743ada3d800a9cc7efc85013f2ea69",
+      "sidecar": "docs/backlog/qualification-recipes-seed-staged-credentials-only-when-the-staged-file-is-absen.md"
+    },
+    {
+      "title": "`engine-scorecard.js current/seat-status --require-evidence` cannot be run standalone",
+      "slug": "engine-scorecard-js-current-seat-status-require-evidence-cannot-be-run-standalon",
+      "bytes_before": 610,
+      "bytes_after": 642,
+      "moved_bytes": 520,
+      "moved_sha256": "c07c1d506bb5f01e6e9b50c1562d77e75f3f52e55baad11dcb42e29ec6a458d1",
+      "sidecar": "docs/backlog/engine-scorecard-js-current-seat-status-require-evidence-cannot-be-run-standalon.md"
+    },
+    {
+      "title": "`mission withdraw` cannot bind a `mission-subject-v2` claim to its ICC campaign — the intake journals no mission binding",
+      "slug": "mission-withdraw-cannot-bind-a-mission-subject-v2-claim-to-its-icc-campaign-the",
+      "bytes_before": 1594,
+      "bytes_after": 888,
+      "moved_bytes": 1467,
+      "moved_sha256": "8bf1975a9521594d15eff72f7c0e8a3582d8c9cfe29b3a89a76c8a97b87b0473",
+      "sidecar": "docs/backlog/mission-withdraw-cannot-bind-a-mission-subject-v2-claim-to-its-icc-campaign-the.md"
+    },
+    {
+      "title": "v2.35.5 qc-panel 🔵 follow-ups (managed-campaign rail debt, 2026-08-31)",
+      "slug": "v2-35-5-qc-panel-follow-ups-managed-campaign-rail-debt-2026-08-31",
+      "bytes_before": 1021,
+      "bytes_after": 564,
+      "moved_bytes": 943,
+      "moved_sha256": "2d1afdfad5445a1a0ff1be5c6c0e246a516a53008c852cbdd740388ca6c778fa",
+      "sidecar": "docs/backlog/v2-35-5-qc-panel-follow-ups-managed-campaign-rail-debt-2026-08-31.md"
+    },
+    {
+      "title": "`peer-addressing.md` says message rows live forever; a spec says 7 days",
+      "slug": "peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days",
+      "bytes_before": 862,
+      "bytes_after": 697,
+      "moved_bytes": 786,
+      "moved_sha256": "e53514579fb61d8df0f7f73da99df9e456391613b26467f02d7462262404ce34",
+      "sidecar": "docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md"
+    },
+    {
+      "title": "Plan-loop freeze: dispatcher and checker disagree on disposition shape; terminal artifact carries no dispositions",
+      "slug": "plan-loop-freeze-dispatcher-and-checker-disagree-on-disposition-shape-terminal-a",
+      "bytes_before": 1106,
+      "bytes_after": 750,
+      "moved_bytes": 988,
+      "moved_sha256": "88d212d6684371997f9efa17ccc8aae3c8ed71f87a673d7dcfacdadba42d01fe",
+      "sidecar": "docs/backlog/plan-loop-freeze-dispatcher-and-checker-disagree-on-disposition-shape-terminal-a.md"
+    },
+    {
+      "title": "Live-state base on world-writable tmpfs — ownership/mode check on the reader side",
+      "slug": "live-state-base-on-world-writable-tmpfs-ownership-mode-check-on-the-reader-side",
+      "bytes_before": 1182,
+      "bytes_after": 772,
+      "moved_bytes": 1094,
+      "moved_sha256": "a60643959f4cca3acdf89ab8ea06da149b623281e83cf9b2a7453489649846b3",
+      "sidecar": "docs/backlog/live-state-base-on-world-writable-tmpfs-ownership-mode-check-on-the-reader-side.md"
+    },
+    {
+      "title": "live-state-dir 🔵 leftovers — multi-row findmnt, `\\040`-only unescape, per-process SSD warning, sub-200k window scaling untested",
+      "slug": "live-state-dir-leftovers-multi-row-findmnt-040-only-unescape-per-process-ssd-war",
+      "bytes_before": 956,
+      "bytes_after": 737,
+      "moved_bytes": 819,
+      "moved_sha256": "a946f2e1de9a96dbd43c9b0187e2199ea5f2c44fb0514e4113bfcde2e495e325",
+      "sidecar": "docs/backlog/live-state-dir-leftovers-multi-row-findmnt-040-only-unescape-per-process-ssd-war.md"
+    },
+    {
+      "title": "context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap",
+      "slug": "context-budget-falls-back-to-inference-after-a-long-foreground-tool-call-live-ti",
+      "bytes_before": 1983,
+      "bytes_after": 732,
+      "moved_bytes": 1854,
+      "moved_sha256": "fd3dccc870a627e2a26a2ec3e43cfe422f676cb720e28a1b4d16a0b2746e588e",
+      "sidecar": "docs/backlog/context-budget-falls-back-to-inference-after-a-long-foreground-tool-call-live-ti.md"
+    },
+    {
+      "title": "Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation",
+      "slug": "stale-closed-findings-stamps-on-chain-entries-written-by-pre-v2-36-3-finalize-ha",
+      "bytes_before": 1131,
+      "bytes_after": 729,
+      "moved_bytes": 1001,
+      "moved_sha256": "60bd9343e8b4878317823fe554c6d057cd0ceca91e984284399f1452f38074b1",
+      "sidecar": "docs/backlog/stale-closed-findings-stamps-on-chain-entries-written-by-pre-v2-36-3-finalize-ha.md"
+    },
+    {
+      "title": "`hetero-review-loop --exclude` allowlist is autopilot's own tree — consumer repos cannot shrink a review payload",
+      "slug": "hetero-review-loop-exclude-allowlist-is-autopilot-s-own-tree-consumer-repos-cann",
+      "bytes_before": 1079,
+      "bytes_after": 789,
+      "moved_bytes": 960,
+      "moved_sha256": "b87c75acd793e273ab6d0b82d7ecbb0e78c4619972482e271701acb48e5c1329",
+      "sidecar": "docs/backlog/hetero-review-loop-exclude-allowlist-is-autopilot-s-own-tree-consumer-repos-cann.md"
+    },
+    {
+      "title": "agy seat payload overflow is discovered per seat at dispatch time — the loop could pre-compute it and fail before spending the other seats",
+      "slug": "agy-seat-payload-overflow-is-discovered-per-seat-at-dispatch-time-the-loop-could",
+      "bytes_before": 1050,
+      "bytes_after": 619,
+      "moved_bytes": 905,
+      "moved_sha256": "ac88ef3ea22fe4f156403d48203980afeba45f00af844815303dbcb4c2b80c5d",
+      "sidecar": "docs/backlog/agy-seat-payload-overflow-is-discovered-per-seat-at-dispatch-time-the-loop-could.md"
+    },
+    {
+      "title": "CEO/dev-flow guidance proportionality — peer request to soften \"Boil the Lake\" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates",
+      "slug": "ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near",
+      "bytes_before": 1962,
+      "bytes_after": 697,
+      "moved_bytes": 1783,
+      "moved_sha256": "905a39ee350fc54824b2b76ab542aecec870c8bf12400f3de14d485c55d081aa",
+      "sidecar": "docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md"
+    },
+    {
+      "title": "depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher",
+      "slug": "depth0-delegate-gate-bash-matcher-is-an-expansion-over-the-frozen-plan-matcher",
+      "bytes_before": 882,
+      "bytes_after": 714,
+      "moved_bytes": 797,
+      "moved_sha256": "e9dc24085cb24d7fafe48c1d6febf6cb0c5ac156e31f28c6654d16977ed77bc8",
+      "sidecar": "docs/backlog/depth0-delegate-gate-bash-matcher-is-an-expansion-over-the-frozen-plan-matcher.md"
+    },
+    {
+      "title": "live-state-dir / context-budget test strength — two surviving mutants, one vacuous-off-Linux assertion, injection-test residue",
+      "slug": "live-state-dir-context-budget-test-strength-two-surviving-mutants-one-vacuous-of",
+      "bytes_before": 8210,
+      "bytes_after": 489,
+      "moved_bytes": 8077,
+      "moved_sha256": "92274a8d8d0422e7d0d750da0cbbb7c475e171f9284a8d69f65a53b90dad9189",
+      "sidecar": "docs/backlog/live-state-dir-context-budget-test-strength-two-surviving-mutants-one-vacuous-of.md"
+    }
+  ],
+  "totals": {
+    "entries": 154,
+    "migrate": 154,
+    "moved_bytes": 219369,
+    "bytes_before": 237170,
+    "bytes_after": 105035
+  }
+}

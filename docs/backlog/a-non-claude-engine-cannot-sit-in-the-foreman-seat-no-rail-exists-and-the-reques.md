@@ -1,0 +1,15 @@
+# A non-Claude engine cannot sit in the foreman seat — no rail exists, and the request is now from two independent peers
+
+Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-09-14
+
+
+- **Trigger**: **FIRED 2026-09-13 — the operator authorised Shape B directly ("B 真工頭（配額是動機）"); shipped v2.36.34.** (Earlier: requested by `308-db` 2026-09-12, relayed as an owner ruling.) A peer's relay of an owner decision is not authorisation here, however accurate: the channel cannot distinguish "the owner said so" from "the owner said so about this scope". Surfaced to the operator the same day; reply sent, and a send receipt is not a read receipt. Do not start on the strength of this row.
+- **Requested by**: `308-db`, 2026-09-12. They explicitly scope round 1 to a **design document only**, explicitly ask that kimi's capabilities be re-derived here rather than copied from their inference, and state they will not touch this repo.
+- **Context**: there is no supported path for a non-Claude engine to hold the control loop. `skills/l4/SKILL.md:22` states l4 is all-Claude and routes a heterogeneous implementer to l5; `scripts/dispatch-hetero.sh`'s contract is only-IMPLEMENTS with the verdict retained at depth 0. That is an implementer rail, not a foreman rail — the capability is absent, not disabled.
+- **Peer's measured facts, NOT re-derived here**: `kimi --model kimi-code/k3 -p "<prompt>"` exits 0 with a response (CLI 0.41.0); prompt is read only from `-p/--prompt` (a positional or `kimi run` gives `unknown command`); the 2026-09-07 "managed provider has no credential" note is superseded. `agy --model gemini-3.8-flash-medium -p "…"` exits 0 (CLI 1.2.1) and needs nothing new, since dispatch-hetero already supports that seat.
+- **The peer's own caveat, and it is the crux**: kimi's prompt ceiling is ~120KB counting diff + spec + wrapper, so it suits small diffs — while a foreman must read handoffs and accumulate context, which is the shape it is worst at. They asked that this be measured, not assumed. It should be, and so should tool-calling, file editing, whether `kimi acp` is usable, and whether `kimi -r <session>` gives real multi-turn. Anything unmeasured gets written "未驗證", never "should work".
+- **Split it before designing the rail** — same ruling as the `chatgpt-tunnel-host` foreman request (2026-09-12, row above): two of that report's four root causes were general contract defects, and a foreman-specific rail would have fixed them for foremen only. Whatever is general here goes to the general contract.
+- **The contract to hold**: "verdict stays at depth 0". Any candidate shape must state whether it violates it. A thin foreman (Claude keeps the loop, outsources the decision) and a true foreman (kimi holds the loop, needing ACP or a tool bridge) answer that differently, and the comparison is the deliverable.
+- **Effort**: S for the design document (round 1). Rail size unknown until the shapes are compared.
+- **Source**: cross-session request from `308-db` via the local Claude session mesh, 2026-09-12. Nothing re-derived on this host yet.
+

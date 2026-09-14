@@ -1,0 +1,215 @@
+{
+  "schema": 1,
+  "entries": [
+    {
+      "fingerprint": "398f45b038e4d89025271f6ad44f33073f69a0ad04691e17012e8c4c4380fd3f",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "PEER-REPORTED (cuda, for revival.3d): a backlog ENTRY has no"
+    },
+    {
+      "fingerprint": "f750fddabebeeb1734a6c52696887c3655843bfeafea1ff1d87b7594614c0aeb",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "agy `--input-format stream-json` raises the payload ceiling "
+    },
+    {
+      "fingerprint": "d7a81f8f2cb6edc923e4f15a4dd59ff3224a57c399f239064b314bd81d340ff4",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "PEER-REPORTED (chatgpt-tunnel-host via cuda): a non-Claude f"
+    },
+    {
+      "fingerprint": "fd08f32551b15dc2769c25fddb550d36b8613eba9cb04606a1f00a45d4ae3b67",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "PEER-REPORTED (openclaw): an active l5 marker deadlocks the "
+    },
+    {
+      "fingerprint": "82ad0e088513eba908f0c48ccc2445e465fa3dafaf0408e78ac33bd308bb7b12",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "`Project Paths` is write-only config — `scaffold-config.js` "
+    },
+    {
+      "fingerprint": "9353d0ea53ff3b46f4c8fd6835129c9b7afe1c861d9584062c218cb6c507f90b",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "The shipped operator-pin admission is unreachable from the m"
+    },
+    {
+      "fingerprint": "da4da821b4aeb6709d27b9b8f95cce8b58de0b54de19559065532ba35b359a56",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "A campaign's `output_paths` must enumerate every codex mirro"
+    },
+    {
+      "fingerprint": "74cde8811415ba9e2a43c8428950d6e12f6f46f84f294ae92478d5c488b0e7ac",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "Two L5 deliverables cannot run on one repo inside 24h: the m"
+    },
+    {
+      "fingerprint": "dd5460e0c41378dff7c4fae8d896a6698951a0564a3dcd978d58201121e30463",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "`probe-unknown.js classify` spawns `resolve-review-loop.sh` "
+    },
+    {
+      "fingerprint": "27cce8dec991118a2c22267e89ec81fa80066816855d8e32f7da175ac3a7e5a3",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "hetero-review-loop: confirm finalize always emits severity i"
+    },
+    {
+      "fingerprint": "0e9cd22a0f43d83a20ad7e1f53f1596e7133682b0af108a4e6a31b90b2422fa5",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "check-phase-review-receipt: open_findings comparison ignores"
+    },
+    {
+      "fingerprint": "f97e716e728f80c08c00650510ec6ac81827c094338e1f60bf7e12b4ab8e34d2",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "resolve-review-loop.test.sh capability-warning assertion mes"
+    },
+    {
+      "fingerprint": "63c981fc1e0ef6b4620f2123aa0bf22ce0d5990409a2ed341c333c7af25533d0",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "~~Foreman context is not measurable by hook — `context-budge"
+    },
+    {
+      "fingerprint": "2e3cd9e0359739dc040fe87954610a97681244a53eaa67469f688ce6f81c3582",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "autopilot effort vocabulary has no `minimal` — the muse-spar"
+    },
+    {
+      "fingerprint": "f38fee6122bd59a9b9440f6f3d8aaf99794e59a00542eadf7bee844844a61f6c",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "`resolve-review-loop-consult-discuss-gate` case (xix) mutate"
+    },
+    {
+      "fingerprint": "910f1bd954334e70d53aca00b96518379895907c462b1b6176aa2977bc8c1e01",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "`autopilot endpoints test` hardcodes `claude-3-haiku-2024030"
+    },
+    {
+      "fingerprint": "eb35f9ded69901a1dc32517f23d951eaf2b5d6e4abb874e0a838c4b07de63c3d",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "`src/engine/local-deployment.js` carries its own transport r"
+    },
+    {
+      "fingerprint": "bfc90726ac6671a92b5eccd351dc2c3cfe666a3ad7cd998e02c8927e7951bdea",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕"
+    },
+    {
+      "fingerprint": "3410aa087579ebcde0f7f37f1a33a47c9ec536edfa1cf4172e433fbd1fcbe4e0",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "Verification-author seats on agy / cc-shim / anthropic-compa"
+    },
+    {
+      "fingerprint": "e32eac0653570b5d6e112e3689b5409f8effd2b6271440c6760dc08417e49c9a",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "Campaign bridge resolves lease identity from `campaignContro"
+    },
+    {
+      "fingerprint": "06d354357cbdfefc249ec533e57142ff8e83b9dae8b7e28629614a6eccd725a1",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "`mission grant` silently replays a stale claim when the node"
+    },
+    {
+      "fingerprint": "dc61b59ac93f1fc410dc55a93d1d47705faeb8320047e3ec7ca8fec4a1d91c2c",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "3600 s wall cap is the schema maximum and too small for an i"
+    },
+    {
+      "fingerprint": "ea215eb1cdafc49a14178df0fe36de28745496d3d4cd69a30639e4b6922bc0da",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "Qualification recipes seed staged credentials only when the "
+    },
+    {
+      "fingerprint": "bd87ff2ced5a38d7690f133147d0047f724546ae7bb3dde451d951d613c97dbe",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "`mission withdraw` cannot bind a `mission-subject-v2` claim "
+    },
+    {
+      "fingerprint": "434dc332ababa47587735fc56897e5f8f58e538782b64f81b00f3335dd643492",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "live-state-dir 🔵 leftovers — multi-row findmnt, `\\040`-only"
+    },
+    {
+      "fingerprint": "212131a358dff81e4983b4086c2c5498223e2fa6dd0c247dfe45e3de98502aca",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "context-budget falls back to inference after a long foregrou"
+    },
+    {
+      "fingerprint": "bf58d0abdb7b49bc6e6003d1112bbd0b9a6de23d21a98e9dca867dd98439f4b4",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "Stale `closed_findings` stamps on chain entries written by p"
+    },
+    {
+      "fingerprint": "aabdc8e9c775d8b24b90cbad8a3745c7de9a316e459290c2ac678cf30c2e497a",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "agy seat payload overflow is discovered per seat at dispatch"
+    },
+    {
+      "fingerprint": "7cc80fd26b8120b9f14faae8b8c5b832c6c9c89e089d5468024a8a872457fece",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "CEO/dev-flow guidance proportionality — peer request to soft"
+    },
+    {
+      "fingerprint": "60c096ef20d7b84d120f6088bb8074e164a45b1c516b7e3db3e12727e4ffa6da",
+      "codes": [
+        "cap_exceeded"
+      ],
+      "note": "live-state-dir / context-budget test strength — two survivin"
+    }
+  ]
+}

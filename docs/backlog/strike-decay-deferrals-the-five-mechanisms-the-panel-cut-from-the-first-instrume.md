@@ -1,0 +1,9 @@
+# Strike-decay deferrals — the five mechanisms the panel cut from the first instrument
+
+Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-09-14
+
+- **Trigger**: Any of: (1) a detector is caught emitting strikes at an anomalous rate; (2) more than two seats trip in one short span and the cause turns out to be a gate bug, not the engines; (3) a re-exam is needed and nobody notices for a week; (4) shadow data shows absolute counts penalising a high-volume seat, which is the only evidence that would justify building a dispatch ledger.
+- **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission. **Detector anomaly quarantine** (4 seats wanted it): emission-rate deviation from a detector's own baseline auto-demotes its strikes to shadow pending review — needs a per-detector baseline that does not exist yet. **Fleet circuit breaker** (fable): >N seats tripping in a short span freezes enforcement and alarms — a gate bug is not an engine bug. **Rate-based windows**: not computable from a strike-only ledger; would require an outcome event per dispatch, which is a real build. **Re-exam scheduling automation** and **liveness-probe stale tax**: both deferred as premature on zero data. **Escalated QC sampling for past-advisory-date seats** (synthesis §6, the "silent rot" trade): the calendar should change how hard we LOOK — a stale seat gets sampled harder so drift arrives as strikes through the normal channel — plus coverage telemetry recording which detectors ran per dispatch. That last one is the most valuable of the five and the one the panel most wanted; it is the natural follow-up cut.
+- **Effort**: M each; the QC-sampling/coverage-telemetry leg is the recommended next one
+- **Source**: hetero design panel 2026-08-22 synthesis §5/§6 + cut list; deferred by scope=Hold on the M-size first cut.
+

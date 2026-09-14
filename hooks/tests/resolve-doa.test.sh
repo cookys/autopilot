@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # resolve-doa.sh integration test — exercises preset selection, fail-closed
+#
+# RED at base 826236659845aa64603cd614e94a8f4512553336:
+#   FAIL [resolve-doa] CHANGE-PINNING: foreign cwd uses code-embedded preset, not plugin .claude/: '"preset":"cloud-high-trust"' not found in output
+#   FAIL [resolve-doa] CHANGE-PINNING: foreign cwd source=default: '"source":"default"' not found in output
 # behaviour, project-override config, and malformed-override resilience.
 # Uses the PATH-stub pattern from lib.sh; no network required.
 . "$(dirname "$0")/lib.sh"
@@ -179,6 +183,27 @@ mkdir -p "$NO_CFG_DIR"
 OUT="$(cd "$NO_CFG_DIR" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT"                                 "cwd resolution (no config): exit code"
 assert_contains "$OUT" '"source":"default"'           "cwd resolution (no config): falls back to default"
+
+# CHANGE-PINNING foreign-repo negative (RED at base). Distinctive plugin-tree
+# .claude/doa-config.md under TEST_TMP (do not write the real repo's .claude/).
+# RED at base 826236659845aa64603cd614e94a8f4512553336: recorded after first run.
+DOA_PLUGIN="$TEST_TMP/doa-plugin-tree"
+mkdir -p "$DOA_PLUGIN/scripts" "$DOA_PLUGIN/.claude"
+cp "$SCRIPT" "$DOA_PLUGIN/scripts/resolve-doa.sh"
+cat > "$DOA_PLUGIN/.claude/doa-config.md" <<'DOAEOF'
+## Project Override
+
+| Role | Model tier | Preset |
+|------|-----------|--------|
+| implementer | sonnet | local-low-trust |
+DOAEOF
+DOA_FOREIGN="$TEST_TMP/doa-foreign-git"
+mkdir -p "$DOA_FOREIGN"
+git -C "$DOA_FOREIGN" init -q
+OUT="$(cd "$DOA_FOREIGN" && env -u DOA_CONFIG_OVERRIDE bash "$DOA_PLUGIN/scripts/resolve-doa.sh" --role implementer --tier sonnet 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "CHANGE-PINNING: foreign cwd + plugin .claude/doa: exit 0"
+assert_contains "$OUT" '"preset":"cloud-high-trust"' "CHANGE-PINNING: foreign cwd uses code-embedded preset, not plugin .claude/"
+assert_contains "$OUT" '"source":"default"' "CHANGE-PINNING: foreign cwd source=default"
 
 # ── 15. Input sanitization — shell-special chars rejected with exit 2 ──────
 # Pipe in role value: 'implementer|judge' should not match the grep -iE pattern

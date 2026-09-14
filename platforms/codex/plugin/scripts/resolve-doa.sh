@@ -151,7 +151,20 @@ if [[ -n "${DOA_CONFIG_OVERRIDE:-}" ]]; then
 elif [[ -f "$PWD/.claude/doa-config.md" ]]; then
   PROJECT_CONFIG="$PWD/.claude/doa-config.md"
 else
-  PROJECT_CONFIG="$REPO_ROOT/.claude/doa-config.md"
+  # Same dogfood gate as resolve_config_ladder tier 3: plugin .claude/ is not
+  # the consuming project's. If PWD is not a git checkout of REPO_ROOT, leave
+  # PROJECT_CONFIG empty so the code-embedded presets answer.
+  _pwd_top="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)" || _pwd_top=""
+  _repo_real="$(cd "$REPO_ROOT" && pwd -P 2>/dev/null)" || _repo_real=""
+  _pwd_real=""
+  if [[ -n "$_pwd_top" ]]; then
+    _pwd_real="$(cd "$_pwd_top" && pwd -P 2>/dev/null)" || _pwd_real=""
+  fi
+  if [[ -n "$_pwd_real" && -n "$_repo_real" && "$_pwd_real" == "$_repo_real" ]]; then
+    PROJECT_CONFIG="$REPO_ROOT/.claude/doa-config.md"
+  else
+    PROJECT_CONFIG=""
+  fi
 fi
 
 if [[ -f "$PROJECT_CONFIG" ]]; then

@@ -12,6 +12,13 @@
 #   - token estimate present; not 7× inflated (N2)
 #   - model env overrides honored (M4)
 #   - path traversal in --proj/--node → exit 2 (S1)
+#
+# RED at base 826236659845aa64603cd614e94a8f4512553336:
+#   FAIL [qc-panel] CHANGE-PINNING: node-a default out dir exists: .../tree/panel/node-a does not exist
+#   FAIL [qc-panel] CHANGE-PINNING: node-b default out dir exists: .../tree/panel/node-b does not exist
+#   FAIL [qc-panel] CHANGE-PINNING: second node does not clobber first node's files: expected 'stay', got ''
+#   FAIL [qc-panel] stderr names out_dir: 'qc-panel.js: out_dir=' not found in output
+#   FAIL [qc-panel] skipped json includes out_dir: '"out_dir"' not found in output
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/qc-panel.js"
@@ -574,5 +581,47 @@ if [ -f "$REFUTE_CAL_DIR/samples.jsonl" ]; then
   assert_contains "$(tail -1 "$REFUTE_CAL_DIR/samples.jsonl")" "survived:0" \
     "refute: calibration source tag records survived:0"
 fi
+
+# ── Default --out namespaced by --node (CHANGE-PINNING, RED at base) ────────
+# Copy the script so repoRoot is the sandbox (do not write docs/ in this checkout).
+QC_SBX="$TEST_TMP/qc-namespace"
+mkdir -p "$QC_SBX/scripts"
+cp "$SCRIPT" "$QC_SBX/scripts/qc-panel.js"
+NS1="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \
+  --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj sameproj --node node-a 2>"$TEST_TMP/ns1.err")"
+NS2="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \
+  --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj sameproj --node node-b 2>"$TEST_TMP/ns2.err")"
+DIR_A="$QC_SBX/docs/projects/sameproj/tree/panel/node-a"
+DIR_B="$QC_SBX/docs/projects/sameproj/tree/panel/node-b"
+assert_file_exists "$DIR_A" "CHANGE-PINNING: node-a default out dir exists"
+assert_file_exists "$DIR_B" "CHANGE-PINNING: node-b default out dir exists"
+COUNT_A_BEFORE="$(find "$DIR_A" -type f | wc -l | tr -d ' ')"
+# Re-run node-b and prove node-a's files are untouched (mtime/count).
+MARKER="$DIR_A/untouched-marker"
+echo stay > "$MARKER"
+NS2B="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \
+  --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj sameproj --node node-b 2>/dev/null)"
+assert_eq "$(cat "$MARKER")" "stay" "CHANGE-PINNING: second node does not clobber first node's files"
+assert_contains "$(cat "$TEST_TMP/ns1.err")" "qc-panel.js: out_dir=" "stderr names out_dir"
+assert_contains "$NS1" '"out_dir"' "skipped json includes out_dir"
+
+# CHANGE-PINNING: --run-id path traversal / slash → exit 2 naming --run-id
+# RED at base: flag does not exist yet (unknown argument).
+"$SCRIPT" --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj p --node n \
+  --run-id 'x/..' --out "$TEST_TMP/runid-out" >/dev/null 2>"$TEST_TMP/runid.err"; RUNID_RC=$?
+assert_eq "2" "$RUNID_RC" "CHANGE-PINNING: --run-id x/.. exits 2"
+assert_contains "$(cat "$TEST_TMP/runid.err")" "--run-id" "CHANGE-PINNING: message names --run-id"
+"$SCRIPT" --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj p --node n \
+  --run-id 'a/b' --out "$TEST_TMP/runid-out2" >/dev/null 2>"$TEST_TMP/runid2.err"; RUNID2_RC=$?
+assert_eq "2" "$RUNID2_RC" "CHANGE-PINNING: --run-id with slash exits 2"
+assert_contains "$(cat "$TEST_TMP/runid2.err")" "--run-id" "CHANGE-PINNING: slash message names --run-id"
+
+# PRESERVATION GUARD (green at base): explicit --out still wins.
+PRES_OUT="$TEST_TMP/explicit-out"
+mkdir -p "$PRES_OUT"
+PRES_JSON="$("$SCRIPT" --report "$NULL_REPORT" --artifacts "$ARTIFACT" --out "$PRES_OUT" --proj p --node n 2>/dev/null)"
+assert_contains "$PRES_JSON" '"status":"skipped"' "PRESERVATION GUARD: explicit --out still skips to that dir"
+ls "$PRES_OUT"/*skipped.json >/dev/null 2>&1
+assert_eq "$?" "0" "PRESERVATION GUARD: skipped artifact lands in explicit --out"
 
 finalize_test

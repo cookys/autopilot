@@ -960,3 +960,20 @@ function main() {
 if (require.main === module) {
   main();
 }
+
+module.exports = {
+  collectEntries,
+  parseHeadingBlock,
+  splitHeadingEntries,
+  fieldLine,
+  byteLen,
+  KNOWN_FIELDS,
+  REQUIRED,
+  DEFAULT_CAPS,
+  checkEntry,
+  effectiveCap,
+  mergeConfig,
+  builtinConfig,
+  parseConfigFile,
+  gitToplevel,
+};

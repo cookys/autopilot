@@ -14,7 +14,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Managed rail: a reviewer no_verdict releases the campaign claim instead of retrying the seat
 - **Status**: fired 2026-09-14
-- **Trigger**: fired 2026-09-14 — mission-5c34ed65c6a4 round-1 review returned no_verdict (MiniMax format fault); the campaign blocked at full_diff_review and the Mission claim was released, so --resume --prior-status no_verdict met "matching Mission claim is released or terminal"
+- **Trigger**: fired 2026-09-14 — a no_verdict review (MiniMax format fault) blocked the campaign at full_diff_review and released the claim; --resume then met "claim is released or terminal"
 - **Effort**: S
 - **Source**: backlog-entry-migration dogfood, 2026-09-14
 - **Pointer**: docs/plans/2026-09-14-backlog-entry-migration.md

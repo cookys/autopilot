@@ -186,6 +186,64 @@ assert_contains "$OUT" "reason=schema drift" "AutopilotEngine surfaces parse err
 assert_contains "$OUT" "review_calls=0" "AutopilotEngine does not dispatch review after resolve block"
 assert_contains "$OUT" "ledger=resolve_roster:blocked" "AutopilotEngine records blocked roster ledger"
 
+# The campaign's "reviewer no_verdict is a resumable gate fault" classifier
+# (v2.36.43) must read the shape the REAL reviewDiff() emits — it collapses
+# every non-reviewed dispatch to status:'blocked', phase:'dispatch_review' and
+# keeps the parsed status only at reviewResult.result.status. Drive reviewDiff
+# with a stub dispatcher and feed its return, wrapped exactly as performReview
+# does ({reviewed:false, raw}), into the classifier.
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const { classifyFullDiffReviewFault } = require(path.join(root, 'src', 'engine', 'campaign-composition'));
+
+const resolver = () => ({
+  error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+  result: {
+    reviewer_engine: 'test-review-model', reviewer_effort: 'high',
+    reviewer_runner: 'test-review-runner', reviewer_qualified: true,
+  },
+});
+const run = (dispatch) => {
+  const engine = new AutopilotEngine({
+    clock: () => '2026-09-14T00:00:00.000Z',
+    reviewLoopResolver: resolver,
+    reviewDispatcher: () => dispatch,
+  });
+  const reviewed = engine.reviewDiff({ diffFile: diff });
+  // performReview (autopilot-engine.js) wraps a non-reviewed reviewDiff as raw.
+  const fullDiff = reviewed.status === 'reviewed'
+    ? { reviewed: true }
+    : { reviewed: false, reason: reviewed.reason, raw: reviewed };
+  return { reviewed, fullDiff, fault: classifyFullDiffReviewFault(fullDiff) };
+};
+const parsed = (status) => ({
+  error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+  result: { runner: 'test-review-runner', model: 'test-review-model', status, verdict: null, findings: '', raw_log: null, error: null },
+});
+
+const noVerdict = run(parsed('no_verdict'));
+console.log(`no_verdict_raw_status=${noVerdict.reviewed.status}`);
+console.log(`no_verdict_raw_phase=${noVerdict.reviewed.phase}`);
+console.log(`no_verdict_fault=${noVerdict.fault}`);
+const precondition = run(parsed('precondition_failed'));
+console.log(`precondition_fault=${precondition.fault}`);
+const transport = run({ error: new Error('ECONNRESET'), status: null, signal: null, stdout: '', stderr: '', parseError: null, result: null });
+console.log(`transport_fault=${transport.fault}`);
+const parseFail = run({ error: null, status: 0, signal: null, stdout: '{bad', stderr: '', parseError: new Error('bad json'), result: null });
+console.log(`parse_fault=${parseFail.fault}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine no_verdict classifier process exits 0"
+assert_contains "$OUT" "no_verdict_raw_status=blocked" "reviewDiff collapses no_verdict to status=blocked (the shape the classifier must read through)"
+assert_contains "$OUT" "no_verdict_raw_phase=dispatch_review" "reviewDiff reports dispatch_review phase for a parsed no_verdict"
+assert_contains "$OUT" "no_verdict_fault=gate_transient" "a real reviewDiff no_verdict classifies as a resumable gate fault"
+assert_contains "$OUT" "precondition_fault=terminal" "a parsed precondition_failed stays terminal"
+assert_contains "$OUT" "transport_fault=gate_transient" "a dispatcher transport error classifies as a resumable gate fault"
+assert_contains "$OUT" "parse_fault=gate_transient" "an unparseable dispatcher payload classifies as a resumable gate fault"
+
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
 const path = require('path');
 const root = process.argv[2];

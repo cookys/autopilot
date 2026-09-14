@@ -10,10 +10,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`cookys-7840hs` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
-7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42. Next: reviewer no_verdict releases the claim (2026-09-14).
+7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
 ### Managed rail: a reviewer no_verdict releases the campaign claim instead of retrying the seat
-- **Status**: fired 2026-09-14
+- **Status**: shipped v2.36.43 2026-09-14
 - **Trigger**: fired 2026-09-14 — a no_verdict review (MiniMax format fault) blocked the campaign at full_diff_review and released the claim; --resume then met "claim is released or terminal"
 - **Effort**: S
 - **Source**: backlog-entry-migration dogfood, 2026-09-14
@@ -87,6 +87,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.42 pre-merge review (sonnet), 2026-09-14
 - **Pointer**: none
 - **Context**: `projectMissionMode` does not touch git, so the claim runs before repo identity is known. Reject on `canonicalRepoIdentity` throw pre-claim + a non-git fixture.
+
+### `autopilot-engine.test.sh` reads the live session-mode marker — 10 waiver/KR4 assertions red under an l5 marker
+- **Status**: open
+- **Trigger**: the suite is red wherever this repo has an l5 marker (2026-09-14: 476/10 on HEAD, `strict /l5 implementer tuple.endpoint is unresolved`)
+- **Effort**: S
+- **Source**: observed 2026-09-14 while adding the no_verdict classifier cases (v2.36.43)
+- **Pointer**: none
+- **Context**: header unsets AUTOPILOT_LEVEL but the strict-l5 bootstrap still finds the marker file; point the marker dir at TEST_TMP.
 
 ### Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `[]` snapshot
 - **Status**: open

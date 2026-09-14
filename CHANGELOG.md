@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.36.43 — managed rail：reviewer no_verdict 變成可 resume 的 durable wait，不再 terminal stop 放掉 claim
+
+- `src/engine/campaign-composition.js`：full-diff review 回 `no_verdict`（格式／傳輸故障）或 findings normalize 失敗，是 **gate**
+  故障不是 candidate 故障——candidate 已 sealed、committed、verified。原本走一般 `blocked` → engine terminalize → Mission claim
+  釋放 → `--resume` 遇到「claim is released or terminal」（2026-09-14 dogfood，MiniMax 席位）。現在 persist 一個
+  `VERTICAL_VERIFICATION` checkpoint（candidate、verification receipt、`next_action: retry_full_diff_review`）並回
+  `durable_wait / terminalize:false / resumable / code: review_no_verdict`；depth-0 用 `--resume`（可加
+  `--prior-status no_verdict` 升險或換席）重跑 review 席位，不重派 implementer。reviewer qualification／wall budget／journal
+  故障維持 terminal stop。
+- 分類器 `classifyFullDiffReviewFault(fullDiff)`（composition 匯出）讀的是 engine `reviewDiff()` 真正留下的層：reviewDiff 把所有
+  非 reviewed 的派工都壓成 `status:'blocked'`，dispatcher 的 parsed status 只留在 `raw.reviewResult.result.status`；transport／
+  parse 故障是 `result` 為 null 或 error/signal。第一版讀 `raw.status === 'no_verdict'` 在 production 永遠不會命中——pre-merge
+  reviewer（sonnet）抓到，這裡是修正後的版本。
+- `hooks/tests/implementation-campaign-routing.test.sh` +7：fixture 用真實 reviewDiff 形狀；no_verdict／normalize 失敗／transport
+  故障 → durable wait 與 checkpoint 內容；resume 後 review 席位剛好跑 1 次、implementer 0 次、`ready`；parsed
+  precondition_failed 與 pre-dispatch block 仍 terminal。`hooks/tests/autopilot-engine.test.sh` +7：真的 `engine.reviewDiff`
+  接 stub dispatcher（no_verdict／precondition_failed／ECONNRESET／壞 JSON）→ 照 performReview 包成 raw → 分類器結果。
+  HEAD 紅；三個 mutant（忽略 parsed status、transport 不算、放寬全部）各被不同斷言抓到。
+- 註：`autopilot-engine.test.sh` 在本機另有 10 條既有紅燈（strict-l5 bootstrap 讀到 live session marker，與本版無關），登 BACKLOG。
+- 註：這是 composition 層驗證；engine 端走的是既有 `durable_wait` 回傳路徑（AWAITING_DISPOSITION 同一條），CLI 端到端
+  `--resume` 與 v2.36.41 一樣待下個 managed campaign 量。
+
+prose-justification: 本版對 prose 面沒有增量（+0 行，只動 src/engine 與 tests）；自 v2.35.2 基線的 +9% 是 v2.36.34／v2.36.38／v2.36.40
+已各自註明的 reference 與 runbook。
+
 ## v2.36.42 — managed rail：`--campaign-ledger` 錯值在 Mission claim 之前就拒絕，不再燒 grant attempt
 
 - `src/engine/campaign-intake.js`：`--campaign-ledger` 只接受一個值（canonical Git common-dir ledger），這是純 argv 驗證，

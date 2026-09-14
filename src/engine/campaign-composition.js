@@ -229,6 +229,27 @@ function noDispatchContradictions(mutation) {
   return [...new Set(contradictions)].sort();
 }
 
+// Classify a non-reviewed full-diff review outcome. `fullDiff.raw` is the
+// engine's reviewDiff() return: the dispatcher's parsed status is NOT on
+// raw.status (reviewDiff collapses every non-reviewed outcome to
+// status:'blocked') — it survives only at raw.reviewResult.result.status, and
+// a transport/parse fault leaves raw.reviewResult.result null or sets
+// error/signal. Only those, plus a findings-normalization fault, are gate
+// faults worth a resumable retry; a parsed precondition_failed stays terminal.
+function classifyFullDiffReviewFault(fullDiff) {
+  if (!isObj(fullDiff)) return 'terminal';
+  if (fullDiff.phase === 'product_review_normalization') return 'gate_transient';
+  const raw = isObj(fullDiff.raw) ? fullDiff.raw : null;
+  // Pre-dispatch blocks (qualification, resolver, wall budget) never carry a
+  // reviewResult; a reviewed-but-rejected replay carries a parsed 'reviewed'.
+  const dispatch = raw && isObj(raw.reviewResult) ? raw.reviewResult : null;
+  if (!dispatch) return 'terminal';
+  if (dispatch.error || dispatch.signal) return 'gate_transient';
+  const parsed = isObj(dispatch.result) ? dispatch.result : null;
+  if (!parsed) return 'gate_transient';
+  return parsed.status === 'no_verdict' ? 'gate_transient' : 'terminal';
+}
+
 function blocked(phase, reason, trace, detail = {}) {
   return {
     status: 'blocked',
@@ -1907,6 +1928,45 @@ function runCampaignComposition(input = {}, adapters = {}) {
           ),
         };
       }
+      // A reviewer that returned no verdict (format fault, transport fault) or
+      // whose findings failed normalization is a GATE fault, not a candidate
+      // fault: the candidate is sealed, committed and verified. Terminalizing
+      // here released the Mission claim and made `--resume` meet "claim is
+      // released or terminal" (2026-09-14 dogfood, MiniMax no_verdict). Persist
+      // a resumable checkpoint at VERTICAL_VERIFICATION instead, so the caller
+      // re-runs the review seat via `--resume` (optionally `--prior-status
+      // no_verdict` to elevate or swap the seat) without re-dispatching the
+      // implementer. Qualification/budget/journal faults keep the terminal stop.
+      const reviewGateTransient = classifyFullDiffReviewFault(fullDiff) === 'gate_transient';
+      const candidateSealed = isObj(candidate)
+        && (candidate.committed === true
+          || isStr(candidate.commit)
+          || isStr(candidate.tree_sha));
+      if (reviewGateTransient && candidateSealed) {
+        persistController({
+          ...controller,
+          phase: 'VERTICAL_VERIFICATION',
+          next_action: 'retry_full_diff_review',
+          candidate: { ...candidate, committed: true },
+          verification_receipt: verification || null,
+          full_diff_barriers: fullDiffBarriers,
+        });
+        return {
+          stop: blocked(
+            fullDiff.phase || 'full_diff_review',
+            fullDiff.reason || 'authoritative full-diff review unavailable',
+            trace,
+            {
+              code: 'review_no_verdict',
+              candidate,
+              resumable: true,
+              durable_wait: true,
+              terminalize: false,
+              controller,
+            },
+          ),
+        };
+      }
       return {
         stop: blocked(
           fullDiff.phase || 'full_diff_review',
@@ -2941,6 +3001,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
 
 module.exports = {
   CampaignCompositionError,
+  classifyFullDiffReviewFault,
   runCampaignComposition,
   validateFinalPanelReceipt,
   AWAITING_DISPOSITION,

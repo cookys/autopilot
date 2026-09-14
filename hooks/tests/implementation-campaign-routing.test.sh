@@ -519,6 +519,165 @@ for key in awaiting_disposition_snapshot_nonempty disposition_resume_rebinds_sna
   assert_contains "$DISPOSITION_RESUME_OUT" "$key=true" "disposition resume proves $key"
 done
 
+# A reviewer no_verdict (format/transport fault) is a GATE fault on a sealed,
+# verified candidate. It used to be a terminal block — the engine then released
+# the Mission claim and `--resume` met "claim is released or terminal"
+# (2026-09-14 dogfood, MiniMax no_verdict). Now it is a resumable durable wait
+# checkpointed at VERTICAL_VERIFICATION; the resume re-runs the review seat and
+# never re-dispatches the implementer.
+NO_VERDICT_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const { runCampaignComposition } = require(path.join(root, 'src', 'engine'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+
+const finalPanel = () => {
+  const seat = {
+    schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat', seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: '7'.repeat(64), reason: null,
+  };
+  seat.receipt_digest = canonicalDigest(seat);
+  return {
+    reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: '7'.repeat(64),
+    sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [seat],
+  };
+};
+const candidate = {
+  committed: true, commit: '1'.repeat(40), tree_sha: '2'.repeat(40),
+  branch: 'feat/no-verdict', writer_fence: { receipt_digest: '3'.repeat(64) },
+};
+const cleanAdjudication = () => ({
+  registry_complete: true, repair_gate_passed: true, registry_digest: '6'.repeat(64),
+  must_fix_now: [], follow_up: [], rejected: [],
+});
+const build = (reviewImpl, sink) => ({
+  preflight: () => ({ passed: true }),
+  implement: () => { sink.implementCalls += 1; return candidate; },
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: '4'.repeat(64) }),
+  review: () => { sink.reviewCalls += 1; return reviewImpl(); },
+  adjudicate: cleanAdjudication,
+  convergence: () => ({ passed: true }),
+  finalPanel,
+  onControllerUpdate: (controller) => sink.controllers.push(JSON.parse(JSON.stringify(controller))),
+  onCampaignEvent: (event) => sink.events.push(event.event_type),
+});
+const resumeFrom = (controller) => ({
+  phase: controller.phase,
+  repair_generation: 0,
+  candidate: controller.candidate,
+  controller,
+  verification: controller.verification_receipt,
+  review: controller.review_payload,
+  findings: null,
+  full_diff_barriers: controller.full_diff_barriers,
+});
+// performReview wraps reviewDiff()'s return as `raw`; reviewDiff collapses every
+// non-reviewed dispatch to status:'blocked', phase:'dispatch_review' and keeps
+// the dispatcher's parsed status only at raw.reviewResult.result.status.
+const dispatchRaw = (result, extra = {}) => ({
+  status: 'blocked',
+  phase: 'dispatch_review',
+  reason: 'review dispatch result status',
+  reviewResult: { error: null, signal: null, status: 0, parseError: null, result, ...extra },
+});
+const withNoVerdict = (raw, phase) => () => ({
+  reviewed: false,
+  phase,
+  reason: 'review status no_verdict',
+  raw,
+});
+
+// (1) transport-shaped no_verdict → durable, resumable, checkpointed.
+const first = { controllers: [], events: [], implementCalls: 0, reviewCalls: 0 };
+const wait = runCampaignComposition(
+  { promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1 },
+  build(withNoVerdict(dispatchRaw({ status: 'no_verdict' }), undefined), first),
+);
+assert.strictEqual(wait.status, 'blocked');
+assert.strictEqual(wait.phase, 'full_diff_review');
+assert.strictEqual(wait.code, 'review_no_verdict');
+assert.strictEqual(wait.durable_wait, true);
+assert.strictEqual(wait.terminalize, false);
+assert.strictEqual(wait.resumable, true);
+const checkpoint = first.controllers.at(-1);
+assert.strictEqual(checkpoint.phase, 'VERTICAL_VERIFICATION');
+assert.strictEqual(checkpoint.next_action, 'retry_full_diff_review');
+assert.strictEqual(checkpoint.candidate.commit, candidate.commit);
+assert.strictEqual(checkpoint.candidate.committed, true);
+assert.strictEqual(checkpoint.verification_receipt.receipt_digest, '4'.repeat(64));
+console.log('no_verdict_is_durable_wait=true');
+
+// (2) resume from that checkpoint: the seat is re-run, the implementer is not.
+const second = { controllers: [], events: [], implementCalls: 0, reviewCalls: 0 };
+const resumed = runCampaignComposition({
+  promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1,
+  controller: checkpoint,
+  resume: resumeFrom(checkpoint),
+}, build(() => ({
+  reviewed: true, success: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: '5'.repeat(64),
+}), second));
+assert.strictEqual(resumed.status, 'ready', resumed.reason);
+assert.strictEqual(second.implementCalls, 0, 'resume must not re-dispatch the implementer');
+assert.strictEqual(second.reviewCalls, 1, 'resume re-runs exactly one review seat');
+assert(resumed.trace.includes('resume_adopt_candidate'));
+console.log('no_verdict_resume_reruns_seat=true');
+
+// (3) findings that fail normalization are the same gate fault.
+const third = { controllers: [], events: [], implementCalls: 0, reviewCalls: 0 };
+const parserWait = runCampaignComposition(
+  { promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1 },
+  build(withNoVerdict({ status: 'reviewed', review: { findings: 'prose' } }, 'product_review_normalization'), third),
+);
+assert.strictEqual(parserWait.durable_wait, true);
+assert.strictEqual(parserWait.phase, 'product_review_normalization');
+assert.strictEqual(third.controllers.at(-1).phase, 'VERTICAL_VERIFICATION');
+console.log('parser_fault_is_durable_wait=true');
+
+// (4) a reviewer precondition (qualification) fault is NOT the candidate's
+// gate to retry — it stays a terminal block, exactly as before.
+const fourth = { controllers: [], events: [], implementCalls: 0, reviewCalls: 0 };
+const terminal = runCampaignComposition(
+  { promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1 },
+  build(withNoVerdict(dispatchRaw({ status: 'precondition_failed' }), undefined), fourth),
+);
+assert.strictEqual(terminal.status, 'blocked');
+assert.notStrictEqual(terminal.durable_wait, true);
+assert.notStrictEqual(fourth.controllers.at(-1).next_action, 'retry_full_diff_review');
+console.log('precondition_fault_stays_terminal=true');
+
+// (5) a pre-dispatch block (reviewer qualification) never reaches the
+// dispatcher — no reviewResult at all — and stays terminal.
+const fifth = { controllers: [], events: [], implementCalls: 0, reviewCalls: 0 };
+const preDispatch = runCampaignComposition(
+  { promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1 },
+  build(withNoVerdict({ status: 'blocked', phase: 'reviewer_qualification', reason: 'unqualified' }, undefined), fifth),
+);
+assert.strictEqual(preDispatch.status, 'blocked');
+assert.notStrictEqual(preDispatch.durable_wait, true);
+console.log('pre_dispatch_block_stays_terminal=true');
+
+// (6) transport fault (no parsed result) is a gate fault too.
+const sixth = { controllers: [], events: [], implementCalls: 0, reviewCalls: 0 };
+const transport = runCampaignComposition(
+  { promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1 },
+  build(withNoVerdict(dispatchRaw(null, { status: 1, error: new Error('ECONNRESET') }), undefined), sixth),
+);
+assert.strictEqual(transport.durable_wait, true);
+assert.strictEqual(sixth.controllers.at(-1).next_action, 'retry_full_diff_review');
+console.log('transport_fault_is_durable_wait=true');
+NODE
+)"
+assert_exit_code "$?" "0" "reviewer no_verdict process exits zero: $NO_VERDICT_OUT"
+for key in no_verdict_is_durable_wait no_verdict_resume_reruns_seat \
+  parser_fault_is_durable_wait precondition_fault_stays_terminal \
+  pre_dispatch_block_stays_terminal transport_fault_is_durable_wait; do
+  assert_contains "$NO_VERDICT_OUT" "$key=true" "reviewer no_verdict proves $key"
+done
+
 SBX="$TEST_TMP/resume-repo"
 mkdir -p "$SBX/.claude" "$SBX/src"
 git -C "$SBX" init -q

@@ -229,6 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
+| 2026-09-14 | managed rail reviewer no_verdict（Fix，無 project dir）— `campaign-composition.js` 把 no_verdict／normalize 失敗改成 VERTICAL_VERIFICATION checkpoint 的 durable wait，resume 只重跑 review 席位；routing test +5 | v2.36.43 | (this ship) |
 | 2026-09-14 | managed rail `--campaign-ledger` 錯值燒 grant（Fix，無 project dir）— `campaign-intake.js` 把 ledger 路徑驗證搬到 Mission claim 之前；state test +2（計數 adapter 證明 claim 0 次） | v2.36.42 | 201330f9 |
 | 2026-09-14 | managed rail disposition resume（Fix，無 project dir）— `campaign-composition.js` 寫入端 snapshot 因字串/陣列錯配存成 `[]`、讀回端把陣列塞給只吃字串的 provider；兩端修正＋空 snapshot 不覆蓋 review_payload；routing test +3（含舊 controller） | v2.36.41 | 9fd24051 |
 | 2026-09-14 | backlog gate 進 pre-commit ritual（無 project dir）— `sync-manifest.json` 新 ritual、量過會擋；l5 reference 加 depth-0 managed-campaign 11 步 runbook | v2.36.40 | 52032cc8 |

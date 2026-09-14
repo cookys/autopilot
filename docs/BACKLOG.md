@@ -152,14 +152,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-reported-chatgpt-tunnel-host-via-cuda-a-non-claude-foreman-rail-and-two-con.md
 
 ### PEER-REPORTED (7840hs, unverified locally): four dispatch-layer defects, three of them silent
-- **Status**: fired 2026-09-12
+- **Status**: shipped v2.36.33 2026-09-13
 - **Trigger**: **FIRED — reported 2026-09-12.** Queued behind the four deliverables of the 2026-09-12 integration-ledger graph. Reproduce each on this host before designing; the peer's evidence is isolated and credible but lives on their machine.…
 - **Effort**: Fix
 - **Source**: cross-session report from `cookys-7840hs` via fleet relay, 2026-09-12. Not reproduced on this host. Reply sent the same day; delivery was **durable, not…
 - **Pointer**: docs/backlog/peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the.md
 
 ### PEER-REPORTED (308 dogfood): acceptance records no accepted SHA, so containment cannot be checked mechanically
-- **Status**: fired 2026-09-12
+- **Status**: shipped v2.36.29 2026-09-12
 - **Trigger**: **FIRED — reported with two days of burned measurement behind it, 2026-09-12.** Queue behind the operator-pin plan. P1 first: P2 and P3 both consume it. Reproduce the schema gap locally (it is a file read, not a run) before designing;…
 - **Effort**: Fix
 - **Source**: cross-session report from `308-db`, 2026-09-12, after a two-day measurement phase measured a build whose inputs were never verified present.
@@ -189,7 +189,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: there is no supported path for a non-Claude engine to hold the control loop.
 
 ### `Project Paths` is write-only config — `scaffold-config.js` emits it, nothing reads it, and the skills that create project docs never see it
-- **Status**: fired 2026-09-12
+- **Status**: shipped v2.36.31 2026-09-13
 - **Trigger**: **FIRED — swept 2026-09-12** across all 30 skills after `resolve-knowledge-routing.sh` landed, asking which others name autopilot's own layout.
 - **Effort**: S
 - **Source**: 30-skill sweep, 2026-09-12, prompted by the operator after `resolve-knowledge-routing.sh` (v2.36.30).

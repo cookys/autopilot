@@ -93,9 +93,10 @@ function printUsage() {
   --report     <node-report.json>    required
   --artifacts  <path>[,<path>...]    required
   --diff       <diff-file>           optional
-  --out        <dir>                 required unless --proj+--node set
+  --out        <dir>                 required unless --proj+--node set (explicit --out wins)
   --proj       <project-name>        used to derive default --out path
   --node       <node-id>             used to derive default --out path
+  --run-id     <id>                 optional extra default-out path component (not a substitute for --out)
 
 ENV: QC_CLAUDE_BIN, QC_AGY_BIN,
      QC_JUDGE_A_MODEL, QC_JUDGE_B_MODEL, QC_SYNTH_MODEL,
@@ -138,6 +139,7 @@ async function main() {
   let outDir = '';
   let proj = '';
   let nodeId = '';
+  let runId = '';
 
   const args = process.argv.slice(2);
   for (let i = 0; i < args.length; i++) {
@@ -154,6 +156,8 @@ async function main() {
       proj = args[++i] || '';
     } else if (arg === '--node') {
       nodeId = args[++i] || '';
+    } else if (arg === '--run-id') {
+      runId = args[++i] || '';
     } else if (arg === '--help' || arg === '-h') {
       printUsage();
       process.exit(0);
@@ -189,15 +193,19 @@ async function main() {
 
   if (proj) validatePathComponent(proj, '--proj');
   if (nodeId) validatePathComponent(nodeId, '--node');
+  if (runId) validatePathComponent(runId, '--run-id');
 
   if (!outDir) {
     if (proj && nodeId) {
-      outDir = path.join(repoRoot, 'docs', 'projects', proj, 'tree', 'panel');
+      outDir = path.join(repoRoot, 'docs', 'projects', proj, 'tree', 'panel', nodeId);
+      if (runId) outDir = path.join(outDir, runId);
     } else {
       console.error("qc-panel.js: --out is required unless both --proj and --node are set");
       process.exit(2);
     }
   }
+  outDir = path.resolve(outDir);
+  console.error(`qc-panel.js: out_dir=${outDir}`);
 
   try {
     fs.mkdirSync(outDir, { recursive: true });
@@ -226,7 +234,16 @@ async function main() {
     const ts = nowIso().replace(/[^a-zA-Z0-9]/g, '-').replace(/-+$/, '');
     const nodeLabel = nodeId || 'node';
     const skipFile = path.join(outDir, `${nodeLabel}-${ts}-skipped.json`);
-    const skippedJsonStr = '{"status":"skipped","verdict":null,"dissents":[],"extras":[],"judges":null,"token_estimate":0,"skipped_reason":"null-verdict"}\n';
+    const skippedJsonStr = JSON.stringify({
+      status: 'skipped',
+      verdict: null,
+      dissents: [],
+      extras: [],
+      judges: null,
+      token_estimate: 0,
+      skipped_reason: 'null-verdict',
+      out_dir: outDir
+    }) + '\n';
     try {
       fs.writeFileSync(skipFile, skippedJsonStr);
     } catch (e) {}
@@ -883,7 +900,8 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
     judges: judgesJson,
     refute_shadow: refuteShadowJson,
     token_estimate: tokenTotal,
-    skipped_reason: null
+    skipped_reason: null,
+    out_dir: outDir
   };
 
   const verdictJsonStr = JSON.stringify(verdictJsonObj) + '\n';

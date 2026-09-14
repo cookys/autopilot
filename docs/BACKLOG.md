@@ -104,6 +104,30 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: header unsets AUTOPILOT_LEVEL but the strict-l5 bootstrap still finds the marker file; point the marker dir at TEST_TMP.
 
+### Managed rail: the final panel's non-incumbent seats are structurally precondition_failed under the exact-tuple rule
+- **Status**: fired 2026-09-15
+- **Trigger**: peer-residue attempt 3 stopped at `final_panel_seat_precondition_failed`: codex/GLM seats are neither the incumbent tuple nor in `fallback_ladder`
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-15, `finalPanelSeatQualified` in `src/engine/autopilot-engine.js`
+- **Pointer**: none
+- **Context**: the sealed roster admits a panel the engine cannot review; qualify seats from `qc_panel_seats` or refuse at intake.
+
+### Managed rail: a pre-spend rejection at the dispatch-hetero layer still consumes the Mission claim
+- **Status**: fired 2026-09-15
+- **Trigger**: peer-residue attempts 1–2 burned on `dirty: repository has uncommitted changes` and a marker-bridge digest mismatch
+- **Effort**: Fix
+- **Source**: /l5 dogfood 2026-09-15; sibling of v2.36.42 (`--campaign-ledger`) and of the non-git `--repo` row
+- **Pointer**: none
+- **Context**: `precondition_failed` before any runner spend should release with the attempt refunded, or the checks should run at intake before the claim.
+
+### /l5 recipe: set the l5 marker AFTER the plan hetero loop — under it codex seats are refused as non-strict dispatch
+- **Status**: fired 2026-09-15
+- **Trigger**: plan-review codex seat exit 2 with `active session-mode=l5 blocks non-strict dispatch`; the artifact recorded empty stdout and transport_exhausted
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-15
+- **Pointer**: docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md
+- **Context**: recipe order corrected; the rail could surface the marker block as the seat's reason instead of an empty envelope.
+
 ### Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `[]` snapshot
 - **Status**: open
 - **Trigger**: a review whose findings fail `normalizeFindings` (UNSTRUCTURED/INVALID/DUPLICATE codes) reaches the durable wait on a real run
@@ -145,7 +169,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: measured 2026-09-11 across five attempts on one lineage.
 
 ### PEER-REPORTED (chatgpt-tunnel-host via cuda): a non-Claude foreman rail — and two contract defects that are not really about foremen
-- **Status**: fired 2026-09-12
+- **Status**: shipped v2.36.45 2026-09-15
 - **Trigger**: **FIRED — feature request received 2026-09-12.** Queued behind the 2026-09-12 integration-ledger graph. Before designing the rail, split it (see the ruling below): two of the four root causes are general contract defects that a…
 - **Effort**: Fix
 - **Source**: feature request from `chatgpt-tunnel-host` relayed via `cuda`, 2026-09-12. Not reproduced here; their log and brief deliberately not collected yet, to avoid…
@@ -204,7 +228,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: v2.36.32's detection layer fingerprints every ref, HEAD, symbolic-ref target, staged/unstaged diff content, and a size+mtime+type+link-target walk of every entry outside `.git`.
 
 ### The shared config ladder's tier 3 reads the PLUGIN's `.claude/`, and the installed plugin ships one
-- **Status**: fired 2026-09-12
+- **Status**: shipped v2.36.45 2026-09-15
 - **Trigger**: **FIRED — measured 2026-09-12** while building `resolve-knowledge-routing.sh`; the leak went red on the first foreign-project test before the resolver was fixed.
 - **Effort**: S
 - **Source**: /l5-adjacent dogfood, 2026-09-12, `docs/plans/2026-09-12-portable-knowledge-routing.md`.

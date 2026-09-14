@@ -1938,10 +1938,10 @@ BRAIN_SEAT_JSON='null'
 BRAIN_IDENTITY_FILE="$(read_field "$CONFIG" brain_seat_identity_file "")"
 # Seat-pin scope guard (review 2026-08-17 MUST-FIX): a brain seat is per-project
 # governance. Only a config the CALLER owns may seat one — an explicit override
-# or the caller-cwd project config. When the ladder fell back to the autopilot
-# repo's own config (SOURCE=project-repo) or the template, the pin must NOT
-# project onto the consumer (it would announce the maintainer's seat, and its
-# relative path would resolve against the wrong cwd).
+# or the caller-cwd project config. resolve_config_ladder now refuses cross-repo
+# tier 3 (dogfood-only), so SOURCE=project-repo here is the caller's own repo;
+# this guard is defence in depth, not the only wall. Template still must not
+# project the maintainer's seat onto a consumer.
 case "$SOURCE" in
   override|project-cwd) ;;
   *) BRAIN_IDENTITY_FILE="" ;;

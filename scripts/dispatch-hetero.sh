@@ -168,6 +168,7 @@ OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via
 KIMI_BIN="kimi"            # Kimi Code CLI runner (Moonshot); test seam via --kimi-bin
 KEEP=0
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
+WRAPPER_COMMITTED=0  # set when the rail's own capture commit is made; gates --expect-wrapper-subject
 RETENTION_OWNER=""
 RETENTION_REASON=""
 RETENTION_REASON_SHA256=""
@@ -3484,7 +3485,8 @@ if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
      || ! git -C "$WT" var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
     _identity_args=(-c user.email=autopilot@example.invalid -c user.name=Autopilot)
   fi
-  git -C "$WT" -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
+  git -C "$WT" -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1 \
+    && WRAPPER_COMMITTED=1   # capture path taken: the content gate may assert the wrapper subject
   fi
 fi
 
@@ -3638,7 +3640,11 @@ check_main_checkout_boundary() {
 run_hands_content_gate() {
   HANDS_BOUNDARY_ERROR=""; HANDS_BOUNDARY_CODE=""
   local content_out content_rc
-  content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" 2>&1)" && content_rc=0 || content_rc=$?
+  # --expect-wrapper-subject only when THIS rail made the commit (capture path: the worker
+  # left the tree dirty at BASE_SHA). A worker that commits itself owns its subject.
+  local -a _subject_args=()
+  [ "${WRAPPER_COMMITTED:-0}" -eq 1 ] && _subject_args=(--expect-wrapper-subject)
+  content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" "${_subject_args[@]}" 2>&1)" && content_rc=0 || content_rc=$?
   case "$content_rc" in
     0) return 0 ;;
     1) HANDS_BOUNDARY_CODE="unsafe_commit_content"; HANDS_BOUNDARY_ERROR="boundary_rejected: unsafe commit content (added symlink / gitlink / ignored path) — ${content_out}" ;;
@@ -4409,6 +4415,7 @@ dispatch_detached_run() {
     # The after-fingerprint in the detached child must exempt the same sibling namespaces
     # the parent's before-fingerprint did, or every --sibling-ref-prefix run rejects itself.
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES 2>/dev/null || true
+    declare -p WRAPPER_COMMITTED 2>/dev/null || true
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null

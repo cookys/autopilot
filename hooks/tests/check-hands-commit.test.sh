@@ -151,5 +151,23 @@ eq "abbreviated --head is recorded as the full oid" "$H7" "$(printf '%s' "$OUT" 
 node "$G" --repo "$R" --base deadbeef --head "$H7" >/dev/null 2>&1; eq "bad base sha: exit 3 (not verified), not 0" "3" "$?"
 node "$G" --repo "$R" --base "$H6" >/dev/null 2>&1; eq "missing --head: usage 2" "2" "$?"
 
+# 11. --expect-wrapper-subject (opt-in).
+# RED at base 826236659845aa64603cd614e94a8f4512553336:
+#   FAIL — CHANGE-PINNING: matching wrapper subject with flag exits 0  want: 0 got: 2
+#   FAIL — CHANGE-PINNING: feat(x) tip with flag exits 1  want: 1 got: 2
+#   (flag did not exist; unknown argument → usage 2. The feat(x) case therefore
+#   "passed" as a non-zero today only if we did not pin exit 1.)
+# PRESERVATION GUARD: without the flag, feat(x) still exits 0 (green at base).
+git -C "$R" commit --allow-empty -qm "dispatch-hetero(agy): edits on feat/x"
+WOK="$(git -C "$R" rev-parse HEAD)"
+OUT="$(node "$G" --repo "$R" --base "$H7" --head "$WOK" --expect-wrapper-subject 2>/dev/null)"; WOK_RC=$?
+eq "CHANGE-PINNING: matching wrapper subject with flag exits 0" "0" "$WOK_RC"
+git -C "$R" commit --allow-empty -qm "feat(x): not a wrapper"
+WBAD="$(git -C "$R" rev-parse HEAD)"
+OUT="$(node "$G" --repo "$R" --base "$WOK" --head "$WBAD" --expect-wrapper-subject 2>/dev/null)"; WBAD_RC=$?
+eq "CHANGE-PINNING: feat(x) tip with flag exits 1" "1" "$WBAD_RC"
+OUT="$(node "$G" --repo "$R" --base "$WOK" --head "$WBAD")"; FEAT_RC=$?
+eq "PRESERVATION GUARD: feat(x) tip without flag still exits 0" "0" "$FEAT_RC"
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

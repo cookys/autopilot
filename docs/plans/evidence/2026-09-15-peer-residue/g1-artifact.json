@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "peer-residue-2026-09-15",
+  "logical_plan_id": "peer-residue-2026-09-15",
+  "session_id": "1b58dad4",
+  "session_key": "74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "e6ee44260f2b33b77dec487c7968c5ee61441d538433f7f818526003515f5243",
+  "manifest_sha256": "83e820a4c3db4381b138ef6cae8b0216c8297b35e741a66d91634effa94f0100",
+  "plan_sha256": "54e3a6bce23b97cf92c0997992a8c82589e043e2317191bf549f2989e13b11d5",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "ce99f543a0179c005e912473ce4c6771ee52e399b196fb1d98f4c26860102512"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-R00JoN",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "bf943e7b920c220b3e6ff40df4ad5a035fe10473148c565f0fdd1f15414d1d21"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "4bc8a3da9b113acd2125210a8e7d4eb99fc043ef956db92b4447547fb4771ded"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5ce166b4fffbb0cf3a31d161ea16ed6c0d7e862b6568d16385764a9327c80ea5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-IAf6V5/stdout",
+          "digest": "5ce166b4fffbb0cf3a31d161ea16ed6c0d7e862b6568d16385764a9327c80ea5"
+        },
+        "receipt_digest": "7fe9c087077a79195fe2bdf69bc17d39b0e625507ac56acfd91bbddf99e03c6f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/dispatch-foreman.sh brief and its string assertion",
+      "claim": "The proposed brief permits --run-id as an alternative to --out, but --run-id alone uses qc-panel's project-level default and does not guarantee output beneath RUN_DIR.",
+      "evidence": "Section 2 requires --out '$RUN_DIR/panel/<node>' or --run-id '$RUN_ID'. The same section defines --run-id as appending to docs/projects/<proj>/tree/panel/<node>, which is not RUN_DIR.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 2; frozen rubric R8",
+      "repair": "Require --out rooted at RUN_DIR in the foreman brief and pinned assertion. Treat --run-id only as an optional additional component, not as an alternative to --out.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5eb2196208e8d1c62b7a0cbccde45e6ada80c7a68029eb3c0804f17d82b51c94"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Acceptance test matrix for resolve-qc-gate.sh",
+      "claim": "The acceptance commands do not run the existing resolve-qc-gate consumer suite, so the plan cannot establish that all three helper consumers remain green.",
+      "evidence": "Section 5 lists resolve-config, resolve-doa, resolve-review-loop, and resolve-worktree-teardown tests, but omits resolve-qc-gate.test.sh even though resolve-qc-gate.sh is one of the three helper consumers named in section 1.",
+      "evidence_reference": "PLAN_UNDER_REVIEW sections 1 and 5; frozen rubric R4",
+      "repair": "Add the existing resolve-qc-gate test suite to the mandatory acceptance commands and require it to pass.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6a84570431ae3634a1c0b9a652330c316f4ad6bae313227e9f97819f35b47c86"
+    },
+    {
+      "rubric_id": "R11",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Managed deliverable output_paths and generated Codex mirrors",
+      "claim": "The plan does not enumerate the sealed output_paths, including generated Codex mirrors, so containment cannot be enforced before implementation.",
+      "evidence": "The plan names source files and tests informally and requires sync-codex-plugin-skills.sh --check, but it provides no explicit output_paths manifest and does not identify the generated mirror files that must change to remain byte-identical to touched scripts and references.",
+      "evidence_reference": "PLAN_UNDER_REVIEW sections 1-5; frozen rubric R11",
+      "repair": "Seal an explicit output_paths list before dispatch that includes every authorized source file, test file, documentation file, and generated Codex mirror reported by the synchronization script; reject any diff outside that list.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "516163601ccc5dfbd3a6349e7da87d22ce637f5ca0c8af6386318127576a12a8"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-14T21:09:58.527Z"
+}

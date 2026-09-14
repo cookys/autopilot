@@ -51,9 +51,7 @@ already implements exactly this gate; the helper adopts it.
   `source: template`, and the review-loop `stale_reaper_age_days`/`implementer_engine` answers equal
   the template's; (b) cwd = a SUBDIRECTORY of the autopilot repo → tier 3 still fires
   (`source: project-repo`); (c) cwd outside any git repo → template. `resolve-doa.test.sh` gains the
-  foreign-repo negative. Assertions (a) and (c) pin the NEW gate and must fail on the pre-change
-  helper (record the red); assertion (b) is a preservation guard for behaviour that already holds
-  at base and is green at base by design — it is recorded as such, not claimed as a red.
+  foreign-repo negative. Each new assertion must fail on the pre-change helper (record the red).
 
 ## 2. qc-panel output namespace — `scripts/qc-panel.js`, `scripts/dispatch-foreman.sh`
 
@@ -115,9 +113,7 @@ foreman suite's TEST_TMP defect; any change to what tier 1/2/4 read.
   `skills/*/references/*.md`; `references/hetero-dispatch.md` is a top-level reference already at
   78,649 B (2026-09-15) and is NOT under that cap — the §3 paragraph must stay ≤ 700 B and the hand
   records `wc -c` before/after in its commit message so the growth is visible.
-- Every assertion that pins a behaviour CHANGE has a recorded red against the base commit;
-  preservation guards (behaviour unchanged, e.g. §1 test (b), §2 explicit `--out`, §3 default-off)
-  are green at base and are labelled preservation in the test file.
+- Every new assertion has a recorded red against the base commit.
 - **Sealed output surface** (the campaign's `output_paths`, verbatim; a diff touching anything else
   is `boundary_rejected`, and every `scripts/**` / `references/**` file has its codex mirror listed):
   `scripts/lib/resolve-config.sh`, `platforms/codex/plugin/scripts/lib/resolve-config.sh`,
@@ -144,12 +140,6 @@ foreman suite's TEST_TMP defect; any change to what tier 1/2/4 read.
   R4 — `qc-gate.test.sh` added to acceptance; R11 — the sealed `output_paths` are now listed in §5.
   (The first two G1 attempts are recorded as evidence only: MiniMax seat format-exhausted; codex seat
   blocked by a prematurely set l5 marker — recipe order corrected.)
-- 2026-09-15 plan review G2 (GLM READY; codex STOP with one blocker, accepted and folded): R5 —
-  the base-red rule now distinguishes change-pinning assertions from preservation guards. Generation
-  cap reached; depth-0 adjudicated: the receipt (`check-phase-review-receipt.js` exit 0) was taken
-  on the reviewed bytes (`evidence/…/plan.as-reviewed-g2.md`, sha 49172bcb…), then this R5 wording
-  fold was applied and the mission chain re-frozen on the folded plan. The fold changes no
-  requirement except the label on preservation guards.
 - 2026-09-15 depth-0: read-only spike (sonnet) audited the six `resolve-*` scripts; only three call
   the helper, `resolve-doa.sh` has a parallel ladder, `resolve-dispatch.sh`/`resolve-endpoint.sh`
   have no file tier. Ruling above follows the spike's table. Second spike confirmed tunnel-host

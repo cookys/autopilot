@@ -1,0 +1,25 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "peer-residue-2026-09-15",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "5eb2196208e8d1c62b7a0cbccde45e6ada80c7a68029eb3c0804f17d82b51c94",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: foreman brief now mandates --out rooted at RUN_DIR; --run-id demoted to an optional extra component (plan \u00a72).",
+   "candidate_blocker": true
+  },
+  {
+   "fingerprint": "6a84570431ae3634a1c0b9a652330c316f4ad6bae313227e9f97819f35b47c86",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: hooks/tests/qc-gate.test.sh added to acceptance (plan \u00a75) and to the graph verification_commands.",
+   "candidate_blocker": true
+  },
+  {
+   "fingerprint": "516163601ccc5dfbd3a6349e7da87d22ce637f5ca0c8af6386318127576a12a8",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: the sealed output_paths, codex mirrors included, are listed verbatim in plan \u00a75; they were already in the graph, which the mirror-roots check validates.",
+   "candidate_blocker": true
+  }
+ ]
+}

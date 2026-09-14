@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "session_key": "74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "logical_plan_id": "peer-residue-2026-09-15",
+  "ticket": "peer-residue-2026-09-15",
+  "rubric_sha256": "e6ee44260f2b33b77dec487c7968c5ee61441d538433f7f818526003515f5243",
+  "manifest_sha256": "83e820a4c3db4381b138ef6cae8b0216c8297b35e741a66d91634effa94f0100",
+  "baseline_plan_sha256": "54e3a6bce23b97cf92c0997992a8c82589e043e2317191bf549f2989e13b11d5",
+  "baseline_plan_bytes": 8800,
+  "started_at": "2026-09-14T21:08:43.503Z",
+  "deadline_at": "2026-09-14T23:08:43.503Z",
+  "max_generations": 2,
+  "max_wall_seconds": 7200,
+  "growth_warn_ratio": 1.25,
+  "growth_stop_ratio": 1.5,
+  "next_generation": 2,
+  "active_claim": null,
+  "terminal": true,
+  "terminal_verdict": "CONDITIONAL",
+  "repair_authorized": true,
+  "claims": [
+    {
+      "claim_id": "6e06d246564455bfb3cf7b38188ed00f",
+      "generation": 1,
+      "session_id": "1b58dad4",
+      "claimed_at": "2026-09-14T21:08:43.503Z",
+      "plan_sha256": "54e3a6bce23b97cf92c0997992a8c82589e043e2317191bf549f2989e13b11d5",
+      "manifest_sha256": "83e820a4c3db4381b138ef6cae8b0216c8297b35e741a66d91634effa94f0100",
+      "owner": {
+        "pid": 2486221,
+        "process_start": "307293469",
+        "nonce": "6e06d246564455bfb3cf7b38188ed00f",
+        "session_inode": "76685263"
+      },
+      "status": "complete",
+      "artifact": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-09-15-peer-residue/plan-review-state/74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2/generation-01.json",
+      "attempt_count": 2
+    },
+    {
+      "claim_id": "469d4f7b8a97a1953179fe2d2ff02a34",
+      "generation": 2,
+      "session_id": "1b58dad4",
+      "claimed_at": "2026-09-14T21:10:45.784Z",
+      "plan_sha256": "49172bcb8cde65804d0a7bdd922e3b0f68eecfafd67be8479c6ce77e9068f8c7",
+      "manifest_sha256": "83e820a4c3db4381b138ef6cae8b0216c8297b35e741a66d91634effa94f0100",
+      "owner": {
+        "pid": 2506840,
+        "process_start": "307305695",
+        "nonce": "469d4f7b8a97a1953179fe2d2ff02a34",
+        "session_inode": "76685263"
+      },
+      "status": "complete",
+      "artifact": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-09-15-peer-residue/plan-review-state/74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2/generation-02.json",
+      "attempt_count": 2
+    }
+  ],
+  "artifacts": [
+    "/home/cookys/projects/autopilot/docs/plans/evidence/2026-09-15-peer-residue/plan-review-state/74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2/generation-01.json",
+    "/home/cookys/projects/autopilot/docs/plans/evidence/2026-09-15-peer-residue/plan-review-state/74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2/generation-02.json"
+  ],
+  "accepted_blocker_fingerprints": [
+    "5eb2196208e8d1c62b7a0cbccde45e6ada80c7a68029eb3c0804f17d82b51c94",
+    "6a84570431ae3634a1c0b9a652330c316f4ad6bae313227e9f97819f35b47c86",
+    "516163601ccc5dfbd3a6349e7da87d22ce637f5ca0c8af6386318127576a12a8"
+  ],
+  "terminal_reason": "generation_cap_requires_depth_0_adjudication"
+}

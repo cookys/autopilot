@@ -1,0 +1,13 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "peer-residue-2026-09-15",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "e30496c5b3ccda790349c10588e36195d165ce0cc11833ccc557c3eb7ce1de6a",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: plan \u00a71/\u00a75 and rubric R5 now distinguish change-pinning assertions (must be red at base) from preservation guards (green at base by design, labelled).",
+   "candidate_blocker": true
+  }
+ ]
+}

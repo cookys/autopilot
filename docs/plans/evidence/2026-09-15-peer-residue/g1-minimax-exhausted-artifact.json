@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "peer-residue-2026-09-15",
+  "logical_plan_id": "peer-residue-2026-09-15",
+  "session_id": "1b58dad4",
+  "session_key": "74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "required_seat_transport_exhausted",
+  "rubric_sha256": "e6ee44260f2b33b77dec487c7968c5ee61441d538433f7f818526003515f5243",
+  "manifest_sha256": "c874bc1becee8c02b22fda69c30de1a274c65e192574cab8939f574ef335bd34",
+  "plan_sha256": "334834b297ab82ba28e5c024f8a052cc0ac2cb72dffabc4bf3e66571f12bd310",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "transport_exhausted",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "77088c101aec0fdb96ad3c9ede1651aabd25e3da72fc8c81f049dbd415550ca6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "87866d636a57aad7a42c50c6e85ffbb4423a47c39709666ac6dea896c7ec1efd",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-rwUq5Q",
+          "digest": "87866d636a57aad7a42c50c6e85ffbb4423a47c39709666ac6dea896c7ec1efd"
+        },
+        "receipt_digest": "1d129aceb3d98b965d4795edf86094d7a7527383fedb5a21780d52606fa5ce93"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "d6d90f2f8242c9d51def190c85bf8f0d51533f31651a6e04b36402fd0812ca35"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "d39e5e27d04c2b6e253fe118e5e8843900372ba5691350151fe1cd4b554c28ee",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-kwVmZx",
+          "digest": "d39e5e27d04c2b6e253fe118e5e8843900372ba5691350151fe1cd4b554c28ee"
+        },
+        "receipt_digest": "62f82c39f6e17a489cbf3ab6875ac7fbd8fd50ccd907ce2d9139129619ad461e"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "a0bcf6b519096a2f91f60b8e2f264c68a6b6d744d4d0d107389abfeb086b8908"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9755f8114540be53e2a64e68d39d797d93c655753769c8e1d176b004a56f3339",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-dJOVi7",
+          "digest": "9755f8114540be53e2a64e68d39d797d93c655753769c8e1d176b004a56f3339"
+        },
+        "receipt_digest": "3215557cd3858905b9058a8e7ee536446aaf6dfb99e3c5831702d2e2d2976627"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-14T21:05:04.445Z",
+  "unratified_observations": [
+    {
+      "kind": "completed_seat_review",
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL",
+      "findings": [
+        {
+          "rubric_id": "R7",
+          "class": "decision-now",
+          "severity": "non-blocking",
+          "affected_surface": "scripts/qc-panel.js --run-id validation and hooks/tests/qc-panel.test.sh",
+          "claim": "The plan specifies that a path-traversal --run-id is refused but does not pin the exit code 2 that R7 requires, nor does it explicitly name slash as a refused character alongside '..'.",
+          "evidence": "Plan §2 Tests say only 'a path-traversal value is refused'; R7 states '--run-id with .. or a slash is refused with exit 2'. The exit code and the slash case are not stated anywhere in the plan.",
+          "evidence_reference": "PLAN_UNDER_REVIEW §2 Tests (qc-panel.test.sh bullet); FROZEN_RUBRIC R7",
+          "repair": "Amend the qc-panel test bullet to read: --run-id containing '..' or any slash is refused with exit code 2; keep the refusal message on stderr.",
+          "blocks_next_slice_or_immediate_integrity": false,
+          "cannot_defer_to_spike": false
+        }
+      ]
+    }
+  ]
+}

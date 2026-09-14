@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "peer-residue-2026-09-15",
+  "logical_plan_id": "peer-residue-2026-09-15",
+  "session_id": "1b58dad4",
+  "session_key": "74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "required_seat_transport_exhausted",
+  "rubric_sha256": "e6ee44260f2b33b77dec487c7968c5ee61441d538433f7f818526003515f5243",
+  "manifest_sha256": "83e820a4c3db4381b138ef6cae8b0216c8297b35e741a66d91634effa94f0100",
+  "plan_sha256": "54e3a6bce23b97cf92c0997992a8c82589e043e2317191bf549f2989e13b11d5",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "transport_exhausted",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "6553df741ab925941d603e12854835fe18f278f81c7bab247231d2dd3bbf53b6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-J3eUb8",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "e2241af830ff450e2d6f1e58952a331db14bcecd0787970eb7127eef1ff9b9e3"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "845eb54a70efb6588028fc827a63e3c82524ca4aeb02b690ef0ae910c22b1601"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 2,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "1a1fd490a088fcf4fec221ba614d194897d06e08cf6a7777aa1612108fa66efc"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "b976c9904ea0abf01409db8f2bcd0064d1a25bb19c9682cf7a156900320d7cf9"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 2,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "10c5ae183a120967c4e119097c58134faeb39eb55f6eb77fd78ed13807adb27a"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-14T21:06:56.560Z",
+  "unratified_observations": [
+    {
+      "kind": "completed_seat_review",
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY",
+      "findings": []
+    }
+  ]
+}

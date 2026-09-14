@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "peer-residue-2026-09-15",
+  "logical_plan_id": "peer-residue-2026-09-15",
+  "session_id": "1b58dad4",
+  "session_key": "74d6727a1954aafb171ede72f449c2a8dddfa287276b4cd12b5c475640405ba2",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "e6ee44260f2b33b77dec487c7968c5ee61441d538433f7f818526003515f5243",
+  "manifest_sha256": "83e820a4c3db4381b138ef6cae8b0216c8297b35e741a66d91634effa94f0100",
+  "plan_sha256": "49172bcb8cde65804d0a7bdd922e3b0f68eecfafd67be8479c6ce77e9068f8c7",
+  "growth_ratio": {
+    "numerator": 2157,
+    "denominator": 1760
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "38cbee3e2311ccef6ae0ed9308ea802f99fc322dbc46600259267ba7e619445f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sHq2ZO",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "fd67278eb28c90f46f03d3be2a09f00fe4718ae426156611f67cce56804e48f8"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "4d746006d22ed7ab2a95033c0abf39b7206da589e7701e9408bfae9aa0f021fb"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6598d12770dca0b6fe4fe586a2d36707762d078fd8f895d99e1ce6f5db11daea",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-e2YzEN/stdout",
+          "digest": "6598d12770dca0b6fe4fe586a2d36707762d078fd8f895d99e1ce6f5db11daea"
+        },
+        "receipt_digest": "94f8aea092564ba63e660f009e8b54a8ceddd27aa1e6d473dfd1a7afb61b244a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §1 tests, §5 acceptance, and hooks/tests/resolve-config.test.sh",
+      "claim": "The base-red requirement is impossible for the new autopilot-subdirectory preservation assertion because its expected behavior already exists at the base commit.",
+      "evidence": "The plan states that the current helper always considers the plugin-root tier 3. From a subdirectory of the autopilot repository, that behavior already finds the autopilot .claude file and returns source: project-repo, which is exactly the new R2 assertion's expected result. Nevertheless, §1 and §5 require every new ladder assertion to fail against the pre-change helper.",
+      "evidence_reference": "Frozen R5; PLAN_UNDER_REVIEW §1 Config ladder tier 3, Tests item (b); §5 Every new assertion has a recorded red against the base commit.",
+      "repair": "Revise R5 and the plan before implementation so base-red evidence is required only for assertions covering changed behavior; record the subdirectory preservation assertion as base-green and, if desired, prove its sensitivity against a deliberate gate mutant.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e30496c5b3ccda790349c10588e36195d165ce0cc11833ccc557c3eb7ce1de6a"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-14T21:12:20.392Z"
+}

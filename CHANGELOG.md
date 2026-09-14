@@ -1,5 +1,38 @@
 # Changelog
 
+## v2.36.45 — peer 回報殘留三條：config ladder tier 3 只在 dogfood 生效、qc-panel 輸出按 node 分目錄、wrapper commit subject 凍結
+
+/l5 managed campaign（plan `docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md`，mission node
+`peer-residue-2026-09-15`；implementer cursor-grok-4.6-low、full-diff reviewer MiniMax-M3 SHIP-AS-IS；plan review
+GLM-5.2 + codex/gpt-5.6-sol 兩代、四條 blocker 全摺入）。
+
+- `scripts/lib/resolve-config.sh`：tier 3（`$REPO_ROOT/.claude/<basename>`）只在 `$PWD` 的 git toplevel 就是 `REPO_ROOT`
+  時生效——安裝出去的 plugin 帶著 `.claude/`，外部專案沒自己的設定時原本會吃到 autopilot 的 dogfood roster
+  （~15 個欄位：cursor-grok implementer、MiniMax／GLM／Qwen 席位）與 `stale_reaper_age_days: 14`（template 是 0，`--gc`
+  從 no-op 變成刪 worktree）。三個 consumer（qc-gate／worktree-teardown／review-loop）不用改；`resolve-doa.sh` 自己的
+  ladder 同樣加閘。審計表：六個 resolve-* 裡只有三個用 helper，`resolve-dispatch.sh`／`resolve-endpoint.sh` 沒有檔案 tier。
+- `scripts/qc-panel.js`：預設 `--out` 改成 `docs/projects/<proj>/tree/panel/<node>`，`--run-id` 可再加一層（同
+  `validatePathComponent`），`out_dir` 進 summary json 並印 stderr；`dispatch-foreman.sh` 的 brief 要求 qc-panel 一律
+  `--out "$RUN_DIR/panel/<node>"`（`--run-id` 不是替代品——codex plan review 抓的）。chatgpt-tunnel-host (A)。
+- `references/hetero-dispatch.md` § Outcome states「Wrapper commit subject」：`dispatch-hetero(<runner>): edits on <branch>`
+  只在 capture path（worker 把樹留髒、rail 自己 commit）存在，是識別碼不是整合證據，landed 問 `check-containment.js`。
+  `check-hands-commit.js --expect-wrapper-subject` opt-in；rail 只在 capture path 帶（`WRAPPER_COMMITTED`）。
+  chatgpt-tunnel-host (D)。
+- 測試：resolve-config +5、resolve-doa +2、qc-panel +5、check-hands-commit +2、dispatch-foreman +1；change-pinning 斷言
+  在 base-run（base 程式碼＋candidate 測試）全紅，preservation guard 標明。
+- depth-0 抓到、rail 席位與兩代 plan review 都沒抓到的錯：hand 第一版讓 rail 對自己的 content gate 無條件帶
+  `--expect-wrapper-subject`，但 wrapper 只在 worker 把樹留髒時 commit，自己 commit 的 worker subject 是自己的——
+  dispatch-hetero suite 57 紅。plan §3 前提「rail authored 那個 commit」是錯的（evidence-discipline §35 同族）。
+  GLM 第二家族 review 再抓一條「旗標沒人 wire＝沒人定的政策」→ 改成只在 capture path 帶；mutant（改壞 wrapper subject）
+  14 條 capture-path 案例紅。
+- rail 這次量到的（全登 BACKLOG）：final panel 三席裡 codex／GLM 因「exact qualified reviewer tuple」規則 precondition_failed，
+  sealed roster 的 panel 結構上只有 incumbent 能審；pre-spend 拒絕（contract checker 的 dirty tree、marker bridge）各燒一次
+  attempt；bridge 掃到別 session 的過期前 marker；plan review 的 codex 席在 l5 marker 下被擋。三次額度用完後照文件降 l3、
+  在 retained worktree 修、以 git 證據 merge。
+
+prose-justification: 本版 prose 面 +1 段（hetero-dispatch.md 的 wrapper subject 契約，≈700 B）；自 v2.35.2 基線的 +9% 是
+v2.36.34／v2.36.38／v2.36.40 已各自註明的 reference 與 runbook。
+
 ## v2.36.44 — dispatch-hetero：`--sibling-ref-prefix` 讓同 repo 平行派工不再互相 boundary_rejected
 
 - `scripts/dispatch-hetero.sh` 新旗標 `--sibling-ref-prefix refs/heads/<ns>/`（可重複）：宣告 caller 自己擁有的 ref namespace，

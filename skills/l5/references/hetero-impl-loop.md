@@ -144,13 +144,26 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    'git-common-dir:<common dir>', graphDigest}})` with `policy`/`policyHash` from
    `resolveGovernancePolicy(.claude/owner-kernel-governance.json)`. Caller-supplied
    `authority_status` / `mission_lineage_id` are refused.
-6. `node scripts/session-mode.js set --level l5 --repo-root <repo>` → `READY`.
+5b. **Plan hetero loop BEFORE the marker** (measured 2026-09-15): run `dispatch-plan-review.js` while
+    no l5 marker is active — under one, codex seats die with `active session-mode=l5 blocks
+    non-strict dispatch` and the artifact records an empty envelope. Manifest seats without an
+    endpoint write `@none`, not null. A MiniMax seat that format-faults twice makes the generation
+    `transport_exhausted` with ZERO ratified findings; swap the second family (codex/GLM) with a
+    fresh `--state-dir`. Folding a finding changes the plan sha, so re-run the freeze chain
+    (sources sha → graph ids → graph check → legacy reconcile → authority) after every fold; take
+    the receipt (`check-phase-review-receipt.js --plan-artifact --dispositions`, every disposition
+    needs `candidate_blocker: true|false`) on the REVIEWED bytes, then fold and re-freeze.
+6. `node scripts/session-mode.js set --level l5 --repo-root <repo>` → `READY`. First check
+   `~/.autopilot/session-mode/` for another ACTIVE marker of this repo from a dead session: the
+   bridge scans every marker and a stale one with an older graph digest blocks intake (BACKLOG).
 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
    `mission grant --repo . --prepared prepared.json --node <id>` → `contract_path`, `seal_path`,
    `branch`, `base_sha`. Each grant is one attempt; a rejected INTAKE still consumes it.
 8. **Brief** ≤ 8 KB: paste `output_paths` verbatim; say the harness commits; forbid `git stash`
    and pushes; list the verify commands. Nothing the hand cannot see (evidence dirs) may be cited
-   as a reading assignment.
+   as a reading assignment. **Commit or keep OUTSIDE the repo every depth-0 evidence file (grant
+   json, brief, run outputs) before dispatch** — the contract checker refuses a dirty tree and the
+   refusal consumes the attempt (2026-09-15: attempt 1).
 9. Dispatch: `AUTOPILOT_LEVEL=l5 AUTOPILOT_ROOT_RUN_ID=<contract.mission_runtime.root_run_id>`
    `node bin/autopilot.js engine implement-review --campaign-contract <contract> --campaign-seal
    <seal> --mission-prepared prepared.json --prompt-file <brief> --branch <branch> --base
@@ -161,9 +174,12 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     every verify command there; probe the reviewer's MUST-FIX claims by re-derivation
     (probe + mutation) before accepting or refuting; run a second-family `dispatch-review.sh`
     when the rail's seat returns `no_verdict`.
-11. Known rail limits (BACKLOG rows, 2026-09-14): a non-empty review needs
-    `--campaign-disposition-authority` on `--resume`, and that path currently drops the findings
-    and terminal-stops; a reviewer `no_verdict` releases the claim; `status task` has no writer.
+11. Known rail limits (BACKLOG rows): `status task` has no writer; the final panel's non-incumbent
+    seats are `precondition_failed` under the exact-tuple rule, so a 3-seat sealed panel stops the
+    campaign at `final_panel` after a green full-diff review (2026-09-15); pre-spend rejections at
+    the dispatch-hetero layer still consume the attempt. (Fixed 2026-09-14: disposition resume
+    v2.36.41, `--campaign-ledger` intake v2.36.42, reviewer `no_verdict` durable wait v2.36.43 —
+    all still awaiting CLI e2e measurement.)
     When the rail stops, degrade per the documented fallback
     (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed`), repair on
     the mission branch in its retained worktree, merge on git evidence, and file the rail defect.

@@ -229,6 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
+| 2026-09-14 | managed rail disposition resume（Fix，無 project dir）— `campaign-composition.js` 寫入端 snapshot 因字串/陣列錯配存成 `[]`、讀回端把陣列塞給只吃字串的 provider；兩端修正＋空 snapshot 不覆蓋 review_payload；routing test +3（含舊 controller） | v2.36.41 | (this ship) |
 | 2026-09-14 | backlog gate 進 pre-commit ritual（無 project dir）— `sync-manifest.json` 新 ritual、量過會擋；l5 reference 加 depth-0 managed-campaign 11 步 runbook | v2.36.40 | 52032cc8 |
 | 2026-09-14 | backlog 遷移 Phase 4（執行計畫 `docs/plans/2026-09-14-backlog-entry-migration.md`，/l5 mission-5c34ed65c6a4 + depth-0 4b）— `migrate-backlog-entries.js`（byte 保存、冪等、不覆蓋、回滾）；BACKLOG 237 KB → 104 KB、154 sidecar、allowlist 30、gate flip block | v2.36.39 | 05f97302 |
 | 2026-09-14 | backlog entry schema Phase 1–3（plan `docs/plans/2026-09-14-backlog-entry-schema.md`，/l5 managed campaign mission-3b68ecb09a61）— `references/backlog-entry.md` 唯一 schema、`check-backlog-entries.js` gate（warn、ratchet、self-test）、`backlog-config.md` DI、寫入者一句連結；真 BACKLOG 起點 747 違規 | v2.36.38 | 8e247018 |

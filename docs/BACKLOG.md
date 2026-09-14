@@ -10,7 +10,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`cookys-7840hs` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
-7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39. Next: the rail defects filed 2026-09-14 (disposition resume, ledger flag, reviewer no_verdict releases the claim).
+7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41. Next: the remaining 2026-09-14 rail defects (ledger flag, reviewer no_verdict releases the claim).
 
 ### Managed rail: a reviewer no_verdict releases the campaign claim instead of retrying the seat
 - **Status**: fired 2026-09-14
@@ -49,12 +49,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-reported-cuda-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec.md
 
 ### Managed rail: `--resume` with a disposition authority drops the prior findings and terminal-stops the campaign
-- **Status**: fired 2026-09-14
+- **Status**: shipped v2.36.41 2026-09-14
 - **Trigger**: **FIRED — measured 2026-09-14** on mission-3b68ecb09a61 (backlog-entry-schema): round-1 review returned FIX-THEN-SHIP → `awaiting_disposition`; the re-invocation with `--resume --campaign-disposition-authority <valid file>` blocked…
 - **Effort**: S
 - **Source**: this dogfood; evidence `docs/plans/evidence/2026-09-14-backlog-entry-schema/impl-run3-resume-terminal-stop.json`.
 - **Pointer**: docs/backlog/managed-rail-resume-with-a-disposition-authority-drops-the-prior-findings-and-te.md
-- **Context**: the disposition rail is unreachable end-to-end from the CLI — every non-empty review ends the campaign.
+- **Context**: root cause in `campaign-composition.js`, not the engine: writer read the findings JSON string as an array (→ `[]`); resume bound the array to a string-only provider. Both fixed; legacy empty snapshots resume.
+
+### Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `[]` snapshot
+- **Status**: open
+- **Trigger**: a review whose findings fail `normalizeFindings` (UNSTRUCTURED/INVALID/DUPLICATE codes) reaches the durable wait on a real run
+- **Effort**: S
+- **Source**: v2.36.41 pre-merge review (sonnet), 2026-09-14
+- **Pointer**: none
+- **Context**: identityInvalid gate in `campaign-composition.js` covers only FINDING_IDENTITY_INVALID; pre-existing. Widen the gate or block non-resumable.
 
 ### `engine implement-review --campaign-ledger <custom path>` is refused at intake and the refusal burns a grant attempt
 - **Status**: fired 2026-09-14

@@ -1,0 +1,50 @@
+{
+  "session_id": "d1423f91-4e83-43b9-ae77-3de0367aa10a",
+  "level": "l3",
+  "repo_root": "/home/cookys/projects/autopilot",
+  "started_at": "2026-09-14T02:13:16.724Z",
+  "expires_at": "2026-09-15T02:13:16.724Z",
+  "entry_level": "l5",
+  "fallback_reason": "precondition_failed",
+  "mission_routing": {
+    "status": "READY",
+    "admitted": true,
+    "would_block": false,
+    "prior_marker_status": "active",
+    "admission": {
+      "schema_version": 1,
+      "artifact_type": "mission_routing_admission",
+      "authority_status": "enforce",
+      "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "6868bba687688a206623c4e73304306c652841290f439d5a182228355bf68e36",
+      "sources_digest": "de57576fcda2ed6fc0e6dfa7269ec3701bc4222f5cb4e4ae556bae9321b34a84",
+      "deliverable_count": 1,
+      "source_authoring_unit_count": 0,
+      "critical_path": 1,
+      "batch_count": 1,
+      "reservation_totals": {
+        "campaigns": 1,
+        "wall_seconds": 4500,
+        "tool_calls": 150,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 16,
+        "output_bytes": 4000000
+      },
+      "admission_digest": "8bf03e658e30045d5c8e4381dced2fd21ed116561a7ad854404ea7054b386472"
+    }
+  },
+  "mission_noop": {
+    "schema_version": 1,
+    "artifact_type": "mission_noop_adoption_set",
+    "admission_digest": "8bf03e658e30045d5c8e4381dced2fd21ed116561a7ad854404ea7054b386472",
+    "noop_adoptions": [],
+    "noop_short_circuit": false,
+    "dispatcher_called": null,
+    "mutation_attempts": null,
+    "gate_attempts": null,
+    "resources_created": null,
+    "digest": "3f26a9d6ef7523245b7a29670339de4857d468bdbd3c2d0c97c52ab3d513e33a"
+  }
+}

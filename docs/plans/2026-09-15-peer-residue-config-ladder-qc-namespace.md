@@ -91,8 +91,10 @@ exists only at `dispatch-hetero.sh:3487`. Nothing documents it; nothing consumes
   grep.
 - `check-hands-commit.js`: a new `--expect-wrapper-subject` opt-in check that the range's tip
   commit subject matches `^dispatch-hetero\([^)]+\): edits on \S+$`; off by default (the rail's own
-  commit is not the only legitimate producer). `dispatch-hetero.sh` passes it when it invokes the
-  gate on its own commit.
+  commit is not the only legitimate producer). `dispatch-hetero.sh` passes it only on the capture
+  path — when the worker left the tree dirty and the rail authored the wrapper commit itself
+  (`WRAPPER_COMMITTED`); a worker that commits its own work has its own subject. (Corrected
+  post-merge; see Review log.)
 - Tests: `hooks/tests/check-hands-commit.test.sh` — matching subject passes, a `feat(...)` subject
   fails ONLY with the flag, default unchanged.
 
@@ -150,6 +152,14 @@ foreman suite's TEST_TMP defect; any change to what tier 1/2/4 read.
   on the reviewed bytes (`evidence/…/plan.as-reviewed-g2.md`, sha 49172bcb…), then this R5 wording
   fold was applied and the mission chain re-frozen on the folded plan. The fold changes no
   requirement except the label on preservation guards.
+- 2026-09-15 post-merge (docs only, `797d3baf` → v2.36.45): §3's premise "the rail authored that
+  commit itself" was refuted at depth-0 verification — the wrapper commit exists only on the capture
+  path, so the hand's unconditional `--expect-wrapper-subject` on the rail's own gate turned 57
+  `dispatch-hetero.test.sh` cases red. The rail's MiniMax-M3 full-diff seat had passed that candidate
+  (`61541082`) SHIP-AS-IS; recorded as a reviewer miss. Repaired in `3e5e4513` + `797d3baf` (GLM
+  second-family review: wire the flag on the capture path, mutant 14 red). Mission ledger terminal
+  record stays `blocked/final_panel` at `61541082`; develop carries the repaired tip via
+  `evidence/…/integration-receipt.json` (see `evidence/…/README.md`).
 - 2026-09-15 depth-0: read-only spike (sonnet) audited the six `resolve-*` scripts; only three call
   the helper, `resolve-doa.sh` has a parallel ladder, `resolve-dispatch.sh`/`resolve-endpoint.sh`
   have no file tier. Ruling above follows the spike's table. Second spike confirmed tunnel-host

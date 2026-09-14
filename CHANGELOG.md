@@ -3,8 +3,9 @@
 ## v2.36.45 — peer 回報殘留三條：config ladder tier 3 只在 dogfood 生效、qc-panel 輸出按 node 分目錄、wrapper commit subject 凍結
 
 /l5 managed campaign（plan `docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md`，mission node
-`peer-residue-2026-09-15`；implementer cursor-grok-4.6-low、full-diff reviewer MiniMax-M3 SHIP-AS-IS；plan review
-GLM-5.2 + codex/gpt-5.6-sol 兩代、四條 blocker 全摺入）。
+`peer-residue-2026-09-15`；implementer cursor-grok-4.6-low；rail 的 full-diff 席 MiniMax-M3 對「修前」候選 `61541082`
+判 SHIP-AS-IS——那版讓 dispatch-hetero suite 57 紅，記為 reviewer miss 而非品質訊號；真正審到最終 tip 的是 GLM-5.2 r2；
+plan review GLM-5.2 + codex/gpt-5.6-sol 兩代、四條 blocker 全摺入）。
 
 - `scripts/lib/resolve-config.sh`：tier 3（`$REPO_ROOT/.claude/<basename>`）只在 `$PWD` 的 git toplevel 就是 `REPO_ROOT`
   時生效——安裝出去的 plugin 帶著 `.claude/`，外部專案沒自己的設定時原本會吃到 autopilot 的 dogfood roster

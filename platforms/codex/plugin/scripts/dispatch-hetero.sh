@@ -87,6 +87,15 @@
 #                                               #   intent, gated pre-spawn by
 #                                               #   check-blueprint-conformance.js preflight
 #       [--keep-worktree]                      # keep worktree even on success
+#       [--sibling-ref-prefix refs/heads/x/]   # repeatable: a ref namespace the CALLER owns
+#                                              #   (sibling dispatches running concurrently on
+#                                              #   this repo, e.g. refs/heads/hands/kr1/). Refs
+#                                              #   created or moved there are not counted as a
+#                                              #   main-checkout mutation. Must start with
+#                                              #   refs/heads/ and end with /; refs/heads/ alone
+#                                              #   is refused. Default: only this dispatch's own
+#                                              #   --branch is exempt, so concurrent dispatches
+#                                              #   on one repo reject each other (308, 2026-09-14).
 #       [--retain-owner <id> --retain-reason <text> --retain-until <epoch>]
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
 #       [--expected-worktree-instance <sha256>] # required identity fence for retained reuse
@@ -158,6 +167,7 @@ CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
 OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via --opencode-bin
 KIMI_BIN="kimi"            # Kimi Code CLI runner (Moonshot); test seam via --kimi-bin
 KEEP=0
+MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
 RETENTION_OWNER=""
 RETENTION_REASON=""
 RETENTION_REASON_SHA256=""
@@ -1725,6 +1735,14 @@ while [ $# -gt 0 ]; do
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --conformance-intent) CONFORMANCE_INTENT_FILE="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
+    --sibling-ref-prefix)
+      case "${2:-}" in
+        refs/heads/) die_precondition "--sibling-ref-prefix refs/heads/ would exempt every branch; name the namespace" ;;
+        *//*) die_precondition "--sibling-ref-prefix has an empty path segment (got '${2:-}')" ;;
+        refs/heads/*/) ;;
+        *) die_precondition "--sibling-ref-prefix must look like refs/heads/<namespace>/ (got '${2:-}')" ;;
+      esac
+      MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES+=("$2"); shift 2 ;;
     --retain-owner) RETENTION_OWNER="${2:-}"; shift 2 ;;
     --retain-reason) RETENTION_REASON="${2:-}"; shift 2 ;;
     --retain-until) RETENTION_EXPIRES_AT="${2:-}"; shift 2 ;;
@@ -4388,6 +4406,9 @@ dispatch_detached_run() {
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
+    # The after-fingerprint in the detached child must exempt the same sibling namespaces
+    # the parent's before-fingerprint did, or every --sibling-ref-prefix run rejects itself.
+    declare -p MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES 2>/dev/null || true
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null

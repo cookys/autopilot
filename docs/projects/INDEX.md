@@ -229,7 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
-| 2026-09-15 | peer-residue 三條（/l5 managed，plan `2026-09-15-peer-residue-config-ladder-qc-namespace.md`，無 project dir）— config ladder tier 3 只在 dogfood 生效、qc-panel 輸出按 node 分目錄、wrapper commit subject 凍結；rail 在 final panel 停，depth-0 修兩刀後 merge | v2.36.45 | (this ship) |
+| 2026-09-15 | peer-residue 三條（/l5 managed，plan `2026-09-15-peer-residue-config-ladder-qc-namespace.md`，無 project dir）— config ladder tier 3 只在 dogfood 生效、qc-panel 輸出按 node 分目錄、wrapper commit subject 凍結；rail 在 final panel 停，depth-0 修兩刀後 merge | v2.36.45 | 298669ac |
 | 2026-09-15 | dispatch-hetero `--sibling-ref-prefix`（S，無 project dir）— 同 repo 平行派工被 all-refs 指紋互殺（308-8f）；開放既有 exclude-prefix 機制給 caller、跨 detach 帶陣列；test +8 含 detached | v2.36.44 | 69b7e009 |
 | 2026-09-14 | managed rail reviewer no_verdict（Fix，無 project dir）— `campaign-composition.js` 把 no_verdict／normalize 失敗改成 VERTICAL_VERIFICATION checkpoint 的 durable wait，resume 只重跑 review 席位；routing test +5 | v2.36.43 | bbf2f768 |
 | 2026-09-14 | managed rail `--campaign-ledger` 錯值燒 grant（Fix，無 project dir）— `campaign-intake.js` 把 ledger 路徑驗證搬到 Mission claim 之前；state test +2（計數 adapter 證明 claim 0 次） | v2.36.42 | 201330f9 |

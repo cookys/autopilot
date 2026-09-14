@@ -2201,6 +2201,59 @@ OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22i --prompt-file "$
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22i: moving a NON-current branch rejects"
 git -C "$SBX" branch -D other-branch >/dev/null 2>&1 || true
 
+# 22q. Concurrent sibling dispatch (308-8f, 2026-09-14): three dispatch-hetero runs on one
+#      repo, each committing on hands/kr1/c{1,2,3}, all rejected each other because the
+#      fingerprint counts EVERY ref and only this dispatch's own --branch is exempt. The stub
+#      stands in for the sibling: it creates refs/heads/hands/kr1/c2 in the main checkout
+#      mid-round. Without the flag that is (correctly, by the old rule) a mutation; with
+#      `--sibling-ref-prefix refs/heads/hands/kr1/` the caller has declared the namespace.
+STUB_SIBLING="$TEST_TMP/agy-sibling"
+cat > "$STUB_SIBLING" <<'EOF2'
+#!/usr/bin/env bash
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "hands: c1"
+git -C "$MAIN_SBX" update-ref "$SIBLING_REF" "$(git -C "$MAIN_SBX" rev-parse HEAD)"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF2
+chmod +x "$STUB_SIBLING"; make_agy_stub_versioned "$STUB_SIBLING"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --branch hands/kr1/c1a --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22q control: a sibling hands/ ref appearing mid-round rejects WITHOUT the flag (the 308 shape)"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22q control: …as main_checkout_mutated"
+git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --branch hands/kr1/c1b --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22q): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "22q: with --sibling-ref-prefix the declared namespace is exempt — round exit 0"
+assert_contains "$OUT" '"status": "committed"' "22q: …and the round is committed"
+git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
+# 22r. The exemption is the declared namespace and nothing else: the same stub planting a
+#      ref OUTSIDE the prefix still rejects with the flag present.
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/other/c9 "$SCRIPT" --branch hands/kr1/c1c --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22r: a ref outside the declared namespace still rejects"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22r: …as main_checkout_mutated"
+git -C "$SBX" update-ref -d refs/heads/hands/other/c9 2>/dev/null || true
+# 22s. Argument validation: refs/heads/ alone and a non-namespace value are refused pre-spawn.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/ 2>&1)"; EXIT=$?
+assert_neq "0" "$EXIT" "22s: --sibling-ref-prefix refs/heads/ is refused"
+assert_contains "$OUT" 'would exempt every branch' "22s: …with the reason"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix hands/kr1 2>&1)"; EXIT=$?
+assert_neq "0" "$EXIT" "22s: a bare branch name (no refs/heads/, no trailing /) is refused"
+assert_contains "$OUT" 'must look like refs/heads/<namespace>/' "22s: …with the shape named"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads// 2>&1)"; EXIT=$?
+assert_neq "0" "$EXIT" "22s: an empty namespace segment (refs/heads//) is refused"
+assert_contains "$OUT" 'empty path segment' "22s: …with the reason"
+# 22t. Same exemption on the DETACHED rail (--ledger/--run-id/--stage): the after-fingerprint
+#      is computed in the setsid child, which only knows the declared namespaces if the
+#      parent serialized MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES across the detach boundary.
+LEDGER_SIB="$TEST_TMP/sibling-detached-ledger/ledger.jsonl"
+mkdir -p "$TEST_TMP/sibling-detached-ledger"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_SIB" >/dev/null
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 DISPATCH_QUIET=1 "$SCRIPT" --branch hands/kr1/c1d --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ --ledger "$LEDGER_SIB" --run-id sib --stage implement 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22t): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "22t detached: the declared namespace survives the detach boundary — round exit 0"
+assert_contains "$OUT" '"status": "committed"' "22t detached: …and the round is committed"
+git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
+
 # 22j. Content-blind fingerprint (review, 2026-09-13): overwriting an IGNORED file in the
 #      main checkout, and a second edit to an ALREADY-dirty main file, must both reject —
 #      `status --porcelain` shows neither.

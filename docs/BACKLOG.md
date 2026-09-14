@@ -57,12 +57,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: root cause in `campaign-composition.js`, not the engine: writer read the findings JSON string as an array (→ `[]`); resume bound the array to a string-only provider. Both fixed (composition test); CLI e2e 待量.
 
 ### PEER-REPORTED (308-8f): parallel dispatch-hetero runs on one repo kill each other — the fingerprint counts every ref
-- **Status**: open
+- **Status**: shipped v2.36.44 2026-09-15
 - **Trigger**: ≥2 concurrent `dispatch-hetero.sh` on one repo; 308 saw 3/3 `main checkout mutated`
 - **Effort**: S
 - **Source**: `308-8f` via SendMessage 2026-09-14 (KR1 c1–c3); 308 homeforge HANDOFF next-step 4
 - **Pointer**: none
-- **Context**: `lib/main-checkout-boundary.sh` excludes only own `BRANCH` + caller prefixes; a sibling's `refs/heads/hands/*` is a delta. Exclude the rail's own branch pattern or document serialize-per-repo.
+- **Context**: fingerprint excluded only own `BRANCH`; a sibling's `refs/heads/hands/*` was a delta. Fixed: `--sibling-ref-prefix` declares the namespace.
 
 ### PEER-REPORTED (308-8f): main-checkout fingerprint stat-walks untracked files — a foreman's own rail I/O trips it
 - **Status**: open
@@ -87,6 +87,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.42 pre-merge review (sonnet), 2026-09-14
 - **Pointer**: none
 - **Context**: `projectMissionMode` does not touch git, so the claim runs before repo identity is known. Reject on `canonicalRepoIdentity` throw pre-claim + a non-git fixture.
+
+### `dispatch-foreman.test.sh` loses its TEST_TMP after case 3 — 40 assertions red on develop
+- **Status**: open
+- **Trigger**: reproduced 2026-09-15 on origin/develop in a clean worktree (62 pass / 40 fail); first symptom `wait_for: No record of process`, then `TEST_TMP/repo: No such file`
+- **Effort**: S
+- **Source**: observed while shipping v2.36.44; not caused by it (identical on HEAD~1)
+- **Pointer**: none
+- **Context**: looks like the EXIT trap (`rm -rf "$TEST_TMP"`) fires from a killed child/process group in case 3. Cases 6/9/12 (main-checkout boundary) are unobservable until fixed.
 
 ### `autopilot-engine.test.sh` reads the live session-mode marker — 10 waiver/KR4 assertions red under an l5 marker
 - **Status**: open

@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.36.44 — dispatch-hetero：`--sibling-ref-prefix` 讓同 repo 平行派工不再互相 boundary_rejected
+
+- `scripts/dispatch-hetero.sh` 新旗標 `--sibling-ref-prefix refs/heads/<ns>/`（可重複）：宣告 caller 自己擁有的 ref namespace，
+  裡面的 ref 新增／移動不算 main-checkout mutation。308-8f 2026-09-14 回報：同 repo 平行跑三個 dispatch-hetero
+  （`hands/kr1/c1|c2|c3`），三刀都 commit 成功卻全被 `main_checkout_mutated` 打掉——指紋算所有 refs，只豁免自己的 `--branch`，
+  sibling 建的分支就是 delta。機制沿用 `lib/main-checkout-boundary.sh` 既有的 `MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES`
+  （foreman 已在用），dispatch-hetero 只是把它開給 caller；預設行為不變。`refs/heads/` 單獨與非 `refs/heads/<ns>/` 形狀
+  都在 spawn 前拒絕。陣列跨 setsid detach 邊界要 `declare -p` 帶過去，否則 detached child 的 after-fingerprint 會自己打自己。
+- `hooks/tests/dispatch-hetero.test.sh` +10（22q–22t）：無旗標時 sibling ref 照舊拒絕（308 那個形狀）；帶旗標 committed；
+  namespace 外的 ref 仍拒絕；三種壞參數（含 reviewer 提的 `refs/heads//` 空段）；detached rail 同樣通過。HEAD 紅 6 條；拿掉 detach carry 的 mutant 只被 22t 抓到
+  （inline 路徑不經 detach，這條就是為它加的）。
+- `references/hetero-dispatch.md` § Outcome states 補 `main_checkout_mutated` 的兩個 caller 責任：平行派工要宣告 namespace
+  或序列化；rail I/O 落 checkout 外。
+- 邊界揭露：`hooks/tests/dispatch-foreman.test.sh` 在本機 origin/develop 就是 62/40 紅（case 3 之後 TEST_TMP 消失），本版沒改
+  foreman 的指紋路徑，但 foreman 那邊的 namespace 案例（6/9/12）因此量不到——登 BACKLOG。
+
+prose-justification: 本版 prose 面 +1 段（hetero-dispatch.md 的 main_checkout_mutated 說明，caller 責任一句話）；自 v2.35.2
+基線的 +9% 是 v2.36.34／v2.36.38／v2.36.40 已各自註明的 reference 與 runbook。
+
 ## v2.36.43 — managed rail：reviewer no_verdict 變成可 resume 的 durable wait，不再 terminal stop 放掉 claim
 
 - `src/engine/campaign-composition.js`：full-diff review 回 `no_verdict`（格式／傳輸故障）或 findings normalize 失敗，是 **gate**

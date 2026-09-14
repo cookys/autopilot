@@ -36,7 +36,9 @@
       "check": "bash scripts/sync-model-routing.sh --check",
       "fix": "bash scripts/sync-model-routing.sh && git add references/model-routing.md skills/*/references/model-routing.md",
       "tier": "both",
-      "trigger": ["*model-routing.md"]
+      "trigger": [
+        "*model-routing.md"
+      ]
     },
     {
       "id": "sync-codex-plugin-skills",
@@ -89,7 +91,10 @@
       "check": "node scripts/check-readme-parity.js",
       "fix": "align README.md and README.zh-TW.md badge values + section headers by hand",
       "tier": "both",
-      "trigger": ["README.md", "README.zh-TW.md"]
+      "trigger": [
+        "README.md",
+        "README.zh-TW.md"
+      ]
     },
     {
       "id": "check-hook-inventory",
@@ -98,7 +103,13 @@
       "check": "node scripts/check-hook-inventory.js --check",
       "fix": "node scripts/check-hook-inventory.js (no flag prints the oracle); reconcile the docs with it",
       "tier": "both",
-      "trigger": ["hooks/", ".claude-plugin/", "README.md", "README.zh-TW.md", "*plugin.json"]
+      "trigger": [
+        "hooks/",
+        ".claude-plugin/",
+        "README.md",
+        "README.zh-TW.md",
+        "*plugin.json"
+      ]
     },
     {
       "id": "check-claude-md-inventory",
@@ -107,7 +118,10 @@
       "check": "node scripts/check-claude-md-inventory.js",
       "fix": "add an index row per unlisted script; for size violations trim the row and move detail to CHANGELOG.md / references/ (see CLAUDE.md Row shape rule)",
       "tier": "both",
-      "trigger": ["scripts/", "CLAUDE.md"]
+      "trigger": [
+        "scripts/",
+        "CLAUDE.md"
+      ]
     },
     {
       "id": "check-js-syntax",
@@ -116,7 +130,11 @@
       "check": "node scripts/check-js-syntax.js",
       "fix": "open the file Node names and fix the reported syntax error (see its stderr message in the ritual output)",
       "tier": "both",
-      "trigger": ["*.js", "*.cjs", "*.mjs"]
+      "trigger": [
+        "*.js",
+        "*.cjs",
+        "*.mjs"
+      ]
     },
     {
       "id": "l1-cache-key-parity",
@@ -125,7 +143,24 @@
       "check": "node scripts/check-l1-cache-key-parity.js",
       "fix": "align jest/vitest versions in .github/workflows/test.yml cache key and hooks/tests/check-test-integrity-l1.test.sh (jest_ver/vitest_ver)",
       "tier": "both",
-      "trigger": [".github/workflows/test.yml", "hooks/tests/check-test-integrity-l1.test.sh"]
+      "trigger": [
+        ".github/workflows/test.yml",
+        "hooks/tests/check-test-integrity-l1.test.sh"
+      ]
+    },
+    {
+      "id": "check-backlog-entries",
+      "title": "docs/BACKLOG.md rows vs references/backlog-entry.md (mode from .claude/backlog-config.md; ratchet allowlist)",
+      "generator": null,
+      "check": "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md",
+      "fix": "shorten the row to its caps and move the evidence to its Pointer (node scripts/migrate-backlog-entries.js --backlog docs/BACKLOG.md --apply moves it for you); never widen .claude/backlog-debt.json",
+      "tier": "both",
+      "trigger": [
+        "docs/BACKLOG.md",
+        ".claude/backlog-config.md",
+        ".claude/backlog-debt.json",
+        "scripts/check-backlog-entries.js"
+      ]
     }
   ]
 }

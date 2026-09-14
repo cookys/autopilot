@@ -117,6 +117,57 @@ summary is a protocol deviation to record.
 GLM, …). Recipes, preconditions, and the outcome table live in
 [`../../../references/hetero-dispatch.md`](../../../references/hetero-dispatch.md).
 
+## Depth-0 recipe for one managed deliverable (measured 2026-09-14, autopilot on itself)
+
+The order below is what the rails actually accept; every step that cost a grant attempt when
+done differently is marked. Paths are this repo's; a consumer substitutes its own.
+
+1. **Plan + rubric** (content-bound): `docs/plans/<date>-<slug>.md` and `.rubric.md`; one plan id
+   maps to exactly ONE graph node, so a plan whose phases must ship separately needs one plan
+   file per campaign.
+2. **Sources manifest** `docs/mission-<slug>-sources.json` with both sha256s; derive ids with
+   `loadSourceCoverageManifest` from `scripts/mission-execution-graph-check.js`.
+3. **Graph** `docs/mission-<slug>-execution-graph.json`: one node, `campaign.output_paths` naming
+   every file the hand may touch INCLUDING each codex mirror (`--mirror-roots
+   <(scripts/sync-codex-plugin-skills.sh --mirror-roots-json)` refuses a missing one at check
+   time); `required_paths` must sit inside `allowed_path_prefixes`; `spec.path`/`section` must
+   exist at the base commit — commit the plan BEFORE admission or admission says
+   `spec.path missing at base`.
+4. `.claude/mission-routing-config.json` → the new graph + sources; then
+   `scripts/mission-terminal-reconcile.js legacy --repo-root . --graph-digest <digest>` (the
+   legacy B/C disposition is bound to the current graph digest; without it admission fails with
+   `exact legacy B/C terminal disposition is invalid`).
+5. **Task authority**: build with the kernel, never by hand —
+   `freezeTaskAuthorityEnvelope({taskId, policy, policyHash, intent, acceptance:{contract_hash:
+   <plan sha>, criteria_hash: <rubric sha>, required_evidence}, resourceCeiling, escalationPolicy,
+   finishReceiptSchema, effectPermissions, dataEgressRules, missionAuthority:{repoIdentity:
+   'git-common-dir:<common dir>', graphDigest}})` with `policy`/`policyHash` from
+   `resolveGovernancePolicy(.claude/owner-kernel-governance.json)`. Caller-supplied
+   `authority_status` / `mission_lineage_id` are refused.
+6. `node scripts/session-mode.js set --level l5 --repo-root <repo>` → `READY`.
+7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
+   `mission grant --repo . --prepared prepared.json --node <id>` → `contract_path`, `seal_path`,
+   `branch`, `base_sha`. Each grant is one attempt; a rejected INTAKE still consumes it.
+8. **Brief** ≤ 8 KB: paste `output_paths` verbatim; say the harness commits; forbid `git stash`
+   and pushes; list the verify commands. Nothing the hand cannot see (evidence dirs) may be cited
+   as a reading assignment.
+9. Dispatch: `AUTOPILOT_LEVEL=l5 AUTOPILOT_ROOT_RUN_ID=<contract.mission_runtime.root_run_id>`
+   `node bin/autopilot.js engine implement-review --campaign-contract <contract> --campaign-seal
+   <seal> --mission-prepared prepared.json --prompt-file <brief> --branch <branch> --base
+   <base_sha> --cwd <repo> --max-rounds 3` — do NOT pass `--campaign-ledger`: any non-canonical
+   path is `campaign_ledger_path_mismatch` at intake and burns the attempt. Watch the hands
+   worktree from a report-only monitor; the artifact is the commit on `<branch>`.
+10. **Verification is yours**: check out the hand's commit in a detached scratch worktree and run
+    every verify command there; probe the reviewer's MUST-FIX claims by re-derivation
+    (probe + mutation) before accepting or refuting; run a second-family `dispatch-review.sh`
+    when the rail's seat returns `no_verdict`.
+11. Known rail limits (BACKLOG rows, 2026-09-14): a non-empty review needs
+    `--campaign-disposition-authority` on `--resume`, and that path currently drops the findings
+    and terminal-stops; a reviewer `no_verdict` releases the claim; `status task` has no writer.
+    When the rail stops, degrade per the documented fallback
+    (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed`), repair on
+    the mission branch in its retained worktree, merge on git evidence, and file the rail defect.
+
 ## Degradation
 
 `--solo` → fall back to the `/l3` inline engine. This is also the automatic

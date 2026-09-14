@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.36.40 — backlog gate 進 pre-commit ritual；depth-0 managed-campaign 步驟寫進 l5 reference
+
+- `scripts/sync-manifest.json` 多一條 `check-backlog-entries` ritual（觸發：`docs/BACKLOG.md`、`.claude/backlog-config.md`、
+  `.claude/backlog-debt.json`、gate 本體），pre-commit 就擋；量過：塞一列胖 row commit 被拒（`✗ check-backlog-entries FAILED`）。
+  v2.36.39 翻 block 後第一條新 row 是 commit 之後才被 finish-flow 層抓到、已經推出去——這條 ritual 就是那次的修法
+  （母 plan open question 3 由事故回答）。
+- `skills/l5/references/hetero-impl-loop.md` § "Depth-0 recipe for one managed deliverable"：2026-09-14 兩次 campaign 量出來的
+  11 步（plan 先 commit、graph 帶 mirror、legacy rollover、authority 用 kernel 產、grant、brief、不傳 `--campaign-ledger`、
+  獨立驗證、rail 停了怎麼降級），取代散在 memory 裡的片段。
+- plan Review log 記 Phase 4 與「≤40 KB」驗收的偏離（154 列 × 900 B cap 不可能 40 KB；cap 是契約、40 KB 是猜的）。
+
+prose-justification: 本版 prose 增量是 l5 reference 的 11 步 runbook（機制已存在、只寫下操作順序），自 v2.35.2 基線的 +8%
+於 v2.36.34 已註明。
+
 ## v2.36.39 — backlog 遷移完成，本 repo 的 gate 翻成 block
 
 Phase 4 of `docs/plans/2026-09-14-backlog-entry-schema.md`（執行計畫 `docs/plans/2026-09-14-backlog-entry-migration.md`）。

@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "final-panel-pins-2026-09-15",
+  "logical_plan_id": "final-panel-pins-2026-09-15",
+  "session_id": "1b58dad4-fpp",
+  "session_key": "4f8d42622fddb45d061f8e08def572a172cd67974018726271893ce0c8226fb6",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "d3a11b8d43f7e03c0dc5df11fa3047cda8ed19664c6a8d5aba351f7634de75d6",
+  "manifest_sha256": "521d79d9037d7f02325caa339d635e13238762e6952238a48cf6ac7e2fc50607",
+  "plan_sha256": "3c110096873715c81a0e0b68240a49a66876f3b8486765724dd4f2596e755d22",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "febab0974832b68520a361732b18a8912bc761eb4ffa618276db1dfec1cd414d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ba9b569f5ed3cd0cf12b1a966d1a6592874a9cffc9daae2480f0fa4cdaac2b99",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-VKT44s",
+          "digest": "ba9b569f5ed3cd0cf12b1a966d1a6592874a9cffc9daae2480f0fa4cdaac2b99"
+        },
+        "receipt_digest": "957ca1c478dec853bae4f2a0649b2c5bdda6220cabe1819e08f45401965e7320"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "07ede12da6eac3bca44b4810f271502716ff81336e836b07b1907505d199b06a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "362dbb4e3537a08d7eeef0004344d5c216c3cb3b10fa68dcb3d5c5bedc2abebb",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-RHVvuv/stdout",
+          "digest": "362dbb4e3537a08d7eeef0004344d5c216c3cb3b10fa68dcb3d5c5bedc2abebb"
+        },
+        "receipt_digest": "2ba64dd8fa9f8a3adee792e569b97bdd48d7013a546f2eb8ed40a34041621c9d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/campaign-intake.js pre-claim panel-seat evaluation",
+      "claim": "The plan gates the shared finalPanelSeatQualified evaluation on qc_panel_seats_complete === true and min_panel_size >= 1, whereas R6 states runCampaignIntake evaluates every qc_panel_seats[i] with the shared function before the claim adapter, unconditioned; when the gate is false, a seat that is neither incumbent, ladder, nor admitted falls through to the generic validateReviewRoster defect path instead of the final_panel_seat_unqualified rejection with the pin-seat remedy.",
+      "evidence": "Plan section 2.4: the pre-claim check only runs when input.roster.qc_panel_seats_complete === true and min_panel_size >= 1 (the same condition under which performFinalPanel would review); otherwise the existing validateReviewRoster path still reports the roster defect. No test in 2.6 exercises the gated-off case with an unadmitted seat.",
+      "evidence_reference": "Plan section 2.4 and section 2.6 implementation-campaign-state.test.sh cases",
+      "repair": "Either state explicitly in section 2.4 that the gate matches exactly the performFinalPanel review condition (so no roster reaching a final panel can bypass the final_panel_seat_unqualified rejection), and add one test asserting that under the gated-off condition an unadmitted qc seat still cannot reach the claim adapter, or amend the gate to always run the shared check before the claim adapter per R6. No current change if the gate equivalence is confirmed and demonstrated by a test.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "559eb02b711ccf7d715afd57857b3a96f2aa04a9550e8a4e3dcd12f2012098d8"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/resolve-review-loop.sh standing-pin admission for qc_panel[N]",
+      "claim": "The planned standing-pin lookup can admit the wrong endpoint because it intentionally retains matching on engine, runner, and role only, although qc_panel rows are distinct by endpoint.",
+      "evidence": "Plan section 2.1 permits separate qc_panel rows for the same engine and runner at different endpoints, while section 2.2 says the existing lookup needs no change. The current lookup at scripts/resolve-review-loop.sh:2300-2305 uses rows.find with engine, runner, and role but does not compare endpoint; the seat arrays at lines 2053-2062 also do not carry endpoint into this gate. The first matching row can therefore admit a differently addressed seat.",
+      "evidence_reference": "Frozen R1 and R3; plan sections 2.1 and 2.2; scripts/resolve-review-loop.sh:2053-2062 and 2293-2308",
+      "repair": "Carry each qc_panel seat endpoint into the admission loop, normalize named and no-endpoint values consistently, and require the standing pin endpoint to equal that seat endpoint. Add a negative isolated-store test proving a pin for the same engine and runner at endpoint A does not admit endpoint B.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1c20c40e622dbc0d4b3b1b75671b91d13ca1ab27fe0866f67e1c693f42fa621d"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/engine-capability-state.js unpin-seat selector semantics",
+      "claim": "The plan does not define which row is removed when engine and runner are supplied without endpoint and multiple rows share that pair across endpoints, so the requirement to remove exactly one row is not implementable deterministically.",
+      "evidence": "R1 permits two qc_panel rows with the same engine and runner when their endpoints differ. Plan section 2.1 nevertheless makes endpoint optional for unpin-seat and says the operation removes one row, without defining whether omitted endpoint means null, wildcard, ambiguity error, or first match. The proposed selector object is likewise described only as optional.",
+      "evidence_reference": "Frozen R1 and R2; plan sections 1 and 2.1",
+      "repair": "Freeze the selector contract before implementation: require engine and runner together; define omitted endpoint as the null endpoint, with an explicit normalization rule for @none, and never as a wildcard. Add tests with null and named endpoints for the same engine and runner, proving each command removes exactly its intended row and reports removed: 1.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5ebbfd00781e05030dab23f4547081b89109f28034ee6c12b0c5c05298e15f75"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-state.test.sh pre-spend rejection coverage",
+      "claim": "The proposed test does not explicitly prove that the Mission claim adapter is never called and does not assert the required null pre-spend receipt, leaving the central pre-spend boundary inadequately gated.",
+      "evidence": "Plan section 2.6 says only that the claim adapter is not called. In current code, src/engine/campaign-intake.js has distinct missionClaimAdapter and claimAdapter variables, the latter naming the later generation claim. A spy described merely as the claim adapter can cover generation claim while allowing a Mission claim and release cycle. The test list also omits an assertion that pre_spend_no_effect_receipt is null.",
+      "evidence_reference": "Frozen R6; plan sections 1, 2.4, and 2.6; src/engine/campaign-intake.js:1395-1415 and 1732-1747",
+      "repair": "Specify separate spies for missionClaim and claimGeneration and assert both call counts are zero for an unqualified panel seat. Also assert pre_spend_no_effect_receipt is null and steps contains only the final_panel_seat_unqualified rejection.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7d7900f26a83d96d51c868bd556cfed2f8a430e8b9f7ffa917268054194e4a95"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Test-header red-at-base classification across qc-panel-honesty.test.sh and engine-capability-pin.test.sh",
+      "claim": "Several assertions described as change-pinning RED cases are already green at the base SHA, so the proposed evidence record cannot satisfy the frozen red-at-base rule as written.",
+      "evidence": "The plan labels false results for override_admitted_seats containing qc_panel alone or a different index as RED while explicitly acknowledging that the current function already returns false. Current finalPanelSeatQualified ignores override_admitted_seats and returns false when no incumbent or ladder match exists. Likewise, pinning the same role twice already leaves one row with the second row's reason, so the proposed same-qc-tuple assertion is preservation behavior at base. A mutant failure is not a red result against the base SHA.",
+      "evidence_reference": "Frozen R8; plan section 2.6; src/engine/autopilot-engine.js:1135-1155; scripts/engine-capability-state.js:944-953",
+      "repair": "Classify the already-false index-negative assertions and same-tuple replacement assertion as labelled preservation guards with recorded green base results. Use the exact-index positive admission, multi-row retention, selective unpin, and pre-Mission rejection assertions as the change-pinning RED cases, each recorded against the base SHA. Keep mutation coverage only as supplementary evidence.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0346a1f9cbdcb989942fd324430a30d13cda9a4d00534295bd90cba57b11b4d2"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "559eb02b711ccf7d715afd57857b3a96f2aa04a9550e8a4e3dcd12f2012098d8",
+      "rubric_id": "R6",
+      "affected_surface": "src/engine/campaign-intake.js pre-claim panel-seat evaluation",
+      "claim": "The plan gates the shared finalPanelSeatQualified evaluation on qc_panel_seats_complete === true and min_panel_size >= 1, whereas R6 states runCampaignIntake evaluates every qc_panel_seats[i] with the shared function before the claim adapter, unconditioned; when the gate is false, a seat that is neither incumbent, ladder, nor admitted falls through to the generic validateReviewRoster defect path instead of the final_panel_seat_unqualified rejection with the pin-seat remedy.",
+      "evidence_reference": "Plan section 2.4 and section 2.6 implementation-campaign-state.test.sh cases",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-15T03:51:25.942Z"
+}

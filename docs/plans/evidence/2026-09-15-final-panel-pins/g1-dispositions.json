@@ -1,0 +1,17 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "final-panel-pins-2026-09-15",
+ "generation": 1,
+ "findings": [
+  {"fingerprint": "1c20c40e622dbc0d4b3b1b75671b91d13ca1ab27fe0866f67e1c693f42fa621d", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: qc_panel pin identity is engine+runner+endpoint, so the resolver's admission loop must carry the seat endpoint (QC_PANEL_ENDPOINTS, @none ≡ null) and the pin endpoint must equal it; negative isolated-store test added (§2.2, §2.6)."},
+  {"fingerprint": "5ebbfd00781e05030dab23f4547081b89109f28034ee6c12b0c5c05298e15f75", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: unpin-seat selector frozen — --engine, --runner and --endpoint are required together for --role qc_panel; --endpoint @none means the null endpoint; never a wildcard; tests with null and named endpoints on the same engine+runner each remove exactly one row (§2.1, §2.6)."},
+  {"fingerprint": "7d7900f26a83d96d51c868bd556cfed2f8a430e8b9f7ffa917268054194e4a95", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: the intake test uses separate spies for missionClaim and the generation claim, asserts both counts are zero, pre_spend_no_effect_receipt === null, and steps contains only the final_panel_seat_unqualified rejection (§2.6)."},
+  {"fingerprint": "0346a1f9cbdcb989942fd324430a30d13cda9a4d00534295bd90cba57b11b4d2", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: index-negative and same-tuple-replacement assertions are relabelled preservation guards (green at base, recorded); change-pinning reds are exact-index admission, multi-row retention, selective unpin, endpoint-mismatch non-admission, and the pre-Mission rejection; mutants are supplementary only (§2.6)."},
+  {"fingerprint": "559eb02b711ccf7d715afd57857b3a96f2aa04a9550e8a4e3dcd12f2012098d8", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted: the intake check runs whenever qc_panel_seats is a non-empty array (no completeness gate); an incomplete panel still gets the existing validateReviewRoster defect later, but an unadmitted seat can never reach the claim adapter (§2.4); test added for the incomplete-panel case."}
+ ]
+}

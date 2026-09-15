@@ -211,6 +211,16 @@ three `reviewed` seat receipts or a real verdict, not `precondition_failed`.
 
 ## Review log
 
+- 2026-09-15 execution: lineage `a5847a…` attempt 1 burned pre-spend (`required path src/engine/final-panel-qualification.js
+  not present at base` — a NEW file cannot be in `required_paths`); graph refrozen, attempt 2 withdrawn never-started,
+  new lineage `2ee60fd0` (amended objective; same adoption key + new digest is `MISSION_BINDING_MISMATCH`). Its attempt 1:
+  the hand finished all §2 work in 1587 s but its commit was `boundary_rejected` on the unlisted
+  `platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md` mirror. Depth-0 adopted the retained worktree's edits
+  unchanged as `fa2a0c50`; base-run reds on `afe55e6a` (4 suites), 12 verify commands green, 3 mutants red, GLM-5.2
+  second-family SHIP-AS-IS (`evidence/…/review-glm.json`). Merge `3be9ad53`, receipt `evidence/…/integration-receipt.json`.
+  §5 dogfood: two pins recorded on this host; `override_admitted_seats` = `["implementer","qc_panel[0]","qc_panel[1]"]`
+  (`evidence/…/dogfood-resolver.stderr`).
+
 - 2026-09-15 plan review G1 (GLM-5.2 architecture seat: CONDITIONAL, one non-blocking R6 finding;
   codex/gpt-5.6-sol operations-skeptic: STOP with four blockers R3/R2/R6/R8). All five accepted and
   folded: pin endpoint carried into the resolver's qc admission (R3); `unpin-seat` selector contract

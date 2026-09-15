@@ -1,5 +1,49 @@
 # Changelog
 
+## v2.36.46 — final panel 認 operator 記錄的席位：qc_panel 常設 pin 按席位、resolver 記錄 qc 席位准入、intake 在 claim 前拒絕未准入的席位
+
+/l5 managed campaign（plan `docs/plans/2026-09-15-final-panel-per-seat-pins.md`，mission node
+`final-panel-pins-2026-09-15`；plan review GLM-5.2 + codex/gpt-5.6-sol 兩代、六條 blocker 全摺入；implementer
+cursor-grok-4.6-low；**hand 的 commit 被 boundary gate 拒絕**（sync 把 `skills/l5/references/hetero-impl-loop.md`
+鏡像進 `platforms/codex/plugin/skills/`，而 `--mirror-roots-json` 不列 `skills`，output_paths 沒它），depth-0 從
+retained worktree 原樣接手 commit `fa2a0c50`；rail 這輪沒有產出任何 reviewed artifact——驗證全在 depth-0：
+base-run 四個 suite 在 `afe55e6a` 全紅、12 條 verify 指令綠、三個 mutant（拔 endpoint 比對／index 不敏感／刪 intake
+block）各紅一個 suite；第二家族 GLM-5.2 full-diff SHIP-AS-IS 帶完整 NO-FINDING-PROOF）。owner 裁定「這種每天再犯的
+問題應該一次到位」，所以做的是常設 pin 而不是每次派工帶 override 檔。
+
+量到的真因不是「exact-tuple 規則」：(1) managed rail 解 roster 只帶 `--check-scorecard`、從沒傳 scope/identity 檔，
+`fallback_ladder` 永遠 `[]`；(2) resolver 只對 `UNQUALIFIED_RUNNERS="cursor"` 的席位查 override/pin，codex／cc-shim 的
+qc 席位根本不查；(3) pin store 一個 role 一列，三席 panel 釘不了。GLM-5.2 的 reviewer 考試是 failed（event 139）、
+gpt-5.6-sol 的 scorecard runner token 是 `codex-cli` 不是 `codex`——這兩件不是 bug，照 ADR-0001 只有「有紀錄的
+operator 決定」能放行，這版就是把那條路接通。
+
+- `scripts/engine-capability-state.js`：`pin-seat --role qc_panel` 一列一個 engine+runner+endpoint（其他 role 維持一
+  role 一列）；`unpin-seat --role qc_panel [--engine X --runner Y [--endpoint E]]`，省略 endpoint＝`@none`、從不是
+  wildcard，非 qc_panel 帶 selector 拒絕。
+- `scripts/resolve-review-loop.sh`：每個 `qc_panel[N]` 席位都查 override 檔／standing pin（pin 比對含 endpoint），准入
+  記進 `override_admitted_seats` 且保留索引字串 `qc_panel[N]`；沒准入的 qc 席位印 stderr ⚠ 不拒絕（plan review、
+  qc-panel.js 等非 managed consumer 照常）；新 `--field override_admitted_seats`。
+- `src/engine/final-panel-qualification.js`（新）：`finalPanelSeatQualified(roster, seat, index)` 唯一一份，engine 的
+  final panel 與 campaign intake 共用；path (c)＝`override_admitted_seats` 含 `qc_panel[<index>]`（`qc_panel`、別的
+  index、沒這個 key 都不算）。
+- `src/engine/campaign-intake.js`：在 Mission claim 之前逐席評估，任一席不合格 → `blocked`／
+  `final_panel_seat_unqualified`，訊息列出每席 `qc_panel[i] model/runner@endpoint` 與 `pin-seat` 解法；不燒 claim、不開
+  worktree。**從這版起，下一個 managed campaign 在 pin 沒記之前會在 intake 就被拒**——這是設計，也是本機今天先記兩個
+  pin 的原因（GLM-5.2/cc-shim@glm、gpt-5.6-sol/codex@none）；dogfood 證明：`--field override_admitted_seats` 回
+  `["implementer","qc_panel[0]","qc_panel[1]"]`，MiniMax 席走 incumbent 路徑。
+- 文件：`references/hetero-dispatch.md` +486 B（三條准入路徑、pin 指令、intake 拒絕）；l5 recipe 6b（prepare 前查
+  admitted seats）與 7（`required_paths` 要存在於 base、換 graph 要新 lineage）；scripts-inventory row。
+- 測試：engine-capability-pin +7、resolve-review-loop-standing-pin +4、qc-panel-honesty +4、implementation-campaign-state
+  +1（多斷言：兩個 claim spy 都 0、receipt null、steps 只含 rejection）。
+- rail 這輪量到的（BACKLOG）：`--mirror-roots-json` 漏 `skills`（S）；`required_paths` 列新檔燒一次 attempt（pre-spend
+  row 第三例）；同 adoption key 換 graph digest 是 `MISSION_BINDING_MISMATCH`，只能開新 lineage（舊 lineage
+  `a5847a…` 留在 ACTIVE、attempt 2 以 never-started withdraw，是殘留不是阻擋）；rail 從不傳 scope 檔（S）。
+
+prose-justification: 本版 prose 面 +486 B（hetero-dispatch.md 的 qc_panel 准入段）+ l5 recipe 兩條；自 v2.35.2 基線的
++9% 是 v2.36.34／v2.36.38／v2.36.40／v2.36.45 已各自註明的 reference 與 runbook。
+
+---
+
 ## v2.36.45 — peer 回報殘留三條：config ladder tier 3 只在 dogfood 生效、qc-panel 輸出按 node 分目錄、wrapper commit subject 凍結
 
 /l5 managed campaign（plan `docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md`，mission node

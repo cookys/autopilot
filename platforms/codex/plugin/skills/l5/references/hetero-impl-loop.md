@@ -162,7 +162,11 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     `final_panel_seat_unqualified`.
 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
    `mission grant --repo . --prepared prepared.json --node <id>` → `contract_path`, `seal_path`,
-   `branch`, `base_sha`. Each grant is one attempt; a rejected INTAKE still consumes it.
+   `branch`, `base_sha`. Each grant is one attempt; a rejected INTAKE still consumes it. The graph's
+   `required_paths` must exist at `base_sha` — a file the hand will CREATE goes in `authorized_creates`
+   and `output_paths` only (2026-09-15: listing it burned an attempt). Changing the graph after a
+   lineage exists needs a new lineage (amend `intent.objective`) — same adoption key + new digest is
+   `MISSION_BINDING_MISMATCH`.
 8. **Brief** ≤ 8 KB: paste `output_paths` verbatim; say the harness commits; forbid `git stash`
    and pushes; list the verify commands. Nothing the hand cannot see (evidence dirs) may be cited
    as a reading assignment. **Commit or keep OUTSIDE the repo every depth-0 evidence file (grant

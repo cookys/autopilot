@@ -105,20 +105,36 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: header unsets AUTOPILOT_LEVEL but the strict-l5 bootstrap still finds the marker file; point the marker dir at TEST_TMP.
 
 ### Managed rail: the final panel's non-incumbent seats are structurally precondition_failed under the exact-tuple rule
-- **Status**: fired 2026-09-15
+- **Status**: shipped v2.36.46 2026-09-15
 - **Trigger**: peer-residue attempt 3 stopped at `final_panel_seat_precondition_failed`: codex/GLM seats are neither the incumbent tuple nor in `fallback_ladder`
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-15, `finalPanelSeatQualified` in `src/engine/autopilot-engine.js`
-- **Pointer**: none
-- **Context**: the sealed roster admits a panel the engine cannot review; qualify seats from `qc_panel_seats` or refuse at intake.
+- **Pointer**: docs/plans/2026-09-15-final-panel-per-seat-pins.md
+- **Context**: cause was the inputs, not the rule — see plan §0.
 
 ### Managed rail: a pre-spend rejection at the dispatch-hetero layer still consumes the Mission claim
 - **Status**: fired 2026-09-15
-- **Trigger**: peer-residue attempts 1–2 burned on `dirty: repository has uncommitted changes` and a marker-bridge digest mismatch
+- **Trigger**: peer-residue attempts 1–2 burned (dirty tree; marker-bridge digest); final-panel-pins attempt 1 burned on `required path … not present at base` (a NEW file in `required_paths`)
 - **Effort**: Fix
-- **Source**: /l5 dogfood 2026-09-15; sibling of v2.36.42 (`--campaign-ledger`) and of the non-git `--repo` row
-- **Pointer**: none
+- **Source**: /l5 dogfood 2026-09-15; sibling of v2.36.42 and of the non-git `--repo` row
+- **Pointer**: docs/plans/evidence/2026-09-15-final-panel-pins/impl-run1.json
 - **Context**: `precondition_failed` before any runner spend should release with the attempt refunded, or the checks should run at intake before the claim.
+
+### `--mirror-roots-json` omits `skills` — the graph check cannot warn that a skills output needs its mirror
+- **Status**: open
+- **Trigger**: final-panel-pins attempt 1: hand commit `boundary_rejected` on `platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md`, unlisted and unflagged by `--mirror-roots`
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-15
+- **Pointer**: docs/plans/evidence/2026-09-15-final-panel-pins/impl-run2.json
+- **Context**: add `skills` to the dirs list so the graph check names the mirror pre-seal.
+
+### Managed rail never passes scorecard scope files — `fallback_ladder` is always `[]`; evidenced qc seats need a pin
+- **Status**: open
+- **Trigger**: a qc seat scorecard-qualified for reviewer (e.g. gpt-5.6-sol once `codex-cli`/`codex` canonicalise) is refused at intake without a pin
+- **Effort**: S
+- **Source**: plan §0 fact 1 / §6, 2026-09-15
+- **Pointer**: docs/plans/2026-09-15-final-panel-per-seat-pins.md
+- **Context**: engine resolves with bare `--check-scorecard`; `resolve-review-loop.sh:1498` needs both files to emit a ladder.
 
 ### /l5 recipe: set the l5 marker AFTER the plan hetero loop — under it codex seats are refused as non-strict dispatch
 - **Status**: fired 2026-09-15

@@ -1,0 +1,93 @@
+{
+  "acceptance": {
+    "contract_hash": "a3225385b89c74d2bca6237bfe5c882baf5ed84893d5b7350ae1b66945910b35",
+    "criteria_hash": "3c46213913377ac71c431b146e4ebbb94ea075aa76a58937ed03f909ddede678",
+    "required_evidence": [
+      "mirror-parity",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": []
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "project-default",
+    "data_egress": "local-only",
+    "data_egress_source": "project-default",
+    "guidance_profile": "guided",
+    "guidance_source": "project-default",
+    "topology_preference": "auto",
+    "topology_source": "project-default"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Ship docs/plans/2026-09-16-agy-effort-and-rail-wording.md: agy effort follows the resolved model tier on all three rails with a visible fold note; the VA refusal, the readiness bootstrap fallback and the dirty-tree refusal each name their remedy.",
+    "requirements_hash": "a3225385b89c74d2bca6237bfe5c882baf5ed84893d5b7350ae1b66945910b35",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        "bin",
+        "docs",
+        "hooks",
+        "platforms",
+        "scripts",
+        "src"
+      ],
+      "domains": [
+        "autopilot",
+        "integration"
+      ],
+      "languages": [
+        "javascript",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "6c710af9fdf2bc29dd46a5e85ff0efacd4a3fa95aeefe37047ee85bfb618d418",
+  "mission_lineage_id": "lineage-v1-6ef940783aab435464780bb3155b77694dc26907b5d0044e0d1441ff29b1d366",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_authority_id": "82dfee0aa525a806df11e645101f39ffa851e22fca5cba53d1d6b86de10afa17",
+  "task_id": "agy-effort-rail-wording-2026-09-16"
+}

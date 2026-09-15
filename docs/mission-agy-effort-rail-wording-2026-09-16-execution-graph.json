@@ -1,0 +1,111 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "agy-effort-rail-wording-2026-09-16",
+   "acceptance_ids": [
+    "agy-effort-follows-id",
+    "fold-visible",
+    "va-remedy",
+    "readiness-fallback-loud",
+    "dirty-remedy",
+    "no-regression"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "bin",
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/bin",
+     "platforms/codex/plugin/scripts",
+     "platforms/codex/plugin/src",
+     "scripts",
+     "src"
+    ],
+    "baseline_churn": 2000,
+    "max_changed_files": 26,
+    "max_extra_churn": 1000,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 5400,
+    "output_paths": [
+     "scripts/lib/agy-model-alias.sh",
+     "scripts/dispatch-hetero.sh",
+     "scripts/dispatch-review.sh",
+     "scripts/dispatch-author.sh",
+     "src/readiness/provider-bootstrap.js",
+     "src/status/cli.js",
+     "src/engine/repo-preconditions.js",
+     "bin/autopilot.js",
+     "platforms/codex/plugin/scripts/lib/agy-model-alias.sh",
+     "platforms/codex/plugin/scripts/dispatch-hetero.sh",
+     "platforms/codex/plugin/scripts/dispatch-review.sh",
+     "platforms/codex/plugin/scripts/dispatch-author.sh",
+     "platforms/codex/plugin/src/readiness/provider-bootstrap.js",
+     "platforms/codex/plugin/src/status/cli.js",
+     "platforms/codex/plugin/src/engine/repo-preconditions.js",
+     "platforms/codex/plugin/bin/autopilot.js",
+     "hooks/tests/dispatch-hetero.test.sh",
+     "hooks/tests/dispatch-review.test.sh",
+     "hooks/tests/dispatch-author.test.sh",
+     "hooks/tests/status-cli.test.sh",
+     "hooks/tests/autopilot-cli.test.sh",
+     "hooks/tests/implementation-campaign-state.test.sh",
+     "hooks/tests/provider-readiness-consumer.test.sh",
+     "docs/BACKLOG.md"
+    ],
+    "authorized_creates": [],
+    "profile": "high",
+    "required_paths": [
+     "scripts/lib/agy-model-alias.sh",
+     "scripts/dispatch-hetero.sh",
+     "src/status/cli.js"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-16-agy-effort-and-rail-wording.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 26,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-a3225385b89c74d2bca6237bfe5c882baf5ed84893d5b7350ae1b66945910b35"
+   ],
+   "source_rubric_ids": [
+    "R111322188580102544240711879534812855387234524228595212013717289979167166481573",
+    "R15549342386150568152155145330084565864308987161584968248578779311060590548359",
+    "R20365734438071212906299380676067153602513954326143873232587753603424967721261",
+    "R41046831834336829344726773223902707505640549531006923130094427970709290796892",
+    "R44540726491958676811411212951955695117084997081593262038675737637624728634935",
+    "R5395888007905883674884242341654888649584513745161815791047412789064584266056",
+    "R66868096324490431571319951059586391411885030243771419814667942942916721796305",
+    "R73113794794718612243460841457108384148636391908212059084102429746716012905250",
+    "R83301356798750128335980073522663514713236416832689961298399109183294345648040",
+    "R8718675135298316849326515526969026137057224260529503376729225143555236423603"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/dispatch-hetero.test.sh",
+    "bash hooks/tests/dispatch-review.test.sh",
+    "bash hooks/tests/dispatch-author.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/provider-readiness.test.sh",
+    "bash hooks/tests/provider-readiness-consumer.test.sh",
+    "bash hooks/tests/autopilot-cli.test.sh",
+    "bash hooks/tests/status-cli.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

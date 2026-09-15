@@ -88,6 +88,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-16-disposition-resume-scope-sha.md
 - **Context**: extend the v2.36.53 pre-claim preflight from the durable-wait phases to every git_candidate resume; the existing P3 drift cases gain a zero-call assertion.
 
+### Managed rail (cuda P1): GLM tautological no_finding_proof stops full_diff_review; final panel seat transport_failed
+- **Status**: fired 2026-09-16
+- **Trigger**: cuda P1 (fleet-comms): r2 GLM review no_verdict (tautological no_finding_proof) stopped the campaign; r3 reached final_panel then `final_panel_seat_transport_failed`; both fell back to the depth-0 panel
+- **Effort**: Fix
+- **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: raw logs requested from cuda; decide whether a tautological proof is an instrument fault (re-administer/swap seat, v2.36.43 durable wait) and which seat failed transport at the final panel.
+
 ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
 - **Status**: fired 2026-09-16
 - **Trigger**: cuda e2e: campaign-v1-48ffc2fd… verify script failed → engine ran dispatch_review (SHIP-AS-IS) → blocked at campaign_event_journal `cannot apply review_completed while campaign is VERTICAL_VERIFICATION`

@@ -18,7 +18,8 @@
 1. **D（fired）ledger rotation carry 重排**：`scripts/run-ledger.sh` ~3155-3190 的 carry jq 用 `group_by(._rotation_root)` 排序，journal 時間序丟失；ledger 2.1 MB ≫ 256 KiB 每次 append 都 rotate。先問 consult（codex）design fork：(a) 只修 writer（carry 保 append 序，dedupe 用 reduce+seen set，jq 的 group_by/unique_by 都會排序）；(b) 加 reader 端 `projectCampaign` 依 `input_artifact_digest === 前一 output` 鏈結（ts 只到秒會撞）。(b) 會把 `src/campaign/cli.js` 拉進 output_paths。紅測試放 `hooks/tests/run-ledger-rotation.test.sh` 旁：三條 journal 其 base64 序≠append 序、ledger 先撐過 cap、append 一次 → 斷言 snapshot 序＝append 序 **且** `projectCampaign` 不丟例外（兩者都要，單一斷言會被另一種修法混過）。現有磁碟 segment 已經是壞序，D 的 dogfood 若選 (a) 只能用新 campaign 或 fixture。D 自己的 campaign 若 reviewer no_verdict，別花時間 `--resume`（preflight 會擋、且投影仍壞）：直接走 A 的降級路徑。
 2. **B**：freeze chain（`SCRATCH=<dir> node freeze.js`——腳本在舊 session scratchpad，不在 repo；重寫很快，內容見 A 的 mission 檔）→ routing → legacy reconcile → commit → marker → grant → brief（≤8 KB，列七個測試檔＋鏡像）→ dispatch。agy 1.2.3 的重現指令在 plan §0.1。
 3. **C**：機制已讀（task #3 描述）：composition 在 verification 紅且 retriable 時照契約先跑 full-diff barrier → engine journal `REVIEW_COMPLETED`，但 reducer 只從 REVIEWING 收、VERTICAL_VERIFIED 只收 passed:true → 卡 journal。三個修法選項要 consult。
-4. 之後：ADJUDICATING pre-claim（open row）、stale lease GC（要開 row）、308-8f 的 agy 部分已併進 B。
+4. cuda P1 新回報（BACKLOG fired，排 C 後）：GLM no_finding_proof 判 tautological 停 full_diff_review；r3 final_panel_seat_transport_failed——已向 cuda 要 raw log（`msg_01M2KKKM50WEXHZFA5NXQ61SYG`）。
+5. 之後：ADJUDICATING pre-claim（open row）、stale lease GC（要開 row）、308-8f 的 agy 部分已併進 B。
 
 ## 驗證方式
 - `git fetch -q origin && git status -sb` → `## develop...origin/develop`。

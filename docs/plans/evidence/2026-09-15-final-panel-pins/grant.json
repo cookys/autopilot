@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-a5847a2565640f42ad937e22a11ebd96c3fff8812f9e42f6a683adff57ce349e",
+  "claim_id": "claim-v1-9036dd9db2fb3d8de910cf08dc1afb4e2a98370557930a59b837bc94ed2f8d60",
+  "mission_grant_ref": "b0b34d71a5b425ee23d3cb979d07ee4766d1f72c1f20d49a9b464f24f75bfb40",
+  "mission_subject_digest": "982b7242b986e510c7bc893bbe071ed0d7a6297be457a956100e6d25a764902d",
+  "mission_campaign_id": "campaign-v2-1c4a2a8c2ecbf314df4e7767db37f9db2ac05c1341b8e9fcfb611d787d588c6d",
+  "graph_node_id": "final-panel-pins-2026-09-15",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/a5847a2565640f42ad937e22a11ebd96c3fff8812f9e42f6a683adff57ce349e/final-panel-pins-2026-09-15/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/a5847a2565640f42ad937e22a11ebd96c3fff8812f9e42f6a683adff57ce349e/final-panel-pins-2026-09-15/attempt-1/campaign.seal.json",
+  "branch": "mission/a5847a256564/final-panel-pins-2026-09-15-a1",
+  "base_sha": "80377e7f4c1be0111fb367f162eff62ce6f6ef74",
+  "state_hash": "3cdcb6c902c7ea5df4e778b1ce5370d6f683ed5eb473e098bb727b5a510174aa"
+}

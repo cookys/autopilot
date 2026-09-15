@@ -324,6 +324,99 @@ check "managed admission matrix exits 0" 0 "$RC"
   && ok "managed admission matrix rejects six invalid classes and admits linked worktree" \
   || fail "managed admission matrix output ($D3_OUT)"
 
+# R. retire — another session's managed marker leaves once its deliverable is integrated,
+# proven from the Mission registry + a record-integration.js receipt + git ancestry.
+# RED at base 9d957fd2: `retire` was not a verb (usage, exit 2) — every case below.
+RT="$TMP/retire"; mkdir -p "$RT"
+git init -q "$RT/repo"; git -C "$RT/repo" config user.email t@t; git -C "$RT/repo" config user.name t
+printf 'a\n' > "$RT/repo/a.txt"; git -C "$RT/repo" add a.txt; git -C "$RT/repo" commit -qm base
+git -C "$RT/repo" branch -M develop
+git -C "$RT/repo" checkout -q -b mission/k1/node-a-a1
+printf 'b\n' > "$RT/repo/b.txt"; git -C "$RT/repo" add b.txt; git -C "$RT/repo" commit -qm hand
+SRC_SHA="$(git -C "$RT/repo" rev-parse HEAD)"
+git -C "$RT/repo" checkout -q develop
+git -C "$RT/repo" merge -q --no-ff -m merge mission/k1/node-a-a1
+ACC_SHA="$(git -C "$RT/repo" rev-parse HEAD)"
+# the receipt comes from the real writer, on the real branch names
+node "$REPO_ROOT/scripts/record-integration.js" --repo "$RT/repo" --source-sha "$SRC_SHA" \
+  --accepted-sha "$ACC_SHA" --method merge --unit-id node-a > "$RT/receipt.json" 2>"$RT/receipt.err" \
+  || { fail "retire fixture: record-integration receipt ($(cat "$RT/receipt.err"))"; }
+# a second, unintegrated branch for the negative
+git -C "$RT/repo" checkout -q -b mission/k1/node-b-a1
+printf 'c\n' > "$RT/repo/c.txt"; git -C "$RT/repo" add c.txt; git -C "$RT/repo" commit -qm hand2
+UNINT_SHA="$(git -C "$RT/repo" rev-parse HEAD)"
+git -C "$RT/repo" checkout -q develop
+# Mission registry + state with claims for both nodes under one graph digest
+GD="$(printf 'a1%.0s' $(seq 1 32))"; KEY="$(printf 'b2%.0s' $(seq 1 32))"
+mkdir -p "$RT/repo/.git/autopilot/mission/states"
+node - "$RT/repo/.git/autopilot/mission" "$GD" "$KEY" "$SRC_SHA" <<'NODE'
+const fs = require('fs'); const path = require('path');
+const [dir, gd, key, src] = process.argv.slice(2);
+fs.writeFileSync(path.join(dir, 'registry.json'), JSON.stringify({ missions: { [key]: { mission_graph_digest: gd, mission_lineage_id: 'lineage-v1-' + key } } }));
+fs.writeFileSync(path.join(dir, 'states', key + '.json'), JSON.stringify({ claims: {
+  c1: { claim_id: 'claim-v1-a', graph_node_id: 'node-a', campaign_contract_draft: { branch: 'mission/k1/node-a-a1' } },
+  c2: { claim_id: 'claim-v1-b', graph_node_id: 'node-b', campaign_contract_draft: { branch: 'mission/k1/node-b-a1' } },
+} }));
+NODE
+RMD="$RT/markers"; mkdir -p "$RMD"
+mk_marker() { # id level entry repo
+  node - "$RMD/$1.json" "$1" "$2" "$3" "$4" "$GD" <<'NODE'
+const fs = require('fs'); const [file, id, level, entry, repo, gd] = process.argv.slice(2);
+fs.writeFileSync(file, JSON.stringify({ session_id: id, level, repo_root: repo, started_at: '2026-01-01T00:00:00.000Z',
+  expires_at: '2099-01-01T00:00:00.000Z', entry_level: entry, fallback_reason: 'none',
+  mission_routing: { status: 'READY', admitted: true, would_block: false, admission: { mission_graph_digest: gd } } }));
+NODE
+}
+mk_marker dead-sess l5 l5 "$RT/repo"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session dead-sess --integration-receipt "$RT/receipt.json" --repo-root "$RT/repo" 2>&1); RC=$?
+check "retire: integrated deliverable retires the foreign managed marker (exit 0)" 0 "$RC"
+[ ! -e "$RMD/dead-sess.json" ] && ok "retire: marker file removed" || fail "retire: marker still present ($OUT)"
+echo "$OUT" | grep -q '"graph_node_id": "node-a"' && ok "retire: output names the bound graph node" || fail "retire: output ($OUT)"
+# negative: receipt for node-b (unit_id mismatch with any claim whose branch is integrated) — hand-edit the receipt
+node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));r.edges[0].unit_id="node-b";fs.writeFileSync(process.argv[2],JSON.stringify(r))' "$RT/receipt.json" "$RT/receipt-b.json"
+mk_marker dead-sess l5 l5 "$RT/repo"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session dead-sess --integration-receipt "$RT/receipt-b.json" --repo-root "$RT/repo" 2>&1); RC=$?
+check "retire: receipt bound to no claim of the lineage is refused (exit 1)" 1 "$RC"
+[ -e "$RMD/dead-sess.json" ] && ok "retire: refused marker stays" || fail "retire: refused marker was removed"
+echo "$OUT" | grep -q 'match no claim' && ok "retire: refusal names the binding" || fail "retire: refusal text ($OUT)"
+# negative: unintegrated branch — receipt claims accepted_sha on the unmerged tip
+node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));r.edges[0].unit_id="node-b";r.edges[0].source_ref="refs/heads/mission/k1/node-b-a1";r.edges[0].source_sha=process.argv[3];r.edges[0].accepted_sha=process.argv[3];fs.writeFileSync(process.argv[2],JSON.stringify(r))' "$RT/receipt.json" "$RT/receipt-unint.json" "$UNINT_SHA"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session dead-sess --integration-receipt "$RT/receipt-unint.json" --repo-root "$RT/repo" 2>&1); RC=$?
+check "retire: accepted_sha not on the integration ref is refused (exit 1)" 1 "$RC"
+echo "$OUT" | grep -q 'not an ancestor of develop' && ok "retire: refusal names git ancestry" || fail "retire: refusal text ($OUT)"
+# negative: non-managed marker
+mk_marker plain-l3 l3 l3 "$RT/repo"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session plain-l3 --integration-receipt "$RT/receipt.json" --repo-root "$RT/repo" 2>&1); RC=$?
+check "retire: a plain l3 marker is not retirable (exit 1)" 1 "$RC"
+[ -e "$RMD/plain-l3.json" ] && ok "retire: plain marker stays" || fail "retire: plain marker removed"
+# negative: two lineages share the graph digest (a re-adopted plan) → refused without --lineage, allowed with it
+KEY2="$(printf 'c3%.0s' $(seq 1 32))"
+node - "$RT/repo/.git/autopilot/mission" "$GD" "$KEY2" <<'NODE'
+const fs = require('fs'); const path = require('path'); const [dir, gd, key2] = process.argv.slice(2);
+const reg = JSON.parse(fs.readFileSync(path.join(dir, 'registry.json'))); reg.missions[key2] = { mission_graph_digest: gd, mission_lineage_id: 'lineage-v1-' + key2 };
+fs.writeFileSync(path.join(dir, 'registry.json'), JSON.stringify(reg));
+fs.writeFileSync(path.join(dir, 'states', key2 + '.json'), JSON.stringify({ claims: {} }));
+NODE
+mk_marker dead-sess l5 l5 "$RT/repo"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session dead-sess --integration-receipt "$RT/receipt.json" --repo-root "$RT/repo" 2>&1); RC=$?
+check "retire: ambiguous lineage (shared graph digest) is refused without --lineage (exit 1)" 1 "$RC"
+echo "$OUT" | grep -q 'shared by 2 Mission lineages' && ok "retire: refusal names the ambiguity" || fail "retire: refusal text ($OUT)"
+[ -e "$RMD/dead-sess.json" ] && ok "retire: ambiguous marker stays" || fail "retire: ambiguous marker removed"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session dead-sess --integration-receipt "$RT/receipt.json" --repo-root "$RT/repo" --lineage "$KEY" 2>&1); RC=$?
+check "retire: --lineage names the integrated lineage (exit 0)" 0 "$RC"
+[ ! -e "$RMD/dead-sess.json" ] && ok "retire: named-lineage marker removed" || fail "retire: named-lineage marker still present ($OUT)"
+mk_marker dead-sess l5 l5 "$RT/repo"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session dead-sess --integration-receipt "$RT/receipt.json" --repo-root "$RT/repo" --lineage "$KEY" --integration-ref --upload-pack=x 2>&1); RC=$?
+check "retire: option-shaped --integration-ref is refused (exit 1)" 1 "$RC"
+echo "$OUT" | grep -q 'not an option' && ok "retire: refusal names the option-shaped ref" || fail "retire: refusal text ($OUT)"
+rm -f "$RMD/dead-sess.json"
+# negative: marker of another repository
+mk_marker other-repo l5 l5 "$TMP"
+OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session other-repo --integration-receipt "$RT/receipt.json" --repo-root "$RT/repo" 2>&1); RC=$?
+check "retire: another repository's marker is refused (exit 1)" 1 "$RC"
+echo "$OUT" | grep -q 'different repository' && ok "retire: refusal names the repo mismatch" || fail "retire: refusal text ($OUT)"
+
+
 echo "---"
 echo "pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

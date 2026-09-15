@@ -113,7 +113,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: cause was the inputs, not the rule — see plan §0.
 
 ### Managed rail: a pre-spend rejection at the dispatch-hetero layer still consumes the Mission claim
-- **Status**: fired 2026-09-15
+- **Status**: shipped v2.36.48 2026-09-15
 - **Trigger**: peer-residue attempts 1–2 burned (dirty tree; marker-bridge digest); final-panel-pins attempt 1 burned on `required path … not present at base` (a NEW file in `required_paths`)
 - **Effort**: Fix
 - **Source**: /l5 dogfood 2026-09-15; sibling of v2.36.42 and of the non-git `--repo` row
@@ -280,7 +280,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/a-campaign-s-output-paths-must-enumerate-every-codex-mirror-and-the-rejection-ar.md
 
 ### Two L5 deliverables cannot run on one repo inside 24h: the marker bridge scans every marker and `clear` needs a receipt nothing writes
-- **Status**: fired 2026-09-15
+- **Status**: shipped v2.36.48 2026-09-15
 - **Trigger**: the next managed `engine implement-review` blocked at `precondition_failed` with `marker-to-campaign admission bridge failed: marker Mission mission_graph_digest does not match campaign projection`, or any work on…
 - **Effort**: S
 - **Source**: /l5 dogfood on the operator pin plan, 2026-09-11 — D4 blocked three attempts (`AUTOPILOT_ROOT_RUN_ID` missing, then `mission_grant_ref_released`, then the…

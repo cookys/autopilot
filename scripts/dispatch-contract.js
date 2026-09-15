@@ -6,6 +6,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const repoPreconditions = require('../src/engine/repo-preconditions');
 const {
   validateZeroDiffReceiptForContract,
 } = require(path.resolve(__dirname, '..', 'src', 'engine', 'sealed-zero-diff-validator'));
@@ -1123,30 +1124,10 @@ function loadContract(pathStr, errors) {
 }
 
 function validatePolicyFilePathsAtBase(repo, commitSha, paths, reasons) {
-  for (const p of paths) {
-    if (!hasPathAtCommit(repo, commitSha, p)) {
-      reasons.push(`path: required path ${p} not present at base`);
-      return;
-    }
-  }
+  reasons.push(...repoPreconditions.requiredPathReasons(repo, commitSha, paths));
 }
 
-function hasPathAtCommit(repo, commitSha, targetPath) {
-  let out;
-  try {
-    out = runGit(repo, ['ls-tree', '-r', '--name-only', commitSha, '--', targetPath]);
-  } catch (err) {
-    return false;
-  }
-
-  if (out.trim().length === 0) {
-    return false;
-  }
-
-  const exact = targetPath.replace(/\/+$/, '');
-  const lines = out.split('\n').filter((v) => v.length > 0);
-  return lines.some((line) => line === exact || line.startsWith(`${exact}/`) || line.endsWith(`/${exact}`));
-}
+const hasPathAtCommit = repoPreconditions.hasPathAtCommit;
 
 function resolveEngine(repo, reasons, resolvedEngine, requiredEngineRole = 'implementer') {
   const configPath = path.join(repo, '.claude', 'review-loop-config.md');
@@ -1264,37 +1245,13 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
   let headSha = '';
   let baseAtHead = false;
 
-  try {
-    headSha = runGit(repo, ['rev-parse', 'HEAD']).trim();
-    if (!isHex40(headSha)) {
-      reasons.push('base: HEAD must be a commit');
-    }
-  } catch (err) {
-    reasons.push('base: repository has no HEAD');
-  }
-
-  try {
-    runGit(repo, ['rev-parse', '--is-inside-work-tree']);
-  } catch (err) {
-    reasons.push('base: repository is not a git work tree');
-  }
-
+  // HEAD / work tree / dirty / base are stated once in src/engine/repo-preconditions.js
+  // so campaign intake can re-derive them before the Mission claim.
+  reasons.push(...repoPreconditions.repoBaseReasons(repo, baseSha));
   if (reasons.length > 0) {
     return { reasons, specSha: '' };
   }
-
-  const status = runGit(repo, ['status', '--porcelain']);
-  if (status.trim().length > 0) {
-    reasons.push('dirty: repository has uncommitted changes');
-    return { reasons, specSha: '' };
-  }
-
-  try {
-    runGit(repo, ['cat-file', '-e', `${baseSha}^{commit}`]);
-  } catch (err) {
-    reasons.push('base: pinned base commit does not resolve');
-    return { reasons, specSha: '' };
-  }
+  headSha = runGit(repo, ['rev-parse', 'HEAD']).trim();
 
   for (const dep of contract.depends_on) {
     try {

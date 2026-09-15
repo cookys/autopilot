@@ -34,6 +34,7 @@ const {
   consumeProviderReadinessBeforeSpend,
 } = require('../readiness/receipt');
 const { finalPanelSeatQualified } = require('./final-panel-qualification');
+const repoPreconditions = require('./repo-preconditions');
 
 
 const RUN_LEDGER = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
@@ -1353,6 +1354,50 @@ function runCampaignIntake(input = {}, adapters = {}) {
         steps: [rejection],
         pre_spend_no_effect_receipt: null,
       };
+    }
+  }
+  // Repository facts the contract checker will demand at dispatch (HEAD, work
+  // tree, clean tree, pinned base resolves, required paths present at base) are
+  // re-derived HERE, before the Mission claim, from the sealed campaign bytes.
+  // The checker runs inside dispatch-hetero AFTER the claim, so each of these
+  // used to consume an attempt with nothing spent (2026-09-15: a dirty tree,
+  // then a NEW file listed in required_paths). Same statement of the rule:
+  // src/engine/repo-preconditions.js is what checkPolicy calls too.
+  if (contractPath) {
+    let sealedContract = null;
+    try {
+      sealedContract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+    } catch (_error) {
+      sealedContract = null;
+    }
+    if (sealedContract && typeof sealedContract === 'object'
+        && typeof sealedContract.base_sha === 'string') {
+      const strict = sealedContract.strict_dispatch && typeof sealedContract.strict_dispatch === 'object'
+        ? sealedContract.strict_dispatch
+        : null;
+      let reasons = [];
+      try {
+        reasons = repoPreconditions.repoBaseReasons(repo, sealedContract.base_sha);
+        if (reasons.length === 0 && strict && Array.isArray(strict.required_paths)) {
+          reasons = repoPreconditions.requiredPathReasons(repo, sealedContract.base_sha, strict.required_paths);
+        }
+      } catch (error) {
+        reasons = [`base: ${error.message || String(error)}`];
+      }
+      if (reasons.length > 0) {
+        const rejection = rejected(
+          'campaign_generation',
+          'campaign_repo_precondition_failed',
+          `repository does not satisfy the sealed contract before the claim: ${reasons.join('; ')}`,
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
     }
   }
   const qcSeats = input.roster && Array.isArray(input.roster.qc_panel_seats)

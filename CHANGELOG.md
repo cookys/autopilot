@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.36.48 — 花錢前的 repo 事實檢查搬到 Mission claim 之前；`session-mode.js retire` 用證據退掉別的 session 的 marker
+
+兩條 rail 缺陷（BACKLOG fired 2026-09-15），一條 fix 分支，同一版：
+
+- **pre-spend 拒絕不再燒 claim**（v2.36.42 ledger path、v2.36.46 panel seat 之後第三個同型）：`checkPolicy` 對 repo 的
+  五項要求（HEAD 是 commit、是 work tree、樹乾淨、base 可解析、`required_paths` 在 base 存在）抽成
+  `src/engine/repo-preconditions.js` 一份陳述，`scripts/dispatch-contract.js` 照舊呼叫（reason 字串與短路順序逐字不變，
+  317 條契約斷言綠），`campaign-intake.js` 在 Mission claim adapter 之前用 sealed contract 的 `base_sha`／
+  `strict_dispatch.required_paths` 重推一次；不合就 `blocked`／`campaign_repo_precondition_failed`，`steps=[rejection]`、
+  receipt null、兩個 claim spy 都 0。今天三次 attempt 燒在這裡的原因（dirty tree ×1、新檔列進 required_paths ×1、
+  marker bridge ×1）前兩種現在 grant 不動。測試 fixture 因此要像真 repo 一樣 gitignore `.autopilot/`、鬆散 contract
+  檔改放 `$TEST_TMP`。
+- **marker bridge 的裁定維持**：它掃全部 marker、對不同 graph digest 的活 marker 拒絕，是 concurrency fence，不改。
+  改的是出口：`session-mode.js retire --session <id> --integration-receipt <record-integration receipt>` 從 marker 的
+  graph digest 找 Mission registry 的 lineage → 該 lineage 有一筆 claim 的 `graph_node_id`＝receipt `unit_id` 且分支＝
+  `source_ref` → git 證明 `source_sha ⊂ accepted_sha ⊂ --integration-ref`（預設 develop）→ 才 unlink。receipt 從不被
+  單獨信任（ADR-0001）。一個 digest 有多個 lineage（同 plan 換字重 adopt）時 fail closed，`--lineage <adoption-key>`
+  指名；`--integration-ref` 以 `-` 開頭拒絕、git 參數帶 `--end-of-options`。本機 dogfood：用早上那張
+  `integration-receipt.json` 退掉本 session 自己的 marker。**手動刪 marker 從此沒有理由**（recipe 6 改寫）。
+- 附帶修：`.claude/mission-routing-config.json` 回指一個 sources 仍相符的已完成 graph（backlog-entry-migration）並做
+  legacy reconcile——v2.36.46 出貨後我在 plan 補 Review log，凍結的 source sha 漂了，`session-mode set` 任何 level
+  都被拒、`mission-routing-admission.test.sh` 13 紅、`session-mode.test.sh` 13 紅；完成的 graph 保持不動（memory
+  「archive live evidence routing closeout」那條），這輪 v2.36.47 的 mirror-roots 修正也證明舊 graph 缺 skills 鏡像。
+- 測試：implementation-campaign-state +1（三段：missing path／dirty／preservation）、session-mode +19（happy、四負向、
+  ambiguous lineage ×2、option-shaped ref）；reviewer sonnet 一條 MUST-FIX（lineage 綁定）已摺入；GLM-5.2 二家族
+  SHIP-AS-IS（parser 被 session-title chrome 弄成 no_verdict，raw log 有完整 proof）。
+
+prose-justification: 本版 prose 面 +1 段（l5 recipe 6 的 retire 用法，取代「別人的 marker 手動搬走」）。
+
+---
+
 ## v2.36.47 — `--mirror-roots-json` 列出 projected skills：graph check 在 seal 前就知道 skills 輸出要帶鏡像
 
 `sync-codex-plugin-skills.sh --mirror-roots-json` 原本只列 DIRS（bin／src／scripts／references…），但 `sync_skills` 另外把

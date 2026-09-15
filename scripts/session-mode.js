@@ -22,7 +22,23 @@
  *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
  *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N]
  *   node scripts/session-mode.js clear [--task-status-receipt <file> --root-run-id <id>]
+ *   node scripts/session-mode.js retire --session <id> --integration-receipt <file>
+ *     [--integration-ref <ref>] [--lineage <adoption-key>] [--repo-root <dir>]
  *   node scripts/session-mode.js status
+ *
+ * retire (v2.36.48): retire ANOTHER session's managed marker for this repo once its
+ * deliverable is integrated. The marker-to-campaign bridge in dispatch-hetero.sh scans
+ * every marker in the directory and refuses a live one whose graph digest differs from
+ * the sealed campaign's — correct as a concurrency guard, but a finished deliverable's
+ * marker used to have no exit short of its 24h TTL (or hand deletion, which is
+ * gate-input deletion). `retire` re-derives completion instead of trusting a claim
+ * (ADR-0001): the marker's graph digest names a Mission lineage in the repo's
+ * registry; that lineage holds a claim for `unit_id`; the receipt from
+ * `scripts/record-integration.js` names that claim's branch as source_ref; and git
+ * proves source_sha ⊂ accepted_sha ⊂ --integration-ref (default develop). Only then
+ * is the marker unlinked. A marker records only its graph digest, so when a re-adopted
+ * plan left two lineages on one digest the verb fails closed until --lineage names the
+ * integrated one (reviewer MUST-FIX, 2026-09-15).
  * Exit: 0 ok / 2 usage-or-invalid-args.
  */
 
@@ -601,6 +617,146 @@ function cmdClear(args) {
   return 0;
 }
 
+function retireFail(reason) {
+  process.stderr.write(`session-mode: retire refused: ${reason}\n`);
+  return 1;
+}
+
+function gitOk(repoRoot, args) {
+  try {
+    execFileSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cmdRetire(args) {
+  const sessionId = args.session;
+  const receiptFile = args['integration-receipt'];
+  const integrationRef = args['integration-ref'] || 'develop';
+  const repoRoot = args['repo-root'] ? path.resolve(args['repo-root']) : gitToplevel();
+  if (!sessionId || !receiptFile) {
+    process.stderr.write('session-mode: retire requires --session <id> and --integration-receipt <file>\n');
+    return 2;
+  }
+  const target = path.join(markerDir(), `${normalizeSessionId(sessionId)}.json`);
+  let marker;
+  try {
+    marker = JSON.parse(fs.readFileSync(target, 'utf8'));
+  } catch (error) {
+    return retireFail(`marker unreadable: ${error.message}`);
+  }
+  if (!marker || typeof marker !== 'object' || !LEVELS.has(marker.level)
+      || typeof marker.repo_root !== 'string') {
+    return retireFail('marker malformed');
+  }
+  let markerRepo;
+  let thisRepo;
+  try {
+    markerRepo = fs.realpathSync(marker.repo_root);
+    thisRepo = fs.realpathSync(repoRoot);
+  } catch (error) {
+    return retireFail(`repo_root unresolved: ${error.message}`);
+  }
+  if (markerRepo !== thisRepo) return retireFail('marker belongs to a different repository');
+  const managed = marker.level === 'l5' || marker.level === 'l6'
+    || (marker.level === 'l3' && ['l4', 'l5', 'l6'].includes(marker.entry_level));
+  if (!managed) return retireFail('marker is not a managed (l5/l6 or degraded-from-l4+) marker; nothing for the bridge to refuse');
+  const admission = marker.mission_routing && marker.mission_routing.admission;
+  const graphDigest = admission && admission.mission_graph_digest;
+  if (!SHA256.test(graphDigest || '')) return retireFail('marker carries no Mission graph digest');
+
+  let receipt;
+  try {
+    receipt = JSON.parse(fs.readFileSync(path.resolve(receiptFile), 'utf8'));
+  } catch (error) {
+    return retireFail(`integration receipt unreadable: ${error.message}`);
+  }
+  const edge = receipt && receipt.artifact_type === 'merge_execution_receipt'
+    && receipt.status === 'complete' && Array.isArray(receipt.edges) && receipt.edges[0];
+  if (!edge || edge.status !== 'executed'
+      || !/^[a-f0-9]{40}$/u.test(edge.source_sha || '')
+      || !/^[a-f0-9]{40}$/u.test(edge.accepted_sha || '')
+      || typeof edge.source_ref !== 'string' || typeof edge.unit_id !== 'string') {
+    return retireFail('integration receipt is not a complete merge_execution_receipt from record-integration.js');
+  }
+
+  // Bind the receipt to the marker through the Mission registry: the graph digest
+  // names a lineage, the lineage holds a claim for unit_id, and that claim's branch
+  // is the receipt's source_ref.
+  let commonDir;
+  try {
+    commonDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch (error) {
+    return retireFail(`git common dir unresolved: ${error.message}`);
+  }
+  let registry;
+  try {
+    registry = JSON.parse(fs.readFileSync(path.join(commonDir, 'autopilot', 'mission', 'registry.json'), 'utf8'));
+  } catch (error) {
+    return retireFail(`Mission registry unreadable: ${error.message}`);
+  }
+  let lineages = Object.entries((registry && registry.missions) || {})
+    .filter(([, entry]) => entry && entry.mission_graph_digest === graphDigest);
+  if (lineages.length === 0) return retireFail('no Mission lineage was prepared for the marker graph digest');
+  // A marker records only the graph digest, not its lineage; a re-adopted plan (same
+  // graph, reworded intent) yields a second lineage with the same digest. Do not pick
+  // one silently: the operator names it with --lineage <adoption-key>.
+  if (args.lineage) {
+    lineages = lineages.filter(([key]) => key === args.lineage);
+    if (lineages.length === 0) return retireFail('--lineage names no Mission lineage with the marker graph digest');
+  } else if (lineages.length > 1) {
+    return retireFail(`marker graph digest is shared by ${lineages.length} Mission lineages (${lineages.map(([key]) => key.slice(0, 12)).join(', ')}); pass --lineage <adoption-key> to name the integrated one`);
+  }
+  let bound = null;
+  for (const [adoptionKey] of lineages) {
+    let state;
+    try {
+      state = JSON.parse(fs.readFileSync(path.join(commonDir, 'autopilot', 'mission', 'states', `${adoptionKey}.json`), 'utf8'));
+    } catch {
+      continue;
+    }
+    for (const claim of Object.values((state && state.claims) || {})) {
+      const branch = claim && claim.campaign_contract_draft && claim.campaign_contract_draft.branch;
+      if (claim && claim.graph_node_id === edge.unit_id && typeof branch === 'string'
+          && `refs/heads/${branch}` === edge.source_ref) {
+        bound = { adoptionKey, claim_id: claim.claim_id, branch };
+        break;
+      }
+    }
+    if (bound) break;
+  }
+  if (!bound) return retireFail('integration receipt unit_id/source_ref match no claim of the marker lineage');
+
+  // Git re-derivation: both commits exist, source ⊂ accepted ⊂ integration ref.
+  if (!gitOk(repoRoot, ['cat-file', '-e', `${edge.source_sha}^{commit}`])) return retireFail('receipt source_sha does not resolve');
+  if (!gitOk(repoRoot, ['cat-file', '-e', `${edge.accepted_sha}^{commit}`])) return retireFail('receipt accepted_sha does not resolve');
+  if (integrationRef.startsWith('-')) return retireFail('integration ref must be a ref name, not an option');
+  if (!gitOk(repoRoot, ['rev-parse', '--verify', '-q', '--end-of-options', `${integrationRef}^{commit}`])) return retireFail(`integration ref ${integrationRef} does not resolve`);
+  if (!gitOk(repoRoot, ['merge-base', '--is-ancestor', edge.source_sha, edge.accepted_sha])) return retireFail('source_sha is not an ancestor of accepted_sha');
+  if (!gitOk(repoRoot, ['merge-base', '--is-ancestor', '--end-of-options', edge.accepted_sha, integrationRef])) return retireFail(`accepted_sha is not an ancestor of ${integrationRef}`);
+
+  try {
+    fs.unlinkSync(target);
+  } catch (error) {
+    return retireFail(`marker unlink failed: ${error.message}`);
+  }
+  process.stdout.write(`${JSON.stringify({
+    ok: true,
+    retired: target,
+    session_id: marker.session_id,
+    lineage: bound.adoptionKey,
+    graph_node_id: edge.unit_id,
+    claim_id: bound.claim_id,
+    branch: bound.branch,
+    accepted_sha: edge.accepted_sha,
+    integration_ref: integrationRef,
+  }, null, 2)}\n`);
+  return 0;
+}
+
 function cmdStatus() {
   const m = readMarker();
   const out = m
@@ -616,12 +772,13 @@ function main() {
   switch (cmd) {
     case 'set': return cmdSet(args);
     case 'clear': return cmdClear(args);
+    case 'retire': return cmdRetire(args);
     case 'status': return cmdStatus();
     default:
       process.stderr.write(
         'Usage: session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] | ' +
-        'clear | status\n',
+        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | status\n',
       );
       return 2;
   }

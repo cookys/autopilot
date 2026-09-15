@@ -1,0 +1,93 @@
+{
+  "acceptance": {
+    "contract_hash": "9af01f030b25766d9930016b6828c27d47bcaf417b67f43f08b8197efac3a8aa",
+    "criteria_hash": "d3a11b8d43f7e03c0dc5df11fa3047cda8ed19664c6a8d5aba351f7634de75d6",
+    "required_evidence": [
+      "mirror-parity",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": []
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "project-default",
+    "data_egress": "local-only",
+    "data_egress_source": "project-default",
+    "guidance_profile": "guided",
+    "guidance_source": "project-default",
+    "topology_preference": "auto",
+    "topology_source": "project-default"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Ship docs/plans/2026-09-15-final-panel-per-seat-pins.md: qc_panel standing pins keyed by engine+runner+endpoint, the roster resolver records qc_panel[N] admissions, finalPanelSeatQualified admits recorded seats from one shared module, and campaign intake refuses an unadmitted panel seat before the Mission claim.",
+    "requirements_hash": "9af01f030b25766d9930016b6828c27d47bcaf417b67f43f08b8197efac3a8aa",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        "docs",
+        "hooks",
+        "platforms",
+        "schemas",
+        "scripts",
+        "src"
+      ],
+      "domains": [
+        "autopilot",
+        "integration"
+      ],
+      "languages": [
+        "javascript",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "7fe2c211c10045ce8fa10616e81c707f77a817830a8989e9fa3c2e519ac2ff03",
+  "mission_lineage_id": "lineage-v1-a5847a2565640f42ad937e22a11ebd96c3fff8812f9e42f6a683adff57ce349e",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_authority_id": "6b6e74d2b3f1162a48558b6da8bd1acfc56289af39c67e459b3499ce659c3a2d",
+  "task_id": "final-panel-pins-2026-09-15"
+}

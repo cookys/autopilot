@@ -1,0 +1,109 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "final-panel-pins-2026-09-15",
+   "acceptance_ids": [
+    "qc-panel-multi-pin",
+    "resolver-records-qc-admission",
+    "intake-refuses-pre-claim"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/references",
+     "platforms/codex/plugin/scripts",
+     "platforms/codex/plugin/src",
+     "references",
+     "scripts",
+     "skills/l5/references",
+     "src"
+    ],
+    "authorized_creates": [
+     "src/engine/final-panel-qualification.js",
+     "platforms/codex/plugin/src/engine/final-panel-qualification.js"
+    ],
+    "baseline_churn": 3000,
+    "max_changed_files": 20,
+    "max_extra_churn": 1500,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "output_paths": [
+     "scripts/engine-capability-state.js",
+     "platforms/codex/plugin/scripts/engine-capability-state.js",
+     "scripts/resolve-review-loop.sh",
+     "platforms/codex/plugin/scripts/resolve-review-loop.sh",
+     "src/engine/final-panel-qualification.js",
+     "platforms/codex/plugin/src/engine/final-panel-qualification.js",
+     "src/engine/autopilot-engine.js",
+     "platforms/codex/plugin/src/engine/autopilot-engine.js",
+     "src/engine/campaign-intake.js",
+     "platforms/codex/plugin/src/engine/campaign-intake.js",
+     "references/hetero-dispatch.md",
+     "platforms/codex/plugin/references/hetero-dispatch.md",
+     "skills/l5/references/hetero-impl-loop.md",
+     "docs/scripts-inventory.md",
+     "hooks/tests/engine-capability-pin.test.sh",
+     "hooks/tests/resolve-review-loop-standing-pin.test.sh",
+     "hooks/tests/qc-panel-honesty.test.sh",
+     "hooks/tests/implementation-campaign-state.test.sh"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "scripts/engine-capability-state.js",
+     "scripts/resolve-review-loop.sh",
+     "src/engine/final-panel-qualification.js",
+     "src/engine/campaign-intake.js"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-15-final-panel-per-seat-pins.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 12,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 20,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 4000000,
+    "tool_calls": 150,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-9af01f030b25766d9930016b6828c27d47bcaf417b67f43f08b8197efac3a8aa"
+   ],
+   "source_rubric_ids": [
+    "R100804130773808321929362750209317119893679271283281334955407533720155704705955",
+    "R105134510807382858136833370865198469705834601882022184156043010019222965491522",
+    "R105408869892606614703301511784870957456546222551881133175885930178482779930087",
+    "R107450487027003251004196877412489396063420170858461310011564143374861234621946",
+    "R34560761083212353415301292941937981178290771909614035449124649594606641632551",
+    "R34952765912747086643143400449782343780502684973483565835118815042937883707694",
+    "R43659914044425553655194114992885023769536652677513750601740577493385229681155",
+    "R79441617996804589429280412527318379326421048996543845940562617910463907542497",
+    "R79880340282794610030446004599561876310574009965268796281727117934753772911657",
+    "R80191196721516785896700004002550736562189399832430541256442019229143209770760",
+    "R81662079452817447476329601166196906190820519240044959622562493445547326237597"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/engine-capability-pin.test.sh",
+    "bash hooks/tests/resolve-review-loop-standing-pin.test.sh",
+    "bash hooks/tests/resolve-review-loop.test.sh",
+    "bash hooks/tests/qc-panel-honesty.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/dispatch-contract-pin.test.sh",
+    "bash hooks/tests/resolve-live-tuple.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-reference-sizes.js",
+    "node scripts/check-claude-md-inventory.js"
+   ]
+  }
+ ]
+}

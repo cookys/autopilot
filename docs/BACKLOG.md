@@ -84,9 +84,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Trigger**: host ledgers already rotated under the sorted `group_by` carry (zero original journals; file order is base64, not append) still throw `event input artifact must match the prior output artifact`
 - **Effort**: Fix
-- **Source**: plan 2026-09-16-ledger-rotation-order §6 (writer-only ship; reader recovery out of scope)
+- **Source**: l5 implementation plan 2026-09-16 (writer-only ship; reader recovery out of scope)
 - **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
-- **Context**: provenance-gated reader recovery for `_rotation_carry` rows, or a locked migration that proves projected digests unchanged.
+- **Context**: plan §6 — provenance-gated reader recovery for `_rotation_carry` rows, or a locked migration that proves projected digests unchanged.
 
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open

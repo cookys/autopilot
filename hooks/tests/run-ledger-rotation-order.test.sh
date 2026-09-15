@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Ledger rotation carry must keep journal append order (writer keep-first).
 #
-# T1 (RED at base 9fa7ac1a): ".1 journals in append order" /
+# Base for the RED evidence is 41193a66 (rubric R8); scripts/run-ledger.sh is
+# byte-identical at the grant base 9fa7ac1a (docs-only commits in between), and
+# the failures below were observed with both writers (9 FAIL lines each).
+# T1 (RED at base 41193a66): ".1 journals in append order" /
 #   "live journals in append order" — expected
 #   ["intake:<id>","campaign-event:zz-1","campaign-event:mm-2","campaign-event:aa-3"]
 #   got group_by order
 #   ["campaign-event:zz-1","campaign-event:aa-3","campaign-event:mm-2","intake:<id>"]
-# T2 (RED at base 9fa7ac1a): "projectCampaign does not throw:
+# T2 (RED at base 41193a66): "projectCampaign does not throw:
 #   event input artifact must match the prior output artifact"
 # T3 (preservation, green at base): latest leased stage once in live;
 #   query-latest generation/nonce unchanged.

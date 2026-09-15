@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.36.50 — `dispatch-hetero.sh --sibling-path-prefix <dir>/`：caller 自己的 rail I/O 落在 checkout 裡不再被當成 mutation
+
+308-8f 2026-09-14 回報第二條（第一條 `--sibling-ref-prefix` 在 v2.36.44）：工頭把 hand 的 stderr／result 寫進主 checkout
+的目錄，fingerprint 的 stat walk 看到新檔就 `main_checkout_mutated`。stat walk 是 2026-09-13 的設計，不改；改成 caller
+宣告：`--sibling-path-prefix <dir>/`（可重複）只從 stat walk 裡 prune 那個目錄，refs／diff／config／hooks／index 在那裡
+照量。`/`、`.git/`、絕對路徑、`..`、`./` 段、空段、沒有尾斜線都拒收。**目錄必須在 round 之前就存在**（mid-round 建目錄
+會動 root 的 mtime，照樣拒——這是刻意的，也有測試釘住）。symlink 不擴大豁免：指向 checkout 內別處的寫入照樣被 walk 到，
+指向外面的本來就看不到（reviewer 實測）。跨 detach 邊界用 `declare -p` 帶過去，跟 ref prefix 一樣。
+`references/hetero-dispatch.md` 那段改成「rail I/O 應該落在 checkout 外；非得寫進去就宣告」。
+測試 dispatch-hetero 22u–22x（+10：control 紅、宣告後綠、宣告外照拒、九種壞參數、mid-round 建目錄照拒、detached rail）。
+reviewer sonnet SHIP-AS-IS，三條 🟡（`./` 段、缺目錄測試、`[*]+set` 慣用法註解）全摺入。
+
+prose-justification: 本版 prose 面 +1 句（hetero-dispatch.md 的 Outcome states 段，`--sibling-path-prefix` 用法）。
+
+---
+
 ## v2.36.49 — 兩條沒人補的 hash 鏈：review-loop 契約 schema 漏一欄、profiles 基線對 ceo-agent／dev-flow 漂了兩天
 
 `codex-plugin-package.test.sh` 在 develop 上紅了 9 條、`profile-context-isolation.test.sh` 紅 2 條，兩個原因都是「出貨時

@@ -229,6 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
+| 2026-09-16 | disposition resume 修復（Fix，/l5 managed campaign）— durable-wait resume 走 `verifyResumeCandidate`、claim 前 preflight 驗 Git、`scope_implementation_sha` 綁初始 candidate；rail 量到 ledger rotation 重排缺陷登 BACKLOG | v2.36.53 | 527d59d2 |
 | 2026-09-16 | 兩條 hash 鏈進 pre-commit ritual ＋ l5 recipe 補 resume／merge 後規矩（S，無 project dir）— `check-contract-schema`、`check-profile-catalog` 進 sync-manifest；cuda 端到端量到 disposition resume 缺陷登 BACKLOG | v2.36.52 | 1985b332 |
 | 2026-09-16 | backlog 遷移 table style（S，無 project dir）— revival.3d 的外部表頭一次轉 schema 欄；lossy 列原行逐字進 sidecar；gate 支援多表與 `\|`；四條 reviewer MUST-FIX 全摺入 | v2.36.51 | 70eea675 |
 | 2026-09-16 | `--sibling-path-prefix`（Fix，無 project dir）— 308-8f 第二條：caller 宣告的 rail I/O 目錄從 fingerprint 的 stat walk 排除，其他量測不變；目錄要先存在 | v2.36.50 | 5125bb5d |

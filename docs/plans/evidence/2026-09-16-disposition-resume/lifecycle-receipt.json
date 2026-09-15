@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-15T18:58:42.810Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-fd316019e63a29e1162340960c748777669c0e8f4182520c2e50616cbd2c76e4",
+  "observed_head": "527d59d2135c691e30895ab26f25eabfc1f1c28c",
+  "worktree_observation_digest": "8d56455ddc7fcff42581e0984ea3b8dcb846dcd01691800a2145e6953ee97484",
+  "journal_digest": "7ce204eb60670f9e9c9c1edc83bcc6a234db5082d8a8e69f76aa8c67c2de937d",
+  "disposition_digest": "a2f46b32e28bf2b496c35e05743b6b349dec8757f65057cd98e350fae25ce87f",
+  "branch_inventory_digest": "77a0e71351532cdd91928fe92b4c214f3f600832c21b2c3f85d5b9d05b978583",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/6bece9d5644c/disposition-resume-2026-09-16-a2",
+      "tip": "b973089062661dadee3d3c1f5db484a2312fa6c5",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-15/reap-20260915T185822Z-3718002.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "9d859d70be064e89e864bdc4761d767617acabd76f97326116853384e44e5c9e"
+}

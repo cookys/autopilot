@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.36.53 — managed rail：durable-wait resume 走 verifyResumeCandidate，claim 前先驗 Git、`scope_implementation_sha` 綁上初始 candidate
+
+- `src/engine/campaign-intake.js`：`defaultGenerationClaim` 的 durable-wait 分支（`BOUNDARY_REJECTED`／`AWAITING_DISPOSITION`／
+  `AWAITING_CONVERGENCE_ADJUDICATION`）原本把 raw `candidate_reference` 直接當 `resume_candidate`、跳過 `verifyResumeCandidate`，
+  所以 `scope_implementation_sha` 從沒被填，engine 的 repair-scope contract 拿到 undefined、`check-repair-scope.js` 以
+  「implementation_sha must be an immutable full 40-hex commit object ID」exit 2（cuda 對 fleet-comms 端到端量到，2026-09-16；
+  BACKLOG 原先的診斷「沒人設 `initial_candidate_reference`」是錯的——`projectCampaign` 有設）。現在 git_candidate 的
+  durable-wait resume 一律走 `verifyResumeCandidate`（同一形狀：`commit`＝目前 candidate、`scope_implementation_sha`＝第一代
+  candidate，churn 基線不漂），並在 **Mission claim 之前**多一道 read-only preflight：branch tip／tree／ancestry 漂了或
+  reference 壞了就 `campaign_resume_git_drift`／`campaign_resume_candidate_invalid` blocked，claim adapter 一次都不叫（第四個
+  pre-spend 同型：ledger v2.36.42、panel v2.36.46、repo facts v2.36.48）。preflight 讀不到 sealed contract 或 ledger 投影失敗
+  也 fail-closed，不會靜默滑進 claim。`ADJUDICATING`／`VERTICAL_VERIFICATION` 流程不動（rubric R6；其 pre-claim 化另立 BACKLOG）。
+- `hooks/tests/implementation-campaign-routing.test.sh` +17（56→73）：真 git sandbox＋ledger 複本，C0（初始）／C1（repair tip）
+  雙錨點——`scope_implementation_sha === C0 && commit === C1`；T3 用 missionClaim spy 斷言 tip／tree／ancestry 漂移與 writer-fence
+  digest 壞掉四種情境 claim 呼叫 0 次；T4 engine 層注入 `campaignScopeChecker` spy，斷言每份 contract `base_sha===base &&
+  implementation_sha===C0`、repair 從 C1 起、`DISPOSITION_RESUMED` 後進 repair；T5 保留 `unbound-candidate` 不綁。base 上 5 條紅。
+- 流程（`docs/plans/evidence/2026-09-16-disposition-resume/`）：/l5 managed campaign；plan 兩代 hetero review（GLM-5.2＋gpt-5.6-sol，
+  7 條 blocker 全 fold）；consult 席 grok 402 改走 codex；attempt 1 燒在 depth-0 自己動了 checkout；attempt 2 hand（cursor-grok-4.6-low）
+  `3ca6c738` verify 綠，rail reviewer MiniMax no_verdict → composition 正確標 durable wait（v2.36.43 在這層是通的），但
+  `--resume` 被下面那條 rail 缺陷擋住 → 依文件降級 l3、第二家族 review（codex 兩輪：2 MUST-FIX 接受修 `b9730890`、1 條駁回）、
+  git 證據 merge `527d59d2`、record-integration → reap → `zero_residue: true`。
+- **rail 這輪量到的**（BACKLOG fired）：ledger 超過 `RUN_LEDGER_MAX_BYTES`（256 KiB；本 repo 2.1 MB）後每次 append 都 rotate，
+  `run-ledger.sh` 的 carry-forward 把 active runs 的 journal 依 base64(row) 分組重排，時間序丟失 → `campaign resume`／`inspect`
+  一律「event input artifact must match the prior output artifact」；七月起的 stale lease 讓 live segment 永遠縮不回去。這是
+  下一刀。
+
+prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一條從未修移到已修）。
+
+---
+
 ## v2.36.52 — 兩條漂了兩天的鏈進 pre-commit ritual；l5 recipe 補 resume／merge 後的規矩
 
 - `scripts/sync-manifest.json` +2 rituals（mechanism，不是 guidance）：`check-contract-schema`（trigger：`resolve-review-loop.sh`、

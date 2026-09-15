@@ -69,8 +69,24 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: cuda e2e (fleet-comms P0, autopilot 3ac4fa4e): `--resume --campaign-disposition-authority` → `implementation_sha must be an immutable full 40-hex commit object ID`, exit 2, no JSON
 - **Effort**: Fix
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K1VDJ50VJQZPC7SGDEJVVN`; the v2.36.41 measurement point
-- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Pointer**: docs/plans/evidence/2026-09-16-disposition-resume/README.md
 - **Context**: the durable-wait branch of `defaultGenerationClaim` bypassed `verifyResumeCandidate`, so `resume_candidate` was the raw reference without `scope_implementation_sha`; now every git_candidate resume is verified and normalized.
+
+### Managed rail: ledger rotation carry-forward reorders journal rows — resume/inspect fail above 256 KiB
+- **Status**: fired 2026-09-16
+- **Trigger**: campaign-v1-fd316019… (this repo, ledger 2.1 MB): composition marked `review_no_verdict` resumable, `campaign resume` → `event input artifact must match the prior output artifact`
+- **Effort**: Fix
+- **Source**: /l5 dogfood 2026-09-16 (the v2.36.43 measurement point)
+- **Pointer**: docs/plans/evidence/2026-09-16-disposition-resume/README.md
+- **Context**: `run-ledger.sh` rotates on every append above RUN_LEDGER_MAX_BYTES and its carry re-emits active-run journals grouped by base64(row), not in append order; stale July leases keep every run "active" so the live segment never shrinks.
+
+### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
+- **Status**: open
+- **Trigger**: a drifted non-durable-wait resume burns a grant attempt (same pre-spend class as v2.36.42/46/48/53)
+- **Effort**: S
+- **Source**: plan 2026-09-16-disposition-resume-scope-sha §6 (kept out by rubric R6)
+- **Pointer**: docs/plans/2026-09-16-disposition-resume-scope-sha.md
+- **Context**: extend the v2.36.53 pre-claim preflight from the durable-wait phases to every git_candidate resume; the existing P3 drift cases gain a zero-call assertion.
 
 ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
 - **Status**: fired 2026-09-16

@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-6bece9d5644cd994200a1d5b7181248a879c06ae3c9aa664125fd9ed9ffbc806",
+  "claim_id": "claim-v1-209ba22db78626f6e565a54fce6fcd6a3b6b9aabf07746a09c89c115f3088bf3",
+  "mission_grant_ref": "215e68bd703af95c9900c1d9d8170684a70fd937bc06eff77c61f8b804f7d8e9",
+  "mission_subject_digest": "53094d2f4d2de443d85a3160df15d1e95ddec2d77016b5f9e2294e2e6fe7e21e",
+  "mission_campaign_id": "campaign-v2-f17a7738b8260c75ac839bf5c543fd4b982f0dbf47d5a109cc9784f72e7b649d",
+  "graph_node_id": "disposition-resume-2026-09-16",
+  "graph_attempt": 2,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/6bece9d5644cd994200a1d5b7181248a879c06ae3c9aa664125fd9ed9ffbc806/disposition-resume-2026-09-16/attempt-2/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/6bece9d5644cd994200a1d5b7181248a879c06ae3c9aa664125fd9ed9ffbc806/disposition-resume-2026-09-16/attempt-2/campaign.seal.json",
+  "branch": "mission/6bece9d5644c/disposition-resume-2026-09-16-a2",
+  "base_sha": "1ea8825b356f3af73950ae39c1b81868568073ed",
+  "state_hash": "071e7fdd55d1dcbdf8e5ccea20da33e82b08e8fa4c809bb66a6ca41a6e45c31c"
+}

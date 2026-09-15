@@ -1,0 +1,18 @@
+== controller-execution-independent
+PASS [controller-execution-independent] 1 assertions
+== p6d-gates-repair-ladder
+PASS [p6d-gates-repair-ladder] 2 assertions
+== mission-runtime-v2
+PASS [mission-runtime-v2] 103 assertions
+== implementation-campaign-receipt
+PASS [implementation-campaign-receipt] 11 assertions
+== autopilot-engine
+PASS [autopilot-engine] 493 assertions
+== syntax
+✓ check-js-syntax: 655 tracked .js/.cjs/.mjs file(s) parse cleanly (4249ms)
+== mirror
+Codex plugin payload in sync: platforms/codex/plugin
+== backlog
+new 0 exit 0
+== sync-all
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","check-claude-md-inventory","check-js-syntax","l1-cache-key-parity","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}

@@ -154,8 +154,11 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     the receipt (`check-phase-review-receipt.js --plan-artifact --dispositions`, every disposition
     needs `candidate_blocker: true|false`) on the REVIEWED bytes, then fold and re-freeze.
 6. `node scripts/session-mode.js set --level l5 --repo-root <repo>` → `READY`. First check
-   `~/.autopilot/session-mode/` for another ACTIVE marker of this repo from a dead session: the
-   bridge scans every marker and a stale one with an older graph digest blocks intake (BACKLOG).
+   `~/.autopilot/session-mode/` for another ACTIVE managed marker of this repo: the bridge scans
+   every marker and one with a different graph digest blocks intake (a deliberate concurrency
+   fence). If that marker's deliverable is already integrated, retire it with evidence —
+   `node scripts/session-mode.js retire --session <id> --integration-receipt <record-integration
+   receipt>` re-derives lineage claim + git ancestry (v2.36.48); never delete a marker by hand.
 6b. Run `bash scripts/resolve-review-loop.sh --check-scorecard --field override_admitted_seats` and
     read the stderr ⚠ notes. Every `qc_panel[N]` without evidence must be pinned first
     (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with

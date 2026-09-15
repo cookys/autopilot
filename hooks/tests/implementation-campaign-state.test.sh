@@ -517,6 +517,9 @@ git -C "$SBX" config user.email "campaign-state@example.invalid"
 git -C "$SBX" config user.name "Campaign State Test"
 write_mission_governance "$SBX/.claude/owner-kernel-governance.json" shadow
 printf 'fixture\n' > "$SBX/README.md"
+# The suite parks ledgers under $SBX/.autopilot/; intake now re-derives the contract
+# checker's clean-tree rule before the claim, so the sandbox ignores it like a real repo.
+printf '.autopilot/\n' > "$SBX/.gitignore"
 git -C "$SBX" add .
 git -C "$SBX" commit -qm "fixture"
 BASE_SHA="$(git -C "$SBX" rev-parse HEAD)"
@@ -1005,7 +1008,7 @@ function campaignControlFixture(nonce, initialState = admitted.initial_state) {
 }
 
 const terminalOrder = [];
-const terminalContractPath = path.join(repo, 'mission-terminal-campaign.json');
+const terminalContractPath = path.join(repo, '..', 'mission-terminal-campaign.json');
 const terminalContract = {
   ...admitted.contract,
   mission_grant_ref: 'd'.repeat(64),
@@ -1629,8 +1632,8 @@ console.log(`durable_release_fail_no_mutation=${
 // ambiguous post-dispatch remain possibly effectful.
 const sealedRootRunId = 'sealed-root-identity-v1';
 const strictBranch = 'impl/icc-p1-intake';
-const strictContractPath = path.join(repo, 'strict-root-identity-campaign.json');
-const strictSealPath = path.join(repo, 'strict-root-identity-campaign.seal.json');
+const strictContractPath = path.join(repo, '..', 'strict-root-identity-campaign.json');
+const strictSealPath = path.join(repo, '..', 'strict-root-identity-campaign.seal.json');
 const strictMissionLineage = `lineage-v1-${missionSha256('strict-root-lineage')}`;
 const strictMissionPolicyDigest = missionSha256('strict-root-policy');
 const strictTaskAuthorityId = missionSha256('strict-root-task-authority');
@@ -3376,7 +3379,7 @@ runLedger([
   '--to-state', 'dead',
   '--idempotency-key', 'fixture-journal-abandon',
 ]);
-const alternatePath = path.join(repo, 'alternate-campaign.jsonl');
+const alternatePath = path.join(repo, '..', 'alternate-campaign.jsonl');
 const alternate = runCampaignIntake({
   ...commonInput,
   ledgerPath: alternatePath,
@@ -5089,6 +5092,86 @@ NODE
 assert_exit_code "$?" "0" "controller/journal ordering suite exits zero"
 assert_contains "$ORDER_OUT" '"boundary_reject_stops_controller_advance":true' "rejected event does not advance controller"
 assert_contains "$ORDER_OUT" '"boundary_journal_precedes_controller":true' "journal event precedes controller phase"
+
+# Repository facts are re-derived BEFORE the Mission claim (RED at base 9d957fd2: both
+# rejections below reached the claim adapter — dirty tree and a required path absent at base
+# used to be found only by dispatch-hetero's contract checker, after the grant was consumed).
+REPO_FACTS_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const root = process.argv[2];
+const tmp = fs.mkdtempSync(path.join(process.argv[3], 'repo-facts-'));
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+
+const git = (args) => execFileSync('git', ['-C', tmp, ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+git(['init', '-q']);
+git(['config', 'user.email', 't@t']);
+git(['config', 'user.name', 't']);
+fs.writeFileSync(path.join(tmp, 'present.txt'), 'x\n');
+git(['add', 'present.txt']);
+git(['commit', '-q', '-m', 'base']);
+const base = git(['rev-parse', 'HEAD']);
+
+function contract(requiredPaths) {
+  const file = path.join(tmp, `..`, `campaign-${Math.random().toString(16).slice(2)}.json`);
+  fs.writeFileSync(file, JSON.stringify({
+    schema_version: 1, base_sha: base, strict_dispatch: { required_paths: requiredPaths },
+  }));
+  return file;
+}
+function spies() {
+  const counts = { missionClaim: 0, claimGeneration: 0 };
+  return {
+    counts,
+    adapters: {
+      now: () => '2026-07-26T00:00:00.000Z',
+      missionClaim() { counts.missionClaim += 1; return { owner: 'mission', status: 'claimed', claim_id: 'must-not-run' }; },
+      releaseMission() { return { owner: 'mission_release', status: 'released' }; },
+      claimGeneration() { counts.claimGeneration += 1; return { owner: 'campaign_generation', status: 'claimed', generation: 1, nonce: 'n' }; },
+    },
+  };
+}
+const roster = {
+  reviewer_engine: 'fixture-reviewer', reviewer_effort: 'high', reviewer_runner: 'fixture',
+  implementer_engine: 'fixture-implementer', implementer_effort: 'high', implementer_runner: 'fixture',
+};
+
+// (1) required path absent at base → refused before any claim.
+const missing = spies();
+const missingResult = runCampaignIntake({ repo: tmp, roster, contractPath: contract(['present.txt', 'not-yet.js']) }, missing.adapters);
+assert.strictEqual(missingResult.status, 'blocked');
+assert.strictEqual(missingResult.rejection.code, 'campaign_repo_precondition_failed');
+assert.match(missingResult.rejection.reason, /required path not-yet\.js not present at base/);
+assert.strictEqual(missingResult.pre_spend_no_effect_receipt, null);
+assert.deepStrictEqual(missingResult.steps, [missingResult.rejection]);
+assert.strictEqual(missing.counts.missionClaim, 0);
+assert.strictEqual(missing.counts.claimGeneration, 0);
+
+// (2) dirty tree → refused before any claim.
+fs.writeFileSync(path.join(tmp, 'scratch.txt'), 'dirty\n');
+const dirty = spies();
+const dirtyResult = runCampaignIntake({ repo: tmp, roster, contractPath: contract(['present.txt']) }, dirty.adapters);
+assert.strictEqual(dirtyResult.status, 'blocked');
+assert.strictEqual(dirtyResult.rejection.code, 'campaign_repo_precondition_failed');
+assert.match(dirtyResult.rejection.reason, /dirty: repository has uncommitted changes/);
+assert.strictEqual(dirty.counts.missionClaim, 0);
+assert.strictEqual(dirty.counts.claimGeneration, 0);
+fs.unlinkSync(path.join(tmp, 'scratch.txt'));
+
+// (3) preservation guard (green at base): clean tree, paths present → the claim adapter is reached.
+const clean = spies();
+runCampaignIntake({ repo: tmp, roster, contractPath: contract(['present.txt']) }, clean.adapters);
+assert.ok((clean.counts.missionClaim + clean.counts.claimGeneration) >= 1);
+
+console.log('repo-facts-intake assertions passed');
+NODE
+)"
+assert_contains "$REPO_FACTS_OUT" "repo-facts-intake assertions passed" \
+  "campaign intake refuses dirty tree / missing required path before claim"
 
 PANEL_INTAKE_OUT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';

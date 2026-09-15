@@ -71,7 +71,7 @@
       ]
     }
   },
-  "mission_graph_digest": "7fe2c211c10045ce8fa10616e81c707f77a817830a8989e9fa3c2e519ac2ff03",
+  "mission_graph_digest": "6e05fe9b2efe6af0645152b2d8335e246db998ca5a1f6184767125997bfffef8",
   "mission_lineage_id": "lineage-v1-a5847a2565640f42ad937e22a11ebd96c3fff8812f9e42f6a683adff57ce349e",
   "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
   "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
@@ -88,6 +88,6 @@
     "max_wall_seconds": 36000
   },
   "schema_version": 1,
-  "task_authority_id": "6b6e74d2b3f1162a48558b6da8bd1acfc56289af39c67e459b3499ce659c3a2d",
+  "task_authority_id": "634929faa874d6ea4708b9406c4a9c5d7be685222ca1b03f3d0c0674960431d5",
   "task_id": "final-panel-pins-2026-09-15"
 }

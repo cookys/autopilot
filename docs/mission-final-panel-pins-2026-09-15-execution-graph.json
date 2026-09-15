@@ -55,7 +55,6 @@
     "required_paths": [
      "scripts/engine-capability-state.js",
      "scripts/resolve-review-loop.sh",
-     "src/engine/final-panel-qualification.js",
      "src/engine/campaign-intake.js"
     ],
     "spec": {

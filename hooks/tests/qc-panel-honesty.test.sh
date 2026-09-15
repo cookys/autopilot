@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# RED at base 80377e7f: AssertionError false !== true (finalPanelSeatQualified with
+#   override_admitted_seats: ['qc_panel[1]'] at index 1).
+# preservation guard (green at base): false for ['qc_panel'], ['qc_panel[0]'] vs index 1,
+#   and when the key is absent (index-insensitive match would admit the mismatch).
 . "$(dirname "$0")/lib.sh"
 
 OUT="$(node - "$REPO_ROOT" <<'NODE'
@@ -192,6 +196,23 @@ const unpinnedFamilyConflict = pinEngine.reviewDiff({
 });
 assert.strictEqual(unpinnedFamilyConflict.status, 'blocked');
 assert.strictEqual(unpinnedFamilyConflict.phase, 'reviewer_family');
+
+const admittedSeat = {
+  runner: 'unqualified-runner', model: 'unqualified-model', effort: 'high', family: 'other',
+};
+assert.strictEqual(finalPanelSeatQualified({
+  ...qualifiedRoster,
+  override_admitted_seats: ['qc_panel[1]'],
+}, admittedSeat, 1), true);
+assert.strictEqual(finalPanelSeatQualified({
+  ...qualifiedRoster,
+  override_admitted_seats: ['qc_panel'],
+}, admittedSeat, 1), false);
+assert.strictEqual(finalPanelSeatQualified({
+  ...qualifiedRoster,
+  override_admitted_seats: ['qc_panel[0]'],
+}, admittedSeat, 1), false);
+assert.strictEqual(finalPanelSeatQualified(qualifiedRoster, admittedSeat, 1), false);
 
 assert.strictEqual(terminalPanelCrossFamilySatisfied({
   implementer_engine: 'gpt-5.6',

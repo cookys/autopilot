@@ -43,7 +43,7 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token> [--effort <effort>]
   node scripts/engine-capability-state.js pin-seat --engine <token> --runner <token> --role <token> --effort <effort> --endpoint <name|@none> --reason <text> --operator <who> [--store <path>]
-  node scripts/engine-capability-state.js unpin-seat --role <token> [--store <path>]
+  node scripts/engine-capability-state.js unpin-seat --role <token> [--engine <token> --runner <token> [--endpoint <name|@none>]] [--store <path>]
   node scripts/engine-capability-state.js pins [--role <token>] [--store <path>]
 
 Options:
@@ -81,6 +81,7 @@ Options:
   --proof-detector-id <token>    Detector that produced the proof (invalidate-strike).
   --reason <text>      Non-empty operator reason for pin-seat (required).
   --operator <who>     Non-empty operator attribution for pin-seat (required; never defaulted).
+                       unpin-seat --engine/--runner/--endpoint apply to --role qc_panel only.
 
 Exit codes:
   0 = success
@@ -941,24 +942,57 @@ function buildPinRow(input) {
   });
 }
 
+function pinEndpointKey(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return normalizePinEndpoint(value === ENDPOINT_NULL_SELECTOR ? ENDPOINT_NULL_SELECTOR : value);
+}
+
+function sameQcPin(entry, engine, runner, endpoint) {
+  return entry.role === 'qc_panel'
+    && entry.engine === engine
+    && entry.runner === runner
+    && pinEndpointKey(entry.endpoint) === pinEndpointKey(endpoint);
+}
+
 function pinSeat(config, input) {
   const row = buildPinRow(input);
   return withWriteLock({ storeDir: config.storeDir, lockFile: config.lockFile, name: 'capability' }, () => {
     ensureDir(config.storeDir);
     const existing = readPinRows(config.pinsFile);
-    const next = existing.filter((entry) => entry.role !== row.role);
+    const next = row.role === 'qc_panel'
+      ? existing.filter((entry) => !sameQcPin(entry, row.engine, row.runner, row.endpoint))
+      : existing.filter((entry) => entry.role !== row.role);
     next.push(row);
     writeSnapshot(config.pinsFile, next);
     return row;
   });
 }
 
-function unpinSeat(config, roleRaw) {
+function unpinSeat(config, roleRaw, selector) {
   const role = normalizeSeatToken(roleRaw, 'role');
+  const hasSelector = selector !== undefined && selector !== null;
+  if (hasSelector && role !== 'qc_panel') {
+    throw new Error('--engine/--runner/--endpoint apply to --role qc_panel only');
+  }
   return withWriteLock({ storeDir: config.storeDir, lockFile: config.lockFile, name: 'capability' }, () => {
     ensureDir(config.storeDir);
     const existing = readPinRows(config.pinsFile);
-    const next = existing.filter((entry) => entry.role !== role);
+    let next;
+    if (hasSelector) {
+      if (!selector.engine || !selector.runner) {
+        throw new Error('selector requires --engine and --runner');
+      }
+      const engine = normalizeEngineToken(selector.engine, 'engine');
+      const runner = normalizeSeatToken(selector.runner, 'runner');
+      const endpoint = selector.endpoint === undefined || selector.endpoint === null || selector.endpoint === ''
+        ? null
+        : normalizePinEndpoint(selector.endpoint);
+      next = existing.filter((entry) => !sameQcPin(entry, engine, runner, endpoint));
+    } else if (role === 'qc_panel') {
+      next = existing.filter((entry) => entry.role !== 'qc_panel');
+    } else {
+      next = existing.filter((entry) => entry.role !== role);
+    }
     writeSnapshot(config.pinsFile, next);
     return { role, removed: existing.length - next.length };
   });
@@ -1853,7 +1887,7 @@ function parseCommandLineArgs(argv) {
     ['pin-seat', new Set([
       'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires', 'store',
     ])],
-    ['unpin-seat', new Set(['role', 'store'])],
+    ['unpin-seat', new Set(['role', 'engine', 'runner', 'endpoint', 'store'])],
     ['pins', new Set(['role', 'store'])],
   ]);
   const allowed = commandOptions.get(command);
@@ -2221,8 +2255,16 @@ function main() {
     }
     const config = resolveStoreConfig(options);
     let result;
+    const hasSelector = ['engine', 'runner', 'endpoint']
+      .some((key) => Object.prototype.hasOwnProperty.call(options, key));
     try {
-      result = unpinSeat(config, options.role);
+      result = unpinSeat(config, options.role, hasSelector ? {
+        engine: options.engine,
+        runner: options.runner,
+        endpoint: Object.prototype.hasOwnProperty.call(options, 'endpoint')
+          ? options.endpoint
+          : null,
+      } : undefined);
     } catch (error) {
       failValidation(`unpin-seat: ${error.message}`);
     }

@@ -2058,8 +2058,9 @@ _seat_engines=()
 # under the old three-field identity. An EMPTY effort here means the legacy partition (rows
 # recorded before effort partitioning), which is a distinct seat, not a wildcard.
 _seat_efforts=()
+_seat_endpoints=()
 _add_seat() {
-  _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); _seat_efforts+=("${4:-}")
+  _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); _seat_efforts+=("${4:-}"); _seat_endpoints+=("${5:-}")
 }
 
 # EVERY SELECTABLE ENGINE gets a seat row. "Selectable" means the resolver can
@@ -2105,7 +2106,7 @@ for (( _i = 0; _i < _qc_max; _i++ )); do
   _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
   [[ -n "$_qc_run" ]] || continue
   _qc_eng="${QC_PANEL[$_i]:-}"
-  _add_seat "qc_panel[$_i]" "${_qc_eng:-<unspecified>}" "$_qc_run" "${QC_PANEL_EFFORTS[$_i]:-}"
+  _add_seat "qc_panel[$_i]" "${_qc_eng:-<unspecified>}" "$_qc_run" "${QC_PANEL_EFFORTS[$_i]:-}" "${QC_PANEL_ENDPOINTS[$_i]:-}"
   [[ -n "$_qc_eng" ]] && _panel_div_runners="$_panel_div_runners $_qc_run"
 done
 
@@ -2247,7 +2248,7 @@ process.stdout.write(JSON.stringify(a));' "$QUALROW_ADMITTED_JSON" "$_role" 2>/d
     # that is the vacuum D7 closes (plan §0a): "switch on, no evidence, no
     # override" refuses for EVERY runner, not only cursor (case ii).
   else
-    _is_unqualified_runner "$_run" || continue
+    _is_unqualified_runner "$_run" || [[ "$_role" == qc_panel\[*\] ]] || continue
   fi
   _ovr="$(AUTOPILOT_QUALIFICATION_OVERRIDE="${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" node -e '
 const fs = require("fs");
@@ -2297,17 +2298,24 @@ process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}\u001foper
 let rows = [];
 try { rows = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
 if (!Array.isArray(rows)) process.exit(1);
-const [engine, runner, role] = process.argv.slice(1);
+const [engine, runner, role, seatEndpoint] = process.argv.slice(1);
 const wantRole = role.replace(/\[[0-9]+\]$/, "").replace(/_low_risk$/, "");
+const normEndpoint = (v) => (!v || v === "@none") ? null : v;
+const isQc = /^qc_panel\[[0-9]+\]$/.test(role);
 const m = rows.find((o) => o && o.engine === engine && o.runner === runner
   && o.role === wantRole
+  && (!isQc || normEndpoint(o.endpoint) === normEndpoint(seatEndpoint))
   && typeof o.reason === "string" && o.reason.trim()
   && typeof o.operator === "string" && o.operator.trim());
 if (!m) process.exit(1);
 process.stdout.write(`${m.reason}\u001fstanding\u001f${m.operator}\u001fstanding operator pin`);
-' "$_eng" "$_run" "$_role" 2>/dev/null)" || _ovr=""
+' "$_eng" "$_run" "$_role" "${_seat_endpoints[$_i]:-}" 2>/dev/null)" || _ovr=""
   fi
   if [[ -z "$_ovr" ]]; then
+    if [[ "$_role" == qc_panel\[*\] ]] && ! _is_unqualified_runner "$_run"; then
+      echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) has no recorded operator admission — the managed rail's final panel will refuse it at intake" >&2
+      continue
+    fi
     echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) is NOT qualified for any role and has no matching operator override or standing pin — add an unexpired entry for engine/runner/role '${_role%%[*}' to \$AUTOPILOT_QUALIFICATION_OVERRIDE, record a standing pin with 'engine-capability-state.js pin-seat', or qualify the engine via engine-onboarding. Naming an unqualified runner in a roster is refused, not downgraded." >&2
     exit 3
   fi
@@ -2570,6 +2578,7 @@ if [[ -n "$FIELD" ]]; then
     skill_mode_effective) printf '%s\n' "$CAP_SKILL_MODE_EFF" ;;
     capability_warnings) printf '%s\n' "$CAP_WARNINGS_JSON" ;;
     brain_seat) printf '%s\n' "$BRAIN_SEAT_JSON" ;;
+    override_admitted_seats) printf '%s\n' "$OVERRIDE_ADMITTED_JSON" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit "$ENFORCE_EXIT"

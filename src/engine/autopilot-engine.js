@@ -20,6 +20,7 @@ const {
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
+const { finalPanelSeatQualified } = require('./final-panel-qualification');
 const {
   consumeStrictL5ProviderReadiness,
   isStrictL5ProviderReadinessAuthority,
@@ -699,6 +700,12 @@ function validateReviewRoster(roster, options = {}) {
       throw new TypeError(`managed review roster qc_panel_seats[${index}] is invalid`);
     }
   }
+  if (Object.prototype.hasOwnProperty.call(roster, 'override_admitted_seats')) {
+    if (!Array.isArray(roster.override_admitted_seats)
+        || roster.override_admitted_seats.some((value) => typeof value !== 'string')) {
+      throw new TypeError('override_admitted_seats must be an array of strings');
+    }
+  }
   return roster;
 }
 
@@ -1125,34 +1132,6 @@ function reviewerQualificationViable(roster) {
       roster,
       reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
     }) !== null;
-}
-
-// Terminal QC seats are independently selected tuples, not aliases for the
-// focused reviewer. A roster-level qualification bit therefore cannot certify
-// a different runner/model/effort. The incumbent remains compatible only when
-// the sealed seat is exactly that qualified tuple; every other terminal seat
-// needs an exact qualified scorecard-ladder row.
-function finalPanelSeatQualified(roster, seat) {
-  if (!roster || !seat) return false;
-  const endpoint = (value) => typeof value === 'string' && value.length > 0 ? value : null;
-  const incumbent = roster.reviewer_qualified === true
-    && roster.reviewer_runner === seat.runner
-    && roster.reviewer_engine === seat.model
-    && roster.reviewer_effort === seat.effort
-    && endpoint(roster.reviewer_endpoint) === endpoint(seat.endpoint);
-  if (incumbent) return true;
-  if (!Array.isArray(roster.fallback_ladder)) return false;
-  return roster.fallback_ladder.some((row) => {
-    if (!row || typeof row !== 'object') return false;
-    const rowModel = typeof row.model === 'string' && row.model.length > 0
-      ? row.model
-      : row.engine;
-    return row.runner === seat.runner
-      && rowModel === seat.model
-      && row.effort === seat.effort
-      && endpoint(row.endpoint) === endpoint(seat.endpoint)
-      && (typeof row.family !== 'string' || row.family === seat.family);
-  });
 }
 
 // Terminal panel decorrelation is a roster-level invariant. A pinned seat is an
@@ -5057,9 +5036,9 @@ class AutopilotEngine {
           reviewer_engine: seat.model,
           reviewer_effort: seat.effort,
           reviewer_endpoint: seat.endpoint || '',
-          reviewer_qualified: finalPanelSeatQualified(roster, seat),
+          reviewer_qualified: finalPanelSeatQualified(roster, seat, index),
         };
-        const outcome = finalPanelSeatQualified(roster, seat)
+        const outcome = finalPanelSeatQualified(roster, seat, index)
           ? performReview({
             ...reviewInput,
             scope: 'final',

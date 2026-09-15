@@ -9,6 +9,10 @@
 # this covers the roster side. The red case matters more than the green one: with
 # the pin store emptied, the same config must still be REFUSED, or the gate has
 # been removed rather than widened.
+# RED at base 80377e7f: pinned matching endpoint admits qc_panel[0]/[2]: not found;
+#   unpinned qc_panel seat expected exit 0 got 2 (unknown field before field case).
+# preservation guard (green at base): pin at a different endpoint does not admit qc_panel[1];
+#   dropping endpoint compare would admit it. Unpinned qc seat must not refuse (exit 0).
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
@@ -75,5 +79,34 @@ assert_contains "$(cat "$TEST_TMP/rev-err")" "is NOT qualified for any role" \
 node "$CAP_STATE" unpin-seat --role implementer --store "$PIN_STORE" >/dev/null
 run_resolver
 assert_eq "$RUN_EXIT" "3" "unpinning restores the refusal — the gate was widened, not deleted"
+
+# --- 3-seat qc panel: pins for 0 and 2 admit those indices; unpinned seat 1 warns.
+QC_STORE="$TEST_TMP/qc-pin-store"
+mkdir -p "$QC_STORE"
+QC_CFG="$TEST_TMP/qc-panel.md"
+printf -- '- qc_panel: glm-a, glm-b, glm-c
+- qc_panel_runners: cc-shim, cc-shim, cc-shim
+- qc_panel_efforts: high, high, high
+- qc_panel_endpoints: @none, glm, @none
+' > "$QC_CFG"
+node "$CAP_STATE" pin-seat --engine glm-a --runner cc-shim --role qc_panel --effort high \
+  --endpoint @none --reason "pinned seat 0" --operator test-operator --store "$QC_STORE" >/dev/null
+node "$CAP_STATE" pin-seat --engine glm-c --runner cc-shim --role qc_panel --effort high \
+  --endpoint @none --reason "pinned seat 2" --operator test-operator --store "$QC_STORE" >/dev/null
+node "$CAP_STATE" pin-seat --engine glm-b --runner cc-shim --role qc_panel --effort high \
+  --endpoint @none --reason "wrong endpoint for seat 1" --operator test-operator --store "$QC_STORE" >/dev/null
+QC_STDOUT="$TEST_TMP/qc-stdout"
+QC_STDERR="$TEST_TMP/qc-stderr"
+REVIEW_LOOP_CONFIG_OVERRIDE="$QC_CFG" bash "$SCRIPT" --store "$QC_STORE" --check-scorecard \
+  --field override_admitted_seats >"$QC_STDOUT" 2>"$QC_STDERR"
+QC_EXIT=$?
+QC_FIELD="$(cat "$QC_STDOUT")"
+assert_eq "$QC_EXIT" "0" "unpinned qc_panel seat does not refuse the resolver"
+assert_contains "$QC_FIELD" "qc_panel[0]" "pinned matching endpoint admits qc_panel[0]"
+assert_contains "$QC_FIELD" "qc_panel[2]" "pinned matching endpoint admits qc_panel[2]"
+assert_not_contains "$QC_FIELD" "qc_panel[1]" \
+  "preservation guard (green at base): pin at a different endpoint does not admit qc_panel[1]; dropping endpoint compare would admit it"
+assert_contains "$(cat "$QC_STDERR")" "has no recorded operator admission" \
+  "preservation guard (green at base): unpinned qc seat emits the intake-refusal note"
 
 finalize_test

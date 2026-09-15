@@ -156,6 +156,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
 6. `node scripts/session-mode.js set --level l5 --repo-root <repo>` → `READY`. First check
    `~/.autopilot/session-mode/` for another ACTIVE marker of this repo from a dead session: the
    bridge scans every marker and a stale one with an older graph digest blocks intake (BACKLOG).
+6b. Run `bash scripts/resolve-review-loop.sh --check-scorecard --field override_admitted_seats` and
+    read the stderr ⚠ notes. Every `qc_panel[N]` without evidence must be pinned first
+    (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with
+    `final_panel_seat_unqualified`.
 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
    `mission grant --repo . --prepared prepared.json --node <id>` → `contract_path`, `seal_path`,
    `branch`, `base_sha`. Each grant is one attempt; a rejected INTAKE still consumes it.

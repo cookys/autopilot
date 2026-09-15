@@ -1,43 +1,45 @@
 ## 目標
-接續 autopilot 維護。2026-09-16 出貨到 v2.36.51。operator 2026-09-15 下令「CEO 模式把 fired backlog 依序做完、可平行就平行、走 /l5」：8 條 fired 裡 6 條其實早已出貨（狀態翻正），真正開著的兩條合成一個 managed campaign 出了 v2.36.45。**BACKLOG 現在沒有 fired 的工作 row 了**（剩的 fired 都是這輪量到的 rail 缺陷：final panel exact-tuple、pre-spend 燒 claim、marker bridge、l5 marker 順序）。下一步：operator 指名，或依序做那幾條 rail 缺陷（它們讓 /l5 每次都要降 l3 收尾）。
+接續 autopilot 維護。2026-09-16 出貨到 **v2.36.52**。operator 2026-09-15 指令：「CEO 模式把 fired backlog 依序做完、可平行就平行、走 /l5、討論找 hetero engine」——當時 8 條 fired 全部關了（6 條早已出貨翻正、2 條合成 v2.36.45 campaign），之後這輪量到的 rail 缺陷也全部出貨（v2.36.46–48、50），既有紅燈 suite 全部歸零（v2.36.49 ＋兩個 tests-only commit）。**下一刀已定：cuda 端到端量到的 disposition resume 缺陷**（見下一步 1）。
 
 ## 現況
-- 分支 `develop` = `origin/develop` @ `92463677`（v2.36.51 merge `70eea675`；v2.36.50 `5125bb5d`；v2.36.49 `41a989df`；v2.36.48 `3f4eb339`；v2.36.47 `f88a7f53`；v2.36.46 `3be9ad53`）。工作樹乾淨；另有一個別的 session 的 detached worktree（`…/7ef6560a…/scratchpad/baseline`），不是本 session 的、別動。
-- DONE 並已推：**v2.36.51**（`migrate-backlog-entries.js` table style，revival.3d 請求；`## Columns`／`## Status map` 對映，lossy 列原行進 sidecar；reviewer 四條 MUST-FIX 全摺入；已回 cuda 用法，等他們對 196 KB 真檔跑 dry-run）、**v2.36.50**（`dispatch-hetero.sh --sibling-path-prefix <dir>/`，308-8f 第二條）、**v2.36.49**（review-loop 契約 schema 補 `plan_review_same_family_as_depth0`（v2.36.33 起就漂）；profiles 基線對 ceo-agent／dev-flow 重釘，migration 814→815、七條 rewritten disposition；codex-plugin-package 9 紅、profile-context-isolation 2 紅歸零）＋ 兩個 tests-only commit：autopilot-engine 10 紅歸零（真因是 live config 的 cursor pin 在隔離 capability dir 不存在、不是 marker；改讀凍結 fixture＋在隔離 store 種 pin）、兩個 suite 補回 +x（run.sh L2 才跑得到）。**現在沒有已知的既有紅 suite。**）、**v2.36.48**（pre-claim repo facts：dirty／base／required_paths 在 Mission claim 前重推，`src/engine/repo-preconditions.js` 一份陳述、`dispatch-contract.js` 照舊呼叫；`session-mode.js retire --session <id> --integration-receipt <f> [--lineage <key>]` 用 registry＋git 證據退別的 session 的已整合 marker，bridge fence 依裁定不改；routing config 回指 `mission-backlog-entry-migration`（**教訓：凍結後改 plan（連 Review log 都算）source sha 就漂，`session-mode set` 全部 level 被拒、兩個 suite 紅——收尾要回指未漂移的已完成 graph＋legacy reconcile，或別在 merge 後改 plan**））、**v2.36.47**（`--mirror-roots-json` 列 projected skills）、**v2.36.46**（/l5 managed campaign final-panel-pins：qc_panel 常設 pin 一席一列、resolver 記錄 `qc_panel[N]` 准入、`finalPanelSeatQualified` 單一模組、intake 在 claim 前拒未准入席位。owner 裁定「一次到位」走 L 不走 Fix。rail 這輪：lineage 1 attempt 1 燒在 `required_paths` 列了新檔（pre-spend row 第三例）、同 adoption key 換 digest 是 `MISSION_BINDING_MISMATCH` → 開新 lineage（舊 lineage `a5847a…` 留 ACTIVE、attempt 2 never-started withdraw，殘留不阻擋）；lineage 2 的 hand 做完全部工作但 commit 被 boundary gate 拒（skills 鏡像沒列、`--mirror-roots-json` 漏 `skills`）→ depth-0 從 retained worktree 原樣接手 `fa2a0c50`，base-run 紅／12 verify 綠／3 mutant 紅／GLM 二家族 SHIP-AS-IS。**本機已記兩個 qc pin**（GLM-5.2/cc-shim@glm、gpt-5.6-sol/codex@none）；從這版起 managed campaign 沒 pin 會在 intake 就被拒——設計如此。下一個 managed campaign 的 final panel 是這版的真正量測點：三席都應 `reviewed`，不再 `precondition_failed`。）、v2.36.45（/l5 managed campaign peer-residue：config ladder tier 3 dogfood-only、qc-panel 輸出按 node、wrapper subject 契約；rail 在 final panel 停、depth-0 在 retained worktree 修兩刀後以 git 證據 merge；GLM 二輪 SHIP-AS-IS；**rail 的 MiniMax full-diff 席對 57 紅的候選 `61541082` 判 SHIP-AS-IS＝reviewer miss，目前真正的閘是 depth-0 驗證不是 panel**；`record-integration.js` 收據補在 `docs/plans/evidence/2026-09-15-peer-residue/`——這工具要在砍分支前跑，accepted 必須是 checkout HEAD、source 要有活 ref）、v2.36.44（dispatch-hetero `--sibling-ref-prefix`，308-8f 平行派工互殺；reviewer SHIP-AS-IS）、v2.36.43（reviewer no_verdict → `VERTICAL_VERIFICATION` checkpoint 的 durable wait；分類器 `classifyFullDiffReviewFault` 讀 `raw.reviewResult.result.status`——第一版讀 `raw.status` 在 production 永遠不命中，reviewer 抓到後重寫並加了走真 `engine.reviewDiff` 的測試；同樣只驗到 composition/engine 單元層，CLI e2e 待量）、v2.36.42（`campaign-intake.js` ledger 路徑驗證搬到 Mission claim 之前；reviewer sonnet PASS、一條 sibling 缺陷「非 git `--repo` 也燒 claim」登 BACKLOG）、v2.36.41（disposition resume：根因在 `campaign-composition.js` 字串/陣列錯配、不在 engine；routing test +3；reviewer sonnet PASS、一條後續 gap 登 BACKLOG；**只驗到 composition 層**，CLI `--resume --campaign-disposition-authority` e2e 未量，下個 managed campaign 第一個非空 review 就是量測點，量到才把 BACKLOG row 的「待量」拿掉）、v2.36.38（schema／gate warn／DI／寫入者連結，/l5 mission-3b68ecb09a61）、v2.36.39（`migrate-backlog-entries.js`、真 BACKLOG 遷移 237 KB→104 KB、154 sidecar、allowlist 30、gate flip block，/l5 mission-5c34ed65c6a4 + depth-0 4b）、v2.36.40（gate 進 pre-commit ritual、l5 reference 加 depth-0 11 步 runbook）。
-- IN-FLIGHT：無。session marker 停在 l3（l5 降級），2026-09-15 到期自清；不要手刪。
-- 鬆散端：`stash@{0}`（2026-08-30 evidence-discipline §20/§21 草稿，落地要過 QC review，非本輪產物）。
-- cuda／revival.3d 已收到 v2.36.38–39 通知（送達≠已讀）；他們是 table style，遷移腳本目前只支援 heading。
+- 分支 `develop` = `origin/develop` @ `4ed806aa`（v2.36.52 `1985b332`；v2.36.51 merge `70eea675`；v2.36.50 `5125bb5d`；v2.36.49 `41a989df`；v2.36.48 `3f4eb339`；v2.36.47 `f88a7f53`；v2.36.46 `3be9ad53`）。工作樹乾淨；沒有 mission worktree；別的 session 的 `…/7ef6560a…/scratchpad/baseline` detached worktree 不是我們的、別動。`stash@{0}`（2026-08-30 evidence-discipline §20/§21 草稿）仍在、非本輪產物。
+- session marker：本 session 的 l5 marker 已用 `session-mode.js retire` 退掉（dogfood）；`.claude/mission-routing-config.json` 目前指 `mission-backlog-entry-migration`（已完成、sources 仍相符）→ `mission-routing-admission` READY，`session-mode set` 任何 level 可用。
+- 本機 pin store（`~/.autopilot/engine-capability/pins.jsonl`）：implementer `cursor-grok-4.6-low/cursor`（2026-09-12）＋ **qc_panel 兩席** `GLM-5.2/cc-shim@glm`、`gpt-5.6-sol/codex@none`（2026-09-15，v2.36.46 dogfood）。從 v2.36.46 起 managed campaign 沒 pin 的 qc 席在 intake 就被拒，這是設計。
+- 這輪出貨（全在 CHANGELOG）：v2.36.45 peer-residue（/l5 campaign；rail 席位放過 57 紅候選＝reviewer miss）；v2.36.46 final panel 認 standing pin（L，owner 裁定一次到位；hand commit 被 boundary gate 拒、depth-0 接手）；v2.36.47 `--mirror-roots-json` 列 skills；v2.36.48 pre-claim repo facts ＋ `session-mode.js retire`；v2.36.49 contract schema 漏欄＋profiles 基線 re-pin；v2.36.50 `--sibling-path-prefix`；v2.36.51 backlog 遷移 table style（revival.3d）；v2.36.52 兩條鏈進 pre-commit ritual ＋ recipe 補規矩。
+- Peer 狀態：cuda（revival.3d／fleet-comms）已更新到 ≥v2.36.49，拿到 table 遷移用法（等他們對 196 KB 真檔 dry-run 回報）；他們對 fleet-comms 跑 owner-led bounded campaign 到 review 成功，resume 死在 check-repair-scope（下一步 1）。308-8f 兩條剩 agy `--effort`（未重現）。送達≠已讀。
 
 ## 已決事項(不重議)
-- Backlog 一列＝index row：七欄 byte cap、Pointer 必填（≤600 B 才准 none）、整列 900 B、`shipped <version> <date>`；schema 只在 `references/backlog-entry.md` 一份。
-- Title 超長不遷移、不自動改（標題是身分），進 allowlist 由人裁。
-- Gate 在本 repo 是 block 模式且是 pre-commit ritual；allowlist 只減不增。
-- Phase 4 驗收「≤40 KB」是猜的數字，cap 是契約；偏離已記在母 plan Review log，不補救。
-- Managed rail 停了就照文件 `--fallback precondition_failed` 降級、在 mission 分支的 retained worktree 修、git 證據 merge、缺陷登 BACKLOG——不繞 rail、不手改 rail。
-- Review 停止規則：三輪；reviewer MUST-FIX 一律 probe＋mutation 重新推導後才接受或駁回。
+- Backlog 一列＝index row（schema 只在 `references/backlog-entry.md`），gate block 模式且是 pre-commit ritual；Title 超長不自動改。
+- Managed rail 停了照文件降級（`--fallback precondition_failed`）、在 retained worktree 修、git 證據 merge、缺陷登 BACKLOG——不繞 rail。
+- Review 三輪停；reviewer MUST-FIX 一律 probe＋mutation 重推才接受或駁回。
+- config 列席位 ≠ 合格（ADR-0001／resolver 2311）：無證據席位只能靠 override 檔或 standing pin，且要進 `override_admitted_seats`。
+- marker bridge 掃全部 marker、對不同 graph digest 的活 marker 拒絕＝concurrency fence，不改；出口是 `retire`（registry＋git 證據），不准手刪 marker。
+- pre-spend 拒絕走 pre-claim 檢查（第三個同型：ledger v2.36.42、panel v2.36.46、repo facts v2.36.48），不做 attempt refund。
+- 同 adoption key 換 graph digest 是 `MISSION_BINDING_MISMATCH`，只能改 `intent.objective` 開新 lineage；舊 lineage 留 ACTIVE 是殘留不阻擋。
 
 ## 下一步
-1. v2.36.41–43 的 rail 修正：這次 campaign 的 review 是 SHIP-AS-IS（無 disposition 路徑）、reviewer 沒 no_verdict，所以 e2e 仍未量到；「待量」維持。這次 campaign 的完整過程（三次 attempt 各被什麼擋、怎麼降級）在 CHANGELOG v2.36.45 與 `skills/l5/references/hetero-impl-loop.md` recipe 5b/6/8/11。
-1b. rail 缺陷（fired 2026-09-15）全部出貨：final panel exact-tuple v2.36.46、pre-spend 燒 claim v2.36.48、marker bridge／retire v2.36.48、mirror-roots skills v2.36.47。剩：rail 不傳 scorecard scope 檔（S，open，trigger 未到）。既有紅 suite 全部歸零（v2.36.49 ＋ 兩個 tests-only commit）。**兩條在 pre-commit 之外的鏈**：改 ceo-agent／dev-flow SKILL.md 要跑 `build-profile-payload.js catalog --check`；resolver 多吐欄位要跑 `check-contract-schema.js`——這次各漂了兩天。本 session 的 l5 marker 已用 retire 退掉（dogfood），目前無 marker。
-2. 308-8f 剩一條：agy hand 不帶 `--effort` 只 edit（Fix，未在本機重現，`agy_effort_clamp` 預設待查）。stat-walk 那條 v2.36.50 出了。可通知 308-8f v2.36.44 出了 `--sibling-ref-prefix refs/heads/hands/kr1/`（送達≠已讀）。
-2b. `dispatch-foreman.test.sh` 在 origin/develop 就 62/40 紅（case 3 後 TEST_TMP 消失，BACKLOG 有 row）——foreman 側 boundary 案例（6/9/12）因此量不到；判紅先看是不是這個。
-3. `autopilot-engine.test.sh` 本機 10 條既有紅燈（strict-l5 bootstrap 讀 live `~/.autopilot/session-mode/_home_cookys_projects_autopilot.json`，該 marker 是 l5、2026-08-05 已過期但還在）——測試不 hermetic，BACKLOG 有 row；判紅先看是不是這 10 條。composition 層的 review→wait→resume 測試骨架已在 `implementation-campaign-routing.test.sh`「Disposition resume must rebind」段，可直接抄。
-2. 若 revival.3d 要用遷移腳本：`scripts/migrate-backlog-entries.js` 加 table style（parser 已在 gate 匯出；`planMigration` 開頭的 `exit 2 not supported yet` 就是入口）。
-3. 30 條 Title >120 B 的 allowlist 殘留：人手改標題（改了 fingerprint 會變，`--update-allowlist` 會自動移除舊 pair）。
+1. **fired（Fix）— disposition resume 死在 `check-repair-scope.js:215`**：`campaign-intake.js:621-633` 用 `projection.initial_candidate_reference || reference` 當 `scope_implementation_sha`，repo 裡沒人設 `initial_candidate_reference`；ledger 的 `awaiting_disposition` payload 有 `candidate_ref`（40 hex）。綁上去、red-first（composition 層 + 真 ledger fixture）、若能做到 CLI e2e 更好（cuda 的 ledger 在 `/home/cookys/projects/fleet-comms/.git/autopilot/implementation-campaign.jsonl`，campaign-v1-a8095f81…，可請他們重跑）。修好回 cuda（thread `msg_01M2JW9NJRE106DKDZWQARFJF2`）。
+2. 兩條 S wording（BACKLOG「/l5 wording」row）：VA 席錯誤訊息補「加進 config 即可」；文件說明 CLI `status readiness --probe` 在 engine 外永遠 probe-needed。
+3. 308-8f：agy hand 不帶 `--effort` 只 edit（Fix，先本機重現，`agy_effort_clamp` 預設）。
+4. open、trigger 未到：rail 從不傳 scorecard scope 檔（`fallback_ladder` 永遠 `[]`，有證據的 qc 席還是要 pin）；codex-cli／codex runner token 正規化；30 條 Title >120 B allowlist 殘留。
+5. 下一個 managed campaign 是 v2.36.46 的真正量測點：final panel 三席應 `reviewed`；同時量 v2.36.43（no_verdict durable wait）。
 
 ## 驗證方式
-- `git fetch -q origin && git status -sb` → `## develop...origin/develop` 無 ahead/behind。
-- `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md; echo $?` → 0（block 模式、new 0、allowed 30）。
-- 塞一列 `- stray bullet` 進任一 row 後 `git commit` → pre-commit `✗ check-backlog-entries FAILED`（改回來）。
-- `bash hooks/tests/migrate-backlog-entries.test.sh` → `PASS 45`；`bash hooks/tests/check-backlog-entries.test.sh` → `PASS 29`。
+- `git fetch -q origin && git status -sb` → `## develop...origin/develop`。
+- `node scripts/mission-routing-admission.js --repo-root "$PWD" --level l5` → `READY`；`node scripts/session-mode.js status --repo-root "$PWD"` → `active: false`。
+- `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md; echo $?` → 0（new 0、allowed 31）。
+- `bash scripts/sync-all.sh --check` → ok:true（14 rituals，含新的 `check-contract-schema`、`check-profile-catalog`）。
+- 既有紅 suite 歸零的證據：`autopilot-engine.test.sh` 493/0、`codex-plugin-package.test.sh` 125/0、`profile-context-isolation.test.sh` 122/0、`dispatch-hetero.test.sh` 322/0、`session-mode.test.sh` 48/0、`migrate-backlog-entries.test.sh` 70/0、`check-backlog-entries.test.sh` 31/0（一次跑一個）。
 
 ## Read-order
-1. /home/cookys/projects/autopilot/docs/BACKLOG.md — 現在是 index rows；證據在各列 Pointer（`docs/backlog/*.md`）。
-2. /home/cookys/projects/autopilot/skills/l5/references/hetero-impl-loop.md — § Depth-0 recipe，開下一個 managed campaign照這 11 步。
-3. /home/cookys/projects/autopilot/docs/plans/2026-09-14-backlog-entry-schema.md — Review log 有兩次 campaign 的完整裁決紀錄與偏離。
-4. /home/cookys/projects/autopilot/CHANGELOG.md — v2.36.38–40 三節。
+1. `docs/BACKLOG.md` — fired 的只剩 disposition resume 那條；證據在各列 Pointer。
+2. `skills/l5/references/hetero-impl-loop.md` — depth-0 recipe 11 步（5b、6、7、9、11 這輪都改過）。
+3. `CHANGELOG.md` v2.36.45–52 八節（每節都有「rail 這輪量到的」段）。
+4. `docs/plans/evidence/2026-09-15-final-panel-pins/README.md`、`…/2026-09-15-peer-residue/README.md` — 兩次 campaign 的 attempt 紀錄、integration receipt、移走的 marker。
 
 ## 陷阱
-- 全部已落地，這裡只放指標：memory `managed-campaign-depth0-recipe`（三個燒 grant 的坑）、`node-exit-truncates-pipe-stdout`（>64 KiB 走 fs.writeSync）、`parallel-suites-interfere`、`contract-pin-test-leaves-pre-js`、`dispatch-review-runner-setup`（MiniMax no_verdict 換席）。
-- 測試套件有 `set -e` 的話，預期非零的 node 呼叫要 `set +e … set -e` 包起來，否則整個 suite 靜默死掉、summary 都不印。
-- `git checkout -- <file>` 在 mission worktree 做紅燈驗證會把自己的修補洗掉——先 `git stash`？不行（worktree 共用 stash）；用 `git diff > patch` 再 `git apply -R` 或直接複製檔案。
+- 落地在 memory 的：`engine-test-fixture-gotchas`（新增：suite 隔離 `ENGINE_CAPABILITY_DIR`，live config 的 cursor pin 席位會 exit 3——改讀凍結 fixture＋種 pin）、`archive-live-evidence-routing-closeout`（新增：merge 後改 plan 讓 admission 漂、全 level `session-mode set` 被拒；回指相符的已完成 graph＋legacy reconcile）、`dispatch-review-runner-setup`（GLM 帶完整 proof 但 parser 因 session-title chrome 回 no_verdict——讀 raw log 再判）。
+- `git stash push -q <path>` 的 `-q` 放在 `push` 前會被當成沒指定子命令、接著 `stash pop` 會 pop 到別人的 stash@{0}——本輪中過一次；紅燈驗證改用 detached scratch worktree ＋ `git apply <tests.diff>`。
+- 改 `skills/ceo-agent/SKILL.md`／`skills/dev-flow/SKILL.md` 或讓 resolver 多吐欄位：現在 pre-commit ritual 會擋（v2.36.52），re-pin 配方在 v2.36.49 CHANGELOG。
+- `required_paths` 列新檔燒 attempt；campaign `output_paths` 要含 `skills/<projected>/**` 的 codex 鏡像（`--mirror-roots-json` 現在會列）；brief >8 KB 只是建議不是硬限。
+- `record-integration.js` 要在砍分支前跑（accepted 必須是 checkout HEAD、source 要活 ref）；事後補要重建分支名在臨時 worktree。

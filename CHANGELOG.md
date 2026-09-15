@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.36.47 — `--mirror-roots-json` 列出 projected skills：graph check 在 seal 前就知道 skills 輸出要帶鏡像
+
+`sync-codex-plugin-skills.sh --mirror-roots-json` 原本只列 DIRS（bin／src／scripts／references…），但 `sync_skills` 另外把
+`PROJECTED_SKILLS`（dev-flow、ceo-agent、l3–l6、finish-flow）整目錄鏡像進 `platforms/codex/plugin/skills/`。
+`mission-execution-graph-check.js --mirror-roots` 吃這份 JSON 要求 output_paths 帶鏡像，卻不知道 skills 也是鏡像——
+2026-09-15 final-panel-pins 的 hand 做完全部工作，commit 在 boundary gate 被 `platforms/codex/plugin/skills/l5/references/
+hetero-impl-loop.md` 擋掉。現在 JSON 多列 `skills/<projected>` 七條；emitter 搬到 `PROJECTED_SKILLS` 定義之後。
+`codex-plugin-package.test.sh` +3（兩條 RED at base、一條 preservation）；reviewer sonnet SHIP-AS-IS（確認 graph check 的
+`startsWith(d + "/")` 對含斜線的 dir 正確）。
+
+prose-justification: 本版 prose 面無增量。
+
+---
+
 ## v2.36.46 — final panel 認 operator 記錄的席位：qc_panel 常設 pin 按席位、resolver 記錄 qc 席位准入、intake 在 claim 前拒絕未准入的席位
 
 /l5 managed campaign（plan `docs/plans/2026-09-15-final-panel-per-seat-pins.md`，mission node

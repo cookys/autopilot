@@ -808,9 +808,19 @@ function defaultGenerationClaim({
       // Prefer a bound git candidate when present so later stages can re-attach.
       if (existing.candidate_reference
           && existing.candidate_reference.kind === 'git_candidate') {
-        existing.resume_candidate = existing.candidate_reference;
-      } else if (candidateRef && existing.candidate_reference) {
-        existing.resume_candidate = existing.candidate_reference;
+        try {
+          existing.resume_candidate = verifyResumeCandidate({
+            projection: existing,
+            repo,
+            base,
+          });
+        } catch (error) {
+          return rejected(
+            'campaign_generation',
+            error.code || 'campaign_resume_candidate_invalid',
+            error.message || String(error),
+          );
+        }
       }
     }
     if (resumableCandidatePhase
@@ -1465,6 +1475,74 @@ function runCampaignIntake(input = {}, adapters = {}) {
       steps: [rejection],
       pre_spend_no_effect_receipt: null,
     };
+  }
+  // Durable-wait resume preflight: verify a git_candidate against Git BEFORE
+  // the Mission claim so a drifted resume cannot burn a grant attempt.
+  // ADJUDICATING / VERTICAL_VERIFICATION resumes are not preflighted (R6).
+  // Fail-closed: any failure to read the sealed contract or project the ledger
+  // is a blocked preflight, never a silent skip into the claim (a skipped check
+  // would reinstate the spend the preflight exists to prevent).
+  if (input.resume === true) {
+    let preflightRejection = null;
+    try {
+      const identity = canonicalRepoIdentity(repo);
+      const preflightLedger = campaignLedgerPathFor(identity);
+      if (fs.existsSync(preflightLedger) && rawContractDigest) {
+        let sealedTicket = null;
+        try {
+          const sealed = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+          sealedTicket = sealed && typeof sealed.ticket === 'string'
+            ? sealed.ticket
+            : null;
+        } catch (error) {
+          throw new CampaignIntakeError(
+            'campaign_resume_candidate_invalid',
+            `resume preflight could not read the sealed contract: ${error.message || String(error)}`,
+          );
+        }
+        if (!sealedTicket) {
+          throw new CampaignIntakeError(
+            'campaign_resume_candidate_invalid',
+            'resume preflight requires a sealed contract ticket',
+          );
+        }
+        const campaignId = campaignIdFor(identity, sealedTicket, rawContractDigest);
+        let projection = null;
+        try {
+          projection = projectCampaign(loadRows(preflightLedger), campaignId);
+        } catch (error) {
+          throw new CampaignIntakeError(
+            'campaign_resume_candidate_invalid',
+            error.message || String(error),
+          );
+        }
+        if (projection
+            && NON_SUCCESS_DURABLE_STATES.has(projection.state.phase)
+            && projection.candidate_reference
+            && projection.candidate_reference.kind === 'git_candidate') {
+          verifyResumeCandidate({
+            projection,
+            repo,
+            base: input.base,
+          });
+        }
+      }
+    } catch (error) {
+      preflightRejection = rejected(
+        'campaign_generation',
+        (error && error.code) || 'campaign_resume_candidate_invalid',
+        (error && error.message) || String(error),
+      );
+    }
+    if (preflightRejection) {
+      return {
+        status: 'blocked',
+        reason: preflightRejection.reason,
+        rejection: preflightRejection,
+        steps: [preflightRejection],
+        pre_spend_no_effect_receipt: null,
+      };
+    }
   }
   const missionClaimAdapter = adapters.missionClaim || defaultMissionClaim;
   let missionClaim;

@@ -733,7 +733,7 @@ assert_exit_code "$SEAL_EXIT" "0" "P3 resume fixture campaign seals: $SEAL_OUT"
 
 BAD_AUTHORITY="$TEST_TMP/bad-authority.json"
 printf '%s\n' '{"artifact_type":"reviewer-self-authorization"}' > "$BAD_AUTHORITY"
-BAD_AUTH_OUT="$(node "$REPO_ROOT/bin/autopilot.js" engine implement-review \
+BAD_AUTH_OUT="$(env -u AUTOPILOT_LEVEL node "$REPO_ROOT/bin/autopilot.js" engine implement-review \
   --campaign-contract "$CONTRACT" \
   --campaign-seal "$SEAL" \
   --campaign-disposition-authority "$BAD_AUTHORITY" \
@@ -1362,6 +1362,951 @@ assert_not_contains "$STATUS_OUT" '"can_merge"' \
   "raw campaign status does not infer merge authority"
 assert_not_contains "$STATUS_OUT" '"can_close"' \
   "raw campaign status does not infer close authority"
+
+# Durable-wait resume candidate shape + pre-claim drift (T1–T6).
+# RED at base 1ea8825b: Expected values to be strictly equal: + undefined !== C0
+#   (generation_claim.resume_candidate.scope_implementation_sha)
+# RED at base 1ea8825b: Expected values to be strictly equal: + admitted !== blocked
+#   (durable-wait git drift still admitted; missionClaim spy count 1 not 0)
+# RED at base 1ea8825b: implementation_sha must be an immutable full 40-hex commit object ID
+#   (engine resume returns at the scope contract before campaignScopeChecker is called)
+# T5/T6 (preservation, green at base): unbound-candidate admits without resume_candidate;
+#   existing P3 ADJUDICATING assertions above are unchanged.
+DISP_SBX="$TEST_TMP/disp-resume-repo"
+mkdir -p "$DISP_SBX/.claude" "$DISP_SBX/src"
+git -C "$DISP_SBX" init -q
+git -C "$DISP_SBX" config user.email "disp-resume@example.invalid"
+git -C "$DISP_SBX" config user.name "Disp Resume Test"
+write_mission_governance "$DISP_SBX/.claude/owner-kernel-governance.json" shadow
+printf 'base\n' > "$DISP_SBX/src/value.txt"
+git -C "$DISP_SBX" add .
+git -C "$DISP_SBX" commit -qm "base"
+DISP_BASE="$(git -C "$DISP_SBX" rev-parse HEAD)"
+DISP_WT="$TEST_TMP/disp-resume-worktree"
+git -C "$DISP_SBX" worktree add -q -b impl/disp-resume "$DISP_WT" "$DISP_BASE"
+printf 'c0\n' > "$DISP_WT/src/value.txt"
+git -C "$DISP_WT" add .
+git -C "$DISP_WT" commit -qm "c0"
+C0="$(git -C "$DISP_WT" rev-parse HEAD)"
+C0_TREE="$(git -C "$DISP_WT" rev-parse HEAD^{tree})"
+printf 'c1\n' > "$DISP_WT/src/value.txt"
+git -C "$DISP_WT" add .
+git -C "$DISP_WT" commit -qm "c1"
+C1="$(git -C "$DISP_WT" rev-parse HEAD)"
+C1_TREE="$(git -C "$DISP_WT" rev-parse HEAD^{tree})"
+assert_neq "$C0" "$C1" "fixture C0 and C1 are distinct commits"
+DISP_COMMON_RAW="$(git -C "$DISP_SBX" rev-parse --git-common-dir)"
+DISP_COMMON="$(realpath "$DISP_SBX/$DISP_COMMON_RAW")"
+DISP_CONTRACT="$TEST_TMP/disp-resume-campaign.json"
+DISP_SEAL="$TEST_TMP/disp-resume-campaign.seal.json"
+DISP_PROMPT="$TEST_TMP/disp-resume-prompt.txt"
+printf 'durable-wait resume binds scope_implementation_sha\n' > "$DISP_PROMPT"
+node - "$DISP_CONTRACT" "$DISP_COMMON" "$DISP_BASE" <<'NODE'
+const fs = require('fs');
+const [target, commonDir, base] = process.argv.slice(2);
+fs.writeFileSync(target, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'icc-disp-resume',
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  base_sha: base,
+  branch: 'impl/disp-resume',
+  vertical_acceptance: ['durable wait resume binds scope sha'],
+  allowed_path_prefixes: ['src/'],
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 120,
+  verify_cmd: 'node fixture.js',
+  rubric_ids: ['ICC-DISP-RESUME1'],
+}, null, 2)}\n`);
+NODE
+DISP_SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+  --contract "$DISP_CONTRACT" --repo "$DISP_SBX" --mission-mode shadow --out "$DISP_SEAL" 2>&1)"
+assert_exit_code "$?" "0" "durable-wait resume fixture seals: $DISP_SEAL_OUT"
+
+DISP_INTAKE_OUT="$(node - "$REPO_ROOT" "$DISP_SBX" "$DISP_WT" "$DISP_CONTRACT" "$DISP_SEAL" \
+  "$DISP_PROMPT" "$DISP_BASE" "$C0" "$C0_TREE" "$C1" "$C1_TREE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [
+  root, repo, worktree, contractPath, sealPath, promptFile,
+  base, c0, c0Tree, c1, c1Tree,
+] = process.argv.slice(2);
+const {
+  CAMPAIGN_EVENTS,
+  CAMPAIGN_STATES,
+  appendCampaignEvent,
+  canonicalDigest,
+  createWriterFence,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
+const { worktreeInstanceId } = require(path.join(root, 'src', 'engine', 'repair-lineage-cleanup'));
+const { loadRows, projectCampaign } = require(path.join(root, 'src', 'campaign', 'cli'));
+const adapters = {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+};
+const lineageBody = (campaignId, commit) => ({
+  lineage_id: campaignId,
+  branch: 'impl/disp-resume',
+  worktree,
+  provider_session_id: null,
+  provider_session_reused: false,
+  provider_session_non_reuse_reason: 'runner_resume_not_verified:fixture',
+  worktree_reused: false,
+  worktree_instance_id: worktreeInstanceId(worktree),
+  cleanup_epoch: 1,
+  cleanup_receipt_id: null,
+  generation: commit === c0 ? 0 : 1,
+  inherited_churn: 0,
+  delta_churn: 2,
+  retention_owner: campaignId,
+  retention_reason: 'implementation-campaign-repair-lineage',
+  retention_expires_at: 2000000000,
+  terminal_worktree_disposition: 'active',
+  transcript_reused: false,
+  transcript_source_digest: 'a'.repeat(64),
+  review_input_mode: 'full_diff_generation',
+  new_input_bytes: 17,
+  new_input_tokens: 23,
+  input_token_measurement: 'provider_reported',
+  finding_occurrences: [],
+  accepted_invariant_ids: [`acceptance:${'c'.repeat(64)}`],
+  accepted_invariants: ['preserve durable invariant'],
+  accepted_invariants_source_commit: commit,
+  accepted_invariants_digest: canonicalDigest({
+    schema: 1,
+    assertions: ['preserve durable invariant'],
+    source_commit: commit,
+  }),
+  prior_review_finding_ids: commit === c0 ? [] : ['icc-disp-001'],
+  previous_repair_finding_count: null,
+  non_reduction_rounds: 0,
+  repair_scope_paths: ['src/value.txt'],
+  repair_scope_seal: null,
+});
+const fenceFor = (campaignId, commit, tree) => createWriterFence({
+  campaignId,
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: commit,
+  candidateTreeSha: tree,
+  implementationResult: {
+    status: 'committed',
+    implementation: { commit },
+    implementationResult: { error: null, signal: null, status: 0 },
+  },
+});
+let control = runCampaignIntake({
+  repo, contractPath, sealPath, promptFile,
+  branch: 'impl/disp-resume', base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-09-16T00:00:00.000Z',
+}, adapters);
+const campaignId = control.campaign_id;
+const gitCandidate = (commit, tree) => ({
+  kind: 'git_candidate',
+  commit,
+  tree_sha: tree,
+  branch: 'impl/disp-resume',
+  base,
+  writer_fence: fenceFor(campaignId, commit, tree),
+  repair_lineage: lineageBody(campaignId, commit),
+});
+const step = (eventType, generation, stageIdentity, payload, extra = {}) => {
+  const appended = appendCampaignEvent({
+    repo,
+    campaignControl: control,
+    observedAt: extra.observedAt || `2026-09-16T00:00:0${generation}.000Z`,
+    eventType,
+    generation,
+    stageIdentity,
+    usage: extra.usage,
+    payload,
+    artifactReference: extra.artifactReference,
+  });
+  control = { ...control, initial_state: appended.state };
+  return appended;
+};
+step(CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, 0, 'campaign-mutation:0', { sealed_contract: true });
+step(CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED, 0, 'campaign-mutation:0', {
+  scope_check_passed: true, scope_check_digest: 'd'.repeat(64),
+}, { artifactReference: gitCandidate(c0, c0Tree), usage: { changed_files: 1, churn: 2 } });
+step(CAMPAIGN_EVENTS.VERTICAL_VERIFIED, 0, 'campaign-verification:0', {
+  passed: true, evidence_digest: 'e'.repeat(64),
+}, { artifactReference: { kind: 'verification_receipt', digest: 'e'.repeat(64) } });
+const finding = {
+  finding_id: 'icc-disp-001',
+  claim: 'MUST-FIX src/value.txt must keep the repair path',
+  severity: '🟠',
+  source: 'fixture',
+};
+const findingsJson = JSON.stringify([finding]);
+const reviewDigest = canonicalDigest({
+  verdict: 'FIX-THEN-SHIP', findings: findingsJson, scope: 'full_diff', tree_sha: c0Tree,
+});
+step(CAMPAIGN_EVENTS.REVIEW_COMPLETED, 0, 'campaign-review:0', {
+  review_digest: reviewDigest,
+}, {
+  artifactReference: {
+    kind: 'product_review',
+    digest: reviewDigest,
+    repair_lineage: lineageBody(campaignId, c0),
+  },
+});
+const registryDigest = '1'.repeat(64);
+step(CAMPAIGN_EVENTS.REPAIR_AUTHORIZED, 1, 'campaign-repair-authorization:1', {
+  registry_complete: true,
+  registry_digest: registryDigest,
+  repair_gate_passed: true,
+  repair_gate_digest: '2'.repeat(64),
+}, { artifactReference: { kind: 'finding_registry', digest: registryDigest } });
+step(CAMPAIGN_EVENTS.REPAIR_STARTED, 1, 'campaign-mutation:1', { sealed_contract: true });
+step(CAMPAIGN_EVENTS.REPAIR_COMPLETED, 1, 'campaign-mutation:1', {
+  scope_check_passed: true, scope_check_digest: 'd'.repeat(64),
+}, { artifactReference: gitCandidate(c1, c1Tree), usage: { changed_files: 1, churn: 4 } });
+step(CAMPAIGN_EVENTS.VERTICAL_VERIFIED, 1, 'campaign-verification:1', {
+  passed: true, evidence_digest: 'e'.repeat(64),
+}, { artifactReference: { kind: 'verification_receipt', digest: 'e'.repeat(64) } });
+const reviewDigest1 = canonicalDigest({
+  verdict: 'FIX-THEN-SHIP', findings: findingsJson, scope: 'full_diff', tree_sha: c1Tree,
+});
+step(CAMPAIGN_EVENTS.REVIEW_COMPLETED, 1, 'campaign-review:1', {
+  review_digest: reviewDigest1,
+}, {
+  artifactReference: {
+    kind: 'product_review',
+    digest: reviewDigest1,
+    repair_lineage: lineageBody(campaignId, c1),
+  },
+});
+const findingsDigest = canonicalDigest([finding]);
+step(CAMPAIGN_EVENTS.AWAITING_DISPOSITION, 1, 'campaign-adjudication:1', {
+  reason: 'disposition authority required',
+  findings_digest: findingsDigest,
+  candidate_ref: c1,
+});
+const ledgerPath = control.generation_claim.ledger;
+const projection = projectCampaign(loadRows(ledgerPath), campaignId);
+assert.strictEqual(projection.initial_candidate_reference.commit, c0);
+assert.strictEqual(projection.candidate_reference.commit, c1);
+assert.notStrictEqual(c0, c1);
+assert.strictEqual(projection.state.phase, CAMPAIGN_STATES.AWAITING_DISPOSITION);
+assert.strictEqual(projection.awaiting_disposition.candidate_ref, c1);
+fs.copyFileSync(ledgerPath, `${ledgerPath}.awaiting.bak`);
+console.log(`c0=${c0}`);
+console.log(`c1=${c1}`);
+console.log(`review_digest=${reviewDigest1}`);
+console.log(`campaign_id=${campaignId}`);
+console.log('t_journal=true');
+NODE
+)"
+assert_exit_code "$?" "0" "durable-wait fixture journals AWAITING_DISPOSITION: $DISP_INTAKE_OUT"
+assert_contains "$DISP_INTAKE_OUT" "t_journal=true" "fixture parked at AWAITING_DISPOSITION"
+
+DISP_CAMPAIGN_ID="$(printf '%s\n' "$DISP_INTAKE_OUT" | sed -n 's/^campaign_id=//p')"
+DISP_REVIEW_DIGEST="$(printf '%s\n' "$DISP_INTAKE_OUT" | sed -n 's/^review_digest=//p')"
+DISP_C0="$(printf '%s\n' "$DISP_INTAKE_OUT" | sed -n 's/^c0=//p')"
+DISP_C1="$(printf '%s\n' "$DISP_INTAKE_OUT" | sed -n 's/^c1=//p')"
+assert_neq "$DISP_CAMPAIGN_ID" "" "fixture emits campaign id"
+assert_neq "$DISP_REVIEW_DIGEST" "" "fixture emits review digest"
+assert_eq "$DISP_C0" "$C0" "journal C0 matches git C0"
+assert_eq "$DISP_C1" "$C1" "journal C1 matches git C1"
+
+DISP_RESUME_OUT="$(node - "$REPO_ROOT" "$DISP_SBX" "$DISP_WT" "$DISP_CONTRACT" "$DISP_SEAL" \
+  "$DISP_PROMPT" "$DISP_BASE" "$C0" "$C1" "$C1_TREE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [
+  root, repo, worktree, contractPath, sealPath, promptFile, base, c0, c1, c1Tree,
+] = process.argv.slice(2);
+const { CAMPAIGN_STATES, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+const { loadRows, projectCampaign } = require(path.join(root, 'src', 'campaign', 'cli'));
+const { campaignIdFor } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+const { canonicalRepoIdentity } = require(path.join(root, 'scripts', 'implementation-campaign-check'));
+const digest = require('crypto').createHash('sha256')
+  .update(fs.readFileSync(contractPath)).digest('hex');
+const campaignId = campaignIdFor(canonicalRepoIdentity(repo), 'icc-disp-resume', digest);
+const identity = canonicalRepoIdentity(repo);
+const ledgerPath = path.join(
+  identity.slice('git-common-dir:'.length),
+  'autopilot',
+  'implementation-campaign.jsonl',
+);
+const restoreLedger = () => fs.copyFileSync(`${ledgerPath}.awaiting.bak`, ledgerPath);
+const adapters = {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+};
+const resumeAdapters = (missionSpy) => ({
+  ...adapters,
+  ...(missionSpy ? {
+    missionClaim: missionSpy,
+    releaseMission: () => ({ owner: 'mission_release', status: 'released' }),
+  } : {}),
+});
+const runResume = (extraAdapters = {}) => runCampaignIntake({
+  repo, contractPath, sealPath, promptFile,
+  branch: 'impl/disp-resume', base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-09-16T00:00:05.000Z',
+  resume: true,
+}, resumeAdapters(extraAdapters.missionClaim));
+function spyClaim() {
+  const spy = { count: 0 };
+  spy.fn = () => {
+    spy.count += 1;
+    return { owner: 'mission', status: 'unknown', enforcement: 'shadow', reason: 'spy' };
+  };
+  return spy;
+}
+const git = (args) => spawnSync('git', ['-C', repo, ...args], {
+  encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+});
+
+restoreLedger();
+const projection = projectCampaign(loadRows(ledgerPath), campaignId);
+const admitted = runResume();
+assert.strictEqual(admitted.status, 'admitted', JSON.stringify(admitted.rejection || admitted));
+assert.strictEqual(
+  admitted.generation_claim.resume_durable_wait.phase,
+  CAMPAIGN_STATES.AWAITING_DISPOSITION,
+);
+const rc = admitted.generation_claim.resume_candidate;
+assert.strictEqual(rc.committed, true);
+assert.strictEqual(rc.commit, c1);
+assert.strictEqual(rc.tree_sha, c1Tree);
+assert.strictEqual(rc.scope_implementation_sha, c0);
+assert.notStrictEqual(rc.scope_implementation_sha, c1);
+const ref = projection.candidate_reference;
+assert.deepStrictEqual(rc.branch, ref.branch);
+assert.deepStrictEqual(rc.writer_fence, ref.writer_fence);
+assert.deepStrictEqual(rc.repair_lineage, ref.repair_lineage);
+const expectedKeys = [
+  'branch', 'commit', 'committed', 'repair_lineage',
+  'scope_implementation_sha', 'tree_sha', 'writer_fence',
+];
+if (ref.campaign_contract_sha256) {
+  expectedKeys.push('campaign_contract_sha256', 'unit_contract_sha256');
+}
+assert.deepStrictEqual(Object.keys(rc).sort(), expectedKeys.sort());
+assert.strictEqual(Object.prototype.hasOwnProperty.call(rc, 'kind'), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(rc, 'base'), false);
+console.log('t1_t2_admitted=true');
+
+restoreLedger();
+{
+  const moved = spawnSync('git', ['-C', worktree, 'reset', '--hard', base], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(moved.status, 0, moved.stderr);
+  const spy = spyClaim();
+  const out = runResume({ missionClaim: spy.fn });
+  spawnSync('git', ['-C', worktree, 'reset', '--hard', c1], { stdio: 'ignore' });
+  assert.strictEqual(out.status, 'blocked', JSON.stringify(out.rejection || out));
+  assert.strictEqual(out.rejection.code, 'campaign_resume_git_drift');
+  assert.strictEqual(spy.count, 0);
+}
+
+function probeChild() {
+  const src = path.join(root, 'src', 'engine');
+  const script = `
+    'use strict';
+    const { runCampaignIntake } = require(${JSON.stringify(src)});
+    let spy = 0;
+    const out = runCampaignIntake({
+      repo: ${JSON.stringify(repo)},
+      contractPath: ${JSON.stringify(contractPath)},
+      sealPath: ${JSON.stringify(sealPath)},
+      promptFile: ${JSON.stringify(promptFile)},
+      branch: 'impl/disp-resume',
+      base: ${JSON.stringify(base)},
+      roster: { implementer_engine: 'fixture-implementer' },
+      observedAt: '2026-09-16T00:00:05.000Z',
+      resume: true,
+    }, {
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      missionClaim: () => {
+        spy += 1;
+        return { owner: 'mission', status: 'unknown', enforcement: 'shadow', reason: 'spy' };
+      },
+      releaseMission: () => ({ owner: 'mission_release', status: 'released' }),
+    });
+    process.stdout.write(JSON.stringify({
+      status: out.status,
+      code: out.rejection && out.rejection.code,
+      reason: out.rejection && out.rejection.reason,
+      spy,
+    }));
+  `;
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_COMMON_DIR;
+  delete env.GIT_NO_REPLACE_OBJECTS;
+  const r = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', env });
+  assert.strictEqual(r.status, 0, r.stderr || r.stdout);
+  return JSON.parse(r.stdout);
+}
+const bashGit = (cmdline) => spawnSync('bash', ['-lc', cmdline], { encoding: 'utf8' });
+
+restoreLedger();
+const baseTree = git(['rev-parse', `${base}^{tree}`]).stdout.trim();
+assert.notStrictEqual(c1Tree, baseTree, 'c1 tree must differ from base tree');
+const treeReplacement = bashGit(
+  `printf 'tree drift replacement\\n' | git -C ${JSON.stringify(repo)} commit-tree ${baseTree} -p ${base}`,
+).stdout.trim();
+assert.ok(/^[0-9a-f]{40}$/.test(treeReplacement), `treeReplacement=${treeReplacement}`);
+assert.strictEqual(bashGit(`git -C ${JSON.stringify(repo)} replace ${c1} ${treeReplacement}`).status, 0);
+assert.strictEqual(git(['rev-parse', `${c1}^{tree}`]).stdout.trim(), baseTree);
+{
+  const out = probeChild();
+  assert.strictEqual(out.status, 'blocked', JSON.stringify(out));
+  assert.strictEqual(out.code, 'campaign_resume_git_drift');
+  assert.strictEqual(out.spy, 0);
+}
+bashGit(`git -C ${JSON.stringify(repo)} replace -d ${c1}`);
+
+restoreLedger();
+const offBase = bashGit(
+  `printf 'off-base root\\n' | git -C ${JSON.stringify(repo)} commit-tree ${baseTree}`,
+).stdout.trim();
+const baseDrift = bashGit(
+  `printf 'base ancestry drift replacement\\n' | git -C ${JSON.stringify(repo)} commit-tree ${c1Tree} -p ${offBase}`,
+).stdout.trim();
+assert.ok(/^[0-9a-f]{40}$/.test(baseDrift), `baseDrift=${baseDrift}`);
+assert.strictEqual(bashGit(`git -C ${JSON.stringify(repo)} replace ${c1} ${baseDrift}`).status, 0);
+{
+  const out = probeChild();
+  assert.strictEqual(out.status, 'blocked', JSON.stringify(out));
+  assert.strictEqual(out.code, 'campaign_resume_git_drift');
+  assert.strictEqual(out.spy, 0);
+}
+bashGit(`git -C ${JSON.stringify(repo)} replace -d ${c1}`);
+
+restoreLedger();
+{
+  const raw = fs.readFileSync(ledgerPath, 'utf8');
+  const lines = raw.split('\n');
+  let mutatedCount = 0;
+  const mutated = lines.map((line) => {
+    if (!line.trim()) return line;
+    try {
+      const row = JSON.parse(line);
+      if (typeof row.payload !== 'string') return line;
+      const payload = JSON.parse(row.payload);
+      const ref = payload && payload.artifact_reference;
+      if (ref && ref.kind === 'git_candidate' && ref.commit === c1 && ref.writer_fence) {
+        // Corrupt the writer-fence digest itself (not a sibling field): the
+        // artifact digest is recomputed so only the fence validation can trip.
+        ref.writer_fence.receipt_digest = 'f'.repeat(64);
+        payload.artifact_reference = ref;
+        if (payload.event && typeof payload.event === 'object') {
+          payload.event.output_artifact_digest = canonicalDigest(ref);
+        }
+        row.payload = JSON.stringify(payload);
+        mutatedCount += 1;
+      }
+      return JSON.stringify(row);
+    } catch (_e) { /* keep */ }
+    return line;
+  });
+  assert.ok(mutatedCount > 0, `malformed fence mutations=${mutatedCount}`);
+  fs.writeFileSync(ledgerPath, mutated.join('\n'));
+  const out = probeChild();
+  assert.strictEqual(out.status, 'blocked', JSON.stringify(out));
+  assert.strictEqual(out.code, 'campaign_resume_candidate_invalid', JSON.stringify(out));
+  assert.strictEqual(out.spy, 0);
+}
+restoreLedger();
+console.log('t3_preclaim_drift=true');
+NODE
+)"
+assert_exit_code "$?" "0" "T1–T3 durable-wait intake: $DISP_RESUME_OUT"
+assert_contains "$DISP_RESUME_OUT" "t1_t2_admitted=true" "T1/T2 admitted normalized resume_candidate"
+assert_contains "$DISP_RESUME_OUT" "t3_preclaim_drift=true" "T3 pre-claim drift refused"
+
+DISP_ENGINE_OUT="$(
+  DISP_C0="$DISP_C0" DISP_C1="$DISP_C1" DISP_BASE_SHA="$DISP_BASE" \
+  node - "$REPO_ROOT" "$DISP_SBX" "$DISP_WT" "$DISP_CONTRACT" "$DISP_SEAL" \
+  "$DISP_PROMPT" "$DISP_CAMPAIGN_ID" "$DISP_REVIEW_DIGEST" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [
+  root, repo, worktree, contractPath, sealPath, promptFile,
+  campaignId, durableReviewDigest,
+] = process.argv.slice(2);
+const c0 = process.env.DISP_C0;
+const c1 = process.env.DISP_C1;
+const base = process.env.DISP_BASE_SHA;
+const c1Tree = spawnSync('git', ['-C', repo, 'rev-parse', `${c1}^{tree}`], {
+  encoding: 'utf8',
+}).stdout.trim();
+spawnSync('git', ['-C', repo, 'replace', '-d', c1], { stdio: 'ignore' });
+spawnSync('git', ['-C', worktree, 'reset', '--hard', c1], { stdio: 'ignore' });
+{
+  const common = spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], {
+    encoding: 'utf8',
+  }).stdout.trim();
+  const ledger = path.join(path.resolve(repo, common), 'autopilot', 'implementation-campaign.jsonl');
+  if (fs.existsSync(`${ledger}.awaiting.bak`)) {
+    fs.copyFileSync(`${ledger}.awaiting.bak`, ledger);
+  }
+}
+const {
+  AutopilotEngine,
+  canonicalDigest,
+  compileCampaignDispositionProvider,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
+const finding = {
+  finding_id: 'icc-disp-001',
+  claim: 'MUST-FIX src/value.txt must keep the repair path',
+  severity: '🟠',
+  source: 'fixture',
+};
+const findings = JSON.stringify([finding]);
+const roster = {
+  reviewer_engine: 'fixture-reviewer',
+  reviewer_effort: 'high',
+  reviewer_runner: 'fixture',
+  reviewer_qualified: true,
+  implementer_engine: 'gpt-5.6',
+  implementer_effort: 'high',
+  implementer_runner: 'fixture',
+  loop_max_rounds: 3,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 3,
+  required_review_families: 2,
+  cross_family_required: true,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [
+    { role: 'qc', runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
+    { role: 'qc', runner: 'fixture-b', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
+    { role: 'qc', runner: 'fixture-c', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+  ],
+  fallback_ladder: [
+    { runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', family: 'openai' },
+    { runner: 'fixture-b', model: 'claude-opus', effort: 'high', family: 'anthropic' },
+    { runner: 'fixture-c', model: 'grok-4.5', effort: 'high', family: 'xai' },
+  ],
+};
+const seal = JSON.parse(fs.readFileSync(sealPath, 'utf8'));
+const decision = {
+  finding_id: 'icc-disp-001',
+  evidence: {
+    kind: 'trace',
+    trace_chain: ['fixture:must-fix-now'],
+    confirmed_by: 'owner/root',
+  },
+  disposition: {
+    disposition: 'must-fix-now',
+    acceptance_id: 'ICC-DISP',
+    deferral_harm: 'stranded campaign',
+  },
+};
+const contracts = [];
+let adjudicateCalls = 0;
+const engine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-09-16T00:00:05.000Z',
+  campaignDispositionProvider: compileCampaignDispositionProvider({
+    schema_version: 1,
+    artifact_type: 'campaign_disposition_authority',
+    authority: 'depth-0',
+    actor_id: 'owner/root',
+    campaign_id: campaignId,
+    contract_digest: seal.contract_sha256,
+    reviews: [{ review_digest: durableReviewDigest, decisions: [decision] }],
+  }),
+  campaignAdjudicator() {
+    adjudicateCalls += 1;
+    const retained = {
+      id: 'icc-disp-001',
+      claim: 'MUST-FIX src/value.txt must keep the repair path',
+      severity: '🟠',
+      source: 'fixture',
+      evidence: { digest: 'b'.repeat(64), classification: 'actionable' },
+      adjudication_authority: {
+        authority: 'depth-0',
+        actor_id: 'owner/root',
+        review_digest: durableReviewDigest,
+      },
+      disposition: {
+        disposition: 'must-fix-now',
+        acceptance_id: 'ICC-DISP',
+        deferral_harm: 'stranded campaign',
+      },
+    };
+    return {
+      registry_complete: true,
+      repair_gate_passed: true,
+      registry_digest: '1'.repeat(64),
+      must_fix_now: adjudicateCalls === 1 ? [retained] : [],
+      follow_up: [],
+      rejected: [],
+    };
+  },
+  campaignScopeChecker({ session }) {
+    contracts.push(session && session.contract);
+    return {
+      passed: true,
+      verdict: 'PASS',
+      changed_files: ['src/value.txt'],
+      total_churn: 1,
+      receipt_digest: 'a'.repeat(64),
+    };
+  },
+  campaignRepairChangedPaths() {
+    return { status: 'ok', paths: ['src/value.txt'] };
+  },
+  campaignIntake(input) {
+    const control = runCampaignIntake(input, {
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    });
+    if (control.status !== 'admitted' || !control.generation_claim) {
+      throw new Error(`intake blocked: ${JSON.stringify(control.rejection || control)}`);
+    }
+    control.generation_claim.resume_verification = {
+      passed: true,
+      receipt_digest: 'e'.repeat(64),
+    };
+    control.generation_claim.resume_review = {
+      reviewed: true,
+      verdict: 'FIX-THEN-SHIP',
+      findings,
+      review_digest: durableReviewDigest,
+      review_input_mode: 'full_diff_generation',
+    };
+    control.generation_claim.resume_findings = [finding];
+    control.generation_claim.resume_phase = 'AWAITING_DISPOSITION';
+    control.generation_claim.resume_full_diff_barriers = {
+      0: {
+        kind: 'full_diff_review',
+        success: true,
+        review_digest: durableReviewDigest,
+        candidate_ref: c1,
+      },
+      1: {
+        kind: 'full_diff_review',
+        success: true,
+        review_digest: durableReviewDigest,
+        candidate_ref: c1,
+      },
+    };
+    return control;
+  },
+  implementationDispatcher() {
+    spawnSync('git', ['-C', worktree, 'config', 'user.email', 'disp@example.invalid'], { stdio: 'ignore' });
+    spawnSync('git', ['-C', worktree, 'config', 'user.name', 'disp'], { stdio: 'ignore' });
+    const reset = spawnSync('git', ['reset', '--hard', c1], { cwd: worktree, encoding: 'utf8' });
+    assert.strictEqual(reset.status, 0, reset.stderr);
+    fs.writeFileSync(path.join(worktree, 'src/value.txt'), 'c2\n');
+    spawnSync('git', ['add', 'src/value.txt'], { cwd: worktree, stdio: 'ignore' });
+    const committed = spawnSync('git', ['commit', '-qm', 'c2'], { cwd: worktree, encoding: 'utf8' });
+    assert.strictEqual(committed.status, 0, committed.stderr);
+    spawnSync('git', ['add', 'src/value.txt'], { cwd: worktree, stdio: 'ignore' });
+    spawnSync('git', ['commit', '-qm', 'c2'], { cwd: worktree, stdio: 'ignore' });
+    const commit = spawnSync('git', ['rev-parse', 'HEAD'], {
+      cwd: worktree, encoding: 'utf8',
+    }).stdout.trim();
+    const tree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], {
+      cwd: worktree, encoding: 'utf8',
+    }).stdout.trim();
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        commit,
+        tree_sha: tree,
+        branch: 'impl/disp-resume',
+        worktree,
+        worktree_reused: true,
+        files_changed: 1,
+        insertions: 1,
+        deletions: 1,
+        runner: 'fixture',
+        model: 'gpt-5.6',
+      },
+    };
+  },
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'fixture',
+        model: 'fixture-reviewer',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: '[]',
+        raw_log: null,
+        error: null,
+      },
+    };
+  },
+  diffProvider() { return promptFile; },
+  gitWorktreeAdd() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '',
+      worktree, parent: null, commit: c1, observed_commit: c1,
+      observed_tree_sha: c1Tree, detached: false,
+    };
+  },
+  gitWorktreeRemove() {
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+  },
+  repairLineageCleanupTransaction() {
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+  },
+  verifyCommandRunner({ verifyCmd }) {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '',
+      executed_argv: ['/bin/sh', '-c', verifyCmd],
+    };
+  },
+});
+const result = engine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/disp-resume',
+  base,
+  roster,
+  campaignContract: contractPath,
+  campaignSeal: sealPath,
+  resume: true,
+  verificationEnv: { PATH: process.env.PATH || '', CI: 'disp-resume' },
+  verificationEnvAllowlist: ['CI'],
+});
+assert.ok(contracts.length >= 1, `spy calls=${contracts.length} result=${JSON.stringify({
+  status: result.status, phase: result.phase, reason: result.reason,
+})}`);
+for (const contract of contracts) {
+  assert.strictEqual(contract.base_sha, base);
+  assert.strictEqual(contract.implementation_sha, c0);
+  assert.notStrictEqual(contract.implementation_sha, c1);
+  assert.notStrictEqual(contract.implementation_sha, undefined);
+}
+const c2 = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).stdout.trim();
+const parent = spawnSync('git', ['rev-parse', 'HEAD^'], { cwd: worktree, encoding: 'utf8' }).stdout.trim();
+assert.strictEqual(parent, c1, JSON.stringify({
+  parent, c1, c0, c2, status: result.status, phase: result.phase, reason: result.reason,
+}));
+assert.notStrictEqual(c2, c1);
+const forbidden = new Set(['campaign_scope_session', 'scope_check']);
+assert.ok(!forbidden.has(result.phase), `phase=${result.phase} reason=${result.reason}`);
+const events = [];
+try {
+  const { loadRows, projectCampaign } = require(path.join(root, 'src', 'campaign', 'cli'));
+  const common = spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], {
+    encoding: 'utf8',
+  }).stdout.trim();
+  const ledger = path.join(path.resolve(repo, common), 'autopilot', 'implementation-campaign.jsonl');
+  const proj = projectCampaign(loadRows(ledger), campaignId);
+  events.push(proj.state.phase);
+} catch (_e) { /* ignore */ }
+const trace = (result.campaign_receipt && result.campaign_receipt.trace) || [];
+const joined = `${JSON.stringify(result)}\n${trace.join(',')}`;
+assert.ok(
+  joined.includes('DISPOSITION_RESUMED')
+    || joined.includes('disposition_resumed')
+    || joined.includes('resume_disposition_only')
+    || (result.campaign_receipt && Array.isArray(result.campaign_receipt.trace)
+      && result.campaign_receipt.trace.includes('repair')),
+  `missing disposition/repair progress: status=${result.status} phase=${result.phase} reason=${result.reason}`,
+);
+console.log(`engine_status=${result.status}`);
+console.log(`engine_phase=${result.phase}`);
+console.log(`spy_calls=${contracts.length}`);
+console.log(`c2=${c2}`);
+console.log('t4_engine_scope=true');
+NODE
+)"
+assert_exit_code "$?" "0" "T4 engine scope check: $DISP_ENGINE_OUT"
+assert_contains "$DISP_ENGINE_OUT" "t4_engine_scope=true" "T4 engine spy recorded C0 implementation_sha"
+
+T5_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const root = process.argv[2];
+const tmp = process.argv[3];
+const {
+  CAMPAIGN_EVENTS,
+  appendCampaignEvent,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
+const repo = path.join(tmp, 'unbound-resume-repo');
+fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+const git = (args, cwd = repo) => spawnSync('git', ['-C', cwd, ...args], {
+  encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+});
+git(['init', '-q']);
+git(['config', 'user.email', 'unbound@example.invalid']);
+git(['config', 'user.name', 'Unbound']);
+const govSrc = path.join(root, '.claude', 'owner-kernel-governance.json');
+const gov = JSON.parse(fs.readFileSync(govSrc, 'utf8'));
+gov.mission_convergence = {
+  schema_version: 1,
+  enforcement_mode: 'shadow',
+  max_campaigns: 8,
+  max_wall_seconds: 7200,
+  max_tool_calls: 1000,
+  max_engine_attempts: 100,
+  max_external_wait_seconds: 600,
+  max_canonical_changed_files: 100,
+  max_output_bytes: 1000000,
+  max_deliverables: 8,
+  max_parallel: 3,
+  max_batches: 4,
+  max_graph_depth: 4,
+  max_gate_attempts: 16,
+  closure_ratio: 1,
+  max_stagnant_campaigns: 2,
+};
+fs.writeFileSync(
+  path.join(repo, '.claude', 'owner-kernel-governance.json'),
+  `${JSON.stringify(gov, null, 2)}\n`,
+);
+fs.writeFileSync(path.join(repo, 'src/value.txt'), 'base\n');
+git(['add', '.']);
+git(['commit', '-qm', 'base']);
+const base = git(['rev-parse', 'HEAD']).stdout.trim();
+git(['checkout', '-qb', 'impl/unbound-resume']);
+const commonDir = fs.realpathSync(path.resolve(repo, git(['rev-parse', '--git-common-dir']).stdout.trim()));
+const contractPath = path.join(tmp, 'unbound-campaign.json');
+const sealPath = path.join(tmp, 'unbound-campaign.seal.json');
+const promptFile = path.join(tmp, 'unbound-prompt.txt');
+fs.writeFileSync(promptFile, 'unbound\n');
+fs.writeFileSync(contractPath, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'icc-unbound-resume',
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  base_sha: base,
+  branch: 'impl/unbound-resume',
+  vertical_acceptance: ['unbound preserved'],
+  allowed_path_prefixes: ['src/'],
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 120,
+  verify_cmd: 'true',
+  rubric_ids: ['ICC-UNBOUND1'],
+}, null, 2)}\n`);
+const seal = spawnSync(process.execPath, [
+  path.join(root, 'scripts', 'implementation-campaign-check.js'),
+  'seal', '--contract', contractPath, '--repo', repo, '--mission-mode', 'shadow', '--out', sealPath,
+], { encoding: 'utf8' });
+assert.strictEqual(seal.status, 0, seal.stderr || seal.stdout);
+const adapters = {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+};
+let control = runCampaignIntake({
+  repo, contractPath, sealPath, promptFile,
+  branch: 'impl/unbound-resume', base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-09-16T03:00:00.000Z',
+}, adapters);
+assert.strictEqual(control.status, 'admitted', JSON.stringify(control.rejection || control));
+control = { ...control, initial_state: appendCampaignEvent({
+  repo, campaignControl: control, observedAt: '2026-09-16T03:00:01.000Z',
+  eventType: CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, generation: 0,
+  stageIdentity: 'campaign-mutation:0', payload: { sealed_contract: true },
+}).state };
+const digest = 'b'.repeat(64);
+control = { ...control, initial_state: appendCampaignEvent({
+  repo, campaignControl: control, observedAt: '2026-09-16T03:00:02.000Z',
+  eventType: CAMPAIGN_EVENTS.BOUNDARY_REJECTED, generation: 0,
+  stageIdentity: 'campaign-mutation:0',
+  payload: {
+    reason: 'no commit produced',
+    boundary_reason: 'scope_or_budget_boundary',
+    candidate_ref: 'unbound-candidate',
+    boundary_receipt_digest: digest,
+  },
+  artifactReference: { kind: 'campaign_boundary_rejected', digest },
+}).state };
+console.log(`t5_repo=${repo}`);
+console.log(`t5_contract=${contractPath}`);
+console.log(`t5_seal=${sealPath}`);
+console.log(`t5_prompt=${promptFile}`);
+console.log(`t5_base=${base}`);
+console.log('t5_journal=true');
+NODE
+)"
+assert_exit_code "$?" "0" "T5 unbound journal: $T5_OUT"
+assert_contains "$T5_OUT" "t5_journal=true" "T5 BOUNDARY_REJECTED journaled"
+T5_REPO="$(printf '%s\n' "$T5_OUT" | sed -n 's/^t5_repo=//p')"
+T5_CONTRACT="$(printf '%s\n' "$T5_OUT" | sed -n 's/^t5_contract=//p')"
+T5_SEAL="$(printf '%s\n' "$T5_OUT" | sed -n 's/^t5_seal=//p')"
+T5_PROMPT="$(printf '%s\n' "$T5_OUT" | sed -n 's/^t5_prompt=//p')"
+T5_BASE="$(printf '%s\n' "$T5_OUT" | sed -n 's/^t5_base=//p')"
+T5_RESUME="$(node - "$REPO_ROOT" "$T5_REPO" "$T5_CONTRACT" "$T5_SEAL" "$T5_PROMPT" "$T5_BASE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root, repo, contractPath, sealPath, promptFile, base] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const adapters = {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+};
+const resumed = runCampaignIntake({
+  repo, contractPath, sealPath, promptFile,
+  branch: 'impl/unbound-resume', base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-09-16T03:00:03.000Z',
+  resume: true,
+}, adapters);
+assert.strictEqual(resumed.status, 'admitted', JSON.stringify(resumed.rejection || resumed));
+const wait = resumed.generation_claim.resume_durable_wait;
+assert.strictEqual(wait.candidate_ref, 'unbound-candidate');
+assert.ok(
+  resumed.generation_claim.resume_candidate == null,
+  `resume_candidate=${JSON.stringify(resumed.generation_claim.resume_candidate)}`,
+);
+console.log('t5_unbound_preserved=true');
+NODE
+)"
+assert_exit_code "$?" "0" "T5 unbound preservation: $T5_RESUME"
+assert_contains "$T5_RESUME" "t5_unbound_preserved=true" \
+  "T5 BOUNDARY_REJECTED unbound-candidate still admits without resume_candidate"
 
 ROUTING="$(sed -n '1,240p' \
   "$REPO_ROOT/skills/l5/SKILL.md" \

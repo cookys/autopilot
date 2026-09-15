@@ -73,12 +73,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: the durable-wait branch of `defaultGenerationClaim` bypassed `verifyResumeCandidate`, so `resume_candidate` was the raw reference without `scope_implementation_sha`; now every git_candidate resume is verified and normalized.
 
 ### Managed rail: ledger rotation carry-forward reorders journal rows — resume/inspect fail above 256 KiB
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.54 2026-09-16
 - **Trigger**: campaign-v1-fd316019… (this repo, ledger 2.1 MB): composition marked `review_no_verdict` resumable, `campaign resume` → `event input artifact must match the prior output artifact`
 - **Effort**: Fix
 - **Source**: /l5 dogfood 2026-09-16 (the v2.36.43 measurement point)
 - **Pointer**: docs/plans/evidence/2026-09-16-disposition-resume/README.md
-- **Context**: `run-ledger.sh` rotates on every append above RUN_LEDGER_MAX_BYTES and its carry re-emits active-run journals grouped by base64(row), not in append order; stale July leases keep every run "active" so the live segment never shrinks.
+- **Context**: `group_by` sorted the journal carry into base64(row) order; writer now keep-first in append order; reader untouched.
+
+### Managed rail: already-scrambled carry-only ledger segments cannot project — reader recovery or locked migration
+- **Status**: open
+- **Trigger**: host ledgers already rotated under the sorted `group_by` carry (zero original journals; file order is base64, not append) still throw `event input artifact must match the prior output artifact`
+- **Effort**: Fix
+- **Source**: l5 implementation plan 2026-09-16 (writer-only ship; reader recovery out of scope)
+- **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
+- **Context**: plan §6 — provenance-gated reader recovery for `_rotation_carry` rows, or a locked migration that proves projected digests unchanged.
 
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open

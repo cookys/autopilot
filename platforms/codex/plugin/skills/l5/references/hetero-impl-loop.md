@@ -190,7 +190,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
 11. Known rail limits (BACKLOG rows): `status task` has no writer. Fixed since
     2026-09-14: `--campaign-ledger` intake v2.36.42, reviewer `no_verdict` durable wait v2.36.43,
     final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48,
-    durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53.
+    durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
+    ledger rotation carry keeps journal append order v2.36.54.
     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
     line drifts the frozen source sha and every `session-mode set` is refused until routing is

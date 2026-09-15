@@ -3159,30 +3159,28 @@ atomic_append_ledger() {
       # the live segment under the same ledger lock as the append.
       if [ -f "${ledger}.1" ]; then
         local carry
-        # Compact carry: latest leased stage row per (run_id, stage). Keeps the
-        # new live segment from exposing a post-rotation heartbeat without its
-        # lease, without re-materializing the entire active history (journals
-        # and older stage rows remain readable via oldest-to-live scan).
         # Compact carry into the new live segment under the same lock:
         #  1) latest leased stage row per (run_id, stage)
-        #  2) all journal rows for those active run_ids (intake/events/idempotency)
-        # so rotation cannot hide active state/lease, and campaign projection still
-        # finds its intake after older segments are GC'd. -c keeps JSONL compact.
+        #  2) journal rows for those active run_ids, FIRST occurrence per
+        #     _rotation_root in oldest-to-live (append) order — no group_by /
+        #     unique_by / sort_by / sort on journal rows. The reader replays
+        #     the campaign event chain in file order, so a sorted carry
+        #     breaks ARTIFACT_CHAIN once originals are GC'd.
+        # -c keeps JSONL compact.
         carry="$(ledger_jq_slurp_unlocked "$ledger" -c '
           ([ .[] | select(.kind=="stage") ]
             | group_by((.run_id // "") + "\u0000" + (.stage // ""))
             | map(.[-1] | select(.state=="leased"))
           ) as $leases
           | ($leases | map(.run_id) | unique) as $active
-          | ([ .[]
+          | (reduce (.[]
               | select(.kind=="journal" and ((.run_id as $r | $active | index($r)) != null))
               | . as $row
               | (($row | del(._rotation_carry, ._rotation_root) | tojson | @base64)) as $root
               | ($row + {_rotation_carry:true, _rotation_root:($row._rotation_root // $root)})
-            ]
-            | group_by(._rotation_root)
-            | map(.[-1])
-          ) as $journals
+            ) as $j ({seen:{}, out:[]};
+              if .seen[$j._rotation_root] then . else .seen[$j._rotation_root] = true | .out += [$j] end)
+            | .out) as $journals
           | ($leases + $journals)
           | .[]
         ' 2>/dev/null || true)"

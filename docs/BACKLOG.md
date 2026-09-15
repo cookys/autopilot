@@ -65,12 +65,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: fingerprint excluded only own `BRANCH`; a sibling's `refs/heads/hands/*` was a delta. Fixed: `--sibling-ref-prefix` declares the namespace.
 
 ### Managed rail: disposition resume dies in `check-repair-scope.js` — `scope_implementation_sha` never set
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.53 2026-09-16
 - **Trigger**: cuda e2e (fleet-comms P0, autopilot 3ac4fa4e): `--resume --campaign-disposition-authority` → `implementation_sha must be an immutable full 40-hex commit object ID`, exit 2, no JSON
 - **Effort**: Fix
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K1VDJ50VJQZPC7SGDEJVVN`; the v2.36.41 measurement point
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: `campaign-intake.js:621-633` reads `projection.initial_candidate_reference || reference` and nothing sets it; the awaiting_disposition payload carries `candidate_ref` (40 hex). Bind it.
+- **Context**: the durable-wait branch of `defaultGenerationClaim` bypassed `verifyResumeCandidate`, so `resume_candidate` was the raw reference without `scope_implementation_sha`; now every git_candidate resume is verified and normalized.
 
 ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
 - **Status**: fired 2026-09-16

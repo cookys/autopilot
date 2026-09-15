@@ -808,9 +808,19 @@ function defaultGenerationClaim({
       // Prefer a bound git candidate when present so later stages can re-attach.
       if (existing.candidate_reference
           && existing.candidate_reference.kind === 'git_candidate') {
-        existing.resume_candidate = existing.candidate_reference;
-      } else if (candidateRef && existing.candidate_reference) {
-        existing.resume_candidate = existing.candidate_reference;
+        try {
+          existing.resume_candidate = verifyResumeCandidate({
+            projection: existing,
+            repo,
+            base,
+          });
+        } catch (error) {
+          return rejected(
+            'campaign_generation',
+            error.code || 'campaign_resume_candidate_invalid',
+            error.message || String(error),
+          );
+        }
       }
     }
     if (resumableCandidatePhase
@@ -1465,6 +1475,63 @@ function runCampaignIntake(input = {}, adapters = {}) {
       steps: [rejection],
       pre_spend_no_effect_receipt: null,
     };
+  }
+  // Durable-wait resume preflight: verify a git_candidate against Git BEFORE
+  // the Mission claim so a drifted resume cannot burn a grant attempt.
+  // ADJUDICATING / VERTICAL_VERIFICATION resumes are not preflighted (R6).
+  if (input.resume === true) {
+    try {
+      const identity = canonicalRepoIdentity(repo);
+      const preflightLedger = campaignLedgerPathFor(identity);
+      if (fs.existsSync(preflightLedger) && rawContractDigest) {
+        let sealedTicket = null;
+        try {
+          const sealed = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+          sealedTicket = sealed && typeof sealed.ticket === 'string'
+            ? sealed.ticket
+            : null;
+        } catch (_error) {
+          sealedTicket = null;
+        }
+          if (sealedTicket) {
+          const campaignId = campaignIdFor(identity, sealedTicket, rawContractDigest);
+          let projection = null;
+          try {
+            projection = projectCampaign(loadRows(preflightLedger), campaignId);
+          } catch (error) {
+            throw new CampaignIntakeError(
+              'campaign_resume_candidate_invalid',
+              error.message || String(error),
+            );
+          }
+          if (projection
+              && NON_SUCCESS_DURABLE_STATES.has(projection.state.phase)
+              && projection.candidate_reference
+              && projection.candidate_reference.kind === 'git_candidate') {
+            verifyResumeCandidate({
+              projection,
+              repo,
+              base: input.base,
+            });
+          }
+          }
+      }
+    } catch (error) {
+      if (error instanceof CampaignIntakeError) {
+        const rejection = rejected(
+          'campaign_generation',
+          error.code || 'campaign_resume_candidate_invalid',
+          error.message || String(error),
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+    }
   }
   const missionClaimAdapter = adapters.missionClaim || defaultMissionClaim;
   let missionClaim;

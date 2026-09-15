@@ -1818,7 +1818,11 @@ const { AutopilotEngine } = require(path.join(process.argv[2], 'src', 'engine', 
 const diff = process.argv[3];
 let reviewCalls = 0;
 const engine = new AutopilotEngine({
-  resolveReviewLoop() {
+  // The option is reviewLoopResolver; a `resolveReviewLoop` key is silently ignored and the
+  // REAL resolver runs against the live config — which since the 2026-09-12 cursor pin refuses
+  // under the suite's isolated ENGINE_CAPABILITY_DIR (exit 3). That was the 10-red "live marker"
+  // BACKLOG row; the marker was never the cause.
+  reviewLoopResolver() {
     return {
       status: 0, signal: null, stdout: '', stderr: '', parseError: null,
       result: {
@@ -1875,7 +1879,25 @@ const { buildSelectedRoster } = require(path.join(root, 'src', 'readiness', 'sta
 const { qualifyExactRoleNow } = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
 const { createProviderReadinessReceipt } = require(path.join(root, 'src', 'readiness', 'receipt'));
 const NOW = '2026-09-07T00:00:00.000Z';
-const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], { cwd: root, env: process.env });
+// Hermetic: the repo's live review-loop-config names a cursor implementer that only resolves
+// with the HOST's standing pin; under the suite's isolated ENGINE_CAPABILITY_DIR it exits 3
+// (the "10 reds" of 2026-09-14 — the live marker was never the cause). Resolve the frozen
+// 2026-09-13 fixture instead and seed the SAME kind of pin into the isolated store, so the
+// roster shape the KR4 cases were written against is reproduced without the host.
+// The pin tuple below MUST equal the fixture's implementer_* fields; if either side is edited
+// alone the resolver refuses and the throw after resolveReviewLoopJson names it.
+const { execFileSync } = require('child_process');
+execFileSync(process.execPath, [path.join(root, 'scripts', 'engine-capability-state.js'), 'pin-seat',
+  '--engine', 'cursor-grok-4.6-low', '--runner', 'cursor', '--role', 'implementer', '--effort', 'low',
+  '--endpoint', '@none', '--reason', 'kr4 fixture pin (isolated store)', '--operator', 'autopilot-engine.test',
+  '--store', process.env.ENGINE_CAPABILITY_DIR], { stdio: ['ignore', 'ignore', 'pipe'] });
+const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
+  cwd: root,
+  env: { ...process.env, REVIEW_LOOP_CONFIG_OVERRIDE: path.join(root, 'hooks', 'tests', 'fixtures', 'review-loop-config.frozen-2026-09-13.md') },
+});
+if (resolvedResult.status !== 0 || !resolvedResult.result) {
+  throw new Error(`fixture roster did not resolve: status=${resolvedResult.status} ${String(resolvedResult.stderr || '').slice(0, 300)}`);
+}
 const l4Roster = {
   ...resolvedResult.result,
   verification_author_present: false,
@@ -3680,6 +3702,7 @@ const validPayload = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',

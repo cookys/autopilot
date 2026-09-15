@@ -96,13 +96,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: looks like the EXIT trap (`rm -rf "$TEST_TMP"`) fires from a killed child/process group in case 3. Cases 6/9/12 (main-checkout boundary) are unobservable until fixed.
 
-### `autopilot-engine.test.sh` reads the live session-mode marker — 10 waiver/KR4 assertions red under an l5 marker
-- **Status**: open
+### `autopilot-engine.test.sh` resolves the live config under an isolated capability store — 10 waiver/KR4 assertions red
+- **Status**: shipped tests-only 2026-09-15
 - **Trigger**: the suite is red wherever this repo has an l5 marker (2026-09-14: 476/10 on HEAD, `strict /l5 implementer tuple.endpoint is unresolved`)
 - **Effort**: S
 - **Source**: observed 2026-09-14 while adding the no_verdict classifier cases (v2.36.43)
 - **Pointer**: none
-- **Context**: header unsets AUTOPILOT_LEVEL but the strict-l5 bootstrap still finds the marker file; point the marker dir at TEST_TMP.
+- **Context**: the live config's cursor pin is absent from the isolated capability dir (exit 3); fixed via frozen fixture + seeded pin.
 
 ### Managed rail: the final panel's non-incumbent seats are structurally precondition_failed under the exact-tuple rule
 - **Status**: shipped v2.36.46 2026-09-15

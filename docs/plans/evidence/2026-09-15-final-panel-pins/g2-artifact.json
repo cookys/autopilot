@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "final-panel-pins-2026-09-15",
+  "logical_plan_id": "final-panel-pins-2026-09-15",
+  "session_id": "1b58dad4-fpp",
+  "session_key": "4f8d42622fddb45d061f8e08def572a172cd67974018726271893ce0c8226fb6",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "d3a11b8d43f7e03c0dc5df11fa3047cda8ed19664c6a8d5aba351f7634de75d6",
+  "manifest_sha256": "521d79d9037d7f02325caa339d635e13238762e6952238a48cf6ac7e2fc50607",
+  "plan_sha256": "778851dbf79515329bef9a6544504ca8e8e3d39edc519bb9a79687736f9ec563",
+  "growth_ratio": {
+    "numerator": 2074,
+    "denominator": 1707
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "4a23478b731d66c24239ea3ff38fefc7bf68369c73befa0e49690683ee16d0cc"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a8089e2b53fe7c0ef9ad2d62a8214afb63d3de65b64f4e6d02517e38413e4282",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-5TCro8",
+          "digest": "a8089e2b53fe7c0ef9ad2d62a8214afb63d3de65b64f4e6d02517e38413e4282"
+        },
+        "receipt_digest": "e9028de8ca17e718b00bbe92874a3dc5672f0142bad6f59fce9a8e16acc6671d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "1b1d170e0c806f870e4a61df08eb354bf2693d1b9920fe0bb6dee3ed73c4439d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0f09fef676be461af33ab110e37c3d1968b9704c0a8573d24d97517de46107b3",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-AHVeir/stdout",
+          "digest": "0f09fef676be461af33ab110e37c3d1968b9704c0a8573d24d97517de46107b3"
+        },
+        "receipt_digest": "86f1e366a2250ef88affd13dad532a720b958962dea19d065e22a769ecd79a07"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/engine-capability-state.js unpinSeat CLI contract",
+      "claim": "Rubric R2 writes the selector as --engine X --runner Y [--endpoint E], implying --endpoint is optional; the plan freezes a stricter contract requiring all three selector flags together, with --endpoint @none selecting the null-endpoint row.",
+      "evidence": "Plan §1 'Selector contract (frozen, G1 codex blocker R2)' states 'all three selector flags are required together; --endpoint @none selects the null-endpoint row; the endpoint is never a wildcard', versus the rubric's bracketed optional endpoint. The stricter contract still removes exactly one row and never wildcards the endpoint, so the rubric's intent (exact-row removal, count reporting, non-zero on selector for other roles) is preserved; the divergence is only that engine+runner-only selection is not offered.",
+      "evidence_reference": "PLAN §1 bullet 2 (qc_panel selector contract) and §2.1 unpinSeat(config, role, selector); rubric R2 text",
+      "repair": "No current change; follow-up only. If a future need arises to unpin by engine+runner across endpoints, amend the selector contract explicitly rather than silently widening it; alternatively record one line in the plan noting the deliberate supersession of the rubric's optional-endpoint form.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "618175d63e0ee26327a96d3d80ffb7c378157d150772f8a3958b4559fb025ad8"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/engine-capability-state.js CLI contract and engine-capability-pin.test.sh",
+      "claim": "The plan requires all three selector flags for qc_panel unpinning, but the frozen rubric requires engine and runner with an optional endpoint.",
+      "evidence": "R2 specifies '--engine X --runner Y [--endpoint E]'. Sections 1, 2.1, and 2.6 instead require --engine, --runner, and --endpoint together, including explicit --endpoint @none for a null endpoint.",
+      "evidence_reference": "Frozen rubric R2; plan sections 1, 2.1, and 2.6",
+      "repair": "Align the CLI contract with R2: accept engine and runner without endpoint, define omission as selecting the null endpoint row, accept an explicit endpoint for exact non-null selection, and add tests for both forms.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d3ece8fe4615b37b31b07d6339aaf5740a77169b0e105402921f211b88aea292"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/resolve-review-loop-standing-pin.test.sh base-state evidence",
+      "claim": "The endpoint-mismatch negative assertion is not red at the base revision and therefore cannot be recorded as a change-pinning red assertion.",
+      "evidence": "Section 2.6 acknowledges that the base records no qc_panel admission, so an assertion that endpoint A does not admit endpoint B already passes at base. Calling it red only because it is paired with a new positive assertion does not satisfy the assertion-level red-versus-preservation classification required by R8.",
+      "evidence_reference": "Frozen rubric R8; plan section 2.6 resolve-review-loop-standing-pin.test.sh",
+      "repair": "Label the endpoint-mismatch negative assertion as a green-at-base preservation guard, and separately record a red-at-base assertion that a matching endpoint pin admits the exact indexed seat. Record both outcomes against the base SHA in the test header.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1a2b1739949149536d823195fd9fab9f1dff0fd8ebc8c11777d5d267a56d8355"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "618175d63e0ee26327a96d3d80ffb7c378157d150772f8a3958b4559fb025ad8",
+      "rubric_id": "R2",
+      "affected_surface": "scripts/engine-capability-state.js unpinSeat CLI contract",
+      "claim": "Rubric R2 writes the selector as --engine X --runner Y [--endpoint E], implying --endpoint is optional; the plan freezes a stricter contract requiring all three selector flags together, with --endpoint @none selecting the null-endpoint row.",
+      "evidence_reference": "PLAN §1 bullet 2 (qc_panel selector contract) and §2.1 unpinSeat(config, role, selector); rubric R2 text",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-15T03:54:52.609Z"
+}

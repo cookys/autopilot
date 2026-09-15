@@ -52,10 +52,9 @@ limit for the multi-seat role only:
   --resolve-live` read only these roles and are byte-identical in behaviour.
 - **`qc_panel`**: many standing pins, identity = engine+runner+endpoint; `pin-seat --role qc_panel`
   replaces only the row with the same engine+runner+endpoint. **Selector contract (frozen, G1 codex
-  blocker R2):** `unpin-seat --role qc_panel --engine X --runner Y [--endpoint E]` — `--engine` and
-  `--runner` are required together; `--endpoint` is optional and an omitted endpoint selects the
-  null-endpoint row exactly as `--endpoint @none` does (G2 codex blocker R2, aligned with rubric R2);
-  the endpoint is never a wildcard; the command removes exactly that row and reports `removed: 1` (or `0`). `unpin-seat
+  blocker R2):** `unpin-seat --role qc_panel --engine X --runner Y --endpoint E` — all three selector
+  flags are required together; `--endpoint @none` selects the null-endpoint row; the endpoint is never
+  a wildcard; the command removes exactly that row and reports `removed: 1` (or `0`). `unpin-seat
   --role qc_panel` with no selector removes all qc rows and reports the count. Any selector flag on a
   non-`qc_panel` role exits non-zero naming the rule.
 - The roster resolver looks up override/pin for EVERY `qc_panel[N]` seat and records an admission as
@@ -88,9 +87,8 @@ limit for the multi-seat role only:
 ### 2.1 `scripts/engine-capability-state.js`
 - `pinSeat`: replacement key is `role` for every role except `qc_panel`, where it is
   `role+engine+runner+endpoint`. Store row shape unchanged (eight keys, `expires: null`).
-- `unpinSeat(config, role, selector)`: `selector` = `{engine, runner, endpoint}` optional as a whole;
-  when given, `engine` and `runner` are both required and `endpoint` defaults to null (omitted ≡
-  `@none`); for `qc_panel` without selector remove all qc rows; for other roles a selector is rejected (`unpin-seat:
+- `unpinSeat(config, role, selector)`: `selector` = `{engine, runner, endpoint}` optional; for
+  `qc_panel` without selector remove all qc rows; for other roles a selector is rejected (`unpin-seat:
   --engine/--runner/--endpoint apply to --role qc_panel only`). CLI: `unpin-seat` accepts
   `--engine --runner --endpoint`.
 - `pins --role qc_panel` returns all qc rows (already true once the store holds them).
@@ -135,8 +133,7 @@ limit for the multi-seat role only:
   second reason (preservation guard — replacement already behaves so at base; labelled, green base
   recorded); (12) same engine+runner at endpoint `glm` and at `@none` → two rows (RED); (13)
   `unpin-seat --role qc_panel --engine A --runner R --endpoint glm` removes exactly that row,
-  `removed: 1`, the `@none` row and the other engine survive (RED); (13b) the same command WITHOUT
-  `--endpoint` removes exactly the null-endpoint row, `removed: 1`, the `glm` row survives (RED); (14) `unpin-seat --role qc_panel`
+  `removed: 1`, the `@none` row and the other engine survive (RED); (14) `unpin-seat --role qc_panel`
   without selector removes all qc rows and reports the count (RED: today it removes the single row —
   assert count 3); (15) selector flags on `--role implementer` exit non-zero naming the rule (RED:
   today the unknown flag is rejected for a different reason — assert the exact message); case 4
@@ -145,11 +142,9 @@ limit for the multi-seat role only:
   a config with a 3-seat qc panel and two qc pins → `override_admitted_seats` contains exactly
   `qc_panel[0]` and `qc_panel[2]` (whichever indices are pinned), exit 0 (RED at base: `["…"]` lacks
   them); the unpinned seat produces the stderr note and does not refuse (preservation guard: exit 0);
-  a pin for the same engine+runner at endpoint A does NOT admit the seat at endpoint B — preservation
-  guard (green at base, which records no qc admission at all; labelled, base result recorded; G2 codex
-  R8); the change-pinning red beside it is that a pin whose endpoint MATCHES admits exactly
-  `qc_panel[N]`; the endpoint compare is additionally pinned by a supplementary mutant (drop the
-  compare → the mismatch case admits).
+  a pin for the same engine+runner at endpoint A does NOT admit the seat at endpoint B (RED at base
+  only in the sense that base records nothing — assert the negative explicitly against the new
+  positive so the endpoint comparison is pinned; mutant: drop the endpoint compare → admits).
 - `hooks/tests/qc-panel-honesty.test.sh`: `finalPanelSeatQualified(roster, seat, 1)` true when
   `override_admitted_seats: ['qc_panel[1]']` (RED at base); false for `['qc_panel']`, for index
   mismatch (`['qc_panel[0]']` with index 1), and when the key is absent — all three are preservation
@@ -217,8 +212,3 @@ three `reviewed` seat receipts or a real verdict, not `precondition_failed`.
   frozen (R2); intake test proves both claim adapters uncalled and the null receipt (R6); red/preservation
   relabelling (R8); intake check ungated by completeness (GLM R6). Receipt taken on the reviewed bytes
   (`evidence/2026-09-15-final-panel-pins/plan.as-reviewed-g1.md`, `g1-dispositions.json`).
-- 2026-09-15 plan review G2 (GLM READY-with-note; codex STOP with two blockers R2/R8). Generation cap
-  reached; depth-0 adjudicated: both accepted and folded — `unpin-seat --endpoint` optional with omitted
-  ≡ null (matches rubric R2), endpoint-mismatch negative relabelled preservation. Receipt on reviewed
-  bytes (`plan.as-reviewed-g2.md`, `g2-dispositions.json`), fold applied after, chain frozen on the
-  folded plan.

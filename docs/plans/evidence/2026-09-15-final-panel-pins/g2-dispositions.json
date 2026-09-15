@@ -1,0 +1,13 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "final-panel-pins-2026-09-15",
+ "generation": 2,
+ "findings": [
+  {"fingerprint": "d3ece8fe4615b37b31b07d6339aaf5740a77169b0e105402921f211b88aea292", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: selector contract aligned with frozen R2 — --engine and --runner required together, --endpoint optional; omitted endpoint selects the null-endpoint row (same as --endpoint @none), never a wildcard; tests cover both forms (§1, §2.1, §2.6)."},
+  {"fingerprint": "1a2b1739949149536d823195fd9fab9f1dff0fd8ebc8c11777d5d267a56d8355", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: the endpoint-mismatch negative is relabelled a green-at-base preservation guard; the change-pinning red is the matching-endpoint pin admitting the exact indexed seat; both recorded against the base sha (§2.6)."},
+  {"fingerprint": "618175d63e0ee26327a96d3d80ffb7c378157d150772f8a3958b4559fb025ad8", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Superseded by the codex R2 fold: the plan now matches the rubric's optional-endpoint form, so no supersession note is needed."}
+ ]
+}

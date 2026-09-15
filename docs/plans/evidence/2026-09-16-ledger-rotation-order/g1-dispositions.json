@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "ledger-rotation-order-2026-09-16",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "3b1ed2c02cfa9689bc6358299c59acf05d23e407904d995f69990630d5c9076d",
+      "disposition": "accepted_blocker",
+      "candidate_blocker": true,
+      "rationale": "Accepted: §2.1 offered a to_entries/group_by/min_by/sort_by alternative that R4 forbids outright; the alternative is removed, the reduce keep-first form is the only reference shape."
+    },
+    {
+      "fingerprint": "cf2654e213267c9e173cf92bfacd1498076caa60815915b526de8844d0ad1037",
+      "disposition": "accepted_blocker",
+      "candidate_blocker": true,
+      "rationale": "Accepted (same defect as 3b1ed2c0): the sorting-primitive alternative is deleted from §2.1; R4 stands as written."
+    },
+    {
+      "fingerprint": "be849a9e1c3accab913f36abce1c58e4de87a7976bdae52a589eeb2f74b820ff",
+      "disposition": "accepted_nonblocking",
+      "candidate_blocker": false,
+      "rationale": "Accepted: §2.4 now states that a reseal with a freed number re-freezes plan AND rubric together (R9 is re-pinned to the same number), so the row, the reference entry and R9 can never diverge."
+    }
+  ]
+}

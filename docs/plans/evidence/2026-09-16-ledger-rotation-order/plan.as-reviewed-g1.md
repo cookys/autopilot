@@ -82,9 +82,8 @@ nothing live depends on healing the old bytes. The reader is untouched.
 
 ### 2.1 `scripts/run-ledger.sh` (`atomic_append_ledger`, the `carry=` jq)
 
-Replace the `$journals` binding with the reduce form below — the ONLY acceptable shape (R4 forbids
-`group_by` / `unique_by` / `sort_by` / `sort` on journal rows outright, including index-sort
-reconstructions):
+Replace the `$journals` binding. Reference shape (either form is acceptable; both keep first
+occurrence and append order):
 
 ```jq
 | (reduce (.[]
@@ -97,7 +96,8 @@ reconstructions):
   | .out) as $journals
 ```
 
-The comment block above the jq is updated to say the carry preserves
+or `to_entries | group_by(.value._rotation_root) | map(min_by(.key)) | sort_by(.key) | map(.value)`
+over the same filtered stream. The comment block above the jq is updated to say the carry preserves
 append order and why (the reader replays the campaign event chain in file order). `$leases` and
 `($leases + $journals) | .[]` are unchanged.
 
@@ -146,8 +146,8 @@ snapshot contains no duplicate roots for the reader to collapse beyond what
 `run-ledger-rotation.test.sh` already covers; `src/campaign/cli.js` is byte-identical to base.
 
 ### 2.4 Docs (pinned version **v2.36.54**; canonical `origin/develop` is 2.36.53 at freeze — if an
-intervening release lands first, depth-0 reseals plan AND rubric together with the freed number per
-the concurrent-session rule, so R9, the BACKLOG row and the reference entry always carry one number)
+intervening release lands first, depth-0 reseals with the freed number per the concurrent-session
+rule)
 
 - `docs/BACKLOG.md`: the fired row → Status `shipped v2.36.54 2026-09-16`; Context names the real
   mechanism (`group_by` sorted the journal carry; now keep-first in append order). New open row
@@ -202,10 +202,3 @@ is GC'd; if it parks, degrade per HANDOFF, do not `--resume`.
   into §2.3. Depth-0 ruling: (a) only — the owner froze D's scope to carry-order preservation, no
   live caller needs the old bytes healed, and the reader recovery is a DFS inside the fail-closed
   projection core that deserves its own plan and hetero loop (§6).
-- Plan hetero loop G1 2026-09-16 (GLM-5.2 CONDITIONAL, gpt-5.6-sol STOP; evidence
-  `docs/plans/evidence/2026-09-16-ledger-rotation-order/g1-*`): two blockers (the §2.1
-  `to_entries/group_by/min_by/sort_by` alternative contradicted R4) accepted — alternative removed;
-  one non-blocking (version reseal could diverge from R9) accepted — §2.4 reseals plan and rubric
-  together.
-- Plan hetero loop G2 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol READY, zero findings, terminal;
-  evidence `g2-*`). Plan frozen on these bytes plus this log line.

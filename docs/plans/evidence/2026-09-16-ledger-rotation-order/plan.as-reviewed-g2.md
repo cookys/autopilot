@@ -207,5 +207,3 @@ is GC'd; if it parks, degrade per HANDOFF, do not `--resume`.
   `to_entries/group_by/min_by/sort_by` alternative contradicted R4) accepted — alternative removed;
   one non-blocking (version reseal could diverge from R9) accepted — §2.4 reseals plan and rubric
   together.
-- Plan hetero loop G2 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol READY, zero findings, terminal;
-  evidence `g2-*`). Plan frozen on these bytes plus this log line.

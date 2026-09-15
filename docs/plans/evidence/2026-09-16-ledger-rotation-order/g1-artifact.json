@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "ledger-rotation-order-2026-09-16",
+  "logical_plan_id": "ledger-rotation-order-2026-09-16",
+  "session_id": "d-g1-1789513749",
+  "session_key": "f9ab76053baa46117191cf4e3e99be49ec1c4e2568ed1a4cae39dd20b6df62c1",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "78910525f2a6d2e623eb44c856b7a4daec1c04d6241e2ead9ec5e143e758fae5",
+  "manifest_sha256": "8e1c6cd28b542fb68f5d07f5fe9c01750bdb694b29a30695a68b47cf2fe3cfc2",
+  "plan_sha256": "d5a5df86df983d4b401d5803705c919ba65e2d5c3de34a41ecbcabc34147fc69",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "4ab6a2caca7d63b4191124d557a1c5d7d29eeb73e8b93b6360d8a925eec51589"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e91e32086b535e823c68be1b0eca8028ceec75174b3d2cbb1abc13b1b91effcd",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-z3vw6t",
+          "digest": "e91e32086b535e823c68be1b0eca8028ceec75174b3d2cbb1abc13b1b91effcd"
+        },
+        "receipt_digest": "15d300cf09329323ae780c93873f672a596366b7953ffe225879b755d4cbcd70"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "3ee542834fa204024efe26aa5e6eca79e4464a8461d4ee5aae28f4b39f0c88ba"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7079823cbff783666c9ee95fd3786b32fc59da46114b8869be5336876747f46d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-3IT3vz/stdout",
+          "digest": "7079823cbff783666c9ee95fd3786b32fc59da46114b8869be5336876747f46d"
+        },
+        "receipt_digest": "29fc49f6fb2bdc7737464bf307e4edaee7a06e1064f11d8703f04a1630be92a7"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/run-ledger.sh (atomic_append_ledger journal carry) alternative implementation shape in plan section 2.1",
+      "claim": "The plan offers two acceptable reference shapes, but the second one ('to_entries | group_by(.value._rotation_root) | map(min_by(.key)) | sort_by(.key) | map(.value)') uses group_by and sort_by on journal rows, which R4 explicitly forbids ('uses no sorting primitive (group_by, unique_by, sort_by, sort) on journal rows').",
+      "evidence": "Plan section 2.1 states 'Reference shape (either form is acceptable; both keep first occurrence and append order)' and then lists the reduce-based form followed by the to_entries/group_by/min_by/sort_by form. The frozen rubric R4 bans group_by, unique_by, sort_by, and sort on journal rows outright, not merely their order-destroying use.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 2.1, second reference jq; FROZEN_RUBRIC R4",
+      "repair": "Amend section 2.1 to present only the reduce-based carry as the accepted shape and mark the to_entries/group_by/sort_by variant as rejected because it violates R4's no-sorting-primitive constraint on journal rows, even though sort_by(.key) happens to restore index order.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3b1ed2c02cfa9689bc6358299c59acf05d23e407904d995f69990630d5c9076d"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md version pin for the shipped row",
+      "claim": "The plan's version-pinning contingency (reseal with a freed number if an intervening release lands first) could ship the row under a version other than v2.36.54, which R9 pins exactly.",
+      "evidence": "Section 2.4 says 'canonical origin/develop is 2.36.53 at freeze — if an intervening release lands first, depth-0 reseals with the freed number per the concurrent-session rule', while R9 requires Status 'shipped v2.36.54' and the hetero-impl-loop step 11 entry to carry that version.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 2.4; FROZEN_RUBRIC R9",
+      "repair": "No current change; follow-up only. If resealing occurs, the depth-0 seal must update the version consistently across the BACKLOG row and the hetero-impl-loop step 11 entry in the same change so R9's single-version invariant still holds.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "be849a9e1c3accab913f36abce1c58e4de87a7976bdae52a589eeb2f74b820ff"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/run-ledger.sh journal-carry implementation and its Codex mirror",
+      "claim": "The plan explicitly permits an implementation that violates the frozen prohibition on sorting primitives for journal rows.",
+      "evidence": "Section 2.1 allows an alternative based on to_entries, group_by, min_by, and sort_by. R4 expressly forbids group_by, unique_by, sort_by, and sort on journal rows, regardless of whether a later index sort reconstructs append order.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2.1; frozen rubric R4",
+      "repair": "Remove the sorting-based alternative from the plan and require the order-preserving reduce with a seen-root map and output array. Add an acceptance check scoped to the journal binding that rejects group_by, unique_by, sort_by, or sort while leaving the unchanged stage-carry grouping permitted.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cf2654e213267c9e173cf92bfacd1498076caa60815915b526de8844d0ad1037"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "be849a9e1c3accab913f36abce1c58e4de87a7976bdae52a589eeb2f74b820ff",
+      "rubric_id": "R9",
+      "affected_surface": "docs/BACKLOG.md version pin for the shipped row",
+      "claim": "The plan's version-pinning contingency (reseal with a freed number if an intervening release lands first) could ship the row under a version other than v2.36.54, which R9 pins exactly.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 2.4; FROZEN_RUBRIC R9",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-15T23:10:32.668Z"
+}

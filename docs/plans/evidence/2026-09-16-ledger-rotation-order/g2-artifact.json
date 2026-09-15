@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "ledger-rotation-order-2026-09-16",
+  "logical_plan_id": "ledger-rotation-order-2026-09-16",
+  "session_id": "d-g1-1789513749",
+  "session_key": "f9ab76053baa46117191cf4e3e99be49ec1c4e2568ed1a4cae39dd20b6df62c1",
+  "generation": 2,
+  "verdict": "READY",
+  "semantic_verdict": "READY",
+  "terminal": true,
+  "policy_reason": "generation_2_terminal",
+  "rubric_sha256": "78910525f2a6d2e623eb44c856b7a4daec1c04d6241e2ead9ec5e143e758fae5",
+  "manifest_sha256": "8e1c6cd28b542fb68f5d07f5fe9c01750bdb694b29a30695a68b47cf2fe3cfc2",
+  "plan_sha256": "c28b14d5563c8015f2c36ab84f5421666ce1c6a9a1e585ceafa58e9777470c1a",
+  "growth_ratio": {
+    "numerator": 253,
+    "denominator": 245
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "412fdc148b652fb0c204044a92c33084dbc4e50e09ef6a9a91bb9cd1b2b4d3da"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-kktdVE",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "ae30059ff5afebf20fbe912ae618f9306885c60d32f62aaca994b41a390489b7"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "45e0fd1101f913115b99662bdc8d3b1e2f9f20779900ff94e7ebd7f4410de3b6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-gOKWXa/stdout",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "e0e0044e27f9349eb2d5ca28440aa6f4b41247fdd987fa761e4c75a6028ee3e4"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-15T23:12:04.732Z"
+}

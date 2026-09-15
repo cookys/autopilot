@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-1d2dc35a5dc677cb911e81b5791d70a5d1a09768763858cc1a26cdd639c1dc83",
+  "claim_id": "claim-v1-d5b1c9e0dbc3e10f9f39af9cd81db37a317d58d2b31cb8abbc0fe28130678e6d",
+  "mission_grant_ref": "f3a1b2fe4cca11ee190a70c2479995e9f743c10ded9711c4ce378ea7fb52c1ed",
+  "mission_subject_digest": "736de418a4f0602bf19da5294149eb4c770ab0817122d28115f14b34c8942e2f",
+  "mission_campaign_id": "campaign-v2-1f64fc63c4c69563602c7b30d53e0921eb39b7ba0c7236a605869520c4656b6f",
+  "graph_node_id": "ledger-rotation-order-2026-09-16",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/1d2dc35a5dc677cb911e81b5791d70a5d1a09768763858cc1a26cdd639c1dc83/ledger-rotation-order-2026-09-16/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/1d2dc35a5dc677cb911e81b5791d70a5d1a09768763858cc1a26cdd639c1dc83/ledger-rotation-order-2026-09-16/attempt-1/campaign.seal.json",
+  "branch": "mission/1d2dc35a5dc6/ledger-rotation-order-2026-09-16-a1",
+  "base_sha": "9fa7ac1abc3f317d159cefe241c83217bb348ee0",
+  "state_hash": "31579c29cc32b7710ddb4d998437652fcedb151f0f39439d03e44badd714fcf4"
+}

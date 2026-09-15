@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_prepare_receipt",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "adoption_key": "1d2dc35a5dc677cb911e81b5791d70a5d1a09768763858cc1a26cdd639c1dc83",
+  "mission_lineage_id": "lineage-v1-1d2dc35a5dc677cb911e81b5791d70a5d1a09768763858cc1a26cdd639c1dc83",
+  "task_authority_id": "ce714f1cf625e52e8c7741faeb398e348bdaf531519d636073529a9057b5ff6d",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "intent_hash": "4b699e4f156ca913ce954086309e836a4cea060c6ecdb1a3e91350d81ddfb4ed",
+  "initial_required_acceptance_hashes": [
+    "67379749c97d66d92174d4f51f7d580441e1b30ccf824df8d33bcf4a43b9c9c4",
+    "78910525f2a6d2e623eb44c856b7a4daec1c04d6241e2ead9ec5e143e758fae5"
+  ],
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "mission_graph_digest": "12915f9bb75c20cb17844215f3d3be79622cce9a17775c3324c14f44b44c325b",
+  "enforcement_mode": "enforce",
+  "state_hash": "d09ce33050fd0f7796b3b7e5d833e30d04f529dc7eb4b2235b42b6cb077b9c04",
+  "adopted": false,
+  "prepared_at": "2026-09-15T23:12:40.565Z",
+  "receipt_digest": "4856af9b11d3e17c25ae17b92f80f57f8fefaa2ff6cd068e7681d20901fc63ff"
+}

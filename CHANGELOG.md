@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.36.54 — managed rail：ledger rotation carry 保留 journal append 序（writer-only）
+
+- `scripts/run-ledger.sh` `atomic_append_ledger`：rotation carry 原本用 `group_by(._rotation_root) | map(.[-1])` 重新落
+  active runs 的 journal，`group_by` 會排序，所以 carry 出來的 journal 是 base64(row) 序不是 append 序；ledger 超過
+  `RUN_LEDGER_MAX_BYTES`（本 repo 2.09 MB ≫ 256 KiB、109 個 stale lease）後每次 append 都 rotate，四輪後原始 segment 被
+  GC，磁碟上五個 segment 全是 carry row（601 列、451 journal、零原始列）。reader `projectCampaign` 照檔案序 replay event
+  chain → `ARTIFACT_CHAIN_BROKEN`「event input artifact must match the prior output artifact」，任何多於一個 event 的
+  campaign 都不能 resume／inspect（含 v2.36.43 停在 durable wait 的 `fd316019`）。現在 carry 用 `reduce` 依
+  `_rotation_root` keep-first、保 oldest-to-live 序，journal 列不再碰任何排序原語；stage carry（latest leased per
+  run_id+stage）與 `_rotation_root` 推導不動；reader 一字未改（rubric R6）。
+- `hooks/tests/run-ledger-rotation-order.test.sh`（新，22 條）：真 intake＋三個 event 走 shipped writer；`date` shim 只攔
+  `iso_ts` 那組 argv 釘 `ts`、`observedAt`／`idempotencyKey` 釘死、前置斷言「rotation root 字典序≠append 序」否則
+  `fixture not discriminating`；`RUN_LEDGER_MAX_BYTES=1 RUN_LEDGER_MAX_ROTATIONS=1` 兩次 heartbeat 兩輪 rotation，
+  斷言 `.1` 與 live 都是 append 序、每 root 每 segment 恰一次、snapshot keep-first 得 append 序、`projectCampaign` 不丟且
+  phase／event_count／last_output_artifact_digest 正確；T3 stage carry 保留守衛。base `41193a66` 上 9 條紅。
+- **明確不做**（BACKLOG open row）：已經被舊 carry 打亂的 segment 不會自癒——consult（codex）建議的 provenance-gated
+  reader recovery 或上鎖一次性 migration 另立 plan；stale July lease 讓 live segment 永遠縮不回去也是另一條 row。
+- 流程（`docs/plans/evidence/2026-09-16-ledger-rotation-order/`）：consult grok 仍 402 → codex；plan 兩代 hetero review
+  （GLM-5.2＋gpt-5.6-sol，G1 三條全 fold、G2 零 finding）；/l5 managed campaign attempt 1 hand（cursor-grok-4.6-low）
+  `7fda94d7` 六個 output path 全中；rail reviewer MiniMax 給了可讀的 FIX-THEN-SHIP 但兩條自我 REVOKED 的 finding 撞 id，
+  normalizer 停在 `duplicate product review finding` → `review_no_verdict`；照 HANDOFF 不 `--resume`（本 repo ledger 已是
+  carry-only），降級 l3、第二家族 codex review 一條 🟡 修於 `2cd3d5f8`、MiniMax 三條 🟠 兩駁一收，git 證據 merge
+  `79528505`、record-integration → reap → `zero_residue: true`。
+
+prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一條從未修移到已修）。
+
+---
+
 ## v2.36.53 — managed rail：durable-wait resume 走 verifyResumeCandidate，claim 前先驗 Git、`scope_implementation_sha` 綁上初始 candidate
 
 - `src/engine/campaign-intake.js`：`defaultGenerationClaim` 的 durable-wait 分支（`BOUNDARY_REJECTED`／`AWAITING_DISPOSITION`／

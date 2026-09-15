@@ -128,6 +128,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: two wording/doc items: the l5 roster profile error names the seat but not the remedy; the CLI readiness probe has no qualification provider, so only the engine path passes.
 
+### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
+- **Status**: open
+- **Trigger**: next agy implementer qualification, or a consumer config that still defaults the implementer to agy
+- **Effort**: S
+- **Source**: `openclaw` via hangar-bridge 2026-09-16, msg `msg_01M2KNFAB7P7TGGMF4K5QYQFYH`
+- **Pointer**: none
+- **Context**: agy `-p` self-aborts at 5 min, a >~40-line brief at low ends in silent no_op, `run_command` 10 s cap backgrounds test loops; add scorecard dimensions or auto-degrade the seat with a warning.
+
+### Managed rail: a reviewer that self-revokes a MUST-FIX under a reused finding id is normalized as no_verdict
+- **Status**: open
+- **Trigger**: a rail review whose findings text contains "REVOKED" and two entries with one `[id]` — `product_review_normalization` fails `duplicate product review finding <id>` and the campaign parks in durable wait although the verdict was readable
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-16 (mission ledger-rotation-order, MiniMax-M3 r1)
+- **Pointer**: docs/plans/evidence/2026-09-16-ledger-rotation-order/README.md
+- **Context**: a 🟠 and a 🔵 shared id `rotation-carry-jq`, the 🟠 ending "REVOKED"; the duplicate-id check is correct fail-closed but discards a readable review. Option: drop REVOKED findings before the duplicate check, keep them advisory.
+
 ### PEER-REPORTED (cuda): `migrate-backlog-entries.js` needs a table-style parser — revival.3d's BACKLOG is a 196 KB table
 - **Status**: shipped v2.36.51 2026-09-16
 - **Trigger**: cuda asked 2026-09-16 (msg `msg_01M2JWY92NEV7CMDB7MSFK5YJZ`) after the heading-only limit was named in the v2.36.39 handoff

@@ -1,0 +1,7 @@
+PASS [run-ledger-rotation-order] 22 assertions
+PASS [run-ledger-rotation] 17 assertions
+PASS [run-ledger-directive] 36 assertions
+PASS [campaign-claim-resolve] 2 assertions
+PASS [next-touch-validation] 24 assertions
+PASS [mission-runtime-v2] 103 assertions
+PASS [implementation-campaign-dogfood] 20 assertions

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-15T23:38:32.244Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-409e89d22823d3abc39d0088196b882a9e9e9e2119c2cf5b22693487d393fa2c",
+  "observed_head": "79528505e2bf0c8a1aebf8afff8524f49d9d57d7",
+  "worktree_observation_digest": "0ea26f0dc2ee620d28b01e2354a779d143ace2775bd084ec28cbe47643119b96",
+  "journal_digest": "26c7b7ca74385f26ef6c26c6cf695e381eac6b2bf999f54e17ac18be4a104c09",
+  "disposition_digest": "7c6c591b5f1e0090771b8ac6366372569ebc2926d756c6397845b81c4dd44ff0",
+  "branch_inventory_digest": "fc42fcc39f6b5dae63afe6fecefb956e29784e569bd1e12ec5409c3b940c2851",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/1d2dc35a5dc6/ledger-rotation-order-2026-09-16-a1",
+      "tip": "2cd3d5f840a2888d78d3b7f95e512497fc4d1857",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-15/reap-20260915T233817Z-55280.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "aa46d29cc9c5e6679bfa1408110c0e823afad807011c007838f5284995a961e8"
+}

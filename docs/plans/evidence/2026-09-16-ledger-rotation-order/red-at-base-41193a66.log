@@ -1,0 +1,17 @@
+FAIL [run-ledger-rotation-order] .1 journals in append order: expected '["intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6","campaign-event:zz-1","campaign-event:mm-2","campaign-event:aa-3"]', got '["campaign-event:zz-1","campaign-event:aa-3","campaign-event:mm-2","intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6"]'
+FAIL [run-ledger-rotation-order] live journals in append order: expected '["intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6","campaign-event:zz-1","campaign-event:mm-2","campaign-event:aa-3"]', got '["campaign-event:zz-1","campaign-event:aa-3","campaign-event:mm-2","intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6"]'
+FAIL [run-ledger-rotation-order] snapshot first-occurrence dedupe yields append order: expected '["intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6","campaign-event:zz-1","campaign-event:mm-2","campaign-event:aa-3"]', got '["campaign-event:zz-1","campaign-event:aa-3","campaign-event:mm-2","intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6"]'
+FAIL [run-ledger-rotation-order] projectCampaign does not throw: event input artifact must match the prior output artifact
+FAIL [run-ledger-rotation-order] projectCampaign does not throw: expected 'true', got 'false'
+FAIL [run-ledger-rotation-order] state.phase after VERTICAL_VERIFIED: expected 'REVIEWING', got 'null'
+FAIL [run-ledger-rotation-order] state.event_count === 3: expected '3', got 'null'
+FAIL [run-ledger-rotation-order] last_output_artifact_digest matches third appendCampaignEvent: expected '31fee7703f4abc1ff6fe6553217131a953f43b4b7531397c681809ae11c2a12e', got 'null'
+FAIL [run-ledger-rotation-order] 15 passed, 8 failed
+      - .1 journals in append order: expected '["intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6","campaign-event:zz-1","campaign-event:mm-2","campaign-event:aa-3"]', got '["campaign-event:zz-1","campaign-event:aa-3","campaign-event:mm-2","intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6"]'
+      - live journals in append order: expected '["intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6","campaign-event:zz-1","campaign-event:mm-2","campaign-event:aa-3"]', got '["campaign-event:zz-1","campaign-event:aa-3","campaign-event:mm-2","intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6"]'
+      - snapshot first-occurrence dedupe yields append order: expected '["intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6","campaign-event:zz-1","campaign-event:mm-2","campaign-event:aa-3"]', got '["campaign-event:zz-1","campaign-event:aa-3","campaign-event:mm-2","intake:campaign-v1-ab1a581e4932cb1760fcad3c8372718fd8f5f5c6fe5fe598009616e95f1c1ca6"]'
+      - projectCampaign does not throw: event input artifact must match the prior output artifact
+      - projectCampaign does not throw: expected 'true', got 'false'
+      - state.phase after VERTICAL_VERIFIED: expected 'REVIEWING', got 'null'
+      - state.event_count === 3: expected '3', got 'null'
+      - last_output_artifact_digest matches third appendCampaignEvent: expected '31fee7703f4abc1ff6fe6553217131a953f43b4b7531397c681809ae11c2a12e', got 'null'

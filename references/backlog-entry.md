@@ -26,6 +26,6 @@ A file declares one style in `backlog-config.md`. The gate parses all three.
 
 **heading** — `### Title` then `- **Field**: value` bullets (this repo).
 
-**table** — `| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |` rows; `Id` matches `id_pattern`.
+**table** — `| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |` rows; `Id` matches `id_pattern`. Several tables (one per `##` section) may repeat the header; `\|` inside a cell is a literal pipe. A table with foreign headers (e.g. `id｜標題｜狀態｜體量｜來源｜spec｜備註`) is converted once by `migrate-backlog-entries.js`: map headers under a `## Columns` config section (`- 標題: Title`) and state words under `## Status map` (`- planned: open`); a `Trigger：…` inside the Status cell becomes Trigger; a row whose cells carry text the schema columns cannot hold moves its original row line verbatim to a sidecar, a row they can hold stays with `none`.
 
 **checklist** — `- [ ] [Severity] Title` plus indented `- Field: value`. Severity is a tag, not a field.

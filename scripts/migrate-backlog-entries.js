@@ -12,6 +12,15 @@
  * Default is dry-run: print the manifest JSON and a unified diff, write nothing.
  * --apply writes only after every sidecar re-read contains moved_sha256 text.
  *
+ * Table style (v2.36.51, revival.3d via cuda 2026-09-16): a backlog whose entries are
+ * markdown table rows (any headers) is rewritten table-by-table into the schema columns
+ * `| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |`; every row that
+ * violates the gate has its ORIGINAL row line moved verbatim into a sidecar and its Pointer
+ * set there. Foreign headers map through a `## Columns` section in the config
+ * (`- <header>: <Field>`, e.g. `- 標題: Title`, `- 狀態: Status`); the Status cell's leading
+ * `**word**` maps through `## Status map` (`- planned: open`); `Trigger：…` inside the Status
+ * cell becomes Trigger. Lines outside tables are preserved byte-for-byte.
+ *
  * Exit: 0 dry-run or preserved:true · 1 apply not preserved / write failure · 2 usage
  */
 
@@ -250,9 +259,244 @@ function loadCfg(opts, repoRoot) {
   return cfg;
 }
 
+// ── table style ─────────────────────────────────────────────────────────────
+
+const TABLE_FIELDS = ['Id', 'Title', 'Status', 'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
+const DEFAULT_STATUS_MAP = {
+  open: 'open', idea: 'open', planned: 'open', todo: 'open', blocked: 'open', acceptance: 'open',
+  'in-progress': 'open', wip: 'open', fired: 'fired', done: 'shipped', shipped: 'shipped',
+  closed: 'shipped', dropped: 'dropped', cancelled: 'dropped', canceled: 'dropped', wontfix: 'dropped',
+};
+
+// `## Columns` and `## Status map` sections of the backlog config: `- <key>: <value>` lines.
+function parseKeyMapSection(configPath, headingRe) {
+  const out = {};
+  if (!configPath) return out;
+  let text;
+  try { text = fs.readFileSync(configPath, 'utf8'); } catch { return out; }
+  let inb = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^##\s+/.test(line)) { inb = headingRe.test(line); continue; }
+    if (!inb) continue;
+    const m = line.match(/^\s*-\s+`?([^`:]+?)`?\s*:\s*`?([^`]+?)`?\s*$/);
+    if (m) out[m[1].trim()] = m[2].trim();
+  }
+  return out;
+}
+
+function stripBold(s) {
+  const t = String(s == null ? '' : s).replace(/\*\*/g, '').trim();
+  return /^[—–-]$/.test(t) ? '' : t;  // a lone dash cell means "none"
+}
+
+function escapeCell(s) {
+  return String(s == null ? '' : s).replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').trim();
+}
+
+function renderTableRow(fields) {
+  return '| ' + TABLE_FIELDS.map((f) => escapeCell(fields[f] == null ? '' : fields[f])).join(' | ') + ' |';
+}
+
+function tableHeaderLines() {
+  return [
+    '| ' + TABLE_FIELDS.join(' | ') + ' |',
+    '|' + TABLE_FIELDS.map(() => '----').join('|') + '|',
+  ];
+}
+
+// The Status cell of a foreign table carries the state word, the trigger and often a log:
+// `**planned**（Trigger：after 09-17；…）`. Split it into a schema status and a trigger.
+function tableStatusAndTrigger(statusCell, rowText, when, statusMap) {
+  const raw = stripBold(statusCell);
+  const word = (raw.match(/^([A-Za-z][\w-]*)/) || [, ''])[1].toLowerCase();
+  const canon = /^(open|fired \d{4}-\d{2}-\d{2}|dropped \d{4}-\d{2}-\d{2}|shipped \S+ \d{4}-\d{2}-\d{2})$/;
+  let status;
+  if (canon.test(raw)) {
+    status = raw;
+  } else {
+    const kind = statusMap[word] || DEFAULT_STATUS_MAP[word] || 'open';
+    // FIRED is read from the Status cell only — a log elsewhere in the row that mentions a
+    // past alert must not flip a done row (reviewer, 2026-09-16).
+    if (/\bFIRED\b/.test(raw)) status = 'fired ' + findDate(raw, when);
+    else if (kind === 'fired') status = 'fired ' + findDate(rowText, when);
+    else if (kind === 'shipped') {
+      const vm = rowText.match(/\bv(\d+[\w.-]*)/);
+      status = 'shipped ' + (vm ? 'v' + vm[1] : 'unknown') + ' ' + findDate(raw, findDate(rowText, when));
+    } else if (kind === 'dropped') status = 'dropped ' + findDate(raw, findDate(rowText, when));
+    else status = 'open';
+  }
+  const tm = raw.match(/Trigger\s*[：:]\s*([^；;）)]+)/i);
+  const trigger = tm ? tm[1].trim() : '';
+  return { status, trigger };
+}
+
+function planTableMigration(text, cfg, repoRoot, opts) {
+  const colMap = parseKeyMapSection(opts.config, /columns/i);
+  const statusMap = {};
+  for (const [k, v] of Object.entries(parseKeyMapSection(opts.config, /status\s*map/i))) {
+    statusMap[k.toLowerCase()] = String(v).toLowerCase();
+  }
+  const now = Date.now();
+  const when = today();
+  const headSha = gitHead(repoRoot);
+  const usedSlugs = new Set();
+  const outDirArg = opts.outDir || 'docs/backlog';
+  const outDirAbs = path.isAbsolute(outDirArg) ? outDirArg : path.join(repoRoot, outDirArg);
+  try {
+    for (const name of fs.readdirSync(outDirAbs)) {
+      if (name.endsWith('.md')) usedSlugs.add(name.slice(0, -3));
+    }
+  } catch { /* out-dir absent */ }
+  const backlogRel = posixRel(repoRoot, path.resolve(opts.backlog || 'docs/BACKLOG.md'));
+
+  const lines = text.split('\n');
+  const outLines = [];
+  const planned = [];
+  const sidecars = [];
+  let section = '';
+  let i = 0;
+  const isRow = (l) => /^\s*\|/.test(l);
+  const cellsOf = (l) => gate.splitTableCells(l);
+  const isSep = (cells) => cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c));
+
+  let inFence = false;
+  const headerIndex = (cells) => {
+    const idx = {};
+    cells.map((c) => stripBold(c)).forEach((h, n) => {
+      const mapped = colMap[h] || h;
+      if (TABLE_FIELDS.includes(mapped) && idx[mapped] == null) idx[mapped] = n;
+    });
+    if (idx.Title == null && idx.Id != null) idx.Title = idx.Id;
+    return idx;
+  };
+  // A verbatim move: the row cannot be read positionally (cell count differs from the header)
+  // or its cells hold text the schema columns cannot carry; the original line goes to a sidecar
+  // and the rewritten row points there. Nothing is dropped.
+  const moveVerbatim = (rowLine, rowFields, titleRaw, id, bytesBefore) => {
+    const slug = uniqueSlug(slugify(id || titleRaw), usedSlugs);
+    const sidecarAbs = path.join(outDirAbs, slug + '.md');
+    rowFields.Pointer = posixRel(repoRoot, sidecarAbs);
+    let rewritten = renderTableRow(rowFields);
+    if (byteLen(rewritten) > 900 && rowFields.Context) { rowFields.Context = ''; rewritten = renderTableRow(rowFields); }
+    while (byteLen(rewritten) > 900 && byteLen(rowFields.Trigger) > 20) {
+      rowFields.Trigger = truncBytes(rowFields.Trigger.replace(/…$/, ''), Math.max(20, byteLen(rowFields.Trigger) - 32));
+      rewritten = renderTableRow(rowFields);
+    }
+    outLines.push(rewritten);
+    const moved = rowLine + '\n';
+    const body = `# ${titleRaw}\n\nSource: ${backlogRel}@${headSha}, migrated ${when}` + (section ? `\nSection: ${section}` : '') + `\nOriginal row (verbatim):\n\n` + moved;
+    sidecars.push({ abs: sidecarAbs, contents: body, moved });
+    planned.push({ title: titleRaw, slug, bytes_before: bytesBefore, bytes_after: byteLen(rewritten), moved_bytes: byteLen(moved), moved_sha256: sha256(moved), sidecar: rowFields.Pointer });
+  };
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    if (/^##\s+/.test(line)) section = line.replace(/^##\s+/, '').trim();
+    // Only a header that maps a Title or Id column starts a table; every other `|` line —
+    // inside a code fence, ASCII art, a stray row after a blank line — is preserved verbatim.
+    const headerIdx = !inFence && isRow(line) ? headerIndex(cellsOf(line)) : null;
+    if (!headerIdx || headerIdx.Title == null) { outLines.push(line); i += 1; continue; }
+    const headerCells = cellsOf(line).map((c) => stripBold(c));
+    i += 1;
+    if (i < lines.length && isRow(lines[i]) && isSep(cellsOf(lines[i]))) i += 1;
+    const idx = headerIdx;
+    outLines.push(...tableHeaderLines());
+    while (i < lines.length && isRow(lines[i]) && !/^\s*(```|~~~)/.test(lines[i])) {
+      const rowLine = lines[i];
+      i += 1;
+      const cells = cellsOf(rowLine);
+      if (cells.length !== headerCells.length) {
+        const idGuess = stripBold(cells[idx.Id != null ? idx.Id : 0] || '');
+        const titleGuess = stripBold(cells[idx.Title] || '') || idGuess || 'row';
+        moveVerbatim(rowLine, {
+          Id: idGuess, Title: titleGuess, Status: 'open', Trigger: 'see pointer (cell count differs from header)',
+          Effort: 'M', Source: 'unknown', Pointer: '', Context: '',
+        }, titleGuess, idGuess, byteLen(rowLine));
+        continue;
+      }
+      const get = (f) => (idx[f] != null ? (cells[idx[f]] || '') : '');
+      const id = stripBold(get('Id'));
+      const titleRaw = stripBold(get('Title')).replace(/[.。]\s*$/, '') || id;
+      const { status, trigger: triggerFromStatus } = tableStatusAndTrigger(get('Status'), rowLine, when, statusMap);
+      const trigger = stripBold(get('Trigger')) || triggerFromStatus || 'see pointer';
+      const effort = normaliseEffort({ Effort: stripBold(get('Effort')) }, '');
+      const source = truncBytes(stripBold(get('Source')), 160) || 'unknown';
+      const pointerCell = stripBold(get('Pointer'));
+      const contextCell = stripBold(get('Context'));
+      // A foreign "evidence" cell that is not a resolvable pointer is prose: keep it as Context
+      // and let a short row carry `none` (the gate allows that under 600 B); a long row moves.
+      // The evidence cell may wrap a path in backticks with a suffix (`docs/x.md` §1): take the
+      // first backticked token that resolves as the Pointer and keep the rest as Context.
+      let pointerPath = '';
+      let pointerRest = pointerCell;
+      if (pointerCell && gate.pointerOk(pointerCell, cfg, repoRoot).ok === true) {
+        pointerPath = pointerCell; pointerRest = '';
+      } else {
+        for (const m of pointerCell.matchAll(/`([^`]+)`/g)) {
+          if (gate.pointerOk(m[1], cfg, repoRoot).ok === true) {
+            pointerPath = m[1];
+            pointerRest = pointerCell.replace(m[0], '').replace(/\s+/g, ' ').trim();
+            break;
+          }
+        }
+      }
+      const pointerIsPath = pointerPath !== '';
+      const contextParts = [contextCell, pointerRest].filter(Boolean);
+      const rowFields = {
+        Id: id, Title: titleRaw, Status: status, Trigger: truncBytes(trigger, 240), Effort: effort,
+        Source: source, Pointer: pointerIsPath ? pointerPath : 'none',
+        Context: contextParts.length ? truncBytes(firstSentence(contextParts.join('；')), 240) : '',
+      };
+      const probe = {
+        fields: Object.fromEntries(Object.entries(rowFields).filter(([k, v]) => k !== 'Id' && v !== '')),
+        extra: false, text: renderTableRow(rowFields), id: id || null, title: titleRaw, unparseable: false,
+      };
+      const bytesBefore = byteLen(rowLine);
+      // Lossy = some original cell text would not survive the rewrite (a log inside the Status
+      // cell, a truncated Context, prose beyond the first sentence). That text goes to a sidecar;
+      // a row the schema columns carry in full stays in place with `none`.
+      const retained = [rowFields.Status, rowFields.Trigger, rowFields.Context, rowFields.Source, rowFields.Effort, rowFields.Id, pointerPath].join(' ');
+      const originalCells = [['Status', get('Status')], ['Source', get('Source')], ['Context', get('Context')], ['Pointer', get('Pointer')], ['Effort', get('Effort')], ['Id', get('Id')]]
+        .map(([f, c]) => [f, stripBold(c)]).filter(([, c]) => c);
+      const lossy = originalCells.some(([f, c]) => {
+        const norm = c.replace(/\s+/g, ' ');
+        if (retained.includes(norm)) return false;
+        if (f !== 'Status') return true;
+        // only the Status cell may lose its state word and the `Trigger：` wrapper — and only
+        // when the state word itself survived as a status of the same kind
+        const word = (norm.match(/^([A-Za-z][\w-]*)/) || [, ''])[1].toLowerCase();
+        const kind = statusMap[word] || DEFAULT_STATUS_MAP[word] || 'open';
+        if (!rowFields.Status.startsWith(kind)) return true;
+        const stripped = norm.replace(/^[A-Za-z][\w-]*\s*[（(]?/, '').replace(/Trigger\s*[：:]\s*/i, '').replace(/[）)]\s*$/, '').trim();
+        return stripped.length > 0 && !retained.includes(stripped);
+      });
+      if (!lossy && !needsMigration(probe, cfg, repoRoot, now)) {
+        const kept = renderTableRow(rowFields);
+        outLines.push(kept);
+        planned.push({ title: titleRaw, slug: null, bytes_before: bytesBefore, bytes_after: byteLen(kept), moved_bytes: 0, moved_sha256: sha256(''), sidecar: null });
+        continue;
+      }
+      moveVerbatim(rowLine, rowFields, titleRaw, id, bytesBefore);
+    }
+  }
+  const newText = outLines.join('\n');
+  const migrateCount = planned.filter((e) => e.sidecar).length;
+  const manifest = {
+    preserved: null,
+    entries: planned,
+    totals: {
+      entries: planned.length, migrate: migrateCount,
+      moved_bytes: planned.reduce((n, e) => n + e.moved_bytes, 0),
+      bytes_before: byteLen(text), bytes_after: byteLen(newText),
+    },
+  };
+  return { newText, sidecars, planned, manifest, outDirAbs, when, migrateCount };
+}
+
 function planMigration(text, cfg, repoRoot, opts) {
   const style = cfg.style || 'heading';
-  if (style === 'table' || style === 'checklist') {
+  if (style === 'table') return planTableMigration(text, cfg, repoRoot, opts);
+  if (style === 'checklist') {
     process.stderr.write('not supported yet\n');
     process.exit(2);
   }
@@ -381,9 +625,23 @@ function applyWrites(backlogPath, newText, sidecars, manifest, outDirAbs, when) 
       try { fs.unlinkSync(t); } catch { /* ignore */ }
     }
   };
-  if (!sidecars.length) {
+  if (!sidecars.length && newText === fs.readFileSync(backlogPath, 'utf8')) {
     // Nothing to move: no out-dir, no manifest, no byte-identical rewrite (MIG-EMPTY-APPLY-ARTIFACTS).
     return { ok: true, preserved: true, noop: true };
+  }
+  if (!sidecars.length) {
+    // A lossless table re-header (foreign columns → schema columns) moves nothing but still
+    // rewrites the backlog; atomic rename, no sidecar, no manifest.
+    const blTmp = backlogPath + '.tmp-' + process.pid + '-' + crypto.randomBytes(4).toString('hex');
+    try {
+      fs.writeFileSync(blTmp, newText);
+      fs.renameSync(blTmp, backlogPath);
+      return { ok: true, preserved: true };
+    } catch (e) {
+      try { fs.unlinkSync(blTmp); } catch { /* ignore */ }
+      process.stderr.write(String(e.message || e) + '\n');
+      return { ok: false, preserved: false };
+    }
   }
   try {
     fs.mkdirSync(outDirAbs, { recursive: true });

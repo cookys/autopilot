@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.36.51 — `migrate-backlog-entries.js` 支援 table style：外部表頭一次轉成 schema 欄，lossy 列原行逐字進 sidecar
+
+revival.3d（cuda 轉達，2026-09-16）的 BACKLOG 是 196 KB 的 markdown 表，多個 `##` 段各一張表、表頭是 `id｜標題｜狀態｜體量｜
+來源｜spec｜備註`，狀態欄裡塞著狀態字、`Trigger：…` 和長日誌。v2.36.39 的遷移腳本對 table style 只會 `exit 2`。
+
+- `migrate-backlog-entries.js`：`style: table` 時每張表重寫成 `| Id | Title | Status | Trigger | Effort | Source | Pointer |
+  Context |`；表頭經 config 的 `## Columns`（`- 標題: Title`）對映、狀態字經 `## Status map`（`- planned: open`）對映，狀態欄
+  裡的 `Trigger：…` 變 Trigger，備註欄裡反引號包的可解析路徑變 Pointer。**lossy 列**（任何一格的文字 schema 欄裝不下、
+  格數跟表頭不合）把**原行逐字**搬進 `docs/backlog/<id-slug>.md`，Pointer 指過去；無損列留原地、Pointer `none`。表外的
+  行逐字不動：code fence 裡的 `|` 行、空行後的孤行、對不到 Title/Id 的表頭都不當表處理。FIRED 只看狀態欄，備註提到
+  過去的告警不會把 done 翻成 fired。無 sidecar 但表頭改了也會原子改寫。
+- `check-backlog-entries.js`：格內 `\|` 是字面管線；多張表重複的表頭不算 entry；匯出 `pointerOk`／`splitTableCells`。
+- reviewer sonnet 抓到四條 MUST-FIX（Effort/Id 自由文字被默默丟掉、少一格的列被錯位解讀、fence 內 `|` 行被當表頭、
+  整行的 FIRED 翻掉 done），逐條以具體列重現後全部摺入，測試 (o) 釘住；(n) 覆蓋 revival 樣本；gate 套件 +2（多表、`\|`）。
+  `references/backlog-entry.md` table 段補這些規則。
+- 順手：migrate 套件 (j) 對真 BACKLOG 的期望「還剩 unparseable header」自 2026-09-14 表頭改寫後就過期（base 上本來就
+  紅），改成「除了 Title cap（至多加 header）什麼都不剩」。
+
+prose-justification: 本版 prose 面 +1 句（`references/backlog-entry.md` table 段）。
+
+---
+
 ## v2.36.50 — `dispatch-hetero.sh --sibling-path-prefix <dir>/`：caller 自己的 rail I/O 落在 checkout 裡不再被當成 mutation
 
 308-8f 2026-09-14 回報第二條（第一條 `--sibling-ref-prefix` 在 v2.36.44）：工頭把 hand 的 stderr／result 寫進主 checkout

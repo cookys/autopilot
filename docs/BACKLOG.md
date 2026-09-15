@@ -65,7 +65,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: fingerprint excluded only own `BRANCH`; a sibling's `refs/heads/hands/*` was a delta. Fixed: `--sibling-ref-prefix` declares the namespace.
 
 ### PEER-REPORTED (cuda): `migrate-backlog-entries.js` needs a table-style parser — revival.3d's BACKLOG is a 196 KB table
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.51 2026-09-16
 - **Trigger**: cuda asked 2026-09-16 (msg `msg_01M2JWY92NEV7CMDB7MSFK5YJZ`) after the heading-only limit was named in the v2.36.39 handoff
 - **Effort**: S
 - **Source**: `cuda` via hangar-bridge, 2026-09-16, thread `msg_01M2JW9NJRE106DKDZWQARFJF2`

@@ -122,6 +122,26 @@ o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --json --config "$d/.claude/bac
 assert_contains "$o" '"style":"table"' "table style parsed"
 assert_eq "$(json_exit "$o")" "0" "table style clean"
 
+# --- table style: several tables (one per ## section) and an escaped pipe inside a cell ---
+# RED at base f1f32640: the second table's header was read as an entry (Title "Title") and
+# `\|` split the row into the wrong number of cells (unparseable).
+d="$(repo style-table-multi)"
+printf '%s\n' \
+  '## A' \
+  '| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |' \
+  '| --- | --- | --- | --- | --- | --- | --- | --- |' \
+  '| 0001 | First table row | open | when tests run | S | suite | docs/plans/ok.md | |' \
+  '' \
+  '## B' \
+  '| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |' \
+  '| --- | --- | --- | --- | --- | --- | --- | --- |' \
+  '| 0002 | Row with a \| pipe | open | when a \| b | S | suite | docs/plans/ok.md | |' \
+  > "$d/docs/BACKLOG.md"
+printf '%s\n' 'style: table' 'id_pattern: ^\d{4}$' > "$d/.claude/backlog-config.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --json --config "$d/.claude/backlog-config.md")"
+assert_eq "$(json_exit "$o")" "0" "multi-table: repeated header is not an entry and \\| stays inside its cell"
+assert_contains "$o" '"entries":2' "multi-table: exactly two entries"
+
 d="$(repo style-check)"
 printf '%s\n' \
   '- [ ] [Minor] Checklist style row' \

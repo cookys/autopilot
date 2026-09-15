@@ -264,18 +264,35 @@ function parseHeadingBlock(block) {
   return { fields, extra, text, id: null, title: fields.Title };
 }
 
+// Split a table row on unescaped pipes; `\|` inside a cell is a literal pipe.
+function splitTableCells(line) {
+  const cells = [];
+  let cur = '';
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '\\' && line[i + 1] === '|') { cur += '|'; i += 1; continue; }
+    if (ch === '|') { cells.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  cells.push(cur);
+  return cells.slice(1, -1).map((c) => c.trim());
+}
+
 function parseTable(text) {
   const rows = [];
   const lines = text.split(/\r?\n/);
   let header = null;
   for (const line of lines) {
     if (!/^\s*\|/.test(line)) continue;
-    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    const cells = splitTableCells(line);
     if (cells.every((c) => /^:?-+:?$/.test(c))) continue;
     if (!header) {
       header = cells.map((c) => c.replace(/\*/g, ''));
       continue;
     }
+    // A file with several tables (one per `##` section) repeats the header; a row whose
+    // cells equal the header is that repeat, not an entry (revival.3d shape, 2026-09-16).
+    if (cells.length === header.length && cells.every((c, n) => c.replace(/\*/g, '') === header[n])) continue;
     rows.push({ cells, raw: line });
   }
   return { header, rows };
@@ -976,4 +993,6 @@ module.exports = {
   builtinConfig,
   parseConfigFile,
   gitToplevel,
+  pointerOk,
+  splitTableCells,
 };

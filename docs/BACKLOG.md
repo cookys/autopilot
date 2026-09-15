@@ -88,6 +88,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
 - **Context**: plan §6 — provenance-gated reader recovery for `_rotation_carry` rows, or a locked migration that proves projected digests unchanged.
 
+### Managed rail: stale campaign leases are never released — 109 runs leased since July keep the ~2 MB carry alive
+- **Status**: open
+- **Trigger**: any append to this repo's `implementation-campaign.jsonl` still rotates (carry ≈ whole ledger); a parked or dead campaign's `leased` stage row is carried forever
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-16 (measured while shipping v2.36.54; split out of the rotation-order row)
+- **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
+- **Context**: plan §6 — a lease GC (dead pid + no heartbeat past TTL → `released`/`expired` row) so the live segment can shrink; A's `fd316019` and D's `409e89d2` parked campaigns join the pile.
+
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open
 - **Trigger**: a drifted non-durable-wait resume burns a grant attempt (same pre-spend class as v2.36.42/46/48/53)

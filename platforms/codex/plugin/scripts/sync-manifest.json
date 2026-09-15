@@ -161,6 +161,32 @@
         ".claude/backlog-debt.json",
         "scripts/check-backlog-entries.js"
       ]
+    },
+    {
+      "id": "check-contract-schema",
+      "title": "resolve-review-loop.sh output fields vs schemas/review-loop-contract.schema.json (three-way equality + enum parity)",
+      "generator": null,
+      "check": "node scripts/check-contract-schema.js",
+      "fix": "add the new field to x-field-order + required + properties in schemas/review-loop-contract.schema.json (and the validPayload fixture in hooks/tests/autopilot-engine.test.sh)",
+      "tier": "both",
+      "trigger": [
+        "scripts/resolve-review-loop.sh",
+        "schemas/review-loop-contract.schema.json",
+        "src/engine/resolve-review-loop.js"
+      ]
+    },
+    {
+      "id": "check-profile-catalog",
+      "title": "profiles/ hash chain (rule-inventory source sha, migration, catalog, guided dispositions) vs skills/ceo-agent + skills/dev-flow",
+      "generator": null,
+      "check": "node scripts/build-profile-payload.js catalog --check --repo .",
+      "fix": "re-pin: source sha + segment lines in profiles/rule-inventory.json, `build-profile-payload.js migration --out`, catalog digests/totals, rewritten dispositions (v2.36.49 CHANGELOG has the recipe)",
+      "tier": "both",
+      "trigger": [
+        "skills/ceo-agent/SKILL.md",
+        "skills/dev-flow/SKILL.md",
+        "profiles/"
+      ]
     }
   ]
 }

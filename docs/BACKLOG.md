@@ -64,6 +64,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: fingerprint excluded only own `BRANCH`; a sibling's `refs/heads/hands/*` was a delta. Fixed: `--sibling-ref-prefix` declares the namespace.
 
+### Managed rail: disposition resume dies in `check-repair-scope.js` — `scope_implementation_sha` never set
+- **Status**: fired 2026-09-16
+- **Trigger**: cuda e2e (fleet-comms P0, autopilot 3ac4fa4e): `--resume --campaign-disposition-authority` → `implementation_sha must be an immutable full 40-hex commit object ID`, exit 2, no JSON
+- **Effort**: Fix
+- **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K1VDJ50VJQZPC7SGDEJVVN`; the v2.36.41 measurement point
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: `campaign-intake.js:621-633` reads `projection.initial_candidate_reference || reference` and nothing sets it; the awaiting_disposition payload carries `candidate_ref` (40 hex). Bind it.
+
+### /l5 wording: verification-author seat error lacks the remedy; CLI `status readiness --probe` is always probe-needed
+- **Status**: open
+- **Trigger**: next operator who hits `requires the verification-author seat` or reads `probe-needed` from the CLI and asks
+- **Effort**: S
+- **Source**: `cuda` via hangar-bridge 2026-09-16 (same thread)
+- **Pointer**: none
+- **Context**: two wording/doc items: the l5 roster profile error names the seat but not the remedy; the CLI readiness probe has no qualification provider, so only the engine path passes.
+
 ### PEER-REPORTED (cuda): `migrate-backlog-entries.js` needs a table-style parser — revival.3d's BACKLOG is a 196 KB table
 - **Status**: shipped v2.36.51 2026-09-16
 - **Trigger**: cuda asked 2026-09-16 (msg `msg_01M2JWY92NEV7CMDB7MSFK5YJZ`) after the heading-only limit was named in the v2.36.39 handoff

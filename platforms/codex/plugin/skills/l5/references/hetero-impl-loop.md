@@ -180,17 +180,23 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    <seal> --mission-prepared prepared.json --prompt-file <brief> --branch <branch> --base
    <base_sha> --cwd <repo> --max-rounds 3` — do NOT pass `--campaign-ledger`: any non-canonical
    path is `campaign_ledger_path_mismatch` at intake and burns the attempt. Watch the hands
-   worktree from a report-only monitor; the artifact is the commit on `<branch>`.
+   worktree from a report-only monitor; the artifact is the commit on `<branch>`. On
+   `awaiting_disposition`, resume with `--resume --campaign-disposition-authority <file>` and
+   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16).
 10. **Verification is yours**: check out the hand's commit in a detached scratch worktree and run
     every verify command there; probe the reviewer's MUST-FIX claims by re-derivation
     (probe + mutation) before accepting or refuting; run a second-family `dispatch-review.sh`
     when the rail's seat returns `no_verdict`.
-11. Known rail limits (BACKLOG rows): `status task` has no writer; the final panel's non-incumbent
-    seats are `precondition_failed` under the exact-tuple rule, so a 3-seat sealed panel stops the
-    campaign at `final_panel` after a green full-diff review (2026-09-15); pre-spend rejections at
-    the dispatch-hetero layer still consume the attempt. (Fixed 2026-09-14: disposition resume
-    v2.36.41, `--campaign-ledger` intake v2.36.42, reviewer `no_verdict` durable wait v2.36.43 —
-    all still awaiting CLI e2e measurement.)
+11. Known rail limits (BACKLOG rows): `status task` has no writer; disposition resume dies in
+    `check-repair-scope.js` because `scope_implementation_sha` is never set from the ledger's
+    `candidate_ref` (cuda e2e 2026-09-16, the v2.36.41 measurement point — open). Fixed since
+    2026-09-14: `--campaign-ledger` intake v2.36.42, reviewer `no_verdict` durable wait v2.36.43,
+    final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48.
+    **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
+    the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
+    line drifts the frozen source sha and every `session-mode set` is refused until routing is
+    rolled back to a completed graph whose sources still match plus `mission-terminal-reconcile.js
+    legacy` (2026-09-15).
     When the rail stops, degrade per the documented fallback
     (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed`), repair on
     the mission branch in its retained worktree, merge on git evidence, and file the rail defect.

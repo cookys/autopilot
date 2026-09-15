@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.36.52 — 兩條漂了兩天的鏈進 pre-commit ritual；l5 recipe 補 resume／merge 後的規矩
+
+- `scripts/sync-manifest.json` +2 rituals（mechanism，不是 guidance）：`check-contract-schema`（trigger：`resolve-review-loop.sh`、
+  `schemas/review-loop-contract.schema.json`、`src/engine/resolve-review-loop.js`）與 `check-profile-catalog`
+  （trigger：`skills/ceo-agent/SKILL.md`、`skills/dev-flow/SKILL.md`、`profiles/`）。v2.36.49 修的兩條漂移各活了兩天，因為
+  沒有任何 hook 跑它們；現在動到那些檔案就跑（0.2 s 與 2.9 s）。`sync-all.test.sh` 29 綠。
+- `skills/l5/references/hetero-impl-loop.md`：recipe 9 補「resume 帶 `--campaign-disposition-authority` 時要拿掉
+  `--campaign-disposition-policy`」（cuda 2026-09-16）；recipe 11 改寫已修／未修清單，並加 merge 後兩條規矩：先跑
+  `record-integration.js` 再砍分支；merge 後別再改 plan（連 Review log 都會讓 source sha 漂、所有 level 的
+  `session-mode set` 被拒，2026-09-15 量到）。
+- BACKLOG（cuda 對 fleet-comms 的 managed campaign 端到端量測，v2.36.41 說的量測點終於來了）：disposition resume 死在
+  `check-repair-scope.js`——`scope_implementation_sha` 從沒被設（`campaign-intake.js:621-633` 讀
+  `initial_candidate_reference`，repo 裡沒人寫它；ledger 的 `candidate_ref` 就在那裡）→ **fired，下一刀**；另兩條小的
+  wording／文件（VA 席錯誤訊息、CLI `status readiness --probe`）。
+
+prose-justification: 本版 prose 面 +2 句（l5 recipe 9／11）。
+
+---
+
 ## v2.36.51 — `migrate-backlog-entries.js` 支援 table style：外部表頭一次轉成 schema 欄，lossy 列原行逐字進 sidecar
 
 revival.3d（cuda 轉達，2026-09-16）的 BACKLOG 是 196 KB 的 markdown 表，多個 `##` 段各一張表、表頭是 `id｜標題｜狀態｜體量｜

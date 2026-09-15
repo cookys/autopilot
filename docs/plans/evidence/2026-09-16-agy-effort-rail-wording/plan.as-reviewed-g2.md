@@ -57,11 +57,9 @@ design; the message should say what to do.
    in `scripts/lib/agy-model-alias.sh`: if the resolved id ends in `-low|-medium|-high`, print that
    tier; otherwise print `agy_effort_clamp <effort>`. All three rails (`dispatch-hetero.sh:3441`,
    `dispatch-review.sh:1412`, `dispatch-author.sh:1140`) call it with the RESOLVED `$MODEL`.
-   `agy_effort_clamp` stays (other callers, tests). Fold predicate: the resolved tier differs from
-   `agy_effort_clamp <requested effort>` (the EFFECTIVE value, so the default `xhigh` on a `-high` id is
-   NOT a fold). When it holds, the suffix wins — the same precedence `agy_resolve_model_alias` already
-   states — and the rail emits one stderr note `agy effort <requested> (clamped <clamped>) folded to
-   <tier>: model id encodes the tier` so the fold is visible.
+   `agy_effort_clamp` stays (other callers, tests). When the alias suffix and `--effort` disagree, the
+   suffix wins — the same precedence `agy_resolve_model_alias` already states — and the rail emits one
+   stderr note `agy effort <effort> folded to <tier> (model id encodes the tier)` so the fold is visible.
 2. **VA refusal names the remedy**: message becomes
    `strict /l5 requires the verification-author seat: set verification_author_present: true and
    verification_author_engine/runner/effort/endpoint in .claude/review-loop-config.md (l4 does not
@@ -99,17 +97,14 @@ design; the message should say what to do.
     `--effort low` → `--effort high` AND exactly one stderr line naming `low`, `high`, and "model id
     encodes the tier" (RED at base: `high` with no note — the value coincides, the note is the
     discriminator); (iii) `gemini-flash-high` with `--effort high` → `--effort high` and ZERO such lines
-    (preservation); (iii-b) `gemini-flash-high` under the DEFAULT `xhigh` → `--effort high` and ZERO
-    such lines (preservation — the predicate compares against the clamped value); (iv) non-suffixed agy id (`AGY_STUB_MODELS` inventory with a bare id) under `xhigh`
+    (preservation); (iv) non-suffixed agy id (`AGY_STUB_MODELS` inventory with a bare id) under `xhigh`
     → `--effort high` (preservation); (v) grok, codex, cc-shim: the complete argv the stub records is
     byte-identical to a literal expected string (preservation, labelled; add the argv capture to the
     stub where the suite lacks it).
-  - `hooks/tests/status-cli.test.sh`: bootstrap failure with a KNOWN cause (a roster fixture whose
-    bootstrap throws `strict_l5_provider_roster_unavailable`) → stdout JSON deep-equals the
-    provider-less receipt the base emits for the same fixture (captured as the expected object in the
-    test, digest fields normalized), exactly one stderr line matching
-    `^readiness: strict bootstrap unavailable \(strict_l5_provider_roster_unavailable` — the exact
-    thrown code — and exit 0 (RED at base: zero stderr lines);
+  - `hooks/tests/status-cli.test.sh`: bootstrap failure (unresolvable roster fixture) → stdout JSON
+    deep-equals the provider-less receipt the base emits for the same fixture (captured as the
+    expected object in the test, digest fields normalized), exactly one stderr line matching
+    `^readiness: strict bootstrap unavailable \(.+\)`, exit 0 (RED at base: zero stderr lines);
     successful bootstrap → no such stderr line (preservation).
   - `hooks/tests/autopilot-cli.test.sh`: usage text contains `--probe` and the phrases "bounded live
     spend" and "per-seat transport and live probes" (RED at base).
@@ -127,13 +122,8 @@ design; the message should say what to do.
   `platforms/codex/plugin/scripts/dispatch-review.sh`, `platforms/codex/plugin/scripts/dispatch-author.sh`,
   `platforms/codex/plugin/src/readiness/provider-bootstrap.js`, `platforms/codex/plugin/src/status/cli.js`,
   `platforms/codex/plugin/src/engine/repo-preconditions.js`, `platforms/codex/plugin/bin/autopilot.js`,
-  the seven writable test files `hooks/tests/dispatch-hetero.test.sh`, `hooks/tests/dispatch-review.test.sh`,
-  `hooks/tests/dispatch-author.test.sh`, `hooks/tests/status-cli.test.sh`, `hooks/tests/autopilot-cli.test.sh`,
-  `hooks/tests/implementation-campaign-state.test.sh`, `hooks/tests/provider-readiness-consumer.test.sh`
-  (`hooks/tests/provider-readiness.test.sh` is an unchanged acceptance suite only), and `docs/BACKLOG.md`.
-  This deliverable makes NO `CHANGELOG.md` edit; the v2.36.54 section is a separately authorized
-  release operation after the merge, outside this contract. Version pinned **v2.36.54** (after
-  campaign A's v2.36.53; resealed if the numbering moves).
+  the six test files above, and `docs/BACKLOG.md`. `CHANGELOG.md` is a depth-0 release action, not
+  sealed. Version pinned **v2.36.54** (after campaign A's v2.36.53; resealed if the numbering moves).
 
 ## 3. Out of scope
 
@@ -165,8 +155,3 @@ returns a verdict instead of the vendor conflict error; recorded at the BACKLOG 
   three rails; byte-identical argv guards for grok/codex/cc-shim in all three suites; readiness receipt
   deep-equal; `--probe` usage semantic pinned + CLI assertion; `dispatch-explore.sh` ruled out; exact
   sealed `output_paths` enumerated; `check-backlog-entries.js` in acceptance; version pinned v2.36.54.
-- G2 (terminal at generation cap; GLM READY, gpt-5.6-sol STOP 4 blockers; all accepted and folded):
-  fold predicate defined against the clamped effort + default-`xhigh`/`-high` zero-note case on all
-  three rails; readiness failure fixture with a known code asserted verbatim; the seven test paths
-  enumerated; CHANGELOG explicitly excluded from this deliverable. Depth-0 freeze: zero unaddressed
-  blockers, zero deferred.

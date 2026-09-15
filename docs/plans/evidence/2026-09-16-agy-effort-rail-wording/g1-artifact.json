@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "agy-effort-rail-wording-2026-09-16",
+  "logical_plan_id": "agy-effort-rail-wording-2026-09-16",
+  "session_id": "agy-effort-g1",
+  "session_key": "dc1e7721f43f3378baf417feda482198d3ce3f97287200eace4e7c408ac3c95d",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "3c46213913377ac71c431b146e4ebbb94ea075aa76a58937ed03f909ddede678",
+  "manifest_sha256": "fc148e32de0f3da6884e991398a0fa0ae3c5738770e413f3e4e27959680bb6d9",
+  "plan_sha256": "3a260fe96647eb74bcbb88e24506a85789e7558af8cf24ae685da45494cb2591",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "af4b8ba391180fba4870be4755c0f61f6441fd9482c1c789d3a1b3ad04495c33"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "76b6d2d4066a0396381304564f07e5118375c60a09bf1a8334be819b23f7f571",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-RTajgI",
+          "digest": "76b6d2d4066a0396381304564f07e5118375c60a09bf1a8334be819b23f7f571"
+        },
+        "receipt_digest": "f89427ba8709c4740f14aab0f1379a1927cb431c5d4fee202e2ecec47d8064e5"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "0905697a1fcdc6d84678674b8a0389cee269497286b73a38955d57a0cbda5eac"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2ce9a3f907dabdaf22d7afe7e6ebb3642c924c07211328cc6c6dda165520a672",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-joTv5w/stdout",
+          "digest": "2ce9a3f907dabdaf22d7afe7e6ebb3642c924c07211328cc6c6dda165520a672"
+        },
+        "receipt_digest": "f01d2addb737285b8eee40aa8452cf3831563ecf81557e63a7a934474825cb1c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/dispatch-hetero.test.sh and the other listed suites",
+      "claim": "The plan states tests are RED at base but never commits to recording each change-pinning assertion as RED against the base sha in the test header, as R9 requires.",
+      "evidence": "Section 2 lists the new assertions with parenthetical 'RED at base: receives high' but no requirement to pin the base sha in each test header or to label preservation guards (e.g. the grok/codex/cc-shim unchanged cases) as green at base.",
+      "evidence_reference": "Plan section 2, Tests paragraph",
+      "repair": "Add to the Tests section: each change-pinning assertion records its RED run against the base sha in the test header; preservation guards for the unchanged runners are labelled and verified green at base.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "63b863200345cae8b59242660a9ccebb18d234d14fa8f59bfe929b96fc1325e6"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md and release verification steps",
+      "claim": "R10 requires check-backlog-entries.js to exit 0 after the three BACKLOG Context edits, but the plan's acceptance and no-regression list omit that check.",
+      "evidence": "Section 2 edits three BACKLOG rows' Context; the acceptance table's no-regression evidence lists the suites, check-js-syntax.js, and sync-codex-plugin-skills.sh --check only, with no check-backlog-entries.js run.",
+      "evidence_reference": "Plan section 4, no-regression row",
+      "repair": "Add check-backlog-entries.js exit 0 to the no-regression verification step following the three Context edits; no design change needed.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4b4989ac75b7ea5947019eef0250f8ba54db0943565b161ba1f03f2389f2537d"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Effort-fold diagnostics across dispatch-hetero.sh, dispatch-review.sh, and dispatch-author.sh",
+      "claim": "The plan does not test the full diagnostic contract: exactly one note when folding changes the requested effort and no note when it does not change.",
+      "evidence": "Section 2 assigns the stderr-note assertion only to dispatch-hetero.test.sh. The review and author suites receive only argv assertions, and no listed test checks the zero-note path.",
+      "evidence_reference": "Plan sections 2 and 4, acceptance criterion fold-visible",
+      "repair": "Add assertions for all three rails covering exactly one diagnostic on a changed value and zero diagnostics when requested effort already matches the encoded tier; assert that each changed-value diagnostic names the requested effort, folded tier, and model-id reason.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3aab89ecc926a9ace6b77d753fd150fd2536e53a5248b63ae9ba92a42bd171dd"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Preservation behavior for non-agy runners and non-suffixed agy model IDs",
+      "claim": "The test plan does not establish byte-identical argv preservation for grok, codex, and cc-shim in each of the three dispatch suites.",
+      "evidence": "Only dispatch-hetero.test.sh is assigned a non-suffixed agy assertion. The plan relies on broadly rerunning existing suites but specifies no byte-for-byte argv guards for grok, codex, and cc-shim across hetero, review, and author.",
+      "evidence_reference": "Plan section 2 test list and section 4 no-regression criterion",
+      "repair": "Identify or add labelled preservation assertions in all three suites that compare the complete argv received by grok, codex, and cc-shim against the base behavior, plus non-suffixed agy under xhigh receiving high.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "77d0eca4e03520bc9bb8fe05c22985eac6d517ff53f1b239ef528413b2d17b3e"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "status readiness fallback receipt compatibility",
+      "claim": "The proposed status test is too weak to prove that bootstrap failure emits the same provider-less receipt as before.",
+      "evidence": "Section 2 describes the test as checking stderr, exit 0, and overall_status unchanged. Equality of overall_status does not protect the remaining receipt fields or prevent accidental stdout additions, while R6 requires the same provider-less receipt.",
+      "evidence_reference": "Plan section 2 entry for hooks/tests/status-cli.test.sh and section 4 criterion readiness-fallback-loud",
+      "repair": "Pin the complete provider-less stdout receipt or normalized JSON object to the base fixture while separately asserting exactly one stderr line with the thrown code or message and exit status 0; also retain a successful-bootstrap assertion with empty diagnostic stderr.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e7a796e4f8d628b6320709c908fb9f801ab96a3cd07724ac0702eec6391ef64f"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "bin/autopilot.js status usage text",
+      "claim": "The planned usage wording covers bounded live spend but does not require documentation of the per-seat transport and live-probe semantics.",
+      "evidence": "The ruling and file list say only that --probe is documented as bounded live spend. No acceptance criterion or CLI test pins the required per-seat transport/live-probe wording.",
+      "evidence_reference": "Plan sections 1.3, 2 entry for bin/autopilot.js, and section 4 acceptance table",
+      "repair": "Specify the exact semantic content of the status usage line: --probe performs bounded live spend and runs per-seat transport/live probes. Add an autopilot CLI assertion that pins those concepts without changing flag behavior.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9daca165ec410d0b949e7d5780999481a195fc811ab77de0a361adb86e473265"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Change-pinning and preservation-test provenance",
+      "claim": "The plan does not require every change-pinning assertion to carry a RED-at-base-SHA header or every preservation guard to be labelled and demonstrated green at base.",
+      "evidence": "Only the hetero flash-medium case is annotated RED at base, without a base SHA. The review, author, readiness, verification-author, dirty-tree, and usage assertions have no stated RED provenance, and preservation guards are neither enumerated nor labelled green at base. Stub-only execution is mentioned only indirectly for agy stubs.",
+      "evidence_reference": "Plan section 2 test descriptions, section 4 acceptance table, and section 5 dogfood proof",
+      "repair": "For every changed assertion, record the exact base SHA and expected RED observation in its test header. Label every preservation guard and record it green at that SHA. State and enforce that all automated tests use stubs for agy, codex, transports, and endpoints, keeping the single live dogfood probe outside the suites.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "59f9ed39313a08ac5c2d4dc92bb56f7e4dc2159bfa3b8e4a9eda1d32e375ea2c"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sealed output scope, mirror verification, and acceptance commands",
+      "claim": "The plan neither defines an unambiguous sealed output_paths set nor includes check-backlog-entries.js in acceptance, and dispatch-explore.sh has contradictory scope treatment.",
+      "evidence": "Section 0.1 says dispatch-explore.sh is in scope for the helper call, section 2 omits it from changed files, and section 3 excludes only its runner arguments beyond the helper call. Mirror paths are represented only as '+ mirrors'. The acceptance table includes syntax, suite, and sync checks but omits check-backlog-entries.js after the three Context edits.",
+      "evidence_reference": "Plan sections 0.1, 2, 3, and 4",
+      "repair": "Enumerate every permitted source, test, documentation, and exact Codex mirror path as sealed output_paths; explicitly decide whether dispatch-explore.sh changes; reject any diff outside that set; and add check-backlog-entries.js with required exit 0 to acceptance after the three Context edits.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "398be398e5ea7d213784cc62fc2261159f5422f543b15f81c863dbb9ad7e8d0c"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "63b863200345cae8b59242660a9ccebb18d234d14fa8f59bfe929b96fc1325e6",
+      "rubric_id": "R9",
+      "affected_surface": "hooks/tests/dispatch-hetero.test.sh and the other listed suites",
+      "claim": "The plan states tests are RED at base but never commits to recording each change-pinning assertion as RED against the base sha in the test header, as R9 requires.",
+      "evidence_reference": "Plan section 2, Tests paragraph",
+      "disposition": null
+    },
+    {
+      "fingerprint": "4b4989ac75b7ea5947019eef0250f8ba54db0943565b161ba1f03f2389f2537d",
+      "rubric_id": "R10",
+      "affected_surface": "docs/BACKLOG.md and release verification steps",
+      "claim": "R10 requires check-backlog-entries.js to exit 0 after the three BACKLOG Context edits, but the plan's acceptance and no-regression list omit that check.",
+      "evidence_reference": "Plan section 4, no-regression row",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-15T17:59:50.853Z"
+}

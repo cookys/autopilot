@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "agy-effort-rail-wording-2026-09-16",
+  "logical_plan_id": "agy-effort-rail-wording-2026-09-16",
+  "session_id": "agy-effort-g1",
+  "session_key": "dc1e7721f43f3378baf417feda482198d3ce3f97287200eace4e7c408ac3c95d",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "3c46213913377ac71c431b146e4ebbb94ea075aa76a58937ed03f909ddede678",
+  "manifest_sha256": "fc148e32de0f3da6884e991398a0fa0ae3c5738770e413f3e4e27959680bb6d9",
+  "plan_sha256": "aedbebca0ac00ffd9be91ae98ed0c25f7586d955b0bfba74d2d271d8ead64d48",
+  "growth_ratio": {
+    "numerator": 12355,
+    "denominator": 8709
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "89d286450fa49ad54ebd18bac91a22b5996f6ec90347f4a83d17737fc9a920f5"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-9rPM9d",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "a0a3d229862716c876f5bfbaa1de1bf798eb8f73030cc73ea5e5d6e1478fce84"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "65095f927512cdf250c9795aff6cb87d8c01d7ef27175a4c8613720eb1daaa4c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "15184cbe6898247bc1ba5a4db75fb2ffef64d99aaec2ffed8c2cb241cee1332c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-JhSzrG/stdout",
+          "digest": "15184cbe6898247bc1ba5a4db75fb2ffef64d99aaec2ffed8c2cb241cee1332c"
+        },
+        "receipt_digest": "451ea90ef533a8029c5c0388aec763b03349e93e6260f35c4d83b901777aa176"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "agy effort-fold logging in all three dispatch rails",
+      "claim": "The plan does not define whether a fold is detected against the raw requested effort or its clamped value.",
+      "evidence": "The plan says to emit a note when the alias suffix and '--effort' disagree, but the default request is 'xhigh', which clamps to 'high'. For a '-high' model, raw comparison would emit a note while effective-value comparison would not. No test covers this case.",
+      "evidence_reference": "Plan section 1 ruling 1; dispatch-suite cases in section 2; frozen rubric R3",
+      "repair": "Define the fold predicate as resolved tier differing from 'agy_effort_clamp' of the requested effort, and add a default-'xhigh' plus '-high' zero-note preservation case to all three dispatch suites.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "038f58a606172c940e638d89b7c4092af5bb4e3a479642a0f3f7b5606abe2bb0"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "status readiness bootstrap-failure acceptance test",
+      "claim": "The proposed test does not prove that the diagnostic contains the thrown code or message.",
+      "evidence": "The assertion only matches '^readiness: strict bootstrap unavailable \\(.+\\)', so any nonempty placeholder would pass even though R6 requires the actual thrown code or message.",
+      "evidence_reference": "Plan section 2 status-cli.test.sh bullet and section 4 readiness-fallback-loud criterion; frozen rubric R6",
+      "repair": "Give the failure fixture a known error code or message and assert that exact value appears in the single readiness diagnostic line while retaining the receipt deep-equality and exit-zero checks.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "92d07f7d96097f8962d8d0979887e6c610b8a48eed291ccf6f9dc4bf48eccff4"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "sealed output_paths boundary",
+      "claim": "The purported exact output-path seal is internally inconsistent and does not enumerate its test files.",
+      "evidence": "The plan says 'the six test files above', but seven modified test files are named: three dispatch suites, status-cli, autopilot-cli, implementation-campaign-state, and provider-readiness-consumer.",
+      "evidence_reference": "Plan section 2 test bullets and sealed output_paths paragraph; frozen rubric R10",
+      "repair": "Replace the shorthand with an explicit repo-relative list of all seven writable test paths and retain provider-readiness.test.sh only as an unchanged acceptance suite.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b6922730b2f2e12dec8310f72c1f6d1bd05b1ec0ddf352cea2abd02807a27b4d"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "CHANGELOG ownership versus sealed output boundary",
+      "claim": "The plan permits a CHANGELOG.md release edit outside the sealed output_paths, contradicting R10's prohibition on changes outside that seal.",
+      "evidence": "The sealed-path paragraph states that CHANGELOG.md is a depth-0 release action and is not sealed, while R10 requires that no file outside sealed output_paths change.",
+      "evidence_reference": "Plan section 2 sealed output_paths paragraph; frozen rubric R10",
+      "repair": "Either add CHANGELOG.md to the sealed output_paths or explicitly exclude its modification from this deliverable and perform no CHANGELOG edit until a separately authorized release operation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "48f1ecd26bee8d24ce316c641f32ec9e6d26342c7ce66918993b62e7b76b97c5"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-15T18:03:48.437Z"
+}

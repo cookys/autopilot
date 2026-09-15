@@ -1,0 +1,55 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "agy-effort-rail-wording-2026-09-16",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "63b863200345cae8b59242660a9ccebb18d234d14fa8f59bfe929b96fc1325e6",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: every change-pinning assertion carries a RED-at-base-sha header with the observed failure; preservation guards labelled green at base; stub-only rule stated in §2."
+  },
+  {
+   "fingerprint": "4b4989ac75b7ea5947019eef0250f8ba54db0943565b161ba1f03f2389f2537d",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: exact sealed output_paths enumerated incl. codex mirrors; dispatch-explore.sh ruled out entirely; check-backlog-entries.js exit 0 added to acceptance."
+  },
+  {
+   "fingerprint": "3aab89ecc926a9ace6b77d753fd150fd2536e53a5248b63ae9ba92a42bd171dd",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: one-note/zero-note assertions on all three rails with the three named elements (§2 tests i-iii)."
+  },
+  {
+   "fingerprint": "77d0eca4e03520bc9bb8fe05c22985eac6d517ff53f1b239ef528413b2d17b3e",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: byte-identical argv preservation guards for grok/codex/cc-shim in all three suites plus the non-suffixed agy case (§2 tests iv-v)."
+  },
+  {
+   "fingerprint": "e7a796e4f8d628b6320709c908fb9f801ab96a3cd07724ac0702eec6391ef64f",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: status test deep-equals the base provider-less receipt, asserts exactly one stderr line and exit 0, and keeps a successful-bootstrap no-note guard."
+  },
+  {
+   "fingerprint": "9daca165ec410d0b949e7d5780999481a195fc811ab77de0a361adb86e473265",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: usage line pinned to bounded live spend + per-seat transport and live probes, with an autopilot-cli assertion."
+  },
+  {
+   "fingerprint": "59f9ed39313a08ac5c2d4dc92bb56f7e4dc2159bfa3b8e4a9eda1d32e375ea2c",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: every change-pinning assertion carries a RED-at-base-sha header with the observed failure; preservation guards labelled green at base; stub-only rule stated in §2."
+  },
+  {
+   "fingerprint": "398be398e5ea7d213784cc62fc2261159f5422f543b15f81c863dbb9ad7e8d0c",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: exact sealed output_paths enumerated incl. codex mirrors; dispatch-explore.sh ruled out entirely; check-backlog-entries.js exit 0 added to acceptance."
+  }
+ ]
+}

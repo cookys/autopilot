@@ -1,0 +1,31 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "agy-effort-rail-wording-2026-09-16",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "038f58a606172c940e638d89b7c4092af5bb4e3a479642a0f3f7b5606abe2bb0",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: fold predicate = resolved tier != agy_effort_clamp(requested); default-xhigh + -high zero-note preservation case added to all three suites."
+  },
+  {
+   "fingerprint": "92d07f7d96097f8962d8d0979887e6c610b8a48eed291ccf6f9dc4bf48eccff4",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: failure fixture throws a known code (strict_l5_provider_roster_unavailable) asserted verbatim in the single diagnostic line."
+  },
+  {
+   "fingerprint": "b6922730b2f2e12dec8310f72c1f6d1bd05b1ec0ddf352cea2abd02807a27b4d",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: seven writable test paths enumerated; provider-readiness.test.sh kept as an unchanged acceptance suite."
+  },
+  {
+   "fingerprint": "48f1ecd26bee8d24ce316c641f32ec9e6d26342c7ce66918993b62e7b76b97c5",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: CHANGELOG explicitly excluded from this deliverable; release edit is a separately authorized operation after merge."
+  }
+ ]
+}

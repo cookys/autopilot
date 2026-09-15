@@ -96,6 +96,15 @@
 #                                              #   is refused. Default: only this dispatch's own
 #                                              #   --branch is exempt, so concurrent dispatches
 #                                              #   on one repo reject each other (308, 2026-09-14).
+#       [--sibling-path-prefix <dir>/]         # repeatable: a checkout-relative directory the
+#                                              #   CALLER writes its own rail I/O into (hand
+#                                              #   stderr/result under the checkout, 308-8f).
+#                                              #   Pruned from the fingerprint's stat walk only;
+#                                              #   refs/diffs/config/hooks/index there still
+#                                              #   count. The directory must exist BEFORE the
+#                                              #   round (creating it touches the root mtime).
+#                                              #   Rail I/O should live OUTSIDE the checkout —
+#                                              #   this is the declared exception.
 #       [--retain-owner <id> --retain-reason <text> --retain-until <epoch>]
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
 #       [--expected-worktree-instance <sha256>] # required identity fence for retained reuse
@@ -168,6 +177,7 @@ OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via
 KIMI_BIN="kimi"            # Kimi Code CLI runner (Moonshot); test seam via --kimi-bin
 KEEP=0
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
+MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()     # --sibling-path-prefix; pruned from the fingerprint's stat walk
 WRAPPER_COMMITTED=0  # set when the rail's own capture commit is made; gates --expect-wrapper-subject
 RETENTION_OWNER=""
 RETENTION_REASON=""
@@ -1744,6 +1754,18 @@ while [ $# -gt 0 ]; do
         *) die_precondition "--sibling-ref-prefix must look like refs/heads/<namespace>/ (got '${2:-}')" ;;
       esac
       MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES+=("$2"); shift 2 ;;
+    --sibling-path-prefix)
+      case "${2:-}" in
+        ""|/|./|.) die_precondition "--sibling-path-prefix would exempt the whole checkout; name the directory" ;;
+        /*) die_precondition "--sibling-path-prefix must be checkout-relative (got '${2:-}')" ;;
+        .git|.git/|.git/*) die_precondition "--sibling-path-prefix may not name .git" ;;
+        ..|../*|*/..|*/../*) die_precondition "--sibling-path-prefix may not contain .. (got '${2:-}')" ;;
+        ./*|*/./*) die_precondition "--sibling-path-prefix may not contain a ./ segment (got '${2:-}')" ;;
+        *//*) die_precondition "--sibling-path-prefix has an empty path segment (got '${2:-}')" ;;
+        */) ;;
+        *) die_precondition "--sibling-path-prefix must look like <dir>/ (got '${2:-}')" ;;
+      esac
+      MAIN_CHECKOUT_FP_EXCLUDE_PATHS+=("$2"); shift 2 ;;
     --retain-owner) RETENTION_OWNER="${2:-}"; shift 2 ;;
     --retain-reason) RETENTION_REASON="${2:-}"; shift 2 ;;
     --retain-until) RETENTION_EXPIRES_AT="${2:-}"; shift 2 ;;
@@ -4415,6 +4437,7 @@ dispatch_detached_run() {
     # The after-fingerprint in the detached child must exempt the same sibling namespaces
     # the parent's before-fingerprint did, or every --sibling-ref-prefix run rejects itself.
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES 2>/dev/null || true
+    declare -p MAIN_CHECKOUT_FP_EXCLUDE_PATHS 2>/dev/null || true
     declare -p WRAPPER_COMMITTED 2>/dev/null || true
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null

@@ -22,6 +22,12 @@
 #   BRANCH          this dispatch's own branch (its refs/heads entry is expected to move)
 #   MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES  optional bash array of additional `refs/...` PREFIXES the
 #                   caller owns (a foreman's hands branches); every other ref delta is a mutation
+#   MAIN_CHECKOUT_FP_EXCLUDE_PATHS  optional bash array of checkout-relative DIRECTORY prefixes
+#                   (`dir/` form, no leading slash, never `.git/` or `..`) the caller owns as its
+#                   own rail I/O (a foreman writing hand stderr/result under the checkout, 308-8f
+#                   2026-09-14). They are pruned from the stat walk only; tracked-content diffs,
+#                   refs, config, hooks and index are still measured there. Rail I/O should
+#                   still land OUTSIDE the checkout; this is the declared exception, not the rule.
 # Outputs:
 #   main_checkout_fingerprint → 64-hex digest or UNVERIFIABLE-… on stdout
 #   build_hands_git_env       → HANDS_GIT_ENV array (prepends to any inherited GIT_CONFIG_COUNT)
@@ -61,7 +67,17 @@ main_checkout_fingerprint() {
     || { _fp_unverifiable dirty; return 0; }
   # Every entry type, with type, mode and link target: a symlink planted over an empty
   # ignored directory has no regular file to change (round 5, 2026-09-13).
-  walk="$(find "$MAIN_CHECKOUT" -xdev -path "$MAIN_CHECKOUT/.git" -prune -o -printf '%P\t%y\t%m\t%s\t%T@\t%l\n' 2>/dev/null | LC_ALL=C sort)" \
+  local -a _walk_prune=(-path "$MAIN_CHECKOUT/.git" -prune)
+  # `[*]+set` is empty for a declared-but-empty array too; tolerated here (and for the ref
+  # prefixes above) because the guarded body is loop-only — never key an else-branch on it.
+  if [ "${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[*]+set}" = set ]; then
+    local _xp
+    for _xp in "${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[@]}"; do
+      [ -n "$_xp" ] || continue
+      _walk_prune+=(-o -path "$MAIN_CHECKOUT/${_xp%/}" -prune)
+    done
+  fi
+  walk="$(find "$MAIN_CHECKOUT" -xdev '(' "${_walk_prune[@]}" ')' -o -printf '%P\t%y\t%m\t%s\t%T@\t%l\n' 2>/dev/null | LC_ALL=C sort)" \
     || { _fp_unverifiable walk; return 0; }
   # Administrative surfaces the walk prunes (round 7, 2026-09-13): the shared config at every
   # scope (a brief saying "configure the remote" lands here) and the hooks directory.

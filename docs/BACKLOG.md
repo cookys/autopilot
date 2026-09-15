@@ -64,13 +64,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: fingerprint excluded only own `BRANCH`; a sibling's `refs/heads/hands/*` was a delta. Fixed: `--sibling-ref-prefix` declares the namespace.
 
+### PEER-REPORTED (cuda): `migrate-backlog-entries.js` needs a table-style parser — revival.3d's BACKLOG is a 196 KB table
+- **Status**: fired 2026-09-16
+- **Trigger**: cuda asked 2026-09-16 (msg `msg_01M2JWY92NEV7CMDB7MSFK5YJZ`) after the heading-only limit was named in the v2.36.39 handoff
+- **Effort**: S
+- **Source**: `cuda` via hangar-bridge, 2026-09-16, thread `msg_01M2JW9NJRE106DKDZWQARFJF2`
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: `planMigration` opens with `exit 2 not supported yet` for table style; the gate's parser already handles tables. Owner-led /l5 question in the same thread was a stale v2.36.22 checkout.
+
 ### PEER-REPORTED (308-8f): main-checkout fingerprint stat-walks untracked files — a foreman's own rail I/O trips it
-- **Status**: open
+- **Status**: shipped v2.36.50 2026-09-16
 - **Trigger**: a caller writes hand result/stderr under its own worktree, or `main_checkout_mutated` fires falsely again
 - **Effort**: S
 - **Source**: `308-8f` via SendMessage 2026-09-14 (TASK-C3); 308 repo `TASK-C3-tracer-second-worker-20260914.md` "rail 坑"
 - **Pointer**: none
-- **Context**: `lib/main-checkout-boundary.sh` stat walk is by design (2026-09-13). Fix: caller-declared exclude paths + doc "rail I/O lands outside the worktree".
+- **Context**: stat walk is by design (2026-09-13); fixed as caller-declared `--sibling-path-prefix <dir>/`.
 
 ### PEER-REPORTED (308-8f): agy flash-medium hand without `--effort medium` only edits — no run_command, no commit
 - **Status**: open

@@ -2254,6 +2254,60 @@ assert_eq "0" "$EXIT" "22t detached: the declared namespace survives the detach 
 assert_contains "$OUT" '"status": "committed"' "22t detached: …and the round is committed"
 git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
 
+# 22u. Caller rail I/O under the checkout (308-8f, 2026-09-14): a foreman that writes its hand
+#      stderr/result into a directory INSIDE the main checkout trips the stat walk. The stub
+#      stands in for that I/O: it creates a file under $MAIN_SBX/rail-io/ mid-round. Without
+#      the flag that is (correctly) a mutation; with `--sibling-path-prefix rail-io/` the caller
+#      has declared the directory. RED at base 3ac4fa4e: the flag did not exist (usage exit).
+STUB_RAILIO="$TEST_TMP/agy-railio"
+cat > "$STUB_RAILIO" <<'EOF2'
+#!/usr/bin/env bash
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "hands: railio"
+mkdir -p "$MAIN_SBX/$RAIL_IO_DIR"; echo "hand stderr" > "$MAIN_SBX/$RAIL_IO_DIR/u1.stderr.log"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF2
+chmod +x "$STUB_RAILIO"; make_agy_stub_versioned "$STUB_RAILIO"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --branch t22u-a --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22u control: rail I/O written under the checkout rejects WITHOUT the flag (the 308-8f shape)"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22u control: …as main_checkout_mutated"
+rm -rf "$SBX/rail-io"; mkdir -p "$SBX/rail-io"   # the declared directory exists BEFORE the round (its creation would touch the root mtime)
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --branch t22u-b --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22u): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "22u: with --sibling-path-prefix the declared directory is exempt — round exit 0"
+assert_contains "$OUT" '"status": "committed"' "22u: …and the round is committed"
+rm -rf "$SBX/rail-io"
+# 22v. The exemption is the declared directory and nothing else: the same stub writing OUTSIDE
+#      the prefix still rejects with the flag present (preservation of the fence).
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=elsewhere "$SCRIPT" --branch t22v --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22v: a write outside the declared directory still rejects"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22v: …as main_checkout_mutated"
+rm -rf "$SBX/elsewhere"
+# 22w. Argument validation: the whole checkout, .git, absolute and .. forms are refused pre-spawn.
+for bad in "/" "./" "/tmp/x/" ".git/" "../x/" "a//b/" "rail-io" "./.git/" "rail-io/./.git/"; do
+  OUT="$(cd "$SBX" && "$SCRIPT" --branch t22w --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix "$bad" 2>&1)"; EXIT=$?
+  assert_neq "0" "$EXIT" "22w: --sibling-path-prefix '$bad' is refused"
+  assert_contains "$OUT" 'sibling-path-prefix' "22w: …naming the flag ('$bad')"
+done
+# 22w2. Documented contract: the declared directory must exist BEFORE the round. Creating it
+#       mid-round touches the root directory's mtime, which is NOT pruned — still rejects.
+rm -rf "$SBX/rail-io"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --branch t22w2 --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22w2: a declared directory created only mid-round still rejects (root mtime)"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22w2: …as main_checkout_mutated"
+rm -rf "$SBX/rail-io"
+# 22x. Detached rail: the declared directory must survive the detach boundary like the ref prefixes.
+LEDGER_RIO="$TEST_TMP/railio-detached-ledger/ledger.jsonl"
+mkdir -p "$TEST_TMP/railio-detached-ledger"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_RIO" >/dev/null
+mkdir -p "$SBX/rail-io"
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io DISPATCH_QUIET=1 "$SCRIPT" --branch t22x --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ --ledger "$LEDGER_RIO" --run-id rio --stage implement 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22x): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "22x detached: the declared directory survives the detach boundary — round exit 0"
+assert_contains "$OUT" '"status": "committed"' "22x detached: …and the round is committed"
+rm -rf "$SBX/rail-io"
+
 # 22j. Content-blind fingerprint (review, 2026-09-13): overwriting an IGNORED file in the
 #      main checkout, and a second edit to an ALREADY-dirty main file, must both reject —
 #      `status --porcelain` shows neither.

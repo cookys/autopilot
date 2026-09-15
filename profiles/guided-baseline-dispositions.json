@@ -274,6 +274,65 @@
         "293f7fcb5f9152b7b07c794e03685b7ab29182dfbd9d4cf1d507d367f317f935"
       ],
       "rationale": "P0 skills/ceo-agent/SKILL.md:194 ((topology, the P0-verified kill+reap mechanism, run-summary ledger):). Split in v2.36.21: the parenthetical loses ', run-summary ledger' (now line 194, successor 2eaf96b1) and the ledger half becomes the new line 196 'depth-0 control loop and run-summary ledger:' (successor 293f7fcb) pointing at references/depth0-control-loop.md. No requirement removed."
+    },
+    {
+      "content_hash": "12fb8846aec4a9f9da4e64636069a0ee4e25163c270d3da6a458957d8620c7a7",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "82ba0ae70190ebfc75acbf09d38decae5f830b13a8e19be41124accb5550d02d",
+        "4d2a2342d8dc19dc2bfb6e45dec6a7be1342db57c842971b71629240f35943ce",
+        "d8ea8ae52de539c606de4c2c88e0cfb290f8488a96675e01153182b11885ad6f",
+        "6f20ee22cd76f18619feb67e45cb7d70d11388710142cc3a9a8301c0cf75d5d0"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:299 ('a. Create project dir (docs/projects/YYYY-MM-DD-<name>/) ← MANDATORY'). The MANDATORY project-dir step survives at current :299; the literal docs/ path became <projects_dir> resolved by scripts/resolve-project-paths.sh, with :300-:302 stating the resolver and the `none` ⇒ ask rule. v2.36.33 (12b2de41, Project Paths reader); re-pinned v2.36.49 after the drift sat unpinned 2026-09-13→15."
+    },
+    {
+      "content_hash": "073d53d70688de78ed7a1dfcd9bb18e34269b7c9fafc55162c22c0f30ee56c42",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "68e67610b846dfa9b6af8fd4492ea1b093874ffc6de6b501993a4ea44c98c409"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:584-586 ('Anything postponed goes to BACKLOG with: Context / Trigger condition'). The deferral rule survives at current :584 as one line pointing at references/backlog-entry.md (the entry schema shipped v2.36.38); the two field bullets are now the schema's, not dev-flow's. v2.36.38–39 (mission backlog-entry-schema); re-pinned v2.36.49."
+    },
+    {
+      "content_hash": "8412cad2769eebc95465e78668a5a741b40ae4a65d938ae9ef363cbe69a10891",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "68e67610b846dfa9b6af8fd4492ea1b093874ffc6de6b501993a4ea44c98c409"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:585 ('- Context: what it is and why it was deferred') — folded into the one-line successor at current :584 (backlog-entry.md schema owns the fields). v2.36.38–39; re-pinned v2.36.49."
+    },
+    {
+      "content_hash": "73d64ba6f448f012d1480fcc8d15befa73fe65b158ef903b9b488407c4008587",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "68e67610b846dfa9b6af8fd4492ea1b093874ffc6de6b501993a4ea44c98c409"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:586 ('- Trigger condition: when it should be picked up') — folded into the one-line successor at current :584. v2.36.38–39; re-pinned v2.36.49."
+    },
+    {
+      "content_hash": "5abe34c5a4a3a03049ac4671dc7f243bf8b190a34495ee5767617b089a83de10",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "2b304a97400d8671118627964e0cd1348f269f7b79aa58904d02f30933732ca0"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:281 (S session end: 'If anything was postponed, add to BACKLOG with context + trigger condition.'). Same obligation at current :281; the field list is now references/backlog-entry.md's schema (v2.36.38). Re-pinned v2.36.49."
+    },
+    {
+      "content_hash": "cb4996d2047bc3b6db2f102dc00b420509d6e14c710e3101ee3071f4d24bbe5e",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a15565445ae17ba538833ef3f24a787bdc89ba39b65b54b28aa1527b3ceb9a26"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:555 (S-Lite deferred items). Same obligation at current :555, pointing at references/backlog-entry.md (v2.36.38). Re-pinned v2.36.49."
+    },
+    {
+      "content_hash": "ba6ce6b6ac275c8f3b9268b060130a5b1b27624ea08bd7a44ab55cb6f2a6ac8a",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "772a1fb6eac145cb07fd9b1646fcaaaabe9e64c3da4d8f09e690b985122c2cca"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:476 (L-4 backlog safety: 'If deferral passes: add to BACKLOG with context + trigger condition, mark phase Deferred'). Same rule at current :476; the row format is references/backlog-entry.md's (v2.36.38). Re-pinned v2.36.49."
     }
   ]
 }

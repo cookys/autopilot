@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.36.49 — 兩條沒人補的 hash 鏈：review-loop 契約 schema 漏一欄、profiles 基線對 ceo-agent／dev-flow 漂了兩天
+
+`codex-plugin-package.test.sh` 在 develop 上紅了 9 條、`profile-context-isolation.test.sh` 紅 2 條，兩個原因都是「出貨時
+沒把鏈補上」：
+
+- `schemas/review-loop-contract.schema.json`：v2.36.33（7840hs 四缺陷）讓 resolver 多吐 `plan_review_same_family_as_depth0`，
+  schema 的 `x-field-order`／`required`／`properties` 都沒加，`check-contract-schema.js` 從此 DRIFT（codex 套件裡的鏡像
+  gate 也一起紅）。補上（boolean，89 欄）。
+- `profiles/`：v2.36.33 的 Project Paths reader 改了 `skills/ceo-agent/SKILL.md:299-302`（+3 行），v2.36.38 的 backlog
+  entry schema 改了 `skills/dev-flow/SKILL.md` 五處（含 :584-586 → 一行），rule-inventory 的 source sha 沒重釘。照 D6
+  re-pin 的做法：兩個 source sha 重釘、segment 行號位移（ceo-agent +3 於 299 後，dev-flow −2 於 586 後，含
+  duplicate_rule_sets）、`build-profile-payload.js migration` 重產（canonical_rules 814 → 815，guided 420 → 421）、
+  catalog 三個 sha256 與 category_totals、guided-baseline 七條 `rewritten` disposition（每條寫明後繼行與出處版本；
+  topology 那行不在 guided baseline，checker 拒收 dead entry 後移除）、兩個測試釘值 814 → 815。工具是權威：每一步
+  都是 `catalog --check` 告訴我下一個缺口。
+- 教訓（進 HANDOFF）：改 `skills/ceo-agent/SKILL.md` 或 `skills/dev-flow/SKILL.md` 任何一行，`build-profile-payload.js
+  catalog --check` 就得跟著跑；`resolve-review-loop.sh` 多吐一欄，`check-contract-schema.js` 就得跟著跑。兩者都在
+  pre-commit 之外，所以會漂兩天沒人看見。
+
+prose-justification: 本版 prose 面無增量。
+
+---
+
 ## v2.36.48 — 花錢前的 repo 事實檢查搬到 Mission claim 之前；`session-mode.js retire` 用證據退掉別的 session 的 marker
 
 兩條 rail 缺陷（BACKLOG fired 2026-09-15），一條 fix 分支，同一版：

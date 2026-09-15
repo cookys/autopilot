@@ -60,6 +60,7 @@
     "brain_seat",
     "plan_review",
     "plan_review_resolved_from",
+    "plan_review_same_family_as_depth0",
     "hetero_review",
     "hetero_review_resolved_from",
     "plan_reviewer_engine",
@@ -534,6 +535,10 @@
         "off"
       ]
     },
+    "plan_review_same_family_as_depth0": {
+      "type": "boolean",
+      "description": "True when the resolved plan-review chair shares the depth-0 (Claude) family — an empty finding list from it is then indistinguishable from a clean review (v2.36.33)."
+    },
     "hetero_review": {
       "type": "string",
       "enum": [
@@ -899,6 +904,7 @@
     "strict_l5_policy_override",
     "plan_review",
     "plan_review_resolved_from",
+    "plan_review_same_family_as_depth0",
     "hetero_review",
     "hetero_review_resolved_from",
     "plan_reviewer_engine",

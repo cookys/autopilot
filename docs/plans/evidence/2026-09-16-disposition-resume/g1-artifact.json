@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "disposition-resume-2026-09-16",
+  "logical_plan_id": "disposition-resume-2026-09-16",
+  "session_id": "disp-resume-g1",
+  "session_key": "53cb2c3291c79010b645c1ea5648e426a9cd45c39782ab9f2a14b994aca282b2",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "80effdaac38a3a7e60059c40759495e5a2a1a0adb59946f8376d5d1dc7ef9ab5",
+  "manifest_sha256": "cb39ed5b7634a482bf8a0755e5ce1d0a22bf712f5cf0d11d0fcb11b263e496a2",
+  "plan_sha256": "316e7d12414c53d4e5f712e6f1eb0a252d179fea46f73be0c792873962be8f21",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "2565725c96560c009d7920e4790a01c64479ba84ca6fc2ccd39cb7c0fd87bc3b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-hMUJzc",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "e81ad4f8c0cb0dc71a6fb79c1c96a543677796b83a2941f3c5c8348a6d7a1c39"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "adb2a328ca93d89d055f26895fabbb16d17ffbb675f5fb3dc40c78076ea8c8ff"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a40377f5d68382bf2d459e25a67966b1739c5db2316d1fa96c804e35cb50623c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-NswV9I/stdout",
+          "digest": "a40377f5d68382bf2d459e25a67966b1739c5db2316d1fa96c804e35cb50623c"
+        },
+        "receipt_digest": "47b074f18a1aced177a412f7a9b927685b1da4b5e8fd615c3f0ece532a0cc3cb"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-intake.js and T3",
+      "claim": "The proposed implementation cannot reject Git drift before the Mission claim because it performs verification inside defaultGenerationClaim, which runs after the Mission claim adapter.",
+      "evidence": "runCampaignIntake invokes missionClaimAdapter before invoking claimGeneration/defaultGenerationClaim. Plan section 2.1 changes only defaultGenerationClaim, so a drifted durable candidate still calls the Mission claim adapter first. T3 also covers only branch-tip drift and does not assert zero Mission-claim calls, malformed-reference rejection, candidate-tree drift, or base-ancestry drift.",
+      "evidence_reference": "src/engine/campaign-intake.js:1473 and src/engine/campaign-intake.js:1806; plan sections 2.1 and 2.4 T3",
+      "repair": "Add a read-only durable-resume candidate preflight before missionClaimAdapter, then revalidate during generation claiming to close the race. Expand T3 to spy on missionClaimAdapter and assert zero calls for branch-tip, candidate-tree, base-ancestry, and malformed-reference cases with the required rejection codes.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b8d813b1944f4cc78b8e9ad0d35d393cb8c07ad5b2e2ce7e36900cc9a24c83d5"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh T1",
+      "claim": "T1 does not prove that resume_candidate has the exact verifyResumeCandidate shape required by R1.",
+      "evidence": "T1 asserts committed, scope_implementation_sha, commit, and durable-wait phase only. It does not assert tree_sha, branch, writer_fence, repair_lineage, or absence of raw-reference-only fields such as kind and base, so a partially normalized or raw-plus-patched object can pass.",
+      "evidence_reference": "plan section 2.4 T1; frozen rubric R1",
+      "repair": "Assert the complete normalized resume_candidate object, including tree_sha, branch, writer_fence, repair_lineage, commit, committed, and the 40-hex scope_implementation_sha, and assert that raw-only fields are absent.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "79ea07685c468bb180e469c3fbe43d5eb60dc5c4b9d32546804cb9e423503753"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh T4",
+      "claim": "T4 can pass without proving that scope-session creation and the first repair-scope check actually ran and succeeded.",
+      "evidence": "The planned assertion only excludes two returned phases and permits inspecting either the scopeCheck input or a ledger row. An unrelated earlier stop can satisfy the negative phase assertion, while a ledger row does not prove that campaignScopeChecker received or accepted the sealed contract.",
+      "evidence_reference": "plan section 2.4 T4 and acceptance criterion scope-check-passes; src/engine/autopilot-engine.js:7108",
+      "repair": "Instrument campaignScopeChecker, require the expected call count, capture session.contract, assert implementation_sha equals c1, return a passing receipt, and assert the run advances through the disposition and repair path rather than merely avoiding two phase names.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "77a7bead835bc191dc15b16c0a985aad1ba73279499e29a8156c69872337a29f"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "sealed output_paths and documentation mirrors",
+      "claim": "The file-change plan is inconsistent with the sealed output paths and does not explicitly account for the generated l5 reference mirror.",
+      "evidence": "The execution graph excludes CHANGELOG.md, but plan section 2.3 requires a CHANGELOG.md PATCH section. The graph includes platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md, but the plan's file list mentions only the source reference even though sync-codex-plugin-skills.sh mirrors projected l5 references.",
+      "evidence_reference": "docs/mission-disposition-resume-2026-09-16-execution-graph.json campaign.output_paths; plan sections 2.2, 2.3, and 4; scripts/sync-codex-plugin-skills.sh:72",
+      "repair": "Keep CHANGELOG.md outside this deliverable as an explicitly separate release action, or reseal the execution graph to include it before dispatch. Add the generated l5 reference mirror explicitly to the change list and regenerate it from the source before running the sync check.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9d0728d800ab6103855f35e98bb27fa09ea41a71092737d67e7c17717d71eb17"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "docs/BACKLOG.md, skills/l5/references/hetero-impl-loop.md, and release metadata",
+      "claim": "The documentation disposition is not executable as frozen because the required shipped version remains an unresolved placeholder.",
+      "evidence": "Plan section 2.3 requires both documentation updates to contain '<version>' but does not select the version. The current canonical version is 2.36.52, so leaving the decision to implementation risks inconsistent BACKLOG, skill-reference, mirror, and CHANGELOG text.",
+      "evidence_reference": "plan section 2.3; .claude-plugin/plugin.json version 2.36.52; frozen rubric R9",
+      "repair": "Pin the intended patch version before dispatch, expected to be v2.36.53 from the reviewed base unless the controller records a conflicting intervening release and reseals the plan.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a9cbbc7dc58f397055067171566b5d302810e75eb7761f962c1b88b1deae8007"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-15T17:56:15.750Z"
+}

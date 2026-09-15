@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "disposition-resume-2026-09-16",
+  "logical_plan_id": "disposition-resume-2026-09-16",
+  "session_id": "disp-resume-g1",
+  "session_key": "53cb2c3291c79010b645c1ea5648e426a9cd45c39782ab9f2a14b994aca282b2",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "80effdaac38a3a7e60059c40759495e5a2a1a0adb59946f8376d5d1dc7ef9ab5",
+  "manifest_sha256": "cb39ed5b7634a482bf8a0755e5ce1d0a22bf712f5cf0d11d0fcb11b263e496a2",
+  "plan_sha256": "57ef12fb9fe56abfe25f2cf0bfae5a829335931dfb7f9ae6b915eccdea59b85d",
+  "growth_ratio": {
+    "numerator": 7586,
+    "denominator": 5563
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "997c17e4779e5a4d86156b0e9b138a7f75a92193b877f055033a0a7feed02e88"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "d4675a5f76948f3c83e9bddece42c5a72a6af667c8624cd7856aa88e8ef1cd8f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-uJTPdI",
+          "digest": "d4675a5f76948f3c83e9bddece42c5a72a6af667c8624cd7856aa88e8ef1cd8f"
+        },
+        "receipt_digest": "0d8caa3648a0d12eb7a114f40f9dd500f2b6a40d292e188fbdee8c6766ea7054"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "bb587ab61a22d12b3dde7be5bef442f635e9c63e73226fe93da5982679ed9fae"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "79704c6000806ccc0b8c9500824c6cd003954d7f8268755055fa46155844c4e0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-WX0xsC/stdout",
+          "digest": "79704c6000806ccc0b8c9500824c6cd003954d7f8268755055fa46155844c4e0"
+        },
+        "receipt_digest": "d73bc1cd8253cbcb2cd8beb64304dce0bdebee90ee99c76236aba3339479646b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh (P3 resume block header)",
+      "claim": "The plan records the RED-at-base status of T1-T4 in a block-head comment but does not state that each RED entry includes the failing message text, which R8 requires verbatim.",
+      "evidence": "Section 2.4 says 'All change-pinning assertions recorded RED against base 3831d5f6 in a comment at the block head' without mentioning the failing message, while R8 requires 'recorded RED against base 3831d5f6 in the test block header with the failing message'.",
+      "evidence_reference": "Plan section 2.4, first paragraph under 'Tests'; rubric R8.",
+      "repair": "No current change; follow-up only. During execution, capture each failing assertion's actual error output at base 3831d5f6 and paste it alongside the RED marker in the block-head comment so the header carries both the RED label and the failing message as R8 pins.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4e911c6b308647fae21d4715e2e3ad02a9d6d157d007cd873b5ee2bc7bc6638c"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-intake.js pre-claim flow and T3 ADJUDICATING assertions",
+      "claim": "The plan changes observable ADJUDICATING resume behavior even though R6 freezes that path unchanged.",
+      "evidence": "Section 2.1 applies the new pre-claim verification to every resumable phase, and T3 newly requires the ADJUDICATING drift cases to call the Mission claim adapter zero times. The plan itself states that those cases currently call the adapter first. Preventing that call changes claim-attempt side effects and directly conflicts with the byte-for-byte behavioral preservation required by R6.",
+      "evidence_reference": "PLAN_UNDER_REVIEW sections 2.1 and 2.4 T3; FROZEN_RUBRIC R6",
+      "repair": "Restrict the pre-claim durable-resume preflight to the durable-wait phases covered by this defect. Leave ADJUDICATING and VERTICAL_VERIFICATION control flow and assertions unchanged, and remove the new ADJUDICATING zero-call requirement from T3.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "51b61c1f7137baa683c95c147e4b198df2dffdae89e6a61c977c72bf7ec56d0b"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "4e911c6b308647fae21d4715e2e3ad02a9d6d157d007cd873b5ee2bc7bc6638c",
+      "rubric_id": "R8",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh (P3 resume block header)",
+      "claim": "The plan records the RED-at-base status of T1-T4 in a block-head comment but does not state that each RED entry includes the failing message text, which R8 requires verbatim.",
+      "evidence_reference": "Plan section 2.4, first paragraph under 'Tests'; rubric R8.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-15T18:00:01.825Z"
+}

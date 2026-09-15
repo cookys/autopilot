@@ -72,6 +72,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: `campaign-intake.js:621-633` reads `projection.initial_candidate_reference || reference` and nothing sets it; the awaiting_disposition payload carries `candidate_ref` (40 hex). Bind it.
 
+### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
+- **Status**: fired 2026-09-16
+- **Trigger**: cuda e2e: campaign-v1-48ffc2fd… verify script failed → engine ran dispatch_review (SHIP-AS-IS) → blocked at campaign_event_journal `cannot apply review_completed while campaign is VERTICAL_VERIFICATION`
+- **Effort**: Fix
+- **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K2PYTE18H2JSJ260EXMN26`
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: the reducer refuses VERTICAL_VERIFIED with passed:false, so a red verification records nothing and the loop proceeds to review; expected: repair generation or a clean terminal.
+
+### Intake dirty-tree precondition on a shared main checkout: the refusal does not name the clean-worktree remedy
+- **Status**: fired 2026-09-16
+- **Trigger**: cuda e2e on v2.36.48: `--cwd` main checkout refused (dirty), a clean detached worktree as `--cwd` passed
+- **Effort**: S
+- **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K2PYTE18H2JSJ260EXMN26`
+- **Pointer**: none
+- **Context**: expected usage (fail-closed pre-claim, v2.36.48); the precondition reason should name the remedy: run from a clean checkout/worktree or commit.
+
 ### /l5 wording: verification-author seat error lacks the remedy; CLI `status readiness --probe` is always probe-needed
 - **Status**: open
 - **Trigger**: next operator who hits `requires the verification-author seat` or reads `probe-needed` from the CLI and asks

@@ -1,0 +1,85 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "disposition-resume-2026-09-16",
+   "acceptance_ids": [
+    "resume-shape",
+    "durable-wait-drift-refused",
+    "scope-check-passes",
+    "unbound-preserved",
+    "no-regression"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/skills/l5/references",
+     "platforms/codex/plugin/src",
+     "skills/l5/references",
+     "src"
+    ],
+    "baseline_churn": 800,
+    "max_changed_files": 8,
+    "max_extra_churn": 400,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "output_paths": [
+     "src/engine/campaign-intake.js",
+     "platforms/codex/plugin/src/engine/campaign-intake.js",
+     "hooks/tests/implementation-campaign-routing.test.sh",
+     "docs/BACKLOG.md",
+     "skills/l5/references/hetero-impl-loop.md",
+     "platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "src/engine/campaign-intake.js",
+     "hooks/tests/implementation-campaign-routing.test.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-16-disposition-resume-scope-sha.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 8,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 150,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-efbf7dc8c5618b1eb7fff9623809b52635af470ff8772c3880bfa12f99188d53"
+   ],
+   "source_rubric_ids": [
+    "R12622879808563407488682030694209925760794827832806647161971381036139187810193",
+    "R15904299285076223800116904132577314629688330066536811079745571846360695708917",
+    "R35612133127421059354519170732144588728173991511644588290873935377772923647655",
+    "R43639966667992412817407192798753754589348042493935705477783533828329740446707",
+    "R48364179017094879806921443211222679554571336078044781108777096765571683987121",
+    "R52921285765863227311371646288211995903284904935860215890647022215283605644133",
+    "R53809133236914230383853515568989775344768769912940418038831096771208928705003",
+    "R5693473975734765538538113936616502976265654498125827322085786989842850551669",
+    "R83339007884579645745642512592649660717135260256712088261868739995203507329190",
+    "R92491922543715364621856252598817594780232383647541928489597384899549719332460"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/controller-execution-independent.test.sh",
+    "bash hooks/tests/p6d-gates-repair-ladder.test.sh",
+    "bash hooks/tests/mission-runtime-v2.test.sh",
+    "bash hooks/tests/implementation-campaign-receipt.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check"
+   ]
+  }
+ ]
+}

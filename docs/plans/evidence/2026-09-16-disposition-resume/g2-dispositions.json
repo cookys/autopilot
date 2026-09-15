@@ -1,0 +1,19 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "disposition-resume-2026-09-16",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "4e911c6b308647fae21d4715e2e3ad02a9d6d157d007cd873b5ee2bc7bc6638c",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: §2.4 now requires each RED header to carry the failing message captured at base 3831d5f6."
+  },
+  {
+   "fingerprint": "51b61c1f7137baa683c95c147e4b198df2dffdae89e6a61c977c72bf7ec56d0b",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: pre-claim preflight restricted to the durable-wait phases; ADJUDICATING/VERTICAL_VERIFICATION flow and T3 assertions unchanged; follow-up row filed for their pre-spend drift class (§6)."
+  }
+ ]
+}

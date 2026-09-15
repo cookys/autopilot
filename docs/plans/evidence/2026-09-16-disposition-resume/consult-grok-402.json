@@ -1,0 +1,1 @@
+{ "role": "consult", "status": "transport_failed", "engine": "grok-4.6", "runner": "grok", "effort": "xhigh", "endpoint": null, "response": null, "error": "transport status=runner_failed" }

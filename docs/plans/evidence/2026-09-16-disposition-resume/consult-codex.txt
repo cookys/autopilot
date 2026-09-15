@@ -1,0 +1,77 @@
+Recommendation: choose (a) for `git_candidate` references and retain the existing no-verification path only when no bound Git candidate exists.
+
+1. For `AWAITING_DISPOSITION`
+
+The retained reference alone is insufficient because disposition resume is not necessarily read-only. The owner may classify a finding as must-fix, immediately returning the campaign to repair. The engine then relies on both identities:
+
+- `commit`: the current candidate from which the next repair continues.
+- `scope_implementation_sha`: the first candidate, which remains the campaign-wide churn and new-file baseline.
+
+It also reuses the recorded branch and worktree lineage. That makes Git reconciliation part of validating executable authority, even though the already-completed review and verification are not rerun.
+
+Option (a) fails closed if the candidate branch, tree, ancestry, or retained resource identity drifted. Its availability cost is that an otherwise read-only disposition could be rejected when the immutable commit still exists but its retained branch/worktree was removed outside the recognized cleanup protocol.
+
+One residual failure remains in the current verifier: it accepts an absent worktree when cleanup is `pending_intent` or `completed` at [campaign-intake.js:605](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:605>). If the owner then authorizes a repair, intake succeeds but retained-worktree reuse can fail later. That is a separate phase-sensitive resource-precondition gap, not a reason to omit Git verification.
+
+Option (b) permits an integrity failure. For example, a Git replacement can make the recorded commit resolve to a different tree while preserving the textual commit ID. The persisted verification and focused review still describe the original tree, but a shape-only resume accepts them. Branch/worktree movement similarly advances durable disposition state before the repair dispatcher eventually discovers that the retained lineage no longer matches. In the worst case, stale verification evidence is reused for different effective content.
+
+2. Why the verifier was skipped
+
+There is no artifact evidence that cleanup or retention expiry motivated the skip.
+
+The code introduced the durable-wait branch as “exact replay / durable-wait no-op adoption” and specifically discusses preserving a possibly unbound `BOUNDARY_REJECTED` candidate at [campaign-intake.js:787](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:787>). It then assigns the raw reference at [campaign-intake.js:808](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:808>) and excludes the durable phases from the ordinary verifier at [campaign-intake.js:816](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:816>). Git history shows those choices landed together in commit `3c5c6356`.
+
+The likely reason was coarse handling of all durable waits, particularly `BOUNDARY_REJECTED`, which may contain only `candidate_ref: "unbound-candidate"`. Calling `verifyResumeCandidate` unconditionally would reject that because it requires `kind === "git_candidate"` at [campaign-intake.js:524](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:524>). Option (a)’s kind guard preserves that case.
+
+Cleanup is already accounted for:
+
+- Properly journaled missing worktrees are accepted as `pending_intent` or `completed` at [campaign-intake.js:605](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:605>).
+- Completed cleanup is idempotently recognized at [repair-lineage-cleanup-transaction.js:73](</home/cookys/projects/autopilot/src/engine/repair-lineage-cleanup-transaction.js:73>).
+- The verifier does not compare retention expiry with the current time; it only requires a positive epoch at [campaign-intake.js:544](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:544>).
+- An actually expired campaign is independently rejected by the wall-clock budget check at [campaign-intake.js:889](</home/cookys/projects/autopilot/src/engine/campaign-intake.js:889>).
+
+Therefore recognized cleanup does not justify skipping verification. An absent worktree without matching cleanup evidence should be treated as drift.
+
+3. Red-first assertions
+
+Use a real ledger containing two distinct candidate commits:
+
+- `C0`: initial implementation candidate.
+- `C1`: generation-1 repair candidate and current branch tip.
+- Durable state: `AWAITING_DISPOSITION`, generation 1, with `candidate_ref === C1`.
+
+First establish the fixture itself:
+
+- `initial_candidate_reference.commit === C0`
+- `candidate_reference.commit === C1`
+- `C0 !== C1`
+
+After `runCampaignIntake({resume: true})`, assert:
+
+- `status === "admitted"`
+- `generation_claim.resume_durable_wait.phase === "AWAITING_DISPOSITION"`
+- `generation_claim.resume_candidate.committed === true`
+- `generation_claim.resume_candidate.commit === C1`
+- `generation_claim.resume_candidate.tree_sha === tree(C1)`
+- `generation_claim.resume_candidate.scope_implementation_sha === C0`
+- `generation_claim.resume_candidate.scope_implementation_sha !== C1`
+- Its branch, writer fence, and repair lineage equal the current `C1` reference’s values.
+
+The last two SHA assertions are the essential discriminator. Merely asserting “40 hex,” “defined,” or “scope check no longer crashes” would allow a shape-only implementation that incorrectly uses `C1` as both anchors.
+
+For an engine-level assertion, make the disposition authority return a must-fix decision and have the next repair produce `C2`. Capture the scope checker input and assert:
+
+- `session.contract.base_sha === originalBase`
+- `session.contract.implementation_sha === C0`
+- `head === C2`
+- The repair dispatch starts from `C1`, not `C0`.
+
+That proves the intended dual anchoring: campaign scope remains based on the first implementation, while repair continuation uses the latest candidate.
+
+Finally, move the retained branch away from `C1` before intake and assert:
+
+- intake is blocked with `rejection.code === "campaign_resume_git_drift"`
+- no new generation lease is acquired
+- no disposition, implementation, verification, or review adapter is invoked.
+
+Keep a preservation case where `BOUNDARY_REJECTED` has only `"unbound-candidate"`: it should retain `resume_durable_wait.candidate_ref` while leaving `resume_candidate` null.

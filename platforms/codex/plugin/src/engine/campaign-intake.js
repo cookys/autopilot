@@ -33,6 +33,7 @@ const {
 const {
   consumeProviderReadinessBeforeSpend,
 } = require('../readiness/receipt');
+const { finalPanelSeatQualified } = require('./final-panel-qualification');
 
 
 const RUN_LEDGER = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
@@ -1345,6 +1346,34 @@ function runCampaignIntake(input = {}, adapters = {}) {
         'campaign_ledger_path_mismatch',
         'campaign ledger path must be the repository-wide canonical Git common-dir ledger',
       );
+      return {
+        status: 'blocked',
+        reason: rejection.reason,
+        rejection,
+        steps: [rejection],
+        pre_spend_no_effect_receipt: null,
+      };
+    }
+  }
+  const qcSeats = input.roster && Array.isArray(input.roster.qc_panel_seats)
+    ? input.roster.qc_panel_seats
+    : null;
+  if (qcSeats && qcSeats.length > 0) {
+    const failures = [];
+    for (let i = 0; i < qcSeats.length; i += 1) {
+      const seat = qcSeats[i];
+      if (!finalPanelSeatQualified(input.roster, seat, i)) {
+        const endpoint = seat && seat.endpoint != null && String(seat.endpoint).length > 0
+          ? seat.endpoint
+          : '@none';
+        const model = seat && seat.model ? seat.model : '<unspecified>';
+        const runner = seat && seat.runner ? seat.runner : '<unspecified>';
+        failures.push(`qc_panel[${i}] ${model}/${runner}@${endpoint}`);
+      }
+    }
+    if (failures.length > 0) {
+      const msg = `${failures.join('; ')}; record a standing pin: node scripts/engine-capability-state.js pin-seat --role qc_panel --engine <model> --runner <runner> --effort <effort> --endpoint <endpoint|@none> --reason <text> --operator <who>; or replace the seat with one carrying reviewer evidence`;
+      const rejection = rejected('campaign_generation', 'final_panel_seat_unqualified', msg);
       return {
         status: 'blocked',
         reason: rejection.reason,

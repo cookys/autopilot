@@ -4,6 +4,13 @@
 # pin-seat / unpin-seat / pins over pins.jsonl via writeSnapshot.
 # Never touch ~/.autopilot — isolated CAP=$(mktemp -d) only.
 # Never assert through a pipeline (node … | grep hides a crash).
+# RED at base 80377e7f: FAIL: 10: two qc_panel engines → count=1 out=[{"engine":"glm-b",...}]
+# preservation guard (green at base): 4 same-role replacement; 11 same qc tuple replacement
+# RED at base 80377e7f: FAIL: 12: same engine+runner glm vs @none → count=1
+# RED at base 80377e7f: FAIL: 13: ec=2 err=ERROR: unknown option for unpin-seat: --engine
+# RED at base 80377e7f: FAIL: 13b: ec=2 err=ERROR: unknown option for unpin-seat: --engine
+# RED at base 80377e7f: FAIL: 14: no-selector unpin → ec=0 removed=1
+# RED at base 80377e7f: FAIL: 15: implementer selector → ec=2 err=ERROR: unknown option for unpin-seat: --engine
 
 set -uo pipefail
 # Ambient mission harness env must not poison hermetic unit tests.
@@ -93,6 +100,7 @@ pin_cmd implementer 'second reason' >"$OUT" 2>"$ERR"
 node "$CLI" pins --role implementer --store "$CAP" >"$OUT" 2>"$ERR"
 count=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.length))' "$OUT")
 reason=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d[0]&&d[0].reason))' "$OUT")
+# preservation guard (green at base)
 if [ "$count" = "1" ] && [ "$reason" = "second reason" ]; then
   ok "4: same-role replacement leaves one row with second reason"
 else
@@ -292,6 +300,117 @@ if [ "$pins_ec" != "0" ] && [ "$pins_names_file" = "yes" ] && [ "$pins_names_lin
   ok "9: unparsable row fails loud on pins/pin-seat/unpin-seat naming file+line; pins.jsonl byte-unchanged"
 else
   bad "9: pins_ec=$pins_ec(file=$pins_names_file,line=$pins_names_line) pinseat_ec=$pinseat_ec(file=$pinseat_names_file,line=$pinseat_names_line) unpinseat_ec=$unpinseat_ec(file=$unpinseat_names_file,line=$unpinseat_names_line) err1=$(cat "$ERR")"
+fi
+
+qc_pin() {
+  local engine="$1" runner="$2" endpoint="$3" reason="$4"
+  node "$CLI" pin-seat \
+    --engine "$engine" --runner "$runner" --role qc_panel --effort high \
+    --endpoint "$endpoint" --reason "$reason" --operator cookys --store "$CAP"
+}
+
+# ── 10: two qc_panel pins, different engines → two rows ──
+reset_pins
+qc_pin glm-a cc-shim @none 'seat a' >"$OUT" 2>"$ERR"
+qc_pin glm-b cc-shim @none 'seat b' >"$OUT" 2>"$ERR"
+node "$CLI" pins --role qc_panel --store "$CAP" >"$OUT" 2>"$ERR"
+count=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.length))' "$OUT")
+if [ "$count" = "2" ]; then
+  ok "10: two qc_panel engines leave two rows"
+else
+  bad "10: two qc_panel engines → count=$count out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+
+# ── 11: same engine+runner+endpoint twice → one row, second reason ──
+# preservation guard (green at base)
+reset_pins
+qc_pin glm-a cc-shim @none 'first qc' >"$OUT" 2>"$ERR"
+qc_pin glm-a cc-shim @none 'second qc' >"$OUT" 2>"$ERR"
+node "$CLI" pins --role qc_panel --store "$CAP" >"$OUT" 2>"$ERR"
+count=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.length))' "$OUT")
+reason=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d[0]&&d[0].reason))' "$OUT")
+if [ "$count" = "1" ] && [ "$reason" = "second qc" ]; then
+  ok "11: same qc tuple replacement leaves one row with second reason"
+else
+  bad "11: count=$count reason=$reason out=$(cat "$OUT")"
+fi
+
+# ── 12: same engine+runner at glm and @none → two rows ──
+reset_pins
+qc_pin glm-a cc-shim glm 'ep glm' >"$OUT" 2>"$ERR"
+qc_pin glm-a cc-shim @none 'ep none' >"$OUT" 2>"$ERR"
+node "$CLI" pins --role qc_panel --store "$CAP" >"$OUT" 2>"$ERR"
+count=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.length))' "$OUT")
+if [ "$count" = "2" ]; then
+  ok "12: glm vs @none are distinct qc pins"
+else
+  bad "12: same engine+runner glm vs @none → count=$count out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+
+# ── 13: unpin selector --endpoint glm removes that row only ──
+reset_pins
+qc_pin glm-a cc-shim glm 'ep glm' >"$OUT" 2>"$ERR"
+qc_pin glm-a cc-shim @none 'ep none' >"$OUT" 2>"$ERR"
+qc_pin glm-b cc-shim @none 'other eng' >"$OUT" 2>"$ERR"
+node "$CLI" unpin-seat --role qc_panel --engine glm-a --runner cc-shim --endpoint glm --store "$CAP" >"$OUT" 2>"$ERR"
+ec=$?
+removed=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.removed))' "$OUT")
+surv=$(node -e '
+  const {spawnSync}=require("child_process");
+  const r=spawnSync("node",[process.argv[1],"pins","--role","qc_panel","--store",process.argv[2]],{encoding:"utf8"});
+  const rows=JSON.parse(r.stdout);
+  const keys=rows.map((x)=>`${x.engine}|${x.endpoint===null?"@none":x.endpoint}`).sort().join(",");
+  process.stdout.write(keys);
+' "$CLI" "$CAP")
+if [ "$ec" = "0" ] && [ "$removed" = "1" ] && [ "$surv" = "glm-a|@none,glm-b|@none" ]; then
+  ok "13: unpin glm removes that row; @none and other engine survive"
+else
+  bad "13: ec=$ec removed=$removed surv=$surv out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+
+# ── 13b: omitted --endpoint removes the null-endpoint row only ──
+reset_pins
+qc_pin glm-a cc-shim glm 'ep glm' >"$OUT" 2>"$ERR"
+qc_pin glm-a cc-shim @none 'ep none' >"$OUT" 2>"$ERR"
+node "$CLI" unpin-seat --role qc_panel --engine glm-a --runner cc-shim --store "$CAP" >"$OUT" 2>"$ERR"
+ec=$?
+removed=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.removed))' "$OUT")
+surv=$(node -e '
+  const {spawnSync}=require("child_process");
+  const r=spawnSync("node",[process.argv[1],"pins","--role","qc_panel","--store",process.argv[2]],{encoding:"utf8"});
+  const rows=JSON.parse(r.stdout);
+  const keys=rows.map((x)=>`${x.engine}|${x.endpoint===null?"@none":x.endpoint}`).sort().join(",");
+  process.stdout.write(keys);
+' "$CLI" "$CAP")
+if [ "$ec" = "0" ] && [ "$removed" = "1" ] && [ "$surv" = "glm-a|glm" ]; then
+  ok "13b: omitted --endpoint unpins @none only; glm survives"
+else
+  bad "13b: ec=$ec removed=$removed surv=$surv out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+
+# ── 14: unpin qc_panel with no selector removes all qc rows ──
+reset_pins
+qc_pin glm-a cc-shim @none 'a' >"$OUT" 2>"$ERR"
+qc_pin glm-b cc-shim @none 'b' >"$OUT" 2>"$ERR"
+qc_pin glm-c cc-shim glm 'c' >"$OUT" 2>"$ERR"
+node "$CLI" unpin-seat --role qc_panel --store "$CAP" >"$OUT" 2>"$ERR"
+ec=$?
+removed=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.removed))' "$OUT")
+if [ "$ec" = "0" ] && [ "$removed" = "3" ]; then
+  ok "14: unpin qc_panel without selector reports removed:3"
+else
+  bad "14: no-selector unpin → ec=$ec removed=$removed out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+
+# ── 15: selector on implementer is refused ──
+reset_pins
+pin_cmd implementer 'owner ruling' >"$OUT" 2>"$ERR"
+node "$CLI" unpin-seat --role implementer --engine x --runner y --store "$CAP" >"$OUT" 2>"$ERR"
+ec=$?
+if [ "$ec" != "0" ] && grep -q 'apply to --role qc_panel only' "$ERR"; then
+  ok "15: selector on implementer names qc_panel-only rule"
+else
+  bad "15: implementer selector → ec=$ec err=$(cat "$ERR")"
 fi
 
 echo "----"

@@ -859,6 +859,8 @@ the intended inputs, file-write verdict, `--print-timeout 8m`,
 rail is replaced by the throwaway-dir rail; everything else (artifact-based verification,
 never trust self-report) carries over. Spike caveats: `multi-agent-portability.md` §7.
 
+A terminal `qc_panel` seat is admitted only by (a) the incumbent qualified reviewer tuple, (b) an exact `fallback_ladder` row, or (c) `override_admitted_seats` containing `qc_panel[N]`. Record a standing pin with `node scripts/engine-capability-state.js pin-seat --role qc_panel --engine <model> --runner <runner> --effort <effort> --endpoint <name|@none> --reason <text> --operator <who>`. Campaign intake refuses an unadmitted seat (`final_panel_seat_unqualified`) before any spend.
+
 For reviewer isolation, the engine supports a `--spec-file <file>` flag to pass the original task specification as a trusted baseline. This solves structural reviewer non-convergence by scoping the review against dispatcher-authored bounds, while keeping the diff itself as the only untrusted input.
 
 ## No skill yet — deliberately

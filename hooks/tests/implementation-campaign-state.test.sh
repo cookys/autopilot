@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# RED at base 80377e7f: AssertionError actual 'invalid_mission_claim' expected
+#   'final_panel_seat_unqualified' (unadmitted qc_panel_seats[1] reached claim).
+# preservation guard (green at base): override_admitted_seats ['qc_panel[1]'] reaches a
+#   claim adapter (spy count >= 1). Incomplete panel with an unadmitted seat is still
+#   refused pre-claim (RED at base: same invalid_mission_claim).
 . "$(dirname "$0")/lib.sh"
 # Ambient mission harness env must not poison hermetic unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
@@ -5084,5 +5089,96 @@ NODE
 assert_exit_code "$?" "0" "controller/journal ordering suite exits zero"
 assert_contains "$ORDER_OUT" '"boundary_reject_stops_controller_advance":true' "rejected event does not advance controller"
 assert_contains "$ORDER_OUT" '"boundary_journal_precedes_controller":true' "journal event precedes controller phase"
+
+PANEL_INTAKE_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+
+const unadmittedSeat = {
+  role: 'qc',
+  runner: 'cc-shim',
+  model: 'glm-unadmitted',
+  effort: 'high',
+  endpoint: null,
+  family: 'other',
+};
+const admittedIncumbent = {
+  role: 'qc',
+  runner: 'fixture',
+  model: 'fixture-reviewer',
+  effort: 'high',
+  endpoint: null,
+  family: 'fixture',
+};
+const roster = {
+  reviewer_engine: 'fixture-reviewer',
+  reviewer_effort: 'high',
+  reviewer_runner: 'fixture',
+  reviewer_qualified: true,
+  min_panel_size: 1,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [admittedIncumbent, unadmittedSeat],
+  implementer_engine: 'fixture-implementer',
+  implementer_effort: 'high',
+  implementer_runner: 'fixture',
+};
+
+function spies() {
+  const counts = { missionClaim: 0, claimGeneration: 0 };
+  return {
+    counts,
+    adapters: {
+      now: () => '2026-07-26T00:00:00.000Z',
+      missionClaim() {
+        counts.missionClaim += 1;
+        return { owner: 'mission', status: 'claimed', claim_id: 'must-not-run' };
+      },
+      releaseMission() {
+        return { owner: 'mission_release', status: 'released' };
+      },
+      claimGeneration() {
+        counts.claimGeneration += 1;
+        return { owner: 'campaign_generation', status: 'claimed', generation: 1, nonce: 'n' };
+      },
+    },
+  };
+}
+
+const blocked = spies();
+const result = runCampaignIntake({ repo: process.cwd(), roster }, blocked.adapters);
+assert.strictEqual(result.status, 'blocked');
+assert.strictEqual(result.rejection.code, 'final_panel_seat_unqualified');
+assert.strictEqual(result.pre_spend_no_effect_receipt, null);
+assert.deepStrictEqual(result.steps, [result.rejection]);
+assert.match(result.rejection.reason, /qc_panel\[1\]/);
+assert.match(result.rejection.reason, /pin-seat --role qc_panel/);
+assert.strictEqual(blocked.counts.missionClaim, 0);
+assert.strictEqual(blocked.counts.claimGeneration, 0);
+
+const happy = spies();
+const admitted = runCampaignIntake({
+  repo: process.cwd(),
+  roster: { ...roster, override_admitted_seats: ['qc_panel[1]'] },
+}, happy.adapters);
+assert.ok((happy.counts.missionClaim + happy.counts.claimGeneration) >= 1);
+
+const incomplete = spies();
+const incompleteResult = runCampaignIntake({
+  repo: process.cwd(),
+  roster: { ...roster, qc_panel_seats_complete: false },
+}, incomplete.adapters);
+assert.strictEqual(incompleteResult.status, 'blocked');
+assert.strictEqual(incompleteResult.rejection.code, 'final_panel_seat_unqualified');
+assert.strictEqual(incomplete.counts.missionClaim, 0);
+assert.strictEqual(incomplete.counts.claimGeneration, 0);
+
+console.log('final-panel-intake assertions passed');
+NODE
+)"
+assert_contains "$PANEL_INTAKE_OUT" "final-panel-intake assertions passed" \
+  "campaign intake refuses unadmitted qc seats before claim"
 
 finalize_test

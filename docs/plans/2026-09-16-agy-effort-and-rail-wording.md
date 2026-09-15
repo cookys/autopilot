@@ -131,9 +131,9 @@ design; the message should say what to do.
   `hooks/tests/dispatch-author.test.sh`, `hooks/tests/status-cli.test.sh`, `hooks/tests/autopilot-cli.test.sh`,
   `hooks/tests/implementation-campaign-state.test.sh`, `hooks/tests/provider-readiness-consumer.test.sh`
   (`hooks/tests/provider-readiness.test.sh` is an unchanged acceptance suite only), and `docs/BACKLOG.md`.
-  This deliverable makes NO `CHANGELOG.md` edit; the v2.36.54 section is a separately authorized
-  release operation after the merge, outside this contract. Version pinned **v2.36.54** (after
-  campaign A's v2.36.53; resealed if the numbering moves).
+  This deliverable makes NO `CHANGELOG.md` edit; the v2.36.55 section is a separately authorized
+  release operation after the merge, outside this contract. Version pinned **v2.36.55** (after
+  campaign D's v2.36.54; resealed if the numbering moves).
 
 ## 3. Out of scope
 
@@ -170,3 +170,5 @@ returns a verdict instead of the vendor conflict error; recorded at the BACKLOG 
   three rails; readiness failure fixture with a known code asserted verbatim; the seven test paths
   enumerated; CHANGELOG explicitly excluded from this deliverable. Depth-0 freeze: zero unaddressed
   blockers, zero deferred.
+- Re-stamped v2.36.54→v2.36.55 under the pre-authorized clause after campaign D shipped first
+  (2026-09-16); no other byte changed, the G2 receipt on the as-reviewed bytes stands.

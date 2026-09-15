@@ -229,7 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
-| 2026-09-16 | `--sibling-path-prefix`（Fix，無 project dir）— 308-8f 第二條：caller 宣告的 rail I/O 目錄從 fingerprint 的 stat walk 排除，其他量測不變；目錄要先存在 | v2.36.50 | (develop) |
+| 2026-09-16 | `--sibling-path-prefix`（Fix，無 project dir）— 308-8f 第二條：caller 宣告的 rail I/O 目錄從 fingerprint 的 stat walk 排除，其他量測不變；目錄要先存在 | v2.36.50 | 5125bb5d |
 | 2026-09-15 | contract schema 漏欄 ＋ profiles 基線 re-pin（S，無 project dir）— `plan_review_same_family_as_depth0` 進 schema；ceo-agent／dev-flow 的 source sha、segment、migration（814→815）、catalog、七條 rewritten disposition 重釘；codex-plugin-package 9 紅、profile-context-isolation 2 紅歸零 | v2.36.49 | 41a989df |
 | 2026-09-15 | pre-claim repo facts ＋ `session-mode.js retire`（Fix，無 project dir）— dirty tree／required path 在 claim 前拒（第三個 pre-spend 同型）；別的 session 的已整合 marker 用 registry＋git 證據退掉，bridge fence 不改；routing config 回指未漂移 graph | v2.36.48 | (fix branch → develop) |
 | 2026-09-15 | `--mirror-roots-json` 列出 projected skills（Fix，無 project dir）— graph check 在 seal 前就要求 skills 輸出帶鏡像；final-panel-pins 的 hand commit 就是被這個沒列的鏡像擋掉 | v2.36.47 | (fix branch → develop) |

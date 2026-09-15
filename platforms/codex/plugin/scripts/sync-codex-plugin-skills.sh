@@ -56,17 +56,6 @@ DIRS=(
   "project-config-template"
 )
 
-if [ "$MODE" = "mirror-roots-json" ]; then
-  printf '{"root":"platforms/codex/plugin","dirs":['
-  _first=1
-  for _d in "${DIRS[@]}"; do
-    [ "$_first" -eq 1 ] || printf ','
-    printf '"%s"' "$_d"; _first=0
-  done
-  printf ']}\n'
-  exit 0
-fi
-
 PROJECTED_SKILLS=(
   "dev-flow"
   "ceo-agent"
@@ -76,6 +65,25 @@ PROJECTED_SKILLS=(
   "l6"
   "finish-flow"
 )
+
+if [ "$MODE" = "mirror-roots-json" ]; then
+  # Emit the projected skills too: sync_skills mirrors skills/<name>/** for every
+  # PROJECTED_SKILLS entry, so a campaign whose output_paths touch e.g.
+  # skills/l5/references/x.md must also own platforms/codex/plugin/skills/l5/references/x.md.
+  # Omitting them let a hand finish all its work and then lose the commit at the boundary
+  # gate (2026-09-15, final-panel-pins attempt 1).
+  printf '{"root":"platforms/codex/plugin","dirs":['
+  _first=1
+  for _d in "${DIRS[@]}"; do
+    [ "$_first" -eq 1 ] || printf ','
+    printf '"%s"' "$_d"; _first=0
+  done
+  for _p in "${PROJECTED_SKILLS[@]}"; do
+    printf ',"skills/%s"' "$_p"
+  done
+  printf ']}\n'
+  exit 0
+fi
 
 LIFECYCLE_ADAPTER="$REPO/platforms/codex/skill-adapters/lifecycle.md"
 LIFECYCLE_ADAPTER_MARKER="AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1"

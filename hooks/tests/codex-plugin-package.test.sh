@@ -821,4 +821,11 @@ NODE
   assert_file_absent "$UPG_CACHE/$UPG_V1/hooks/post-compact.js" "previous version's post-compact.js is gone after upgrade (the MODULE_NOT_FOUND site)"
 fi
 
+# --mirror-roots-json names the projected skills mirrors (RED at base 11018b67: dirs ended at
+# project-config-template; a skills/l5/references output lost a hand commit at the boundary gate).
+MIRROR_JSON="$(bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --mirror-roots-json)"
+assert_contains "$MIRROR_JSON" '"skills/l5"' "mirror-roots-json lists skills/l5"
+assert_contains "$MIRROR_JSON" '"skills/dev-flow"' "mirror-roots-json lists skills/dev-flow"
+assert_contains "$MIRROR_JSON" '"scripts"' "mirror-roots-json still lists scripts (preservation guard, green at base)"
+
 finalize_test

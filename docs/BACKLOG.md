@@ -121,7 +121,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `precondition_failed` before any runner spend should release with the attempt refunded, or the checks should run at intake before the claim.
 
 ### `--mirror-roots-json` omits `skills` — the graph check cannot warn that a skills output needs its mirror
-- **Status**: open
+- **Status**: shipped v2.36.47 2026-09-15
 - **Trigger**: final-panel-pins attempt 1: hand commit `boundary_rejected` on `platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md`, unlisted and unflagged by `--mirror-roots`
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-15

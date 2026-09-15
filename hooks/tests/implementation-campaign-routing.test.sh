@@ -1810,7 +1810,9 @@ restoreLedger();
       const payload = JSON.parse(row.payload);
       const ref = payload && payload.artifact_reference;
       if (ref && ref.kind === 'git_candidate' && ref.commit === c1 && ref.writer_fence) {
-        ref.base = '0'.repeat(40);
+        // Corrupt the writer-fence digest itself (not a sibling field): the
+        // artifact digest is recomputed so only the fence validation can trip.
+        ref.writer_fence.receipt_digest = 'f'.repeat(64);
         payload.artifact_reference = ref;
         if (payload.event && typeof payload.event === 'object') {
           payload.event.output_artifact_digest = canonicalDigest(ref);

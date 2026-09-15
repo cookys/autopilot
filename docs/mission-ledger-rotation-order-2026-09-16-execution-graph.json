@@ -1,0 +1,86 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "ledger-rotation-order-2026-09-16",
+   "acceptance_ids": [
+    "carry-order-preserved",
+    "projection-after-gc",
+    "stage-carry-unchanged",
+    "no-regression"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/scripts",
+     "platforms/codex/plugin/skills/l5/references",
+     "scripts",
+     "skills/l5/references"
+    ],
+    "baseline_churn": 600,
+    "max_changed_files": 7,
+    "max_extra_churn": 300,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 3600,
+    "output_paths": [
+     "scripts/run-ledger.sh",
+     "platforms/codex/plugin/scripts/run-ledger.sh",
+     "hooks/tests/run-ledger-rotation-order.test.sh",
+     "docs/BACKLOG.md",
+     "skills/l5/references/hetero-impl-loop.md",
+     "platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md"
+    ],
+    "authorized_creates": [
+     "hooks/tests/run-ledger-rotation-order.test.sh"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "scripts/run-ledger.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-16-ledger-rotation-order.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 7,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 150,
+    "wall_seconds": 4500
+   },
+   "source_plan_ids": [
+    "plan-d5a5df86df983d4b401d5803705c919ba65e2d5c3de34a41ecbcabc34147fc69"
+   ],
+   "source_rubric_ids": [
+    "R105285037391942344985879957226555648805461572468545748882280602300686569365254",
+    "R110774137956476227102945799702412654410710222491209323068860828646236746767711",
+    "R112806553063967627380088651799045007519407316587424042356025425361267107778931",
+    "R114648549520715955716525841588909325695478668138934059190618495807071192523281",
+    "R17919488302650438935746022459667162387510289701121492373323197683889367420531",
+    "R24321452829285816371849976899672168287075871301473577994425487887017721037756",
+    "R24464469354189921921550303332786116003963112807268520025825899301258196995569",
+    "R32435146662676889251494703014698864672630299179094908904284083242446247003218",
+    "R33142626448105225162230183876429373483283095145164948897050197191588619430710",
+    "R91217512772304525269095697971111200127044825411778442016288009684727797232061"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/run-ledger-rotation-order.test.sh",
+    "bash hooks/tests/run-ledger-rotation.test.sh",
+    "bash hooks/tests/run-ledger-directive.test.sh",
+    "bash hooks/tests/implementation-campaign-dogfood.test.sh",
+    "bash hooks/tests/campaign-claim-resolve.test.sh",
+    "bash hooks/tests/next-touch-validation.test.sh",
+    "bash hooks/tests/mission-runtime-v2.test.sh",
+    "bash scripts/sync-codex-plugin-skills.sh --check"
+   ]
+  }
+ ]
+}

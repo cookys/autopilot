@@ -291,4 +291,8 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
   `readlinkSync(..., { encoding: 'buffer' })`. The G1 blocker falsified rubric R1's own wording
   ("git archive via `--output`"), so the frozen rubric could not carry the fold; the rubric was
   corrected and the review continues under logical id `blind-review-packet-2026-09-16-v2` (G1 of v2
-  reviews the folded plan; the v1 G1 artifact and dispositions stay in the evidence dir).
+  reviews the folded plan; the v1 G1 artifact and dispositions stay in the evidence dir). The
+  first v2 G1 process was killed by the host memory guard before any seat returned (other operator
+  jobs held ~80 GB); the rail then recorded `orphaned_active_claim_transport_exhausted` with zero
+  semantic content consumed, so that state dir was moved aside (kept in the session scratchpad) and
+  v2 G1 re-run from a clean lineage — the same zero-consumption reset the plan-review contract allows.

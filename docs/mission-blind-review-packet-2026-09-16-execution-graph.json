@@ -1,0 +1,93 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "blind-review-packet-2026-09-16",
+   "acceptance_ids": [
+    "packet-canary",
+    "packet-hazards",
+    "packet-identity",
+    "runner-wiring",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/references",
+     "platforms/codex/plugin/src",
+     "references",
+     "src"
+    ],
+    "baseline_churn": 2400,
+    "max_changed_files": 9,
+    "max_extra_churn": 1200,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 12000,
+    "output_paths": [
+     "src/runners/review-packet.js",
+     "platforms/codex/plugin/src/runners/review-packet.js",
+     "src/runners/review.js",
+     "platforms/codex/plugin/src/runners/review.js",
+     "hooks/tests/review-packet.test.sh",
+     "hooks/tests/dispatch-review.test.sh",
+     "references/blind-dispatch.md",
+     "platforms/codex/plugin/references/blind-dispatch.md",
+     "docs/BACKLOG.md"
+    ],
+    "authorized_creates": [
+     "src/runners/review-packet.js",
+     "platforms/codex/plugin/src/runners/review-packet.js",
+     "hooks/tests/review-packet.test.sh"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "src/runners/review.js",
+     "hooks/tests/dispatch-review.test.sh",
+     "references/blind-dispatch.md"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-16-blind-review-packet.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 9,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 14400
+   },
+   "source_plan_ids": [
+    "plan-6030a0afc81cc1e262d9b6e26eeeabd1ec7b7f3e5548355d8c0ae148722ad924"
+   ],
+   "source_rubric_ids": [
+    "R31430662245264064047549314110914527693177606459680843216977079626078527745865",
+    "R39061204333689410729250230475842694640131765046970360672710423263389632705889",
+    "R48702418082846745689652986681620034526802579748807276518235927325304182910968",
+    "R57712258431331184012116743540939643374126418882389399258009528815746982918315",
+    "R61825976369956986285908681878780751828609455070819224651117844585928330935338",
+    "R70794792156288933432884516315868748293706740980294659883433706031663194284572",
+    "R80474481391811179065436046659680807746229880790221930147976440286723860635789",
+    "R8532352622748077598485794928056731382158954979301219099567876957800137860817",
+    "R96360373498947707836396216856584634036657421123101410504111085977446794000253",
+    "R96660686762668257682640212119454233314143446424889498176706057642727245842823"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/review-packet.test.sh",
+    "bash hooks/tests/dispatch-review.test.sh",
+    "bash hooks/tests/review-runner.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-16-blind-review-packet.md",
+      "rubric_path": "plans/2026-09-16-blind-review-packet.rubric.md",
+      "plan_sha256": "6030a0afc81cc1e262d9b6e26eeeabd1ec7b7f3e5548355d8c0ae148722ad924",
+      "rubric_sha256": "305915f01e74e80e28bde7c4f00c85d535f9f62ac5b709c41958905c282b2c09"
+    }
+  ]
+}

@@ -1083,38 +1083,51 @@ assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition
 
 # RED at base 9b049c00: bash gate already agrees with the Node predicate for the
 #   --runner vocabulary (preservation, green at base for the gate; Node side is new).
+# Parity (codex r1 MUST-FIX: a capable runner must PROVE it reached the runner binary,
+# not merely miss the gate text). The stub exits 99 — a signature no dispatch-review
+# precondition produces — so `rc=99` in the envelope error is the "stub invoked" marker.
+# Per-runner minimal setup: cc-shim/anthropic-compatible need an --endpoint fixture,
+# anthropic-compatible's transport is `node` (a fake node on PATH exits 99).
 PARITY_STUB="$TEST_TMP/blind-parity-stub"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$PARITY_STUB"
+printf '#!/usr/bin/env bash\nexit 99\n' > "$PARITY_STUB"
 chmod +x "$PARITY_STUB"
-PARITY_OUT="$(node - "$REPO_ROOT" "$SCRIPT" "$DIFF" "$PARITY_STUB" <<'NODE'
-'use strict';
-const assert = require('assert');
-const path = require('path');
-const { spawnSync } = require('child_process');
-const [root, script, diff, stub] = process.argv.slice(2);
-const { isBlindDiscoveryCapableRunner } = require(path.join(root, 'src', 'engine', 'final-panel-qualification'));
-const vocab = 'codex agy grok cc-shim anthropic-compatible claude-native qoderclicn kimi cursor opencode'.split(' ');
-for (const runner of vocab) {
-  const spawned = spawnSync(script, ['--runner', runner, '--model', 'fixture', '--diff-file', diff, '--bin', stub], {
-    encoding: 'utf8',
-    env: { ...process.env, AUTOPILOT_BLIND_DISCOVERY: '1', DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0' },
-    timeout: 15000,
-  });
-  const out = `${spawned.stdout || ''}${spawned.stderr || ''}`;
-  const blocked = /enforceable no-tools runner profile/.test(out);
-  const capable = isBlindDiscoveryCapableRunner(runner);
-  if (capable) {
-    assert.strictEqual(blocked, false, `${runner} capable but hit no-tools gate: ${out.slice(0, 400)}`);
-  } else {
-    assert.strictEqual(blocked, true, `${runner} incompatible but missed no-tools gate: ${out.slice(0, 400)}`);
-    assert.strictEqual(spawned.status, 2, `${runner} expected exit 2 got ${spawned.status}`);
-  }
-}
-console.log('blind_runner_parity=true');
-NODE
-)"
-assert_eq "$?" "0" "blind discovery bash gate matches isBlindDiscoveryCapableRunner: $PARITY_OUT"
-assert_contains "$PARITY_OUT" "blind_runner_parity=true" "parity loop completed"
+PARITY_FAKE_NODE="$TEST_TMP/blind-parity-fake-node"
+mkdir -p "$PARITY_FAKE_NODE"
+printf '#!/usr/bin/env bash\nexit 99\n' > "$PARITY_FAKE_NODE/node"
+chmod +x "$PARITY_FAKE_NODE/node"
+export AUTOPILOT_ENDPOINT_PARITYEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_PARITYEP_TOKEN="t"
+PARITY_CAPABLE="$(node -e '
+const { BLIND_DISCOVERY_CAPABLE_RUNNERS } = require(process.argv[1]);
+process.stdout.write(BLIND_DISCOVERY_CAPABLE_RUNNERS.join(" "));
+' "$REPO_ROOT/src/engine/final-panel-qualification.js")"
+for PARITY_RUNNER in codex agy grok cc-shim anthropic-compatible claude-native qoderclicn kimi cursor opencode; do
+  PARITY_EXTRA=()
+  PARITY_PATH="$PATH"
+  case "$PARITY_RUNNER" in
+    cc-shim) PARITY_EXTRA=(--endpoint PARITYEP) ;;
+    anthropic-compatible) PARITY_EXTRA=(--endpoint PARITYEP --context-window off); PARITY_PATH="$PARITY_FAKE_NODE:$PATH" ;;
+  esac
+  PARITY_OUT="$(PATH="$PARITY_PATH" AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
+    "$SCRIPT" --runner "$PARITY_RUNNER" --model fixture --diff-file "$DIFF" --bin "$PARITY_STUB" "${PARITY_EXTRA[@]}" 2>&1)"; PARITY_EXIT=$?
+  PARITY_NODE_CAPABLE="$(node -e '
+const { isBlindDiscoveryCapableRunner } = require(process.argv[1]);
+process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
+' "$REPO_ROOT/src/engine/final-panel-qualification.js" "$PARITY_RUNNER")"
+  case " $PARITY_CAPABLE " in
+    *" $PARITY_RUNNER "*) PARITY_LIST_CAPABLE=true ;;
+    *) PARITY_LIST_CAPABLE=false ;;
+  esac
+  assert_eq "$PARITY_LIST_CAPABLE" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: predicate agrees with the exported constant"
+  if [ "$PARITY_NODE_CAPABLE" = "true" ]; then
+    assert_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: blind-capable runner reached the stub binary (rc=99 signature)"
+    assert_not_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: capable runner is not gated"
+  else
+    assert_eq "2" "$PARITY_EXIT" "$PARITY_RUNNER: incompatible runner is a precondition failure (exit 2)"
+    assert_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: incompatible runner hits the no-tools gate"
+    assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: incompatible runner never reaches the stub"
+  fi
+done
 
 BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
 BLIND_SCRIPT="$TEST_TMP/blind-probe"

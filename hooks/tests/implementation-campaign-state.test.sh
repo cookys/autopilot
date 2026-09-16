@@ -5434,6 +5434,11 @@ const rOvr = runCampaignIntake({
 }, sOvr.adapters);
 assertBlindBlock(rOvr, sOvr);
 
+// Standing pin at the INTAKE layer: resolve-review-loop turns a pin-store admission into
+// roster.override_admitted_seats (resolve-review-loop-standing-pin.test.sh pins that step);
+// intake never reads the pin store itself, so "pinned" == override_admitted_seats here with
+// NO ladder entry (the seat is admitted by the pin alone). Codex r1 asked for a
+// pin-store-backed fixture: not addressable at this layer — refuted with this rationale.
 const sPin = spies();
 const rPin = runCampaignIntake({
   repo: process.cwd(),
@@ -5468,7 +5473,12 @@ function assertAdmitted(seat) {
       fallback_ladder: [{ runner: seat.runner, model: seat.model, effort: seat.effort, family: seat.family }],
     }),
   }, s.adapters);
-  assert.ok((s.counts.missionClaim + s.counts.claimGeneration) >= 1, JSON.stringify(result.rejection || result));
+  // Control (codex r1): the blind gate did NOT fire and the Mission claim was reached (spent
+  // exactly once). Full `admitted` needs a sealed contract + real claim adapters; that
+  // engine-level control is the routing suite's red-path / proof blocks, whose qc seats are
+  // cc-shim and which run to completion at head.
+  assert.ok(!result.rejection || result.rejection.code !== 'final_panel_seat_blind_incompatible', `${seat.runner}: ${JSON.stringify(result.rejection)}`);
+  assert.strictEqual(s.counts.missionClaim, 1, `${seat.runner}: missionClaim calls (gate passed, claim reached)`);
 }
 
 assertAdmitted(ccSeat);

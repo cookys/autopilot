@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-16T09:41:42.279Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-aa64ebe36e7035202cd33cacef28b5649d5e28a8c362ff3cf40d2b0aa9dee393",
+  "observed_head": "3079903fc8a9301c888ad8b94a71d078d64281cc",
+  "worktree_observation_digest": "236fbd3f08caba75fbcda2ff471594a70afc006a70cf832b5bd73d731a2fff34",
+  "journal_digest": "4fa6b93af7b21cf1a5539b80eff5a770e0c36431aed7630f64e308d1c9ec456b",
+  "disposition_digest": "44ac369047ef2f16358bbbcf66ad5c7d32e509c86680a95111aa8d22d6c1627c",
+  "branch_inventory_digest": "ddfcd97d531d1419bb29a13b120e001ee24e8ab33e3830984f40f0ac08f69c1f",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/b1ad342b34cb/proof-parity-raw-log-2026-09-16-a1",
+      "tip": "96723849605edaada65844b8bb3702da2eb76453",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T094133Z-3056705.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "e584467b63557534cf9c6712859d666748c9cc1f78d92112dbf838064daf3db6"
+}

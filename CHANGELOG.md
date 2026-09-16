@@ -1,5 +1,38 @@
 # Changelog
 
+## v2.36.57 — review proof 文法 bash／Node 對齊（shape 與 tautology 分開報）；validator 拒絕的 envelope 保留 raw_log（cuda P1 之一）
+
+- `src/runners/review.js`：`isValidNoFindingProof` 原本只認 `;` 分隔（`^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$`），
+  而 `dispatch-review.sh` 的 battery 從 2026-08-15 起接受任何標點／空白分隔——engine 把 shell 已收的 `reviewed` envelope 再過
+  一次 Node validator，`.`／`,`／空白分隔的 proof 就被以「non-tautological」訊息打掉。cuda 在 GLM-5.2 量到三次、revival.3d 在
+  `claude-fable-5`／`claude-native` 量到三次，同一 diff 手派 `dispatch-review.sh` 全過。現在兩邊同一文法（分隔符一個以上、
+  `[space ; , .]`），capture 先照 blacklist 的正規化（小寫、去頭尾空白標點）——正規化後為空＝**shape** 失敗，命中 blacklist＝
+  **tautology** 失敗，Node 兩個不同訊息、bash 沿用既有兩條 `BATTERY_FAIL_REASON`；blacklist 內容不動。
+- `dispatchReviewJson`：validator 丟錯時 `result` 仍 null、`parseError` 仍在，另 schema-lenient `JSON.parse(stdout.trim())`
+  只撈非空字串 `raw_log`，`runner`／`model` 取自呼叫 argv（不信被拒的 envelope），其他欄位一律不撈。engine 的 blocked review
+  record、`dispatch_review blocked` ledger entry、`performReview` 的 non-reviewed outcome 都帶頂層 `raw_log`；final panel
+  失敗席的 receipt 多一個**可選** `raw_log`（在 digest 內），成功席形狀／digest 與 base 逐位相同；
+  `campaign-composition.js` 席位驗證與 `schemas/implementation-campaign-receipt.schema.json` 收可選 `raw_log`、仍拒未知鍵
+  與空字串。
+- 測試：`review-runner` +5（一張 `proof|expected` 向量表同時餵 bash battery 與 `parseReviewOutput`；salvage 四案含「被拒
+  envelope 自稱 SHIP-AS-IS 不留痕」）；`implementation-campaign-routing` +6（真 engine `proof`／`proof-taut` 模式：真 sandbox
+  ledger、真 appender、兩席 final panel，`.` proof 被 reviewed、tautology 席 receipt 帶 raw_log 且 panel 因 sealed minimum 2
+  而 block、reviewed 席鍵集合與 digest 釘死；tautology full-diff 的 performReview outcome 頂層 raw_log）；
+  `implementation-campaign-receipt` +6（digest 含 raw_log、空字串拒、未知鍵兩層都拒）。base `0e3ea3cc` 上 17 條紅。
+- **rail 這輪量到的**（BACKLOG fired）：`--resume --campaign-disposition-authority` 走到 repair 時，`prepare_implementation`
+  拿呼叫端的 `--branch` 去對 derived 的 repair 分支名（`caller branch disagrees with campaign stage (expected
+  …-repair-r2-<sha7>)`）——同一 run 內的 repair 自己會 derive，resume 路徑沒有。這次 resume 是 v2.36.53（pre-claim 驗證）與
+  v2.36.54（carry 保序）第一次在活 ledger 上走通到 REPAIR_AUTHORIZED。
+- 流程（`docs/plans/evidence/2026-09-16-proof-parity-raw-log/`）：consult codex 拆成兩刀（本刀 B+C，A1 pre-spend 下一刀）；
+  八個 suite base 先綠；plan 兩代 hetero review（G1 三條 fold，G2 兩 fold 一駁）；/l5 campaign hand `76bc02a8` 17 檔，in-rail
+  MiniMax FIX-THEN-SHIP 兩條都真（comma 分支被改名→斷言靠預設分支空過；performReview raw_log wrapper 手搭、engine 沒被叫）
+  → disposition must-fix-now ×2 → resume 撞上面那條 rail 缺陷 → 降級 l3 自修（真 engine 模式取代兩個空斷言）→ codex 第二家族
+  兩條（panel 沒 block、RED header 缺）修於 `96723849`；merge `3079903f`、`zero_residue: true`。
+
+prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一條從未修移到已修）。
+
+---
+
 ## v2.36.56 — managed rail：verification 紅走 repair 路徑（vertical_failed 下不記 review_completed；vertical repair 綁初始改動路徑）
 
 - `src/engine/autopilot-engine.js` `performReview`：composition 在 verification 紅時照契約先跑 full-diff barrier，review

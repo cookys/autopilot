@@ -1,0 +1,28 @@
+FAIL [review-runner] proof vector + salvage process exits 0: : expected '1', got '0'
+FAIL [review-runner] bash and Node agree on every vector row: 'vector_parity=true' not found in output
+FAIL [review-runner] salvaged.raw_log equals envelope path; runner/model from args: 'salvage_ok=true' not found in output
+FAIL [review-runner] malformed JSON salvages nothing: 'salvage_malformed=true' not found in output
+FAIL [review-runner] empty/non-string raw_log salvages nothing: 'salvage_empty_nonstring=true' not found in output
+  throw new AssertionError(obj);
+AssertionError [ERR_ASSERTION]: full-diff period proof: {"reviewed":false,"reason":"review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields","raw":{"status":"blocked","phase":"dispatch_review","reason":"review output JSON no_finding_proof must conta
+FAIL [implementation-campaign-routing] proof parity (proof) through the real engine: : expected exit 0, got 1
+FAIL [implementation-campaign-routing] proof-parity engine proves proof_period_full_diff_reviewed: 'proof_period_full_diff_reviewed=true' not found in output
+FAIL [implementation-campaign-routing] proof-parity engine proves proof_final_panel_seat_raw_log: 'proof_final_panel_seat_raw_log=true' not found in output
+  throw new AssertionError(obj);
+AssertionError [ERR_ASSERTION]: performReview outcome raw_log=undefined
+FAIL [implementation-campaign-routing] proof parity (proof-taut) through the real engine: : expected exit 0, got 1
+FAIL [implementation-campaign-routing] proof-parity engine proves proof_perform_review_outcome_raw_log: 'proof_perform_review_outcome_raw_log=true' not found in output
+  throw new AssertionError(obj);
+AssertionError [ERR_ASSERTION]: review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields
+FAIL [implementation-campaign-routing] proof-parity engine routing: : expected exit 0, got 1
+FAIL [implementation-campaign-routing] period-separated proof is reviewed (RED at base: dispatch_review blocked tautology message): 'period_proof_reviewed=true' not found in output
+FAIL [implementation-campaign-routing] tautological proof blocks with tautology message and raw_log: 'tautology_blocked_raw_log=true' not found in output
+  throw new AssertionError(obj);
+AssertionError [ERR_ASSERTION]: Expected "actual" to be strictly unequal to:
+FAIL [implementation-campaign-receipt] campaign receipt and composition tests execute: expected exit 0, got 1
+FAIL [implementation-campaign-receipt] failed seat raw_log is digested; empty raw_log rejected: 'failed_seat_raw_log_digest=true' not found in output
+FAIL [implementation-campaign-receipt] unrelated extra key is rejected by composition validation: 'unknown_key_rejected=true' not found in output
+FAIL [implementation-campaign-receipt] schema accepts optional seat raw_log: expected exit 0, got 2
+FAIL [implementation-campaign-receipt] schema rejects empty raw_log: expected exit 1, got 2
+FAIL [implementation-campaign-receipt] schema rejects an unrelated extra seat key (preservation): expected exit 1, got 2
+dispatch-review at base: PASS 416 (the bash battery already accepted single .,/space separators; the + run case is pinned as observed)

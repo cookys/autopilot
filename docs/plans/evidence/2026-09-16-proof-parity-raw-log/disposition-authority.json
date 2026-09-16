@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_disposition_authority",
+  "authority": "depth-0",
+  "actor_id": "owner/cookys",
+  "campaign_id": "campaign-v1-aa64ebe36e7035202cd33cacef28b5649d5e28a8c362ff3cf40d2b0aa9dee393",
+  "contract_digest": "f1a642a317d3ec8070c329edad25f3a201430cd65c6885f80751cf088141cd56",
+  "reviews": [{
+    "review_digest": "57d3b2445b297adc9b3658eb6491cb40c86ddcc377db831d03a9fc76b8383be8",
+    "decisions": [
+      {
+        "finding_id": "dispatch-review-ship-comma-orphan",
+        "evidence": { "kind": "trace", "trace_chain": ["depth-0: grep ship_comma_sep) hooks/tests/dispatch-review.test.sh → branch absent; STUB_MODE falls to the default `;` proof so the comma assertion passes vacuously"], "confirmed_by": "owner/cookys" },
+        "disposition": { "disposition": "must-fix-now", "acceptance_id": "grammar-parity", "deferral_harm": "the comma-separator acceptance would be a vacuous assertion (evidence-discipline §9)" }
+      },
+      {
+        "finding_id": "routing-test-manual-wrapper",
+        "evidence": { "kind": "trace", "trace_chain": ["depth-0: hooks/tests/implementation-campaign-routing.test.sh ~2906-2938 builds `wrapped` by hand and never calls composerEngine; performOutcomes stays empty"], "confirmed_by": "owner/cookys" },
+        "disposition": { "disposition": "must-fix-now", "acceptance_id": "raw-log-propagated", "deferral_harm": "R4's performReview top-level raw_log assertion would be tautological; the seam could regress unseen" }
+      }
+    ]
+  }]
+}

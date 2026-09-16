@@ -1,0 +1,1556 @@
+<<<AUTOPILOT-REVIEW-8532e3357276fd12cf878022b97436c8>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS:
+🟠 [r5-final-panel-coverage] MUST-FIX The final-panel fixture sets min_panel_size to 1 and asserts final_panel_count is 1, so the rejected second seat does not exercise the specified panel-blocking path; it also checks only that the successful seat lacks raw_log, not that its digest is byte-identical to base. This leaves required quorum-failure and digest-preservation behavior unpinned. Set the sealed minimum to 2, assert the panel blocks with the failed seat excluded, and compare the successful seat’s shape/digest against a fixed base expectation.
+🟡 [r8-red-provenance] MUST-FIX The new salvage assertions in review-runner.test.sh and raw_log/schema assertions in implementation-campaign-receipt.test.sh lack the required RED-at-base block headers with observed base behavior, while the semicolon preservation assertion is not labelled as a preservation guard. This fails rubric R8’s mandatory provenance contract; add the specified RED and preservation annotations to those assertion blocks.
+<<<AUTOPILOT-END-8532e3357276fd12cf878022b97436c8>>>
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /home/cookys/projects/autopilot
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a0a98f-36af-7620-80ae-ebb607a69a42
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-8532e3357276fd12cf878022b97436c8>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-8532e3357276fd12cf878022b97436c8>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=83df5422ca612a8eb66d10d7c22cabc9
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+# Review proof contract parity across bash and Node, and a rejected reviewer envelope keeps its raw_log
+
+> Status: execution plan for ONE managed deliverable (`/l5`, mission graph node
+> `proof-parity-raw-log-2026-09-16`) — the first of two cut from BACKLOG row "Managed rail (cuda P1):
+> GLM tautological no_finding_proof stops full_diff_review; final panel seat transport_failed" (fired
+> 2026-09-16). This plan covers defects (ii) the proof validator false positive and (iii) `raw_log`
+> lost on a validator rejection. Defect (i) — the blind final panel refusing a pinned codex seat after
+> the campaign spent — is the second deliverable (pre-spend admission), planned separately.
+
+## 0. What is actually broken (verified 2026-09-16, base `0e3ea3cc`)
+
+### 0.1 Two validators, two grammars
+
+- bash battery (`scripts/dispatch-review.sh` ~575): `^checked=(.+)[[:space:];,.]evidence=(.+)[[:space:];,.]conclusion=(.+)$`
+  — any single punctuation/space separator between the labelled fields (added 2026-08-15 because
+  kimi separated fields with a period). Then the tautology blacklist on each trimmed field.
+- Node (`src/runners/review.js:51` `isValidNoFindingProof`): `^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$`
+  — semicolons only. Same blacklist.
+- The engine consumes the shell's `reviewed` envelope through `parseReviewOutput` (`review.js`),
+  so a proof the shell accepted with `.`/`,`/space separators throws
+  `review output JSON no_finding_proof must contain non-tautological checked, evidence, and
+  conclusion fields` — the same message the blacklist path uses. The operator reads "tautological"
+  for a concrete proof. Reproduced locally: `checked=diff lines 1-40. evidence=ran tests.
+  conclusion=nothing to fix` passes the battery and is rejected by Node with that message.
+- Field evidence: cuda saw it three times on GLM-5.2 (r2/r5/r7); revival.3d saw it three times on
+  `claude-fable-5` via `claude-native`, and the SAME diff with the SAME seats dispatched manually
+  through `dispatch-review.sh` (outside the engine, no Node validator) passed every time. The only
+  divergence between the two paths is the Node grammar.
+
+### 0.2 A validator rejection discards the reviewer's text
+
+`dispatchReviewJson` (`review.js` ~262-290): when `parseReviewOutput(stdout)` throws, the result is
+`{ result: null, parseError }`. The engine (`autopilot-engine.js` ~3363-3395 `reviewResultBlocked`)
+turns that into `status: 'blocked', phase: 'dispatch_review', reason: <validator message>, review:
+null`; the ledger entry `dispatch_review blocked` carries runner/model/exit_status only. The shell
+envelope's `raw_log` path — the only pointer to what the reviewer actually wrote — is in the discarded
+JSON. revival.3d: `grep -oE '"no_finding_proof":"[^"]*"'` over three engine logs — zero hits; the
+rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.js` ~4986
+`finalPanelSeatReceipt`) has no field for it either (closed key set, `campaign-composition.js`
+`FINAL_PANEL_SEAT_KEYS`, `schemas/implementation-campaign-receipt.schema.json`).
+
+## 1. Ruling and shape
+
+1. **One proof grammar, two independent validators, one vector table.** Both validators accept
+   one-or-more separator characters from `[space ; , .]` between the ordered labels:
+   bash `^checked=(.+)[[:space:];,.]+evidence=(.+)[[:space:];,.]+conclusion=(.+)$`, Node
+   `/^checked=(.+)[\s;,.]+evidence=(.+)[\s;,.]+conclusion=(.+)$/u`; captures are trimmed and the
+   unchanged blacklist is applied to each field. Two DISTINCT failures on both sides: a **shape**
+   failure (labels missing/reordered, an empty field, an unsupported separator such as `|`) and a
+   **semantic** failure (a field normalizes to a blacklist entry). Precedence: after the ordered-label
+   match each capture is NORMALIZED exactly as the blacklist does (lowercase, strip leading/trailing
+   whitespace and punctuation); a capture whose normalized value is empty (e.g. `checked=;
+   evidence=…` where the greedy capture is only `;`) is a SHAPE failure on both sides — bash checks
+   normalized emptiness explicitly before its blacklist `case`, Node does the same — so the `''`
+   blacklist entry is unreachable and stays only as a guard. Node's messages become
+   `review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion
+   fields separated by space, ';', ',' or '.'` and `… contains a tautological checked, evidence, or
+   conclusion value`; the bash battery's two `BATTERY_FAIL_REASON` strings already distinguish them
+   and are unchanged except the `+` quantifier. No producer-side normalization to `;`: Node is an
+   independent boundary and must accept the contract the shell declared.
+2. **Constrained salvage of `raw_log`.** On a `parseReviewOutput` failure `dispatchReviewJson`
+   keeps `result: null` and `parseError`, then — schema-lenient, never text-lenient —
+   `JSON.parse(stdout.trim())`; if that yields an object whose `raw_log` is a non-empty string, the
+   result gains `salvaged: { runner, model, raw_log }` where `runner`/`model` come from the
+   invocation args (not the rejected envelope). Nothing else is salvaged (no status, verdict,
+   findings, proof, usage, unratified_verdict). Malformed JSON or a non-string/empty `raw_log` →
+   no `salvaged` key.
+3. **Propagation.** The engine's blocked review record (`autopilot-engine.js` ~3378) gains
+   `raw_log: reviewResult.salvaged ? reviewResult.salvaged.raw_log : null`, the ledger entry
+   `dispatch_review blocked` records the same, and `performReview`'s non-reviewed outcome exposes it
+   as top-level `raw_log` next to `reason` (the composition sees `outcome.raw_log`; the seat receipt
+   reads THAT field, never a nested raw dispatch path). The final-panel seat receipt gains an OPTIONAL `raw_log` key:
+   present (non-empty string) only on a failed seat whose salvage succeeded; absent otherwise
+   (successful receipts keep their exact shape and digest); when present it is part of the body
+   digested into `receipt_digest`. `FINAL_PANEL_SEAT_KEYS` validation becomes "exact keys, with
+   `raw_log` optional"; the JSON schema adds `raw_log` as an optional non-empty string.
+4. Authority is untouched: `result`, `status`, `verdict`, `review_digest` decide; a seat with a
+   salvaged `raw_log` is still `no_verdict`/`parser_failed`, excluded from `final_panel_count`.
+
+## 2. Changes by file
+
+- `scripts/dispatch-review.sh` (+ mirror): battery regex gains `+` on both separator classes; comment
+  updated; messages unchanged.
+- `src/runners/review.js` (+ mirror): `isValidNoFindingProof` → returns a classification
+  (`ok` / `shape` / `tautology`) used by `parseReviewOutput` for the two messages; `dispatchReviewJson`
+  salvage block (§1.2).
+- `src/engine/autopilot-engine.js` (+ mirror): blocked review record + ledger entry + performReview
+  non-reviewed outcome carry top-level `raw_log` (§1.3); `finalPanelSeatReceipt` adds `raw_log` when
+  the OUTCOME's top-level `raw_log` is a non-empty string (that is the only seam; it never inspects a
+  nested dispatch result).
+- `src/engine/campaign-composition.js` (+ mirror): `FINAL_PANEL_SEAT_KEYS` validation accepts the
+  optional `raw_log` (non-empty string when present) — nothing else changes there.
+- `schemas/implementation-campaign-receipt.schema.json` (+ mirror): optional `raw_log`
+  (`{ "type": "string", "minLength": 1 }`) on the final-panel seat definition, `additionalProperties:
+  false` kept.
+- Tests (every change-pinning assertion carries `# RED at base 0e3ea3cc: <observed>` in its block
+  header; preservation guards labelled `(preservation, green at base)`; stubs only):
+  - `hooks/tests/review-runner.test.sh`: **shared vector table** (one heredoc of `proof|expected`
+    rows) driven through BOTH the bash battery (via `dispatch-review.sh` with a stub runner whose
+    output carries the proof) AND `parseReviewOutput`. Valid rows: `;`, `.`, `,`, space,
+    mixed-punctuation+space separators, a `;` inside a substantive field. Invalid rows: missing
+    label, reordered labels, `|` separator, empty value per field (class `shape`), every blacklist entry substituted
+    into each of the three fields with the other two substantive. Assert per row: both validators
+    agree (RED at base: the `.`/`,`/space rows disagree), the Node message class is `shape` vs
+    `tautology` as the row says (RED at base: one message for both), and a `;` inside a field keeps
+    the whole capture intact (preservation). Salvage: a syntactically valid envelope rejected only by
+    proof validation → `result === null`, `parseError` non-null, `salvaged.raw_log` equals the
+    envelope's path exactly, `salvaged.runner/model` equal the invocation args even when the envelope
+    lies (RED at base: no `salvaged`); malformed JSON → no `salvaged`; `raw_log: ""`/non-string →
+    no `salvaged`; a rejected envelope claiming `SHIP-AS-IS` copies no verdict/status/findings
+    (authority guard).
+  - `hooks/tests/dispatch-review.test.sh`: the battery accepts `.`/`,`/space/mixed separated proofs
+    and a doubled separator run (the hand pins the observed base state for the run case), rejects
+    `|` with the shape message and a blacklist value with the tautology message (preservation).
+  - `hooks/tests/implementation-campaign-routing.test.sh`: engine block — a review dispatcher stub
+    that emits a shell-shaped envelope with a proof the Node grammar rejected at base
+    (`.`-separated) → at head the review is `reviewed` (RED at base: `dispatch_review blocked` with
+    the tautology message); a second stub emitting an envelope with a genuinely tautological
+    conclusion → blocked with the tautology message AND the blocked record + ledger entry carry the
+    envelope's `raw_log` (RED at base: `raw_log` absent), and `performReview`'s non-reviewed outcome
+    (captured via the composition adapter seam) exposes top-level `raw_log` (RED at base); final
+    panel: one seat's stub emits a
+    rejected envelope → that seat's receipt has `status: 'no_verdict'` (or `parser_failed` per the
+    existing mapping), `verdict/review_digest null`, `raw_log` = the path, excluded from
+    `final_panel_count`, the panel blocks (RED at base: no `raw_log` key); the other seats' receipts
+    have NO `raw_log` key and their digests are unchanged from base (preservation).
+  - `hooks/tests/implementation-campaign-receipt.test.sh`: a v1 seat receipt without `raw_log`
+    validates (preservation); a failed seat receipt with `raw_log` validates and tampering the path
+    changes/breaks `receipt_digest` (RED at base: schema rejects the key); `raw_log: ""` is rejected;
+    an unrelated extra key with a recomputed valid digest is rejected by BOTH the composition seat
+    validation and the JSON schema (preservation, green at base).
+- Docs: `docs/BACKLOG.md` cuda P1 row: Status stays `fired` (deliverable 2 pending), Context gains
+  "(ii)+(iii) shipped v2.36.57: Node grammar aligned, raw_log salvaged" and a one-line pointer to the
+  second plan; `skills/l5/references/hetero-impl-loop.md` step 11 fixed list gains "proof grammar
+  parity + raw_log on rejected envelopes v2.36.57" (+ mirror). `CHANGELOG.md` is NOT sealed, and neither
+  are the version manifests: the v2.36.57 number is a pin the hand writes into text exactly as
+  v2.36.53–56 did; the bump itself (`sync-version.js`, CHANGELOG, INDEX) is a depth-0 release commit
+  AFTER the merge, and the `scope-integrity` criterion is evaluated on the merge commit only.
+
+### 2.5 Sealed `output_paths` (exact)
+
+```
+scripts/dispatch-review.sh
+platforms/codex/plugin/scripts/dispatch-review.sh
+src/runners/review.js
+platforms/codex/plugin/src/runners/review.js
+src/engine/autopilot-engine.js
+platforms/codex/plugin/src/engine/autopilot-engine.js
+src/engine/campaign-composition.js
+platforms/codex/plugin/src/engine/campaign-composition.js
+schemas/implementation-campaign-receipt.schema.json
+platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json
+hooks/tests/review-runner.test.sh
+hooks/tests/dispatch-review.test.sh
+hooks/tests/implementation-campaign-routing.test.sh
+hooks/tests/implementation-campaign-receipt.test.sh
+docs/BACKLOG.md
+skills/l5/references/hetero-impl-loop.md
+platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+```
+
+## 3. Out of scope
+
+- Defect (i) — pre-spend admission of blind-incompatible final-panel seats (second deliverable).
+- Any change to the blacklist contents, to the SHIP-AS-IS/no-proof rule, or to `unratified_verdict`.
+- Journaling reviewer text into the campaign ledger; `dispatch-anthropic-review.js` (its own
+  validator is producer-side and already label-anchored — verify only, do not edit).
+- `scripts/next-touch-validation.js` / `admit-backlog-follow-ups.js` (they pass seat receipts through
+  unchanged; the schema change is what admits the key).
+
+## 4. Acceptance
+
+| id | criterion | evidence |
+|----|-----------|----------|
+| `grammar-parity` | every row of the shared vector table yields the same accept/reject in bash and Node; `.`/`,`/space/mixed separators accepted by both | review-runner + dispatch-review suites |
+| `distinct-failures` | shape failures and tautology failures produce different messages on both sides | same |
+| `raw-log-salvaged` | a proof-rejected envelope yields `result:null`, `parseError`, `salvaged.raw_log` exactly; no other field salvaged; malformed JSON salvages nothing | review-runner suite |
+| `raw-log-propagated` | engine blocked review record, ledger entry and failed final-panel seat receipt carry `raw_log`; successful receipts unchanged | routing + receipt suites |
+| `no-regression` | `review-runner`, `dispatch-review`, `autopilot-engine`, `implementation-campaign-routing`, `implementation-campaign-receipt`, `qc-panel-honesty`, `status-task`, `implementation-campaign-state` green; `check-canonical-invariants.sh`; `check-js-syntax.js`; `sync-codex-plugin-skills.sh --check`; `check-backlog-entries.js` | suite output |
+| `scope-integrity` | `git diff --name-only 0e3ea3cc HEAD` ⊆ §2.5 (plus committed plan/mission docs); `src/engine/implementation-campaign.js`, `src/engine/campaign-intake.js`, `src/campaign/cli.js` byte-identical to `0e3ea3cc` | command output |
+
+## 5. Dogfood proof (depth-0, after merge)
+
+The next managed campaign's in-rail review on this host (GLM-5.2 or MiniMax) with a `.`-separated
+proof is `reviewed`, not `dispatch_review blocked`; and a deliberately tautological stub run shows
+`raw_log` in the blocked record. cuda/revival.3d re-run on their side is theirs to report.
+
+## 6. Follow-ups filed, not done here
+
+- Defect (i): `final_panel_seat_blind_incompatible` pre-spend admission + resolver ⚠ (deliverable 2);
+  codex containment (bwrap) qualification spike so a codex seat can become blind-capable.
+- Reviewer text into the campaign ledger on rejection (bounded), if operators still need it after
+  `raw_log` lands.
+
+## Review log
+
+- Design consult 2026-09-16 (codex gpt-5.6-sol on the raw-prompt rail; evidence
+  `docs/plans/evidence/2026-09-16-proof-parity-raw-log/consult-codex-answer.md`): recommends two
+  deliverables (A1 alone; B+C together), one-or-more separator grammar on both sides with distinct
+  shape/semantic failures and a shared vector table, schema-lenient salvage with runner/model from
+  the invocation, optional `raw_log` on the failed seat receipt with old receipts still valid; names
+  the red-first assertions folded into §2.
+- Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP 3 blockers; evidence `g1-*`): empty-field
+  precedence undefined → shape-before-blacklist on both sides; performReview top-level `raw_log` had no
+  assertion → added; unknown-key closure had no preservation case → added. All accepted and folded.
+- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 3;
+  evidence `g2-*`): normalized-emptiness precedence — accepted, §1.1 rewritten; seat receipt source
+  contradiction — accepted, §2 bullet rewritten; "version bump outside output_paths makes the shipped
+  claim false" — rejected with rationale (release commit is depth-0, same as v2.36.53–56; §2 Docs
+  clarified). Depth-0 freeze: zero unaddressed blockers, zero deferred.
+# Rubric — 2026-09-16-proof-parity-raw-log.md
+
+> Source plan: docs/plans/2026-09-16-proof-parity-raw-log.md
+
+R1: A shared vector table (one heredoc of `proof|expected` rows) is driven through BOTH the bash battery (real `dispatch-review.sh` with a stub runner) and Node `parseReviewOutput`; every row yields the same accept/reject on both sides, including `.`, `,`, space and mixed-punctuation separators and a `;` inside a substantive field value; at base `0e3ea3cc` the `.`/`,`/space rows disagree (Node rejects).
+R2: Node distinguishes a shape failure (labels missing/reordered, empty field, unsupported separator such as `|`) from a semantic failure (a field normalizes to a blacklist entry) with two different messages; the bash battery's two existing `BATTERY_FAIL_REASON` strings map to the same two classes; the blacklist contents are unchanged.
+R3: On a `parseReviewOutput` failure, `dispatchReviewJson` returns `result === null`, a non-null `parseError`, and — only when `JSON.parse(stdout.trim())` yields an object with a non-empty string `raw_log` — `salvaged: { runner, model, raw_log }` with `runner`/`model` taken from the invocation args; malformed JSON, empty or non-string `raw_log` salvage nothing; no status/verdict/findings/proof/usage/unratified_verdict is ever salvaged (a rejected envelope claiming SHIP-AS-IS leaves no trace of it).
+R4: The engine's blocked review record (`status: 'blocked', phase: 'dispatch_review'`), its `dispatch_review blocked` ledger entry and `performReview`'s non-reviewed outcome carry `raw_log` when salvaged; a review dispatcher stub emitting a `.`-separated proof is `reviewed` at head and `dispatch_review blocked` at base.
+R5: A failed final-panel seat whose dispatch result carries `salvaged.raw_log` has a receipt with `raw_log` (non-empty string) that is part of `receipt_digest`; successful seat receipts have no `raw_log` key and their shape/digest are byte-identical to base; the failed seat stays `no_verdict`/`parser_failed`, verdict/review_digest null, excluded from `final_panel_count`.
+R6: `campaign-composition.js` seat validation and `schemas/implementation-campaign-receipt.schema.json` accept the optional `raw_log` (non-empty string) and still reject unknown keys and `raw_log: ""`; a v1 receipt without `raw_log` validates unchanged.
+R7: `src/engine/implementation-campaign.js`, `src/engine/campaign-intake.js`, `src/campaign/cli.js`, `scripts/dispatch-anthropic-review.js` are byte-identical to base `0e3ea3cc`; no new event, CLI flag, or ledger row shape.
+R8: Every change-pinning assertion (R1 disagreement rows, R2 messages, R3 salvage, R4 engine, R5 seat raw_log, R6 schema) is recorded RED against base `0e3ea3cc` in the test header with the observed message; preservation guards labelled; suites use stubs only.
+R9: Suites green: `review-runner`, `dispatch-review`, `autopilot-engine`, `implementation-campaign-routing`, `implementation-campaign-receipt`, `qc-panel-honesty`, `status-task`, `implementation-campaign-state`; `bash scripts/check-canonical-invariants.sh`, `node scripts/check-js-syntax.js`, `bash scripts/sync-codex-plugin-skills.sh --check`, `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` pass.
+R10: Docs: cuda P1 BACKLOG row keeps Status `fired` and its Context records "(ii)+(iii) shipped v2.36.57"; l5 reference step 11 gains the fixed item (+ mirror); `git diff --name-only 0e3ea3cc HEAD` ⊆ §2.5 plus the committed plan/mission docs.
+
+
+## Depth-0 note to the reviewer
+
+- Base for RED evidence / byte-identity is 0e3ea3cc (rubric); grant base b6a5e42e differs by docs only.
+- The rail ran full-diff review (MiniMax FIX-THEN-SHIP: one MUST-FIX — the comma stub branch was renamed away so the comma assertion passed vacuously; one CUT — the performReview raw_log wrapper was hand-built and tautological). Depth-0 accepted both as must-fix-now and repaired in the last commit of this diff: real-engine `proof`/`proof-taut` modes in the routing red-path block now drive AutopilotEngine end to end (real sandbox ledger, real appender) and assert the seat receipt raw_log + performReview outcome raw_log; the stub-fed composition final-panel block was removed as pass-through only.
+- Suites at head: review-runner 39, dispatch-review 416, autopilot-engine 493, routing 89, receipt 17, qc-panel-honesty 1, status-task 5, state 295; canonical, syntax, mirror, backlog gate green; four R7 files byte-identical.
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index b5286eac..7e6fc696 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -110,7 +110,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Effort**: Fix
+ - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
+ - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+-- **Context**: three defects (raw data msg `msg_01M2KKPZ75X780NYXR0KPDDBQS`): tautological-proof check rejects a concrete proof; no_verdict result omits raw_log; final panel refuses codex (blind-review no-tools profile) though dispatch-review.sh runs it.
++- **Context**: (i) panel refuses pinned codex; (ii) proof rejects concrete proof; (iii) no_verdict omits raw_log. (ii)+(iii) shipped v2.36.57: Node grammar aligned with the battery, raw_log salvaged on rejection; (i) pre-spend admission next.
+ 
+ ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
+ - **Status**: shipped v2.36.56 2026-09-16
+diff --git a/hooks/tests/dispatch-review.test.sh b/hooks/tests/dispatch-review.test.sh
+index b0b97891..331f624a 100755
+--- a/hooks/tests/dispatch-review.test.sh
++++ b/hooks/tests/dispatch-review.test.sh
+@@ -160,6 +160,34 @@ case "$MODE" in
+     echo "NO-FINDING-PROOF: checked=restore discipline in the sync window, evidence=each flipped node records its prior value and is restored inside finally, conclusion=no node outside the changed set is touched"
+     echo "$END"
+     ;;
++  ship_space_sep)
++    echo "$BEGIN"
++    echo "VERDICT: SHIP-AS-IS"
++    echo "FINDINGS: none"
++    echo "NO-FINDING-PROOF: checked=restore discipline in the sync window evidence=each flipped node records its prior value conclusion=no node outside the changed set is touched"
++    echo "$END"
++    ;;
++  ship_mixed_sep)
++    echo "$BEGIN"
++    echo "VERDICT: SHIP-AS-IS"
++    echo "FINDINGS: none"
++    echo "NO-FINDING-PROOF: checked=neutral-arm control flow. evidence=the gated block encloses every new read and write, conclusion=both gates fully enclose their new control flow"
++    echo "$END"
++    ;;
++  ship_doubled_sep)
++    echo "$BEGIN"
++    echo "VERDICT: SHIP-AS-IS"
++    echo "FINDINGS: none"
++    echo "NO-FINDING-PROOF: checked=neutral-arm control flow;; evidence=the gated block encloses every new read and write;; conclusion=both gates fully enclose their new control flow"
++    echo "$END"
++    ;;
++  ship_pipe_sep)
++    echo "$BEGIN"
++    echo "VERDICT: SHIP-AS-IS"
++    echo "FINDINGS: none"
++    echo "NO-FINDING-PROOF: checked=neutral-arm control flow|evidence=the gated block encloses every new read and write|conclusion=both gates fully enclose their new control flow"
++    echo "$END"
++    ;;
+   ship_missing_conclusion)
+     echo "$BEGIN"
+     echo "VERDICT: SHIP-AS-IS"
+@@ -777,6 +805,24 @@ assert_eq "0" "$EXIT" "period-separated no-finding proof is accepted"
+ assert_contains "$OUT" '"no_finding_proof": "checked=' "period-separated proof is parsed"
+ OUT="$(STUB_MODE=ship_comma_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+ assert_eq "0" "$EXIT" "comma-separated no-finding proof is accepted"
++assert_contains "$OUT" '"no_finding_proof": "checked=restore discipline in the sync window, evidence=' \
++  "comma-separated proof is the one the stub emitted (MiniMax r1: the branch had been renamed away)"
++OUT="$(STUB_MODE=ship_space_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "space-separated no-finding proof is accepted"
++OUT="$(STUB_MODE=ship_mixed_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "mixed-punctuation no-finding proof is accepted"
++# RED at base 0e3ea3cc: doubled `;;` was absorbed into the field by the single-char
++# separator class + greedy capture (observed: status reviewed). The `+` quantifier
++# still accepts the run; pin that the battery remains green.
++OUT="$(STUB_MODE=ship_doubled_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "doubled-separator no-finding proof is accepted"
++OUT="$(STUB_MODE=ship_pipe_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
++assert_eq "1" "$EXIT" "pipe-separated proof is a shape failure"
++assert_contains "$OUT" "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" \
++  "pipe separator uses the battery shape message"
++OUT="$(STUB_MODE=ship_tautology "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
++assert_contains "$OUT" "NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value" \
++  "blacklist value uses the battery tautology message (preservation)"
+ 
+ # 反向：放寬分隔符**沒有**放寬反鴨子蓋章的閘門。缺欄位、同義反覆仍然擋。
+ OUT="$(STUB_MODE=ship_missing_conclusion "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+diff --git a/hooks/tests/implementation-campaign-receipt.test.sh b/hooks/tests/implementation-campaign-receipt.test.sh
+index 8a98cee5..937baed5 100755
+--- a/hooks/tests/implementation-campaign-receipt.test.sh
++++ b/hooks/tests/implementation-campaign-receipt.test.sh
+@@ -947,6 +947,79 @@ console.log('one_bounded_repair=true');
+ console.log('mechanical_adjudication=true');
+ console.log('missing_disposition_blocks=true');
+ console.log('vertical_first=true');
++
++const { validateFinalPanelReceipt } = require(path.join(root, 'src', 'engine', 'campaign-composition'));
++const v1Seat = {
++  schema_version: 1,
++  artifact_type: 'implementation_campaign_final_panel_seat',
++  seat_index: 1,
++  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
++  status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
++};
++v1Seat.receipt_digest = canonicalDigest(v1Seat);
++assert.strictEqual(validateFinalPanelReceipt({
++  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
++  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [v1Seat],
++}, 1).passed, true);
++console.log('v1_seat_without_raw_log=true');
++
++const failedBody = {
++  schema_version: 1,
++  artifact_type: 'implementation_campaign_final_panel_seat',
++  seat_index: 1,
++  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
++  status: 'no_verdict', verdict: null, review_digest: null,
++  reason: 'final_panel_seat_no_verdict',
++  raw_log: '/tmp/rejected.log',
++};
++const failedSeat = { ...failedBody, receipt_digest: canonicalDigest(failedBody) };
++const failedMeta = validateFinalPanelReceipt({
++  reviewed: false, verdict: null, findings: '[]', review_digest: null,
++  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [failedSeat],
++}, 1);
++assert.notStrictEqual(failedMeta.reason, 'final_panel_metadata_incomplete');
++assert.notStrictEqual(failedMeta.reason, 'final_panel_receipt_digest_mismatch');
++const tamperedBody = { ...failedBody, raw_log: '/tmp/tampered.log' };
++assert.notStrictEqual(canonicalDigest(tamperedBody), failedSeat.receipt_digest);
++const tamperedSeat = { ...failedSeat, raw_log: '/tmp/tampered.log' };
++assert.strictEqual(validateFinalPanelReceipt({
++  reviewed: false, verdict: null, findings: '[]', review_digest: null,
++  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [tamperedSeat],
++}, 1).reason, 'final_panel_receipt_digest_mismatch');
++fs.writeFileSync(path.join(temp, 'seat-with-raw-log.json'), `${JSON.stringify({
++  ...composition,
++  final_panel_seat_receipts: [failedSeat],
++}, null, 2)}\n`);
++const emptyRaw = { ...failedBody, raw_log: '' };
++emptyRaw.receipt_digest = canonicalDigest(emptyRaw);
++assert.strictEqual(validateFinalPanelReceipt({
++  reviewed: false, verdict: null, findings: '[]', review_digest: null,
++  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [emptyRaw],
++}, 1).reason, 'final_panel_metadata_incomplete');
++fs.writeFileSync(path.join(temp, 'seat-empty-raw-log.json'), `${JSON.stringify({
++  ...composition,
++  final_panel_seat_receipts: [emptyRaw],
++}, null, 2)}\n`);
++console.log('failed_seat_raw_log_digest=true');
++
++const extraBody = {
++  schema_version: 1,
++  artifact_type: 'implementation_campaign_final_panel_seat',
++  seat_index: 1,
++  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
++  status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
++  unexpected: 'nope',
++};
++const extraSeat = { ...extraBody, receipt_digest: canonicalDigest(extraBody) };
++assert.strictEqual(validateFinalPanelReceipt({
++  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
++  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [extraSeat],
++}, 1).reason, 'final_panel_metadata_incomplete');
++fs.writeFileSync(path.join(temp, 'seat-extra-key.json'), `${JSON.stringify({
++  ...composition,
++  final_panel_seat_receipts: [extraSeat],
++}, null, 2)}\n`);
++console.log('unknown_key_rejected=true');
+ NODE
+ )"
+ assert_exit_code "$?" "0" "campaign receipt and composition tests execute"
+@@ -960,6 +1033,12 @@ assert_contains "$OUT" "missing_disposition_blocks=true" \
+   "missing disposition fails closed before repair"
+ assert_contains "$OUT" "vertical_first=true" \
+   "failed vertical evidence repairs before broad review"
++assert_contains "$OUT" "v1_seat_without_raw_log=true" \
++  "v1 seat without raw_log still validates (preservation)"
++assert_contains "$OUT" "failed_seat_raw_log_digest=true" \
++  "failed seat raw_log is digested; empty raw_log rejected"
++assert_contains "$OUT" "unknown_key_rejected=true" \
++  "unrelated extra key is rejected by composition validation"
+ 
+ node "$REPO_ROOT/scripts/validate-json-schema.js" \
+   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+@@ -973,5 +1052,17 @@ node "$REPO_ROOT/scripts/validate-json-schema.js" \
+   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+   --document "$TEST_TMP/invalid-terminal.json" >/dev/null 2>&1
+ assert_exit_code "$?" "1" "terminal schema rejects a finding without evidence and authority"
++node "$REPO_ROOT/scripts/validate-json-schema.js" \
++  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
++  --document "$TEST_TMP/seat-with-raw-log.json" >/dev/null
++assert_exit_code "$?" "0" "schema accepts optional seat raw_log"
++node "$REPO_ROOT/scripts/validate-json-schema.js" \
++  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
++  --document "$TEST_TMP/seat-empty-raw-log.json" >/dev/null 2>&1
++assert_exit_code "$?" "1" "schema rejects empty raw_log"
++node "$REPO_ROOT/scripts/validate-json-schema.js" \
++  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
++  --document "$TEST_TMP/seat-extra-key.json" >/dev/null 2>&1
++assert_exit_code "$?" "1" "schema rejects an unrelated extra seat key (preservation)"
+ 
+ finalize_test
+diff --git a/hooks/tests/implementation-campaign-routing.test.sh b/hooks/tests/implementation-campaign-routing.test.sh
+index b53c85c2..b051fc5e 100755
+--- a/hooks/tests/implementation-campaign-routing.test.sh
++++ b/hooks/tests/implementation-campaign-routing.test.sh
+@@ -2389,6 +2389,7 @@ const {
+   runCampaignIntake,
+ } = require(path.join(root, 'src', 'engine'));
+ const { loadRows, projectCampaign } = require(path.join(root, 'src', 'campaign', 'cli'));
++const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+ 
+ const roster = {
+   reviewer_engine: 'fixture-reviewer',
+@@ -2434,9 +2435,51 @@ function engineTransport(result) {
+   };
+ }
+ 
+-function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
++// proofPanel mode (plan 2026-09-16-proof-parity-raw-log R4/R5): verification is
++// GREEN, the full-diff review is a SHIP-AS-IS envelope with a `.`-separated proof
++// (reviewed at head; blocked at base 0e3ea3cc with the tautology message), and
++// final-panel seat B emits an envelope whose proof is genuinely tautological so
++// the Node validator rejects it and only `raw_log` survives. The engine's REAL
++// performReview / finalPanelSeatReceipt run; outcomes are captured through the
++// campaignComposer adapter seam.
++const PROOF_RAW_LOG = '/tmp/dispatch-review-log-proof-fixture';
++const PERIOD_PROOF_ENV = 'checked=fixture diff and acceptance contract. evidence=changed behavior is covered by the supplied regression test. conclusion=no concrete acceptance discrepancy remains';
++const TAUT_PROOF_ENV = 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no must-fix remains';
++function proofEnvelope(model, proof) {
++  return {
++    runner: 'fixture', model, status: 'reviewed', verdict: 'SHIP-AS-IS', findings: 'none',
++    no_finding_proof: proof, raw_log: PROOF_RAW_LOG, error: null, usage: null,
++  };
++}
++function transportFromEnvelope(env) {
++  const stdout = JSON.stringify(env);
++  try {
++    return { error: null, status: 0, signal: null, stdout, stderr: '', result: parseReviewOutput(stdout), parseError: null };
++  } catch (parseError) {
++    // Mirror dispatchReviewJson's salvage contract (review-runner.test.sh pins the real one).
++    return {
++      error: null, status: 0, signal: null, stdout, stderr: '', result: null, parseError,
++      salvaged: { runner: 'fixture', model: env.model, raw_log: env.raw_log },
++    };
++  }
++}
++const proofRoster = {
++  ...roster,
++  min_panel_size: 1,
++  fallback_ladder: [
++    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
++    { runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture' },
++  ],
++  qc_panel_seats: [
++    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
++    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture' },
++  ],
++};
++
++function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, tautFullDiff = false } = {}) {
+   spawnSync('git', ['-C', worktree, 'reset', '--hard', base], { stdio: 'ignore' });
+   const attempts = [];
++  const performOutcomes = [];
+   const reviewByTree = new Map();
+   let implCalls = 0;
+   let repairDispatcherCalls = 0;
+@@ -2536,7 +2579,26 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
+         model: 'fixture-implementer',
+       });
+     },
+-    reviewDispatcher() {
++    ...(proofPanel ? {
++      campaignComposer(input, adapters) {
++        const innerReview = adapters.review;
++        adapters.review = (reviewInput) => {
++          const outcome = innerReview(reviewInput);
++          performOutcomes.push({ scope: reviewInput && reviewInput.scope, outcome });
++          return outcome;
++        };
++        return require(path.join(root, 'src', 'engine', 'campaign-composition')).runCampaignComposition(input, adapters);
++      },
++    } : {}),
++    reviewDispatcher(args) {
++      if (proofPanel) {
++        const modelIdx = Array.isArray(args) ? args.indexOf('--model') : -1;
++        const model = modelIdx >= 0 ? args[modelIdx + 1] : 'fixture-reviewer';
++        return transportFromEnvelope(proofEnvelope(
++          model,
++          (model === 'fixture-reviewer-b' || tautFullDiff) ? TAUT_PROOF_ENV : PERIOD_PROOF_ENV,
++        ));
++      }
+       const headTree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], {
+         cwd: worktree, encoding: 'utf8',
+       }).stdout.trim();
+@@ -2573,7 +2635,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
+       return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+     },
+     verifyCommandRunner({ commit, verifyCmd }) {
+-      const failed = commit === redCommit;
++      const failed = !proofPanel && commit === redCommit;
+       return {
+         error: null,
+         status: failed ? 1 : 0,
+@@ -2588,7 +2650,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
+     promptFile,
+     branch: 'impl/red-path',
+     base,
+-    roster,
++    roster: proofPanel ? proofRoster : roster,
+     campaignContract: contractPath,
+     campaignSeal: sealPath,
+     verificationEnv: { PATH: process.env.PATH || '', CI: 'red-path' },
+@@ -2597,6 +2659,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
+   return {
+     result,
+     attempts,
++    performOutcomes,
+     reviewByTree,
+     redTree,
+     repairedTree,
+@@ -2608,7 +2671,55 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
+   };
+ }
+ 
+-if (mode === 't5') {
++if (mode === 'proof') {
++  const proof = runRedPath({ proofPanel: true });
++  const findSeats = (value) => {
++    if (!value || typeof value !== 'object') return null;
++    if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
++    for (const child of Object.values(value)) {
++      const found = findSeats(child);
++      if (found) return found;
++    }
++    return null;
++  };
++  // R4: the `.`-separated full-diff proof is reviewed (RED at base 0e3ea3cc:
++  // status blocked, phase dispatch_review, reason "…must contain non-tautological…").
++  const fullDiff = proof.performOutcomes.filter((row) => row.scope === 'full_diff');
++  assert.ok(fullDiff.length >= 1, `no full_diff outcome captured: ${JSON.stringify(proof.performOutcomes.map((r) => r.scope))} result=${JSON.stringify({ status: proof.result.status, phase: proof.result.phase, reason: proof.result.reason })}`);
++  assert.strictEqual(fullDiff[0].outcome.reviewed, true, `full-diff period proof: ${JSON.stringify(fullDiff[0].outcome).slice(0, 300)}`);
++  console.log('proof_period_full_diff_reviewed=true');
++  // R4: performReview's non-reviewed outcome exposes top-level raw_log — observed at the
++  // composition adapter seam on a run whose FULL-DIFF review is a tautological proof
++  // (the final-panel seats call performReview internally; their seam is the receipt, R5).
++  // (separate `proof-taut` invocation below: one campaign per sandbox ledger).
++
++  // R5: the failed seat receipt carries raw_log (part of its digest); the reviewed seat does not.
++  const seats = findSeats(proof.result);
++  assert.ok(Array.isArray(seats) && seats.length === 2, `expected two seat receipts: ${JSON.stringify(seats)}`);
++  const seatA = seats.find((seat) => seat.model === 'fixture-reviewer');
++  const seatB = seats.find((seat) => seat.model === 'fixture-reviewer-b');
++  assert.strictEqual(seatA.status, 'reviewed');
++  assert.ok(!Object.prototype.hasOwnProperty.call(seatA, 'raw_log'), 'reviewed seat has no raw_log key');
++  assert.ok(['no_verdict', 'parser_failed'].includes(seatB.status), `seat B status ${seatB.status}`);
++  assert.strictEqual(seatB.verdict, null);
++  assert.strictEqual(seatB.review_digest, null);
++  assert.strictEqual(seatB.raw_log, PROOF_RAW_LOG);
++  const { receipt_digest: seatBDigest, ...seatBBody } = seatB;
++  assert.strictEqual(canonicalDigest(seatBBody), seatBDigest, 'raw_log is inside the seat receipt digest');
++  assert.notStrictEqual(canonicalDigest({ ...seatBBody, raw_log: '/tmp/other' }), seatBDigest);
++  const panelCount = (proof.result.campaign_receipt && proof.result.campaign_receipt.final_panel_count);
++  assert.strictEqual(panelCount, 1, `final_panel_count=${panelCount}`);
++  console.log('proof_final_panel_seat_raw_log=true');
++} else if (mode === 'proof-taut') {
++  const tautRun = runRedPath({ proofPanel: true, tautFullDiff: true });
++  const tautFull = tautRun.performOutcomes.filter((row) => row.scope === 'full_diff').map((row) => row.outcome);
++  assert.strictEqual(tautFull.length, 1, `expected one full_diff outcome: ${JSON.stringify(tautRun.performOutcomes.map((r) => r.scope))} result=${JSON.stringify({ status: tautRun.result.status, phase: tautRun.result.phase, reason: tautRun.result.reason })}`);
++  assert.strictEqual(tautFull[0].reviewed, false);
++  assert.match(String(tautFull[0].reason), /tautological/);
++  assert.strictEqual(tautFull[0].raw_log, PROOF_RAW_LOG, `performReview outcome raw_log=${tautFull[0].raw_log}`);
++  assert.strictEqual(tautRun.result.status, 'blocked');
++  console.log('proof_perform_review_outcome_raw_log=true');
++} else if (mode === 't5') {
+   const t5 = runRedPath({ throwOnGen1ReviewCompleted: true });
+   const t5Auth = t5.attempts.filter(
+     (row) => row.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && row.generation === 1,
+@@ -2809,6 +2920,172 @@ assert_exit_code "$?" "0" "red verification T5 fail-closed: $RED_PATH_T5_OUT"
+ assert_contains "$RED_PATH_T5_OUT" "t5_green_journal_fail_closed=true" \
+   "red-path proves t5_green_journal_fail_closed"
+ 
++# --- proof grammar parity + raw_log through the REAL engine (plan 2026-09-16-proof-parity-raw-log R4/R5) ---
++# RED at base 0e3ea3cc: proof_period_full_diff_reviewed — the `.`-separated full-diff proof is
++# "dispatch_review blocked: review output JSON no_finding_proof must contain non-tautological …";
++# proof_perform_review_outcome_raw_log / proof_final_panel_seat_raw_log never reached.
++proof_parity_run() {
++  local tag="$1" mode="$2" out sbx wt base common_raw common contract seal seal_out
++  sbx="$TEST_TMP/proof-parity-$tag-repo"
++  mkdir -p "$sbx/.claude" "$sbx/src"
++  git -C "$sbx" init -q
++  git -C "$sbx" config user.email "proof-parity@example.invalid"
++  git -C "$sbx" config user.name "Proof Parity Test"
++  write_mission_governance "$sbx/.claude/owner-kernel-governance.json" shadow
++  printf 'base\n' > "$sbx/src/value.txt"
++  git -C "$sbx" add .
++  git -C "$sbx" commit -qm "base"
++  base="$(git -C "$sbx" rev-parse HEAD)"
++  wt="$TEST_TMP/proof-parity-$tag-wt"
++  git -C "$sbx" worktree add -q -b impl/red-path "$wt" "$base"
++  common_raw="$(git -C "$sbx" rev-parse --git-common-dir)"
++  common="$(realpath "$sbx/$common_raw")"
++  contract="$TEST_TMP/proof-parity-$tag-campaign.json"
++  seal="$TEST_TMP/proof-parity-$tag-campaign.seal.json"
++  node - "$contract" "$common" "$base" "$tag" <<'NODE'
++const fs = require('fs');
++const [target, commonDir, base, tag] = process.argv.slice(2);
++fs.writeFileSync(target, `${JSON.stringify({
++  schema_version: 1,
++  ticket: `icc-proof-parity-${tag}`,
++  profile: 'poc',
++  mission_grant_ref: null,
++  repo_identity: `git-common-dir:${commonDir}`,
++  base_sha: base,
++  branch: 'impl/red-path',
++  vertical_acceptance: ['proof grammar parity and raw_log salvage'],
++  allowed_path_prefixes: ['src/'],
++  max_changed_files: 4,
++  baseline_churn: 10,
++  max_growth_ratio: 1.5,
++  max_extra_churn: 5,
++  max_repair_generations: 2,
++  max_wall_seconds: 600,
++  verify_cmd: 'node fixture.js',
++  rubric_ids: ['ICC-PROOF-PARITY1'],
++}, null, 2)}\n`);
++NODE
++  seal_out="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
++    --contract "$contract" --repo "$sbx" --mission-mode shadow --out "$seal" 2>&1)"
++  assert_exit_code "$?" "0" "proof-parity $tag fixture seals: $seal_out"
++  out="$(node "$RED_PATH_JS" "$REPO_ROOT" "$sbx" "$wt" "$contract" "$seal" "$RED_PATH_PROMPT" "$base" "$mode")"
++  assert_exit_code "$?" "0" "proof parity ($mode) through the real engine: $out"
++  printf '%s\n' "$out"
++}
++RED_PATH_PF_OUT="$(proof_parity_run panel proof)"
++for key in proof_period_full_diff_reviewed proof_final_panel_seat_raw_log; do
++  assert_contains "$RED_PATH_PF_OUT" "$key=true" "proof-parity engine proves $key"
++done
++RED_PATH_PT_OUT="$(proof_parity_run taut proof-taut)"
++assert_contains "$RED_PATH_PT_OUT" "proof_perform_review_outcome_raw_log=true" \
++  "proof-parity engine proves proof_perform_review_outcome_raw_log"
++
++PROOF_ENGINE_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
++'use strict';
++const assert = require('assert');
++const fs = require('fs');
++const path = require('path');
++const [root, tmp] = process.argv.slice(2);
++const { AutopilotEngine, runCampaignComposition } = require(path.join(root, 'src', 'engine'));
++const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
++const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
++
++const diff = path.join(tmp, 'proof-engine.diff');
++fs.writeFileSync(diff, '+x\n');
++const PERIOD_PROOF = 'checked=diff lines 1-40. evidence=ran tests. conclusion=nothing to fix';
++const TAUT_PROOF = 'checked=the changed slice; evidence=regression ran; conclusion=looks good';
++const RAW = '/tmp/proof-parity-rejected.log';
++const TAUT_MSG = 'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
++const BASE_MSG = 'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields';
++
++function envelope(proof, extra = {}) {
++  return {
++    runner: extra.runner || 'liar-runner',
++    model: extra.model || 'liar-model',
++    status: 'reviewed',
++    verdict: 'SHIP-AS-IS',
++    findings: extra.findings || 'none',
++    no_finding_proof: proof,
++    raw_log: extra.raw_log === undefined ? RAW : extra.raw_log,
++    error: null,
++    usage: null,
++  };
++}
++
++function dispatchFromEnvelope(env, args) {
++  const stdout = JSON.stringify(env);
++  try {
++    return {
++      error: null, status: 0, signal: null, stdout, stderr: '',
++      result: parseReviewOutput(stdout), parseError: null,
++    };
++  } catch (parseError) {
++    const out = {
++      error: null, status: 0, signal: null, stdout, stderr: '',
++      result: null, parseError,
++    };
++    if (typeof env.raw_log === 'string' && env.raw_log.length > 0) {
++      const runnerIdx = args.indexOf('--runner');
++      const modelIdx = args.indexOf('--model');
++      out.salvaged = {
++        runner: runnerIdx >= 0 ? args[runnerIdx + 1] : null,
++        model: modelIdx >= 0 ? args[modelIdx + 1] : null,
++        raw_log: env.raw_log,
++      };
++    }
++    return out;
++  }
++}
++
++const resolver = () => ({
++  error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
++  result: {
++    reviewer_engine: 'test-review-model', reviewer_effort: 'high',
++    reviewer_runner: 'test-review-runner', reviewer_qualified: true,
++  },
++});
++
++const periodEngine = new AutopilotEngine({
++  clock: () => '2026-09-16T00:00:00.000Z',
++  reviewLoopResolver: resolver,
++  reviewDispatcher(args) {
++    return dispatchFromEnvelope(envelope(PERIOD_PROOF), args);
++  },
++});
++const period = periodEngine.reviewDiff({ diffFile: diff });
++assert.strictEqual(period.status, 'reviewed', period.reason);
++console.log('period_proof_reviewed=true');
++
++const tautEngine = new AutopilotEngine({
++  clock: () => '2026-09-16T00:00:00.000Z',
++  reviewLoopResolver: resolver,
++  reviewDispatcher(args) {
++    return dispatchFromEnvelope(envelope(TAUT_PROOF), args);
++  },
++});
++const taut = tautEngine.reviewDiff({ diffFile: diff });
++assert.strictEqual(taut.status, 'blocked');
++assert.strictEqual(taut.phase, 'dispatch_review');
++assert.strictEqual(taut.reason, TAUT_MSG);
++assert.notStrictEqual(taut.reason, BASE_MSG);
++assert.strictEqual(taut.raw_log, RAW);
++const blockedLedger = taut.ledger.find((row) => row.unit === 'dispatch_review' && row.status === 'blocked');
++assert.ok(blockedLedger);
++assert.strictEqual(blockedLedger.raw_log, RAW);
++console.log('tautology_blocked_raw_log=true');
++
++// performReview's top-level raw_log and the failed-seat receipt are proven through the REAL
++// engine in the `proof` mode of RED_PATH_JS above (a hand-built wrapper here was tautological —
++// MiniMax r1 🔵, accepted as must-fix-now by depth-0).
++
++NODE
++)"
++assert_exit_code "$?" "0" "proof-parity engine routing: $PROOF_ENGINE_OUT"
++assert_contains "$PROOF_ENGINE_OUT" "period_proof_reviewed=true" \
++  "period-separated proof is reviewed (RED at base: dispatch_review blocked tautology message)"
++assert_contains "$PROOF_ENGINE_OUT" "tautology_blocked_raw_log=true" \
++  "tautological proof blocks with tautology message and raw_log"
++
+ ROUTING="$(sed -n '1,240p' \
+   "$REPO_ROOT/skills/l5/SKILL.md" \
+   "$REPO_ROOT/skills/l6/SKILL.md" \
+diff --git a/hooks/tests/review-runner.test.sh b/hooks/tests/review-runner.test.sh
+index 8de0402e..0286a423 100755
+--- a/hooks/tests/review-runner.test.sh
++++ b/hooks/tests/review-runner.test.sh
+@@ -327,4 +327,229 @@ assert_contains "$OUT" "source=agy-json" "review consumer accepts closed native
+ assert_contains "$OUT" "total=142" "review consumer preserves native usage total"
+ assert_contains "$OUT" "rejected=5" "review consumer rejects invalid, overflow, and open usage"
+ 
++# Shared vector table: bash battery vs Node parseReviewOutput (v2.36.57).
++# RED at base 0e3ea3cc: Node rejected `.`/`,`/space/mixed rows with
++# "review output JSON no_finding_proof must contain non-tautological checked,
++# evidence, and conclusion fields"; bash accepted those rows. Shape and
++# tautology shared that one Node message.
++PROOF_STUB="$TEST_TMP/proof-stub"
++cat > "$PROOF_STUB" <<'EOF'
++#!/usr/bin/env bash
++read_prompt_arg() {
++  local prompt="" i=1
++  while [ "$i" -le "$#" ]; do
++    arg="${!i}"
++    if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then
++      next_index=$((i + 1)); next_arg="${!next_index}"
++      if [ -n "$next_arg" ] && [ -f "$next_arg" ]; then prompt="$(cat "$next_arg")"
++      else prompt="$next_arg"; fi
++      break
++    fi
++    i=$((i + 1))
++  done
++  [ -z "$prompt" ] && prompt="$(cat)"
++  printf '%s' "$prompt"
++}
++extract_markers() {
++  local prompt="$1" begin end
++  begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
++  end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
++  [ -n "$begin" ] && [ -n "$end" ] || return 1
++  printf '%s\n%s\n' "$begin" "$end"
++}
++PROMPT="$(read_prompt_arg "$@")"
++MARKERS="$(extract_markers "$PROMPT")" || exit 1
++BEGIN="$(printf '%s\n' "$MARKERS" | sed -n '1p')"
++END="$(printf '%s\n' "$MARKERS" | sed -n '2p')"
++echo "$BEGIN"
++echo "VERDICT: SHIP-AS-IS"
++echo "FINDINGS: none"
++echo "NO-FINDING-PROOF: ${STUB_PROOF}"
++echo "$END"
++EOF
++chmod +x "$PROOF_STUB"
++
++VECTOR_TABLE="$TEST_TMP/proof-vectors.txt"
++cat > "$VECTOR_TABLE" <<'EOF'
++checked=diff lines 1-40; evidence=ran the regression; conclusion=nothing blocking remains|ok
++checked=diff lines 1-40. evidence=ran the regression. conclusion=nothing blocking remains|ok
++checked=diff lines 1-40, evidence=ran the regression, conclusion=nothing blocking remains|ok
++checked=diff lines 1-40 evidence=ran the regression conclusion=nothing blocking remains|ok
++checked=diff lines 1-40.; evidence=ran the regression, conclusion=nothing blocking remains|ok
++checked=field;with semicolon inside; evidence=ran the regression; conclusion=nothing blocking remains|ok
++checked=diff lines 1-40; evidence=ran the regression|shape
++evidence=ran the regression; checked=diff lines 1-40; conclusion=nothing blocking remains|shape
++checked=diff lines 1-40|evidence=ran the regression|conclusion=nothing blocking remains|shape
++checked=; evidence=ran the regression; conclusion=nothing blocking remains|shape
++checked=diff lines 1-40; evidence=; conclusion=nothing blocking remains|shape
++checked=diff lines 1-40; evidence=ran the regression; conclusion=;|shape
++checked=none; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=no finding; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=no findings; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=no must-fix; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=no must-fix remains; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=n/a; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=na; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=checked; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=all passed; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=looks good; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=diff; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=tests; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=spec; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=code; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=acceptance criteria; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=requirements satisfied; evidence=ran the regression; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=none; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=no finding; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=no findings; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=no must-fix; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=no must-fix remains; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=n/a; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=na; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=checked; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=all passed; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=looks good; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=diff; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=tests; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=spec; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=code; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=acceptance criteria; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=requirements satisfied; conclusion=nothing blocking remains|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=none|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=no finding|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=no findings|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=no must-fix|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=no must-fix remains|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=n/a|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=na|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=checked|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=all passed|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=looks good|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=diff|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=tests|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=spec|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=code|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=acceptance criteria|tautology
++checked=diff lines 1-40; evidence=ran the regression; conclusion=requirements satisfied|tautology
++EOF
++
++VECTOR_OUT="$(node - "$REPO_ROOT" "$DIFF" "$PROOF_STUB" "$VECTOR_TABLE" "$TEST_TMP" <<'NODE'
++'use strict';
++const assert = require('assert');
++const fs = require('fs');
++const path = require('path');
++const { spawnSync } = require('child_process');
++const [root, diff, stub, tablePath, tmp] = process.argv.slice(2);
++const { parseReviewOutput, isValidNoFindingProof } = require(path.join(root, 'src', 'runners', 'review'));
++const script = path.join(root, 'scripts', 'dispatch-review.sh');
++const SHAPE_MSG = 'review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion fields separated by space, \';\', \',\' or \'.\'';
++const TAUT_MSG = 'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
++const BASE_MSG = 'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields';
++const BASH_SHAPE = 'NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields';
++const BASH_TAUT = 'NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value';
++
++function bashClass(proof) {
++  const run = spawnSync(script, [
++    '--runner', 'codex', '--model', 'gpt-5.5', '--diff-file', diff, '--bin', stub,
++  ], { encoding: 'utf8', env: { ...process.env, STUB_PROOF: proof } });
++  let envelope;
++  try { envelope = JSON.parse((run.stdout || '').trim().split('\n').filter(Boolean).at(-1)); }
++  catch (_err) { throw new Error(`bash stdout not JSON for ${proof}: ${run.stdout}`); }
++  if (envelope.status === 'reviewed') return { cls: 'ok', error: envelope.error };
++  const err = String(envelope.error || '');
++  if (err.includes(BASH_SHAPE)) return { cls: 'shape', error: err };
++  if (err.includes(BASH_TAUT)) return { cls: 'tautology', error: err };
++  throw new Error(`unclassified bash error for ${proof}: ${err}`);
++}
++
++function nodeClass(proof) {
++  const envelope = JSON.stringify({
++    runner: 'codex', model: 'gpt-5.5', status: 'reviewed', verdict: 'SHIP-AS-IS',
++    findings: 'none', no_finding_proof: proof, raw_log: '/tmp/log', error: null, usage: null,
++  });
++  try {
++    parseReviewOutput(envelope);
++    return { cls: 'ok', error: null };
++  } catch (error) {
++    const msg = error.message || String(error);
++    if (msg === SHAPE_MSG) return { cls: 'shape', error: msg };
++    if (msg === TAUT_MSG) return { cls: 'tautology', error: msg };
++    if (msg === BASE_MSG) return { cls: 'base-tautology-msg', error: msg };
++    throw new Error(`unclassified node error for ${proof}: ${msg}`);
++  }
++}
++
++const rows = fs.readFileSync(tablePath, 'utf8').split('\n').filter(Boolean).map((line) => {
++  const cut = line.lastIndexOf('|');
++  return { proof: line.slice(0, cut), expected: line.slice(cut + 1) };
++});
++for (const row of rows) {
++  const bash = bashClass(row.proof);
++  const node = nodeClass(row.proof);
++  assert.strictEqual(bash.cls, row.expected, `bash ${row.proof}`);
++  assert.strictEqual(node.cls, row.expected, `node ${row.proof}`);
++  assert.strictEqual(isValidNoFindingProof(row.proof), row.expected, `classifier ${row.proof}`);
++  if (row.proof.includes('field;with semicolon inside')) {
++    const parsed = parseReviewOutput(JSON.stringify({
++      runner: 'codex', model: 'gpt-5.5', status: 'reviewed', verdict: 'SHIP-AS-IS',
++      findings: 'none', no_finding_proof: row.proof, raw_log: '/tmp/log', error: null, usage: null,
++    }));
++    assert.ok(parsed.no_finding_proof.includes('field;with semicolon inside'));
++  }
++}
++console.log(`vector_rows=${rows.length}`);
++console.log('vector_parity=true');
++
++function dispatchLike(stdout, args) {
++  const fake = path.join(tmp, 'fake-dispatch.sh');
++  fs.writeFileSync(fake, `#!/usr/bin/env bash\nprintf '%s\\n' ${JSON.stringify(stdout)}\n`);
++  fs.chmodSync(fake, 0o755);
++  const { dispatchReviewJson } = require(path.join(root, 'src', 'runners', 'review'));
++  return dispatchReviewJson(args, { scriptPath: fake });
++}
++
++const tautProof = 'checked=diff; evidence=tests; conclusion=looks good';
++const goodEnvelope = {
++  runner: 'liar-runner', model: 'liar-model', status: 'reviewed', verdict: 'SHIP-AS-IS',
++  findings: 'none', no_finding_proof: tautProof, raw_log: '/tmp/salvaged.log',
++  error: null, usage: null,
++};
++const salvaged = dispatchLike(JSON.stringify(goodEnvelope), [
++  '--runner', 'arg-runner', '--model', 'arg-model', '--diff-file', diff,
++]);
++assert.strictEqual(salvaged.result, null);
++assert.ok(salvaged.parseError);
++assert.strictEqual(salvaged.salvaged.raw_log, '/tmp/salvaged.log');
++assert.strictEqual(salvaged.salvaged.runner, 'arg-runner');
++assert.strictEqual(salvaged.salvaged.model, 'arg-model');
++assert.strictEqual(salvaged.result, null);
++assert.ok(!Object.prototype.hasOwnProperty.call(salvaged, 'verdict'));
++assert.ok(!JSON.stringify(salvaged.salvaged).includes('SHIP-AS-IS'));
++assert.ok(!Object.prototype.hasOwnProperty.call(salvaged.salvaged, 'status'));
++assert.ok(!Object.prototype.hasOwnProperty.call(salvaged.salvaged, 'findings'));
++console.log('salvage_ok=true');
++
++const malformed = dispatchLike('{not json', ['--runner', 'arg-runner', '--model', 'arg-model']);
++assert.strictEqual(malformed.result, null);
++assert.ok(malformed.parseError);
++assert.ok(!Object.prototype.hasOwnProperty.call(malformed, 'salvaged'));
++console.log('salvage_malformed=true');
++
++const emptyLog = dispatchLike(JSON.stringify({ ...goodEnvelope, raw_log: '' }), [
++  '--runner', 'arg-runner', '--model', 'arg-model',
++]);
++assert.ok(!Object.prototype.hasOwnProperty.call(emptyLog, 'salvaged'));
++const nonString = dispatchLike(JSON.stringify({ ...goodEnvelope, raw_log: 12 }), [
++  '--runner', 'arg-runner', '--model', 'arg-model',
++]);
++assert.ok(!Object.prototype.hasOwnProperty.call(nonString, 'salvaged'));
++console.log('salvage_empty_nonstring=true');
++NODE
++)"
++assert_eq "0" "$?" "proof vector + salvage process exits 0: $VECTOR_OUT"
++assert_contains "$VECTOR_OUT" "vector_parity=true" "bash and Node agree on every vector row"
++assert_contains "$VECTOR_OUT" "salvage_ok=true" "salvaged.raw_log equals envelope path; runner/model from args"
++assert_contains "$VECTOR_OUT" "salvage_malformed=true" "malformed JSON salvages nothing"
++assert_contains "$VECTOR_OUT" "salvage_empty_nonstring=true" "empty/non-string raw_log salvages nothing"
++
+ finalize_test
+diff --git a/platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json b/platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json
+index d647e0a3..108e76c4 100644
+--- a/platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json
++++ b/platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json
+@@ -229,7 +229,8 @@
+         "verdict": { "type": ["string", "null"] },
+         "review_digest": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+         "reason": { "type": ["string", "null"] },
+-        "receipt_digest": { "$ref": "#/$defs/sha256" }
++        "receipt_digest": { "$ref": "#/$defs/sha256" },
++        "raw_log": { "type": "string", "minLength": 1 }
+       },
+       "additionalProperties": false
+     },
+diff --git a/platforms/codex/plugin/scripts/dispatch-review.sh b/platforms/codex/plugin/scripts/dispatch-review.sh
+index 1a92ba6f..98261c40 100755
+--- a/platforms/codex/plugin/scripts/dispatch-review.sh
++++ b/platforms/codex/plugin/scripts/dispatch-review.sh
+@@ -570,10 +570,11 @@ validate_review_block() {
+     ' "$block_file")"
+     # Anchor on the FIELD LABELS, not on one hard-coded separator: kimi-code/k3
+     # (2026-08-15) separated its last field with a period and lost a substantive
+-    # proof to punctuation. Any separator punctuation/whitespace run is accepted;
+-    # all three labels must still appear IN ORDER with non-empty content, and the
+-    # tautology blacklist below is untouched.
+-    if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]evidence=(.+)[[:space:]\;,.]conclusion=(.+)$ ]]; then
++    # proof to punctuation. One-or-more separator characters from [space ; , .]
++    # are accepted (v2.36.57 + quantifier); all three labels must still appear
++    # IN ORDER. Normalized-empty captures are SHAPE failures before the
++    # unchanged tautology blacklist.
++    if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]+evidence=(.+)[[:space:]\;,.]+conclusion=(.+)$ ]]; then
+       BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
+     fi
+     local proof_checked proof_evidence proof_conclusion proof_value proof_normalized
+@@ -582,6 +583,9 @@ validate_review_block() {
+     proof_conclusion="$(printf '%s' "${BASH_REMATCH[3]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+     for proof_value in "$proof_checked" "$proof_evidence" "$proof_conclusion"; do
+       proof_normalized="$(printf '%s' "$proof_value" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:][:punct:]]*//; s/[[:space:][:punct:]]*$//')"
++      if [ -z "$proof_normalized" ]; then
++        BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
++      fi
+       case "$proof_normalized" in
+         ""|none|"no finding"|"no findings"|"no must-fix"|"no must-fix remains"|n/a|na|checked|"all passed"|"looks good"|diff|tests|spec|code|"acceptance criteria"|"requirements satisfied")
+           BATTERY_FAIL_REASON="NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value"; return 1
+diff --git a/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md b/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+index e244d515..6e4ce60c 100644
+--- a/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
++++ b/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+@@ -195,7 +195,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+     final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48,
+     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
+     ledger rotation carry keeps journal append order v2.36.54,
+-    red verification takes the repair path v2.36.56.
++    red verification takes the repair path v2.36.56,
++    proof grammar parity + raw_log on rejected envelopes v2.36.57.
+     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
+     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
+     line drifts the frozen source sha and every `session-mode set` is refused until routing is
+diff --git a/platforms/codex/plugin/src/engine/autopilot-engine.js b/platforms/codex/plugin/src/engine/autopilot-engine.js
+index 9a1df829..d7d5a1e2 100644
+--- a/platforms/codex/plugin/src/engine/autopilot-engine.js
++++ b/platforms/codex/plugin/src/engine/autopilot-engine.js
+@@ -3362,11 +3362,15 @@ class AutopilotEngine {
+     }
+     const blockedReason = reviewResultBlocked(reviewResult);
+     const parsed = reviewResult && reviewResult.result ? reviewResult.result : null;
++    const salvagedRawLog = reviewResult && reviewResult.salvaged
++      ? reviewResult.salvaged.raw_log
++      : null;
+     ledger.push(
+       this.ledgerEntry('dispatch_review', blockedReason ? 'blocked' : reviewResult.result.status, startedAt, {
+         runner: roster.reviewer_runner,
+         model: roster.reviewer_engine,
+         exit_status: reviewResult ? reviewResult.status : null,
++        ...(blockedReason ? { raw_log: salvagedRawLog } : {}),
+       }),
+     );
+ 
+@@ -3383,6 +3387,7 @@ class AutopilotEngine {
+         review: null,
+         reviewArgs,
+         ledger,
++        raw_log: salvagedRawLog,
+       };
+     }
+ 
+@@ -4851,6 +4856,9 @@ class AutopilotEngine {
+           reviewed: false,
+           reason: reviewed.reason || `review status ${reviewed.status}`,
+           raw: reviewed,
++          raw_log: Object.prototype.hasOwnProperty.call(reviewed, 'raw_log')
++            ? reviewed.raw_log
++            : null,
+         };
+       }
+       if (repairGeneration > 0 && previousReviewForRemediation) {
+@@ -5009,6 +5017,10 @@ class AutopilotEngine {
+         review_digest: isReviewed ? outcome.review_digest : null,
+         reason: isReviewed ? null : `final_panel_seat_${status}`,
+       };
++      if (!isReviewed && outcome && typeof outcome.raw_log === 'string'
++          && outcome.raw_log.length > 0) {
++        body.raw_log = outcome.raw_log;
++      }
+       return { ...body, receipt_digest: campaignCanonicalDigest(body) };
+     };
+ 
+diff --git a/platforms/codex/plugin/src/engine/campaign-composition.js b/platforms/codex/plugin/src/engine/campaign-composition.js
+index 1b94e48e..b17c0bcc 100644
+--- a/platforms/codex/plugin/src/engine/campaign-composition.js
++++ b/platforms/codex/plugin/src/engine/campaign-composition.js
+@@ -337,12 +337,20 @@ const FINAL_PANEL_FAILURE_STATUSES = new Set([
+   'precondition_failed',
+ ]);
+ 
+-function hasExactKeys(value, keys) {
+-  return value
+-    && typeof value === 'object'
+-    && !Array.isArray(value)
+-    && Object.keys(value).length === keys.length
+-    && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
++function hasFinalPanelSeatKeys(seat) {
++  if (!seat || typeof seat !== 'object' || Array.isArray(seat)) return false;
++  if (!FINAL_PANEL_SEAT_KEYS.every((key) => Object.prototype.hasOwnProperty.call(seat, key))) {
++    return false;
++  }
++  const allowed = new Set([...FINAL_PANEL_SEAT_KEYS, 'raw_log']);
++  for (const key of Object.keys(seat)) {
++    if (!allowed.has(key)) return false;
++  }
++  if (Object.prototype.hasOwnProperty.call(seat, 'raw_log')
++      && (typeof seat.raw_log !== 'string' || seat.raw_log.length < 1)) {
++    return false;
++  }
++  return true;
+ }
+ 
+ function validateFinalPanelReceipt(receipt, expectedMinimum) {
+@@ -361,7 +369,7 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
+   const tuples = new Set();
+   let firstFailure = null;
+   for (const seat of receipt.final_panel_seat_receipts) {
+-    if (!hasExactKeys(seat, FINAL_PANEL_SEAT_KEYS)
++    if (!hasFinalPanelSeatKeys(seat)
+         || seat.schema_version !== 1
+         || seat.artifact_type !== 'implementation_campaign_final_panel_seat'
+         || !Number.isSafeInteger(seat.seat_index)
+diff --git a/platforms/codex/plugin/src/runners/review.js b/platforms/codex/plugin/src/runners/review.js
+index 2f06996e..b903c91b 100644
+--- a/platforms/codex/plugin/src/runners/review.js
++++ b/platforms/codex/plugin/src/runners/review.js
+@@ -48,15 +48,27 @@ const NO_FINDING_TAUTOLOGIES = new Set([
+   'requirements satisfied',
+ ]);
+ 
++function normalizeNoFindingProofField(part) {
++  return String(part).toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
++}
++
++// Classifier: 'ok' | 'shape' | 'tautology'. Keep the export name; callers that
++// need a boolean use `=== 'ok'`. Grammar matches the bash battery (v2.36.57).
+ function isValidNoFindingProof(value) {
+-  const match = /^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$/.exec(value);
+-  if (!match) return false;
+-  return match.slice(1).every((part) => {
+-    const normalized = part.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
+-    return !NO_FINDING_TAUTOLOGIES.has(normalized);
+-  });
++  if (typeof value !== 'string') return 'shape';
++  const match = /^checked=(.+)[\s;,.]+evidence=(.+)[\s;,.]+conclusion=(.+)$/u.exec(value);
++  if (!match) return 'shape';
++  const normalized = match.slice(1).map(normalizeNoFindingProofField);
++  if (normalized.some((part) => part.length === 0)) return 'shape';
++  if (normalized.some((part) => NO_FINDING_TAUTOLOGIES.has(part))) return 'tautology';
++  return 'ok';
+ }
+ 
++const NO_FINDING_PROOF_SHAPE_ERROR =
++  'review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion fields separated by space, \';\', \',\' or \'.\'';
++const NO_FINDING_PROOF_TAUTOLOGY_ERROR =
++  'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
++
+ function validateUsage(value) {
+   if (value === null) return;
+   const fields = [
+@@ -129,10 +141,14 @@ function validateReviewResult(value) {
+   if (value.verdict === 'SHIP-AS-IS' && value.no_finding_proof === null) {
+     throw new Error('review output JSON SHIP-AS-IS requires no_finding_proof');
+   }
+-  if (value.verdict === 'SHIP-AS-IS' && !isValidNoFindingProof(value.no_finding_proof)) {
+-    throw new Error(
+-      'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields',
+-    );
++  if (value.verdict === 'SHIP-AS-IS') {
++    const proofClass = isValidNoFindingProof(value.no_finding_proof);
++    if (proofClass === 'shape') {
++      throw new Error(NO_FINDING_PROOF_SHAPE_ERROR);
++    }
++    if (proofClass === 'tautology') {
++      throw new Error(NO_FINDING_PROOF_TAUTOLOGY_ERROR);
++    }
+   }
+   if (value.verdict !== 'SHIP-AS-IS' && value.no_finding_proof !== null) {
+     throw new Error('review output JSON no_finding_proof must be null unless verdict is SHIP-AS-IS');
+@@ -272,7 +288,7 @@ function dispatchReviewJson(args, options = {}) {
+       transportEnvelope,
+     };
+   } catch (error) {
+-    return {
++    const payload = {
+       error: child.error || null,
+       status: child.status,
+       signal: child.signal,
+@@ -282,6 +298,20 @@ function dispatchReviewJson(args, options = {}) {
+       parseError: error,
+       transportEnvelope,
+     };
++    try {
++      const parsed = JSON.parse(stdout.trim());
++      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
++          && typeof parsed.raw_log === 'string' && parsed.raw_log.length > 0) {
++        payload.salvaged = {
++          runner: argValue('--runner'),
++          model: argValue('--model'),
++          raw_log: parsed.raw_log,
++        };
++      }
++    } catch (_salvageError) {
++      // Malformed JSON or a non-object: no salvaged key.
++    }
++    return payload;
+   }
+ }
+ 
+@@ -289,5 +319,6 @@ module.exports = {
+   dispatchReview,
+   dispatchReviewJson,
+   parseReviewOutput,
++  isValidNoFindingProof,
+   DISPATCH_REVIEW,
+ };
+diff --git a/schemas/implementation-campaign-receipt.schema.json b/schemas/implementation-campaign-receipt.schema.json
+index d647e0a3..108e76c4 100644
+--- a/schemas/implementation-campaign-receipt.schema.json
++++ b/schemas/implementation-campaign-receipt.schema.json
+@@ -229,7 +229,8 @@
+         "verdict": { "type": ["string", "null"] },
+         "review_digest": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+         "reason": { "type": ["string", "null"] },
+-        "receipt_digest": { "$ref": "#/$defs/sha256" }
++        "receipt_digest": { "$ref": "#/$defs/sha256" },
++        "raw_log": { "type": "string", "minLength": 1 }
+       },
+       "additionalProperties": false
+     },
+diff --git a/scripts/dispatch-review.sh b/scripts/dispatch-review.sh
+index 1a92ba6f..98261c40 100755
+--- a/scripts/dispatch-review.sh
++++ b/scripts/dispatch-review.sh
+@@ -570,10 +570,11 @@ validate_review_block() {
+     ' "$block_file")"
+     # Anchor on the FIELD LABELS, not on one hard-coded separator: kimi-code/k3
+     # (2026-08-15) separated its last field with a period and lost a substantive
+-    # proof to punctuation. Any separator punctuation/whitespace run is accepted;
+-    # all three labels must still appear IN ORDER with non-empty content, and the
+-    # tautology blacklist below is untouched.
+-    if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]evidence=(.+)[[:space:]\;,.]conclusion=(.+)$ ]]; then
++    # proof to punctuation. One-or-more separator characters from [space ; , .]
++    # are accepted (v2.36.57 + quantifier); all three labels must still appear
++    # IN ORDER. Normalized-empty captures are SHAPE failures before the
++    # unchanged tautology blacklist.
++    if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]+evidence=(.+)[[:space:]\;,.]+conclusion=(.+)$ ]]; then
+       BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
+     fi
+     local proof_checked proof_evidence proof_conclusion proof_value proof_normalized
+@@ -582,6 +583,9 @@ validate_review_block() {
+     proof_conclusion="$(printf '%s' "${BASH_REMATCH[3]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+     for proof_value in "$proof_checked" "$proof_evidence" "$proof_conclusion"; do
+       proof_normalized="$(printf '%s' "$proof_value" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:][:punct:]]*//; s/[[:space:][:punct:]]*$//')"
++      if [ -z "$proof_normalized" ]; then
++        BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
++      fi
+       case "$proof_normalized" in
+         ""|none|"no finding"|"no findings"|"no must-fix"|"no must-fix remains"|n/a|na|checked|"all passed"|"looks good"|diff|tests|spec|code|"acceptance criteria"|"requirements satisfied")
+           BATTERY_FAIL_REASON="NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value"; return 1
+diff --git a/skills/l5/references/hetero-impl-loop.md b/skills/l5/references/hetero-impl-loop.md
+index e244d515..6e4ce60c 100644
+--- a/skills/l5/references/hetero-impl-loop.md
++++ b/skills/l5/references/hetero-impl-loop.md
+@@ -195,7 +195,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+     final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48,
+     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
+     ledger rotation carry keeps journal append order v2.36.54,
+-    red verification takes the repair path v2.36.56.
++    red verification takes the repair path v2.36.56,
++    proof grammar parity + raw_log on rejected envelopes v2.36.57.
+     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
+     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
+     line drifts the frozen source sha and every `session-mode set` is refused until routing is
+diff --git a/src/engine/autopilot-engine.js b/src/engine/autopilot-engine.js
+index 9a1df829..d7d5a1e2 100644
+--- a/src/engine/autopilot-engine.js
++++ b/src/engine/autopilot-engine.js
+@@ -3362,11 +3362,15 @@ class AutopilotEngine {
+     }
+     const blockedReason = reviewResultBlocked(reviewResult);
+     const parsed = reviewResult && reviewResult.result ? reviewResult.result : null;
++    const salvagedRawLog = reviewResult && reviewResult.salvaged
++      ? reviewResult.salvaged.raw_log
++      : null;
+     ledger.push(
+       this.ledgerEntry('dispatch_review', blockedReason ? 'blocked' : reviewResult.result.status, startedAt, {
+         runner: roster.reviewer_runner,
+         model: roster.reviewer_engine,
+         exit_status: reviewResult ? reviewResult.status : null,
++        ...(blockedReason ? { raw_log: salvagedRawLog } : {}),
+       }),
+     );
+ 
+@@ -3383,6 +3387,7 @@ class AutopilotEngine {
+         review: null,
+         reviewArgs,
+         ledger,
++        raw_log: salvagedRawLog,
+       };
+     }
+ 
+@@ -4851,6 +4856,9 @@ class AutopilotEngine {
+           reviewed: false,
+           reason: reviewed.reason || `review status ${reviewed.status}`,
+           raw: reviewed,
++          raw_log: Object.prototype.hasOwnProperty.call(reviewed, 'raw_log')
++            ? reviewed.raw_log
++            : null,
+         };
+       }
+       if (repairGeneration > 0 && previousReviewForRemediation) {
+@@ -5009,6 +5017,10 @@ class AutopilotEngine {
+         review_digest: isReviewed ? outcome.review_digest : null,
+         reason: isReviewed ? null : `final_panel_seat_${status}`,
+       };
++      if (!isReviewed && outcome && typeof outcome.raw_log === 'string'
++          && outcome.raw_log.length > 0) {
++        body.raw_log = outcome.raw_log;
++      }
+       return { ...body, receipt_digest: campaignCanonicalDigest(body) };
+     };
+ 
+diff --git a/src/engine/campaign-composition.js b/src/engine/campaign-composition.js
+index 1b94e48e..b17c0bcc 100644
+--- a/src/engine/campaign-composition.js
++++ b/src/engine/campaign-composition.js
+@@ -337,12 +337,20 @@ const FINAL_PANEL_FAILURE_STATUSES = new Set([
+   'precondition_failed',
+ ]);
+ 
+-function hasExactKeys(value, keys) {
+-  return value
+-    && typeof value === 'object'
+-    && !Array.isArray(value)
+-    && Object.keys(value).length === keys.length
+-    && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
++function hasFinalPanelSeatKeys(seat) {
++  if (!seat || typeof seat !== 'object' || Array.isArray(seat)) return false;
++  if (!FINAL_PANEL_SEAT_KEYS.every((key) => Object.prototype.hasOwnProperty.call(seat, key))) {
++    return false;
++  }
++  const allowed = new Set([...FINAL_PANEL_SEAT_KEYS, 'raw_log']);
++  for (const key of Object.keys(seat)) {
++    if (!allowed.has(key)) return false;
++  }
++  if (Object.prototype.hasOwnProperty.call(seat, 'raw_log')
++      && (typeof seat.raw_log !== 'string' || seat.raw_log.length < 1)) {
++    return false;
++  }
++  return true;
+ }
+ 
+ function validateFinalPanelReceipt(receipt, expectedMinimum) {
+@@ -361,7 +369,7 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
+   const tuples = new Set();
+   let firstFailure = null;
+   for (const seat of receipt.final_panel_seat_receipts) {
+-    if (!hasExactKeys(seat, FINAL_PANEL_SEAT_KEYS)
++    if (!hasFinalPanelSeatKeys(seat)
+         || seat.schema_version !== 1
+         || seat.artifact_type !== 'implementation_campaign_final_panel_seat'
+         || !Number.isSafeInteger(seat.seat_index)
+diff --git a/src/runners/review.js b/src/runners/review.js
+index 2f06996e..b903c91b 100644
+--- a/src/runners/review.js
++++ b/src/runners/review.js
+@@ -48,15 +48,27 @@ const NO_FINDING_TAUTOLOGIES = new Set([
+   'requirements satisfied',
+ ]);
+ 
++function normalizeNoFindingProofField(part) {
++  return String(part).toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
++}
++
++// Classifier: 'ok' | 'shape' | 'tautology'. Keep the export name; callers that
++// need a boolean use `=== 'ok'`. Grammar matches the bash battery (v2.36.57).
+ function isValidNoFindingProof(value) {
+-  const match = /^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$/.exec(value);
+-  if (!match) return false;
+-  return match.slice(1).every((part) => {
+-    const normalized = part.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
+-    return !NO_FINDING_TAUTOLOGIES.has(normalized);
+-  });
++  if (typeof value !== 'string') return 'shape';
++  const match = /^checked=(.+)[\s;,.]+evidence=(.+)[\s;,.]+conclusion=(.+)$/u.exec(value);
++  if (!match) return 'shape';
++  const normalized = match.slice(1).map(normalizeNoFindingProofField);
++  if (normalized.some((part) => part.length === 0)) return 'shape';
++  if (normalized.some((part) => NO_FINDING_TAUTOLOGIES.has(part))) return 'tautology';
++  return 'ok';
+ }
+ 
++const NO_FINDING_PROOF_SHAPE_ERROR =
++  'review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion fields separated by space, \';\', \',\' or \'.\'';
++const NO_FINDING_PROOF_TAUTOLOGY_ERROR =
++  'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
++
+ function validateUsage(value) {
+   if (value === null) return;
+   const fields = [
+@@ -129,10 +141,14 @@ function validateReviewResult(value) {
+   if (value.verdict === 'SHIP-AS-IS' && value.no_finding_proof === null) {
+     throw new Error('review output JSON SHIP-AS-IS requires no_finding_proof');
+   }
+-  if (value.verdict === 'SHIP-AS-IS' && !isValidNoFindingProof(value.no_finding_proof)) {
+-    throw new Error(
+-      'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields',
+-    );
++  if (value.verdict === 'SHIP-AS-IS') {
++    const proofClass = isValidNoFindingProof(value.no_finding_proof);
++    if (proofClass === 'shape') {
++      throw new Error(NO_FINDING_PROOF_SHAPE_ERROR);
++    }
++    if (proofClass === 'tautology') {
++      throw new Error(NO_FINDING_PROOF_TAUTOLOGY_ERROR);
++    }
+   }
+   if (value.verdict !== 'SHIP-AS-IS' && value.no_finding_proof !== null) {
+     throw new Error('review output JSON no_finding_proof must be null unless verdict is SHIP-AS-IS');
+@@ -272,7 +288,7 @@ function dispatchReviewJson(args, options = {}) {
+       transportEnvelope,
+     };
+   } catch (error) {
+-    return {
++    const payload = {
+       error: child.error || null,
+       status: child.status,
+       signal: child.signal,
+@@ -282,6 +298,20 @@ function dispatchReviewJson(args, options = {}) {
+       parseError: error,
+       transportEnvelope,
+     };
++    try {
++      const parsed = JSON.parse(stdout.trim());
++      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
++          && typeof parsed.raw_log === 'string' && parsed.raw_log.length > 0) {
++        payload.salvaged = {
++          runner: argValue('--runner'),
++          model: argValue('--model'),
++          raw_log: parsed.raw_log,
++        };
++      }
++    } catch (_salvageError) {
++      // Malformed JSON or a non-object: no salvaged key.
++    }
++    return payload;
+   }
+ }
+ 
+@@ -289,5 +319,6 @@ module.exports = {
+   dispatchReview,
+   dispatchReviewJson,
+   parseReviewOutput,
++  isValidNoFindingProof,
+   DISPATCH_REVIEW,
+ };
+
+```
+<<<AUTOPILOT-END-8532e3357276fd12cf878022b97436c8>>>
+
+warning: Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+codex
+<<<AUTOPILOT-REVIEW-8532e3357276fd12cf878022b97436c8>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS:
+🟠 [r5-final-panel-coverage] MUST-FIX The final-panel fixture sets min_panel_size to 1 and asserts final_panel_count is 1, so the rejected second seat does not exercise the specified panel-blocking path; it also checks only that the successful seat lacks raw_log, not that its digest is byte-identical to base. This leaves required quorum-failure and digest-preservation behavior unpinned. Set the sealed minimum to 2, assert the panel blocks with the failed seat excluded, and compare the successful seat’s shape/digest against a fixed base expectation.
+🟡 [r8-red-provenance] MUST-FIX The new salvage assertions in review-runner.test.sh and raw_log/schema assertions in implementation-campaign-receipt.test.sh lack the required RED-at-base block headers with observed base behavior, while the semicolon preservation assertion is not labelled as a preservation guard. This fails rubric R8’s mandatory provenance contract; add the specified RED and preservation annotations to those assertion blocks.
+<<<AUTOPILOT-END-8532e3357276fd12cf878022b97436c8>>>
+tokens used
+44,218

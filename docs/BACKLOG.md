@@ -96,6 +96,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
 - **Context**: plan §6 — a lease GC (dead pid + no heartbeat past TTL → `released`/`expired` row) so the live segment can shrink; A's `fd316019` and D's `409e89d2` parked campaigns join the pile.
 
+### Managed rail: a disposition resume into a repair round refuses the caller's --branch (expects the derived one)
+- **Status**: fired 2026-09-16
+- **Trigger**: `--resume --campaign-disposition-authority` with must-fix-now findings passes intake → REPAIR_AUTHORIZED, then `prepare_implementation`: `caller branch disagrees with campaign stage (expected <branch>-repair-r2-<sha7>)`
+- **Effort**: Fix
+- **Source**: /l5 dogfood 2026-09-16 (mission proof-parity-raw-log, campaign-v1-aa64ebe3…; first live resume after v2.36.53/54)
+- **Pointer**: docs/plans/evidence/2026-09-16-proof-parity-raw-log/README.md
+- **Context**: `deriveCampaignDispatchUnit` compares the CALLER branch to `expectedBranch(generation)`; an in-run repair derives the name (`buildRepairBranchName`), the resume path passes the original `--branch` through. Derive on resume.
+
+### PEER-REPORTED (cuda): backlog table migration — unmapped Status → open, extra column dropped, gate 305 after
+- **Status**: fired 2026-09-16
+- **Trigger**: revival.3d dry-run on the real 196 KB table: 34 unmapped statuses became `open` (`preserved:true`); a header column outside `## Columns` lost 13 cells; the gate on the output reports 305; bytes_before−after ≠ moved
+- **Effort**: Fix
+- **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2MPAGM6AT3V3419FMB54XGP`
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: unmapped status → sidecar + error, never `open`; every header column mapped or preserved; `preserved` must cover in-place rewrites; the gate is part of `--apply`'s acceptance; byte accounting reconciles. Reply with the version when fixed.
+
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open
 - **Trigger**: a drifted non-durable-wait resume burns a grant attempt (same pre-spend class as v2.36.42/46/48/53)

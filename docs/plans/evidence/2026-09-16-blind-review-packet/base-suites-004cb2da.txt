@@ -1,0 +1,11 @@
+bash hooks/tests/review-runner.test.sh rc=0 secs=127
+bash hooks/tests/dispatch-review.test.sh rc=0 secs=224
+bash hooks/tests/implementation-campaign-state.test.sh rc=0 secs=22
+bash hooks/tests/implementation-campaign-routing.test.sh rc=0 secs=39
+bash hooks/tests/implementation-campaign-receipt.test.sh rc=0 secs=2
+bash hooks/tests/qc-panel-honesty.test.sh rc=0 secs=0
+bash hooks/tests/controller-execution-independent.test.sh rc=0 secs=3
+node scripts/check-js-syntax.js rc=0 secs=4
+bash scripts/sync-codex-plugin-skills.sh --check rc=0 secs=1
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md rc=0 secs=0
+DONE

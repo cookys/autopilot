@@ -615,12 +615,15 @@ const roster = {
   qc_panel_seats_complete: true,
   qc_panel_seats: [{
     role: 'qc',
-    runner: 'fixture',
+    runner: 'cc-shim',
     model: 'fixture-reviewer',
     effort: 'high',
     endpoint: null,
     family: 'fixture',
   }],
+  fallback_ladder: [
+    { runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
+  ],
   implementer_engine: 'fixture-implementer',
   implementer_effort: 'high',
   implementer_runner: 'fixture',
@@ -5235,7 +5238,7 @@ const unadmittedSeat = {
 };
 const admittedIncumbent = {
   role: 'qc',
-  runner: 'fixture',
+  runner: 'cc-shim',
   model: 'fixture-reviewer',
   effort: 'high',
   endpoint: null,
@@ -5244,7 +5247,7 @@ const admittedIncumbent = {
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
-  reviewer_runner: 'fixture',
+  reviewer_runner: 'cc-shim',
   reviewer_qualified: true,
   min_panel_size: 1,
   qc_panel_seats_complete: true,
@@ -5308,5 +5311,173 @@ NODE
 )"
 assert_contains "$PANEL_INTAKE_OUT" "final-panel-intake assertions passed" \
   "campaign intake refuses unadmitted qc seats before claim"
+
+# RED at base 9b049c00: qualified gpt-5.6-sol/codex admitted past qc; spies
+#   {"status":"blocked","code":"invalid_mission_claim","missionClaim":1,"claimGeneration":0}
+# RED at base 9b049c00: unqualified codex → final_panel_seat_unqualified
+#   "qc_panel[0] gpt-5.6-sol/codex@@none; record a standing pin: ..."
+# RED at base 9b049c00: override_admitted / standing-pin (override_admitted_seats, no
+#   ladder) still admitted past qc (missionClaim 1).
+# preservation (green at base): GLM-5.2/cc-shim and claude-native admitted past qc.
+BLIND_INTAKE_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+
+function spies() {
+  const counts = { missionClaim: 0, claimGeneration: 0 };
+  return {
+    counts,
+    adapters: {
+      now: () => '2026-07-26T00:00:00.000Z',
+      missionClaim() {
+        counts.missionClaim += 1;
+        return { owner: 'mission', status: 'claimed', claim_id: 'must-not-run' };
+      },
+      releaseMission() {
+        return { owner: 'mission_release', status: 'released' };
+      },
+      claimGeneration() {
+        counts.claimGeneration += 1;
+        return { owner: 'campaign_generation', status: 'claimed', generation: 1, nonce: 'n' };
+      },
+    },
+  };
+}
+
+function baseRoster(seats, extra) {
+  return {
+    reviewer_engine: 'fixture-reviewer',
+    reviewer_effort: 'high',
+    reviewer_runner: 'cc-shim',
+    reviewer_qualified: true,
+    min_panel_size: 1,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: seats,
+    implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+    ...extra,
+  };
+}
+
+const codexNone = {
+  role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai',
+};
+const codexEp = {
+  role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: 'openai', family: 'openai',
+};
+const ccSeat = {
+  role: 'qc', runner: 'cc-shim', model: 'GLM-5.2', effort: 'high', endpoint: null, family: 'other',
+};
+const cursorSeat = {
+  role: 'qc', runner: 'cursor', model: 'cursor-grok-4.6-low', effort: 'high', endpoint: null, family: 'cursor',
+};
+const nativeSeat = {
+  role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic',
+};
+const kimiSeat = {
+  role: 'qc', runner: 'kimi', model: 'kimi-code/k3', effort: 'high', endpoint: null, family: 'moonshot',
+};
+
+function assertBlindBlock(result, spiesObj) {
+  assert.strictEqual(result.status, 'blocked');
+  assert.strictEqual(result.rejection.code, 'final_panel_seat_blind_incompatible');
+  assert.strictEqual(result.pre_spend_no_effect_receipt, null);
+  assert.deepStrictEqual(result.steps, [result.rejection]);
+  assert.match(result.rejection.reason, /pins and overrides do not bypass containment/);
+  assert.strictEqual(spiesObj.counts.missionClaim, 0);
+  assert.strictEqual(spiesObj.counts.claimGeneration, 0);
+}
+
+const ladderCodex = [{ runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' }];
+const s1 = spies();
+const r1 = runCampaignIntake({
+  repo: process.cwd(),
+  roster: baseRoster([codexNone], { fallback_ladder: ladderCodex }),
+}, s1.adapters);
+assertBlindBlock(r1, s1);
+assert.match(r1.rejection.reason, /qc_panel\[0\] gpt-5\.6-sol\/codex@@none/);
+assert.strictEqual(r1.rejection.reason.split('\n').length, 1);
+
+const sEp = spies();
+const rEp = runCampaignIntake({
+  repo: process.cwd(),
+  roster: baseRoster([codexEp], { fallback_ladder: [{ runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: 'openai', family: 'openai' }] }),
+}, sEp.adapters);
+assertBlindBlock(rEp, sEp);
+assert.match(rEp.rejection.reason, /qc_panel\[0\] gpt-5\.6-sol\/codex@openai/);
+
+const twoSeats = [codexNone, ccSeat, cursorSeat];
+const twoLadder = [
+  ...ladderCodex,
+  { runner: 'cc-shim', model: 'GLM-5.2', effort: 'high', family: 'other' },
+  { runner: 'cursor', model: 'cursor-grok-4.6-low', effort: 'high', family: 'cursor' },
+];
+const s2 = spies();
+const r2 = runCampaignIntake({
+  repo: process.cwd(),
+  roster: baseRoster(twoSeats, { fallback_ladder: twoLadder }),
+}, s2.adapters);
+assertBlindBlock(r2, s2);
+const lines = r2.rejection.reason.split('\n');
+assert.strictEqual(lines.length, 2);
+assert.match(lines[0], /^qc_panel\[0\] gpt-5\.6-sol\/codex@@none /);
+assert.match(lines[1], /^qc_panel\[2\] cursor-grok-4\.6-low\/cursor@@none /);
+
+const sOvr = spies();
+const rOvr = runCampaignIntake({
+  repo: process.cwd(),
+  roster: baseRoster([codexNone], { fallback_ladder: ladderCodex, override_admitted_seats: ['qc_panel[0]'] }),
+}, sOvr.adapters);
+assertBlindBlock(rOvr, sOvr);
+
+const sPin = spies();
+const rPin = runCampaignIntake({
+  repo: process.cwd(),
+  roster: baseRoster([codexNone], { override_admitted_seats: ['qc_panel[0]'] }),
+}, sPin.adapters);
+assertBlindBlock(rPin, sPin);
+
+const sPrec = spies();
+const rPrec = runCampaignIntake({
+  repo: process.cwd(),
+  roster: baseRoster([codexNone], { fallback_ladder: [] }),
+}, sPrec.adapters);
+assertBlindBlock(rPrec, sPrec);
+assert.notStrictEqual(rPrec.rejection.code, 'final_panel_seat_unqualified');
+
+for (const bad of [kimiSeat, cursorSeat]) {
+  const sb = spies();
+  const rb = runCampaignIntake({
+    repo: process.cwd(),
+    roster: baseRoster([bad], {
+      fallback_ladder: [{ runner: bad.runner, model: bad.model, effort: 'high', family: bad.family }],
+    }),
+  }, sb.adapters);
+  assertBlindBlock(rb, sb);
+}
+
+function assertAdmitted(seat) {
+  const s = spies();
+  const result = runCampaignIntake({
+    repo: process.cwd(),
+    roster: baseRoster([seat], {
+      fallback_ladder: [{ runner: seat.runner, model: seat.model, effort: seat.effort, family: seat.family }],
+    }),
+  }, s.adapters);
+  assert.ok((s.counts.missionClaim + s.counts.claimGeneration) >= 1, JSON.stringify(result.rejection || result));
+}
+
+assertAdmitted(ccSeat);
+assertAdmitted(nativeSeat);
+
+console.log('final-panel-blind-intake assertions passed');
+NODE
+)"
+assert_contains "$BLIND_INTAKE_OUT" "final-panel-blind-intake assertions passed" \
+  "campaign intake refuses blind-incompatible qc seats before claim"
 
 finalize_test

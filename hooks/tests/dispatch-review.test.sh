@@ -1080,6 +1080,42 @@ unset OPENCODE_ARGV_FILE
 OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "blind codex review requires a no-tools profile"
 assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition explains containment"
+
+# RED at base 9b049c00: bash gate already agrees with the Node predicate for the
+#   --runner vocabulary (preservation, green at base for the gate; Node side is new).
+PARITY_STUB="$TEST_TMP/blind-parity-stub"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$PARITY_STUB"
+chmod +x "$PARITY_STUB"
+PARITY_OUT="$(node - "$REPO_ROOT" "$SCRIPT" "$DIFF" "$PARITY_STUB" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [root, script, diff, stub] = process.argv.slice(2);
+const { isBlindDiscoveryCapableRunner } = require(path.join(root, 'src', 'engine', 'final-panel-qualification'));
+const vocab = 'codex agy grok cc-shim anthropic-compatible claude-native qoderclicn kimi cursor opencode'.split(' ');
+for (const runner of vocab) {
+  const spawned = spawnSync(script, ['--runner', runner, '--model', 'fixture', '--diff-file', diff, '--bin', stub], {
+    encoding: 'utf8',
+    env: { ...process.env, AUTOPILOT_BLIND_DISCOVERY: '1', DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0' },
+    timeout: 15000,
+  });
+  const out = `${spawned.stdout || ''}${spawned.stderr || ''}`;
+  const blocked = /enforceable no-tools runner profile/.test(out);
+  const capable = isBlindDiscoveryCapableRunner(runner);
+  if (capable) {
+    assert.strictEqual(blocked, false, `${runner} capable but hit no-tools gate: ${out.slice(0, 400)}`);
+  } else {
+    assert.strictEqual(blocked, true, `${runner} incompatible but missed no-tools gate: ${out.slice(0, 400)}`);
+    assert.strictEqual(spawned.status, 2, `${runner} expected exit 2 got ${spawned.status}`);
+  }
+}
+console.log('blind_runner_parity=true');
+NODE
+)"
+assert_eq "$?" "0" "blind discovery bash gate matches isBlindDiscoveryCapableRunner: $PARITY_OUT"
+assert_contains "$PARITY_OUT" "blind_runner_parity=true" "parity loop completed"
+
 BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
 BLIND_SCRIPT="$TEST_TMP/blind-probe"
 printf '#!/usr/bin/env bash\nif [ -e escape-sentinel ]; then printf '\''%s\\n'\'' '\''{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null,"usage":null}'\''; else exit 1; fi\n' > "$BLIND_SCRIPT"; chmod +x "$BLIND_SCRIPT"

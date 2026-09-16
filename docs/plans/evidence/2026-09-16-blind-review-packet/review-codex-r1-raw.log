@@ -1,0 +1,2778 @@
+<<<AUTOPILOT-REVIEW-beb2c4a3a7bd37ea6bb9777f25037c58>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS:
+🔴 [deny-dir-descendants] MUST-FIX Denial is evaluated only on leaf paths, while directory removal handles only literal patterns ending in `/**`; consequently `logs/x.raw.log/verdict.txt` or `docs/plans/p.review.md/body` survives in both `tree/` and `diff.patch` although its ancestor directory matches a default deny pattern. Derive directory prefixes and treat every descendant of a matched directory as denied for tree, diff, rename, and symlink-target processing.
+🟠 [ambient-common-gitdir] MUST-FIX `gitEnv` preserves ambient `GIT_COMMON_DIR`, which can make the supposedly isolated temporary `GIT_DIR` consume another repository's config and `info/attributes`, allowing a smudge/filter command to run before integrity verification. Scrub `GIT_COMMON_DIR` from every Git subprocess environment and add a poisoned-environment sentinel test.
+🟠 [attributes-symlink-type] MUST-FIX Every `.gitattributes` blob is restored with `writeFileSync`, so a safe tracked `.gitattributes` symlink becomes a regular file and then fails integrity instead of being retained as required. Restore removed attribute entries according to their Git mode, using a real symlink for mode `120000`, before integrity and hazard pruning.
+🟠 [name-status-utf8] MUST-FIX `parseNameStatus` decodes old and new path buffers without UTF-8 validation, so a deleted or renamed invalid-UTF-8 path present only in the base tree is lossily decoded and accepted after checkout. Validate every `--name-status -z` path buffer and fail with `unsupported path encoding: <hex>` before creating or checking out the packet tree.
+🟠 [posix-backslash-path] MUST-FIX `packetPathDenied` rewrites backslashes to `/` even though Git paths and the deny grammar are repository-relative POSIX byte strings; on POSIX a valid root file such as `.qc\product.js` is therefore falsely treated as being under `.qc/` and silently omitted from review. Match canonical Git paths without rewriting backslashes.
+<<<AUTOPILOT-END-beb2c4a3a7bd37ea6bb9777f25037c58>>>
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /tmp/claude-1000/-home-cookys-projects-autopilot/6bdcb942-bbf5-4a9e-a425-4423ec14694c/scratchpad/c1a/verify-wt
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: max
+reasoning summaries: none
+session id: 01a0ab42-f8da-7452-aaf8-1bc3f22c52f3
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-beb2c4a3a7bd37ea6bb9777f25037c58>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-beb2c4a3a7bd37ea6bb9777f25037c58>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=7ae7da92a15b7e7fa3719adb4c1f18fb
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+# Blind review redesign, cut 1a-A — the content-addressed review packet and its runner wiring
+
+> Status: execution plan for ONE managed deliverable (`/l5`, mission graph node
+> `blind-review-packet-2026-09-16`) — the first cut of BACKLOG row "Blind review redesign: blind the
+> packet and the process boundary, not the runner" (open, L). Two consults converged on the shape
+> (`docs/plans/evidence/2026-09-16-blind-review-redesign/consult-{claude-fable-5-1,gpt-6-astra}.md`);
+> a third (codex gpt-5.6-sol, `consult-plan-cut1a-codex-answer.md`) reviewed the first draft of this
+> plan and split it: this deliverable is the packet builder plus the `dispatchReview` wiring and the
+> adversarial packet tests; the engine threading (receipt `packet_hash`, schema, panel identity rule)
+> is cut 1a-B, a separate plan on top of this one. Cut 1b (cleanroom launcher, `bwrap`; probe
+> evidence `bwrap-probe.md`) admits tool-capable seats; cut 2 is the speed work (§7).
+
+## 0. What is actually true today (verified 2026-09-16, base `004cb2da`)
+
+- Blind mode is a runner allow-list plus a scratch copy. `src/runners/review.js:210-240`
+  (`dispatchReview`): with `blindDiscovery: true` it `mkdtemp`s a `0700` dir, copies the `--diff-file`
+  and `--spec-file` arguments into it as `diff.file.input` / `spec.file.input`, launches
+  `scripts/dispatch-review.sh` with cwd = that dir and `AUTOPILOT_BLIND_DISCOVERY=1`, and removes the
+  dir afterwards. `dispatch-review.sh:288-295` refuses every runner outside
+  `qoderclicn|cc-shim|claude-native|anthropic-compatible` under that env; intake refuses those seats
+  first (`final_panel_seat_blind_incompatible`, v2.36.58).
+- The diff a seat sees is `git diff --no-ext-diff --no-textconv <base>..<commit>` over the whole tree
+  (`defaultDiffProvider`, `autopilot-engine.js:1778`), so a tracked verdict carrier rides into every
+  seat's prompt if the candidate touched it. This repo tracks such carriers today: five
+  `.qc/<sha>.verdict.json`, two `docs/plans/*.review.md`, 810 files under `docs/plans/evidence/`.
+  Nothing filters them.
+- The spec a seat sees is the dispatcher's brief (`promptFile`); implementer narrative is already
+  kept out (`prior_findings_included: false`, blind-evidence gate in `dispatch-review.sh`). Commit
+  messages never enter (git diff, not format-patch). `prepareReview` (`:4665-4735`) computes a
+  transient `diff_digest` + `spec_digest` and re-checks them before invocation; nothing durable
+  records what a seat was handed.
+- A tool-capable seat has nothing to work on even if it were admitted: the scratch dir holds two
+  files, no source tree. Cut 1b needs a tree to mount; today there is none.
+- The tree holds a symlink (`.agents/skills -> ../skills`, mode 120000) and no gitlinks. The base
+  `git archive` is ~51 MB — larger than `spawnSync`'s default 1 MiB stdout buffer.
+
+## 1. Ruling and shape
+
+1. **One packet per review dispatch, built by the dispatcher, content-addressed.** New module
+   `src/runners/review-packet.js` (Node built-ins + `git` only) exports
+   `buildReviewPacket({ repo, baseSha, candidateSha, diffFile, specFile, outDir, denyList })`,
+   `packetPathDenied(path, denyList)`, `normalizeDenyList(denyList)`, `DEFAULT_PACKET_DENY_LIST`
+   and the integrity helper `verifyTreeIntegrity(treeDir, listing)` (used by the build and by test
+   (h2)). It writes, under `outDir`:
+   - `tree/` — NOT `git archive` (it honours candidate-controlled `export-subst`, which expands
+     `$Format:%B$` to the commit message, and `export-ignore`, which drops an allowed file). Instead:
+     an ISOLATED temporary git directory `<outDir>/.gitdir` (created by the builder: `HEAD` =
+     `ref: refs/heads/none`, empty `refs/`, `objects/info/alternates` naming the real repository's
+     objects directory as printed by `git rev-parse --git-path objects`, NO `config`, NO
+     `info/attributes`, NO hooks) used for every tree command via env `GIT_DIR=<outDir>/.gitdir
+     GIT_INDEX_FILE=<outDir>/.gitdir/index GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+     GIT_ATTR_NOSYSTEM=1`: `git read-tree <candidateOid>`, then every `.gitattributes` entry (any
+     depth) removed from that index (`git update-index --force-remove`), then `git
+     --work-tree=<outDir>/.empty -c core.attributesFile=/dev/null -c core.symlinks=true -c
+     core.autocrlf=false -c core.eol=lf checkout-index -a --prefix=<outDir>/tree/`. The temp git
+     dir has no `info/attributes` and no config, the empty work-tree has no `.gitattributes`, the
+     index has none, and global/system config and attribute files are disabled, so NO filter driver
+     (LFS or any configured smudge), `ident`, `eol` or `text` conversion can run (verified
+     2026-09-17: a sentinel smudge driver configured in the repo and attached through
+     `$GIT_DIR/info/attributes` is never invoked under the temp git dir, and IS invoked by a
+     control that uses the real git dir; `$Id$` stays literal; a real symlink is created even with
+     repo `core.symlinks=false`). The removed `.gitattributes` blobs are then written raw from
+     `git cat-file blob <oid>` so the tree is complete; `.gitdir` and `.empty` removed. Then an
+     INTEGRITY pass: every `git ls-tree -r -z <candidateOid>` entry must exist in `tree/` with the
+     `lstat` type matching its mode (`100644`/`100755` → regular file, `120000` → symlink) and
+     `git hash-object --stdin --no-filters` of its bytes (a symlink: of its target bytes) equal to
+     the listed object id, and `tree/` must hold nothing the listing lacks — any mismatch (a
+     rewritten byte, a symlink materialized as a file, a missing or extra path) fails the build
+     closed with `tree integrity: <path>`. Path bytes from `ls-tree -z` / `--name-status -z` are
+     handled as `Buffer`s; any path that is not valid UTF-8 fails the build closed with
+     `unsupported path encoding: <hex>` before checkout (no lossy decode ever reaches the deny
+     matcher or the manifest). Only then is every path matched by the
+     deny-list deleted (a denied directory is removed whole). No `.git`, so no history, no
+     `.git/autopilot`, no commit text; untracked files never enter by construction. Symlinks are
+     kept as symlinks (never dereferenced); a link whose target is absolute, escapes `tree/`
+     (`..` past the root), or resolves to a denied path is removed and listed in `denied_paths`. A
+     gitlink (submodule, mode 160000 in `git ls-tree -r`) fails the build closed with
+     `unsupported submodule: <path>` before checkout.
+   - `diff.patch` — the dispatcher's diff file is first proven CANONICAL: the builder regenerates
+     `git diff --no-ext-diff --no-textconv <baseOid>..<candidateOid>` in `repo` (the exact command
+     `defaultDiffProvider` uses) and `diffFile`'s bytes must equal it, else the build fails closed
+     with `diff not canonical` (a reordered, edited or foreign diff never reaches the splitter).
+     The canonical bytes are then split into top-level `diff --git` sections as `Buffer`s (bytes
+     are never re-encoded; CRLF and binary sections stay exact) and aligned one-for-one, in order,
+     with the records of `git diff --no-ext-diff --no-textconv --name-status -z <baseOid>
+     <candidateOid>` (git emits both in the same order for the same two OIDs); a count mismatch
+     still fails the build closed. A section is dropped when EITHER its old or its new path is denied; when the old path
+     was denied and the new path is not (a rename out of a denied dir), the new path is also pruned
+     from `tree/` and listed. Kept sections are copied byte-for-byte; with no denied path the file
+     is byte-identical (`cmp`) to the input. A line inside file content that starts with
+     `diff --git` never starts a section because sections come from the aligned record count, not
+     from a regex over content.
+   - `spec.md` — the spec file byte-for-byte; when `specFile` is absent (`undefined`/`null`) a
+     zero-byte `spec.md` (the terminal review site runs with `noReviewSpec`).
+   - `MANIFEST.json` — `{ schema_version: 1, artifact_type: 'review_packet_manifest', base_sha,
+     candidate_sha, deny_list, entries, packet_hash }`: `base_sha`/`candidate_sha` are the FULL
+     object ids (`git rev-parse --verify <x>^{commit}`); `deny_list` is the normalized list
+     (validated, deduplicated, sorted); `entries` is `[{ path, type: 'file'|'symlink', sha256,
+     bytes }…]` sorted by `path` (relative to `outDir`: `tree/…`, `diff.patch`, `spec.md`; the
+     manifest is not an entry), walked with `lstat`, a symlink's `sha256`/`bytes` taken over its
+     target string; `packet_hash = sha256(JSON.stringify({ schema_version, base_sha, candidate_sha,
+     deny_list, entries }))` (that key order, UTF-8, no whitespace). No timestamp, absolute path,
+     hostname or PID anywhere — two builds of the same inputs produce the same hash.
+   - Deny-list grammar: paths are repository-relative POSIX byte strings; a pattern is a `/`-joined
+     sequence of segments where `**` matches zero or more whole segments and `*` matches within one
+     segment (so `**/*.raw.log` matches root `x.raw.log`); a pattern ending in `/**` matches the
+     directory itself and everything under it. `normalizeDenyList` rejects absolute patterns, `..`,
+     empty patterns and any other glob syntax. `DEFAULT_PACKET_DENY_LIST = Object.freeze([
+     '.autopilot/**', '.qc/**', 'docs/plans/evidence/**', 'docs/plans/**/*.review.md',
+     'docs/plans/**/*.review.json', 'docs/plans/**/*disposition*.json', '**/*.receipt.json',
+     '**/*.raw.log' ])` — every entry names a verdict carrier this repo tracks or writes.
+   - Returns `{ dir, packet_hash, manifest_path, entries_count, denied_paths }` (`denied_paths`
+     sorted, tree/diff/symlink hits unioned). Every failure is a thrown `Error` naming the step
+     (`git read-tree`, `checkout-index`, `tree integrity`, `git diff --name-status`, alignment,
+     symlink, submodule).
+2. **`dispatchReview` builds the packet in blind mode when it can.** `src/runners/review.js`: when
+   `options.blindDiscovery === true` AND `options.packet` is an object `{ repo, baseSha, candidateSha
+   }`, the blind dir gets `packet/` built by §1.1 (`diffFile`/`specFile` taken from the `--diff-file`
+   / `--spec-file` args; a missing `--spec-file` arg means the zero-byte spec and NO `--spec-file`
+   arg is added), the launch args point `--diff-file` at `packet/diff.patch` and, when present,
+   `--spec-file` at `packet/spec.md`, cwd stays the blind dir root, and the env gains
+   `AUTOPILOT_REVIEW_PACKET_DIR=<blindDir>/packet` and `AUTOPILOT_REVIEW_PACKET_HASH`. The launch env
+   is always a clone of `options.env || process.env` with BOTH packet variables deleted first and set
+   only after a successful build — an ambient value never leaks into a legacy or non-blind launch.
+   `dispatchReviewJson` returns `packet: { packet_hash, entries_count, denied_paths }` on the
+   success branch and `packet: null` on EVERY other return branch (child error, parse error, missing
+   script). Without `options.packet` the legacy copy path (`diff.file.input`, `spec.file.input`) is
+   byte-identical to today apart from the env scrub. A packet build failure returns the
+   `{ error, status: null, signal: null }` shape the function already uses for a missing script and
+   the script is never launched (fail closed, no unfiltered input reaches a seat).
+3. **Nothing else moves.** The engine does not yet pass `options.packet` (cut 1a-B: the two
+   `reviewOptions` sites, `reviewDiff` return, `finalPanelSeatReceipt.packet_hash`, the
+   `FINAL_PANEL_SEAT_OPTIONAL_KEYS` rule, `schemas/implementation-campaign-receipt.schema.json`, the
+   panel identity rule). `dispatch-review.sh`'s blind `case`, the intake predicate and the resolver ⚠
+   stay exactly as v2.36.58 shipped them (cut 1b). A cleanroom seat is still refused at intake; what
+   changes is that the packet it will be handed now exists and is proven clean.
+
+## 2. Changes by file
+
+- `src/runners/review-packet.js` (NEW, + mirror): §1.1. `git` via `spawnSync` with `cwd: repo`,
+  `error`/`signal`/`status`/stderr checked on every call; no `tar`.
+- `src/runners/review.js` (+ mirror): §1.2. `require('./review-packet')`; the packet is built
+  before the arg rewrite; `child.autopilotPacket` carries the build result to `dispatchReviewJson`.
+- Tests (each change-pinning block starts with `# RED at base 004cb2da: <observed message>` quoting
+  the base run verbatim; preservation guards labelled `(preservation, green at base)`; fixture
+  repos and stub `--bin`/`scriptPath` binaries only — no real reviewer runs):
+  - `hooks/tests/review-packet.test.sh` (NEW): fixture repo with base commit B and candidate C.
+    C's commit message holds token `T-MSG`; C changes `src/app.js` (benign, content includes a line
+    starting with `diff --git a/x b/x`), adds `.autopilot/prior-verdict.json` (`T-AUTOPILOT`),
+    `.qc/deadbeef.verdict.json` (`T-QC`), `docs/plans/evidence/x/review.json` (`T-EVIDENCE`),
+    `docs/plans/p.review.md` (`T-REVIEWMD`), `docs/plans/g1-disposition.json` (`T-DISP`),
+    `lib/run.receipt.json` (`T-RECEIPT`), `logs/x.raw.log` (`T-RAWLOG`, at a nested path AND a
+    root-level `y.raw.log`), renames `docs/plans/evidence/old.md` (present at B, `T-RENAME`) to
+    `docs/notes/moved.md`, adds a binary file `img.bin` (allowed) and a CRLF file `win.txt`
+    (allowed), a safe relative symlink `link -> src`, an escaping symlink `esc -> ../../etc`, and a
+    symlink to a denied path `qc -> .qc`; an untracked `notes/verdict.txt` (`T-UNTRACKED`) sits in
+    the worktree; C also commits a `.gitattributes` with `msg.txt export-subst` (`msg.txt` holds
+    `$Format:%B$`, so `git archive` would expand `T-MSG` into it) and `keep.txt export-ignore`
+    (`keep.txt` is an allowed product file); the diff file is `git diff --no-ext-diff --no-textconv
+    B..C`; the spec holds no token. Assertions: (a) `grep -r` for each of the eleven tokens over
+    the packet dir → zero hits, `tree/msg.txt` holds the literal `$Format:%B$` and `tree/keep.txt`
+    is present with C's bytes (RED at base: module absent; a `git archive` control in the test
+    shows the expansion and the omission); (b) `tree/src/app.js`, `tree/img.bin`, `tree/win.txt` byte-equal
+    to C's blobs; `tree/link` is a symlink to `src`; `tree/esc`, `tree/qc`, `tree/.autopilot`,
+    `tree/.qc`, `tree/docs/plans/evidence`, `tree/docs/notes/moved.md` (rename out of a denied
+    dir) absent; `denied_paths` lists each pruned path once, sorted; (c) `diff.patch` holds the
+    `src/app.js`, `img.bin`, `win.txt`, `link` sections byte-equal (`cmp` on the extracted section
+    bytes) to the input's, and no section for any denied old/new path; (d) `MANIFEST.json` entries
+    == the sorted `lstat` walk minus the manifest, each `sha256`/`bytes` re-verified by a Node
+    helper (`fs.readFileSync` for files, `fs.readlinkSync(p, { encoding: 'buffer' })` for symlinks —
+    never a line-oriented shell pipeline, which would append a newline), `type` correct,
+    `base_sha`/`candidate_sha` equal exactly `git rev-parse --verify B^{commit}` / `C^{commit}` as
+    printed, `deny_list` sorted+deduped, `packet_hash` == `sha256` of the pinned preimage string
+    (re-computed in the test from the manifest fields in the stated key order); (e) building twice
+    → equal `packet_hash`; one spec byte changed → different; deny-list reordered/duplicated →
+    equal; (f) with `denyList: []` and a candidate touching no symlink/rename hazards,
+    `diff.patch` is byte-identical (`cmp`) to the input; (g) `packetPathDenied` table: `.autopilot/x`,
+    `.autopilot/a/b`, `.qc/a.verdict.json`, `docs/plans/evidence/r.md`, `docs/plans/a/b.review.md`,
+    `docs/plans/g2-disposition.json`, `a/b/c.receipt.json`, `x.raw.log`, `a/x.raw.log` → denied;
+    `docs/plans/evidence.md`, `src/receipt.json`, `autopilot/x`, `docs/review.md` → allowed;
+    `normalizeDenyList` rejects `/abs/**`, `a/../b`, `` and `{a,b}`; (h) a fixture whose tree
+    exceeds 1 MiB builds; (h2) a fixture with `id.txt ident` (`$Id$` is rewritten on checkout)
+    is NOT rewritten (attributes are inert) and the build succeeds with the literal bytes, while
+    the integrity helper (exported for the test) run on a copy of the tree whose `id.txt` has been
+    replaced by the git-style ident expansion `$Id: <blob oid> $` fails closed with `tree
+    integrity: id.txt` and no `MANIFEST.json` is written; (h2b) a fixture whose sentinel filter is
+    attached through `.git/info/attributes` (not a tracked `.gitattributes`) builds with the marker
+    absent, while a control `checkout-index` against the real git dir creates the marker; (h2c) an
+    equal-count diff file with two sections swapped (or one byte edited) fails closed with `diff
+    not canonical` before any section is written; (h3) a second fixture repo created with `git init --object-format=sha256`
+    builds, its manifest OIDs are the 64-hex `rev-parse` values and the `packet_hash` preimage
+    re-computes; (h4) a fixture with a filename containing an invalid UTF-8 byte (`printf 'bad\xff'`)
+    fails closed with `unsupported path encoding:` before any file is written; (i) a gitlink fixture (a submodule entry added with
+    `git update-index --add --cacheinfo 160000,<sha>,sub`) fails with `unsupported submodule: sub`
+    and writes nothing under `outDir`; (j) a candidate with `specFile` absent yields a zero-byte
+    `spec.md` and the manifest lists it with `bytes: 0`.
+  - `hooks/tests/dispatch-review.test.sh` (next to the existing blind adapter case ~1138, which
+    already drives `dispatchReviewJson` with `blindDiscovery: true` and a stub `scriptPath`): with
+    `options.packet` the stub script receives `--diff-file` ending in `/packet/diff.patch`,
+    `--spec-file` ending in `/packet/spec.md`, env `AUTOPILOT_REVIEW_PACKET_DIR` = the dir of those
+    files, `AUTOPILOT_REVIEW_PACKET_HASH` = 64 hex, `AUTOPILOT_BLIND_DISCOVERY=1`, and the JSON
+    result carries `packet.packet_hash` equal to the env value (RED at base: `diff.file.input`, no
+    packet key); without `--spec-file` in the args the stub receives no `--spec-file` and
+    `packet/spec.md` is zero bytes; without `options.packet` the args end in `diff.file.input` /
+    `spec.file.input` and `packet` is `null` (preservation); with poisoned ambient
+    `AUTOPILOT_REVIEW_PACKET_DIR=/poison` and `AUTOPILOT_REVIEW_PACKET_HASH=poison` in
+    `options.env`, the legacy blind launch and the non-blind launch see neither variable (RED at
+    base: inherited); a packet build failure (candidateSha that does not exist) returns `error`
+    set, `status: null`, `packet: null`, and the stub was never invoked (RED at base); the
+    child-error, parse-error and missing-script branches all carry `packet: null`.
+- Docs: `references/blind-dispatch.md` (+ mirror) — new section "Packet blinding (v2.36.59)" after
+  "Verifier isolation": what the packet is, the deny-list default and grammar, the hash preimage,
+  the symlink/submodule rules, and the pointer to cuts 1a-B/1b; `docs/BACKLOG.md` — the redesign
+  row's Context gains "cut 1a-A (packet builder) shipped v2.36.59" (≤ 240 bytes; Status stays
+  `open`). `CHANGELOG.md` and version manifests are NOT sealed (depth-0 release commit after the
+  merge; the v2.36.59 number in text is a pin as in v2.36.53–58).
+
+### 2.5 Sealed `output_paths` (exact)
+
+```
+src/runners/review-packet.js
+platforms/codex/plugin/src/runners/review-packet.js
+src/runners/review.js
+platforms/codex/plugin/src/runners/review.js
+hooks/tests/review-packet.test.sh
+hooks/tests/dispatch-review.test.sh
+references/blind-dispatch.md
+platforms/codex/plugin/references/blind-dispatch.md
+docs/BACKLOG.md
+```
+
+`review-packet.js`, its mirror and `review-packet.test.sh` are created (`authorized_creates`); every
+other path exists at base.
+
+### 2.6 Global constraints (copied verbatim into every dispatch)
+
+- Node ≥ 20.10, built-ins only; the only external process is `git`; never `git archive` (attribute
+  leakage); the tree is verified against `git ls-tree -r` object ids before use.
+- `MANIFEST.json` and `packet_hash` contain no timestamp, absolute path, hostname or PID; the hash
+  preimage is `JSON.stringify({ schema_version, base_sha, candidate_sha, deny_list, entries })`.
+- Symlinks are never followed; a gitlink fails the build closed; no attribute-driven filter, ident
+  or eol conversion can run during checkout (isolated temp `GIT_DIR` with alternates only — no
+  config, no `info/attributes` —, index without `.gitattributes`, empty work-tree,
+  `core.attributesFile=/dev/null`, `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM=/dev/null`,
+  `GIT_ATTR_NOSYSTEM=1`); non-UTF-8 paths fail closed; a non-canonical diff file fails closed.
+- Object ids are taken verbatim from `git rev-parse`; nothing assumes SHA-1 or 40 hex digits.
+- The legacy blind path (no `options.packet`) and the non-blind path are byte-identical to base
+  `004cb2da` except that both packet env variables are always scrubbed from the launch env.
+- `src/engine/**`, `scripts/**`, `bin/autopilot.js`, `schemas/**` are byte-identical to base.
+- No new CLI flag; no new resolver field; no new config knob.
+
+## 3. Out of scope
+
+- Cut 1a-B: `options.packet` from the engine (`performReview` ~4812, terminal site ~9692 with
+  `baseSha: immutableBase`), `reviewDiff` return, `finalPanelSeatReceipt.packet_hash`,
+  `FINAL_PANEL_SEAT_OPTIONAL_KEYS` (mixed presence among reviewed seats rejected, all-missing
+  allowed only for legacy receipts, forbidden on failed seats), the receipt JSON schema + mirror,
+  the panel identity rule. Its plan is written on top of this deliverable's merged base.
+- Binding `packet_hash` into `review_digest` / durable replay (consult finding 5): refuted for now —
+  the packet is a pure function of `(base_sha, candidate tree, spec bytes, deny_list)`; the first
+  three are already re-checked by the transient full-diff authority before invocation and the
+  deny-list is a frozen constant in this cut. Revisit when the deny-list becomes configurable (1b).
+- The cleanroom tier (1b) and the speed cuts (2). A configurable deny-list (1b).
+- Redacting code comments / test names: they are the code under review (both consults).
+
+## 4. Acceptance
+
+| id | criterion | evidence |
+|----|-----------|----------|
+| `packet-canary` | eleven planted tokens (commit message, untracked file, eight deny-listed tracked carriers, a rename out of a denied dir) yield zero hits over the built packet; allowed product, binary and CRLF files and their diff sections are present byte-for-byte | review-packet suite |
+| `packet-hazards` | safe relative symlink kept as a real symlink even with `core.symlinks=false`; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; `export-subst`/`export-ignore` neither leak nor omit; a smudge driver attached via `.gitattributes` OR `.git/info/attributes` never runs and `ident` stays literal; an ident-expanded `id.txt` fails closed as `tree integrity: id.txt`; a non-canonical diff fails closed; a SHA-256 repo builds with 64-hex OIDs; an invalid-UTF-8 path fails closed; >1 MiB tree builds; absent spec → zero-byte `spec.md` | review-packet suite |
+| `packet-identity` | same inputs → same `packet_hash`; one spec byte → different; deny-list order/duplicates irrelevant; manifest entries == `lstat` walk with verified sha256 and `type`; full OIDs; pinned preimage; no denied path → `diff.patch` byte-identical | review-packet suite |
+| `runner-wiring` | blind dispatch with `options.packet` launches on `packet/diff.patch` (+ `packet/spec.md` only when a spec arg was given) with the packet env and returns `packet.packet_hash`; legacy path unchanged with `packet: null`; ambient packet env never inherited; a build failure never launches; every non-success branch carries `packet: null` | dispatch-review suite |
+| `no-regression` | `review-packet`, `dispatch-review`, `review-runner` green; `node scripts/check-js-syntax.js`; `bash scripts/sync-codex-plugin-skills.sh --check`; `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` | suite output |
+| `scope-integrity` | `git diff --name-only 004cb2da HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/engine/**`, `scripts/**`, `bin/autopilot.js`, `schemas/**` byte-identical to `004cb2da`; every new test file is `test -x` | command output |
+
+## 5. Dogfood proof (depth-0, after merge)
+
+A manual `dispatchReviewJson` run with `options.packet` against this repo's HEAD (candidate = a
+commit touching `docs/plans/evidence/**` and `.qc/**`) lists those paths in `denied_paths`, the
+stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symlink.
+
+## 6. Risks + inversion
+
+- **Deny-list too broad / too narrow.** Too broad hides product files (silent under-review); too
+  narrow leaks. The default names only verdict carriers this repo tracks or writes; `denied_paths`
+  is returned so a caller can log it; the canary pins both directions (§2 (a)–(c), (g)).
+- **Alignment fragility.** The diff is proven byte-canonical against a regeneration from the two
+  OIDs before it is split, so positional alignment to `--name-status -z` is sound; a count mismatch
+  still fails closed; the rename/copy/odd-name/CRLF/binary/embedded-`diff --git`/reordered
+  fixtures pin it.
+- **Attribute-driven rewrites and side effects.** `export-*` are bypassed by not using
+  `git archive`; filters/ident/eol cannot run because the checkout sees no attributes at all
+  (private index, empty work-tree, no global/system attribute files); the object-id + type
+  integrity pass is defense in depth and fails the build closed before launch. A candidate cannot
+  make the dispatcher execute a configured filter driver.
+- **Symlink escape.** Never dereferenced; escaping/denied targets pruned; pinned by §2 (b).
+- **Hand scope.** Two product files, two tests, two docs — sized for one round after the consult's
+  split.
+
+## 7. The cuts
+
+1. **1a-A (this plan)** — packet builder + runner wiring.
+2. **1a-B** — engine passes the packet; receipts carry `packet_hash`; the panel asserts one hash.
+3. **1b** — cleanroom tier: runner table gains `tools: true|false`; `scripts/lib/cleanroom-launch.sh`
+   runs a tool-capable CLI inside `bwrap` with only `packet/tree`, the runtime, TLS/DNS and a
+   sanitized credential HOME (policy and probe: `evidence/2026-09-16-blind-review-redesign/bwrap-probe.md`);
+   intake runs a no-model stub probe per cleanroom seat and refuses in seconds when the boundary is
+   not enforceable; `BLIND_DISCOVERY_CAPABLE_RUNNERS` becomes the packet tier; codex profile first;
+   the isolation suite is host-only and refuses (never skips) without `bwrap`; configurable deny-list.
+4. **2** — verify once per tree, in-rail single review off when a panel exists, seats in separate
+   processes concurrently, one standby seat, panel snapshot at intake.
+
+## Review log
+
+- Consults 2026-09-16 (claude-fable-5-1 and gpt-6-astra, evidence dir above): converged on packet
+  blinding + two tiers + gate at intake and resolver + verify-once + concurrent seats. Divergence:
+  UID drop (Fable) vs bwrap (astra) — settled by the host probe (`bwrap-probe.md`): the operator HOME is
+  `0750` and holds every CLI, so UID drop needs host surgery; bwrap needs none and codex with tools
+  ran inside it against a planted packet.
+- Plan consult 2026-09-16 (codex gpt-5.6-sol on the first draft, `consult-plan-cut1a-codex-answer.md`),
+  twelve findings: accepted 1 (`--output` archive, >1 MiB fixture), 2 (lstat walk, symlink rules,
+  gitlink fails closed), 3+4 (schema + optional-key semantics → moved whole to cut 1a-B with the
+  mixed-presence rule), 6 (hash preimage binds OIDs + deny-list + type), 7 (`--name-status -z`
+  alignment, either-path deny, rename prune, Buffer split), 8 (`.qc/**`, review/disposition
+  patterns, root globstar, grammar), 9 (zero-byte spec, `immutableBase` — recorded for 1a-B), 10
+  (env scrub, `packet` on every branch), 11 (split A/B; `dispatch-review.test.sh` chosen), 12
+  (wording). Refuted 5 (durable replay binding) with the rationale in §3.
+- Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP 2 blockers; evidence
+  `evidence/2026-09-16-blind-review-packet/g1-*`): both accepted — (R2) `git archive` honours
+  candidate-controlled `export-subst`/`export-ignore`, so the tree is now a private-index
+  `checkout-index` verified against `ls-tree` object ids, with the attribute fixtures; (R4) the
+  symlink oracle `readlink | sha256sum` hashes a trailing newline — replaced by a Node helper over
+  `readlinkSync(..., { encoding: 'buffer' })`. The G1 blocker falsified rubric R1's own wording
+  ("git archive via `--output`"), so the frozen rubric could not carry the fold; the rubric was
+  corrected and the review continues under logical id `blind-review-packet-2026-09-16-v2` (G1 of v2
+  reviews the folded plan; the v1 G1 artifact and dispositions stay in the evidence dir). The
+  first v2 G1 process was killed by the host memory guard before any seat returned (other operator
+  jobs held ~80 GB); the rail then recorded `orphaned_active_claim_transport_exhausted` with zero
+  semantic content consumed, so that state dir was moved aside (kept in the session scratchpad) and
+  v2 G1 re-run from a clean lineage — the same zero-consumption reset the plan-review contract allows.
+- Plan hetero loop v2 G1 2026-09-17 (GLM-5.2 READY, gpt-5.6-sol STOP 4 blockers; evidence
+  `v2g1-*`): all four accepted — (R3) `checkout-index` could execute a configured smudge driver
+  before the integrity pass: the private index now drops every `.gitattributes`, checks out against
+  an empty `--work-tree` with `core.attributesFile=/dev/null` + `GIT_ATTR_NOSYSTEM=1` (probed: the
+  sentinel driver never runs), and the sentinel fixture pins it; (R3) `core.symlinks=false` would
+  materialize a symlink as a file that still hashes equal: `core.symlinks=true` is forced and the
+  integrity pass checks `lstat` type against the `ls-tree` mode, fixture repo sets
+  `core.symlinks=false`; (R1) non-UTF-8 path bytes: fail closed with `unsupported path encoding`
+  before any write (chosen over a reversible encoding — nothing in this repo needs it), fixture
+  added; (R4) 40-hex assertion → exact equality with `rev-parse`, explicit `--object-format` on the
+  fixtures, a SHA-256 fixture added.
+- Plan hetero loop v2 G2 2026-09-17 (terminal at the generation cap; GLM-5.2 CONDITIONAL 1
+  non-blocking, gpt-5.6-sol STOP 3; evidence `v2g2-*`): all accepted at depth-0 — (R3, both seats)
+  the frozen rubric's "an ident rewrite fails closed" now has a literal witness: the exported
+  integrity helper on a tree whose `id.txt` carries the git-style expansion → `tree integrity:
+  id.txt`, while production keeps attributes inert; (R3) `$GIT_DIR/info/attributes` still reached
+  `checkout-index` through the real git dir (reproduced with a sentinel driver): every tree
+  command now runs under an isolated temporary `GIT_DIR` that shares only the object store via
+  `objects/info/alternates` and carries no config / attributes / hooks, with
+  `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM=/dev/null` (probed: driver never runs; the control does);
+  fixture (h2b); (R1) count-only alignment could pair a swapped section with the wrong record: the
+  diff file is first proven byte-canonical against a regeneration from the resolved OIDs (`diff not
+  canonical` otherwise), fixture (h2c). Depth-0 freeze: zero unaddressed blockers, zero deferred.
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index b4fbed5c..f672c39a 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -118,7 +118,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Effort**: L
+ - **Source**: owner request 2026-09-16 after v2.36.58
+ - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
+-- **Context**: content-addressed packet (archive tree + `git diff`, spec only, deny-list); `packet` and `cleanroom` (tools under UID-drop/bwrap) tiers both count; intake preflight canary; verify once per tree; parallel seats. Detail in the pointer.
++- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Cut 1a-A (packet builder) shipped v2.36.59; 1a-B/1b/2 open. Detail in the pointer.
+ 
+ ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
+ - **Status**: open
+diff --git a/hooks/tests/dispatch-review.test.sh b/hooks/tests/dispatch-review.test.sh
+index 07ecb487..d5799ec5 100755
+--- a/hooks/tests/dispatch-review.test.sh
++++ b/hooks/tests/dispatch-review.test.sh
+@@ -1906,4 +1906,205 @@ assert_eq "$(normalize_argv < "$REVIEW_CC_ARGV")" "$(printf '%s\n' \
+   -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
+   "review cc-shim argv matches frozen literal (preservation, green at base)"
+ 
++# RED at base 004cb2da: stdout "/poison|poison" (ambient packet env inherited)
++# RED at base 004cb2da: no packet key on dispatchReviewJson result; args end in diff.file.input
++# RED at base 004cb2da: bad candidate still launched the stub
++PKT_REPO="$TEST_TMP/pkt-repo"
++git init --object-format=sha1 -q "$PKT_REPO"
++git -C "$PKT_REPO" config user.email t@t.example
++git -C "$PKT_REPO" config user.name t
++printf 'a\n' > "$PKT_REPO/a.txt"
++git -C "$PKT_REPO" add a.txt
++git -C "$PKT_REPO" commit -q -m b
++printf 'b\n' > "$PKT_REPO/a.txt"
++git -C "$PKT_REPO" add a.txt
++git -C "$PKT_REPO" commit -q -m c
++PKT_B="$(git -C "$PKT_REPO" rev-parse HEAD^)"
++PKT_C="$(git -C "$PKT_REPO" rev-parse HEAD)"
++PKT_DIFF="$TEST_TMP/pkt.diff"
++git -C "$PKT_REPO" diff --no-ext-diff --no-textconv "$PKT_B..$PKT_C" > "$PKT_DIFF"
++PKT_SPEC="$TEST_TMP/pkt.spec"
++printf 'spec\n' > "$PKT_SPEC"
++PKT_DUMP="$TEST_TMP/pkt-dump"; mkdir -p "$PKT_DUMP"
++PKT_STUB="$TEST_TMP/pkt-stub"
++cat > "$PKT_STUB" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$PKT_DUMP/args"
++printenv > "$PKT_DUMP/env"
++touch "$PKT_DUMP/invoked"
++printf '%s\n' '{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null,"usage":null}'
++EOF
++chmod +x "$PKT_STUB"
++
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_REPO="$PKT_REPO" PKT_B="$PKT_B" PKT_C="$PKT_C" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
++const fs = require('fs');
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const result = dispatchReviewJson([
++  '--runner', 'fixture', '--model', 'fixture',
++  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
++], {
++  scriptPath: process.env.PKT_STUB,
++  blindDiscovery: true,
++  packet: { repo: process.env.PKT_REPO, baseSha: process.env.PKT_B, candidateSha: process.env.PKT_C },
++});
++const args = fs.readFileSync(`${process.env.PKT_DUMP}/args`, 'utf8');
++const env = fs.readFileSync(`${process.env.PKT_DUMP}/env`, 'utf8');
++process.stdout.write(JSON.stringify({
++  args,
++  envDir: (env.match(/^AUTOPILOT_REVIEW_PACKET_DIR=(.*)$/m) || [])[1] || '',
++  envHash: (env.match(/^AUTOPILOT_REVIEW_PACKET_HASH=(.*)$/m) || [])[1] || '',
++  blind: /AUTOPILOT_BLIND_DISCOVERY=1/.test(env),
++  packet: result.packet,
++}));
++NODE
++)"
++assert_eq "0" "$?" "packet dispatch node exits 0"
++assert_contains "$OUT" '/packet/diff.patch' "packet mode --diff-file ends /packet/diff.patch"
++assert_contains "$OUT" '/packet/spec.md' "packet mode --spec-file ends /packet/spec.md"
++assert_contains "$OUT" '"blind":true' "packet mode sets AUTOPILOT_BLIND_DISCOVERY=1"
++node -e '
++const o=JSON.parse(process.argv[1]);
++if (!o.packet || o.packet.packet_hash !== o.envHash) process.exit(2);
++if (!/^[0-9a-f]{64}$/.test(o.envHash)) process.exit(3);
++if (!o.args.includes("/packet/diff.patch")) process.exit(4);
++if (!o.envDir.endsWith("/packet")) process.exit(5);
++' "$OUT"
++assert_eq "0" "$?" "packet.packet_hash equals env hash; DIR is packet dir"
++
++rm -f "$PKT_DUMP/args" "$PKT_DUMP/env" "$PKT_DUMP/invoked"
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_REPO="$PKT_REPO" PKT_B="$PKT_B" PKT_C="$PKT_C" PKT_DIFF="$PKT_DIFF" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
++const fs = require('fs');
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const result = dispatchReviewJson([
++  '--runner', 'fixture', '--model', 'fixture',
++  '--diff-file', process.env.PKT_DIFF,
++], {
++  scriptPath: process.env.PKT_STUB,
++  blindDiscovery: true,
++  packet: { repo: process.env.PKT_REPO, baseSha: process.env.PKT_B, candidateSha: process.env.PKT_C },
++});
++const args = fs.readFileSync(`${process.env.PKT_DUMP}/args`, 'utf8');
++process.stdout.write(JSON.stringify({ args, packet: result.packet }));
++NODE
++)"
++assert_not_contains "$OUT" '--spec-file' "no --spec-file arg when omitted"
++# zero-byte spec was in packet dir during launch; reconstruct via entries_count/hash still
++node -e 'const o=JSON.parse(process.argv[1]); if (o.args.includes("--spec-file")) process.exit(2);' "$OUT"
++assert_eq "0" "$?" "omitted spec-file not added"
++
++# rebuild to inspect spec.md: run buildReviewPacket
++node - "$REPO_ROOT/src/runners/review-packet.js" "$PKT_REPO" "$PKT_B" "$PKT_C" "$PKT_DIFF" "$TEST_TMP/pkt-nospec" <<'NODE'
++const fs = require('fs');
++const { buildReviewPacket } = require(process.argv[2]);
++const r = buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++});
++if (fs.readFileSync(require('path').join(r.dir, 'spec.md')).length !== 0) process.exit(2);
++NODE
++assert_eq "0" "$?" "no --spec-file yields zero-byte packet/spec.md"
++
++# preservation: no options.packet
++rm -f "$PKT_DUMP/args" "$PKT_DUMP/env"
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
++const fs = require('fs');
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const result = dispatchReviewJson([
++  '--runner', 'fixture', '--model', 'fixture',
++  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
++], { scriptPath: process.env.PKT_STUB, blindDiscovery: true });
++const args = fs.readFileSync(`${process.env.PKT_DUMP}/args`, 'utf8');
++process.stdout.write(JSON.stringify({ args, packet: result.packet }));
++NODE
++)"
++assert_contains "$OUT" 'diff.input' "legacy blind args end in diff.file.input (preservation, green at base)"
++assert_contains "$OUT" 'spec.input' "legacy blind args end in spec.file.input (preservation, green at base)"
++assert_contains "$OUT" '"packet":null' "legacy blind packet is null (preservation)"
++
++# poisoned ambient env
++rm -f "$PKT_DUMP/args" "$PKT_DUMP/env"
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
++const fs = require('fs');
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const env = { ...process.env, AUTOPILOT_REVIEW_PACKET_DIR: '/poison', AUTOPILOT_REVIEW_PACKET_HASH: 'poison' };
++dispatchReviewJson([
++  '--runner', 'fixture', '--model', 'fixture',
++  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
++], { scriptPath: process.env.PKT_STUB, blindDiscovery: true, env });
++const e = fs.readFileSync(`${process.env.PKT_DUMP}/env`, 'utf8');
++process.stdout.write(e);
++NODE
++)"
++assert_not_contains "$OUT" '/poison' "legacy blind launch does not inherit AUTOPILOT_REVIEW_PACKET_DIR"
++assert_not_contains "$OUT" 'PACKET_HASH=poison' "legacy blind launch does not inherit AUTOPILOT_REVIEW_PACKET_HASH"
++
++rm -f "$PKT_DUMP/env"
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
++const fs = require('fs');
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const env = { ...process.env, AUTOPILOT_REVIEW_PACKET_DIR: '/poison', AUTOPILOT_REVIEW_PACKET_HASH: 'poison' };
++dispatchReviewJson([
++  '--runner', 'fixture', '--model', 'fixture',
++  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
++], { scriptPath: process.env.PKT_STUB, env });
++const e = fs.readFileSync(`${process.env.PKT_DUMP}/env`, 'utf8');
++process.stdout.write(e);
++NODE
++)"
++assert_not_contains "$OUT" '/poison' "non-blind launch does not inherit AUTOPILOT_REVIEW_PACKET_DIR"
++assert_not_contains "$OUT" 'PACKET_HASH=poison' "non-blind launch does not inherit AUTOPILOT_REVIEW_PACKET_HASH"
++
++# bad candidate: never invoke stub
++rm -f "$PKT_DUMP/invoked"
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_REPO="$PKT_REPO" PKT_B="$PKT_B" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" node - <<'NODE'
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const result = dispatchReviewJson([
++  '--runner', 'fixture', '--model', 'fixture',
++  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
++], {
++  scriptPath: process.env.PKT_STUB,
++  blindDiscovery: true,
++  packet: { repo: process.env.PKT_REPO, baseSha: process.env.PKT_B, candidateSha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' },
++});
++process.stdout.write(JSON.stringify({
++  hasError: Boolean(result.error),
++  status: result.status,
++  packet: result.packet,
++}));
++NODE
++)"
++assert_contains "$OUT" '"hasError":true' "bad candidate returns error"
++assert_contains "$OUT" '"status":null' "bad candidate status null"
++assert_contains "$OUT" '"packet":null' "bad candidate packet null"
++assert_file_absent "$PKT_DUMP/invoked" "bad candidate never invokes stub"
++
++# child-error / parse-error / missing-script → packet null
++CHILD_STUB="$TEST_TMP/child-err"
++printf '#!/usr/bin/env bash\nexit 1\n' > "$CHILD_STUB"; chmod +x "$CHILD_STUB"
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" CHILD_STUB="$CHILD_STUB" node - <<'NODE'
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', process.env.PKT_DIFF], { scriptPath: process.env.CHILD_STUB });
++process.stdout.write(JSON.stringify({ packet: result.packet, status: result.status }));
++NODE
++)"
++assert_contains "$OUT" '"packet":null' "child-error branch packet null"
++
++PARSE_STUB="$TEST_TMP/parse-err"
++printf '#!/usr/bin/env bash\necho not-json\n' > "$PARSE_STUB"; chmod +x "$PARSE_STUB"
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PARSE_STUB="$PARSE_STUB" node - <<'NODE'
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', process.env.PKT_DIFF], { scriptPath: process.env.PARSE_STUB });
++process.stdout.write(JSON.stringify({ packet: result.packet, parse: Boolean(result.parseError) }));
++NODE
++)"
++assert_contains "$OUT" '"packet":null' "parse-error branch packet null"
++
++OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" node - <<'NODE'
++const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
++const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', process.env.PKT_DIFF], { scriptPath: '/no/such/dispatch-review.sh' });
++process.stdout.write(JSON.stringify({ packet: result.packet, hasError: Boolean(result.error) }));
++NODE
++)"
++assert_contains "$OUT" '"packet":null' "missing-script branch packet null"
++
+ finalize_test
+diff --git a/hooks/tests/review-packet.test.sh b/hooks/tests/review-packet.test.sh
+new file mode 100755
+index 00000000..4ddf4973
+--- /dev/null
++++ b/hooks/tests/review-packet.test.sh
+@@ -0,0 +1,585 @@
++#!/usr/bin/env bash
++# RED at base 004cb2da: bash: hooks/tests/review-packet.test.sh: No such file or directory
++# RED at base 004cb2da: Cannot find module './src/runners/review-packet'
++. "$(dirname "$0")/lib.sh"
++
++MODULE="$REPO_ROOT/src/runners/review-packet.js"
++assert_file_exists "$MODULE" "review-packet module exists"
++
++FIX="$TEST_TMP/fixrepo"
++git init --object-format=sha1 -q "$FIX"
++git -C "$FIX" config user.email t@t.example
++git -C "$FIX" config user.name t
++git -C "$FIX" config core.symlinks false
++SMUDGE_MARK="$TEST_TMP/smudge.marker"
++git -C "$FIX" config filter.sentinel.smudge "sh -c 'echo SENTINEL >> \"$SMUDGE_MARK\"; cat'"
++git -C "$FIX" config filter.sentinel.clean cat
++
++mkdir -p "$FIX/src" "$FIX/docs/plans/evidence"
++printf 'base-app\n' > "$FIX/src/app.js"
++printf 'T-RENAME\n' > "$FIX/docs/plans/evidence/old.md"
++printf 'keep-bytes-c-will-replace\n' > "$FIX/keep.txt"
++git -C "$FIX" add src/app.js docs/plans/evidence/old.md keep.txt
++git -C "$FIX" commit -q -m 'B-base'
++
++printf 'product-line\ndiff --git a/x b/x\nmore\n' > "$FIX/src/app.js"
++mkdir -p "$FIX/.autopilot" "$FIX/.qc" "$FIX/docs/plans/evidence/x" "$FIX/lib" "$FIX/logs" "$FIX/docs/notes"
++printf 'T-AUTOPILOT\n' > "$FIX/.autopilot/prior-verdict.json"
++printf 'T-QC\n' > "$FIX/.qc/deadbeef.verdict.json"
++printf 'T-EVIDENCE\n' > "$FIX/docs/plans/evidence/x/review.json"
++printf 'T-REVIEWMD\n' > "$FIX/docs/plans/p.review.md"
++printf 'T-DISP\n' > "$FIX/docs/plans/g1-disposition.json"
++printf 'T-RECEIPT\n' > "$FIX/lib/run.receipt.json"
++printf 'T-RAWLOG\n' > "$FIX/logs/x.raw.log"
++printf 'T-RAWLOG\n' > "$FIX/y.raw.log"
++git -C "$FIX" mv docs/plans/evidence/old.md docs/notes/moved.md
++printf 'keep-c-bytes\n' > "$FIX/keep.txt"
++printf '$Format:%%B$\n' > "$FIX/msg.txt"
++# literal $Format:%B$ without extra percent: write via node
++node -e 'require("fs").writeFileSync(process.argv[1], "$Format:%B$\n")' "$FIX/msg.txt"
++printf 'msg.txt export-subst\nkeep.txt export-ignore\nsecret.txt filter=sentinel\n' > "$FIX/.gitattributes"
++printf 'secret-ok\n' > "$FIX/secret.txt"
++printf 'crlf-body\r\n' > "$FIX/win.txt"
++printf 'bin\x00\xff' > "$FIX/img.bin"
++ln -s src "$FIX/link"
++ln -s ../../etc "$FIX/esc"
++ln -s .qc "$FIX/qc"
++git -C "$FIX" add src/app.js .autopilot .qc docs/plans lib logs y.raw.log docs/notes keep.txt msg.txt .gitattributes secret.txt win.txt img.bin link esc qc
++git -C "$FIX" commit -q -m 'C-candidate T-MSG'
++mkdir -p "$FIX/notes"
++printf 'T-UNTRACKED\n' > "$FIX/notes/verdict.txt"
++
++B="$(git -C "$FIX" rev-parse HEAD^)"
++C="$(git -C "$FIX" rev-parse HEAD)"
++DIFF="$TEST_TMP/input.diff"
++git -C "$FIX" diff --no-ext-diff --no-textconv "$B..$C" > "$DIFF"
++SPEC="$TEST_TMP/spec.md"
++printf 'spec-no-token\n' > "$SPEC"
++
++OUT1="$TEST_TMP/packet1"
++BUILD_JSON="$(node - "$MODULE" "$FIX" "$B" "$C" "$DIFF" "$SPEC" "$OUT1" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++const r = buildReviewPacket({
++  repo: process.argv[3],
++  baseSha: process.argv[4],
++  candidateSha: process.argv[5],
++  diffFile: process.argv[6],
++  specFile: process.argv[7],
++  outDir: process.argv[8],
++});
++process.stdout.write(JSON.stringify(r));
++NODE
++)"
++
++# (a) tokens
++for tok in T-MSG T-AUTOPILOT T-QC T-EVIDENCE T-REVIEWMD T-DISP T-RECEIPT T-RAWLOG T-RENAME T-UNTRACKED; do
++  HITS="$(grep -r "$tok" "$OUT1" 2>/dev/null || true)"
++  assert_eq "$HITS" "" "(a) token $tok absent from packet"
++done
++assert_contains "$(cat "$OUT1/tree/msg.txt")" '$Format:%B$' "(a) msg.txt keeps literal export-subst"
++assert_eq "$(cat "$OUT1/tree/keep.txt")" "$(printf 'keep-c-bytes\n')" "(a) keep.txt present with C bytes"
++
++# git archive control
++ARCH="$TEST_TMP/archive"
++mkdir -p "$ARCH"
++git -C "$FIX" archive "$C" | tar -C "$ARCH" -xf -
++assert_contains "$(cat "$ARCH/msg.txt" 2>/dev/null || true)" "T-MSG" "git archive control expands T-MSG"
++assert_file_absent "$ARCH/keep.txt" "git archive control omits export-ignore keep.txt"
++
++# (b) allowed bytes and absences
++git -C "$FIX" show "$C:src/app.js" > "$TEST_TMP/blob-app.js"
++git -C "$FIX" show "$C:img.bin" > "$TEST_TMP/blob-img.bin"
++git -C "$FIX" show "$C:win.txt" > "$TEST_TMP/blob-win.txt"
++cmp -s "$OUT1/tree/src/app.js" "$TEST_TMP/blob-app.js"
++assert_eq "0" "$?" "(b) src/app.js bytes"
++cmp -s "$OUT1/tree/img.bin" "$TEST_TMP/blob-img.bin"
++assert_eq "0" "$?" "(b) img.bin bytes"
++cmp -s "$OUT1/tree/win.txt" "$TEST_TMP/blob-win.txt"
++assert_eq "0" "$?" "(b) win.txt bytes"
++assert_eq "src" "$(readlink "$OUT1/tree/link")" "(b) link -> src"
++assert_file_absent "$OUT1/tree/esc" "(b) esc pruned"
++assert_file_absent "$OUT1/tree/qc" "(b) qc pruned"
++assert_file_absent "$OUT1/tree/.autopilot" "(b) .autopilot pruned"
++assert_file_absent "$OUT1/tree/.qc" "(b) .qc pruned"
++assert_file_absent "$OUT1/tree/docs/plans/evidence" "(b) evidence pruned"
++assert_file_absent "$OUT1/tree/docs/notes/moved.md" "(b) renamed-out path pruned"
++node - "$BUILD_JSON" <<'NODE'
++const r = JSON.parse(process.argv[2]);
++const d = r.denied_paths;
++const need = ['.autopilot/prior-verdict.json', '.qc/deadbeef.verdict.json', 'docs/plans/evidence/x/review.json', 'docs/plans/p.review.md', 'docs/plans/g1-disposition.json', 'lib/run.receipt.json', 'logs/x.raw.log', 'y.raw.log', 'esc', 'qc', 'docs/notes/moved.md'];
++const miss = need.filter((p) => !d.includes(p));
++const sorted = [...d].sort();
++if (miss.length) { console.error('missing denied', miss, d); process.exit(2); }
++if (JSON.stringify(d) !== JSON.stringify(sorted)) { console.error('not sorted', d); process.exit(3); }
++const dup = d.filter((p, i) => d.indexOf(p) !== i);
++if (dup.length) { console.error('dup', dup); process.exit(4); }
++NODE
++assert_eq "0" "$?" "(b) denied_paths lists pruned paths once sorted"
++
++# (c) kept diff sections
++node - "$DIFF" "$OUT1/diff.patch" <<'NODE'
++const fs = require('fs');
++const input = fs.readFileSync(process.argv[2]);
++const out = fs.readFileSync(process.argv[3]);
++const split = (buf) => {
++  const n = Buffer.from('\ndiff --git ');
++  const first = Buffer.from('diff --git ');
++  const starts = [];
++  if (buf.subarray(0, first.length).equals(first)) starts.push(0);
++  let idx = 0;
++  while (true) {
++    const f = buf.indexOf(n, idx);
++    if (f < 0) break;
++    starts.push(f + 1);
++    idx = f + 1;
++  }
++  return starts.map((s, i) => buf.subarray(s, i + 1 < starts.length ? starts[i + 1] : buf.length));
++};
++const inSecs = split(input);
++const outSecs = split(out);
++const names = (sec) => {
++  const line = sec.toString('utf8').split('\n')[0];
++  return line;
++};
++const keepHints = ['src/app.js', 'img.bin', 'win.txt', 'link'];
++for (const h of keepHints) {
++  const a = inSecs.find((s) => s.includes(Buffer.from(h)));
++  const b = outSecs.find((s) => s.includes(Buffer.from(h)));
++  if (!a || !b || !a.equals(b)) {
++    console.error('section mismatch', h);
++    process.exit(2);
++  }
++}
++const deniedHints = ['.autopilot', '.qc/', 'docs/plans/evidence', 'p.review.md', 'disposition', 'run.receipt.json', 'raw.log', 'moved.md', 'old.md'];
++for (const h of deniedHints) {
++  if (out.includes(Buffer.from(h))) {
++    console.error('denied path in diff', h);
++    process.exit(3);
++  }
++}
++NODE
++assert_eq "0" "$?" "(c) kept sections byte-equal; denied sections absent"
++
++# (d) manifest
++node - "$OUT1" "$FIX" "$B" "$C" <<'NODE'
++const fs = require('fs');
++const path = require('path');
++const crypto = require('crypto');
++const { spawnSync } = require('child_process');
++const dir = process.argv[2];
++const repo = process.argv[3];
++const b = process.argv[4];
++const c = process.argv[5];
++const m = JSON.parse(fs.readFileSync(path.join(dir, 'MANIFEST.json'), 'utf8'));
++const git = (args) => spawnSync('git', args, { cwd: repo, encoding: 'utf8' }).stdout.trim();
++if (m.base_sha !== git(['rev-parse', '--verify', `${b}^{commit}`])) process.exit(2);
++if (m.candidate_sha !== git(['rev-parse', '--verify', `${c}^{commit}`])) process.exit(3);
++function walk(root, rel, acc) {
++  for (const name of fs.readdirSync(root).sort()) {
++    const full = path.join(root, name);
++    const r = rel ? `${rel}/${name}` : name;
++    const st = fs.lstatSync(full);
++    if (st.isDirectory()) walk(full, r, acc);
++    else acc.push({ r, full, st });
++  }
++}
++const acc = [];
++walk(dir, '', acc);
++const walked = acc.filter((x) => x.r !== 'MANIFEST.json').sort((a, b) => a.r.localeCompare(b.r));
++if (walked.length !== m.entries.length) process.exit(4);
++for (let i = 0; i < walked.length; i++) {
++  const e = m.entries[i];
++  const w = walked[i];
++  if (e.path !== w.r) process.exit(5);
++  const buf = w.st.isSymbolicLink() ? fs.readlinkSync(w.full, { encoding: 'buffer' }) : fs.readFileSync(w.full);
++  const sha = crypto.createHash('sha256').update(buf).digest('hex');
++  if (e.sha256 !== sha || e.bytes !== buf.length) process.exit(6);
++  if (e.type !== (w.st.isSymbolicLink() ? 'symlink' : 'file')) process.exit(7);
++}
++const pre = JSON.stringify({
++  schema_version: m.schema_version,
++  base_sha: m.base_sha,
++  candidate_sha: m.candidate_sha,
++  deny_list: m.deny_list,
++  entries: m.entries,
++});
++const h = crypto.createHash('sha256').update(pre).digest('hex');
++if (h !== m.packet_hash) process.exit(8);
++const denySorted = [...m.deny_list].sort();
++if (JSON.stringify(m.deny_list) !== JSON.stringify(denySorted)) process.exit(9);
++if ([...new Set(m.deny_list)].length !== m.deny_list.length) process.exit(10);
++NODE
++assert_eq "0" "$?" "(d) manifest identity fields"
++
++# (e) two builds, spec change, deny reorder
++OUT2="$TEST_TMP/packet2"
++HASH1="$(node -e 'console.log(JSON.parse(process.argv[1]).packet_hash)' "$BUILD_JSON")"
++HASH2="$(node - "$MODULE" "$FIX" "$B" "$C" "$DIFF" "$SPEC" "$OUT2" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++process.stdout.write(buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: process.argv[7], outDir: process.argv[8],
++}).packet_hash);
++NODE
++)"
++assert_eq "$HASH1" "$HASH2" "(e) two builds equal packet_hash"
++
++SPEC2="$TEST_TMP/spec2.md"
++printf 'spec-no-tokenX\n' > "$SPEC2"
++OUT3="$TEST_TMP/packet3"
++HASH3="$(node - "$MODULE" "$FIX" "$B" "$C" "$DIFF" "$SPEC2" "$OUT3" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++process.stdout.write(buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: process.argv[7], outDir: process.argv[8],
++}).packet_hash);
++NODE
++)"
++assert_neq "$HASH1" "$HASH3" "(e) spec byte change alters hash"
++
++OUT4="$TEST_TMP/packet4"
++HASH4="$(node - "$MODULE" "$FIX" "$B" "$C" "$DIFF" "$SPEC" "$OUT4" <<'NODE'
++const { buildReviewPacket, DEFAULT_PACKET_DENY_LIST } = require(process.argv[2]);
++const d = [...DEFAULT_PACKET_DENY_LIST].reverse();
++d.push(d[0]);
++process.stdout.write(buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: process.argv[7], outDir: process.argv[8],
++  denyList: d,
++}).packet_hash);
++NODE
++)"
++assert_eq "$HASH1" "$HASH4" "(e) deny reorder/dup equal hash"
++
++# (f) empty deny, no hazards
++F2="$TEST_TMP/plain"
++git init --object-format=sha1 -q "$F2"
++git -C "$F2" config user.email t@t.example
++git -C "$F2" config user.name t
++printf 'one\n' > "$F2/a.txt"
++git -C "$F2" add a.txt
++git -C "$F2" commit -q -m b
++printf 'two\n' > "$F2/a.txt"
++git -C "$F2" add a.txt
++git -C "$F2" commit -q -m c
++FB="$(git -C "$F2" rev-parse HEAD^)"
++FC="$(git -C "$F2" rev-parse HEAD)"
++FDIFF="$TEST_TMP/plain.diff"
++git -C "$F2" diff --no-ext-diff --no-textconv "$FB..$FC" > "$FDIFF"
++FOUT="$TEST_TMP/plain-out"
++node - "$MODULE" "$F2" "$FB" "$FC" "$FDIFF" "$FOUT" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++});
++NODE
++cmp -s "$FDIFF" "$FOUT/diff.patch"
++assert_eq "0" "$?" "(f) denyList [] diff.patch cmp identical"
++
++# (g) tables
++node - "$MODULE" <<'NODE'
++const { packetPathDenied, normalizeDenyList, DEFAULT_PACKET_DENY_LIST } = require(process.argv[2]);
++const denied = ['.autopilot/x', '.autopilot/a/b', '.qc/a.verdict.json', 'docs/plans/evidence/r.md', 'docs/plans/a/b.review.md', 'docs/plans/g2-disposition.json', 'a/b/c.receipt.json', 'x.raw.log', 'a/x.raw.log'];
++const allowed = ['docs/plans/evidence.md', 'src/receipt.json', 'autopilot/x', 'docs/review.md'];
++for (const p of denied) {
++  if (!packetPathDenied(p, DEFAULT_PACKET_DENY_LIST)) { console.error('should deny', p); process.exit(2); }
++}
++for (const p of allowed) {
++  if (packetPathDenied(p, DEFAULT_PACKET_DENY_LIST)) { console.error('should allow', p); process.exit(3); }
++}
++const bad = ['/abs/**', 'a/../b', '', '{a,b}'];
++for (const p of bad) {
++  let threw = false;
++  try { normalizeDenyList([p]); } catch { threw = true; }
++  if (!threw) { console.error('should reject', p); process.exit(4); }
++}
++NODE
++assert_eq "0" "$?" "(g) packetPathDenied and normalizeDenyList tables"
++
++# (h) >1 MiB
++H="$TEST_TMP/big"
++git init --object-format=sha1 -q "$H"
++git -C "$H" config user.email t@t.example
++git -C "$H" config user.name t
++dd if=/dev/zero of="$H/big.bin" bs=1024 count=1100 status=none
++git -C "$H" add big.bin
++git -C "$H" commit -q -m b
++printf 'x\n' > "$H/z.txt"
++git -C "$H" add z.txt
++git -C "$H" commit -q -m c
++HB="$(git -C "$H" rev-parse HEAD^)"
++HC="$(git -C "$H" rev-parse HEAD)"
++HDIFF="$TEST_TMP/big.diff"
++git -C "$H" diff --no-ext-diff --no-textconv "$HB..$HC" > "$HDIFF"
++node - "$MODULE" "$H" "$HB" "$HC" "$HDIFF" "$TEST_TMP/big-out" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++});
++NODE
++assert_eq "0" "$?" "(h) >1 MiB tree builds"
++
++# (h2) ident literal + integrity helper
++ID="$TEST_TMP/ident"
++git init --object-format=sha1 -q "$ID"
++git -C "$ID" config user.email t@t.example
++git -C "$ID" config user.name t
++printf 'id.txt ident\n' > "$ID/.gitattributes"
++printf '$Id$\n' > "$ID/id.txt"
++git -C "$ID" add .gitattributes id.txt
++git -C "$ID" commit -q -m b
++printf '$Id$\nchanged\n' > "$ID/id.txt"
++git -C "$ID" add id.txt
++git -C "$ID" commit -q -m c
++IB="$(git -C "$ID" rev-parse HEAD^)"
++IC="$(git -C "$ID" rev-parse HEAD)"
++IDIFF="$TEST_TMP/id.diff"
++git -C "$ID" diff --no-ext-diff --no-textconv "$IB..$IC" > "$IDIFF"
++IOUT="$TEST_TMP/id-out"
++node - "$MODULE" "$ID" "$IB" "$IC" "$IDIFF" "$IOUT" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: null, outDir: process.argv[7],
++});
++NODE
++assert_contains "$(cat "$IOUT/tree/id.txt")" '$Id$' "(h2) ident stays literal"
++assert_file_exists "$IOUT/MANIFEST.json" "(h2) successful build writes manifest"
++
++H2MSG="$(node - "$MODULE" "$ID" "$IOUT" <<'NODE'
++const fs = require('fs');
++const path = require('path');
++const { spawnSync } = require('child_process');
++const { verifyTreeIntegrity } = require(process.argv[2]);
++const repo = process.argv[3];
++const out = process.argv[4];
++const copy = out + '-copy';
++fs.cpSync(path.join(out, 'tree'), copy, { recursive: true });
++const ls = spawnSync('git', ['ls-tree', '-r', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout;
++const listing = [];
++for (const line of ls.trim().split('\n')) {
++  const [meta, p] = line.split('\t');
++  const [mode, , oid] = meta.split(' ');
++  listing.push({ mode, oid, path: p, repo });
++}
++const blob = spawnSync('git', ['rev-parse', 'HEAD:id.txt'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
++fs.writeFileSync(path.join(copy, 'id.txt'), `$Id: ${blob} $\n`);
++try {
++  verifyTreeIntegrity(copy, listing);
++  process.stdout.write('NO-THROW');
++} catch (e) {
++  process.stdout.write(String(e.message));
++}
++NODE
++)"
++assert_contains "$H2MSG" "tree integrity: id.txt" "(h2) expanded ident fails integrity helper"
++assert_file_absent "$IOUT-copy/MANIFEST.json" "(h2) helper does not write MANIFEST.json"
++
++# (h2b) info/attributes sentinel
++INFO="$TEST_TMP/infoattr"
++git init --object-format=sha1 -q "$INFO"
++git -C "$INFO" config user.email t@t.example
++git -C "$INFO" config user.name t
++INFO_MARK="$TEST_TMP/info-smudge"
++git -C "$INFO" config filter.sentinel.smudge "sh -c 'echo RAN >> \"$INFO_MARK\"; cat'"
++mkdir -p "$INFO/.git/info"
++printf 'watched.txt filter=sentinel\n' > "$INFO/.git/info/attributes"
++printf 'watch-bytes\n' > "$INFO/watched.txt"
++git -C "$INFO" add watched.txt
++git -C "$INFO" commit -q -m b
++printf 'watch-bytes2\n' > "$INFO/watched.txt"
++git -C "$INFO" add watched.txt
++git -C "$INFO" commit -q -m c
++INB="$(git -C "$INFO" rev-parse HEAD^)"
++INC="$(git -C "$INFO" rev-parse HEAD)"
++INDIFF="$TEST_TMP/info.diff"
++git -C "$INFO" diff --no-ext-diff --no-textconv "$INB..$INC" > "$INDIFF"
++rm -f "$INFO_MARK"
++node - "$MODULE" "$INFO" "$INB" "$INC" "$INDIFF" "$TEST_TMP/info-out" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++});
++NODE
++assert_file_absent "$INFO_MARK" "(h2b) isolated build never runs info/attributes sentinel"
++# control: checkout-index against real git dir
++CTRL="$TEST_TMP/info-ctrl"
++mkdir -p "$CTRL"
++git -C "$INFO" checkout-index -a --prefix="$CTRL/"
++assert_file_exists "$INFO_MARK" "(h2b) real-git-dir checkout-index control runs sentinel"
++
++# (h2c) swapped sections
++SWAP="$TEST_TMP/swap.diff"
++node - "$DIFF" "$SWAP" <<'NODE'
++const fs = require('fs');
++const buf = fs.readFileSync(process.argv[2]);
++const n = Buffer.from('\ndiff --git ');
++const first = Buffer.from('diff --git ');
++const starts = [];
++if (buf.subarray(0, first.length).equals(first)) starts.push(0);
++let idx = 0;
++while (true) {
++  const f = buf.indexOf(n, idx);
++  if (f < 0) break;
++  starts.push(f + 1);
++  idx = f + 1;
++}
++const secs = starts.map((s, i) => buf.subarray(s, i + 1 < starts.length ? starts[i + 1] : buf.length));
++if (secs.length < 2) process.exit(2);
++const swapped = Buffer.concat([secs[1], secs[0], ...secs.slice(2)]);
++fs.writeFileSync(process.argv[3], swapped);
++NODE
++H2C="$(node - "$MODULE" "$FIX" "$B" "$C" "$SWAP" "$TEST_TMP/swap-out" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++try {
++  buildReviewPacket({
++    repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++    diffFile: process.argv[6], specFile: null, outDir: process.argv[7],
++  });
++  process.stdout.write('NO-THROW');
++} catch (e) {
++  process.stdout.write(String(e.message));
++}
++NODE
++)"
++assert_contains "$H2C" "diff not canonical" "(h2c) swapped sections fail closed"
++
++# (h3) sha256
++S256="$TEST_TMP/sha256"
++if git init --object-format=sha256 -q "$S256" 2>/dev/null; then
++  git -C "$S256" config user.email t@t.example
++  git -C "$S256" config user.name t
++  printf 'a\n' > "$S256/a.txt"
++  git -C "$S256" add a.txt
++  git -C "$S256" commit -q -m b
++  printf 'b\n' > "$S256/a.txt"
++  git -C "$S256" add a.txt
++  git -C "$S256" commit -q -m c
++  SB="$(git -C "$S256" rev-parse --verify HEAD^^{commit})"
++  SC="$(git -C "$S256" rev-parse --verify HEAD^{commit})"
++  SDIFF="$TEST_TMP/s256.diff"
++  git -C "$S256" diff --no-ext-diff --no-textconv "$SB..$SC" > "$SDIFF"
++  node - "$MODULE" "$S256" "$SB" "$SC" "$SDIFF" "$TEST_TMP/s256-out" <<'NODE'
++const fs = require('fs');
++const path = require('path');
++const crypto = require('crypto');
++const { spawnSync } = require('child_process');
++const { buildReviewPacket } = require(process.argv[2]);
++const repo = process.argv[3];
++const r = buildReviewPacket({
++  repo, baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++});
++const m = JSON.parse(fs.readFileSync(path.join(r.dir, 'MANIFEST.json'), 'utf8'));
++const b = spawnSync('git', ['rev-parse', '--verify', `${process.argv[4]}^{commit}`], { cwd: repo, encoding: 'utf8' }).stdout.trim();
++const c = spawnSync('git', ['rev-parse', '--verify', `${process.argv[5]}^{commit}`], { cwd: repo, encoding: 'utf8' }).stdout.trim();
++if (m.base_sha !== b || m.candidate_sha !== c) process.exit(2);
++if (!/^[0-9a-f]{64}$/.test(m.base_sha) || !/^[0-9a-f]{64}$/.test(m.candidate_sha)) process.exit(3);
++const pre = JSON.stringify({
++  schema_version: m.schema_version, base_sha: m.base_sha, candidate_sha: m.candidate_sha,
++  deny_list: m.deny_list, entries: m.entries,
++});
++if (crypto.createHash('sha256').update(pre).digest('hex') !== m.packet_hash) process.exit(4);
++NODE
++  assert_eq "0" "$?" "(h3) sha256 fixture OIDs and preimage"
++else
++  fail "(h3) git init --object-format=sha256 unavailable"
++fi
++
++# (h4) invalid UTF-8 filename
++U8="$TEST_TMP/utf8"
++git init --object-format=sha1 -q "$U8"
++git -C "$U8" config user.email t@t.example
++git -C "$U8" config user.name t
++printf 'ok\n' > "$U8/ok.txt"
++git -C "$U8" add ok.txt
++git -C "$U8" commit -q -m b
++node - "$U8" <<'NODE'
++const fs = require('fs');
++const path = require('path');
++const dir = process.argv[2];
++fs.writeFileSync(Buffer.from(`${dir}/bad\xff`, 'latin1'), 'x\n');
++NODE
++git -C "$U8" add -A
++git -C "$U8" commit -q -m c
++UB="$(git -C "$U8" rev-parse HEAD^)"
++UC="$(git -C "$U8" rev-parse HEAD)"
++UDIFF="$TEST_TMP/u8.diff"
++git -C "$U8" diff --no-ext-diff --no-textconv "$UB..$UC" > "$UDIFF"
++UOUT="$TEST_TMP/u8-out"
++H4MSG="$(node - "$MODULE" "$U8" "$UB" "$UC" "$UDIFF" "$UOUT" <<'NODE'
++const fs = require('fs');
++const { buildReviewPacket } = require(process.argv[2]);
++try {
++  buildReviewPacket({
++    repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++    diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++  });
++  process.stdout.write('NO-THROW');
++} catch (e) {
++  process.stdout.write(String(e.message));
++}
++NODE
++)"
++assert_contains "$H4MSG" "unsupported path encoding:" "(h4) invalid UTF-8 fails closed"
++if [ -d "$UOUT" ]; then
++  LEFT="$(find "$UOUT" -mindepth 1 | wc -l)"
++  assert_eq "0" "$(echo "$LEFT" | tr -d ' ')" "(h4) nothing written under outDir"
++fi
++
++# (i) gitlink
++GL="$TEST_TMP/gitlink"
++git init --object-format=sha1 -q "$GL"
++git -C "$GL" config user.email t@t.example
++git -C "$GL" config user.name t
++printf 'f\n' > "$GL/f.txt"
++git -C "$GL" add f.txt
++git -C "$GL" commit -q -m b
++SHA="$(git -C "$GL" rev-parse HEAD)"
++git -C "$GL" update-index --add --cacheinfo "160000,$SHA,sub"
++git -C "$GL" commit -q -m c
++GB="$(git -C "$GL" rev-parse HEAD^)"
++GC="$(git -C "$GL" rev-parse HEAD)"
++GDIFF="$TEST_TMP/gl.diff"
++git -C "$GL" diff --no-ext-diff --no-textconv "$GB..$GC" > "$GDIFF" || true
++GOUT="$TEST_TMP/gl-out"
++IMSG="$(node - "$MODULE" "$GL" "$GB" "$GC" "$GDIFF" "$GOUT" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++try {
++  buildReviewPacket({
++    repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++    diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++  });
++  process.stdout.write('NO-THROW');
++} catch (e) {
++  process.stdout.write(String(e.message));
++}
++NODE
++)"
++assert_contains "$IMSG" "unsupported submodule: sub" "(i) gitlink fails closed"
++if [ -d "$GOUT" ]; then
++  LEFT="$(find "$GOUT" -mindepth 1 | wc -l)"
++  assert_eq "0" "$(echo "$LEFT" | tr -d ' ')" "(i) writes nothing under outDir"
++fi
++
++# (j) absent specFile
++JOUT="$TEST_TMP/nospec"
++node - "$MODULE" "$F2" "$FB" "$FC" "$FDIFF" "$JOUT" <<'NODE'
++const { buildReviewPacket } = require(process.argv[2]);
++buildReviewPacket({
++  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
++  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
++});
++NODE
++assert_eq "0" "$(wc -c < "$JOUT/spec.md" | tr -d ' ')" "(j) zero-byte spec.md"
++node -e 'const m=require(process.argv[1]+"/MANIFEST.json"); const e=m.entries.find(x=>x.path==="spec.md"); if(!e || e.bytes!==0) process.exit(2)' "$JOUT"
++assert_eq "0" "$?" "(j) manifest lists spec.md bytes 0"
++
++# DEFAULT_PACKET_DENY_LIST length
++node -e 'const {DEFAULT_PACKET_DENY_LIST}=require(process.argv[1]); if(DEFAULT_PACKET_DENY_LIST.length!==8) process.exit(2)' "$MODULE"
++assert_eq "0" "$?" "DEFAULT_PACKET_DENY_LIST has eight patterns"
++
++finalize_test
+diff --git a/platforms/codex/plugin/references/blind-dispatch.md b/platforms/codex/plugin/references/blind-dispatch.md
+index f8bee7db..cb2b07b6 100644
+--- a/platforms/codex/plugin/references/blind-dispatch.md
++++ b/platforms/codex/plugin/references/blind-dispatch.md
+@@ -311,6 +311,52 @@ implemented", no "it works / tests pass / this is done" narrative, no worker-aut
+ If any is present, strip it and re-assemble from artifacts + the original task baseline.
+ Mechanically, the spec travels via dispatch-review.sh --spec-file (dispatcher-authored, trusted); the diff remains the only untrusted input.
+ 
++## Packet blinding (v2.36.59)
++
++Cut 1a-A of the blind-review redesign builds one **content-addressed packet** per
++review dispatch (`src/runners/review-packet.js`, wired through `dispatchReview`
++when `options.packet` is set). The seat still sees only artifacts; the packet is
++what those artifacts are.
++
++**Contents** under the packet directory:
++
++- `tree/` — isolated-temp-`GIT_DIR` `checkout-index` of the candidate (never
++  `git archive`). Alternates to the real object store; no hooks, no
++  `info/attributes`, no filter-bearing config on the sha1 path. Every
++  `.gitattributes` is dropped from the index before checkout and rewritten raw
++  from `cat-file blob`. An integrity pass then requires `lstat` type to match
++  `ls-tree` mode and `git hash-object --stdin --no-filters` to match the listed
++  id.
++- `diff.patch` — the dispatcher's diff, first proven byte-canonical against
++  `git diff --no-ext-diff --no-textconv <base>..<candidate>`, then Buffer-split
++  and aligned to `--name-status -z`.
++- `spec.md` — byte copy of the spec, or zero bytes when `--spec-file` is absent.
++- `MANIFEST.json` — `{ schema_version, artifact_type, base_sha, candidate_sha,
++  deny_list, entries, packet_hash }` with full `rev-parse --verify` OIDs.
++
++**Deny-list** (`DEFAULT_PACKET_DENY_LIST`): `.autopilot/**`, `.qc/**`,
++`docs/plans/evidence/**`, `docs/plans/**/*.review.md`,
++`docs/plans/**/*.review.json`, `docs/plans/**/*disposition*.json`,
++`**/*.receipt.json`, `**/*.raw.log`. Grammar: `/`-joined segments; `**` matches
++zero or more whole segments; `*` matches inside one segment; a pattern ending
++`/**` matches the directory itself and everything under it. Absolute paths,
++`..`, empty patterns, and other glob syntax are rejected. A section is dropped
++when old **or** new path is denied; a rename out of a denied dir also prunes the
++new tree path.
++
++**Hash preimage:** `packet_hash = sha256(JSON.stringify({ schema_version,
++base_sha, candidate_sha, deny_list, entries }))` — that key order, UTF-8, no
++whitespace. No timestamp, absolute path, hostname, or PID.
++
++**Isolation / hazards:** non-UTF-8 paths fail closed (`unsupported path
++encoding`); gitlinks fail closed (`unsupported submodule`) before any write;
++symlinks are kept as symlinks and never dereferenced; absolute, escaping, or
++deny-targeting links are pruned into `denied_paths`.
++
++**Later cuts (not this deliverable):** 1a-B threads `packet_hash` into engine
++receipts and the panel identity rule; 1b is the cleanroom launcher (`bwrap`) and
++a configurable deny-list.
++
+ ## Nested dispatch (subagents spawning subagents)
+ 
+ > Claude Code v2.1.172+ lets subagents spawn their own subagents (depth ≤ 5;
+diff --git a/platforms/codex/plugin/src/runners/review-packet.js b/platforms/codex/plugin/src/runners/review-packet.js
+new file mode 100644
+index 00000000..ea81b1d7
+--- /dev/null
++++ b/platforms/codex/plugin/src/runners/review-packet.js
+@@ -0,0 +1,579 @@
++'use strict';
++
++const crypto = require('crypto');
++const fs = require('fs');
++const path = require('path');
++const { spawnSync } = require('child_process');
++
++const DEFAULT_PACKET_DENY_LIST = Object.freeze([
++  '.autopilot/**',
++  '.qc/**',
++  'docs/plans/evidence/**',
++  'docs/plans/**/*.review.md',
++  'docs/plans/**/*.review.json',
++  'docs/plans/**/*disposition*.json',
++  '**/*.receipt.json',
++  '**/*.raw.log',
++]);
++
++const GIT_MAX_BUFFER = 64 * 1024 * 1024;
++const GIT_ISOLATION_KEYS = [
++  'GIT_DIR',
++  'GIT_WORK_TREE',
++  'GIT_INDEX_FILE',
++  'GIT_OBJECT_DIRECTORY',
++  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
++];
++
++function gitEnv(extra) {
++  const env = { ...process.env, ...extra };
++  for (const key of GIT_ISOLATION_KEYS) {
++    if (!extra || !Object.prototype.hasOwnProperty.call(extra, key)) {
++      delete env[key];
++    }
++  }
++  return env;
++}
++
++function runGit(step, args, options = {}) {
++  const result = spawnSync('git', args, {
++    cwd: options.cwd,
++    env: options.env || gitEnv(),
++    input: options.input,
++    maxBuffer: GIT_MAX_BUFFER,
++    shell: false,
++    encoding: options.encoding,
++  });
++  if (result.error) {
++    throw new Error(`${step}: ${result.error.message}`);
++  }
++  if (result.signal) {
++    throw new Error(`${step}: signal ${result.signal}`);
++  }
++  if (result.status !== 0) {
++    const err = result.stderr
++      ? Buffer.isBuffer(result.stderr)
++        ? result.stderr.toString('utf8')
++        : String(result.stderr)
++      : '';
++    throw new Error(`${step}: ${err.trim() || `exit ${result.status}`}`);
++  }
++  return result.stdout;
++}
++
++function isValidUtf8(buf) {
++  return Buffer.from(buf.toString('utf8'), 'utf8').equals(buf);
++}
++
++function splitNul(buf) {
++  const parts = [];
++  let start = 0;
++  for (let i = 0; i < buf.length; i += 1) {
++    if (buf[i] === 0) {
++      parts.push(buf.subarray(start, i));
++      start = i + 1;
++    }
++  }
++  if (start < buf.length) parts.push(buf.subarray(start));
++  return parts;
++}
++
++function parseLsTree(buf) {
++  const entries = [];
++  for (const rec of splitNul(buf)) {
++    if (rec.length === 0) continue;
++    const sp1 = rec.indexOf(0x20);
++    const sp2 = rec.indexOf(0x20, sp1 + 1);
++    const tab = rec.indexOf(0x09, sp2 + 1);
++    if (sp1 < 0 || sp2 < 0 || tab < 0) {
++      throw new Error(`git ls-tree: malformed record`);
++    }
++    const mode = rec.subarray(0, sp1).toString('utf8');
++    const type = rec.subarray(sp1 + 1, sp2).toString('utf8');
++    const oid = rec.subarray(sp2 + 1, tab).toString('utf8');
++    const pathBytes = rec.subarray(tab + 1);
++    entries.push({ mode, type, oid, pathBytes });
++  }
++  return entries;
++}
++
++function otherGlobSyntax(pattern) {
++  if (pattern.startsWith('/') || path.isAbsolute(pattern)) return true;
++  if (pattern.length === 0) return true;
++  const segs = pattern.split('/');
++  for (const seg of segs) {
++    if (seg === '..' || seg === '.') return true;
++    if (seg !== '**' && (seg.includes('**') || /[?[{}\]]/.test(seg))) return true;
++  }
++  return segs.some((s) => s === '');
++}
++
++function normalizeDenyList(denyList) {
++  const raw = denyList == null ? [...DEFAULT_PACKET_DENY_LIST] : [...denyList];
++  for (const pattern of raw) {
++    if (typeof pattern !== 'string' || otherGlobSyntax(pattern)) {
++      throw new Error(`invalid deny-list pattern: ${pattern}`);
++    }
++  }
++  return [...new Set(raw)].sort();
++}
++
++function matchOneSegment(seg, pat) {
++  if (pat === '**') return false;
++  if (!pat.includes('*')) return seg === pat;
++  let re = '^';
++  for (const ch of pat) {
++    if (ch === '*') re += '[^/]*';
++    else re += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++  }
++  re += '$';
++  return new RegExp(re).test(seg);
++}
++
++function matchGlob(pathSegs, patSegs, pi, gi) {
++  if (gi === patSegs.length) return pi === pathSegs.length;
++  if (patSegs[gi] === '**') {
++    if (gi === patSegs.length - 1) return true;
++    for (let n = pi; n <= pathSegs.length; n += 1) {
++      if (matchGlob(pathSegs, patSegs, n, gi + 1)) return true;
++    }
++    return false;
++  }
++  if (pi === pathSegs.length) return false;
++  if (!matchOneSegment(pathSegs[pi], patSegs[gi])) return false;
++  return matchGlob(pathSegs, patSegs, pi + 1, gi + 1);
++}
++
++function packetPathDenied(repoPath, denyList) {
++  const list = denyList == null ? DEFAULT_PACKET_DENY_LIST : denyList;
++  const posix = String(repoPath).replace(/\\/g, '/').replace(/^\.\//, '');
++  if (posix === '' || posix === '.') return false;
++  const pathSegs = posix.split('/');
++  for (const pattern of list) {
++    const patSegs = pattern.split('/');
++    if (matchGlob(pathSegs, patSegs, 0, 0)) return true;
++  }
++  return false;
++}
++
++function posixRel(from, to) {
++  return path.relative(from, to).split(path.sep).join('/');
++}
++
++function walkLstat(root) {
++  const acc = [];
++  function rec(dir, rel) {
++    let names;
++    try {
++      names = fs.readdirSync(dir);
++    } catch (error) {
++      if (error && error.code === 'ENOENT') return;
++      throw error;
++    }
++    names.sort();
++    for (const name of names) {
++      const full = path.join(dir, name);
++      const childRel = rel ? `${rel}/${name}` : name;
++      const st = fs.lstatSync(full);
++      if (st.isDirectory()) rec(full, childRel);
++      else acc.push({ rel: childRel, full, st });
++    }
++  }
++  rec(root, '');
++  return acc;
++}
++
++function sha256Hex(buf) {
++  return crypto.createHash('sha256').update(buf).digest('hex');
++}
++
++function splitDiffSections(buf) {
++  const needle = Buffer.from('diff --git ');
++  const nlNeedle = Buffer.from('\ndiff --git ');
++  const starts = [];
++  if (buf.length >= needle.length && buf.subarray(0, needle.length).equals(needle)) {
++    starts.push(0);
++  }
++  let idx = 0;
++  while (idx < buf.length) {
++    const found = buf.indexOf(nlNeedle, idx);
++    if (found < 0) break;
++    starts.push(found + 1);
++    idx = found + 1;
++  }
++  const sections = [];
++  for (let i = 0; i < starts.length; i += 1) {
++    const end = i + 1 < starts.length ? starts[i + 1] : buf.length;
++    sections.push(buf.subarray(starts[i], end));
++  }
++  return sections;
++}
++
++function parseNameStatus(buf) {
++  const tokens = splitNul(buf).filter((t) => t.length > 0);
++  const records = [];
++  let i = 0;
++  while (i < tokens.length) {
++    const status = tokens[i].toString('utf8');
++    const code = status[0];
++    if (code === 'R' || code === 'C') {
++      if (i + 2 >= tokens.length) throw new Error('git diff --name-status: truncated rename/copy record');
++      records.push({
++        status,
++        oldPath: tokens[i + 1].toString('utf8'),
++        newPath: tokens[i + 2].toString('utf8'),
++      });
++      i += 3;
++    } else {
++      if (i + 1 >= tokens.length) throw new Error('git diff --name-status: truncated record');
++      const p = tokens[i + 1].toString('utf8');
++      records.push({ status, oldPath: p, newPath: p });
++      i += 2;
++    }
++  }
++  return records;
++}
++
++function typeForMode(mode, st) {
++  if (mode === '120000') return st.isSymbolicLink();
++  if (mode === '100644' || mode === '100755') return st.isFile();
++  return false;
++}
++
++function hashObject(repo, format, input) {
++  const args = [];
++  if (format && format !== 'sha1') {
++    args.push('-c', `extensions.objectFormat=${format}`);
++  }
++  args.push('hash-object', '--stdin', '--no-filters');
++  const out = runGit('git hash-object', args, {
++    cwd: repo,
++    env: gitEnv(),
++    input,
++    encoding: 'utf8',
++  });
++  return String(out).trim();
++}
++
++function verifyTreeIntegrity(treeDir, listing) {
++  const listed = new Set();
++  for (const entry of listing) {
++    const rel = entry.path;
++    listed.add(rel);
++    const full = path.join(treeDir, rel);
++    let st;
++    try {
++      st = fs.lstatSync(full);
++    } catch {
++      throw new Error(`tree integrity: ${rel}`);
++    }
++    if (!typeForMode(entry.mode, st)) {
++      throw new Error(`tree integrity: ${rel}`);
++    }
++    const bytes = st.isSymbolicLink()
++      ? fs.readlinkSync(full, { encoding: 'buffer' })
++      : fs.readFileSync(full);
++    const hashed = hashObject(entry.repo || path.resolve('.'), entry.format || '', bytes);
++    if (hashed !== entry.oid) {
++      throw new Error(`tree integrity: ${rel}`);
++    }
++  }
++  for (const item of walkLstat(treeDir)) {
++    if (!listed.has(item.rel)) {
++      throw new Error(`tree integrity: ${item.rel}`);
++    }
++  }
++}
++
++function resolveSymlinkTarget(treeDir, linkRel, target) {
++  const targetStr = Buffer.isBuffer(target) ? target.toString('utf8') : String(target);
++  if (targetStr.startsWith('/') || /^[A-Za-z]:[\\/]/.test(targetStr)) {
++    return { absolute: true, resolved: null };
++  }
++  const linkDir = path.posix.dirname(linkRel);
++  const joined = path.posix.normalize(linkDir === '.' ? targetStr : `${linkDir}/${targetStr}`);
++  if (joined === '..' || joined.startsWith('../')) {
++    return { absolute: false, escaped: true, resolved: joined };
++  }
++  return { absolute: false, escaped: false, resolved: joined === '.' ? '' : joined };
++}
++
++function rmIfExists(p) {
++  fs.rmSync(p, { recursive: true, force: true });
++}
++
++function buildReviewPacket({
++  repo,
++  baseSha,
++  candidateSha,
++  diffFile,
++  specFile,
++  outDir,
++  denyList,
++} = {}) {
++  const deny = normalizeDenyList(denyList);
++  const repoAbs = path.resolve(repo);
++  const outAbs = path.resolve(outDir);
++  const baseOid = String(runGit('git rev-parse --verify', ['rev-parse', '--verify', `${baseSha}^{commit}`], {
++    cwd: repoAbs,
++    env: gitEnv(),
++    encoding: 'utf8',
++  })).trim();
++  const candidateOid = String(runGit('git rev-parse --verify', ['rev-parse', '--verify', `${candidateSha}^{commit}`], {
++    cwd: repoAbs,
++    env: gitEnv(),
++    encoding: 'utf8',
++  })).trim();
++  let format = '';
++  try {
++    format = String(runGit('git rev-parse --show-object-format', ['rev-parse', '--show-object-format'], {
++      cwd: repoAbs,
++      env: gitEnv(),
++      encoding: 'utf8',
++    })).trim();
++  } catch {
++    format = '';
++  }
++
++  const lsRaw = runGit('git ls-tree', ['ls-tree', '-r', '-z', candidateOid], {
++    cwd: repoAbs,
++    env: gitEnv(),
++  });
++  const rawEntries = parseLsTree(lsRaw);
++  for (const entry of rawEntries) {
++    if (entry.mode === '160000' || entry.type === 'commit') {
++      const p = isValidUtf8(entry.pathBytes)
++        ? entry.pathBytes.toString('utf8')
++        : entry.pathBytes.toString('hex');
++      throw new Error(`unsupported submodule: ${p}`);
++    }
++    if (!isValidUtf8(entry.pathBytes)) {
++      throw new Error(`unsupported path encoding: ${entry.pathBytes.toString('hex')}`);
++    }
++  }
++  const listing = rawEntries.map((entry) => ({
++    mode: entry.mode,
++    type: entry.type,
++    oid: entry.oid,
++    path: entry.pathBytes.toString('utf8'),
++    repo: repoAbs,
++    format,
++  }));
++
++  fs.mkdirSync(outAbs, { recursive: true });
++  const gitDir = path.join(outAbs, '.gitdir');
++  const emptyDir = path.join(outAbs, '.empty');
++  const treeDir = path.join(outAbs, 'tree');
++  const deniedSet = new Set();
++
++  try {
++    const objectsPath = String(runGit('git rev-parse --git-path objects', ['rev-parse', '--git-path', 'objects'], {
++      cwd: repoAbs,
++      env: gitEnv(),
++      encoding: 'utf8',
++    })).trim();
++    const objectsAbs = path.isAbsolute(objectsPath) ? objectsPath : path.resolve(repoAbs, objectsPath);
++
++    fs.mkdirSync(path.join(gitDir, 'refs'), { recursive: true });
++    fs.mkdirSync(path.join(gitDir, 'objects', 'info'), { recursive: true });
++    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/none\n');
++    fs.writeFileSync(path.join(gitDir, 'objects', 'info', 'alternates'), `${objectsAbs}\n`);
++    if (format && format !== 'sha1') {
++      fs.writeFileSync(path.join(gitDir, 'config'), `[core]\n\trepositoryFormatVersion = 1\n[extensions]\n\tobjectFormat = ${format}\n`);
++    }
++    fs.mkdirSync(emptyDir, { recursive: true });
++    fs.mkdirSync(treeDir, { recursive: true });
++
++    const isolated = gitEnv({
++      GIT_DIR: gitDir,
++      GIT_INDEX_FILE: path.join(gitDir, 'index'),
++      GIT_CONFIG_GLOBAL: '/dev/null',
++      GIT_CONFIG_SYSTEM: '/dev/null',
++      GIT_ATTR_NOSYSTEM: '1',
++    });
++
++    const formatFlags = (format && format !== 'sha1')
++      ? ['-c', `extensions.objectFormat=${format}`]
++      : [];
++
++    runGit('git read-tree', [...formatFlags, 'read-tree', candidateOid], { cwd: repoAbs, env: isolated });
++
++    const attrPaths = listing.filter((e) => path.posix.basename(e.path) === '.gitattributes');
++    for (const attr of attrPaths) {
++      runGit('git update-index', [...formatFlags, 'update-index', '--force-remove', '--', attr.path], {
++        cwd: repoAbs,
++        env: isolated,
++      });
++    }
++
++    const prefix = treeDir.endsWith(path.sep) ? treeDir : `${treeDir}${path.sep}`;
++    runGit('checkout-index', [
++      ...formatFlags,
++      '-c', 'core.attributesFile=/dev/null',
++      '-c', 'core.symlinks=true',
++      '-c', 'core.autocrlf=false',
++      '-c', 'core.eol=lf',
++      `--work-tree=${emptyDir}`,
++      'checkout-index', '-a', `--prefix=${prefix}`,
++    ], { cwd: repoAbs, env: isolated });
++
++    for (const attr of attrPaths) {
++      const dest = path.join(treeDir, attr.path);
++      fs.mkdirSync(path.dirname(dest), { recursive: true });
++      const blob = runGit('git cat-file blob', [...formatFlags, 'cat-file', 'blob', attr.oid], {
++        cwd: repoAbs,
++        env: isolated,
++      });
++      fs.writeFileSync(dest, blob);
++    }
++
++    rmIfExists(gitDir);
++    rmIfExists(emptyDir);
++
++    verifyTreeIntegrity(treeDir, listing);
++
++    for (const entry of listing) {
++      if (packetPathDenied(entry.path, deny)) {
++        deniedSet.add(entry.path);
++        rmIfExists(path.join(treeDir, entry.path));
++      }
++    }
++    for (const pattern of deny) {
++      if (pattern.endsWith('/**')) {
++        const dirRel = pattern.slice(0, -3);
++        if (dirRel) {
++          const dirFull = path.join(treeDir, dirRel);
++          if (fs.existsSync(dirFull)) {
++            deniedSet.add(dirRel);
++            rmIfExists(dirFull);
++          }
++        }
++      }
++    }
++
++    for (const item of walkLstat(treeDir)) {
++      if (!item.st.isSymbolicLink()) continue;
++      const target = fs.readlinkSync(item.full, { encoding: 'buffer' });
++      const info = resolveSymlinkTarget(treeDir, item.rel, target);
++      let hazardous = Boolean(info.absolute || info.escaped);
++      if (!hazardous && info.resolved) {
++        if (packetPathDenied(info.resolved, deny) || packetPathDenied(item.rel, deny)) {
++          hazardous = true;
++        } else {
++          const resolvedFull = path.join(treeDir, info.resolved);
++          try {
++            const rst = fs.lstatSync(resolvedFull);
++            if (rst.isDirectory() || rst.isFile() || rst.isSymbolicLink()) {
++              if (packetPathDenied(info.resolved, deny)) hazardous = true;
++            }
++          } catch {
++            // dangling inside tree: keep unless denied
++          }
++        }
++      }
++      if (hazardous) {
++        deniedSet.add(item.rel);
++        rmIfExists(item.full);
++      }
++    }
++
++    const inputDiff = fs.readFileSync(diffFile);
++    const canonicalRaw = runGit('git diff', [
++      'diff', '--no-ext-diff', '--no-textconv', `${baseOid}..${candidateOid}`,
++    ], { cwd: repoAbs, env: gitEnv() });
++    const canonical = Buffer.isBuffer(canonicalRaw) ? canonicalRaw : Buffer.from(canonicalRaw);
++    if (!canonical.equals(inputDiff)) {
++      throw new Error('diff not canonical');
++    }
++
++    const nameStatusRaw = runGit('git diff --name-status', [
++      'diff', '--no-ext-diff', '--no-textconv', '--name-status', '-z', baseOid, candidateOid,
++    ], { cwd: repoAbs, env: gitEnv() });
++    const records = parseNameStatus(Buffer.isBuffer(nameStatusRaw) ? nameStatusRaw : Buffer.from(nameStatusRaw));
++    const sections = splitDiffSections(inputDiff);
++    if (sections.length !== records.length) {
++      throw new Error(`alignment: section count ${sections.length} != name-status ${records.length}`);
++    }
++
++    const kept = [];
++    for (let i = 0; i < records.length; i += 1) {
++      const rec = records[i];
++      const oldDenied = packetPathDenied(rec.oldPath, deny);
++      const newDenied = packetPathDenied(rec.newPath, deny);
++      if (oldDenied || newDenied) {
++        if (oldDenied) deniedSet.add(rec.oldPath);
++        if (newDenied) deniedSet.add(rec.newPath);
++        if (oldDenied && !newDenied) {
++          deniedSet.add(rec.newPath);
++          rmIfExists(path.join(treeDir, rec.newPath));
++        }
++        continue;
++      }
++      kept.push(sections[i]);
++    }
++    fs.writeFileSync(path.join(outAbs, 'diff.patch'), Buffer.concat(kept));
++
++    const specDest = path.join(outAbs, 'spec.md');
++    if (specFile == null) {
++      fs.writeFileSync(specDest, Buffer.alloc(0));
++    } else {
++      fs.copyFileSync(specFile, specDest);
++    }
++
++    const entries = [];
++    for (const item of walkLstat(outAbs)) {
++      if (item.rel === 'MANIFEST.json') continue;
++      const isLink = item.st.isSymbolicLink();
++      const bytesBuf = isLink
++        ? fs.readlinkSync(item.full, { encoding: 'buffer' })
++        : fs.readFileSync(item.full);
++      entries.push({
++        path: item.rel,
++        type: isLink ? 'symlink' : 'file',
++        sha256: sha256Hex(bytesBuf),
++        bytes: bytesBuf.length,
++      });
++    }
++    entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
++
++    const preimageObj = {
++      schema_version: 1,
++      base_sha: baseOid,
++      candidate_sha: candidateOid,
++      deny_list: deny,
++      entries,
++    };
++    const packetHash = sha256Hex(Buffer.from(JSON.stringify(preimageObj), 'utf8'));
++    const manifest = {
++      schema_version: 1,
++      artifact_type: 'review_packet_manifest',
++      base_sha: baseOid,
++      candidate_sha: candidateOid,
++      deny_list: deny,
++      entries,
++      packet_hash: packetHash,
++    };
++    const manifestPath = path.join(outAbs, 'MANIFEST.json');
++    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
++
++    const denied_paths = [...deniedSet].sort();
++    return {
++      dir: outAbs,
++      packet_hash: packetHash,
++      manifest_path: manifestPath,
++      entries_count: entries.length,
++      denied_paths,
++    };
++  } finally {
++    rmIfExists(gitDir);
++    rmIfExists(emptyDir);
++  }
++}
++
++module.exports = {
++  buildReviewPacket,
++  packetPathDenied,
++  normalizeDenyList,
++  DEFAULT_PACKET_DENY_LIST,
++  verifyTreeIntegrity,
++};
+diff --git a/platforms/codex/plugin/src/runners/review.js b/platforms/codex/plugin/src/runners/review.js
+index b903c91b..065663e7 100644
+--- a/platforms/codex/plugin/src/runners/review.js
++++ b/platforms/codex/plugin/src/runners/review.js
+@@ -203,36 +203,70 @@ function dispatchReview(args, options = {}) {
+       error: new Error(`dispatch-review.sh not found: ${scriptPath}`),
+       status: null,
+       signal: null,
++      packet: null,
+     };
+   }
+   let launchArgs = args;
+   let launchCwd = options.cwd || REPO_ROOT;
+   let blindCwd = null;
++  let autopilotPacket = null;
++  const launchEnv = { ...(options.env || process.env) };
++  delete launchEnv.AUTOPILOT_REVIEW_PACKET_DIR;
++  delete launchEnv.AUTOPILOT_REVIEW_PACKET_HASH;
+   try {
+     if (options.blindDiscovery === true) {
+       blindCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-blind-'));
+       fs.chmodSync(blindCwd, 0o700);
+       launchArgs = [...args];
+-      for (const flag of ['--diff-file', '--spec-file']) {
+-        const index = launchArgs.indexOf(flag);
+-        if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
+-        const source = launchArgs[index + 1];
+-        const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
+-        fs.copyFileSync(source, target);
+-        fs.chmodSync(target, 0o600);
+-        launchArgs[index + 1] = target;
++      if (options.packet && typeof options.packet === 'object') {
++        const { buildReviewPacket } = require('./review-packet');
++        const diffIndex = launchArgs.indexOf('--diff-file');
++        const specIndex = launchArgs.indexOf('--spec-file');
++        const diffFile = diffIndex >= 0 && typeof launchArgs[diffIndex + 1] === 'string'
++          ? launchArgs[diffIndex + 1]
++          : undefined;
++        const specFile = specIndex >= 0 && typeof launchArgs[specIndex + 1] === 'string'
++          ? launchArgs[specIndex + 1]
++          : undefined;
++        const packetDir = path.join(blindCwd, 'packet');
++        autopilotPacket = buildReviewPacket({
++          repo: options.packet.repo,
++          baseSha: options.packet.baseSha,
++          candidateSha: options.packet.candidateSha,
++          diffFile,
++          specFile: specFile === undefined ? null : specFile,
++          outDir: packetDir,
++        });
++        if (diffIndex >= 0) {
++          launchArgs[diffIndex + 1] = path.join(packetDir, 'diff.patch');
++        }
++        if (specIndex >= 0) {
++          launchArgs[specIndex + 1] = path.join(packetDir, 'spec.md');
++        }
++        launchEnv.AUTOPILOT_REVIEW_PACKET_DIR = packetDir;
++        launchEnv.AUTOPILOT_REVIEW_PACKET_HASH = autopilotPacket.packet_hash;
++      } else {
++        for (const flag of ['--diff-file', '--spec-file']) {
++          const index = launchArgs.indexOf(flag);
++          if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
++          const source = launchArgs[index + 1];
++          const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
++          fs.copyFileSync(source, target);
++          fs.chmodSync(target, 0o600);
++          launchArgs[index + 1] = target;
++        }
+       }
+       launchCwd = blindCwd;
++      launchEnv.AUTOPILOT_BLIND_DISCOVERY = '1';
+     }
+     const child = spawnSync(scriptPath, launchArgs, {
+       cwd: launchCwd,
+-      env: options.blindDiscovery === true
+-        ? { ...(options.env || process.env), AUTOPILOT_BLIND_DISCOVERY: '1' }
+-        : (options.env || process.env),
++      env: launchEnv,
+       shell: false,
+       stdio: options.stdio || 'inherit',
+     });
+     child.autopilotLaunchCwd = launchCwd;
++    child.autopilotPacket = autopilotPacket;
+     return child;
+   } catch (error) {
+     return { error, status: null, signal: null };
+@@ -273,10 +307,12 @@ function dispatchReviewJson(args, options = {}) {
+       result: null,
+       parseError: null,
+       transportEnvelope,
++      packet: null,
+     };
+   }
+ 
+   try {
++    const built = child.autopilotPacket;
+     return {
+       error: child.error || null,
+       status: child.status,
+@@ -286,6 +322,13 @@ function dispatchReviewJson(args, options = {}) {
+       result: parseReviewOutput(stdout),
+       parseError: null,
+       transportEnvelope,
++      packet: built
++        ? {
++          packet_hash: built.packet_hash,
++          entries_count: built.entries_count,
++          denied_paths: built.denied_paths,
++        }
++        : null,
+     };
+   } catch (error) {
+     const payload = {
+@@ -297,6 +340,7 @@ function dispatchReviewJson(args, options = {}) {
+       result: null,
+       parseError: error,
+       transportEnvelope,
++      packet: null,
+     };
+     try {
+       const parsed = JSON.parse(stdout.trim());
+diff --git a/references/blind-dispatch.md b/references/blind-dispatch.md
+index f8bee7db..cb2b07b6 100644
+--- a/references/blind-dispatch.md
++++ b/references/blind-dispatch.md
+@@ -311,6 +311,52 @@ implemented", no "it works / tests pass / this is done" narrative, no worker-aut
+ If any is present, strip it and re-assemble from artifacts + the original task baseline.
+ Mechanically, the spec travels via dispatch-review.sh --spec-file (dispatcher-authored, trusted); the diff remains the only untrusted input.
+ 
++## Packet blinding (v2.36.59)
++
++Cut 1a-A of the blind-review redesign builds one **content-addressed packet** per
++review dispatch (`src/runners/review-packet.js`, wired through `dispatchReview`
++when `options.packet` is set). The seat still sees only artifacts; the packet is
++what those artifacts are.
++
++**Contents** under the packet directory:
++
++- `tree/` — isolated-temp-`GIT_DIR` `checkout-index` of the candidate (never
++  `git archive`). Alternates to the real object store; no hooks, no
++  `info/attributes`, no filter-bearing config on the sha1 path. Every
++  `.gitattributes` is dropped from the index before checkout and rewritten raw
++  from `cat-file blob`. An integrity pass then requires `lstat` type to match
++  `ls-tree` mode and `git hash-object --stdin --no-filters` to match the listed
++  id.
++- `diff.patch` — the dispatcher's diff, first proven byte-canonical against
++  `git diff --no-ext-diff --no-textconv <base>..<candidate>`, then Buffer-split
++  and aligned to `--name-status -z`.
++- `spec.md` — byte copy of the spec, or zero bytes when `--spec-file` is absent.
++- `MANIFEST.json` — `{ schema_version, artifact_type, base_sha, candidate_sha,
++  deny_list, entries, packet_hash }` with full `rev-parse --verify` OIDs.
++
++**Deny-list** (`DEFAULT_PACKET_DENY_LIST`): `.autopilot/**`, `.qc/**`,
++`docs/plans/evidence/**`, `docs/plans/**/*.review.md`,
++`docs/plans/**/*.review.json`, `docs/plans/**/*disposition*.json`,
++`**/*.receipt.json`, `**/*.raw.log`. Grammar: `/`-joined segments; `**` matches
++zero or more whole segments; `*` matches inside one segment; a pattern ending
++`/**` matches the directory itself and everything under it. Absolute paths,
++`..`, empty patterns, and other glob syntax are rejected. A section is dropped
++when old **or** new path is denied; a rename out of a denied dir also prunes the
++new tree path.
++
++**Hash preimage:** `packet_hash = sha256(JSON.stringify({ schema_version,
++base_sha, candidate_sha, deny_list, entries }))` — that key order, UTF-8, no
++whitespace. No timestamp, absolute path, hostname, or PID.
++
++**Isolation / hazards:** non-UTF-8 paths fail closed (`unsupported path
++encoding`); gitlinks fail closed (`unsupported submodule`) before any write;
++symlinks are kept as symlinks and never dereferenced; absolute, escaping, or
++deny-targeting links are pruned into `denied_paths`.
++
++**Later cuts (not this deliverable):** 1a-B threads `packet_hash` into engine
++receipts and the panel identity rule; 1b is the cleanroom launcher (`bwrap`) and
++a configurable deny-list.
++
+ ## Nested dispatch (subagents spawning subagents)
+ 
+ > Claude Code v2.1.172+ lets subagents spawn their own subagents (depth ≤ 5;
+diff --git a/src/runners/review-packet.js b/src/runners/review-packet.js
+new file mode 100644
+index 00000000..ea81b1d7
+--- /dev/null
++++ b/src/runners/review-packet.js
+@@ -0,0 +1,579 @@
++'use strict';
++
++const crypto = require('crypto');
++const fs = require('fs');
++const path = require('path');
++const { spawnSync } = require('child_process');
++
++const DEFAULT_PACKET_DENY_LIST = Object.freeze([
++  '.autopilot/**',
++  '.qc/**',
++  'docs/plans/evidence/**',
++  'docs/plans/**/*.review.md',
++  'docs/plans/**/*.review.json',
++  'docs/plans/**/*disposition*.json',
++  '**/*.receipt.json',
++  '**/*.raw.log',
++]);
++
++const GIT_MAX_BUFFER = 64 * 1024 * 1024;
++const GIT_ISOLATION_KEYS = [
++  'GIT_DIR',
++  'GIT_WORK_TREE',
++  'GIT_INDEX_FILE',
++  'GIT_OBJECT_DIRECTORY',
++  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
++];
++
++function gitEnv(extra) {
++  const env = { ...process.env, ...extra };
++  for (const key of GIT_ISOLATION_KEYS) {
++    if (!extra || !Object.prototype.hasOwnProperty.call(extra, key)) {
++      delete env[key];
++    }
++  }
++  return env;
++}
++
++function runGit(step, args, options = {}) {
++  const result = spawnSync('git', args, {
++    cwd: options.cwd,
++    env: options.env || gitEnv(),
++    input: options.input,
++    maxBuffer: GIT_MAX_BUFFER,
++    shell: false,
++    encoding: options.encoding,
++  });
++  if (result.error) {
++    throw new Error(`${step}: ${result.error.message}`);
++  }
++  if (result.signal) {
++    throw new Error(`${step}: signal ${result.signal}`);
++  }
++  if (result.status !== 0) {
++    const err = result.stderr
++      ? Buffer.isBuffer(result.stderr)
++        ? result.stderr.toString('utf8')
++        : String(result.stderr)
++      : '';
++    throw new Error(`${step}: ${err.trim() || `exit ${result.status}`}`);
++  }
++  return result.stdout;
++}
++
++function isValidUtf8(buf) {
++  return Buffer.from(buf.toString('utf8'), 'utf8').equals(buf);
++}
++
++function splitNul(buf) {
++  const parts = [];
++  let start = 0;
++  for (let i = 0; i < buf.length; i += 1) {
++    if (buf[i] === 0) {
++      parts.push(buf.subarray(start, i));
++      start = i + 1;
++    }
++  }
++  if (start < buf.length) parts.push(buf.subarray(start));
++  return parts;
++}
++
++function parseLsTree(buf) {
++  const entries = [];
++  for (const rec of splitNul(buf)) {
++    if (rec.length === 0) continue;
++    const sp1 = rec.indexOf(0x20);
++    const sp2 = rec.indexOf(0x20, sp1 + 1);
++    const tab = rec.indexOf(0x09, sp2 + 1);
++    if (sp1 < 0 || sp2 < 0 || tab < 0) {
++      throw new Error(`git ls-tree: malformed record`);
++    }
++    const mode = rec.subarray(0, sp1).toString('utf8');
++    const type = rec.subarray(sp1 + 1, sp2).toString('utf8');
++    const oid = rec.subarray(sp2 + 1, tab).toString('utf8');
++    const pathBytes = rec.subarray(tab + 1);
++    entries.push({ mode, type, oid, pathBytes });
++  }
++  return entries;
++}
++
++function otherGlobSyntax(pattern) {
++  if (pattern.startsWith('/') || path.isAbsolute(pattern)) return true;
++  if (pattern.length === 0) return true;
++  const segs = pattern.split('/');
++  for (const seg of segs) {
++    if (seg === '..' || seg === '.') return true;
++    if (seg !== '**' && (seg.includes('**') || /[?[{}\]]/.test(seg))) return true;
++  }
++  return segs.some((s) => s === '');
++}
++
++function normalizeDenyList(denyList) {
++  const raw = denyList == null ? [...DEFAULT_PACKET_DENY_LIST] : [...denyList];
++  for (const pattern of raw) {
++    if (typeof pattern !== 'string' || otherGlobSyntax(pattern)) {
++      throw new Error(`invalid deny-list pattern: ${pattern}`);
++    }
++  }
++  return [...new Set(raw)].sort();
++}
++
++function matchOneSegment(seg, pat) {
++  if (pat === '**') return false;
++  if (!pat.includes('*')) return seg === pat;
++  let re = '^';
++  for (const ch of pat) {
++    if (ch === '*') re += '[^/]*';
++    else re += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++  }
++  re += '$';
++  return new RegExp(re).test(seg);
++}
++
++function matchGlob(pathSegs, patSegs, pi, gi) {
++  if (gi === patSegs.length) return pi === pathSegs.length;
++  if (patSegs[gi] === '**') {
++    if (gi === patSegs.length - 1) return true;
++    for (let n = pi; n <= pathSegs.length; n += 1) {
++      if (matchGlob(pathSegs, patSegs, n, gi + 1)) return true;
++    }
++    return false;
++  }
++  if (pi === pathSegs.length) return false;
++  if (!matchOneSegment(pathSegs[pi], patSegs[gi])) return false;
++  return matchGlob(pathSegs, patSegs, pi + 1, gi + 1);
++}
++
++function packetPathDenied(repoPath, denyList) {
++  const list = denyList == null ? DEFAULT_PACKET_DENY_LIST : denyList;
++  const posix = String(repoPath).replace(/\\/g, '/').replace(/^\.\//, '');
++  if (posix === '' || posix === '.') return false;
++  const pathSegs = posix.split('/');
++  for (const pattern of list) {
++    const patSegs = pattern.split('/');
++    if (matchGlob(pathSegs, patSegs, 0, 0)) return true;
++  }
++  return false;
++}
++
++function posixRel(from, to) {
++  return path.relative(from, to).split(path.sep).join('/');
++}
++
++function walkLstat(root) {
++  const acc = [];
++  function rec(dir, rel) {
++    let names;
++    try {
++      names = fs.readdirSync(dir);
++    } catch (error) {
++      if (error && error.code === 'ENOENT') return;
++      throw error;
++    }
++    names.sort();
++    for (const name of names) {
++      const full = path.join(dir, name);
++      const childRel = rel ? `${rel}/${name}` : name;
++      const st = fs.lstatSync(full);
++      if (st.isDirectory()) rec(full, childRel);
++      else acc.push({ rel: childRel, full, st });
++    }
++  }
++  rec(root, '');
++  return acc;
++}
++
++function sha256Hex(buf) {
++  return crypto.createHash('sha256').update(buf).digest('hex');
++}
++
++function splitDiffSections(buf) {
++  const needle = Buffer.from('diff --git ');
++  const nlNeedle = Buffer.from('\ndiff --git ');
++  const starts = [];
++  if (buf.length >= needle.length && buf.subarray(0, needle.length).equals(needle)) {
++    starts.push(0);
++  }
++  let idx = 0;
++  while (idx < buf.length) {
++    const found = buf.indexOf(nlNeedle, idx);
++    if (found < 0) break;
++    starts.push(found + 1);
++    idx = found + 1;
++  }
++  const sections = [];
++  for (let i = 0; i < starts.length; i += 1) {
++    const end = i + 1 < starts.length ? starts[i + 1] : buf.length;
++    sections.push(buf.subarray(starts[i], end));
++  }
++  return sections;
++}
++
++function parseNameStatus(buf) {
++  const tokens = splitNul(buf).filter((t) => t.length > 0);
++  const records = [];
++  let i = 0;
++  while (i < tokens.length) {
++    const status = tokens[i].toString('utf8');
++    const code = status[0];
++    if (code === 'R' || code === 'C') {
++      if (i + 2 >= tokens.length) throw new Error('git diff --name-status: truncated rename/copy record');
++      records.push({
++        status,
++        oldPath: tokens[i + 1].toString('utf8'),
++        newPath: tokens[i + 2].toString('utf8'),
++      });
++      i += 3;
++    } else {
++      if (i + 1 >= tokens.length) throw new Error('git diff --name-status: truncated record');
++      const p = tokens[i + 1].toString('utf8');
++      records.push({ status, oldPath: p, newPath: p });
++      i += 2;
++    }
++  }
++  return records;
++}
++
++function typeForMode(mode, st) {
++  if (mode === '120000') return st.isSymbolicLink();
++  if (mode === '100644' || mode === '100755') return st.isFile();
++  return false;
++}
++
++function hashObject(repo, format, input) {
++  const args = [];
++  if (format && format !== 'sha1') {
++    args.push('-c', `extensions.objectFormat=${format}`);
++  }
++  args.push('hash-object', '--stdin', '--no-filters');
++  const out = runGit('git hash-object', args, {
++    cwd: repo,
++    env: gitEnv(),
++    input,
++    encoding: 'utf8',
++  });
++  return String(out).trim();
++}
++
++function verifyTreeIntegrity(treeDir, listing) {
++  const listed = new Set();
++  for (const entry of listing) {
++    const rel = entry.path;
++    listed.add(rel);
++    const full = path.join(treeDir, rel);
++    let st;
++    try {
++      st = fs.lstatSync(full);
++    } catch {
++      throw new Error(`tree integrity: ${rel}`);
++    }
++    if (!typeForMode(entry.mode, st)) {
++      throw new Error(`tree integrity: ${rel}`);
++    }
++    const bytes = st.isSymbolicLink()
++      ? fs.readlinkSync(full, { encoding: 'buffer' })
++      : fs.readFileSync(full);
++    const hashed = hashObject(entry.repo || path.resolve('.'), entry.format || '', bytes);
++    if (hashed !== entry.oid) {
++      throw new Error(`tree integrity: ${rel}`);
++    }
++  }
++  for (const item of walkLstat(treeDir)) {
++    if (!listed.has(item.rel)) {
++      throw new Error(`tree integrity: ${item.rel}`);
++    }
++  }
++}
++
++function resolveSymlinkTarget(treeDir, linkRel, target) {
++  const targetStr = Buffer.isBuffer(target) ? target.toString('utf8') : String(target);
++  if (targetStr.startsWith('/') || /^[A-Za-z]:[\\/]/.test(targetStr)) {
++    return { absolute: true, resolved: null };
++  }
++  const linkDir = path.posix.dirname(linkRel);
++  const joined = path.posix.normalize(linkDir === '.' ? targetStr : `${linkDir}/${targetStr}`);
++  if (joined === '..' || joined.startsWith('../')) {
++    return { absolute: false, escaped: true, resolved: joined };
++  }
++  return { absolute: false, escaped: false, resolved: joined === '.' ? '' : joined };
++}
++
++function rmIfExists(p) {
++  fs.rmSync(p, { recursive: true, force: true });
++}
++
++function buildReviewPacket({
++  repo,
++  baseSha,
++  candidateSha,
++  diffFile,
++  specFile,
++  outDir,
++  denyList,
++} = {}) {
++  const deny = normalizeDenyList(denyList);
++  const repoAbs = path.resolve(repo);
++  const outAbs = path.resolve(outDir);
++  const baseOid = String(runGit('git rev-parse --verify', ['rev-parse', '--verify', `${baseSha}^{commit}`], {
++    cwd: repoAbs,
++    env: gitEnv(),
++    encoding: 'utf8',
++  })).trim();
++  const candidateOid = String(runGit('git rev-parse --verify', ['rev-parse', '--verify', `${candidateSha}^{commit}`], {
++    cwd: repoAbs,
++    env: gitEnv(),
++    encoding: 'utf8',
++  })).trim();
++  let format = '';
++  try {
++    format = String(runGit('git rev-parse --show-object-format', ['rev-parse', '--show-object-format'], {
++      cwd: repoAbs,
++      env: gitEnv(),
++      encoding: 'utf8',
++    })).trim();
++  } catch {
++    format = '';
++  }
++
++  const lsRaw = runGit('git ls-tree', ['ls-tree', '-r', '-z', candidateOid], {
++    cwd: repoAbs,
++    env: gitEnv(),
++  });
++  const rawEntries = parseLsTree(lsRaw);
++  for (const entry of rawEntries) {
++    if (entry.mode === '160000' || entry.type === 'commit') {
++      const p = isValidUtf8(entry.pathBytes)
++        ? entry.pathBytes.toString('utf8')
++        : entry.pathBytes.toString('hex');
++      throw new Error(`unsupported submodule: ${p}`);
++    }
++    if (!isValidUtf8(entry.pathBytes)) {
++      throw new Error(`unsupported path encoding: ${entry.pathBytes.toString('hex')}`);
++    }
++  }
++  const listing = rawEntries.map((entry) => ({
++    mode: entry.mode,
++    type: entry.type,
++    oid: entry.oid,
++    path: entry.pathBytes.toString('utf8'),
++    repo: repoAbs,
++    format,
++  }));
++
++  fs.mkdirSync(outAbs, { recursive: true });
++  const gitDir = path.join(outAbs, '.gitdir');
++  const emptyDir = path.join(outAbs, '.empty');
++  const treeDir = path.join(outAbs, 'tree');
++  const deniedSet = new Set();
++
++  try {
++    const objectsPath = String(runGit('git rev-parse --git-path objects', ['rev-parse', '--git-path', 'objects'], {
++      cwd: repoAbs,
++      env: gitEnv(),
++      encoding: 'utf8',
++    })).trim();
++    const objectsAbs = path.isAbsolute(objectsPath) ? objectsPath : path.resolve(repoAbs, objectsPath);
++
++    fs.mkdirSync(path.join(gitDir, 'refs'), { recursive: true });
++    fs.mkdirSync(path.join(gitDir, 'objects', 'info'), { recursive: true });
++    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/none\n');
++    fs.writeFileSync(path.join(gitDir, 'objects', 'info', 'alternates'), `${objectsAbs}\n`);
++    if (format && format !== 'sha1') {
++      fs.writeFileSync(path.join(gitDir, 'config'), `[core]\n\trepositoryFormatVersion = 1\n[extensions]\n\tobjectFormat = ${format}\n`);
++    }
++    fs.mkdirSync(emptyDir, { recursive: true });
++    fs.mkdirSync(treeDir, { recursive: true });
++
++    const isolated = gitEnv({
++      GIT_DIR: gitDir,
++      GIT_INDEX_FILE: path.join(gitDir, 'index'),
++      GIT_CONFIG_GLOBAL: '/dev/null',
++      GIT_CONFIG_SYSTEM: '/dev/null',
++      GIT_ATTR_NOSYSTEM: '1',
++    });
++
++    const formatFlags = (format && format !== 'sha1')
++      ? ['-c', `extensions.objectFormat=${format}`]
++      : [];
++
++    runGit('git read-tree', [...formatFlags, 'read-tree', candidateOid], { cwd: repoAbs, env: isolated });
++
++    const attrPaths = listing.filter((e) => path.posix.basename(e.path) === '.gitattributes');
++    for (const attr of attrPaths) {
++      runGit('git update-index', [...formatFlags, 'update-index', '--force-remove', '--', attr.path], {
++        cwd: repoAbs,
++        env: isolated,
++      });
++    }
++
++    const prefix = treeDir.endsWith(path.sep) ? treeDir : `${treeDir}${path.sep}`;
++    runGit('checkout-index', [
++      ...formatFlags,
++      '-c', 'core.attributesFile=/dev/null',
++      '-c', 'core.symlinks=true',
++      '-c', 'core.autocrlf=false',
++      '-c', 'core.eol=lf',
++      `--work-tree=${emptyDir}`,
++      'checkout-index', '-a', `--prefix=${prefix}`,
++    ], { cwd: repoAbs, env: isolated });
++
++    for (const attr of attrPaths) {
++      const dest = path.join(treeDir, attr.path);
++      fs.mkdirSync(path.dirname(dest), { recursive: true });
++      const blob = runGit('git cat-file blob', [...formatFlags, 'cat-file', 'blob', attr.oid], {
++        cwd: repoAbs,
++        env: isolated,
++      });
++      fs.writeFileSync(dest, blob);
++    }
++
++    rmIfExists(gitDir);
++    rmIfExists(emptyDir);
++
++    verifyTreeIntegrity(treeDir, listing);
++
++    for (const entry of listing) {
++      if (packetPathDenied(entry.path, deny)) {
++        deniedSet.add(entry.path);
++        rmIfExists(path.join(treeDir, entry.path));
++      }
++    }
++    for (const pattern of deny) {
++      if (pattern.endsWith('/**')) {
++        const dirRel = pattern.slice(0, -3);
++        if (dirRel) {
++          const dirFull = path.join(treeDir, dirRel);
++          if (fs.existsSync(dirFull)) {
++            deniedSet.add(dirRel);
++            rmIfExists(dirFull);
++          }
++        }
++      }
++    }
++
++    for (const item of walkLstat(treeDir)) {
++      if (!item.st.isSymbolicLink()) continue;
++      const target = fs.readlinkSync(item.full, { encoding: 'buffer' });
++      const info = resolveSymlinkTarget(treeDir, item.rel, target);
++      let hazardous = Boolean(info.absolute || info.escaped);
++      if (!hazardous && info.resolved) {
++        if (packetPathDenied(info.resolved, deny) || packetPathDenied(item.rel, deny)) {
++          hazardous = true;
++        } else {
++          const resolvedFull = path.join(treeDir, info.resolved);
++          try {
++            const rst = fs.lstatSync(resolvedFull);
++            if (rst.isDirectory() || rst.isFile() || rst.isSymbolicLink()) {
++              if (packetPathDenied(info.resolved, deny)) hazardous = true;
++            }
++          } catch {
++            // dangling inside tree: keep unless denied
++          }
++        }
++      }
++      if (hazardous) {
++        deniedSet.add(item.rel);
++        rmIfExists(item.full);
++      }
++    }
++
++    const inputDiff = fs.readFileSync(diffFile);
++    const canonicalRaw = runGit('git diff', [
++      'diff', '--no-ext-diff', '--no-textconv', `${baseOid}..${candidateOid}`,
++    ], { cwd: repoAbs, env: gitEnv() });
++    const canonical = Buffer.isBuffer(canonicalRaw) ? canonicalRaw : Buffer.from(canonicalRaw);
++    if (!canonical.equals(inputDiff)) {
++      throw new Error('diff not canonical');
++    }
++
++    const nameStatusRaw = runGit('git diff --name-status', [
++      'diff', '--no-ext-diff', '--no-textconv', '--name-status', '-z', baseOid, candidateOid,
++    ], { cwd: repoAbs, env: gitEnv() });
++    const records = parseNameStatus(Buffer.isBuffer(nameStatusRaw) ? nameStatusRaw : Buffer.from(nameStatusRaw));
++    const sections = splitDiffSections(inputDiff);
++    if (sections.length !== records.length) {
++      throw new Error(`alignment: section count ${sections.length} != name-status ${records.length}`);
++    }
++
++    const kept = [];
++    for (let i = 0; i < records.length; i += 1) {
++      const rec = records[i];
++      const oldDenied = packetPathDenied(rec.oldPath, deny);
++      const newDenied = packetPathDenied(rec.newPath, deny);
++      if (oldDenied || newDenied) {
++        if (oldDenied) deniedSet.add(rec.oldPath);
++        if (newDenied) deniedSet.add(rec.newPath);
++        if (oldDenied && !newDenied) {
++          deniedSet.add(rec.newPath);
++          rmIfExists(path.join(treeDir, rec.newPath));
++        }
++        continue;
++      }
++      kept.push(sections[i]);
++    }
++    fs.writeFileSync(path.join(outAbs, 'diff.patch'), Buffer.concat(kept));
++
++    const specDest = path.join(outAbs, 'spec.md');
++    if (specFile == null) {
++      fs.writeFileSync(specDest, Buffer.alloc(0));
++    } else {
++      fs.copyFileSync(specFile, specDest);
++    }
++
++    const entries = [];
++    for (const item of walkLstat(outAbs)) {
++      if (item.rel === 'MANIFEST.json') continue;
++      const isLink = item.st.isSymbolicLink();
++      const bytesBuf = isLink
++        ? fs.readlinkSync(item.full, { encoding: 'buffer' })
++        : fs.readFileSync(item.full);
++      entries.push({
++        path: item.rel,
++        type: isLink ? 'symlink' : 'file',
++        sha256: sha256Hex(bytesBuf),
++        bytes: bytesBuf.length,
++      });
++    }
++    entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
++
++    const preimageObj = {
++      schema_version: 1,
++      base_sha: baseOid,
++      candidate_sha: candidateOid,
++      deny_list: deny,
++      entries,
++    };
++    const packetHash = sha256Hex(Buffer.from(JSON.stringify(preimageObj), 'utf8'));
++    const manifest = {
++      schema_version: 1,
++      artifact_type: 'review_packet_manifest',
++      base_sha: baseOid,
++      candidate_sha: candidateOid,
++      deny_list: deny,
++      entries,
++      packet_hash: packetHash,
++    };
++    const manifestPath = path.join(outAbs, 'MANIFEST.json');
++    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
++
++    const denied_paths = [...deniedSet].sort();
++    return {
++      dir: outAbs,
++      packet_hash: packetHash,
++      manifest_path: manifestPath,
++      entries_count: entries.length,
++      denied_paths,
++    };
++  } finally {
++    rmIfExists(gitDir);
++    rmIfExists(emptyDir);
++  }
++}
++
++module.exports = {
++  buildReviewPacket,
++  packetPathDenied,
++  normalizeDenyList,
++  DEFAULT_PACKET_DENY_LIST,
++  verifyTreeIntegrity,
++};
+diff --git a/src/runners/review.js b/src/runners/review.js
+index b903c91b..065663e7 100644
+--- a/src/runners/review.js
++++ b/src/runners/review.js
+@@ -203,36 +203,70 @@ function dispatchReview(args, options = {}) {
+       error: new Error(`dispatch-review.sh not found: ${scriptPath}`),
+       status: null,
+       signal: null,
++      packet: null,
+     };
+   }
+   let launchArgs = args;
+   let launchCwd = options.cwd || REPO_ROOT;
+   let blindCwd = null;
++  let autopilotPacket = null;
++  const launchEnv = { ...(options.env || process.env) };
++  delete launchEnv.AUTOPILOT_REVIEW_PACKET_DIR;
++  delete launchEnv.AUTOPILOT_REVIEW_PACKET_HASH;
+   try {
+     if (options.blindDiscovery === true) {
+       blindCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-blind-'));
+       fs.chmodSync(blindCwd, 0o700);
+       launchArgs = [...args];
+-      for (const flag of ['--diff-file', '--spec-file']) {
+-        const index = launchArgs.indexOf(flag);
+-        if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
+-        const source = launchArgs[index + 1];
+-        const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
+-        fs.copyFileSync(source, target);
+-        fs.chmodSync(target, 0o600);
+-        launchArgs[index + 1] = target;
++      if (options.packet && typeof options.packet === 'object') {
++        const { buildReviewPacket } = require('./review-packet');
++        const diffIndex = launchArgs.indexOf('--diff-file');
++        const specIndex = launchArgs.indexOf('--spec-file');
++        const diffFile = diffIndex >= 0 && typeof launchArgs[diffIndex + 1] === 'string'
++          ? launchArgs[diffIndex + 1]
++          : undefined;
++        const specFile = specIndex >= 0 && typeof launchArgs[specIndex + 1] === 'string'
++          ? launchArgs[specIndex + 1]
++          : undefined;
++        const packetDir = path.join(blindCwd, 'packet');
++        autopilotPacket = buildReviewPacket({
++          repo: options.packet.repo,
++          baseSha: options.packet.baseSha,
++          candidateSha: options.packet.candidateSha,
++          diffFile,
++          specFile: specFile === undefined ? null : specFile,
++          outDir: packetDir,
++        });
++        if (diffIndex >= 0) {
++          launchArgs[diffIndex + 1] = path.join(packetDir, 'diff.patch');
++        }
++        if (specIndex >= 0) {
++          launchArgs[specIndex + 1] = path.join(packetDir, 'spec.md');
++        }
++        launchEnv.AUTOPILOT_REVIEW_PACKET_DIR = packetDir;
++        launchEnv.AUTOPILOT_REVIEW_PACKET_HASH = autopilotPacket.packet_hash;
++      } else {
++        for (const flag of ['--diff-file', '--spec-file']) {
++          const index = launchArgs.indexOf(flag);
++          if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
++          const source = launchArgs[index + 1];
++          const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
++          fs.copyFileSync(source, target);
++          fs.chmodSync(target, 0o600);
++          launchArgs[index + 1] = target;
++        }
+       }
+       launchCwd = blindCwd;
++      launchEnv.AUTOPILOT_BLIND_DISCOVERY = '1';
+     }
+     const child = spawnSync(scriptPath, launchArgs, {
+       cwd: launchCwd,
+-      env: options.blindDiscovery === true
+-        ? { ...(options.env || process.env), AUTOPILOT_BLIND_DISCOVERY: '1' }
+-        : (options.env || process.env),
++      env: launchEnv,
+       shell: false,
+       stdio: options.stdio || 'inherit',
+     });
+     child.autopilotLaunchCwd = launchCwd;
++    child.autopilotPacket = autopilotPacket;
+     return child;
+   } catch (error) {
+     return { error, status: null, signal: null };
+@@ -273,10 +307,12 @@ function dispatchReviewJson(args, options = {}) {
+       result: null,
+       parseError: null,
+       transportEnvelope,
++      packet: null,
+     };
+   }
+ 
+   try {
++    const built = child.autopilotPacket;
+     return {
+       error: child.error || null,
+       status: child.status,
+@@ -286,6 +322,13 @@ function dispatchReviewJson(args, options = {}) {
+       result: parseReviewOutput(stdout),
+       parseError: null,
+       transportEnvelope,
++      packet: built
++        ? {
++          packet_hash: built.packet_hash,
++          entries_count: built.entries_count,
++          denied_paths: built.denied_paths,
++        }
++        : null,
+     };
+   } catch (error) {
+     const payload = {
+@@ -297,6 +340,7 @@ function dispatchReviewJson(args, options = {}) {
+       result: null,
+       parseError: error,
+       transportEnvelope,
++      packet: null,
+     };
+     try {
+       const parsed = JSON.parse(stdout.trim());
+
+```
+<<<AUTOPILOT-END-beb2c4a3a7bd37ea6bb9777f25037c58>>>
+
+warning: Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+codex
+<<<AUTOPILOT-REVIEW-beb2c4a3a7bd37ea6bb9777f25037c58>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS:
+🔴 [deny-dir-descendants] MUST-FIX Denial is evaluated only on leaf paths, while directory removal handles only literal patterns ending in `/**`; consequently `logs/x.raw.log/verdict.txt` or `docs/plans/p.review.md/body` survives in both `tree/` and `diff.patch` although its ancestor directory matches a default deny pattern. Derive directory prefixes and treat every descendant of a matched directory as denied for tree, diff, rename, and symlink-target processing.
+🟠 [ambient-common-gitdir] MUST-FIX `gitEnv` preserves ambient `GIT_COMMON_DIR`, which can make the supposedly isolated temporary `GIT_DIR` consume another repository's config and `info/attributes`, allowing a smudge/filter command to run before integrity verification. Scrub `GIT_COMMON_DIR` from every Git subprocess environment and add a poisoned-environment sentinel test.
+🟠 [attributes-symlink-type] MUST-FIX Every `.gitattributes` blob is restored with `writeFileSync`, so a safe tracked `.gitattributes` symlink becomes a regular file and then fails integrity instead of being retained as required. Restore removed attribute entries according to their Git mode, using a real symlink for mode `120000`, before integrity and hazard pruning.
+🟠 [name-status-utf8] MUST-FIX `parseNameStatus` decodes old and new path buffers without UTF-8 validation, so a deleted or renamed invalid-UTF-8 path present only in the base tree is lossily decoded and accepted after checkout. Validate every `--name-status -z` path buffer and fail with `unsupported path encoding: <hex>` before creating or checking out the packet tree.
+🟠 [posix-backslash-path] MUST-FIX `packetPathDenied` rewrites backslashes to `/` even though Git paths and the deny grammar are repository-relative POSIX byte strings; on POSIX a valid root file such as `.qc\product.js` is therefore falsely treated as being under `.qc/` and silently omitted from review. Match canonical Git paths without rewriting backslashes.
+<<<AUTOPILOT-END-beb2c4a3a7bd37ea6bb9777f25037c58>>>
+tokens used
+85,900

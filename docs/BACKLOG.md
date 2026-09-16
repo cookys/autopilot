@@ -120,6 +120,38 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
 - **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Cut 1a-A (packet builder) shipped v2.36.59; 1a-B/1b/2 open. Detail in the pointer.
 
+### Managed rail: final-panel seats run dispatch-review.sh at the 5m default timeout and time out on ordinary diffs
+- **Status**: open
+- **Trigger**: blind-review-packet campaign 2026-09-17: verify/review/full_suite green, then all three panel seats rc=124 on a 90 KB diff
+- **Effort**: Fix
+- **Source**: /l5 dogfood 2026-09-17 (lineage 2 attempt 1, `impl-run1.json`)
+- **Pointer**: docs/plans/evidence/2026-09-16-blind-review-packet/README.md
+- **Context**: `performFinalPanel` → `reviewDiff` passes no `--timeout`; seats die at the rail default (5m) after ~1h of paid work. Pass a sealed/roster timeout (≥ 20m) to every managed review dispatch.
+
+### Managed rail: graph-check admits `max_wall_seconds` to 14400, the contract schema caps 7200 — intake burns the attempt
+- **Status**: open
+- **Trigger**: blind-review-packet lineage 1 attempt 1 sealed 12000 s: graph-check READY, grant claimed, intake `REJECTED: max_wall_seconds: expected integer in 1..7200`
+- **Effort**: Fix
+- **Source**: /l5 dogfood 2026-09-17 (`impl-run1-attempt1-intake-rejected.json`)
+- **Pointer**: docs/plans/evidence/2026-09-16-blind-review-packet/README.md
+- **Context**: `mission-execution-graph.js:260` allows 1..14400; `schemas/implementation-campaign-contract.schema.json` maximum 7200. One limit, checked at graph time.
+
+### Review packet: `verifyTreeIntegrity` spawns `git hash-object` once per tracked file (21 s for 4236 files)
+- **Status**: open
+- **Trigger**: dogfood build of this repo's HEAD 2026-09-17 took 21 s per packet; a 3-seat panel plus in-rail review pays it four times
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 (plan §5)
+- **Pointer**: docs/plans/evidence/2026-09-16-blind-review-packet/README.md
+- **Context**: batch with one `git hash-object --stdin-paths --no-filters` process (symlinks hashed in-process) or reuse the packet across seats of one panel (cut 2 builds one packet per candidate).
+
+### Blind review redesign cut 1a-B: engine passes `options.packet`; seat receipts carry `packet_hash`; one hash per panel
+- **Status**: open
+- **Trigger**: cut 1a-A (v2.36.59) shipped the builder + runner wiring; nothing in the engine calls it yet
+- **Effort**: L
+- **Source**: plan 2026-09-16-blind-review-packet §3 (consult split A/B)
+- **Pointer**: docs/plans/2026-09-16-blind-review-packet.md
+- **Context**: `performReview` ~4812 + terminal site ~9692 (`baseSha: immutableBase`, `noReviewSpec`); `reviewDiff` return; `finalPanelSeatReceipt.packet_hash`; `FINAL_PANEL_SEAT_OPTIONAL_KEYS` (mixed presence rejected); receipt schema + mirror.
+
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open
 - **Trigger**: a drifted non-durable-wait resume burns a grant attempt (same pre-spend class as v2.36.42/46/48/53)

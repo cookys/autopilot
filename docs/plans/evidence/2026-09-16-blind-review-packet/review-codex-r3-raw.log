@@ -1,0 +1,458 @@
+<<<AUTOPILOT-REVIEW-193876f3db27d9a523f5f612b1b4c871>>>
+VERDICT: SHIP-AS-IS
+FINDINGS: none
+NO-FINDING-PROOF: checked=raw-byte symlink repair in canonical runner and Codex mirror; evidence=both copies now pass the blob Buffer directly to fs.symlinkSync, preserving target bytes instead of lossy UTF-8 decoding while leaving regular-file handling unchanged; conclusion=the prior attributes-symlink-raw-bytes MUST-FIX is closed consistently and the repair introduces no correctness, security, or completeness regression
+<<<AUTOPILOT-END-193876f3db27d9a523f5f612b1b4c871>>>
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /tmp/hetero-mission-2130c723d81d-blind-review-packet-2026-09-16-a1-gmYc7u
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: max
+reasoning summaries: none
+session id: 01a0ab5e-7c29-75d2-b8a8-6aea61faf272
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-193876f3db27d9a523f5f612b1b4c871>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-193876f3db27d9a523f5f612b1b4c871>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=8a60cae002aca83d98588d40bf2b3cbb
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+Delta re-review after your r2 FIX-THEN-SHIP (one MUST-FIX: attributes-symlink-raw-bytes). The diff below is ONLY the repair on top of the commit you reviewed. Judge whether each finding is closed and whether the repair introduces a regression. The full plan follows.
+
+# Blind review redesign, cut 1a-A — the content-addressed review packet and its runner wiring
+
+> Status: execution plan for ONE managed deliverable (`/l5`, mission graph node
+> `blind-review-packet-2026-09-16`) — the first cut of BACKLOG row "Blind review redesign: blind the
+> packet and the process boundary, not the runner" (open, L). Two consults converged on the shape
+> (`docs/plans/evidence/2026-09-16-blind-review-redesign/consult-{claude-fable-5-1,gpt-6-astra}.md`);
+> a third (codex gpt-5.6-sol, `consult-plan-cut1a-codex-answer.md`) reviewed the first draft of this
+> plan and split it: this deliverable is the packet builder plus the `dispatchReview` wiring and the
+> adversarial packet tests; the engine threading (receipt `packet_hash`, schema, panel identity rule)
+> is cut 1a-B, a separate plan on top of this one. Cut 1b (cleanroom launcher, `bwrap`; probe
+> evidence `bwrap-probe.md`) admits tool-capable seats; cut 2 is the speed work (§7).
+
+## 0. What is actually true today (verified 2026-09-16, base `004cb2da`)
+
+- Blind mode is a runner allow-list plus a scratch copy. `src/runners/review.js:210-240`
+  (`dispatchReview`): with `blindDiscovery: true` it `mkdtemp`s a `0700` dir, copies the `--diff-file`
+  and `--spec-file` arguments into it as `diff.file.input` / `spec.file.input`, launches
+  `scripts/dispatch-review.sh` with cwd = that dir and `AUTOPILOT_BLIND_DISCOVERY=1`, and removes the
+  dir afterwards. `dispatch-review.sh:288-295` refuses every runner outside
+  `qoderclicn|cc-shim|claude-native|anthropic-compatible` under that env; intake refuses those seats
+  first (`final_panel_seat_blind_incompatible`, v2.36.58).
+- The diff a seat sees is `git diff --no-ext-diff --no-textconv <base>..<commit>` over the whole tree
+  (`defaultDiffProvider`, `autopilot-engine.js:1778`), so a tracked verdict carrier rides into every
+  seat's prompt if the candidate touched it. This repo tracks such carriers today: five
+  `.qc/<sha>.verdict.json`, two `docs/plans/*.review.md`, 810 files under `docs/plans/evidence/`.
+  Nothing filters them.
+- The spec a seat sees is the dispatcher's brief (`promptFile`); implementer narrative is already
+  kept out (`prior_findings_included: false`, blind-evidence gate in `dispatch-review.sh`). Commit
+  messages never enter (git diff, not format-patch). `prepareReview` (`:4665-4735`) computes a
+  transient `diff_digest` + `spec_digest` and re-checks them before invocation; nothing durable
+  records what a seat was handed.
+- A tool-capable seat has nothing to work on even if it were admitted: the scratch dir holds two
+  files, no source tree. Cut 1b needs a tree to mount; today there is none.
+- The tree holds a symlink (`.agents/skills -> ../skills`, mode 120000) and no gitlinks. The base
+  `git archive` is ~51 MB — larger than `spawnSync`'s default 1 MiB stdout buffer.
+
+## 1. Ruling and shape
+
+1. **One packet per review dispatch, built by the dispatcher, content-addressed.** New module
+   `src/runners/review-packet.js` (Node built-ins + `git` only) exports
+   `buildReviewPacket({ repo, baseSha, candidateSha, diffFile, specFile, outDir, denyList })`,
+   `packetPathDenied(path, denyList)`, `normalizeDenyList(denyList)`, `DEFAULT_PACKET_DENY_LIST`
+   and the integrity helper `verifyTreeIntegrity(treeDir, listing)` (used by the build and by test
+   (h2)). It writes, under `outDir`:
+   - `tree/` — NOT `git archive` (it honours candidate-controlled `export-subst`, which expands
+     `$Format:%B$` to the commit message, and `export-ignore`, which drops an allowed file). Instead:
+     an ISOLATED temporary git directory `<outDir>/.gitdir` (created by the builder: `HEAD` =
+     `ref: refs/heads/none`, empty `refs/`, `objects/info/alternates` naming the real repository's
+     objects directory as printed by `git rev-parse --git-path objects`, NO `config`, NO
+     `info/attributes`, NO hooks) used for every tree command via env `GIT_DIR=<outDir>/.gitdir
+     GIT_INDEX_FILE=<outDir>/.gitdir/index GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+     GIT_ATTR_NOSYSTEM=1`: `git read-tree <candidateOid>`, then every `.gitattributes` entry (any
+     depth) removed from that index (`git update-index --force-remove`), then `git
+     --work-tree=<outDir>/.empty -c core.attributesFile=/dev/null -c core.symlinks=true -c
+     core.autocrlf=false -c core.eol=lf checkout-index -a --prefix=<outDir>/tree/`. The temp git
+     dir has no `info/attributes` and no config, the empty work-tree has no `.gitattributes`, the
+     index has none, and global/system config and attribute files are disabled, so NO filter driver
+     (LFS or any configured smudge), `ident`, `eol` or `text` conversion can run (verified
+     2026-09-17: a sentinel smudge driver configured in the repo and attached through
+     `$GIT_DIR/info/attributes` is never invoked under the temp git dir, and IS invoked by a
+     control that uses the real git dir; `$Id$` stays literal; a real symlink is created even with
+     repo `core.symlinks=false`). The removed `.gitattributes` blobs are then written raw from
+     `git cat-file blob <oid>` so the tree is complete; `.gitdir` and `.empty` removed. Then an
+     INTEGRITY pass: every `git ls-tree -r -z <candidateOid>` entry must exist in `tree/` with the
+     `lstat` type matching its mode (`100644`/`100755` → regular file, `120000` → symlink) and
+     `git hash-object --stdin --no-filters` of its bytes (a symlink: of its target bytes) equal to
+     the listed object id, and `tree/` must hold nothing the listing lacks — any mismatch (a
+     rewritten byte, a symlink materialized as a file, a missing or extra path) fails the build
+     closed with `tree integrity: <path>`. Path bytes from `ls-tree -z` / `--name-status -z` are
+     handled as `Buffer`s; any path that is not valid UTF-8 fails the build closed with
+     `unsupported path encoding: <hex>` before checkout (no lossy decode ever reaches the deny
+     matcher or the manifest). Only then is every path matched by the
+     deny-list deleted (a denied directory is removed whole). No `.git`, so no history, no
+     `.git/autopilot`, no commit text; untracked files never enter by construction. Symlinks are
+     kept as symlinks (never dereferenced); a link whose target is absolute, escapes `tree/`
+     (`..` past the root), or resolves to a denied path is removed and listed in `denied_paths`. A
+     gitlink (submodule, mode 160000 in `git ls-tree -r`) fails the build closed with
+     `unsupported submodule: <path>` before checkout.
+   - `diff.patch` — the dispatcher's diff file is first proven CANONICAL: the builder regenerates
+     `git diff --no-ext-diff --no-textconv <baseOid>..<candidateOid>` in `repo` (the exact command
+     `defaultDiffProvider` uses) and `diffFile`'s bytes must equal it, else the build fails closed
+     with `diff not canonical` (a reordered, edited or foreign diff never reaches the splitter).
+     The canonical bytes are then split into top-level `diff --git` sections as `Buffer`s (bytes
+     are never re-encoded; CRLF and binary sections stay exact) and aligned one-for-one, in order,
+     with the records of `git diff --no-ext-diff --no-textconv --name-status -z <baseOid>
+     <candidateOid>` (git emits both in the same order for the same two OIDs); a count mismatch
+     still fails the build closed. A section is dropped when EITHER its old or its new path is denied; when the old path
+     was denied and the new path is not (a rename out of a denied dir), the new path is also pruned
+     from `tree/` and listed. Kept sections are copied byte-for-byte; with no denied path the file
+     is byte-identical (`cmp`) to the input. A line inside file content that starts with
+     `diff --git` never starts a section because sections come from the aligned record count, not
+     from a regex over content.
+   - `spec.md` — the spec file byte-for-byte; when `specFile` is absent (`undefined`/`null`) a
+     zero-byte `spec.md` (the terminal review site runs with `noReviewSpec`).
+   - `MANIFEST.json` — `{ schema_version: 1, artifact_type: 'review_packet_manifest', base_sha,
+     candidate_sha, deny_list, entries, packet_hash }`: `base_sha`/`candidate_sha` are the FULL
+     object ids (`git rev-parse --verify <x>^{commit}`); `deny_list` is the normalized list
+     (validated, deduplicated, sorted); `entries` is `[{ path, type: 'file'|'symlink', sha256,
+     bytes }…]` sorted by `path` (relative to `outDir`: `tree/…`, `diff.patch`, `spec.md`; the
+     manifest is not an entry), walked with `lstat`, a symlink's `sha256`/`bytes` taken over its
+     target string; `packet_hash = sha256(JSON.stringify({ schema_version, base_sha, candidate_sha,
+     deny_list, entries }))` (that key order, UTF-8, no whitespace). No timestamp, absolute path,
+     hostname or PID anywhere — two builds of the same inputs produce the same hash.
+   - Deny-list grammar: paths are repository-relative POSIX byte strings; a pattern is a `/`-joined
+     sequence of segments where `**` matches zero or more whole segments and `*` matches within one
+     segment (so `**/*.raw.log` matches root `x.raw.log`); a pattern ending in `/**` matches the
+     directory itself and everything under it. `normalizeDenyList` rejects absolute patterns, `..`,
+     empty patterns and any other glob syntax. `DEFAULT_PACKET_DENY_LIST = Object.freeze([
+     '.autopilot/**', '.qc/**', 'docs/plans/evidence/**', 'docs/plans/**/*.review.md',
+     'docs/plans/**/*.review.json', 'docs/plans/**/*disposition*.json', '**/*.receipt.json',
+     '**/*.raw.log' ])` — every entry names a verdict carrier this repo tracks or writes.
+   - Returns `{ dir, packet_hash, manifest_path, entries_count, denied_paths }` (`denied_paths`
+     sorted, tree/diff/symlink hits unioned). Every failure is a thrown `Error` naming the step
+     (`git read-tree`, `checkout-index`, `tree integrity`, `git diff --name-status`, alignment,
+     symlink, submodule).
+2. **`dispatchReview` builds the packet in blind mode when it can.** `src/runners/review.js`: when
+   `options.blindDiscovery === true` AND `options.packet` is an object `{ repo, baseSha, candidateSha
+   }`, the blind dir gets `packet/` built by §1.1 (`diffFile`/`specFile` taken from the `--diff-file`
+   / `--spec-file` args; a missing `--spec-file` arg means the zero-byte spec and NO `--spec-file`
+   arg is added), the launch args point `--diff-file` at `packet/diff.patch` and, when present,
+   `--spec-file` at `packet/spec.md`, cwd stays the blind dir root, and the env gains
+   `AUTOPILOT_REVIEW_PACKET_DIR=<blindDir>/packet` and `AUTOPILOT_REVIEW_PACKET_HASH`. The launch env
+   is always a clone of `options.env || process.env` with BOTH packet variables deleted first and set
+   only after a successful build — an ambient value never leaks into a legacy or non-blind launch.
+   `dispatchReviewJson` returns `packet: { packet_hash, entries_count, denied_paths }` on the
+   success branch and `packet: null` on EVERY other return branch (child error, parse error, missing
+   script). Without `options.packet` the legacy copy path (`diff.file.input`, `spec.file.input`) is
+   byte-identical to today apart from the env scrub. A packet build failure returns the
+   `{ error, status: null, signal: null }` shape the function already uses for a missing script and
+   the script is never launched (fail closed, no unfiltered input reaches a seat).
+3. **Nothing else moves.** The engine does not yet pass `options.packet` (cut 1a-B: the two
+   `reviewOptions` sites, `reviewDiff` return, `finalPanelSeatReceipt.packet_hash`, the
+   `FINAL_PANEL_SEAT_OPTIONAL_KEYS` rule, `schemas/implementation-campaign-receipt.schema.json`, the
+   panel identity rule). `dispatch-review.sh`'s blind `case`, the intake predicate and the resolver ⚠
+   stay exactly as v2.36.58 shipped them (cut 1b). A cleanroom seat is still refused at intake; what
+   changes is that the packet it will be handed now exists and is proven clean.
+
+## 2. Changes by file
+
+- `src/runners/review-packet.js` (NEW, + mirror): §1.1. `git` via `spawnSync` with `cwd: repo`,
+  `error`/`signal`/`status`/stderr checked on every call; no `tar`.
+- `src/runners/review.js` (+ mirror): §1.2. `require('./review-packet')`; the packet is built
+  before the arg rewrite; `child.autopilotPacket` carries the build result to `dispatchReviewJson`.
+- Tests (each change-pinning block starts with `# RED at base 004cb2da: <observed message>` quoting
+  the base run verbatim; preservation guards labelled `(preservation, green at base)`; fixture
+  repos and stub `--bin`/`scriptPath` binaries only — no real reviewer runs):
+  - `hooks/tests/review-packet.test.sh` (NEW): fixture repo with base commit B and candidate C.
+    C's commit message holds token `T-MSG`; C changes `src/app.js` (benign, content includes a line
+    starting with `diff --git a/x b/x`), adds `.autopilot/prior-verdict.json` (`T-AUTOPILOT`),
+    `.qc/deadbeef.verdict.json` (`T-QC`), `docs/plans/evidence/x/review.json` (`T-EVIDENCE`),
+    `docs/plans/p.review.md` (`T-REVIEWMD`), `docs/plans/g1-disposition.json` (`T-DISP`),
+    `lib/run.receipt.json` (`T-RECEIPT`), `logs/x.raw.log` (`T-RAWLOG`, at a nested path AND a
+    root-level `y.raw.log`), renames `docs/plans/evidence/old.md` (present at B, `T-RENAME`) to
+    `docs/notes/moved.md`, adds a binary file `img.bin` (allowed) and a CRLF file `win.txt`
+    (allowed), a safe relative symlink `link -> src`, an escaping symlink `esc -> ../../etc`, and a
+    symlink to a denied path `qc -> .qc`; an untracked `notes/verdict.txt` (`T-UNTRACKED`) sits in
+    the worktree; C also commits a `.gitattributes` with `msg.txt export-subst` (`msg.txt` holds
+    `$Format:%B$`, so `git archive` would expand `T-MSG` into it) and `keep.txt export-ignore`
+    (`keep.txt` is an allowed product file); the diff file is `git diff --no-ext-diff --no-textconv
+    B..C`; the spec holds no token. Assertions: (a) `grep -r` for each of the eleven tokens over
+    the packet dir → zero hits, `tree/msg.txt` holds the literal `$Format:%B$` and `tree/keep.txt`
+    is present with C's bytes (RED at base: module absent; a `git archive` control in the test
+    shows the expansion and the omission); (b) `tree/src/app.js`, `tree/img.bin`, `tree/win.txt` byte-equal
+    to C's blobs; `tree/link` is a symlink to `src`; `tree/esc`, `tree/qc`, `tree/.autopilot`,
+    `tree/.qc`, `tree/docs/plans/evidence`, `tree/docs/notes/moved.md` (rename out of a denied
+    dir) absent; `denied_paths` lists each pruned path once, sorted; (c) `diff.patch` holds the
+    `src/app.js`, `img.bin`, `win.txt`, `link` sections byte-equal (`cmp` on the extracted section
+    bytes) to the input's, and no section for any denied old/new path; (d) `MANIFEST.json` entries
+    == the sorted `lstat` walk minus the manifest, each `sha256`/`bytes` re-verified by a Node
+    helper (`fs.readFileSync` for files, `fs.readlinkSync(p, { encoding: 'buffer' })` for symlinks —
+    never a line-oriented shell pipeline, which would append a newline), `type` correct,
+    `base_sha`/`candidate_sha` equal exactly `git rev-parse --verify B^{commit}` / `C^{commit}` as
+    printed, `deny_list` sorted+deduped, `packet_hash` == `sha256` of the pinned preimage string
+    (re-computed in the test from the manifest fields in the stated key order); (e) building twice
+    → equal `packet_hash`; one spec byte changed → different; deny-list reordered/duplicated →
+    equal; (f) with `denyList: []` and a candidate touching no symlink/rename hazards,
+    `diff.patch` is byte-identical (`cmp`) to the input; (g) `packetPathDenied` table: `.autopilot/x`,
+    `.autopilot/a/b`, `.qc/a.verdict.json`, `docs/plans/evidence/r.md`, `docs/plans/a/b.review.md`,
+    `docs/plans/g2-disposition.json`, `a/b/c.receipt.json`, `x.raw.log`, `a/x.raw.log` → denied;
+    `docs/plans/evidence.md`, `src/receipt.json`, `autopilot/x`, `docs/review.md` → allowed;
+    `normalizeDenyList` rejects `/abs/**`, `a/../b`, `` and `{a,b}`; (h) a fixture whose tree
+    exceeds 1 MiB builds; (h2) a fixture with `id.txt ident` (`$Id$` is rewritten on checkout)
+    is NOT rewritten (attributes are inert) and the build succeeds with the literal bytes, while
+    the integrity helper (exported for the test) run on a copy of the tree whose `id.txt` has been
+    replaced by the git-style ident expansion `$Id: <blob oid> $` fails closed with `tree
+    integrity: id.txt` and no `MANIFEST.json` is written; (h2b) a fixture whose sentinel filter is
+    attached through `.git/info/attributes` (not a tracked `.gitattributes`) builds with the marker
+    absent, while a control `checkout-index` against the real git dir creates the marker; (h2c) an
+    equal-count diff file with two sections swapped (or one byte edited) fails closed with `diff
+    not canonical` before any section is written; (h3) a second fixture repo created with `git init --object-format=sha256`
+    builds, its manifest OIDs are the 64-hex `rev-parse` values and the `packet_hash` preimage
+    re-computes; (h4) a fixture with a filename containing an invalid UTF-8 byte (`printf 'bad\xff'`)
+    fails closed with `unsupported path encoding:` before any file is written; (i) a gitlink fixture (a submodule entry added with
+    `git update-index --add --cacheinfo 160000,<sha>,sub`) fails with `unsupported submodule: sub`
+    and writes nothing under `outDir`; (j) a candidate with `specFile` absent yields a zero-byte
+    `spec.md` and the manifest lists it with `bytes: 0`.
+  - `hooks/tests/dispatch-review.test.sh` (next to the existing blind adapter case ~1138, which
+    already drives `dispatchReviewJson` with `blindDiscovery: true` and a stub `scriptPath`): with
+    `options.packet` the stub script receives `--diff-file` ending in `/packet/diff.patch`,
+    `--spec-file` ending in `/packet/spec.md`, env `AUTOPILOT_REVIEW_PACKET_DIR` = the dir of those
+    files, `AUTOPILOT_REVIEW_PACKET_HASH` = 64 hex, `AUTOPILOT_BLIND_DISCOVERY=1`, and the JSON
+    result carries `packet.packet_hash` equal to the env value (RED at base: `diff.file.input`, no
+    packet key); without `--spec-file` in the args the stub receives no `--spec-file` and
+    `packet/spec.md` is zero bytes; without `options.packet` the args end in `diff.file.input` /
+    `spec.file.input` and `packet` is `null` (preservation); with poisoned ambient
+    `AUTOPILOT_REVIEW_PACKET_DIR=/poison` and `AUTOPILOT_REVIEW_PACKET_HASH=poison` in
+    `options.env`, the legacy blind launch and the non-blind launch see neither variable (RED at
+    base: inherited); a packet build failure (candidateSha that does not exist) returns `error`
+    set, `status: null`, `packet: null`, and the stub was never invoked (RED at base); the
+    child-error, parse-error and missing-script branches all carry `packet: null`.
+- Docs: `references/blind-dispatch.md` (+ mirror) — new section "Packet blinding (v2.36.59)" after
+  "Verifier isolation": what the packet is, the deny-list default and grammar, the hash preimage,
+  the symlink/submodule rules, and the pointer to cuts 1a-B/1b; `docs/BACKLOG.md` — the redesign
+  row's Context gains "cut 1a-A (packet builder) shipped v2.36.59" (≤ 240 bytes; Status stays
+  `open`). `CHANGELOG.md` and version manifests are NOT sealed (depth-0 release commit after the
+  merge; the v2.36.59 number in text is a pin as in v2.36.53–58).
+
+### 2.5 Sealed `output_paths` (exact)
+
+```
+src/runners/review-packet.js
+platforms/codex/plugin/src/runners/review-packet.js
+src/runners/review.js
+platforms/codex/plugin/src/runners/review.js
+hooks/tests/review-packet.test.sh
+hooks/tests/dispatch-review.test.sh
+references/blind-dispatch.md
+platforms/codex/plugin/references/blind-dispatch.md
+docs/BACKLOG.md
+```
+
+`review-packet.js`, its mirror and `review-packet.test.sh` are created (`authorized_creates`); every
+other path exists at base.
+
+### 2.6 Global constraints (copied verbatim into every dispatch)
+
+- Node ≥ 20.10, built-ins only; the only external process is `git`; never `git archive` (attribute
+  leakage); the tree is verified against `git ls-tree -r` object ids before use.
+- `MANIFEST.json` and `packet_hash` contain no timestamp, absolute path, hostname or PID; the hash
+  preimage is `JSON.stringify({ schema_version, base_sha, candidate_sha, deny_list, entries })`.
+- Symlinks are never followed; a gitlink fails the build closed; no attribute-driven filter, ident
+  or eol conversion can run during checkout (isolated temp `GIT_DIR` with alternates only — no
+  config, no `info/attributes` —, index without `.gitattributes`, empty work-tree,
+  `core.attributesFile=/dev/null`, `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM=/dev/null`,
+  `GIT_ATTR_NOSYSTEM=1`); non-UTF-8 paths fail closed; a non-canonical diff file fails closed.
+- Object ids are taken verbatim from `git rev-parse`; nothing assumes SHA-1 or 40 hex digits.
+- The legacy blind path (no `options.packet`) and the non-blind path are byte-identical to base
+  `004cb2da` except that both packet env variables are always scrubbed from the launch env.
+- `src/engine/**`, `scripts/**`, `bin/autopilot.js`, `schemas/**` are byte-identical to base.
+- No new CLI flag; no new resolver field; no new config knob.
+
+## 3. Out of scope
+
+- Cut 1a-B: `options.packet` from the engine (`performReview` ~4812, terminal site ~9692 with
+  `baseSha: immutableBase`), `reviewDiff` return, `finalPanelSeatReceipt.packet_hash`,
+  `FINAL_PANEL_SEAT_OPTIONAL_KEYS` (mixed presence among reviewed seats rejected, all-missing
+  allowed only for legacy receipts, forbidden on failed seats), the receipt JSON schema + mirror,
+  the panel identity rule. Its plan is written on top of this deliverable's merged base.
+- Binding `packet_hash` into `review_digest` / durable replay (consult finding 5): refuted for now —
+  the packet is a pure function of `(base_sha, candidate tree, spec bytes, deny_list)`; the first
+  three are already re-checked by the transient full-diff authority before invocation and the
+  deny-list is a frozen constant in this cut. Revisit when the deny-list becomes configurable (1b).
+- The cleanroom tier (1b) and the speed cuts (2). A configurable deny-list (1b).
+- Redacting code comments / test names: they are the code under review (both consults).
+
+## 4. Acceptance
+
+| id | criterion | evidence |
+|----|-----------|----------|
+| `packet-canary` | eleven planted tokens (commit message, untracked file, eight deny-listed tracked carriers, a rename out of a denied dir) yield zero hits over the built packet; allowed product, binary and CRLF files and their diff sections are present byte-for-byte | review-packet suite |
+| `packet-hazards` | safe relative symlink kept as a real symlink even with `core.symlinks=false`; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; `export-subst`/`export-ignore` neither leak nor omit; a smudge driver attached via `.gitattributes` OR `.git/info/attributes` never runs and `ident` stays literal; an ident-expanded `id.txt` fails closed as `tree integrity: id.txt`; a non-canonical diff fails closed; a SHA-256 repo builds with 64-hex OIDs; an invalid-UTF-8 path fails closed; >1 MiB tree builds; absent spec → zero-byte `spec.md` | review-packet suite |
+| `packet-identity` | same inputs → same `packet_hash`; one spec byte → different; deny-list order/duplicates irrelevant; manifest entries == `lstat` walk with verified sha256 and `type`; full OIDs; pinned preimage; no denied path → `diff.patch` byte-identical | review-packet suite |
+| `runner-wiring` | blind dispatch with `options.packet` launches on `packet/diff.patch` (+ `packet/spec.md` only when a spec arg was given) with the packet env and returns `packet.packet_hash`; legacy path unchanged with `packet: null`; ambient packet env never inherited; a build failure never launches; every non-success branch carries `packet: null` | dispatch-review suite |
+| `no-regression` | `review-packet`, `dispatch-review`, `review-runner` green; `node scripts/check-js-syntax.js`; `bash scripts/sync-codex-plugin-skills.sh --check`; `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` | suite output |
+| `scope-integrity` | `git diff --name-only 004cb2da HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/engine/**`, `scripts/**`, `bin/autopilot.js`, `schemas/**` byte-identical to `004cb2da`; every new test file is `test -x` | command output |
+
+## 5. Dogfood proof (depth-0, after merge)
+
+A manual `dispatchReviewJson` run with `options.packet` against this repo's HEAD (candidate = a
+commit touching `docs/plans/evidence/**` and `.qc/**`) lists those paths in `denied_paths`, the
+stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symlink.
+
+## 6. Risks + inversion
+
+- **Deny-list too broad / too narrow.** Too broad hides product files (silent under-review); too
+  narrow leaks. The default names only verdict carriers this repo tracks or writes; `denied_paths`
+  is returned so a caller can log it; the canary pins both directions (§2 (a)–(c), (g)).
+- **Alignment fragility.** The diff is proven byte-canonical against a regeneration from the two
+  OIDs before it is split, so positional alignment to `--name-status -z` is sound; a count mismatch
+  still fails closed; the rename/copy/odd-name/CRLF/binary/embedded-`diff --git`/reordered
+  fixtures pin it.
+- **Attribute-driven rewrites and side effects.** `export-*` are bypassed by not using
+  `git archive`; filters/ident/eol cannot run because the checkout sees no attributes at all
+  (private index, empty work-tree, no global/system attribute files); the object-id + type
+  integrity pass is defense in depth and fails the build closed before launch. A candidate cannot
+  make the dispatcher execute a configured filter driver.
+- **Symlink escape.** Never dereferenced; escaping/denied targets pruned; pinned by §2 (b).
+- **Hand scope.** Two product files, two tests, two docs — sized for one round after the consult's
+  split.
+
+## 7. The cuts
+
+1. **1a-A (this plan)** — packet builder + runner wiring.
+2. **1a-B** — engine passes the packet; receipts carry `packet_hash`; the panel asserts one hash.
+3. **1b** — cleanroom tier: runner table gains `tools: true|false`; `scripts/lib/cleanroom-launch.sh`
+   runs a tool-capable CLI inside `bwrap` with only `packet/tree`, the runtime, TLS/DNS and a
+   sanitized credential HOME (policy and probe: `evidence/2026-09-16-blind-review-redesign/bwrap-probe.md`);
+   intake runs a no-model stub probe per cleanroom seat and refuses in seconds when the boundary is
+   not enforceable; `BLIND_DISCOVERY_CAPABLE_RUNNERS` becomes the packet tier; codex profile first;
+   the isolation suite is host-only and refuses (never skips) without `bwrap`; configurable deny-list.
+4. **2** — verify once per tree, in-rail single review off when a panel exists, seats in separate
+   processes concurrently, one standby seat, panel snapshot at intake.
+
+## Review log
+
+- Consults 2026-09-16 (claude-fable-5-1 and gpt-6-astra, evidence dir above): converged on packet
+  blinding + two tiers + gate at intake and resolver + verify-once + concurrent seats. Divergence:
+  UID drop (Fable) vs bwrap (astra) — settled by the host probe (`bwrap-probe.md`): the operator HOME is
+  `0750` and holds every CLI, so UID drop needs host surgery; bwrap needs none and codex with tools
+  ran inside it against a planted packet.
+- Plan consult 2026-09-16 (codex gpt-5.6-sol on the first draft, `consult-plan-cut1a-codex-answer.md`),
+  twelve findings: accepted 1 (`--output` archive, >1 MiB fixture), 2 (lstat walk, symlink rules,
+  gitlink fails closed), 3+4 (schema + optional-key semantics → moved whole to cut 1a-B with the
+  mixed-presence rule), 6 (hash preimage binds OIDs + deny-list + type), 7 (`--name-status -z`
+  alignment, either-path deny, rename prune, Buffer split), 8 (`.qc/**`, review/disposition
+  patterns, root globstar, grammar), 9 (zero-byte spec, `immutableBase` — recorded for 1a-B), 10
+  (env scrub, `packet` on every branch), 11 (split A/B; `dispatch-review.test.sh` chosen), 12
+  (wording). Refuted 5 (durable replay binding) with the rationale in §3.
+- Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP 2 blockers; evidence
+  `evidence/2026-09-16-blind-review-packet/g1-*`): both accepted — (R2) `git archive` honours
+  candidate-controlled `export-subst`/`export-ignore`, so the tree is now a private-index
+  `checkout-index` verified against `ls-tree` object ids, with the attribute fixtures; (R4) the
+  symlink oracle `readlink | sha256sum` hashes a trailing newline — replaced by a Node helper over
+  `readlinkSync(..., { encoding: 'buffer' })`. The G1 blocker falsified rubric R1's own wording
+  ("git archive via `--output`"), so the frozen rubric could not carry the fold; the rubric was
+  corrected and the review continues under logical id `blind-review-packet-2026-09-16-v2` (G1 of v2
+  reviews the folded plan; the v1 G1 artifact and dispositions stay in the evidence dir). The
+  first v2 G1 process was killed by the host memory guard before any seat returned (other operator
+  jobs held ~80 GB); the rail then recorded `orphaned_active_claim_transport_exhausted` with zero
+  semantic content consumed, so that state dir was moved aside (kept in the session scratchpad) and
+  v2 G1 re-run from a clean lineage — the same zero-consumption reset the plan-review contract allows.
+- Plan hetero loop v2 G1 2026-09-17 (GLM-5.2 READY, gpt-5.6-sol STOP 4 blockers; evidence
+  `v2g1-*`): all four accepted — (R3) `checkout-index` could execute a configured smudge driver
+  before the integrity pass: the private index now drops every `.gitattributes`, checks out against
+  an empty `--work-tree` with `core.attributesFile=/dev/null` + `GIT_ATTR_NOSYSTEM=1` (probed: the
+  sentinel driver never runs), and the sentinel fixture pins it; (R3) `core.symlinks=false` would
+  materialize a symlink as a file that still hashes equal: `core.symlinks=true` is forced and the
+  integrity pass checks `lstat` type against the `ls-tree` mode, fixture repo sets
+  `core.symlinks=false`; (R1) non-UTF-8 path bytes: fail closed with `unsupported path encoding`
+  before any write (chosen over a reversible encoding — nothing in this repo needs it), fixture
+  added; (R4) 40-hex assertion → exact equality with `rev-parse`, explicit `--object-format` on the
+  fixtures, a SHA-256 fixture added.
+- Plan hetero loop v2 G2 2026-09-17 (terminal at the generation cap; GLM-5.2 CONDITIONAL 1
+  non-blocking, gpt-5.6-sol STOP 3; evidence `v2g2-*`): all accepted at depth-0 — (R3, both seats)
+  the frozen rubric's "an ident rewrite fails closed" now has a literal witness: the exported
+  integrity helper on a tree whose `id.txt` carries the git-style expansion → `tree integrity:
+  id.txt`, while production keeps attributes inert; (R3) `$GIT_DIR/info/attributes` still reached
+  `checkout-index` through the real git dir (reproduced with a sentinel driver): every tree
+  command now runs under an isolated temporary `GIT_DIR` that shares only the object store via
+  `objects/info/alternates` and carries no config / attributes / hooks, with
+  `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM=/dev/null` (probed: driver never runs; the control does);
+  fixture (h2b); (R1) count-only alignment could pair a swapped section with the wrong record: the
+  diff file is first proven byte-canonical against a regeneration from the resolved OIDs (`diff not
+  canonical` otherwise), fixture (h2c). Depth-0 freeze: zero unaddressed blockers, zero deferred.
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/platforms/codex/plugin/src/runners/review-packet.js b/platforms/codex/plugin/src/runners/review-packet.js
+index cc3d03e9..ccb620c8 100644
+--- a/platforms/codex/plugin/src/runners/review-packet.js
++++ b/platforms/codex/plugin/src/runners/review-packet.js
+@@ -431,7 +431,7 @@ function buildReviewPacket({
+         env: isolated,
+       });
+       if (attr.mode === '120000') {
+-        fs.symlinkSync(blob.toString('utf8'), dest);
++        fs.symlinkSync(blob, dest); // raw target bytes; a non-UTF-8 target must round-trip the object id
+       } else {
+         fs.writeFileSync(dest, blob, { mode: attr.mode === '100755' ? 0o755 : 0o644 });
+       }
+diff --git a/src/runners/review-packet.js b/src/runners/review-packet.js
+index cc3d03e9..ccb620c8 100644
+--- a/src/runners/review-packet.js
++++ b/src/runners/review-packet.js
+@@ -431,7 +431,7 @@ function buildReviewPacket({
+         env: isolated,
+       });
+       if (attr.mode === '120000') {
+-        fs.symlinkSync(blob.toString('utf8'), dest);
++        fs.symlinkSync(blob, dest); // raw target bytes; a non-UTF-8 target must round-trip the object id
+       } else {
+         fs.writeFileSync(dest, blob, { mode: attr.mode === '100755' ? 0o755 : 0o644 });
+       }
+
+```
+<<<AUTOPILOT-END-193876f3db27d9a523f5f612b1b4c871>>>
+
+warning: Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+codex
+<<<AUTOPILOT-REVIEW-193876f3db27d9a523f5f612b1b4c871>>>
+VERDICT: SHIP-AS-IS
+FINDINGS: none
+NO-FINDING-PROOF: checked=raw-byte symlink repair in canonical runner and Codex mirror; evidence=both copies now pass the blob Buffer directly to fs.symlinkSync, preserving target bytes instead of lossy UTF-8 decoding while leaving regular-file handling unchanged; conclusion=the prior attributes-symlink-raw-bytes MUST-FIX is closed consistently and the repair introduces no correctness, security, or completeness regression
+<<<AUTOPILOT-END-193876f3db27d9a523f5f612b1b4c871>>>
+tokens used
+23,165

@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.36.59 — blind review redesign 第一刀（1a-A）：content-addressed、deny-list 的審查包（review packet）
+
+- `src/runners/review-packet.js`（新）：`buildReviewPacket({ repo, baseSha, candidateSha, diffFile, specFile, outDir, denyList })`
+  在 `outDir` 建一份審查包——`tree/`（候選 commit 的樹，**不用 `git archive`**：它會照候選者自己的 `export-subst` 把
+  commit message 展進檔案、照 `export-ignore` 丟掉允許的檔；改用隔離的暫時 `GIT_DIR`（只靠 `objects/info/alternates`
+  共用物件庫，沒有 config／`info/attributes`／hooks）＋私有 index（先拔掉所有 `.gitattributes`）＋空的 `--work-tree`
+  做 `checkout-index`，再以 `git hash-object --stdin --no-filters` 逐檔對回 `ls-tree` 的 object id 與 lstat 型別；任何
+  filter／ident／eol 都跑不到，symlink 保持 symlink）、`diff.patch`（先證明輸入 diff 與 `git diff --no-ext-diff
+  --no-textconv base..candidate` 位元組相同，再按 `--name-status -z` 對齊切段，old／new path 任一命中 deny-list 就整段
+  丟，從 denied 目錄搬出來的檔連樹上的新路徑一起剪）、`spec.md`、`MANIFEST.json`（完整 OID、正規化 deny_list、
+  `entries[{path,type,sha256,bytes}]`、`packet_hash = sha256(JSON.stringify({schema_version, base_sha, candidate_sha,
+  deny_list, entries}))`，無時間戳／絕對路徑／主機名）。`DEFAULT_PACKET_DENY_LIST`：`.autopilot/**`、`.qc/**`、
+  `docs/plans/evidence/**`、`docs/plans/**/*.review.md`、`docs/plans/**/*.review.json`、`docs/plans/**/*disposition*.json`、
+  `**/*.receipt.json`、`**/*.raw.log`——每一條都是這個 repo 真的在追蹤或會寫出的判決載體。Fail-closed：submodule、
+  非 UTF-8 路徑、tree integrity 不符、diff 非 canonical、環境毒（所有 ambient `GIT_*` 一律清掉，含 `GIT_COMMON_DIR`、
+  `GIT_CONFIG_*`）。
+- `src/runners/review.js`：blind 模式下有 `options.packet = { repo, baseSha, candidateSha }` 就建包，`--diff-file`／
+  `--spec-file` 改指 `packet/diff.patch`／`packet/spec.md`，環境帶 `AUTOPILOT_REVIEW_PACKET_DIR`／`_HASH`（launch env
+  一律先清掉這兩個，ambient 值進不來）；`dispatchReviewJson` 每個分支都帶 `packet`（成功 `{packet_hash, entries_count,
+  denied_paths}`，其餘 `null`）；建包失敗就不啟動。沒給 `options.packet` 的舊路徑逐位元組不變。**引擎這一刀還沒接**
+  （1a-B）；runner 閘門／intake／resolver 也沒動（1b）。
+- 測試：`hooks/tests/review-packet.test.sh`（新，54 條）——十個植入 token（commit message、untracked、八種載體、搬出
+  denied 目錄的 rename）零命中；`export-subst`／`export-ignore`／`.gitattributes` 與 `.git/info/attributes` 兩種
+  sentinel smudge 都沒跑（對照組真的會跑）；`core.symlinks=false` 下仍是真 symlink；ident 展開版 → `tree integrity`；
+  交換段落的 diff → `diff not canonical`；sha256 物件格式 repo；非 UTF-8 檔名（含只在 base 的）；gitlink；>1 MiB；
+  祖先目錄命中即 denied、反斜線不是分隔符；毒化 `GIT_COMMON_DIR`＋`GIT_CONFIG_*`。`dispatch-review.test.sh` 加 packet
+  wiring／preservation／env scrub／fail-closed 分支。`references/blind-dispatch.md` 新增 "Packet blinding" 節。
+- 流程：plan 走 codex consult＋hetero plan loop 三代（v1 G1 把 rubric 自己的說法打掉→換 v2 lineage 重凍；每一條被
+  接受的機制都先在主機上實測過才寫進 plan）；managed campaign lineage 1 在 intake 被 `max_wall_seconds` 7200 上限打
+  掉（graph-check 卻放行 14400——row）；lineage 2 hand 全綠，**final panel 三席全在 5m 預設 timeout 死掉**（rail 沒傳
+  `--timeout`——row）→ l3 降級，depth-0 用非 blind 的 codex 二審抓到五條（leaf-only deny、ambient `GIT_COMMON_DIR`、
+  symlink `.gitattributes` 變檔案、name-status 沒驗 UTF-8、反斜線改寫）逐條複驗修掉，r3 SHIP-AS-IS 後合併。證據
+  `docs/plans/evidence/2026-09-16-blind-review-packet/`。
+- 本機 pin：redesign 期間 `qc_panel[0]` 暫換 `claude-fable-5-1/claude-native`（packet tier），1b 落地後換回 codex。
+
+prose-justification: 本版 prose 增量只有 `references/blind-dispatch.md` 的 "Packet blinding" 一節（46 行，含鏡像）——它是新機制的 canonical 說明，不是指引；engine 面 +1200 行。
+
 ## v2.36.58 — managed rail：final panel 的 blind-incompatible 席位在 intake 就拒（cuda P1 之二）
 
 - `src/engine/final-panel-qualification.js`：`BLIND_DISCOVERY_CAPABLE_RUNNERS`（`anthropic-compatible`、`cc-shim`、

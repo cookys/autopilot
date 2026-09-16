@@ -1,0 +1,7 @@
+bash hooks/tests/review-packet.test.sh rc=0 secs=5
+bash hooks/tests/dispatch-review.test.sh rc=0 secs=258
+bash hooks/tests/review-runner.test.sh rc=0 secs=140
+node scripts/check-js-syntax.js rc=0 secs=6
+bash scripts/sync-codex-plugin-skills.sh --check rc=0 secs=1
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md rc=0 secs=0
+DONE

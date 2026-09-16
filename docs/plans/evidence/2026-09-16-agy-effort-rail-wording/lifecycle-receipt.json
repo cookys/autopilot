@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-16T01:48:54.198Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-fee713e8e6251e59156edfb7f4c09502bc17af761d45c8ce0b83374dd0d90859",
+  "observed_head": "c8d2f97ec4fda626d39c78036a95a048d6842ddf",
+  "worktree_observation_digest": "97dc067c2b716cf292c0cd60cf3eebabc3d0e93266c7337a657b57b8c3fc8fe0",
+  "journal_digest": "73558dd93f7035bacd24490a3db19cf27d2c4733b39ddd3e5d2277e7e3fe56b7",
+  "disposition_digest": "a2441fe643170c5c39c9e8128046ca18551fd1bbfa21e7a1b5e218783e8b76b1",
+  "branch_inventory_digest": "b79d21715ab6a4f9aa241d992f71a041a041eb095433cb9f82875318efa3882c",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/6ef940783aab/agy-effort-rail-wording-2026-09-16-a1",
+      "tip": "e1813ad0fc6261ad8dde923e7d15fca0f45ed9e2",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T014845Z-1556381.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "b54d6fecd3fda7bbc84ca2af3c6a78ab93e59194b2c4870955ad8630ded591ca"
+}

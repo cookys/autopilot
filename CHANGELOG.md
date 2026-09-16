@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.36.55 — agy effort 跟著解析後的 model tier 走；三個 rail 拒絕訊息各自說出補救
+
+- `scripts/lib/agy-model-alias.sh` `agy_effort_for_model <resolved-model> <effort>`：解析後的 id 尾巴是 `-low|-medium|-high`
+  就用那個 tier，否則照舊 `agy_effort_clamp`。三條 rail（`dispatch-hetero.sh`、`dispatch-review.sh`、`dispatch-author.sh`）
+  的 agy exec 位置改用它，fold 改變值時 stderr 印一行 `agy effort <requested> (clamped <clamped>) folded to <tier>: model
+  id encodes the tier`（值相同時零行，含預設 `xhigh` 對 `-high` id）。量到的機制（agy 1.2.3 本機）：
+  `--model gemini-3.8-flash-medium --effort high` 是 vendor 拒絕「conflicts with --effort=high」，不是 308-8f 回報猜的
+  「漏了 --effort」——rail 從來沒漏過旗標，衝突才是缺陷。
+- `src/readiness/provider-bootstrap.js`：VA 拒絕改成「set verification_author_present: true and verification_author_*
+  in .claude/review-loop-config.md (l4 does not require it)」，code 不變。`src/status/cli.js`：strict bootstrap 丟例外時
+  stderr 一行 `readiness: strict bootstrap unavailable (<code>) — qualification axis reads unknown…` 再照舊 fallback；
+  `bin/autopilot.js` usage 把 `--probe` 的語意寫死（bounded live spend；`quota --probe` 不花錢）。
+  `src/engine/repo-preconditions.js`：`dirty: repository has uncommitted changes (commit them, or pass a clean
+  checkout/worktree as --cwd)`，前綴不變。
+- 測試：三個 dispatch suite 各加 (i)-(v)（alias medium → `--effort medium`、`-high --effort low` → high＋恰一行 note、
+  三種零 note 保留、grok/codex/cc-shim argv 凍結字面）；status-cli 注入會丟 `strict_l5_provider_roster_unavailable`
+  的 bootstrap，斷言恰一行 stderr、exit 0、stdout 與 base 抓的 provider-less receipt（去 digest/timestamp）深等；
+  state suite 釘 dirty 補救全文；autopilot-cli／provider-readiness-consumer 釘 VA 文字。base `fe225ff5` 上 21 條紅。
+- **本版明說沒達到的**：`hooks/tests/provider-readiness-consumer.test.sh`（5 紅）與 `hooks/tests/autopilot-cli.test.sh`
+  （33 紅）從 `acf3b06c`（2026-09-12 implementer 換成 cursor pin）起在本機與 CI 都是紅——suite 內跑 `--check-scorecard`
+  而 sandbox 看不到 host pin。這是 base 的病，不是本 deliverable 的，rubric `no-regression` 對這兩個 suite 沒被滿足也
+  沒被 reseal 掉；BACKLOG fired。另 `hooks/tests/run-ledger-rotation-order.test.sh`（v2.36.54）落地時是 100644，CI 的
+  executable gate 紅——`c8d2f97e` 補 +x。
+- 流程（`docs/plans/evidence/2026-09-16-agy-effort-rail-wording/`）：plan 兩代 hetero review（前一 session）；/l5 managed
+  campaign attempt 1 hand（cursor-grok-4.6-low）`e4a0b9a1` 24 個 output path 全中，rail 在 acceptance 撞上面那兩個
+  base 紅 suite 停下、且 terminal journal `MUTATION_FAILURE_EVIDENCE_REQUIRED` 連停都記不下來（BACKLOG open）→ 降級
+  l3、第二家族 codex review 一條 🟠（兩個自我推導的 oracle：codex argv 拿抓到的值比自己、readiness receipt 用受測實作
+  算期望）修於 `e1813ad0` 改凍結字面；git 證據 merge `6d83e121`、record-integration → reap → `zero_residue: true`。
+  dogfood：真 agy 1.2.3 `dispatch-review.sh --model gemini-flash-medium` 回 SHIP-AS-IS 並印 fold note。
+- 同時登 BACKLOG（peer 回報）：openclaw 的 agy flash/low implementer no-go、verify_cmd 跑在無依賴的 detached worktree
+  且輸出不落 ledger、PreToolUse(Bash) 三規則 hook 提案；gentoo 的 context-budget 無 model-id 視窗來源；C row 併入
+  openclaw 的第二次量測。
+
+prose-justification: 本版對 prose 面沒有增量（usage 一行加註 `--probe` 語意）。
+
+---
+
 ## v2.36.54 — managed rail：ledger rotation carry 保留 journal append 序（writer-only）
 
 - `scripts/run-ledger.sh` `atomic_append_ledger`：rotation carry 原本用 `group_by(._rotation_root) | map(.[-1])` 重新落

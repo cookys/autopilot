@@ -116,12 +116,60 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: fired 2026-09-16
 - **Trigger**: cuda e2e: campaign-v1-48ffc2fd… verify script failed → engine ran dispatch_review (SHIP-AS-IS) → blocked at campaign_event_journal `cannot apply review_completed while campaign is VERTICAL_VERIFICATION`
 - **Effort**: Fix
-- **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K2PYTE18H2JSJ260EXMN26`
+- **Source**: `cuda` msg `msg_01M2K2PYTE18H2JSJ260EXMN26`; `openclaw` msg `msg_01M2KR1TFPY8F2SEX8D6ABCH2G` (second measurement, campaign-v1-cfadd975…)
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: the reducer refuses VERTICAL_VERIFIED with passed:false, so a red verification records nothing and the loop proceeds to review; expected: repair generation or a clean terminal.
 
-### Intake dirty-tree precondition on a shared main checkout: the refusal does not name the clean-worktree remedy
+### Managed rail: verify_cmd runs in a fresh detached worktree with no deps; its stdout/stderr never reach the ledger
+- **Status**: open
+- **Trigger**: a verify that needs node_modules/dist fails in 1.4 s; the ledger holds only `status:failed` + tree_sha
+- **Effort**: S
+- **Source**: `openclaw` via hangar-bridge 2026-09-16, msg `msg_01M2KR1TFPY8F2SEX8D6ABCH2G`
+- **Pointer**: none
+- **Context**: `autopilot-engine.js` ~1863 `autopilot-verify-wt-*` is a detached worktree; journal bounded verify output and document that verify_cmd must self-bootstrap.
+
+### PEER-REPORTED (openclaw): PreToolUse(Bash) guard — detach without wake-up, `pkill -f` self-match, zsh `=`/glob abort
+- **Status**: open
+- **Trigger**: operator decision on adoption; three regex rules on `tool_input.command`, must fire for depth-0 too
+- **Effort**: S
+- **Source**: `openclaw` msgs `msg_01M2KS2TXH2V1T90DQ7X8F2TB1`, `msg_01M2KS5WZKY5WTFXPGEKJ9QH8W`; replied `msg_01M2KS6RBYNB9X43MT9PMTKGVG`
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: (1) `nohup`/`setsid`/`&` + rail entrypoint → deny (use `run_in_background`); (2) `pkill -f` without `[x]` → warn; (3) bare `=` token or unquoted glob → deny (zsh aborts the line).
+
+### context-budget: no model-id window source — a 1M session without the autopilot statusline gets 200k tiers
+- **Status**: open
+- **Trigger**: a host without autopilot's statusLine (no live `context_window_size`) on an `[1m]` model: T2 at 155k, nagging at 16 % use
+- **Effort**: S
+- **Source**: `gentoo` msg `msg_01M2KSM2SZRDN31GY8K943K18V`; replied `msg_01M2KSSQHTS6WMCBXGSQFHD4P5` (set explicit t1/t2 meanwhile)
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: `hooks/context-budget.js` reads the live file, else `inferWindowTokens(observedMax)`; add the transcript model id (`[1m]` → 1M) as a source before the ratchet.
+
+### provider-readiness-consumer / autopilot-cli suites track the live review-loop config — red since acf3b06c
 - **Status**: fired 2026-09-16
+- **Trigger**: `resolveReviewLoopJson(['--check-scorecard'])` inside the suites exits 3 (cursor implementer has no row in the sandboxed capability dir); 5 + 33 failures at base fe225ff5
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-16 (mission agy-effort-rail-wording, `acceptance_failed` on command #6)
+- **Pointer**: docs/plans/evidence/2026-09-16-agy-effort-rail-wording/README.md
+- **Context**: the d0b95eff config does not heal them either (6 / 25 failures); the suites need a hermetic `REVIEW_LOOP_CONFIG_OVERRIDE` fixture and host-independent expectations.
+
+### Managed rail: acceptance_failed cannot be journaled — terminal journal says MUTATION_FAILURE_EVIDENCE_REQUIRED
+- **Status**: open
+- **Trigger**: a hand commit whose verification command fails → `campaign_terminal_journal` refuses, exit 1, no durable wait, no receipt; the lease joins the stale pile
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-16 (mission agy-effort-rail-wording, campaign-v1-fee713e8…)
+- **Pointer**: docs/plans/evidence/2026-09-16-agy-effort-rail-wording/impl-run1.json
+- **Context**: the dispatch-hetero envelope names the failing command and exit code; the terminal event wants a mutation-failure evidence digest the acceptance path never produces.
+
+### CI `tests` workflow red before v2.36.54: `dispatch-detached-campaign-authority.test.sh` fails on the runner
+- **Status**: open
+- **Trigger**: every run since at least 2026-09-14 (the workflow runs only the changed test files, so the red is masked locally)
+- **Effort**: S
+- **Source**: `gh run list` 2026-09-16 while fixing the v2.36.54 executable-bit red
+- **Pointer**: none
+- **Context**: `detached campaign strict dispatch changes only the narrow subset: expected 'src/out.txt', got ''` on the GitHub runner; passes locally — environment coupling to reproduce in a clean clone.
+
+### Intake dirty-tree precondition on a shared main checkout: the refusal does not name the clean-worktree remedy
+- **Status**: shipped v2.36.55 2026-09-16
 - **Trigger**: cuda e2e on v2.36.48: `--cwd` main checkout refused (dirty), a clean detached worktree as `--cwd` passed
 - **Effort**: S
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K2PYTE18H2JSJ260EXMN26`
@@ -129,8 +177,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: expected usage (fail-closed pre-claim, v2.36.48); refusal should name the remedy: commit, or pass a clean checkout/worktree as `--cwd`.
 
 ### /l5 wording: verification-author seat error lacks the remedy; CLI `status readiness --probe` is always probe-needed
-- **Status**: open
-- **Trigger**: next operator who hits `requires the verification-author seat` or reads `probe-needed` from the CLI and asks
+- **Status**: shipped v2.36.55 2026-09-16
+- **Trigger**: an operator hits `requires the verification-author seat` or reads `probe-needed` from the CLI
 - **Effort**: S
 - **Source**: `cuda` via hangar-bridge 2026-09-16 (same thread)
 - **Pointer**: none
@@ -169,7 +217,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: stat walk is by design (2026-09-13); fixed as caller-declared `--sibling-path-prefix <dir>/`.
 
 ### PEER-REPORTED (308-8f): agy flash-medium hand without `--effort medium` only edits — no run_command, no commit
-- **Status**: open
+- **Status**: shipped v2.36.55 2026-09-16
 - **Trigger**: any agy hand dispatched without an explicit effort; re-check `agy_effort_clamp` default in `dispatch-hetero.sh`
 - **Effort**: Fix
 - **Source**: `308-8f` via SendMessage 2026-09-14; dispatcher note in 308's `/tmp/c3-runs/u1-a.stderr.log`

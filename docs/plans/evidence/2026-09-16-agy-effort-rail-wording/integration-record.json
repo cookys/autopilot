@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "artifact_type": "merge_execution_receipt",
+  "manifest_seal": null,
+  "root_run_id": null,
+  "status": "complete",
+  "halt_reason": null,
+  "halt_edge": null,
+  "edges": [
+    {
+      "sequence": 1,
+      "source_ref": "refs/heads/mission/6ef940783aab/agy-effort-rail-wording-2026-09-16-a1",
+      "target_ref": "refs/heads/develop",
+      "mode": "no-ff",
+      "status": "executed",
+      "source_validation": {
+        "ref": "refs/heads/mission/6ef940783aab/agy-effort-rail-wording-2026-09-16-a1",
+        "expected_sha": "e1813ad0fc6261ad8dde923e7d15fca0f45ed9e2",
+        "actual_sha": "e1813ad0fc6261ad8dde923e7d15fca0f45ed9e2",
+        "from_edge": null
+      },
+      "target_validation": {
+        "ref": "refs/heads/develop",
+        "expected_sha": "c8d2f97ec4fda626d39c78036a95a048d6842ddf",
+        "actual_sha": "c8d2f97ec4fda626d39c78036a95a048d6842ddf",
+        "from_edge": null
+      },
+      "before_sha": "e1813ad0fc6261ad8dde923e7d15fca0f45ed9e2",
+      "after_sha": "c8d2f97ec4fda626d39c78036a95a048d6842ddf",
+      "merge_commit": "c8d2f97ec4fda626d39c78036a95a048d6842ddf",
+      "source_sha": "e1813ad0fc6261ad8dde923e7d15fca0f45ed9e2",
+      "accepted_sha": "c8d2f97ec4fda626d39c78036a95a048d6842ddf",
+      "integration_method": "merge",
+      "unit_id": "agy-effort-rail-wording-2026-09-16",
+      "conflicts": [],
+      "error": null,
+      "preservation": {
+        "approved_paths": [],
+        "protected_paths": [],
+        "action": "none",
+        "restored": true,
+        "verification": "exact"
+      },
+      "edge_receipt_digest": "0470b5da998cdaa18eb4771d3e0c7a1653652a48d587b18016072f1736380f95"
+    }
+  ],
+  "receipt_digest": "72e5cb917ff50c71006e197e39183ba2a8a1e1546e8d132e2282343e3db0be09"
+}

@@ -1,0 +1,21 @@
+FAIL [dispatch-hetero] hetero alias gemini-flash-medium default effort reaches stub as --effort medium: expected 'high', got 'medium'
+FAIL [dispatch-hetero] hetero gemini-flash-high --effort low reaches stub as --effort high: expected 'low', got 'high'
+FAIL [dispatch-hetero] hetero fold note exactly one line when values differ: expected '0', got '1'
+FAIL [dispatch-hetero] hetero fold note names requested, folded tier, and model-id reason: 'agy effort low (clamped low) folded to high: model id encodes the tier' not found in output
+FAIL [dispatch-hetero] 336 passed, 4 failed
+FAIL [dispatch-review] review alias gemini-flash-medium default effort reaches stub as --effort medium: 'agy-argv-effort=medium' not found in output
+FAIL [dispatch-review] review gemini-flash-high --effort low reaches stub as --effort high: 'agy-argv-effort=high' not found in output
+FAIL [dispatch-review] review fold note exactly one line when values differ: expected '0', got '1'
+FAIL [dispatch-review] review fold note names requested, folded tier, and model-id reason: 'agy effort low (clamped low) folded to high: model id encodes the tier' not found in output
+FAIL [dispatch-review] 405 passed, 4 failed
+FAIL [dispatch-author] author alias gemini-flash-medium default effort reaches stub as --effort medium: expected 'high', got 'medium'
+FAIL [dispatch-author] author gemini-flash-high --effort low reaches stub as --effort high: expected 'low', got 'high'
+FAIL [dispatch-author] author fold note exactly one line when values differ: expected '0', got '1'
+FAIL [dispatch-author] author fold note names requested, folded tier, and model-id reason: 'agy effort low (clamped low) folded to high: model id encodes the tier' not found in output
+FAIL [dispatch-author] 110 passed, 4 failed
+FAIL [status-cli] exactly one readiness fallback stderr line: expected '0', got '1'
+FAIL [status-cli] stderr must include thrown code strict_l5_provider_roster_unavailable
+FAIL [status-cli] readiness fallback is exactly one stderr line: expected '2', got '0'
+FAIL [status-cli] 31 passed, 3 failed
+FAIL [implementation-campaign-state] campaign intake refuses dirty tree / missing required path before claim: 'repo-facts-intake assertions passed' not found in output
+FAIL [implementation-campaign-state] 294 passed, 1 failed

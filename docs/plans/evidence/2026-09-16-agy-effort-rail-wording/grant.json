@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-6ef940783aab435464780bb3155b77694dc26907b5d0044e0d1441ff29b1d366",
+  "claim_id": "claim-v1-82352fc55dfb01ee018660fe703d82a63686d7054c623f9f3aaccb18dfc6cfe7",
+  "mission_grant_ref": "001bd5f2d7e1e91da5fbcc44ae03d41b562100ca3e4e2da29fa534cebdaebe88",
+  "mission_subject_digest": "cca191387bd88a8a0ed0f52056dd3141d8053523d70751f62acc6288f046b6fc",
+  "mission_campaign_id": "campaign-v2-02a66b6693bf0e8e58cb6c6a5fc2d61481e378e38960057ea6cb7654a3e81371",
+  "graph_node_id": "agy-effort-rail-wording-2026-09-16",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/6ef940783aab435464780bb3155b77694dc26907b5d0044e0d1441ff29b1d366/agy-effort-rail-wording-2026-09-16/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/6ef940783aab435464780bb3155b77694dc26907b5d0044e0d1441ff29b1d366/agy-effort-rail-wording-2026-09-16/attempt-1/campaign.seal.json",
+  "branch": "mission/6ef940783aab/agy-effort-rail-wording-2026-09-16-a1",
+  "base_sha": "fe225ff5c45da80c8ce3456a8b8216b776235574",
+  "state_hash": "ca280c1d1b6075daf6322a55fdfd464a72577df5ddd60c4e73f02405915b6319"
+}

@@ -1,0 +1,8 @@
+PASS [dispatch-hetero] 340 assertions
+PASS [dispatch-review] 409 assertions
+PASS [dispatch-author] 114 assertions
+PASS [provider-readiness] 32 assertions
+PASS [status-cli] 33 assertions
+PASS [implementation-campaign-state] 295 assertions
+FAIL [autopilot-cli] 88 passed, 35 failed
+FAIL [provider-readiness-consumer] 30 passed, 5 failed

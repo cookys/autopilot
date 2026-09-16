@@ -1,0 +1,38 @@
+node:assert:152
+  throw new AssertionError(obj);
+  ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+3 !== 0
+
+    at [stdin]:35:8
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [stdin]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_stdin:51:5
+    at Socket.<anonymous> (node:internal/process/execution:205:5)
+    at Socket.emit (node:events:521:24) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 3,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.16.0
+FAIL [provider-readiness-consumer] strict /l5 provider policy bootstrap is available: expected exit 0, got 1
+FAIL [provider-readiness-consumer] strict /l5 policy is the exact frozen six-claim contract: 'strict_policy_exact=true' not found in output
+FAIL [provider-readiness-consumer] strict /l5 accepts a fresh host-owned exact-roster readiness bundle: 'strict_positive_ready=true' not found in output
+FAIL [provider-readiness-consumer] strict /l5 negative matrix rejects before workflow dispatch: 'strict_negative_matrix_zero_dispatch=true' not found in output
+FAIL [provider-readiness-consumer] v2.36.8: l4 roster profile derives, issues and consumes an l4 bundle; l5/l6 invariants pinned by isolated controls: 'strict_l4_profile=true' not found in output
+FAIL [provider-readiness-consumer] 29 passed, 5 failed
+      - strict /l5 provider policy bootstrap is available: expected exit 0, got 1
+      - strict /l5 policy is the exact frozen six-claim contract: 'strict_policy_exact=true' not found in output
+      - strict /l5 accepts a fresh host-owned exact-roster readiness bundle: 'strict_positive_ready=true' not found in output
+      - strict /l5 negative matrix rejects before workflow dispatch: 'strict_negative_matrix_zero_dispatch=true' not found in output
+      - v2.36.8: l4 roster profile derives, issues and consumes an l4 bundle; l5/l6 invariants pinned by isolated controls: 'strict_l4_profile=true' not found in output

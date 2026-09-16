@@ -1,0 +1,67 @@
+FAIL [autopilot-cli] implement-review default blocks at reviewer qualification: '"phase":"reviewer_qualification"' not found in output
+FAIL [autopilot-cli] implement-review qualification block explains reason: 'reviewer is not qualified or qualification is unknown' not found in output
+FAIL [autopilot-cli] strict L5 executable fixture consumes a fresh host-owned readiness bundle: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+FAIL [autopilot-cli] strict L5 executable fixture records the frozen policy digest: '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' not found in output
+FAIL [autopilot-cli] strict L5 executable fixture records canonical claim provenance: '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' not found in output
+FAIL [autopilot-cli] strict L6 executable fixture consumes a fresh host-owned readiness bundle: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+FAIL [autopilot-cli] strict L6 executable fixture receipt carries the actual level, not the l5 literal: '"strict_level":"l6"' not found in output
+FAIL [autopilot-cli] strict L6 executable fixture records the frozen policy digest: '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' not found in output
+FAIL [autopilot-cli] strict L6 executable fixture records canonical claim provenance: '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' not found in output
+FAIL [autopilot-cli] strict L4 executable fixture consumes a fresh host-owned readiness bundle (KR1): '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+FAIL [autopilot-cli] strict L4 executable fixture receipt carries the actual level, not an l5 literal: '"strict_level":"l4"' not found in output
+FAIL [autopilot-cli] strict L4 executable fixture reaches campaign intake (the v2.36.7 wall is gone): '"phase":"campaign_intake"' not found in output
+FAIL [autopilot-cli] strict L4 executable fixture records the frozen policy digest (D4 claim set untouched): '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' not found in output
+FAIL [autopilot-cli] strict L4 CLI warns loudly on an advisory derivation (KR2c: stderr line present): 'POLICY OVERRIDE' not found in output
+FAIL [autopilot-cli] strict L4 CLI records advisory_default when no override reason is configured (KR2a): 'reason: advisory_default' not found in output
+FAIL [autopilot-cli] strict L4 CLI names the uncertified reviewer seat in the override line (KR2b): 'reviewer=cc-shim/unknown-reviewer-model' not found in output
+FAIL [autopilot-cli] strict L4 CLI proceeds to readiness under advisory policy: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+FAIL [autopilot-cli] strict L4 advisory run still stamps the actual level: '"strict_level":"l4"' not found in output
+FAIL [autopilot-cli] KR3(i) l5: a VA-less roster with a complete QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+FAIL [autopilot-cli] KR3(i) l5: the refusal names the verification-author seat: 'requires the verification-author seat' not found in output
+FAIL [autopilot-cli] KR3(ii) l5: VA present with an unresolved QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+FAIL [autopilot-cli] KR3(ii) l5: the refusal names the QC roster: 'exact QC roster is incomplete' not found in output
+FAIL [autopilot-cli] KR3(i) l6: a VA-less roster with a complete QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+FAIL [autopilot-cli] KR3(i) l6: the refusal names the verification-author seat: 'requires the verification-author seat' not found in output
+FAIL [autopilot-cli] KR3(ii) l6: VA present with an unresolved QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+FAIL [autopilot-cli] KR3(ii) l6: the refusal names the QC roster: 'exact QC roster is incomplete' not found in output
+FAIL [autopilot-cli] strict L5 CLI warns loudly on every advisory derivation over a drifted roster: 'strict /l5 POLICY OVERRIDE' not found in output
+FAIL [autopilot-cli] strict L5 CLI records the advisory_default audit reason when no override is configured: 'reason: advisory_default' not found in output
+FAIL [autopilot-cli] strict L5 CLI proceeds to readiness under advisory policy: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+FAIL [autopilot-cli] l4 default: the full roster derives under the l4 profile (VA + QC included when present): '"strict_level":"l4"' not found in output
+FAIL [autopilot-cli] l4 + --require-qualified-reviewer: readiness consumed before the requirement is checked: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+FAIL [autopilot-cli] implement-review --resume fails closed as resume_invalid on a missing branch: '"phase":"resume_invalid"' not found in output
+FAIL [autopilot-cli] implement-review --resume explains the missing branch: 'does not exist or has no commit' not found in output
+FAIL [autopilot-cli] 84 passed, 33 failed
+      - implement-review default blocks at reviewer qualification: '"phase":"reviewer_qualification"' not found in output
+      - implement-review qualification block explains reason: 'reviewer is not qualified or qualification is unknown' not found in output
+      - strict L5 executable fixture consumes a fresh host-owned readiness bundle: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+      - strict L5 executable fixture records the frozen policy digest: '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' not found in output
+      - strict L5 executable fixture records canonical claim provenance: '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' not found in output
+      - strict L6 executable fixture consumes a fresh host-owned readiness bundle: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+      - strict L6 executable fixture receipt carries the actual level, not the l5 literal: '"strict_level":"l6"' not found in output
+      - strict L6 executable fixture records the frozen policy digest: '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' not found in output
+      - strict L6 executable fixture records canonical claim provenance: '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' not found in output
+      - strict L4 executable fixture consumes a fresh host-owned readiness bundle (KR1): '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+      - strict L4 executable fixture receipt carries the actual level, not an l5 literal: '"strict_level":"l4"' not found in output
+      - strict L4 executable fixture reaches campaign intake (the v2.36.7 wall is gone): '"phase":"campaign_intake"' not found in output
+      - strict L4 executable fixture records the frozen policy digest (D4 claim set untouched): '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' not found in output
+      - strict L4 CLI warns loudly on an advisory derivation (KR2c: stderr line present): 'POLICY OVERRIDE' not found in output
+      - strict L4 CLI records advisory_default when no override reason is configured (KR2a): 'reason: advisory_default' not found in output
+      - strict L4 CLI names the uncertified reviewer seat in the override line (KR2b): 'reviewer=cc-shim/unknown-reviewer-model' not found in output
+      - strict L4 CLI proceeds to readiness under advisory policy: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+      - strict L4 advisory run still stamps the actual level: '"strict_level":"l4"' not found in output
+      - KR3(i) l5: a VA-less roster with a complete QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+      - KR3(i) l5: the refusal names the verification-author seat: 'requires the verification-author seat' not found in output
+      - KR3(ii) l5: VA present with an unresolved QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+      - KR3(ii) l5: the refusal names the QC roster: 'exact QC roster is incomplete' not found in output
+      - KR3(i) l6: a VA-less roster with a complete QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+      - KR3(i) l6: the refusal names the verification-author seat: 'requires the verification-author seat' not found in output
+      - KR3(ii) l6: VA present with an unresolved QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+      - KR3(ii) l6: the refusal names the QC roster: 'exact QC roster is incomplete' not found in output
+      - strict L5 CLI warns loudly on every advisory derivation over a drifted roster: 'strict /l5 POLICY OVERRIDE' not found in output
+      - strict L5 CLI records the advisory_default audit reason when no override is configured: 'reason: advisory_default' not found in output
+      - strict L5 CLI proceeds to readiness under advisory policy: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+      - l4 default: the full roster derives under the l4 profile (VA + QC included when present): '"strict_level":"l4"' not found in output
+      - l4 + --require-qualified-reviewer: readiness consumed before the requirement is checked: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+      - implement-review --resume fails closed as resume_invalid on a missing branch: '"phase":"resume_invalid"' not found in output
+      - implement-review --resume explains the missing branch: 'does not exist or has no commit' not found in output

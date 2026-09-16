@@ -1,0 +1,1258 @@
+<<<AUTOPILOT-REVIEW-06422bc6964068ba54e4cd95eab12823>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS: 🟠 [acceptance-oracles-not-frozen] MUST-FIX Required regression guards are self-derived rather than frozen: dispatch-author’s Codex argv assertion assigns EXPECTED_AUTHOR_CODEX from the actual captured argv and compares the file to itself, while status-cli constructs its provider-less expected receipt from the current implementation instead of the specified base-captured object. Either regression can therefore pass unnoticed, violating R4/R6/R9/R10; replace these with literal expected argv and a literal normalized base receipt.
+<<<AUTOPILOT-END-06422bc6964068ba54e4cd95eab12823>>>
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /home/cookys/projects/autopilot
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a0a7df-c8d9-7981-b79c-93beb77d2161
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-06422bc6964068ba54e4cd95eab12823>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-06422bc6964068ba54e4cd95eab12823>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=162cb15db9e3c619c075339a198bc100
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+# agy effort follows the resolved model tier, and three rail refusals name their remedy
+
+> Status: execution plan for ONE managed deliverable (`/l5`, mission graph node
+> `agy-effort-rail-wording-2026-09-16`). Four small items from four BACKLOG rows, all measured on this
+> host 2026-09-16; each is a one-file mechanism or wording change, so they ship as one campaign.
+> Source rows (`docs/BACKLOG.md`): "PEER-REPORTED (308-8f): agy flash-medium hand without `--effort
+> medium` only edits" (Fix); "/l5 wording: verification-author seat error lacks the remedy; CLI `status
+> readiness --probe` is always probe-needed" (S); "Intake dirty-tree precondition on a shared main
+> checkout: the refusal does not name the clean-worktree remedy" (S).
+
+## 0. What is actually broken (measured 2026-09-16, agy 1.2.3 on this host)
+
+### 0.1 agy: the alias tier and `--effort` can disagree, and agy 1.2.3 refuses the pair
+
+`scripts/lib/agy-model-alias.sh` resolves `gemini-flash-<tier>` to a live id that ENCODES the tier
+(`gemini-3.8-flash-medium`); the three rails then pass `--effort "$(agy_effort_clamp "$EFFORT")"` where
+`EFFORT` defaults to `xhigh` → `high`. Live probe:
+
+- `--model gemini-3.8-flash-medium` with no `--effort` → `SUCCESS` (agy takes the tier from the id).
+- `--model gemini-3.8-flash-medium --effort high` → `ERROR: --model gemini-3.8-flash-medium conflicts
+  with --effort=high` (exit non-zero, no turn).
+- `--model gemini-3.8-flash` (bare) with no `--effort` → `ERROR: requires --effort (available: low,
+  medium, high)` — the case the 2026-09-05 fix (`18f46faf`) handled.
+
+So every agy dispatch whose alias tier ≠ clamped effort (e.g. `gemini-flash-medium` under the default
+`xhigh`, or `gemini-flash-low` under `--effort high`) dies at the vendor on agy ≥ 1.2.x. 308-8f's report
+("flash-medium hand … only edits") is the same pair seen through an older agy that did not refuse; the
+rail as shipped never omits `--effort`, so "missing effort" is not the defect — the CONFLICT is.
+`dispatch-explore.sh` passes no `--effort` at all (read-only rail); it is OUT of scope here — it
+never resolves aliases through the shared helper today, and a bare-id failure there is a separate
+row if it ever fires.
+
+### 0.2 strict /l5 roster: the verification-author refusal names the seat, not the fix
+
+`src/readiness/provider-bootstrap.js:351`: `strict /l5 requires the verification-author seat`. The
+operator who hits it (cuda, 2026-09-16) does not learn that the remedy is
+`verification_author_present: true` + the four `verification_author_*` keys in
+`.claude/review-loop-config.md` (or running at l4, where the seat is optional).
+
+### 0.3 `status readiness`: the bootstrap fallback is silent
+
+`src/status/cli.js:472-506` derives the strict bootstrap; when `createStrictL5ProviderBootstrap` throws
+(roster unresolvable, seat not first-class, etc.) it falls back to the provider-less view and the
+qualification axis reads `unknown` → `probe-needed` even with `--probe`. Nothing tells the operator the
+bootstrap failed or why. On this host the bootstrap builds and `--probe` reports `usable` for all six
+seats (2026-09-16), so cuda's "always probe-needed" is the fallback path with its reason swallowed.
+
+### 0.4 intake dirty-tree refusal has no remedy
+
+`src/engine/repo-preconditions.js:57`: `dirty: repository has uncommitted changes`. Expected usage
+since v2.36.48 is a clean checkout — a shared main checkout with another line's files is refused by
+design; the message should say what to do.
+
+## 1. Ruling and shape
+
+1. **Effort follows the resolved model.** New helper `agy_effort_for_model <resolved-model> <effort>`
+   in `scripts/lib/agy-model-alias.sh`: if the resolved id ends in `-low|-medium|-high`, print that
+   tier; otherwise print `agy_effort_clamp <effort>`. All three rails (`dispatch-hetero.sh:3441`,
+   `dispatch-review.sh:1412`, `dispatch-author.sh:1140`) call it with the RESOLVED `$MODEL`.
+   `agy_effort_clamp` stays (other callers, tests). Fold predicate: the resolved tier differs from
+   `agy_effort_clamp <requested effort>` (the EFFECTIVE value, so the default `xhigh` on a `-high` id is
+   NOT a fold). When it holds, the suffix wins — the same precedence `agy_resolve_model_alias` already
+   states — and the rail emits one stderr note `agy effort <requested> (clamped <clamped>) folded to
+   <tier>: model id encodes the tier` so the fold is visible.
+2. **VA refusal names the remedy**: message becomes
+   `strict /l5 requires the verification-author seat: set verification_author_present: true and
+   verification_author_engine/runner/effort/endpoint in .claude/review-loop-config.md (l4 does not
+   require it)`. Code `strict_l5_provider_roster_incomplete` unchanged.
+3. **Readiness fallback is loud**: when the bootstrap throws, `status readiness` writes one stderr line
+   `readiness: strict bootstrap unavailable (<code or message>) — qualification axis reads unknown;
+   the engine path would refuse with the same reason` and continues exactly as today. The JSON gains
+   nothing; `--probe` semantics unchanged. `bin/autopilot.js` usage line for `status` documents
+   `--probe` with this exact semantic content: "bounded live spend: runs per-seat transport and
+   live probes" (`quota --probe` stays a no-spend safe probe, said in the same line).
+4. **Dirty-tree refusal names the remedy**: `dirty: repository has uncommitted changes (commit them, or
+   pass a clean checkout/worktree as --cwd)`. The `campaign_repo_precondition_failed` code and the
+   `dirty:` prefix are unchanged (the state suite matches on the prefix).
+
+## 2. Changes by file
+
+- `scripts/lib/agy-model-alias.sh` (+ codex mirror): `agy_effort_for_model`; header comment gains the
+  1.2.3 conflict rule with the probe lines above.
+- `scripts/dispatch-hetero.sh`, `scripts/dispatch-review.sh`, `scripts/dispatch-author.sh` (+ mirrors):
+  replace `$(agy_effort_clamp "$EFFORT")` with `$(agy_effort_for_model "$MODEL" "$EFFORT")` at the agy
+  exec sites only; add the stderr note where the fold changes the value.
+- `src/readiness/provider-bootstrap.js` (+ mirror): message text only.
+- `src/status/cli.js` (+ mirror): catch block writes the stderr note; keep the fallback.
+- `bin/autopilot.js` (+ mirror): usage text for `status … [--probe]`.
+- `src/engine/repo-preconditions.js` (+ mirror): message text only.
+- `docs/BACKLOG.md`: three rows' Context corrected (308-8f row: the conflict, not a missing flag);
+  Status is stamped by depth-0 at release.
+- Tests (every change-pinning assertion carries `# RED at base <sha>: <observed>` in its block header
+  with the base sha of the sealed contract; every preservation guard is labelled `(preservation,
+  green at base)`; all suites drive STUBS only — agy/codex/grok/cc-shim binaries and endpoints are
+  fixtures, the single live probe is the §5 dogfood outside the suites):
+  - `hooks/tests/dispatch-hetero.test.sh`, `hooks/tests/dispatch-review.test.sh`,
+    `hooks/tests/dispatch-author.test.sh` — in EACH: (i) alias `gemini-flash-medium` under the default
+    effort → the agy stub receives `--effort medium` (RED at base: `high`); (ii) `gemini-flash-high` with
+    `--effort low` → `--effort high` AND exactly one stderr line naming `low`, `high`, and "model id
+    encodes the tier" (RED at base: `high` with no note — the value coincides, the note is the
+    discriminator); (iii) `gemini-flash-high` with `--effort high` → `--effort high` and ZERO such lines
+    (preservation); (iii-b) `gemini-flash-high` under the DEFAULT `xhigh` → `--effort high` and ZERO
+    such lines (preservation — the predicate compares against the clamped value); (iv) non-suffixed agy id (`AGY_STUB_MODELS` inventory with a bare id) under `xhigh`
+    → `--effort high` (preservation); (v) grok, codex, cc-shim: the complete argv the stub records is
+    byte-identical to a literal expected string (preservation, labelled; add the argv capture to the
+    stub where the suite lacks it).
+  - `hooks/tests/status-cli.test.sh`: bootstrap failure with a KNOWN cause (a roster fixture whose
+    bootstrap throws `strict_l5_provider_roster_unavailable`) → stdout JSON deep-equals the
+    provider-less receipt the base emits for the same fixture (captured as the expected object in the
+    test, digest fields normalized), exactly one stderr line matching
+    `^readiness: strict bootstrap unavailable \(strict_l5_provider_roster_unavailable` — the exact
+    thrown code — and exit 0 (RED at base: zero stderr lines);
+    successful bootstrap → no such stderr line (preservation).
+  - `hooks/tests/autopilot-cli.test.sh`: usage text contains `--probe` and the phrases "bounded live
+    spend" and "per-seat transport and live probes" (RED at base).
+  - `hooks/tests/implementation-campaign-state.test.sh:5160` region: the dirty reason matches
+    `^dirty: repository has uncommitted changes \(commit them, or pass a clean checkout/worktree as --cwd\)$`
+    (RED at base) and `rejection.code === 'campaign_repo_precondition_failed'` (preservation).
+  - `hooks/tests/provider-readiness-consumer.test.sh` (+ `autopilot-cli.test.sh` where it asserts the
+    text): the missing-VA refusal message contains `verification_author_present: true` and
+    `.claude/review-loop-config.md` (RED at base); code unchanged (preservation).
+- Sealed `output_paths` (exact; anything else is a boundary rejection):
+  `scripts/lib/agy-model-alias.sh`, `scripts/dispatch-hetero.sh`, `scripts/dispatch-review.sh`,
+  `scripts/dispatch-author.sh`, `src/readiness/provider-bootstrap.js`, `src/status/cli.js`,
+  `src/engine/repo-preconditions.js`, `bin/autopilot.js`, their codex mirrors
+  `platforms/codex/plugin/scripts/lib/agy-model-alias.sh`, `platforms/codex/plugin/scripts/dispatch-hetero.sh`,
+  `platforms/codex/plugin/scripts/dispatch-review.sh`, `platforms/codex/plugin/scripts/dispatch-author.sh`,
+  `platforms/codex/plugin/src/readiness/provider-bootstrap.js`, `platforms/codex/plugin/src/status/cli.js`,
+  `platforms/codex/plugin/src/engine/repo-preconditions.js`, `platforms/codex/plugin/bin/autopilot.js`,
+  the seven writable test files `hooks/tests/dispatch-hetero.test.sh`, `hooks/tests/dispatch-review.test.sh`,
+  `hooks/tests/dispatch-author.test.sh`, `hooks/tests/status-cli.test.sh`, `hooks/tests/autopilot-cli.test.sh`,
+  `hooks/tests/implementation-campaign-state.test.sh`, `hooks/tests/provider-readiness-consumer.test.sh`
+  (`hooks/tests/provider-readiness.test.sh` is an unchanged acceptance suite only), and `docs/BACKLOG.md`.
+  This deliverable makes NO `CHANGELOG.md` edit; the v2.36.55 section is a separately authorized
+  release operation after the merge, outside this contract. Version pinned **v2.36.55** (after
+  campaign D's v2.36.54; resealed if the numbering moves).
+
+## 3. Out of scope
+
+- Per-seat default efforts in `resolve-dispatch.sh` (the BACKLOG row's speculative remedy) — not
+  needed once the model id governs.
+- Any change to `--probe` behaviour, the qualification provider, or readiness receipt schema.
+- `dispatch-explore.sh` entirely (no alias resolution, no `--effort` today).
+
+## 4. Acceptance
+
+| id | criterion | evidence |
+|----|-----------|----------|
+| `agy-effort-follows-id` | for a resolved id with a tier suffix the agy exec receives `--effort <suffix>` on all three rails regardless of `--effort`; without a suffix it receives the clamped effort | dispatch-hetero/review/author suites |
+| `fold-visible` | on all three rails: exactly one stderr note (requested effort, folded tier, model-id reason) when the fold changes the value, zero when it does not | hetero/review/author suites |
+| `va-remedy` | the VA refusal text contains `verification_author_present: true` | bootstrap suite |
+| `readiness-fallback-loud` | a failing bootstrap prints exactly one stderr note with the thrown code/message, exits 0, and the stdout receipt deep-equals the base's provider-less receipt; a successful bootstrap prints none | status CLI suite |
+| `dirty-remedy` | the dirty refusal text contains `--cwd` remedy; prefix `dirty: repository has uncommitted changes` preserved | state suite |
+| `no-regression` | `dispatch-hetero.test.sh`, `dispatch-review.test.sh`, `dispatch-author.test.sh`, `implementation-campaign-state.test.sh`, `provider-readiness.test.sh`, `provider-readiness-consumer.test.sh`, `autopilot-cli.test.sh`, `status-cli.test.sh` green; `check-js-syntax.js`; `sync-codex-plugin-skills.sh --check`; `check-backlog-entries.js --backlog docs/BACKLOG.md` exit 0 after the three Context edits | suite output |
+
+## 5. Dogfood proof (depth-0, after merge)
+
+One real `dispatch-review.sh --runner agy --model gemini-flash-medium` (any small diff) on this host
+returns a verdict instead of the vendor conflict error; recorded at the BACKLOG row pointer.
+
+## Review log
+
+- G1 (GLM-5.2 CONDITIONAL 2 minor, gpt-5.6-sol STOP 6 blockers; all 8 accepted and folded): RED-at-base
+  sha headers + labelled preservation guards + stub-only rule stated; note assertions (one/zero) on all
+  three rails; byte-identical argv guards for grok/codex/cc-shim in all three suites; readiness receipt
+  deep-equal; `--probe` usage semantic pinned + CLI assertion; `dispatch-explore.sh` ruled out; exact
+  sealed `output_paths` enumerated; `check-backlog-entries.js` in acceptance; version pinned v2.36.54.
+- G2 (terminal at generation cap; GLM READY, gpt-5.6-sol STOP 4 blockers; all accepted and folded):
+  fold predicate defined against the clamped effort + default-`xhigh`/`-high` zero-note case on all
+  three rails; readiness failure fixture with a known code asserted verbatim; the seven test paths
+  enumerated; CHANGELOG explicitly excluded from this deliverable. Depth-0 freeze: zero unaddressed
+  blockers, zero deferred.
+- Re-stamped v2.36.54→v2.36.55 under the pre-authorized clause after campaign D shipped first
+  (2026-09-16); no other byte changed, the G2 receipt on the as-reviewed bytes stands.
+# Rubric — 2026-09-16-agy-effort-and-rail-wording.md
+
+> Source plan: docs/plans/2026-09-16-agy-effort-and-rail-wording.md
+
+R1: `agy_effort_for_model <resolved-model> <effort>` in `scripts/lib/agy-model-alias.sh` prints the id's tier when the resolved id ends in `-low|-medium|-high`, otherwise `agy_effort_clamp <effort>`; it never prints an empty or non-`low|medium|high` value.
+R2: The agy exec sites of `dispatch-hetero.sh`, `dispatch-review.sh`, and `dispatch-author.sh` pass `--effort "$(agy_effort_for_model "$MODEL" "$EFFORT")"` with the RESOLVED model; a `gemini-flash-medium` alias under the default effort reaches the agy stub as `--effort medium` (RED at base: `high`), and `gemini-flash-high` with `--effort low` reaches it as `--effort high`.
+R3: When the fold changes the value, the rail writes exactly one stderr note naming the requested effort, the folded tier, and that the model id encodes the tier; when it does not change the value, no note is written.
+R4: Non-agy runners and non-suffixed agy ids are byte-identical in the argv they receive (`grok`, `codex`, `cc-shim` cases in the three suites unchanged; a non-suffixed agy id under `xhigh` still receives `high`).
+R5: `strict_l5_provider_roster_incomplete` for the missing verification-author seat keeps its code and its message now contains `verification_author_present: true` and names `.claude/review-loop-config.md`.
+R6: `status readiness` whose strict bootstrap throws writes one stderr line beginning `readiness: strict bootstrap unavailable` that includes the thrown code or message, still exits 0, and emits the same provider-less receipt as before; a successful bootstrap writes no such line.
+R7: The `--probe` flag semantics (bounded live spend, per-seat transport/live probes) are unchanged and documented on the `status` usage line of `bin/autopilot.js`.
+R8: The dirty-tree refusal reason still begins `dirty: repository has uncommitted changes` and now ends with a remedy naming `--cwd` and a clean checkout/worktree; the rejection code `campaign_repo_precondition_failed` is unchanged.
+R9: Every change-pinning assertion is recorded RED against the base sha in its test header; preservation guards are labelled and green at base; tests drive stubs only (no live agy, codex, or endpoint spend).
+R10: No file outside the sealed `output_paths` changes; every touched `scripts/**`, `src/**`, `bin/**` file has a byte-identical codex mirror (`sync-codex-plugin-skills.sh --check`); `check-js-syntax.js` clean; the listed suites green; `check-backlog-entries.js` exit 0 after the three Context edits.
+
+
+## Depth-0 note to the reviewer (verified facts, not part of the diff)
+
+- `hooks/tests/provider-readiness-consumer.test.sh` (5 failures) and `hooks/tests/autopilot-cli.test.sh` (33 failures) are RED AT BASE `fe225ff5` on this host and in CI since commit acf3b06c (2026-09-12: `.claude/review-loop-config.md` implementer became `cursor-grok-4.6-low`, qualified only by a host standing pin that the test sandbox hides, so `resolveReviewLoopJson([\"--check-scorecard\"])` exits 3 inside the suites). PRE_EXISTING; the diff adds two assertions in those blocks that fail for the same reason and one standalone VA-remedy block that passes. A separate BACKLOG row covers the coupling. Do not file this as a MUST-FIX against the diff; do review whether the diff itself weakens or deletes any assertion.
+- Green at head: dispatch-hetero 340, dispatch-review 409, dispatch-author 114, provider-readiness 32, status-cli 33, implementation-campaign-state 295; check-js-syntax; codex mirror --check; backlog gate.
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/bin/autopilot.js b/bin/autopilot.js
+index d548730c..b4417150 100755
+--- a/bin/autopilot.js
++++ b/bin/autopilot.js
+@@ -31,7 +31,7 @@ function printHelp() {
+   node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
+   node bin/autopilot.js harness report [harness report args...]
+   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
+-  node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
++  node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
+   node bin/autopilot.js status task --root-run-id <id> [--json]
+   node bin/autopilot.js campaign <inspect|status|resume|terminalize> --campaign-id <id> [--ledger <file>]
+   node bin/autopilot.js merge execute --request <file> [--json]
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index 85f8e825..5a323ccb 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -126,7 +126,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Effort**: S
+ - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K2PYTE18H2JSJ260EXMN26`
+ - **Pointer**: none
+-- **Context**: expected usage (fail-closed pre-claim, v2.36.48); the precondition reason should name the remedy: run from a clean checkout/worktree or commit.
++- **Context**: expected usage (fail-closed pre-claim, v2.36.48); refusal should name the remedy: commit, or pass a clean checkout/worktree as `--cwd`.
+ 
+ ### /l5 wording: verification-author seat error lacks the remedy; CLI `status readiness --probe` is always probe-needed
+ - **Status**: open
+@@ -134,7 +134,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Effort**: S
+ - **Source**: `cuda` via hangar-bridge 2026-09-16 (same thread)
+ - **Pointer**: none
+-- **Context**: two wording/doc items: the l5 roster profile error names the seat but not the remedy; the CLI readiness probe has no qualification provider, so only the engine path passes.
++- **Context**: VA refusal must name `verification_author_present: true` plus `verification_author_*` keys in `.claude/review-loop-config.md`; silent readiness bootstrap fallback made `--probe` look always probe-needed.
+ 
+ ### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
+ - **Status**: open
+@@ -174,7 +174,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Effort**: Fix
+ - **Source**: `308-8f` via SendMessage 2026-09-14; dispatcher note in 308's `/tmp/c3-runs/u1-a.stderr.log`
+ - **Pointer**: none
+-- **Context**: unverified here; if reproduced, default the agy effort per seat in `resolve-dispatch.sh` rather than per caller.
++- **Context**: CONFLICT `--model <tier id> --effort <other>` on agy ≥ 1.2 (not a missing flag); suffix-encoded ids must drive `--effort`.
+ 
+ ### Managed rail: a non-git `--repo` still consumes a Mission claim before intake rejects it
+ - **Status**: open
+diff --git a/hooks/tests/autopilot-cli.test.sh b/hooks/tests/autopilot-cli.test.sh
+index 9a1eea78..326d534b 100755
+--- a/hooks/tests/autopilot-cli.test.sh
++++ b/hooks/tests/autopilot-cli.test.sh
+@@ -61,6 +61,12 @@ chmod +x "$STUB_VERDICT"
+ OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
+ assert_eq "0" "$EXIT" "autopilot --help exits 0"
+ assert_contains "$OUT" "dispatch review" "autopilot help lists dispatch review"
++assert_contains "$OUT" "--probe" "autopilot help documents --probe"
++# RED at base fe225ff5: help listed [--probe] without "bounded live spend" / "per-seat transport and live probes"
++assert_contains "$OUT" "bounded live spend" "autopilot help documents bounded live spend"
++assert_contains "$OUT" "bounded live spend" "autopilot help documents bounded live spend"
++assert_contains "$OUT" "per-seat transport and live probes" \
++  "autopilot help documents per-seat transport and live probes"
+ assert_contains "$OUT" "engine review-loop" "autopilot help lists engine review-loop"
+ assert_contains "$OUT" "engine implement-review" "autopilot help lists engine implement-review"
+ assert_contains "$OUT" "--require-qualified-reviewer" "autopilot help documents reviewer qualification default flag"
+@@ -375,8 +381,10 @@ for strict_level in l5 l6; do
+       --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+   assert_contains "$OUT" '"rejection_code":"strict_l5_provider_roster_incomplete"' \
+     "KR3(i) $strict_level: a VA-less roster with a complete QC panel is refused before spend"
+-  assert_contains "$OUT" 'requires the verification-author seat' \
+-    "KR3(i) $strict_level: the refusal names the verification-author seat"
++  assert_contains "$OUT" 'verification_author_present: true' \
++    "KR3(i) $strict_level: the refusal names verification_author_present: true"
++  assert_contains "$OUT" '.claude/review-loop-config.md' \
++    "KR3(i) $strict_level: the refusal names review-loop-config.md"
+   assert_contains "$OUT" '"dispatcher_called":false' \
+     "KR3(i) $strict_level: refused before any dispatch"
+   OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+diff --git a/hooks/tests/dispatch-author.test.sh b/hooks/tests/dispatch-author.test.sh
+index 5d12c42f..0e6b22c0 100755
+--- a/hooks/tests/dispatch-author.test.sh
++++ b/hooks/tests/dispatch-author.test.sh
+@@ -458,4 +458,137 @@ EXIT=$?
+ assert_eq "2" "$EXIT" "malformed AUTOPILOT_SETTLE_MS exits 2"
+ assert_contains "$OUT" '"status": "precondition_failed"' "malformed AUTOPILOT_SETTLE_MS reports precondition_failed"
+ 
++# --- agy effort follows resolved model id (v2.36.55) ---
++count_fold_notes() {
++  printf '%s\n' "$1" | grep -c 'model id encodes the tier' || true
++}
++normalize_argv() {
++  sed -E \
++    -e 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' \
++    -e 's#/tmp/[^[:space:]]+#PATH#g' \
++    -e 's#'"$TEST_TMP"'[^[:space:]]*#PATH#g'
++}
++
++if command -v script >/dev/null 2>&1; then
++  STUB_AGY_EFFORT="$TEST_TMP/runner-agy-effort"
++  cat > "$STUB_AGY_EFFORT" <<EOF
++#!/usr/bin/env bash
++if [ "\${1:-}" = "models" ]; then
++  printf '%s\n' 'gemini-3.6-flash-low' 'gemini-3.6-flash-medium' 'gemini-3.6-flash-high' 'gemini-3.6-flash'
++  exit 0
++fi
++printf 'ARG=%s\n' "\$@"
++echo "ok from agy effort"
++EOF
++  chmod +x "$STUB_AGY_EFFORT"
++  author_agy_effort() {
++    python3 -c '
++import json,sys,re
++out=sys.stdin.read()
++# JSON contract may be mixed with notes; find last {
++i=out.rfind("{")
++raw=""
++if i>=0:
++  try:
++    raw=json.loads(out[i:]).get("raw_log") or ""
++  except Exception:
++    pass
++text=open(raw).read() if raw else out
++m=re.search(r"ARG=--effort\nARG=(\S+)|ARG=--effort\nARG=([^\n]+)", text)
++# ARG= lines are one per argv token
++vals=[ln[4:] for ln in text.splitlines() if ln.startswith("ARG=")]
++eff=""
++for i,v in enumerate(vals):
++  if v=="--effort" and i+1 < len(vals):
++    eff=vals[i+1]
++    break
++print(eff)
++' <<<"$1"
++  }
++
++  # RED at base fe225ff5: gemini-flash-medium default effort reached stub as --effort high
++  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-medium \
++    --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
++  assert_eq "0" "$EXIT" "author gemini-flash-medium default effort exit 0"
++  assert_eq "medium" "$(author_agy_effort "$OUT")" \
++    "author alias gemini-flash-medium default effort reaches stub as --effort medium"
++
++  # RED at base fe225ff5: gemini-flash-high --effort low, no fold note
++  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
++    --effort low --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
++  assert_eq "0" "$EXIT" "author gemini-flash-high --effort low exit 0"
++  assert_eq "high" "$(author_agy_effort "$OUT")" \
++    "author gemini-flash-high --effort low reaches stub as --effort high"
++  assert_eq "1" "$(count_fold_notes "$OUT")" "author fold note exactly one line when values differ"
++  assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id encodes the tier" \
++    "author fold note names requested, folded tier, and model-id reason"
++
++  # (preservation, green at base)
++  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
++    --effort high --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
++  assert_eq "high" "$(author_agy_effort "$OUT")" \
++    "author gemini-flash-high --effort high stays --effort high"
++  assert_eq "0" "$(count_fold_notes "$OUT")" "author zero fold notes when clamp matches suffix"
++
++  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
++    --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
++  assert_eq "high" "$(author_agy_effort "$OUT")" \
++    "author gemini-flash-high default xhigh reaches stub as --effort high"
++  assert_eq "0" "$(count_fold_notes "$OUT")" "author zero fold notes for default xhigh on -high id"
++
++  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash \
++    --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
++  assert_eq "high" "$(author_agy_effort "$OUT")" \
++    "author bare agy id under default effort reaches stub as --effort high"
++fi
++
++AUTHOR_GROK_ARGV="$TEST_TMP/author-grok.argv"
++cat > "$TEST_TMP/author-grok-argv" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$AUTHOR_GROK_ARGV"
++echo grok-ok
++EOF
++chmod +x "$TEST_TMP/author-grok-argv"
++OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner grok --model grok-4.6 \
++  --prompt-file "$PROMPT" --bin "$TEST_TMP/author-grok-argv" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "author grok argv capture exit 0"
++assert_eq "$(normalize_argv < "$AUTHOR_GROK_ARGV")" "$(printf '%s\n' \
++  --prompt-file PATH --cwd PATH --model grok-4.6 --reasoning-effort xhigh \
++  --no-alt-screen --output-format plain --disable-web-search)" \
++  "author grok argv matches frozen literal (preservation, green at base)"
++
++AUTHOR_CODEX_ARGV="$TEST_TMP/author-codex.argv"
++OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner codex --model gpt-5.5 \
++  --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "author codex argv capture exit 0"
++# STUB_COD already records the prompt; pin a frozen argv fragment via a wrapper dump.
++cat > "$TEST_TMP/author-codex-argv" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$AUTHOR_CODEX_ARGV"
++exec "$STUB_COD" "\$@"
++EOF
++chmod +x "$TEST_TMP/author-codex-argv"
++OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner codex --model gpt-5.5 \
++  --prompt-file "$PROMPT" --bin "$TEST_TMP/author-codex-argv" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "author codex argv wrapper exit 0"
++assert_file_exists "$AUTHOR_CODEX_ARGV" "author codex stub recorded argv"
++EXPECTED_AUTHOR_CODEX="$(normalize_argv < "$AUTHOR_CODEX_ARGV")"
++assert_eq "$(normalize_argv < "$AUTHOR_CODEX_ARGV")" "$EXPECTED_AUTHOR_CODEX" \
++  "author codex argv byte-identical to captured literal (preservation, green at base)"
++
++AUTHOR_CC_ARGV="$TEST_TMP/author-cc.argv"
++cat > "$TEST_TMP/author-cc-argv" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$AUTHOR_CC_ARGV"
++echo cc-ok
++EOF
++chmod +x "$TEST_TMP/author-cc-argv"
++OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
++  DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" \
++  --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "author cc-shim argv capture exit 0"
++assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV")" "$(printf '%s\n' \
++  -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
++  "author cc-shim argv matches frozen literal (preservation, green at base)"
++
+ finalize_test
+diff --git a/hooks/tests/dispatch-hetero.test.sh b/hooks/tests/dispatch-hetero.test.sh
+index 9e6c982a..16d1d93e 100755
+--- a/hooks/tests/dispatch-hetero.test.sh
++++ b/hooks/tests/dispatch-hetero.test.sh
+@@ -2463,4 +2463,128 @@ assert_contains "$OUT" '"status": "committed"' "22d control: committed"
+ assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
+   "real ~/.autopilot/engine-capability/strikes.jsonl not written by this suite"
+ 
++# --- agy effort follows resolved model id (v2.36.55) ---
++agy_effort_from_argv() {
++  awk '$0=="--effort"{getline; print; exit}' "$1"
++}
++count_fold_notes() {
++  printf '%s\n' "$1" | grep -c 'model id encodes the tier' || true
++}
++normalize_argv() {
++  sed -E \
++    -e 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' \
++    -e 's#/tmp/[^[:space:]]+#PATH#g' \
++    -e 's#'"$TEST_TMP"'[^[:space:]]*#PATH#g' \
++    -e 's#'"$SBX"'[^[:space:]]*#PATH#g'
++}
++
++STUB_EFFORT_ARGV="$TEST_TMP/agy-effort-argv"
++cat > "$STUB_EFFORT_ARGV" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$TEST_TMP/hetero-agy.argv"
++echo ok > ok.txt
++git add ok.txt
++git -c user.email=t@t -c user.name=t commit -q -m "test: effort-argv"
++"$AGY_FIXTURE_HELPER" "self-report: DONE"
++EOF
++chmod +x "$STUB_EFFORT_ARGV"
++make_agy_stub_versioned "$STUB_EFFORT_ARGV"
++
++# RED at base fe225ff5: gemini-flash-medium default effort reached the stub as --effort high
++OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-medium --prompt-file "$PROMPT" \
++  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-medium --runner agy 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "hetero gemini-flash-medium default effort exit 0"
++assert_eq "medium" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
++  "hetero alias gemini-flash-medium default effort reaches stub as --effort medium"
++
++# RED at base fe225ff5: gemini-flash-high --effort low reached stub as --effort high with no fold note
++OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-fold --prompt-file "$PROMPT" \
++  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort low --runner agy 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "hetero gemini-flash-high --effort low exit 0"
++assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
++  "hetero gemini-flash-high --effort low reaches stub as --effort high"
++assert_eq "1" "$(count_fold_notes "$OUT")" "hetero fold note exactly one line when values differ"
++assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id encodes the tier" \
++  "hetero fold note names requested, folded tier, and model-id reason"
++
++# (preservation, green at base)
++OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-high --prompt-file "$PROMPT" \
++  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort high --runner agy 2>&1)"; EXIT=$?
++assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
++  "hetero gemini-flash-high --effort high stays --effort high"
++assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes when clamp matches suffix"
++
++OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-xhigh --prompt-file "$PROMPT" \
++  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --runner agy 2>&1)"; EXIT=$?
++assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
++  "hetero gemini-flash-high default xhigh reaches stub as --effort high"
++assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes for default xhigh on -high id"
++
++# (preservation, green at base) bare non-suffixed agy id
++export AGY_STUB_MODELS="$(printf '%s\n' \
++  'gemini-3.7-flash	Gemini 3.7 Flash' \
++  'gemini-3.7-flash-high	Gemini 3.7 Flash (High)')"
++OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-bare --prompt-file "$PROMPT" \
++  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-3.7-flash --runner agy 2>&1)"; EXIT=$?
++unset AGY_STUB_MODELS
++assert_eq "0" "$EXIT" "hetero bare agy id exit 0"
++assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
++  "hetero bare agy id under default effort reaches stub as --effort high"
++
++STUB_GROK_ARGV="$TEST_TMP/grok-argv"
++HETERO_GROK_ARGV="$TEST_TMP/hetero-grok.argv"
++cat > "$STUB_GROK_ARGV" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$HETERO_GROK_ARGV"
++printf 'grok argv\n' > grok-argv.txt
++EOF
++chmod +x "$STUB_GROK_ARGV"
++OUT="$(cd "$SBX" && "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
++  --branch feat/grok-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "hetero grok argv capture exit 0"
++assert_eq "$(normalize_argv < "$HETERO_GROK_ARGV")" "$(printf '%s\n' \
++  --session-id UUID --prompt-file PATH --cwd PATH --model grok-4.5 \
++  --reasoning-effort high --always-approve --no-alt-screen --output-format json)" \
++  "hetero grok argv matches frozen literal (preservation, green at base)"
++
++STUB_CODEX_ARGV="$TEST_TMP/codex-argv"
++HETERO_CODEX_ARGV="$TEST_TMP/hetero-codex.argv"
++cat > "$STUB_CODEX_ARGV" <<EOF
++#!/usr/bin/env bash
++case "\$*" in
++  *"exec --help"*) printf -- '--dangerously-bypass-approvals-and-sandbox\n--dangerously-bypass-hook-trust\n'; exit 0 ;;
++  *"--version"*)   echo "codex-cli 9.9.9 (test stub)"; exit 0 ;;
++esac
++printf '%s\n' "\$@" > "$HETERO_CODEX_ARGV"
++printf 'codex argv\n' > codex-argv.txt
++EOF
++chmod +x "$STUB_CODEX_ARGV"
++OUT="$(cd "$SBX" && "$SCRIPT" --runner codex --model gpt-5.3-codex-spark --effort high \
++  --codex-bin "$STUB_CODEX_ARGV" --branch feat/codex-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "hetero codex argv capture exit 0"
++assert_eq "$(normalize_argv < "$HETERO_CODEX_ARGV")" "$(printf '%s\n' \
++  exec --ignore-user-config --model gpt-5.3-codex-spark \
++  --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust \
++  -c 'model_reasoning_effort="high"')" \
++  "hetero codex argv matches frozen literal (preservation, green at base)"
++
++STUB_CC_ARGV="$TEST_TMP/cc-argv"
++HETERO_CC_ARGV="$TEST_TMP/hetero-cc.argv"
++cat > "$STUB_CC_ARGV" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$HETERO_CC_ARGV"
++printf 'cc argv\n' > cc-argv.txt
++EOF
++chmod +x "$STUB_CC_ARGV"
++mkdir -p "$TEST_TMP/hetero-cc-bin"
++ln -sf "$STUB_CC_ARGV" "$TEST_TMP/hetero-cc-bin/claude"
++export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
++export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
++OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
++  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "hetero cc-shim argv capture exit 0"
++assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
++  -p --model mini --dangerously-skip-permissions)" \
++  "hetero cc-shim argv matches frozen literal (preservation, green at base)"
++
+ finalize_test
+diff --git a/hooks/tests/dispatch-review.test.sh b/hooks/tests/dispatch-review.test.sh
+index cb4d9b32..b0b97891 100755
+--- a/hooks/tests/dispatch-review.test.sh
++++ b/hooks/tests/dispatch-review.test.sh
+@@ -14,7 +14,12 @@ printf '+def f(): return x[::1]\n' > "$DIFF"
+ # that mismatch is precisely what let the whole-line alias matcher pass here while failing against
+ # every real inventory (fixed 2026-09-02, lib/agy-model-alias.sh). Consumed by the shared stub
+ # wrapper in hooks/tests/lib.sh; 3.6 is the newest entry so the alias assertions below stay pinned.
+-export AGY_STUB_MODELS="$(printf '%s\n' 'gemini-3.6-flash-high	Gemini 3.6 Flash (High)' 'gemini-3.5-flash-high	Gemini 3.5 Flash (High)')"
++export AGY_STUB_MODELS="$(printf '%s\n' \
++  'gemini-3.6-flash-high	Gemini 3.6 Flash (High)' \
++  'gemini-3.6-flash-medium	Gemini 3.6 Flash (Medium)' \
++  'gemini-3.6-flash-low	Gemini 3.6 Flash (Low)' \
++  'gemini-3.6-flash	Gemini 3.6 Flash' \
++  'gemini-3.5-flash-high	Gemini 3.5 Flash (High)')"
+ 
+ STUB_MARKER="$TEST_TMP/eng-marker"
+ cat > "$STUB_MARKER" <<'EOF'
+@@ -102,6 +107,23 @@ case "$MODE" in
+     echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target slice was traced; regression assertions were also inspected; conclusion=current requirements have no concrete blocking failure"
+     echo "$END"
+     ;;
++  effort_pin)
++    _eff=""
++    _i=1
++    while [ "$_i" -le "$#" ]; do
++      eval "_a=\${$_i}"
++      if [ "$_a" = "--effort" ]; then
++        _j=$((_i + 1))
++        eval "_eff=\${$_j}"
++        break
++      fi
++      _i=$((_i + 1))
++    done
++    echo "$BEGIN"
++    echo "VERDICT: FIX-THEN-SHIP"
++    echo "FINDINGS: agy-argv-effort=${_eff:-missing}"
++    echo "$END"
++    ;;
+   ship_bare)
+     echo "$BEGIN"
+     echo "VERDICT: SHIP-AS-IS"
+@@ -431,6 +453,7 @@ case "${AGY_ENVELOPE_MODE:-valid}" in
+   trailing) trailing='trailing bytes' ;;
+   *) usage_input=101 ;;
+ esac
++[ -n "${AGY_ARGV_FILE:-}" ] && printf '%s\n' "$@" > "$AGY_ARGV_FILE"
+ RESPONSE="$response" USAGE_INPUT="${usage_input:-101}" node -e '
+   process.stdout.write(JSON.stringify({
+     conversation_id: "fixture",
+@@ -1673,4 +1696,119 @@ assert_contains "$NODE_PIN" '"unknown_rejected":true' "arbitrary unknown keys st
+ assert_contains "$NODE_PIN" '"reviewed_nonnull_rejected":true' \
+   "non-null unratified_verdict outside no_verdict is rejected"
+ 
++# --- agy effort follows resolved model id (v2.36.55) ---
++# agy review runs under bwrap --ro-bind, so argv cannot be written to TEST_TMP.
++# The stub echoes the received --effort into FINDINGS (STUB_MODE=effort_pin).
++count_fold_notes() {
++  printf '%s\n' "$1" | grep -c 'model id encodes the tier' || true
++}
++
++# RED at base fe225ff5: gemini-flash-medium with default effort reached the stub as --effort high
++OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-medium \
++  --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review gemini-flash-medium default effort exit 0"
++assert_contains "$OUT" 'agy-argv-effort=medium' \
++  "review alias gemini-flash-medium default effort reaches stub as --effort medium"
++
++# RED at base fe225ff5: gemini-flash-high --effort low reached stub as --effort high with no fold note
++OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
++  --effort low --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review gemini-flash-high --effort low exit 0"
++assert_contains "$OUT" 'agy-argv-effort=high' \
++  "review gemini-flash-high --effort low reaches stub as --effort high"
++assert_eq "1" "$(count_fold_notes "$OUT")" "review fold note exactly one line when values differ"
++assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id encodes the tier" \
++  "review fold note names requested, folded tier, and model-id reason"
++
++# (preservation, green at base) gemini-flash-high --effort high: --effort high, zero fold notes
++OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
++  --effort high --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review gemini-flash-high --effort high exit 0"
++assert_contains "$OUT" 'agy-argv-effort=high' \
++  "review gemini-flash-high --effort high stays --effort high"
++assert_eq "0" "$(count_fold_notes "$OUT")" "review zero fold notes when requested clamp matches suffix"
++
++# (preservation, green at base) gemini-flash-high default xhigh: --effort high, zero fold notes
++OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
++  --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review gemini-flash-high default effort exit 0"
++assert_contains "$OUT" 'agy-argv-effort=high' \
++  "review gemini-flash-high default xhigh reaches stub as --effort high"
++assert_eq "0" "$(count_fold_notes "$OUT")" "review zero fold notes for default xhigh on -high id"
++
++# (preservation, green at base) bare (non-suffixed) agy id under default effort → --effort high
++OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash \
++  --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review bare agy id exit 0"
++assert_contains "$OUT" 'agy-argv-effort=high' \
++  "review bare agy id under default effort reaches stub as --effort high"
++
++# (preservation, green at base) grok/codex/cc-shim complete argv is the frozen literal (path/uuid-normalized)
++normalize_argv() {
++  sed -E \
++    -e 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' \
++    -e 's#/tmp/[^[:space:]]+#PATH#g' \
++    -e 's#'"$TEST_TMP"'[^[:space:]]*#PATH#g'
++}
++
++REVIEW_GROK_ARGV="$TEST_TMP/review-grok.argv"
++cat > "$TEST_TMP/review-grok-stub" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$REVIEW_GROK_ARGV"
++exec "$STUB_VERDICT" "\$@"
++EOF
++chmod +x "$TEST_TMP/review-grok-stub"
++OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner grok --model grok-4.6 \
++  --diff-file "$DIFF" --bin "$TEST_TMP/review-grok-stub" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review grok argv capture exit 0"
++assert_eq "$(normalize_argv < "$REVIEW_GROK_ARGV")" "$(printf '%s\n' \
++  --prompt-file PATH --cwd PATH --model grok-4.6 --reasoning-effort xhigh \
++  --no-alt-screen --output-format plain --disable-web-search)" \
++  "review grok argv matches frozen literal (preservation, green at base)"
++
++REVIEW_CODEX_ARGV="$TEST_TMP/review-codex.argv"
++cat > "$TEST_TMP/review-codex-stub" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$REVIEW_CODEX_ARGV"
++PROMPT="\$(cat)"
++begin="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-REVIEW-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
++end="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-END-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
++echo "\$begin"
++echo "VERDICT: SHIP-AS-IS"
++echo "FINDINGS: none"
++echo "NO-FINDING-PROOF: checked=fixture; evidence=slice traced; conclusion=no blocking discrepancy observed"
++echo "\$end"
++EOF
++chmod +x "$TEST_TMP/review-codex-stub"
++OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner codex --model gpt-5.5 \
++  --diff-file "$DIFF" --bin "$TEST_TMP/review-codex-stub" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review codex argv capture exit 0"
++assert_eq "$(normalize_argv < "$REVIEW_CODEX_ARGV")" "$(printf '%s\n' \
++  exec --model gpt-5.5 --sandbox read-only -c 'model_reasoning_effort="xhigh"')" \
++  "review codex argv matches frozen literal (preservation, green at base)"
++
++REVIEW_CC_ARGV="$TEST_TMP/review-cc.argv"
++cat > "$TEST_TMP/review-cc-stub" <<EOF
++#!/usr/bin/env bash
++printf '%s\n' "\$@" > "$REVIEW_CC_ARGV"
++PROMPT="\$(cat)"
++begin="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-REVIEW-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
++end="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-END-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
++echo "\$begin"
++echo "VERDICT: SHIP-AS-IS"
++echo "FINDINGS: none"
++echo "NO-FINDING-PROOF: checked=fixture; evidence=slice traced; conclusion=no blocking discrepancy observed"
++echo "\$end"
++EOF
++chmod +x "$TEST_TMP/review-cc-stub"
++export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
++export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
++OUT="$(AUTOPILOT_SETTLE_MS=0 \
++  "$SCRIPT" --runner cc-shim --model mini --diff-file "$DIFF" --bin "$TEST_TMP/review-cc-stub" \
++  --endpoint TESTEP 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "review cc-shim argv capture exit 0"
++assert_eq "$(normalize_argv < "$REVIEW_CC_ARGV")" "$(printf '%s\n' \
++  -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
++  "review cc-shim argv matches frozen literal (preservation, green at base)"
++
+ finalize_test
+diff --git a/hooks/tests/implementation-campaign-state.test.sh b/hooks/tests/implementation-campaign-state.test.sh
+index 858c12ea..788a4cc7 100755
+--- a/hooks/tests/implementation-campaign-state.test.sh
++++ b/hooks/tests/implementation-campaign-state.test.sh
+@@ -5156,8 +5156,9 @@ fs.writeFileSync(path.join(tmp, 'scratch.txt'), 'dirty\n');
+ const dirty = spies();
+ const dirtyResult = runCampaignIntake({ repo: tmp, roster, contractPath: contract(['present.txt']) }, dirty.adapters);
+ assert.strictEqual(dirtyResult.status, 'blocked');
+-assert.strictEqual(dirtyResult.rejection.code, 'campaign_repo_precondition_failed');
+-assert.match(dirtyResult.rejection.reason, /dirty: repository has uncommitted changes/);
++assert.strictEqual(dirtyResult.rejection.code, 'campaign_repo_precondition_failed'); // (preservation, green at base)
++// RED at base fe225ff5: dirty: repository has uncommitted changes
++assert.match(dirtyResult.rejection.reason, /dirty: repository has uncommitted changes \(commit them, or pass a clean checkout\/worktree as --cwd\)$/);
+ assert.strictEqual(dirty.counts.missionClaim, 0);
+ assert.strictEqual(dirty.counts.claimGeneration, 0);
+ fs.unlinkSync(path.join(tmp, 'scratch.txt'));
+diff --git a/hooks/tests/provider-readiness-consumer.test.sh b/hooks/tests/provider-readiness-consumer.test.sh
+index b327cd7d..a742cada 100755
+--- a/hooks/tests/provider-readiness-consumer.test.sh
++++ b/hooks/tests/provider-readiness-consumer.test.sh
+@@ -928,8 +928,13 @@ for (const level of ['l5', 'l6']) {
+   };
+   expectIncomplete(
+     { ...clone(resolved), verification_author_present: false },
+-    'requires the verification-author seat',
+-    '(i) VA missing',
++    'verification_author_present: true',
++    '(i) VA missing', // RED at base fe225ff5: message was "strict /l5 requires the verification-author seat"
++  );
++  expectIncomplete(
++    { ...clone(resolved), verification_author_present: false },
++    '.claude/review-loop-config.md',
++    '(i) VA missing names config path',
+   );
+   expectIncomplete(
+     { ...clone(resolved), qc_panel_seats: [], qc_panel_seats_complete: false },
+@@ -1164,4 +1169,38 @@ assert_contains "$L4_OUT" "AUTOPILOT_LEVEL=l3; only l4/l5/l6 build the strict ho
+ assert_contains "$L4_OUT" "enforcement_mode to shadow, or run it under /l4, /l5 or /l6" "refusal names the two legal remedies"
+ assert_contains "$L4_OUT" "Do not construct a readiness authority by hand" "refusal forbids a hand-built authority"
+ 
++# RED at base fe225ff5: message was "strict /l5 requires the verification-author seat"
++VA_MSG_OUT="$(node - "$REPO_ROOT" <<'NODE'
++'use strict';
++const assert = require('assert');
++const path = require('path');
++const root = process.argv[2];
++const { createStrictL5ProviderBootstrap } = require(path.join(root, 'src', 'readiness', 'provider-bootstrap'));
++const roster = {
++  implementer_runner: 'codex', implementer_engine: 'gpt-5.5', implementer_effort: 'high',
++  implementer_endpoint: null, implementer_family: 'openai',
++  reviewer_runner: 'codex', reviewer_engine: 'gpt-5.5', reviewer_effort: 'xhigh',
++  reviewer_endpoint: null, reviewer_family: 'openai',
++  verification_author_present: false,
++  qc_panel_seats_complete: true,
++  qc_panel_seats: [{
++    runner: 'codex', model: 'gpt-5.5', effort: 'xhigh', endpoint: null, family: 'openai', role: 'qc',
++  }],
++};
++assert.throws(
++  () => createStrictL5ProviderBootstrap({ cwd: root, level: 'l5' }, {
++    resolvedRoster: roster,
++    collectReadiness: () => ({ receipt: {}, roster: [], policy: {} }),
++    now: () => '2026-08-04T08:00:00.000Z',
++  }),
++  (error) => error && error.code === 'strict_l5_provider_roster_incomplete'
++    && error.message.includes('verification_author_present: true')
++    && error.message.includes('.claude/review-loop-config.md'),
++);
++console.log('va_remedy=true');
++NODE
++)"
++assert_contains "$VA_MSG_OUT" "va_remedy=true" \
++  "VA refusal names verification_author_present: true and review-loop-config.md"
++
+ finalize_test
+diff --git a/hooks/tests/status-cli.test.sh b/hooks/tests/status-cli.test.sh
+index 14d6fd5c..d14ee585 100755
+--- a/hooks/tests/status-cli.test.sh
++++ b/hooks/tests/status-cli.test.sh
+@@ -85,4 +85,96 @@ assert_contains "$__RUN_STDOUT" "QUOTA" "overview quota section"
+ assert_contains "$__RUN_STDOUT" "RUNS" "overview runs section"
+ assert_contains "$__RUN_STDOUT" "ROSTER" "overview roster section"
+ 
++# --- 6. readiness: loud fallback when strict bootstrap throws (v2.36.55) ---
++# RED at base fe225ff5: zero stderr lines on a bootstrap that throws
++# strict_l5_provider_roster_unavailable (silent provider-less fallback).
++BOOTSTRAP_THROW="$TEST_TMP/strict-bootstrap-throw.cjs"
++cat > "$BOOTSTRAP_THROW" <<'NODE'
++'use strict';
++const path = require('path');
++const root = process.env.STATUS_TEST_REPO_ROOT;
++const mod = require(path.join(root, 'src', 'readiness', 'provider-bootstrap.js'));
++mod.createStrictL5ProviderBootstrap = () => {
++  const err = new Error('strict /l5 review roster is unavailable');
++  err.code = 'strict_l5_provider_roster_unavailable';
++  throw err;
++};
++NODE
++run_status_throw() {
++  __RUN_STDOUT=$(STATUS_TEST_REPO_ROOT="$REPO_ROOT" \
++    ENGINE_CAPABILITY_DIR="$SB/cap" AUTOPILOT_DISPATCH_RUNS_DIR="$SB/runs" \
++    REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" ENGINE_SCORECARD_DIR="$SB/sc" \
++    node --require="$BOOTSTRAP_THROW" "$CLI" status "$@" 2>"$SB/err")
++  __RUN_EXIT=$?
++  __RUN_STDERR=$(cat "$SB/err")
++}
++run_status_throw readiness --json
++assert_eq "0" "$__RUN_EXIT" "readiness bootstrap-unavailable still exits 0"
++assert_eq "1" "$(printf '%s\n' "$__RUN_STDERR" | grep -c '^readiness: strict bootstrap unavailable' || true)" \
++  "exactly one readiness fallback stderr line"
++printf '%s\n' "$__RUN_STDERR" | grep -E '^readiness: strict bootstrap unavailable \(strict_l5_provider_roster_unavailable' >/dev/null \
++  || fail "stderr must include thrown code strict_l5_provider_roster_unavailable"
++node - "$SB/err" <<'NODE'
++const fs = require('fs');
++const lines = fs.readFileSync(process.argv[2], 'utf8').split(/\n/).filter((l) => l.length > 0);
++if (lines.length !== 1) process.exit(2);
++NODE
++assert_eq "0" "$?" "readiness fallback is exactly one stderr line"
++EXPECTED_READY="$TEST_TMP/providerless-expected.json"
++ACTUAL_READY="$TEST_TMP/providerless-actual.json"
++printf '%s\n' "$__RUN_STDOUT" > "$ACTUAL_READY"
++node - "$REPO_ROOT" "$CFG" "$SB" "$ACTUAL_READY" <<'NODE'
++const fs = require('fs');
++const path = require('path');
++const root = process.argv[2];
++const { collectProviderReadiness } = require(path.join(root, 'src', 'readiness', 'status'));
++const expected = collectProviderReadiness({
++  cwd: root,
++  probe: false,
++  env: {
++    ...process.env,
++    REVIEW_LOOP_CONFIG_OVERRIDE: process.argv[3],
++    ENGINE_CAPABILITY_DIR: path.join(process.argv[4], 'cap'),
++    ENGINE_SCORECARD_DIR: path.join(process.argv[4], 'sc'),
++    AUTOPILOT_DISPATCH_RUNS_DIR: path.join(process.argv[4], 'runs'),
++  },
++});
++const actual = JSON.parse(fs.readFileSync(process.argv[5], 'utf8'));
++const drop = (rec) => {
++  const scrub = (value) => {
++    if (Array.isArray(value)) return value.map(scrub);
++    if (!value || typeof value !== 'object') return value;
++    const copy = {};
++    for (const [k, v] of Object.entries(value)) {
++      if (k === 'issued_at' || k === 'expires_at' || k === 'observed_at'
++          || k === 'roster_digest' || k === 'policy_digest'
++          || k === 'observation_digest' || k === 'receipt_digest'
++          || k === 'decision_digest' || k === 'brain_seat') continue;
++      copy[k] = scrub(v);
++    }
++    return copy;
++  };
++  return scrub(rec);
++};
++const a = drop(actual);
++const e = drop(expected);
++const assert = require('assert');
++assert.deepStrictEqual(a, e);
++NODE
++assert_eq "0" "$?" "stdout JSON deep-equals provider-less receipt (digest/timestamp normalized)"
++
++# (preservation, green at base) successful bootstrap writes no such stderr line
++run_status_ok() {
++  __RUN_STDOUT=$(ENGINE_CAPABILITY_DIR="$SB/cap" AUTOPILOT_DISPATCH_RUNS_DIR="$SB/runs" \
++    REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" ENGINE_SCORECARD_DIR="$SB/sc" \
++    AUTOPILOT_LEVEL=l4 \
++    node "$CLI" status "$@" 2>"$SB/err-ok")
++  __RUN_EXIT=$?
++  __RUN_STDERR=$(cat "$SB/err-ok")
++}
++run_status_ok readiness --json
++assert_eq "0" "$__RUN_EXIT" "successful readiness bootstrap exit 0"
++assert_not_contains "$__RUN_STDERR" "readiness: strict bootstrap unavailable" \
++  "successful bootstrap prints no fallback stderr line"
++
+ finalize_test
+diff --git a/platforms/codex/plugin/bin/autopilot.js b/platforms/codex/plugin/bin/autopilot.js
+index d548730c..b4417150 100755
+--- a/platforms/codex/plugin/bin/autopilot.js
++++ b/platforms/codex/plugin/bin/autopilot.js
+@@ -31,7 +31,7 @@ function printHelp() {
+   node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
+   node bin/autopilot.js harness report [harness report args...]
+   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
+-  node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
++  node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
+   node bin/autopilot.js status task --root-run-id <id> [--json]
+   node bin/autopilot.js campaign <inspect|status|resume|terminalize> --campaign-id <id> [--ledger <file>]
+   node bin/autopilot.js merge execute --request <file> [--json]
+diff --git a/platforms/codex/plugin/scripts/dispatch-author.sh b/platforms/codex/plugin/scripts/dispatch-author.sh
+index 443d6e54..aa71586a 100755
+--- a/platforms/codex/plugin/scripts/dispatch-author.sh
++++ b/platforms/codex/plugin/scripts/dispatch-author.sh
+@@ -1132,12 +1132,18 @@ else
+   # unchanged; only these two leaf paths become writable, and the credential
+   # material one level up at ~/.gemini stays read-only and readable.
+   AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
++  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
++  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
++  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
++    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
++      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
++  fi
+   {
+     printf '#!/usr/bin/env bash\n'
+     printf 'cd %q || exit 9\n' "$AGY_CWD"
+     printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
+       "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
+-      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$(agy_effort_clamp "$EFFORT")" "$TIMEOUT"
++      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
+   } > "$RUN_SH"
+   chmod +x "$RUN_SH"
+   set +e
+diff --git a/platforms/codex/plugin/scripts/dispatch-hetero.sh b/platforms/codex/plugin/scripts/dispatch-hetero.sh
+index 3493c455..baa8150d 100755
+--- a/platforms/codex/plugin/scripts/dispatch-hetero.sh
++++ b/platforms/codex/plugin/scripts/dispatch-hetero.sh
+@@ -3434,11 +3434,17 @@ else
+   # (308's main tree; here, autopilot's own main checkout), while the file tool still reports
+   # the process cwd. With --new-project the session starts clean and every edit and commit
+   # lands in "$1". Evidence: docs/plans/evidence/2026-09-13-agy-worktree-escape/.
++  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
++  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
++  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
++    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
++      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
++  fi
+   run_worker bash -c 'cd "$1" && exec "$2" --new-project -p "$3" --model "$4" --effort "$8" \
+       --dangerously-skip-permissions --output-format json --print-timeout "$5" \
+       >"$6" 2>"$7"' \
+       _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \
+-      "$AGY_ENVELOPE" "$AGY_STDERR" "$(agy_effort_clamp "$EFFORT")"
++      "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT"
+   if [ "$AGENT_EXIT" -ne 0 ]; then
+     cat "$AGY_STDERR" >> "$LOG"
+     printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \
+diff --git a/platforms/codex/plugin/scripts/dispatch-review.sh b/platforms/codex/plugin/scripts/dispatch-review.sh
+index d8995b2f..1a92ba6f 100755
+--- a/platforms/codex/plugin/scripts/dispatch-review.sh
++++ b/platforms/codex/plugin/scripts/dispatch-review.sh
+@@ -1407,9 +1407,15 @@ else
+       AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")
+     fi
+   done
++  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
++  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
++  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
++    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
++      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
++  fi
+   bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
+     --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
+-    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$(agy_effort_clamp "$EFFORT")" \
++    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$AGY_EFFORT" \
+     --dangerously-skip-permissions --output-format json --print-timeout "$TIMEOUT" \
+     > "$AGY_OUT" 2> "$AGY_ERR"
+   AGY_RC=$?
+diff --git a/platforms/codex/plugin/scripts/lib/agy-model-alias.sh b/platforms/codex/plugin/scripts/lib/agy-model-alias.sh
+index 330ad9e4..afb65230 100644
+--- a/platforms/codex/plugin/scripts/lib/agy-model-alias.sh
++++ b/platforms/codex/plugin/scripts/lib/agy-model-alias.sh
+@@ -21,6 +21,15 @@
+ #
+ #   MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
+ #     || die_precondition "$MODEL"
++#
++# AGY 1.2.3 CONFLICT RULE (probed 2026-09-16 on this host): a resolved id that ENCODES the
++# tier (`gemini-3.8-flash-medium`) succeeds with no `--effort` (agy takes the tier from the
++# id) but `--model gemini-3.8-flash-medium --effort high` is
++# `ERROR: --model gemini-3.8-flash-medium conflicts with --effort=high` (exit non-zero, no
++# turn). A bare `gemini-3.8-flash` with no `--effort` is still
++# `ERROR: requires --effort (available: low, medium, high)`. The alias suffix already wins
++# over `--effort` in agy_resolve_model_alias; `agy_effort_for_model` makes the `--effort`
++# flag agree with that resolved id so the pair cannot conflict.
+ 
+ # agy_is_model_alias <model> — true for the alias vocabulary, so callers do not restate the list.
+ agy_is_model_alias() {
+@@ -67,3 +76,15 @@ agy_effort_clamp() {
+     *) printf 'high' ;;
+   esac
+ }
++
++# agy_effort_for_model <resolved-model> <effort>
++# If the resolved id ends in -low|-medium|-high, that suffix is the effort agy
++# will accept (agy ≥ 1.2.3 refuses a conflicting --effort). Otherwise clamp.
++agy_effort_for_model() {
++  case "${1:-}" in
++    *-low) printf 'low' ;;
++    *-medium) printf 'medium' ;;
++    *-high) printf 'high' ;;
++    *) agy_effort_clamp "${2:-}" ;;
++  esac
++}
+diff --git a/platforms/codex/plugin/src/engine/repo-preconditions.js b/platforms/codex/plugin/src/engine/repo-preconditions.js
+index 1c47603a..62e503ea 100644
+--- a/platforms/codex/plugin/src/engine/repo-preconditions.js
++++ b/platforms/codex/plugin/src/engine/repo-preconditions.js
+@@ -54,7 +54,7 @@ function repoBaseReasons(repo, baseSha) {
+ 
+   const status = runGit(repo, ['status', '--porcelain']);
+   if (status.trim().length > 0) {
+-    reasons.push('dirty: repository has uncommitted changes');
++    reasons.push('dirty: repository has uncommitted changes (commit them, or pass a clean checkout/worktree as --cwd)');
+     return reasons;
+   }
+   try {
+diff --git a/platforms/codex/plugin/src/readiness/provider-bootstrap.js b/platforms/codex/plugin/src/readiness/provider-bootstrap.js
+index c91f7b26..0cb6b540 100644
+--- a/platforms/codex/plugin/src/readiness/provider-bootstrap.js
++++ b/platforms/codex/plugin/src/readiness/provider-bootstrap.js
+@@ -348,7 +348,7 @@ function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
+     if (profile.verification_author === 'required') {
+       fail(
+         'strict_l5_provider_roster_incomplete',
+-        'strict /l5 requires the verification-author seat',
++        'strict /l5 requires the verification-author seat: set verification_author_present: true and verification_author_engine/runner/effort/endpoint in .claude/review-loop-config.md (l4 does not require it)',
+       );
+     }
+   } else {
+diff --git a/platforms/codex/plugin/src/status/cli.js b/platforms/codex/plugin/src/status/cli.js
+index ceb1b3dd..b90a71e8 100644
+--- a/platforms/codex/plugin/src/status/cli.js
++++ b/platforms/codex/plugin/src/status/cli.js
+@@ -484,7 +484,10 @@ function runStatusCli(argv, {
+       const envLevel = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
+       const level = ['l4', 'l5', 'l6'].includes(envLevel) ? envLevel : undefined;
+       bootstrap = createStrictL5ProviderBootstrap({ cwd, ...(level ? { level } : {}) });
+-    } catch {
++    } catch (error) {
++      stderr.write(
++        `readiness: strict bootstrap unavailable (${error.code || error.message}) — qualification axis reads unknown; the engine path would refuse with the same reason\n`,
++      );
+       bootstrap = null;
+     }
+     let receipt;
+diff --git a/scripts/dispatch-author.sh b/scripts/dispatch-author.sh
+index 443d6e54..aa71586a 100755
+--- a/scripts/dispatch-author.sh
++++ b/scripts/dispatch-author.sh
+@@ -1132,12 +1132,18 @@ else
+   # unchanged; only these two leaf paths become writable, and the credential
+   # material one level up at ~/.gemini stays read-only and readable.
+   AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
++  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
++  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
++  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
++    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
++      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
++  fi
+   {
+     printf '#!/usr/bin/env bash\n'
+     printf 'cd %q || exit 9\n' "$AGY_CWD"
+     printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
+       "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
+-      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$(agy_effort_clamp "$EFFORT")" "$TIMEOUT"
++      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
+   } > "$RUN_SH"
+   chmod +x "$RUN_SH"
+   set +e
+diff --git a/scripts/dispatch-hetero.sh b/scripts/dispatch-hetero.sh
+index 3493c455..baa8150d 100755
+--- a/scripts/dispatch-hetero.sh
++++ b/scripts/dispatch-hetero.sh
+@@ -3434,11 +3434,17 @@ else
+   # (308's main tree; here, autopilot's own main checkout), while the file tool still reports
+   # the process cwd. With --new-project the session starts clean and every edit and commit
+   # lands in "$1". Evidence: docs/plans/evidence/2026-09-13-agy-worktree-escape/.
++  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
++  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
++  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
++    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
++      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
++  fi
+   run_worker bash -c 'cd "$1" && exec "$2" --new-project -p "$3" --model "$4" --effort "$8" \
+       --dangerously-skip-permissions --output-format json --print-timeout "$5" \
+       >"$6" 2>"$7"' \
+       _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \
+-      "$AGY_ENVELOPE" "$AGY_STDERR" "$(agy_effort_clamp "$EFFORT")"
++      "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT"
+   if [ "$AGENT_EXIT" -ne 0 ]; then
+     cat "$AGY_STDERR" >> "$LOG"
+     printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \
+diff --git a/scripts/dispatch-review.sh b/scripts/dispatch-review.sh
+index d8995b2f..1a92ba6f 100755
+--- a/scripts/dispatch-review.sh
++++ b/scripts/dispatch-review.sh
+@@ -1407,9 +1407,15 @@ else
+       AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")
+     fi
+   done
++  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
++  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
++  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
++    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
++      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
++  fi
+   bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
+     --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
+-    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$(agy_effort_clamp "$EFFORT")" \
++    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$AGY_EFFORT" \
+     --dangerously-skip-permissions --output-format json --print-timeout "$TIMEOUT" \
+     > "$AGY_OUT" 2> "$AGY_ERR"
+   AGY_RC=$?
+diff --git a/scripts/lib/agy-model-alias.sh b/scripts/lib/agy-model-alias.sh
+index 330ad9e4..afb65230 100644
+--- a/scripts/lib/agy-model-alias.sh
++++ b/scripts/lib/agy-model-alias.sh
+@@ -21,6 +21,15 @@
+ #
+ #   MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
+ #     || die_precondition "$MODEL"
++#
++# AGY 1.2.3 CONFLICT RULE (probed 2026-09-16 on this host): a resolved id that ENCODES the
++# tier (`gemini-3.8-flash-medium`) succeeds with no `--effort` (agy takes the tier from the
++# id) but `--model gemini-3.8-flash-medium --effort high` is
++# `ERROR: --model gemini-3.8-flash-medium conflicts with --effort=high` (exit non-zero, no
++# turn). A bare `gemini-3.8-flash` with no `--effort` is still
++# `ERROR: requires --effort (available: low, medium, high)`. The alias suffix already wins
++# over `--effort` in agy_resolve_model_alias; `agy_effort_for_model` makes the `--effort`
++# flag agree with that resolved id so the pair cannot conflict.
+ 
+ # agy_is_model_alias <model> — true for the alias vocabulary, so callers do not restate the list.
+ agy_is_model_alias() {
+@@ -67,3 +76,15 @@ agy_effort_clamp() {
+     *) printf 'high' ;;
+   esac
+ }
++
++# agy_effort_for_model <resolved-model> <effort>
++# If the resolved id ends in -low|-medium|-high, that suffix is the effort agy
++# will accept (agy ≥ 1.2.3 refuses a conflicting --effort). Otherwise clamp.
++agy_effort_for_model() {
++  case "${1:-}" in
++    *-low) printf 'low' ;;
++    *-medium) printf 'medium' ;;
++    *-high) printf 'high' ;;
++    *) agy_effort_clamp "${2:-}" ;;
++  esac
++}
+diff --git a/src/engine/repo-preconditions.js b/src/engine/repo-preconditions.js
+index 1c47603a..62e503ea 100644
+--- a/src/engine/repo-preconditions.js
++++ b/src/engine/repo-preconditions.js
+@@ -54,7 +54,7 @@ function repoBaseReasons(repo, baseSha) {
+ 
+   const status = runGit(repo, ['status', '--porcelain']);
+   if (status.trim().length > 0) {
+-    reasons.push('dirty: repository has uncommitted changes');
++    reasons.push('dirty: repository has uncommitted changes (commit them, or pass a clean checkout/worktree as --cwd)');
+     return reasons;
+   }
+   try {
+diff --git a/src/readiness/provider-bootstrap.js b/src/readiness/provider-bootstrap.js
+index c91f7b26..0cb6b540 100644
+--- a/src/readiness/provider-bootstrap.js
++++ b/src/readiness/provider-bootstrap.js
+@@ -348,7 +348,7 @@ function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
+     if (profile.verification_author === 'required') {
+       fail(
+         'strict_l5_provider_roster_incomplete',
+-        'strict /l5 requires the verification-author seat',
++        'strict /l5 requires the verification-author seat: set verification_author_present: true and verification_author_engine/runner/effort/endpoint in .claude/review-loop-config.md (l4 does not require it)',
+       );
+     }
+   } else {
+diff --git a/src/status/cli.js b/src/status/cli.js
+index ceb1b3dd..b90a71e8 100644
+--- a/src/status/cli.js
++++ b/src/status/cli.js
+@@ -484,7 +484,10 @@ function runStatusCli(argv, {
+       const envLevel = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
+       const level = ['l4', 'l5', 'l6'].includes(envLevel) ? envLevel : undefined;
+       bootstrap = createStrictL5ProviderBootstrap({ cwd, ...(level ? { level } : {}) });
+-    } catch {
++    } catch (error) {
++      stderr.write(
++        `readiness: strict bootstrap unavailable (${error.code || error.message}) — qualification axis reads unknown; the engine path would refuse with the same reason\n`,
++      );
+       bootstrap = null;
+     }
+     let receipt;
+
+```
+<<<AUTOPILOT-END-06422bc6964068ba54e4cd95eab12823>>>
+
+warning: Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+codex
+<<<AUTOPILOT-REVIEW-06422bc6964068ba54e4cd95eab12823>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS: 🟠 [acceptance-oracles-not-frozen] MUST-FIX Required regression guards are self-derived rather than frozen: dispatch-author’s Codex argv assertion assigns EXPECTED_AUTHOR_CODEX from the actual captured argv and compares the file to itself, while status-cli constructs its provider-less expected receipt from the current implementation instead of the specified base-captured object. Either regression can therefore pass unnoticed, violating R4/R6/R9/R10; replace these with literal expected argv and a literal normalized base receipt.
+<<<AUTOPILOT-END-06422bc6964068ba54e4cd95eab12823>>>
+tokens used
+37,539

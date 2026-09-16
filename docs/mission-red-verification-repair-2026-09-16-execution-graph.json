@@ -1,0 +1,91 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "red-verification-repair-2026-09-16",
+   "acceptance_ids": [
+    "no-review-event-under-vertical-failed",
+    "repair-authorized-from-vertical",
+    "vertical-repair-path-bound",
+    "repaired-generation-reviewed",
+    "green-journal-still-fail-closed",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/skills/l5/references",
+     "platforms/codex/plugin/src",
+     "skills/l5/references",
+     "src"
+    ],
+    "baseline_churn": 1200,
+    "max_changed_files": 8,
+    "max_extra_churn": 600,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 5400,
+    "output_paths": [
+     "src/engine/autopilot-engine.js",
+     "platforms/codex/plugin/src/engine/autopilot-engine.js",
+     "hooks/tests/implementation-campaign-routing.test.sh",
+     "hooks/tests/implementation-campaign-state.test.sh",
+     "docs/BACKLOG.md",
+     "skills/l5/references/hetero-impl-loop.md",
+     "platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md"
+    ],
+    "authorized_creates": [],
+    "profile": "high",
+    "required_paths": [
+     "src/engine/autopilot-engine.js",
+     "hooks/tests/implementation-campaign-routing.test.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-16-red-verification-repair-path.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 8,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 200,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-ccff249f74aab18df86b3284c46cff0300b9041e871a9ba9f898c42bad2ef2b1"
+   ],
+   "source_rubric_ids": [
+    "R102896203868616446608075751363674091604007796344851481769173002178748019095648",
+    "R107872264894116093635594068591784620215410852821945478447312122607061262312823",
+    "R110725157627948872907952724095368145423065120434525888588890677375482417240488",
+    "R15547753184896653855947114417845926931986661519624631965739384324050920562501",
+    "R35056426731714576241081389358122704065667605056791362084788954658549897581539",
+    "R41035049558464871109864251322241990203599246473804772942183167588768832456755",
+    "R49623113496885007749272969518169986492624825887960214971357056577664666761636",
+    "R94392758809806142473440084759815860370429674556710796594803627780122465190378",
+    "R97834744205371551168763331937218075799060443281108426922894633732017482972382",
+    "R97970865280230155070753233437623086262549160123838628248156916059748560831844"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/implementation-campaign.test.sh",
+    "bash hooks/tests/controller-execution-independent.test.sh",
+    "bash hooks/tests/p6d-gates-repair-ladder.test.sh",
+    "bash hooks/tests/mission-runtime-v2.test.sh",
+    "bash hooks/tests/implementation-campaign-receipt.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

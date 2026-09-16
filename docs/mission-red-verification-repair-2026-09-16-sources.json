@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-16-red-verification-repair-path.md",
+      "rubric_path": "plans/2026-09-16-red-verification-repair-path.rubric.md",
+      "plan_sha256": "ccff249f74aab18df86b3284c46cff0300b9041e871a9ba9f898c42bad2ef2b1",
+      "rubric_sha256": "2231d88ea86136c91e80b22faae0123713571eea3eb1a3a822a7565d2ab38df9"
+    }
+  ]
+}

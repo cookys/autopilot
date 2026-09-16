@@ -1906,4 +1906,205 @@ assert_eq "$(normalize_argv < "$REVIEW_CC_ARGV")" "$(printf '%s\n' \
   -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
   "review cc-shim argv matches frozen literal (preservation, green at base)"
 
+# RED at base 004cb2da: stdout "/poison|poison" (ambient packet env inherited)
+# RED at base 004cb2da: no packet key on dispatchReviewJson result; args end in diff.file.input
+# RED at base 004cb2da: bad candidate still launched the stub
+PKT_REPO="$TEST_TMP/pkt-repo"
+git init --object-format=sha1 -q "$PKT_REPO"
+git -C "$PKT_REPO" config user.email t@t.example
+git -C "$PKT_REPO" config user.name t
+printf 'a\n' > "$PKT_REPO/a.txt"
+git -C "$PKT_REPO" add a.txt
+git -C "$PKT_REPO" commit -q -m b
+printf 'b\n' > "$PKT_REPO/a.txt"
+git -C "$PKT_REPO" add a.txt
+git -C "$PKT_REPO" commit -q -m c
+PKT_B="$(git -C "$PKT_REPO" rev-parse HEAD^)"
+PKT_C="$(git -C "$PKT_REPO" rev-parse HEAD)"
+PKT_DIFF="$TEST_TMP/pkt.diff"
+git -C "$PKT_REPO" diff --no-ext-diff --no-textconv "$PKT_B..$PKT_C" > "$PKT_DIFF"
+PKT_SPEC="$TEST_TMP/pkt.spec"
+printf 'spec\n' > "$PKT_SPEC"
+PKT_DUMP="$TEST_TMP/pkt-dump"; mkdir -p "$PKT_DUMP"
+PKT_STUB="$TEST_TMP/pkt-stub"
+cat > "$PKT_STUB" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$PKT_DUMP/args"
+printenv > "$PKT_DUMP/env"
+touch "$PKT_DUMP/invoked"
+printf '%s\n' '{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null,"usage":null}'
+EOF
+chmod +x "$PKT_STUB"
+
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_REPO="$PKT_REPO" PKT_B="$PKT_B" PKT_C="$PKT_C" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
+const fs = require('fs');
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const result = dispatchReviewJson([
+  '--runner', 'fixture', '--model', 'fixture',
+  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
+], {
+  scriptPath: process.env.PKT_STUB,
+  blindDiscovery: true,
+  packet: { repo: process.env.PKT_REPO, baseSha: process.env.PKT_B, candidateSha: process.env.PKT_C },
+});
+const args = fs.readFileSync(`${process.env.PKT_DUMP}/args`, 'utf8');
+const env = fs.readFileSync(`${process.env.PKT_DUMP}/env`, 'utf8');
+process.stdout.write(JSON.stringify({
+  args,
+  envDir: (env.match(/^AUTOPILOT_REVIEW_PACKET_DIR=(.*)$/m) || [])[1] || '',
+  envHash: (env.match(/^AUTOPILOT_REVIEW_PACKET_HASH=(.*)$/m) || [])[1] || '',
+  blind: /AUTOPILOT_BLIND_DISCOVERY=1/.test(env),
+  packet: result.packet,
+}));
+NODE
+)"
+assert_eq "0" "$?" "packet dispatch node exits 0"
+assert_contains "$OUT" '/packet/diff.patch' "packet mode --diff-file ends /packet/diff.patch"
+assert_contains "$OUT" '/packet/spec.md' "packet mode --spec-file ends /packet/spec.md"
+assert_contains "$OUT" '"blind":true' "packet mode sets AUTOPILOT_BLIND_DISCOVERY=1"
+node -e '
+const o=JSON.parse(process.argv[1]);
+if (!o.packet || o.packet.packet_hash !== o.envHash) process.exit(2);
+if (!/^[0-9a-f]{64}$/.test(o.envHash)) process.exit(3);
+if (!o.args.includes("/packet/diff.patch")) process.exit(4);
+if (!o.envDir.endsWith("/packet")) process.exit(5);
+' "$OUT"
+assert_eq "0" "$?" "packet.packet_hash equals env hash; DIR is packet dir"
+
+rm -f "$PKT_DUMP/args" "$PKT_DUMP/env" "$PKT_DUMP/invoked"
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_REPO="$PKT_REPO" PKT_B="$PKT_B" PKT_C="$PKT_C" PKT_DIFF="$PKT_DIFF" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
+const fs = require('fs');
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const result = dispatchReviewJson([
+  '--runner', 'fixture', '--model', 'fixture',
+  '--diff-file', process.env.PKT_DIFF,
+], {
+  scriptPath: process.env.PKT_STUB,
+  blindDiscovery: true,
+  packet: { repo: process.env.PKT_REPO, baseSha: process.env.PKT_B, candidateSha: process.env.PKT_C },
+});
+const args = fs.readFileSync(`${process.env.PKT_DUMP}/args`, 'utf8');
+process.stdout.write(JSON.stringify({ args, packet: result.packet }));
+NODE
+)"
+assert_not_contains "$OUT" '--spec-file' "no --spec-file arg when omitted"
+# zero-byte spec was in packet dir during launch; reconstruct via entries_count/hash still
+node -e 'const o=JSON.parse(process.argv[1]); if (o.args.includes("--spec-file")) process.exit(2);' "$OUT"
+assert_eq "0" "$?" "omitted spec-file not added"
+
+# rebuild to inspect spec.md: run buildReviewPacket
+node - "$REPO_ROOT/src/runners/review-packet.js" "$PKT_REPO" "$PKT_B" "$PKT_C" "$PKT_DIFF" "$TEST_TMP/pkt-nospec" <<'NODE'
+const fs = require('fs');
+const { buildReviewPacket } = require(process.argv[2]);
+const r = buildReviewPacket({
+  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
+  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
+});
+if (fs.readFileSync(require('path').join(r.dir, 'spec.md')).length !== 0) process.exit(2);
+NODE
+assert_eq "0" "$?" "no --spec-file yields zero-byte packet/spec.md"
+
+# preservation: no options.packet
+rm -f "$PKT_DUMP/args" "$PKT_DUMP/env"
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
+const fs = require('fs');
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const result = dispatchReviewJson([
+  '--runner', 'fixture', '--model', 'fixture',
+  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
+], { scriptPath: process.env.PKT_STUB, blindDiscovery: true });
+const args = fs.readFileSync(`${process.env.PKT_DUMP}/args`, 'utf8');
+process.stdout.write(JSON.stringify({ args, packet: result.packet }));
+NODE
+)"
+assert_contains "$OUT" 'diff.input' "legacy blind args end in diff.file.input (preservation, green at base)"
+assert_contains "$OUT" 'spec.input' "legacy blind args end in spec.file.input (preservation, green at base)"
+assert_contains "$OUT" '"packet":null' "legacy blind packet is null (preservation)"
+
+# poisoned ambient env
+rm -f "$PKT_DUMP/args" "$PKT_DUMP/env"
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
+const fs = require('fs');
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const env = { ...process.env, AUTOPILOT_REVIEW_PACKET_DIR: '/poison', AUTOPILOT_REVIEW_PACKET_HASH: 'poison' };
+dispatchReviewJson([
+  '--runner', 'fixture', '--model', 'fixture',
+  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
+], { scriptPath: process.env.PKT_STUB, blindDiscovery: true, env });
+const e = fs.readFileSync(`${process.env.PKT_DUMP}/env`, 'utf8');
+process.stdout.write(e);
+NODE
+)"
+assert_not_contains "$OUT" '/poison' "legacy blind launch does not inherit AUTOPILOT_REVIEW_PACKET_DIR"
+assert_not_contains "$OUT" 'PACKET_HASH=poison' "legacy blind launch does not inherit AUTOPILOT_REVIEW_PACKET_HASH"
+
+rm -f "$PKT_DUMP/env"
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" PKT_DUMP="$PKT_DUMP" node - <<'NODE'
+const fs = require('fs');
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const env = { ...process.env, AUTOPILOT_REVIEW_PACKET_DIR: '/poison', AUTOPILOT_REVIEW_PACKET_HASH: 'poison' };
+dispatchReviewJson([
+  '--runner', 'fixture', '--model', 'fixture',
+  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
+], { scriptPath: process.env.PKT_STUB, env });
+const e = fs.readFileSync(`${process.env.PKT_DUMP}/env`, 'utf8');
+process.stdout.write(e);
+NODE
+)"
+assert_not_contains "$OUT" '/poison' "non-blind launch does not inherit AUTOPILOT_REVIEW_PACKET_DIR"
+assert_not_contains "$OUT" 'PACKET_HASH=poison' "non-blind launch does not inherit AUTOPILOT_REVIEW_PACKET_HASH"
+
+# bad candidate: never invoke stub
+rm -f "$PKT_DUMP/invoked"
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_REPO="$PKT_REPO" PKT_B="$PKT_B" PKT_DIFF="$PKT_DIFF" PKT_SPEC="$PKT_SPEC" PKT_STUB="$PKT_STUB" node - <<'NODE'
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const result = dispatchReviewJson([
+  '--runner', 'fixture', '--model', 'fixture',
+  '--diff-file', process.env.PKT_DIFF, '--spec-file', process.env.PKT_SPEC,
+], {
+  scriptPath: process.env.PKT_STUB,
+  blindDiscovery: true,
+  packet: { repo: process.env.PKT_REPO, baseSha: process.env.PKT_B, candidateSha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' },
+});
+process.stdout.write(JSON.stringify({
+  hasError: Boolean(result.error),
+  status: result.status,
+  packet: result.packet,
+}));
+NODE
+)"
+assert_contains "$OUT" '"hasError":true' "bad candidate returns error"
+assert_contains "$OUT" '"status":null' "bad candidate status null"
+assert_contains "$OUT" '"packet":null' "bad candidate packet null"
+assert_file_absent "$PKT_DUMP/invoked" "bad candidate never invokes stub"
+
+# child-error / parse-error / missing-script → packet null
+CHILD_STUB="$TEST_TMP/child-err"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$CHILD_STUB"; chmod +x "$CHILD_STUB"
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" CHILD_STUB="$CHILD_STUB" node - <<'NODE'
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', process.env.PKT_DIFF], { scriptPath: process.env.CHILD_STUB });
+process.stdout.write(JSON.stringify({ packet: result.packet, status: result.status }));
+NODE
+)"
+assert_contains "$OUT" '"packet":null' "child-error branch packet null"
+
+PARSE_STUB="$TEST_TMP/parse-err"
+printf '#!/usr/bin/env bash\necho not-json\n' > "$PARSE_STUB"; chmod +x "$PARSE_STUB"
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" PARSE_STUB="$PARSE_STUB" node - <<'NODE'
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', process.env.PKT_DIFF], { scriptPath: process.env.PARSE_STUB });
+process.stdout.write(JSON.stringify({ packet: result.packet, parse: Boolean(result.parseError) }));
+NODE
+)"
+assert_contains "$OUT" '"packet":null' "parse-error branch packet null"
+
+OUT="$(REPO_ROOT="$REPO_ROOT" PKT_DIFF="$PKT_DIFF" node - <<'NODE'
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', process.env.PKT_DIFF], { scriptPath: '/no/such/dispatch-review.sh' });
+process.stdout.write(JSON.stringify({ packet: result.packet, hasError: Boolean(result.error) }));
+NODE
+)"
+assert_contains "$OUT" '"packet":null' "missing-script branch packet null"
+
 finalize_test

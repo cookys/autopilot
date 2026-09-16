@@ -203,36 +203,70 @@ function dispatchReview(args, options = {}) {
       error: new Error(`dispatch-review.sh not found: ${scriptPath}`),
       status: null,
       signal: null,
+      packet: null,
     };
   }
   let launchArgs = args;
   let launchCwd = options.cwd || REPO_ROOT;
   let blindCwd = null;
+  let autopilotPacket = null;
+  const launchEnv = { ...(options.env || process.env) };
+  delete launchEnv.AUTOPILOT_REVIEW_PACKET_DIR;
+  delete launchEnv.AUTOPILOT_REVIEW_PACKET_HASH;
   try {
     if (options.blindDiscovery === true) {
       blindCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-blind-'));
       fs.chmodSync(blindCwd, 0o700);
       launchArgs = [...args];
-      for (const flag of ['--diff-file', '--spec-file']) {
-        const index = launchArgs.indexOf(flag);
-        if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
-        const source = launchArgs[index + 1];
-        const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
-        fs.copyFileSync(source, target);
-        fs.chmodSync(target, 0o600);
-        launchArgs[index + 1] = target;
+      if (options.packet && typeof options.packet === 'object') {
+        const { buildReviewPacket } = require('./review-packet');
+        const diffIndex = launchArgs.indexOf('--diff-file');
+        const specIndex = launchArgs.indexOf('--spec-file');
+        const diffFile = diffIndex >= 0 && typeof launchArgs[diffIndex + 1] === 'string'
+          ? launchArgs[diffIndex + 1]
+          : undefined;
+        const specFile = specIndex >= 0 && typeof launchArgs[specIndex + 1] === 'string'
+          ? launchArgs[specIndex + 1]
+          : undefined;
+        const packetDir = path.join(blindCwd, 'packet');
+        autopilotPacket = buildReviewPacket({
+          repo: options.packet.repo,
+          baseSha: options.packet.baseSha,
+          candidateSha: options.packet.candidateSha,
+          diffFile,
+          specFile: specFile === undefined ? null : specFile,
+          outDir: packetDir,
+        });
+        if (diffIndex >= 0) {
+          launchArgs[diffIndex + 1] = path.join(packetDir, 'diff.patch');
+        }
+        if (specIndex >= 0) {
+          launchArgs[specIndex + 1] = path.join(packetDir, 'spec.md');
+        }
+        launchEnv.AUTOPILOT_REVIEW_PACKET_DIR = packetDir;
+        launchEnv.AUTOPILOT_REVIEW_PACKET_HASH = autopilotPacket.packet_hash;
+      } else {
+        for (const flag of ['--diff-file', '--spec-file']) {
+          const index = launchArgs.indexOf(flag);
+          if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
+          const source = launchArgs[index + 1];
+          const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
+          fs.copyFileSync(source, target);
+          fs.chmodSync(target, 0o600);
+          launchArgs[index + 1] = target;
+        }
       }
       launchCwd = blindCwd;
+      launchEnv.AUTOPILOT_BLIND_DISCOVERY = '1';
     }
     const child = spawnSync(scriptPath, launchArgs, {
       cwd: launchCwd,
-      env: options.blindDiscovery === true
-        ? { ...(options.env || process.env), AUTOPILOT_BLIND_DISCOVERY: '1' }
-        : (options.env || process.env),
+      env: launchEnv,
       shell: false,
       stdio: options.stdio || 'inherit',
     });
     child.autopilotLaunchCwd = launchCwd;
+    child.autopilotPacket = autopilotPacket;
     return child;
   } catch (error) {
     return { error, status: null, signal: null };
@@ -273,10 +307,12 @@ function dispatchReviewJson(args, options = {}) {
       result: null,
       parseError: null,
       transportEnvelope,
+      packet: null,
     };
   }
 
   try {
+    const built = child.autopilotPacket;
     return {
       error: child.error || null,
       status: child.status,
@@ -286,6 +322,13 @@ function dispatchReviewJson(args, options = {}) {
       result: parseReviewOutput(stdout),
       parseError: null,
       transportEnvelope,
+      packet: built
+        ? {
+          packet_hash: built.packet_hash,
+          entries_count: built.entries_count,
+          denied_paths: built.denied_paths,
+        }
+        : null,
     };
   } catch (error) {
     const payload = {
@@ -297,6 +340,7 @@ function dispatchReviewJson(args, options = {}) {
       result: null,
       parseError: error,
       transportEnvelope,
+      packet: null,
     };
     try {
       const parsed = JSON.parse(stdout.trim());

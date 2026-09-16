@@ -118,7 +118,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
-- **Context**: content-addressed packet (archive tree + `git diff`, spec only, deny-list); `packet` and `cleanroom` (tools under UID-drop/bwrap) tiers both count; intake preflight canary; verify once per tree; parallel seats. Detail in the pointer.
+- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Cut 1a-A (packet builder) shipped v2.36.59; 1a-B/1b/2 open. Detail in the pointer.
 
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open

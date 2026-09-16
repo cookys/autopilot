@@ -26,7 +26,7 @@
     "max_extra_churn": 1200,
     "max_growth_ratio": 1.5,
     "max_repair_generations": 2,
-    "max_wall_seconds": 12000,
+    "max_wall_seconds": 7200,
     "output_paths": [
      "src/runners/review-packet.js",
      "platforms/codex/plugin/src/runners/review-packet.js",
@@ -63,7 +63,7 @@
     "external_wait_seconds": 1800,
     "output_bytes": 3000000,
     "tool_calls": 300,
-    "wall_seconds": 14400
+    "wall_seconds": 7200
    },
    "source_plan_ids": [
     "plan-6030a0afc81cc1e262d9b6e26eeeabd1ec7b7f3e5548355d8c0ae148722ad924"

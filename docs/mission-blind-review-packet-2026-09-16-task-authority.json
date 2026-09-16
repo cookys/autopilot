@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/2026-09-16-blind-review-packet.md: a content-addressed, deny-listed review packet (tree + diff + spec + MANIFEST) built by dispatchReview in blind mode when options.packet is given, with adversarial packet tests.",
+    "objective": "Ship docs/plans/2026-09-16-blind-review-packet.md: a content-addressed, deny-listed review packet (tree + diff + spec + MANIFEST) built by dispatchReview in blind mode when options.packet is given, with adversarial packet tests (lineage 2: wall budget re-sealed at the 7200 s contract cap).",
     "requirements_hash": "6030a0afc81cc1e262d9b6e26eeeabd1ec7b7f3e5548355d8c0ae148722ad924",
     "scope": {
       "allowed_tools": [
@@ -70,8 +70,8 @@
       ]
     }
   },
-  "mission_graph_digest": "f63f0cbb5a76a99d20911a1dc2e3f29ebdf96ff7607898c75bb8801ef86d5735",
-  "mission_lineage_id": "lineage-v1-805ffedb2f45ab81a759de39ac0cb36393694496ce0e37884539b62c062af45b",
+  "mission_graph_digest": "d3068a5e3ba47658cbcce737fa16610dd7a3caa02afd6e80b74b778e302fe347",
+  "mission_lineage_id": "lineage-v1-2130c723d81ddc626cef84e9cb5f1c0c27018fac41d1f55476028a9e7f1dcd48",
   "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
   "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
   "red_lines": [
@@ -87,6 +87,6 @@
     "max_wall_seconds": 36000
   },
   "schema_version": 1,
-  "task_authority_id": "4f3c8198d6525b7f9746deb8a4ead066727068a6afa882c60bd0a3e608a80fd3",
+  "task_authority_id": "24c454a9d0183053d9f80043bc02eb679764db8b8ecd51e874fe96d52cd06699",
   "task_id": "blind-review-packet-2026-09-16"
 }

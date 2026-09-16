@@ -311,6 +311,52 @@ implemented", no "it works / tests pass / this is done" narrative, no worker-aut
 If any is present, strip it and re-assemble from artifacts + the original task baseline.
 Mechanically, the spec travels via dispatch-review.sh --spec-file (dispatcher-authored, trusted); the diff remains the only untrusted input.
 
+## Packet blinding (v2.36.59)
+
+Cut 1a-A of the blind-review redesign builds one **content-addressed packet** per
+review dispatch (`src/runners/review-packet.js`, wired through `dispatchReview`
+when `options.packet` is set). The seat still sees only artifacts; the packet is
+what those artifacts are.
+
+**Contents** under the packet directory:
+
+- `tree/` — isolated-temp-`GIT_DIR` `checkout-index` of the candidate (never
+  `git archive`). Alternates to the real object store; no hooks, no
+  `info/attributes`, no filter-bearing config on the sha1 path. Every
+  `.gitattributes` is dropped from the index before checkout and rewritten raw
+  from `cat-file blob`. An integrity pass then requires `lstat` type to match
+  `ls-tree` mode and `git hash-object --stdin --no-filters` to match the listed
+  id.
+- `diff.patch` — the dispatcher's diff, first proven byte-canonical against
+  `git diff --no-ext-diff --no-textconv <base>..<candidate>`, then Buffer-split
+  and aligned to `--name-status -z`.
+- `spec.md` — byte copy of the spec, or zero bytes when `--spec-file` is absent.
+- `MANIFEST.json` — `{ schema_version, artifact_type, base_sha, candidate_sha,
+  deny_list, entries, packet_hash }` with full `rev-parse --verify` OIDs.
+
+**Deny-list** (`DEFAULT_PACKET_DENY_LIST`): `.autopilot/**`, `.qc/**`,
+`docs/plans/evidence/**`, `docs/plans/**/*.review.md`,
+`docs/plans/**/*.review.json`, `docs/plans/**/*disposition*.json`,
+`**/*.receipt.json`, `**/*.raw.log`. Grammar: `/`-joined segments; `**` matches
+zero or more whole segments; `*` matches inside one segment; a pattern ending
+`/**` matches the directory itself and everything under it. Absolute paths,
+`..`, empty patterns, and other glob syntax are rejected. A section is dropped
+when old **or** new path is denied; a rename out of a denied dir also prunes the
+new tree path.
+
+**Hash preimage:** `packet_hash = sha256(JSON.stringify({ schema_version,
+base_sha, candidate_sha, deny_list, entries }))` — that key order, UTF-8, no
+whitespace. No timestamp, absolute path, hostname, or PID.
+
+**Isolation / hazards:** non-UTF-8 paths fail closed (`unsupported path
+encoding`); gitlinks fail closed (`unsupported submodule`) before any write;
+symlinks are kept as symlinks and never dereferenced; absolute, escaping, or
+deny-targeting links are pruned into `denied_paths`.
+
+**Later cuts (not this deliverable):** 1a-B threads `packet_hash` into engine
+receipts and the panel identity rule; 1b is the cleanroom launcher (`bwrap`) and
+a configurable deny-list.
+
 ## Nested dispatch (subagents spawning subagents)
 
 > Claude Code v2.1.172+ lets subagents spawn their own subagents (depth ≤ 5;

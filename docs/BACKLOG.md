@@ -112,6 +112,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: unmapped status → sidecar + error, never `open`; every header column mapped or preserved; `preserved` must cover in-place rewrites; the gate is part of `--apply`'s acceptance; byte accounting reconciles. Reply with the version when fixed.
 
+### Blind review redesign: blind the packet and the process boundary, not the runner
+- **Status**: open
+- **Trigger**: owner asked 2026-09-16 how to keep review independence while tool-capable reviewers sit on the panel and the loop gets faster; gpt-6-astra and claude-fable-5-1 converged
+- **Effort**: L
+- **Source**: owner request 2026-09-16 after v2.36.58
+- **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
+- **Context**: content-addressed packet (archive tree + `git diff`, spec only, deny-list); `packet` and `cleanroom` (tools under UID-drop/bwrap) tiers both count; intake preflight canary; verify once per tree; parallel seats. Detail in the pointer.
+
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open
 - **Trigger**: a drifted non-durable-wait resume burns a grant attempt (same pre-spend class as v2.36.42/46/48/53)

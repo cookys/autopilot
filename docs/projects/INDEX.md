@@ -229,6 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
+| 2026-09-16 | verification 紅走 repair 路徑（Fix，/l5 managed campaign）— `performReview` 在 vertical_failed 下不記 review_completed、vertical repair 綁初始改動路徑；routing suite +10；final panel codex 席 transport_failed 第三次量到 | v2.36.56 | 5117590c |
 | 2026-09-16 | agy effort 跟 model tier 走＋三個拒絕訊息說補救（Fix，/l5 managed campaign）— `agy_effort_for_model`、fold note、VA／readiness／dirty 補救文字；兩個 base 紅 suite 登 fired row 不 reseal | v2.36.55 | 6d83e121 |
 | 2026-09-16 | ledger rotation carry 保 journal append 序（Fix，/l5 managed campaign）— `run-ledger.sh` carry 改 reduce keep-first、journal 不再排序；新 rotation-order suite 22 條；已亂 segment 的 reader recovery 另立 open row | v2.36.54 | 79528505 |
 | 2026-09-16 | disposition resume 修復（Fix，/l5 managed campaign）— durable-wait resume 走 `verifyResumeCandidate`、claim 前 preflight 驗 Git、`scope_implementation_sha` 綁初始 candidate；rail 量到 ledger rotation 重排缺陷登 BACKLOG | v2.36.53 | 527d59d2 |

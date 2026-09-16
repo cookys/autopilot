@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-16T03:38:03.527Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-7a15d59b36efc64fd3a2d1dfea545fc957aa8b78d4e0656d5f1b045e0d33eb97",
+  "observed_head": "5117590c0c45670ea9d2d3d5fa9157143dece005",
+  "worktree_observation_digest": "5124b8e03bb4d656c5c5970e9a0162f5fc6220f7c766d09a5190a108b27e9d97",
+  "journal_digest": "557268aa3cfccfafc0e0aaffac743ed80cf3ee5b57e8bf6c94da867c82b9f36d",
+  "disposition_digest": "1087bd4cc1888d6907d56a44cdbb2d8ec9848e5c8c56282e10a7dbaf3adf74fb",
+  "branch_inventory_digest": "cc2b660f4bcafbb15dd613585994a15c453e36ee76526563f68e2b4ab90dce79",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/2289e8dc3d26/red-verification-repair-2026-09-16-a1",
+      "tip": "8ab3a51e10e014c47f3dc1d2a1164ff7ba9aca51",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T033754Z-2075550.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "9532c7c25989ad86170c6f3564780b0d99cbbf32ae474df6fac646d3f42ed605"
+}

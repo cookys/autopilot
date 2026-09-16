@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-2289e8dc3d26d285cfcfaae089b51bc0806468f491b7e8ffb0f10678dd5c5bbe",
+  "claim_id": "claim-v1-10949103c9c3cc8460b8ce9411e63ae4f58068d02e466123ec27f8c2af9e7ddb",
+  "mission_grant_ref": "7e7ba718cf5730bea4f03e31b863dc1085a4d7dcc9c1bfbdbce713e541b42e33",
+  "mission_subject_digest": "9d0781f2f1bc064c90df617393db12f44718a1174458a4ff83091507b99e83a8",
+  "mission_campaign_id": "campaign-v2-89f73444c1ffafb69410ffa3f4f4313d9ce1ed2048122886e69f987fde36f103",
+  "graph_node_id": "red-verification-repair-2026-09-16",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/2289e8dc3d26d285cfcfaae089b51bc0806468f491b7e8ffb0f10678dd5c5bbe/red-verification-repair-2026-09-16/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/2289e8dc3d26d285cfcfaae089b51bc0806468f491b7e8ffb0f10678dd5c5bbe/red-verification-repair-2026-09-16/attempt-1/campaign.seal.json",
+  "branch": "mission/2289e8dc3d26/red-verification-repair-2026-09-16-a1",
+  "base_sha": "1d822ee3e5d04bf3536bb793c2e2d47ba9bcee30",
+  "state_hash": "eae691e1e3988eff6d7ef9ebabe3661e43856b1c0cdb05b3ab0c85d278941931"
+}

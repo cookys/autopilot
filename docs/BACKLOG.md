@@ -106,7 +106,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Managed rail (cuda P1): GLM tautological no_finding_proof stops full_diff_review; final panel seat transport_failed
 - **Status**: fired 2026-09-16
-- **Trigger**: cuda P1 (fleet-comms): r2 GLM review no_verdict (tautological no_finding_proof) stopped the campaign; r3 reached final_panel then `final_panel_seat_transport_failed`; both fell back to the depth-0 panel
+- **Trigger**: cuda P1 (fleet-comms): r2 GLM no_verdict (tautological no_finding_proof) stopped the campaign; r3 `final_panel_seat_transport_failed`; aimax395 campaign C 2026-09-16: codex seat transport_failed, panel 2/3
 - **Effort**: Fix
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md

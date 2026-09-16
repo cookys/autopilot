@@ -1,0 +1,1131 @@
+<<<AUTOPILOT-REVIEW-c5dba6cdcc90ea3ac6009d889117786f>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS: 🟠 [engine-t7-vertical-failed] MUST-FIX The engine-level T7 inspects the generation-0 full-diff gate’s success and digest but never asserts `gen0Gate.input.vertical_failed === true`, leaving R6/T7’s required engine-path binding unverified; add that assertion against the selected generation-0 gate entry.
+<<<AUTOPILOT-END-c5dba6cdcc90ea3ac6009d889117786f>>>
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /home/cookys/projects/autopilot
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a0a843-6f2d-7df2-a705-c01ee97b4191
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-c5dba6cdcc90ea3ac6009d889117786f>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-c5dba6cdcc90ea3ac6009d889117786f>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=32f7aff2e6b7126666530789b700226f
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+# Red verification takes the repair path: no review_completed under vertical_failed, and the vertical repair is path-bound
+
+> Status: execution plan for ONE managed deliverable (`/l5`, mission graph node
+> `red-verification-repair-2026-09-16`).
+> Source row: `docs/BACKLOG.md` "Managed rail: a failed campaign_verification still dispatches review,
+> then review_completed hits VERTICAL_VERIFICATION" (fired 2026-09-16; measured by cuda on
+> `campaign-v1-48ffc2fd…` and by openclaw on `campaign-v1-cfadd975…`). Owner instruction 2026-09-16:
+> CEO mode, work the fired rows in order via `/l5`.
+
+## 0. What is actually broken (verified in code 2026-09-16, base `d14bfb68`)
+
+1. Reducer (`src/engine/implementation-campaign.js` ~966-1035): `VERTICAL_VERIFICATION` accepts
+   `vertical_verified` only with `passed:true` (`VERTICAL_EVIDENCE_REQUIRED` otherwise) → `REVIEWING`;
+   `REVIEWING` + `review_completed` → `ADJUDICATING`; `REPAIR_AUTHORIZED` is accepted from BOTH
+   `ADJUDICATING` and `VERTICAL_VERIFICATION` → `REPAIRING`. A red verification therefore already has
+   a reducer-valid route to repair that never passes through `REVIEWING`.
+2. Engine verify adapter (`src/engine/autopilot-engine.js` ~7231-7420) journals `VERTICAL_VERIFIED`
+   only on GREEN (`recordGreenVerification`); on RED it journals nothing to the campaign ledger.
+3. Composition (`src/engine/campaign-composition.js` ~2158-2200): red + retriable + below the repair
+   ceiling → `ensureFullDiffBarrier(true)` (contract: the first candidate gets its authoritative
+   full-diff before any repair, even when vertical verification failed; `mutate('vertical_repair')`
+   independently requires that barrier via `requireFullDiffBeforeRepair`) → `scope_before_repair` →
+   `convergence` (engine adapter journals `REPAIR_AUTHORIZED`) → `mutate('vertical_repair',
+   [{ id: 'vertical-acceptance', claim: verification.reason }])`.
+4. Engine review adapter `performReview` (`autopilot-engine.js` ~4728-4975) receives
+   `vertical_failed: true` (part of the review authority digest) but the journaling block at ~4946
+   appends `REVIEW_COMPLETED` for every `scope !== 'final'` review → the reducer refuses
+   (`cannot apply review_completed while campaign is VERTICAL_VERIFICATION`) → the adapter returns
+   `{ reviewed: false, phase: 'campaign_event_journal' }` → the barrier stops the composition →
+   TERMINAL_STOP with the reviewer spend wasted and no repair generation.
+5. Adjacent, on the same path (consult finding, verified): the vertical repair's synthetic finding
+   carries no path, so `findingBoundRepairPaths` (`autopilot-engine.js:1514`) throws
+   `finding vertical-acceptance has no explicit allowed repair path` and the mutate adapter returns
+   `phase: 'campaign_repair_scope_seal'` (~6700-6720). Fixing (4) alone moves the stop from the
+   review to the repair-scope seal; the operators' expectation ("repair generation or a clean
+   terminal") needs both.
+
+## 1. Ruling and shape
+
+Option (a) of the design consult (see Review log), plus the path binding for the vertical repair:
+
+1. **No `REVIEW_COMPLETED` under `vertical_failed`.** In `performReview`, the campaign-event append is
+   gated by a predicate — `scope !== 'final' && verticalFailed !== true` — not by catching and
+   ignoring the reducer error. The red-candidate review still runs (barrier contract kept), its
+   digest/findings/verdict stay durable in the controller full-diff gate journal and the repair
+   ticket, and the campaign advances `VERTICAL_VERIFICATION → REPAIR_AUTHORIZED(generation+1) →
+   REPAIRING` on the existing reducer edge. The `campaign_resume_review` digest replay branch is
+   likewise skipped under `vertical_failed` (it can only apply to an ADJUDICATING resume).
+2. **Vertical repair scope = the candidate's own changed paths.** In the mutate adapter, when
+   `kind === 'vertical_repair'` and the finding set is exactly the composition's synthetic
+   `vertical-acceptance` finding, `findingPaths` is `repairLineage.repair_scope_paths` (the initial
+   candidate's changed paths, already required non-empty just above) instead of
+   `findingBoundRepairPaths(...)`. Reviewer findings are never given this treatment: any other finding
+   set keeps the explicit-path rule. The seal is still created (`createRepairScopeSeal`) with those
+   paths and `sourceCommit: currentBase`; the repair prompt names the verify failure as the reason.
+3. No reducer, event, ledger-row, CLI, or composition change. A GREEN generation's `REVIEW_COMPLETED`
+   journaling is byte-for-byte unchanged and still fail-closed on a journal error.
+4. Red-verification durability (journaling the red receipt or its stdout/stderr) is NOT in scope —
+   the controller focused-verification gate already records the red receipt digest with its
+   tree/argv/env bindings; the campaign-ledger marker is a separate row.
+
+## 2. Changes by file
+
+### 2.1 `src/engine/autopilot-engine.js`
+
+- `performReview` (~4936-4975): wrap the `campaign_resume_review` replay check and the
+  `REVIEW_COMPLETED` append in `if (scope !== 'final' && verticalFailed !== true) { … }`; comment
+  states the reducer edge used instead.
+- mutate adapter (~6700-6725): before calling `findingBoundRepairPaths`, if `kind === 'vertical_repair'`
+  and `repairFindings.length === 1 && repairFindings[0].id === 'vertical-acceptance'` (the id the
+  composition emits), set `findingPaths = [...repairLineage.repair_scope_paths].sort()`; otherwise
+  unchanged. `normalizedFindingIds` is unchanged.
+
+### 2.2 `platforms/codex/plugin/src/engine/autopilot-engine.js`
+
+Byte-identical mirror (`bash scripts/sync-codex-plugin-skills.sh --check`).
+
+### 2.3 Tests
+
+Every change-pinning assertion is recorded RED against base `d14bfb68` in the block header with the
+observed message; preservation guards are labelled `(preservation, green at base)`; the engine block
+uses the routing suite's existing real-ledger sandbox (never the host ledger).
+
+- `hooks/tests/implementation-campaign-routing.test.sh` — new engine block "red verification takes
+  the repair path": an `AutopilotEngine` with the suite's real `campaignEventAppender` (wrapped by a SPY
+  that records every attempted `{eventType, generation}` BEFORE delegating), a `verifyCommandRunner`
+  whose first run (generation 0) returns RED and whose second (generation 1) returns GREEN, an
+  implementation dispatcher stub that commits a real candidate and, on the repair round, a real
+  repaired commit touching only the initial changed paths, a review dispatcher stub returning a
+  REWORK/FIX-THEN-SHIP verdict with one finding on the red candidate and SHIP-AS-IS on the repaired
+  one, and the suite's usual adjudication/final-panel stubs.
+  - **T1 (RED at base)** zero attempted `REVIEW_COMPLETED` appends at generation 0 (the spy count,
+    not the ledger — an implementation that attempts and swallows the error must fail here); the
+    run does not return `phase: 'campaign_event_journal'`.
+  - **T2 (RED at base)** exactly one `REPAIR_AUTHORIZED` append at generation 1; the state returned by
+    that append has `generation === 1` and `phase === CAMPAIGN_STATES.REPAIRING`; the campaign ledger
+    replays (`projectCampaign`) to generation ≥ 1.
+  - **T3 (RED at base)** the run does not stop at `campaign_repair_scope_seal`: the repair dispatcher
+    was called once with a `repairScopeSeal` whose `allowed_paths` equal the initial candidate's
+    changed paths (sorted) and whose `finding_ids` are `['vertical-acceptance']`.
+  - **T4 (RED at base)** the repaired generation goes green and is reviewed: ledger events contain
+    `repair_completed(1)`, `vertical_verified(1)`, exactly one `review_completed(1)`; no generation-0
+    `vertical_verified` or `review_completed` rows exist; the reviewer stub was called exactly once
+    for the red candidate (identified by tree_sha) before the repair.
+  - **T5 (RED at base — at base the run stops at generation 0 before the injection is reached)**
+    GREEN generation journaling stays fail-closed: with a `campaignEventAppender` that throws a unique
+    message on `REVIEW_COMPLETED` at generation 1, the spy has recorded `repair_authorized(1)` and one
+    `review_completed(1)` attempt BEFORE the throw, and the run returns `phase:
+    'campaign_event_journal'` with `reason` equal to the injected message (proves generation 1 was
+    reached and the predicate is conditional, not a blanket swallow).
+  - **T6 (preservation, green at base)** a reviewer finding without an explicit path on a NON-vertical
+    repair is still refused with `finding … has no explicit allowed repair path` (the existing
+    assertion at `implementation-campaign-state.test.sh:2621` region stays; add or reference it).
+- `hooks/tests/implementation-campaign-state.test.sh` — extend the R3 composition case (~4146): assert
+  the ordered trace subsequence `verify, full_diff_review, scope_before_repair, convergence` followed
+  by the repair mutation, exactly one generation-0 full-diff review call that received
+  `vertical_failed: true`, generation 1's review (if reached) received `vertical_failed: false`, mutation
+  kinds exactly `initial` then `vertical_repair` (preservation guards, green at base — they pin the
+  composition contract the engine fix relies on).
+  - **T7 (R6 evidence; preservation guard, green at base, in the composition case; in the engine
+    block the hand pins the base-observed gate-journal state in the header UNCONDITIONALLY — either
+    the generation-0 entry is absent / `success:false` at base → RED with the observed value, or it is
+    present → labelled preservation)**: the returned `controller.gate_journal`
+    holds exactly one `full_diff_review` entry for generation 0 whose `result.success === true`,
+    whose `result.review_digest` (or the digest field the gate records) equals the review stub's
+    digest, and whose `input.vertical_failed === true`; the engine block asserts the same on the
+    engine's returned controller after the run, proving the red-candidate review stayed durable
+    outside the campaign ledger.
+
+### 2.5 Sealed `output_paths` (exact; anything else is a boundary rejection)
+
+```
+src/engine/autopilot-engine.js
+platforms/codex/plugin/src/engine/autopilot-engine.js
+hooks/tests/implementation-campaign-routing.test.sh
+hooks/tests/implementation-campaign-state.test.sh
+docs/BACKLOG.md
+skills/l5/references/hetero-impl-loop.md
+platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+```
+
+### 2.4 Docs (pinned version **v2.36.56**; canonical `origin/develop` is 2.36.55 at freeze — reseal plan
+and rubric together with the freed number if an intervening release lands first)
+
+- `docs/BACKLOG.md`: the fired row → `shipped v2.36.56 2026-09-16`, Context names the real mechanism
+  (performReview journals `review_completed` under `vertical_failed`; vertical repair had no path
+  binding). The openclaw "verify_cmd runs in a fresh detached worktree; stdout/stderr never reach the
+  ledger" row stays open and unchanged.
+- `skills/l5/references/hetero-impl-loop.md` step 11 fixed list: "red verification takes the repair
+  path v2.36.56"; mirror regenerated.
+- `CHANGELOG.md` is NOT a sealed output path (depth-0 release action).
+
+## 3. Out of scope (do not touch)
+
+- `src/engine/implementation-campaign.js` (reducer), `src/engine/campaign-composition.js`,
+  `src/engine/campaign-intake.js`, `src/campaign/cli.js`, `src/engine/controller-execution.js`.
+- Journaling the red verification receipt / stdout / stderr; fresh-worktree bootstrap for verify_cmd.
+- Any change to how reviewer findings are path-bound (only the synthetic vertical finding is special).
+- The rail's `acceptance_failed` terminal-journal defect and the `REVOKED` normalization wart.
+
+## 4. Acceptance
+
+| id | criterion | evidence |
+|----|-----------|----------|
+| `no-review-event-under-vertical-failed` | zero attempted `REVIEW_COMPLETED` appends for a red generation; the run never returns `campaign_event_journal` for it | T1 |
+| `repair-authorized-from-vertical` | `REPAIR_AUTHORIZED(1)` appended once, state `REPAIRING`, ledger replays past generation 0 | T2 |
+| `vertical-repair-path-bound` | the vertical repair seal's `allowed_paths` are the initial candidate's changed paths; the run does not stop at `campaign_repair_scope_seal` | T3 |
+| `repaired-generation-reviewed` | `repair_completed(1)`, `vertical_verified(1)`, one `review_completed(1)`; none at generation 0 | T4 |
+| `green-journal-still-fail-closed` | a journal error on a GREEN generation's `review_completed` still blocks at `campaign_event_journal` | T5 |
+| `no-regression` | `implementation-campaign-routing`, `implementation-campaign-state`, `implementation-campaign`, `controller-execution-independent`, `p6d-gates-repair-ladder`, `mission-runtime-v2`, `implementation-campaign-receipt` green; `check-js-syntax.js`; `sync-codex-plugin-skills.sh --check`; `check-backlog-entries.js` exit 0 | suite output |
+| `scope-integrity` | `git diff --stat d14bfb68 -- src/engine/implementation-campaign.js src/engine/campaign-composition.js src/engine/campaign-intake.js src/campaign/cli.js src/engine/controller-execution.js` prints nothing; `git diff --name-only d14bfb68 HEAD` is a subset of §2.5 | command output |
+
+## 5. Dogfood proof (depth-0, after merge)
+
+A managed campaign on this repo whose sealed verify_cmd is red on the first candidate (a deliberately
+failing one-line test in the hand's output paths) reaches `REPAIR_AUTHORIZED` and a repair round
+instead of TERMINAL_STOP at `campaign_event_journal`; recorded at the row pointer. cuda/openclaw re-run
+on their own ledgers is theirs to report.
+
+## 6. Follow-ups filed, not done here
+
+- Campaign-ledger marker for a red verification (`vertical_verified { passed:false }` as a self-loop in
+  `VERTICAL_VERIFICATION`, no phase change) + bounded stdout/stderr — folds into the open openclaw row.
+- Crash between the red review and `REPAIR_AUTHORIZED` repeats verification and review (failed
+  verification gates are not reusable and the review reuse key includes the verification receipt
+  digest) — BACKLOG candidate once measured.
+
+## Review log
+
+- Design consult 2026-09-16 (grok 402 → codex gpt-5.6-sol on the raw-prompt rail, evidence
+  `docs/plans/evidence/2026-09-16-red-verification-repair/consult-codex-answer.md`): recommends (a)
+  as a predicate around the append, rejects (b) (a red candidate in ADJUDICATING can reach
+  TERMINAL_READY/FOLLOW_UP) and (c) (`requireFullDiffBeforeRepair` still blocks the repair; blind
+  repair spend); audits every reader (resume, inspect, ladder, gate reuse) — none needs
+  `REVIEW_COMPLETED(N)` before `REPAIR_AUTHORIZED(N+1)`; names the spy-count assertion and the
+  adjacent `findingBoundRepairPaths` blocker. Depth-0 folds the adjacent blocker in as §1.2 (the
+  operators' acceptance is a repair generation, not a later stop) with the synthetic-finding-only guard.
+- Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP; evidence `g1-*`): one blocker —
+  R6's "digest remains in the controller gate journal" had no assertion — accepted, T7 added to §2.3.
+- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 4
+  blockers; evidence `g2-*`): T5 must prove generation 1 was reached (spy + injected message) —
+  folded; R7 byte-identity needs a command — `scope-integrity` acceptance row added; T7 provenance
+  pinned unconditionally; §2.5 enumerates the exact sealed output_paths. Depth-0 freeze: zero
+  unaddressed blockers, zero deferred.
+# Rubric — 2026-09-16-red-verification-repair-path.md
+
+> Source plan: docs/plans/2026-09-16-red-verification-repair-path.md
+
+R1: With a RED generation-0 verification, the engine attempts ZERO `review_completed` campaign-event appends for generation 0 (asserted on a spy wrapping `campaignEventAppender` that records every attempt before delegating), and the run does not return `phase: 'campaign_event_journal'`; at base it returns exactly that with reason `cannot apply review_completed while campaign is VERTICAL_VERIFICATION`.
+R2: Exactly one `repair_authorized` append at generation 1 follows; the state it returns has `generation === 1` and `phase === REPAIRING`; `projectCampaign` over the sandbox ledger replays to generation ≥ 1.
+R3: The vertical repair is dispatched (not stopped at `campaign_repair_scope_seal`) with a repair-scope seal whose `allowed_paths` equal the initial candidate's changed paths (sorted) and whose `finding_ids` are exactly `['vertical-acceptance']`; a reviewer finding without an explicit path on a non-vertical repair is still refused (preservation guard).
+R4: The repaired generation goes GREEN and is reviewed: ledger rows contain `repair_completed(1)`, `vertical_verified(1)` and exactly one `review_completed(1)`; no `vertical_verified` or `review_completed` row exists for generation 0; the reviewer adapter ran exactly once on the red candidate (by tree_sha) before the repair.
+R5: GREEN-generation journaling stays fail-closed: an appender that throws on the generation-1 `review_completed` makes the run return `phase: 'campaign_event_journal'` (preservation guard, green at base).
+R6: The gate is a predicate on `vertical_failed` (`scope !== 'final' && verticalFailed !== true`) around the append and the resume-digest replay, not a try/catch that ignores the reducer error; the red-candidate review still runs once (barrier contract) and its digest remains in the controller full-diff gate journal.
+R7: `src/engine/implementation-campaign.js`, `src/engine/campaign-composition.js`, `src/engine/campaign-intake.js`, `src/campaign/cli.js`, `src/engine/controller-execution.js` are byte-identical to base `d14bfb68`; no new event, ledger row shape, or CLI flag.
+R8: Composition preservation guards in `implementation-campaign-state.test.sh` R3: ordered trace `verify, full_diff_review, scope_before_repair, convergence` then the repair mutation; exactly one generation-0 full-diff review that received `vertical_failed: true`; mutation kinds `initial` then `vertical_repair`.
+R9: Every change-pinning assertion (R1–R4) is recorded RED against base `d14bfb68` in the test header with the observed failing message; preservation guards labelled; tests use only the suite sandbox ledger.
+R10: Docs: the fired BACKLOG row → `shipped v2.36.56` with the real mechanism in Context; the openclaw verify-worktree row untouched; `skills/l5/references/hetero-impl-loop.md` step 11 gains the fixed item with its version and its codex mirror is regenerated; `sync-codex-plugin-skills.sh --check`, `check-js-syntax.js`, `check-backlog-entries.js` pass; the seven listed suites are green; no file outside the sealed `output_paths` changes.
+
+
+## Depth-0 note to the reviewer
+
+- Base for RED evidence and byte-identity is d14bfb68 (rubric); the grant base 1d822ee3 differs from it by docs/mission files only.
+- The rail already ran: in-rail MiniMax-M3 full-diff review SHIP-AS-IS; final panel GLM-5.2 FIX-THEN-SHIP with one MUST-FIX (engine T7 does not assert input.vertical_failed === true; depth-0 will fold it), MiniMax SHIP-AS-IS, codex seat transport_failed (known rail defect, BACKLOG cuda P1).
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index 9a580c52..0603af0f 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -113,12 +113,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Context**: three defects (raw data msg `msg_01M2KKPZ75X780NYXR0KPDDBQS`): tautological-proof check rejects a concrete proof; no_verdict result omits raw_log; final panel refuses codex (blind-review no-tools profile) though dispatch-review.sh runs it.
+ 
+ ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
+-- **Status**: fired 2026-09-16
++- **Status**: shipped v2.36.56 2026-09-16
+ - **Trigger**: cuda e2e: campaign-v1-48ffc2fd… verify script failed → engine ran dispatch_review (SHIP-AS-IS) → blocked at campaign_event_journal `cannot apply review_completed while campaign is VERTICAL_VERIFICATION`
+ - **Effort**: Fix
+ - **Source**: `cuda` msg `msg_01M2K2PYTE18H2JSJ260EXMN26`; `openclaw` msg `msg_01M2KR1TFPY8F2SEX8D6ABCH2G` (second measurement, campaign-v1-cfadd975…)
+ - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+-- **Context**: the reducer refuses VERTICAL_VERIFIED with passed:false, so a red verification records nothing and the loop proceeds to review; expected: repair generation or a clean terminal.
++- **Context**: performReview journaled `review_completed` under `vertical_failed`; vertical repair had no path binding — now predicate-gated and path-bound to the initial changed paths.
+ 
+ ### Managed rail: verify_cmd runs in a fresh detached worktree with no deps; its stdout/stderr never reach the ledger
+ - **Status**: open
+diff --git a/hooks/tests/implementation-campaign-routing.test.sh b/hooks/tests/implementation-campaign-routing.test.sh
+index f198a7a8..ddd8c2b7 100755
+--- a/hooks/tests/implementation-campaign-routing.test.sh
++++ b/hooks/tests/implementation-campaign-routing.test.sh
+@@ -2308,6 +2308,497 @@ assert_exit_code "$?" "0" "T5 unbound preservation: $T5_RESUME"
+ assert_contains "$T5_RESUME" "t5_unbound_preserved=true" \
+   "T5 BOUNDARY_REJECTED unbound-candidate still admits without resume_candidate"
+ 
++# Red verification takes the repair path (plan 2026-09-16-red-verification-repair-path).
++# T6 (preservation, green at base): reviewer finding with no explicit path on a
++# NON-vertical repair is still refused — see implementation-campaign-state.test.sh
++# bounded_predispatch_rejected / claim "finding without an explicit repair path"
++# (~2621). Do not weaken that assertion.
++# RED at base d14bfb68:
++# T1: AssertionError 1 !== 0 gen-0 review_completed attempts;
++#     phase=campaign_event_journal reason=cannot apply review_completed while
++#     campaign is VERTICAL_VERIFICATION
++# T2: never reached (stops at gen 0 after T1 journal error; no repair_authorized)
++# T3: never reached (stops at campaign_event_journal, not a later seal)
++# T4: never reached (no generation 1 ledger events)
++# T5: at base the run stops at generation 0 before the injection is reached
++# T7 at base d14bfb68: generation-0 full_diff_review absent on returned
++#     controller (t7_base_probe=[]) — RED; after the fix the gate must be
++#     present with success:true.
++RED_PATH_SBX="$TEST_TMP/red-verify-repair-repo"
++mkdir -p "$RED_PATH_SBX/.claude" "$RED_PATH_SBX/src"
++git -C "$RED_PATH_SBX" init -q
++git -C "$RED_PATH_SBX" config user.email "red-path@example.invalid"
++git -C "$RED_PATH_SBX" config user.name "Red Path Test"
++write_mission_governance "$RED_PATH_SBX/.claude/owner-kernel-governance.json" shadow
++printf 'base\n' > "$RED_PATH_SBX/src/value.txt"
++git -C "$RED_PATH_SBX" add .
++git -C "$RED_PATH_SBX" commit -qm "base"
++RED_PATH_BASE="$(git -C "$RED_PATH_SBX" rev-parse HEAD)"
++RED_PATH_WT="$TEST_TMP/red-verify-repair-wt"
++git -C "$RED_PATH_SBX" worktree add -q -b impl/red-path "$RED_PATH_WT" "$RED_PATH_BASE"
++RED_PATH_COMMON_RAW="$(git -C "$RED_PATH_SBX" rev-parse --git-common-dir)"
++RED_PATH_COMMON="$(realpath "$RED_PATH_SBX/$RED_PATH_COMMON_RAW")"
++RED_PATH_CONTRACT="$TEST_TMP/red-path-campaign.json"
++RED_PATH_SEAL="$TEST_TMP/red-path-campaign.seal.json"
++RED_PATH_PROMPT="$TEST_TMP/red-path-prompt.txt"
++printf 'red verification takes the repair path\n' > "$RED_PATH_PROMPT"
++node - "$RED_PATH_CONTRACT" "$RED_PATH_COMMON" "$RED_PATH_BASE" <<'NODE'
++const fs = require('fs');
++const [target, commonDir, base] = process.argv.slice(2);
++fs.writeFileSync(target, `${JSON.stringify({
++  schema_version: 1,
++  ticket: 'icc-red-path',
++  profile: 'poc',
++  mission_grant_ref: null,
++  repo_identity: `git-common-dir:${commonDir}`,
++  base_sha: base,
++  branch: 'impl/red-path',
++  vertical_acceptance: ['red verification takes the repair path'],
++  allowed_path_prefixes: ['src/'],
++  max_changed_files: 4,
++  baseline_churn: 10,
++  max_growth_ratio: 1.5,
++  max_extra_churn: 5,
++  max_repair_generations: 2,
++  max_wall_seconds: 600,
++  verify_cmd: 'node fixture.js',
++  rubric_ids: ['ICC-RED-PATH1'],
++}, null, 2)}\n`);
++NODE
++RED_SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
++  --contract "$RED_PATH_CONTRACT" --repo "$RED_PATH_SBX" --mission-mode shadow --out "$RED_PATH_SEAL" 2>&1)"
++assert_exit_code "$?" "0" "red-path fixture campaign seals: $RED_SEAL_OUT"
++
++RED_PATH_JS="$TEST_TMP/red-path-engine.js"
++cat > "$RED_PATH_JS" <<'NODE'
++'use strict';
++const assert = require('assert');
++const fs = require('fs');
++const path = require('path');
++const { spawnSync } = require('child_process');
++const [
++  root, repo, worktree, contractPath, sealPath, promptFile, base, mode,
++] = process.argv.slice(2);
++const {
++  AutopilotEngine,
++  CAMPAIGN_EVENTS,
++  CAMPAIGN_STATES,
++  appendCampaignEvent,
++  canonicalDigest,
++  normalizeProductReviewFindings,
++  runCampaignIntake,
++} = require(path.join(root, 'src', 'engine'));
++const { loadRows, projectCampaign } = require(path.join(root, 'src', 'campaign', 'cli'));
++
++const roster = {
++  reviewer_engine: 'fixture-reviewer',
++  reviewer_effort: 'high',
++  reviewer_runner: 'fixture',
++  reviewer_qualified: true,
++  implementer_engine: 'fixture-implementer',
++  implementer_effort: 'high',
++  implementer_runner: 'fixture',
++  loop_max_rounds: 3,
++  loop_convergence_verdict: 'SHIP-AS-IS',
++  min_panel_size: 1,
++  required_review_families: 1,
++  cross_family_required: false,
++  qc_panel_seats_complete: true,
++  qc_panel_seats: [
++    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
++  ],
++  fallback_ladder: [
++    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
++  ],
++};
++
++function gitC(cwd, args) {
++  return spawnSync('git', args, { cwd, encoding: 'utf8' });
++}
++
++function commitValue(content) {
++  spawnSync('git', ['-C', worktree, 'config', 'user.email', 'red-path@example.invalid'], { stdio: 'ignore' });
++  spawnSync('git', ['-C', worktree, 'config', 'user.name', 'red-path'], { stdio: 'ignore' });
++  fs.writeFileSync(path.join(worktree, 'src/value.txt'), content);
++  spawnSync('git', ['add', 'src/value.txt'], { cwd: worktree, stdio: 'ignore' });
++  const committed = spawnSync('git', ['commit', '-qm', content.trim()], { cwd: worktree, encoding: 'utf8' });
++  assert.strictEqual(committed.status, 0, committed.stderr);
++  const commit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).stdout.trim();
++  const tree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: worktree, encoding: 'utf8' }).stdout.trim();
++  return { commit, tree };
++}
++
++function engineTransport(result) {
++  return {
++    error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result,
++  };
++}
++
++function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
++  spawnSync('git', ['-C', worktree, 'reset', '--hard', base], { stdio: 'ignore' });
++  const attempts = [];
++  const reviewByTree = new Map();
++  let implCalls = 0;
++  let repairDispatcherCalls = 0;
++  let receivedSeal = null;
++  let redCommit = null;
++  let redTree = null;
++  let repairedTree = null;
++  let repairAuthState = null;
++  const redFindingLine = '🟠 [icc-red-001] src/value.txt vertical acceptance failed';
++  let tick = 0;
++  const spyAppender = (input) => {
++    attempts.push({ eventType: input.eventType, generation: input.generation });
++    if (throwOnGen1ReviewCompleted
++        && input.eventType === CAMPAIGN_EVENTS.REVIEW_COMPLETED
++        && input.generation === 1) {
++      throw new Error('RED-PATH-T5-JOURNAL-FAIL-GEN1');
++    }
++    const appended = appendCampaignEvent(input);
++    if (input.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && input.generation === 1) {
++      repairAuthState = appended.state;
++    }
++    return appended;
++  };
++  const engine = new AutopilotEngine({
++    cwd: repo,
++    clock: () => {
++      tick += 1;
++      const mm = String(Math.floor(tick / 60)).padStart(2, '0');
++      const ss = String(tick % 60).padStart(2, '0');
++      return `2026-09-16T01:${mm}:${ss}.000Z`;
++    },
++    campaignEventAppender: spyAppender,
++    campaignIntake(input) {
++      const control = runCampaignIntake(input, {
++        readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
++        contextGate: () => ({ owner: 'context_window', status: 'ready' }),
++        occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
++      });
++      if (control.status !== 'admitted' || !control.generation_claim) {
++        throw new Error(`intake blocked: ${JSON.stringify(control.rejection || control)}`);
++      }
++      return control;
++    },
++    campaignScopeChecker() {
++      return {
++        passed: true,
++        verdict: 'PASS',
++        changed_files: ['src/value.txt'],
++        total_churn: 1,
++        receipt_digest: 'a'.repeat(64),
++      };
++    },
++    campaignRepairChangedPaths() {
++      return { status: 'ok', paths: ['src/value.txt'] };
++    },
++    campaignAdjudicator() {
++      return {
++        registry_complete: true,
++        repair_gate_passed: true,
++        registry_digest: '1'.repeat(64),
++        must_fix_now: [],
++        follow_up: [],
++        rejected: [],
++      };
++    },
++    repairPromptWriter(input) {
++      if (input.repairScopeSeal) receivedSeal = input.repairScopeSeal;
++      const dest = `${input.promptFile}.repair-${input.round}`;
++      fs.writeFileSync(dest, `repair round ${input.round}\n`);
++      return dest;
++    },
++    implementationDispatcher() {
++      implCalls += 1;
++      const isRepair = implCalls > 1;
++      if (isRepair) {
++        repairDispatcherCalls += 1;
++        if (receivedSeal) { /* seal already captured from prompt writer */ }
++      }
++      const { commit, tree } = commitValue(isRepair ? 'green\n' : 'red\n');
++      if (!isRepair) {
++        redCommit = commit;
++        redTree = tree;
++      } else {
++        repairedTree = tree;
++      }
++      return engineTransport({
++        status: 'committed',
++        commit,
++        tree_sha: tree,
++        branch: 'impl/red-path',
++        worktree,
++        worktree_reused: isRepair,
++        files_changed: 1,
++        insertions: 1,
++        deletions: 1,
++        runner: 'fixture',
++        model: 'fixture-implementer',
++      });
++    },
++    reviewDispatcher() {
++      const headTree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], {
++        cwd: worktree, encoding: 'utf8',
++      }).stdout.trim();
++      const treeKey = headTree === repairedTree ? repairedTree
++        : (headTree === redTree ? redTree : headTree);
++      reviewByTree.set(treeKey, (reviewByTree.get(treeKey) || 0) + 1);
++      const isRed = treeKey === redTree || (redTree && implCalls === 1);
++      return engineTransport({
++        runner: 'fixture',
++        model: 'fixture-reviewer',
++        status: 'reviewed',
++        verdict: isRed ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS',
++        findings: isRed ? redFindingLine : '',
++        raw_log: null,
++        error: null,
++      });
++    },
++    diffProvider() { return promptFile; },
++    gitWorktreeAdd({ commit }) {
++      const tree = spawnSync('git', ['-C', repo, 'rev-parse', `${commit}^{tree}`], {
++        encoding: 'utf8',
++      }).stdout.trim();
++      return {
++        error: null, status: 0, signal: null, stdout: '', stderr: '',
++        worktree: path.join(path.dirname(worktree), `verify-${commit.slice(0, 12)}`),
++        parent: null, commit, observed_commit: commit,
++        observed_tree_sha: tree, detached: true,
++      };
++    },
++    gitWorktreeRemove() {
++      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
++    },
++    repairLineageCleanupTransaction() {
++      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
++    },
++    verifyCommandRunner({ commit, verifyCmd }) {
++      const failed = commit === redCommit;
++      return {
++        error: null,
++        status: failed ? 1 : 0,
++        signal: null,
++        stdout: failed ? 'RED\n' : 'GREEN\n',
++        stderr: '',
++        executed_argv: ['/bin/sh', '-c', verifyCmd],
++      };
++    },
++  });
++  const result = engine.runImplementationReviewLoop({
++    promptFile,
++    branch: 'impl/red-path',
++    base,
++    roster,
++    campaignContract: contractPath,
++    campaignSeal: sealPath,
++    verificationEnv: { PATH: process.env.PATH || '', CI: 'red-path' },
++    verificationEnvAllowlist: ['CI'],
++  });
++  return {
++    result,
++    attempts,
++    reviewByTree,
++    redTree,
++    repairedTree,
++    repairDispatcherCalls,
++    receivedSeal,
++    repairAuthState,
++    redFindingLine,
++    campaignId: result.campaign_control && result.campaign_control.campaign_id,
++  };
++}
++
++if (mode === 't5') {
++  const t5 = runRedPath({ throwOnGen1ReviewCompleted: true });
++  const t5Auth = t5.attempts.filter(
++    (row) => row.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && row.generation === 1,
++  );
++  const t5Rc1 = t5.attempts.filter(
++    (row) => row.eventType === CAMPAIGN_EVENTS.REVIEW_COMPLETED && row.generation === 1,
++  );
++  assert.strictEqual(t5Auth.length, 1, `T5 missing repair_authorized(1): ${JSON.stringify(t5.attempts)}`);
++  assert.strictEqual(t5Rc1.length, 1, `T5 expected one review_completed(1) attempt: ${JSON.stringify(t5.attempts)}`);
++  assert.strictEqual(t5.result.phase, 'campaign_event_journal', `T5 phase=${t5.result.phase} reason=${t5.result.reason}`);
++  assert.strictEqual(t5.result.reason, 'RED-PATH-T5-JOURNAL-FAIL-GEN1');
++  console.log('t5_green_journal_fail_closed=true');
++} else {
++const happy = runRedPath();
++const ctrlProbe = (happy.result.campaign_control && happy.result.campaign_control.controller)
++  || (happy.result.campaign_receipt && happy.result.campaign_receipt.controller);
++const gen0Probe = ctrlProbe && ctrlProbe.gate_journal && Array.isArray(ctrlProbe.gate_journal.entries)
++  ? ctrlProbe.gate_journal.entries.filter((entry) => (
++    entry.kind === 'full_diff_review'
++    && entry.input
++    && entry.input.generation === 0
++  )).map((entry) => ({
++    success: entry.result && entry.result.success,
++    vertical_failed: entry.input && entry.input.vertical_failed,
++    invalidated: entry.invalidated === true,
++    digest: entry.result && entry.result.review_digest,
++  }))
++  : null;
++console.log(`t7_base_probe=${JSON.stringify(gen0Probe)}`);
++const gen0ReviewAttempts = happy.attempts.filter(
++  (row) => row.eventType === CAMPAIGN_EVENTS.REVIEW_COMPLETED && row.generation === 0,
++);
++assert.strictEqual(
++  gen0ReviewAttempts.length,
++  0,
++  `T1 expected zero gen-0 review_completed attempts, got ${JSON.stringify(happy.attempts)} phase=${happy.result.phase} reason=${happy.result.reason}`,
++);
++assert.notStrictEqual(
++  happy.result.phase,
++  'campaign_event_journal',
++  `T1 must not stop at campaign_event_journal: ${happy.result.reason}`,
++);
++console.log('t1_zero_gen0_review_completed=true');
++
++const repairAuth = happy.attempts.filter(
++  (row) => row.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && row.generation === 1,
++);
++assert.strictEqual(repairAuth.length, 1, `T2 repair_authorized attempts=${JSON.stringify(happy.attempts)}`);
++assert.ok(happy.repairAuthState, 'T2 missing appender state');
++assert.strictEqual(happy.repairAuthState.generation, 1);
++assert.strictEqual(happy.repairAuthState.phase, CAMPAIGN_STATES.REPAIRING);
++const common = spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], {
++  encoding: 'utf8',
++}).stdout.trim();
++const ledgerPath = path.join(path.resolve(repo, common), 'autopilot', 'implementation-campaign.jsonl');
++const projected = projectCampaign(loadRows(ledgerPath), happy.campaignId);
++assert.ok(projected && projected.state, 'T2 missing projection');
++assert.ok(projected.state.generation >= 1, `T2 generation=${projected.state.generation}`);
++const repairAuthRow = loadRows(ledgerPath)
++  .map((row) => {
++    try {
++      const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
++      return payload && payload.event;
++    } catch (_e) {
++      return null;
++    }
++  })
++  .filter(Boolean)
++  .find((event) => event.event_type === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED
++    && event.generation === 1);
++assert.ok(repairAuthRow, 'T2 missing repair_authorized ledger event');
++console.log('t2_repair_authorized_gen1=true');
++
++assert.notStrictEqual(
++  happy.result.phase,
++  'campaign_repair_scope_seal',
++  `T3 stopped at repair scope: ${happy.result.reason}`,
++);
++assert.strictEqual(happy.repairDispatcherCalls, 1, `T3 repair dispatcher calls=${happy.repairDispatcherCalls}`);
++assert.ok(happy.receivedSeal, 'T3 missing repairScopeSeal');
++assert.deepStrictEqual(happy.receivedSeal.allowed_paths, ['src/value.txt']);
++assert.deepStrictEqual(happy.receivedSeal.finding_ids, ['vertical-acceptance']);
++console.log('t3_vertical_repair_path_bound=true');
++
++function eventPairs(rows) {
++  return rows
++    .map((row) => {
++      try {
++        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
++        return payload && payload.event;
++      } catch (_e) {
++        return null;
++      }
++    })
++    .filter(Boolean)
++    .map((event) => `${event.event_type}(${event.generation})`);
++}
++const ledgerEvents = eventPairs(loadRows(ledgerPath));
++assert.ok(ledgerEvents.includes('repair_completed(1)'), `T4 missing repair_completed: ${ledgerEvents.join(',')}`);
++assert.ok(ledgerEvents.includes('vertical_verified(1)'), `T4 missing vertical_verified(1): ${ledgerEvents.join(',')}`);
++const rc1 = ledgerEvents.filter((item) => item === 'review_completed(1)');
++assert.strictEqual(rc1.length, 1, `T4 review_completed(1) count=${rc1.length} events=${ledgerEvents.join(',')}`);
++assert.ok(!ledgerEvents.includes('vertical_verified(0)'), 'T4 must not journal gen-0 vertical_verified');
++assert.ok(!ledgerEvents.includes('review_completed(0)'), 'T4 must not journal gen-0 review_completed');
++assert.strictEqual(
++  happy.reviewByTree.get(happy.redTree) || 0,
++  1,
++  `T4 red-candidate reviewer calls=${JSON.stringify([...happy.reviewByTree])}`,
++);
++console.log('t4_repaired_generation_reviewed=true');
++
++const ctrl = (happy.result.campaign_receipt && happy.result.campaign_receipt.controller)
++  || (happy.result.campaign_receipt && happy.result.campaign_receipt.controller_state)
++  || happy.result.controller
++  || (happy.result.campaign_control && happy.result.campaign_control.controller);
++assert.ok(ctrl && ctrl.gate_journal && Array.isArray(ctrl.gate_journal.entries),
++  `T7 missing controller gate_journal: phase=${happy.result.phase}`);
++const fullDiffGates = ctrl.gate_journal.entries.filter((entry) => entry.kind === 'full_diff_review');
++assert.ok(fullDiffGates.length >= 1, `T7 no full_diff_review entries phase=${happy.result.phase}`);
++const gen0Gate = fullDiffGates[0];
++assert.strictEqual(gen0Gate.result.success, true, `T7 success=${gen0Gate.result && gen0Gate.result.success}`);
++const normalizedRed = normalizeProductReviewFindings(happy.redFindingLine);
++assert.strictEqual(normalizedRed.status, 'normalized');
++const expectedDigest = canonicalDigest({
++  verdict: 'FIX-THEN-SHIP',
++  findings: normalizedRed.canonical,
++  scope: 'full_diff',
++  tree_sha: happy.redTree,
++});
++assert.strictEqual(gen0Gate.result.review_digest, expectedDigest);
++console.log('t7_gen0_full_diff_gate_durable=true');
++}
++NODE
++RED_PATH_OUT="$(node "$RED_PATH_JS" "$REPO_ROOT" "$RED_PATH_SBX" "$RED_PATH_WT" \
++  "$RED_PATH_CONTRACT" "$RED_PATH_SEAL" "$RED_PATH_PROMPT" "$RED_PATH_BASE")"
++assert_exit_code "$?" "0" "red verification repair path: $RED_PATH_OUT"
++for key in t1_zero_gen0_review_completed t2_repair_authorized_gen1 \
++  t3_vertical_repair_path_bound t4_repaired_generation_reviewed \
++  t7_gen0_full_diff_gate_durable; do
++  assert_contains "$RED_PATH_OUT" "$key=true" "red-path proves $key"
++done
++
++RED_PATH_T5_SBX="$TEST_TMP/red-verify-repair-t5-repo"
++mkdir -p "$RED_PATH_T5_SBX/.claude" "$RED_PATH_T5_SBX/src"
++git -C "$RED_PATH_T5_SBX" init -q
++git -C "$RED_PATH_T5_SBX" config user.email "red-path-t5@example.invalid"
++git -C "$RED_PATH_T5_SBX" config user.name "Red Path T5 Test"
++write_mission_governance "$RED_PATH_T5_SBX/.claude/owner-kernel-governance.json" shadow
++printf 'base\n' > "$RED_PATH_T5_SBX/src/value.txt"
++git -C "$RED_PATH_T5_SBX" add .
++git -C "$RED_PATH_T5_SBX" commit -qm "base"
++RED_PATH_T5_BASE="$(git -C "$RED_PATH_T5_SBX" rev-parse HEAD)"
++RED_PATH_T5_WT="$TEST_TMP/red-verify-repair-t5-wt"
++git -C "$RED_PATH_T5_SBX" worktree add -q -b impl/red-path "$RED_PATH_T5_WT" "$RED_PATH_T5_BASE"
++RED_PATH_T5_COMMON_RAW="$(git -C "$RED_PATH_T5_SBX" rev-parse --git-common-dir)"
++RED_PATH_T5_COMMON="$(realpath "$RED_PATH_T5_SBX/$RED_PATH_T5_COMMON_RAW")"
++RED_PATH_T5_CONTRACT="$TEST_TMP/red-path-t5-campaign.json"
++RED_PATH_T5_SEAL="$TEST_TMP/red-path-t5-campaign.seal.json"
++node - "$RED_PATH_T5_CONTRACT" "$RED_PATH_T5_COMMON" "$RED_PATH_T5_BASE" <<'NODE'
++const fs = require('fs');
++const [target, commonDir, base] = process.argv.slice(2);
++fs.writeFileSync(target, `${JSON.stringify({
++  schema_version: 1,
++  ticket: 'icc-red-path-t5',
++  profile: 'poc',
++  mission_grant_ref: null,
++  repo_identity: `git-common-dir:${commonDir}`,
++  base_sha: base,
++  branch: 'impl/red-path',
++  vertical_acceptance: ['red verification takes the repair path'],
++  allowed_path_prefixes: ['src/'],
++  max_changed_files: 4,
++  baseline_churn: 10,
++  max_growth_ratio: 1.5,
++  max_extra_churn: 5,
++  max_repair_generations: 2,
++  max_wall_seconds: 600,
++  verify_cmd: 'node fixture.js',
++  rubric_ids: ['ICC-RED-PATH1'],
++}, null, 2)}\n`);
++NODE
++RED_T5_SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
++  --contract "$RED_PATH_T5_CONTRACT" --repo "$RED_PATH_T5_SBX" --mission-mode shadow --out "$RED_PATH_T5_SEAL" 2>&1)"
++assert_exit_code "$?" "0" "red-path T5 fixture seals: $RED_T5_SEAL_OUT"
++RED_PATH_T5_OUT="$(node "$RED_PATH_JS" "$REPO_ROOT" "$RED_PATH_T5_SBX" "$RED_PATH_T5_WT" \
++  "$RED_PATH_T5_CONTRACT" "$RED_PATH_T5_SEAL" "$RED_PATH_PROMPT" "$RED_PATH_T5_BASE" t5)"
++assert_exit_code "$?" "0" "red verification T5 fail-closed: $RED_PATH_T5_OUT"
++assert_contains "$RED_PATH_T5_OUT" "t5_green_journal_fail_closed=true" \
++  "red-path proves t5_green_journal_fail_closed"
++
+ ROUTING="$(sed -n '1,240p' \
+   "$REPO_ROOT/skills/l5/SKILL.md" \
+   "$REPO_ROOT/skills/l6/SKILL.md" \
+diff --git a/hooks/tests/implementation-campaign-state.test.sh b/hooks/tests/implementation-campaign-state.test.sh
+index 788a4cc7..9783d7e8 100755
+--- a/hooks/tests/implementation-campaign-state.test.sh
++++ b/hooks/tests/implementation-campaign-state.test.sh
+@@ -4144,16 +4144,22 @@ for (const axis of ctrl.REPAIR_BUDGET_AXES) {
+ }
+ 
+ // R3 full-diff before repair (vertical fail still requires barrier).
++// Preservation guards (green at base d14bfb68): ordered subsequence, vertical_failed
++// flags, mutation kinds initial then vertical_repair, T7 gen-0 gate journal.
+ let fullDiffCalls = 0;
+ let repairCalls = 0;
++const verticalReviewInputs = [];
++const verticalMutationKinds = [];
++let verticalController = null;
+ const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 }, {
+   preflight: () => ({ passed: true }),
+   implement: ({ kind }) => {
++    verticalMutationKinds.push(kind);
+     if (kind !== 'initial') repairCalls += 1;
+     return {
+       committed: true,
+       commit: 'a'.repeat(40),
+-      tree_sha: 'b'.repeat(40),
++      tree_sha: kind === 'initial' ? 'b'.repeat(40) : '1'.repeat(40),
+     };
+   },
+   scopeCheck: () => ({ passed: true }),
+@@ -4162,16 +4168,25 @@ const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize:
+     receipt_digest: 'c'.repeat(64),
+     reason: gen === 0 ? 'vertical fail' : null,
+   }),
+-  review: ({ scope }) => {
+-    if (scope === 'full_diff' || scope === undefined) fullDiffCalls += 1;
++  review: ({ scope, vertical_failed: vf, repair_generation: gen }) => {
++    if (scope === 'full_diff' || scope === undefined) {
++      fullDiffCalls += 1;
++      verticalReviewInputs.push({
++        generation: gen,
++        vertical_failed: vf === true,
++      });
++    }
+     return {
+       reviewed: true,
+       review_input_mode: 'full_diff_generation',
+-      review_digest: 'd'.repeat(64),
++      review_digest: gen === 0 ? 'd'.repeat(64) : 'e'.repeat(64),
+       findings: '[]',
+-      verdict: 'REWORK',
++      verdict: gen === 0 ? 'REWORK' : 'SHIP-AS-IS',
+     };
+   },
++  onControllerUpdate: (controller) => {
++    verticalController = JSON.parse(JSON.stringify(controller));
++  },
+   adjudicate: () => ({
+     registry_complete: true,
+     repair_gate_passed: true,
+@@ -4208,6 +4223,35 @@ const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize:
+ assert.ok(fullDiffCalls >= 1, 'full-diff runs before repair on vertical fail');
+ assert.ok(repairCalls >= 1, 'repair still happens after full-diff');
+ assert.ok(vertical.trace.includes('full_diff_review'), 'trace records full_diff_review');
++const subseq = ['verify', 'full_diff_review', 'scope_before_repair', 'convergence'];
++let subseqFrom = 0;
++for (const step of subseq) {
++  const idx = vertical.trace.indexOf(step, subseqFrom);
++  assert.ok(idx >= 0, `missing ${step} after ${subseqFrom} in ${vertical.trace.join(',')}`);
++  subseqFrom = idx + 1;
++}
++const repairIdx = vertical.trace.findIndex((step, i) => i >= subseqFrom
++  && (step === 'repair' || step === 'mutate' || step === 'implement'));
++assert.ok(
++  vertical.trace.indexOf('convergence') < (repairIdx >= 0 ? repairIdx : vertical.trace.length),
++  `repair mutation must follow convergence: ${vertical.trace.join(',')}`,
++);
++assert.deepStrictEqual(verticalMutationKinds.slice(0, 2), ['initial', 'vertical_repair']);
++const gen0Reviews = verticalReviewInputs.filter((row) => row.generation === 0);
++assert.strictEqual(gen0Reviews.length, 1, JSON.stringify(verticalReviewInputs));
++assert.strictEqual(gen0Reviews[0].vertical_failed, true);
++const gen1Reviews = verticalReviewInputs.filter((row) => row.generation === 1);
++if (gen1Reviews.length > 0) {
++  assert.ok(gen1Reviews.every((row) => row.vertical_failed === false),
++    JSON.stringify(gen1Reviews));
++}
++const t7Ctrl = vertical.controller || verticalController;
++assert.ok(t7Ctrl && t7Ctrl.gate_journal, 'T7 composition controller gate_journal missing');
++const t7Full = (t7Ctrl.gate_journal.entries || []).filter((entry) => entry.kind === 'full_diff_review');
++assert.ok(t7Full.length >= 1);
++assert.strictEqual(t7Full[0].result.success, true);
++assert.strictEqual(t7Full[0].result.review_digest, 'd'.repeat(64));
++assert.strictEqual(gen0Reviews[0].vertical_failed, true);
+ 
+ // Focused-only cannot authorize repair.
+ const focusedOnly = ctrl.requireFullDiffBeforeRepair({
+diff --git a/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md b/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+index 25e9735b..e244d515 100644
+--- a/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
++++ b/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+@@ -194,7 +194,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+     2026-09-14: `--campaign-ledger` intake v2.36.42, reviewer `no_verdict` durable wait v2.36.43,
+     final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48,
+     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
+-    ledger rotation carry keeps journal append order v2.36.54.
++    ledger rotation carry keeps journal append order v2.36.54,
++    red verification takes the repair path v2.36.56.
+     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
+     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
+     line drifts the frozen source sha and every `session-mode set` is refused until routing is
+diff --git a/platforms/codex/plugin/src/engine/autopilot-engine.js b/platforms/codex/plugin/src/engine/autopilot-engine.js
+index f10708a3..9a1df829 100644
+--- a/platforms/codex/plugin/src/engine/autopilot-engine.js
++++ b/platforms/codex/plugin/src/engine/autopilot-engine.js
+@@ -4932,37 +4932,42 @@ class AutopilotEngine {
+         scope,
+         tree_sha: candidate.tree_sha,
+       });
+-      if (scope !== 'final'
+-          && resumeReviewDigest
+-          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+-        if (reviewDigest !== resumeReviewDigest) {
+-          return {
+-            reviewed: false,
+-            phase: 'campaign_resume_review',
+-            reason: 'replayed focused review does not match the durable review digest',
+-            raw: reviewed,
+-          };
+-        }
+-      } else if (scope !== 'final') {
+-        try {
+-          recordCampaignEvent({
+-            eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+-            generation: repairGeneration,
+-            stageIdentity: `campaign-review:${repairGeneration}`,
+-            payload: { review_digest: reviewDigest },
+-            artifactReference: {
+-              kind: 'product_review',
+-              digest: reviewDigest,
+-              repair_lineage: { ...repairLineage },
+-            },
+-          });
+-        } catch (error) {
+-          return {
+-            reviewed: false,
+-            phase: 'campaign_event_journal',
+-            reason: error.message || String(error),
+-            raw: reviewed,
+-          };
++      // Under vertical_failed the campaign is still VERTICAL_VERIFICATION and
++      // advances on REPAIR_AUTHORIZED from that reducer edge; skip resume-digest
++      // replay and REVIEW_COMPLETED. The review stays in the controller
++      // full-diff gate journal and the repair ticket.
++      if (scope !== 'final' && verticalFailed !== true) {
++        if (resumeReviewDigest
++            && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
++          if (reviewDigest !== resumeReviewDigest) {
++            return {
++              reviewed: false,
++              phase: 'campaign_resume_review',
++              reason: 'replayed focused review does not match the durable review digest',
++              raw: reviewed,
++            };
++          }
++        } else {
++          try {
++            recordCampaignEvent({
++              eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
++              generation: repairGeneration,
++              stageIdentity: `campaign-review:${repairGeneration}`,
++              payload: { review_digest: reviewDigest },
++              artifactReference: {
++                kind: 'product_review',
++                digest: reviewDigest,
++                repair_lineage: { ...repairLineage },
++              },
++            });
++          } catch (error) {
++            return {
++              reviewed: false,
++              phase: 'campaign_event_journal',
++              reason: error.message || String(error),
++              raw: reviewed,
++            };
++          }
+         }
+       }
+       return {
+@@ -6707,10 +6712,17 @@ class AutopilotEngine {
+           }
+           let findingPaths;
+           try {
+-            findingPaths = findingBoundRepairPaths(
+-              repairFindings,
+-              campaignControl.contract.allowed_path_prefixes,
+-            );
++            if (kind === 'vertical_repair'
++                && Array.isArray(repairFindings)
++                && repairFindings.length === 1
++                && repairFindings[0].id === 'vertical-acceptance') {
++              findingPaths = [...repairLineage.repair_scope_paths].sort();
++            } else {
++              findingPaths = findingBoundRepairPaths(
++                repairFindings,
++                campaignControl.contract.allowed_path_prefixes,
++              );
++            }
+           } catch (error) {
+             return {
+               committed: false,
+diff --git a/skills/l5/references/hetero-impl-loop.md b/skills/l5/references/hetero-impl-loop.md
+index 25e9735b..e244d515 100644
+--- a/skills/l5/references/hetero-impl-loop.md
++++ b/skills/l5/references/hetero-impl-loop.md
+@@ -194,7 +194,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+     2026-09-14: `--campaign-ledger` intake v2.36.42, reviewer `no_verdict` durable wait v2.36.43,
+     final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48,
+     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
+-    ledger rotation carry keeps journal append order v2.36.54.
++    ledger rotation carry keeps journal append order v2.36.54,
++    red verification takes the repair path v2.36.56.
+     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
+     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
+     line drifts the frozen source sha and every `session-mode set` is refused until routing is
+diff --git a/src/engine/autopilot-engine.js b/src/engine/autopilot-engine.js
+index f10708a3..9a1df829 100644
+--- a/src/engine/autopilot-engine.js
++++ b/src/engine/autopilot-engine.js
+@@ -4932,37 +4932,42 @@ class AutopilotEngine {
+         scope,
+         tree_sha: candidate.tree_sha,
+       });
+-      if (scope !== 'final'
+-          && resumeReviewDigest
+-          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+-        if (reviewDigest !== resumeReviewDigest) {
+-          return {
+-            reviewed: false,
+-            phase: 'campaign_resume_review',
+-            reason: 'replayed focused review does not match the durable review digest',
+-            raw: reviewed,
+-          };
+-        }
+-      } else if (scope !== 'final') {
+-        try {
+-          recordCampaignEvent({
+-            eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+-            generation: repairGeneration,
+-            stageIdentity: `campaign-review:${repairGeneration}`,
+-            payload: { review_digest: reviewDigest },
+-            artifactReference: {
+-              kind: 'product_review',
+-              digest: reviewDigest,
+-              repair_lineage: { ...repairLineage },
+-            },
+-          });
+-        } catch (error) {
+-          return {
+-            reviewed: false,
+-            phase: 'campaign_event_journal',
+-            reason: error.message || String(error),
+-            raw: reviewed,
+-          };
++      // Under vertical_failed the campaign is still VERTICAL_VERIFICATION and
++      // advances on REPAIR_AUTHORIZED from that reducer edge; skip resume-digest
++      // replay and REVIEW_COMPLETED. The review stays in the controller
++      // full-diff gate journal and the repair ticket.
++      if (scope !== 'final' && verticalFailed !== true) {
++        if (resumeReviewDigest
++            && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
++          if (reviewDigest !== resumeReviewDigest) {
++            return {
++              reviewed: false,
++              phase: 'campaign_resume_review',
++              reason: 'replayed focused review does not match the durable review digest',
++              raw: reviewed,
++            };
++          }
++        } else {
++          try {
++            recordCampaignEvent({
++              eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
++              generation: repairGeneration,
++              stageIdentity: `campaign-review:${repairGeneration}`,
++              payload: { review_digest: reviewDigest },
++              artifactReference: {
++                kind: 'product_review',
++                digest: reviewDigest,
++                repair_lineage: { ...repairLineage },
++              },
++            });
++          } catch (error) {
++            return {
++              reviewed: false,
++              phase: 'campaign_event_journal',
++              reason: error.message || String(error),
++              raw: reviewed,
++            };
++          }
+         }
+       }
+       return {
+@@ -6707,10 +6712,17 @@ class AutopilotEngine {
+           }
+           let findingPaths;
+           try {
+-            findingPaths = findingBoundRepairPaths(
+-              repairFindings,
+-              campaignControl.contract.allowed_path_prefixes,
+-            );
++            if (kind === 'vertical_repair'
++                && Array.isArray(repairFindings)
++                && repairFindings.length === 1
++                && repairFindings[0].id === 'vertical-acceptance') {
++              findingPaths = [...repairLineage.repair_scope_paths].sort();
++            } else {
++              findingPaths = findingBoundRepairPaths(
++                repairFindings,
++                campaignControl.contract.allowed_path_prefixes,
++              );
++            }
+           } catch (error) {
+             return {
+               committed: false,
+
+```
+<<<AUTOPILOT-END-c5dba6cdcc90ea3ac6009d889117786f>>>
+
+warning: Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+codex
+<<<AUTOPILOT-REVIEW-c5dba6cdcc90ea3ac6009d889117786f>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS: 🟠 [engine-t7-vertical-failed] MUST-FIX The engine-level T7 inspects the generation-0 full-diff gate’s success and digest but never asserts `gen0Gate.input.vertical_failed === true`, leaving R6/T7’s required engine-path binding unverified; add that assertion against the selected generation-0 gate entry.
+<<<AUTOPILOT-END-c5dba6cdcc90ea3ac6009d889117786f>>>
+tokens used
+29,132

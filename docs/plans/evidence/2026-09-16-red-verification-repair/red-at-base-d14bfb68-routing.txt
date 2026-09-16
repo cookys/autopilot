@@ -1,0 +1,13 @@
+  throw new AssertionError(obj);
+AssertionError [ERR_ASSERTION]: T1 expected zero gen-0 review_completed attempts, got [{"eventType":"implementation_started","generation":0},{"eventType":"implementation_completed","generation":0},{"eventType":"review_completed","generation":0},{"eventType":"terminal_stop","generation":0}] phase=cam
+FAIL [implementation-campaign-routing] red verification repair path: t7_base_probe=[]: expected exit 0, got 1
+FAIL [implementation-campaign-routing] red-path proves t1_zero_gen0_review_completed: 't1_zero_gen0_review_completed=true' not found in output
+FAIL [implementation-campaign-routing] red-path proves t2_repair_authorized_gen1: 't2_repair_authorized_gen1=true' not found in output
+FAIL [implementation-campaign-routing] red-path proves t3_vertical_repair_path_bound: 't3_vertical_repair_path_bound=true' not found in output
+FAIL [implementation-campaign-routing] red-path proves t4_repaired_generation_reviewed: 't4_repaired_generation_reviewed=true' not found in output
+FAIL [implementation-campaign-routing] red-path proves t7_gen0_full_diff_gate_durable: 't7_gen0_full_diff_gate_durable=true' not found in output
+  throw new AssertionError(obj);
+AssertionError [ERR_ASSERTION]: T5 missing repair_authorized(1): [{"eventType":"implementation_started","generation":0},{"eventType":"implementation_completed","generation":0},{"eventType":"review_completed","generation":0},{"eventType":"terminal_stop","generation":0}]
+FAIL [implementation-campaign-routing] red verification T5 fail-closed: : expected exit 0, got 1
+FAIL [implementation-campaign-routing] red-path proves t5_green_journal_fail_closed: 't5_green_journal_fail_closed=true' not found in output
+FAIL [implementation-campaign-routing] 75 passed, 8 failed

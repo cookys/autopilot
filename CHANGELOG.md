@@ -1,5 +1,40 @@
 # Changelog
 
+## v2.36.56 — managed rail：verification 紅走 repair 路徑（vertical_failed 下不記 review_completed；vertical repair 綁初始改動路徑）
+
+- `src/engine/autopilot-engine.js` `performReview`：composition 在 verification 紅時照契約先跑 full-diff barrier，review
+  adapter 卻無條件 journal `REVIEW_COMPLETED`，reducer 在 `VERTICAL_VERIFICATION` 拒收（`cannot apply review_completed
+  while campaign is VERTICAL_VERIFICATION`）→ barrier 停 → TERMINAL_STOP，reviewer 花了、repair 一代都沒有（cuda
+  `48ffc2fd…`、openclaw `cfadd975…` 各量到一次）。現在 journal 用述詞 `scope !== 'final' && verticalFailed !== true`
+  包住（含 resume-digest replay 分支），不是 try/catch 吞錯；紅候選的 review 照跑、digest 留在 controller full-diff gate
+  journal 與 repair ticket，campaign 走 reducer 本來就有的 `VERTICAL_VERIFICATION → REPAIR_AUTHORIZED → REPAIRING` 邊。
+- 同檔 mutate adapter：修掉上面那刀後同一條路徑會停在 `campaign_repair_scope_seal`——composition 合成的
+  `vertical-acceptance` finding 沒有路徑，`findingBoundRepairPaths` 丟 `no explicit allowed repair path`。現在
+  `kind === 'vertical_repair'` 且 finding 集合恰為那一條合成 finding 時，repair scope＝初始 candidate 的改動路徑
+  （`repairLineage.repair_scope_paths`）；reviewer finding 一律維持顯式路徑規則。
+- `hooks/tests/implementation-campaign-routing.test.sh` +10（73→83）：真 sandbox ledger＋真 `campaignEventAppender`
+  外包一層 spy 記錄每次「嘗試」——T1 斷言 gen-0 `review_completed` 嘗試為零（不是看 ledger 沒落地，吞錯的實作也會過那
+  種斷言）；T2 `repair_authorized(1)` 恰一次、state REPAIRING、投影過 gen 0；T3 repair 派出且 seal `allowed_paths`＝初始改動
+  路徑、`finding_ids=['vertical-acceptance']`；T4 gen-1 `repair_completed`／`vertical_verified`／恰一次 `review_completed`、
+  gen-0 兩者皆無；T5 gen-1 review_completed 注入唯一錯誤訊息仍 fail-closed 且 spy 證明 gen 1 真的到了；T7 gen-0
+  full_diff_review gate entry `success:true`＋digest。base `d14bfb68` 上 8 條紅。state suite R3 加 preservation：trace
+  子序列、gen-0 review 收到 `vertical_failed:true`、gen-1 收到 false、mutation 序 `initial, vertical_repair`。
+- **明說**：plan T7 寫的 `input.vertical_failed === true` 斷言不成立——gate journal 只存 `input_digest`，沒有 `input` 物件
+  （G1/G2 與 GLM／codex 兩家族都照字面要求了）；試過（`8ab3a51e`）後駁回，binding 由 composition 層的 adapter payload
+  guard 斷言，routing 測試釘住結構形狀。plan §5 的真 campaign dogfood **延後**：routing block 已經用真 appender、真
+  ledger、真 git commit 走完整條紅→repair→綠→review_completed(1)，活 campaign 只多 transport；下一個自然紅的 campaign
+  （cuda／openclaw）就是量測點。
+- 流程（`docs/plans/evidence/2026-09-16-red-verification-repair/`）：consult codex 建議 (a)＋點出相鄰的 path-binding
+  blocker；七個 verification suite **先在 base 跑綠再封**（B 的教訓）；plan 兩代 hetero review（G1 一條、G2 四條全 fold）；
+  /l5 campaign hand（cursor-grok-4.6-low）`d986afbf` verify 綠、in-rail MiniMax SHIP-AS-IS、full_suite、adjudicate、
+  convergence 都通，final panel GLM FIX-THEN-SHIP／MiniMax SHIP-AS-IS／**codex 席 transport_failed**（cuda P1 那條，本機
+  第三次量到）→ 降級 l3，codex 第二家族 review 同一條 🟠 駁回，git 證據 merge `5117590c`、record-integration → reap →
+  `zero_residue: true`。
+
+prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一條從未修移到已修）。
+
+---
+
 ## v2.36.55 — agy effort 跟著解析後的 model tier 走；三個 rail 拒絕訊息各自說出補救
 
 - `scripts/lib/agy-model-alias.sh` `agy_effort_for_model <resolved-model> <effort>`：解析後的 id 尾巴是 `-low|-medium|-high`

@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "proof-parity-raw-log-2026-09-16",
+  "logical_plan_id": "proof-parity-raw-log-2026-09-16",
+  "session_id": "p1-g1-1789545714",
+  "session_key": "951c2ec1458874498dbe1e3b0df2527c5b8f9c62fb65caf461b661b9b43b3423",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "602008830843f3d8b37254522cbebd0ea6d88aeffb04287ba3efa6b4caf44c2c",
+  "manifest_sha256": "82af6943c187827b0e3ee54f11005fcddd94c884328fa6bff7ec70f69b9f3158",
+  "plan_sha256": "b4572bc515750ab7404554ab046aba2bfc7295972a92c7b6f67ca9952a2796d5",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "e1e90ec34214cf3201d4ed877d41e7fe477b3721b80e79d0d0c8ef77b463330c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9d03b7bf4e44bd7a8b0ff5a9642d93df56137e88aad53a7353894f817a0a63c3",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-mVyFru",
+          "digest": "9d03b7bf4e44bd7a8b0ff5a9642d93df56137e88aad53a7353894f817a0a63c3"
+        },
+        "receipt_digest": "0ed618bf0dbe1138e48c9bc2ffb88faa3632f538e0be91f2b329dd4aee1d01db"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "e317e8a0821c5b97bfd262342ed49039e89cebc7308a9e8e3eb261b868bf2b93"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e96f9515863740e773d0439d1b3ec15bcd057a78bee6a7bb966c68f63c4ec167",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-5awt6R/stdout",
+          "digest": "e96f9515863740e773d0439d1b3ec15bcd057a78bee6a7bb966c68f63c4ec167"
+        },
+        "receipt_digest": "ad435f8e10bca7bf521bce059e99a9d7bae3dd084fe6eb4a4c07dc76588d70f7"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Proof grammar classification in scripts/dispatch-review.sh and src/runners/review.js",
+      "claim": "The proposed regex and change list do not guarantee that empty checked or evidence fields receive the required shape failure; they can still be classified as tautologies.",
+      "evidence": "With the proposed one-or-more separator regex, 'checked=; evidence=ran tests; conclusion=nothing to fix' matches: the greedy checked capture receives ';' while the separator consumes the following space. Normalization then produces the empty blacklist entry. The plan says the bash change is only the regex quantifier, so the existing blacklist branch emits the tautology message instead of the required shape message. The same ambiguity exists in the proposed Node regex unless normalized-empty precedence is explicitly defined.",
+      "evidence_reference": "Plan lines 44-54 and 76-80; scripts/dispatch-review.sh lines 576-587; src/runners/review.js lines 51-57",
+      "repair": "Define classification precedence explicitly: after matching, treat any capture whose punctuation-and-whitespace normalization is empty as shape before consulting the unchanged blacklist, and implement this in both validators. Add empty checked and evidence vectors using multi-character separators such as '; ' so the greedy-capture case is pinned.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a9af07dde977cdf3408d4d68378442028acf33731742d0da5ae00c3c77f53425"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Engine propagation tests for performReview",
+      "claim": "The test plan does not directly prove that performReview's non-reviewed outcome exposes raw_log, so the explicit R4 contract can regress while all listed assertions pass.",
+      "evidence": "The routing tests assert raw_log on the blocked review record, ledger entry, and final-panel receipt. The receipt path is separately described as reading nested outcome.raw.reviewResult.salvaged.raw_log, so it does not require the top-level performReview outcome raw_log promised by the ruling.",
+      "evidence_reference": "Plan lines 63-70, 81-83, and 108-117",
+      "repair": "Add a RED-at-base routing assertion that observes the non-reviewed performReview result and requires its top-level raw_log to equal the salvaged path next to reason; retain separate assertions for the blocked record, ledger entry, and seat receipt.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cbc0340639e5ad5962e124d1056653b54443de9d71a17ff5277e77a11fe45d82"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Closed-key validation tests for final-panel seat receipts",
+      "claim": "The planned receipt tests do not verify R6's requirement that unknown keys remain rejected by both campaign-composition validation and the JSON schema.",
+      "evidence": "The test list covers a legacy receipt without raw_log, a failed receipt with raw_log, digest tampering, and raw_log as an empty string. It contains no preservation case adding an unrelated key with a recomputed valid digest. This leaves an implementation that accidentally weakens exact-key validation or additionalProperties closure undetected.",
+      "evidence_reference": "Plan lines 84-88 and 118-120; src/engine/campaign-composition.js lines 318-378",
+      "repair": "Add labelled preservation guards for both validation boundaries: construct a seat with an unrelated extra key, recompute receipt_digest so rejection cannot be attributed to digest mismatch, and assert campaign-composition rejects it; separately assert the JSON schema rejects the same unknown key.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "75a039fda189b43c6320936d1eb3c9d7ce8868c3849a8c932cd607014daab4c0"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-16T08:06:20.760Z"
+}

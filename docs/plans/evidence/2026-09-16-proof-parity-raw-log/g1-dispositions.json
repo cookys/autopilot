@@ -1,0 +1,25 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "proof-parity-raw-log-2026-09-16",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "a9af07dde977cdf3408d4d68378442028acf33731742d0da5ae00c3c77f53425",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a71.1 now defines precedence \u2014 after the ordered-label match, a field that trims to empty is a SHAPE failure on both sides (bash: explicit empty check before the blacklist loop; Node: same), so the '' blacklist entry is unreachable; vector rows for empty checked/evidence/conclusion expect the shape class."
+  },
+  {
+   "fingerprint": "cbc0340639e5ad5962e124d1056653b54443de9d71a17ff5277e77a11fe45d82",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a72 routing test now asserts performReview's non-reviewed outcome exposes top-level `raw_log` (the composition sees `outcome.raw_log`) and \u00a71.3 states the seat receipt reads that top-level field, not a nested raw path."
+  },
+  {
+   "fingerprint": "75a039fda189b43c6320936d1eb3c9d7ce8868c3849a8c932cd607014daab4c0",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a72 receipt test gains a preservation case \u2014 an unrelated extra key with a recomputed valid digest is rejected by both the composition seat validation and the JSON schema."
+  }
+ ]
+}

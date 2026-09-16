@@ -1,0 +1,25 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "proof-parity-raw-log-2026-09-16",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "cd0a8d94f501ee62769512413a292dc68b92a4bae9929694801b0686c055fe1c",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: emptiness is decided on the NORMALIZED value (same lowercase + strip-leading/trailing-space-and-punctuation the blacklist uses): normalized-empty \u2192 shape failure; otherwise blacklist. Bash and Node both order it that way; \u00a71.1 rewritten."
+  },
+  {
+   "fingerprint": "96e023ebf5ee1d1b6883bd80e74f2a012adf2490725151daf4dc794505cd3b6f",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a72 autopilot-engine bullet rewritten \u2014 finalPanelSeatReceipt reads the top-level outcome.raw_log that performReview sets; no nested raw path."
+  },
+  {
+   "fingerprint": "49af8554c26fbb7cae0c4b4490ac1512955255719f666653ce2faef1bb664693",
+   "disposition": "rejected",
+   "candidate_blocker": true,
+   "rationale": "Rejected: the version bump is a depth-0 release action after the merge (sync-version.js + CHANGELOG + INDEX), outside the sealed contract \u2014 the same convention as v2.36.53/54/55/56 and stated in \u00a72 Docs; the hand writes the pinned number into BACKLOG/l5 text exactly as those deliverables did and the scope-integrity criterion is evaluated on the merge commit, not on the release commit. \u00a72 Docs gains one clarifying sentence."
+  }
+ ]
+}

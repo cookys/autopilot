@@ -47,12 +47,7 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
    `/^checked=(.+)[\s;,.]+evidence=(.+)[\s;,.]+conclusion=(.+)$/u`; captures are trimmed and the
    unchanged blacklist is applied to each field. Two DISTINCT failures on both sides: a **shape**
    failure (labels missing/reordered, an empty field, an unsupported separator such as `|`) and a
-   **semantic** failure (a field normalizes to a blacklist entry). Precedence: after the ordered-label
-   match each capture is NORMALIZED exactly as the blacklist does (lowercase, strip leading/trailing
-   whitespace and punctuation); a capture whose normalized value is empty (e.g. `checked=;
-   evidence=…` where the greedy capture is only `;`) is a SHAPE failure on both sides — bash checks
-   normalized emptiness explicitly before its blacklist `case`, Node does the same — so the `''`
-   blacklist entry is unreachable and stays only as a guard. Node's messages become
+   **semantic** failure (a field normalizes to a blacklist entry). Node's messages become
    `review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion
    fields separated by space, ';', ',' or '.'` and `… contains a tautological checked, evidence, or
    conclusion value`; the bash battery's two `BATTERY_FAIL_REASON` strings already distinguish them
@@ -68,8 +63,7 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
 3. **Propagation.** The engine's blocked review record (`autopilot-engine.js` ~3378) gains
    `raw_log: reviewResult.salvaged ? reviewResult.salvaged.raw_log : null`, the ledger entry
    `dispatch_review blocked` records the same, and `performReview`'s non-reviewed outcome exposes it
-   as top-level `raw_log` next to `reason` (the composition sees `outcome.raw_log`; the seat receipt
-   reads THAT field, never a nested raw dispatch path). The final-panel seat receipt gains an OPTIONAL `raw_log` key:
+   as `raw_log` next to `reason`. The final-panel seat receipt gains an OPTIONAL `raw_log` key:
    present (non-empty string) only on a failed seat whose salvage succeeded; absent otherwise
    (successful receipts keep their exact shape and digest); when present it is part of the body
    digested into `receipt_digest`. `FINAL_PANEL_SEAT_KEYS` validation becomes "exact keys, with
@@ -85,9 +79,8 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
   (`ok` / `shape` / `tautology`) used by `parseReviewOutput` for the two messages; `dispatchReviewJson`
   salvage block (§1.2).
 - `src/engine/autopilot-engine.js` (+ mirror): blocked review record + ledger entry + performReview
-  non-reviewed outcome carry top-level `raw_log` (§1.3); `finalPanelSeatReceipt` adds `raw_log` when
-  the OUTCOME's top-level `raw_log` is a non-empty string (that is the only seam; it never inspects a
-  nested dispatch result).
+  outcome carry `raw_log` (§1.3); `finalPanelSeatReceipt` adds `raw_log` when the outcome's raw
+  dispatch result has `salvaged.raw_log`.
 - `src/engine/campaign-composition.js` (+ mirror): `FINAL_PANEL_SEAT_KEYS` validation accepts the
   optional `raw_log` (non-empty string when present) — nothing else changes there.
 - `schemas/implementation-campaign-receipt.schema.json` (+ mirror): optional `raw_log`
@@ -99,7 +92,7 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
     rows) driven through BOTH the bash battery (via `dispatch-review.sh` with a stub runner whose
     output carries the proof) AND `parseReviewOutput`. Valid rows: `;`, `.`, `,`, space,
     mixed-punctuation+space separators, a `;` inside a substantive field. Invalid rows: missing
-    label, reordered labels, `|` separator, empty value per field (class `shape`), every blacklist entry substituted
+    label, reordered labels, `|` separator, empty value per field, every blacklist entry substituted
     into each of the three fields with the other two substantive. Assert per row: both validators
     agree (RED at base: the `.`/`,`/space rows disagree), the Node message class is `shape` vs
     `tautology` as the row says (RED at base: one message for both), and a `;` inside a field keeps
@@ -117,25 +110,18 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
     (`.`-separated) → at head the review is `reviewed` (RED at base: `dispatch_review blocked` with
     the tautology message); a second stub emitting an envelope with a genuinely tautological
     conclusion → blocked with the tautology message AND the blocked record + ledger entry carry the
-    envelope's `raw_log` (RED at base: `raw_log` absent), and `performReview`'s non-reviewed outcome
-    (captured via the composition adapter seam) exposes top-level `raw_log` (RED at base); final
-    panel: one seat's stub emits a
+    envelope's `raw_log` (RED at base: `raw_log` absent); final panel: one seat's stub emits a
     rejected envelope → that seat's receipt has `status: 'no_verdict'` (or `parser_failed` per the
     existing mapping), `verdict/review_digest null`, `raw_log` = the path, excluded from
     `final_panel_count`, the panel blocks (RED at base: no `raw_log` key); the other seats' receipts
     have NO `raw_log` key and their digests are unchanged from base (preservation).
   - `hooks/tests/implementation-campaign-receipt.test.sh`: a v1 seat receipt without `raw_log`
     validates (preservation); a failed seat receipt with `raw_log` validates and tampering the path
-    changes/breaks `receipt_digest` (RED at base: schema rejects the key); `raw_log: ""` is rejected;
-    an unrelated extra key with a recomputed valid digest is rejected by BOTH the composition seat
-    validation and the JSON schema (preservation, green at base).
+    changes/breaks `receipt_digest` (RED at base: schema rejects the key); `raw_log: ""` is rejected.
 - Docs: `docs/BACKLOG.md` cuda P1 row: Status stays `fired` (deliverable 2 pending), Context gains
   "(ii)+(iii) shipped v2.36.57: Node grammar aligned, raw_log salvaged" and a one-line pointer to the
   second plan; `skills/l5/references/hetero-impl-loop.md` step 11 fixed list gains "proof grammar
-  parity + raw_log on rejected envelopes v2.36.57" (+ mirror). `CHANGELOG.md` is NOT sealed, and neither
-  are the version manifests: the v2.36.57 number is a pin the hand writes into text exactly as
-  v2.36.53–56 did; the bump itself (`sync-version.js`, CHANGELOG, INDEX) is a depth-0 release commit
-  AFTER the merge, and the `scope-integrity` criterion is evaluated on the merge commit only.
+  parity + raw_log on rejected envelopes v2.36.57" (+ mirror). `CHANGELOG.md` is NOT sealed.
 
 ### 2.5 Sealed `output_paths` (exact)
 
@@ -200,11 +186,3 @@ proof is `reviewed`, not `dispatch_review blocked`; and a deliberately tautologi
   shape/semantic failures and a shared vector table, schema-lenient salvage with runner/model from
   the invocation, optional `raw_log` on the failed seat receipt with old receipts still valid; names
   the red-first assertions folded into §2.
-- Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP 3 blockers; evidence `g1-*`): empty-field
-  precedence undefined → shape-before-blacklist on both sides; performReview top-level `raw_log` had no
-  assertion → added; unknown-key closure had no preservation case → added. All accepted and folded.
-- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 3;
-  evidence `g2-*`): normalized-emptiness precedence — accepted, §1.1 rewritten; seat receipt source
-  contradiction — accepted, §2 bullet rewritten; "version bump outside output_paths makes the shipped
-  claim false" — rejected with rationale (release commit is depth-0, same as v2.36.53–56; §2 Docs
-  clarified). Depth-0 freeze: zero unaddressed blockers, zero deferred.

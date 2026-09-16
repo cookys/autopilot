@@ -48,11 +48,10 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
    unchanged blacklist is applied to each field. Two DISTINCT failures on both sides: a **shape**
    failure (labels missing/reordered, an empty field, an unsupported separator such as `|`) and a
    **semantic** failure (a field normalizes to a blacklist entry). Precedence: after the ordered-label
-   match each capture is NORMALIZED exactly as the blacklist does (lowercase, strip leading/trailing
-   whitespace and punctuation); a capture whose normalized value is empty (e.g. `checked=;
-   evidence=…` where the greedy capture is only `;`) is a SHAPE failure on both sides — bash checks
-   normalized emptiness explicitly before its blacklist `case`, Node does the same — so the `''`
-   blacklist entry is unreachable and stays only as a guard. Node's messages become
+   match, any capture that trims to empty (e.g. `checked=; evidence=…` where the greedy capture is
+   only `;`) is a SHAPE failure on both sides — bash checks emptiness explicitly before its
+   blacklist loop, Node does the same — so the `''` blacklist entry is unreachable and stays only as
+   a guard. Node's messages become
    `review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion
    fields separated by space, ';', ',' or '.'` and `… contains a tautological checked, evidence, or
    conclusion value`; the bash battery's two `BATTERY_FAIL_REASON` strings already distinguish them
@@ -85,9 +84,8 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
   (`ok` / `shape` / `tautology`) used by `parseReviewOutput` for the two messages; `dispatchReviewJson`
   salvage block (§1.2).
 - `src/engine/autopilot-engine.js` (+ mirror): blocked review record + ledger entry + performReview
-  non-reviewed outcome carry top-level `raw_log` (§1.3); `finalPanelSeatReceipt` adds `raw_log` when
-  the OUTCOME's top-level `raw_log` is a non-empty string (that is the only seam; it never inspects a
-  nested dispatch result).
+  outcome carry `raw_log` (§1.3); `finalPanelSeatReceipt` adds `raw_log` when the outcome's raw
+  dispatch result has `salvaged.raw_log`.
 - `src/engine/campaign-composition.js` (+ mirror): `FINAL_PANEL_SEAT_KEYS` validation accepts the
   optional `raw_log` (non-empty string when present) — nothing else changes there.
 - `schemas/implementation-campaign-receipt.schema.json` (+ mirror): optional `raw_log`
@@ -132,10 +130,7 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
 - Docs: `docs/BACKLOG.md` cuda P1 row: Status stays `fired` (deliverable 2 pending), Context gains
   "(ii)+(iii) shipped v2.36.57: Node grammar aligned, raw_log salvaged" and a one-line pointer to the
   second plan; `skills/l5/references/hetero-impl-loop.md` step 11 fixed list gains "proof grammar
-  parity + raw_log on rejected envelopes v2.36.57" (+ mirror). `CHANGELOG.md` is NOT sealed, and neither
-  are the version manifests: the v2.36.57 number is a pin the hand writes into text exactly as
-  v2.36.53–56 did; the bump itself (`sync-version.js`, CHANGELOG, INDEX) is a depth-0 release commit
-  AFTER the merge, and the `scope-integrity` criterion is evaluated on the merge commit only.
+  parity + raw_log on rejected envelopes v2.36.57" (+ mirror). `CHANGELOG.md` is NOT sealed.
 
 ### 2.5 Sealed `output_paths` (exact)
 
@@ -203,8 +198,3 @@ proof is `reviewed`, not `dispatch_review blocked`; and a deliberately tautologi
 - Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP 3 blockers; evidence `g1-*`): empty-field
   precedence undefined → shape-before-blacklist on both sides; performReview top-level `raw_log` had no
   assertion → added; unknown-key closure had no preservation case → added. All accepted and folded.
-- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 3;
-  evidence `g2-*`): normalized-emptiness precedence — accepted, §1.1 rewritten; seat receipt source
-  contradiction — accepted, §2 bullet rewritten; "version bump outside output_paths makes the shipped
-  claim false" — rejected with rationale (release commit is depth-0, same as v2.36.53–56; §2 Docs
-  clarified). Depth-0 freeze: zero unaddressed blockers, zero deferred.

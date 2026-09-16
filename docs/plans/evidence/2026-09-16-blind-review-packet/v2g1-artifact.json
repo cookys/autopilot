@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-packet-2026-09-16-v2",
+  "logical_plan_id": "blind-review-packet-2026-09-16-v2",
+  "session_id": "c1a-v2g1-1789574242",
+  "session_key": "5139483fcd7d19234453f611f5ae98ecba8ca565452894a07462a51889d2c2e0",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "305915f01e74e80e28bde7c4f00c85d535f9f62ac5b709c41958905c282b2c09",
+  "manifest_sha256": "d18fac26042e1bbe5c8bf5ef12109348aa6d5ada90dddb05e21bf6f46e288634",
+  "plan_sha256": "856ab8cc9e43bcc925792f926237184e9694f059eff054d2a8d36c27b2fe0427",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "4f4e050d1e6fe6464c7a21087f583400240d2bfb4757cafc35035aa42aaca44b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-6iadXo",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "0fee46bf8d6744bc25820ef52badf8bfd67aaddc4eecc3dd8339687872963256"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "d613ed04005182f729249f4c1c184fbf3bc9f5e17235953c6107509d6d17226a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "be99c1c5ad8ccf026ccf1c35a4262eb53cfe4f847fb472c14efc6cc2986a52ef",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-DAY2cn/stdout",
+          "digest": "be99c1c5ad8ccf026ccf1c35a4262eb53cfe4f847fb472c14efc6cc2986a52ef"
+        },
+        "receipt_digest": "8c667fac4519a68bb8bcfbb8b3cb2456aa44d31bea9bc2204566ca6eec084273"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Private-index checkout and attribute hazard boundary",
+      "claim": "The planned checkout can execute configured smudge-filter helpers before the integrity pass, so a candidate-controlled .gitattributes file can trigger arbitrary local processes or network activity even though the resulting bytes are later rejected.",
+      "evidence": "The plan invokes checkout-index after reading the candidate tree and relies on a post-checkout object-ID comparison for filter rewrites. Git checkout applies an effective filter attribute using drivers from repository or user configuration; common examples include Git LFS. A mismatch detected afterward does not undo helper execution or its side effects.",
+      "evidence_reference": "Plan §1.1 tree construction, §2.6 built-ins-only constraint, and §6 Attribute-driven rewrites",
+      "repair": "Before checkout-index, evaluate the candidate index's effective filter attribute for every path without checking out files and fail closed if any filter is set, or specify and test a configuration-isolation mechanism that provably prevents every filter driver from executing. Add a fixture with a configured sentinel smudge driver and assert that the sentinel is never invoked and no output is written.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "481c7442580c8b4f7758fecb4a8d8e0e5e8a8fe30dc9c50891c769bbe23c5eb7"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Symlink preservation and tree integrity verification",
+      "claim": "The specified checkout command does not force symlink creation, and the integrity pass can accept a symlink blob materialized as a regular file because both contain the same target bytes.",
+      "evidence": "The command overrides core.autocrlf and core.eol only. With core.symlinks=false, checkout-index materializes mode 120000 entries as regular files containing the link target. The described integrity pass compares hash-object output to the blob OID but does not require the lstat type to match the ls-tree mode, so this representation can pass the stated check while violating R1 and R3.",
+      "evidence_reference": "Plan §1.1 checkout-index and integrity pass; §2 review-packet symlink assertions; frozen R1 and R3",
+      "repair": "Force core.symlinks=true for checkout-index, verify each checked-out entry's lstat type against its ls-tree mode before pruning, and fail closed with a named tree-integrity error when the host cannot create a real symlink. Add a fixture or invocation with core.symlinks=false to pin the behavior.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e457e265887d53af9a6ac2f1c1574e1b6692f98f64915cb8e24eec3d3d225ed8"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Path representation across Git output, deny matching, filesystem access, and MANIFEST.json",
+      "claim": "The plan requires repository paths to be POSIX byte strings but never defines a lossless mapping from arbitrary Git path bytes into JavaScript and RFC 8259 JSON strings, leaving denial, manifest identity, and collision behavior undefined for non-UTF-8 names.",
+      "evidence": "Git's NUL-delimited ls-tree and name-status output can contain non-UTF-8 path bytes. MANIFEST.json requires string-valued paths and JSON.stringify hashing, while normalizeDenyList and packetPathDenied operate on patterns described as byte strings. A normal UTF-8 decode can replace distinct invalid byte sequences with the same replacement character, causing manifest collisions or incorrect deny decisions.",
+      "evidence_reference": "Plan §1.1 deny-list grammar and MANIFEST.json definition; frozen R1",
+      "repair": "Define one reversible canonical encoding for raw Git path bytes and use it consistently for parsing, deny matching, filesystem Buffer paths, manifest paths, sorting, and denied_paths. Add fixtures containing invalid UTF-8 and delimiter-like bytes that prove distinct paths remain distinct and denial is fail-closed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6e908439b2466f8a8ef5658eb2b72c92e99225c9018ad333744ec1add5395bc0"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Full object-ID assertions and fixture portability",
+      "claim": "The test plan hard-codes base_sha and candidate_sha as 40-hex even though R4 requires full OIDs and Git repositories may use SHA-256 object IDs.",
+      "evidence": "The manifest design correctly says full object IDs, but the detailed review-packet test explicitly asserts 40-hex. A fixture repository can inherit init.defaultObjectFormat=sha256, producing 64-hex commit IDs and failing the suite despite correct behavior; a product implementation that truncates or assumes SHA-1 could also satisfy the proposed assertion accidentally.",
+      "evidence_reference": "Plan §1.1 MANIFEST.json definition and §2 review-packet assertion (d); frozen R4",
+      "repair": "Assert exact equality with the full values returned by rev-parse rather than a 40-character shape. Make fixture object format explicit for hermetic tests and add or parameterize a SHA-256 repository case so packet construction and hash preimage handling are proven object-format agnostic.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "90ee918fb4908957b5ff54097134f40bf1ef5a899a381cfd9a9efb2034bef3d6"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-16T16:01:30.994Z"
+}

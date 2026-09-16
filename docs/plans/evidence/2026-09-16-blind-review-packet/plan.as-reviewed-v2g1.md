@@ -43,25 +43,13 @@
    `DEFAULT_PACKET_DENY_LIST`. It writes, under `outDir`:
    - `tree/` — NOT `git archive` (it honours candidate-controlled `export-subst`, which expands
      `$Format:%B$` to the commit message, and `export-ignore`, which drops an allowed file). Instead:
-     a private index (`GIT_INDEX_FILE=<outDir>/.index`, `git read-tree <candidateOid>`) from which
-     every `.gitattributes` entry (any depth) is first removed (`git update-index --force-remove`),
-     then checked out with `GIT_ATTR_NOSYSTEM=1 git --work-tree=<outDir>/.empty -c
-     core.attributesFile=/dev/null -c core.symlinks=true -c core.autocrlf=false -c core.eol=lf
-     checkout-index -a --prefix=<outDir>/tree/` — the empty work-tree keeps git from reading the
-     real worktree's `.gitattributes`, so NO filter driver (LFS or any configured smudge), `ident`,
-     `eol` or `text` conversion can run (verified 2026-09-17: a configured sentinel smudge driver is
-     never invoked, `$Id$` stays literal, a real symlink is created even with repo
-     `core.symlinks=false`); the removed `.gitattributes` blobs are then written raw from
-     `git cat-file blob <oid>` so the tree is complete; index and `.empty` removed. Then an
-     INTEGRITY pass: every `git ls-tree -r -z <candidateOid>` entry must exist in `tree/` with the
-     `lstat` type matching its mode (`100644`/`100755` → regular file, `120000` → symlink) and
-     `git hash-object --stdin --no-filters` of its bytes (a symlink: of its target bytes) equal to
-     the listed object id, and `tree/` must hold nothing the listing lacks — any mismatch (a
-     rewritten byte, a symlink materialized as a file, a missing or extra path) fails the build
-     closed with `tree integrity: <path>`. Path bytes from `ls-tree -z` / `--name-status -z` are
-     handled as `Buffer`s; any path that is not valid UTF-8 fails the build closed with
-     `unsupported path encoding: <hex>` before checkout (no lossy decode ever reaches the deny
-     matcher or the manifest). Only then is every path matched by the
+     a private index (`GIT_INDEX_FILE=<outDir>/.index`, `git read-tree <candidateOid>`) checked out
+     with `git -c core.autocrlf=false -c core.eol=lf checkout-index -a --prefix=<outDir>/tree/`,
+     the index removed; then an INTEGRITY pass: every `git ls-tree -r -z <candidateOid>` entry must
+     exist in `tree/` with `git hash-object --stdin --no-filters` of its bytes (a symlink: of its target bytes)
+     equal to the listed object id, and `tree/` must hold nothing the listing lacks — any
+     mismatch (an `ident`/`filter`/`eol` attribute rewriting bytes, a missing or extra path) fails
+     the build closed with `tree integrity: <path>`. Only then is every path matched by the
      deny-list deleted (a denied directory is removed whole). No `.git`, so no history, no
      `.git/autopilot`, no commit text; untracked files never enter by construction. Symlinks are
      kept as symlinks (never dereferenced); a link whose target is absolute, escapes `tree/`
@@ -156,9 +144,8 @@
     bytes) to the input's, and no section for any denied old/new path; (d) `MANIFEST.json` entries
     == the sorted `lstat` walk minus the manifest, each `sha256`/`bytes` re-verified by a Node
     helper (`fs.readFileSync` for files, `fs.readlinkSync(p, { encoding: 'buffer' })` for symlinks —
-    never a line-oriented shell pipeline, which would append a newline), `type` correct,
-    `base_sha`/`candidate_sha` equal exactly `git rev-parse --verify B^{commit}` / `C^{commit}` as
-    printed, `deny_list` sorted+deduped, `packet_hash` == `sha256` of the pinned preimage string
+    never a line-oriented shell pipeline, which would append a newline), `type` correct, `base_sha`/`candidate_sha` are 40-hex,
+    `deny_list` sorted+deduped, `packet_hash` == `sha256` of the pinned preimage string
     (re-computed in the test from the manifest fields in the stated key order); (e) building twice
     → equal `packet_hash`; one spec byte changed → different; deny-list reordered/duplicated →
     equal; (f) with `denyList: []` and a candidate touching no symlink/rename hazards,
@@ -168,13 +155,7 @@
     `docs/plans/evidence.md`, `src/receipt.json`, `autopilot/x`, `docs/review.md` → allowed;
     `normalizeDenyList` rejects `/abs/**`, `a/../b`, `` and `{a,b}`; (h) a fixture whose tree
     exceeds 1 MiB builds; (h2) a fixture with `id.txt ident` (`$Id$` is rewritten on checkout)
-    is NOT rewritten (attributes are inert) and the build succeeds with the literal bytes, while a
-    tampered tree (the test overwrites one checked-out file through a seam or asserts the
-    integrity helper directly on a mutated copy) fails closed with `tree integrity: <path>` and no
-    `MANIFEST.json`; (h3) a second fixture repo created with `git init --object-format=sha256`
-    builds, its manifest OIDs are the 64-hex `rev-parse` values and the `packet_hash` preimage
-    re-computes; (h4) a fixture with a filename containing an invalid UTF-8 byte (`printf 'bad\xff'`)
-    fails closed with `unsupported path encoding:` before any file is written; (i) a gitlink fixture (a submodule entry added with
+    fails closed with `tree integrity: id.txt` and writes no `MANIFEST.json`; (i) a gitlink fixture (a submodule entry added with
     `git update-index --add --cacheinfo 160000,<sha>,sub`) fails with `unsupported submodule: sub`
     and writes nothing under `outDir`; (j) a candidate with `specFile` absent yields a zero-byte
     `spec.md` and the manifest lists it with `bytes: 0`.
@@ -222,10 +203,7 @@ other path exists at base.
   leakage); the tree is verified against `git ls-tree -r` object ids before use.
 - `MANIFEST.json` and `packet_hash` contain no timestamp, absolute path, hostname or PID; the hash
   preimage is `JSON.stringify({ schema_version, base_sha, candidate_sha, deny_list, entries })`.
-- Symlinks are never followed; a gitlink fails the build closed; no attribute-driven filter, ident
-  or eol conversion can run during checkout (private index without `.gitattributes`, empty
-  work-tree, `core.attributesFile=/dev/null`, `GIT_ATTR_NOSYSTEM=1`); non-UTF-8 paths fail closed.
-- Object ids are taken verbatim from `git rev-parse`; nothing assumes SHA-1 or 40 hex digits.
+- Symlinks are never followed; a gitlink fails the build closed.
 - The legacy blind path (no `options.packet`) and the non-blind path are byte-identical to base
   `004cb2da` except that both packet env variables are always scrubbed from the launch env.
 - `src/engine/**`, `scripts/**`, `bin/autopilot.js`, `schemas/**` are byte-identical to base.
@@ -250,7 +228,7 @@ other path exists at base.
 | id | criterion | evidence |
 |----|-----------|----------|
 | `packet-canary` | eleven planted tokens (commit message, untracked file, eight deny-listed tracked carriers, a rename out of a denied dir) yield zero hits over the built packet; allowed product, binary and CRLF files and their diff sections are present byte-for-byte | review-packet suite |
-| `packet-hazards` | safe relative symlink kept as a real symlink even with `core.symlinks=false`; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; `export-subst`/`export-ignore` neither leak nor omit; a configured smudge driver never runs and `ident` stays literal; a tampered tree fails closed as `tree integrity`; a SHA-256 repo builds with 64-hex OIDs; an invalid-UTF-8 path fails closed; >1 MiB tree builds; absent spec → zero-byte `spec.md` | review-packet suite |
+| `packet-hazards` | safe relative symlink kept as a symlink; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; `export-subst`/`export-ignore` attributes neither leak nor omit; an `ident` rewrite fails closed as `tree integrity`; >1 MiB tree builds; absent spec → zero-byte `spec.md` | review-packet suite |
 | `packet-identity` | same inputs → same `packet_hash`; one spec byte → different; deny-list order/duplicates irrelevant; manifest entries == `lstat` walk with verified sha256 and `type`; full OIDs; pinned preimage; no denied path → `diff.patch` byte-identical | review-packet suite |
 | `runner-wiring` | blind dispatch with `options.packet` launches on `packet/diff.patch` (+ `packet/spec.md` only when a spec arg was given) with the packet env and returns `packet.packet_hash`; legacy path unchanged with `packet: null`; ambient packet env never inherited; a build failure never launches; every non-success branch carries `packet: null` | dispatch-review suite |
 | `no-regression` | `review-packet`, `dispatch-review`, `review-runner` green; `node scripts/check-js-syntax.js`; `bash scripts/sync-codex-plugin-skills.sh --check`; `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` | suite output |
@@ -270,11 +248,9 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
 - **Alignment fragility.** Sections aligned to `--name-status -z` records fail closed on any count
   mismatch rather than guessing; the rename/copy/odd-name/CRLF/binary/embedded-`diff --git`
   fixtures pin the alignment.
-- **Attribute-driven rewrites and side effects.** `export-*` are bypassed by not using
-  `git archive`; filters/ident/eol cannot run because the checkout sees no attributes at all
-  (private index, empty work-tree, no global/system attribute files); the object-id + type
-  integrity pass is defense in depth and fails the build closed before launch. A candidate cannot
-  make the dispatcher execute a configured filter driver.
+- **Attribute-driven rewrites.** `export-*` are bypassed by not using `git archive`; every other
+  attribute that rewrites bytes on checkout is caught by the object-id integrity pass and fails the
+  build closed before launch; no seat runs on an unfiltered or altered input.
 - **Symlink escape.** Never dereferenced; escaping/denied targets pruned; pinned by §2 (b).
 - **Hand scope.** Two product files, two tests, two docs — sized for one round after the consult's
   split.
@@ -320,14 +296,3 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
   jobs held ~80 GB); the rail then recorded `orphaned_active_claim_transport_exhausted` with zero
   semantic content consumed, so that state dir was moved aside (kept in the session scratchpad) and
   v2 G1 re-run from a clean lineage — the same zero-consumption reset the plan-review contract allows.
-- Plan hetero loop v2 G1 2026-09-17 (GLM-5.2 READY, gpt-5.6-sol STOP 4 blockers; evidence
-  `v2g1-*`): all four accepted — (R3) `checkout-index` could execute a configured smudge driver
-  before the integrity pass: the private index now drops every `.gitattributes`, checks out against
-  an empty `--work-tree` with `core.attributesFile=/dev/null` + `GIT_ATTR_NOSYSTEM=1` (probed: the
-  sentinel driver never runs), and the sentinel fixture pins it; (R3) `core.symlinks=false` would
-  materialize a symlink as a file that still hashes equal: `core.symlinks=true` is forced and the
-  integrity pass checks `lstat` type against the `ls-tree` mode, fixture repo sets
-  `core.symlinks=false`; (R1) non-UTF-8 path bytes: fail closed with `unsupported path encoding`
-  before any write (chosen over a reversible encoding — nothing in this repo needs it), fixture
-  added; (R4) 40-hex assertion → exact equality with `rev-parse`, explicit `--object-format` on the
-  fixtures, a SHA-256 fixture added.

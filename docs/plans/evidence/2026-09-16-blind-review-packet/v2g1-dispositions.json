@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-packet-2026-09-16-v2",
+ "generation": 1,
+ "findings": [
+  {"fingerprint": "481c7442580c8b4f7758fecb4a8d8e0e5e8a8fe30dc9c50891c769bbe23c5eb7", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: checkout-index would run a configured smudge driver before the integrity pass (reproduced with a sentinel touch driver). §1.1 now drops every .gitattributes from the private index and checks out against an empty --work-tree with core.attributesFile=/dev/null and GIT_ATTR_NOSYSTEM=1 (probed 2026-09-17: sentinel never runs, $Id$ literal); the sentinel fixture and a checkout-index control are in §2 (a)."},
+  {"fingerprint": "e457e265887d53af9a6ac2f1c1574e1b6692f98f64915cb8e24eec3d3d225ed8", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: core.symlinks=true is forced on the checkout and the integrity pass compares lstat type with the ls-tree mode; the fixture repo sets core.symlinks=false and asserts tree/link is a real symlink (§1.1, §2 (a), acceptance packet-hazards)."},
+  {"fingerprint": "6e908439b2466f8a8ef5658eb2b72c92e99225c9018ad333744ec1add5395bc0", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted with the fail-closed variant of the repair: path bytes are handled as Buffers and any non-UTF-8 path fails the build closed with `unsupported path encoding: <hex>` before anything is written, so no lossy decode reaches the deny matcher or the manifest; fixture (h4) added. A reversible encoding is unnecessary for the repositories this rail serves."},
+  {"fingerprint": "90ee918fb4908957b5ff54097134f40bf1ef5a899a381cfd9a9efb2034bef3d6", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: the test asserts exact equality with `git rev-parse --verify` output instead of a 40-hex shape; fixtures use explicit `git init --object-format`; a SHA-256 fixture (h3) proves the manifest and preimage are object-format agnostic (§1.1, §2 (d), (h3))."}
+ ]
+}

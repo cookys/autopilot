@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # RED at base 004cb2da: bash: hooks/tests/review-packet.test.sh: No such file or directory
 # RED at base 004cb2da: Cannot find module './src/runners/review-packet'
+# RED at e566ea0c (hand commit, second-family codex review r1): (g2) `logs/x.raw.log/verdict.txt` allowed
+#   (leaf-only deny); `.qc\product.js` denied (backslash rewrite); (h2d) sentinel ran under ambient
+#   GIT_COMMON_DIR (marker present); (h4b) deleted invalid-UTF-8 path NO-THROW; (k) tracked
+#   .gitattributes symlink → `tree integrity: .gitattributes`.
 . "$(dirname "$0")/lib.sh"
 
 MODULE="$REPO_ROOT/src/runners/review-packet.js"
@@ -78,6 +82,7 @@ for tok in T-MSG T-AUTOPILOT T-QC T-EVIDENCE T-REVIEWMD T-DISP T-RECEIPT T-RAWLO
 done
 assert_contains "$(cat "$OUT1/tree/msg.txt")" '$Format:%B$' "(a) msg.txt keeps literal export-subst"
 assert_eq "$(cat "$OUT1/tree/keep.txt")" "$(printf 'keep-c-bytes\n')" "(a) keep.txt present with C bytes"
+assert_file_absent "$SMUDGE_MARK" "(a) tracked .gitattributes sentinel smudge never ran during the build (preservation, green at e566ea0c)"
 
 # git archive control
 ARCH="$TEST_TMP/archive"
@@ -280,8 +285,11 @@ assert_eq "0" "$?" "(f) denyList [] diff.patch cmp identical"
 # (g) tables
 node - "$MODULE" <<'NODE'
 const { packetPathDenied, normalizeDenyList, DEFAULT_PACKET_DENY_LIST } = require(process.argv[2]);
-const denied = ['.autopilot/x', '.autopilot/a/b', '.qc/a.verdict.json', 'docs/plans/evidence/r.md', 'docs/plans/a/b.review.md', 'docs/plans/g2-disposition.json', 'a/b/c.receipt.json', 'x.raw.log', 'a/x.raw.log'];
-const allowed = ['docs/plans/evidence.md', 'src/receipt.json', 'autopilot/x', 'docs/review.md'];
+const denied = ['.autopilot/x', '.autopilot/a/b', '.qc/a.verdict.json', 'docs/plans/evidence/r.md', 'docs/plans/a/b.review.md', 'docs/plans/g2-disposition.json', 'a/b/c.receipt.json', 'x.raw.log', 'a/x.raw.log',
+  // (g2) descendants of a directory named like a denied file are denied too
+  'logs/x.raw.log/verdict.txt', 'docs/plans/p.review.md/body', 'lib/run.receipt.json/inner/x'];
+// (g2) a backslash is an ordinary POSIX filename byte, never a separator
+const allowed = ['docs/plans/evidence.md', 'src/receipt.json', 'autopilot/x', 'docs/review.md', '.qc\\product.js', 'docs\\plans\\evidence\\x'];
 for (const p of denied) {
   if (!packetPathDenied(p, DEFAULT_PACKET_DENY_LIST)) { console.error('should deny', p); process.exit(2); }
 }
@@ -577,6 +585,85 @@ NODE
 assert_eq "0" "$(wc -c < "$JOUT/spec.md" | tr -d ' ')" "(j) zero-byte spec.md"
 node -e 'const m=require(process.argv[1]+"/MANIFEST.json"); const e=m.entries.find(x=>x.path==="spec.md"); if(!e || e.bytes!==0) process.exit(2)' "$JOUT"
 assert_eq "0" "$?" "(j) manifest lists spec.md bytes 0"
+
+# (h2d) ambient GIT_COMMON_DIR / GIT_CONFIG_* poison must not reach the isolated git dir
+POISON="$TEST_TMP/poison"
+git init --object-format=sha1 -q "$POISON"
+POISON_MARK="$TEST_TMP/poison-smudge"
+git -C "$POISON" config filter.poison.smudge "sh -c 'echo RAN >> \"$POISON_MARK\"; cat'"
+mkdir -p "$POISON/.git/info"
+printf '* filter=poison\n' > "$POISON/.git/info/attributes"
+rm -f "$POISON_MARK"
+GIT_COMMON_DIR="$POISON/.git" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=filter.poison.smudge GIT_CONFIG_VALUE_0="sh -c 'echo RAN >> \"$POISON_MARK\"; cat'" \
+  node - "$MODULE" "$INFO" "$INB" "$INC" "$INDIFF" "$TEST_TMP/poison-out" <<'NODE'
+const { buildReviewPacket } = require(process.argv[2]);
+buildReviewPacket({
+  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
+  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
+});
+NODE
+assert_eq "0" "$?" "(h2d) build succeeds under a poisoned GIT_* environment"
+assert_file_absent "$POISON_MARK" "(h2d) ambient GIT_COMMON_DIR / GIT_CONFIG_* never reach the isolated checkout"
+assert_file_exists "$TEST_TMP/poison-out/tree/watched.txt" "(h2d) tree came from the requested repository, not the poisoned one"
+
+# (h4b) an invalid-UTF-8 path that exists only at BASE (deleted in the candidate) also fails closed
+U8D="$TEST_TMP/utf8-del"
+git init --object-format=sha1 -q "$U8D"
+git -C "$U8D" config user.email t@t.example
+git -C "$U8D" config user.name t
+printf 'ok\n' > "$U8D/ok.txt"
+node -e 'require("fs").writeFileSync(Buffer.from(`${process.argv[1]}/gone\xff`, "latin1"), "x\n")' "$U8D"
+git -C "$U8D" add -A
+git -C "$U8D" commit -q -m b
+git -C "$U8D" rm -q --cached -- "$(printf 'gone\xff')" 2>/dev/null || git -C "$U8D" rm -q --cached "gone"*
+printf 'ok2\n' > "$U8D/ok.txt"
+git -C "$U8D" add ok.txt
+git -C "$U8D" commit -q -m c
+U8DB="$(git -C "$U8D" rev-parse HEAD^)"
+U8DC="$(git -C "$U8D" rev-parse HEAD)"
+U8DDIFF="$TEST_TMP/u8d.diff"
+git -C "$U8D" diff --no-ext-diff --no-textconv "$U8DB..$U8DC" > "$U8DDIFF"
+H4BMSG="$(node - "$MODULE" "$U8D" "$U8DB" "$U8DC" "$U8DDIFF" "$TEST_TMP/u8d-out" <<'NODE'
+const { buildReviewPacket } = require(process.argv[2]);
+try {
+  buildReviewPacket({
+    repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
+    diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
+  });
+  process.stdout.write('NO-THROW');
+} catch (e) {
+  process.stdout.write(String(e.message));
+}
+NODE
+)"
+assert_contains "$H4BMSG" "unsupported path encoding:" "(h4b) invalid UTF-8 base-only path in name-status fails closed"
+
+# (k) a tracked .gitattributes that is a SYMLINK is restored as a symlink and survives integrity
+KS="$TEST_TMP/attrlink"
+git init --object-format=sha1 -q "$KS"
+git -C "$KS" config user.email t@t.example
+git -C "$KS" config user.name t
+printf 'a.txt -text\n' > "$KS/attrs.real"
+ln -s attrs.real "$KS/.gitattributes"
+printf 'a\n' > "$KS/a.txt"
+git -C "$KS" add -A
+git -C "$KS" commit -q -m b
+printf 'a2\n' > "$KS/a.txt"
+git -C "$KS" add a.txt
+git -C "$KS" commit -q -m c
+KSB="$(git -C "$KS" rev-parse HEAD^)"
+KSC="$(git -C "$KS" rev-parse HEAD)"
+KSDIFF="$TEST_TMP/ks.diff"
+git -C "$KS" diff --no-ext-diff --no-textconv "$KSB..$KSC" > "$KSDIFF"
+node - "$MODULE" "$KS" "$KSB" "$KSC" "$KSDIFF" "$TEST_TMP/ks-out" <<'NODE'
+const { buildReviewPacket } = require(process.argv[2]);
+buildReviewPacket({
+  repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
+  diffFile: process.argv[6], specFile: null, outDir: process.argv[7], denyList: [],
+});
+NODE
+assert_eq "0" "$?" "(k) build with a symlink .gitattributes succeeds"
+assert_eq "attrs.real" "$(readlink "$TEST_TMP/ks-out/tree/.gitattributes" 2>/dev/null)" "(k) .gitattributes restored as a symlink"
 
 # DEFAULT_PACKET_DENY_LIST length
 node -e 'const {DEFAULT_PACKET_DENY_LIST}=require(process.argv[1]); if(DEFAULT_PACKET_DENY_LIST.length!==8) process.exit(2)' "$MODULE"

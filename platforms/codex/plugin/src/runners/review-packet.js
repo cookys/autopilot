@@ -17,22 +17,17 @@ const DEFAULT_PACKET_DENY_LIST = Object.freeze([
 ]);
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
-const GIT_ISOLATION_KEYS = [
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_INDEX_FILE',
-  'GIT_OBJECT_DIRECTORY',
-  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-];
-
+// Every ambient GIT_* variable is scrubbed before any git subprocess: GIT_DIR /
+// GIT_COMMON_DIR / GIT_INDEX_FILE / GIT_OBJECT_DIRECTORY / GIT_ALTERNATE_OBJECT_DIRECTORIES
+// would point the isolated temp git dir at another repository's config and
+// info/attributes; GIT_CONFIG_PARAMETERS / GIT_CONFIG_COUNT|KEY_n|VALUE_n inject config
+// (a filter driver) without a file. Only the keys this module sets survive.
 function gitEnv(extra) {
-  const env = { ...process.env, ...extra };
-  for (const key of GIT_ISOLATION_KEYS) {
-    if (!extra || !Object.prototype.hasOwnProperty.call(extra, key)) {
-      delete env[key];
-    }
+  const env = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith('GIT_')) env[key] = value;
   }
-  return env;
+  return { ...env, ...(extra || {}) };
 }
 
 function runGit(step, args, options = {}) {
@@ -146,12 +141,16 @@ function matchGlob(pathSegs, patSegs, pi, gi) {
 
 function packetPathDenied(repoPath, denyList) {
   const list = denyList == null ? DEFAULT_PACKET_DENY_LIST : denyList;
-  const posix = String(repoPath).replace(/\\/g, '/').replace(/^\.\//, '');
+  const posix = String(repoPath).replace(/^\.\//, '');
   if (posix === '' || posix === '.') return false;
   const pathSegs = posix.split('/');
+  // A path is denied when it, or ANY ancestor directory of it, matches a pattern:
+  // `logs/x.raw.log/verdict.txt` is under a directory named like a denied file.
   for (const pattern of list) {
     const patSegs = pattern.split('/');
-    if (matchGlob(pathSegs, patSegs, 0, 0)) return true;
+    for (let n = 1; n <= pathSegs.length; n += 1) {
+      if (matchGlob(pathSegs.slice(0, n), patSegs, 0, 0)) return true;
+    }
   }
   return false;
 }
@@ -209,6 +208,13 @@ function splitDiffSections(buf) {
   return sections;
 }
 
+function pathBytesToString(pathBytes) {
+  if (!isValidUtf8(pathBytes)) {
+    throw new Error(`unsupported path encoding: ${pathBytes.toString('hex')}`);
+  }
+  return pathBytes.toString('utf8');
+}
+
 function parseNameStatus(buf) {
   const tokens = splitNul(buf).filter((t) => t.length > 0);
   const records = [];
@@ -220,13 +226,13 @@ function parseNameStatus(buf) {
       if (i + 2 >= tokens.length) throw new Error('git diff --name-status: truncated rename/copy record');
       records.push({
         status,
-        oldPath: tokens[i + 1].toString('utf8'),
-        newPath: tokens[i + 2].toString('utf8'),
+        oldPath: pathBytesToString(tokens[i + 1]),
+        newPath: pathBytesToString(tokens[i + 2]),
       });
       i += 3;
     } else {
       if (i + 1 >= tokens.length) throw new Error('git diff --name-status: truncated record');
-      const p = tokens[i + 1].toString('utf8');
+      const p = pathBytesToString(tokens[i + 1]);
       records.push({ status, oldPath: p, newPath: p });
       i += 2;
     }
@@ -424,7 +430,11 @@ function buildReviewPacket({
         cwd: repoAbs,
         env: isolated,
       });
-      fs.writeFileSync(dest, blob);
+      if (attr.mode === '120000') {
+        fs.symlinkSync(blob.toString('utf8'), dest);
+      } else {
+        fs.writeFileSync(dest, blob, { mode: attr.mode === '100755' ? 0o755 : 0o644 });
+      }
     }
 
     rmIfExists(gitDir);

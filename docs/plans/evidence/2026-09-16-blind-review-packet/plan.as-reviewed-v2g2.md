@@ -43,23 +43,16 @@
    `DEFAULT_PACKET_DENY_LIST`. It writes, under `outDir`:
    - `tree/` — NOT `git archive` (it honours candidate-controlled `export-subst`, which expands
      `$Format:%B$` to the commit message, and `export-ignore`, which drops an allowed file). Instead:
-     an ISOLATED temporary git directory `<outDir>/.gitdir` (created by the builder: `HEAD` =
-     `ref: refs/heads/none`, empty `refs/`, `objects/info/alternates` naming the real repository's
-     objects directory as printed by `git rev-parse --git-path objects`, NO `config`, NO
-     `info/attributes`, NO hooks) used for every tree command via env `GIT_DIR=<outDir>/.gitdir
-     GIT_INDEX_FILE=<outDir>/.gitdir/index GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
-     GIT_ATTR_NOSYSTEM=1`: `git read-tree <candidateOid>`, then every `.gitattributes` entry (any
-     depth) removed from that index (`git update-index --force-remove`), then `git
-     --work-tree=<outDir>/.empty -c core.attributesFile=/dev/null -c core.symlinks=true -c
-     core.autocrlf=false -c core.eol=lf checkout-index -a --prefix=<outDir>/tree/`. The temp git
-     dir has no `info/attributes` and no config, the empty work-tree has no `.gitattributes`, the
-     index has none, and global/system config and attribute files are disabled, so NO filter driver
-     (LFS or any configured smudge), `ident`, `eol` or `text` conversion can run (verified
-     2026-09-17: a sentinel smudge driver configured in the repo and attached through
-     `$GIT_DIR/info/attributes` is never invoked under the temp git dir, and IS invoked by a
-     control that uses the real git dir; `$Id$` stays literal; a real symlink is created even with
-     repo `core.symlinks=false`). The removed `.gitattributes` blobs are then written raw from
-     `git cat-file blob <oid>` so the tree is complete; `.gitdir` and `.empty` removed. Then an
+     a private index (`GIT_INDEX_FILE=<outDir>/.index`, `git read-tree <candidateOid>`) from which
+     every `.gitattributes` entry (any depth) is first removed (`git update-index --force-remove`),
+     then checked out with `GIT_ATTR_NOSYSTEM=1 git --work-tree=<outDir>/.empty -c
+     core.attributesFile=/dev/null -c core.symlinks=true -c core.autocrlf=false -c core.eol=lf
+     checkout-index -a --prefix=<outDir>/tree/` — the empty work-tree keeps git from reading the
+     real worktree's `.gitattributes`, so NO filter driver (LFS or any configured smudge), `ident`,
+     `eol` or `text` conversion can run (verified 2026-09-17: a configured sentinel smudge driver is
+     never invoked, `$Id$` stays literal, a real symlink is created even with repo
+     `core.symlinks=false`); the removed `.gitattributes` blobs are then written raw from
+     `git cat-file blob <oid>` so the tree is complete; index and `.empty` removed. Then an
      INTEGRITY pass: every `git ls-tree -r -z <candidateOid>` entry must exist in `tree/` with the
      `lstat` type matching its mode (`100644`/`100755` → regular file, `120000` → symlink) and
      `git hash-object --stdin --no-filters` of its bytes (a symlink: of its target bytes) equal to
@@ -75,15 +68,11 @@
      (`..` past the root), or resolves to a denied path is removed and listed in `denied_paths`. A
      gitlink (submodule, mode 160000 in `git ls-tree -r`) fails the build closed with
      `unsupported submodule: <path>` before checkout.
-   - `diff.patch` — the dispatcher's diff file is first proven CANONICAL: the builder regenerates
-     `git diff --no-ext-diff --no-textconv <baseOid>..<candidateOid>` in `repo` (the exact command
-     `defaultDiffProvider` uses) and `diffFile`'s bytes must equal it, else the build fails closed
-     with `diff not canonical` (a reordered, edited or foreign diff never reaches the splitter).
-     The canonical bytes are then split into top-level `diff --git` sections as `Buffer`s (bytes
-     are never re-encoded; CRLF and binary sections stay exact) and aligned one-for-one, in order,
-     with the records of `git diff --no-ext-diff --no-textconv --name-status -z <baseOid>
-     <candidateOid>` (git emits both in the same order for the same two OIDs); a count mismatch
-     still fails the build closed. A section is dropped when EITHER its old or its new path is denied; when the old path
+   - `diff.patch` — the dispatcher's diff file split into top-level `diff --git` sections as
+     `Buffer`s (bytes are never re-encoded; CRLF and binary sections stay exact). The section list is
+     aligned one-for-one, in order, with the records of `git diff --no-ext-diff --no-textconv
+     --name-status -z <baseOid> <candidateOid>` run in `repo`; a count mismatch fails the build
+     closed. A section is dropped when EITHER its old or its new path is denied; when the old path
      was denied and the new path is not (a rename out of a denied dir), the new path is also pruned
      from `tree/` and listed. Kept sections are copied byte-for-byte; with no denied path the file
      is byte-identical (`cmp`) to the input. A line inside file content that starts with
@@ -179,14 +168,10 @@
     `docs/plans/evidence.md`, `src/receipt.json`, `autopilot/x`, `docs/review.md` → allowed;
     `normalizeDenyList` rejects `/abs/**`, `a/../b`, `` and `{a,b}`; (h) a fixture whose tree
     exceeds 1 MiB builds; (h2) a fixture with `id.txt ident` (`$Id$` is rewritten on checkout)
-    is NOT rewritten (attributes are inert) and the build succeeds with the literal bytes, while
-    the integrity helper (exported for the test) run on a copy of the tree whose `id.txt` has been
-    replaced by the git-style ident expansion `$Id: <blob oid> $` fails closed with `tree
-    integrity: id.txt` and no `MANIFEST.json` is written; (h2b) a fixture whose sentinel filter is
-    attached through `.git/info/attributes` (not a tracked `.gitattributes`) builds with the marker
-    absent, while a control `checkout-index` against the real git dir creates the marker; (h2c) an
-    equal-count diff file with two sections swapped (or one byte edited) fails closed with `diff
-    not canonical` before any section is written; (h3) a second fixture repo created with `git init --object-format=sha256`
+    is NOT rewritten (attributes are inert) and the build succeeds with the literal bytes, while a
+    tampered tree (the test overwrites one checked-out file through a seam or asserts the
+    integrity helper directly on a mutated copy) fails closed with `tree integrity: <path>` and no
+    `MANIFEST.json`; (h3) a second fixture repo created with `git init --object-format=sha256`
     builds, its manifest OIDs are the 64-hex `rev-parse` values and the `packet_hash` preimage
     re-computes; (h4) a fixture with a filename containing an invalid UTF-8 byte (`printf 'bad\xff'`)
     fails closed with `unsupported path encoding:` before any file is written; (i) a gitlink fixture (a submodule entry added with
@@ -238,10 +223,8 @@ other path exists at base.
 - `MANIFEST.json` and `packet_hash` contain no timestamp, absolute path, hostname or PID; the hash
   preimage is `JSON.stringify({ schema_version, base_sha, candidate_sha, deny_list, entries })`.
 - Symlinks are never followed; a gitlink fails the build closed; no attribute-driven filter, ident
-  or eol conversion can run during checkout (isolated temp `GIT_DIR` with alternates only — no
-  config, no `info/attributes` —, index without `.gitattributes`, empty work-tree,
-  `core.attributesFile=/dev/null`, `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM=/dev/null`,
-  `GIT_ATTR_NOSYSTEM=1`); non-UTF-8 paths fail closed; a non-canonical diff file fails closed.
+  or eol conversion can run during checkout (private index without `.gitattributes`, empty
+  work-tree, `core.attributesFile=/dev/null`, `GIT_ATTR_NOSYSTEM=1`); non-UTF-8 paths fail closed.
 - Object ids are taken verbatim from `git rev-parse`; nothing assumes SHA-1 or 40 hex digits.
 - The legacy blind path (no `options.packet`) and the non-blind path are byte-identical to base
   `004cb2da` except that both packet env variables are always scrubbed from the launch env.
@@ -267,7 +250,7 @@ other path exists at base.
 | id | criterion | evidence |
 |----|-----------|----------|
 | `packet-canary` | eleven planted tokens (commit message, untracked file, eight deny-listed tracked carriers, a rename out of a denied dir) yield zero hits over the built packet; allowed product, binary and CRLF files and their diff sections are present byte-for-byte | review-packet suite |
-| `packet-hazards` | safe relative symlink kept as a real symlink even with `core.symlinks=false`; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; `export-subst`/`export-ignore` neither leak nor omit; a smudge driver attached via `.gitattributes` OR `.git/info/attributes` never runs and `ident` stays literal; an ident-expanded `id.txt` fails closed as `tree integrity: id.txt`; a non-canonical diff fails closed; a SHA-256 repo builds with 64-hex OIDs; an invalid-UTF-8 path fails closed; >1 MiB tree builds; absent spec → zero-byte `spec.md` | review-packet suite |
+| `packet-hazards` | safe relative symlink kept as a real symlink even with `core.symlinks=false`; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; `export-subst`/`export-ignore` neither leak nor omit; a configured smudge driver never runs and `ident` stays literal; a tampered tree fails closed as `tree integrity`; a SHA-256 repo builds with 64-hex OIDs; an invalid-UTF-8 path fails closed; >1 MiB tree builds; absent spec → zero-byte `spec.md` | review-packet suite |
 | `packet-identity` | same inputs → same `packet_hash`; one spec byte → different; deny-list order/duplicates irrelevant; manifest entries == `lstat` walk with verified sha256 and `type`; full OIDs; pinned preimage; no denied path → `diff.patch` byte-identical | review-packet suite |
 | `runner-wiring` | blind dispatch with `options.packet` launches on `packet/diff.patch` (+ `packet/spec.md` only when a spec arg was given) with the packet env and returns `packet.packet_hash`; legacy path unchanged with `packet: null`; ambient packet env never inherited; a build failure never launches; every non-success branch carries `packet: null` | dispatch-review suite |
 | `no-regression` | `review-packet`, `dispatch-review`, `review-runner` green; `node scripts/check-js-syntax.js`; `bash scripts/sync-codex-plugin-skills.sh --check`; `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` | suite output |
@@ -284,10 +267,9 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
 - **Deny-list too broad / too narrow.** Too broad hides product files (silent under-review); too
   narrow leaks. The default names only verdict carriers this repo tracks or writes; `denied_paths`
   is returned so a caller can log it; the canary pins both directions (§2 (a)–(c), (g)).
-- **Alignment fragility.** The diff is proven byte-canonical against a regeneration from the two
-  OIDs before it is split, so positional alignment to `--name-status -z` is sound; a count mismatch
-  still fails closed; the rename/copy/odd-name/CRLF/binary/embedded-`diff --git`/reordered
-  fixtures pin it.
+- **Alignment fragility.** Sections aligned to `--name-status -z` records fail closed on any count
+  mismatch rather than guessing; the rename/copy/odd-name/CRLF/binary/embedded-`diff --git`
+  fixtures pin the alignment.
 - **Attribute-driven rewrites and side effects.** `export-*` are bypassed by not using
   `git archive`; filters/ident/eol cannot run because the checkout sees no attributes at all
   (private index, empty work-tree, no global/system attribute files); the object-id + type
@@ -349,15 +331,3 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
   before any write (chosen over a reversible encoding — nothing in this repo needs it), fixture
   added; (R4) 40-hex assertion → exact equality with `rev-parse`, explicit `--object-format` on the
   fixtures, a SHA-256 fixture added.
-- Plan hetero loop v2 G2 2026-09-17 (terminal at the generation cap; GLM-5.2 CONDITIONAL 1
-  non-blocking, gpt-5.6-sol STOP 3; evidence `v2g2-*`): all accepted at depth-0 — (R3, both seats)
-  the frozen rubric's "an ident rewrite fails closed" now has a literal witness: the exported
-  integrity helper on a tree whose `id.txt` carries the git-style expansion → `tree integrity:
-  id.txt`, while production keeps attributes inert; (R3) `$GIT_DIR/info/attributes` still reached
-  `checkout-index` through the real git dir (reproduced with a sentinel driver): every tree
-  command now runs under an isolated temporary `GIT_DIR` that shares only the object store via
-  `objects/info/alternates` and carries no config / attributes / hooks, with
-  `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM=/dev/null` (probed: driver never runs; the control does);
-  fixture (h2b); (R1) count-only alignment could pair a swapped section with the wrong record: the
-  diff file is first proven byte-canonical against a regeneration from the resolved OIDs (`diff not
-  canonical` otherwise), fixture (h2c). Depth-0 freeze: zero unaddressed blockers, zero deferred.

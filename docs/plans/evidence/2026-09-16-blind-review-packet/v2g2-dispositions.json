@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-packet-2026-09-16-v2",
+ "generation": 2,
+ "findings": [
+  {"fingerprint": "4923e471ac752c26936f9eb199b2d45549705c8abdd3be81add3652ce126cad0", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted: (h2) now runs the exported integrity helper on a tree whose id.txt carries the git-style ident expansion and asserts `tree integrity: id.txt`, giving the frozen R3 sentence a literal witness while production keeps attributes inert."},
+  {"fingerprint": "e44970cab0e07c746967222de19a5a26f56b7bde7cc9712c1bd2a2d5a81e9b93", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: same repair as the GLM finding — the integrity-helper mutation IS a git-style ident expansion of id.txt and the assertion is `tree integrity: id.txt` with no MANIFEST.json (§2 (h2))."},
+  {"fingerprint": "6ea08d9517c9178a4afb388b51de01d0b12e49695e8ce70764945a070ecbe9f1", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted and reproduced (a sentinel driver attached via .git/info/attributes ran under the previous design): every tree command now uses an isolated temporary GIT_DIR sharing only the object store via objects/info/alternates, with no config/attributes/hooks and GIT_CONFIG_GLOBAL/SYSTEM=/dev/null; probed 2026-09-17 (driver never runs; the real-git-dir control does); fixture (h2b) added (§1.1, §2, §2.6)."},
+  {"fingerprint": "6553af00feb5ad4969475bd1f84f0682c4955851fb468406922b8f3b8bc5a206", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: the diff file is first proven byte-canonical against a regeneration of `git diff --no-ext-diff --no-textconv <base>..<candidate>` from the resolved OIDs (fail closed `diff not canonical`), so positional alignment with --name-status is sound; equal-count swapped-section fixture (h2c) added (§1.1, §2, §6)."}
+ ]
+}

@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-packet-2026-09-16-v2",
+  "logical_plan_id": "blind-review-packet-2026-09-16-v2",
+  "session_id": "c1a-v2g2-1789574697",
+  "session_key": "5139483fcd7d19234453f611f5ae98ecba8ca565452894a07462a51889d2c2e0",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "305915f01e74e80e28bde7c4f00c85d535f9f62ac5b709c41958905c282b2c09",
+  "manifest_sha256": "d18fac26042e1bbe5c8bf5ef12109348aa6d5ada90dddb05e21bf6f46e288634",
+  "plan_sha256": "16f455e5030e7159a187203244af90560df25a02b9c5a6ea1db5b2745fa1133e",
+  "growth_ratio": {
+    "numerator": 28477,
+    "denominator": 25105
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "781a88b416f16b5e8dca844fa175e421bc9f475805fd7b00e503bb758a0027f3"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "1993fc8db245b4279f39d436b18fab278aba51a00fd02c3665cf3425e3541368",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-1uhKxK",
+          "digest": "1993fc8db245b4279f39d436b18fab278aba51a00fd02c3665cf3425e3541368"
+        },
+        "receipt_digest": "059c5bc6cf0fc21a13d4287663790344a2e3e71972ab47f795c3a7fdae3ed70d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "6c9195d47c9ddfad4bfa969d9b2097d0c8c428f9907ef0c42b1b0e8f7c59657e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "029aee820c7d0f69f72c5989470f99a2d8ac1870fec8bbfaa9d35f8b1ad0dfde",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-MLAjGF/stdout",
+          "digest": "029aee820c7d0f69f72c5989470f99a2d8ac1870fec8bbfaa9d35f8b1ad0dfde"
+        },
+        "receipt_digest": "7c6799a37072027897e84b6c253ce53a17f37ad02c12d8d3ffd15eb77981959a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/review-packet.test.sh (h2 fixture); src/runners/review-packet.js integrity pass",
+      "claim": "The frozen rubric requires that an ident rewrite fails closed with tree integrity: <path>, but the plan's v2 design (every .gitattributes removed before checkout-index, empty work-tree, core.attributesFile=/dev/null, GIT_ATTR_NOSYSTEM=1) makes an ident rewrite structurally unreachable, so the plan instead tests that $Id$ stays literal and the build succeeds. The fail-closed integrity branch is exercised only via the separate tampered-tree fixture, which is an equivalent-or-stronger guarantee, but the rubric sentence is not literally covered by a fixture in which an ident rewrite occurs and is caught.",
+      "evidence": "Rubric R3 text: 'an ident rewrite fails closed with tree integrity: <path>'. Plan §1.1: attributes are stripped before checkout, then the removed .gitattributes blobs are written raw; verified sentinel smudge never runs and $Id$ stays literal. Plan test (h2): 'id.txt ident ... is NOT rewritten (attributes are inert) and the build succeeds with the literal bytes, while a tampered tree ... fails closed with tree integrity: <path>'.",
+      "evidence_reference": "FROZEN_RUBRIC R3 sentence 4; PLAN_UNDER_REVIEW §1.1 integrity paragraph and §2 review-packet.test.sh item (h2)",
+      "repair": "No current change; follow-up only. When implementing (h2), additionally assert the integrity helper directly on a synthetic $Id$-expanded copy of id.txt (or keep the existing tampered-tree seam) so the rubric's fail-closed-on-ident-rewrite branch has an explicit RED-at-base-pinned witness even though the checkout path can no longer trigger it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4923e471ac752c26936f9eb199b2d45549705c8abdd3be81add3652ce126cad0"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/review-packet.test.sh and the ident integrity contract",
+      "claim": "The plan directly contradicts the frozen requirement for an ident rewrite to fail closed.",
+      "evidence": "Frozen R3 requires an ident rewrite to fail with 'tree integrity: <path>'. Plan section 2(h2) instead requires id.txt to remain literal and the build to succeed, while a separate generic mutation exercises the integrity failure. That does not provide the frozen ident-specific evidence.",
+      "evidence_reference": "Frozen rubric R3; plan section 2, review-packet.test.sh item h2; plan acceptance criterion packet-hazards",
+      "repair": "Retain the production assertion that attributes are inert, but make the integrity-helper mutation a Git-style ident expansion and assert 'tree integrity: id.txt' with no MANIFEST.json. Otherwise the controller must reconcile the frozen rubric before implementation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e44970cab0e07c746967222de19a5a26f56b7bde7cc9712c1bd2a2d5a81e9b93"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/runners/review-packet.js checkout isolation",
+      "claim": "The proposed checkout does not actually prevent all attribute-driven filters from executing.",
+      "evidence": "The plan removes tracked .gitattributes and disables system and global attributes, but checkout-index still uses the repository's real Git directory. Git also consults $GIT_DIR/info/attributes, which the proposed GIT_INDEX_FILE, empty work-tree, core.attributesFile and GIT_ATTR_NOSYSTEM controls do not disable. A filter or ident rule there can run before the integrity pass; detecting changed bytes afterward cannot undo filter side effects.",
+      "evidence_reference": "Plan section 1.1 private-index checkout procedure; plan section 2(h2); global constraint stating that no attribute-driven filter can run",
+      "repair": "Run checkout-index through an isolated temporary Git directory that shares only the required object database and contains no info attributes or inherited filter configuration. Add a fixture using repository info attributes and a sentinel filter, and assert the filter is never invoked.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6ea08d9517c9178a4afb388b51de01d0b12e49695e8ce70764945a070ecbe9f1"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/runners/review-packet.js diff section alignment and deny filtering",
+      "claim": "A section-count check alone does not establish that input diff sections correspond to the name-status records used for deny decisions.",
+      "evidence": "The plan specifies positional one-for-one pairing and failure only on a count mismatch. It does not validate each section's old and new paths or prove that diffFile is the canonical diff for the resolved commits. An equal-count reordered or substituted diff can therefore pair a denied record with an allowed section and retain a denied section.",
+      "evidence_reference": "Plan section 1.1 diff.patch algorithm; plan section 2 review-packet assertions c and f; frozen rubric R1",
+      "repair": "Before filtering, either byte-validate diffFile against a freshly generated canonical diff for the resolved commits or robustly validate every section's old and new path against its name-status record. Add an equal-count reordered-section fixture that must fail closed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6553af00feb5ad4969475bd1f84f0682c4955851fb468406922b8f3b8bc5a206"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "4923e471ac752c26936f9eb199b2d45549705c8abdd3be81add3652ce126cad0",
+      "rubric_id": "R3",
+      "affected_surface": "hooks/tests/review-packet.test.sh (h2 fixture); src/runners/review-packet.js integrity pass",
+      "claim": "The frozen rubric requires that an ident rewrite fails closed with tree integrity: <path>, but the plan's v2 design (every .gitattributes removed before checkout-index, empty work-tree, core.attributesFile=/dev/null, GIT_ATTR_NOSYSTEM=1) makes an ident rewrite structurally unreachable, so the plan instead tests that $Id$ stays literal and the build succeeds. The fail-closed integrity branch is exercised only via the separate tampered-tree fixture, which is an equivalent-or-stronger guarantee, but the rubric sentence is not literally covered by a fixture in which an ident rewrite occurs and is caught.",
+      "evidence_reference": "FROZEN_RUBRIC R3 sentence 4; PLAN_UNDER_REVIEW §1.1 integrity paragraph and §2 review-packet.test.sh item (h2)",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-16T16:08:51.619Z"
+}

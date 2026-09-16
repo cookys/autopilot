@@ -3434,11 +3434,17 @@ else
   # (308's main tree; here, autopilot's own main checkout), while the file tool still reports
   # the process cwd. With --new-project the session starts clean and every edit and commit
   # lands in "$1". Evidence: docs/plans/evidence/2026-09-13-agy-worktree-escape/.
+  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
+  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
+  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
+    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
+      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
+  fi
   run_worker bash -c 'cd "$1" && exec "$2" --new-project -p "$3" --model "$4" --effort "$8" \
       --dangerously-skip-permissions --output-format json --print-timeout "$5" \
       >"$6" 2>"$7"' \
       _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \
-      "$AGY_ENVELOPE" "$AGY_STDERR" "$(agy_effort_clamp "$EFFORT")"
+      "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT"
   if [ "$AGENT_EXIT" -ne 0 ]; then
     cat "$AGY_STDERR" >> "$LOG"
     printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \

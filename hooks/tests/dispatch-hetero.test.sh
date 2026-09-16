@@ -2463,4 +2463,128 @@ assert_contains "$OUT" '"status": "committed"' "22d control: committed"
 assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
   "real ~/.autopilot/engine-capability/strikes.jsonl not written by this suite"
 
+# --- agy effort follows resolved model id (v2.36.55) ---
+agy_effort_from_argv() {
+  awk '$0=="--effort"{getline; print; exit}' "$1"
+}
+count_fold_notes() {
+  printf '%s\n' "$1" | grep -c 'model id encodes the tier' || true
+}
+normalize_argv() {
+  sed -E \
+    -e 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' \
+    -e 's#/tmp/[^[:space:]]+#PATH#g' \
+    -e 's#'"$TEST_TMP"'[^[:space:]]*#PATH#g' \
+    -e 's#'"$SBX"'[^[:space:]]*#PATH#g'
+}
+
+STUB_EFFORT_ARGV="$TEST_TMP/agy-effort-argv"
+cat > "$STUB_EFFORT_ARGV" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$TEST_TMP/hetero-agy.argv"
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: effort-argv"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
+EOF
+chmod +x "$STUB_EFFORT_ARGV"
+make_agy_stub_versioned "$STUB_EFFORT_ARGV"
+
+# RED at base fe225ff5: gemini-flash-medium default effort reached the stub as --effort high
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-medium --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-medium --runner agy 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero gemini-flash-medium default effort exit 0"
+assert_eq "medium" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
+  "hetero alias gemini-flash-medium default effort reaches stub as --effort medium"
+
+# RED at base fe225ff5: gemini-flash-high --effort low reached stub as --effort high with no fold note
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-fold --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort low --runner agy 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero gemini-flash-high --effort low exit 0"
+assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
+  "hetero gemini-flash-high --effort low reaches stub as --effort high"
+assert_eq "1" "$(count_fold_notes "$OUT")" "hetero fold note exactly one line when values differ"
+assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id encodes the tier" \
+  "hetero fold note names requested, folded tier, and model-id reason"
+
+# (preservation, green at base)
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-high --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort high --runner agy 2>&1)"; EXIT=$?
+assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
+  "hetero gemini-flash-high --effort high stays --effort high"
+assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes when clamp matches suffix"
+
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-xhigh --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --runner agy 2>&1)"; EXIT=$?
+assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
+  "hetero gemini-flash-high default xhigh reaches stub as --effort high"
+assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes for default xhigh on -high id"
+
+# (preservation, green at base) bare non-suffixed agy id
+export AGY_STUB_MODELS="$(printf '%s\n' \
+  'gemini-3.7-flash	Gemini 3.7 Flash' \
+  'gemini-3.7-flash-high	Gemini 3.7 Flash (High)')"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-bare --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-3.7-flash --runner agy 2>&1)"; EXIT=$?
+unset AGY_STUB_MODELS
+assert_eq "0" "$EXIT" "hetero bare agy id exit 0"
+assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
+  "hetero bare agy id under default effort reaches stub as --effort high"
+
+STUB_GROK_ARGV="$TEST_TMP/grok-argv"
+HETERO_GROK_ARGV="$TEST_TMP/hetero-grok.argv"
+cat > "$STUB_GROK_ARGV" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$HETERO_GROK_ARGV"
+printf 'grok argv\n' > grok-argv.txt
+EOF
+chmod +x "$STUB_GROK_ARGV"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  --branch feat/grok-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero grok argv capture exit 0"
+assert_eq "$(normalize_argv < "$HETERO_GROK_ARGV")" "$(printf '%s\n' \
+  --session-id UUID --prompt-file PATH --cwd PATH --model grok-4.5 \
+  --reasoning-effort high --always-approve --no-alt-screen --output-format json)" \
+  "hetero grok argv matches frozen literal (preservation, green at base)"
+
+STUB_CODEX_ARGV="$TEST_TMP/codex-argv"
+HETERO_CODEX_ARGV="$TEST_TMP/hetero-codex.argv"
+cat > "$STUB_CODEX_ARGV" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  *"exec --help"*) printf -- '--dangerously-bypass-approvals-and-sandbox\n--dangerously-bypass-hook-trust\n'; exit 0 ;;
+  *"--version"*)   echo "codex-cli 9.9.9 (test stub)"; exit 0 ;;
+esac
+printf '%s\n' "\$@" > "$HETERO_CODEX_ARGV"
+printf 'codex argv\n' > codex-argv.txt
+EOF
+chmod +x "$STUB_CODEX_ARGV"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner codex --model gpt-5.3-codex-spark --effort high \
+  --codex-bin "$STUB_CODEX_ARGV" --branch feat/codex-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero codex argv capture exit 0"
+assert_eq "$(normalize_argv < "$HETERO_CODEX_ARGV")" "$(printf '%s\n' \
+  exec --ignore-user-config --model gpt-5.3-codex-spark \
+  --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust \
+  -c 'model_reasoning_effort="high"')" \
+  "hetero codex argv matches frozen literal (preservation, green at base)"
+
+STUB_CC_ARGV="$TEST_TMP/cc-argv"
+HETERO_CC_ARGV="$TEST_TMP/hetero-cc.argv"
+cat > "$STUB_CC_ARGV" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$HETERO_CC_ARGV"
+printf 'cc argv\n' > cc-argv.txt
+EOF
+chmod +x "$STUB_CC_ARGV"
+mkdir -p "$TEST_TMP/hetero-cc-bin"
+ln -sf "$STUB_CC_ARGV" "$TEST_TMP/hetero-cc-bin/claude"
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
+  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero cc-shim argv capture exit 0"
+assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
+  -p --model mini --dangerously-skip-permissions)" \
+  "hetero cc-shim argv matches frozen literal (preservation, green at base)"
+
 finalize_test

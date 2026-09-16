@@ -458,4 +458,140 @@ EXIT=$?
 assert_eq "2" "$EXIT" "malformed AUTOPILOT_SETTLE_MS exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "malformed AUTOPILOT_SETTLE_MS reports precondition_failed"
 
+# --- agy effort follows resolved model id (v2.36.55) ---
+count_fold_notes() {
+  printf '%s\n' "$1" | grep -c 'model id encodes the tier' || true
+}
+normalize_argv() {
+  sed -E \
+    -e 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' \
+    -e 's#/tmp/[^[:space:]]+#PATH#g' \
+    -e 's#'"$TEST_TMP"'[^[:space:]]*#PATH#g'
+}
+
+if command -v script >/dev/null 2>&1; then
+  STUB_AGY_EFFORT="$TEST_TMP/runner-agy-effort"
+  cat > "$STUB_AGY_EFFORT" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "models" ]; then
+  printf '%s\n' 'gemini-3.6-flash-low' 'gemini-3.6-flash-medium' 'gemini-3.6-flash-high' 'gemini-3.6-flash'
+  exit 0
+fi
+printf 'ARG=%s\n' "\$@"
+echo "ok from agy effort"
+EOF
+  chmod +x "$STUB_AGY_EFFORT"
+  author_agy_effort() {
+    python3 -c '
+import json,sys,re
+out=sys.stdin.read()
+# JSON contract may be mixed with notes; find last {
+i=out.rfind("{")
+raw=""
+if i>=0:
+  try:
+    raw=json.loads(out[i:]).get("raw_log") or ""
+  except Exception:
+    pass
+text=open(raw).read() if raw else out
+m=re.search(r"ARG=--effort\nARG=(\S+)|ARG=--effort\nARG=([^\n]+)", text)
+# ARG= lines are one per argv token
+vals=[ln[4:] for ln in text.splitlines() if ln.startswith("ARG=")]
+eff=""
+for i,v in enumerate(vals):
+  if v=="--effort" and i+1 < len(vals):
+    eff=vals[i+1]
+    break
+print(eff)
+' <<<"$1"
+  }
+
+  # RED at base fe225ff5: gemini-flash-medium default effort reached stub as --effort high
+  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-medium \
+    --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "author gemini-flash-medium default effort exit 0"
+  assert_eq "medium" "$(author_agy_effort "$OUT")" \
+    "author alias gemini-flash-medium default effort reaches stub as --effort medium"
+
+  # RED at base fe225ff5: gemini-flash-high --effort low, no fold note
+  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
+    --effort low --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "author gemini-flash-high --effort low exit 0"
+  assert_eq "high" "$(author_agy_effort "$OUT")" \
+    "author gemini-flash-high --effort low reaches stub as --effort high"
+  assert_eq "1" "$(count_fold_notes "$OUT")" "author fold note exactly one line when values differ"
+  assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id encodes the tier" \
+    "author fold note names requested, folded tier, and model-id reason"
+
+  # (preservation, green at base)
+  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
+    --effort high --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
+  assert_eq "high" "$(author_agy_effort "$OUT")" \
+    "author gemini-flash-high --effort high stays --effort high"
+  assert_eq "0" "$(count_fold_notes "$OUT")" "author zero fold notes when clamp matches suffix"
+
+  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
+    --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
+  assert_eq "high" "$(author_agy_effort "$OUT")" \
+    "author gemini-flash-high default xhigh reaches stub as --effort high"
+  assert_eq "0" "$(count_fold_notes "$OUT")" "author zero fold notes for default xhigh on -high id"
+
+  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash \
+    --prompt-file "$PROMPT" --bin "$STUB_AGY_EFFORT" 2>&1)"; EXIT=$?
+  assert_eq "high" "$(author_agy_effort "$OUT")" \
+    "author bare agy id under default effort reaches stub as --effort high"
+fi
+
+AUTHOR_GROK_ARGV="$TEST_TMP/author-grok.argv"
+cat > "$TEST_TMP/author-grok-argv" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$AUTHOR_GROK_ARGV"
+echo grok-ok
+EOF
+chmod +x "$TEST_TMP/author-grok-argv"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner grok --model grok-4.6 \
+  --prompt-file "$PROMPT" --bin "$TEST_TMP/author-grok-argv" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author grok argv capture exit 0"
+assert_eq "$(normalize_argv < "$AUTHOR_GROK_ARGV")" "$(printf '%s\n' \
+  --prompt-file PATH --cwd PATH --model grok-4.6 --reasoning-effort xhigh \
+  --no-alt-screen --output-format plain --disable-web-search)" \
+  "author grok argv matches frozen literal (preservation, green at base)"
+
+AUTHOR_CODEX_ARGV="$TEST_TMP/author-codex.argv"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner codex --model gpt-5.5 \
+  --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author codex argv capture exit 0"
+# STUB_COD already records the prompt; pin a frozen argv fragment via a wrapper dump.
+cat > "$TEST_TMP/author-codex-argv" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$AUTHOR_CODEX_ARGV"
+exec "$STUB_COD" "\$@"
+EOF
+chmod +x "$TEST_TMP/author-codex-argv"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner codex --model gpt-5.5 \
+  --prompt-file "$PROMPT" --bin "$TEST_TMP/author-codex-argv" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author codex argv wrapper exit 0"
+assert_file_exists "$AUTHOR_CODEX_ARGV" "author codex stub recorded argv"
+# Frozen literal (codex transport, default effort xhigh, no --repo-root): the oracle
+# must not be derived from the capture it checks (codex r1 MUST-FIX, 2026-09-16).
+assert_eq "$(normalize_argv < "$AUTHOR_CODEX_ARGV")" "$(printf '%s\n' \
+  exec --model gpt-5.5 --sandbox read-only --skip-git-repo-check \
+  -c 'model_reasoning_effort="xhigh"' --output-last-message PATH)" \
+  "author codex argv matches frozen literal (preservation, green at base)"
+
+AUTHOR_CC_ARGV="$TEST_TMP/author-cc.argv"
+cat > "$TEST_TMP/author-cc-argv" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$AUTHOR_CC_ARGV"
+echo cc-ok
+EOF
+chmod +x "$TEST_TMP/author-cc-argv"
+OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
+  DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" \
+  --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author cc-shim argv capture exit 0"
+assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV")" "$(printf '%s\n' \
+  -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
+  "author cc-shim argv matches frozen literal (preservation, green at base)"
+
 finalize_test

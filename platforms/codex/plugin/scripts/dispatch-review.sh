@@ -1407,9 +1407,15 @@ else
       AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")
     fi
   done
+  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
+  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
+  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
+    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
+      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
+  fi
   bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
     --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
-    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$(agy_effort_clamp "$EFFORT")" \
+    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$AGY_EFFORT" \
     --dangerously-skip-permissions --output-format json --print-timeout "$TIMEOUT" \
     > "$AGY_OUT" 2> "$AGY_ERR"
   AGY_RC=$?

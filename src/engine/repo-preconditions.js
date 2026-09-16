@@ -54,7 +54,7 @@ function repoBaseReasons(repo, baseSha) {
 
   const status = runGit(repo, ['status', '--porcelain']);
   if (status.trim().length > 0) {
-    reasons.push('dirty: repository has uncommitted changes');
+    reasons.push('dirty: repository has uncommitted changes (commit them, or pass a clean checkout/worktree as --cwd)');
     return reasons;
   }
   try {

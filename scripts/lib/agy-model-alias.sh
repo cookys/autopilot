@@ -21,6 +21,15 @@
 #
 #   MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
 #     || die_precondition "$MODEL"
+#
+# AGY 1.2.3 CONFLICT RULE (probed 2026-09-16 on this host): a resolved id that ENCODES the
+# tier (`gemini-3.8-flash-medium`) succeeds with no `--effort` (agy takes the tier from the
+# id) but `--model gemini-3.8-flash-medium --effort high` is
+# `ERROR: --model gemini-3.8-flash-medium conflicts with --effort=high` (exit non-zero, no
+# turn). A bare `gemini-3.8-flash` with no `--effort` is still
+# `ERROR: requires --effort (available: low, medium, high)`. The alias suffix already wins
+# over `--effort` in agy_resolve_model_alias; `agy_effort_for_model` makes the `--effort`
+# flag agree with that resolved id so the pair cannot conflict.
 
 # agy_is_model_alias <model> — true for the alias vocabulary, so callers do not restate the list.
 agy_is_model_alias() {
@@ -65,5 +74,17 @@ agy_effort_clamp() {
   case "${1:-}" in
     low|medium|high) printf '%s' "$1" ;;
     *) printf 'high' ;;
+  esac
+}
+
+# agy_effort_for_model <resolved-model> <effort>
+# If the resolved id ends in -low|-medium|-high, that suffix is the effort agy
+# will accept (agy ≥ 1.2.3 refuses a conflicting --effort). Otherwise clamp.
+agy_effort_for_model() {
+  case "${1:-}" in
+    *-low) printf 'low' ;;
+    *-medium) printf 'medium' ;;
+    *-high) printf 'high' ;;
+    *) agy_effort_clamp "${2:-}" ;;
   esac
 }

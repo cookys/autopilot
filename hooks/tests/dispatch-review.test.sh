@@ -14,7 +14,12 @@ printf '+def f(): return x[::1]\n' > "$DIFF"
 # that mismatch is precisely what let the whole-line alias matcher pass here while failing against
 # every real inventory (fixed 2026-09-02, lib/agy-model-alias.sh). Consumed by the shared stub
 # wrapper in hooks/tests/lib.sh; 3.6 is the newest entry so the alias assertions below stay pinned.
-export AGY_STUB_MODELS="$(printf '%s\n' 'gemini-3.6-flash-high	Gemini 3.6 Flash (High)' 'gemini-3.5-flash-high	Gemini 3.5 Flash (High)')"
+export AGY_STUB_MODELS="$(printf '%s\n' \
+  'gemini-3.6-flash-high	Gemini 3.6 Flash (High)' \
+  'gemini-3.6-flash-medium	Gemini 3.6 Flash (Medium)' \
+  'gemini-3.6-flash-low	Gemini 3.6 Flash (Low)' \
+  'gemini-3.6-flash	Gemini 3.6 Flash' \
+  'gemini-3.5-flash-high	Gemini 3.5 Flash (High)')"
 
 STUB_MARKER="$TEST_TMP/eng-marker"
 cat > "$STUB_MARKER" <<'EOF'
@@ -100,6 +105,23 @@ case "$MODE" in
     echo "VERDICT: SHIP-AS-IS"
     echo "FINDINGS: none"
     echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target slice was traced; regression assertions were also inspected; conclusion=current requirements have no concrete blocking failure"
+    echo "$END"
+    ;;
+  effort_pin)
+    _eff=""
+    _i=1
+    while [ "$_i" -le "$#" ]; do
+      eval "_a=\${$_i}"
+      if [ "$_a" = "--effort" ]; then
+        _j=$((_i + 1))
+        eval "_eff=\${$_j}"
+        break
+      fi
+      _i=$((_i + 1))
+    done
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: agy-argv-effort=${_eff:-missing}"
     echo "$END"
     ;;
   ship_bare)
@@ -431,6 +453,7 @@ case "${AGY_ENVELOPE_MODE:-valid}" in
   trailing) trailing='trailing bytes' ;;
   *) usage_input=101 ;;
 esac
+[ -n "${AGY_ARGV_FILE:-}" ] && printf '%s\n' "$@" > "$AGY_ARGV_FILE"
 RESPONSE="$response" USAGE_INPUT="${usage_input:-101}" node -e '
   process.stdout.write(JSON.stringify({
     conversation_id: "fixture",
@@ -1672,5 +1695,120 @@ assert_contains "$NODE_PIN" '"status_stays":true' "unratified_verdict never chan
 assert_contains "$NODE_PIN" '"unknown_rejected":true' "arbitrary unknown keys still fail closed"
 assert_contains "$NODE_PIN" '"reviewed_nonnull_rejected":true' \
   "non-null unratified_verdict outside no_verdict is rejected"
+
+# --- agy effort follows resolved model id (v2.36.55) ---
+# agy review runs under bwrap --ro-bind, so argv cannot be written to TEST_TMP.
+# The stub echoes the received --effort into FINDINGS (STUB_MODE=effort_pin).
+count_fold_notes() {
+  printf '%s\n' "$1" | grep -c 'model id encodes the tier' || true
+}
+
+# RED at base fe225ff5: gemini-flash-medium with default effort reached the stub as --effort high
+OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-medium \
+  --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review gemini-flash-medium default effort exit 0"
+assert_contains "$OUT" 'agy-argv-effort=medium' \
+  "review alias gemini-flash-medium default effort reaches stub as --effort medium"
+
+# RED at base fe225ff5: gemini-flash-high --effort low reached stub as --effort high with no fold note
+OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
+  --effort low --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review gemini-flash-high --effort low exit 0"
+assert_contains "$OUT" 'agy-argv-effort=high' \
+  "review gemini-flash-high --effort low reaches stub as --effort high"
+assert_eq "1" "$(count_fold_notes "$OUT")" "review fold note exactly one line when values differ"
+assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id encodes the tier" \
+  "review fold note names requested, folded tier, and model-id reason"
+
+# (preservation, green at base) gemini-flash-high --effort high: --effort high, zero fold notes
+OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
+  --effort high --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review gemini-flash-high --effort high exit 0"
+assert_contains "$OUT" 'agy-argv-effort=high' \
+  "review gemini-flash-high --effort high stays --effort high"
+assert_eq "0" "$(count_fold_notes "$OUT")" "review zero fold notes when requested clamp matches suffix"
+
+# (preservation, green at base) gemini-flash-high default xhigh: --effort high, zero fold notes
+OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash-high \
+  --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review gemini-flash-high default effort exit 0"
+assert_contains "$OUT" 'agy-argv-effort=high' \
+  "review gemini-flash-high default xhigh reaches stub as --effort high"
+assert_eq "0" "$(count_fold_notes "$OUT")" "review zero fold notes for default xhigh on -high id"
+
+# (preservation, green at base) bare (non-suffixed) agy id under default effort → --effort high
+OUT="$(STUB_MODE=effort_pin AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash \
+  --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review bare agy id exit 0"
+assert_contains "$OUT" 'agy-argv-effort=high' \
+  "review bare agy id under default effort reaches stub as --effort high"
+
+# (preservation, green at base) grok/codex/cc-shim complete argv is the frozen literal (path/uuid-normalized)
+normalize_argv() {
+  sed -E \
+    -e 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' \
+    -e 's#/tmp/[^[:space:]]+#PATH#g' \
+    -e 's#'"$TEST_TMP"'[^[:space:]]*#PATH#g'
+}
+
+REVIEW_GROK_ARGV="$TEST_TMP/review-grok.argv"
+cat > "$TEST_TMP/review-grok-stub" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$REVIEW_GROK_ARGV"
+exec "$STUB_VERDICT" "\$@"
+EOF
+chmod +x "$TEST_TMP/review-grok-stub"
+OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner grok --model grok-4.6 \
+  --diff-file "$DIFF" --bin "$TEST_TMP/review-grok-stub" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review grok argv capture exit 0"
+assert_eq "$(normalize_argv < "$REVIEW_GROK_ARGV")" "$(printf '%s\n' \
+  --prompt-file PATH --cwd PATH --model grok-4.6 --reasoning-effort xhigh \
+  --no-alt-screen --output-format plain --disable-web-search)" \
+  "review grok argv matches frozen literal (preservation, green at base)"
+
+REVIEW_CODEX_ARGV="$TEST_TMP/review-codex.argv"
+cat > "$TEST_TMP/review-codex-stub" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$REVIEW_CODEX_ARGV"
+PROMPT="\$(cat)"
+begin="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-REVIEW-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
+end="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-END-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
+echo "\$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=fixture; evidence=slice traced; conclusion=no blocking discrepancy observed"
+echo "\$end"
+EOF
+chmod +x "$TEST_TMP/review-codex-stub"
+OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner codex --model gpt-5.5 \
+  --diff-file "$DIFF" --bin "$TEST_TMP/review-codex-stub" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review codex argv capture exit 0"
+assert_eq "$(normalize_argv < "$REVIEW_CODEX_ARGV")" "$(printf '%s\n' \
+  exec --model gpt-5.5 --sandbox read-only -c 'model_reasoning_effort="xhigh"')" \
+  "review codex argv matches frozen literal (preservation, green at base)"
+
+REVIEW_CC_ARGV="$TEST_TMP/review-cc.argv"
+cat > "$TEST_TMP/review-cc-stub" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$REVIEW_CC_ARGV"
+PROMPT="\$(cat)"
+begin="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-REVIEW-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
+end="\$(printf '%s\n' "\$PROMPT" | sed -n 's/^\\(<<<AUTOPILOT-END-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
+echo "\$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=fixture; evidence=slice traced; conclusion=no blocking discrepancy observed"
+echo "\$end"
+EOF
+chmod +x "$TEST_TMP/review-cc-stub"
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
+OUT="$(AUTOPILOT_SETTLE_MS=0 \
+  "$SCRIPT" --runner cc-shim --model mini --diff-file "$DIFF" --bin "$TEST_TMP/review-cc-stub" \
+  --endpoint TESTEP 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "review cc-shim argv capture exit 0"
+assert_eq "$(normalize_argv < "$REVIEW_CC_ARGV")" "$(printf '%s\n' \
+  -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
+  "review cc-shim argv matches frozen literal (preservation, green at base)"
 
 finalize_test

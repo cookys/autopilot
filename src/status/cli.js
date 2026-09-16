@@ -484,7 +484,10 @@ function runStatusCli(argv, {
       const envLevel = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
       const level = ['l4', 'l5', 'l6'].includes(envLevel) ? envLevel : undefined;
       bootstrap = createStrictL5ProviderBootstrap({ cwd, ...(level ? { level } : {}) });
-    } catch {
+    } catch (error) {
+      stderr.write(
+        `readiness: strict bootstrap unavailable (${error.code || error.message}) — qualification axis reads unknown; the engine path would refuse with the same reason\n`,
+      );
       bootstrap = null;
     }
     let receipt;

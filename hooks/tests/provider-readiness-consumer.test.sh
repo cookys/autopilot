@@ -928,8 +928,13 @@ for (const level of ['l5', 'l6']) {
   };
   expectIncomplete(
     { ...clone(resolved), verification_author_present: false },
-    'requires the verification-author seat',
-    '(i) VA missing',
+    'verification_author_present: true',
+    '(i) VA missing', // RED at base fe225ff5: message was "strict /l5 requires the verification-author seat"
+  );
+  expectIncomplete(
+    { ...clone(resolved), verification_author_present: false },
+    '.claude/review-loop-config.md',
+    '(i) VA missing names config path',
   );
   expectIncomplete(
     { ...clone(resolved), qc_panel_seats: [], qc_panel_seats_complete: false },
@@ -1163,5 +1168,39 @@ assert_contains "$L4_OUT" "code=provider_readiness_authority_missing" "l4 enforc
 assert_contains "$L4_OUT" "AUTOPILOT_LEVEL=l3; only l4/l5/l6 build the strict host bootstrap" "refusal names the level and the cause (l4 compiles the bootstrap since v2.36.8)"
 assert_contains "$L4_OUT" "enforcement_mode to shadow, or run it under /l4, /l5 or /l6" "refusal names the two legal remedies"
 assert_contains "$L4_OUT" "Do not construct a readiness authority by hand" "refusal forbids a hand-built authority"
+
+# RED at base fe225ff5: message was "strict /l5 requires the verification-author seat"
+VA_MSG_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const { createStrictL5ProviderBootstrap } = require(path.join(root, 'src', 'readiness', 'provider-bootstrap'));
+const roster = {
+  implementer_runner: 'codex', implementer_engine: 'gpt-5.5', implementer_effort: 'high',
+  implementer_endpoint: null, implementer_family: 'openai',
+  reviewer_runner: 'codex', reviewer_engine: 'gpt-5.5', reviewer_effort: 'xhigh',
+  reviewer_endpoint: null, reviewer_family: 'openai',
+  verification_author_present: false,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [{
+    runner: 'codex', model: 'gpt-5.5', effort: 'xhigh', endpoint: null, family: 'openai', role: 'qc',
+  }],
+};
+assert.throws(
+  () => createStrictL5ProviderBootstrap({ cwd: root, level: 'l5' }, {
+    resolvedRoster: roster,
+    collectReadiness: () => ({ receipt: {}, roster: [], policy: {} }),
+    now: () => '2026-08-04T08:00:00.000Z',
+  }),
+  (error) => error && error.code === 'strict_l5_provider_roster_incomplete'
+    && error.message.includes('verification_author_present: true')
+    && error.message.includes('.claude/review-loop-config.md'),
+);
+console.log('va_remedy=true');
+NODE
+)"
+assert_contains "$VA_MSG_OUT" "va_remedy=true" \
+  "VA refusal names verification_author_present: true and review-loop-config.md"
 
 finalize_test

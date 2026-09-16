@@ -572,9 +572,12 @@ OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner codex --model g
   --prompt-file "$PROMPT" --bin "$TEST_TMP/author-codex-argv" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author codex argv wrapper exit 0"
 assert_file_exists "$AUTHOR_CODEX_ARGV" "author codex stub recorded argv"
-EXPECTED_AUTHOR_CODEX="$(normalize_argv < "$AUTHOR_CODEX_ARGV")"
-assert_eq "$(normalize_argv < "$AUTHOR_CODEX_ARGV")" "$EXPECTED_AUTHOR_CODEX" \
-  "author codex argv byte-identical to captured literal (preservation, green at base)"
+# Frozen literal (codex transport, default effort xhigh, no --repo-root): the oracle
+# must not be derived from the capture it checks (codex r1 MUST-FIX, 2026-09-16).
+assert_eq "$(normalize_argv < "$AUTHOR_CODEX_ARGV")" "$(printf '%s\n' \
+  exec --model gpt-5.5 --sandbox read-only --skip-git-repo-check \
+  -c 'model_reasoning_effort="xhigh"' --output-last-message PATH)" \
+  "author codex argv matches frozen literal (preservation, green at base)"
 
 AUTHOR_CC_ARGV="$TEST_TMP/author-cc.argv"
 cat > "$TEST_TMP/author-cc-argv" <<EOF

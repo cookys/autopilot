@@ -123,43 +123,31 @@ assert_eq "0" "$?" "readiness fallback is exactly one stderr line"
 EXPECTED_READY="$TEST_TMP/providerless-expected.json"
 ACTUAL_READY="$TEST_TMP/providerless-actual.json"
 printf '%s\n' "$__RUN_STDOUT" > "$ACTUAL_READY"
-node - "$REPO_ROOT" "$CFG" "$SB" "$ACTUAL_READY" <<'NODE'
+# Frozen literal: the provider-less receipt the BASE (fe225ff5) CLI emits for this empty
+# config fixture, with issued_at/expires_at/observed_at and every *_digest / brain_seat
+# stripped. Not derived from the implementation under test (codex r1 MUST-FIX, 2026-09-16).
+cat > "$EXPECTED_READY" <<'JSON'
+{"schema_version":1,"artifact_type":"provider_readiness_receipt","overall_status":"probe-needed","seats":[{"seat_id":"implementer","required":true,"family":"openai","decision":{"schema_version":1,"artifact_type":"provider_readiness_decision","tuple":{"role":"implementer","runner":"codex","model":"gpt-5.3-codex-spark","effort":"high","endpoint":null},"tuple_digest":"9e1c837b1293be0eba619fc606ab086170999b6279f0bd62ab7dc5815e7e2e35","axes":{"transport":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_transport_observation"},"live":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_live_observation"},"qualification":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_qualification_observation"}},"usable_now":false,"probe_required":true,"blocking_reasons":[],"fallbacks":[]},"fallbacks":[],"selected":null,"status":"probe-needed","failing_axes":[{"axis":"transport","status":"unknown","reason":"missing_transport_observation"},{"axis":"live","status":"unknown","reason":"missing_live_observation"},{"axis":"qualification","status":"unknown","reason":"missing_qualification_observation"}]},{"seat_id":"reviewer","required":true,"family":"openai","decision":{"schema_version":1,"artifact_type":"provider_readiness_decision","tuple":{"role":"reviewer","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null},"tuple_digest":"472485ff907bbc702aab5d955423679121f8e180d768f43634b37972d6ff48ef","axes":{"transport":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_transport_observation"},"live":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_live_observation"},"qualification":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_qualification_observation"}},"usable_now":false,"probe_required":true,"blocking_reasons":[],"fallbacks":[]},"fallbacks":[],"selected":null,"status":"probe-needed","failing_axes":[{"axis":"transport","status":"unknown","reason":"missing_transport_observation"},{"axis":"live","status":"unknown","reason":"missing_live_observation"},{"axis":"qualification","status":"unknown","reason":"missing_qualification_observation"}]},{"seat_id":"qc:1","required":true,"family":"openai","decision":{"schema_version":1,"artifact_type":"provider_readiness_decision","tuple":{"role":"qc","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null},"tuple_digest":"fd1a7712e62af57ec0b480e73e8839e47c1a5b1e41d58fd0fa743098396fc886","axes":{"transport":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_transport_observation"},"live":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_live_observation"},"qualification":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_qualification_observation"}},"usable_now":false,"probe_required":true,"blocking_reasons":[],"fallbacks":[]},"fallbacks":[],"selected":null,"status":"probe-needed","failing_axes":[{"axis":"transport","status":"unknown","reason":"missing_transport_observation"},{"axis":"live","status":"unknown","reason":"missing_live_observation"},{"axis":"qualification","status":"unknown","reason":"missing_qualification_observation"}]},{"seat_id":"qc:2","required":true,"family":"anthropic","decision":{"schema_version":1,"artifact_type":"provider_readiness_decision","tuple":{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null},"tuple_digest":"9016bc23f76b0b2b018539aa76cf5a82c57e7a609fdeb0a4f03ebee2ddbbca16","axes":{"transport":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_transport_observation"},"live":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_live_observation"},"qualification":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_qualification_observation"}},"usable_now":false,"probe_required":true,"blocking_reasons":[],"fallbacks":[]},"fallbacks":[],"selected":null,"status":"probe-needed","failing_axes":[{"axis":"transport","status":"unknown","reason":"missing_transport_observation"},{"axis":"live","status":"unknown","reason":"missing_live_observation"},{"axis":"qualification","status":"unknown","reason":"missing_qualification_observation"}]},{"seat_id":"qc:3","required":true,"family":"google","decision":{"schema_version":1,"artifact_type":"provider_readiness_decision","tuple":{"role":"qc","runner":"agy","model":"gemini-3.6-flash-high","effort":"high","endpoint":null},"tuple_digest":"c30f6be79439ebf88f1cf9e14a1e6b18f9f70fe35a3b6566987b731a83e6deec","axes":{"transport":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_transport_observation"},"live":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_live_observation"},"qualification":{"status":"unknown","observed_status":null,"ttl_seconds":0,"evidence_class":"none","freshness":"missing","reason":"missing_qualification_observation"}},"usable_now":false,"probe_required":true,"blocking_reasons":[],"fallbacks":[]},"fallbacks":[],"selected":null,"status":"probe-needed","failing_axes":[{"axis":"transport","status":"unknown","reason":"missing_transport_observation"},{"axis":"live","status":"unknown","reason":"missing_live_observation"},{"axis":"qualification","status":"unknown","reason":"missing_qualification_observation"}]}]}
+JSON
+node - "$EXPECTED_READY" "$ACTUAL_READY" <<'NODE'
 const fs = require('fs');
-const path = require('path');
-const root = process.argv[2];
-const { collectProviderReadiness } = require(path.join(root, 'src', 'readiness', 'status'));
-const expected = collectProviderReadiness({
-  cwd: root,
-  probe: false,
-  env: {
-    ...process.env,
-    REVIEW_LOOP_CONFIG_OVERRIDE: process.argv[3],
-    ENGINE_CAPABILITY_DIR: path.join(process.argv[4], 'cap'),
-    ENGINE_SCORECARD_DIR: path.join(process.argv[4], 'sc'),
-    AUTOPILOT_DISPATCH_RUNS_DIR: path.join(process.argv[4], 'runs'),
-  },
-});
-const actual = JSON.parse(fs.readFileSync(process.argv[5], 'utf8'));
-const drop = (rec) => {
-  const scrub = (value) => {
-    if (Array.isArray(value)) return value.map(scrub);
-    if (!value || typeof value !== 'object') return value;
-    const copy = {};
-    for (const [k, v] of Object.entries(value)) {
-      if (k === 'issued_at' || k === 'expires_at' || k === 'observed_at'
-          || k === 'roster_digest' || k === 'policy_digest'
-          || k === 'observation_digest' || k === 'receipt_digest'
-          || k === 'decision_digest' || k === 'brain_seat') continue;
-      copy[k] = scrub(v);
-    }
-    return copy;
-  };
-  return scrub(rec);
-};
-const a = drop(actual);
-const e = drop(expected);
 const assert = require('assert');
-assert.deepStrictEqual(a, e);
+const expected = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const actual = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+const scrub = (value) => {
+  if (Array.isArray(value)) return value.map(scrub);
+  if (!value || typeof value !== 'object') return value;
+  const copy = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k === 'issued_at' || k === 'expires_at' || k === 'observed_at'
+        || k === 'roster_digest' || k === 'policy_digest'
+        || k === 'observation_digest' || k === 'receipt_digest'
+        || k === 'decision_digest' || k === 'brain_seat') continue;
+    copy[k] = scrub(v);
+  }
+  return copy;
+};
+assert.deepStrictEqual(scrub(actual), expected);
 NODE
 assert_eq "0" "$?" "stdout JSON deep-equals provider-less receipt (digest/timestamp normalized)"
 

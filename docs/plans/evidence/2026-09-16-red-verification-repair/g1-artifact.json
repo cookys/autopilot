@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "red-verification-repair-2026-09-16",
+  "logical_plan_id": "red-verification-repair-2026-09-16",
+  "session_id": "c-g1-1789526783",
+  "session_key": "48858c8d1d0cf80bf7e5954938f02e4358b6669658a06c05996bcf7b35056c62",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "2231d88ea86136c91e80b22faae0123713571eea3eb1a3a822a7565d2ab38df9",
+  "manifest_sha256": "84a9ffadc860140022b02b50c7e183d5ea5f4d47cb8155aab642db9ff1558586",
+  "plan_sha256": "888b12b3740f241c46c6fb3cdcf1cc65cacdad5b48e7586824382f1d76b4ed59",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "cb789cef9b005d698abf435b3f12656b4f9e8915ac129c2b25b774cd7ac8c1cb"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-3Qb4c3",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "c7e8a14c54357b12cd5c125a9bfc456590ba1e4e660f46171df1eceac4ce19ff"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "07809c5ee2574babd1853698251d9187536ca04c8ae523c4d68884785a7aee51"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7b7cf673220db453b9f84ceeeaec000953f62876baac8d90238c43efd3a5b267",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-VUE8l7/stdout",
+          "digest": "7b7cf673220db453b9f84ceeeaec000953f62876baac8d90238c43efd3a5b267"
+        },
+        "receipt_digest": "74f36fcff16bbed499f8108b807929b57801b47b7ffc2b36c6456f7f617ddd66"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh and the R6 acceptance evidence",
+      "claim": "The plan does not require an assertion proving that the red candidate's review digest remains in the controller full-diff gate journal.",
+      "evidence": "Section 1.1 claims the digest remains durable, but T1 through T6 cover event attempts, repair authorization, repair dispatch, campaign-ledger rows, green journal failure, and non-vertical path refusal. The composition extension covers ordering and vertical_failed arguments. None reads the controller full-diff gate journal or verifies its stored digest.",
+      "evidence_reference": "PLAN_UNDER_REVIEW sections 1.1, 2.3, and 4; frozen rubric R6",
+      "repair": "Add a deterministic routing-test assertion that reads the suite-sandbox controller full-diff gate journal after the generation-0 red review and verifies that the red candidate's review digest is retained with its expected candidate and verification bindings. Add this assertion to the acceptance table and keep it separate from the campaign-event spy assertion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cea3bfb32d9e05b1bd14f574b98472fc139951390b18bed7d775654b5f18fc39"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-16T02:48:14.597Z"
+}

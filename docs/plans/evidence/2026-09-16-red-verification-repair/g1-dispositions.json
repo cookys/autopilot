@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "red-verification-repair-2026-09-16",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "cea3bfb32d9e05b1bd14f574b98472fc139951390b18bed7d775654b5f18fc39",
+      "disposition": "accepted_blocker",
+      "candidate_blocker": true,
+      "rationale": "Accepted: §2.3 gains T7 — the composition R3 case reads the returned controller gate journal and asserts the generation-0 full_diff_review entry holds the red review digest with success:true and vertical_failed in its input; the engine block asserts the same on the engine-returned controller (R6 evidence now has an assertion)."
+    }
+  ]
+}

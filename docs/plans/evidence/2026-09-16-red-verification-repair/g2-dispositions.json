@@ -1,0 +1,31 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "red-verification-repair-2026-09-16",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "ed605a51c9d9958873fca3fab9b9918ff29194cadaa61b51bd29e37743a84507",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: T5 now asserts the spy recorded repair_authorized(1) and a review_completed(1) attempt BEFORE the injected throw, and that the returned reason equals the injected unique message \u2014 generation 1 is proven reached."
+  },
+  {
+   "fingerprint": "b8c46fb54080dd971c89353155df9cabc2e65a7d176bb0439e184d98947be552",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: acceptance no-regression gains `git diff --stat d14bfb68 -- <five R7 files>` empty; the hand runs it in Verify."
+  },
+  {
+   "fingerprint": "048d52693fe0cf0179897c3cae73d7cb78f4d5f756a8dff19ebc224871fea7b3",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: T7 is a preservation guard (green at base) in the composition case; in the engine block the hand pins the base-observed gate-journal state in the header unconditionally (either the entry is absent/success:false \u2192 RED with the observed value, or present \u2192 labelled preservation)."
+  },
+  {
+   "fingerprint": "e49b95e31e383e4a6f7aa49c6221bbf86213dfffb4124c4da10b6651f2d7616b",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a72.5 enumerates the exact sealed output_paths (6 paths) and acceptance gains `git diff --name-only d14bfb68 HEAD` \u2286 output_paths."
+  }
+ ]
+}

@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "red-verification-repair-2026-09-16",
+  "logical_plan_id": "red-verification-repair-2026-09-16",
+  "session_id": "c-g1-1789526783",
+  "session_key": "48858c8d1d0cf80bf7e5954938f02e4358b6669658a06c05996bcf7b35056c62",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "2231d88ea86136c91e80b22faae0123713571eea3eb1a3a822a7565d2ab38df9",
+  "manifest_sha256": "84a9ffadc860140022b02b50c7e183d5ea5f4d47cb8155aab642db9ff1558586",
+  "plan_sha256": "49e0ae1a8af11eff7b169b670d259162062595686baf7b19e41a409fbfc3e671",
+  "growth_ratio": {
+    "numerator": 6994,
+    "denominator": 6581
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "e87701df502f9d166150efd3d32599c9d3cec553448df4200c09d69e1cb9dd78"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-dIL8Ls",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "16a162aefbdc1e921a8f992d8161b6553b52048893c94c8e903e019e8062315e"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "c608b36921d155cd50473dc2465d8887d47afc56c10fd06503d93120baacdb42"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9a359ed8571c8109b41b6586d7478ed2178023d2d367a990febaf0a60b5217b6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-C9EOVa/stdout",
+          "digest": "9a359ed8571c8109b41b6586d7478ed2178023d2d367a990febaf0a60b5217b6"
+        },
+        "receipt_digest": "7102e299fb30f141b2655d80b69530919a5b8fe5522be522349523437a0f7146"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh generation-1 GREEN journaling preservation guard",
+      "claim": "The proposed T5 can pass against the base for the wrong reason because the shared RED-generation scenario already stops at generation 0 with phase campaign_event_journal, before the injected generation-1 review_completed failure is reached.",
+      "evidence": "The engine-block fixture is described as RED at generation 0 and GREEN at generation 1. T5 asserts only that the run returns phase campaign_event_journal when the appender throws on generation-1 review_completed. On base d14bfb68, the generation-0 review_completed reducer rejection produces that same phase, so the stated assertion does not prove that generation 1 was reached or that the injected throw fired.",
+      "evidence_reference": "Plan section 2.3, shared engine-block setup and T5; frozen rubric R5.",
+      "repair": "Define T5 as an independent base-green scenario seeded or resumed so that generation 1 is already eligible for GREEN review, and assert both that exactly one generation-1 review_completed append was attempted and that the designated injected exception fired before asserting phase campaign_event_journal.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ed605a51c9d9958873fca3fab9b9918ff29194cadaa61b51bd29e37743a84507"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Protected campaign reducer, composition, intake, CLI, and controller-execution files",
+      "claim": "The plan states that the five R7 files are out of scope but provides no acceptance check proving they remain byte-identical to base d14bfb68.",
+      "evidence": "The no-regression acceptance row runs suites and syntax checks, but it does not compare src/engine/implementation-campaign.js, src/engine/campaign-composition.js, src/engine/campaign-intake.js, src/campaign/cli.js, and src/engine/controller-execution.js with d14bfb68. Passing tests cannot establish byte identity.",
+      "evidence_reference": "Plan sections 3 and 4; frozen rubric R7.",
+      "repair": "Add a mandatory acceptance command that performs an exact diff against d14bfb68 for all five protected files and fails on any byte change; retain the existing suites for behavioral coverage.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b8c46fb54080dd971c89353155df9cabc2e65a7d176bb0439e184d98947be552"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Test-header RED provenance for the T7 gate-journal assertion",
+      "claim": "T7 leaves its RED-against-base classification conditional, so the plan does not guarantee the unconditional RED record and observed failing message required for every change-pinning assertion.",
+      "evidence": "T7 says it is RED at base only if the base run stops before the gate entry is written. The plan's own failure analysis says the base barrier stops after performReview returns campaign_event_journal, making this an empirical fact that must be pinned rather than left conditional.",
+      "evidence_reference": "Plan section 2.3 T7 and section 0 item 4; frozen rubric R9.",
+      "repair": "Run the T7 assertion against d14bfb68, replace the conditional wording with the observed RED result, and require the test header to record the exact failing assertion message alongside T1 through T4.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "048d52693fe0cf0179897c3cae73d7cb78f4d5f756a8dff19ebc224871fea7b3"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sealed output-path integrity and final changed-file audit",
+      "claim": "The plan refers to sealed output_paths but never enumerates their exact set or defines a final check that rejects changes outside that set.",
+      "evidence": "Section 2 describes intended files and section 2.4 says CHANGELOG.md is not a sealed output path, but no authoritative output_paths manifest appears in the plan. The acceptance table also lacks an exact changed-file comparison against d14bfb68, so generated or incidental edits could escape detection.",
+      "evidence_reference": "Plan sections 2, 2.4, and 4; frozen rubric R10.",
+      "repair": "Enumerate the exact sealed output_paths, including the generated Codex mirror targets, and add a final base-relative changed-file check that fails if any path outside that set changed; separately pin the openclaw BACKLOG row as unchanged.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e49b95e31e383e4a6f7aa49c6221bbf86213dfffb4124c4da10b6651f2d7616b"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-16T02:50:15.659Z"
+}

@@ -102,12 +102,9 @@ uses the routing suite's existing real-ledger sandbox (never the host ledger).
     `repair_completed(1)`, `vertical_verified(1)`, exactly one `review_completed(1)`; no generation-0
     `vertical_verified` or `review_completed` rows exist; the reviewer stub was called exactly once
     for the red candidate (identified by tree_sha) before the repair.
-  - **T5 (RED at base — at base the run stops at generation 0 before the injection is reached)**
-    GREEN generation journaling stays fail-closed: with a `campaignEventAppender` that throws a unique
-    message on `REVIEW_COMPLETED` at generation 1, the spy has recorded `repair_authorized(1)` and one
-    `review_completed(1)` attempt BEFORE the throw, and the run returns `phase:
-    'campaign_event_journal'` with `reason` equal to the injected message (proves generation 1 was
-    reached and the predicate is conditional, not a blanket swallow).
+  - **T5 (preservation, green at base)** GREEN generation journaling stays fail-closed: with a
+    `campaignEventAppender` that throws on `REVIEW_COMPLETED` at generation 1, the run returns
+    `phase: 'campaign_event_journal'` (proves the predicate is conditional, not a blanket swallow).
   - **T6 (preservation, green at base)** a reviewer finding without an explicit path on a NON-vertical
     repair is still refused with `finding … has no explicit allowed repair path` (the existing
     assertion at `implementation-campaign-state.test.sh:2621` region stays; add or reference it).
@@ -117,27 +114,6 @@ uses the routing suite's existing real-ledger sandbox (never the host ledger).
   `vertical_failed: true`, generation 1's review (if reached) received `vertical_failed: false`, mutation
   kinds exactly `initial` then `vertical_repair` (preservation guards, green at base — they pin the
   composition contract the engine fix relies on).
-  - **T7 (R6 evidence; preservation guard, green at base, in the composition case; in the engine
-    block the hand pins the base-observed gate-journal state in the header UNCONDITIONALLY — either
-    the generation-0 entry is absent / `success:false` at base → RED with the observed value, or it is
-    present → labelled preservation)**: the returned `controller.gate_journal`
-    holds exactly one `full_diff_review` entry for generation 0 whose `result.success === true`,
-    whose `result.review_digest` (or the digest field the gate records) equals the review stub's
-    digest, and whose `input.vertical_failed === true`; the engine block asserts the same on the
-    engine's returned controller after the run, proving the red-candidate review stayed durable
-    outside the campaign ledger.
-
-### 2.5 Sealed `output_paths` (exact; anything else is a boundary rejection)
-
-```
-src/engine/autopilot-engine.js
-platforms/codex/plugin/src/engine/autopilot-engine.js
-hooks/tests/implementation-campaign-routing.test.sh
-hooks/tests/implementation-campaign-state.test.sh
-docs/BACKLOG.md
-skills/l5/references/hetero-impl-loop.md
-platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
-```
 
 ### 2.4 Docs (pinned version **v2.36.56**; canonical `origin/develop` is 2.36.55 at freeze — reseal plan
 and rubric together with the freed number if an intervening release lands first)
@@ -168,7 +144,6 @@ and rubric together with the freed number if an intervening release lands first)
 | `repaired-generation-reviewed` | `repair_completed(1)`, `vertical_verified(1)`, one `review_completed(1)`; none at generation 0 | T4 |
 | `green-journal-still-fail-closed` | a journal error on a GREEN generation's `review_completed` still blocks at `campaign_event_journal` | T5 |
 | `no-regression` | `implementation-campaign-routing`, `implementation-campaign-state`, `implementation-campaign`, `controller-execution-independent`, `p6d-gates-repair-ladder`, `mission-runtime-v2`, `implementation-campaign-receipt` green; `check-js-syntax.js`; `sync-codex-plugin-skills.sh --check`; `check-backlog-entries.js` exit 0 | suite output |
-| `scope-integrity` | `git diff --stat d14bfb68 -- src/engine/implementation-campaign.js src/engine/campaign-composition.js src/engine/campaign-intake.js src/campaign/cli.js src/engine/controller-execution.js` prints nothing; `git diff --name-only d14bfb68 HEAD` is a subset of §2.5 | command output |
 
 ## 5. Dogfood proof (depth-0, after merge)
 
@@ -195,10 +170,3 @@ on their own ledgers is theirs to report.
   `REVIEW_COMPLETED(N)` before `REPAIR_AUTHORIZED(N+1)`; names the spy-count assertion and the
   adjacent `findingBoundRepairPaths` blocker. Depth-0 folds the adjacent blocker in as §1.2 (the
   operators' acceptance is a repair generation, not a later stop) with the synthetic-finding-only guard.
-- Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP; evidence `g1-*`): one blocker —
-  R6's "digest remains in the controller gate journal" had no assertion — accepted, T7 added to §2.3.
-- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 4
-  blockers; evidence `g2-*`): T5 must prove generation 1 was reached (spy + injected message) —
-  folded; R7 byte-identity needs a command — `scope-integrity` acceptance row added; T7 provenance
-  pinned unconditionally; §2.5 enumerates the exact sealed output_paths. Depth-0 freeze: zero
-  unaddressed blockers, zero deferred.

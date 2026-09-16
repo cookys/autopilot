@@ -2739,6 +2739,16 @@ const expectedDigest = canonicalDigest({
   tree_sha: happy.redTree,
 });
 assert.strictEqual(gen0Gate.result.review_digest, expectedDigest);
+// R6 binding note (final-panel GLM + codex r1 asked for `input.vertical_failed === true`):
+// the controller gate journal stores NO input object — only `input_digest` =
+// sha256({kind, input}) over the composition's gateInput, which includes
+// `vertical_failed` (campaign-composition.js ~1791). The binding is therefore
+// inside the digest and not addressable as a field; the adapter-payload guard in
+// implementation-campaign-state.test.sh (R3: generation-0 full-diff review received
+// vertical_failed:true) is the assertable form. Pin the shape so nobody re-adds a
+// field assertion that can only ever read undefined.
+assert.strictEqual(gen0Gate.input, undefined, 'T7 gate journal stores input_digest, not input');
+assert.match(String(gen0Gate.input_digest), /^[0-9a-f]{64}$/, 'T7 gen-0 gate input_digest');
 console.log('t7_gen0_full_diff_gate_durable=true');
 }
 NODE

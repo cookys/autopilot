@@ -1,0 +1,19 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-packet-2026-09-16",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "15034a09d75e2bb70a47cbca4ab816fd4705d3b0866a2d583188d8538be40e73",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: git archive honours export-subst/export-ignore (reproduced: $Format:%B$ expanded to the commit message, an export-ignored file omitted). The tree is now a private-index checkout-index verified entry-by-entry against ls-tree object ids with hash-object --no-filters; export-subst/export-ignore/ident fixtures added (§1.1, §2 (a), (h2), R1/R3)."
+  },
+  {
+   "fingerprint": "d9a9d964b945686d567092b61dca5bb4094378adef90bfbd1d83ff95cb249cfa",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: readlink | sha256sum hashes a trailing newline. Test (d) now re-verifies sha256/bytes with a Node helper over fs.readlinkSync(p, { encoding: 'buffer' }) (§2 (d), R4)."
+  }
+ ]
+}

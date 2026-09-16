@@ -37,25 +37,18 @@
 ## 1. Ruling and shape
 
 1. **One packet per review dispatch, built by the dispatcher, content-addressed.** New module
-   `src/runners/review-packet.js` (Node built-ins + `git` only) exports
+   `src/runners/review-packet.js` (Node built-ins + `git` + `tar` only) exports
    `buildReviewPacket({ repo, baseSha, candidateSha, diffFile, specFile, outDir, denyList })`,
    `packetPathDenied(path, denyList)`, `normalizeDenyList(denyList)` and
    `DEFAULT_PACKET_DENY_LIST`. It writes, under `outDir`:
-   - `tree/` — NOT `git archive` (it honours candidate-controlled `export-subst`, which expands
-     `$Format:%B$` to the commit message, and `export-ignore`, which drops an allowed file). Instead:
-     a private index (`GIT_INDEX_FILE=<outDir>/.index`, `git read-tree <candidateOid>`) checked out
-     with `git -c core.autocrlf=false -c core.eol=lf checkout-index -a --prefix=<outDir>/tree/`,
-     the index removed; then an INTEGRITY pass: every `git ls-tree -r -z <candidateOid>` entry must
-     exist in `tree/` with `git hash-object --stdin --no-filters` of its bytes (a symlink: of its target bytes)
-     equal to the listed object id, and `tree/` must hold nothing the listing lacks — any
-     mismatch (an `ident`/`filter`/`eol` attribute rewriting bytes, a missing or extra path) fails
-     the build closed with `tree integrity: <path>`. Only then is every path matched by the
-     deny-list deleted (a denied directory is removed whole). No `.git`, so no history, no
+   - `tree/` — `git archive --format=tar --output=<outDir>/.staging.tar <candidateOid>` (never a
+     buffered stdout), then `tar -xf <staging> -C tree`, staging removed; then every path matched by
+     the deny-list deleted (a denied directory is removed whole). No `.git`, so no history, no
      `.git/autopilot`, no commit text; untracked files never enter by construction. Symlinks are
      kept as symlinks (never dereferenced); a link whose target is absolute, escapes `tree/`
      (`..` past the root), or resolves to a denied path is removed and listed in `denied_paths`. A
      gitlink (submodule, mode 160000 in `git ls-tree -r`) fails the build closed with
-     `unsupported submodule: <path>` before checkout.
+     `unsupported submodule: <path>`.
    - `diff.patch` — the dispatcher's diff file split into top-level `diff --git` sections as
      `Buffer`s (bytes are never re-encoded; CRLF and binary sections stay exact). The section list is
      aligned one-for-one, in order, with the records of `git diff --no-ext-diff --no-textconv
@@ -87,8 +80,7 @@
      '**/*.raw.log' ])` — every entry names a verdict carrier this repo tracks or writes.
    - Returns `{ dir, packet_hash, manifest_path, entries_count, denied_paths }` (`denied_paths`
      sorted, tree/diff/symlink hits unioned). Every failure is a thrown `Error` naming the step
-     (`git read-tree`, `checkout-index`, `tree integrity`, `git diff --name-status`, alignment,
-     symlink, submodule).
+     (`git archive`, `tar`, `git diff --name-status`, alignment, symlink, submodule).
 2. **`dispatchReview` builds the packet in blind mode when it can.** `src/runners/review.js`: when
    `options.blindDiscovery === true` AND `options.packet` is an object `{ repo, baseSha, candidateSha
    }`, the blind dir gets `packet/` built by §1.1 (`diffFile`/`specFile` taken from the `--diff-file`
@@ -113,8 +105,8 @@
 
 ## 2. Changes by file
 
-- `src/runners/review-packet.js` (NEW, + mirror): §1.1. `git` via `spawnSync` with `cwd: repo`,
-  `error`/`signal`/`status`/stderr checked on every call; no `tar`.
+- `src/runners/review-packet.js` (NEW, + mirror): §1.1. `git`/`tar` via `spawnSync` with
+  `cwd: repo`, `error`/`signal`/`status`/stderr checked on every call.
 - `src/runners/review.js` (+ mirror): §1.2. `require('./review-packet')`; the packet is built
   before the arg rewrite; `child.autopilotPacket` carries the build result to `dispatchReviewJson`.
 - Tests (each change-pinning block starts with `# RED at base 004cb2da: <observed message>` quoting
@@ -130,21 +122,16 @@
     `docs/notes/moved.md`, adds a binary file `img.bin` (allowed) and a CRLF file `win.txt`
     (allowed), a safe relative symlink `link -> src`, an escaping symlink `esc -> ../../etc`, and a
     symlink to a denied path `qc -> .qc`; an untracked `notes/verdict.txt` (`T-UNTRACKED`) sits in
-    the worktree; C also commits a `.gitattributes` with `msg.txt export-subst` (`msg.txt` holds
-    `$Format:%B$`, so `git archive` would expand `T-MSG` into it) and `keep.txt export-ignore`
-    (`keep.txt` is an allowed product file); the diff file is `git diff --no-ext-diff --no-textconv
-    B..C`; the spec holds no token. Assertions: (a) `grep -r` for each of the eleven tokens over
-    the packet dir → zero hits, `tree/msg.txt` holds the literal `$Format:%B$` and `tree/keep.txt`
-    is present with C's bytes (RED at base: module absent; a `git archive` control in the test
-    shows the expansion and the omission); (b) `tree/src/app.js`, `tree/img.bin`, `tree/win.txt` byte-equal
+    the worktree; the diff file is `git diff --no-ext-diff --no-textconv B..C`; the spec holds no
+    token. Assertions: (a) `grep -r` for each of the eleven tokens over the packet dir → zero hits
+    (RED at base: module absent); (b) `tree/src/app.js`, `tree/img.bin`, `tree/win.txt` byte-equal
     to C's blobs; `tree/link` is a symlink to `src`; `tree/esc`, `tree/qc`, `tree/.autopilot`,
     `tree/.qc`, `tree/docs/plans/evidence`, `tree/docs/notes/moved.md` (rename out of a denied
     dir) absent; `denied_paths` lists each pruned path once, sorted; (c) `diff.patch` holds the
     `src/app.js`, `img.bin`, `win.txt`, `link` sections byte-equal (`cmp` on the extracted section
     bytes) to the input's, and no section for any denied old/new path; (d) `MANIFEST.json` entries
-    == the sorted `lstat` walk minus the manifest, each `sha256`/`bytes` re-verified by a Node
-    helper (`fs.readFileSync` for files, `fs.readlinkSync(p, { encoding: 'buffer' })` for symlinks —
-    never a line-oriented shell pipeline, which would append a newline), `type` correct, `base_sha`/`candidate_sha` are 40-hex,
+    == the sorted `lstat` walk minus the manifest, each `sha256` re-verified (`sha256sum` for files,
+    `readlink | sha256sum` for symlinks), `type` correct, `base_sha`/`candidate_sha` are 40-hex,
     `deny_list` sorted+deduped, `packet_hash` == `sha256` of the pinned preimage string
     (re-computed in the test from the manifest fields in the stated key order); (e) building twice
     → equal `packet_hash`; one spec byte changed → different; deny-list reordered/duplicated →
@@ -154,8 +141,7 @@
     `docs/plans/g2-disposition.json`, `a/b/c.receipt.json`, `x.raw.log`, `a/x.raw.log` → denied;
     `docs/plans/evidence.md`, `src/receipt.json`, `autopilot/x`, `docs/review.md` → allowed;
     `normalizeDenyList` rejects `/abs/**`, `a/../b`, `` and `{a,b}`; (h) a fixture whose tree
-    exceeds 1 MiB builds; (h2) a fixture with `id.txt ident` (`$Id$` is rewritten on checkout)
-    fails closed with `tree integrity: id.txt` and writes no `MANIFEST.json`; (i) a gitlink fixture (a submodule entry added with
+    exceeds 1 MiB of archive bytes builds; (i) a gitlink fixture (a submodule entry added with
     `git update-index --add --cacheinfo 160000,<sha>,sub`) fails with `unsupported submodule: sub`
     and writes nothing under `outDir`; (j) a candidate with `specFile` absent yields a zero-byte
     `spec.md` and the manifest lists it with `bytes: 0`.
@@ -199,8 +185,8 @@ other path exists at base.
 
 ### 2.6 Global constraints (copied verbatim into every dispatch)
 
-- Node ≥ 20.10, built-ins only; the only external process is `git`; never `git archive` (attribute
-  leakage); the tree is verified against `git ls-tree -r` object ids before use.
+- Node ≥ 20.10, built-ins only; external processes limited to `git` and `tar`; never a buffered
+  `git archive` on stdout.
 - `MANIFEST.json` and `packet_hash` contain no timestamp, absolute path, hostname or PID; the hash
   preimage is `JSON.stringify({ schema_version, base_sha, candidate_sha, deny_list, entries })`.
 - Symlinks are never followed; a gitlink fails the build closed.
@@ -228,7 +214,7 @@ other path exists at base.
 | id | criterion | evidence |
 |----|-----------|----------|
 | `packet-canary` | eleven planted tokens (commit message, untracked file, eight deny-listed tracked carriers, a rename out of a denied dir) yield zero hits over the built packet; allowed product, binary and CRLF files and their diff sections are present byte-for-byte | review-packet suite |
-| `packet-hazards` | safe relative symlink kept as a symlink; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; `export-subst`/`export-ignore` attributes neither leak nor omit; an `ident` rewrite fails closed as `tree integrity`; >1 MiB tree builds; absent spec → zero-byte `spec.md` | review-packet suite |
+| `packet-hazards` | safe relative symlink kept as a symlink; escaping and deny-targeting symlinks pruned and listed; gitlink fails closed with nothing written; >1 MiB archive builds; absent spec → zero-byte `spec.md` | review-packet suite |
 | `packet-identity` | same inputs → same `packet_hash`; one spec byte → different; deny-list order/duplicates irrelevant; manifest entries == `lstat` walk with verified sha256 and `type`; full OIDs; pinned preimage; no denied path → `diff.patch` byte-identical | review-packet suite |
 | `runner-wiring` | blind dispatch with `options.packet` launches on `packet/diff.patch` (+ `packet/spec.md` only when a spec arg was given) with the packet env and returns `packet.packet_hash`; legacy path unchanged with `packet: null`; ambient packet env never inherited; a build failure never launches; every non-success branch carries `packet: null` | dispatch-review suite |
 | `no-regression` | `review-packet`, `dispatch-review`, `review-runner` green; `node scripts/check-js-syntax.js`; `bash scripts/sync-codex-plugin-skills.sh --check`; `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` | suite output |
@@ -248,9 +234,8 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
 - **Alignment fragility.** Sections aligned to `--name-status -z` records fail closed on any count
   mismatch rather than guessing; the rename/copy/odd-name/CRLF/binary/embedded-`diff --git`
   fixtures pin the alignment.
-- **Attribute-driven rewrites.** `export-*` are bypassed by not using `git archive`; every other
-  attribute that rewrites bytes on checkout is caught by the object-id integrity pass and fails the
-  build closed before launch; no seat runs on an unfiltered or altered input.
+- **`tar` absent on a host.** The build fails closed before launch; no seat runs on an unfiltered
+  input.
 - **Symlink escape.** Never dereferenced; escaping/denied targets pruned; pinned by §2 (b).
 - **Hand scope.** Two product files, two tests, two docs — sized for one round after the consult's
   split.
@@ -283,9 +268,3 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
   patterns, root globstar, grammar), 9 (zero-byte spec, `immutableBase` — recorded for 1a-B), 10
   (env scrub, `packet` on every branch), 11 (split A/B; `dispatch-review.test.sh` chosen), 12
   (wording). Refuted 5 (durable replay binding) with the rationale in §3.
-- Plan hetero loop G1 2026-09-16 (GLM-5.2 READY, gpt-5.6-sol STOP 2 blockers; evidence
-  `evidence/2026-09-16-blind-review-packet/g1-*`): both accepted — (R2) `git archive` honours
-  candidate-controlled `export-subst`/`export-ignore`, so the tree is now a private-index
-  `checkout-index` verified against `ls-tree` object ids, with the attribute fixtures; (R4) the
-  symlink oracle `readlink | sha256sum` hashes a trailing newline — replaced by a Node helper over
-  `readlinkSync(..., { encoding: 'buffer' })`.

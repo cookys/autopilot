@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-packet-2026-09-16",
+  "logical_plan_id": "blind-review-packet-2026-09-16",
+  "session_id": "c1a-g1-1789573782",
+  "session_key": "819dc23d13913ed037df1e438bc618d4f379e1a079320a7cc108c5385a8e295e",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "80b05bd70102e058fc50bf9518cdd7e10e7530556676b91e0fcef63d91286dcf",
+  "manifest_sha256": "7e54da7974c34468c638b3d3c7eef71420bdca0f1ad921978096b621dd009a34",
+  "plan_sha256": "a0988c60ef7754786fe21b43f647406c76f39b765a174d5b43f6a61edee20a9f",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "ec3a6936b8dd38299898faed185b3f4cd260ad4dab4a16211ff04f5238b0e230"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-GVdQDt",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "f5e5560c99692cfb3e4085eb9e0a6153171216aa87b4b0b2bb3d0f6e316b11b7"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "0a9ed22438afdc40e42d52acbbb25bd644244a0e54f0fc3ffe0112d57993baeb"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ce9ff76abd6cd0b828a722dd9859dc65561c23e32f9fd5e621a4da1719257427",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-nIau7M/stdout",
+          "digest": "ce9ff76abd6cd0b828a722dd9859dc65561c23e32f9fd5e621a4da1719257427"
+        },
+        "receipt_digest": "6cdfb932f1000f91d6acfb89aff97245883d16bfdcb0245a1d39716870dd3b0b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/runners/review-packet.js tree construction and hooks/tests/review-packet.test.sh packet canary",
+      "claim": "The proposed git archive boundary does not guarantee that commit-message data stays out of tree/ or that allowed files retain candidate blob bytes, because candidate-controlled export-subst and export-ignore attributes can modify or omit archived files.",
+      "evidence": "The plan archives candidateOid directly and asserts that absence of .git prevents commit text from entering the packet. Git archive honors committed .gitattributes: export-subst can expand a placeholder such as $Format:%B$ using the candidate commit message, while export-ignore can remove an otherwise allowed tracked file. The planned commit-message canary does not add either attribute, so it would pass without exercising this leakage and integrity channel.",
+      "evidence_reference": "Plan §1.1 tree construction; §2 review-packet.test.sh item (a); acceptance criterion packet-canary",
+      "repair": "Define a fail-closed mechanism that neutralizes or detects archive-affecting attributes before publishing output, and extend the fixture with candidate-controlled export-subst carrying T-MSG plus export-ignore on an allowed file. Assert zero token leakage and exact presence and bytes for every affected allowed blob.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "15034a09d75e2bb70a47cbca4ab816fd4705d3b0866a2d583188d8538be40e73"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/review-packet.test.sh manifest entry verification",
+      "claim": "The prescribed symlink hash oracle hashes different bytes from the required manifest algorithm.",
+      "evidence": "The manifest definition requires sha256 and bytes over the symlink target string itself, but test item (d) specifies readlink piped to sha256sum. The readlink command appends a newline, so a target such as src is tested as the bytes for src followed by newline. A correct implementation would fail this test, or an incorrect newline-inclusive implementation could be accepted.",
+      "evidence_reference": "Plan §1.1 MANIFEST.json definition and §2 review-packet.test.sh item (d)",
+      "repair": "Recompute symlink hashes and byte counts with a Node helper using fs.readlinkSync(path, { encoding: 'buffer' }) and hash that Buffer directly, without line-oriented shell output or command substitution.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d9a9d964b945686d567092b61dca5bb4094378adef90bfbd1d83ff95cb249cfa"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-16T15:52:51.974Z"
+}

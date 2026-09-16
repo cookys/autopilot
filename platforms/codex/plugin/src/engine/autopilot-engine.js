@@ -4932,37 +4932,42 @@ class AutopilotEngine {
         scope,
         tree_sha: candidate.tree_sha,
       });
-      if (scope !== 'final'
-          && resumeReviewDigest
-          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
-        if (reviewDigest !== resumeReviewDigest) {
-          return {
-            reviewed: false,
-            phase: 'campaign_resume_review',
-            reason: 'replayed focused review does not match the durable review digest',
-            raw: reviewed,
-          };
-        }
-      } else if (scope !== 'final') {
-        try {
-          recordCampaignEvent({
-            eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
-            generation: repairGeneration,
-            stageIdentity: `campaign-review:${repairGeneration}`,
-            payload: { review_digest: reviewDigest },
-            artifactReference: {
-              kind: 'product_review',
-              digest: reviewDigest,
-              repair_lineage: { ...repairLineage },
-            },
-          });
-        } catch (error) {
-          return {
-            reviewed: false,
-            phase: 'campaign_event_journal',
-            reason: error.message || String(error),
-            raw: reviewed,
-          };
+      // Under vertical_failed the campaign is still VERTICAL_VERIFICATION and
+      // advances on REPAIR_AUTHORIZED from that reducer edge; skip resume-digest
+      // replay and REVIEW_COMPLETED. The review stays in the controller
+      // full-diff gate journal and the repair ticket.
+      if (scope !== 'final' && verticalFailed !== true) {
+        if (resumeReviewDigest
+            && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+          if (reviewDigest !== resumeReviewDigest) {
+            return {
+              reviewed: false,
+              phase: 'campaign_resume_review',
+              reason: 'replayed focused review does not match the durable review digest',
+              raw: reviewed,
+            };
+          }
+        } else {
+          try {
+            recordCampaignEvent({
+              eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+              generation: repairGeneration,
+              stageIdentity: `campaign-review:${repairGeneration}`,
+              payload: { review_digest: reviewDigest },
+              artifactReference: {
+                kind: 'product_review',
+                digest: reviewDigest,
+                repair_lineage: { ...repairLineage },
+              },
+            });
+          } catch (error) {
+            return {
+              reviewed: false,
+              phase: 'campaign_event_journal',
+              reason: error.message || String(error),
+              raw: reviewed,
+            };
+          }
         }
       }
       return {
@@ -6707,10 +6712,17 @@ class AutopilotEngine {
           }
           let findingPaths;
           try {
-            findingPaths = findingBoundRepairPaths(
-              repairFindings,
-              campaignControl.contract.allowed_path_prefixes,
-            );
+            if (kind === 'vertical_repair'
+                && Array.isArray(repairFindings)
+                && repairFindings.length === 1
+                && repairFindings[0].id === 'vertical-acceptance') {
+              findingPaths = [...repairLineage.repair_scope_paths].sort();
+            } else {
+              findingPaths = findingBoundRepairPaths(
+                repairFindings,
+                campaignControl.contract.allowed_path_prefixes,
+              );
+            }
           } catch (error) {
             return {
               committed: false,

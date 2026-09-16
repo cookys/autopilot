@@ -113,12 +113,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: three defects (raw data msg `msg_01M2KKPZ75X780NYXR0KPDDBQS`): tautological-proof check rejects a concrete proof; no_verdict result omits raw_log; final panel refuses codex (blind-review no-tools profile) though dispatch-review.sh runs it.
 
 ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.56 2026-09-16
 - **Trigger**: cuda e2e: campaign-v1-48ffc2fd… verify script failed → engine ran dispatch_review (SHIP-AS-IS) → blocked at campaign_event_journal `cannot apply review_completed while campaign is VERTICAL_VERIFICATION`
 - **Effort**: Fix
 - **Source**: `cuda` msg `msg_01M2K2PYTE18H2JSJ260EXMN26`; `openclaw` msg `msg_01M2KR1TFPY8F2SEX8D6ABCH2G` (second measurement, campaign-v1-cfadd975…)
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: the reducer refuses VERTICAL_VERIFIED with passed:false, so a red verification records nothing and the loop proceeds to review; expected: repair generation or a clean terminal.
+- **Context**: performReview journaled `review_completed` under `vertical_failed`; vertical repair had no path binding — now predicate-gated and path-bound to the initial changed paths.
 
 ### Managed rail: verify_cmd runs in a fresh detached worktree with no deps; its stdout/stderr never reach the ledger
 - **Status**: open

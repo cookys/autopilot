@@ -4144,16 +4144,22 @@ for (const axis of ctrl.REPAIR_BUDGET_AXES) {
 }
 
 // R3 full-diff before repair (vertical fail still requires barrier).
+// Preservation guards (green at base d14bfb68): ordered subsequence, vertical_failed
+// flags, mutation kinds initial then vertical_repair, T7 gen-0 gate journal.
 let fullDiffCalls = 0;
 let repairCalls = 0;
+const verticalReviewInputs = [];
+const verticalMutationKinds = [];
+let verticalController = null;
 const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 }, {
   preflight: () => ({ passed: true }),
   implement: ({ kind }) => {
+    verticalMutationKinds.push(kind);
     if (kind !== 'initial') repairCalls += 1;
     return {
       committed: true,
       commit: 'a'.repeat(40),
-      tree_sha: 'b'.repeat(40),
+      tree_sha: kind === 'initial' ? 'b'.repeat(40) : '1'.repeat(40),
     };
   },
   scopeCheck: () => ({ passed: true }),
@@ -4162,15 +4168,24 @@ const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize:
     receipt_digest: 'c'.repeat(64),
     reason: gen === 0 ? 'vertical fail' : null,
   }),
-  review: ({ scope }) => {
-    if (scope === 'full_diff' || scope === undefined) fullDiffCalls += 1;
+  review: ({ scope, vertical_failed: vf, repair_generation: gen }) => {
+    if (scope === 'full_diff' || scope === undefined) {
+      fullDiffCalls += 1;
+      verticalReviewInputs.push({
+        generation: gen,
+        vertical_failed: vf === true,
+      });
+    }
     return {
       reviewed: true,
       review_input_mode: 'full_diff_generation',
-      review_digest: 'd'.repeat(64),
+      review_digest: gen === 0 ? 'd'.repeat(64) : 'e'.repeat(64),
       findings: '[]',
-      verdict: 'REWORK',
+      verdict: gen === 0 ? 'REWORK' : 'SHIP-AS-IS',
     };
+  },
+  onControllerUpdate: (controller) => {
+    verticalController = JSON.parse(JSON.stringify(controller));
   },
   adjudicate: () => ({
     registry_complete: true,
@@ -4208,6 +4223,35 @@ const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize:
 assert.ok(fullDiffCalls >= 1, 'full-diff runs before repair on vertical fail');
 assert.ok(repairCalls >= 1, 'repair still happens after full-diff');
 assert.ok(vertical.trace.includes('full_diff_review'), 'trace records full_diff_review');
+const subseq = ['verify', 'full_diff_review', 'scope_before_repair', 'convergence'];
+let subseqFrom = 0;
+for (const step of subseq) {
+  const idx = vertical.trace.indexOf(step, subseqFrom);
+  assert.ok(idx >= 0, `missing ${step} after ${subseqFrom} in ${vertical.trace.join(',')}`);
+  subseqFrom = idx + 1;
+}
+const repairIdx = vertical.trace.findIndex((step, i) => i >= subseqFrom
+  && (step === 'repair' || step === 'mutate' || step === 'implement'));
+assert.ok(
+  vertical.trace.indexOf('convergence') < (repairIdx >= 0 ? repairIdx : vertical.trace.length),
+  `repair mutation must follow convergence: ${vertical.trace.join(',')}`,
+);
+assert.deepStrictEqual(verticalMutationKinds.slice(0, 2), ['initial', 'vertical_repair']);
+const gen0Reviews = verticalReviewInputs.filter((row) => row.generation === 0);
+assert.strictEqual(gen0Reviews.length, 1, JSON.stringify(verticalReviewInputs));
+assert.strictEqual(gen0Reviews[0].vertical_failed, true);
+const gen1Reviews = verticalReviewInputs.filter((row) => row.generation === 1);
+if (gen1Reviews.length > 0) {
+  assert.ok(gen1Reviews.every((row) => row.vertical_failed === false),
+    JSON.stringify(gen1Reviews));
+}
+const t7Ctrl = vertical.controller || verticalController;
+assert.ok(t7Ctrl && t7Ctrl.gate_journal, 'T7 composition controller gate_journal missing');
+const t7Full = (t7Ctrl.gate_journal.entries || []).filter((entry) => entry.kind === 'full_diff_review');
+assert.ok(t7Full.length >= 1);
+assert.strictEqual(t7Full[0].result.success, true);
+assert.strictEqual(t7Full[0].result.review_digest, 'd'.repeat(64));
+assert.strictEqual(gen0Reviews[0].vertical_failed, true);
 
 // Focused-only cannot authorize repair.
 const focusedOnly = ctrl.requireFullDiffBeforeRepair({

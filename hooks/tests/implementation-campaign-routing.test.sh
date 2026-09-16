@@ -2308,6 +2308,507 @@ assert_exit_code "$?" "0" "T5 unbound preservation: $T5_RESUME"
 assert_contains "$T5_RESUME" "t5_unbound_preserved=true" \
   "T5 BOUNDARY_REJECTED unbound-candidate still admits without resume_candidate"
 
+# Red verification takes the repair path (plan 2026-09-16-red-verification-repair-path).
+# T6 (preservation, green at base): reviewer finding with no explicit path on a
+# NON-vertical repair is still refused — see implementation-campaign-state.test.sh
+# bounded_predispatch_rejected / claim "finding without an explicit repair path"
+# (~2621). Do not weaken that assertion.
+# RED at base d14bfb68:
+# T1: AssertionError 1 !== 0 gen-0 review_completed attempts;
+#     phase=campaign_event_journal reason=cannot apply review_completed while
+#     campaign is VERTICAL_VERIFICATION
+# T2: never reached (stops at gen 0 after T1 journal error; no repair_authorized)
+# T3: never reached (stops at campaign_event_journal, not a later seal)
+# T4: never reached (no generation 1 ledger events)
+# T5: at base the run stops at generation 0 before the injection is reached
+# T7 at base d14bfb68: generation-0 full_diff_review absent on returned
+#     controller (t7_base_probe=[]) — RED; after the fix the gate must be
+#     present with success:true.
+RED_PATH_SBX="$TEST_TMP/red-verify-repair-repo"
+mkdir -p "$RED_PATH_SBX/.claude" "$RED_PATH_SBX/src"
+git -C "$RED_PATH_SBX" init -q
+git -C "$RED_PATH_SBX" config user.email "red-path@example.invalid"
+git -C "$RED_PATH_SBX" config user.name "Red Path Test"
+write_mission_governance "$RED_PATH_SBX/.claude/owner-kernel-governance.json" shadow
+printf 'base\n' > "$RED_PATH_SBX/src/value.txt"
+git -C "$RED_PATH_SBX" add .
+git -C "$RED_PATH_SBX" commit -qm "base"
+RED_PATH_BASE="$(git -C "$RED_PATH_SBX" rev-parse HEAD)"
+RED_PATH_WT="$TEST_TMP/red-verify-repair-wt"
+git -C "$RED_PATH_SBX" worktree add -q -b impl/red-path "$RED_PATH_WT" "$RED_PATH_BASE"
+RED_PATH_COMMON_RAW="$(git -C "$RED_PATH_SBX" rev-parse --git-common-dir)"
+RED_PATH_COMMON="$(realpath "$RED_PATH_SBX/$RED_PATH_COMMON_RAW")"
+RED_PATH_CONTRACT="$TEST_TMP/red-path-campaign.json"
+RED_PATH_SEAL="$TEST_TMP/red-path-campaign.seal.json"
+RED_PATH_PROMPT="$TEST_TMP/red-path-prompt.txt"
+printf 'red verification takes the repair path\n' > "$RED_PATH_PROMPT"
+node - "$RED_PATH_CONTRACT" "$RED_PATH_COMMON" "$RED_PATH_BASE" <<'NODE'
+const fs = require('fs');
+const [target, commonDir, base] = process.argv.slice(2);
+fs.writeFileSync(target, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'icc-red-path',
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  base_sha: base,
+  branch: 'impl/red-path',
+  vertical_acceptance: ['red verification takes the repair path'],
+  allowed_path_prefixes: ['src/'],
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 600,
+  verify_cmd: 'node fixture.js',
+  rubric_ids: ['ICC-RED-PATH1'],
+}, null, 2)}\n`);
+NODE
+RED_SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+  --contract "$RED_PATH_CONTRACT" --repo "$RED_PATH_SBX" --mission-mode shadow --out "$RED_PATH_SEAL" 2>&1)"
+assert_exit_code "$?" "0" "red-path fixture campaign seals: $RED_SEAL_OUT"
+
+RED_PATH_JS="$TEST_TMP/red-path-engine.js"
+cat > "$RED_PATH_JS" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [
+  root, repo, worktree, contractPath, sealPath, promptFile, base, mode,
+] = process.argv.slice(2);
+const {
+  AutopilotEngine,
+  CAMPAIGN_EVENTS,
+  CAMPAIGN_STATES,
+  appendCampaignEvent,
+  canonicalDigest,
+  normalizeProductReviewFindings,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
+const { loadRows, projectCampaign } = require(path.join(root, 'src', 'campaign', 'cli'));
+
+const roster = {
+  reviewer_engine: 'fixture-reviewer',
+  reviewer_effort: 'high',
+  reviewer_runner: 'fixture',
+  reviewer_qualified: true,
+  implementer_engine: 'fixture-implementer',
+  implementer_effort: 'high',
+  implementer_runner: 'fixture',
+  loop_max_rounds: 3,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 1,
+  required_review_families: 1,
+  cross_family_required: false,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [
+    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
+  ],
+  fallback_ladder: [
+    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
+  ],
+};
+
+function gitC(cwd, args) {
+  return spawnSync('git', args, { cwd, encoding: 'utf8' });
+}
+
+function commitValue(content) {
+  spawnSync('git', ['-C', worktree, 'config', 'user.email', 'red-path@example.invalid'], { stdio: 'ignore' });
+  spawnSync('git', ['-C', worktree, 'config', 'user.name', 'red-path'], { stdio: 'ignore' });
+  fs.writeFileSync(path.join(worktree, 'src/value.txt'), content);
+  spawnSync('git', ['add', 'src/value.txt'], { cwd: worktree, stdio: 'ignore' });
+  const committed = spawnSync('git', ['commit', '-qm', content.trim()], { cwd: worktree, encoding: 'utf8' });
+  assert.strictEqual(committed.status, 0, committed.stderr);
+  const commit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).stdout.trim();
+  const tree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: worktree, encoding: 'utf8' }).stdout.trim();
+  return { commit, tree };
+}
+
+function engineTransport(result) {
+  return {
+    error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result,
+  };
+}
+
+function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
+  spawnSync('git', ['-C', worktree, 'reset', '--hard', base], { stdio: 'ignore' });
+  const attempts = [];
+  const reviewByTree = new Map();
+  let implCalls = 0;
+  let repairDispatcherCalls = 0;
+  let receivedSeal = null;
+  let redCommit = null;
+  let redTree = null;
+  let repairedTree = null;
+  let repairAuthState = null;
+  const redFindingLine = '🟠 [icc-red-001] src/value.txt vertical acceptance failed';
+  let tick = 0;
+  const spyAppender = (input) => {
+    attempts.push({ eventType: input.eventType, generation: input.generation });
+    if (throwOnGen1ReviewCompleted
+        && input.eventType === CAMPAIGN_EVENTS.REVIEW_COMPLETED
+        && input.generation === 1) {
+      throw new Error('RED-PATH-T5-JOURNAL-FAIL-GEN1');
+    }
+    const appended = appendCampaignEvent(input);
+    if (input.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && input.generation === 1) {
+      repairAuthState = appended.state;
+    }
+    return appended;
+  };
+  const engine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => {
+      tick += 1;
+      const mm = String(Math.floor(tick / 60)).padStart(2, '0');
+      const ss = String(tick % 60).padStart(2, '0');
+      return `2026-09-16T01:${mm}:${ss}.000Z`;
+    },
+    campaignEventAppender: spyAppender,
+    campaignIntake(input) {
+      const control = runCampaignIntake(input, {
+        readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+        contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+        occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      });
+      if (control.status !== 'admitted' || !control.generation_claim) {
+        throw new Error(`intake blocked: ${JSON.stringify(control.rejection || control)}`);
+      }
+      return control;
+    },
+    campaignScopeChecker() {
+      return {
+        passed: true,
+        verdict: 'PASS',
+        changed_files: ['src/value.txt'],
+        total_churn: 1,
+        receipt_digest: 'a'.repeat(64),
+      };
+    },
+    campaignRepairChangedPaths() {
+      return { status: 'ok', paths: ['src/value.txt'] };
+    },
+    campaignAdjudicator() {
+      return {
+        registry_complete: true,
+        repair_gate_passed: true,
+        registry_digest: '1'.repeat(64),
+        must_fix_now: [],
+        follow_up: [],
+        rejected: [],
+      };
+    },
+    repairPromptWriter(input) {
+      if (input.repairScopeSeal) receivedSeal = input.repairScopeSeal;
+      const dest = `${input.promptFile}.repair-${input.round}`;
+      fs.writeFileSync(dest, `repair round ${input.round}\n`);
+      return dest;
+    },
+    implementationDispatcher() {
+      implCalls += 1;
+      const isRepair = implCalls > 1;
+      if (isRepair) {
+        repairDispatcherCalls += 1;
+        if (receivedSeal) { /* seal already captured from prompt writer */ }
+      }
+      const { commit, tree } = commitValue(isRepair ? 'green\n' : 'red\n');
+      if (!isRepair) {
+        redCommit = commit;
+        redTree = tree;
+      } else {
+        repairedTree = tree;
+      }
+      return engineTransport({
+        status: 'committed',
+        commit,
+        tree_sha: tree,
+        branch: 'impl/red-path',
+        worktree,
+        worktree_reused: isRepair,
+        files_changed: 1,
+        insertions: 1,
+        deletions: 1,
+        runner: 'fixture',
+        model: 'fixture-implementer',
+      });
+    },
+    reviewDispatcher() {
+      const headTree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], {
+        cwd: worktree, encoding: 'utf8',
+      }).stdout.trim();
+      const treeKey = headTree === repairedTree ? repairedTree
+        : (headTree === redTree ? redTree : headTree);
+      reviewByTree.set(treeKey, (reviewByTree.get(treeKey) || 0) + 1);
+      const isRed = treeKey === redTree || (redTree && implCalls === 1);
+      return engineTransport({
+        runner: 'fixture',
+        model: 'fixture-reviewer',
+        status: 'reviewed',
+        verdict: isRed ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS',
+        findings: isRed ? redFindingLine : '',
+        raw_log: null,
+        error: null,
+      });
+    },
+    diffProvider() { return promptFile; },
+    gitWorktreeAdd({ commit }) {
+      const tree = spawnSync('git', ['-C', repo, 'rev-parse', `${commit}^{tree}`], {
+        encoding: 'utf8',
+      }).stdout.trim();
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '',
+        worktree: path.join(path.dirname(worktree), `verify-${commit.slice(0, 12)}`),
+        parent: null, commit, observed_commit: commit,
+        observed_tree_sha: tree, detached: true,
+      };
+    },
+    gitWorktreeRemove() {
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+    },
+    repairLineageCleanupTransaction() {
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+    },
+    verifyCommandRunner({ commit, verifyCmd }) {
+      const failed = commit === redCommit;
+      return {
+        error: null,
+        status: failed ? 1 : 0,
+        signal: null,
+        stdout: failed ? 'RED\n' : 'GREEN\n',
+        stderr: '',
+        executed_argv: ['/bin/sh', '-c', verifyCmd],
+      };
+    },
+  });
+  const result = engine.runImplementationReviewLoop({
+    promptFile,
+    branch: 'impl/red-path',
+    base,
+    roster,
+    campaignContract: contractPath,
+    campaignSeal: sealPath,
+    verificationEnv: { PATH: process.env.PATH || '', CI: 'red-path' },
+    verificationEnvAllowlist: ['CI'],
+  });
+  return {
+    result,
+    attempts,
+    reviewByTree,
+    redTree,
+    repairedTree,
+    repairDispatcherCalls,
+    receivedSeal,
+    repairAuthState,
+    redFindingLine,
+    campaignId: result.campaign_control && result.campaign_control.campaign_id,
+  };
+}
+
+if (mode === 't5') {
+  const t5 = runRedPath({ throwOnGen1ReviewCompleted: true });
+  const t5Auth = t5.attempts.filter(
+    (row) => row.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && row.generation === 1,
+  );
+  const t5Rc1 = t5.attempts.filter(
+    (row) => row.eventType === CAMPAIGN_EVENTS.REVIEW_COMPLETED && row.generation === 1,
+  );
+  assert.strictEqual(t5Auth.length, 1, `T5 missing repair_authorized(1): ${JSON.stringify(t5.attempts)}`);
+  assert.strictEqual(t5Rc1.length, 1, `T5 expected one review_completed(1) attempt: ${JSON.stringify(t5.attempts)}`);
+  assert.strictEqual(t5.result.phase, 'campaign_event_journal', `T5 phase=${t5.result.phase} reason=${t5.result.reason}`);
+  assert.strictEqual(t5.result.reason, 'RED-PATH-T5-JOURNAL-FAIL-GEN1');
+  console.log('t5_green_journal_fail_closed=true');
+} else {
+const happy = runRedPath();
+const ctrlProbe = (happy.result.campaign_control && happy.result.campaign_control.controller)
+  || (happy.result.campaign_receipt && happy.result.campaign_receipt.controller);
+const gen0Probe = ctrlProbe && ctrlProbe.gate_journal && Array.isArray(ctrlProbe.gate_journal.entries)
+  ? ctrlProbe.gate_journal.entries.filter((entry) => (
+    entry.kind === 'full_diff_review'
+    && entry.input
+    && entry.input.generation === 0
+  )).map((entry) => ({
+    success: entry.result && entry.result.success,
+    vertical_failed: entry.input && entry.input.vertical_failed,
+    invalidated: entry.invalidated === true,
+    digest: entry.result && entry.result.review_digest,
+  }))
+  : null;
+console.log(`t7_base_probe=${JSON.stringify(gen0Probe)}`);
+const gen0ReviewAttempts = happy.attempts.filter(
+  (row) => row.eventType === CAMPAIGN_EVENTS.REVIEW_COMPLETED && row.generation === 0,
+);
+assert.strictEqual(
+  gen0ReviewAttempts.length,
+  0,
+  `T1 expected zero gen-0 review_completed attempts, got ${JSON.stringify(happy.attempts)} phase=${happy.result.phase} reason=${happy.result.reason}`,
+);
+assert.notStrictEqual(
+  happy.result.phase,
+  'campaign_event_journal',
+  `T1 must not stop at campaign_event_journal: ${happy.result.reason}`,
+);
+console.log('t1_zero_gen0_review_completed=true');
+
+const repairAuth = happy.attempts.filter(
+  (row) => row.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && row.generation === 1,
+);
+assert.strictEqual(repairAuth.length, 1, `T2 repair_authorized attempts=${JSON.stringify(happy.attempts)}`);
+assert.ok(happy.repairAuthState, 'T2 missing appender state');
+assert.strictEqual(happy.repairAuthState.generation, 1);
+assert.strictEqual(happy.repairAuthState.phase, CAMPAIGN_STATES.REPAIRING);
+const common = spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], {
+  encoding: 'utf8',
+}).stdout.trim();
+const ledgerPath = path.join(path.resolve(repo, common), 'autopilot', 'implementation-campaign.jsonl');
+const projected = projectCampaign(loadRows(ledgerPath), happy.campaignId);
+assert.ok(projected && projected.state, 'T2 missing projection');
+assert.ok(projected.state.generation >= 1, `T2 generation=${projected.state.generation}`);
+const repairAuthRow = loadRows(ledgerPath)
+  .map((row) => {
+    try {
+      const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+      return payload && payload.event;
+    } catch (_e) {
+      return null;
+    }
+  })
+  .filter(Boolean)
+  .find((event) => event.event_type === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED
+    && event.generation === 1);
+assert.ok(repairAuthRow, 'T2 missing repair_authorized ledger event');
+console.log('t2_repair_authorized_gen1=true');
+
+assert.notStrictEqual(
+  happy.result.phase,
+  'campaign_repair_scope_seal',
+  `T3 stopped at repair scope: ${happy.result.reason}`,
+);
+assert.strictEqual(happy.repairDispatcherCalls, 1, `T3 repair dispatcher calls=${happy.repairDispatcherCalls}`);
+assert.ok(happy.receivedSeal, 'T3 missing repairScopeSeal');
+assert.deepStrictEqual(happy.receivedSeal.allowed_paths, ['src/value.txt']);
+assert.deepStrictEqual(happy.receivedSeal.finding_ids, ['vertical-acceptance']);
+console.log('t3_vertical_repair_path_bound=true');
+
+function eventPairs(rows) {
+  return rows
+    .map((row) => {
+      try {
+        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        return payload && payload.event;
+      } catch (_e) {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .map((event) => `${event.event_type}(${event.generation})`);
+}
+const ledgerEvents = eventPairs(loadRows(ledgerPath));
+assert.ok(ledgerEvents.includes('repair_completed(1)'), `T4 missing repair_completed: ${ledgerEvents.join(',')}`);
+assert.ok(ledgerEvents.includes('vertical_verified(1)'), `T4 missing vertical_verified(1): ${ledgerEvents.join(',')}`);
+const rc1 = ledgerEvents.filter((item) => item === 'review_completed(1)');
+assert.strictEqual(rc1.length, 1, `T4 review_completed(1) count=${rc1.length} events=${ledgerEvents.join(',')}`);
+assert.ok(!ledgerEvents.includes('vertical_verified(0)'), 'T4 must not journal gen-0 vertical_verified');
+assert.ok(!ledgerEvents.includes('review_completed(0)'), 'T4 must not journal gen-0 review_completed');
+assert.strictEqual(
+  happy.reviewByTree.get(happy.redTree) || 0,
+  1,
+  `T4 red-candidate reviewer calls=${JSON.stringify([...happy.reviewByTree])}`,
+);
+console.log('t4_repaired_generation_reviewed=true');
+
+const ctrl = (happy.result.campaign_receipt && happy.result.campaign_receipt.controller)
+  || (happy.result.campaign_receipt && happy.result.campaign_receipt.controller_state)
+  || happy.result.controller
+  || (happy.result.campaign_control && happy.result.campaign_control.controller);
+assert.ok(ctrl && ctrl.gate_journal && Array.isArray(ctrl.gate_journal.entries),
+  `T7 missing controller gate_journal: phase=${happy.result.phase}`);
+const fullDiffGates = ctrl.gate_journal.entries.filter((entry) => entry.kind === 'full_diff_review');
+assert.ok(fullDiffGates.length >= 1, `T7 no full_diff_review entries phase=${happy.result.phase}`);
+const gen0Gate = fullDiffGates[0];
+assert.strictEqual(gen0Gate.result.success, true, `T7 success=${gen0Gate.result && gen0Gate.result.success}`);
+const normalizedRed = normalizeProductReviewFindings(happy.redFindingLine);
+assert.strictEqual(normalizedRed.status, 'normalized');
+const expectedDigest = canonicalDigest({
+  verdict: 'FIX-THEN-SHIP',
+  findings: normalizedRed.canonical,
+  scope: 'full_diff',
+  tree_sha: happy.redTree,
+});
+assert.strictEqual(gen0Gate.result.review_digest, expectedDigest);
+// R6 binding note (final-panel GLM + codex r1 asked for `input.vertical_failed === true`):
+// the controller gate journal stores NO input object — only `input_digest` =
+// sha256({kind, input}) over the composition's gateInput, which includes
+// `vertical_failed` (campaign-composition.js ~1791). The binding is therefore
+// inside the digest and not addressable as a field; the adapter-payload guard in
+// implementation-campaign-state.test.sh (R3: generation-0 full-diff review received
+// vertical_failed:true) is the assertable form. Pin the shape so nobody re-adds a
+// field assertion that can only ever read undefined.
+assert.strictEqual(gen0Gate.input, undefined, 'T7 gate journal stores input_digest, not input');
+assert.match(String(gen0Gate.input_digest), /^[0-9a-f]{64}$/, 'T7 gen-0 gate input_digest');
+console.log('t7_gen0_full_diff_gate_durable=true');
+}
+NODE
+RED_PATH_OUT="$(node "$RED_PATH_JS" "$REPO_ROOT" "$RED_PATH_SBX" "$RED_PATH_WT" \
+  "$RED_PATH_CONTRACT" "$RED_PATH_SEAL" "$RED_PATH_PROMPT" "$RED_PATH_BASE")"
+assert_exit_code "$?" "0" "red verification repair path: $RED_PATH_OUT"
+for key in t1_zero_gen0_review_completed t2_repair_authorized_gen1 \
+  t3_vertical_repair_path_bound t4_repaired_generation_reviewed \
+  t7_gen0_full_diff_gate_durable; do
+  assert_contains "$RED_PATH_OUT" "$key=true" "red-path proves $key"
+done
+
+RED_PATH_T5_SBX="$TEST_TMP/red-verify-repair-t5-repo"
+mkdir -p "$RED_PATH_T5_SBX/.claude" "$RED_PATH_T5_SBX/src"
+git -C "$RED_PATH_T5_SBX" init -q
+git -C "$RED_PATH_T5_SBX" config user.email "red-path-t5@example.invalid"
+git -C "$RED_PATH_T5_SBX" config user.name "Red Path T5 Test"
+write_mission_governance "$RED_PATH_T5_SBX/.claude/owner-kernel-governance.json" shadow
+printf 'base\n' > "$RED_PATH_T5_SBX/src/value.txt"
+git -C "$RED_PATH_T5_SBX" add .
+git -C "$RED_PATH_T5_SBX" commit -qm "base"
+RED_PATH_T5_BASE="$(git -C "$RED_PATH_T5_SBX" rev-parse HEAD)"
+RED_PATH_T5_WT="$TEST_TMP/red-verify-repair-t5-wt"
+git -C "$RED_PATH_T5_SBX" worktree add -q -b impl/red-path "$RED_PATH_T5_WT" "$RED_PATH_T5_BASE"
+RED_PATH_T5_COMMON_RAW="$(git -C "$RED_PATH_T5_SBX" rev-parse --git-common-dir)"
+RED_PATH_T5_COMMON="$(realpath "$RED_PATH_T5_SBX/$RED_PATH_T5_COMMON_RAW")"
+RED_PATH_T5_CONTRACT="$TEST_TMP/red-path-t5-campaign.json"
+RED_PATH_T5_SEAL="$TEST_TMP/red-path-t5-campaign.seal.json"
+node - "$RED_PATH_T5_CONTRACT" "$RED_PATH_T5_COMMON" "$RED_PATH_T5_BASE" <<'NODE'
+const fs = require('fs');
+const [target, commonDir, base] = process.argv.slice(2);
+fs.writeFileSync(target, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'icc-red-path-t5',
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  base_sha: base,
+  branch: 'impl/red-path',
+  vertical_acceptance: ['red verification takes the repair path'],
+  allowed_path_prefixes: ['src/'],
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 600,
+  verify_cmd: 'node fixture.js',
+  rubric_ids: ['ICC-RED-PATH1'],
+}, null, 2)}\n`);
+NODE
+RED_T5_SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+  --contract "$RED_PATH_T5_CONTRACT" --repo "$RED_PATH_T5_SBX" --mission-mode shadow --out "$RED_PATH_T5_SEAL" 2>&1)"
+assert_exit_code "$?" "0" "red-path T5 fixture seals: $RED_T5_SEAL_OUT"
+RED_PATH_T5_OUT="$(node "$RED_PATH_JS" "$REPO_ROOT" "$RED_PATH_T5_SBX" "$RED_PATH_T5_WT" \
+  "$RED_PATH_T5_CONTRACT" "$RED_PATH_T5_SEAL" "$RED_PATH_PROMPT" "$RED_PATH_T5_BASE" t5)"
+assert_exit_code "$?" "0" "red verification T5 fail-closed: $RED_PATH_T5_OUT"
+assert_contains "$RED_PATH_T5_OUT" "t5_green_journal_fail_closed=true" \
+  "red-path proves t5_green_journal_fail_closed"
+
 ROUTING="$(sed -n '1,240p' \
   "$REPO_ROOT/skills/l5/SKILL.md" \
   "$REPO_ROOT/skills/l6/SKILL.md" \

@@ -6,7 +6,7 @@
 - session marker 已 `retire` → `active: false`。routing 指 `agy-effort-rail-wording-2026-09-16`（已完成）→ admission READY。開 C 之前照 recipe：新 graph → routing 換 → `mission-terminal-reconcile.js legacy --graph-digest <new>`。
 - pin store 不變（implementer cursor-grok-4.6-low；qc_panel gpt-5.6-sol、GLM-5.2；MiniMax incumbent）。**grok 仍 402**：consult 走 `dispatch-author.sh --runner codex --model gpt-5.6-sol --prompt-file … --timeout 20m`。
 - 本 repo canonical ledger 仍 carry-only 亂序（v2.36.54 writer-only 不自癒）；D／B 兩個 campaign 的 lease 都在 stale 堆（B 的還沒 terminal：rail 連 acceptance_failed 都記不下來，row open）。**v2.36.54 起新 campaign 的 carry 保序**，B 的 campaign 沒被序問題咬到。
-- **兩個 suite 從 `acf3b06c`（09-12）起 base 紅**：`provider-readiness-consumer`（5）與 `autopilot-cli`（33）——suite 內跑 `--check-scorecard`，sandbox 看不到 host 的 cursor pin。CI 也紅（且 CI 只跑改到的檔，所以本機才看得到）。fired row；任何 campaign 的 `verification_commands` 在修好前**不要放這兩個**。
+- **兩個 suite 從 `acf3b06c`（09-12）起 base 紅**：`provider-readiness-consumer`（5）與 `autopilot-cli`（33）——suite 內跑 `--check-scorecard`，sandbox 看不到 host 的 cursor pin。CI 上同樣會紅（但 CI 是 release-gated，見下）。fired row；任何 campaign 的 `verification_commands` 在修好前**不要放這兩個**。
 - CI 是 release-gated（只在 `.claude-plugin/plugin.json` 變動時跑）：v2.36.55 那 run 紅在 executable gate（100644 test 檔；`c8d2f97e` 只改 index 被 `git add -A` 讀回，`c5df6df7` 才真 chmod）；下次 release 的 run 應只剩 `dispatch-detached-campaign-authority.test.sh`（09-14 起 runner 上紅，open row）。
 - Peer：cuda 已知 v2.36.54 對已亂 segment 無用（`msg_01M2KQA9GPTEW4P29AWT913NX0`），他們 P0 的 resume 量到 preflight 正確擋 drift（claim 沒燒）。openclaw 三則（agy no-go、report #2、hook 提案）都登 row、已回覆 hook 提案（`msg_01M2KS6RBYNB9X43MT9PMTKGVG`）。gentoo 的 context-budget 問題已回覆＋登 row。
 

@@ -59,9 +59,14 @@
      輪成 MiniMax-M3。保留該註記的實質理由供日後追溯：known-bad corpus 量的是
      catch，不是 honesty-under-pressure（METR 對 sol 的 eval-awareness 發現）。
      它被校準的檔位是 `high`；這裡用的是 `max`，比校準時更多算力。 -->
-- qc_panel: gpt-5.6-sol, GLM-5.2, MiniMax-M3
-- qc_panel_runners: codex, cc-shim, cc-shim
-- qc_panel_efforts: max, high, high
+<!-- 2026-09-16 使用者裁定（HANDOFF 下一步 0，雞生蛋）：v2.36.58 起 intake 拒收
+     blind-incompatible 席位（codex 有工具），blind review redesign 自己的 campaign
+     也會被擋，所以 redesign 期間 qc_panel[0] 暫時換成 packet-tier 的
+     claude-fable-5-1 @ claude-native。redesign 落地（cleanroom tier 讓 codex 合法）後
+     換回 gpt-5.6-sol @ codex max。這是 operator 決定，不是資格評定。 -->
+- qc_panel: claude-fable-5-1, GLM-5.2, MiniMax-M3
+- qc_panel_runners: claude-native, cc-shim, cc-shim
+- qc_panel_efforts: high, high, high
 - qc_panel_endpoints: @none, glm, minimax
 - qc_panel_aggregation: union-on-verified-critical
 - provider_readiness_receipt_ttl_seconds: 300

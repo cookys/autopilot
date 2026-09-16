@@ -121,12 +121,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: extend the v2.36.53 pre-claim preflight from the durable-wait phases to every git_candidate resume; the existing P3 drift cases gain a zero-call assertion.
 
 ### Managed rail (cuda P1): GLM tautological no_finding_proof stops full_diff_review; final panel seat transport_failed
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.58 2026-09-16
 - **Trigger**: cuda P1 (fleet-comms): r2 GLM no_verdict (tautological no_finding_proof) stopped the campaign; r3 `final_panel_seat_transport_failed`; aimax395 campaign C 2026-09-16: codex seat transport_failed, panel 2/3
 - **Effort**: Fix
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: (i) panel refuses pinned codex; (ii) proof rejects concrete proof; (iii) no_verdict omits raw_log. (ii)+(iii) shipped v2.36.57: Node grammar aligned with the battery, raw_log salvaged on rejection; (i) pre-spend admission next.
+- **Context**: (ii)+(iii) shipped v2.36.57 (proof grammar + raw_log); (i) pre-spend `final_panel_seat_blind_incompatible` v2.36.58
+
+### Managed rail: codex containment (bwrap) qualification spike so a codex seat can serve the blind final panel
+- **Status**: open
+- **Trigger**: operator wants a pinned codex qc seat to survive managed blind discovery without replacing the seat
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-16 (cuda P1 consult, A2)
+- **Pointer**: docs/plans/2026-09-16-final-panel-blind-admission.md
+- **Context**: bwrap scratch-only inputs + runtime/TLS/DNS + sanitized ~/.codex; prove no repo/home/tmp/proc reach, no shell/git/curl/MCP re-acq; nested-sandbox/timeout/exit/raw_log parity; fail-before-spend; record versions.
 
 ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
 - **Status**: shipped v2.36.56 2026-09-16

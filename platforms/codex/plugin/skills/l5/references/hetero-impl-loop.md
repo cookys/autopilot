@@ -162,7 +162,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    `node scripts/session-mode.js retire --session <id> --integration-receipt <record-integration
    receipt>` re-derives lineage claim + git ancestry (v2.36.48); never delete a marker by hand.
 6b. Run `bash scripts/resolve-review-loop.sh --check-scorecard --field override_admitted_seats` and
-    read the stderr ⚠ notes. Every `qc_panel[N]` without evidence must be pinned first
+    read the stderr ⚠ notes (a qc seat whose runner cannot run blind review is reported there and refused at intake). Every `qc_panel[N]` without evidence must be pinned first
     (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with
     `final_panel_seat_unqualified`.
 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
@@ -196,7 +196,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
     ledger rotation carry keeps journal append order v2.36.54,
     red verification takes the repair path v2.36.56,
-    proof grammar parity + raw_log on rejected envelopes v2.36.57.
+    proof grammar parity + raw_log on rejected envelopes v2.36.57,
+    blind-incompatible final-panel seat refused at intake v2.36.58.
     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
     line drifts the frozen source sha and every `session-mode set` is refused until routing is

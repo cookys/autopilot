@@ -6,6 +6,17 @@
 // the sealed seat is exactly that qualified tuple; every other terminal seat
 // needs an exact qualified scorecard-ladder row. Path (c) is a recorded
 // operator admission for that exact panel index.
+const BLIND_DISCOVERY_CAPABLE_RUNNERS = Object.freeze([
+  'anthropic-compatible',
+  'cc-shim',
+  'claude-native',
+  'qoderclicn',
+]);
+
+function isBlindDiscoveryCapableRunner(runner) {
+  return typeof runner === 'string' && BLIND_DISCOVERY_CAPABLE_RUNNERS.includes(runner);
+}
+
 function finalPanelSeatQualified(roster, seat, index) {
   if (!roster || !seat) return false;
   const endpoint = (value) => typeof value === 'string' && value.length > 0 ? value : null;
@@ -34,4 +45,8 @@ function finalPanelSeatQualified(roster, seat, index) {
   });
 }
 
-module.exports = { finalPanelSeatQualified };
+module.exports = {
+  BLIND_DISCOVERY_CAPABLE_RUNNERS,
+  isBlindDiscoveryCapableRunner,
+  finalPanelSeatQualified,
+};

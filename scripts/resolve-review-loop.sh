@@ -2110,6 +2110,28 @@ for (( _i = 0; _i < _qc_max; _i++ )); do
   [[ -n "$_qc_eng" ]] && _panel_div_runners="$_panel_div_runners $_qc_run"
 done
 
+# Literal mirror of BLIND_DISCOVERY_CAPABLE_RUNNERS in
+# src/engine/final-panel-qualification.js (parity test keeps them equal).
+if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
+  for (( _i = 0; _i < _qc_max; _i++ )); do
+    _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
+    [[ -n "$_qc_run" ]] || continue
+    case "$_qc_run" in
+      anthropic-compatible|cc-shim|claude-native|qoderclicn) continue ;;
+    esac
+    _qc_eng="${QC_PANEL[$_i]:-<unspecified>}"
+    _blind_warn="qc_panel[${_i}] seat (${_qc_eng}/${_qc_run}) cannot execute a managed blind-discovery review — the managed rail refuses it at intake (final_panel_seat_blind_incompatible); replace the seat or complete the containment qualification"
+    CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "$_blind_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+    echo "resolve-review-loop: ⚠ ${_blind_warn}" >&2
+  done
+fi
+
 # A seat is "reviewer-class" when its judgement is the thing being decorrelated
 # from the implementer's work. Everything that is not the implementer seat is.
 _is_unqualified_runner() {

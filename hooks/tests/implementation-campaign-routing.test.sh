@@ -1056,14 +1056,14 @@ const roster = {
   cross_family_required: true,
   qc_panel_seats_complete: true,
   qc_panel_seats: [
-    { role: 'qc', runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
-    { role: 'qc', runner: 'fixture-b', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
-    { role: 'qc', runner: 'fixture-c', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+    { role: 'qc', runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
+    { role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
+    { role: 'qc', runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
   ],
   fallback_ladder: [
-    { runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', family: 'openai' },
-    { runner: 'fixture-b', model: 'claude-opus', effort: 'high', family: 'anthropic' },
-    { runner: 'fixture-c', model: 'grok-4.5', effort: 'high', family: 'xai' },
+    { runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', family: 'openai' },
+    { runner: 'claude-native', model: 'claude-opus', effort: 'high', family: 'anthropic' },
+    { runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', family: 'xai' },
   ],
 };
 let implementationCalls = 0;
@@ -1897,14 +1897,14 @@ const roster = {
   cross_family_required: true,
   qc_panel_seats_complete: true,
   qc_panel_seats: [
-    { role: 'qc', runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
-    { role: 'qc', runner: 'fixture-b', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
-    { role: 'qc', runner: 'fixture-c', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+    { role: 'qc', runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
+    { role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
+    { role: 'qc', runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
   ],
   fallback_ladder: [
-    { runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', family: 'openai' },
-    { runner: 'fixture-b', model: 'claude-opus', effort: 'high', family: 'anthropic' },
-    { runner: 'fixture-c', model: 'grok-4.5', effort: 'high', family: 'xai' },
+    { runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', family: 'openai' },
+    { runner: 'claude-native', model: 'claude-opus', effort: 'high', family: 'anthropic' },
+    { runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', family: 'xai' },
   ],
 };
 const seal = JSON.parse(fs.readFileSync(sealPath, 'utf8'));
@@ -2406,10 +2406,10 @@ const roster = {
   cross_family_required: false,
   qc_panel_seats_complete: true,
   qc_panel_seats: [
-    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
+    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
   ],
   fallback_ladder: [
-    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
+    { runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
   ],
 };
 
@@ -2467,12 +2467,12 @@ const proofRoster = {
   ...roster,
   min_panel_size: 2,
   fallback_ladder: [
-    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
-    { runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture' },
+    { runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
+    { runner: 'cc-shim', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture' },
   ],
   qc_panel_seats: [
-    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
-    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture' },
+    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
+    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture' },
   ],
 };
 
@@ -2709,7 +2709,7 @@ if (mode === 'proof') {
   assert.strictEqual(canonicalDigest(seatABody), seatADigest);
   assert.strictEqual(seatADigest, canonicalDigest({
     schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat', seat_index: 1,
-    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
     status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: seatA.review_digest, reason: null,
   }));
   assert.ok(['no_verdict', 'parser_failed'].includes(seatB.status), `seat B status ${seatB.status}`);
@@ -3100,6 +3100,158 @@ assert_contains "$PROOF_ENGINE_OUT" "period_proof_reviewed=true" \
   "period-separated proof is reviewed (RED at base: dispatch_review blocked tautology message)"
 assert_contains "$PROOF_ENGINE_OUT" "tautology_blocked_raw_log=true" \
   "tautological proof blocks with tautology message and raw_log"
+
+# RED at base 9b049c00: dispatchers called, run ended at final_panel (fixture
+#   equivalent). After the gate: phase=campaign_intake, zero dispatcher calls,
+#   sandbox ledger has no intake row.
+BLIND_SBX="$TEST_TMP/blind-incompat-repo"
+mkdir -p "$BLIND_SBX/.claude" "$BLIND_SBX/src"
+git -C "$BLIND_SBX" init -q
+git -C "$BLIND_SBX" config user.email "blind-incompat@example.invalid"
+git -C "$BLIND_SBX" config user.name "Blind Incompat Test"
+write_mission_governance "$BLIND_SBX/.claude/owner-kernel-governance.json" shadow
+printf 'base\n' > "$BLIND_SBX/src/value.txt"
+git -C "$BLIND_SBX" add .
+git -C "$BLIND_SBX" commit -qm "base"
+BLIND_BASE="$(git -C "$BLIND_SBX" rev-parse HEAD)"
+BLIND_WT="$TEST_TMP/blind-incompat-wt"
+git -C "$BLIND_SBX" worktree add -q -b impl/blind-incompat "$BLIND_WT" "$BLIND_BASE"
+BLIND_COMMON_RAW="$(git -C "$BLIND_SBX" rev-parse --git-common-dir)"
+BLIND_COMMON="$(realpath "$BLIND_SBX/$BLIND_COMMON_RAW")"
+BLIND_CONTRACT="$TEST_TMP/blind-incompat-campaign.json"
+BLIND_SEAL="$TEST_TMP/blind-incompat-campaign.seal.json"
+BLIND_PROMPT="$TEST_TMP/blind-incompat-prompt.txt"
+printf 'blind incompatible final panel seat is refused at intake\n' > "$BLIND_PROMPT"
+node - "$BLIND_CONTRACT" "$BLIND_COMMON" "$BLIND_BASE" <<'NODE'
+const fs = require('fs');
+const [target, commonDir, base] = process.argv.slice(2);
+fs.writeFileSync(target, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'icc-blind-incompat',
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  base_sha: base,
+  branch: 'impl/blind-incompat',
+  vertical_acceptance: ['blind incompatible final panel seat is refused at intake'],
+  allowed_path_prefixes: ['src/'],
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 600,
+  verify_cmd: 'node fixture.js',
+  rubric_ids: ['ICC-BLIND1'],
+}, null, 2)}\n`);
+NODE
+BLIND_SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+  --contract "$BLIND_CONTRACT" --repo "$BLIND_SBX" --mission-mode shadow --out "$BLIND_SEAL" 2>&1)"
+assert_exit_code "$?" "0" "blind-incompat fixture campaign seals: $BLIND_SEAL_OUT"
+
+BLIND_ENGINE_OUT="$(node - "$REPO_ROOT" "$BLIND_SBX" "$BLIND_WT" "$BLIND_CONTRACT" "$BLIND_SEAL" \
+  "$BLIND_PROMPT" "$BLIND_BASE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const [
+  root, repo, worktree, contractPath, sealPath, promptFile, base,
+] = process.argv.slice(2);
+const {
+  AutopilotEngine,
+  appendCampaignEvent,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
+const { loadRows } = require(path.join(root, 'src', 'campaign', 'cli'));
+let implCalls = 0;
+let reviewCalls = 0;
+const engine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-09-16T04:00:00.000Z',
+  campaignEventAppender: (input) => appendCampaignEvent(input),
+  campaignIntake(input) {
+    return runCampaignIntake(input, {
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    });
+  },
+  implementationDispatcher() {
+    implCalls += 1;
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'committed' } };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'reviewed' } };
+  },
+  diffProvider() { return promptFile; },
+});
+const result = engine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/blind-incompat',
+  base,
+  roster: {
+    reviewer_engine: 'fixture-reviewer',
+    reviewer_effort: 'high',
+    reviewer_runner: 'cc-shim',
+    reviewer_qualified: true,
+    implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+    loop_max_rounds: 3,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    min_panel_size: 1,
+    required_review_families: 1,
+    cross_family_required: false,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [
+      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+    ],
+    fallback_ladder: [
+      { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+    ],
+  },
+  campaignContract: contractPath,
+  campaignSeal: sealPath,
+  verificationEnv: { PATH: process.env.PATH || '', CI: 'blind-incompat' },
+  verificationEnvAllowlist: ['CI'],
+});
+assert.strictEqual(result.phase, 'campaign_intake', `phase=${result.phase} reason=${result.reason}`);
+assert.strictEqual(result.status, 'blocked');
+const ledgerEntry = Array.isArray(result.ledger)
+  ? result.ledger.find((row) => row && row.unit === 'campaign_intake')
+  : null;
+const code = (ledgerEntry && ledgerEntry.rejection_code)
+  || (result.campaign_control && result.campaign_control.rejection && result.campaign_control.rejection.code)
+  || '';
+assert.strictEqual(code, 'final_panel_seat_blind_incompatible', JSON.stringify({ code, reason: result.reason, ledger: result.ledger }));
+assert.match(String(result.reason), /cannot execute a managed blind-discovery review/);
+assert.strictEqual(implCalls, 0, `implementation dispatcher calls=${implCalls}`);
+assert.strictEqual(reviewCalls, 0, `review dispatcher calls=${reviewCalls}`);
+const common = require('child_process').spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], {
+  encoding: 'utf8',
+}).stdout.trim();
+const ledgerPath = path.join(path.resolve(repo, common), 'autopilot', 'implementation-campaign.jsonl');
+if (fs.existsSync(ledgerPath)) {
+  const rows = loadRows(ledgerPath);
+  const intakeRows = rows.filter((row) => {
+    try {
+      const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+      const event = payload && payload.event;
+      return event && (event.event_type === 'campaign_intake' || event.artifact_type === 'implementation_campaign_intake');
+    } catch (_e) {
+      return false;
+    }
+  });
+  assert.strictEqual(intakeRows.length, 0, `sandbox ledger intake rows=${JSON.stringify(intakeRows)}`);
+}
+console.log('blind_incompatible_pre_spend=true');
+NODE
+)"
+assert_exit_code "$?" "0" "blind-incompatible engine intake: $BLIND_ENGINE_OUT"
+assert_contains "$BLIND_ENGINE_OUT" "blind_incompatible_pre_spend=true" \
+  "engine run stops at campaign_intake with zero dispatcher calls"
 
 ROUTING="$(sed -n '1,240p' \
   "$REPO_ROOT/skills/l5/SKILL.md" \

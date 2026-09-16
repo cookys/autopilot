@@ -33,7 +33,10 @@ const {
 const {
   consumeProviderReadinessBeforeSpend,
 } = require('../readiness/receipt');
-const { finalPanelSeatQualified } = require('./final-panel-qualification');
+const {
+  finalPanelSeatQualified,
+  isBlindDiscoveryCapableRunner,
+} = require('./final-panel-qualification');
 const repoPreconditions = require('./repo-preconditions');
 
 
@@ -1414,6 +1417,34 @@ function runCampaignIntake(input = {}, adapters = {}) {
     ? input.roster.qc_panel_seats
     : null;
   if (qcSeats && qcSeats.length > 0) {
+    const blindFailures = [];
+    for (let i = 0; i < qcSeats.length; i += 1) {
+      const seat = qcSeats[i];
+      if (!isBlindDiscoveryCapableRunner(seat && seat.runner)) {
+        const endpoint = seat && seat.endpoint != null && String(seat.endpoint).length > 0
+          ? seat.endpoint
+          : '@none';
+        const model = seat && seat.model ? seat.model : '<unspecified>';
+        const runner = seat && seat.runner ? seat.runner : '<unspecified>';
+        blindFailures.push(
+          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn); replace it with a blind-capable seat or complete the codex containment qualification — pins and overrides do not bypass containment`,
+        );
+      }
+    }
+    if (blindFailures.length > 0) {
+      const rejection = rejected(
+        'campaign_generation',
+        'final_panel_seat_blind_incompatible',
+        blindFailures.join('\n'),
+      );
+      return {
+        status: 'blocked',
+        reason: rejection.reason,
+        rejection,
+        steps: [rejection],
+        pre_spend_no_effect_receipt: null,
+      };
+    }
     const failures = [];
     for (let i = 0; i < qcSeats.length; i += 1) {
       const seat = qcSeats[i];

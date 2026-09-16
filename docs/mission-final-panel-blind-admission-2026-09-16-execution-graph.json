@@ -1,0 +1,101 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "final-panel-blind-admission-2026-09-16",
+   "acceptance_ids": [
+    "blind-incompatible-pre-spend",
+    "blind-capable-admitted",
+    "resolver-warning",
+    "predicate-parity",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/scripts",
+     "platforms/codex/plugin/skills/l5/references",
+     "platforms/codex/plugin/src",
+     "scripts",
+     "skills/l5/references",
+     "src"
+    ],
+    "baseline_churn": 1200,
+    "max_changed_files": 17,
+    "max_extra_churn": 600,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 5400,
+    "output_paths": [
+     "src/engine/final-panel-qualification.js",
+     "platforms/codex/plugin/src/engine/final-panel-qualification.js",
+     "src/engine/campaign-intake.js",
+     "platforms/codex/plugin/src/engine/campaign-intake.js",
+     "scripts/resolve-review-loop.sh",
+     "platforms/codex/plugin/scripts/resolve-review-loop.sh",
+     "scripts/dispatch-review.sh",
+     "platforms/codex/plugin/scripts/dispatch-review.sh",
+     "hooks/tests/implementation-campaign-state.test.sh",
+     "hooks/tests/implementation-campaign-routing.test.sh",
+     "hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh",
+     "hooks/tests/resolve-review-loop.test.sh",
+     "hooks/tests/dispatch-review.test.sh",
+     "docs/BACKLOG.md",
+     "skills/l5/references/hetero-impl-loop.md",
+     "platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md"
+    ],
+    "authorized_creates": [],
+    "profile": "high",
+    "required_paths": [
+     "src/engine/campaign-intake.js",
+     "src/engine/final-panel-qualification.js",
+     "scripts/resolve-review-loop.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-16-final-panel-blind-admission.md",
+     "section": "1. Ruling and shape (option A1 of the design consult, see Review log)"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 17,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-25492fdafb827436002fad7b58baa93de574a7560c2a8a5cf11b710490d127c3"
+   ],
+   "source_rubric_ids": [
+    "R102021207895874354704152925081622979741759901628885979682166868485678007290667",
+    "R105757087734292791733998787053730342665224534152015418305812153789439862566678",
+    "R107495438788531268999005688025691209205522974172488891843709292557981181523221",
+    "R18823014632792549004575138375376400044430882770069550393679399087977017841764",
+    "R27032967157452275094423031324098182855163522441743726990042877372663486215735",
+    "R29222076956728397353901101551507318867551363126616465559655082013231068340025",
+    "R42247587049346908033528108187020971790357485626464269261931357602288345738615",
+    "R56509777406494752618866041292884140693091611508663050689609443869509016135932",
+    "R84974728226339715943944911184594704743584586018695743438101478234790700992701",
+    "R88623101992293559988722216910581611068441429584297292416489794080059716755787"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/resolve-review-loop.test.sh",
+    "bash hooks/tests/resolve-review-loop-standing-pin.test.sh",
+    "bash hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh",
+    "bash hooks/tests/dispatch-review.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

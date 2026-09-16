@@ -288,4 +288,7 @@ stub sees `packet/diff.patch` without them, and `tree/.agents/skills` is a symli
   candidate-controlled `export-subst`/`export-ignore`, so the tree is now a private-index
   `checkout-index` verified against `ls-tree` object ids, with the attribute fixtures; (R4) the
   symlink oracle `readlink | sha256sum` hashes a trailing newline — replaced by a Node helper over
-  `readlinkSync(..., { encoding: 'buffer' })`.
+  `readlinkSync(..., { encoding: 'buffer' })`. The G1 blocker falsified rubric R1's own wording
+  ("git archive via `--output`"), so the frozen rubric could not carry the fold; the rubric was
+  corrected and the review continues under logical id `blind-review-packet-2026-09-16-v2` (G1 of v2
+  reviews the folded plan; the v1 G1 artifact and dispositions stay in the evidence dir).

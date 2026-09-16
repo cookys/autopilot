@@ -5156,8 +5156,9 @@ fs.writeFileSync(path.join(tmp, 'scratch.txt'), 'dirty\n');
 const dirty = spies();
 const dirtyResult = runCampaignIntake({ repo: tmp, roster, contractPath: contract(['present.txt']) }, dirty.adapters);
 assert.strictEqual(dirtyResult.status, 'blocked');
-assert.strictEqual(dirtyResult.rejection.code, 'campaign_repo_precondition_failed');
-assert.match(dirtyResult.rejection.reason, /dirty: repository has uncommitted changes/);
+assert.strictEqual(dirtyResult.rejection.code, 'campaign_repo_precondition_failed'); // (preservation, green at base)
+// RED at base fe225ff5: dirty: repository has uncommitted changes
+assert.match(dirtyResult.rejection.reason, /dirty: repository has uncommitted changes \(commit them, or pass a clean checkout\/worktree as --cwd\)$/);
 assert.strictEqual(dirty.counts.missionClaim, 0);
 assert.strictEqual(dirty.counts.claimGeneration, 0);
 fs.unlinkSync(path.join(tmp, 'scratch.txt'));

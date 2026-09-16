@@ -1132,12 +1132,18 @@ else
   # unchanged; only these two leaf paths become writable, and the credential
   # material one level up at ~/.gemini stays read-only and readable.
   AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
+  AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
+  AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
+  if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
+    printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
+      "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
+  fi
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
     printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
       "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
-      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$(agy_effort_clamp "$EFFORT")" "$TIMEOUT"
+      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   set +e

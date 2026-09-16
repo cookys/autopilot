@@ -85,4 +85,96 @@ assert_contains "$__RUN_STDOUT" "QUOTA" "overview quota section"
 assert_contains "$__RUN_STDOUT" "RUNS" "overview runs section"
 assert_contains "$__RUN_STDOUT" "ROSTER" "overview roster section"
 
+# --- 6. readiness: loud fallback when strict bootstrap throws (v2.36.55) ---
+# RED at base fe225ff5: zero stderr lines on a bootstrap that throws
+# strict_l5_provider_roster_unavailable (silent provider-less fallback).
+BOOTSTRAP_THROW="$TEST_TMP/strict-bootstrap-throw.cjs"
+cat > "$BOOTSTRAP_THROW" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.env.STATUS_TEST_REPO_ROOT;
+const mod = require(path.join(root, 'src', 'readiness', 'provider-bootstrap.js'));
+mod.createStrictL5ProviderBootstrap = () => {
+  const err = new Error('strict /l5 review roster is unavailable');
+  err.code = 'strict_l5_provider_roster_unavailable';
+  throw err;
+};
+NODE
+run_status_throw() {
+  __RUN_STDOUT=$(STATUS_TEST_REPO_ROOT="$REPO_ROOT" \
+    ENGINE_CAPABILITY_DIR="$SB/cap" AUTOPILOT_DISPATCH_RUNS_DIR="$SB/runs" \
+    REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" ENGINE_SCORECARD_DIR="$SB/sc" \
+    node --require="$BOOTSTRAP_THROW" "$CLI" status "$@" 2>"$SB/err")
+  __RUN_EXIT=$?
+  __RUN_STDERR=$(cat "$SB/err")
+}
+run_status_throw readiness --json
+assert_eq "0" "$__RUN_EXIT" "readiness bootstrap-unavailable still exits 0"
+assert_eq "1" "$(printf '%s\n' "$__RUN_STDERR" | grep -c '^readiness: strict bootstrap unavailable' || true)" \
+  "exactly one readiness fallback stderr line"
+printf '%s\n' "$__RUN_STDERR" | grep -E '^readiness: strict bootstrap unavailable \(strict_l5_provider_roster_unavailable' >/dev/null \
+  || fail "stderr must include thrown code strict_l5_provider_roster_unavailable"
+node - "$SB/err" <<'NODE'
+const fs = require('fs');
+const lines = fs.readFileSync(process.argv[2], 'utf8').split(/\n/).filter((l) => l.length > 0);
+if (lines.length !== 1) process.exit(2);
+NODE
+assert_eq "0" "$?" "readiness fallback is exactly one stderr line"
+EXPECTED_READY="$TEST_TMP/providerless-expected.json"
+ACTUAL_READY="$TEST_TMP/providerless-actual.json"
+printf '%s\n' "$__RUN_STDOUT" > "$ACTUAL_READY"
+node - "$REPO_ROOT" "$CFG" "$SB" "$ACTUAL_READY" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const { collectProviderReadiness } = require(path.join(root, 'src', 'readiness', 'status'));
+const expected = collectProviderReadiness({
+  cwd: root,
+  probe: false,
+  env: {
+    ...process.env,
+    REVIEW_LOOP_CONFIG_OVERRIDE: process.argv[3],
+    ENGINE_CAPABILITY_DIR: path.join(process.argv[4], 'cap'),
+    ENGINE_SCORECARD_DIR: path.join(process.argv[4], 'sc'),
+    AUTOPILOT_DISPATCH_RUNS_DIR: path.join(process.argv[4], 'runs'),
+  },
+});
+const actual = JSON.parse(fs.readFileSync(process.argv[5], 'utf8'));
+const drop = (rec) => {
+  const scrub = (value) => {
+    if (Array.isArray(value)) return value.map(scrub);
+    if (!value || typeof value !== 'object') return value;
+    const copy = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'issued_at' || k === 'expires_at' || k === 'observed_at'
+          || k === 'roster_digest' || k === 'policy_digest'
+          || k === 'observation_digest' || k === 'receipt_digest'
+          || k === 'decision_digest' || k === 'brain_seat') continue;
+      copy[k] = scrub(v);
+    }
+    return copy;
+  };
+  return scrub(rec);
+};
+const a = drop(actual);
+const e = drop(expected);
+const assert = require('assert');
+assert.deepStrictEqual(a, e);
+NODE
+assert_eq "0" "$?" "stdout JSON deep-equals provider-less receipt (digest/timestamp normalized)"
+
+# (preservation, green at base) successful bootstrap writes no such stderr line
+run_status_ok() {
+  __RUN_STDOUT=$(ENGINE_CAPABILITY_DIR="$SB/cap" AUTOPILOT_DISPATCH_RUNS_DIR="$SB/runs" \
+    REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" ENGINE_SCORECARD_DIR="$SB/sc" \
+    AUTOPILOT_LEVEL=l4 \
+    node "$CLI" status "$@" 2>"$SB/err-ok")
+  __RUN_EXIT=$?
+  __RUN_STDERR=$(cat "$SB/err-ok")
+}
+run_status_ok readiness --json
+assert_eq "0" "$__RUN_EXIT" "successful readiness bootstrap exit 0"
+assert_not_contains "$__RUN_STDERR" "readiness: strict bootstrap unavailable" \
+  "successful bootstrap prints no fallback stderr line"
+
 finalize_test

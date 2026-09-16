@@ -61,6 +61,12 @@ chmod +x "$STUB_VERDICT"
 OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "autopilot --help exits 0"
 assert_contains "$OUT" "dispatch review" "autopilot help lists dispatch review"
+assert_contains "$OUT" "--probe" "autopilot help documents --probe"
+# RED at base fe225ff5: help listed [--probe] without "bounded live spend" / "per-seat transport and live probes"
+assert_contains "$OUT" "bounded live spend" "autopilot help documents bounded live spend"
+assert_contains "$OUT" "bounded live spend" "autopilot help documents bounded live spend"
+assert_contains "$OUT" "per-seat transport and live probes" \
+  "autopilot help documents per-seat transport and live probes"
 assert_contains "$OUT" "engine review-loop" "autopilot help lists engine review-loop"
 assert_contains "$OUT" "engine implement-review" "autopilot help lists engine implement-review"
 assert_contains "$OUT" "--require-qualified-reviewer" "autopilot help documents reviewer qualification default flag"
@@ -375,8 +381,10 @@ for strict_level in l5 l6; do
       --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
   assert_contains "$OUT" '"rejection_code":"strict_l5_provider_roster_incomplete"' \
     "KR3(i) $strict_level: a VA-less roster with a complete QC panel is refused before spend"
-  assert_contains "$OUT" 'requires the verification-author seat' \
-    "KR3(i) $strict_level: the refusal names the verification-author seat"
+  assert_contains "$OUT" 'verification_author_present: true' \
+    "KR3(i) $strict_level: the refusal names verification_author_present: true"
+  assert_contains "$OUT" '.claude/review-loop-config.md' \
+    "KR3(i) $strict_level: the refusal names review-loop-config.md"
   assert_contains "$OUT" '"dispatcher_called":false' \
     "KR3(i) $strict_level: refused before any dispatch"
   OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \

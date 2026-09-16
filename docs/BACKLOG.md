@@ -126,7 +126,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2K2PYTE18H2JSJ260EXMN26`
 - **Pointer**: none
-- **Context**: expected usage (fail-closed pre-claim, v2.36.48); the precondition reason should name the remedy: run from a clean checkout/worktree or commit.
+- **Context**: expected usage (fail-closed pre-claim, v2.36.48); refusal should name the remedy: commit, or pass a clean checkout/worktree as `--cwd`.
 
 ### /l5 wording: verification-author seat error lacks the remedy; CLI `status readiness --probe` is always probe-needed
 - **Status**: open
@@ -134,7 +134,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: `cuda` via hangar-bridge 2026-09-16 (same thread)
 - **Pointer**: none
-- **Context**: two wording/doc items: the l5 roster profile error names the seat but not the remedy; the CLI readiness probe has no qualification provider, so only the engine path passes.
+- **Context**: VA refusal must name `verification_author_present: true` plus `verification_author_*` keys in `.claude/review-loop-config.md`; silent readiness bootstrap fallback made `--probe` look always probe-needed.
 
 ### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
 - **Status**: open
@@ -174,7 +174,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: Fix
 - **Source**: `308-8f` via SendMessage 2026-09-14; dispatcher note in 308's `/tmp/c3-runs/u1-a.stderr.log`
 - **Pointer**: none
-- **Context**: unverified here; if reproduced, default the agy effort per seat in `resolve-dispatch.sh` rather than per caller.
+- **Context**: CONFLICT `--model <tier id> --effort <other>` on agy ≥ 1.2 (not a missing flag); suffix-encoded ids must drive `--effort`.
 
 ### Managed rail: a non-git `--repo` still consumes a Mission claim before intake rejects it
 - **Status**: open

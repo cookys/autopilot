@@ -132,7 +132,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    <(scripts/sync-codex-plugin-skills.sh --mirror-roots-json)` refuses a missing one at check
    time); `required_paths` must sit inside `allowed_path_prefixes`; `spec.path`/`section` must
    exist at the base commit — commit the plan BEFORE admission or admission says
-   `spec.path missing at base`.
+   `spec.path missing at base`. Run EVERY `verification_commands` entry at the base commit before
+   sealing: a suite that is red at base fails the hand's acceptance after the paid round and the
+   rail then cannot even journal the stop (2026-09-16, two suites red since a config change).
 4. `.claude/mission-routing-config.json` → the new graph + sources; then
    `scripts/mission-terminal-reconcile.js legacy --repo-root . --graph-digest <digest>` (the
    legacy B/C disposition is bound to the current graph digest; without it admission fails with
@@ -183,8 +185,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    worktree from a report-only monitor; the artifact is the commit on `<branch>`. On
    `awaiting_disposition`, resume with `--resume --campaign-disposition-authority <file>` and
    DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16).
-10. **Verification is yours**: check out the hand's commit in a detached scratch worktree and run
-    every verify command there; probe the reviewer's MUST-FIX claims by re-derivation
+10. **Verification is yours**: check out the hand's commit in a scratch worktree on a temp branch
+    (some suites die on a detached HEAD) and run every verify command there; `test -x` every test
+    file the hand created (`bash file` masks a 100644 mode that the CI executable gate rejects); probe the reviewer's MUST-FIX claims by re-derivation
     (probe + mutation) before accepting or refuting; run a second-family `dispatch-review.sh`
     when the rail's seat returns `no_verdict`.
 11. Known rail limits (BACKLOG rows): `status task` has no writer. Fixed since

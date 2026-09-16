@@ -963,6 +963,11 @@ assert.strictEqual(validateFinalPanelReceipt({
 }, 1).passed, true);
 console.log('v1_seat_without_raw_log=true');
 
+// RED at base 0e3ea3cc (plan §1.3, R5/R6): the composition seat validation rejected any
+// `raw_log` key (observed: "failed seat raw_log is digested; empty raw_log rejected:
+// 'failed_seat_raw_log_digest=true' not found"), and the schema rejected it too
+// ("schema accepts optional seat raw_log: expected exit 0, got 2"). The unknown-key
+// cases below are preservation guards (green at base).
 const failedBody = {
   schema_version: 1,
   artifact_type: 'implementation_campaign_final_panel_seat',

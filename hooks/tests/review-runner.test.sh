@@ -489,6 +489,7 @@ for (const row of rows) {
   assert.strictEqual(bash.cls, row.expected, `bash ${row.proof}`);
   assert.strictEqual(node.cls, row.expected, `node ${row.proof}`);
   assert.strictEqual(isValidNoFindingProof(row.proof), row.expected, `classifier ${row.proof}`);
+  // (preservation, green at base): a `;` inside a substantive field keeps the whole capture.
   if (row.proof.includes('field;with semicolon inside')) {
     const parsed = parseReviewOutput(JSON.stringify({
       runner: 'codex', model: 'gpt-5.5', status: 'reviewed', verdict: 'SHIP-AS-IS',
@@ -508,6 +509,10 @@ function dispatchLike(stdout, args) {
   return dispatchReviewJson(args, { scriptPath: fake });
 }
 
+// Salvage (plan §1.2, R3). RED at base 0e3ea3cc: dispatchReviewJson returned
+// { result: null, parseError } with NO `salvaged` key — observed
+// "salvaged.raw_log equals envelope path; runner/model from args: 'salvage_ok=true' not found",
+// "malformed JSON salvages nothing … not found", "empty/non-string raw_log salvages nothing … not found".
 const tautProof = 'checked=diff; evidence=tests; conclusion=looks good';
 const goodEnvelope = {
   runner: 'liar-runner', model: 'liar-model', status: 'reviewed', verdict: 'SHIP-AS-IS',

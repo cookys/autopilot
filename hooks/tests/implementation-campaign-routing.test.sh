@@ -2465,7 +2465,7 @@ function transportFromEnvelope(env) {
 }
 const proofRoster = {
   ...roster,
-  min_panel_size: 1,
+  min_panel_size: 2,
   fallback_ladder: [
     { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
     { runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture' },
@@ -2700,6 +2700,18 @@ if (mode === 'proof') {
   const seatB = seats.find((seat) => seat.model === 'fixture-reviewer-b');
   assert.strictEqual(seatA.status, 'reviewed');
   assert.ok(!Object.prototype.hasOwnProperty.call(seatA, 'raw_log'), 'reviewed seat has no raw_log key');
+  // (preservation) the reviewed seat keeps the exact base v1 key set and its digest is the
+  // canonical digest of that body — byte-identical to what base emitted for this seat.
+  const BASE_SEAT_KEYS = ['schema_version', 'artifact_type', 'seat_index', 'runner', 'model', 'effort',
+    'endpoint', 'family', 'status', 'verdict', 'review_digest', 'reason', 'receipt_digest'];
+  assert.deepStrictEqual(Object.keys(seatA).sort(), [...BASE_SEAT_KEYS].sort());
+  const { receipt_digest: seatADigest, ...seatABody } = seatA;
+  assert.strictEqual(canonicalDigest(seatABody), seatADigest);
+  assert.strictEqual(seatADigest, canonicalDigest({
+    schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat', seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: seatA.review_digest, reason: null,
+  }));
   assert.ok(['no_verdict', 'parser_failed'].includes(seatB.status), `seat B status ${seatB.status}`);
   assert.strictEqual(seatB.verdict, null);
   assert.strictEqual(seatB.review_digest, null);
@@ -2709,6 +2721,9 @@ if (mode === 'proof') {
   assert.notStrictEqual(canonicalDigest({ ...seatBBody, raw_log: '/tmp/other' }), seatBDigest);
   const panelCount = (proof.result.campaign_receipt && proof.result.campaign_receipt.final_panel_count);
   assert.strictEqual(panelCount, 1, `final_panel_count=${panelCount}`);
+  // sealed minimum is 2: the rejected seat is excluded and the panel BLOCKS.
+  assert.strictEqual(proof.result.status, 'blocked', `panel status=${proof.result.status}`);
+  assert.match(String(proof.result.reason || proof.result.phase), /final_panel/);
   console.log('proof_final_panel_seat_raw_log=true');
 } else if (mode === 'proof-taut') {
   const tautRun = runRedPath({ proofPanel: true, tautFullDiff: true });

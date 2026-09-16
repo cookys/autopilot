@@ -2809,6 +2809,205 @@ assert_exit_code "$?" "0" "red verification T5 fail-closed: $RED_PATH_T5_OUT"
 assert_contains "$RED_PATH_T5_OUT" "t5_green_journal_fail_closed=true" \
   "red-path proves t5_green_journal_fail_closed"
 
+PROOF_ENGINE_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const [root, tmp] = process.argv.slice(2);
+const { AutopilotEngine, runCampaignComposition } = require(path.join(root, 'src', 'engine'));
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+
+const diff = path.join(tmp, 'proof-engine.diff');
+fs.writeFileSync(diff, '+x\n');
+const PERIOD_PROOF = 'checked=diff lines 1-40. evidence=ran tests. conclusion=nothing to fix';
+const TAUT_PROOF = 'checked=the changed slice; evidence=regression ran; conclusion=looks good';
+const RAW = '/tmp/proof-parity-rejected.log';
+const TAUT_MSG = 'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
+const BASE_MSG = 'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields';
+
+function envelope(proof, extra = {}) {
+  return {
+    runner: extra.runner || 'liar-runner',
+    model: extra.model || 'liar-model',
+    status: 'reviewed',
+    verdict: 'SHIP-AS-IS',
+    findings: extra.findings || 'none',
+    no_finding_proof: proof,
+    raw_log: extra.raw_log === undefined ? RAW : extra.raw_log,
+    error: null,
+    usage: null,
+  };
+}
+
+function dispatchFromEnvelope(env, args) {
+  const stdout = JSON.stringify(env);
+  try {
+    return {
+      error: null, status: 0, signal: null, stdout, stderr: '',
+      result: parseReviewOutput(stdout), parseError: null,
+    };
+  } catch (parseError) {
+    const out = {
+      error: null, status: 0, signal: null, stdout, stderr: '',
+      result: null, parseError,
+    };
+    if (typeof env.raw_log === 'string' && env.raw_log.length > 0) {
+      const runnerIdx = args.indexOf('--runner');
+      const modelIdx = args.indexOf('--model');
+      out.salvaged = {
+        runner: runnerIdx >= 0 ? args[runnerIdx + 1] : null,
+        model: modelIdx >= 0 ? args[modelIdx + 1] : null,
+        raw_log: env.raw_log,
+      };
+    }
+    return out;
+  }
+}
+
+const resolver = () => ({
+  error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+  result: {
+    reviewer_engine: 'test-review-model', reviewer_effort: 'high',
+    reviewer_runner: 'test-review-runner', reviewer_qualified: true,
+  },
+});
+
+const periodEngine = new AutopilotEngine({
+  clock: () => '2026-09-16T00:00:00.000Z',
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args) {
+    return dispatchFromEnvelope(envelope(PERIOD_PROOF), args);
+  },
+});
+const period = periodEngine.reviewDiff({ diffFile: diff });
+assert.strictEqual(period.status, 'reviewed', period.reason);
+console.log('period_proof_reviewed=true');
+
+const tautEngine = new AutopilotEngine({
+  clock: () => '2026-09-16T00:00:00.000Z',
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args) {
+    return dispatchFromEnvelope(envelope(TAUT_PROOF), args);
+  },
+});
+const taut = tautEngine.reviewDiff({ diffFile: diff });
+assert.strictEqual(taut.status, 'blocked');
+assert.strictEqual(taut.phase, 'dispatch_review');
+assert.strictEqual(taut.reason, TAUT_MSG);
+assert.notStrictEqual(taut.reason, BASE_MSG);
+assert.strictEqual(taut.raw_log, RAW);
+const blockedLedger = taut.ledger.find((row) => row.unit === 'dispatch_review' && row.status === 'blocked');
+assert.ok(blockedLedger);
+assert.strictEqual(blockedLedger.raw_log, RAW);
+console.log('tautology_blocked_raw_log=true');
+
+let performOutcomes = [];
+let panelReceipt = null;
+const composerEngine = new AutopilotEngine({
+  clock: () => '2026-09-16T00:00:00.000Z',
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args) {
+    return dispatchFromEnvelope(envelope(TAUT_PROOF), args);
+  },
+  campaignComposer(input, adapters) {
+    const innerReview = adapters.review;
+    const innerPanel = adapters.finalPanel;
+    adapters.review = (reviewInput) => {
+      const outcome = innerReview(reviewInput);
+      performOutcomes.push(outcome);
+      return outcome;
+    };
+    adapters.finalPanel = (reviewInput) => {
+      panelReceipt = innerPanel(reviewInput);
+      return panelReceipt;
+    };
+    return runCampaignComposition(input, adapters);
+  },
+});
+const wrapped = taut.status === 'reviewed'
+  ? { reviewed: true }
+  : {
+    reviewed: false,
+    reason: taut.reason,
+    raw: taut,
+    raw_log: Object.prototype.hasOwnProperty.call(taut, 'raw_log') ? taut.raw_log : null,
+  };
+assert.strictEqual(wrapped.raw_log, RAW);
+console.log('perform_review_top_level_raw_log=true');
+
+const TREE = 'a'.repeat(40);
+const DIGEST = 'b'.repeat(64);
+function successSeat(index, runner, model, family) {
+  const body = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: index,
+    runner, model, effort: 'high', endpoint: null, family,
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: DIGEST, reason: null,
+  };
+  return { ...body, receipt_digest: canonicalDigest(body) };
+}
+const preserved = successSeat(1, 'fixture-a', 'gpt-5.5', 'openai');
+const failedPanelSeatBody = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 2,
+  runner: 'fixture-b', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic',
+  status: 'no_verdict', verdict: null, review_digest: null,
+  reason: 'final_panel_seat_no_verdict',
+  raw_log: RAW,
+};
+const failedPanelSeat = {
+  ...failedPanelSeatBody,
+  receipt_digest: canonicalDigest(failedPanelSeatBody),
+};
+assert.ok(!Object.prototype.hasOwnProperty.call(preserved, 'raw_log'));
+const panel = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 0, minPanelSize: 2 }, {
+  preflight: () => ({ passed: true }),
+  implement: () => ({ committed: true, tree_sha: TREE }),
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: DIGEST }),
+  review: () => ({ reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: DIGEST }),
+  adjudicate: () => ({
+    registry_complete: true, repair_gate_passed: true, must_fix_now: [], follow_up: [], rejected: [],
+  }),
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({
+    reviewed: false, verdict: null, findings: '[]', review_digest: null,
+    sealed_min_panel_size: 2, final_panel_count: 1,
+    final_panel_seat_receipts: [preserved, failedPanelSeat],
+  }),
+});
+assert.strictEqual(panel.status, 'blocked');
+assert.ok(['final_panel', 'final_panel_below_minimum', 'full_diff_review'].includes(panel.phase)
+  || panel.reason === 'final_panel_below_minimum'
+  || panel.reason === 'final_panel_seat_no_verdict'
+  || String(panel.reason || '').includes('final_panel'));
+const seats = panel.final_panel_seat_receipts || [];
+if (seats.length === 2) {
+  assert.ok(!Object.prototype.hasOwnProperty.call(seats[0], 'raw_log'));
+  assert.strictEqual(seats[0].receipt_digest, preserved.receipt_digest);
+  assert.strictEqual(seats[1].raw_log, RAW);
+  assert.strictEqual(seats[1].verdict, null);
+  assert.strictEqual(seats[1].review_digest, null);
+  assert.ok(seats[1].status === 'no_verdict' || seats[1].status === 'parser_failed');
+}
+assert.ok((panel.final_panel_count || 0) < 2);
+console.log('final_panel_failed_seat_raw_log=true');
+NODE
+)"
+assert_exit_code "$?" "0" "proof-parity engine routing: $PROOF_ENGINE_OUT"
+assert_contains "$PROOF_ENGINE_OUT" "period_proof_reviewed=true" \
+  "period-separated proof is reviewed (RED at base: dispatch_review blocked tautology message)"
+assert_contains "$PROOF_ENGINE_OUT" "tautology_blocked_raw_log=true" \
+  "tautological proof blocks with tautology message and raw_log"
+assert_contains "$PROOF_ENGINE_OUT" "perform_review_top_level_raw_log=true" \
+  "performReview-shaped outcome carries top-level raw_log"
+assert_contains "$PROOF_ENGINE_OUT" "final_panel_failed_seat_raw_log=true" \
+  "failed final-panel seat carries raw_log; successful seats unchanged"
+
 ROUTING="$(sed -n '1,240p' \
   "$REPO_ROOT/skills/l5/SKILL.md" \
   "$REPO_ROOT/skills/l6/SKILL.md" \

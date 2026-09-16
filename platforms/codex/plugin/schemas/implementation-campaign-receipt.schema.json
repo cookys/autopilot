@@ -229,7 +229,8 @@
         "verdict": { "type": ["string", "null"] },
         "review_digest": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
         "reason": { "type": ["string", "null"] },
-        "receipt_digest": { "$ref": "#/$defs/sha256" }
+        "receipt_digest": { "$ref": "#/$defs/sha256" },
+        "raw_log": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     },

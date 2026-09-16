@@ -110,7 +110,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: Fix
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: three defects (raw data msg `msg_01M2KKPZ75X780NYXR0KPDDBQS`): tautological-proof check rejects a concrete proof; no_verdict result omits raw_log; final panel refuses codex (blind-review no-tools profile) though dispatch-review.sh runs it.
+- **Context**: (i) panel refuses pinned codex; (ii) proof rejects concrete proof; (iii) no_verdict omits raw_log. (ii)+(iii) shipped v2.36.57: Node grammar aligned with the battery, raw_log salvaged on rejection; (i) pre-spend admission next.
 
 ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
 - **Status**: shipped v2.36.56 2026-09-16

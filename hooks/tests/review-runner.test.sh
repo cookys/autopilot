@@ -327,4 +327,229 @@ assert_contains "$OUT" "source=agy-json" "review consumer accepts closed native 
 assert_contains "$OUT" "total=142" "review consumer preserves native usage total"
 assert_contains "$OUT" "rejected=5" "review consumer rejects invalid, overflow, and open usage"
 
+# Shared vector table: bash battery vs Node parseReviewOutput (v2.36.57).
+# RED at base 0e3ea3cc: Node rejected `.`/`,`/space/mixed rows with
+# "review output JSON no_finding_proof must contain non-tautological checked,
+# evidence, and conclusion fields"; bash accepted those rows. Shape and
+# tautology shared that one Node message.
+PROOF_STUB="$TEST_TMP/proof-stub"
+cat > "$PROOF_STUB" <<'EOF'
+#!/usr/bin/env bash
+read_prompt_arg() {
+  local prompt="" i=1
+  while [ "$i" -le "$#" ]; do
+    arg="${!i}"
+    if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then
+      next_index=$((i + 1)); next_arg="${!next_index}"
+      if [ -n "$next_arg" ] && [ -f "$next_arg" ]; then prompt="$(cat "$next_arg")"
+      else prompt="$next_arg"; fi
+      break
+    fi
+    i=$((i + 1))
+  done
+  [ -z "$prompt" ] && prompt="$(cat)"
+  printf '%s' "$prompt"
+}
+extract_markers() {
+  local prompt="$1" begin end
+  begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+  end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+  [ -n "$begin" ] && [ -n "$end" ] || return 1
+  printf '%s\n%s\n' "$begin" "$end"
+}
+PROMPT="$(read_prompt_arg "$@")"
+MARKERS="$(extract_markers "$PROMPT")" || exit 1
+BEGIN="$(printf '%s\n' "$MARKERS" | sed -n '1p')"
+END="$(printf '%s\n' "$MARKERS" | sed -n '2p')"
+echo "$BEGIN"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: ${STUB_PROOF}"
+echo "$END"
+EOF
+chmod +x "$PROOF_STUB"
+
+VECTOR_TABLE="$TEST_TMP/proof-vectors.txt"
+cat > "$VECTOR_TABLE" <<'EOF'
+checked=diff lines 1-40; evidence=ran the regression; conclusion=nothing blocking remains|ok
+checked=diff lines 1-40. evidence=ran the regression. conclusion=nothing blocking remains|ok
+checked=diff lines 1-40, evidence=ran the regression, conclusion=nothing blocking remains|ok
+checked=diff lines 1-40 evidence=ran the regression conclusion=nothing blocking remains|ok
+checked=diff lines 1-40.; evidence=ran the regression, conclusion=nothing blocking remains|ok
+checked=field;with semicolon inside; evidence=ran the regression; conclusion=nothing blocking remains|ok
+checked=diff lines 1-40; evidence=ran the regression|shape
+evidence=ran the regression; checked=diff lines 1-40; conclusion=nothing blocking remains|shape
+checked=diff lines 1-40|evidence=ran the regression|conclusion=nothing blocking remains|shape
+checked=; evidence=ran the regression; conclusion=nothing blocking remains|shape
+checked=diff lines 1-40; evidence=; conclusion=nothing blocking remains|shape
+checked=diff lines 1-40; evidence=ran the regression; conclusion=;|shape
+checked=none; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=no finding; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=no findings; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=no must-fix; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=no must-fix remains; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=n/a; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=na; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=checked; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=all passed; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=looks good; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=diff; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=tests; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=spec; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=code; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=acceptance criteria; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=requirements satisfied; evidence=ran the regression; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=none; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=no finding; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=no findings; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=no must-fix; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=no must-fix remains; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=n/a; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=na; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=checked; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=all passed; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=looks good; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=diff; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=tests; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=spec; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=code; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=acceptance criteria; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=requirements satisfied; conclusion=nothing blocking remains|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=none|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=no finding|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=no findings|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=no must-fix|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=no must-fix remains|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=n/a|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=na|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=checked|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=all passed|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=looks good|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=diff|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=tests|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=spec|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=code|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=acceptance criteria|tautology
+checked=diff lines 1-40; evidence=ran the regression; conclusion=requirements satisfied|tautology
+EOF
+
+VECTOR_OUT="$(node - "$REPO_ROOT" "$DIFF" "$PROOF_STUB" "$VECTOR_TABLE" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [root, diff, stub, tablePath, tmp] = process.argv.slice(2);
+const { parseReviewOutput, isValidNoFindingProof } = require(path.join(root, 'src', 'runners', 'review'));
+const script = path.join(root, 'scripts', 'dispatch-review.sh');
+const SHAPE_MSG = 'review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion fields separated by space, \';\', \',\' or \'.\'';
+const TAUT_MSG = 'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
+const BASE_MSG = 'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields';
+const BASH_SHAPE = 'NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields';
+const BASH_TAUT = 'NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value';
+
+function bashClass(proof) {
+  const run = spawnSync(script, [
+    '--runner', 'codex', '--model', 'gpt-5.5', '--diff-file', diff, '--bin', stub,
+  ], { encoding: 'utf8', env: { ...process.env, STUB_PROOF: proof } });
+  let envelope;
+  try { envelope = JSON.parse((run.stdout || '').trim().split('\n').filter(Boolean).at(-1)); }
+  catch (_err) { throw new Error(`bash stdout not JSON for ${proof}: ${run.stdout}`); }
+  if (envelope.status === 'reviewed') return { cls: 'ok', error: envelope.error };
+  const err = String(envelope.error || '');
+  if (err.includes(BASH_SHAPE)) return { cls: 'shape', error: err };
+  if (err.includes(BASH_TAUT)) return { cls: 'tautology', error: err };
+  throw new Error(`unclassified bash error for ${proof}: ${err}`);
+}
+
+function nodeClass(proof) {
+  const envelope = JSON.stringify({
+    runner: 'codex', model: 'gpt-5.5', status: 'reviewed', verdict: 'SHIP-AS-IS',
+    findings: 'none', no_finding_proof: proof, raw_log: '/tmp/log', error: null, usage: null,
+  });
+  try {
+    parseReviewOutput(envelope);
+    return { cls: 'ok', error: null };
+  } catch (error) {
+    const msg = error.message || String(error);
+    if (msg === SHAPE_MSG) return { cls: 'shape', error: msg };
+    if (msg === TAUT_MSG) return { cls: 'tautology', error: msg };
+    if (msg === BASE_MSG) return { cls: 'base-tautology-msg', error: msg };
+    throw new Error(`unclassified node error for ${proof}: ${msg}`);
+  }
+}
+
+const rows = fs.readFileSync(tablePath, 'utf8').split('\n').filter(Boolean).map((line) => {
+  const cut = line.lastIndexOf('|');
+  return { proof: line.slice(0, cut), expected: line.slice(cut + 1) };
+});
+for (const row of rows) {
+  const bash = bashClass(row.proof);
+  const node = nodeClass(row.proof);
+  assert.strictEqual(bash.cls, row.expected, `bash ${row.proof}`);
+  assert.strictEqual(node.cls, row.expected, `node ${row.proof}`);
+  assert.strictEqual(isValidNoFindingProof(row.proof), row.expected, `classifier ${row.proof}`);
+  if (row.proof.includes('field;with semicolon inside')) {
+    const parsed = parseReviewOutput(JSON.stringify({
+      runner: 'codex', model: 'gpt-5.5', status: 'reviewed', verdict: 'SHIP-AS-IS',
+      findings: 'none', no_finding_proof: row.proof, raw_log: '/tmp/log', error: null, usage: null,
+    }));
+    assert.ok(parsed.no_finding_proof.includes('field;with semicolon inside'));
+  }
+}
+console.log(`vector_rows=${rows.length}`);
+console.log('vector_parity=true');
+
+function dispatchLike(stdout, args) {
+  const fake = path.join(tmp, 'fake-dispatch.sh');
+  fs.writeFileSync(fake, `#!/usr/bin/env bash\nprintf '%s\\n' ${JSON.stringify(stdout)}\n`);
+  fs.chmodSync(fake, 0o755);
+  const { dispatchReviewJson } = require(path.join(root, 'src', 'runners', 'review'));
+  return dispatchReviewJson(args, { scriptPath: fake });
+}
+
+const tautProof = 'checked=diff; evidence=tests; conclusion=looks good';
+const goodEnvelope = {
+  runner: 'liar-runner', model: 'liar-model', status: 'reviewed', verdict: 'SHIP-AS-IS',
+  findings: 'none', no_finding_proof: tautProof, raw_log: '/tmp/salvaged.log',
+  error: null, usage: null,
+};
+const salvaged = dispatchLike(JSON.stringify(goodEnvelope), [
+  '--runner', 'arg-runner', '--model', 'arg-model', '--diff-file', diff,
+]);
+assert.strictEqual(salvaged.result, null);
+assert.ok(salvaged.parseError);
+assert.strictEqual(salvaged.salvaged.raw_log, '/tmp/salvaged.log');
+assert.strictEqual(salvaged.salvaged.runner, 'arg-runner');
+assert.strictEqual(salvaged.salvaged.model, 'arg-model');
+assert.strictEqual(salvaged.result, null);
+assert.ok(!Object.prototype.hasOwnProperty.call(salvaged, 'verdict'));
+assert.ok(!JSON.stringify(salvaged.salvaged).includes('SHIP-AS-IS'));
+assert.ok(!Object.prototype.hasOwnProperty.call(salvaged.salvaged, 'status'));
+assert.ok(!Object.prototype.hasOwnProperty.call(salvaged.salvaged, 'findings'));
+console.log('salvage_ok=true');
+
+const malformed = dispatchLike('{not json', ['--runner', 'arg-runner', '--model', 'arg-model']);
+assert.strictEqual(malformed.result, null);
+assert.ok(malformed.parseError);
+assert.ok(!Object.prototype.hasOwnProperty.call(malformed, 'salvaged'));
+console.log('salvage_malformed=true');
+
+const emptyLog = dispatchLike(JSON.stringify({ ...goodEnvelope, raw_log: '' }), [
+  '--runner', 'arg-runner', '--model', 'arg-model',
+]);
+assert.ok(!Object.prototype.hasOwnProperty.call(emptyLog, 'salvaged'));
+const nonString = dispatchLike(JSON.stringify({ ...goodEnvelope, raw_log: 12 }), [
+  '--runner', 'arg-runner', '--model', 'arg-model',
+]);
+assert.ok(!Object.prototype.hasOwnProperty.call(nonString, 'salvaged'));
+console.log('salvage_empty_nonstring=true');
+NODE
+)"
+assert_eq "0" "$?" "proof vector + salvage process exits 0: $VECTOR_OUT"
+assert_contains "$VECTOR_OUT" "vector_parity=true" "bash and Node agree on every vector row"
+assert_contains "$VECTOR_OUT" "salvage_ok=true" "salvaged.raw_log equals envelope path; runner/model from args"
+assert_contains "$VECTOR_OUT" "salvage_malformed=true" "malformed JSON salvages nothing"
+assert_contains "$VECTOR_OUT" "salvage_empty_nonstring=true" "empty/non-string raw_log salvages nothing"
+
 finalize_test

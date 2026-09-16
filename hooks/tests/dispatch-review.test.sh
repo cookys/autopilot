@@ -153,11 +153,32 @@ case "$MODE" in
     echo "NO-FINDING-PROOF: checked=neutral-arm control flow and keyPrefix equality; evidence=the gated block encloses every new read and write, so the off-arm reduces to the pre-change sequence. conclusion=both gates fully enclose their new control flow"
     echo "$END"
     ;;
-  ship_comma_sep)
+  ship_space_sep)
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
     echo "FINDINGS: none"
-    echo "NO-FINDING-PROOF: checked=restore discipline in the sync window, evidence=each flipped node records its prior value and is restored inside finally, conclusion=no node outside the changed set is touched"
+    echo "NO-FINDING-PROOF: checked=restore discipline in the sync window evidence=each flipped node records its prior value conclusion=no node outside the changed set is touched"
+    echo "$END"
+    ;;
+  ship_mixed_sep)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow. evidence=the gated block encloses every new read and write, conclusion=both gates fully enclose their new control flow"
+    echo "$END"
+    ;;
+  ship_doubled_sep)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow;; evidence=the gated block encloses every new read and write;; conclusion=both gates fully enclose their new control flow"
+    echo "$END"
+    ;;
+  ship_pipe_sep)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow|evidence=the gated block encloses every new read and write|conclusion=both gates fully enclose their new control flow"
     echo "$END"
     ;;
   ship_missing_conclusion)
@@ -777,6 +798,22 @@ assert_eq "0" "$EXIT" "period-separated no-finding proof is accepted"
 assert_contains "$OUT" '"no_finding_proof": "checked=' "period-separated proof is parsed"
 OUT="$(STUB_MODE=ship_comma_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "comma-separated no-finding proof is accepted"
+OUT="$(STUB_MODE=ship_space_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "space-separated no-finding proof is accepted"
+OUT="$(STUB_MODE=ship_mixed_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "mixed-punctuation no-finding proof is accepted"
+# RED at base 0e3ea3cc: doubled `;;` was absorbed into the field by the single-char
+# separator class + greedy capture (observed: status reviewed). The `+` quantifier
+# still accepts the run; pin that the battery remains green.
+OUT="$(STUB_MODE=ship_doubled_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "doubled-separator no-finding proof is accepted"
+OUT="$(STUB_MODE=ship_pipe_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "pipe-separated proof is a shape failure"
+assert_contains "$OUT" "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" \
+  "pipe separator uses the battery shape message"
+OUT="$(STUB_MODE=ship_tautology "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_contains "$OUT" "NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value" \
+  "blacklist value uses the battery tautology message (preservation)"
 
 # 反向：放寬分隔符**沒有**放寬反鴨子蓋章的閘門。缺欄位、同義反覆仍然擋。
 OUT="$(STUB_MODE=ship_missing_conclusion "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

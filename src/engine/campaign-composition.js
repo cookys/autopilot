@@ -337,12 +337,20 @@ const FINAL_PANEL_FAILURE_STATUSES = new Set([
   'precondition_failed',
 ]);
 
-function hasExactKeys(value, keys) {
-  return value
-    && typeof value === 'object'
-    && !Array.isArray(value)
-    && Object.keys(value).length === keys.length
-    && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+function hasFinalPanelSeatKeys(seat) {
+  if (!seat || typeof seat !== 'object' || Array.isArray(seat)) return false;
+  if (!FINAL_PANEL_SEAT_KEYS.every((key) => Object.prototype.hasOwnProperty.call(seat, key))) {
+    return false;
+  }
+  const allowed = new Set([...FINAL_PANEL_SEAT_KEYS, 'raw_log']);
+  for (const key of Object.keys(seat)) {
+    if (!allowed.has(key)) return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(seat, 'raw_log')
+      && (typeof seat.raw_log !== 'string' || seat.raw_log.length < 1)) {
+    return false;
+  }
+  return true;
 }
 
 function validateFinalPanelReceipt(receipt, expectedMinimum) {
@@ -361,7 +369,7 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
   const tuples = new Set();
   let firstFailure = null;
   for (const seat of receipt.final_panel_seat_receipts) {
-    if (!hasExactKeys(seat, FINAL_PANEL_SEAT_KEYS)
+    if (!hasFinalPanelSeatKeys(seat)
         || seat.schema_version !== 1
         || seat.artifact_type !== 'implementation_campaign_final_panel_seat'
         || !Number.isSafeInteger(seat.seat_index)

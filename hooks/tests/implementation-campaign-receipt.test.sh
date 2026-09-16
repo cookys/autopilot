@@ -947,6 +947,79 @@ console.log('one_bounded_repair=true');
 console.log('mechanical_adjudication=true');
 console.log('missing_disposition_blocks=true');
 console.log('vertical_first=true');
+
+const { validateFinalPanelReceipt } = require(path.join(root, 'src', 'engine', 'campaign-composition'));
+const v1Seat = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 1,
+  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+  status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+};
+v1Seat.receipt_digest = canonicalDigest(v1Seat);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [v1Seat],
+}, 1).passed, true);
+console.log('v1_seat_without_raw_log=true');
+
+const failedBody = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 1,
+  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+  status: 'no_verdict', verdict: null, review_digest: null,
+  reason: 'final_panel_seat_no_verdict',
+  raw_log: '/tmp/rejected.log',
+};
+const failedSeat = { ...failedBody, receipt_digest: canonicalDigest(failedBody) };
+const failedMeta = validateFinalPanelReceipt({
+  reviewed: false, verdict: null, findings: '[]', review_digest: null,
+  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [failedSeat],
+}, 1);
+assert.notStrictEqual(failedMeta.reason, 'final_panel_metadata_incomplete');
+assert.notStrictEqual(failedMeta.reason, 'final_panel_receipt_digest_mismatch');
+const tamperedBody = { ...failedBody, raw_log: '/tmp/tampered.log' };
+assert.notStrictEqual(canonicalDigest(tamperedBody), failedSeat.receipt_digest);
+const tamperedSeat = { ...failedSeat, raw_log: '/tmp/tampered.log' };
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: false, verdict: null, findings: '[]', review_digest: null,
+  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [tamperedSeat],
+}, 1).reason, 'final_panel_receipt_digest_mismatch');
+fs.writeFileSync(path.join(temp, 'seat-with-raw-log.json'), `${JSON.stringify({
+  ...composition,
+  final_panel_seat_receipts: [failedSeat],
+}, null, 2)}\n`);
+const emptyRaw = { ...failedBody, raw_log: '' };
+emptyRaw.receipt_digest = canonicalDigest(emptyRaw);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: false, verdict: null, findings: '[]', review_digest: null,
+  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [emptyRaw],
+}, 1).reason, 'final_panel_metadata_incomplete');
+fs.writeFileSync(path.join(temp, 'seat-empty-raw-log.json'), `${JSON.stringify({
+  ...composition,
+  final_panel_seat_receipts: [emptyRaw],
+}, null, 2)}\n`);
+console.log('failed_seat_raw_log_digest=true');
+
+const extraBody = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 1,
+  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+  status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+  unexpected: 'nope',
+};
+const extraSeat = { ...extraBody, receipt_digest: canonicalDigest(extraBody) };
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [extraSeat],
+}, 1).reason, 'final_panel_metadata_incomplete');
+fs.writeFileSync(path.join(temp, 'seat-extra-key.json'), `${JSON.stringify({
+  ...composition,
+  final_panel_seat_receipts: [extraSeat],
+}, null, 2)}\n`);
+console.log('unknown_key_rejected=true');
 NODE
 )"
 assert_exit_code "$?" "0" "campaign receipt and composition tests execute"
@@ -960,6 +1033,12 @@ assert_contains "$OUT" "missing_disposition_blocks=true" \
   "missing disposition fails closed before repair"
 assert_contains "$OUT" "vertical_first=true" \
   "failed vertical evidence repairs before broad review"
+assert_contains "$OUT" "v1_seat_without_raw_log=true" \
+  "v1 seat without raw_log still validates (preservation)"
+assert_contains "$OUT" "failed_seat_raw_log_digest=true" \
+  "failed seat raw_log is digested; empty raw_log rejected"
+assert_contains "$OUT" "unknown_key_rejected=true" \
+  "unrelated extra key is rejected by composition validation"
 
 node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
@@ -973,5 +1052,17 @@ node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
   --document "$TEST_TMP/invalid-terminal.json" >/dev/null 2>&1
 assert_exit_code "$?" "1" "terminal schema rejects a finding without evidence and authority"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/seat-with-raw-log.json" >/dev/null
+assert_exit_code "$?" "0" "schema accepts optional seat raw_log"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/seat-empty-raw-log.json" >/dev/null 2>&1
+assert_exit_code "$?" "1" "schema rejects empty raw_log"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/seat-extra-key.json" >/dev/null 2>&1
+assert_exit_code "$?" "1" "schema rejects an unrelated extra seat key (preservation)"
 
 finalize_test

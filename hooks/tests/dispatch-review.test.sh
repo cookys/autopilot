@@ -153,6 +153,13 @@ case "$MODE" in
     echo "NO-FINDING-PROOF: checked=neutral-arm control flow and keyPrefix equality; evidence=the gated block encloses every new read and write, so the off-arm reduces to the pre-change sequence. conclusion=both gates fully enclose their new control flow"
     echo "$END"
     ;;
+  ship_comma_sep)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=restore discipline in the sync window, evidence=each flipped node records its prior value and is restored inside finally, conclusion=no node outside the changed set is touched"
+    echo "$END"
+    ;;
   ship_space_sep)
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
@@ -798,6 +805,8 @@ assert_eq "0" "$EXIT" "period-separated no-finding proof is accepted"
 assert_contains "$OUT" '"no_finding_proof": "checked=' "period-separated proof is parsed"
 OUT="$(STUB_MODE=ship_comma_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "comma-separated no-finding proof is accepted"
+assert_contains "$OUT" '"no_finding_proof": "checked=restore discipline in the sync window, evidence=' \
+  "comma-separated proof is the one the stub emitted (MiniMax r1: the branch had been renamed away)"
 OUT="$(STUB_MODE=ship_space_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "space-separated no-finding proof is accepted"
 OUT="$(STUB_MODE=ship_mixed_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

@@ -1,0 +1,107 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "proof-parity-raw-log-2026-09-16",
+   "acceptance_ids": [
+    "grammar-parity",
+    "distinct-failures",
+    "raw-log-salvaged",
+    "raw-log-propagated",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/schemas",
+     "platforms/codex/plugin/scripts",
+     "platforms/codex/plugin/skills/l5/references",
+     "platforms/codex/plugin/src",
+     "schemas",
+     "scripts",
+     "skills/l5/references",
+     "src"
+    ],
+    "baseline_churn": 1600,
+    "max_changed_files": 18,
+    "max_extra_churn": 800,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 5400,
+    "output_paths": [
+     "scripts/dispatch-review.sh",
+     "platforms/codex/plugin/scripts/dispatch-review.sh",
+     "src/runners/review.js",
+     "platforms/codex/plugin/src/runners/review.js",
+     "src/engine/autopilot-engine.js",
+     "platforms/codex/plugin/src/engine/autopilot-engine.js",
+     "src/engine/campaign-composition.js",
+     "platforms/codex/plugin/src/engine/campaign-composition.js",
+     "schemas/implementation-campaign-receipt.schema.json",
+     "platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json",
+     "hooks/tests/review-runner.test.sh",
+     "hooks/tests/dispatch-review.test.sh",
+     "hooks/tests/implementation-campaign-routing.test.sh",
+     "hooks/tests/implementation-campaign-receipt.test.sh",
+     "docs/BACKLOG.md",
+     "skills/l5/references/hetero-impl-loop.md",
+     "platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md"
+    ],
+    "authorized_creates": [],
+    "profile": "high",
+    "required_paths": [
+     "src/runners/review.js",
+     "scripts/dispatch-review.sh",
+     "src/engine/autopilot-engine.js"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-16-proof-parity-raw-log.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 18,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-0a37231a1dd10ac8fd7b78206bd17c492d33017d42061946ccd3453307571ec3"
+   ],
+   "source_rubric_ids": [
+    "R109026845785258073152497296508956546840022037568558801334844498124361761588851",
+    "R113258844237510140367331109189022543331419330201141824385354288709106271710659",
+    "R12983470433291749829718590742435658453804916474492777139335233787957135455718",
+    "R51767934964425902755472158658565913496360503923038388472892286679383369325141",
+    "R57989687295607827644897359904796620339781135944789710621185751344818352471088",
+    "R61743496696037991928345176797746385099836447821892964589265037737935909443392",
+    "R70870769385417534547777485825040050538252539922569449612546855810274214778544",
+    "R82864417558871304217528381954536083090665044121936029760388610897884221531086",
+    "R88758950321168470212648144846080362332199766955053463100992171884567334928490",
+    "R96797982762070074531120651929060488775751013934251286189739250067620152828665"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/review-runner.test.sh",
+    "bash hooks/tests/dispatch-review.test.sh",
+    "bash hooks/tests/autopilot-engine.test.sh",
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/implementation-campaign-receipt.test.sh",
+    "bash hooks/tests/qc-panel-honesty.test.sh",
+    "bash hooks/tests/status-task.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash scripts/check-canonical-invariants.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

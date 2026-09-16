@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-16-proof-parity-raw-log.md",
+      "rubric_path": "plans/2026-09-16-proof-parity-raw-log.rubric.md",
+      "plan_sha256": "0a37231a1dd10ac8fd7b78206bd17c492d33017d42061946ccd3453307571ec3",
+      "rubric_sha256": "602008830843f3d8b37254522cbebd0ea6d88aeffb04287ba3efa6b4caf44c2c"
+    }
+  ]
+}

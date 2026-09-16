@@ -1,5 +1,5 @@
 ## 目標
-接續 autopilot 維護。2026-09-16 出貨到 **v2.36.58**（merge `931b31b2`，release `9df3bef9`，已推 `origin/develop`）。operator 指令（2026-09-16）：「CEO 模式把全部該做的依序處理完，/l5，需要討論的找 hetero engine 討論」。本輪做完 D（.54）、B（.55）、C（.56）、P1-1（.57）、P1-2/A1（.58，blind-incompatible 席 intake 就拒）。**第一件事：本機 pin 的 `qc_panel[0]` 是 gpt-5.6-sol/codex，從 .58 起本機每個 managed campaign 會在 intake 停 `final_panel_seat_blind_incompatible`——要 operator 決定換哪一席（見下）。** 之後：resume→repair 分支名（fired）、cuda backlog 遷移三缺陷（fired）、suite/config 耦合（fired）。
+接續 autopilot 維護。2026-09-16 出貨到 **v2.36.58**（merge `931b31b2`，release `9df3bef9`，已推 `origin/develop`）。operator 指令（2026-09-16 收尾時）：**下一個 session 做「blind review redesign」**（L，BACKLOG open row "Blind review redesign: blind the packet and the process boundary, not the runner"），用 /l5 走完整 plan → hetero review → campaign。codex 席的 pin **不用換**——redesign 上線後 cleanroom 席合法；在那之前這台跑不了 managed campaign（intake 會 `final_panel_seat_blind_incompatible`），所以 redesign 本身的 campaign 要先處理這個雞生蛋（見下一步 0）。
 
 ## 現況
 - `develop` = `origin/develop` @ `9df3bef9`（HANDOFF 這次 commit 之後再前進一個）。工作樹乾淨；沒有 mission worktree／branch（五個 campaign 都 `zero_residue: true`）；別的 session 的 `…/7ef6560a…/scratchpad/baseline` detached worktree 不是我們的、別動。
@@ -18,11 +18,17 @@
 - MiniMax REVOKED 撞 id → normalizer no_verdict 是 rail wart（row open），照規則第二家族 codex review，不重跑 MiniMax。
 
 ## 下一步
-0. **換 qc_panel[0]**（operator 決定，上面三選項）；換完 `resolve-review-loop.sh --check-scorecard` 無 blind ⚠ 才能開 campaign。
-1. resume→repair 分支名（fired）：`campaign-dispatch-projection.js deriveCampaignDispatchUnit` 在 resume 路徑自己 derive（同 `buildRepairBranchName`），別要求 caller 猜；cuda 下一個 campaign 可能先撞到。
-2. cuda backlog 遷移三缺陷（fired）：未對映 Status→sidecar＋錯誤；非 Columns 表頭保留；`preserved` 涵蓋原地改形；gate 進 `--apply` acceptance；bytes 對帳。修好回版本號給 cuda。
-3. suite/config 耦合（fired）：hermetic `REVIEW_LOOP_CONFIG_OVERRIDE` fixture＋host 無關期望。
-4. 之後 open：A2 codex bwrap containment spike（要件在 P1 consult 答案）、ADJUDICATING pre-claim、stale lease GC、carry-only recovery、REVOKED 撞 id、acceptance_failed terminal journal、verify_cmd detached worktree＋紅 verification 落 ledger、openclaw hook 提案（operator 裁決）、context-budget model-id 視窗、CI dispatch-detached。
+0. **雞生蛋**：redesign 的 campaign 自己會被 .58 的 intake 擋（pin 有 codex 席）。兩條路：(a) 這一刀暫時 pin 一席 blind-capable 的頂替（`claude-native`/claude-fable-5-1 或 `qoderclicn`/Qwen3.8-Max-Preview），做完 redesign 再把 codex 換回來；(b) 用 `--solo`/l3 inline 做這一刀。建議 (a)——redesign 需要 panel 走真流程當 dogfood。pin 指令：`node scripts/engine-capability-state.js pin-seat --role qc_panel --engine <model> --runner <runner> --effort high --endpoint @none --reason "temporary blind-capable seat during redesign" --operator cookys`；驗證 `bash scripts/resolve-review-loop.sh --check-scorecard` 無 blind ⚠、`node scripts/mission-routing-admission.js --repo-root "$PWD" --level l5` READY。
+1. **Redesign plan**：底稿＝`docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md`（Fable 5.1）＋ `consult-gpt-6-astra.md`；兩者一致的骨架：
+   - **審查包**（`src/runners/review.js` 的 scratch-cwd 換成 `buildPacket`）：`git archive` 的候選樹（無 .git）＋`git diff base..candidate`＋只有 spec；deny-list（`.autopilot/**`、evidence dir、`*.receipt.json`、review decision records）；`MANIFEST.json` 帶 packet hash，每席 receipt 記 hash。
+   - **兩種席位都算數**：`packet`（prompt-only：cc-shim、claude-native、qoderclicn、anthropic-compatible）與 `cleanroom`（有工具：codex、grok、cursor、kimi、opencode）。cleanroom 在隔離下跑：Fable 建議 **UID drop（`setpriv`，per-seat review UID + 0700 HOME 只放憑證，環境清空）**，astra 建議 bwrap 帶完整 launch policy；先做 UID drop，bwrap 當第二 profile。runner 表加 `tools` / `isolation_required`。
+   - **gate 在 intake＋resolver**：intake 每席跑不呼叫模型的 canary preflight（stub 試讀 repo／HOME／`.autopilot`／`/proc/*/cwd`／兄弟 HOME → 全 denied），秒級失敗；panel 快照進 campaign state，final panel 從快照解析。`final-panel-qualification.js` 把「模型資格」與「runner/profile 隔離能力」分開；.58 的 `BLIND_DISCOVERY_CAPABLE_RUNNERS` 變成 `packet` tier 的定義。
+   - **提速**：verify 只跑一次（tree hash 綁 verify＋full_suite 兩個義務）；有 panel 就關 in-rail 單席 review（`review.in_rail` 預設 off）；三席並行（真並行：分離子行程，不是 `Promise.all` 包 spawnSync）＋一席 standby；packet build／panel 與 rail 自己的 suite 可重疊。
+   - **紅字測試**：packet canary（commit message／evidence／deny-list 各種一個 token，建包後零命中）；attestation canary；敵意 stub 席在隔離下讀不到；兩席並行互讀不到；同 panel receipt hash 一致；沒 review UID 的主機 intake 十秒內拒；假「tests passed」rail 照跑 verify。
+   - 知道的取捨：cleanroom 看不到 git history（spec 要寫意圖）；網路開著（斷言憑證檔無 MCP／本地端點）；`min_panel_size`/family 規則跨 tier 混合滿足。
+   - 可能拆兩刀：刀 1＝packet＋tiers＋intake preflight＋UID drop（讓 codex 上 panel）；刀 2＝verify 一次＋砍 in-rail review＋並行＋standby。每刀都要 consult（codex gpt-5.6-sol 或 gpt-6-astra）、hetero plan loop（GLM＋codex，`--timeout 20m`）、freeze chain（scratchpad `…/23f2bf74…/scratchpad/a1/freeze-a1.js` 是最新模板）、**verification_commands 先在 base 跑綠再封**、**max_wall_seconds 至少 hand＋2×suite＋review（寧可 7200+）**。
+2. 之後 fired：resume→repair 分支名（`deriveCampaignDispatchUnit` 在 resume 路徑自己 derive）；cuda backlog 遷移三缺陷（修好回版本號）；suite/config 耦合（hermetic `REVIEW_LOOP_CONFIG_OVERRIDE`）。
+3. open：A2（被 redesign 吸收）、ADJUDICATING pre-claim、stale lease GC、carry-only recovery、REVOKED 撞 id、acceptance_failed terminal journal、verify_cmd detached worktree、openclaw hook 提案、context-budget model-id 視窗、CI dispatch-detached。
 
 ## 驗證方式
 - `git fetch -q origin && git status -sb` → `## develop...origin/develop`。
@@ -32,9 +38,10 @@
 - A1 的證據：`docs/plans/evidence/2026-09-16-final-panel-blind-admission/README.md`；P1-1：`…/2026-09-16-proof-parity-raw-log/`；C：`…/2026-09-16-red-verification-repair/`；B：`…/2026-09-16-agy-effort-rail-wording/`；D：`…/2026-09-16-ledger-rotation-order/`。
 
 ## Read-order
-1. `docs/BACKLOG.md` — fired：resume→repair 分支名、cuda backlog 遷移、suite/config 耦合；open：上面第 4 點。
-2. `CHANGELOG.md` v2.36.58 → v2.36.54。
-3. `skills/l5/references/hetero-impl-loop.md` recipe（本輪加了兩條：base 先跑綠再封；`test -x`＋temp branch）。
+1. `docs/plans/evidence/2026-09-16-blind-review-redesign/`（兩份 consult＋問題）— redesign 的底稿。
+2. `docs/BACKLOG.md` — open：Blind review redesign（L）；fired：resume→repair 分支名、cuda backlog 遷移、suite/config 耦合。
+3. `CHANGELOG.md` v2.36.58 → v2.36.54（今天五刀，每刀的 rail 教訓都在裡面）。
+4. `skills/l5/references/hetero-impl-loop.md` recipe（本輪加了兩條：base 先跑綠再封；`test -x`＋temp branch）。
 
 ## 陷阱
 - **campaign 跑的整段時間主 checkout 一個字都不能動**；grant 後 HEAD 也不能前進。平行工作全放 scratchpad。

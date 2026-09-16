@@ -39,8 +39,9 @@
 1. **One packet per review dispatch, built by the dispatcher, content-addressed.** New module
    `src/runners/review-packet.js` (Node built-ins + `git` only) exports
    `buildReviewPacket({ repo, baseSha, candidateSha, diffFile, specFile, outDir, denyList })`,
-   `packetPathDenied(path, denyList)`, `normalizeDenyList(denyList)` and
-   `DEFAULT_PACKET_DENY_LIST`. It writes, under `outDir`:
+   `packetPathDenied(path, denyList)`, `normalizeDenyList(denyList)`, `DEFAULT_PACKET_DENY_LIST`
+   and the integrity helper `verifyTreeIntegrity(treeDir, listing)` (used by the build and by test
+   (h2)). It writes, under `outDir`:
    - `tree/` — NOT `git archive` (it honours candidate-controlled `export-subst`, which expands
      `$Format:%B$` to the commit message, and `export-ignore`, which drops an allowed file). Instead:
      an ISOLATED temporary git directory `<outDir>/.gitdir` (created by the builder: `HEAD` =

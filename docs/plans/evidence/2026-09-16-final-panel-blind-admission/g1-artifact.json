@@ -1,0 +1,301 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "final-panel-blind-admission-2026-09-16",
+  "logical_plan_id": "final-panel-blind-admission-2026-09-16",
+  "session_id": "a1-g1-1789554512",
+  "session_key": "152ce0ed66ed25bf58deb515345b51c48781bf2ad56b8c9f2fa931933ad75837",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "724fd611bdace86f5f0088feb10af107646f768e23f4b553b737a59b2c1f8bd1",
+  "manifest_sha256": "19b0611d383dfe1aa1fd31a22b3143ed5edb06f737c071eed58f8ab3ed4ab49d",
+  "plan_sha256": "23fe55bce899e9637428c0b711d7f7f8608a297a32a714dfc663f63d0d3a583a",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "31bd213371ccc655a8bd5314bf01a70003c0b99c584c68c44ea59aa1addfcaf6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "f9ea39576eecceb9681c9668f083e1887ba2aa769e41774e0fca669ad35e9fe9",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ZhoJ0K",
+          "digest": "f9ea39576eecceb9681c9668f083e1887ba2aa769e41774e0fca669ad35e9fe9"
+        },
+        "receipt_digest": "f1929724bec75c273cd658da7e2394f6aa30776edc0f5b6e3732f45e5aa73655"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "fd2efe4b51791167d01d5760e5cfbecca0b25692a727309c4db554576298a4f9"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "4568131de78a858f717ce29acfa3ac85c742277e7b8f8291449dd7476b7bb651",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-4QkZ2v/stdout",
+          "digest": "4568131de78a858f717ce29acfa3ac85c742277e7b8f8291449dd7476b7bb651"
+        },
+        "receipt_digest": "6f0a4783528391c51b3e580bc4e99bf65d1abecadb07893b80991d5f3de1960f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh",
+      "claim": "The routing test is described only as reusing the engine-level P3 block with a codex qc seat, but the frozen rubric explicitly requires this engine-level run to use a real appender and a real sandbox ledger, while R8 says tests use stub adapters and sandbox ledgers only; the plan should name the intended split (real appender + real sandbox ledger for the routing run, stub mission/generation claim adapters) so the implementer does not stub the appender or ledger and lose the R4 evidence.",
+      "evidence": "Plan section 2 test bullet for implementation-campaign-routing.test.sh says only 'the engine-level P3 block's roster with a codex qc seat added' and the header line says 'Tests (RED-at-base headers ...; preservation guards labelled; stubs only)', with no statement that runImplementationReviewLoop uses a sealed contract, real appender, and real sandbox ledger as R4 demands; R8's clause 'tests use stub adapters and sandbox ledgers only' reads as excluding the real ledger R4 requires for this one run.",
+      "evidence_reference": "Plan section 2, tests bullet 2 ('implementation-campaign-routing.test.sh'); section 2 header ('stubs only') vs frozen rubric R4 ('runImplementationReviewLoop with a sealed contract, real appender, real sandbox ledger') and R8 ('stub adapters and sandbox ledgers only').",
+      "repair": "In the routing-test bullet, state explicitly: run runImplementationReviewLoop with a sealed contract, the real appender, and the real sandbox ledger; only the missionClaim and claimGeneration adapters are stubs (spies). Interpret R8's 'sandbox ledgers only' as forbidding live dispatchers and external seats, not the real appender/ledger required by R4.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "87863d4e0f42bf6953da35e4a192c4427a46bb76196cfe303de29bdc965e0962"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-state.test.sh",
+      "claim": "The plan lists RED-at-base requirements but does not state that each RED assertion's observed base message is recorded verbatim in the test header, only that headers carry 'observed messages'; naming the exact expected header format per RED case (intake refusal, override refusal, kimi/cursor refusal, routing block, resolver warning) removes ambiguity for the implementer.",
+      "evidence": "Plan section 2 header says '(RED-at-base headers with observed messages; preservation guards labelled; stubs only)' but individual bullets name expected new-code outcomes without specifying the header must carry the base-observed message text (e.g. base admits and calls claimGeneration, base shows no capability_warnings entry).",
+      "evidence_reference": "Plan section 2, tests header; frozen rubric R8 ('recorded RED against base 9b049c00 in the test header with the observed message').",
+      "repair": "For each RED case in section 2, add the expected base observation to record in the header, e.g. 'RED at base: runCampaignIntake returns admitted and claimGeneration spy = 1 (observed message recorded in header)'. No design change; implementer clarifies headers.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cef478b0849c2895e92d71ef7a36a31a7fc1663cd9762300bc5110f29acf388a"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-state.test.sh",
+      "claim": "The planned intake test does not fully prove the frozen rejection-message and claim-order contract.",
+      "evidence": "The test description checks only that the message names qc_panel[0] gpt-5.6-sol/codex and contains the containment phrase. It does not assert the required @<endpoint|@none> rendering, exactly one message line per rejected seat, or explicitly pin both claim adapters' base-versus-change call counts for the same roster.",
+      "evidence_reference": "Plan §2, implementation-campaign-state.test.sh bullet; frozen rubric R2.",
+      "repair": "Add endpoint-present and endpoint-absent cases, include multiple incompatible seats to assert one indexed line per seat, and explicitly assert missionClaim and claimGeneration are both zero after the change while the same base roster is admitted and reaches the required claim call.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0ce0083d65c6ca4f53e4081f5bfe21b85822762bbe1618bd01977a4a8b10b699"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-state.test.sh",
+      "claim": "The plan does not explicitly test that a standing pin cannot admit a blind-incompatible final-panel seat.",
+      "evidence": "The proposed codex fixture is described as fully qualified through fallback_ladder, and a separate override_admitted_seats case is listed. Neither description identifies a standing-pin fixture, although R3 independently requires both standing-pin and override resistance.",
+      "evidence_reference": "Plan §2, implementation-campaign-state.test.sh bullet; frozen rubric R3.",
+      "repair": "Add an explicit standing-pin codex-seat case and assert final_panel_seat_blind_incompatible before both claims; retain the separate override case and the cc-shim and claude-native controls.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c538ab5523ad75d5842d3e5763ae9a3af0d5fccab7698d8b3ae99391819a7e67"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh",
+      "claim": "The engine-level acceptance fixture does not freeze the required production-like persistence boundaries.",
+      "evidence": "The plan refers to the existing P3 block and zero dispatcher calls, but does not state that the case uses a sealed contract, the real appender, and the real sandbox ledger. Those are explicit R4 conditions and cannot be inferred from the fixture name.",
+      "evidence_reference": "Plan §2, implementation-campaign-routing.test.sh bullet; frozen rubric R4.",
+      "repair": "Specify and assert that the routing case uses a sealed contract, real appender, and real sandbox ledger, while stubbing only external dispatch adapters; also record the base result at final_panel with the fixture-equivalent transport failure.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0f0e9f3eb90664043905e34f256dbf00fcdf8eb587e2a9c909ab9b369a9ffc5e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh and hooks/tests/resolve-review-loop.test.sh",
+      "claim": "The resolver test proves one warning for one codex seat but not the required one-warning-per-incompatible-seat behavior.",
+      "evidence": "The proposed test contains only qc_panel[0]. An implementation that reports only the first incompatible seat or overwrites earlier warnings would satisfy the described test while violating R5.",
+      "evidence_reference": "Plan §2, resolver test bullet; frozen rubric R5.",
+      "repair": "Use a roster with at least two blind-incompatible seats and one compatible control, then assert indexed JSON entries and matching stderr warning lines for each incompatible seat, exit zero, absence without --check-scorecard, and absence of both prohibited pin remedies.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d29334ee080a3b424597657e1582652dd82c44de8c90c3d6d08a14e6d23e798d"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §4 scope-integrity acceptance and immutable runtime files",
+      "claim": "The scope-integrity check omits one file that R7 requires to remain byte-identical.",
+      "evidence": "The acceptance row names autopilot-engine.js, review.js, and campaign-composition.js, but omits src/engine/implementation-campaign.js. It also leaves the no-new-CLI-flag and untouched final-panel receipt and blind-environment boundaries as prose rather than explicit diff checks.",
+      "evidence_reference": "Plan §3 and §4 scope-integrity row; frozen rubric R7.",
+      "repair": "Add src/engine/implementation-campaign.js to the byte-identity command against 9b049c00 and include explicit diff-based checks that performFinalPanel, seat receipt logic, blind-environment wiring, runner vocabulary, and CLI flags are unchanged.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4663928d6c8bc486eac42523970750d30df1f08d99bf8bded29a8846ba3d8525"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "87863d4e0f42bf6953da35e4a192c4427a46bb76196cfe303de29bdc965e0962",
+      "rubric_id": "R4",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh",
+      "claim": "The routing test is described only as reusing the engine-level P3 block with a codex qc seat, but the frozen rubric explicitly requires this engine-level run to use a real appender and a real sandbox ledger, while R8 says tests use stub adapters and sandbox ledgers only; the plan should name the intended split (real appender + real sandbox ledger for the routing run, stub mission/generation claim adapters) so the implementer does not stub the appender or ledger and lose the R4 evidence.",
+      "evidence_reference": "Plan section 2, tests bullet 2 ('implementation-campaign-routing.test.sh'); section 2 header ('stubs only') vs frozen rubric R4 ('runImplementationReviewLoop with a sealed contract, real appender, real sandbox ledger') and R8 ('stub adapters and sandbox ledgers only').",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cef478b0849c2895e92d71ef7a36a31a7fc1663cd9762300bc5110f29acf388a",
+      "rubric_id": "R8",
+      "affected_surface": "hooks/tests/implementation-campaign-state.test.sh",
+      "claim": "The plan lists RED-at-base requirements but does not state that each RED assertion's observed base message is recorded verbatim in the test header, only that headers carry 'observed messages'; naming the exact expected header format per RED case (intake refusal, override refusal, kimi/cursor refusal, routing block, resolver warning) removes ambiguity for the implementer.",
+      "evidence_reference": "Plan section 2, tests header; frozen rubric R8 ('recorded RED against base 9b049c00 in the test header with the observed message').",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-16T10:30:07.571Z"
+}

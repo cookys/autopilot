@@ -33,10 +33,8 @@
    `dispatch-review.sh` stays as defense in depth and gains a comment naming the Node constant; a
    parity test asserts the bash gate's accept/deny for every runner in the `--runner` vocabulary
    matches the Node predicate.
-2. **Pre-spend refusal at intake.** In `runCampaignIntake`, BEFORE the existing
-   `final_panel_seat_unqualified` loop (a runner's containment capability is decided before pins or
-   ladders are consulted, so an unqualified AND incompatible seat is reported as incompatible) and
-   before any Mission/generation claim, every
+2. **Pre-spend refusal at intake.** In `runCampaignIntake`, right after the existing
+   `final_panel_seat_unqualified` loop and before any Mission/generation claim, every
    `qc_panel_seats[i]` whose `runner` is not blind-capable produces a rejection with the NEW code
    `final_panel_seat_blind_incompatible` (same `rejected('campaign_generation', …)` shape, `status:
    'blocked'`, `pre_spend_no_effect_receipt: null`). Message, exactly one line per seat:
@@ -87,9 +85,7 @@
     `finalPanelSeatQualified` path consults, no ladder entry) → still blind_incompatible (RED at
     base); replacing the seat with `GLM-5.2/cc-shim` (same otherwise-valid roster) → admitted
     (control, green at base); a `kimi` and a `cursor` seat → refused (RED at base); a
-    `claude-native` seat → admitted (preservation); PRECEDENCE: a codex seat that is ALSO unqualified
-    (no ladder entry, no pin, no override) → `final_panel_seat_blind_incompatible`, not
-    `final_panel_seat_unqualified` (RED at base: unqualified).
+    `claude-native` seat → admitted (preservation).
   - `hooks/tests/implementation-campaign-routing.test.sh`: an engine-level run
     (`runImplementationReviewLoop` with a SEALED contract, the REAL `appendCampaignEvent` appender and
     a REAL sandbox ledger under the fixture repo's git common dir; stub mission/generation claim
@@ -187,7 +183,3 @@ prints the ⚠. Then depth-0 re-pins the seat (operator decision) and the next c
   standing-pin fixture; two-seat resolver fixture; routing run's real appender/ledger stated; header
   format per RED case; implementation-campaign.js + bin/autopilot.js + dispatch-review comment-only
   diff in scope-integrity.
-- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 1;
-  evidence `g2-*`): precedence — an unqualified + incompatible seat would read "unqualified" — accepted:
-  the blind check now runs before the qualification loop, precedence fixture added. Depth-0 freeze:
-  zero unaddressed blockers, zero deferred.

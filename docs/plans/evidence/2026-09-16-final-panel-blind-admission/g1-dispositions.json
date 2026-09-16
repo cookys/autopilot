@@ -1,0 +1,49 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "final-panel-blind-admission-2026-09-16",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "87863d4e0f42bf6953da35e4a192c4427a46bb76196cfe303de29bdc965e0962",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: \u00a72 routing bullet now states the run uses a sealed contract, the real appender and a real sandbox ledger with stub mission/generation claim adapters; the header's 'stubs only' now reads 'stub dispatchers/adapters, sandbox ledgers'."
+  },
+  {
+   "fingerprint": "cef478b0849c2895e92d71ef7a36a31a7fc1663cd9762300bc5110f29acf388a",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: \u00a72 gains the header format `# RED at base 9b049c00: <observed message>` per RED case and names the base observation for each (admitted + claim called; no warning entry; dispatchers called)."
+  },
+  {
+   "fingerprint": "0ce0083d65c6ca4f53e4081f5bfe21b85822762bbe1618bd01977a4a8b10b699",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the intake test asserts the `@<endpoint|@none>` rendering, exactly one message line per refused seat (a two-seat fixture), and pins both claim adapters' call counts at base (1) vs head (0) on the same roster."
+  },
+  {
+   "fingerprint": "c538ab5523ad75d5842d3e5763ae9a3af0d5fccab7698d8b3ae99391819a7e67",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: a standing-pin fixture (the qc seat admitted only through the pin store the intake consults) is added next to the override case; both still refuse."
+  },
+  {
+   "fingerprint": "0f0e9f3eb90664043905e34f256dbf00fcdf8eb587e2a9c909ab9b369a9ffc5e",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: same fold as 87863d4e \u2014 sealed contract + real appender + real sandbox ledger stated explicitly for the routing run."
+  },
+  {
+   "fingerprint": "d29334ee080a3b424597657e1582652dd82c44de8c90c3d6d08a14e6d23e798d",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the resolver fixture carries TWO incompatible seats (codex at [0], cursor at [2]) and asserts two distinct entries in order; a single-warning implementation fails."
+  },
+  {
+   "fingerprint": "4663928d6c8bc486eac42523970750d30df1f08d99bf8bded29a8846ba3d8525",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: scope-integrity row adds src/engine/implementation-campaign.js, and explicit diff checks: `git diff 9b049c00 -- scripts/dispatch-review.sh` touches only comment lines (no `case` change), `bin/autopilot.js` untouched (no new CLI flag)."
+  }
+ ]
+}

@@ -33,10 +33,8 @@
    `dispatch-review.sh` stays as defense in depth and gains a comment naming the Node constant; a
    parity test asserts the bash gate's accept/deny for every runner in the `--runner` vocabulary
    matches the Node predicate.
-2. **Pre-spend refusal at intake.** In `runCampaignIntake`, BEFORE the existing
-   `final_panel_seat_unqualified` loop (a runner's containment capability is decided before pins or
-   ladders are consulted, so an unqualified AND incompatible seat is reported as incompatible) and
-   before any Mission/generation claim, every
+2. **Pre-spend refusal at intake.** In `runCampaignIntake`, right after the existing
+   `final_panel_seat_unqualified` loop and before any Mission/generation claim, every
    `qc_panel_seats[i]` whose `runner` is not blind-capable produces a rejection with the NEW code
    `final_panel_seat_blind_incompatible` (same `rejected('campaign_generation', …)` shape, `status:
    'blocked'`, `pre_spend_no_effect_receipt: null`). Message, exactly one line per seat:
@@ -69,40 +67,26 @@
   `CAP_WARNINGS_JSON` append idiom as the implementer-ladder warnings (~885).
 - `scripts/dispatch-review.sh` (+ mirror): comment only (names the Node constant); the `case` is
   unchanged.
-- Tests (each change-pinning block starts with `# RED at base 9b049c00: <observed message>` quoting
-  the base run verbatim — intake: "admitted, claimGeneration called 1×"; resolver: "no
-  capability_warnings entry"; routing: "dispatchers called, run ended at final_panel"; preservation
-  guards labelled `(preservation, green at base)`; stub dispatchers/adapters and sandbox ledgers only):
+- Tests (RED-at-base headers with observed messages; preservation guards labelled; stubs only):
   - `hooks/tests/implementation-campaign-state.test.sh` (next to the existing
     `final_panel_seat_unqualified` cases ~5270-5310): a roster whose `qc_panel_seats[0]` is
     `gpt-5.6-sol/codex`, fully qualified (in `fallback_ladder`) → `runCampaignIntake` returns
     `status: 'blocked'`, `rejection.code === 'final_panel_seat_blind_incompatible'`, message names
-    `qc_panel[0] gpt-5.6-sol/codex@@none` (the `@<endpoint|@none>` rendering; a second fixture with
-    an endpoint renders `@<endpoint>`) and contains `pins and overrides do not bypass containment`;
-    with TWO incompatible seats (`codex` at [0], `cursor` at [2]) the reason has exactly two lines,
-    one per seat, in index order; the `missionClaim` and `claimGeneration` adapter spies are pinned
-    at base (1 each, same roster) vs head (0 each) (RED at base); the same roster with
-    `override_admitted_seats: ['qc_panel[0]']` → still blind_incompatible (RED at base); a
-    STANDING-PIN fixture (the codex seat admitted only through the pin store the intake's
-    `finalPanelSeatQualified` path consults, no ladder entry) → still blind_incompatible (RED at
+    `qc_panel[0] gpt-5.6-sol/codex` and contains `pins and overrides do not bypass containment`;
+    the `missionClaim`/`claimGeneration` adapter spies are 0 (RED at base: admitted, claim called);
+    the same roster with `override_admitted_seats: ['qc_panel[0]']` → still blind_incompatible (RED at
     base); replacing the seat with `GLM-5.2/cc-shim` (same otherwise-valid roster) → admitted
     (control, green at base); a `kimi` and a `cursor` seat → refused (RED at base); a
-    `claude-native` seat → admitted (preservation); PRECEDENCE: a codex seat that is ALSO unqualified
-    (no ladder entry, no pin, no override) → `final_panel_seat_blind_incompatible`, not
-    `final_panel_seat_unqualified` (RED at base: unqualified).
-  - `hooks/tests/implementation-campaign-routing.test.sh`: an engine-level run
-    (`runImplementationReviewLoop` with a SEALED contract, the REAL `appendCampaignEvent` appender and
-    a REAL sandbox ledger under the fixture repo's git common dir; stub mission/generation claim
-    adapters via the `campaignIntake` seam as the red-path block does) whose roster carries a codex
-    qc seat → the run returns `phase: 'campaign_intake'` with the blind_incompatible code, ZERO
-    implementation/review dispatcher calls, and the sandbox ledger holds no intake row for the
-    campaign (RED at base: dispatchers called, run ends at `final_panel`).
+    `claude-native` seat → admitted (preservation).
+  - `hooks/tests/implementation-campaign-routing.test.sh`: the engine-level P3 block's roster with a
+    codex qc seat added → the run returns `phase: 'campaign_intake'` with the blind_incompatible
+    code and ZERO implementation/review dispatcher calls (RED at base: dispatchers called, run ends
+    at `final_panel`).
   - `hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh` (or `resolve-review-loop.test.sh`,
-    whichever already stubs a qc panel): with `--check-scorecard` and TWO incompatible seats (codex
-    at [0], cursor at [2], cc-shim at [1]) the JSON's `capability_warnings` contains exactly two
-    entries, in index order, matching `^qc_panel\[0\] seat \(gpt-5\.6-sol/codex\) cannot execute a
-    managed blind-discovery review` and `^qc_panel\[2\] seat \(…/cursor\) …`, and stderr has both `⚠`
-    lines; exit 0 (RED at base: no such warning); without `--check-scorecard` the warning is absent (preservation); the warning text
+    whichever already stubs a qc panel): with `--check-scorecard` and a codex qc seat the JSON's
+    `capability_warnings` contains an entry matching `^qc_panel\[0\] seat \(gpt-5\.6-sol/codex\) cannot
+    execute a managed blind-discovery review` and stderr has the `⚠` line; exit 0 (RED at base: no
+    such warning); without `--check-scorecard` the warning is absent (preservation); the warning text
     contains no `pin-seat` / `AUTOPILOT_QUALIFICATION_OVERRIDE` remedy (preservation of the rule).
   - `hooks/tests/dispatch-review.test.sh`: parity — for every runner in the `--runner` vocabulary,
     invoking `dispatch-review.sh` with `AUTOPILOT_BLIND_DISCOVERY=1` and a stub binary either reaches
@@ -156,7 +140,7 @@ platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
 | `resolver-warning` | `--check-scorecard` reports the seat in `capability_warnings[]` and on stderr, exit 0, no pin remedy; absent without the flag | resolve-review-loop suite |
 | `predicate-parity` | for every runner in the vocabulary the bash blind gate agrees with `isBlindDiscoveryCapableRunner` | dispatch-review suite |
 | `no-regression` | `implementation-campaign-state`, `implementation-campaign-routing`, `resolve-review-loop`, `resolve-review-loop-standing-pin`, `resolve-review-loop-qc-panel-rejection`, `dispatch-review` green; `check-js-syntax.js`; `sync-codex-plugin-skills.sh --check`; `check-backlog-entries.js` | suite output |
-| `scope-integrity` | `git diff --name-only 9b049c00 HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/engine/autopilot-engine.js`, `src/runners/review.js`, `src/engine/campaign-composition.js`, `src/engine/implementation-campaign.js`, `bin/autopilot.js` byte-identical to `9b049c00` (no new CLI flag, no runtime/receipt change); `git diff 9b049c00 -- scripts/dispatch-review.sh` shows only `#` comment lines (the `case` list unchanged) | command output |
+| `scope-integrity` | `git diff --name-only 9b049c00 HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/engine/autopilot-engine.js`, `src/runners/review.js`, `src/engine/campaign-composition.js` byte-identical to `9b049c00` | command output |
 
 ## 5. Dogfood proof (depth-0, after merge)
 
@@ -182,12 +166,3 @@ prints the ⚠. Then depth-0 re-pins the seat (operator decision) and the next c
   containment), one canonical predicate with a bash parity test, report-only resolver warning that
   never suggests a pin, and A2 as a bounded spike with the probe list above; names A1's residual
   availability hole. Folded into §1, §4, §6.
-- Plan hetero loop G1 2026-09-16 (GLM-5.2 CONDITIONAL 2 minor, gpt-5.6-sol STOP 5 blockers; evidence
-  `g1-*`): all seven accepted — endpoint rendering + one-line-per-seat + pinned claim counts; a
-  standing-pin fixture; two-seat resolver fixture; routing run's real appender/ledger stated; header
-  format per RED case; implementation-campaign.js + bin/autopilot.js + dispatch-review comment-only
-  diff in scope-integrity.
-- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 1;
-  evidence `g2-*`): precedence — an unqualified + incompatible seat would read "unqualified" — accepted:
-  the blind check now runs before the qualification loop, precedence fixture added. Depth-0 freeze:
-  zero unaddressed blockers, zero deferred.

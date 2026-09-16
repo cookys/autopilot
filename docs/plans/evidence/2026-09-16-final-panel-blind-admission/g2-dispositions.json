@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "final-panel-blind-admission-2026-09-16",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "eaf83121e4917632021cfc018d21921103d656d3d93215369f9c2484649d1826",
+      "disposition": "accepted_blocker",
+      "candidate_blocker": true,
+      "rationale": "Accepted: the blind check now runs BEFORE the qualification loop (a runner capability is decided before pins/ladders are consulted), so an unqualified + incompatible seat is blind_incompatible; a fixture for that precedence case is added."
+    }
+  ]
+}

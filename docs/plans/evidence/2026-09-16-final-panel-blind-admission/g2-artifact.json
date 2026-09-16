@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "final-panel-blind-admission-2026-09-16",
+  "logical_plan_id": "final-panel-blind-admission-2026-09-16",
+  "session_id": "a1-g1-1789554512",
+  "session_key": "152ce0ed66ed25bf58deb515345b51c48781bf2ad56b8c9f2fa931933ad75837",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "724fd611bdace86f5f0088feb10af107646f768e23f4b553b737a59b2c1f8bd1",
+  "manifest_sha256": "19b0611d383dfe1aa1fd31a22b3143ed5edb06f737c071eed58f8ab3ed4ab49d",
+  "plan_sha256": "e8ad61c2b92ed0c44ccefa42ffdc4bc8541ba4d973c4669cce1c10e2ce40eada",
+  "growth_ratio": {
+    "numerator": 14434,
+    "denominator": 12571
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "276c22a207880511a5d7889d3c18d59a9bd1748c4c98817263e647ea6dc2d40a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-s9ICt1",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "4e631ab51334729531e44e1a32918f3af85b59a38a6335d7a5576316c28cba35"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "3c0ecb23ea61163af3a755e70437e24b4c8ea686da7073cd8efa0cfabe9c925b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "c1ac25e0782f899d954be0fe19d8b80ea97d618ba94684ba4bca83c90fb2dfa6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-UJQVac/stdout",
+          "digest": "c1ac25e0782f899d954be0fe19d8b80ea97d618ba94684ba4bca83c90fb2dfa6"
+        },
+        "receipt_digest": "827a56aff6726ef61c2ceeabb892bd64ab74f56e0fa1bc006c9bef10c65a8ed4"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Campaign-intake rejection precedence and coverage",
+      "claim": "The plan places the blind-capability check after the existing final-panel qualification loop, so a blind-incompatible seat that is also unqualified can be rejected as final_panel_seat_unqualified instead of the rubric-required final_panel_seat_blind_incompatible. The planned fixtures cover qualified, override-admitted, and standing-pinned incompatible seats but do not cover this precedence case.",
+      "evidence": "Section 1.2 says the new check runs 'right after the existing final_panel_seat_unqualified loop'. The state-test design explicitly makes the primary codex seat fully qualified and separately exercises override and standing-pin admission. R2 applies to any blind-incompatible qc_panel_seats[i], without conditioning the required rejection code on qualification.",
+      "evidence_reference": "Frozen rubric R2; plan sections 1.2 and 2, implementation-campaign-state.test.sh test design",
+      "repair": "Move the blind-capability scan before the final_panel_seat_unqualified loop, aggregate all incompatible seats there, and return final_panel_seat_blind_incompatible before either claim. Add a fixture where a codex seat is both unqualified and blind-incompatible, asserting the blind-incompatible code, zero missionClaim calls, zero claimGeneration calls, and a RED-at-base header recording the prior unqualified outcome.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eaf83121e4917632021cfc018d21921103d656d3d93215369f9c2484649d1826"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-16T10:32:24.415Z"
+}

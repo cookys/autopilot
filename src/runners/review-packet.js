@@ -431,7 +431,7 @@ function buildReviewPacket({
         env: isolated,
       });
       if (attr.mode === '120000') {
-        fs.symlinkSync(blob.toString('utf8'), dest);
+        fs.symlinkSync(blob, dest); // raw target bytes; a non-UTF-8 target must round-trip the object id
       } else {
         fs.writeFileSync(dest, blob, { mode: attr.mode === '100755' ? 0o755 : 0o644 });
       }

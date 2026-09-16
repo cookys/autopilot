@@ -2389,6 +2389,7 @@ const {
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine'));
 const { loadRows, projectCampaign } = require(path.join(root, 'src', 'campaign', 'cli'));
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
 
 const roster = {
   reviewer_engine: 'fixture-reviewer',
@@ -2434,9 +2435,51 @@ function engineTransport(result) {
   };
 }
 
-function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
+// proofPanel mode (plan 2026-09-16-proof-parity-raw-log R4/R5): verification is
+// GREEN, the full-diff review is a SHIP-AS-IS envelope with a `.`-separated proof
+// (reviewed at head; blocked at base 0e3ea3cc with the tautology message), and
+// final-panel seat B emits an envelope whose proof is genuinely tautological so
+// the Node validator rejects it and only `raw_log` survives. The engine's REAL
+// performReview / finalPanelSeatReceipt run; outcomes are captured through the
+// campaignComposer adapter seam.
+const PROOF_RAW_LOG = '/tmp/dispatch-review-log-proof-fixture';
+const PERIOD_PROOF_ENV = 'checked=fixture diff and acceptance contract. evidence=changed behavior is covered by the supplied regression test. conclusion=no concrete acceptance discrepancy remains';
+const TAUT_PROOF_ENV = 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no must-fix remains';
+function proofEnvelope(model, proof) {
+  return {
+    runner: 'fixture', model, status: 'reviewed', verdict: 'SHIP-AS-IS', findings: 'none',
+    no_finding_proof: proof, raw_log: PROOF_RAW_LOG, error: null, usage: null,
+  };
+}
+function transportFromEnvelope(env) {
+  const stdout = JSON.stringify(env);
+  try {
+    return { error: null, status: 0, signal: null, stdout, stderr: '', result: parseReviewOutput(stdout), parseError: null };
+  } catch (parseError) {
+    // Mirror dispatchReviewJson's salvage contract (review-runner.test.sh pins the real one).
+    return {
+      error: null, status: 0, signal: null, stdout, stderr: '', result: null, parseError,
+      salvaged: { runner: 'fixture', model: env.model, raw_log: env.raw_log },
+    };
+  }
+}
+const proofRoster = {
+  ...roster,
+  min_panel_size: 2,
+  fallback_ladder: [
+    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
+    { runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture' },
+  ],
+  qc_panel_seats: [
+    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
+    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture' },
+  ],
+};
+
+function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, tautFullDiff = false } = {}) {
   spawnSync('git', ['-C', worktree, 'reset', '--hard', base], { stdio: 'ignore' });
   const attempts = [];
+  const performOutcomes = [];
   const reviewByTree = new Map();
   let implCalls = 0;
   let repairDispatcherCalls = 0;
@@ -2536,7 +2579,26 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
         model: 'fixture-implementer',
       });
     },
-    reviewDispatcher() {
+    ...(proofPanel ? {
+      campaignComposer(input, adapters) {
+        const innerReview = adapters.review;
+        adapters.review = (reviewInput) => {
+          const outcome = innerReview(reviewInput);
+          performOutcomes.push({ scope: reviewInput && reviewInput.scope, outcome });
+          return outcome;
+        };
+        return require(path.join(root, 'src', 'engine', 'campaign-composition')).runCampaignComposition(input, adapters);
+      },
+    } : {}),
+    reviewDispatcher(args) {
+      if (proofPanel) {
+        const modelIdx = Array.isArray(args) ? args.indexOf('--model') : -1;
+        const model = modelIdx >= 0 ? args[modelIdx + 1] : 'fixture-reviewer';
+        return transportFromEnvelope(proofEnvelope(
+          model,
+          (model === 'fixture-reviewer-b' || tautFullDiff) ? TAUT_PROOF_ENV : PERIOD_PROOF_ENV,
+        ));
+      }
       const headTree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], {
         cwd: worktree, encoding: 'utf8',
       }).stdout.trim();
@@ -2573,7 +2635,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
       return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
     },
     verifyCommandRunner({ commit, verifyCmd }) {
-      const failed = commit === redCommit;
+      const failed = !proofPanel && commit === redCommit;
       return {
         error: null,
         status: failed ? 1 : 0,
@@ -2588,7 +2650,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
     promptFile,
     branch: 'impl/red-path',
     base,
-    roster,
+    roster: proofPanel ? proofRoster : roster,
     campaignContract: contractPath,
     campaignSeal: sealPath,
     verificationEnv: { PATH: process.env.PATH || '', CI: 'red-path' },
@@ -2597,6 +2659,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
   return {
     result,
     attempts,
+    performOutcomes,
     reviewByTree,
     redTree,
     repairedTree,
@@ -2608,7 +2671,70 @@ function runRedPath({ throwOnGen1ReviewCompleted = false } = {}) {
   };
 }
 
-if (mode === 't5') {
+if (mode === 'proof') {
+  const proof = runRedPath({ proofPanel: true });
+  const findSeats = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+    for (const child of Object.values(value)) {
+      const found = findSeats(child);
+      if (found) return found;
+    }
+    return null;
+  };
+  // R4: the `.`-separated full-diff proof is reviewed (RED at base 0e3ea3cc:
+  // status blocked, phase dispatch_review, reason "…must contain non-tautological…").
+  const fullDiff = proof.performOutcomes.filter((row) => row.scope === 'full_diff');
+  assert.ok(fullDiff.length >= 1, `no full_diff outcome captured: ${JSON.stringify(proof.performOutcomes.map((r) => r.scope))} result=${JSON.stringify({ status: proof.result.status, phase: proof.result.phase, reason: proof.result.reason })}`);
+  assert.strictEqual(fullDiff[0].outcome.reviewed, true, `full-diff period proof: ${JSON.stringify(fullDiff[0].outcome).slice(0, 300)}`);
+  console.log('proof_period_full_diff_reviewed=true');
+  // R4: performReview's non-reviewed outcome exposes top-level raw_log — observed at the
+  // composition adapter seam on a run whose FULL-DIFF review is a tautological proof
+  // (the final-panel seats call performReview internally; their seam is the receipt, R5).
+  // (separate `proof-taut` invocation below: one campaign per sandbox ledger).
+
+  // R5: the failed seat receipt carries raw_log (part of its digest); the reviewed seat does not.
+  const seats = findSeats(proof.result);
+  assert.ok(Array.isArray(seats) && seats.length === 2, `expected two seat receipts: ${JSON.stringify(seats)}`);
+  const seatA = seats.find((seat) => seat.model === 'fixture-reviewer');
+  const seatB = seats.find((seat) => seat.model === 'fixture-reviewer-b');
+  assert.strictEqual(seatA.status, 'reviewed');
+  assert.ok(!Object.prototype.hasOwnProperty.call(seatA, 'raw_log'), 'reviewed seat has no raw_log key');
+  // (preservation) the reviewed seat keeps the exact base v1 key set and its digest is the
+  // canonical digest of that body — byte-identical to what base emitted for this seat.
+  const BASE_SEAT_KEYS = ['schema_version', 'artifact_type', 'seat_index', 'runner', 'model', 'effort',
+    'endpoint', 'family', 'status', 'verdict', 'review_digest', 'reason', 'receipt_digest'];
+  assert.deepStrictEqual(Object.keys(seatA).sort(), [...BASE_SEAT_KEYS].sort());
+  const { receipt_digest: seatADigest, ...seatABody } = seatA;
+  assert.strictEqual(canonicalDigest(seatABody), seatADigest);
+  assert.strictEqual(seatADigest, canonicalDigest({
+    schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat', seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: seatA.review_digest, reason: null,
+  }));
+  assert.ok(['no_verdict', 'parser_failed'].includes(seatB.status), `seat B status ${seatB.status}`);
+  assert.strictEqual(seatB.verdict, null);
+  assert.strictEqual(seatB.review_digest, null);
+  assert.strictEqual(seatB.raw_log, PROOF_RAW_LOG);
+  const { receipt_digest: seatBDigest, ...seatBBody } = seatB;
+  assert.strictEqual(canonicalDigest(seatBBody), seatBDigest, 'raw_log is inside the seat receipt digest');
+  assert.notStrictEqual(canonicalDigest({ ...seatBBody, raw_log: '/tmp/other' }), seatBDigest);
+  const panelCount = (proof.result.campaign_receipt && proof.result.campaign_receipt.final_panel_count);
+  assert.strictEqual(panelCount, 1, `final_panel_count=${panelCount}`);
+  // sealed minimum is 2: the rejected seat is excluded and the panel BLOCKS.
+  assert.strictEqual(proof.result.status, 'blocked', `panel status=${proof.result.status}`);
+  assert.match(String(proof.result.reason || proof.result.phase), /final_panel/);
+  console.log('proof_final_panel_seat_raw_log=true');
+} else if (mode === 'proof-taut') {
+  const tautRun = runRedPath({ proofPanel: true, tautFullDiff: true });
+  const tautFull = tautRun.performOutcomes.filter((row) => row.scope === 'full_diff').map((row) => row.outcome);
+  assert.strictEqual(tautFull.length, 1, `expected one full_diff outcome: ${JSON.stringify(tautRun.performOutcomes.map((r) => r.scope))} result=${JSON.stringify({ status: tautRun.result.status, phase: tautRun.result.phase, reason: tautRun.result.reason })}`);
+  assert.strictEqual(tautFull[0].reviewed, false);
+  assert.match(String(tautFull[0].reason), /tautological/);
+  assert.strictEqual(tautFull[0].raw_log, PROOF_RAW_LOG, `performReview outcome raw_log=${tautFull[0].raw_log}`);
+  assert.strictEqual(tautRun.result.status, 'blocked');
+  console.log('proof_perform_review_outcome_raw_log=true');
+} else if (mode === 't5') {
   const t5 = runRedPath({ throwOnGen1ReviewCompleted: true });
   const t5Auth = t5.attempts.filter(
     (row) => row.eventType === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED && row.generation === 1,
@@ -2808,6 +2934,172 @@ RED_PATH_T5_OUT="$(node "$RED_PATH_JS" "$REPO_ROOT" "$RED_PATH_T5_SBX" "$RED_PAT
 assert_exit_code "$?" "0" "red verification T5 fail-closed: $RED_PATH_T5_OUT"
 assert_contains "$RED_PATH_T5_OUT" "t5_green_journal_fail_closed=true" \
   "red-path proves t5_green_journal_fail_closed"
+
+# --- proof grammar parity + raw_log through the REAL engine (plan 2026-09-16-proof-parity-raw-log R4/R5) ---
+# RED at base 0e3ea3cc: proof_period_full_diff_reviewed — the `.`-separated full-diff proof is
+# "dispatch_review blocked: review output JSON no_finding_proof must contain non-tautological …";
+# proof_perform_review_outcome_raw_log / proof_final_panel_seat_raw_log never reached.
+proof_parity_run() {
+  local tag="$1" mode="$2" out sbx wt base common_raw common contract seal seal_out
+  sbx="$TEST_TMP/proof-parity-$tag-repo"
+  mkdir -p "$sbx/.claude" "$sbx/src"
+  git -C "$sbx" init -q
+  git -C "$sbx" config user.email "proof-parity@example.invalid"
+  git -C "$sbx" config user.name "Proof Parity Test"
+  write_mission_governance "$sbx/.claude/owner-kernel-governance.json" shadow
+  printf 'base\n' > "$sbx/src/value.txt"
+  git -C "$sbx" add .
+  git -C "$sbx" commit -qm "base"
+  base="$(git -C "$sbx" rev-parse HEAD)"
+  wt="$TEST_TMP/proof-parity-$tag-wt"
+  git -C "$sbx" worktree add -q -b impl/red-path "$wt" "$base"
+  common_raw="$(git -C "$sbx" rev-parse --git-common-dir)"
+  common="$(realpath "$sbx/$common_raw")"
+  contract="$TEST_TMP/proof-parity-$tag-campaign.json"
+  seal="$TEST_TMP/proof-parity-$tag-campaign.seal.json"
+  node - "$contract" "$common" "$base" "$tag" <<'NODE'
+const fs = require('fs');
+const [target, commonDir, base, tag] = process.argv.slice(2);
+fs.writeFileSync(target, `${JSON.stringify({
+  schema_version: 1,
+  ticket: `icc-proof-parity-${tag}`,
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  base_sha: base,
+  branch: 'impl/red-path',
+  vertical_acceptance: ['proof grammar parity and raw_log salvage'],
+  allowed_path_prefixes: ['src/'],
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 600,
+  verify_cmd: 'node fixture.js',
+  rubric_ids: ['ICC-PROOF-PARITY1'],
+}, null, 2)}\n`);
+NODE
+  seal_out="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+    --contract "$contract" --repo "$sbx" --mission-mode shadow --out "$seal" 2>&1)"
+  assert_exit_code "$?" "0" "proof-parity $tag fixture seals: $seal_out"
+  out="$(node "$RED_PATH_JS" "$REPO_ROOT" "$sbx" "$wt" "$contract" "$seal" "$RED_PATH_PROMPT" "$base" "$mode")"
+  assert_exit_code "$?" "0" "proof parity ($mode) through the real engine: $out"
+  printf '%s\n' "$out"
+}
+RED_PATH_PF_OUT="$(proof_parity_run panel proof)"
+for key in proof_period_full_diff_reviewed proof_final_panel_seat_raw_log; do
+  assert_contains "$RED_PATH_PF_OUT" "$key=true" "proof-parity engine proves $key"
+done
+RED_PATH_PT_OUT="$(proof_parity_run taut proof-taut)"
+assert_contains "$RED_PATH_PT_OUT" "proof_perform_review_outcome_raw_log=true" \
+  "proof-parity engine proves proof_perform_review_outcome_raw_log"
+
+PROOF_ENGINE_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const [root, tmp] = process.argv.slice(2);
+const { AutopilotEngine, runCampaignComposition } = require(path.join(root, 'src', 'engine'));
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+
+const diff = path.join(tmp, 'proof-engine.diff');
+fs.writeFileSync(diff, '+x\n');
+const PERIOD_PROOF = 'checked=diff lines 1-40. evidence=ran tests. conclusion=nothing to fix';
+const TAUT_PROOF = 'checked=the changed slice; evidence=regression ran; conclusion=looks good';
+const RAW = '/tmp/proof-parity-rejected.log';
+const TAUT_MSG = 'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
+const BASE_MSG = 'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields';
+
+function envelope(proof, extra = {}) {
+  return {
+    runner: extra.runner || 'liar-runner',
+    model: extra.model || 'liar-model',
+    status: 'reviewed',
+    verdict: 'SHIP-AS-IS',
+    findings: extra.findings || 'none',
+    no_finding_proof: proof,
+    raw_log: extra.raw_log === undefined ? RAW : extra.raw_log,
+    error: null,
+    usage: null,
+  };
+}
+
+function dispatchFromEnvelope(env, args) {
+  const stdout = JSON.stringify(env);
+  try {
+    return {
+      error: null, status: 0, signal: null, stdout, stderr: '',
+      result: parseReviewOutput(stdout), parseError: null,
+    };
+  } catch (parseError) {
+    const out = {
+      error: null, status: 0, signal: null, stdout, stderr: '',
+      result: null, parseError,
+    };
+    if (typeof env.raw_log === 'string' && env.raw_log.length > 0) {
+      const runnerIdx = args.indexOf('--runner');
+      const modelIdx = args.indexOf('--model');
+      out.salvaged = {
+        runner: runnerIdx >= 0 ? args[runnerIdx + 1] : null,
+        model: modelIdx >= 0 ? args[modelIdx + 1] : null,
+        raw_log: env.raw_log,
+      };
+    }
+    return out;
+  }
+}
+
+const resolver = () => ({
+  error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+  result: {
+    reviewer_engine: 'test-review-model', reviewer_effort: 'high',
+    reviewer_runner: 'test-review-runner', reviewer_qualified: true,
+  },
+});
+
+const periodEngine = new AutopilotEngine({
+  clock: () => '2026-09-16T00:00:00.000Z',
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args) {
+    return dispatchFromEnvelope(envelope(PERIOD_PROOF), args);
+  },
+});
+const period = periodEngine.reviewDiff({ diffFile: diff });
+assert.strictEqual(period.status, 'reviewed', period.reason);
+console.log('period_proof_reviewed=true');
+
+const tautEngine = new AutopilotEngine({
+  clock: () => '2026-09-16T00:00:00.000Z',
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args) {
+    return dispatchFromEnvelope(envelope(TAUT_PROOF), args);
+  },
+});
+const taut = tautEngine.reviewDiff({ diffFile: diff });
+assert.strictEqual(taut.status, 'blocked');
+assert.strictEqual(taut.phase, 'dispatch_review');
+assert.strictEqual(taut.reason, TAUT_MSG);
+assert.notStrictEqual(taut.reason, BASE_MSG);
+assert.strictEqual(taut.raw_log, RAW);
+const blockedLedger = taut.ledger.find((row) => row.unit === 'dispatch_review' && row.status === 'blocked');
+assert.ok(blockedLedger);
+assert.strictEqual(blockedLedger.raw_log, RAW);
+console.log('tautology_blocked_raw_log=true');
+
+// performReview's top-level raw_log and the failed-seat receipt are proven through the REAL
+// engine in the `proof` mode of RED_PATH_JS above (a hand-built wrapper here was tautological —
+// MiniMax r1 🔵, accepted as must-fix-now by depth-0).
+
+NODE
+)"
+assert_exit_code "$?" "0" "proof-parity engine routing: $PROOF_ENGINE_OUT"
+assert_contains "$PROOF_ENGINE_OUT" "period_proof_reviewed=true" \
+  "period-separated proof is reviewed (RED at base: dispatch_review blocked tautology message)"
+assert_contains "$PROOF_ENGINE_OUT" "tautology_blocked_raw_log=true" \
+  "tautological proof blocks with tautology message and raw_log"
 
 ROUTING="$(sed -n '1,240p' \
   "$REPO_ROOT/skills/l5/SKILL.md" \

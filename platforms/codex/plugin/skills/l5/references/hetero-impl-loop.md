@@ -195,7 +195,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48,
     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
     ledger rotation carry keeps journal append order v2.36.54,
-    red verification takes the repair path v2.36.56.
+    red verification takes the repair path v2.36.56,
+    proof grammar parity + raw_log on rejected envelopes v2.36.57.
     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
     line drifts the frozen source sha and every `session-mode set` is refused until routing is

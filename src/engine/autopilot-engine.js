@@ -3362,11 +3362,15 @@ class AutopilotEngine {
     }
     const blockedReason = reviewResultBlocked(reviewResult);
     const parsed = reviewResult && reviewResult.result ? reviewResult.result : null;
+    const salvagedRawLog = reviewResult && reviewResult.salvaged
+      ? reviewResult.salvaged.raw_log
+      : null;
     ledger.push(
       this.ledgerEntry('dispatch_review', blockedReason ? 'blocked' : reviewResult.result.status, startedAt, {
         runner: roster.reviewer_runner,
         model: roster.reviewer_engine,
         exit_status: reviewResult ? reviewResult.status : null,
+        ...(blockedReason ? { raw_log: salvagedRawLog } : {}),
       }),
     );
 
@@ -3383,6 +3387,7 @@ class AutopilotEngine {
         review: null,
         reviewArgs,
         ledger,
+        raw_log: salvagedRawLog,
       };
     }
 
@@ -4851,6 +4856,9 @@ class AutopilotEngine {
           reviewed: false,
           reason: reviewed.reason || `review status ${reviewed.status}`,
           raw: reviewed,
+          raw_log: Object.prototype.hasOwnProperty.call(reviewed, 'raw_log')
+            ? reviewed.raw_log
+            : null,
         };
       }
       if (repairGeneration > 0 && previousReviewForRemediation) {
@@ -5009,6 +5017,10 @@ class AutopilotEngine {
         review_digest: isReviewed ? outcome.review_digest : null,
         reason: isReviewed ? null : `final_panel_seat_${status}`,
       };
+      if (!isReviewed && outcome && typeof outcome.raw_log === 'string'
+          && outcome.raw_log.length > 0) {
+        body.raw_log = outcome.raw_log;
+      }
       return { ...body, receipt_digest: campaignCanonicalDigest(body) };
     };
 

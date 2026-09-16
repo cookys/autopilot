@@ -48,14 +48,26 @@ const NO_FINDING_TAUTOLOGIES = new Set([
   'requirements satisfied',
 ]);
 
-function isValidNoFindingProof(value) {
-  const match = /^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$/.exec(value);
-  if (!match) return false;
-  return match.slice(1).every((part) => {
-    const normalized = part.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
-    return !NO_FINDING_TAUTOLOGIES.has(normalized);
-  });
+function normalizeNoFindingProofField(part) {
+  return String(part).toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
 }
+
+// Classifier: 'ok' | 'shape' | 'tautology'. Keep the export name; callers that
+// need a boolean use `=== 'ok'`. Grammar matches the bash battery (v2.36.57).
+function isValidNoFindingProof(value) {
+  if (typeof value !== 'string') return 'shape';
+  const match = /^checked=(.+)[\s;,.]+evidence=(.+)[\s;,.]+conclusion=(.+)$/u.exec(value);
+  if (!match) return 'shape';
+  const normalized = match.slice(1).map(normalizeNoFindingProofField);
+  if (normalized.some((part) => part.length === 0)) return 'shape';
+  if (normalized.some((part) => NO_FINDING_TAUTOLOGIES.has(part))) return 'tautology';
+  return 'ok';
+}
+
+const NO_FINDING_PROOF_SHAPE_ERROR =
+  'review output JSON no_finding_proof must contain the ordered checked, evidence, and conclusion fields separated by space, \';\', \',\' or \'.\'';
+const NO_FINDING_PROOF_TAUTOLOGY_ERROR =
+  'review output JSON no_finding_proof contains a tautological checked, evidence, or conclusion value';
 
 function validateUsage(value) {
   if (value === null) return;
@@ -129,10 +141,14 @@ function validateReviewResult(value) {
   if (value.verdict === 'SHIP-AS-IS' && value.no_finding_proof === null) {
     throw new Error('review output JSON SHIP-AS-IS requires no_finding_proof');
   }
-  if (value.verdict === 'SHIP-AS-IS' && !isValidNoFindingProof(value.no_finding_proof)) {
-    throw new Error(
-      'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields',
-    );
+  if (value.verdict === 'SHIP-AS-IS') {
+    const proofClass = isValidNoFindingProof(value.no_finding_proof);
+    if (proofClass === 'shape') {
+      throw new Error(NO_FINDING_PROOF_SHAPE_ERROR);
+    }
+    if (proofClass === 'tautology') {
+      throw new Error(NO_FINDING_PROOF_TAUTOLOGY_ERROR);
+    }
   }
   if (value.verdict !== 'SHIP-AS-IS' && value.no_finding_proof !== null) {
     throw new Error('review output JSON no_finding_proof must be null unless verdict is SHIP-AS-IS');
@@ -272,7 +288,7 @@ function dispatchReviewJson(args, options = {}) {
       transportEnvelope,
     };
   } catch (error) {
-    return {
+    const payload = {
       error: child.error || null,
       status: child.status,
       signal: child.signal,
@@ -282,6 +298,20 @@ function dispatchReviewJson(args, options = {}) {
       parseError: error,
       transportEnvelope,
     };
+    try {
+      const parsed = JSON.parse(stdout.trim());
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          && typeof parsed.raw_log === 'string' && parsed.raw_log.length > 0) {
+        payload.salvaged = {
+          runner: argValue('--runner'),
+          model: argValue('--model'),
+          raw_log: parsed.raw_log,
+        };
+      }
+    } catch (_salvageError) {
+      // Malformed JSON or a non-object: no salvaged key.
+    }
+    return payload;
   }
 }
 
@@ -289,5 +319,6 @@ module.exports = {
   dispatchReview,
   dispatchReviewJson,
   parseReviewOutput,
+  isValidNoFindingProof,
   DISPATCH_REVIEW,
 };

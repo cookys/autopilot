@@ -570,10 +570,11 @@ validate_review_block() {
     ' "$block_file")"
     # Anchor on the FIELD LABELS, not on one hard-coded separator: kimi-code/k3
     # (2026-08-15) separated its last field with a period and lost a substantive
-    # proof to punctuation. Any separator punctuation/whitespace run is accepted;
-    # all three labels must still appear IN ORDER with non-empty content, and the
-    # tautology blacklist below is untouched.
-    if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]evidence=(.+)[[:space:]\;,.]conclusion=(.+)$ ]]; then
+    # proof to punctuation. One-or-more separator characters from [space ; , .]
+    # are accepted (v2.36.57 + quantifier); all three labels must still appear
+    # IN ORDER. Normalized-empty captures are SHAPE failures before the
+    # unchanged tautology blacklist.
+    if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]+evidence=(.+)[[:space:]\;,.]+conclusion=(.+)$ ]]; then
       BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
     fi
     local proof_checked proof_evidence proof_conclusion proof_value proof_normalized
@@ -582,6 +583,9 @@ validate_review_block() {
     proof_conclusion="$(printf '%s' "${BASH_REMATCH[3]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
     for proof_value in "$proof_checked" "$proof_evidence" "$proof_conclusion"; do
       proof_normalized="$(printf '%s' "$proof_value" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:][:punct:]]*//; s/[[:space:][:punct:]]*$//')"
+      if [ -z "$proof_normalized" ]; then
+        BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
+      fi
       case "$proof_normalized" in
         ""|none|"no finding"|"no findings"|"no must-fix"|"no must-fix remains"|n/a|na|checked|"all passed"|"looks good"|diff|tests|spec|code|"acceptance criteria"|"requirements satisfied")
           BATTERY_FAIL_REASON="NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value"; return 1

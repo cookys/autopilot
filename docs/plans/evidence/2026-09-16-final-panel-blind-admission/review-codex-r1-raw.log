@@ -1,0 +1,1176 @@
+<<<AUTOPILOT-REVIEW-984e615ec0a88e803d1a74557bee3f24>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS:
+🟠 [predicate-parity-false-green] MUST-FIX The parity test never proves blind-capable runners reach the stub: it only checks that the containment error text is absent, so any unrelated precondition or dispatch failure passes. Have the stub record invocation per runner and assert that marker for capable runners, while asserting exit 2 and no invocation for incompatible runners.
+🟠 [intake-fixtures-incomplete] MUST-FIX The required standing-pin path is not exercised: `sPin` merely repeats `override_admitted_seats`, and `assertAdmitted` only requires one claim call rather than an admitted intake result. This leaves standing-pin precedence and blind-capable admission vulnerable to false-green tests. Create a genuine pin-store-backed fixture, provide valid claim inputs/adapters, and assert admitted status plus the required mission/generation call counts for cc-shim and claude-native.
+<<<AUTOPILOT-END-984e615ec0a88e803d1a74557bee3f24>>>
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /home/cookys/projects/autopilot
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a0aa1f-a392-7530-bbd2-7abc6b4ef672
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-984e615ec0a88e803d1a74557bee3f24>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-984e615ec0a88e803d1a74557bee3f24>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=9f9d08b51229d0c7af2d4f02b37578bc
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+# A blind-incompatible final-panel seat is refused before the campaign spends
+
+> Status: execution plan for ONE managed deliverable (`/l5`, mission graph node
+> `final-panel-blind-admission-2026-09-16`) — the second of two cut from BACKLOG row "Managed rail
+> (cuda P1): GLM tautological no_finding_proof stops full_diff_review; final panel seat
+> transport_failed" (fired 2026-09-16). Deliverable 1 (v2.36.57) shipped (ii)+(iii); this is (i).
+
+## 0. What is actually broken (verified 2026-09-16, base `9b049c00`)
+
+- `scripts/dispatch-review.sh:288-293`: under `AUTOPILOT_BLIND_DISCOVERY=1` only
+  `qoderclicn|cc-shim|claude-native|anthropic-compatible` run; any other runner dies with
+  `blind review requires an enforceable no-tools runner profile (got: codex)`. Rationale (header
+  ~95-125, `references/blind-dispatch.md`): those runners can execute tools and read the real repo
+  from the scratch cwd, so outcome-blinding is not enforceable; codex `exec --sandbox read-only`
+  still reads the whole filesystem.
+- The engine sets `blindDiscovery: true` for every managed review (`src/runners/review.js`
+  ~195-215; `autopilot-engine.js` ~4839 full-diff, ~9683 final panel).
+- Intake (`src/engine/campaign-intake.js` ~1413-1440) admits `qc_panel_seats` on qualification /
+  standing pins only (`final_panel_seat_unqualified`). With the operator pin
+  `[gpt-5.6-sol/codex, GLM-5.2/cc-shim, MiniMax-M3/cc-shim]` the campaign runs to the end (implement,
+  verify, review, full_suite, adjudicate, convergence) and only THEN the codex seat is
+  `transport_failed` → `final_panel_seat_transport_failed`, panel 2/3, campaign blocked. Measured on
+  cuda (fleet-comms, twice) and on this host (campaign C, 2026-09-16). The same seat dispatched
+  manually without the blind env works every time.
+- `resolve-review-loop.sh --check-scorecard` prints ⚠ for evidence-free pins but nothing about
+  blind capability, so the operator sees no warning before `/l5`.
+
+## 1. Ruling and shape (option A1 of the design consult, see Review log)
+
+1. **One canonical predicate.** `src/engine/final-panel-qualification.js` exports
+   `BLIND_DISCOVERY_CAPABLE_RUNNERS` (frozen array `['anthropic-compatible', 'cc-shim',
+   'claude-native', 'qoderclicn']`) and `isBlindDiscoveryCapableRunner(runner)`. The bash allowlist in
+   `dispatch-review.sh` stays as defense in depth and gains a comment naming the Node constant; a
+   parity test asserts the bash gate's accept/deny for every runner in the `--runner` vocabulary
+   matches the Node predicate.
+2. **Pre-spend refusal at intake.** In `runCampaignIntake`, BEFORE the existing
+   `final_panel_seat_unqualified` loop (a runner's containment capability is decided before pins or
+   ladders are consulted, so an unqualified AND incompatible seat is reported as incompatible) and
+   before any Mission/generation claim, every
+   `qc_panel_seats[i]` whose `runner` is not blind-capable produces a rejection with the NEW code
+   `final_panel_seat_blind_incompatible` (same `rejected('campaign_generation', …)` shape, `status:
+   'blocked'`, `pre_spend_no_effect_receipt: null`). Message, exactly one line per seat:
+   `qc_panel[<i>] <model>/<runner>@<endpoint|@none> cannot execute a managed blind-discovery review
+   (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native,
+   qoderclicn); replace it with a blind-capable seat or complete the codex containment qualification —
+   pins and overrides do not bypass containment`. `override_admitted_seats` and standing pins do NOT
+   admit such a seat. The reason is a capability of the runner, so "unqualified" is not reused.
+3. **Resolver warning, report-only.** `resolve-review-loop.sh --check-scorecard` appends to
+   `capability_warnings[]` one entry per blind-incompatible qc seat — `qc_panel[<i>] seat
+   (<model>/<runner>) cannot execute a managed blind-discovery review — the managed rail refuses it at
+   intake (final_panel_seat_blind_incompatible); replace the seat or complete the containment
+   qualification` — and prints the same as a `⚠` stderr line; exit code unchanged (report-only);
+   nothing is emitted without `--check-scorecard`; the remedy never suggests another pin.
+4. **Runtime unchanged.** `performFinalPanel`, `finalPanelSeatReceipt`, the blind env, the bash gate's
+   behaviour and `dispatch-review.sh`'s runner vocabulary are untouched.
+5. **The hole this leaves, stated.** With `min_panel_size: 3` and a three-seat pin that includes
+   codex, every managed campaign on that host now stops at intake instead of at the final panel —
+   the expensive late failure becomes a cheap early one, but the operator's three-seat panel is not
+   restored until the codex seat is replaced or the codex containment (bwrap) qualification spike
+   (§6) lands. Depth-0 re-pins this host's panel after the merge (operator decision, not the hand's).
+
+## 2. Changes by file
+
+- `src/engine/final-panel-qualification.js` (+ mirror): the constant and predicate (exported next to
+  `finalPanelSeatQualified`).
+- `src/engine/campaign-intake.js` (+ mirror): the pre-claim loop (§1.2).
+- `scripts/resolve-review-loop.sh` (+ mirror): under `CHECK_SCORECARD`, after the existing seat
+  admission walk, the warning per blind-incompatible qc seat (§1.3), using the same
+  `CAP_WARNINGS_JSON` append idiom as the implementer-ladder warnings (~885).
+- `scripts/dispatch-review.sh` (+ mirror): comment only (names the Node constant); the `case` is
+  unchanged.
+- Tests (each change-pinning block starts with `# RED at base 9b049c00: <observed message>` quoting
+  the base run verbatim — intake: "admitted, claimGeneration called 1×"; resolver: "no
+  capability_warnings entry"; routing: "dispatchers called, run ended at final_panel"; preservation
+  guards labelled `(preservation, green at base)`; stub dispatchers/adapters and sandbox ledgers only):
+  - `hooks/tests/implementation-campaign-state.test.sh` (next to the existing
+    `final_panel_seat_unqualified` cases ~5270-5310): a roster whose `qc_panel_seats[0]` is
+    `gpt-5.6-sol/codex`, fully qualified (in `fallback_ladder`) → `runCampaignIntake` returns
+    `status: 'blocked'`, `rejection.code === 'final_panel_seat_blind_incompatible'`, message names
+    `qc_panel[0] gpt-5.6-sol/codex@@none` (the `@<endpoint|@none>` rendering; a second fixture with
+    an endpoint renders `@<endpoint>`) and contains `pins and overrides do not bypass containment`;
+    with TWO incompatible seats (`codex` at [0], `cursor` at [2]) the reason has exactly two lines,
+    one per seat, in index order; the `missionClaim` and `claimGeneration` adapter spies are pinned
+    at base (1 each, same roster) vs head (0 each) (RED at base); the same roster with
+    `override_admitted_seats: ['qc_panel[0]']` → still blind_incompatible (RED at base); a
+    STANDING-PIN fixture (the codex seat admitted only through the pin store the intake's
+    `finalPanelSeatQualified` path consults, no ladder entry) → still blind_incompatible (RED at
+    base); replacing the seat with `GLM-5.2/cc-shim` (same otherwise-valid roster) → admitted
+    (control, green at base); a `kimi` and a `cursor` seat → refused (RED at base); a
+    `claude-native` seat → admitted (preservation); PRECEDENCE: a codex seat that is ALSO unqualified
+    (no ladder entry, no pin, no override) → `final_panel_seat_blind_incompatible`, not
+    `final_panel_seat_unqualified` (RED at base: unqualified).
+  - `hooks/tests/implementation-campaign-routing.test.sh`: an engine-level run
+    (`runImplementationReviewLoop` with a SEALED contract, the REAL `appendCampaignEvent` appender and
+    a REAL sandbox ledger under the fixture repo's git common dir; stub mission/generation claim
+    adapters via the `campaignIntake` seam as the red-path block does) whose roster carries a codex
+    qc seat → the run returns `phase: 'campaign_intake'` with the blind_incompatible code, ZERO
+    implementation/review dispatcher calls, and the sandbox ledger holds no intake row for the
+    campaign (RED at base: dispatchers called, run ends at `final_panel`).
+  - `hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh` (or `resolve-review-loop.test.sh`,
+    whichever already stubs a qc panel): with `--check-scorecard` and TWO incompatible seats (codex
+    at [0], cursor at [2], cc-shim at [1]) the JSON's `capability_warnings` contains exactly two
+    entries, in index order, matching `^qc_panel\[0\] seat \(gpt-5\.6-sol/codex\) cannot execute a
+    managed blind-discovery review` and `^qc_panel\[2\] seat \(…/cursor\) …`, and stderr has both `⚠`
+    lines; exit 0 (RED at base: no such warning); without `--check-scorecard` the warning is absent (preservation); the warning text
+    contains no `pin-seat` / `AUTOPILOT_QUALIFICATION_OVERRIDE` remedy (preservation of the rule).
+  - `hooks/tests/dispatch-review.test.sh`: parity — for every runner in the `--runner` vocabulary,
+    invoking `dispatch-review.sh` with `AUTOPILOT_BLIND_DISCOVERY=1` and a stub binary either reaches
+    the stub (blind-capable) or dies with the `enforceable no-tools runner profile` precondition, and
+    that outcome equals `isBlindDiscoveryCapableRunner(runner)` (preservation, green at base for the
+    gate; the Node side of the comparison is new).
+- Docs: `docs/BACKLOG.md` cuda P1 row → `shipped v2.36.58 2026-09-16`, Context "(i) pre-spend
+  `final_panel_seat_blind_incompatible` v2.36.58"; new open row "codex containment (bwrap) spike so a
+  codex seat can become blind-capable" with the consult's probe list summarized in Context;
+  `skills/l5/references/hetero-impl-loop.md` step 11 fixed list gains "blind-incompatible final-panel
+  seat refused at intake v2.36.58" and step 6b's seat check sentence mentions the ⚠ (+ mirror).
+  `CHANGELOG.md` and version manifests are NOT sealed (depth-0 release commit after the merge; the
+  v2.36.58 number in text is a pin as in v2.36.53–57).
+
+### 2.5 Sealed `output_paths` (exact)
+
+```
+src/engine/final-panel-qualification.js
+platforms/codex/plugin/src/engine/final-panel-qualification.js
+src/engine/campaign-intake.js
+platforms/codex/plugin/src/engine/campaign-intake.js
+scripts/resolve-review-loop.sh
+platforms/codex/plugin/scripts/resolve-review-loop.sh
+scripts/dispatch-review.sh
+platforms/codex/plugin/scripts/dispatch-review.sh
+hooks/tests/implementation-campaign-state.test.sh
+hooks/tests/implementation-campaign-routing.test.sh
+hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh
+hooks/tests/resolve-review-loop.test.sh
+hooks/tests/dispatch-review.test.sh
+docs/BACKLOG.md
+skills/l5/references/hetero-impl-loop.md
+platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+```
+
+## 3. Out of scope
+
+- A2 (codex containment via bwrap) — spike, §6. A3 (advisory non-blind seat) — rejected by the
+  consult: an advisory seat must never count toward the authoritative panel.
+- Any change to `performFinalPanel`, seat receipts, the blind env, or the bash gate's behaviour.
+- The reviewer (`reviewer_runner`) seat: the in-rail full-diff review also runs blind, but this
+  repo's reviewer seats are cc-shim; a non-capable reviewer seat already fails at the first review
+  (cheap) — a follow-up row if a host reports it.
+
+## 4. Acceptance
+
+| id | criterion | evidence |
+|----|-----------|----------|
+| `blind-incompatible-pre-spend` | a qualified/pinned codex qc seat is refused at intake with `final_panel_seat_blind_incompatible`, claim adapters never called; an override-admitted codex seat is still refused; the engine run ends at `campaign_intake` with zero dispatcher calls | state + routing suites |
+| `blind-capable-admitted` | the same roster with a cc-shim / claude-native seat is admitted | state suite |
+| `resolver-warning` | `--check-scorecard` reports the seat in `capability_warnings[]` and on stderr, exit 0, no pin remedy; absent without the flag | resolve-review-loop suite |
+| `predicate-parity` | for every runner in the vocabulary the bash blind gate agrees with `isBlindDiscoveryCapableRunner` | dispatch-review suite |
+| `no-regression` | `implementation-campaign-state`, `implementation-campaign-routing`, `resolve-review-loop`, `resolve-review-loop-standing-pin`, `resolve-review-loop-qc-panel-rejection`, `dispatch-review` green; `check-js-syntax.js`; `sync-codex-plugin-skills.sh --check`; `check-backlog-entries.js` | suite output |
+| `scope-integrity` | `git diff --name-only 9b049c00 HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/engine/autopilot-engine.js`, `src/runners/review.js`, `src/engine/campaign-composition.js`, `src/engine/implementation-campaign.js`, `bin/autopilot.js` byte-identical to `9b049c00` (no new CLI flag, no runtime/receipt change); `git diff 9b049c00 -- scripts/dispatch-review.sh` shows only `#` comment lines (the `case` list unchanged) | command output |
+
+## 5. Dogfood proof (depth-0, after merge)
+
+On this host, before re-pinning: `mission grant` + `engine implement-review` against the current pin
+(codex in `qc_panel[0]`) returns `blocked` at `campaign_intake` with `final_panel_seat_blind_incompatible`
+and no worktree/branch is created (the attempt is not spent); `resolve-review-loop.sh --check-scorecard`
+prints the ⚠. Then depth-0 re-pins the seat (operator decision) and the next campaign passes intake.
+
+## 6. Follow-ups filed, not done here
+
+- A2 spike: codex inside `bwrap` with only the scratch inputs, runtime libraries, TLS/DNS and a
+  sanitized `~/.codex` view; prove no repo/worktree/home/`/tmp`/`/proc` reach, no shell/git/curl/MCP
+  re-acquisition, nested-sandbox behaviour, timeout/exit/raw_log parity, fail-before-spend on missing
+  bwrap/mounts; record codex/bwrap versions and the file dependency set. Only then may `codex` enter
+  the allowlist.
+- Reviewer-seat (in-rail) blind capability warning, if a host reports a non-capable reviewer seat.
+
+## Review log
+
+- Design consult 2026-09-16 (codex gpt-5.6-sol; evidence
+  `docs/plans/evidence/2026-09-16-proof-parity-raw-log/consult-codex-answer.md`, "Deliverable 1"):
+  recommends A1 now with a distinct rejection code (not "unqualified" — a pin cannot fix
+  containment), one canonical predicate with a bash parity test, report-only resolver warning that
+  never suggests a pin, and A2 as a bounded spike with the probe list above; names A1's residual
+  availability hole. Folded into §1, §4, §6.
+- Plan hetero loop G1 2026-09-16 (GLM-5.2 CONDITIONAL 2 minor, gpt-5.6-sol STOP 5 blockers; evidence
+  `g1-*`): all seven accepted — endpoint rendering + one-line-per-seat + pinned claim counts; a
+  standing-pin fixture; two-seat resolver fixture; routing run's real appender/ledger stated; header
+  format per RED case; implementation-campaign.js + bin/autopilot.js + dispatch-review comment-only
+  diff in scope-integrity.
+- Plan hetero loop G2 2026-09-16 (terminal at the generation cap; GLM-5.2 READY, gpt-5.6-sol STOP 1;
+  evidence `g2-*`): precedence — an unqualified + incompatible seat would read "unqualified" — accepted:
+  the blind check now runs before the qualification loop, precedence fixture added. Depth-0 freeze:
+  zero unaddressed blockers, zero deferred.
+# Rubric — 2026-09-16-final-panel-blind-admission.md
+
+> Source plan: docs/plans/2026-09-16-final-panel-blind-admission.md
+
+R1: `src/engine/final-panel-qualification.js` exports `BLIND_DISCOVERY_CAPABLE_RUNNERS` (exactly `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn`) and `isBlindDiscoveryCapableRunner(runner)`; it is the only Node source of that set (intake and any Node caller use it).
+R2: `runCampaignIntake` refuses, BEFORE the Mission claim and the generation claim, any `qc_panel_seats[i]` whose runner is not blind-capable with `rejection.code === 'final_panel_seat_blind_incompatible'`, `status: 'blocked'`, one message line per seat naming `qc_panel[<i>] <model>/<runner>@<endpoint|@none>` and containing `pins and overrides do not bypass containment`; the `missionClaim` and `claimGeneration` adapters are called zero times; at base `9b049c00` the same roster is admitted and the claim adapter is called.
+R3: Neither a standing pin nor `override_admitted_seats: ['qc_panel[<i>]']` admits a blind-incompatible seat (still `final_panel_seat_blind_incompatible`); a seat that is both unqualified and blind-incompatible is reported as `final_panel_seat_blind_incompatible` (precedence: the blind check runs before the qualification loop); the same roster with a `cc-shim` or `claude-native` seat in that slot is admitted (control, green at base); `kimi` and `cursor` seats are refused.
+R4: An engine-level run (`runImplementationReviewLoop` with a sealed contract, real appender, real sandbox ledger) whose roster carries a codex qc seat returns `phase: 'campaign_intake'` with the blind_incompatible code and ZERO implementation and review dispatcher calls; at base the dispatchers run and the campaign ends at `final_panel` (`final_panel_seat_transport_failed` or the fixture's equivalent).
+R5: `resolve-review-loop.sh --check-scorecard` with a blind-incompatible qc seat exits 0, includes in `capability_warnings[]` one entry per such seat matching `^qc_panel\[<i>\] seat \(<model>/<runner>\) cannot execute a managed blind-discovery review` that names `final_panel_seat_blind_incompatible`, prints the same as a `⚠` stderr line, and contains no `pin-seat` / `AUTOPILOT_QUALIFICATION_OVERRIDE` remedy; without `--check-scorecard` no such entry or line exists (preservation).
+R6: Parity: for every runner in `dispatch-review.sh`'s `--runner` vocabulary, running it with `AUTOPILOT_BLIND_DISCOVERY=1` and a stub binary either reaches the stub or dies with `blind review requires an enforceable no-tools runner profile`, and that outcome equals `isBlindDiscoveryCapableRunner(runner)`; the bash `case` list is unchanged (comment only).
+R7: `src/engine/autopilot-engine.js`, `src/runners/review.js`, `src/engine/campaign-composition.js`, `src/engine/implementation-campaign.js` are byte-identical to base `9b049c00`; `performFinalPanel`, seat receipts and the blind env are untouched; no new CLI flag.
+R8: Every change-pinning assertion (R2, R3 refusals, R4, R5) is recorded RED against base `9b049c00` in the test header with the observed message; control/preservation guards labelled; tests use stub adapters and sandbox ledgers only.
+R9: Suites green: `implementation-campaign-state`, `implementation-campaign-routing`, `resolve-review-loop`, `resolve-review-loop-standing-pin`, `resolve-review-loop-qc-panel-rejection`, `dispatch-review`; `node scripts/check-js-syntax.js`, `bash scripts/sync-codex-plugin-skills.sh --check`, `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` pass.
+R10: Docs: cuda P1 BACKLOG row → `shipped v2.36.58` with "(i) pre-spend `final_panel_seat_blind_incompatible`" in Context; a new open row for the A2 codex containment spike with the probe list summarized; l5 reference step 11 gains the fixed item and step 6b mentions the ⚠ (+ mirror); `git diff --name-only 9b049c00 HEAD` ⊆ §2.5 plus the committed plan/mission docs.
+
+
+## Depth-0 note to the reviewer
+
+- Base for RED/byte-identity is 9b049c00 (rubric); grant base a1ee6ff5 differs by docs only.
+- The rail ran verify + full_suite (six suites twice, green), MiniMax full-diff review SHIP-AS-IS, adjudicate and scope, then tripped the campaign wall budget (5635 s > 5400 s) at convergence — a budget artifact, not a defect. Depth-0 verifies and merges on git evidence.
+- Pay special attention to whether each new assertion really exercises the product path (last round a hand shipped two tautological assertions).
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index 9a99956f..36c25863 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -121,12 +121,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Context**: extend the v2.36.53 pre-claim preflight from the durable-wait phases to every git_candidate resume; the existing P3 drift cases gain a zero-call assertion.
+ 
+ ### Managed rail (cuda P1): GLM tautological no_finding_proof stops full_diff_review; final panel seat transport_failed
+-- **Status**: fired 2026-09-16
++- **Status**: shipped v2.36.58 2026-09-16
+ - **Trigger**: cuda P1 (fleet-comms): r2 GLM no_verdict (tautological no_finding_proof) stopped the campaign; r3 `final_panel_seat_transport_failed`; aimax395 campaign C 2026-09-16: codex seat transport_failed, panel 2/3
+ - **Effort**: Fix
+ - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
+ - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+-- **Context**: (i) panel refuses pinned codex; (ii) proof rejects concrete proof; (iii) no_verdict omits raw_log. (ii)+(iii) shipped v2.36.57: Node grammar aligned with the battery, raw_log salvaged on rejection; (i) pre-spend admission next.
++- **Context**: (ii)+(iii) shipped v2.36.57 (proof grammar + raw_log); (i) pre-spend `final_panel_seat_blind_incompatible` v2.36.58
++
++### Managed rail: codex containment (bwrap) qualification spike so a codex seat can serve the blind final panel
++- **Status**: open
++- **Trigger**: operator wants a pinned codex qc seat to survive managed blind discovery without replacing the seat
++- **Effort**: S
++- **Source**: /l5 dogfood 2026-09-16 (cuda P1 consult, A2)
++- **Pointer**: docs/plans/2026-09-16-final-panel-blind-admission.md
++- **Context**: bwrap scratch-only inputs + runtime/TLS/DNS + sanitized ~/.codex; prove no repo/home/tmp/proc reach, no shell/git/curl/MCP re-acq; nested-sandbox/timeout/exit/raw_log parity; fail-before-spend; record versions.
+ 
+ ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
+ - **Status**: shipped v2.36.56 2026-09-16
+diff --git a/hooks/tests/dispatch-review.test.sh b/hooks/tests/dispatch-review.test.sh
+index 331f624a..4b578a60 100755
+--- a/hooks/tests/dispatch-review.test.sh
++++ b/hooks/tests/dispatch-review.test.sh
+@@ -1080,6 +1080,42 @@ unset OPENCODE_ARGV_FILE
+ OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+ assert_eq "2" "$EXIT" "blind codex review requires a no-tools profile"
+ assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition explains containment"
++
++# RED at base 9b049c00: bash gate already agrees with the Node predicate for the
++#   --runner vocabulary (preservation, green at base for the gate; Node side is new).
++PARITY_STUB="$TEST_TMP/blind-parity-stub"
++printf '#!/usr/bin/env bash\nexit 0\n' > "$PARITY_STUB"
++chmod +x "$PARITY_STUB"
++PARITY_OUT="$(node - "$REPO_ROOT" "$SCRIPT" "$DIFF" "$PARITY_STUB" <<'NODE'
++'use strict';
++const assert = require('assert');
++const path = require('path');
++const { spawnSync } = require('child_process');
++const [root, script, diff, stub] = process.argv.slice(2);
++const { isBlindDiscoveryCapableRunner } = require(path.join(root, 'src', 'engine', 'final-panel-qualification'));
++const vocab = 'codex agy grok cc-shim anthropic-compatible claude-native qoderclicn kimi cursor opencode'.split(' ');
++for (const runner of vocab) {
++  const spawned = spawnSync(script, ['--runner', runner, '--model', 'fixture', '--diff-file', diff, '--bin', stub], {
++    encoding: 'utf8',
++    env: { ...process.env, AUTOPILOT_BLIND_DISCOVERY: '1', DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0' },
++    timeout: 15000,
++  });
++  const out = `${spawned.stdout || ''}${spawned.stderr || ''}`;
++  const blocked = /enforceable no-tools runner profile/.test(out);
++  const capable = isBlindDiscoveryCapableRunner(runner);
++  if (capable) {
++    assert.strictEqual(blocked, false, `${runner} capable but hit no-tools gate: ${out.slice(0, 400)}`);
++  } else {
++    assert.strictEqual(blocked, true, `${runner} incompatible but missed no-tools gate: ${out.slice(0, 400)}`);
++    assert.strictEqual(spawned.status, 2, `${runner} expected exit 2 got ${spawned.status}`);
++  }
++}
++console.log('blind_runner_parity=true');
++NODE
++)"
++assert_eq "$?" "0" "blind discovery bash gate matches isBlindDiscoveryCapableRunner: $PARITY_OUT"
++assert_contains "$PARITY_OUT" "blind_runner_parity=true" "parity loop completed"
++
+ BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
+ BLIND_SCRIPT="$TEST_TMP/blind-probe"
+ printf '#!/usr/bin/env bash\nif [ -e escape-sentinel ]; then printf '\''%s\\n'\'' '\''{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null,"usage":null}'\''; else exit 1; fi\n' > "$BLIND_SCRIPT"; chmod +x "$BLIND_SCRIPT"
+diff --git a/hooks/tests/implementation-campaign-routing.test.sh b/hooks/tests/implementation-campaign-routing.test.sh
+index 5900b8df..ec7da432 100755
+--- a/hooks/tests/implementation-campaign-routing.test.sh
++++ b/hooks/tests/implementation-campaign-routing.test.sh
+@@ -1056,14 +1056,14 @@ const roster = {
+   cross_family_required: true,
+   qc_panel_seats_complete: true,
+   qc_panel_seats: [
+-    { role: 'qc', runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
+-    { role: 'qc', runner: 'fixture-b', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
+-    { role: 'qc', runner: 'fixture-c', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
++    { role: 'qc', runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
++    { role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
++    { role: 'qc', runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+   ],
+   fallback_ladder: [
+-    { runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', family: 'openai' },
+-    { runner: 'fixture-b', model: 'claude-opus', effort: 'high', family: 'anthropic' },
+-    { runner: 'fixture-c', model: 'grok-4.5', effort: 'high', family: 'xai' },
++    { runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', family: 'openai' },
++    { runner: 'claude-native', model: 'claude-opus', effort: 'high', family: 'anthropic' },
++    { runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', family: 'xai' },
+   ],
+ };
+ let implementationCalls = 0;
+@@ -1897,14 +1897,14 @@ const roster = {
+   cross_family_required: true,
+   qc_panel_seats_complete: true,
+   qc_panel_seats: [
+-    { role: 'qc', runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
+-    { role: 'qc', runner: 'fixture-b', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
+-    { role: 'qc', runner: 'fixture-c', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
++    { role: 'qc', runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
++    { role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
++    { role: 'qc', runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+   ],
+   fallback_ladder: [
+-    { runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', family: 'openai' },
+-    { runner: 'fixture-b', model: 'claude-opus', effort: 'high', family: 'anthropic' },
+-    { runner: 'fixture-c', model: 'grok-4.5', effort: 'high', family: 'xai' },
++    { runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', family: 'openai' },
++    { runner: 'claude-native', model: 'claude-opus', effort: 'high', family: 'anthropic' },
++    { runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', family: 'xai' },
+   ],
+ };
+ const seal = JSON.parse(fs.readFileSync(sealPath, 'utf8'));
+@@ -2406,10 +2406,10 @@ const roster = {
+   cross_family_required: false,
+   qc_panel_seats_complete: true,
+   qc_panel_seats: [
+-    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
++    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
+   ],
+   fallback_ladder: [
+-    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
++    { runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
+   ],
+ };
+ 
+@@ -2467,12 +2467,12 @@ const proofRoster = {
+   ...roster,
+   min_panel_size: 2,
+   fallback_ladder: [
+-    { runner: 'fixture', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
+-    { runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture' },
++    { runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
++    { runner: 'cc-shim', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture' },
+   ],
+   qc_panel_seats: [
+-    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
+-    { role: 'qc', runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture' },
++    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
++    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture' },
+   ],
+ };
+ 
+@@ -2709,7 +2709,7 @@ if (mode === 'proof') {
+   assert.strictEqual(canonicalDigest(seatABody), seatADigest);
+   assert.strictEqual(seatADigest, canonicalDigest({
+     schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat', seat_index: 1,
+-    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
++    runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+     status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: seatA.review_digest, reason: null,
+   }));
+   assert.ok(['no_verdict', 'parser_failed'].includes(seatB.status), `seat B status ${seatB.status}`);
+@@ -3101,6 +3101,158 @@ assert_contains "$PROOF_ENGINE_OUT" "period_proof_reviewed=true" \
+ assert_contains "$PROOF_ENGINE_OUT" "tautology_blocked_raw_log=true" \
+   "tautological proof blocks with tautology message and raw_log"
+ 
++# RED at base 9b049c00: dispatchers called, run ended at final_panel (fixture
++#   equivalent). After the gate: phase=campaign_intake, zero dispatcher calls,
++#   sandbox ledger has no intake row.
++BLIND_SBX="$TEST_TMP/blind-incompat-repo"
++mkdir -p "$BLIND_SBX/.claude" "$BLIND_SBX/src"
++git -C "$BLIND_SBX" init -q
++git -C "$BLIND_SBX" config user.email "blind-incompat@example.invalid"
++git -C "$BLIND_SBX" config user.name "Blind Incompat Test"
++write_mission_governance "$BLIND_SBX/.claude/owner-kernel-governance.json" shadow
++printf 'base\n' > "$BLIND_SBX/src/value.txt"
++git -C "$BLIND_SBX" add .
++git -C "$BLIND_SBX" commit -qm "base"
++BLIND_BASE="$(git -C "$BLIND_SBX" rev-parse HEAD)"
++BLIND_WT="$TEST_TMP/blind-incompat-wt"
++git -C "$BLIND_SBX" worktree add -q -b impl/blind-incompat "$BLIND_WT" "$BLIND_BASE"
++BLIND_COMMON_RAW="$(git -C "$BLIND_SBX" rev-parse --git-common-dir)"
++BLIND_COMMON="$(realpath "$BLIND_SBX/$BLIND_COMMON_RAW")"
++BLIND_CONTRACT="$TEST_TMP/blind-incompat-campaign.json"
++BLIND_SEAL="$TEST_TMP/blind-incompat-campaign.seal.json"
++BLIND_PROMPT="$TEST_TMP/blind-incompat-prompt.txt"
++printf 'blind incompatible final panel seat is refused at intake\n' > "$BLIND_PROMPT"
++node - "$BLIND_CONTRACT" "$BLIND_COMMON" "$BLIND_BASE" <<'NODE'
++const fs = require('fs');
++const [target, commonDir, base] = process.argv.slice(2);
++fs.writeFileSync(target, `${JSON.stringify({
++  schema_version: 1,
++  ticket: 'icc-blind-incompat',
++  profile: 'poc',
++  mission_grant_ref: null,
++  repo_identity: `git-common-dir:${commonDir}`,
++  base_sha: base,
++  branch: 'impl/blind-incompat',
++  vertical_acceptance: ['blind incompatible final panel seat is refused at intake'],
++  allowed_path_prefixes: ['src/'],
++  max_changed_files: 4,
++  baseline_churn: 10,
++  max_growth_ratio: 1.5,
++  max_extra_churn: 5,
++  max_repair_generations: 2,
++  max_wall_seconds: 600,
++  verify_cmd: 'node fixture.js',
++  rubric_ids: ['ICC-BLIND1'],
++}, null, 2)}\n`);
++NODE
++BLIND_SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
++  --contract "$BLIND_CONTRACT" --repo "$BLIND_SBX" --mission-mode shadow --out "$BLIND_SEAL" 2>&1)"
++assert_exit_code "$?" "0" "blind-incompat fixture campaign seals: $BLIND_SEAL_OUT"
++
++BLIND_ENGINE_OUT="$(node - "$REPO_ROOT" "$BLIND_SBX" "$BLIND_WT" "$BLIND_CONTRACT" "$BLIND_SEAL" \
++  "$BLIND_PROMPT" "$BLIND_BASE" <<'NODE'
++'use strict';
++const assert = require('assert');
++const fs = require('fs');
++const path = require('path');
++const [
++  root, repo, worktree, contractPath, sealPath, promptFile, base,
++] = process.argv.slice(2);
++const {
++  AutopilotEngine,
++  appendCampaignEvent,
++  runCampaignIntake,
++} = require(path.join(root, 'src', 'engine'));
++const { loadRows } = require(path.join(root, 'src', 'campaign', 'cli'));
++let implCalls = 0;
++let reviewCalls = 0;
++const engine = new AutopilotEngine({
++  cwd: repo,
++  clock: () => '2026-09-16T04:00:00.000Z',
++  campaignEventAppender: (input) => appendCampaignEvent(input),
++  campaignIntake(input) {
++    return runCampaignIntake(input, {
++      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
++      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
++      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
++    });
++  },
++  implementationDispatcher() {
++    implCalls += 1;
++    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'committed' } };
++  },
++  reviewDispatcher() {
++    reviewCalls += 1;
++    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'reviewed' } };
++  },
++  diffProvider() { return promptFile; },
++});
++const result = engine.runImplementationReviewLoop({
++  promptFile,
++  branch: 'impl/blind-incompat',
++  base,
++  roster: {
++    reviewer_engine: 'fixture-reviewer',
++    reviewer_effort: 'high',
++    reviewer_runner: 'cc-shim',
++    reviewer_qualified: true,
++    implementer_engine: 'fixture-implementer',
++    implementer_effort: 'high',
++    implementer_runner: 'fixture',
++    loop_max_rounds: 3,
++    loop_convergence_verdict: 'SHIP-AS-IS',
++    min_panel_size: 1,
++    required_review_families: 1,
++    cross_family_required: false,
++    qc_panel_seats_complete: true,
++    qc_panel_seats: [
++      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
++    ],
++    fallback_ladder: [
++      { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
++    ],
++  },
++  campaignContract: contractPath,
++  campaignSeal: sealPath,
++  verificationEnv: { PATH: process.env.PATH || '', CI: 'blind-incompat' },
++  verificationEnvAllowlist: ['CI'],
++});
++assert.strictEqual(result.phase, 'campaign_intake', `phase=${result.phase} reason=${result.reason}`);
++assert.strictEqual(result.status, 'blocked');
++const ledgerEntry = Array.isArray(result.ledger)
++  ? result.ledger.find((row) => row && row.unit === 'campaign_intake')
++  : null;
++const code = (ledgerEntry && ledgerEntry.rejection_code)
++  || (result.campaign_control && result.campaign_control.rejection && result.campaign_control.rejection.code)
++  || '';
++assert.strictEqual(code, 'final_panel_seat_blind_incompatible', JSON.stringify({ code, reason: result.reason, ledger: result.ledger }));
++assert.match(String(result.reason), /cannot execute a managed blind-discovery review/);
++assert.strictEqual(implCalls, 0, `implementation dispatcher calls=${implCalls}`);
++assert.strictEqual(reviewCalls, 0, `review dispatcher calls=${reviewCalls}`);
++const common = require('child_process').spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], {
++  encoding: 'utf8',
++}).stdout.trim();
++const ledgerPath = path.join(path.resolve(repo, common), 'autopilot', 'implementation-campaign.jsonl');
++if (fs.existsSync(ledgerPath)) {
++  const rows = loadRows(ledgerPath);
++  const intakeRows = rows.filter((row) => {
++    try {
++      const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
++      const event = payload && payload.event;
++      return event && (event.event_type === 'campaign_intake' || event.artifact_type === 'implementation_campaign_intake');
++    } catch (_e) {
++      return false;
++    }
++  });
++  assert.strictEqual(intakeRows.length, 0, `sandbox ledger intake rows=${JSON.stringify(intakeRows)}`);
++}
++console.log('blind_incompatible_pre_spend=true');
++NODE
++)"
++assert_exit_code "$?" "0" "blind-incompatible engine intake: $BLIND_ENGINE_OUT"
++assert_contains "$BLIND_ENGINE_OUT" "blind_incompatible_pre_spend=true" \
++  "engine run stops at campaign_intake with zero dispatcher calls"
++
+ ROUTING="$(sed -n '1,240p' \
+   "$REPO_ROOT/skills/l5/SKILL.md" \
+   "$REPO_ROOT/skills/l6/SKILL.md" \
+diff --git a/hooks/tests/implementation-campaign-state.test.sh b/hooks/tests/implementation-campaign-state.test.sh
+index 9783d7e8..68f02c1d 100755
+--- a/hooks/tests/implementation-campaign-state.test.sh
++++ b/hooks/tests/implementation-campaign-state.test.sh
+@@ -615,12 +615,15 @@ const roster = {
+   qc_panel_seats_complete: true,
+   qc_panel_seats: [{
+     role: 'qc',
+-    runner: 'fixture',
++    runner: 'cc-shim',
+     model: 'fixture-reviewer',
+     effort: 'high',
+     endpoint: null,
+     family: 'fixture',
+   }],
++  fallback_ladder: [
++    { runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', family: 'fixture' },
++  ],
+   implementer_engine: 'fixture-implementer',
+   implementer_effort: 'high',
+   implementer_runner: 'fixture',
+@@ -5235,7 +5238,7 @@ const unadmittedSeat = {
+ };
+ const admittedIncumbent = {
+   role: 'qc',
+-  runner: 'fixture',
++  runner: 'cc-shim',
+   model: 'fixture-reviewer',
+   effort: 'high',
+   endpoint: null,
+@@ -5244,7 +5247,7 @@ const admittedIncumbent = {
+ const roster = {
+   reviewer_engine: 'fixture-reviewer',
+   reviewer_effort: 'high',
+-  reviewer_runner: 'fixture',
++  reviewer_runner: 'cc-shim',
+   reviewer_qualified: true,
+   min_panel_size: 1,
+   qc_panel_seats_complete: true,
+@@ -5309,4 +5312,172 @@ NODE
+ assert_contains "$PANEL_INTAKE_OUT" "final-panel-intake assertions passed" \
+   "campaign intake refuses unadmitted qc seats before claim"
+ 
++# RED at base 9b049c00: qualified gpt-5.6-sol/codex admitted past qc; spies
++#   {"status":"blocked","code":"invalid_mission_claim","missionClaim":1,"claimGeneration":0}
++# RED at base 9b049c00: unqualified codex → final_panel_seat_unqualified
++#   "qc_panel[0] gpt-5.6-sol/codex@@none; record a standing pin: ..."
++# RED at base 9b049c00: override_admitted / standing-pin (override_admitted_seats, no
++#   ladder) still admitted past qc (missionClaim 1).
++# preservation (green at base): GLM-5.2/cc-shim and claude-native admitted past qc.
++BLIND_INTAKE_OUT="$(node - "$REPO_ROOT" <<'NODE'
++'use strict';
++const assert = require('assert');
++const path = require('path');
++const root = process.argv[2];
++const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
++
++function spies() {
++  const counts = { missionClaim: 0, claimGeneration: 0 };
++  return {
++    counts,
++    adapters: {
++      now: () => '2026-07-26T00:00:00.000Z',
++      missionClaim() {
++        counts.missionClaim += 1;
++        return { owner: 'mission', status: 'claimed', claim_id: 'must-not-run' };
++      },
++      releaseMission() {
++        return { owner: 'mission_release', status: 'released' };
++      },
++      claimGeneration() {
++        counts.claimGeneration += 1;
++        return { owner: 'campaign_generation', status: 'claimed', generation: 1, nonce: 'n' };
++      },
++    },
++  };
++}
++
++function baseRoster(seats, extra) {
++  return {
++    reviewer_engine: 'fixture-reviewer',
++    reviewer_effort: 'high',
++    reviewer_runner: 'cc-shim',
++    reviewer_qualified: true,
++    min_panel_size: 1,
++    qc_panel_seats_complete: true,
++    qc_panel_seats: seats,
++    implementer_engine: 'fixture-implementer',
++    implementer_effort: 'high',
++    implementer_runner: 'fixture',
++    ...extra,
++  };
++}
++
++const codexNone = {
++  role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai',
++};
++const codexEp = {
++  role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: 'openai', family: 'openai',
++};
++const ccSeat = {
++  role: 'qc', runner: 'cc-shim', model: 'GLM-5.2', effort: 'high', endpoint: null, family: 'other',
++};
++const cursorSeat = {
++  role: 'qc', runner: 'cursor', model: 'cursor-grok-4.6-low', effort: 'high', endpoint: null, family: 'cursor',
++};
++const nativeSeat = {
++  role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic',
++};
++const kimiSeat = {
++  role: 'qc', runner: 'kimi', model: 'kimi-code/k3', effort: 'high', endpoint: null, family: 'moonshot',
++};
++
++function assertBlindBlock(result, spiesObj) {
++  assert.strictEqual(result.status, 'blocked');
++  assert.strictEqual(result.rejection.code, 'final_panel_seat_blind_incompatible');
++  assert.strictEqual(result.pre_spend_no_effect_receipt, null);
++  assert.deepStrictEqual(result.steps, [result.rejection]);
++  assert.match(result.rejection.reason, /pins and overrides do not bypass containment/);
++  assert.strictEqual(spiesObj.counts.missionClaim, 0);
++  assert.strictEqual(spiesObj.counts.claimGeneration, 0);
++}
++
++const ladderCodex = [{ runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' }];
++const s1 = spies();
++const r1 = runCampaignIntake({
++  repo: process.cwd(),
++  roster: baseRoster([codexNone], { fallback_ladder: ladderCodex }),
++}, s1.adapters);
++assertBlindBlock(r1, s1);
++assert.match(r1.rejection.reason, /qc_panel\[0\] gpt-5\.6-sol\/codex@@none/);
++assert.strictEqual(r1.rejection.reason.split('\n').length, 1);
++
++const sEp = spies();
++const rEp = runCampaignIntake({
++  repo: process.cwd(),
++  roster: baseRoster([codexEp], { fallback_ladder: [{ runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: 'openai', family: 'openai' }] }),
++}, sEp.adapters);
++assertBlindBlock(rEp, sEp);
++assert.match(rEp.rejection.reason, /qc_panel\[0\] gpt-5\.6-sol\/codex@openai/);
++
++const twoSeats = [codexNone, ccSeat, cursorSeat];
++const twoLadder = [
++  ...ladderCodex,
++  { runner: 'cc-shim', model: 'GLM-5.2', effort: 'high', family: 'other' },
++  { runner: 'cursor', model: 'cursor-grok-4.6-low', effort: 'high', family: 'cursor' },
++];
++const s2 = spies();
++const r2 = runCampaignIntake({
++  repo: process.cwd(),
++  roster: baseRoster(twoSeats, { fallback_ladder: twoLadder }),
++}, s2.adapters);
++assertBlindBlock(r2, s2);
++const lines = r2.rejection.reason.split('\n');
++assert.strictEqual(lines.length, 2);
++assert.match(lines[0], /^qc_panel\[0\] gpt-5\.6-sol\/codex@@none /);
++assert.match(lines[1], /^qc_panel\[2\] cursor-grok-4\.6-low\/cursor@@none /);
++
++const sOvr = spies();
++const rOvr = runCampaignIntake({
++  repo: process.cwd(),
++  roster: baseRoster([codexNone], { fallback_ladder: ladderCodex, override_admitted_seats: ['qc_panel[0]'] }),
++}, sOvr.adapters);
++assertBlindBlock(rOvr, sOvr);
++
++const sPin = spies();
++const rPin = runCampaignIntake({
++  repo: process.cwd(),
++  roster: baseRoster([codexNone], { override_admitted_seats: ['qc_panel[0]'] }),
++}, sPin.adapters);
++assertBlindBlock(rPin, sPin);
++
++const sPrec = spies();
++const rPrec = runCampaignIntake({
++  repo: process.cwd(),
++  roster: baseRoster([codexNone], { fallback_ladder: [] }),
++}, sPrec.adapters);
++assertBlindBlock(rPrec, sPrec);
++assert.notStrictEqual(rPrec.rejection.code, 'final_panel_seat_unqualified');
++
++for (const bad of [kimiSeat, cursorSeat]) {
++  const sb = spies();
++  const rb = runCampaignIntake({
++    repo: process.cwd(),
++    roster: baseRoster([bad], {
++      fallback_ladder: [{ runner: bad.runner, model: bad.model, effort: 'high', family: bad.family }],
++    }),
++  }, sb.adapters);
++  assertBlindBlock(rb, sb);
++}
++
++function assertAdmitted(seat) {
++  const s = spies();
++  const result = runCampaignIntake({
++    repo: process.cwd(),
++    roster: baseRoster([seat], {
++      fallback_ladder: [{ runner: seat.runner, model: seat.model, effort: seat.effort, family: seat.family }],
++    }),
++  }, s.adapters);
++  assert.ok((s.counts.missionClaim + s.counts.claimGeneration) >= 1, JSON.stringify(result.rejection || result));
++}
++
++assertAdmitted(ccSeat);
++assertAdmitted(nativeSeat);
++
++console.log('final-panel-blind-intake assertions passed');
++NODE
++)"
++assert_contains "$BLIND_INTAKE_OUT" "final-panel-blind-intake assertions passed" \
++  "campaign intake refuses blind-incompatible qc seats before claim"
++
+ finalize_test
+diff --git a/hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh b/hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh
+index 48642575..fba6bd87 100755
+--- a/hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh
++++ b/hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh
+@@ -64,4 +64,55 @@ assert_eq "$RUN_EXIT" "0" "valid three-seat QC panel exits 0"
+ assert_eq "$VALID_SEAT_COUNT" "3" "valid three-seat QC panel serializes all three seats"
+ assert_contains "$RUN_STDOUT" '"qc_panel_seats_complete": true' "valid three-seat QC panel remains complete"
+ 
++# RED at base 9b049c00: --check-scorecard capability_warnings has no
++#   "cannot execute a managed blind-discovery review" entry; stderr has no
++#   matching ⚠ (host pin/override ⚠ lines only).
++BLIND_CFG="$TEST_TMP/blind-panel.md"
++printf -- '- qc_panel: gpt-5.6-sol, GLM-5.2, MiniMax-M3\n- qc_panel_runners: codex, cc-shim, cursor\n- qc_panel_efforts: high, high, high\n- qc_panel_endpoints: @none, @none, @none\n' > "$BLIND_CFG"
++BLIND_OVR="$TEST_TMP/blind-qc-override.json"
++printf '{"schema":1,"overrides":[{"engine":"MiniMax-M3","runner":"cursor","role":"qc_panel","reason":"fixture cursor admission","operator":"test","expires":"2099-12-31"}]}\n' > "$BLIND_OVR"
++EMPTY_SCDIR="$TEST_TMP/blind-empty-scorecard"
++mkdir -p "$EMPTY_SCDIR"
++run_resolver_scorecard() {
++  local stdout_file="$TEST_TMP/stdout" stderr_file="$TEST_TMP/stderr"
++  ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" AUTOPILOT_QUALIFICATION_OVERRIDE="$BLIND_OVR" \
++    REVIEW_LOOP_CONFIG_OVERRIDE="$BLIND_CFG" bash "$SCRIPT" --check-scorecard \
++    >"$stdout_file" 2>"$stderr_file"
++  RUN_EXIT=$?
++  RUN_STDOUT="$(cat "$stdout_file")"
++  RUN_STDERR="$(cat "$stderr_file")"
++}
++run_resolver_scorecard
++assert_eq "$RUN_EXIT" "0" "blind-incompatible qc seats stay report-only under --check-scorecard"
++WARN_JSON="$(JSON_VALUE="$RUN_STDOUT" node -e '
++const v = JSON.parse(process.env.JSON_VALUE);
++const w = (v.capability_warnings || []).filter((x) => /cannot execute a managed blind-discovery review/.test(String(x)));
++process.stdout.write(JSON.stringify(w));
++')"
++WARN_COUNT="$(JSON_VALUE="$WARN_JSON" node -e 'process.stdout.write(String(JSON.parse(process.env.JSON_VALUE).length));')"
++assert_eq "$WARN_COUNT" "2" "exactly two blind-incompatible capability_warnings in index order"
++assert_contains "$WARN_JSON" '"qc_panel[0] seat (gpt-5.6-sol/codex) cannot execute a managed blind-discovery review' \
++  "first warning names qc_panel[0] codex"
++assert_contains "$WARN_JSON" '"qc_panel[2] seat (MiniMax-M3/cursor) cannot execute a managed blind-discovery review' \
++  "second warning names qc_panel[2] cursor"
++JSON_VALUE="$WARN_JSON" node -e '
++const w = JSON.parse(process.env.JSON_VALUE);
++if (w.some((x) => /pin-seat|AUTOPILOT_QUALIFICATION_OVERRIDE/.test(String(x)))) process.exit(1);
++' || fail "blind warning text must not suggest pin-seat or AUTOPILOT_QUALIFICATION_OVERRIDE"
++assert_contains "$RUN_STDERR" "resolve-review-loop: ⚠ qc_panel[0] seat (gpt-5.6-sol/codex) cannot execute a managed blind-discovery review" \
++  "stderr ⚠ for qc_panel[0]"
++assert_contains "$RUN_STDERR" "resolve-review-loop: ⚠ qc_panel[2] seat (MiniMax-M3/cursor) cannot execute a managed blind-discovery review" \
++  "stderr ⚠ for qc_panel[2]"
++
++REVIEW_LOOP_CONFIG_OVERRIDE="$BLIND_CFG" AUTOPILOT_QUALIFICATION_OVERRIDE="$BLIND_OVR" \
++  bash "$SCRIPT" >"$TEST_TMP/stdout-off" 2>"$TEST_TMP/stderr-off"
++OFF_EXIT=$?
++OFF_STDOUT="$(cat "$TEST_TMP/stdout-off")"
++OFF_STDERR="$(cat "$TEST_TMP/stderr-off")"
++assert_eq "$OFF_EXIT" "0" "without --check-scorecard the same panel still resolves"
++assert_not_contains "$OFF_STDOUT" "cannot execute a managed blind-discovery review" \
++  "without --check-scorecard no blind-incompatible capability_warnings"
++assert_not_contains "$OFF_STDERR" "cannot execute a managed blind-discovery review" \
++  "without --check-scorecard no blind-incompatible stderr ⚠"
++
+ finalize_test
+diff --git a/platforms/codex/plugin/scripts/dispatch-review.sh b/platforms/codex/plugin/scripts/dispatch-review.sh
+index 98261c40..592a8afd 100755
+--- a/platforms/codex/plugin/scripts/dispatch-review.sh
++++ b/platforms/codex/plugin/scripts/dispatch-review.sh
+@@ -285,6 +285,8 @@ validate_d2_agy_claims() {
+ 
+ [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
+ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
++# Defense in depth: the canonical set is BLIND_DISCOVERY_CAPABLE_RUNNERS in
++# src/engine/final-panel-qualification.js. Intake refuses other runners first.
+ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
+   case "$RUNNER" in
+     qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
+diff --git a/platforms/codex/plugin/scripts/resolve-review-loop.sh b/platforms/codex/plugin/scripts/resolve-review-loop.sh
+index 8917015a..531fcab9 100755
+--- a/platforms/codex/plugin/scripts/resolve-review-loop.sh
++++ b/platforms/codex/plugin/scripts/resolve-review-loop.sh
+@@ -2110,6 +2110,28 @@ for (( _i = 0; _i < _qc_max; _i++ )); do
+   [[ -n "$_qc_eng" ]] && _panel_div_runners="$_panel_div_runners $_qc_run"
+ done
+ 
++# Literal mirror of BLIND_DISCOVERY_CAPABLE_RUNNERS in
++# src/engine/final-panel-qualification.js (parity test keeps them equal).
++if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
++  for (( _i = 0; _i < _qc_max; _i++ )); do
++    _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
++    [[ -n "$_qc_run" ]] || continue
++    case "$_qc_run" in
++      anthropic-compatible|cc-shim|claude-native|qoderclicn) continue ;;
++    esac
++    _qc_eng="${QC_PANEL[$_i]:-<unspecified>}"
++    _blind_warn="qc_panel[${_i}] seat (${_qc_eng}/${_qc_run}) cannot execute a managed blind-discovery review — the managed rail refuses it at intake (final_panel_seat_blind_incompatible); replace the seat or complete the containment qualification"
++    CAP_WARNINGS_JSON="$(node -e '
++let a = [];
++try { a = JSON.parse(process.argv[1]); } catch { a = []; }
++if (!Array.isArray(a)) a = [];
++a.push(process.argv[2]);
++process.stdout.write(JSON.stringify(a));
++' "$CAP_WARNINGS_JSON" "$_blind_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
++    echo "resolve-review-loop: ⚠ ${_blind_warn}" >&2
++  done
++fi
++
+ # A seat is "reviewer-class" when its judgement is the thing being decorrelated
+ # from the implementer's work. Everything that is not the implementer seat is.
+ _is_unqualified_runner() {
+diff --git a/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md b/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+index 6e4ce60c..6b8ff058 100644
+--- a/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
++++ b/platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
+@@ -162,7 +162,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+    `node scripts/session-mode.js retire --session <id> --integration-receipt <record-integration
+    receipt>` re-derives lineage claim + git ancestry (v2.36.48); never delete a marker by hand.
+ 6b. Run `bash scripts/resolve-review-loop.sh --check-scorecard --field override_admitted_seats` and
+-    read the stderr ⚠ notes. Every `qc_panel[N]` without evidence must be pinned first
++    read the stderr ⚠ notes (a qc seat whose runner cannot run blind review is reported there and refused at intake). Every `qc_panel[N]` without evidence must be pinned first
+     (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with
+     `final_panel_seat_unqualified`.
+ 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
+@@ -196,7 +196,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
+     ledger rotation carry keeps journal append order v2.36.54,
+     red verification takes the repair path v2.36.56,
+-    proof grammar parity + raw_log on rejected envelopes v2.36.57.
++    proof grammar parity + raw_log on rejected envelopes v2.36.57,
++    blind-incompatible final-panel seat refused at intake v2.36.58.
+     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
+     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
+     line drifts the frozen source sha and every `session-mode set` is refused until routing is
+diff --git a/platforms/codex/plugin/src/engine/campaign-intake.js b/platforms/codex/plugin/src/engine/campaign-intake.js
+index 01626164..8abfb295 100644
+--- a/platforms/codex/plugin/src/engine/campaign-intake.js
++++ b/platforms/codex/plugin/src/engine/campaign-intake.js
+@@ -33,7 +33,10 @@ const {
+ const {
+   consumeProviderReadinessBeforeSpend,
+ } = require('../readiness/receipt');
+-const { finalPanelSeatQualified } = require('./final-panel-qualification');
++const {
++  finalPanelSeatQualified,
++  isBlindDiscoveryCapableRunner,
++} = require('./final-panel-qualification');
+ const repoPreconditions = require('./repo-preconditions');
+ 
+ 
+@@ -1414,6 +1417,34 @@ function runCampaignIntake(input = {}, adapters = {}) {
+     ? input.roster.qc_panel_seats
+     : null;
+   if (qcSeats && qcSeats.length > 0) {
++    const blindFailures = [];
++    for (let i = 0; i < qcSeats.length; i += 1) {
++      const seat = qcSeats[i];
++      if (!isBlindDiscoveryCapableRunner(seat && seat.runner)) {
++        const endpoint = seat && seat.endpoint != null && String(seat.endpoint).length > 0
++          ? seat.endpoint
++          : '@none';
++        const model = seat && seat.model ? seat.model : '<unspecified>';
++        const runner = seat && seat.runner ? seat.runner : '<unspecified>';
++        blindFailures.push(
++          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn); replace it with a blind-capable seat or complete the codex containment qualification — pins and overrides do not bypass containment`,
++        );
++      }
++    }
++    if (blindFailures.length > 0) {
++      const rejection = rejected(
++        'campaign_generation',
++        'final_panel_seat_blind_incompatible',
++        blindFailures.join('\n'),
++      );
++      return {
++        status: 'blocked',
++        reason: rejection.reason,
++        rejection,
++        steps: [rejection],
++        pre_spend_no_effect_receipt: null,
++      };
++    }
+     const failures = [];
+     for (let i = 0; i < qcSeats.length; i += 1) {
+       const seat = qcSeats[i];
+diff --git a/platforms/codex/plugin/src/engine/final-panel-qualification.js b/platforms/codex/plugin/src/engine/final-panel-qualification.js
+index 28a0760f..98e3d786 100644
+--- a/platforms/codex/plugin/src/engine/final-panel-qualification.js
++++ b/platforms/codex/plugin/src/engine/final-panel-qualification.js
+@@ -6,6 +6,17 @@
+ // the sealed seat is exactly that qualified tuple; every other terminal seat
+ // needs an exact qualified scorecard-ladder row. Path (c) is a recorded
+ // operator admission for that exact panel index.
++const BLIND_DISCOVERY_CAPABLE_RUNNERS = Object.freeze([
++  'anthropic-compatible',
++  'cc-shim',
++  'claude-native',
++  'qoderclicn',
++]);
++
++function isBlindDiscoveryCapableRunner(runner) {
++  return typeof runner === 'string' && BLIND_DISCOVERY_CAPABLE_RUNNERS.includes(runner);
++}
++
+ function finalPanelSeatQualified(roster, seat, index) {
+   if (!roster || !seat) return false;
+   const endpoint = (value) => typeof value === 'string' && value.length > 0 ? value : null;
+@@ -34,4 +45,8 @@ function finalPanelSeatQualified(roster, seat, index) {
+   });
+ }
+ 
+-module.exports = { finalPanelSeatQualified };
++module.exports = {
++  BLIND_DISCOVERY_CAPABLE_RUNNERS,
++  isBlindDiscoveryCapableRunner,
++  finalPanelSeatQualified,
++};
+diff --git a/scripts/dispatch-review.sh b/scripts/dispatch-review.sh
+index 98261c40..592a8afd 100755
+--- a/scripts/dispatch-review.sh
++++ b/scripts/dispatch-review.sh
+@@ -285,6 +285,8 @@ validate_d2_agy_claims() {
+ 
+ [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
+ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
++# Defense in depth: the canonical set is BLIND_DISCOVERY_CAPABLE_RUNNERS in
++# src/engine/final-panel-qualification.js. Intake refuses other runners first.
+ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
+   case "$RUNNER" in
+     qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
+diff --git a/scripts/resolve-review-loop.sh b/scripts/resolve-review-loop.sh
+index 8917015a..531fcab9 100755
+--- a/scripts/resolve-review-loop.sh
++++ b/scripts/resolve-review-loop.sh
+@@ -2110,6 +2110,28 @@ for (( _i = 0; _i < _qc_max; _i++ )); do
+   [[ -n "$_qc_eng" ]] && _panel_div_runners="$_panel_div_runners $_qc_run"
+ done
+ 
++# Literal mirror of BLIND_DISCOVERY_CAPABLE_RUNNERS in
++# src/engine/final-panel-qualification.js (parity test keeps them equal).
++if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
++  for (( _i = 0; _i < _qc_max; _i++ )); do
++    _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
++    [[ -n "$_qc_run" ]] || continue
++    case "$_qc_run" in
++      anthropic-compatible|cc-shim|claude-native|qoderclicn) continue ;;
++    esac
++    _qc_eng="${QC_PANEL[$_i]:-<unspecified>}"
++    _blind_warn="qc_panel[${_i}] seat (${_qc_eng}/${_qc_run}) cannot execute a managed blind-discovery review — the managed rail refuses it at intake (final_panel_seat_blind_incompatible); replace the seat or complete the containment qualification"
++    CAP_WARNINGS_JSON="$(node -e '
++let a = [];
++try { a = JSON.parse(process.argv[1]); } catch { a = []; }
++if (!Array.isArray(a)) a = [];
++a.push(process.argv[2]);
++process.stdout.write(JSON.stringify(a));
++' "$CAP_WARNINGS_JSON" "$_blind_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
++    echo "resolve-review-loop: ⚠ ${_blind_warn}" >&2
++  done
++fi
++
+ # A seat is "reviewer-class" when its judgement is the thing being decorrelated
+ # from the implementer's work. Everything that is not the implementer seat is.
+ _is_unqualified_runner() {
+diff --git a/skills/l5/references/hetero-impl-loop.md b/skills/l5/references/hetero-impl-loop.md
+index 6e4ce60c..6b8ff058 100644
+--- a/skills/l5/references/hetero-impl-loop.md
++++ b/skills/l5/references/hetero-impl-loop.md
+@@ -162,7 +162,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+    `node scripts/session-mode.js retire --session <id> --integration-receipt <record-integration
+    receipt>` re-derives lineage claim + git ancestry (v2.36.48); never delete a marker by hand.
+ 6b. Run `bash scripts/resolve-review-loop.sh --check-scorecard --field override_admitted_seats` and
+-    read the stderr ⚠ notes. Every `qc_panel[N]` without evidence must be pinned first
++    read the stderr ⚠ notes (a qc seat whose runner cannot run blind review is reported there and refused at intake). Every `qc_panel[N]` without evidence must be pinned first
+     (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with
+     `final_panel_seat_unqualified`.
+ 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
+@@ -196,7 +196,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
+     durable-wait resume verified pre-claim + `scope_implementation_sha` bound v2.36.53,
+     ledger rotation carry keeps journal append order v2.36.54,
+     red verification takes the repair path v2.36.56,
+-    proof grammar parity + raw_log on rejected envelopes v2.36.57.
++    proof grammar parity + raw_log on rejected envelopes v2.36.57,
++    blind-incompatible final-panel seat refused at intake v2.36.58.
+     **After the merge**: run `record-integration.js` BEFORE reaping branches (accepted sha must be
+     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
+     line drifts the frozen source sha and every `session-mode set` is refused until routing is
+diff --git a/src/engine/campaign-intake.js b/src/engine/campaign-intake.js
+index 01626164..8abfb295 100644
+--- a/src/engine/campaign-intake.js
++++ b/src/engine/campaign-intake.js
+@@ -33,7 +33,10 @@ const {
+ const {
+   consumeProviderReadinessBeforeSpend,
+ } = require('../readiness/receipt');
+-const { finalPanelSeatQualified } = require('./final-panel-qualification');
++const {
++  finalPanelSeatQualified,
++  isBlindDiscoveryCapableRunner,
++} = require('./final-panel-qualification');
+ const repoPreconditions = require('./repo-preconditions');
+ 
+ 
+@@ -1414,6 +1417,34 @@ function runCampaignIntake(input = {}, adapters = {}) {
+     ? input.roster.qc_panel_seats
+     : null;
+   if (qcSeats && qcSeats.length > 0) {
++    const blindFailures = [];
++    for (let i = 0; i < qcSeats.length; i += 1) {
++      const seat = qcSeats[i];
++      if (!isBlindDiscoveryCapableRunner(seat && seat.runner)) {
++        const endpoint = seat && seat.endpoint != null && String(seat.endpoint).length > 0
++          ? seat.endpoint
++          : '@none';
++        const model = seat && seat.model ? seat.model : '<unspecified>';
++        const runner = seat && seat.runner ? seat.runner : '<unspecified>';
++        blindFailures.push(
++          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn); replace it with a blind-capable seat or complete the codex containment qualification — pins and overrides do not bypass containment`,
++        );
++      }
++    }
++    if (blindFailures.length > 0) {
++      const rejection = rejected(
++        'campaign_generation',
++        'final_panel_seat_blind_incompatible',
++        blindFailures.join('\n'),
++      );
++      return {
++        status: 'blocked',
++        reason: rejection.reason,
++        rejection,
++        steps: [rejection],
++        pre_spend_no_effect_receipt: null,
++      };
++    }
+     const failures = [];
+     for (let i = 0; i < qcSeats.length; i += 1) {
+       const seat = qcSeats[i];
+diff --git a/src/engine/final-panel-qualification.js b/src/engine/final-panel-qualification.js
+index 28a0760f..98e3d786 100644
+--- a/src/engine/final-panel-qualification.js
++++ b/src/engine/final-panel-qualification.js
+@@ -6,6 +6,17 @@
+ // the sealed seat is exactly that qualified tuple; every other terminal seat
+ // needs an exact qualified scorecard-ladder row. Path (c) is a recorded
+ // operator admission for that exact panel index.
++const BLIND_DISCOVERY_CAPABLE_RUNNERS = Object.freeze([
++  'anthropic-compatible',
++  'cc-shim',
++  'claude-native',
++  'qoderclicn',
++]);
++
++function isBlindDiscoveryCapableRunner(runner) {
++  return typeof runner === 'string' && BLIND_DISCOVERY_CAPABLE_RUNNERS.includes(runner);
++}
++
+ function finalPanelSeatQualified(roster, seat, index) {
+   if (!roster || !seat) return false;
+   const endpoint = (value) => typeof value === 'string' && value.length > 0 ? value : null;
+@@ -34,4 +45,8 @@ function finalPanelSeatQualified(roster, seat, index) {
+   });
+ }
+ 
+-module.exports = { finalPanelSeatQualified };
++module.exports = {
++  BLIND_DISCOVERY_CAPABLE_RUNNERS,
++  isBlindDiscoveryCapableRunner,
++  finalPanelSeatQualified,
++};
+
+```
+<<<AUTOPILOT-END-984e615ec0a88e803d1a74557bee3f24>>>
+
+warning: Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+codex
+<<<AUTOPILOT-REVIEW-984e615ec0a88e803d1a74557bee3f24>>>
+VERDICT: FIX-THEN-SHIP
+FINDINGS:
+🟠 [predicate-parity-false-green] MUST-FIX The parity test never proves blind-capable runners reach the stub: it only checks that the containment error text is absent, so any unrelated precondition or dispatch failure passes. Have the stub record invocation per runner and assert that marker for capable runners, while asserting exit 2 and no invocation for incompatible runners.
+🟠 [intake-fixtures-incomplete] MUST-FIX The required standing-pin path is not exercised: `sPin` merely repeats `override_admitted_seats`, and `assertAdmitted` only requires one claim call rather than an admitted intake result. This leaves standing-pin precedence and blind-capable admission vulnerable to false-green tests. Create a genuine pin-store-backed fixture, provide valid claim inputs/adapters, and assert admitted status plus the required mission/generation call counts for cc-shim and claude-native.
+<<<AUTOPILOT-END-984e615ec0a88e803d1a74557bee3f24>>>
+tokens used
+35,376

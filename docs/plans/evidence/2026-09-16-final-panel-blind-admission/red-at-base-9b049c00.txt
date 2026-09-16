@@ -1,0 +1,9 @@
+FAIL [implementation-campaign-routing] blind-incompatible engine intake: : expected exit 0, got 1
+FAIL [implementation-campaign-routing] engine run stops at campaign_intake with zero dispatcher calls: 'blind_incompatible_pre_spend=true' not found in output
+FAIL [resolve-review-loop-qc-panel-rejection] exactly two blind-incompatible capability_warnings in index order: expected '2', got '0'
+FAIL [resolve-review-loop-qc-panel-rejection] first warning names qc_panel[0] codex: '"qc_panel[0] seat (gpt-5.6-sol/codex) cannot execute a managed blind-discovery review' not found in output
+FAIL [resolve-review-loop-qc-panel-rejection] second warning names qc_panel[2] cursor: '"qc_panel[2] seat (MiniMax-M3/cursor) cannot execute a managed blind-discovery review' not found in output
+FAIL [resolve-review-loop-qc-panel-rejection] stderr ⚠ for qc_panel[0]: 'resolve-review-loop: ⚠ qc_panel[0] seat (gpt-5.6-sol/codex) cannot execute a managed blind-discovery review' not found in output
+FAIL [resolve-review-loop-qc-panel-rejection] stderr ⚠ for qc_panel[2]: 'resolve-review-loop: ⚠ qc_panel[2] seat (MiniMax-M3/cursor) cannot execute a managed blind-discovery review' not found in output
+FAIL [dispatch-review] blind discovery bash gate matches isBlindDiscoveryCapableRunner: : expected '0', got '1'
+FAIL [dispatch-review] parity loop completed: 'blind_runner_parity=true' not found in output

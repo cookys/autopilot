@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-5718ecd1e83c74b0601d049e599b4b2312b6205683c9b191ebc0db80cc4cb405",
+  "claim_id": "claim-v1-65c0bbcda331d102753f78111e27bd816890c0aacd15374c9a5106ff5dd2ed70",
+  "mission_grant_ref": "e913e0e96a40f3a1b2cc2fbe892608fb2ab07f9d07fbd7f702ffe5e213f5dd35",
+  "mission_subject_digest": "d4ccc5a5e09a12d7598d311c22be1d2ba8532c1e42b2eca1acdf2e697511cdc5",
+  "mission_campaign_id": "campaign-v2-8e6a85274352c8385571fe8e1c9e04cae01a3fd8d68f3f0c4ba75777e2e71407",
+  "graph_node_id": "final-panel-blind-admission-2026-09-16",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/5718ecd1e83c74b0601d049e599b4b2312b6205683c9b191ebc0db80cc4cb405/final-panel-blind-admission-2026-09-16/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/5718ecd1e83c74b0601d049e599b4b2312b6205683c9b191ebc0db80cc4cb405/final-panel-blind-admission-2026-09-16/attempt-1/campaign.seal.json",
+  "branch": "mission/5718ecd1e83c/final-panel-blind-admission-2026-09-16-a1",
+  "base_sha": "a1ee6ff5ee757a0c2329d697cdee56c7061f260f",
+  "state_hash": "4e4347f324c17710a550b81c1341d1db7fdd78bfc6b92c6846ea90a012541ad0"
+}

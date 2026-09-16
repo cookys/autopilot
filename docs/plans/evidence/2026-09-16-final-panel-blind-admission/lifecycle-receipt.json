@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-16T12:20:29.288Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-ba5300dd81ef71eac178243333ecbb4bee3ed6efd12da03a0f844f28e954292c",
+  "observed_head": "931b31b2d7ad5eb9f6b8096c0e88b332cda3f75b",
+  "worktree_observation_digest": "fe8944cde8553934920ce646c8cb5dc45a54693125c9b92fa0c8501cfa38d58f",
+  "journal_digest": "7f714d9b378590678f8475f0cb93b6893899eef27201ecff5b1ba5372dcfeab1",
+  "disposition_digest": "f4fe65b2922b8aee0416f21b08c7cf5e5335d794a731edcdc12ea87b612ddcfe",
+  "branch_inventory_digest": "5318e8c8f33205c88a0be9b63cd120f1067b780c757b21b44f41d53bac96cbc3",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/5718ecd1e83c/final-panel-blind-admission-2026-09-16-a1",
+      "tip": "c3eb31f6fbc2c48bd7ca47e1426a99ace161e3ce",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T122020Z-780501.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "f6afdbe37709da80bdfe18071524a7c0b73cc2c8808b9b7389618e7278e5f360"
+}

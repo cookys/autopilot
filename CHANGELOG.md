@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.36.58 — managed rail：final panel 的 blind-incompatible 席位在 intake 就拒（cuda P1 之二）
+
+- `src/engine/final-panel-qualification.js`：`BLIND_DISCOVERY_CAPABLE_RUNNERS`（`anthropic-compatible`、`cc-shim`、
+  `claude-native`、`qoderclicn`）＋`isBlindDiscoveryCapableRunner()`——一份 canonical 集合。`src/engine/campaign-intake.js`：
+  在 qualification 迴圈**之前**、任何 Mission／generation claim 之前，qc_panel 席的 runner 不在集合內就回
+  `final_panel_seat_blind_incompatible`（一席一行：`qc_panel[i] <model>/<runner>@<endpoint|@none> cannot execute a managed
+  blind-discovery review … pins and overrides do not bypass containment`）；standing pin／`override_admitted_seats`／ladder 都
+  不能放行；unqualified＋incompatible 報 incompatible（先決順序）。之前：pin 有 codex 席時 campaign 跑完 implement／verify／
+  review／full_suite／adjudicate／convergence，才在 final panel `transport_failed`（`dispatch-review.sh` 的 blind gate 拒 codex），
+  cuda 兩次、本機 C 一次。
+- `scripts/resolve-review-loop.sh --check-scorecard`：每個 blind-incompatible qc 席一條 `capability_warnings[]`＋⚠ stderr，
+  report-only、不建議 pin；沒帶旗標不印。`scripts/dispatch-review.sh` 只加註解指向 Node 常數，`case` 不動。
+- 測試：state suite intake 區塊（endpoint 渲染、兩席兩行、claim spy base 1／head 0、override／pin／precedence／kimi／cursor 拒、
+  cc-shim／claude-native 通過 gate 到 claim）；routing 真 engine run（sealed contract、真 appender、真 sandbox ledger）在
+  `campaign_intake` 停、零 dispatcher 呼叫；qc-panel-rejection 兩席兩條警告依序；dispatch-review parity：runner 詞彙表逐一
+  帶 `AUTOPILOT_BLIND_DISCOVERY=1` 打 exit-99 stub——capable 的必須真的到 stub（`rc=99` 簽名），incompatible 的 exit 2＋gate
+  訊息且永不到 stub。base `9b049c00` 上 10 條紅。
+- **明說**：本機 pin 的 `qc_panel[0]` 是 gpt-5.6-sol/codex——從這版起本機每個 managed campaign 會在 intake 就停，直到
+  operator 換席（或 A2 codex bwrap containment spike 落地，BACKLOG open row）。這是把昂貴的晚期失敗換成便宜的早期失敗，
+  不是把三席 panel 還給 operator。
+- 流程（`docs/plans/evidence/2026-09-16-final-panel-blind-admission/`）：六個 suite base 先綠；plan 兩代 hetero review（G1 七條
+  全 fold，G2 一條 precedence fold）；/l5 campaign hand `bcc5f720` 15 檔，verify／full_suite／MiniMax SHIP-AS-IS／adjudicate／
+  scope 全過，**wall budget 5635 s > 我封的 5400 s** 在 convergence 停（六個 suite 跑兩遍要 ~40 分鐘；下次 budget 要算兩遍
+  suite）→ 降級 l3；codex 第二家族兩條 🟠（parity 只測 gate 訊息缺席＝假綠；admitted control 太弱）修於 `c3eb31f6`，pin-store
+  fixture 要求駁回（intake 讀 roster override，pin→override 在 resolver 層有 suite）；merge `931b31b2`、`zero_residue: true`。
+- cuda 回報 v2.36.57 已在他們的 GLM-5.3 席位驗證有效（同 diff：.54 時代 no_verdict → .57 reviewed SHIP-AS-IS）。
+
+prose-justification: 本版對 prose 面沒有增量（l5 recipe 6b／11 各一句）。
+
+---
+
 ## v2.36.57 — review proof 文法 bash／Node 對齊（shape 與 tautology 分開報）；validator 拒絕的 envelope 保留 raw_log（cuda P1 之一）
 
 - `src/runners/review.js`：`isValidNoFindingProof` 原本只認 `;` 分隔（`^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$`），

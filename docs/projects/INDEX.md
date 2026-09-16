@@ -229,6 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
+| 2026-09-16 | final panel blind-incompatible 席位 intake 就拒（Fix，/l5 managed campaign；cuda P1 之二）— canonical predicate、resolver ⚠、parity 測試證明 capable runner 真的到 stub；本機 pin 的 codex 席要換 | v2.36.58 | 931b31b2 |
 | 2026-09-16 | review proof 文法 bash／Node 對齊＋被拒 envelope 保留 raw_log（Fix，/l5 managed campaign；cuda P1 之一）— 真 engine proof 模式；resume 首次在活 ledger 走通到 REPAIR_AUTHORIZED、撞到 repair 分支名 rail 缺陷（fired） | v2.36.57 | 3079903f |
 | 2026-09-16 | verification 紅走 repair 路徑（Fix，/l5 managed campaign）— `performReview` 在 vertical_failed 下不記 review_completed、vertical repair 綁初始改動路徑；routing suite +10；final panel codex 席 transport_failed 第三次量到 | v2.36.56 | 5117590c |
 | 2026-09-16 | agy effort 跟 model tier 走＋三個拒絕訊息說補救（Fix，/l5 managed campaign）— `agy_effort_for_model`、fold note、VA／readiness／dirty 補救文字；兩個 base 紅 suite 登 fired row 不 reseal | v2.36.55 | 6d83e121 |

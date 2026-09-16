@@ -1,0 +1,10 @@
+review-runner rc=0 PASS [review-runner] 34 assertions
+dispatch-review rc=0 PASS [dispatch-review] 409 assertions
+autopilot-engine rc=0 PASS [autopilot-engine] 493 assertions
+implementation-campaign-routing rc=0 PASS [implementation-campaign-routing] 83 assertions
+implementation-campaign-receipt rc=0 PASS [implementation-campaign-receipt] 11 assertions
+qc-panel-honesty rc=0 PASS [qc-panel-honesty] 1 assertions
+status-task rc=0 PASS [status-task] 5 assertions
+implementation-campaign-state rc=0 PASS [implementation-campaign-state] 295 assertions
+canonical rc=0
+done

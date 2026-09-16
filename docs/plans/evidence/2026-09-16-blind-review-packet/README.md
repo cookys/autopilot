@@ -42,7 +42,8 @@
   marker-absent, (g2), (h2d) poisoned `GIT_COMMON_DIR` + `GIT_CONFIG_*`, (h4b), (k) — 6 RED at `e566ea0c`, 54 green;
   `repair-suites.txt` six green). r2 delta (`review-codex-r2.json`): one 🟠 (symlink target decoded as UTF-8) →
   `ab22980d` (raw Buffer target). r3 delta: SHIP-AS-IS.
-- Dogfood (plan §5): packet of this repo's HEAD built in 21 s (4236 tracked files, one `hash-object` spawn each —
+- Dogfood (plan §5, re-run at the shipped code `ab22980d` over `da1e373b..ab22980d`): packet built in 21 s (3376 entries after
+  pruning, 865 denied paths, 4236 tracked files with one `hash-object` spawn each —
   batching row filed); `denied_paths` lists `.qc/*.verdict.json`, `docs/plans/evidence/**`, `*.review.md`,
   `*disposition*.json`; `tree/.agents/skills` is a symlink.
 - Merge `ad852de2` (QC trailer: codex r3 + MiniMax in-rail); `integration-record.json`.

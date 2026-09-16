@@ -173,8 +173,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: operator wants a pinned codex qc seat to survive managed blind discovery without replacing the seat
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-16 (cuda P1 consult, A2)
-- **Pointer**: docs/plans/2026-09-16-final-panel-blind-admission.md
-- **Context**: bwrap scratch-only inputs + runtime/TLS/DNS + sanitized ~/.codex; prove no repo/home/tmp/proc reach, no shell/git/curl/MCP re-acq; nested-sandbox/timeout/exit/raw_log parity; fail-before-spend; record versions.
+- **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/bwrap-probe.md
+- **Context**: absorbed by redesign cut 1b (plan 2026-09-16-blind-review-packet §7). Probe 2026-09-16: codex with tools ran inside bwrap on a planted packet; left: timeout/exit/raw_log parity via dispatch-review.sh, other CLIs.
 
 ### Managed rail: a failed campaign_verification still dispatches review, then review_completed hits VERTICAL_VERIFICATION
 - **Status**: shipped v2.36.56 2026-09-16

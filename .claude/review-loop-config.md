@@ -68,6 +68,9 @@
 - qc_panel_runners: claude-native, cc-shim, cc-shim
 - qc_panel_efforts: high, high, high
 - qc_panel_endpoints: @none, glm, minimax
+<!-- review_packet_deny_extra: comma-separated extra packet deny patterns (additive
+     floor = DEFAULT_PACKET_DENY_LIST). Empty = []. Grammar: normalizeDenyList. -->
+- review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical
 - provider_readiness_receipt_ttl_seconds: 300
 - provider_readiness_fallback_family_constraint: different

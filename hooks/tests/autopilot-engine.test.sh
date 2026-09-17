@@ -229,6 +229,120 @@ assert_contains "$OUT" "malformed_reason=packet must be { repo, baseSha, candida
 assert_contains "$OUT" "malformed_calls=0" "malformed input.packet never calls dispatcher"
 assert_contains "$OUT" "nonblind_wellformed_has_packet=false" "well-formed input.packet is ignored when blindDiscovery is false (green at base: input.packet ignored)"
 
+# RED at base 10c50297: packet deny extra is not a prepare_review gate (denyExtra absent from identity)
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+function resolver() {
+  return {
+    error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+    result: {
+      reviewer_engine: 'test-review-model',
+      reviewer_effort: 'test-review-effort',
+      reviewer_runner: 'test-review-runner',
+      reviewer_qualified: true,
+    },
+  };
+}
+
+function stubDispatcher() {
+  return {
+    error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+    result: {
+      runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+      verdict: 'FIX-THEN-SHIP', findings: 'stub finding', raw_log: '/tmp/log', error: null,
+    },
+  };
+}
+
+const well = { repo: '/repo', baseSha: 'b'.repeat(40), candidateSha: 'c'.repeat(40) };
+for (const [label, denyExtra] of [
+  ['null', null],
+  ['empty-string', ''],
+  ['zero', 0],
+  ['false', false],
+  ['object', {}],
+]) {
+  let calls = 0;
+  const engine = new AutopilotEngine({
+    clock: () => 1782864000000,
+    reviewLoopResolver: resolver,
+    reviewDispatcher() { calls += 1; return stubDispatcher(); },
+  });
+  const out = engine.reviewDiff({
+    diffFile: diff,
+    requireQualifiedReviewer: true,
+    packet: { ...well, denyExtra },
+    reviewOptions: { blindDiscovery: true },
+  });
+  console.log(`${label}_status=${out.status}`);
+  console.log(`${label}_phase=${out.phase}`);
+  console.log(`${label}_reason=${out.reason}`);
+  console.log(`${label}_calls=${calls}`);
+}
+
+let invalidCalls = 0;
+const engineInvalid = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher() { invalidCalls += 1; return stubDispatcher(); },
+});
+const invalid = engineInvalid.reviewDiff({
+  diffFile: diff,
+  requireQualifiedReviewer: true,
+  packet: { ...well, denyExtra: ['/abs/**'] },
+  reviewOptions: { blindDiscovery: true },
+});
+console.log(`invalid_status=${invalid.status}`);
+console.log(`invalid_phase=${invalid.phase}`);
+console.log(`invalid_reason=${invalid.reason}`);
+console.log(`invalid_calls=${invalidCalls}`);
+
+let seen;
+const engineOk = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args, options) { seen = options; return stubDispatcher(); },
+});
+engineOk.reviewDiff({
+  diffFile: diff,
+  requireQualifiedReviewer: true,
+  packet: { ...well, denyExtra: ['secret/**'] },
+  reviewOptions: { blindDiscovery: true },
+});
+console.log(`ok_denyExtra=${JSON.stringify(seen && seen.packet && seen.packet.denyExtra)}`);
+
+const engineAbsent = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args, options) { seen = options; return stubDispatcher(); },
+});
+engineAbsent.reviewDiff({
+  diffFile: diff,
+  requireQualifiedReviewer: true,
+  packet: well,
+  reviewOptions: { blindDiscovery: true },
+});
+console.log(`absent_denyExtra=${JSON.stringify(seen && seen.packet && seen.packet.denyExtra)}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine denyExtra prepare_review tests exit 0"
+for label in null empty-string zero false object; do
+  assert_contains "$OUT" "${label}_status=blocked" "malformed denyExtra ($label) blocks"
+  assert_contains "$OUT" "${label}_phase=prepare_review" "malformed denyExtra ($label) prepare_review"
+  assert_contains "$OUT" "${label}_reason=packet deny extra malformed" "malformed denyExtra ($label) reason (RED at base 10c50297: denyExtra ignored)"
+  assert_contains "$OUT" "${label}_calls=0" "malformed denyExtra ($label) never dispatches"
+done
+assert_contains "$OUT" "invalid_status=blocked" "invalid denyExtra pattern blocks"
+assert_contains "$OUT" "invalid_phase=prepare_review" "invalid denyExtra pattern prepare_review"
+assert_contains "$OUT" "invalid_reason=packet deny extra invalid pattern: /abs/**" "invalid denyExtra pattern reason (RED at base 10c50297: pattern not gated)"
+assert_contains "$OUT" "invalid_calls=0" "invalid denyExtra pattern never dispatches"
+assert_contains "$OUT" 'ok_denyExtra=["secret/**"]' "well-formed denyExtra reaches dispatcher packet"
+assert_contains "$OUT" "absent_denyExtra=[]" "undefined denyExtra becomes []"
+
 
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
@@ -3889,6 +4003,7 @@ const validPayload = {
   cross_family_required: false,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'override',
   work_domain: 'mixed',
   domain_source: 'none',
@@ -4298,6 +4413,7 @@ const expectedPacket = {
   repo: path.resolve(process.cwd()),
   baseSha: loopArgs.base,
   candidateSha: '1234567890123456789012345678901234567890',
+  denyExtra: [],
 };
 console.log(`default_has_spec=${reviewArgsDefault.includes('--spec-file')}`);
 console.log(`default_spec_value=${reviewArgsDefault[reviewArgsDefault.indexOf('--spec-file') + 1] === path.resolve('/tmp/some-prompt.md')}`);
@@ -4319,6 +4435,85 @@ assert_contains "$OUT" "default_blind=true" "terminal-site review is blindDiscov
 assert_contains "$OUT" "no_spec_blind=true" "noReviewSpec terminal-site review is blindDiscovery"
 assert_contains "$OUT" "default_packet=$DEFAULT_PKT" "terminal-site options.packet is engine-derived (RED at base bee8da3d: packet undefined; bogus tuple forwarded)"
 assert_contains "$OUT" "no_spec_packet=$DEFAULT_PKT" "noReviewSpec terminal-site options.packet is engine-derived (RED at base bee8da3d: packet undefined)"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const src = fs.readFileSync(path.join(root, 'src', 'engine', 'autopilot-engine.js'), 'utf8');
+const perform = src.includes('denyExtra: reviewRoster.review_packet_deny_extra');
+const terminal = src.includes('denyExtra: roster.review_packet_deny_extra');
+console.log(`perform_site=${perform}`);
+console.log(`terminal_site=${terminal}`);
+console.log(`verbatim=${perform && terminal && !src.includes('denyExtra: roster.review_packet_deny_extra ||') && !src.includes('denyExtra: reviewRoster.review_packet_deny_extra ||')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "denyExtra call-site grep exits 0"
+assert_contains "$OUT" "perform_site=true" "performReview packet passes roster.review_packet_deny_extra verbatim (RED at base 10c50297: field not threaded)"
+assert_contains "$OUT" "terminal_site=true" "terminal packet passes roster.review_packet_deny_extra verbatim"
+assert_contains "$OUT" "verbatim=true" "neither call site coalesces denyExtra with || []"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+let reviewOptionsDefault = null;
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        status: 'committed', runner: 'test-impl-runner', model: 'test-impl-model',
+        branch: 'branch', base: 'base',
+        commit: '1234567890123456789012345678901234567890',
+        files_changed: 1, insertions: 1, deletions: 0, worktree: null,
+        agent_log: '/tmp/impl-log', error: null,
+      },
+    };
+  },
+  reviewDispatcher(args, options) {
+    reviewOptionsDefault = options;
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+        verdict: 'SHIP-AS-IS', findings: 'none', raw_log: '/tmp/log', error: null,
+      },
+    };
+  },
+  diffProvider({ round }) {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-deny-extra-term-'));
+    const file = path.join(tmpDir, `round-${round}.diff`);
+    fs.writeFileSync(file, `round ${round}`, 'utf8');
+    return file;
+  },
+});
+engine.runLegacyImplementationReviewLoop({
+  promptFile: path.resolve('/tmp/some-prompt.md'),
+  branch: 'repair-loop',
+  base: '1111111111111111111111111111111111111111',
+  maxRounds: 1,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 1,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    review_packet_deny_extra: ['secret/**'],
+  },
+  reviewOptions: { packet: { repo: '/bogus', baseSha: 'bogus', candidateSha: 'bogus' } },
+});
+console.log(`term_denyExtra=${JSON.stringify(reviewOptionsDefault && reviewOptionsDefault.packet && reviewOptionsDefault.packet.denyExtra)}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "terminal-site denyExtra roster threading exits 0"
+assert_contains "$OUT" 'term_denyExtra=["secret/**"]' "terminal-site options.packet.denyExtra is the roster field (RED at base 10c50297: denyExtra [])"
 
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
 const fs = require('fs');

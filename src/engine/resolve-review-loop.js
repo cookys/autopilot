@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { bufferToString, findJsonObjectCandidates } = require('../lib/common');
+const { normalizeDenyList } = require('../runners/review-packet');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const RESOLVE_REVIEW_LOOP = path.join(REPO_ROOT, 'scripts', 'resolve-review-loop.sh');
@@ -153,6 +154,14 @@ function validateReviewLoopConfig(value) {
   assertOneOf(value, 'qc_panel_aggregation', schemaEnum('qc_panel_aggregation'));
   assertOneOf(value, 'review_risk', schemaEnum('review_risk'));
   assertOneOf(value, 'review_diff_scope', schemaEnum('review_diff_scope'));
+  assertField(value, 'review_packet_deny_extra', Array.isArray, 'an array');
+  for (const [index, element] of value.review_packet_deny_extra.entries()) {
+    try {
+      normalizeDenyList([element]);
+    } catch (_err) {
+      throw new Error(`review_packet_deny_extra[${index}] invalid pattern: ${element}`);
+    }
+  }
   assertOneOf(value, 'work_domain', schemaEnum('work_domain'));
   assertOneOf(value, 'domain_source', schemaEnum('domain_source'));
   assertField(value, 'loop_max_rounds', (v) => Number.isInteger(v), 'an integer');

@@ -219,7 +219,7 @@ function dispatchReview(args, options = {}) {
       fs.chmodSync(blindCwd, 0o700);
       launchArgs = [...args];
       if (options.packet && typeof options.packet === 'object') {
-        const { buildReviewPacket } = require('./review-packet');
+        const { buildReviewPacket, DEFAULT_PACKET_DENY_LIST } = require('./review-packet');
         const diffIndex = launchArgs.indexOf('--diff-file');
         const specIndex = launchArgs.indexOf('--spec-file');
         const diffFile = diffIndex >= 0 && typeof launchArgs[diffIndex + 1] === 'string'
@@ -229,6 +229,7 @@ function dispatchReview(args, options = {}) {
           ? launchArgs[specIndex + 1]
           : undefined;
         const packetDir = path.join(blindCwd, 'packet');
+        const denyExtra = options.packet.denyExtra === undefined ? [] : options.packet.denyExtra;
         autopilotPacket = buildReviewPacket({
           repo: options.packet.repo,
           baseSha: options.packet.baseSha,
@@ -236,6 +237,7 @@ function dispatchReview(args, options = {}) {
           diffFile,
           specFile: specFile === undefined ? null : specFile,
           outDir: packetDir,
+          denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra],
         });
         if (diffIndex >= 0) {
           launchArgs[diffIndex + 1] = path.join(packetDir, 'diff.patch');

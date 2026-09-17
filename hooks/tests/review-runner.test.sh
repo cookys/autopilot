@@ -557,4 +557,104 @@ assert_contains "$VECTOR_OUT" "salvage_ok=true" "salvaged.raw_log equals envelop
 assert_contains "$VECTOR_OUT" "salvage_malformed=true" "malformed JSON salvages nothing"
 assert_contains "$VECTOR_OUT" "salvage_empty_nonstring=true" "empty/non-string raw_log salvages nothing"
 
+# Packet deny extras through the REAL builder (review.js spread is the only floor).
+# RED at base 10c50297: dispatchReview does not pass denyList.
+PKT_REPO="$TEST_TMP/pkt-repo"
+git init --object-format=sha1 -q "$PKT_REPO"
+git -C "$PKT_REPO" config user.email t@t.example
+git -C "$PKT_REPO" config user.name t
+printf 'keep\n' > "$PKT_REPO/keep.txt"
+mkdir -p "$PKT_REPO/secret"
+printf 'leak\n' > "$PKT_REPO/secret/leak.txt"
+git -C "$PKT_REPO" add keep.txt secret/leak.txt
+git -C "$PKT_REPO" commit -q -m b
+printf 'keep2\n' > "$PKT_REPO/keep.txt"
+git -C "$PKT_REPO" add keep.txt
+git -C "$PKT_REPO" commit -q -m c
+PKT_BASE="$(git -C "$PKT_REPO" rev-parse HEAD^)"
+PKT_CAND="$(git -C "$PKT_REPO" rev-parse HEAD)"
+PKT_DIFF="$TEST_TMP/pkt.diff"
+git -C "$PKT_REPO" diff --no-ext-diff --no-textconv "$PKT_BASE..$PKT_CAND" > "$PKT_DIFF"
+PKT_SPEC="$TEST_TMP/pkt.spec.md"
+printf 'spec\n' > "$PKT_SPEC"
+PKT_STUB="$TEST_TMP/pkt-dispatch.sh"
+cat > "$PKT_STUB" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+dest="\${AUTOPILOT_PACKET_KEEP:?}"
+cp "\$AUTOPILOT_REVIEW_PACKET_DIR/MANIFEST.json" "\$dest"
+printf 'ok\n'
+EOF
+chmod +x "$PKT_STUB"
+
+PKT_OUT="$(node - "$REPO_ROOT" "$PKT_REPO" "$PKT_BASE" "$PKT_CAND" "$PKT_DIFF" "$PKT_SPEC" "$PKT_STUB" "$TEST_TMP" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const root = process.argv[2];
+const repo = process.argv[3];
+const base = process.argv[4];
+const cand = process.argv[5];
+const diff = process.argv[6];
+const spec = process.argv[7];
+const stub = process.argv[8];
+const tmp = process.argv[9];
+const { dispatchReviewJson } = require(path.join(root, 'src', 'runners', 'review'));
+const { DEFAULT_PACKET_DENY_LIST } = require(path.join(root, 'src', 'runners', 'review-packet'));
+
+function run(keep, extra) {
+  const env = { ...process.env, AUTOPILOT_PACKET_KEEP: keep };
+  return dispatchReviewJson([
+    '--runner', 'codex',
+    '--model', 'gpt-5.5',
+    '--diff-file', diff,
+    '--spec-file', spec,
+    '--bin', stub,
+  ], {
+    scriptPath: stub,
+    blindDiscovery: true,
+    packet: { repo, baseSha: base, candidateSha: cand, denyExtra: extra },
+    env,
+  });
+}
+
+const extraKeep = path.join(tmp, 'manifest-extra.json');
+const defaultKeep = path.join(tmp, 'manifest-default.json');
+const extraRun = run(extraKeep, ['secret/**']);
+const defaultRun = run(defaultKeep, []);
+const extraManifest = JSON.parse(fs.readFileSync(extraKeep, 'utf8'));
+const defaultManifest = JSON.parse(fs.readFileSync(defaultKeep, 'utf8'));
+const deny = extraManifest.deny_list;
+const missingDefaults = DEFAULT_PACKET_DENY_LIST.filter((p) => !deny.includes(p));
+console.log(`missing_defaults=${missingDefaults.length}`);
+console.log(`has_extra=${deny.includes('secret/**')}`);
+const extraPaths = (extraManifest.entries || []).map((e) => e.path);
+const defaultPaths = (defaultManifest.entries || []).map((e) => e.path);
+const extraHas = extraPaths.some((p) => p === 'secret/leak.txt' || p.endsWith('/secret/leak.txt'));
+const defaultHas = defaultPaths.some((p) => p === 'secret/leak.txt' || p.endsWith('/secret/leak.txt'));
+console.log(`denied_secret=${!extraHas && defaultHas}`);
+console.log(`hash_differs=${extraManifest.packet_hash !== defaultManifest.packet_hash}`);
+console.log(`extra_hash=${extraRun.packet && extraRun.packet.packet_hash === extraManifest.packet_hash}`);
+
+const callers = spawnSync('rg', [
+  '-n',
+  'buildReviewPacket\\(',
+  '--glob', '*.js',
+  path.join(root, 'src'),
+], { encoding: 'utf8' });
+const lines = (callers.stdout || '').split('\n').filter(Boolean);
+const unexpected = lines.filter((line) => !line.includes(`${path.sep}runners${path.sep}review.js:`)
+  && !line.includes(`${path.sep}runners${path.sep}review-packet.js:`));
+console.log(`builder_callers=${lines.length}`);
+console.log(`unexpected_callers=${unexpected.length}`);
+if (unexpected.length) console.log(unexpected.join('\n'));
+NODE
+)"
+assert_eq "0" "$?" "review-runner real-builder packet extras exit 0: $PKT_OUT"
+assert_contains "$PKT_OUT" "missing_defaults=0" "MANIFEST deny_list contains all 8 defaults (RED at base 10c50297: denyList not passed)"
+assert_contains "$PKT_OUT" "has_extra=true" "MANIFEST deny_list contains extras"
+assert_contains "$PKT_OUT" "denied_secret=true" "extra pattern denies planted secret/leak.txt"
+assert_contains "$PKT_OUT" "hash_differs=true" "packet_hash differs from default-list build"
+assert_contains "$PKT_OUT" "unexpected_callers=0" "buildReviewPacket( is called only from review.js (definition in review-packet.js)"
+
 finalize_test

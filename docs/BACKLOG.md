@@ -118,7 +118,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
-- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B v2.36.63. Open: deny-list config, cut 2. Detail in the pointer.
+- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B v2.36.63, 1c v2.36.64. Open: cut 2. Detail in the pointer.
 
 ### Managed rail: final-panel seats run dispatch-review.sh at the 5m default timeout and time out on ordinary diffs
 - **Status**: shipped v2.36.60 2026-09-17

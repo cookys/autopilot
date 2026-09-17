@@ -1,0 +1,43 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-packet-deny-config-2026-09-17",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "36b6692b3cb2ef1e0967b941a908a29285ff22c0ab303ba53d233c79c50dbfe3",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the \"builder re-adds defaults\" sentence was wrong — the builder only normalizes and stays byte-identical. §1.3 now states the floor has one enforcement site (the review.js spread), the review-runner case reads the built MANIFEST deny_list and asserts all eight defaults, and scope-integrity greps that buildReviewPacket( is called from review.js only; §6 reworded."
+  },
+  {
+   "fingerprint": "d59cdac2903b661c9a050d4e874241add4e559fbe6f2a7d99197d715b940802f",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the character allowlist was a second grammar and is removed. The shell checks exactly the six otherGlobSyntax rules (review-packet.js:95-104) — spaces, +, @, ~, non-ASCII are ACCEPTED by both sides — and JSON-escapes \\ and \" on emission; the oracle table gains accepted probes (space/+/@/~/non-ASCII) and refused/escaped probes (\", \\, a//b, trailing /), comparing emitted element as well as accept/reject."
+  },
+  {
+   "fingerprint": "b38b38b205df51d95c52cf75350e5fb7a2a16092e00074b69bf690f2efaef2e2",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: platforms/codex/plugin/project-config-template/review-loop-config.md exists at base and is now the 20th sealed path (seven pairs); max_changed_files 21."
+  },
+  {
+   "fingerprint": "11dbc5db2d4c6a8f3de51cd027c5a8f59e9d2e5d1548f9339ee972c82616df2b",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: call sites pass the roster value verbatim; reviewPacketIdentity treats only undefined as absent ⇒ []; null/\"\"/0/false/object/non-string element → prepare_review block \"packet deny extra malformed\"."
+  },
+  {
+   "fingerprint": "87ce1218a33296b08355eb5375789749e75d6b5e5ab6957deb83ad4e4560f4a5",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: no stub — review.js requires the builder inline (:222) so the review-runner cases use the REAL builder on a temp git fixture and read MANIFEST.json; the JS resolver validates normalizeDenyList([element]) per element for the index; both resolvers emit the list as given (no sort/dedupe; normalization is the builder's), test wording changed to \"echoed as given\"."
+  },
+  {
+   "fingerprint": "f0186d42ff2087df41e4d66442a1bc73f8f2af494c69f0e45ccef52410aa0dcd",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the full 229-byte Context string is written out with Status open, and v2.36.64 is stated as a release-commit pin that depth-0 re-stamps if the number differs (1b-A/1b-B convention); CHANGELOG/version manifests are not sealed."
+  }
+ ]
+}

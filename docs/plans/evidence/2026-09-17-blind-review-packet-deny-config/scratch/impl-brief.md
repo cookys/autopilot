@@ -21,26 +21,31 @@ byte-identity: `<BASE>`.
 ## Product (plan §1 normative)
 1. Schema: `review_packet_deny_extra` — `type: array`, `items: { type: string, pattern: <grammar> }`,
    `default: []`; add to `x-field-order`, `properties` AND `required` (three-way rule). Mirror.
-2. Shell resolver: `read_field … review_packet_deny_extra ""` → split on commas/whitespace → validate
-   each element with a regex equal to `normalizeDenyList`'s grammar (relative, `/`-joined segments,
-   `**` only as a whole segment, `*` only within a segment, no leading `/`, no `.`/`..` segments, no
-   `?[]{}`); invalid → fail closed `review_packet_deny_extra[i] invalid pattern: <p>`; emit a JSON array
-   (empty ⇒ `[]`) in BOTH printf templates. Mirror.
-3. JS resolver: field derives from the schema; validator calls `normalizeDenyList` (require from
-   `../runners/review-packet`) and rejects naming the element; emits the array. Mirror.
-4. Engine: `reviewPacketIdentity` accepts optional `denyExtra` (array of strings; anything else →
-   `prepare_review` block "packet deny extra malformed"); both call sites pass
-   `denyExtra: roster.review_packet_deny_extra || []`. Mirror.
-5. `review.js` `dispatchReview`: `denyList = normalizeDenyList([...DEFAULT_PACKET_DENY_LIST, ...denyExtra])`
-   passed to `buildReviewPacket` (defaults are a FLOOR — never removable). Mirror.
+2. Shell resolver: `read_field … review_packet_deny_extra ""` → split on COMMAS ONLY (trim spaces) →
+   check each element with exactly the six `otherGlobSyntax` rules (review-packet.js:95-104: leading `/`
+   or absolute, empty, `.`/`..` segment, empty segment (`a//b`, trailing `/`), any `?[]{}` in a segment,
+   `**` inside a segment that is not exactly `**`) — NO character allowlist (spaces, +, @, ~, non-ASCII
+   are legal); invalid → fail closed `review_packet_deny_extra[i] invalid pattern: <p>`; emit a JSON
+   array AS GIVEN (no sort/dedupe; JSON-escape `\` and `"`) in BOTH printf templates; empty ⇒ `[]`. Mirror.
+3. JS resolver: field derives from the schema; validator calls `normalizeDenyList([element])` PER ELEMENT
+   (require from `../runners/review-packet`) and rejects `review_packet_deny_extra[i] invalid pattern: <p>`;
+   emits the array as given. Mirror.
+4. Engine: `reviewPacketIdentity`: `undefined` ⇒ `[]`; anything that is not an array of strings
+   (null/""/0/false/object) → `prepare_review` block "packet deny extra malformed"; any element
+   `normalizeDenyList` throws on → `prepare_review` block "packet deny extra invalid pattern: <p>";
+   both call sites pass `denyExtra: roster.review_packet_deny_extra` VERBATIM (no `|| []`). Mirror.
+5. `review.js` `dispatchReview`: `denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra]` passed to
+   `buildReviewPacket` (the builder normalizes; it does NOT add defaults — this spread is the ONLY floor;
+   do not edit review-packet.js). Mirror.
 6. `sync-codex-plugin-skills.sh` then `--check`.
 
 ## Tests (§2 normative; RED blocks `# RED at base <BASE>: <observed message>`)
-resolve-review-loop: absent ⇒ `[]`; valid list echoed sorted/deduped; invalid element fails closed
-with the message; shell-vs-JS grammar parity over the review-packet (g) table (both accept/reject the
-same strings). review-runner: stub `buildReviewPacket` receives the composed list with all 8 defaults
-present; through the REAL builder an extra pattern denies a planted path and `packet_hash` differs from
-the default build. autopilot-engine: malformed `denyExtra` → `prepare_review` block; roster field reaches
+resolve-review-loop: absent ⇒ `[]`; valid list echoed AS GIVEN; invalid element fails closed with the
+message; ORACLE parity: for every string in an inline table ((g) strings + accepted probes: space, +, @,
+~, non-ASCII; refused/escaped probes: `"`, `\`, `a//b`, trailing `/`) shell accept/reject AND emitted
+element == `normalizeDenyList`'s, both directions. review-runner (REAL builder on a temp git fixture, no
+stub): built MANIFEST.json `deny_list` ⊇ all 8 defaults + extras, an extra pattern denies a planted path,
+`packet_hash` differs from the default-list build; assert `buildReviewPacket(` is called only from review.js. autopilot-engine: malformed `denyExtra` → `prepare_review` block; roster field reaches
 both call sites (incl. the terminal site). contract-parity + check-contract-schema green with the field.
 `review-packet.test.sh:669` length pin untouched. Run each suite at base BEFORE edits; never weaken.
 
@@ -52,7 +57,7 @@ both call sites (incl. the terminal site). contract-parity + check-contract-sche
 - `docs/BACKLOG.md` "Blind review redesign" row (heading ~:115) Context EXACTLY: `packet (tree + git diff
   + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A
   v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B v2.36.63, 1c v2.36.64. Open: cut 2. Detail in the
-  pointer.` (Status stays `open`). Do NOT touch pins, CHANGELOG.md, version manifests.
+  pointer.` (229 bytes; Status stays `open`). Do NOT touch pins, CHANGELOG.md, version manifests.
 
 ## Verify (§4.1; one at a time, foreground, all exit 0)
 ```
@@ -87,6 +92,7 @@ references/blind-dispatch.md
 platforms/codex/plugin/references/blind-dispatch.md
 .claude/review-loop-config.md
 project-config-template/review-loop-config.md
+platforms/codex/plugin/project-config-template/review-loop-config.md
 docs/BACKLOG.md
 ```
 Finish with a clean tree; report RED-at-base messages and suite counts.

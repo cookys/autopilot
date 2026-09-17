@@ -51,26 +51,38 @@
    (always-on contract field, array of patterns, default empty; omitted ⇒ `[]`, so every existing
    config resolves unchanged). Grammar is exactly
    `normalizeDenyList`'s: relative, `/`-joined, `**` whole-segment, `*` within a segment, nothing
-   else. Character allowlist per element: `[A-Za-z0-9._*/-]` only (no whitespace, no quotes, no
-   backslash — this is what makes the shell's JSON emission safe). Config value: comma-separated
-   list; the shell splits on commas only and trims surrounding spaces, so an element with internal
-   whitespace is refused by the allowlist, never split in two. The shell resolver validates each
-   element with a regex and fails closed with `review_packet_deny_extra[i] invalid pattern: <p>`;
+   else — precisely `otherGlobSyntax` (`review-packet.js:95-104`): refused are a leading `/` or an
+   absolute path, the empty string, a `.` or `..` segment, an empty segment (`a//b`, trailing `/`),
+   any `?`, `[`, `]`, `{`, `}` in a segment, and `**` inside a segment that is not exactly `**`;
+   everything else (spaces, `+`, `@`, `~`, non-ASCII) is a legal path byte and is ACCEPTED. There is
+   no character allowlist. Config value: comma-separated list (a comma cannot appear in an element);
+   the shell splits on commas only and trims surrounding spaces. The shell resolver checks each
+   element with the same six rules (a projection of that predicate, not a second grammar) and fails
+   closed with `review_packet_deny_extra[i] invalid pattern: <p>`; on emission it JSON-escapes `\`
+   and `"` per element, so safety comes from escaping, not from narrowing the language;
    the JS resolver and the engine validate by calling `normalizeDenyList` and fail with the same
    message class (`review_packet_deny_extra[i] invalid pattern: <p>` / `packet deny extra invalid
    pattern: <p>`). ONE grammar owner — the builder's `normalizeDenyList`; the schema declares the
    field's type only (array of non-empty strings), never a second `pattern`; the shell regex is not
    a second definition but a projection proven equal by an ORACLE parity case in
    `resolve-review-loop.test.sh`: for every string in an inline table (the (g) table's strings plus
-   whitespace/quote/backslash probes) the shell's accept/reject equals `normalizeDenyList`'s
-   accept/throw for that string, both directions, so a drift in either side fails the suite, not
+   probes for a space, `+`, `@`, `~`, a non-ASCII segment — all ACCEPTED by both — and `"`, `\`,
+   `a//b`, trailing `/` — refused or escaped as the predicate says) the shell's accept/reject and
+   emitted element equal `normalizeDenyList`'s accept/throw and element, both directions, so a
+   drift in either side fails the suite, not
    a runtime dispatch.
 3. **Plumbing, no new shape.** The resolver emits `review_packet_deny_extra` (array, possibly
    empty) in its JSON; `reviewPacketIdentity` accepts an optional `denyExtra` (array of strings,
    else `prepare_review` block "packet deny extra malformed"); both engine packet call sites pass
-   `denyExtra: roster.review_packet_deny_extra || []`; `dispatchReview` forwards
-   `denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra]` to `buildReviewPacket` (which normalizes;
-   defaults are re-added there even if a caller passed a bare extra list). `reviewPacketIdentity`
+   `denyExtra: roster.review_packet_deny_extra` verbatim (no coercion — `reviewPacketIdentity`
+   treats only `undefined` as "absent ⇒ `[]`"; `null`, `''`, `0`, `false`, an object or a non-string
+   element are all `prepare_review` block `packet deny extra malformed`); `dispatchReview` forwards
+   `denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra]` to `buildReviewPacket`. The builder only
+   normalizes what it is given (§0) — it does NOT add defaults, and it stays byte-identical — so the
+   floor has exactly one enforcement site, the spread in `review.js`, and the review-runner case
+   pins it by reading the built `MANIFEST.json` `deny_list` and asserting all eight defaults are
+   present alongside the extras (there is no other composition site in the repo; scope-integrity
+   greps that `buildReviewPacket(` is called from `review.js` only). `reviewPacketIdentity`
    is the prepare-time gate: not an array of strings → `prepare_review` block `packet deny extra
    malformed`; any element `normalizeDenyList` throws on → `prepare_review` block `packet deny
    extra invalid pattern: <p>` (the resolver already refused it, but a hand-built roster can carry
@@ -91,10 +103,13 @@
   { type: string, minLength: 1 }` (type only, no `pattern`), `default: []`; added to `x-field-order`, `properties` and
   `required` (three-way rule); not `x-shell-validated` (no enum).
 - `scripts/resolve-review-loop.sh`: `read_field … review_packet_deny_extra ""`, split on commas only
-  (trim surrounding spaces), per-element allowlist+grammar regex fail-closed (`review_packet_deny_extra[i] invalid pattern: <p>`),
-  emitted as a JSON array in BOTH printf templates (`:2654`, `:2665` neighbourhood) — empty ⇒ `[]`.
+  (trim surrounding spaces), per-element check of the six `otherGlobSyntax` rules, fail-closed
+  (`review_packet_deny_extra[i] invalid pattern: <p>`), emitted as a JSON array AS GIVEN with `\` and
+  `"` escaped, in BOTH printf templates (`:2654`, `:2665` neighbourhood) — empty ⇒ `[]`.
 - `src/engine/resolve-review-loop.js`: field derives from the schema; validator calls
-  `normalizeDenyList` (import from `src/runners/review-packet.js`) and rejects with the element named.
+  `normalizeDenyList([element])` per element (import from `src/runners/review-packet.js`) so the index
+  is known, and rejects `review_packet_deny_extra[i] invalid pattern: <p>`; emits the array as given
+  (no sort/dedupe — normalization is the builder's; the shell likewise emits as given).
 - `src/engine/autopilot-engine.js`: `reviewPacketIdentity` optional `denyExtra`; both call sites.
 - `src/runners/review.js`: compose the effective list; pass `denyList`.
 - `src/runners/review-packet.js`: NONE — byte-identical (its `normalizeDenyList` export is the
@@ -102,19 +117,26 @@
   (`platforms/codex/plugin/src/runners/review-packet.js` exists at base), so the mirrored
   `resolve-review-loop.js` import `../runners/review-packet` resolves inside the mirror too.
 - Tests (RED-first, `# RED at base 6a414c3c: <observed>`): `resolve-review-loop.test.sh` (field
-  absent ⇒ `[]`; valid list echoed sorted/deduped; invalid element fails closed with the message;
-  shell/JS grammar parity over the (g) table), `review-runner.test.sh` (NEW packet cases: a stub
-  `buildReviewPacket` sees the composed list; defaults always present; through the real builder an
-  extra pattern denies a planted path and changes `packet_hash`), `autopilot-engine.test.sh` (next to
+  absent ⇒ `[]`; valid list echoed as given; invalid element fails closed with the message;
+  shell/JS grammar parity over the (g) table), `review-runner.test.sh` (NEW packet cases through the REAL
+  builder on a temp git fixture — `review.js` requires the builder inline (`:222`), there is no
+  injection seam and none is added: the built `MANIFEST.json` `deny_list` contains all eight defaults
+  plus the extras (order-insensitive), an extra pattern denies a planted path, and `packet_hash`
+  differs from the default-list build of the same fixture), `autopilot-engine.test.sh` (next to
   the existing packet cases `:74-230`: malformed `denyExtra` → `prepare_review` block; roster field
   threaded to both call sites, incl. the terminal site `:4290-4321`), `contract-parity.test.sh` /
   `check-contract-schema.js` green with the new field, `review-packet.test.sh:669` length pin untouched.
 - Docs: `references/blind-dispatch.md` "Deny-list" paragraph (`:337-347`) gains "Widening it
   (`review_packet_deny_extra`)"; `.claude/review-loop-config.md` field doc + template
   `project-config-template/review-loop-config.md`; `docs/BACKLOG.md` redesign row Context →
-  `… 1b-B v2.36.63, 1c deny-list v2.36.64. Open: cut 2. …` (≤240 B, Status `open`).
+  EXACTLY `packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary;
+  verify-once; parallel seats. Shipped: 1a-A v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B v2.36.63, 1c
+  v2.36.64. Open: cut 2. Detail in the pointer.` (229 bytes, Status `open`). `v2.36.64` in text is a
+  pin for the release commit (CHANGELOG + version manifests are depth-0's, not sealed); if the
+  release lands under another number depth-0 re-stamps doc, mirror and row in the release commit,
+  the convention 1b-A/1b-B used.
 
-### 2.5 Sealed `output_paths` (draft; re-check mirrors at base)
+### 2.5 Sealed `output_paths` (exact)
 
 ```
 schemas/review-loop-contract.schema.json
@@ -134,8 +156,13 @@ references/blind-dispatch.md
 platforms/codex/plugin/references/blind-dispatch.md
 .claude/review-loop-config.md
 project-config-template/review-loop-config.md
+platforms/codex/plugin/project-config-template/review-loop-config.md
 docs/BACKLOG.md
 ```
+
+Twenty paths, seven mirror pairs (schema, shell resolver, JS resolver, engine, review.js,
+blind-dispatch.md, config template — verified present at base). `max_changed_files` sealed at 21 (> 20;
+the `>=` repair-cap rail defect).
 
 ### 2.6 Global constraints
 
@@ -169,7 +196,7 @@ Base record: `evidence/…-deny-config/base-suites-6a414c3c.txt` — all nine ex
 checkout, sequential (2026-09-17). Mirror gate: `sync-codex-plugin-skills.sh --check` diffs every
 mirror root (`--mirror-roots-json`: `bin src profiles schemas … references scripts
 project-config-template skills/*`), so all seven mirror pairs in §2.5 are byte-equality-checked by
-that one command.
+that one command (the template mirror included).
 ```
 bash hooks/tests/resolve-review-loop.test.sh
 bash hooks/tests/review-runner.test.sh
@@ -190,7 +217,9 @@ the default-list build of the same range; then the same run with an invalid patt
 before any seat is spent.
 
 ## 6. Risks + inversion
-- **Silent narrowing** — impossible by construction (§1.1); the engine suite asserts defaults present.
+- **Silent narrowing** — one composition site (`review.js`) that starts from the constant; the
+  review-runner case reads the built manifest and asserts every default; scope-integrity greps
+  for other `buildReviewPacket(` callers.
 - **Grammar drift** shell vs JS — oracle parity case in the resolver suite (the builder's normalizer
   is the oracle), both directions.
 - **Downstream hash expectations** — none exist (§0): every consumer carries or compares the string.
@@ -201,4 +230,19 @@ before any seat is spent.
 1a-A ✓ → 1a-B ✓ → 1b-A ✓ → 1b-B ✓ → **1c (this)** → 2.
 
 ## Review log
-- (pending)
+- Unknown-escalation probe (`ladder-classify.json`): U0 — coined names already had repo hits; no consult.
+- Plan hetero loop G1 attempt 1 2026-09-17: `required_seat_transport_exhausted` — the claude-native
+  seat tried to run tools in its scratch cwd twice (`g1-attempt1-claude-raw.log`, parser invalid),
+  GLM returned. Zero ratified findings; fresh `--state-dir`, the plan gained the "citations are
+  provenance, not reading assignments" clause, the skeptic seat a MiniMax fallback.
+- G1 (both CONDITIONAL; 3 blockers + 4 non-blocking; `g1-*`, `plan.as-reviewed-g1.md`): six accepted,
+  one refuted with evidence (no consumer recomputes `packet_hash`, folded into §0) — one grammar owner,
+  prepare-time grammar block, composeDenyList dropped, mirror import, base record + mirror gate,
+  comma-only split.
+- G2 (terminal at the cap; GLM READY, claude CONDITIONAL 3 blockers + 3 non-blocking; `g2-*`,
+  `plan.as-reviewed-g2.md`): all six accepted — the floor is the `review.js` spread only (builder never
+  adds defaults), the character allowlist was a second grammar and is gone (shell projects
+  `otherGlobSyntax` exactly, JSON-escapes on emission, oracle table gains accepted/refused probes),
+  the template mirror is the 20th sealed path, `undefined`-only absence, real-builder tests with
+  per-element JS validation and as-given emission, version-pin convention. Growth 1.19× over the
+  G2-reviewed bytes. Zero unaddressed blockers, zero deferred.

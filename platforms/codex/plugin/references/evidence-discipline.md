@@ -148,6 +148,12 @@ Two prior incidents, both preserved here because they are the same shape:
 - **`run:` steps have no `pipefail`**: GitHub Actions' default shell swallows a pipeline's exit code,
   so `cmd | tee log` reports success when `cmd` failed. Set `shell: bash` with `set -o pipefail`, or
   do not pipe the command whose status you are trusting.
+- **A job's one red step hides every skipped step** (v2.36.59→v2.36.60): `test.yml` runs the detached-dispatch
+  smoke before the hooks suite; when the smoke went red the suite step's conclusion became `skipped`, and
+  two releases read "only the known detached failure is red" as "everything else passed". A dogfood
+  kill/resume case had been red since v2.36.58 and nobody saw it (runs `35132044435`, `35174146770`).
+  Judge a run by each step's conclusion, not the job's; a skipped gate is a gate that did not run.
+  Prevention: BACKLOG row — suite step `if: always()` so a smoke failure cannot mask suite regressions.
 
 ---
 

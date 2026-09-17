@@ -1,0 +1,431 @@
+<<<AUTOPILOT-REVIEW-92cb2ba1074f6f8bcbbe5d35c7bead5c>>>
+VERDICT: SHIP-AS-IS
+FINDINGS: none
+NO-FINDING-PROOF: checked=buildReviewArgs validation/reservation and null compatibility, reviewDiff threading, remaining-wall helper, performReview clamp/exhaustion paths, terminal-loop dispatch, final-panel sequential allocation with interleaved unqualified seats, and unit/dogfood assertions; evidence=timeoutSeconds accepts only positive safe integers, emits Ns, is omitted when null, and cannot be overridden; managed reviews clamp requested values to the live remainder and block when exhausted; panel counting uses the correct absolute index and guarantees a positive allocation; tests pin rejection cases, unchanged legacy args, reserved flags, and both expected 115s dispatches; conclusion=no correctness, security, or completeness failure requiring a fix remains
+<<<AUTOPILOT-END-92cb2ba1074f6f8bcbbe5d35c7bead5c>>>
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /home/cookys/projects/autopilot
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: max
+reasoning summaries: none
+session id: 01a0ad24-ba9b-7520-951c-20de53034f0c
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-92cb2ba1074f6f8bcbbe5d35c7bead5c>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-92cb2ba1074f6f8bcbbe5d35c7bead5c>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=5c6b8453f9f3026fb42c37afb6f54bf6
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+# Fix: managed-rail review dispatches carry an explicit --timeout derived from the sealed wall budget
+
+Defect (dogfood 2026-09-17, campaign blind-review-packet lineage 2): `performFinalPanel` → `performReview` →
+`reviewDiff` → `buildReviewArgs` never passed `--timeout` to `scripts/dispatch-review.sh`, whose default is 5m.
+All three final-panel seats died rc=124 on a 90 KB diff after ~1h of paid implement/verify/review. A peer
+(fleet-comms P3, 2026-09-16) saw the in-loop reviewer die the same way (`terminal_stop phase=full_diff_review`).
+
+Intended behaviour after this diff:
+1. `buildReviewArgs` gains `timeoutSeconds` (positive safe integer or null). When set it appends `--timeout <n>s`
+   (seconds: accepted by dispatch-review.sh `timeout_to_ms`, GNU `timeout`, and agy's Go-duration `--print-timeout`).
+   When null, args are byte-identical to before (dispatch-review.sh keeps its own default) — every non-campaign
+   caller must be unchanged. `--timeout` becomes builder-managed: reserved in `extraReviewArgs` like `--endpoint`.
+2. `reviewDiff` threads `input.timeoutSeconds` through unchanged.
+3. New helper `campaignWallRemainingSeconds(control, observedAt)` reads the SAME limit source as
+   `campaignWallBudgetStatus` (`initial_state.limits.max_wall_seconds`) and returns `{exhausted, seconds}`:
+   `seconds: null, exhausted: false` when there is no sealed budget (legacy unmanaged loop → no --timeout).
+4. Campaign `performReview` (in-rail rounds AND final panel) passes `min(requested, remaining)` or `remaining`.
+   Invariant: a seat is never handed more than the campaign's remaining wall seconds.
+5. `performFinalPanel` (seats run sequentially) hands each qualified seat `floor(remaining / seats_not_yet_run)`
+   — an even split so seat 1 cannot starve seats 2..n; performReview re-clamps so this only tightens.
+6. `_runImplementationReviewLoop` terminal review site passes the remainder too.
+7. Tests: unit assertions on buildReviewArgs (emit / omit / reject 0,negative,float,string / reserved flag);
+   dogfood kill→resume campaign asserts every review dispatch (in-loop + single panel seat) carries `--timeout 115s`
+   (cap 120 s, clock 01:00:00 → 01:00:05). The dogfood fixture's qc seat runner was switched `fixture`→`cc-shim`
+   (and roster.reviewer_runner to match) because v2.36.58 intake now refuses non-blind-capable qc runners; that
+   fixture had been red since v2.36.58.
+
+Out of scope: rail defect (2) graph-check 14400 vs schema 7200 wall cap; receipt keys (`packet_hash`, 1a-B);
+any change to dispatch-review.sh defaults.
+
+Review for: correctness of the remaining-budget math and edge cases (exhausted → block, null → no flag,
+requested>remaining clamp, seatsNotYetRun counting when unqualified seats are interleaved), whether any existing
+caller's args changed shape, whether the even split can produce a value < 1 or a wrong index in the
+`finalPanelSeatQualified(roster, later, index + offset)` call, test vacuity (do the assertions really pin the
+behaviour), and anything the diff claims but does not do.
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/hooks/tests/autopilot-engine.test.sh b/hooks/tests/autopilot-engine.test.sh
+index 8bffd475..c726ec55 100755
+--- a/hooks/tests/autopilot-engine.test.sh
++++ b/hooks/tests/autopilot-engine.test.sh
+@@ -3998,6 +3998,47 @@ assert_eq "0" "$EXIT" "AutopilotEngine buildReviewArgs process exits 0"
+ assert_contains "$OUT" "--spec-file some-spec.md" "buildReviewArgs appends specFile when set"
+ assert_not_contains "$OUT" "args_without_spec=.*--spec-file" "buildReviewArgs omits specFile when absent"
+ 
++# --- managed review timeout (rail defect 2026-09-17): `--timeout` is builder-managed and
++# derived from the campaign wall budget; absent → byte-identical args (dispatch-review.sh default).
++OUT="$(node - "$REPO_ROOT" <<'NODE'
++const path = require('path');
++const root = process.argv[2];
++const { buildReviewArgs } = require(path.join(root, 'src', 'engine'));
++const roster = {
++  reviewer_engine: 'test-rev-model',
++  reviewer_effort: 'high',
++  reviewer_runner: 'test-rev-runner',
++};
++console.log(`args_with_timeout=${buildReviewArgs({ diffFile: 'd.diff', roster, timeoutSeconds: 1200 }).join(' ')}`);
++const argsWithoutTimeout = buildReviewArgs({ diffFile: 'd.diff', roster });
++console.log(`without_timeout_has_flag=${argsWithoutTimeout.includes('--timeout')}`);
++console.log(`without_timeout_matches_default=${argsWithoutTimeout.join(' ') === '--runner test-rev-runner --model test-rev-model --diff-file d.diff --effort high'}`);
++for (const [label, timeoutSeconds] of [['zero', 0], ['negative', -5], ['float', 1.5], ['string', '1200']]) {
++  try {
++    buildReviewArgs({ diffFile: 'd.diff', roster, timeoutSeconds });
++    console.log(`${label}=accepted`);
++  } catch (error) {
++    console.log(`${label}=${error.message}`);
++  }
++}
++try {
++  buildReviewArgs({ diffFile: 'd.diff', roster, extraReviewArgs: ['--timeout', '5m'] });
++  console.log('extra_timeout=accepted');
++} catch (error) {
++  console.log(`extra_timeout=${error.message}`);
++}
++NODE
++)"; EXIT=$?
++assert_eq "0" "$EXIT" "AutopilotEngine buildReviewArgs timeout process exits 0"
++assert_contains "$OUT" "--effort high --timeout 1200s" "buildReviewArgs emits --timeout in whole seconds when timeoutSeconds is set"
++assert_contains "$OUT" "without_timeout_has_flag=false" "buildReviewArgs emits no --timeout when timeoutSeconds is absent (dispatch-review.sh default preserved)"
++assert_contains "$OUT" "without_timeout_matches_default=true" "buildReviewArgs args are byte-identical to the pre-timeout shape when timeoutSeconds is absent"
++assert_contains "$OUT" "zero=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects timeoutSeconds=0"
++assert_contains "$OUT" "negative=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects negative timeoutSeconds"
++assert_contains "$OUT" "float=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects fractional timeoutSeconds"
++assert_contains "$OUT" "string=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects string timeoutSeconds"
++assert_contains "$OUT" "extra_timeout=extra args cannot override --timeout" "buildReviewArgs reserves --timeout: extraReviewArgs cannot smuggle it"
++
+ OUT="$(node - "$REPO_ROOT" <<'NODE'
+ const fs = require('fs');
+ const os = require('os');
+diff --git a/hooks/tests/implementation-campaign-dogfood.test.sh b/hooks/tests/implementation-campaign-dogfood.test.sh
+index fc83f322..aa48c2df 100755
+--- a/hooks/tests/implementation-campaign-dogfood.test.sh
++++ b/hooks/tests/implementation-campaign-dogfood.test.sh
+@@ -552,7 +552,7 @@ const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'e
+ const roster = {
+   reviewer_engine: 'fixture-reviewer',
+   reviewer_effort: 'high',
+-  reviewer_runner: 'fixture',
++  reviewer_runner: 'cc-shim',
+   reviewer_qualified: true,
+   implementer_engine: 'fixture-implementer',
+   implementer_effort: 'high',
+@@ -562,7 +562,9 @@ const roster = {
+   min_panel_size: 1,
+   qc_panel_seats_complete: true,
+   qc_panel_seats: [{
+-    role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
++    // v2.36.58 intake rejects a qc seat whose runner is not blind-discovery capable; the
++    // dispatcher is injected, so the runner name only has to pass that gate.
++    role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+   }],
+ };
+ const engine = new AutopilotEngine({
+@@ -655,7 +657,7 @@ const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'e
+ const roster = {
+   reviewer_engine: 'fixture-reviewer',
+   reviewer_effort: 'high',
+-  reviewer_runner: 'fixture',
++  reviewer_runner: 'cc-shim',
+   reviewer_qualified: true,
+   implementer_engine: 'fixture-implementer',
+   implementer_effort: 'high',
+@@ -665,10 +667,13 @@ const roster = {
+   min_panel_size: 1,
+   qc_panel_seats_complete: true,
+   qc_panel_seats: [{
+-    role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
++    // v2.36.58 intake rejects a qc seat whose runner is not blind-discovery capable; the
++    // dispatcher is injected, so the runner name only has to pass that gate.
++    role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+   }],
+ };
+ let implementationCalls = 0;
++const reviewArgsSeen = [];
+ const engine = new AutopilotEngine({
+   cwd: repo,
+   clock: () => '2026-07-28T01:00:05.000Z',
+@@ -683,7 +688,8 @@ const engine = new AutopilotEngine({
+     implementationCalls += 1;
+     throw new Error('resume must not repeat implementation');
+   },
+-  reviewDispatcher() {
++  reviewDispatcher(args) {
++    reviewArgsSeen.push(args);
+     return {
+       error: null,
+       status: 0,
+@@ -764,11 +770,22 @@ assert.strictEqual(implementationCalls, 0);
+ assert.strictEqual(Number(fs.readFileSync(countPath, 'utf8')), 1);
+ assert.strictEqual(result.campaign_control.initial_state.phase, 'TERMINAL_READY');
+ console.log('kill_resume_adopts_commit=true');
++// Rail defect 2026-09-17: every managed review dispatch (in-loop AND final panel) must carry an
++// explicit `--timeout` bounded by the sealed wall budget, never dispatch-review.sh's 5m default.
++// Kill run started the campaign at 01:00:00, this process observes 01:00:05, cap 120 s,
++// one qualified panel seat → 115 s remain for the in-loop review and for the single seat.
++assert.ok(reviewArgsSeen.length >= 2, `expected in-loop + final-panel review dispatches, saw ${reviewArgsSeen.length}`);
++const timeouts = reviewArgsSeen.map((args) => args[args.indexOf('--timeout') + 1]);
++console.log(`review_dispatch_timeouts=${timeouts.join(',')}`);
++assert.ok(timeouts.every((value) => value === '115s'),
++  `every managed review dispatch carries the remaining wall budget: ${JSON.stringify(reviewArgsSeen)}`);
+ NODE
+ )"
+ assert_exit_code "$?" "0" "new engine process resumes the real durable campaign journal"
+ assert_contains "$RESUME_OUT" "kill_resume_adopts_commit=true" \
+   "resume adopts the committed candidate and leaves implementation count unchanged"
++assert_contains "$RESUME_OUT" "review_dispatch_timeouts=115s,115s" \
++  "in-loop review and every final-panel seat receive --timeout = remaining sealed wall budget (120 s cap − 5 s elapsed), not the 5m dispatcher default"
+ 
+ # Case 6 uses the public WLB issuer/inspector, then hands the exact nonzero receipt to ICC and LSM.
+ LIFECYCLE_ROOT="$(node - "$REPO_ROOT" "$TEST_TMP/057-intake.json" <<'NODE'
+diff --git a/src/engine/autopilot-engine.js b/src/engine/autopilot-engine.js
+index d7d5a1e2..30f59cc0 100644
+--- a/src/engine/autopilot-engine.js
++++ b/src/engine/autopilot-engine.js
+@@ -775,11 +775,16 @@ function buildReviewArgs({
+   extraReviewArgs = [],
+   checklists = [],
+   dispatchIdentity = null,
++  timeoutSeconds = null,
+ }) {
+   validateReviewRoster(roster);
+   if (!diffFile || typeof diffFile !== 'string') {
+     throw new TypeError('diffFile is required');
+   }
++  if (timeoutSeconds !== null
++      && (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 1)) {
++    throw new TypeError('timeoutSeconds must be a positive safe integer when set');
++  }
+   validateExtraArgs(extraReviewArgs, new Set([
+     '--runner',
+     '--model',
+@@ -788,6 +793,7 @@ function buildReviewArgs({
+     '--spec-file',
+     '--checklists',
+     '--endpoint',
++    '--timeout',
+     ...DISPATCH_IDENTITY_FLAGS,
+   ]), 'extraReviewArgs');
+   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
+@@ -830,6 +836,14 @@ function buildReviewArgs({
+   if (specFile && typeof specFile === 'string') {
+     args.push('--spec-file', specFile);
+   }
++  // `--timeout` is BUILDER-MANAGED (reserved above like `--endpoint`): the only source is
++  // a caller-derived wall budget in whole seconds. Absent → nothing is emitted and
++  // dispatch-review.sh keeps its own default, so every non-campaign caller is byte-identical.
++  // Seconds (`Ns`) are accepted by dispatch-review.sh timeout_to_ms, GNU timeout, and agy's
++  // Go-duration `--print-timeout` (default prints as `5m0s`).
++  if (timeoutSeconds !== null) {
++    args.push('--timeout', `${timeoutSeconds}s`);
++  }
+   appendDispatchIdentity(args, identity);
+   args.push(...extraReviewArgs);
+   return args;
+@@ -844,6 +858,7 @@ function validateExtraReviewArgs(extraReviewArgs) {
+     '--spec-file',
+     '--checklists',
+     '--endpoint',
++    '--timeout',
+     ...DISPATCH_IDENTITY_FLAGS,
+   ]), 'extraReviewArgs');
+   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
+@@ -1437,6 +1452,23 @@ function campaignWallBudgetStatus(control, observedAt) {
+   };
+ }
+ 
++// Whole seconds left on the campaign's sealed wall budget at `observedAt`, from the SAME
++// limit source campaignWallBudgetStatus reads (initial_state.limits.max_wall_seconds), so
++// a review seat's `--timeout` can never disagree with the budget check that precedes it.
++// `{ exhausted: true }` when the budget is spent (callers block); `seconds: null` with
++// `exhausted: false` when there is no sealed budget at all (legacy unmanaged loop) — then no
++// `--timeout` is emitted and dispatch-review.sh keeps its own default, byte-identical to before.
++function campaignWallRemainingSeconds(control, observedAt) {
++  const budget = campaignWallBudgetStatus(control, observedAt);
++  if (budget.exhausted) return { exhausted: true, seconds: null };
++  if (!Number.isSafeInteger(budget.elapsed_seconds)) return { exhausted: false, seconds: null };
++  const limit = control.initial_state.limits.max_wall_seconds;
++  const remaining = limit - budget.elapsed_seconds;
++  return remaining >= 1
++    ? { exhausted: false, seconds: remaining }
++    : { exhausted: true, seconds: null };
++}
++
+ function campaignMutationBudgetStatus(control, observedAt) {
+   const wall = campaignWallBudgetStatus(control, observedAt);
+   if (wall.exhausted || !control || control.status !== 'admitted') return wall;
+@@ -3309,6 +3341,9 @@ class AutopilotEngine {
+           : [],
+         checklists: injectedChecklists,
+         dispatchIdentity,
++        timeoutSeconds: Object.prototype.hasOwnProperty.call(input, 'timeoutSeconds')
++          ? input.timeoutSeconds
++          : null,
+       });
+     } catch (error) {
+       const startedAt = this.now();
+@@ -4742,6 +4777,7 @@ class AutopilotEngine {
+       pinReviewerTuple = false,
+       prepared_review: preparedReview = null,
+       reservation_identity: reservationIdentity = null,
++      review_timeout_seconds: requestedTimeoutSeconds = null,
+     }) => {
+       const prepared = preparedReview || prepareReview({
+         candidate,
+@@ -4808,11 +4844,34 @@ class AutopilotEngine {
+           reason: 'campaign wall budget exhausted before review',
+         };
+       }
++      // Every managed review dispatch carries an explicit `--timeout` derived from the sealed
++      // wall budget — never dispatch-review.sh's 5m default, which killed all three final-panel
++      // seats on a 90 KB diff (dogfood 2026-09-17) after the campaign had already paid for
++      // implement/verify/review. Invariant: a seat is never handed more than the campaign's
++      // remaining wall seconds; a caller (performFinalPanel) may only tighten it.
++      const remainingWall = campaignWallRemainingSeconds(campaignControl, budgetAt);
++      if (remainingWall.exhausted) {
++        return {
++          reviewed: false,
++          phase: 'campaign_wall_budget',
++          reason: 'campaign wall budget exhausted before review',
++        };
++      }
++      const requestedValid = Number.isSafeInteger(requestedTimeoutSeconds) && requestedTimeoutSeconds >= 1;
++      let reviewTimeoutSeconds = null;
++      if (remainingWall.seconds !== null) {
++        reviewTimeoutSeconds = requestedValid
++          ? Math.min(requestedTimeoutSeconds, remainingWall.seconds)
++          : remainingWall.seconds;
++      } else if (requestedValid) {
++        reviewTimeoutSeconds = requestedTimeoutSeconds;
++      }
+       const previousReviewForRemediation = repairGeneration > 0 ? latestReview : null;
+       let reviewed = this.reviewDiff({
+         diffFile,
+         specFile: promptFile,
+         roster: reviewRoster,
++        timeoutSeconds: reviewTimeoutSeconds,
+         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+           ? input.rosterArgs
+           : ['--check-scorecard'],
+@@ -5046,7 +5105,19 @@ class AutopilotEngine {
+           final_panel_seat_receipts: [],
+         };
+       }
++      // Seats run sequentially. Hand each qualified seat an even share of the wall budget
++      // still left over the seats not yet run, so the first seat cannot consume the whole
++      // remainder and starve the rest (which would fail `allReviewed` anyway). performReview
++      // re-clamps to the live remainder, so this only ever tightens.
+       const outcomes = seats.map((seat, index) => {
++        const seatsNotYetRun = seats
++          .slice(index)
++          .filter((later, offset) => finalPanelSeatQualified(roster, later, index + offset))
++          .length;
++        const remainingNow = campaignWallRemainingSeconds(campaignControl, this.now()).seconds;
++        const seatTimeoutSeconds = remainingNow !== null && seatsNotYetRun > 0
++          ? Math.max(1, Math.floor(remainingNow / seatsNotYetRun))
++          : null;
+         const reviewRoster = {
+           ...roster,
+           reviewer_runner: seat.runner,
+@@ -5062,6 +5133,7 @@ class AutopilotEngine {
+             reviewRoster,
+             reviewStage: `campaign-final-review#seat-${index + 1}`,
+             pinReviewerTuple: true,
++            review_timeout_seconds: seatTimeoutSeconds,
+           })
+           : {
+             reviewed: false,
+@@ -9658,12 +9730,39 @@ class AutopilotEngine {
+         });
+       }
+ 
++      // Same rule as the campaign path: the in-loop review dispatch carries the sealed wall
++      // budget's remainder as `--timeout`, never dispatch-review.sh's 5m default.
++      const reviewRemaining = campaignWallRemainingSeconds(campaignControl, reviewBudgetAt);
++      if (reviewRemaining.exhausted) {
++        ledger.push(this.ledgerEntry(
++          'campaign_wall_budget',
++          'blocked',
++          reviewBudgetAt,
++          { elapsed_seconds: reviewBudget.elapsed_seconds },
++        ));
++        return finish({
++          status: 'blocked',
++          phase: 'campaign_wall_budget',
++          reason: 'campaign has no wall-clock budget remaining before review dispatch',
++          rounds: round,
++          verdict: null,
++          roster,
++          resolveResult,
++          implementation,
++          review: null,
++          implementationChain,
++          reviewChain,
++          ledger,
++        });
++      }
++
+       const previousReviewForRemediation = round > 1 ? review : null;
+       review = this.reviewDiff({
+         priorStatus: round === 1 ? input.priorStatus : undefined,
+         diffFile,
+         specFile: input.noReviewSpec !== true ? promptFile : undefined,
+         roster: dynamicReviewRisk ? null : roster,
++        timeoutSeconds: reviewRemaining.seconds,
+         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+           ? input.rosterArgs
+           : ['--check-scorecard'],
+
+```
+<<<AUTOPILOT-END-92cb2ba1074f6f8bcbbe5d35c7bead5c>>>
+
+warning: Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+codex
+<<<AUTOPILOT-REVIEW-92cb2ba1074f6f8bcbbe5d35c7bead5c>>>
+VERDICT: SHIP-AS-IS
+FINDINGS: none
+NO-FINDING-PROOF: checked=buildReviewArgs validation/reservation and null compatibility, reviewDiff threading, remaining-wall helper, performReview clamp/exhaustion paths, terminal-loop dispatch, final-panel sequential allocation with interleaved unqualified seats, and unit/dogfood assertions; evidence=timeoutSeconds accepts only positive safe integers, emits Ns, is omitted when null, and cannot be overridden; managed reviews clamp requested values to the live remainder and block when exhausted; panel counting uses the correct absolute index and guarantees a positive allocation; tests pin rejection cases, unchanged legacy args, reserved flags, and both expected 115s dispatches; conclusion=no correctness, security, or completeness failure requiring a fix remains
+<<<AUTOPILOT-END-92cb2ba1074f6f8bcbbe5d35c7bead5c>>>
+tokens used
+22,655

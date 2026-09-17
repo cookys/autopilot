@@ -2,10 +2,10 @@
 接續 autopilot 維護。2026-09-17 出貨 v2.36.62（1b-A cleanroom launcher＋seat tiers，merge `94d44940`）與 v2.36.63（1b-B intake cleanroom probe＋JS/resolver tier，merge `bc4ea99e`、release `f15e9e1e`）。兩刀 closeout 全清（worktree／branch reap、residue receipt zero、marker retire）。**下一刀 1c：可設定 packet deny-list**——plan 草稿已在 repo（DRAFT），從 plan loop 開始。
 
 ## 現況
-- `develop` = `origin/develop`（push 後）。無 active session marker；mission routing 仍指 1b-B graph（`blind-review-cleanroom-intake-2026-09-17`，已 completed）；1c freeze 時照 1b-B 的 `freeze-c1d.js` 複製一份改 slug，跑 legacy reconcile 換 graph。
+- `develop` = `origin/develop`（push 後）。無 active session marker；mission routing 仍指 1b-B graph（`blind-review-cleanroom-intake-2026-09-17`；campaign 在 REVIEWING blocked→l3 降級，adoption **不是** COMPLETE，rollover 走不了）；1c freeze 時照 1b-B 的 `freeze-c1d.js` 複製一份改 slug，跑 legacy reconcile 換 graph。
 - 1b-B evidence：`docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md`（時間線、MiniMax／GLM 工具病、claude 🟡 修補 `af1879cb`、§5 dogfood、resume rail 缺陷）。
 - **1c plan**：`docs/plans/2026-09-17-blind-review-packet-deny-config.md`＋`.rubric.md`（DRAFT；§0 行號以 `130b97a8` 校對，plan loop 前用 `d7912c7e`…`f15e9e1e` 之間的 HEAD 再校對一次、Base 釘 release commit）。範圍：`review_packet_deny_extra`（additive、單一 grammar owner＝`normalizeDenyList`、resolver conditional 欄位如 `qc_panel_endpoints`、engine `reviewPacketIdentity` 收 `denyExtra`、review.js 合成 effective list；builder／rail／launcher／intake byte-identical）。manifest／brief／freeze 尚未寫（抄 1b-B 的：`evidence/…-intake/scratch/{run-g.sh,dispatch.sh,freeze-c1d.js}`＋`impl-brief.md`）。
-- BACKLOG 新 open rows（都 fired）：final panel 無 repair 迴圈（1b-A）、**reviewer no_verdict 留 REVIEWING 不能 resume**（1b-B，rail 缺陷）、codex pin swap 等 live cleanroom verdict（09-19 16:26 後）、dispatch-review cleanroom path hygiene（S）、openclaw ruling relay（要 cookys 點頭）。
+- BACKLOG 新 open rows（多數已 fired；openclaw row 等 cookys 點頭）：final panel 無 repair 迴圈（1b-A）、**reviewer no_verdict 留 REVIEWING 不能 resume**（1b-B，rail 缺陷）、codex pin swap 等 live cleanroom verdict（09-19 16:26 後）、dispatch-review cleanroom path hygiene（S）、openclaw ruling relay（要 cookys 點頭）。
 - codex 額度 2026-09-19 16:26 回來後：plan §5 尾段——`cleanroom-launch.sh --profile codex` 對真 packet 拿 parsed verdict → `engine-capability-state.js pin-seat --role qc_panel --engine gpt-5.6-sol --runner codex --effort max …`＋`review-loop-config.md qc_panel[0]` 換回；也可讓 consult 席回 codex。
 
 ## 已決事項(不重議)

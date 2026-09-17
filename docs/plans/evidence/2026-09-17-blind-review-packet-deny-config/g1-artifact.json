@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-packet-deny-config-2026-09-17",
+  "logical_plan_id": "blind-review-packet-deny-config-2026-09-17",
+  "session_id": "c1e-g1-1789660314",
+  "session_key": "64956d35ab7c89dcd5863c3f8ad7490cf0331051ad13153745e6e0f882a97ebb",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "6053919533c703253e84220fe88fd9681d3f1b1f918ad0b0053a74e45e883ced",
+  "manifest_sha256": "06ea9d4cdcd9cb7ceea961928dfba1f5cd50c2351b4fd179c1f237d209a31e54",
+  "plan_sha256": "24cc2408709f01a6bae8766a073610c832a0625359263729bf76a82cb1c1cbf4",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "5bc8ed070390681e4ae0cda5ee1cf27dc5b0f1c35abed985a2f7427150ad8b4a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b80549f6faa47699c72b66cdb3924d1dfbddfe6db1718d0ad344993bcaec737a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-nkqP8k",
+          "digest": "b80549f6faa47699c72b66cdb3924d1dfbddfe6db1718d0ad344993bcaec737a"
+        },
+        "receipt_digest": "d39c475c48054fa1e40db9330dbe3f13804c64926d2779fb7954fe18c4f07b1d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "cbae1bdd0d15d557fc6a0e4da69dc41c2f01426e04cd9f27294e4d6fd163aedb"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "49e6131e8853d067b119fb64fd7f7e91325460464829c1c770a7f953c164a143",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sSgZ6Z",
+          "digest": "49e6131e8853d067b119fb64fd7f7e91325460464829c1c770a7f953c164a143"
+        },
+        "receipt_digest": "a671de5e1cf743eeb88fef0b5589c29c6a48f4766de7684444ea610c25a321d6"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/runners/review-packet.js",
+      "claim": "The plan leaves open an optional composeDenyList(extra) helper in the packet builder (decide at G1; default: no change), which is an unresolved decision point against the byte-identical-to-base guarantee for the builder surface.",
+      "evidence": "Section 2 file list states: 'src/runners/review-packet.js: NONE (export already sufficient) — byte-identical unless a composeDenyList(extra) helper is preferred (decide at G1; default: no change)', while §2.6 and the acceptance 'scope-integrity' row require the builder byte-identical. If the G1 decision selects the helper, the plan contradicts its own frozen constraint and the sealed output_paths would need review-packet.js (and its codex mirror) plus review-packet.test.sh additions.",
+      "evidence_reference": "Plan §2 (Changes by file, review-packet.js entry) and §2.6 (Global constraints, 'review-packet.js ... byte-identical')",
+      "repair": "Resolve G1 now in the plan text to the stated default: no helper, builder unchanged, composition done in src/runners/review.js; strike the helper option so the byte-identical constraint is unconditional. If the helper is ever wanted, it belongs in a separate plan with its own ruling.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b62029643376081eaaf9d2f4270601184a7badd04381ccf63a060bd92dcb80f7"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "schemas/review-loop-contract.schema.json items.pattern; scripts/resolve-review-loop.sh element regex; hooks/tests/resolve-review-loop.test.sh parity case",
+      "claim": "The plan creates three definitions of the pattern language (the builder's normalizeDenyList, the shell regex, and a JSON-schema items.pattern) but parity is only specified between shell and JS, and the (g) table that is supposed to prove equivalence is described as living in review-packet.test.sh with no statement of how resolve-review-loop.test.sh shares it rather than copying it.",
+      "evidence": "Section 2 says the schema gets 'items: string with the grammar as pattern' and section 1.2 says 'the shell regex is proven equal by a parity case over the (g) table'; section 0 places the (g) table at review-packet.test.sh:247-306; section 2.5 lists no shared fixture file; contract-parity.test.sh validates the resolver's JSON against the schema, so a schema pattern that diverges from the shell regex fails at runtime rather than at the parity gate.",
+      "evidence_reference": "Plan section 1.2, section 2 (schema bullet and Tests bullet), section 2.5, section 6 'Grammar drift'",
+      "repair": "Rule now: either drop items.pattern from the schema (items: {type: string} only, grammar enforced solely by the shell regex and normalizeDenyList) or add the schema pattern as a third column of the parity case. Extract the (g) accept/reject table into one fixture file that review-packet.test.sh and resolve-review-loop.test.sh both source, add that file to section 2.5 output_paths, and state the parity case asserts identical accept/reject on every row in both directions.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "71b5943a3dee16f5969f83f152c716c157e2a9629ee2a784488aec50b01b6399"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/autopilot-engine.js reviewPacketIdentity; src/runners/review.js dispatchReview",
+      "claim": "reviewPacketIdentity is specified to check only that denyExtra is an array of strings, so a grammatically invalid element that reaches the roster is not blocked at prepare_review; it surfaces later as an uncaught normalizeDenyList throw inside dispatchReview, which is neither the prepare-time block the rubric requires nor a message in the same class as the shell resolver's.",
+      "evidence": "Section 1.3: 'reviewPacketIdentity accepts an optional denyExtra (array of strings, else prepare_review block \"packet deny extra malformed\")' and 'dispatchReview forwards denyList: normalizeDenyList([...DEFAULT_PACKET_DENY_LIST, ...denyExtra])'. Section 0 says normalizeDenyList throws 'invalid deny-list pattern'. The acceptance row 'grammar' requires 'the same message class' in shell and JS, but the JS resolver message format is only described as 'rejects with the element named'.",
+      "evidence_reference": "Plan section 1.2, section 1.3, section 4 rows 'grammar' and 'plumbing'",
+      "repair": "Have reviewPacketIdentity run normalizeDenyList over [...DEFAULT_PACKET_DENY_LIST, ...denyExtra] and emit a prepare_review block that names the offending element (for example 'review_packet_deny_extra[i] invalid pattern: <p>'), so dispatchReview only ever receives a validated list; fix the JS resolver's rejection message to the same 'review_packet_deny_extra[i] invalid pattern: <p>' format as the shell; add the autopilot-engine case 'string array with invalid grammar -> prepare_review block' next to the malformed-shape case.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "88e508bdd39f2a67cd87b96e28da0834db539bc39b07f75c9e7e239dba0eaefe"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "implementation-spike",
+      "severity": "blocking",
+      "affected_surface": "campaign-intake.js (1b-B probe), packet_hash mixed/mismatch rule (v2.36.61), verifyTreeIntegrity, section 5 dogfood",
+      "claim": "The plan asserts the widened list is hash-bound with zero new fields, but never states whether the existing consumers of packet_hash recompute it from the manifest's deny_list or assume DEFAULT_PACKET_DENY_LIST; if any consumer assumes the defaults, every dispatch under a widened config fails hash verification downstream while the cut keeps those files byte-identical.",
+      "evidence": "Section 0 verifies only the producer side (preimage at review-packet.js:549-564). Section 1.3 says 'packet_hash mixed/mismatch rules (v2.36.61) are unchanged' and section 2.6 pins campaign-intake.js byte-identical, with no verification claim about how intake or the mismatch rule derive the expected hash. Section 5 dogfood stops at 'MANIFEST.json deny_list carries it, the tree lacks the file, and packet_hash differs' and does not carry the packet through intake or a receipt.",
+      "evidence_reference": "Plan section 0 first bullet, section 1.3, section 2.6, section 5",
+      "repair": "Before sealing, verify at base 6a414c3c that every reader of packet_hash (intake probe, mismatch rule, any receipt check) recomputes from manifest deny_list or compares manifest-to-manifest only, and record the file:line in section 0; extend the section 5 dogfood so the widened packet is accepted by the intake path end to end; if any reader assumes defaults, the cut needs a ruling on that file.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e064fc910191c6d6d3c430cc1c756325663741083002168644b36b052343589c"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/runners/review-packet.js; src/engine/resolve-review-loop.js import; platforms/codex/plugin/src/runners/review-packet.js",
+      "claim": "The plan leaves open a composeDenyList helper in review-packet.js ('decide at G1'), which contradicts the byte-identical constraint the rubric and section 2.6 both impose; separately, the engine resolver will now import a runner module, and the plan does not confirm the codex mirror tree contains review-packet.js at the matching relative path.",
+      "evidence": "Section 2: 'byte-identical unless a composeDenyList(extra) helper is preferred (decide at G1; default: no change)'. Section 2: 'validator calls normalizeDenyList (import from src/runners/review-packet.js)'. Section 2.5 lists platforms/codex/plugin/src/engine/resolve-review-loop.js but no codex review-packet.js, and section 0 does not mention the mirror's runner tree.",
+      "evidence_reference": "Plan section 2 (review-packet.js bullet and resolve-review-loop.js bullet), section 2.5, section 2.6",
+      "repair": "Strike the composeDenyList option so review-packet.js is byte-identical by ruling, not by default; add a section 0 line confirming the codex mirror has src/runners/review-packet.js and that the relative import resolves in both trees (or that check-js-syntax.js loads the mirror resolver).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "925c56774131a17593b05733ff170a4d0e40a3328f647884dc1db757cf5b7313"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 4.1 command set; mirror sync gate for schemas, scripts, src and references",
+      "claim": "Section 4.1 has no explicit base-run procedure for the detached checkout, and it is not stated which gate proves the seven codex mirror pairs are byte-equal; sync-codex-plugin-skills.sh --check is named for skills and the plan does not confirm it covers schemas, scripts, src/engine, src/runners and references.",
+      "evidence": "Section 4 row 'no-regression' says 'base recorded' but section 4.1 only lists candidate commands; the only mirror-related command is 'bash scripts/sync-codex-plugin-skills.sh --check'; section 2.5 lists seven platforms/codex/plugin mirror paths across four directories.",
+      "evidence_reference": "Plan section 4 row 'no-regression', section 4.1, section 2.5",
+      "repair": "Add to section 4.1 the base procedure (detached checkout of 6a414c3c, same command set, exit codes recorded to the evidence dir) and either state that the sync check covers every directory in section 2.5 or add a per-pair diff step for the seven mirrors.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1404dbd27a30c1c91baf970d3301aac911fb6b6af139fc9d5740e3334a90396f"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/resolve-review-loop.sh read_field split and JSON array emission",
+      "claim": "The shell reads the field as one string and splits on comma or whitespace before validating, so an element containing whitespace is silently split into two patterns rather than refused, and the JSON emission is safe only if the element regex is a strict character allowlist; neither the split rule nor the allowlist is stated.",
+      "evidence": "Section 2: 'read_field ... review_packet_deny_extra \"\", comma/whitespace split, per-element regex validation fail-closed'; section 1.2 grammar lists allowed constructs but not the accepted character set; section 5 example uses a single scalar value with no separator shown.",
+      "evidence_reference": "Plan section 1.2, section 2 (resolve-review-loop.sh bullet), section 5",
+      "repair": "State the separator rule (comma only, or comma and whitespace) and document it in the config field doc and template; specify the shell regex as a character allowlist so emitted elements need no JSON escaping; add one resolve-review-loop case for a value with an embedded space and one for a trailing separator.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ad8bac22f4803228362d1e7156ca2a6d3a723a2b8eeeeb001d66fe409ee9dc33"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "b62029643376081eaaf9d2f4270601184a7badd04381ccf63a060bd92dcb80f7",
+      "rubric_id": "R5",
+      "affected_surface": "src/runners/review-packet.js",
+      "claim": "The plan leaves open an optional composeDenyList(extra) helper in the packet builder (decide at G1; default: no change), which is an unresolved decision point against the byte-identical-to-base guarantee for the builder surface.",
+      "evidence_reference": "Plan §2 (Changes by file, review-packet.js entry) and §2.6 (Global constraints, 'review-packet.js ... byte-identical')",
+      "disposition": null
+    },
+    {
+      "fingerprint": "e064fc910191c6d6d3c430cc1c756325663741083002168644b36b052343589c",
+      "rubric_id": "R4",
+      "affected_surface": "campaign-intake.js (1b-B probe), packet_hash mixed/mismatch rule (v2.36.61), verifyTreeIntegrity, section 5 dogfood",
+      "claim": "The plan asserts the widened list is hash-bound with zero new fields, but never states whether the existing consumers of packet_hash recompute it from the manifest's deny_list or assume DEFAULT_PACKET_DENY_LIST; if any consumer assumes the defaults, every dispatch under a widened config fails hash verification downstream while the cut keeps those files byte-identical.",
+      "evidence_reference": "Plan section 0 first bullet, section 1.3, section 2.6, section 5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "925c56774131a17593b05733ff170a4d0e40a3328f647884dc1db757cf5b7313",
+      "rubric_id": "R5",
+      "affected_surface": "src/runners/review-packet.js; src/engine/resolve-review-loop.js import; platforms/codex/plugin/src/runners/review-packet.js",
+      "claim": "The plan leaves open a composeDenyList helper in review-packet.js ('decide at G1'), which contradicts the byte-identical constraint the rubric and section 2.6 both impose; separately, the engine resolver will now import a runner module, and the plan does not confirm the codex mirror tree contains review-packet.js at the matching relative path.",
+      "evidence_reference": "Plan section 2 (review-packet.js bullet and resolve-review-loop.js bullet), section 2.5, section 2.6",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1404dbd27a30c1c91baf970d3301aac911fb6b6af139fc9d5740e3334a90396f",
+      "rubric_id": "R7",
+      "affected_surface": "section 4.1 command set; mirror sync gate for schemas, scripts, src and references",
+      "claim": "Section 4.1 has no explicit base-run procedure for the detached checkout, and it is not stated which gate proves the seven codex mirror pairs are byte-equal; sync-codex-plugin-skills.sh --check is named for skills and the plan does not confirm it covers schemas, scripts, src/engine, src/runners and references.",
+      "evidence_reference": "Plan section 4 row 'no-regression', section 4.1, section 2.5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ad8bac22f4803228362d1e7156ca2a6d3a723a2b8eeeeb001d66fe409ee9dc33",
+      "rubric_id": "R2",
+      "affected_surface": "scripts/resolve-review-loop.sh read_field split and JSON array emission",
+      "claim": "The shell reads the field as one string and splits on comma or whitespace before validating, so an element containing whitespace is silently split into two patterns rather than refused, and the JSON emission is safe only if the element regex is a strict character allowlist; neither the split rule nor the allowlist is stated.",
+      "evidence_reference": "Plan section 1.2, section 2 (resolve-review-loop.sh bullet), section 5",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-17T15:54:20.024Z"
+}

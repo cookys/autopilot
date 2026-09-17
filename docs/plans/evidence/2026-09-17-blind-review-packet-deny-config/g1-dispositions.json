@@ -1,0 +1,49 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-packet-deny-config-2026-09-17",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "b62029643376081eaaf9d2f4270601184a7badd04381ccf63a060bd92dcb80f7",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the composeDenyList option is removed — review-packet.js is byte-identical, composition lives in review.js."
+  },
+  {
+   "fingerprint": "71b5943a3dee16f5969f83f152c716c157e2a9629ee2a784488aec50b01b6399",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: one grammar owner (normalizeDenyList); the schema declares type only, no pattern; the shell regex is a projection proven by an oracle parity case in resolve-review-loop.test.sh (shell accept/reject == normalizeDenyList accept/throw over an inline table incl. whitespace/quote/backslash probes, both directions) — no copied table, drift fails the suite not a dispatch."
+  },
+  {
+   "fingerprint": "88e508bdd39f2a67cd87b96e28da0834db539bc39b07f75c9e7e239dba0eaefe",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: reviewPacketIdentity validates every element through normalizeDenyList and blocks at prepare_review with \"packet deny extra invalid pattern: <p>\" (same message class as the resolver); review.js passes the raw composed list to the builder which normalizes — no uncaught throw path."
+  },
+  {
+   "fingerprint": "e064fc910191c6d6d3c430cc1c756325663741083002168644b36b052343589c",
+   "disposition": "rejected",
+   "candidate_blocker": false,
+   "rationale": "Refuted with evidence, folded as §0 fact: no consumer recomputes packet_hash or assumes the default list — review.js carries the string (:247,:327), autopilot-engine shape-checks/copies/compares seats (:61-63,:5100,:5135-5137,:5232-5243), campaign-composition validates 64-hex and applies mixed/mismatch across seats (:417-432), campaign-intake never reads it, verifyTreeIntegrity is test-only. A widened list changes every seat of a panel equally; §6 records it."
+  },
+  {
+   "fingerprint": "925c56774131a17593b05733ff170a4d0e40a3328f647884dc1db757cf5b7313",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: composeDenyList removed; the codex mirror has platforms/codex/plugin/src/runners/review-packet.js at base so the mirrored import resolves — stated in §2."
+  },
+  {
+   "fingerprint": "1404dbd27a30c1c91baf970d3301aac911fb6b6af139fc9d5740e3334a90396f",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: §4.1 now names the base record (base-suites-6a414c3c.txt, detached, sequential) and states that sync-codex-plugin-skills.sh --check diffs every mirror root (bin src schemas references scripts project-config-template …), covering all seven pairs."
+  },
+  {
+   "fingerprint": "ad8bac22f4803228362d1e7156ca2a6d3a723a2b8eeeeb001d66fe409ee9dc33",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: split on commas only with trim; per-element character allowlist [A-Za-z0-9._*/-] (no whitespace/quotes/backslash) so internal whitespace is refused not split, and JSON emission is safe by construction."
+  }
+ ]
+}

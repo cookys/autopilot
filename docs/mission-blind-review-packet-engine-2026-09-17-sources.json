@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-17-blind-review-packet-engine.md",
+      "rubric_path": "plans/2026-09-17-blind-review-packet-engine.rubric.md",
+      "plan_sha256": "c394f4578b74beb7e84eb0dc3249b5a803f67f0c5ba668859949eb5b8467decc",
+      "rubric_sha256": "1473d61d4aab92505cf4e1d0ae4bc9e08ecc7a07e699f11b2ca6fbd46dcf3073"
+    }
+  ]
+}

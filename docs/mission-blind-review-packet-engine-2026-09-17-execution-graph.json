@@ -1,0 +1,102 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "blind-review-packet-engine-2026-09-17",
+   "acceptance_ids": [
+    "engine-packet-request",
+    "packet-identity-surfaced",
+    "panel-one-hash",
+    "schema-parity",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/references",
+     "platforms/codex/plugin/schemas",
+     "platforms/codex/plugin/src",
+     "references",
+     "schemas",
+     "src"
+    ],
+    "baseline_churn": 2400,
+    "max_changed_files": 13,
+    "max_extra_churn": 1200,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 7200,
+    "output_paths": [
+     "src/engine/autopilot-engine.js",
+     "platforms/codex/plugin/src/engine/autopilot-engine.js",
+     "src/engine/campaign-composition.js",
+     "platforms/codex/plugin/src/engine/campaign-composition.js",
+     "schemas/implementation-campaign-receipt.schema.json",
+     "platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json",
+     "hooks/tests/autopilot-engine.test.sh",
+     "hooks/tests/implementation-campaign-routing.test.sh",
+     "hooks/tests/implementation-campaign-receipt.test.sh",
+     "hooks/tests/implementation-campaign-dogfood.test.sh",
+     "references/blind-dispatch.md",
+     "platforms/codex/plugin/references/blind-dispatch.md",
+     "docs/BACKLOG.md"
+    ],
+    "authorized_creates": [],
+    "profile": "high",
+    "required_paths": [
+     "src/engine/autopilot-engine.js",
+     "src/engine/campaign-composition.js",
+     "schemas/implementation-campaign-receipt.schema.json",
+     "hooks/tests/implementation-campaign-receipt.test.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-17-blind-review-packet-engine.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 13,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-c394f4578b74beb7e84eb0dc3249b5a803f67f0c5ba668859949eb5b8467decc"
+   ],
+   "source_rubric_ids": [
+    "R108161835666975182734467775705987477305100300300344676507772860436836081341645",
+    "R16282830409618932239814006768118167221462271469022344913118012778984494415682",
+    "R17444072668106531321446938724023692846089133426662958726053278740542624390700",
+    "R22484418309856917228675988676129490861027734567673703998931305378386697961288",
+    "R25809964822802736790116178266055981582244914701794763215026201524842910880959",
+    "R49255190466724510744711359977197671140509763797731268288122640487564282329413",
+    "R58453558225120813219358722384925753871989084190361069233342838672329872109872",
+    "R93112282071692047614741206212209225743851030805177936718749494842419226981022",
+    "R99368653990662093319148200167020912403072240491232371909811049029676518211133"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/autopilot-engine.test.sh",
+    "bash hooks/tests/implementation-campaign-receipt.test.sh",
+    "bash hooks/tests/implementation-campaign-dogfood.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/controller-execution-independent.test.sh",
+    "bash hooks/tests/qc-panel-honesty.test.sh",
+    "bash hooks/tests/status-task.test.sh",
+    "bash hooks/tests/next-touch-validation.test.sh",
+    "bash hooks/tests/review-runner.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

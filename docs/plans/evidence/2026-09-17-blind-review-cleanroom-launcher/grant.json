@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-6e6a15016119ff89f230af8d32ab853217ed75c5762811a2df8febbaee59f0b7",
+  "claim_id": "claim-v1-0b7504e320f271a798c0f84a846915dad9de4ef077494d6e6ccb4d7c0d25646e",
+  "mission_grant_ref": "28065f9ccafac9f7fc543d943f5a805fbf31feea7e5d26c851a82a38d9ef2ce3",
+  "mission_subject_digest": "da1bb2161dd95a34d16ac7f0a4812c8d9c2ff675b2a0a22172d791604e1d293d",
+  "mission_campaign_id": "campaign-v2-0c57544e3d5122d2c56b460e6d828a61975d393c649d03400bfa9f828184b1e8",
+  "graph_node_id": "blind-review-cleanroom-launcher-2026-09-17",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/6e6a15016119ff89f230af8d32ab853217ed75c5762811a2df8febbaee59f0b7/blind-review-cleanroom-launcher-2026-09-17/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/6e6a15016119ff89f230af8d32ab853217ed75c5762811a2df8febbaee59f0b7/blind-review-cleanroom-launcher-2026-09-17/attempt-1/campaign.seal.json",
+  "branch": "mission/6e6a15016119/blind-review-cleanroom-launcher-2026-09-17-a1",
+  "base_sha": "c69f4bc533d91969185c9bdfbd6af2782f243040",
+  "state_hash": "b4b0003730b81d8c369c031535b6f8b71e03ffcdb5337db777bb94cede452d72"
+}

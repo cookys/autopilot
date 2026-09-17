@@ -1,14 +1,15 @@
 ## 目標
-接續 autopilot 維護。2026-09-17 出貨到 **v2.36.59**（merge `ad852de2`，release `fb004007`，已推 `origin/develop` @ `e882896f`）：blind review redesign **第一刀 1a-A**（content-addressed、deny-list 的 review packet ＋ `dispatchReview` 接線）。整個 redesign 切成四刀（plan §7）：**1a-B**（engine 傳 `options.packet`、receipt 帶 `packet_hash`、panel 一致性）→ **1b**（cleanroom tier：`bwrap` launcher、intake preflight canary、runner tier 取代 `BLIND_DISCOVERY_CAPABLE_RUNNERS`、codex 回 panel、可設定 deny-list）→ **2**（verify 一次、砍 in-rail 單席 review、三席並行＋standby、panel snapshot）。下一個 session 做 **1a-B**（BACKLOG open row，L）。
+接續 autopilot 維護。2026-09-17 出貨到 **v2.36.59**（merge `ad852de2`，release `fb004007`，已推 `origin/develop`；HANDOFF 這次 commit 前 HEAD = `7c20d977`）：blind review redesign **第一刀 1a-A**（content-addressed、deny-list 的 review packet ＋ `dispatchReview` 接線）。整個 redesign 切成四刀（plan §7）：**1a-B**（engine 傳 `options.packet`、receipt 帶 `packet_hash`、panel 一致性）→ **1b**（cleanroom tier：`bwrap` launcher、intake preflight canary、runner tier 取代 `BLIND_DISCOVERY_CAPABLE_RUNNERS`、codex 回 panel、可設定 deny-list）→ **2**（verify 一次、砍 in-rail 單席 review、三席並行＋standby、panel snapshot）。下一個 session 做 **1a-B**（BACKLOG open row，L）。
 
 ## 現況
-- `develop` = `origin/develop` @ `e882896f`。工作樹乾淨；沒有 mission worktree／branch（`lifecycle-receipt.json` `zero_residue: true`；merged 分支進 bundle）。別的 session 的 `…/7ef6560a…/scratchpad/baseline` detached worktree 不是我們的、別動。
+- `develop` = `origin/develop`。工作樹乾淨；沒有 mission／verify worktree 或 branch（`lifecycle-receipt.json` `zero_residue: true`；merged 分支進 bundle）。plan-review state 留兩個 lineage（v1／v2）當證據。別的 session 的 `…/7ef6560a…/scratchpad/baseline` detached worktree 不是我們的、別動。
 - session marker 已 `retire` → `active: false`。routing 指 `blind-review-packet-2026-09-16`（graph `d3068a5e…`，已完成）→ admission READY。開下一個之前照 recipe：新 graph → routing 換 → `mission-terminal-reconcile.js legacy --graph-digest <new>`。
 - **pin 有動**（`004cb2da`，operator 決定 per 上版 HANDOFF 步驟 0 選項 (a)）：`qc_panel[0]` = `claude-fable-5-1/claude-native high @none`（packet tier），`MiniMax-M3/cc-shim` 也補了 standing pin（原本 `reviewer_qualified=false` 沒被 admit）。`.claude/review-loop-config.md` 同步改了（qc_panel／runners／efforts／endpoints）。**1b 落地後換回 `gpt-5.6-sol/codex max`**——config 檔＋`pin-seat`。grok 仍 402：consult 走 `dispatch-author.sh --runner codex --model gpt-5.6-sol --effort high --prompt-file … --timeout 20m`。
 - CI（release-gated）：run `35132044435`（這次 release）`completed failure`——只剩已知的 `dispatch-detached-campaign-authority`（8 passed, 2 failed；open row），executable gate 這次綠。
 - **兩個 suite 從 `acf3b06c` 起 base 紅**（`provider-readiness-consumer` 5、`autopilot-cli` 33），任何 campaign 的 `verification_commands` 都不要放。
 - 這次量到兩個 rail 缺陷（都登 row）：(1) **final panel 三席全部在 `dispatch-review.sh` 5m 預設 timeout 死掉**（`performFinalPanel`→`reviewDiff` 不傳 `--timeout`；90 KB diff 就夠）——campaign 跑完 implement／verify／in-rail review／full_suite 才死；(2) **graph-check 放行 `max_wall_seconds` 14400，contract schema 上限 7200**，grant 後 intake 才拒，燒一次 attempt。在 (1) 修好前，**每個 managed campaign 都會在 final panel 死**——預期走 l3 降級＋手動 panel（codex 非 blind 二審 `--timeout 20m` 最能抓錯，這次抓到五條）。
-- Peer：本 session 沒有 peer 訊息進來。
+- Peer：relay buffer 從 8 月底翻到 09-17 01:44Z 全查過——沒有寄給 aimax395 的未回請求；09-15 後的 @team 都是別專案的資訊通知（revival.3d、itx-chatgpt 的 BlenderMCP 問題是 cuda 端點）。**沒有主動通知 cuda** v2.36.59 與「panel seat 5m timeout 讓每個 managed campaign 死在 final panel」——operator 沒點頭；要通知用 `fleet send`（本專案 scope）。
+- 主機：09-17 01:5x 關掉兩個閒置三週的 llama-server（Ornith-35B :8002 手動起的，`kill`；gemma-4-26B :8001 = `scriptorium-summary-llm` user service，只 `stop` 沒 disable）→ used 80→35 GB。8 個 `las` CADO worker（mple2-recovery）是 operator 的算題，沒動。harness 記憶體守衛的觸發條件因此暫時解除，但守衛本身還在。
 
 ## 已決事項(不重議)
 - 承接上版全部（backlog row=index、rail 停了照文件降級、review 三輪停、config 席位≠合格、marker retire 不手刪、pre-spend 拒絕走 pre-claim、換 graph 開新 lineage、B 兩個 base 紅 suite 不 reseal）。
@@ -35,6 +36,7 @@
 2. `docs/plans/evidence/2026-09-16-blind-review-packet/README.md` — 這次 campaign 怎麼死、怎麼降級、codex 抓到什麼。
 3. `docs/BACKLOG.md` — open：panel seat timeout（Fix）、wall-cap mismatch（Fix）、hash batching（S）、cut 1a-B（L）。
 4. `CHANGELOG.md` v2.36.59。
+5. `skills/l5/references/hetero-impl-loop.md` 5b（本輪加了 rubric 性質／換 lineage 一段）。
 
 ## 陷阱
 - **harness 的記憶體守衛會殺 `run_in_background` 的長工作**（這台 `las` factoring＋llama-server 佔 ~80 GB，free 常 <15 GB）：plan review 被殺兩次、campaign 也可能。長工作一律 `setsid nohup … & disown` 分離＋`Monitor` 輪詢檔案（不是裸等）；被殺的 plan-review 會留 `orphaned_active_claim_transport_exhausted`，零席消費時把 `~/.autopilot/plan-review/<hash>/` 搬走重跑（記進 Review log）。

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-17T10:56:56.655Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-085bdaa1ea1615fce0832a54e7a245959212f31f63be06286b0380edd984f907",
+  "observed_head": "f15e9e1e7c1891d5952f3b2a95db171098302301",
+  "worktree_observation_digest": "68c240b8e48075f37ef274586f4e28d9ad73485b88f07576137e195f5acb5ea6",
+  "journal_digest": "95ec04ef6840562bae120406358c1a1e1067dd44142d3fe72017b1bca8fbf6e1",
+  "disposition_digest": "acea1cad7d26bea060ff8dd0bcce131f5bd9b3a195343bc2cee037eb2517c3d9",
+  "branch_inventory_digest": "1f137a465285395b7878516ed821ae6efdaaea38c92cf92e6e246377a6488e23",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/a5c2d5acdd1b/blind-review-cleanroom-intake-2026-09-17-a1",
+      "tip": "af1879cbf70f4eb4e9ce6ea49feb0217130772f1",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-17/reap-20260917T105550Z-2159222.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "a053befcac49523ef0a7814404f8cfdf9c6a51cb7e2331f00841ea1477b5f96f"
+}

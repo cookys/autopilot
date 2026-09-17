@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "artifact_type": "merge_execution_receipt",
+  "manifest_seal": null,
+  "root_run_id": null,
+  "status": "complete",
+  "halt_reason": null,
+  "halt_edge": null,
+  "edges": [
+    {
+      "sequence": 1,
+      "source_ref": "refs/heads/mission/a5c2d5acdd1b/blind-review-cleanroom-intake-2026-09-17-a1",
+      "target_ref": "refs/heads/develop",
+      "mode": "no-ff",
+      "status": "executed",
+      "source_validation": {
+        "ref": "refs/heads/mission/a5c2d5acdd1b/blind-review-cleanroom-intake-2026-09-17-a1",
+        "expected_sha": "af1879cbf70f4eb4e9ce6ea49feb0217130772f1",
+        "actual_sha": "af1879cbf70f4eb4e9ce6ea49feb0217130772f1",
+        "from_edge": null
+      },
+      "target_validation": {
+        "ref": "refs/heads/develop",
+        "expected_sha": "f15e9e1e7c1891d5952f3b2a95db171098302301",
+        "actual_sha": "f15e9e1e7c1891d5952f3b2a95db171098302301",
+        "from_edge": null
+      },
+      "before_sha": "af1879cbf70f4eb4e9ce6ea49feb0217130772f1",
+      "after_sha": "f15e9e1e7c1891d5952f3b2a95db171098302301",
+      "merge_commit": "f15e9e1e7c1891d5952f3b2a95db171098302301",
+      "source_sha": "af1879cbf70f4eb4e9ce6ea49feb0217130772f1",
+      "accepted_sha": "f15e9e1e7c1891d5952f3b2a95db171098302301",
+      "integration_method": "merge",
+      "unit_id": "blind-review-cleanroom-intake-2026-09-17",
+      "conflicts": [],
+      "error": null,
+      "preservation": {
+        "approved_paths": [],
+        "protected_paths": [],
+        "action": "none",
+        "restored": true,
+        "verification": "exact"
+      },
+      "edge_receipt_digest": "6534977123f85aabe8c6cbd5b69f6b6f012580957dff53178e3679aac62270a1"
+    }
+  ],
+  "receipt_digest": "14c9bc629cd265743bed5c3e84fe09926be0f6d7e6a803e6510e213861747c60"
+}

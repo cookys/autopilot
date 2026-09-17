@@ -1,42 +1,39 @@
 ## 目標
-接續 autopilot 維護。2026-09-17 出貨 v2.36.62（1b-A：cleanroom launcher＋`dispatch-review.sh` seat tiers；merge `94d44940`、release `1cf61c9b`、closeout `d7912c7e`，已 push）。**現在做 1b-B（intake probe＋JS/resolver tier table＋codex pin 條件式回歸）**：plan 已校對到 base、plan hetero loop 待跑／跑中（見「現況」）。
+接續 autopilot 維護。2026-09-17 出貨 v2.36.62（1b-A cleanroom launcher＋seat tiers，merge `94d44940`）與 v2.36.63（1b-B intake cleanroom probe＋JS/resolver tier，merge `bc4ea99e`、release `f15e9e1e`）。兩刀 closeout 全清（worktree／branch reap、residue receipt zero、marker retire）。**下一刀 1c：可設定 packet deny-list**——plan 草稿已在 repo（DRAFT），從 plan loop 開始。
 
 ## 現況
-- `develop` = `origin/develop`。1b-A 殘留全清：mission worktree 已 reap（bundle 在 `.git/autopilot-reap-bundles/2026-09-17/`）、branch 已 reap、`residue-receipt.json` `zero_residue:true`、session marker `70b3e2b4…` 已 retire。evidence：`docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md`（時間線、panel 裁定、GLM 二審 4 🔵、§5 dogfood：真 codex 額度錯誤在邊界內、auth.json sha 不變）。
-- **1b-B 已 freeze（`7562cb42`）**：routing → `blind-review-cleanroom-intake-2026-09-17`（graph digest `16ca5f07…`、lineage `lineage-v1-a5c2d5ac…`）；plan loop G1/G2 跑完（各 10／7 條全 fold，receipt rc 0，`evidence/…-intake/g{1,2}-*`）；session marker **l5 active**（session `ed4f4545-3dbb-4256-bdb4-80502ec4d221`）；prepared.json 在 scratchpad。**campaign 跑中或已跑完時：不要動 plan 檔**（source sha 凍結）。
-- **1b-B**：plan `docs/plans/2026-09-17-blind-review-cleanroom-intake.md`（Base `d7912c7e`，§0 行號已校對）、rubric R1–R8（frozen）、manifest（GLM-5.2 anthropic-compatible＋claude-fable-5-1 claude-native）。brief `evidence/…-intake/scratch/impl-brief.md`（8 KB 內；派工時 sed `<BASE>` 到 **scratchpad 副本**，repo 副本不動）。base suites 12/12 綠：`evidence/…-intake/base-suites-d7912c7e.txt`。
-- 1b-A GLM 二審 carry-in：HOME=DENIED 斷言進 1b-B（cleanroom-launch.test.sh 在 scope）；`_pf_err` unlink＋dead block 登 BACKLOG row（rail 本刀 byte-identical）。
-- Peer（openclaw）owner ruling relay 已登 BACKLOG row（(a)=B、(b) 同 refusal 兩次即停）——**要 cookys 在 session 內點頭才實作**。
-- v2.36.60 live 資料點（fleet-comms P2 in-loop GLM review 到 `ready`）已寫進 1b-A evidence README。
+- `develop` = `origin/develop`（push 後）。無 active session marker；mission routing 仍指 1b-B graph（`blind-review-cleanroom-intake-2026-09-17`，已 completed）；1c freeze 時照 1b-B 的 `freeze-c1d.js` 複製一份改 slug，跑 legacy reconcile 換 graph。
+- 1b-B evidence：`docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md`（時間線、MiniMax／GLM 工具病、claude 🟡 修補 `af1879cb`、§5 dogfood、resume rail 缺陷）。
+- **1c plan**：`docs/plans/2026-09-17-blind-review-packet-deny-config.md`＋`.rubric.md`（DRAFT；§0 行號以 `130b97a8` 校對，plan loop 前用 `d7912c7e`…`f15e9e1e` 之間的 HEAD 再校對一次、Base 釘 release commit）。範圍：`review_packet_deny_extra`（additive、單一 grammar owner＝`normalizeDenyList`、resolver conditional 欄位如 `qc_panel_endpoints`、engine `reviewPacketIdentity` 收 `denyExtra`、review.js 合成 effective list；builder／rail／launcher／intake byte-identical）。manifest／brief／freeze 尚未寫（抄 1b-B 的：`evidence/…-intake/scratch/{run-g.sh,dispatch.sh,freeze-c1d.js}`＋`impl-brief.md`）。
+- BACKLOG 新 open rows（都 fired）：final panel 無 repair 迴圈（1b-A）、**reviewer no_verdict 留 REVIEWING 不能 resume**（1b-B，rail 缺陷）、codex pin swap 等 live cleanroom verdict（09-19 16:26 後）、dispatch-review cleanroom path hygiene（S）、openclaw ruling relay（要 cookys 點頭）。
+- codex 額度 2026-09-19 16:26 回來後：plan §5 尾段——`cleanroom-launch.sh --profile codex` 對真 packet 拿 parsed verdict → `engine-capability-state.js pin-seat --role qc_panel --engine gpt-5.6-sol --runner codex --effort max …`＋`review-loop-config.md qc_panel[0]` 換回；也可讓 consult 席回 codex。
 
 ## 已決事項(不重議)
-- 承接上版全部；1b-B 範圍＝plan §1 六條（JS 單一 tier table＋shell parity、intake `cleanroomProbe` adapter 每 runner 一次、`rejected` → `final_panel_seat_cleanroom_unavailable`、resolver ⚠→advisory、engine 不動、codex pin 只在 live verdict 後）。deny-list config 另刀。
-- 1b-A rail 觀察（final panel 無 repair 迴圈）已登 BACKLOG，不在 1b-B 修。
-- record-integration 的 accepted-sha 要等於 HEAD：release commit 後才跑就用 release/closeout 的 HEAD（1b-A 用 `1cf61c9b`）。
+- 承接上版全部。1c＝additive deny-list（不能拿掉預設）、一個 grammar owner、conditional 欄位不動 `x-field-order`。
+- 兩個 in-rail／二審工具病（MiniMax tautological、GLM END 後多字）都不算票；換席補乾淨判決（claude-native）。
+- record-integration 要在 reap branch **之前**（需要活 ref）；做反了就從 `.git/autopilot-reap-bundles/` 的 bundle `git fetch <bundle> refs/heads/<b>:refs/heads/<b>` 還原再 record 再刪。
 
 ## 下一步（順序）
-1. （已做）plan 校對、classify U0、G1/G2、freeze、l5 marker、prepare。
-2. grant（`mission grant --repo . --prepared <scratch>/prepared.json --node blind-review-cleanroom-intake-2026-09-17`，一次一 attempt；tree 要乾淨）→ brief 副本填 `base_sha` → dispatch（抄 1b-A `scratch/dispatch.sh`：`AUTOPILOT_LEVEL=l5 AUTOPILOT_ROOT_RUN_ID=<contract.mission_runtime.root_run_id>`，`--max-rounds 3`，**不傳 `--campaign-ledger`**，setsid nohup）。`awaiting_disposition` → `--resume --campaign-disposition-authority <file>`（不帶 policy）。
-3. 若這個 session 已派出：看 scratchpad `c1d/impl-run1.{json,err}`（路徑寫在下面「現況」）；worktree 在 `/tmp/hetero-mission-a5c2d5acdd1b-*`。
-4. campaign 跑時起草 deny-list config 那刀。
-5. 收尾同 1b-A：驗候選 §4.1 十二條＋scope 空 diff → GLM 二審（diff 不加路徑）→ plan §5 dogfood → merge `--no-ff`（trailer 末段）→ `sync-version.js --version 2.36.63 --hook-count 31 --skill-count 30` → CHANGELOG／INDEX／maintenance／BACKLOG redesign row → record-integration（accepted=HEAD）→ reap wt／branch（root-run-id＝campaign_id）→ residue receipt → retire marker → preflight 8/8 → push。
-6. 09-19 16:26 後：真 codex 進 launcher 拿 parsed verdict → pin swap（§1.5）。
+1. 1c：校對 §0 → manifest（GLM anthropic-compatible＋claude-native；codex 回來可加 sol）→ base suites §4.1 九條（detached）→ classify → G1／G2（`cp plan → plan.as-reviewed-gN.md` 先、rubric 不動、`--disposition-file` G1 檔給 G2）→ freeze → l5 → grant → brief ≤8 KB（scratchpad 副本填 base）→ dispatch。
+2. campaign 跑時：起草 cut 2（verify-once、並行席）或處理 BACKLOG fired rows。
+3. 收尾同 1b-A／1b-B（驗候選、二審 full diff 不加路徑、§5 dogfood、merge trailer 末段、`sync-version.js --version 2.36.64 --hook-count 31 --skill-count 30`、CHANGELOG／INDEX／maintenance／BACKLOG、**record-integration → reap → receipt → retire**、preflight 8/8、push）。
 
 ## 驗證方式
 - `git fetch -q origin && git status -sb` → `## develop...origin/develop`。
-- `git worktree list` 只剩主 checkout（另一個 `7ef6560a…/baseline` 是別的 session 的，別動）。
-- `node scripts/session-mode.js status --repo-root "$PWD"` → 無 active marker（直到 1b-B set l5）。
+- `node scripts/session-mode.js status --repo-root "$PWD"` → `"active": false`。
+- `git worktree list` 只剩主 checkout（`7ef6560a…/baseline` 是別的 session 的，別動）；`git branch --list 'mission/*'` 空。
 
 ## Read-order
-1. `docs/plans/2026-09-17-blind-review-cleanroom-intake.md` 全文＋rubric。
-2. `docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md`、`scratch/{dispatch.sh,run-g1.sh,freeze-c1c.js}`（照抄的配方）。
-3. `skills/l5/references/`（managed campaign depth-0 步驟）。
-4. `docs/BACKLOG.md` open：final panel 無 repair、dispatch-review hygiene、changed_files cap、openclaw ruling relay。
+1. `docs/plans/2026-09-17-blind-review-packet-deny-config.md`＋rubric。
+2. `docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md`、`scratch/`（配方）。
+3. `skills/l5/references/hetero-impl-loop.md` Depth-0 recipe。
+4. `docs/BACKLOG.md` open rows（上面列的）。
 
 ## 陷阱
-- **frozen rubric 一個字都不能動**；receipt 用被審那版 plan bytes（fold 前 `cp`）。
-- **二審 diff 不加路徑**；reviewer 說「格式錯」先查 pre-commit（CLAUDE.md 800 B 行上限）。
-- `record-integration.js` accepted-sha 必須＝HEAD。reaper 的 root-run-id 給 campaign_id（`impl-run1.json` `campaign_control.campaign_id`），給 mission root 會假乾淨。
-- zsh：`echo ===` 會炸（`=` 展開）、`$PIPESTATUS` 要 bash；`load-endpoints-env.sh` 包 `bash -c`。
-- 長套件 setsid nohup＋Monitor；套件一次一個（平行會互相干擾）；scratchpad 隨 session 消失——產物先進 repo。
-- 隔離 suite 一定要 `AUTOPILOT_HOST_ISOLATION=1` 在**這台**跑；seat root 在 packet 旁（`<packet>/../seat`），不在 /tmp。
+- **frozen rubric 一字不動**；receipt 用被審那版 bytes；G2 要 `--disposition-file <g1-dispositions.json>`（`generation: 1`），漏了 rc=3 不派。
+- disposition 詞彙：`accepted_blocker`／`accepted_nonblocking`／`deferred`／`rejected`（沒有 `accepted`）。
+- **二審 diff 不加路徑**；reviewer 說格式錯先查 pre-commit（CLAUDE.md 800 B 行）。
+- zsh：`echo ===` 炸、`$PIPESTATUS` 要 bash、**`"$B:refs/…"` 會被 `:r` 修飾子吃掉**（用 `${B}:` 或 bash -c）；`load-endpoints-env.sh` 包 `bash -c`。
+- 套件一次一個；長工作 setsid nohup＋Monitor（30 分鐘會過期要重掛）；scratchpad 隨 session 消失——產物先進 repo。
+- campaign 跑中 repo tree 要乾淨（intake 拒 dirty tree 燒 attempt）；rail 停了才動 tree。
+- reaper root-run-id 給 campaign_id（`impl-run1*.json` `campaign_control.campaign_id`）。

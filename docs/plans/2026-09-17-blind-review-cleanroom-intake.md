@@ -48,19 +48,34 @@
    the message's tail changed from "complete the codex containment qualification" to "or use a
    cleanroom-tier runner"; tier `cleanroom` → a new adapter `adapters.cleanroomProbe ||
    defaultCleanroomProbe` is called ONCE per distinct cleanroom runner (not per seat) with
-   `{ runner, repo, contractPath, roster }` and must return a decision: `ready` (probe green),
-   `rejected` (probe exit 2/3 or launcher missing), `unknown` only when `adapters.cleanroomProbe` is
-   absent AND the intake is not enforced (shadow), mirroring `defaultReadiness`. `rejected` →
-   `final_panel_seat_cleanroom_unavailable` with the launcher's first stderr line and exit code in
-   the reason; the seat is refused BEFORE the qualification check, before any claim or spend, and the
-   probe result is a `step('cleanroom_probe', …)` in the intake receipt carrying `runner`,
-   `exit_status`, `launcher_json` (the launcher's one line, parsed) — a step, not a receipt or
-   attestation (ADR-0001). `defaultCleanroomProbe` shells out to
-   `scripts/lib/cleanroom-launch.sh --preflight --deny-path <repo> --deny-path <git common dir>
-   --deny-path <operator HOME> --deny-path <contractPath's directory>` with a 60 s `timeout`, cwd =
-   repo, env scrubbed to `PATH`/`HOME`; it is the only place intake spawns a process for a review seat.
-   `packet` seats are untouched. Order: tier/probe → qualification (`finalPanelSeatQualified`) → the
-   rest, exactly where the blind block sits today.
+   `{ runner, repo, contractPath, roster }` and must return a decision in the closed set
+   `ready | rejected` — there is no `unknown`: the adapter is never absent (the default exists),
+   and the blind block runs before `missionMode` is computed (`campaign-intake.js:1481-1483`), so
+   the probe never consults enforcement mode. A decision outside the set is refused as
+   `cleanroom_probe_adapter_invalid` through the same `requireDecision` rail the readiness adapter
+   uses (`:1825-1836`). Launcher exit → decision, exhaustively: exit 0 with one parseable JSON line on
+   stdout → `ready`; exit 0 without such a line → `rejected` (`launcher emitted no launch line`);
+   exit 124 (the probe's own `timeout`) → `rejected` (`probe timed out after <n> s (exit 124), no
+   diagnostic`); any other exit (2, 3, 137, …) → `rejected` (`exit <n>: <first stderr line>` or
+   `exit <n>: no diagnostic` when stderr is empty). `rejected` → `final_panel_seat_cleanroom_unavailable`
+   carrying that reason verbatim; the seat is refused BEFORE the qualification check, before any
+   claim or spend, and the probe result is a `step('cleanroom_probe', …)` in the intake receipt
+   carrying `runner`, `exit_status`, `launcher_json` (the launcher's one line, parsed; `null` when
+   absent) — a step, not a receipt or attestation (ADR-0001). `defaultCleanroomProbe({ runner, repo,
+   contractPath, roster }, { launcher, timeoutMs, bwrap })` shells out to `<launcher> --preflight
+   --deny-path <repo> --deny-path <git common dir> --deny-path <operator HOME> --deny-path
+   <contractPath's directory>` (`--bwrap <bwrap>` when given) under `timeout <timeoutMs>`, cwd = repo,
+   child env = `PATH` + the operator `HOME` only; `launcher` defaults to
+   `scripts/lib/cleanroom-launch.sh` beside the engine (env `AUTOPILOT_CLEANROOM_LAUNCHER` overrides,
+   the same seam `dispatch-review.sh:333` honours), `timeoutMs` defaults to 60000, `bwrap` to env
+   `AUTOPILOT_CLEANROOM_BWRAP`. The operator `HOME` is passed only as a deny path: the launcher sets
+   the seat HOME to `/home/review` itself (`cleanroom-launch.sh:253-256`) and the deny check runs
+   inside the namespace where the operator HOME is not mounted, which is why
+   `--preflight --deny-path <repo> --deny-path <HOME>` already exits 0 on this host
+   (`cleanroom-launch.test.sh:178-181`); the `host-probe` row is therefore satisfiable as written.
+   It is the only place intake spawns a process for a review seat, exactly one process per
+   distinct cleanroom runner. `packet` seats are untouched. Order: tier/probe → qualification
+   (`finalPanelSeatQualified`) → the rest, exactly where the blind block sits today.
 3. **Resolver: the ⚠ becomes a tier lookup.** `resolve-review-loop.sh:2113-2132`: the literal
    four-runner `case` becomes `review_seat_tier` (a copy of the same function, parity-tested);
    `none` keeps the existing ⚠ text minus the codex-qualification tail; `cleanroom` emits a NEW
@@ -90,27 +105,40 @@
 - `src/engine/campaign-intake.js` (+ mirror): §1.2 — the blind block becomes the tier switch + probe;
   `defaultCleanroomProbe`; new rejection code; `step('cleanroom_probe')`.
 - `scripts/resolve-review-loop.sh` (+ mirror): §1.3.
-- `schemas/…`: NONE expected — verify that the intake receipt `steps[]` schema (if closed) admits a
-  `cleanroom_probe` step name; if it enumerates step owners, add it (+ mirror). (Re-verify at base.)
+- `schemas/`: NONE. Verified at base `d7912c7e`: no schema under `schemas/` encloses the intake
+  receipt `steps[]` owner names (no `enum` near `owner`/`steps` in any `schemas/*.json`), so a
+  `cleanroom_probe` step needs no schema edit; `check-contract-schema.js` reconciles the shell
+  resolver's field set and `x-shell-validated` enums against `review-loop-contract.schema.json`, and
+  the advisory line lands in the existing `capability_warnings[]` field, so the resolver's field
+  set is unchanged (R4) and the gate stays green. Schemas are byte-identical to base (§2.6).
 - Tests (RED-first, `# RED at base d7912c7e: <observed>`; stubs only — the probe adapter is
   injected in every engine/intake suite, the REAL launcher runs only in the host-gated suite):
   - `hooks/tests/implementation-campaign-routing.test.sh`: the fixture at ~`:3302` (codex seat →
-    `final_panel_seat_blind_incompatible`) becomes TWO cases: `grok` seat → still
-    `final_panel_seat_blind_incompatible` (preservation of the code, new message tail); `codex` seat
+    `final_panel_seat_blind_incompatible`) becomes TWO cases: `grok` seat (in the contract's
+    `reviewer_runner` enum, `schemas/review-loop-contract.schema.json`, and in neither tier at base)
+    → still `final_panel_seat_blind_incompatible` (preservation of the code, new message tail); `codex` seat
     with an injected `cleanroomProbe` returning `rejected` (exit 2, `bwrap not found`) →
     `final_panel_seat_cleanroom_unavailable`, `implCalls === 0`, `reviewCalls === 0`, reason carries
     the stderr line (RED at base: blind_incompatible); `codex` seat with the probe returning `ready`
     and a qualified tuple → intake admits and the receipt has a `cleanroom_probe` step with
-    `runner: 'codex'` (RED at base: refused); two codex seats → the probe adapter is called ONCE.
+    `runner: 'codex'` (RED at base: refused); two codex seats → the probe adapter is called ONCE;
+    plus the REAL `defaultCleanroomProbe` driven with a stub `launcher` (no bwrap, no host gate):
+    a stub that prints one JSON line and exits 0 → `ready` with `launcher_json` parsed; a stub that
+    writes one stderr line and exits 2 → `rejected`, reason `exit 2: <that line>`; a stub that sleeps
+    with `timeoutMs: 500` → `rejected`, reason names exit 124; an adapter returning `unknown` →
+    `cleanroom_probe_adapter_invalid`.
   - `hooks/tests/implementation-campaign-state.test.sh`: its two blind pins re-targeted to a
     `none`-tier runner (preservation) + one `cleanroom_probe` step-shape assertion.
   - `hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh`: the eight ⚠ assertions keep the
     `none` case (with the new tail) and gain the cleanroom advisory line for a codex seat (RED at
     base: codex produced the refusal ⚠).
   - `hooks/tests/dispatch-review.test.sh` parity block (~`:1097-1143`): extended to assert the JS
-    `reviewSeatTier` equals the shell `review_seat_tier` for every runner in the contract's runner
-    enum (both `packet` and `cleanroom` members reach the right rail; `none` refused), and that the
-    resolver's mirror agrees (`--check-scorecard` on a fixture config with one seat per tier).
+    `reviewSeatTier` equals the shell `review_seat_tier` for every runner in
+    `schemas/review-loop-contract.schema.json` `properties.reviewer_runner.enum` minus `auto`, read
+    from the schema at test time (never a hard-coded list; a runner added to the enum is covered
+    automatically), with both `packet` and `cleanroom` members reaching the right rail and `none`
+    refused, and that the resolver's mirror agrees (`--check-scorecard` on a fixture config with one
+    seat per tier).
   - `hooks/tests/cleanroom-launch.test.sh` (host-gated, from 1b-A): one added case — the REAL
     `defaultCleanroomProbe` (exported for the test) returns `ready` on this host and `rejected` with
     `AUTOPILOT_CLEANROOM_BWRAP=/nonexistent`; plus the 1b-A second-review carry-in: suite (a) asserts
@@ -119,8 +147,11 @@
 - Docs: `references/blind-dispatch.md` (+ mirror) "Cleanroom tier" section gains "Intake probe
   (v2.36.63)" + the credential recovery sentence; `skills/l5/references/hetero-impl-loop.md` (+ mirror)
   step 6b: the ⚠ sentence now names both tiers and the intake probe; `docs/BACKLOG.md` redesign row
-  Context → `… 1b-A launcher (v2.36.62), 1b-B intake probe (v2.36.63) shipped; deny-list config, 2
-  open. Detail in the pointer.`
+  Context → EXACTLY `packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake
+  canary; verify-once; parallel seats. Shipped: 1a-A v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B
+  v2.36.63. Open: deny-list config, cut 2. Detail in the pointer.` (234 bytes, under the 240-byte
+  Context cap) with the row's Status field staying the literal `open`; `v2.36.63` in text is a pin
+  for the release commit, which is depth-0's, not the hand's.
 
 ### 2.5 Sealed `output_paths` (exact; re-check mirrors at base)
 
@@ -143,14 +174,17 @@ platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
 docs/BACKLOG.md
 ```
 
-Nothing created. `max_changed_files` sealed at 18 (> 16) — defect (3).
+Nothing created. `max_changed_files` sealed at 18, deliberately above the 16 sealed paths: the
+rail's `changed_files >= max_changed_files` check refuses repair when the hand touched every sealed
+path (BACKLOG row, hit on 1a-B); the headroom is the workaround until that row ships.
 
 ### 2.6 Global constraints (verbatim into the dispatch)
 
 - Intake decides, the resolver reports, the engine dispatches: no probe in the resolver, no tier
   logic in `autopilot-engine.js`, no new receipt/attestation type — the probe is a `step`.
 - A cleanroom seat is admitted only on a probe decision `ready` from the injected or default
-  adapter; `unknown` admits only in shadow mode; a pin or override never bypasses `rejected`.
+  adapter; the decision set is `ready | rejected` (anything else is `cleanroom_probe_adapter_invalid`);
+  a pin or override never bypasses `rejected`.
 - The probe spawns exactly one process per distinct cleanroom runner per intake, with a 60 s cap,
   and never a model.
 - `dispatch-review.sh`, `cleanroom-launch.sh`, `review.js`, `review-packet.js`, `bin/autopilot.js`,
@@ -171,7 +205,7 @@ Nothing created. `max_changed_files` sealed at 18 (> 16) — defect (3).
 | id | criterion | evidence |
 |----|-----------|----------|
 | `tier-table` | one JS tier table; deprecated aliases equal to it; shell `review_seat_tier` and the resolver mirror agree for every runner in the contract enum | dispatch-review parity block |
-| `intake-probe` | `none` seat → `final_panel_seat_blind_incompatible` (new tail); cleanroom seat → probe called once per runner; `rejected` → `final_panel_seat_cleanroom_unavailable` before any claim/spend with the launcher's stderr line; `ready` → admitted with a `cleanroom_probe` step; `unknown` admits only in shadow | routing + state suites |
+| `intake-probe` | `none` seat → `final_panel_seat_blind_incompatible` (new tail); cleanroom seat → probe called once per runner; `rejected` → `final_panel_seat_cleanroom_unavailable` before any claim/spend with the launcher's stderr line; `ready` → admitted with a `cleanroom_probe` step; exit 124 / other exits / missing launch line each map to `rejected` with the stated reason; a non-binary adapter decision is `cleanroom_probe_adapter_invalid` | routing + state suites |
 | `resolver-advisory` | codex qc seat yields the cleanroom advisory line, not a refusal ⚠; `none` seats keep the refusal ⚠ | qc-panel-rejection suite |
 | `host-probe` | `defaultCleanroomProbe` is `ready` on this host and `rejected` with a missing bwrap | cleanroom-launch suite (host-gated) |
 | `no-regression` | §4.1 all exit 0 at the candidate; base set recorded | evidence |
@@ -194,8 +228,10 @@ bash scripts/sync-codex-plugin-skills.sh --check
 node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
 ```
 
-(`check-contract-schema.js` is `node`, fix before sealing; `resolve-review-loop.test.sh` must be
-checked for base colour — memory says a resolver-contract change drifts the whole suite.)
+Base record: `evidence/…-intake/base-suites-d7912c7e.txt` — all twelve exit 0 at base on a detached
+checkout, sequential, the isolation suite under `AUTOPILOT_HOST_ISOLATION=1` (2026-09-17).
+`resolve-review-loop.test.sh` is in the set because the resolver is touched; it must stay green at
+the candidate with only the qc-panel warning cases changed.
 
 ## 5. Dogfood proof (depth-0)
 
@@ -207,9 +243,10 @@ parsed verdict → then and only then the pin swap (§1.5) and the first live cl
 
 ## 6. Risks + inversion
 
-- **Probe cost at intake.** ~1 s per cleanroom runner, once; bounded by a 60 s cap → `rejected`.
-- **Shadow-mode `unknown`.** Same semantics as `defaultReadiness`; enforced intake never admits on
-  `unknown`.
+- **Probe cost at intake.** ~1 s per cleanroom runner, once; the 60 s cap is exit 124 → `rejected`
+  with a reason that says so (no launcher line exists on that path).
+- **No `unknown` decision.** The probe is binary; enforcement mode is not consulted (it is not
+  even computed yet where the blind block runs), so shadow and enforce behave identically.
 - **Suite drift.** Three suites pin the old message/code; the code stays, only the tail changes; the
   routing fixture moves its "incompatible" example to `grok`. `resolve-review-loop.test.sh` is run at
   base and at head because the resolver is touched.

@@ -1,0 +1,67 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-cleanroom-intake-2026-09-17",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "ee384ec569e3f5a0efc9fd01a1f6b9935049a7c4640b3937c68e0649e6bdad9d",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: §2 docs bullet now pins the redesign row Status to the literal `open`."
+  },
+  {
+   "fingerprint": "78e4b862432fc4662896d657fb43968ed230c5befa8f51c35d81dafcac6a0fd5",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: §4.1 now cites base-suites-d7912c7e.txt (twelve commands, all exit 0 at base, detached checkout, isolation suite under its host variable) instead of a memory note."
+  },
+  {
+   "fingerprint": "3617d19b54efbca6607ab4758b6a69f80bfb35dfce5c1dfe9b936d02314b449f",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: §1.2 now maps launcher exit to decision exhaustively — 0+JSON line → ready; 0 without a line → rejected; 124 → rejected \"probe timed out … no diagnostic\"; any other exit → rejected \"exit <n>: <first stderr line|no diagnostic>\"; defaultCleanroomProbe takes { launcher, timeoutMs, bwrap } so the routing suite drives the real default probe with stub launchers (exit 0 / exit 2 + stderr / sleeping with timeoutMs 500); acceptance row updated."
+  },
+  {
+   "fingerprint": "7af5d3bb7f928035136364951ae1e1383debcc501e15c3a0eed488d95c96e76d",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: `unknown` removed. The default adapter always exists and the blind block runs before missionMode is computed (campaign-intake.js:1481-1483), so the decision set is ready|rejected and anything else is cleanroom_probe_adapter_invalid via the existing requireDecision rail; §1.2, §2.6, §4, §6 aligned; test case added."
+  },
+  {
+   "fingerprint": "c23ef93e36c1402f1c5ec6980de23ff953995f531ecbbd7593c5f0e4342f39a1",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted as a clarity defect, mechanism unchanged: the launcher sets the seat HOME to /home/review itself (cleanroom-launch.sh:253-256) and the deny check runs inside the namespace where the operator HOME is not mounted; `--preflight --deny-path <repo> --deny-path <HOME>` already exits 0 on this host (cleanroom-launch.test.sh:178-181). §1.2 now states which HOME the child sees and why host-probe is satisfiable."
+  },
+  {
+   "fingerprint": "37c11c8995673228387f66ce0fc0fd4bcd6c78f02f598d01036102a4ef8d88d5",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: verified at base d7912c7e that no schema encloses intake steps[] owner names, so §2 now says NONE with the evidence and explains why check-contract-schema.js stays green (advisory lands in the existing capability_warnings[] field); the max_changed_files 18 > 16 sentence now names the rail defect it works around instead of reading as an unresolved self-flag."
+  },
+  {
+   "fingerprint": "8d880af9a0a86098207c20bd93da77f6c41e9757c931121fb30cd34ed696cbd2",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the stale footnote (check-contract-schema.js \"is node, fix\") is replaced by the base record; the base run is in the evidence dir (base-suites-d7912c7e.txt) before sealing."
+  },
+  {
+   "fingerprint": "180ba1ed67df71ccf50a15405d25ae4c484eefa683f72b5730e975876e821679",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: §2 now states grok is in schemas/review-loop-contract.schema.json reviewer_runner.enum and in neither tier at base."
+  },
+  {
+   "fingerprint": "446df2c5cfb08c29179484567b717d9dca5af671dfbedde96b2cfe4f3555937d",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the parity block reads reviewer_runner.enum from review-loop-contract.schema.json at test time (minus auto), never a hard-coded list."
+  },
+  {
+   "fingerprint": "f1f5821ab9413854b47b67f0ca2f5323fbac52b9f7f0a806cd2d81787c5e2cba",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the full Context string is written out (234 bytes, under the 240 cap), Status pinned to `open`, and v2.36.63 in text is stated to be a release-commit pin owned by depth-0."
+  }
+ ]
+}

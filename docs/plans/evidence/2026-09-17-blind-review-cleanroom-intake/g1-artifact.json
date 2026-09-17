@@ -1,0 +1,397 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-cleanroom-intake-2026-09-17",
+  "logical_plan_id": "blind-review-cleanroom-intake-2026-09-17",
+  "session_id": "c1d-g1-1789631596",
+  "session_key": "29e3c9989b5bad1717387ab53c0a1a4cb3099efcc82606c2ad881e0f05cf8a3e",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "8e2f3823c49e016ccfb8fea803d09d7684993c3cc5a389e0554236020a80e69c",
+  "manifest_sha256": "58a39d02248508818f9054e281a46c9cabae89ec1002492586a704b7a8618291",
+  "plan_sha256": "8fac3426a7291034d6a6116cc7a3c4495b44d209016a64fe808f5bdc3e130d85",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "5b459936f4c99846cca7bff499c5f61e12c3f36fdc2e6582ecd2845b7f6984e3"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0dad38239d808167b3c85d47bcbf1b2bf63b26ccf629ace8aba147f1f78de244",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-h71gvM",
+          "digest": "0dad38239d808167b3c85d47bcbf1b2bf63b26ccf629ace8aba147f1f78de244"
+        },
+        "receipt_digest": "a4aedc0c1116ceb38dd6f59054d76f02e634473d9151abe37c68a277c03607e0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "5a67010d9663e8febb815ea261610d52daccdbe521b3f7e701ca6a2a88ae14ed"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "c95526fb235b8301ef8e4f276ac9a31016b29ae3d9185d7d04d803a06bee859f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-8RNEXB",
+          "digest": "c95526fb235b8301ef8e4f276ac9a31016b29ae3d9185d7d04d803a06bee859f"
+        },
+        "receipt_digest": "0621513d2721f0d88cc789fd9a46c06bdd1316a39f3057862cdfdc337bd94cc1"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R8",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md redesign row",
+      "claim": "The plan supplies the new Context string and implies open defect counts, but never explicitly pins the row's Status field to the literal value open, which R8 requires.",
+      "evidence": "Section 2 docs entry ends with 'deny-list config, 2 open. Detail in the pointer.' and never names a Status value for the row; R8 requires 'Status open' on the redesign row.",
+      "evidence_reference": "Plan section 2, docs/BACKLOG.md entry",
+      "repair": "Add to the docs/BACKLOG.md entry: set the redesign row Status explicitly to open (it is not closed by this cut); the two open defects and the conditional pin swap keep it open by construction.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ee384ec569e3f5a0efc9fd01a1f6b9935049a7c4640b3937c68e0649e6bdad9d"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/resolve-review-loop.test.sh and the base-green sealing record",
+      "claim": "The plan flags that resolve-review-loop.test.sh must be checked for base colour from memory ('memory says a resolver-contract change drifts the whole suite') but does not yet record an observed base exit status, so the 'same set was green at base before sealing' premise is asserted rather than evidenced at plan time.",
+      "evidence": "Section 4.1 parenthetical: 'resolve-review-loop.test.sh must be checked for base colour — memory says a resolver-contract change drifts the whole suite'; no observed base exit code is recorded in the evidence dir reference.",
+      "evidence_reference": "Plan section 4.1, parenthetical after the command list",
+      "repair": "Before sealing, run the full section 4.1 command set in the detached base checkout d7912c7e (with AUTOPILOT_HOST_ISOLATION=1 for the isolation suite) and record the exit codes in docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/; if resolve-review-loop.test.sh is red at base, record the observed message and either scope the fix or explicitly note the pre-existing failure.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "78e4b862432fc4662896d657fb43968ed230c5befa8f51c35d81dafcac6a0fd5"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-intake.js defaultCleanroomProbe / cleanroom_probe step; plan §1.2 and §2.6",
+      "claim": "The plan does not define what the probe returns when the launcher times out, is killed, or exits with a status outside {0,2,3}, so a cleanroom seat could be admitted or refused without a launcher diagnostic and the 'rejected before any claim or spend' guarantee is unpinned for the timeout path.",
+      "evidence": "Plan §1.2 maps 'ready' to exit 0 and 'rejected' to 'probe exit 2/3 or launcher missing'; §6 says the 60 s cap yields 'rejected' but the timeout utility exits 124 (or 137 on SIGKILL), which is outside the enumerated codes, and no test in §2 or §4 covers a timeout or an unexpected exit status. R2 requires a failed probe to refuse with the launcher's diagnostic; a timed-out launcher emits no JSON line and possibly no stderr, so the reason field contract is undefined.",
+      "evidence_reference": "Plan §1.2 (decision mapping), §2.6 bullet 3 (60 s cap), §6 'Probe cost at intake'",
+      "repair": "State in §1.2 that any exit status other than 0 is 'rejected', that exit 124/137 from timeout yields reason 'probe timed out after 60 s' with exit_status recorded, and that a missing or unparseable JSON line is 'rejected' with launcher_json set to null-equivalent string 'unparsed'. Add one routing-suite case with an injected probe returning exit 124 and one host-gated case where the launcher path is a script that sleeps beyond the cap, asserting final_panel_seat_cleanroom_unavailable and implCalls === 0.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3617d19b54efbca6607ab4758b6a69f80bfb35dfce5c1dfe9b936d02314b449f"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-intake.js runCampaignIntake tier switch; plan §1.2 'unknown' semantics",
+      "claim": "The plan says 'unknown' is returned only when the adapter is absent AND intake is not enforced, but it never states what happens when the adapter is absent AND intake IS enforced, so the enforced no-adapter path is undefined and could silently fall through to admission.",
+      "evidence": "§1.2: 'unknown only when adapters.cleanroomProbe is absent AND the intake is not enforced (shadow), mirroring defaultReadiness'. But §1.2 also says the default adapter is 'adapters.cleanroomProbe || defaultCleanroomProbe', meaning the adapter is never absent in practice; the two statements conflict. R2 requires 'an absent probe adapter admits only under shadow enforcement', which implies an enforced absent-adapter case must refuse, and no acceptance row or test case in §2 or §4 pins that refusal.",
+      "evidence_reference": "Plan §1.2 adapter shape and decision list; §4 row intake-probe ('unknown admits only in shadow')",
+      "repair": "Resolve the contradiction: either the default adapter always runs (then 'unknown' can never be produced by absence, and the shadow rule applies only to a probe that returns unknown itself), or intake can be configured with cleanroomProbe: null to disable it and enforced mode then refuses with final_panel_seat_cleanroom_unavailable and reason 'no probe adapter'. Add a routing-suite case for enforced intake with the adapter explicitly nulled asserting refusal, and one for shadow intake asserting admission with a cleanroom_probe step whose decision is unknown.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7af5d3bb7f928035136364951ae1e1383debcc501e15c3a0eed488d95c96e76d"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "defaultCleanroomProbe env scrub and deny-path list; plan §1.2",
+      "claim": "The probe passes the operator HOME as a deny path while also scrubbing the child environment to only PATH and HOME, but the plan does not say which HOME value is exported to the launcher; if it is the operator HOME the preflight will report a readable deny path (exit 3) on every host and the probe can never be 'ready', and if it is a throwaway HOME the deny check of the operator HOME is untestable from inside the sandbox argv.",
+      "evidence": "§1.2: '--deny-path <operator HOME>' and 'env scrubbed to PATH/HOME'. The 1b-A carry-in in §2 says the test must assert 'HOME=DENIED' in the stub output, which confirms the launcher treats HOME specially, yet the plan never specifies the exported HOME value or the expected exit code when HOME equals a deny path. The host-gated acceptance row 'host-probe' expects 'ready' on this host, so the interaction must be defined or the acceptance criterion is unsatisfiable.",
+      "evidence_reference": "Plan §1.2 defaultCleanroomProbe command line; §2 cleanroom-launch.test.sh carry-in; §4 row host-probe",
+      "repair": "Specify that the probe exports HOME as a fresh mkdtemp directory removed after the probe, passes the operator HOME (from os.homedir at intake start) as a deny path, and that the launcher's preflight with deny-path equal to the parent HOME must still exit 0 because the sandbox HOME is the throwaway. Add an assertion in the host-gated case that launcher_json.home is not the operator HOME and that the temp HOME no longer exists after the probe returns.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c23ef93e36c1402f1c5ec6980de23ff953995f531ecbbd7593c5f0e4342f39a1"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "schemas/ intake receipt steps enumeration; plan §2 'schemas: NONE expected' and §2.6",
+      "claim": "The plan seals the output_paths list with no schema file yet admits that the intake receipt steps schema may enumerate step names; if it does, adding cleanroom_probe requires a schema change that is outside the sealed output_paths and would fail scope-integrity, while not adding it would fail check-contract-schema.",
+      "evidence": "§2: 'schemas/…: NONE expected — verify that the intake receipt steps[] schema (if closed) admits a cleanroom_probe step name; if it enumerates step owners, add it (+ mirror). (Re-verify at base.)' §2.5 lists no schema path and says 'Nothing created' and 'max_changed_files sealed at 18 (> 16) — defect (3)', which is an unresolved self-flagged defect. R5 permits a schema change only when the plan names the step-name addition; the plan defers the decision to implementation time.",
+      "evidence_reference": "Plan §2 schemas bullet; §2.5 sealed output_paths and the 'defect (3)' note; §2.6 bullet 4",
+      "repair": "Before sealing, run the verification at base and record the result in §0: either state 'steps[] is an open array; no schema change' or list the exact schema path and its mirror in §2.5 with the cleanroom_probe step-name addition named in §2. Correct max_changed_files to match the final list length and remove the 'defect (3)' marker.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "37c11c8995673228387f66ce0fc0fd4bcd6c78f02f598d01036102a4ef8d88d5"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "plan §4.1 no-regression commands",
+      "claim": "The plan states that one of the §4.1 commands is currently wrong and must be fixed before sealing, and that another suite's base colour is unknown, so R7's requirement that the same set was green at base is not yet established.",
+      "evidence": "§4.1 footnote: 'check-contract-schema.js is node, fix before sealing; resolve-review-loop.test.sh must be checked for base colour — memory says a resolver-contract change drifts the whole suite.' No base run is recorded in the evidence dir referenced in the header, and §5 covers only post-merge dogfood.",
+      "evidence_reference": "Plan §4.1 and its trailing footnote; header 'Evidence dir'",
+      "repair": "Run all twelve §4.1 commands on a detached checkout of d7912c7e, record exit codes in docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/base-run.txt, and replace the footnote with the recorded result. If resolve-review-loop.test.sh is red at base, either exclude it with the observed failure quoted or fix the drift in a preceding cut.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8d880af9a0a86098207c20bd93da77f6c41e9757c931121fb30cd34ed696cbd2"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh fixture; plan §2 tests bullet",
+      "claim": "The plan names grok as the no-profile example runner for the preservation case but does not confirm grok is in the contract runner enum and outside both tiers at base, so the fixture could be rejected for a different code.",
+      "evidence": "§0 lists the packet tier as four runners and cleanroom as codex, and says 'none = rest' without enumerating the rest; §2 picks 'grok' without citing the contract enum. R6 requires the fixture to use a no-profile runner.",
+      "evidence_reference": "Plan §0 first bullet; §2 routing-suite bullet",
+      "repair": "Cite the contract enum entry for the chosen runner in §2 or pick the runner from the enum in the test itself by filtering out both tier lists, so the preservation case cannot drift if the enum changes.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "180ba1ed67df71ccf50a15405d25ae4c484eefa683f72b5730e975876e821679"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/dispatch-review.test.sh parity block; plan §2",
+      "claim": "The parity test compares the JS tier function to the shell function per runner but the plan does not state that the runner enum is read from the contract schema at test time, so the test could pass on a hard-coded list that omits a newly added runner.",
+      "evidence": "§2: 'assert the JS reviewSeatTier equals the shell review_seat_tier for every runner in the contract's runner enum'. R1 requires proof 'for every runner the contract admits'; the plan does not name the enum source file or the extraction step.",
+      "evidence_reference": "Plan §2 dispatch-review.test.sh bullet; §4 row tier-table",
+      "repair": "Name the contract schema path and the jq or node expression used to enumerate runners in the parity block, and add an assertion that the enumerated list is non-empty and contains at least one member of each tier.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "446df2c5cfb08c29179484567b717d9dca5af671dfbedde96b2cfe4f3555937d"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md redesign row Context; plan §2 docs bullet",
+      "claim": "The proposed Context string references v2.36.63 as the shipped version of this cut before the cut has shipped, and the plan does not show a byte count, so the 240-byte cap and the Status open requirement are unverified.",
+      "evidence": "§2: 'Context → … 1b-A launcher (v2.36.62), 1b-B intake probe (v2.36.63) shipped; deny-list config, 2 open. Detail in the pointer.' The string is elided with an ellipsis so its full length cannot be checked, and no mention of Status is made.",
+      "evidence_reference": "Plan §2 final docs bullet; §4.1 check-backlog-entries.js command",
+      "repair": "Write the full Context string in §2 without elision, state its byte length, and state that Status stays open.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f1f5821ab9413854b47b67f0ca2f5323fbac52b9f7f0a806cd2d81787c5e2cba"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "ee384ec569e3f5a0efc9fd01a1f6b9935049a7c4640b3937c68e0649e6bdad9d",
+      "rubric_id": "R8",
+      "affected_surface": "docs/BACKLOG.md redesign row",
+      "claim": "The plan supplies the new Context string and implies open defect counts, but never explicitly pins the row's Status field to the literal value open, which R8 requires.",
+      "evidence_reference": "Plan section 2, docs/BACKLOG.md entry",
+      "disposition": null
+    },
+    {
+      "fingerprint": "78e4b862432fc4662896d657fb43968ed230c5befa8f51c35d81dafcac6a0fd5",
+      "rubric_id": "R7",
+      "affected_surface": "hooks/tests/resolve-review-loop.test.sh and the base-green sealing record",
+      "claim": "The plan flags that resolve-review-loop.test.sh must be checked for base colour from memory ('memory says a resolver-contract change drifts the whole suite') but does not yet record an observed base exit status, so the 'same set was green at base before sealing' premise is asserted rather than evidenced at plan time.",
+      "evidence_reference": "Plan section 4.1, parenthetical after the command list",
+      "disposition": null
+    },
+    {
+      "fingerprint": "180ba1ed67df71ccf50a15405d25ae4c484eefa683f72b5730e975876e821679",
+      "rubric_id": "R6",
+      "affected_surface": "hooks/tests/implementation-campaign-routing.test.sh fixture; plan §2 tests bullet",
+      "claim": "The plan names grok as the no-profile example runner for the preservation case but does not confirm grok is in the contract runner enum and outside both tiers at base, so the fixture could be rejected for a different code.",
+      "evidence_reference": "Plan §0 first bullet; §2 routing-suite bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "446df2c5cfb08c29179484567b717d9dca5af671dfbedde96b2cfe4f3555937d",
+      "rubric_id": "R1",
+      "affected_surface": "hooks/tests/dispatch-review.test.sh parity block; plan §2",
+      "claim": "The parity test compares the JS tier function to the shell function per runner but the plan does not state that the runner enum is read from the contract schema at test time, so the test could pass on a hard-coded list that omits a newly added runner.",
+      "evidence_reference": "Plan §2 dispatch-review.test.sh bullet; §4 row tier-table",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f1f5821ab9413854b47b67f0ca2f5323fbac52b9f7f0a806cd2d81787c5e2cba",
+      "rubric_id": "R8",
+      "affected_surface": "docs/BACKLOG.md redesign row Context; plan §2 docs bullet",
+      "claim": "The proposed Context string references v2.36.63 as the shipped version of this cut before the cut has shipped, and the plan does not show a byte count, so the 240-byte cap and the Status open requirement are unverified.",
+      "evidence_reference": "Plan §2 final docs bullet; §4.1 check-backlog-entries.js command",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-17T08:03:03.995Z"
+}

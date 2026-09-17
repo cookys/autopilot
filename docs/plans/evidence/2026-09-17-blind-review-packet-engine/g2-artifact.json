@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-packet-engine-2026-09-17",
+  "logical_plan_id": "blind-review-packet-engine-2026-09-17",
+  "session_id": "c1b-g2-1789613621",
+  "session_key": "d0e47f674357fd900bb32a2f9360f3083dda92b7488aa113dbc18ec8bb7078d1",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_2_terminal",
+  "rubric_sha256": "1473d61d4aab92505cf4e1d0ae4bc9e08ecc7a07e699f11b2ca6fbd46dcf3073",
+  "manifest_sha256": "859b2309f06df5ac9370db76d2eac1343153fcd350cd755504a28022449648b5",
+  "plan_sha256": "655a43f99224d5342bf6758d51ab19b927f418340b1c6cf4a08b0ef68700de6d",
+  "growth_ratio": {
+    "numerator": 22718,
+    "denominator": 19855
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "33b96d45b7b3bff4bf9df2f40b42ac2bb204de2d04a374117752e2d99e5f123a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "53272f595694763530ca9e23f4254913ba745e3c67d26acc9bfd332da8c62a37",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-PtYYRN",
+          "digest": "53272f595694763530ca9e23f4254913ba745e3c67d26acc9bfd332da8c62a37"
+        },
+        "receipt_digest": "cc8b36974423cd1b04f9f10806ede0f0b84ceb4228f863b55e3c33a4118b8783"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "57e7682d593021b9d48c4e3c19c79f475cc8f7042b1c367c99a1a8720795fde6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-hFl9Ij/stdout",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "4d21e27980204c4c270ba0c28a95496b5a67ff8b2099fb8f0294d18dc1a64535"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/autopilot-engine.js — reviewDiff reviewOptions block (plan section 1.2)",
+      "claim": "The plan states reviewDiff deletes reviewOptions.packet always and then sets reviewOptions.packet from input.packet whenever input.packet is an object with three non-empty strings, but it never gates that set on blindDiscovery being true, while R1 requires that a non-blind direct reviewDiff carries no packet key.",
+      "evidence": "Plan section 1.2 sets the dispatcher packet from input.packet unconditionally on shape; the only blindDiscovery-false test in section 2 (autopilot-engine.test.sh block b) supplies the bogus packet via reviewOptions, not via input.packet, so the case of a direct call with input.packet set and blindDiscovery:false is unpinned. The dispatcher itself ignores packet without blindDiscovery:true (parent plan 1a-A), so no runtime violation is guaranteed — but the rubric clause is not explicitly pinned.",
+      "evidence_reference": "Plan section 1.2 and section 2 autopilot-engine.test.sh block (b)",
+      "repair": "Clarify in section 1.2 that reviewOptions.packet is set from input.packet only when blindDiscovery will be true for the dispatch (or explicitly assert in block (b) that input.packet with blindDiscovery:false reaches the dispatcher with no packet key, matching R1), and add the corresponding change-pinning assertion.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "40762b7516be510c574b104c635310e5c1467dbe1c9ebcc50b314710f18754bc"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "40762b7516be510c574b104c635310e5c1467dbe1c9ebcc50b314710f18754bc",
+      "rubric_id": "R1",
+      "affected_surface": "src/engine/autopilot-engine.js — reviewDiff reviewOptions block (plan section 1.2)",
+      "claim": "The plan states reviewDiff deletes reviewOptions.packet always and then sets reviewOptions.packet from input.packet whenever input.packet is an object with three non-empty strings, but it never gates that set on blindDiscovery being true, while R1 requires that a non-blind direct reviewDiff carries no packet key.",
+      "evidence_reference": "Plan section 1.2 and section 2 autopilot-engine.test.sh block (b)",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-17T02:55:30.884Z"
+}

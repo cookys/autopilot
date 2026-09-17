@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-packet-engine-2026-09-17",
+  "logical_plan_id": "blind-review-packet-engine-2026-09-17",
+  "session_id": "c1b-g1-1789613229",
+  "session_key": "d0e47f674357fd900bb32a2f9360f3083dda92b7488aa113dbc18ec8bb7078d1",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "1473d61d4aab92505cf4e1d0ae4bc9e08ecc7a07e699f11b2ca6fbd46dcf3073",
+  "manifest_sha256": "859b2309f06df5ac9370db76d2eac1343153fcd350cd755504a28022449648b5",
+  "plan_sha256": "0c3a798c800142f63900385e7c2da35bde58202a2c19656080c48b7da219f88e",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "90ec2bf2b9d482fa2d21af51bfb21251c39782fffb58333b6d436ddb45778f46"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-y8yHco",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "d2d5285a22ef17d10b62b9f604ec706c14a2b382c863071ca317a98d280d62d2"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "543a9924f4c425c6103b4afcbe024fb5b8a33a84e5a7e48a6513464fb057f860"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "650c7f82a680b9a951bc09f736a88ec7a81fdaa814c2cc34ed5a1bb5851dd7d1",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-LIf1LM/stdout",
+          "digest": "650c7f82a680b9a951bc09f736a88ec7a81fdaa814c2cc34ed5a1bb5851dd7d1"
+        },
+        "receipt_digest": "104c24005ad349f41a0fe339c72529f74827e9dcbc526563c55b1fdbf9a1ae6a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "codex_operations_skeptic",
+      "target_id": "codex_operations_skeptic",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Managed campaign and terminal review dispatch construction",
+      "claim": "The plan permits a managed review to dispatch without a packet when either SHA is empty, contradicting the requirement that every managed dispatch be packet-backed.",
+      "evidence": "Plan §1.1 says the packet is added only when both values are non-empty strings and is otherwise absent. That fallback allows the legacy whole-diff path to run instead of failing before dispatch.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §1 ruling item 1; frozen rubric R1",
+      "repair": "Remove the packet-absence fallback. Every managed dispatch must either receive the exact packet tuple used by its diff provider or fail before calling the review dispatcher.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c7a8a0e6e71a932ccd79dad1eca7e2c89bd23b69003c06e65b1205e42e2a21e2"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Direct reviewDiff option sanitization and caller packet override tests",
+      "claim": "The plan does not prevent a caller-supplied packet from surviving a direct non-blind reviewDiff call, and its proposed preservation test is vacuous unless it supplies an adversarial packet.",
+      "evidence": "At the base, reviewDiff copies input.reviewOptions directly into dispatcher options. The planned reviewDiff changes concern only the success return, while the proposed non-blind test merely says reviewOptions contains blindDiscovery false and does not state that it also contains a caller packet that must be removed.",
+      "evidence_reference": "src/engine/autopilot-engine.js:3366-3378 at bee8da3d; PLAN_UNDER_REVIEW §2 autopilot-engine test item (b); frozen rubric R1",
+      "repair": "Specify sanitization at the reviewDiff boundary so a non-blind direct call cannot forward packet, and test it with a supplied bogus packet. Also test that a caller packet on each managed path is replaced by the engine-derived repo, baseSha, and candidateSha tuple.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0350cd565e43bb029a3ff687151114ba0977f5608f3b6eb4d277ecbcd3cd0076"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "reviewDiff success-return contract",
+      "claim": "The plan gives conflicting instructions for an invalid or missing dispatcher packet: the ruling requires the packet key to be absent, while the acceptance table says it is null.",
+      "evidence": "Plan §1.2 says the key is absent when packet_hash is not valid. The packet-identity-surfaced acceptance criterion instead says reviewDiff returns a packet object with a valid hash and otherwise null.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §1 ruling item 2 and §4 packet-identity-surfaced; frozen rubric R2",
+      "repair": "Change the acceptance criterion to require absence of the packet key for missing or invalid packet_hash, never null, and retain explicit hasOwnProperty assertions for both cases.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "61bacba869e1209ffb9155a32e36fe6aab1fef78cc737962e30ac9b4658c938d"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "No-regression acceptance and baseline evidence",
+      "claim": "The no-regression gate is not reproducible as written because it lists suite labels rather than exact commands and supplies no evidence that those commands were green at the base before sealing.",
+      "evidence": "The §4 no-regression row names suites and scripts but does not provide their invocations, checkout or worktree context, expected exit status, or baseline output references. The evidence directory named in the plan header is absent in the reviewed checkout.",
+      "evidence_reference": "PLAN_UNDER_REVIEW header and §4 no-regression; frozen rubric R8",
+      "repair": "List each exact executable command, run the identical command set against bee8da3d, and record immutable baseline outputs or digests in the declared evidence location before sealing the plan.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "codex_operations_skeptic",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c35ab7f2b725941dd7def4e0230586d80d930654c03be73580086cafb179873f"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-17T02:50:24.357Z"
+}

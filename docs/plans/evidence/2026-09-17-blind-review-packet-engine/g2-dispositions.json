@@ -1,0 +1,13 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-packet-engine-2026-09-17",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "40762b7516be510c574b104c635310e5c1467dbe1c9ebcc50b314710f18754bc",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: \u00a71.1b now sets reviewOptions.packet from input.packet ONLY when reviewOptions.blindDiscovery === true (otherwise the key stays deleted), and test (b) adds the direct non-blind call WITH input.packet \u2192 dispatcher sees no packet key (change-pinning). The runner already ignored packet without blindDiscovery, so this pins the rubric clause rather than fixing a leak."
+  }
+ ]
+}

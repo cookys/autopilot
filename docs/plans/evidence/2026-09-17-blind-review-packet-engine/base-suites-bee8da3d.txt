@@ -1,0 +1,14 @@
+bash hooks/tests/autopilot-engine.test.sh | exit=0 | PASS [autopilot-engine] 502 assertions | sha256=40d08b664d64fd11
+bash hooks/tests/implementation-campaign-receipt.test.sh | exit=0 | PASS [implementation-campaign-receipt] 17 assertions | sha256=7d6238e555ceec6a
+bash hooks/tests/implementation-campaign-dogfood.test.sh | exit=0 | PASS [implementation-campaign-dogfood] 21 assertions | sha256=2e3a01871c08441c
+bash hooks/tests/implementation-campaign-state.test.sh | exit=0 | PASS [implementation-campaign-state] 296 assertions | sha256=9da14ff5bdc0b41b
+bash hooks/tests/implementation-campaign-routing.test.sh | exit=0 | PASS [implementation-campaign-routing] 92 assertions | sha256=30c15ad763becc14
+bash hooks/tests/controller-execution-independent.test.sh | exit=0 | PASS [controller-execution-independent] 1 assertions | sha256=a92aba0b0c088db1
+bash hooks/tests/qc-panel-honesty.test.sh | exit=0 | PASS [qc-panel-honesty] 1 assertions | sha256=58e57a7daf43c659
+bash hooks/tests/status-task.test.sh | exit=0 | PASS [status-task] 5 assertions | sha256=534ec759a2dde78e
+bash hooks/tests/next-touch-validation.test.sh | exit=0 | PASS [next-touch-validation] 24 assertions | sha256=640e1b6aebe0a89f (re-run on temp branch base-tmp-c1b: detached HEAD breaks symbolic-ref)
+bash hooks/tests/review-runner.test.sh | exit=0 | PASS [review-runner] 39 assertions | sha256=50a0547dfe2209e3
+node scripts/check-js-syntax.js | exit=0 |  | sha256=2518a9cbb1cebf3c
+bash scripts/sync-codex-plugin-skills.sh --check | exit=0 |  | sha256=a061d5b31d473443
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md | exit=0 |  | sha256=3f802b5673c71255
+done

@@ -1,0 +1,31 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-packet-engine-2026-09-17",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "c7a8a0e6e71a932ccd79dad1eca7e2c89bd23b69003c06e65b1205e42e2a21e2",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the non-empty-string fallback let a managed review silently run on the legacy whole-diff copy. \u00a71.1 now has NO fallback \u2014 a missing identity blocks with phase prepare_review / 'review packet identity unavailable' BEFORE reviewDiff is called."
+  },
+  {
+   "fingerprint": "0350cd565e43bb029a3ff687151114ba0977f5608f3b6eb4d277ecbcd3cd0076",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: reviewDiff forwarded input.reviewOptions verbatim. New \u00a71.1b: reviewDiff always deletes reviewOptions.packet and sets it only from the engine-derived input.packet; tests (b) now supply a bogus caller packet on both the managed path (must be replaced) and the direct path (must be absent), plus a malformed input.packet \u2192 prepare_review block."
+  },
+  {
+   "fingerprint": "61bacba869e1209ffb9155a32e36fe6aab1fef78cc737962e30ac9b4658c938d",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a74 packet-identity-surfaced said null while \u00a71.2 said absent. The acceptance row now requires absence (never null) with hasOwnProperty asserted both ways."
+  },
+  {
+   "fingerprint": "c35ab7f2b725941dd7def4e0230586d80d930654c03be73580086cafb179873f",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a74.1 lists the thirteen exact commands (also the graph verification_commands), the run context (candidate checkout on a temp branch, root cwd, sequential), expected exit 0; the same set is run at bee8da3d and recorded as docs/plans/evidence/2026-09-17-blind-review-packet-engine/base-suites-bee8da3d.txt, committed with the plan."
+  }
+ ]
+}

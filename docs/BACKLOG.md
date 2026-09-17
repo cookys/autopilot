@@ -152,6 +152,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md
 - **Context**: cosmetic against the script's existing mktemp idiom; one host-/tmp file per cleanroom dispatch; the dead block is duplication, not a wrong path. Fold with the next codex-block touch, with the mirror.
 
+### `secret-scan-diff.js --range` fails OPEN on a large range — ENOBUFS is printed and the exit code stays 0
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — `--range 6a414c3c..HEAD` printed `git diff error: spawnSync git ENOBUFS`, returned `findings: []` and exit 0, and a `&&` chain pushed on it
+- **Effort**: S
+- **Source**: 1c release push 2026-09-18; the `--files` re-scan of the same 71 files was clean, so the push was safe — the gate was not
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/README.md
+- **Context**: a scanner that cannot read its input must exit non-zero (or fall back to per-file scanning), never report zero findings. Same family as evidence-discipline "a green that verified nothing".
+
 ### Managed rail: final-panel seats starve on the sealed wall budget left after implement/verify/full-suite
 - **Status**: open
 - **Trigger**: any campaign whose earlier stations consume most of `max_wall_seconds` — the panel seats then get the remainder split per seat

@@ -348,7 +348,9 @@ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
         die_precondition "codex binary directory unresolved: ${_codex_resolved} — the codex release directory (codex beside codex-code-mode-host) is required; the npm wrapper layout is not supported in this cut"
       fi
       CLEANROOM_BIN_DIR="$(dirname "$_codex_resolved")"
-      if [ -n "${AUTOPILOT_CLEANROOM_CODEX_AUTH:-}" ] && [ -f "${AUTOPILOT_CLEANROOM_CODEX_AUTH}" ]; then
+      if [ -n "${AUTOPILOT_CLEANROOM_CODEX_AUTH:-}" ]; then
+        # An explicit override never falls back: a typo here must not silently pick the operator's file.
+        [ -f "${AUTOPILOT_CLEANROOM_CODEX_AUTH}" ] || die_precondition "codex credential file not found: AUTOPILOT_CLEANROOM_CODEX_AUTH=${AUTOPILOT_CLEANROOM_CODEX_AUTH}"
         CLEANROOM_AUTH="${AUTOPILOT_CLEANROOM_CODEX_AUTH}"
       elif [ -n "${CODEX_HOME:-}" ] && [ -f "${CODEX_HOME}/auth.json" ]; then
         CLEANROOM_AUTH="${CODEX_HOME}/auth.json"

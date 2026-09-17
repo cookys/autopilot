@@ -300,7 +300,7 @@ if [ "$PREFLIGHT" -eq 1 ]; then
     printf 'cmdline=$(tr "\\0" " " < /proc/1/cmdline)\n'
     printf 'check() {\n'
     printf '  p=$1\n'
-    printf '  if cat "$p" >/dev/null 2>&1; then printf "%%s\\n" "$p" | tee /home/review/work/preflight.err >&2; exit 3; fi\n'
+    printf '  if [ -e "$p" ] || [ -L "$p" ]; then printf "%%s\\n" "$p" | tee /home/review/work/preflight.err >&2; exit 3; fi\n'
     printf '  case "$cmdline" in *"$p"*) printf "%%s\\n" "$p" | tee /home/review/work/preflight.err >&2; exit 3 ;; esac\n'
     printf '}\n'
     printf 'check %q\n' "$SEAT_ROOT"
@@ -315,8 +315,6 @@ if [ "$PREFLIGHT" -eq 1 ]; then
   run_bwrap || inner_rc=$?
   if [ -s "$SEAT_ROOT/work/preflight.err" ]; then
     cat "$SEAT_ROOT/work/preflight.err" >&2
-  elif [ -s "$SEAT_ROOT/probe.stderr" ]; then
-    cat "$SEAT_ROOT/probe.stderr" >&2
   fi
   if [ "$inner_rc" -eq 3 ]; then
     emit_json "$inner_rc"

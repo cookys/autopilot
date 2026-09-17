@@ -1218,6 +1218,15 @@ OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
 assert_eq "2" "$EXIT" "blind cleanroom with missing bwrap is exit 2"
 assert_contains "$OUT" 'bwrap not found' "missing bwrap names bwrap"
 
+# Panel finding dr-auth-fallback (2026-09-17): an explicit credential override that is not a file
+# must refuse, never fall back to the operator's ~/.codex/auth.json.
+OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$TEST_TMP/no-such-auth.json" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "explicit credential override that is missing is exit 2"
+assert_contains "$OUT" 'codex credential file not found: AUTOPILOT_CLEANROOM_CODEX_AUTH=' "missing explicit credential override is named, not silently replaced"
+
 # RED at base ceb7c81d: no launcher seam; preflight never ran
 : > "$CR_LAUNCH_LOG"
 OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=2 CR_PREFLIGHT_ERR='userns blocked' \
@@ -1227,7 +1236,7 @@ OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLI
   "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "preflight failure is exit 2"
 assert_contains "$OUT" 'cleanroom runtime unusable: userns blocked' "preflight stderr is named"
-assert_not_contains "$(cat "$CR_LAUNCH_LOG")" $'\nlaunch\n' "failed preflight never calls launch mode"
+assert_eq "0" "$(grep -cx launch "$CR_LAUNCH_LOG")" "failed preflight never calls launch mode"
 
 # RED at base ceb7c81d: npm-wrapper layout was not a named gate
 CR_BADBIN="$TEST_TMP/codex-npm-wrapper"
@@ -1287,7 +1296,7 @@ OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
   AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
   "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "parity extension: cleanroom launch succeeds via stub launcher"
-assert_contains "$(cat "$CR_LAUNCH_LOG")" $'launch' "parity extension: launcher launch mode was called"
+assert_eq "1" "$(grep -cx launch "$CR_LAUNCH_LOG")" "parity extension: launcher launch mode was called exactly once"
 
 BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
 BLIND_SCRIPT="$TEST_TMP/blind-probe"

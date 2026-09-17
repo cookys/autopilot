@@ -111,6 +111,9 @@ assert_contains "$(cat "$OUTA")" 'PACKET_HOST=DENIED' "packet host path is denie
 assert_contains "$(cat "$OUTA")" 'PACKET_TREE=packet-tree-bytes' "packet tree is byte-equal"
 assert_contains "$(cat "$OUTA")" 'FD7=DENIED' "inherited fd 7 cannot be reopened"
 assert_contains "$(cat "$OUTA")" 'FD9=DENIED' "fd 9 cannot be reopened inside the seat"
+FDS="$(sed -n 's/^fds=//p' "$OUTA")"
+assert_not_contains " $FDS " ' 7 ' "inherited fd 7 is not present in the seat's /proc/self/fd"
+assert_not_contains " $FDS " ' 9 ' "args fd 9 is not present in the seat's /proc/self/fd"
 CMDLINE="$(sed -n 's/^cmdline=//p' "$OUTA")"
 assert_not_contains "$CMDLINE" "$REPO_ABS" "pid1 cmdline has no repository path"
 assert_not_contains "$CMDLINE" "$PKT" "pid1 cmdline has no packet host path"
@@ -192,6 +195,15 @@ RCPFR=$?
 set -e
 assert_eq "3" "$RCPFR" "readable deny-path exits 3"
 assert_contains "$(cat "$TEST_TMP/pf-readable.err")" '/usr/bin/sh' "readable path is named"
+
+# A bound DIRECTORY must also be caught: `cat` on a directory fails with EISDIR, so a presence
+# check is what makes this branch bite (panel finding preflight-dir-cat-vacuous, 2026-09-17).
+set +e
+"$LAUNCHER" --preflight --deny-path /usr > "$TEST_TMP/pf-dir.json" 2>"$TEST_TMP/pf-dir.err"
+RCPFD=$?
+set -e
+assert_eq "3" "$RCPFD" "readable deny-path DIRECTORY exits 3"
+assert_contains "$(cat "$TEST_TMP/pf-dir.err")" '/usr' "readable directory is named"
 
 set +e
 "$LAUNCHER" --preflight --deny-path "$TEST_TMP/does-not-exist-deny" > "$TEST_TMP/pf-gone.json" 2>"$TEST_TMP/pf-gone.err"

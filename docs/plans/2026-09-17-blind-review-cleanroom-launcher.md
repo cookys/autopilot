@@ -1,6 +1,6 @@
 # Blind review redesign — cut 1b-A: a cleanroom launcher, and `dispatch-review.sh` learns seat tiers
 
-> Status: draft for plan hetero loop · Size: L · Base: `ceb7c81d` (v2.36.61) · Parent plan:
+> Status: SHIPPED v2.36.62 (merge `94d44940`, 2026-09-17) · Size: L · Base: `ceb7c81d` (v2.36.61) · Parent plan:
 > `docs/plans/2026-09-16-blind-review-packet.md` §7 item 3 (this is the first half of "1b"; the
 > intake/resolver half is 1b-B, §7 below). Evidence dir:
 > `docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/` (`bwrap-probe-2026-09-17.md` = the
@@ -388,3 +388,18 @@ configurable deny-list → 2.
   created root is removed; (R5) host credential path as a literal in the stub, copied credential as
   the positive control; (R2) release-layout-only message and header sentence; (R3) refresh-rotation
   recovery decided in 1b-B. Growth 1.23×. Zero unaddressed blockers, zero deferred.
+- Campaign 2026-09-17 (/l5 attempt 1, `impl-run1.json`): implement 46 min (cursor-grok-4.6-low, hand
+  `575a5fe0`, 11 files ⊆ §2.5); all eight §4.1 commands green in-rail (isolation suite green in the
+  rail's detached checkout); in-rail MiniMax SHIP-AS-IS; final panel all three seats returned
+  (claude-fable-5-1 FIX-THEN-SHIP 2 🟠, GLM-5.2 FIX-THEN-SHIP 2 🟡 + 2 🔵, MiniMax SHIP-AS-IS; one
+  `packet_hash 5ee8c79c…` across all four reviews). Stopped at `final_adjudication` (no disposition
+  provider; the panel has no repair loop) → l3 degrade, depth-0 repair on the mission branch
+  (`6d7dc38c`, `4936e27c`): preflight probe used `cat` so a directory deny path was vacuous (EISDIR)
+  → presence test + directory exit-3 case; `assert_not_contains … $'\nlaunch\n'` never matched →
+  `grep -cx launch`; fd listing asserted; explicit `AUTOPILOT_CLEANROOM_CODEX_AUTH` never falls back;
+  dead `probe.stderr` branch removed. GLM `cl-md-line-shape` refuted (the CLAUDE.md line was 806 B,
+  over the pre-commit 800 B cap; the wrap is correct). Depth-0 at `4936e27c`: `head-suites-4936e27c.txt`
+  8/8 green, scope ⊆ §2.5, `src`/`schemas`/`bin`/resolver byte-identical; GLM-5.2 second review
+  SHIP-AS-IS (`review-glm-r2.json`, 4 🔵 follow-ups: HOME deny assert missing in the isolation suite,
+  `_pf_err` not unlinked, unreachable legacy block on the blind path, and the 800 B line again) —
+  carried into 1b-B. §5 dogfood: `dogfood-cleanroom-codex*` (see evidence README). Merge `94d44940`.

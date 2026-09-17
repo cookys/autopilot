@@ -138,11 +138,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### PEER-REPORTED (openclaw): briefs pairing `session-mode set --level l5` with non-strict dispatch burn foreman budgets
 - **Status**: open
-- **Trigger**: operator ruling on (a)-exemption; (b)/(c) mechanical, (a)-print S — see reply for the split
+- **Trigger**: in-session operator confirmation of the relayed ruling (a)=B, (b) approved
 - **Effort**: S
 - **Source**: `openclaw` msg `msg_01M2PHM6PWH6VY7WP059Y0Q1TT` (2026-09-17, /l5 ×3 on fleet-comms + chatgpt-tunnel-host); replied `msg_01M2PHNG5TTNXQYJQ2G3EKANFW`
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: (a) `session-mode set` prints the AUTOPILOT_SESSION_MODE_DIR mask line; exempting plan/terminal review seats needs a ruling; (b) same `precondition_failed` twice → ladder stop; (c) brief linter rules file in dispatch-model-guard.
+- **Context**: ruling relayed by openclaw 2026-09-17 (`msg_01M2PWEZ8WAVJ8S4F032MFTVGQ`): (a)=B no seat exemption — ship mask-line print + brief linter; (b) same refusal twice → ladder stop. Peer relay only; operator confirms in-session first.
+
+### Managed rail: final panel has no repair loop — FIX-THEN-SHIP without a disposition provider blocks adjudication
+- **Status**: open
+- **Trigger**: a managed campaign reaches the final panel with a FIX-THEN-SHIP seat and no `--campaign-disposition-policy/authority` given
+- **Effort**: M
+- **Source**: 1b-A campaign 2026-09-17 (`impl-run1.json`, `final_adjudication: final finding registry is incomplete`), after every earlier station was green
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md
+- **Context**: panel MUST-FIX goes to ready/FOLLOW_UP, never repair; no provider → rail stops, documented path is l3 degrade + depth-0 hand repair. Decide: bounded in-rail repair round, or a default provider so the stop is a decision.
 
 ### Managed rail: `changed_files >= max_changed_files` refuses repair when the hand touched every sealed path
 - **Status**: open

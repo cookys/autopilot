@@ -1,0 +1,8 @@
+bash hooks/tests/dispatch-review.test.sh | exit=0 | PASS [dispatch-review] 504 assertions | sha256=f02d0e6dcde3efcd
+AUTOPILOT_HOST_ISOLATION=1 bash hooks/tests/cleanroom-launch.test.sh | exit=0 | PASS [cleanroom-launch] 47 assertions | sha256=1c6c2342f6cdacbe
+bash hooks/tests/review-runner.test.sh | exit=0 | PASS [review-runner] 39 assertions | sha256=50a0547dfe2209e3
+bash hooks/tests/review-packet.test.sh | exit=0 | PASS [review-packet] 54 assertions | sha256=1cfb8b52583753b6
+node scripts/check-js-syntax.js | exit=0 |  | sha256=c94988895f0289d0
+bash scripts/sync-codex-plugin-skills.sh --check | exit=0 |  | sha256=a061d5b31d473443
+node scripts/check-claude-md-inventory.js | exit=0 |  | sha256=966102b36405c5a3
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md | exit=0 |  | sha256=8ab97c3d1f702139

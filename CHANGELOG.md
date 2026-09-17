@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.36.62 — blind review redesign 第三刀（1b-A）：cleanroom launcher，`dispatch-review.sh` 學會 seat tier
+
+- `scripts/lib/cleanroom-launch.sh`（新，＋codex 鏡像）：argv-only 的隔離啟動器。bwrap 選項全走 `--args 9`（NUL 檔），
+  pid 1 的 cmdline 不帶任何 host 路徑；fd 3..1023 在 bwrap 前關掉、fd 9 之後才開（parent 拿著的 host secret fd 進不了
+  席位）；席位看到的只有 packet `tree/`（ro）、一份複製的 `auth.json`＋launcher 寫的兩行 `config.toml`、`/usr`＋TLS／DNS、
+  `/proc`、`/dev`、tmpfs `/tmp`；repo、operator HOME、host 憑證、host `/tmp`、`.autopilot`、鄰席、`/etc/hostname`、packet
+  的 host 路徑一律不在。單一計時器（`--timeout`，coreutils DURATION 原樣轉發，124 原樣回）、INT／TERM／HUP trap 重拋、
+  seat root 只刪自己建的、預存在就拒；`--preflight --deny-path …` 不用 packet／憑證／binary 就能探（exit 2＝bwrap 不能
+  起、exit 3＝deny 路徑竟可讀）。`--sandbox danger-full-access` 只准在 launcher 內（nested `read-only` 建不了 userns）。
+- `scripts/dispatch-review.sh`（＋鏡像）：每個 runner 對到一個 `review_seat_tier`——packet（`anthropic-compatible`／
+  `cc-shim`／`claude-native`／`qoderclicn`，與 v2.36.61 同路）、cleanroom（`codex`，只在 `AUTOPILOT_BLIND_DISCOVERY=1`
+  下經 launcher）、none（`agy`／`grok`／`kimi`／`cursor`／`opencode`，blind 下照舊訊息拒）。cleanroom 前置依序 fail-closed：
+  packet dir → bwrap 存在且 `--preflight` 綠 → `readlink -f` 出的 release bin/（`codex` 旁有 `codex-code-mode-host`；
+  npm wrapper 版型本刀不支援）→ 憑證（`AUTOPILOT_CLEANROOM_CODEX_AUTH` 指到不存在檔就拒、不 fallback），每一步 exit 2
+  帶名字。launcher 的 `--out` 就是 parser 讀的檔、它的 JSON 行進 `raw_log`；非零 rc → 既有的 `emit_no_verdict`。
+  非 blind 的 codex 逐位元組不變（`--sandbox read-only`）。
+- 測試：`hooks/tests/cleanroom-launch.test.sh`（新，47 assertions；`AUTOPILOT_HOST_ISOLATION=1` 閘，設了就 refuse 不
+  skip）用真 bwrap＋敵意 stub codex 打真 launcher：host repo／HOME／host 憑證字面路徑／鄰席／`/etc/hostname`／packet host
+  路徑全 DENIED，複製憑證與 packet tree 可讀（positive control），`/proc/1/cmdline` 無 host 路徑（無 `--args` 的 control
+  看得到）、`/proc/self/fd/7`／`9` 不可重開、寫入留在 seat root 且結束即刪、兩席互不可讀、`--timeout` → 124＋
+  `timed_out:true`。`dispatch-review.test.sh` 474 → 504（tier gate、launcher contract、no outer timeout、憑證覆寫）。
+- 出貨路徑：/l5 managed campaign attempt 1——implement 46 分（cursor-grok-4.6-low，11 檔）、verification 8 條 rail 內全綠
+  （隔離 suite 在 rail 的 detached checkout 也綠）、in-rail MiniMax SHIP-AS-IS、**final panel 三席全回**（claude-fable-5-1
+  FIX-THEN-SHIP 2 🟠、GLM-5.2 FIX-THEN-SHIP 2 🟡 2 🔵、MiniMax SHIP-AS-IS；四次 review 同一 `packet_hash 5ee8c79c…`＝
+  1a-B live、in-rail `--timeout`＝v2.36.60 live）。campaign 停在 `final_adjudication`（沒給 disposition provider；
+  final panel 本來就沒有 repair 迴圈）→ 照文件降級 l3，depth-0 在 mission branch 修 panel findings（preflight probe `cat`
+  對目錄 EISDIR 讓 deny 檢查 vacuous → `[ -e ]||[ -L ]`＋目錄 exit-3 case；`assert_not_contains` 永不 match → `grep -cx`；
+  fd 列表補斷言；顯式憑證覆寫不 fallback；死分支刪）；GLM `cl-md-line-shape` 駁回（CLAUDE.md 那行 806 B 超過 pre-commit
+  800 B 上限，換行是對的）。depth-0 在候選 `4936e27c`：§4.1 八條全綠、scope ⊆ §2.5、`src`／`schemas`／`bin`／resolver
+  逐位元組不變；GLM-5.2 二審 SHIP-AS-IS（4 🔵，全部 follow-up，其中一條又是 800 B 行上限）。
+- Plan §5 dogfood（`dogfood-cleanroom-codex*`）：真 codex 0.154.0 經 launcher 審 3391-entry 的真 packet——usage-limit
+  錯誤出現在**邊界內**（席位 HOME 讀到複製憑證、transport 出得去、席位時鐘顯示 UTC 沒有 host TZ），rc=1 → `no_verdict`，
+  seat root 已刪，host `auth.json` sha 前後不變、host 上 quota-gated `exec` 照樣被額度擋（憑證仍有效）。本刀沒有 live codex
+  判決（額度到 09-19）；intake 仍拒 codex 席，那張表在 1b-B 搬。
+- rail 觀察登 BACKLOG：final panel 沒有 repair 迴圈、registry 沒 provider 就 blocked——文件路徑是降級手修。
+
+prose-justification: `references/blind-dispatch.md` 新一節「Cleanroom tier (v2.36.62)」（tiers、邊界一張清單、本刀證了什麼／
+沒證什麼、1b-B 指標，含鏡像 38 行）；`docs/scripts-inventory.md` 一行；CLAUDE.md Dispatch rails 群加 `lib/cleanroom-launch.sh`。
+
 ## v2.36.61 — blind review redesign 第二刀（1a-B）：engine 把 review packet 交給每一次 managed review，receipt 記下它的 hash
 
 - `src/engine/autopilot-engine.js`：campaign `performReview`（`_runManagedCampaignComposition`）與 terminal 站點

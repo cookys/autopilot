@@ -1,0 +1,2084 @@
+
+--- codex stderr (chrome, not parsed) ---
+Reading prompt from stdin...
+OpenAI Codex v0.154.0
+--------
+workdir: /home/review/work
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: low
+reasoning summaries: none
+session id: 01a0ae4b-4d9e-75a1-9b4f-d883b6e15bf8
+--------
+user
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
+<<<AUTOPILOT-REVIEW-5aadf96a562b9c051fe10548cf7c885c>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
+
+and ending with:
+<<<AUTOPILOT-END-5aadf96a562b9c051fe10548cf7c885c>>>
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=de96703e3dc4cc18913b4054779889f4
+
+The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
+# Blind review redesign — cut 1b-A: a cleanroom launcher, and `dispatch-review.sh` learns seat tiers
+
+> Status: draft for plan hetero loop · Size: L · Base: `ceb7c81d` (v2.36.61) · Parent plan:
+> `docs/plans/2026-09-16-blind-review-packet.md` §7 item 3 (this is the first half of "1b"; the
+> intake/resolver half is 1b-B, §7 below). Evidence dir:
+> `docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/` (`bwrap-probe-2026-09-17.md` = the
+> no-model probe run before this plan; `base-suites-<base>.txt` = §4.1 at base, detached checkout).
+
+## 0. What is actually true today (verified 2026-09-17, base `ceb7c81d`)
+
+- Blind mode is still a runner allow-list: `scripts/dispatch-review.sh:290-295` refuses every runner
+  outside `qoderclicn|cc-shim|claude-native|anthropic-compatible` when `AUTOPILOT_BLIND_DISCOVERY=1`;
+  `src/engine/final-panel-qualification.js` `BLIND_DISCOVERY_CAPABLE_RUNNERS` is the canonical copy,
+  `campaign-intake.js:1423` refuses other seats at intake (`final_panel_seat_blind_incompatible`),
+  `resolve-review-loop.sh:2113-2133` mirrors the set as a ⚠, and `dispatch-review.test.sh:1091-1125`
+  is the parity test. So a tool-capable seat (codex) cannot sit on a managed panel at all.
+- Since v2.36.61 every managed review is packet-backed: `src/runners/review.js` builds
+  `<blindCwd>/packet/{tree,diff.patch,spec.md,MANIFEST.json}` and launches `dispatch-review.sh` with
+  cwd = the blind dir and env `AUTOPILOT_BLIND_DISCOVERY=1`, `AUTOPILOT_REVIEW_PACKET_DIR`,
+  `AUTOPILOT_REVIEW_PACKET_HASH`; `dispatch-review.sh` reads NONE of the packet variables (only the
+  rewritten `--diff-file`/`--spec-file` paths). The packet tree is exactly what a cleanroom seat
+  should be allowed to see, and it already exists at launch time.
+- The codex path (`dispatch-review.sh:942-972`) runs `codex exec --model … --sandbox read-only -c
+  model_reasoning_effort=…` with the prompt on stdin, captures `CODEX_OUT`/`CODEX_ERR`, appends both
+  to `RAW_LOG`, fails closed on non-zero rc before the parser (`emit_no_verdict`), and sets
+  `PARSE_INPUT="$CODEX_OUT"`. `timeout "$TIMEOUT"` is the wall cap; `wait_output_quiescent` settles.
+- Host probe (this session, `bwrap-probe-2026-09-17.md`; bubblewrap 0.11.1, kernel
+  `unprivileged_userns_clone=1`, `apparmor_restrict_unprivileged_userns=1` with the distro
+  `bwrap-userns-restrict` profile): a stub inside `bwrap --unshare-all --share-net --die-with-parent
+  --clearenv` with `/usr`, `/etc/resolv.conf`, `/etc/ssl` ro-bound, a two-line `/etc/passwd`, `/proc`,
+  `/dev`, `/tmp` tmpfs and ONLY the seat dir bound at `/home/review` gets `DENIED` on the host repo,
+  `~/.codex/auth.json`, a sibling seat dir and `/etc/hostname`; `/home` lists `review` only; `/proc`
+  holds 4 pids; **`/proc/1/cmdline` still shows the bwrap argv** (host paths). pid 1 inside the
+  namespace is bwrap's own reaper, so a wrapper around the runner cannot clean it; probed instead:
+  `bwrap --args 9 -- /bin/sh …` with the options in a NUL-separated file read through fd 9 makes
+  `/proc/1/cmdline` exactly `bwrap --args 9 -- /bin/sh /home/review/bin/…` — no host path
+  (`bwrap-probe-2026-09-17.md`). Host `/tmp` is on the root fs (`rw,relatime`, not `noexec`), but a
+  `noexec` `/tmp` elsewhere would break an exec of a script bound from it, so scripts inside are run
+  through `/bin/sh` explicitly. `codex exec` under a sanitized `CODEX_HOME` (only `auth.json` + a two-line
+  `config.toml`) with `--ignore-user-config` authenticates (probed: the request reached the quota
+  gate), and codex WRITES into `CODEX_HOME` (`sessions/`, `*.sqlite`, `shell_snapshots/`, `plugins/`,
+  `cache/`) — the seat HOME must be writable and thrown away. The 2026-09-16 probe showed
+  `--sandbox read-only` cannot nest inside bwrap (needs its own userns) while `--sandbox
+  danger-full-access` works because the outer boundary is the sandbox; `codex-code-mode-host` must
+  sit next to `codex` (bind the whole release `bin/`).
+- codex usage quota is exhausted until 2026-09-19 16:26; a live codex-in-cleanroom review cannot be
+  run during this cut. Everything this plan claims is provable without a model call.
+- Test convention: `hooks/tests/run.sh` discovers every `hooks/tests/*.test.sh`; suites that need a
+  live/host resource gate themselves on an env variable and print `SKIP:` + `finalize_test` when it
+  is unset (`dispatch-plan-review-live.test.sh:3-10`). CI runs `run.sh --parallel` on GitHub Ubuntu
+  runners, where unprivileged userns is AppArmor-restricted.
+
+## 1. Ruling and shape
+
+1. **Seat tiers replace the allow-list in `dispatch-review.sh`.** A runner belongs to exactly one
+   tier, decided by name, no new config: `packet` = `anthropic-compatible cc-shim claude-native
+   qoderclicn` (prompt-only, runs as today); `cleanroom` = `codex` (tool-capable, runs inside the
+   launcher); `none` = every other runner (`agy grok kimi cursor opencode`). A shell function
+   `review_seat_tier <runner>` prints the tier; it is the ONLY place the table lives in the script
+   (the JS/resolver copies move in 1b-B — this cut does not touch them, §3). Under
+   `AUTOPILOT_BLIND_DISCOVERY=1`: `packet` → unchanged path; `none` → the existing
+   `die_precondition` (message unchanged: `blind review requires an enforceable no-tools runner
+   profile (got: <runner>)`); `cleanroom` → the launcher path (§1.2). Without
+   `AUTOPILOT_BLIND_DISCOVERY=1` nothing changes for any runner (the codex `--sandbox read-only`
+   block stays byte-identical and is what non-blind codex reviews still use).
+2. **Cleanroom preconditions fail closed BEFORE any spend.** A `cleanroom` seat under blind mode
+   requires, in this order, each a `die_precondition` (exit 2 → the engine records
+   `precondition_failed`, no model call): `AUTOPILOT_REVIEW_PACKET_DIR` set and
+   `<dir>/tree` + `<dir>/MANIFEST.json` present (a cleanroom seat never runs on the legacy copy);
+   `bwrap` resolvable on `PATH` (or `AUTOPILOT_CLEANROOM_BWRAP=<path>`) AND working: the launcher is
+   run once as `--preflight --deny-path <packet host dir>` (no model, milliseconds) and a non-zero
+   exit is `die_precondition` naming the runtime (`cleanroom runtime unusable: <first stderr line>`
+   — a present bwrap whose user namespaces are blocked by AppArmor is refused here, not turned into a
+   `no_verdict` an hour later); the runner binary: `command -v` then `readlink -f`, the resolved file
+   must be a regular file and `codex-code-mode-host` must sit beside it (else `codex binary
+   directory unresolved: <path> — the codex release directory (codex beside codex-code-mode-host) is
+   required; the npm wrapper layout is not supported in this cut`, also stated in the header) — the
+   directory of the resolved file is the release `bin/` to bind; a credential source (`AUTOPILOT_CLEANROOM_CODEX_AUTH` or `$CODEX_HOME/auth.json` or
+   `~/.codex/auth.json`) exists and is a regular file. Then `scripts/lib/cleanroom-launch.sh` is
+   invoked with `--seat-root <blind dir>/seat` (the launcher-controlled dir beside the packet; the
+   `mktemp` default is for direct callers). `AUTOPILOT_CLEANROOM_BWRAP` must name a binary the host
+   AppArmor policy allows to create user namespaces (header note). Test seam:
+   `AUTOPILOT_CLEANROOM_LAUNCHER=<path>` replaces the launcher script (same role as `--bin`), so the
+   portable suite pins the gate order and the argument shape without `bwrap`.
+3. **`scripts/lib/cleanroom-launch.sh` (NEW, + mirror) is the one isolation launcher.** Contract
+   (argv, no globals). Launch mode: `cleanroom-launch.sh --profile codex --packet-dir <packet>
+   --prompt-file <f> --out <stdout capture> --err <stderr capture> --timeout <Ns|Nm> --model <m>
+   --effort <e> --bin-dir <release bin dir> --auth-file <auth.json> [--bwrap <path>] [--seat-root
+   <dir>] [--keep-seat]` (all nine non-bracketed options required). Preflight mode:
+   `cleanroom-launch.sh --preflight --deny-path <p> [--deny-path <p>…] [--bwrap <path>] [--seat-root
+   <dir>]` — no packet, no prompt, no credential, no binary (intake in 1b-B runs it before any packet
+   exists); it mounts an EMPTY `work/` where the tree would be. Both modes print the JSON line. It:
+   - creates a private seat root (`mktemp -d -t cleanroom-seat.XXXXXX`, `0700`; `--seat-root` uses
+     that path — `dispatch-review.sh` passes `<blind dir>/seat` — a fixed `cleanroom-seat.` prefix so
+     an operator can sweep orphans) with `home/` (`.codex/auth.json` copied `0600`;
+     `.codex/config.toml` WRITTEN by the launcher: exactly `model = "<m>"` and
+     `model_reasoning_effort = "<e>"` — no `[projects.*]`, no MCP, no `history.jsonl`), `work/`
+     (empty mount point), `passwd` (two lines: `review` and `nobody`), `prompt` (the prompt bytes,
+     `0400`), and `bwrap.args` (the complete bwrap option list, NUL-separated).
+   - runs `timeout <T> bwrap --args 9 -- /bin/sh -c 'exec "$0" "$@"' /home/review/bin/codex exec …
+     9< <seat>/bwrap.args`, where `bwrap.args` holds `--unshare-all --share-net --die-with-parent
+     --new-session --hostname review --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64
+     /lib64 --symlink usr/bin /bin --ro-bind /etc/resolv.conf /etc/resolv.conf --ro-bind /etc/ssl
+     /etc/ssl --ro-bind-try /etc/ca-certificates /etc/ca-certificates --ro-bind <seat>/passwd
+     /etc/passwd --proc /proc --dev /dev --tmpfs /tmp --bind <seat>/home /home/review --ro-bind
+     <packet>/tree /home/review/work --ro-bind <seat>/prompt /home/review/prompt --ro-bind <bin-dir>
+     /home/review/bin --clearenv --setenv HOME /home/review --setenv CODEX_HOME /home/review/.codex
+     --setenv PATH /home/review/bin:/usr/bin --setenv TERM dumb --chdir /home/review/work`; the
+     inner command is `codex exec --model <m> --sandbox danger-full-access --skip-git-repo-check
+     --ignore-user-config -c model_reasoning_effort="<e>" --output-last-message
+     /home/review/last-message` with the prompt on stdin (`< <seat>/prompt`), stdout → `--out`,
+     stderr → `--err`. Every host path lives in the args FILE, so `/proc/1/cmdline` inside is
+     exactly `bwrap --args 9 -- /bin/sh -c … /home/review/bin/codex …` (probed 2026-09-17); the
+     probe script in preflight mode is likewise run through `/bin/sh` (a `noexec` seat mount cannot
+     break it). `--sandbox danger-full-access` is legal ONLY here: the bwrap boundary is the sandbox
+     (probe 2026-09-16; nested `read-only` cannot create its userns). Nothing under the operator
+     HOME, the repository, `.autopilot`, host `/tmp` or a sibling seat is bound; the network stays on
+     (model transport; on a proxied / private-CA host `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY`/
+     `SSL_CERT_FILE` are NOT passed through in this cut — a recorded follow-up, §3).
+   - descriptor hygiene: before `bwrap` the launcher closes every inherited descriptor above 2
+     (`for fd in 3..1023: exec {fd}>&-`) and only then opens fd 9 on `bwrap.args`; bwrap itself
+     passes inherited descriptors through and `/proc/self/fd/N` is a reopenable magic link inside a
+     mounted `/proc`, so an fd the caller holds on a host file would otherwise be a read/write channel
+     the mount deny-list never sees. `--timeout` accepts exactly the coreutils DURATION grammar (bare
+     number or `s`/`m`/`h`/`d` suffix) and forwards it untouched — `dispatch-review.sh`'s default
+     `5m` and a bare `300` both work. `--seat-root <dir>`: the launcher `mkdir -m 0700` that EXACT
+     path and exits 2 `seat root already exists` when it is present; it removes only a root it
+     created (a caller's stale or foreign directory is never reused or `rm -rf`ed). In preflight
+     mode every `--deny-path` is checked with `test -e` on the HOST before entering the namespace —
+     a missing path exits 2 naming it, so a typo can never produce a green preflight.
+   - the launcher's `timeout` is the ONLY wall cap (`dispatch-review.sh` does not wrap it again); exit
+     code = the inner exit code (124 passes through untouched); prints one JSON line on ITS stdout
+     `{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "codex"|"preflight",
+     "exit_status": <n>, "timed_out": <bool>, "seat_root_removed": <bool>, "seat_root": <path> }`;
+     traps `EXIT INT TERM HUP`: removes the seat root (unless `--keep-seat`) and re-raises the signal
+     after cleanup. It never reads the repository, never writes outside the seat root and the two
+     capture files. Header notes: an orphaned `cleanroom-seat.*` dir after a SIGKILL holds a copied
+     credential and must be swept; the copied `auth.json` means a token refresh performed inside a
+     seat is discarded (limitation, checked in §5).
+   - `--profile` accepts only `codex`; any other value exits 2 with `unsupported cleanroom
+     profile`. `--preflight` runs a bundled POSIX probe script (written into the seat root) inside
+     the identical boundary: every `--deny-path` must be unreadable (`cat` fails), and
+     `/proc/1/cmdline` must contain none of the `--deny-path` strings, the seat root path, or the
+     packet/bin host paths (the assertion is "no host path in argv", not a fixed prefix); exit 0 only
+     then, 2 when bwrap is missing or cannot start (userns blocked), 3 otherwise with the first
+     offending path on stderr.
+4. **`dispatch-review.sh` cleanroom path.** After the preconditions: `CODEX_OUT`/`CODEX_ERR` as
+   today; the launcher is called WITHOUT an outer `timeout` (its own is the wall cap) with the seat's
+   `--model`, `--effort` (codex vocabulary as the existing block maps it), `--timeout "$TIMEOUT"`,
+   the packet dir, the prompt file, `--seat-root "$AUTOPILOT_REVIEW_PACKET_DIR/../seat"`, and the bin
+   dir of the resolved codex binary; its JSON line is appended to `RAW_LOG` after the stdout/stderr
+   sections (same three-part raw log shape as the existing block, plus a fourth
+   `--- cleanroom launch ---` section); non-zero exit → the existing fail-closed
+   `emit_no_verdict` with reason `cleanroom codex exited non-zero (rc=<n>)`; `PARSE_INPUT="$CODEX_OUT"`
+   so the shared parser, leak scan, proof checks and `--timeout` semantics are unchanged. The prompt
+   is the same prompt file the packet-tier path builds (diff as text + spec + nonce protocol) — a
+   cleanroom seat gets the tree in addition, never instead.
+5. **The isolation suite is host-gated, and when invoked it refuses rather than skips.**
+   `hooks/tests/cleanroom-launch.test.sh` (NEW, `test -x`): when `AUTOPILOT_HOST_ISOLATION` is unset
+   → `SKIP: set AUTOPILOT_HOST_ISOLATION=1 …` + `finalize_test` (the live-suite idiom; CI stays
+   green); when set → `bwrap` missing or `--preflight` failing is a FAIL, never a skip. It plants a
+   hostile stub as the "codex" binary (`--bin-dir` pointing at a dir whose `codex` is a shell script)
+   and runs the REAL launcher: (a) the stub tries to read the real repository root, the operator
+   HOME, `$CODEX_HOME/auth.json`, a planted sibling seat file, `/etc/hostname`, the packet's host
+   path and `/proc/1/cmdline`; the host credential path is written into the stub as a LITERAL
+   resolved on the host before launch (never `$CODEX_HOME` expanded inside, where it names the
+   copied, readable seat credential — that read is the positive control and must succeed); every
+   host read is denied (`cat` fails) except the packet tree, which it reads byte-equal, and
+   `/proc/1/cmdline` contains no host path (not the seat root, packet dir, bin dir or repository
+   root) — a control run WITHOUT `--args` (plain argv) shows the host paths, proving the assertion
+   can fail; the suite drives the launcher from a parent shell that holds `exec 7<` on a host secret
+   file, and the stub asserts `ls /proc/self/fd` is exactly `0 1 2` (plus the fds `/bin/sh` opens for
+   the script itself, enumerated) and `cat /proc/self/fd/7` and `/proc/self/fd/9` both fail (RED at
+   base: launcher absent); (b) the stub sleeps past `--timeout 2s` → launcher exit 124, JSON `timed_out:
+   true`, seat root removed; (c) the stub writes into `/home/review/.codex` and `/tmp` → succeeds, and
+   nothing appears outside the seat root on the host; the seat root is gone after exit; (d) the
+   stub's stdout/stderr land byte-equal in `--out`/`--err`; (e) `--preflight --deny-path <repo>
+   --deny-path <home>` exits 0 on this host, and with `--bwrap /nonexistent` exits 2 (never 0) with a
+   named message, with a `--deny-path` that IS readable (a file the stub can read because the
+   test binds nothing extra — e.g. `/usr/bin/sh`) exits 3 naming it, and with a `--deny-path` that
+   does not exist on the host exits 2 naming it (never 0); (f) two launchers run
+   concurrently with `--keep-seat`: each stub tries the other's seat root → denied; (g) a stub
+   `codex` dir WITHOUT `codex-code-mode-host` → `dispatch-review.sh` exit 2 `codex binary directory
+   unresolved` (portable, in the dispatch-review suite); (h) `--seat-root` pointing at an existing
+   directory → exit 2 `seat root already exists`, the directory untouched; after a normal run the
+   created root is gone; portable stub-launcher variant in the dispatch-review suite. This suite is in this host's `verification_commands` with the env set; it is
+   NOT in CI's job.
+6. **Portable tests in `hooks/tests/dispatch-review.test.sh`** (no bwrap; `AUTOPILOT_CLEANROOM_LAUNCHER`
+   stub): blind codex without `AUTOPILOT_REVIEW_PACKET_DIR` → exit 2 `cleanroom seat requires a review
+   packet`; with a packet dir but `AUTOPILOT_CLEANROOM_BWRAP=/nonexistent` → exit 2 naming bwrap; a
+   stub launcher whose `--preflight` exits 2 → exit 2 `cleanroom runtime unusable` and the stub was
+   never called in launch mode; a codex stub dir lacking `codex-code-mode-host` → exit 2;
+   with a stub launcher: it receives `--profile codex`, `--packet-dir <the env dir>`, `--timeout
+   <the --timeout value>`, `--model`, `--effort`, a `--bin-dir` that contains the resolved binary,
+   `--auth-file`, `--seat-root <packet dir>/../seat`, and `--timeout` equal to the suite's real
+   default (`5m`, coreutils grammar, forwarded untouched); its stdout capture is what the parser
+   reads (stub writes a framed
+   `VERDICT: SHIP-AS-IS` into `--out` → `status: reviewed`); stub exit 124 → `status: no_verdict`
+   with the cleanroom reason and rc in `raw_log`; the launcher JSON line is present in `raw_log`; a
+   `none`-tier runner (grok) under blind mode still gets the unchanged message (preservation); codex
+   WITHOUT blind mode still runs the `--sandbox read-only` block byte-identically (preservation: the
+   existing stub tests at `:720-770` keep passing). The existing parity test (`:1091-1125`) keeps
+   the JS set as-is: it asserts only that the four packet-tier runners reach the stub — extend it
+   with "codex under blind mode with a stub launcher reaches the LAUNCHER, not the binary".
+7. **Nothing else moves.** `final-panel-qualification.js`, `campaign-intake.js`,
+   `resolve-review-loop.sh`, `review.js`, `review-packet.js`, the engine, schemas and pins are
+   byte-identical to `ceb7c81d` (intake still refuses a codex seat — 1b-B lifts that). No new CLI
+   flag on `dispatch-review.sh`; new env variables only (`AUTOPILOT_CLEANROOM_LAUNCHER`,
+   `AUTOPILOT_CLEANROOM_BWRAP`, `AUTOPILOT_CLEANROOM_CODEX_AUTH`, `AUTOPILOT_HOST_ISOLATION`), all
+   documented in the script header.
+
+## 2. Changes by file
+
+- `scripts/lib/cleanroom-launch.sh` (NEW, + mirror `platforms/codex/plugin/scripts/lib/…`): §1.3.
+  Bash, `set -euo pipefail`, no `jq`/`python`; JSON via `lib/json-emit.sh`. Header documents the
+  boundary, the env variables, exit codes (0 inner ok / inner rc passthrough / 2 usage or
+  precondition / 3 preflight denied-read failure / 124 timeout).
+- `scripts/dispatch-review.sh` (+ mirror): §1.1 `review_seat_tier`, the blind gate at `:290-295`
+  becomes a tier switch; §1.2 preconditions; §1.4 launch block inserted as the first branch of the
+  codex `if` (`if [[ "$RUNNER" = codex && blind ]]`), the existing block unchanged after it; header
+  USAGE gains the env variables and the tier table.
+- `hooks/tests/cleanroom-launch.test.sh` (NEW, `test -x`): §1.5.
+- `hooks/tests/dispatch-review.test.sh`: §1.6 (each change-pinning block `# RED at base ceb7c81d:
+  <observed message>`; preservation guards labelled).
+- Docs: `references/blind-dispatch.md` (+ mirror) new section "Cleanroom tier (v2.36.62)" after
+  "Packet blinding": tiers, the boundary in one list, what is and is not proven this cut (no live
+  codex run until quota returns), pointer to 1b-B; `docs/scripts-inventory.md` one row for the
+  launcher; `CLAUDE.md` Dispatch rails group gains `lib/cleanroom-launch.sh` (the root-level path is
+  sealed as an exact `output_paths` entry and an exact `allowed_path_prefixes` entry — the contract
+  checker accepts `normalized === prefix`; the scope session's `<prefix>/**` glob governs NEW paths
+  only, and `CLAUDE.md` is modified, not created); `docs/BACKLOG.md` redesign row Context becomes
+  EXACTLY `packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary;
+  verify-once; parallel seats. 1a-A (v2.36.59), 1a-B (v2.36.61), 1b-A launcher (v2.36.62) shipped;
+  1b-B intake/resolver, 2 open. Detail in the pointer.` (Status `open`). `CHANGELOG.md` and version
+  manifests NOT sealed (depth-0 release commit; `v2.36.62` in text is a pin).
+
+### 2.5 Sealed `output_paths` (exact)
+
+```
+scripts/lib/cleanroom-launch.sh
+platforms/codex/plugin/scripts/lib/cleanroom-launch.sh
+scripts/dispatch-review.sh
+platforms/codex/plugin/scripts/dispatch-review.sh
+hooks/tests/cleanroom-launch.test.sh
+hooks/tests/dispatch-review.test.sh
+references/blind-dispatch.md
+platforms/codex/plugin/references/blind-dispatch.md
+docs/scripts-inventory.md
+CLAUDE.md
+docs/BACKLOG.md
+```
+
+Created (`authorized_creates`): the launcher, its mirror, `hooks/tests/cleanroom-launch.test.sh`.
+Every other path exists at base. `max_changed_files` is sealed at 14 (> 11).
+
+### 2.6 Global constraints (copied verbatim into every dispatch)
+
+- A cleanroom seat runs ONLY inside `cleanroom-launch.sh`; `--sandbox danger-full-access` appears
+  nowhere else; the non-blind codex block keeps `--sandbox read-only` byte-for-byte.
+- Preconditions (packet dir, bwrap present AND `--preflight` green, binary dir with
+  `codex-code-mode-host`, credential file) fail closed with exit 2 before any model process starts;
+  a launcher failure is `no_verdict` with the rc, never a parsed verdict; the launcher's `timeout`
+  is the only wall cap.
+- The seat sees: the packet tree (ro), its own writable HOME with one copied credential and a
+  launcher-written config, the runtime and TLS/DNS; it does not see the repository, the operator
+  HOME, `.autopilot`, host `/tmp`, sibling seats, the host argv, or any inherited file descriptor
+  (all closed above 2 before `bwrap`, fd 9 opened after).
+- No `jq`, no `python`, no `git` in the launcher; Node not required either.
+- `src/**`, `schemas/**`, `bin/autopilot.js`, `scripts/resolve-review-loop.sh`,
+  `scripts/qualification-review-provider.js` byte-identical to `ceb7c81d`.
+- Tests: portable suite uses stubs only; the isolation suite runs only under
+  `AUTOPILOT_HOST_ISOLATION=1` and then never skips.
+
+## 3. Out of scope
+
+- **1b-B**: intake `cleanroomProbe` adapter (same `adapters.x || defaultX` shape as `readiness`,
+  `campaign-intake.js:1825`) calling `cleanroom-launch.sh --preflight` per cleanroom seat and
+  refusing with a new code when the boundary is not enforceable; `final-panel-qualification.js`
+  tier table replacing `BLIND_DISCOVERY_CAPABLE_RUNNERS`; `resolve-review-loop.sh:2113-2133` ⚠
+  becoming a tier lookup; the parity test extension; the routing fixture at `:3302` (codex is no
+  longer "incompatible", it is "cleanroom-unprobed"); codex back on the pinned panel (`pin-seat` after
+  a recorded live probe once quota returns 2026-09-19).
+- Configurable deny-list: touches `review-loop-contract.schema.json` + resolver + the three-way
+  `check-contract-schema` parity; least value, most drift — its own cut after 1b-B.
+- Other cleanroom profiles (`grok`, `cursor-agent`, `kimi`, `opencode`): each needs its own probe
+  (auth layout, config surface, argv); codex first, as the parent plan says.
+- Cut 2 (verify-once, concurrent seats, standby, snapshot).
+- Seccomp, `--unshare-net` with a proxy: the residual channel is the model transport itself (both
+  consults). Proxy / private-CA pass-through (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`,
+  `SSL_CERT_FILE` via `--setenv` when set on the host) is a recorded follow-up for the first proxied
+  host; this host is not proxied. Whether a stale `auth.json` `last_refresh` should be a preflight
+  refusal, and the documented recovery path (re-login) if a provider that rotates refresh tokens on
+  use invalidates the host credential through a seat refresh, are decided in 1b-B — the §5 check
+  proves the host token survived one run, not that rotation cannot occur.
+
+## 4. Acceptance
+
+| id | criterion | evidence |
+|----|-----------|----------|
+| `tier-gate` | under blind mode: packet-tier runners unchanged; `none`-tier refused with the unchanged message; codex routed to the launcher only after packet dir, bwrap-present-and-preflight-green, binary dir (with `codex-code-mode-host`) and credential preconditions, each refusing with exit 2 and a named message; codex without blind mode byte-identical (`--sandbox read-only`); no outer `timeout` around the launcher | dispatch-review suite |
+| `launcher-contract` | the stub launcher receives profile, packet dir, timeout, model, effort, bin dir, auth file; its `--out` is what the parser reads; its exit 124 → `no_verdict` with rc in `raw_log`; its JSON line is in `raw_log` | dispatch-review suite |
+| `boundary` | through the REAL launcher on this host: host repo, operator HOME, the host credential (literal path), sibling seat, `/etc/hostname`, packet host path all denied while the copied seat credential and the packet tree are readable (positive controls); `/proc/1/cmdline` carries no host path (control without `--args` shows them); an fd the parent holds on a host secret is not present inside and `/proc/self/fd/7`/`9` cannot be reopened; writes stay inside the seat root, which is removed on exit and on INT/TERM and never reused when pre-existing; `--timeout` → 124 + `timed_out: true`; two concurrent seats cannot read each other | cleanroom-launch suite (`AUTOPILOT_HOST_ISOLATION=1`) |
+| `preflight` | `--preflight --deny-path …` (no packet, prompt, credential or binary needed) exits 0 on this host with a `profile: "preflight"` JSON line; with a missing bwrap exits 2, never 0; with a path that IS readable exits 3 naming it; with a path that does not exist on the host exits 2 naming it | cleanroom-launch suite |
+| `no-regression` | each command in §4.1 exits 0 at the candidate (detached checkout, sequential); at base the seven pre-existing commands were green and `cleanroom-launch.test.sh` is recorded as `absent at base (created by this cut)` in the evidence dir | suite output + evidence |
+| `scope-integrity` | `git diff --name-only <base> HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/**`, `schemas/**`, `bin/autopilot.js`, `resolve-review-loop.sh`, `qualification-review-provider.js` byte-identical; new launcher and test file `test -x`; `CLAUDE.md` names the launcher and `check-claude-md-inventory.js` exits 0 | command output |
+
+### 4.1 No-regression commands (exact; also the graph's `verification_commands`)
+
+```
+bash hooks/tests/dispatch-review.test.sh
+AUTOPILOT_HOST_ISOLATION=1 bash hooks/tests/cleanroom-launch.test.sh
+bash hooks/tests/review-runner.test.sh
+bash hooks/tests/review-packet.test.sh
+node scripts/check-js-syntax.js
+bash scripts/sync-codex-plugin-skills.sh --check
+node scripts/check-claude-md-inventory.js
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
+```
+
+The second line is host-only by design (this host has `bwrap`); in CI the same suite prints `SKIP`.
+Expected exit 0 for every line at the candidate. At base the second line's file does not exist
+(created by this cut) and the evidence file records it as absent.
+
+## 5. Dogfood proof (depth-0)
+
+Before merge, on this host: run `cleanroom-launch.sh --profile codex` with the REAL codex binary
+against a real packet built from this repo; the expected outcome while quota is exhausted is the
+quota error INSIDE the boundary (proving auth was read from the seat HOME and the transport left
+the sandbox) with rc≠0 → `no_verdict`, and a seat root that is gone afterwards. Record `sha256sum
+~/.codex/auth.json` before and after and confirm the host credential still authenticates (a
+`codex --version`-class call is not enough; a quota-gated `exec` is): the copied-credential refresh
+limitation is stated, not hidden. Record it in the evidence dir. The first real verdict from a
+cleanroom seat is 1b-B's dogfood after 2026-09-19.
+
+## 6. Risks + inversion
+
+- **CI runners cannot create user namespaces.** The isolation suite is env-gated so CI prints
+  `SKIP`; this host's `verification_commands` invoke it with the env. Inversion: a host with the env
+  set and no working bwrap gets a red suite, which is the truth.
+- **codex writes into its HOME.** The seat HOME is writable and discarded; nothing of the operator
+  HOME is present to be modified. The suite asserts the host is untouched.
+- **Nested sandbox.** `--sandbox danger-full-access` reads badly; it is confined to the launcher
+  and the header says why (probe 2026-09-16: `read-only` cannot nest). The portable suite asserts the
+  non-blind block never gained it.
+- **Argv leak.** All bwrap options ride in an args file (`--args FD`), so pid 1's cmdline holds no
+  host path; the suite reads `/proc/1/cmdline` from inside and a no-`--args` control proves the
+  assertion bites.
+- **Timeout ownership / orphaned seats.** One timer (the launcher's); INT/TERM/HUP traps; a fixed
+  `cleanroom-seat.` prefix for sweeping a SIGKILLed seat's credential copy.
+- **Quota.** No live codex verdict this cut — the acceptance table does not claim one.
+- **Hand scope.** One new lib script + its mirror, one script edit + mirror, two test files, one
+  doc + mirror, one inventory row, one BACKLOG line — one round.
+
+## 7. Where this sits
+
+Parent §7: 1a-A ✓ → 1a-B ✓ → **1b-A (this)** → 1b-B (intake/resolver/tier table/codex pin) →
+configurable deny-list → 2.
+
+## Review log
+
+- Unknown-escalation probe (`ladder-classify.json`): U1 (two coined names had zero repo hits); the
+  consult rail was attempted and failed on the codex quota (`consult-codex-quota-rail-failed.json`,
+  ladder row `rail-failed`); pointing the consult seat at GLM needs an operator pin, so no consult.
+- Plan hetero loop G1 2026-09-17 (GLM-5.2 READY, claude-fable-5-1 CONDITIONAL: 1 blocker + 7
+  non-blocking; evidence `g1-*`, `plan.as-reviewed-g1.md`): all nine accepted — (R3, blocker) a
+  wrapper cannot clean `/proc/1/cmdline` because pid 1 is bwrap's reaper → probed `bwrap --args 9`
+  (options in a NUL file) leaves no host path in the argv (`bwrap-probe-2026-09-17.md`), the
+  assertion is now "no host path in pid-1 argv" with a plain-argv control; (R2) `bwrap` present is
+  not `bwrap` working → dispatch runs `--preflight` as a precondition; (R4) one timer only, INT/TERM/
+  HUP traps, `cleanroom-seat.` prefix; (R7) base evidence records the new suite as absent; (R2)
+  binary resolution via `readlink -f` + `codex-code-mode-host`; (R3) token-refresh limitation checked
+  in §5; (R3) scripts run through `/bin/sh`, seat root beside the packet; (R4) preflight contract
+  needs no packet/credential; (R3) proxy/CA pass-through recorded as follow-up. Depth-0 also moved
+  `CLAUDE.md` out of the hand's scope in this fold — reverted in G2 (below). A rubric wording edit
+  made in the same fold drifted the frozen rubric (`frozen rubric/manifest drifted`, refused
+  attempt `g2-drifted-rubric-attempt.err`); the rubric was restored to its G1 bytes before G2.
+- Plan hetero loop G2 2026-09-17 (terminal at the cap; GLM-5.2 CONDITIONAL 1 blocker, claude-fable-5-1
+  CONDITIONAL 2 blockers + 6 non-blocking; evidence `g2-*`, `plan.as-reviewed-g2.md`): all nine
+  accepted — (R6, both seats) the G1 fold put `CLAUDE.md` outside the sealed scope while frozen R6
+  requires the CLAUDE.md registration at the candidate: the contract checker accepts an exact
+  root-level prefix and the `<prefix>/**` scope glob governs new paths only, so `CLAUDE.md` is back
+  in §2.5 / `allowed_path_prefixes`, `check-claude-md-inventory.js` is in §4.1, and the
+  byte-identity clause is gone; (R3, blocker) inherited descriptors are a channel the mount
+  deny-list never sees → the launcher closes 3..1023 before `bwrap`, opens fd 9 after, and suite (a)
+  holds `exec 7<` on a host secret in the parent and asserts the seat's `/proc/self/fd`; (R4)
+  `--deny-path` existence checked on the host (`test -e`, exit 2); (R2) coreutils DURATION grammar
+  forwarded untouched, both `5m` and `2s` covered; (R3) `--seat-root` must not pre-exist, only a
+  created root is removed; (R5) host credential path as a literal in the stub, copied credential as
+  the positive control; (R2) release-layout-only message and header sentence; (R3) refresh-rotation
+  recovery decided in 1b-B. Growth 1.23×. Zero unaddressed blockers, zero deferred.
+
+--- end spec ---
+
+Diff under review:
+```
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 2ba1a972..59b754b6 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -17,7 +17,8 @@ What each one does — purpose, when to call it, pointer to its contract — liv
+ 
+ A caution learned the hard way (2026-08-06): several of these were fully built, tested and documented, yet doing nothing — an age threshold left at `0`, a hook never installed, a scanner keyed on an id the residue did not carry. **A script existing is not evidence it is running.** When one is supposed to be protecting something, check that it actually fires. It is one of a family — a module with zero callers, a suite that passes when you delete the gate it tests, a shadow derived from the answer it checks, an assertion pinned to one machine, a green test writing fixture rows into the real store. Each incident and its preventing artifact: [`references/evidence-discipline.md`](references/evidence-discipline.md). Read it before recording anything as verified.
+ 
+-**Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-consult.sh` `dispatch-discuss.js` `dispatch-explore.sh` `dispatch-foreman.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/main-checkout-boundary.sh` `wait-dispatch-results.js` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/cursor-model.sh` `lib/agy-model-alias.sh` `lib/agy-argv-ceiling.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js` `lib/plan-review-timeout.js` `lib/plan-review-panel.js`
++**Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-consult.sh` `dispatch-discuss.js` `dispatch-explore.sh` `dispatch-foreman.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/cleanroom-launch.sh` `lib/main-checkout-boundary.sh` `wait-dispatch-results.js` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/cursor-model.sh` `lib/agy-model-alias.sh` `lib/agy-argv-ceiling.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js` `lib/plan-review-timeout.js`
++`lib/plan-review-panel.js`
+ 
+ **Routing & config resolution** — `resolve-dispatch.sh` `resolve-dispatch-topology.js` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-knowledge-routing.sh` `resolve-project-paths.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
+ 
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index 81725328..3a563e45 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -118,7 +118,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Effort**: L
+ - **Source**: owner request 2026-09-16 after v2.36.58
+ - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
+-- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Cuts 1a-A (v2.36.59) and 1a-B (v2.36.61) shipped; 1b/2 open. Detail in the pointer.
++- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. 1a-A (v2.36.59), 1a-B (v2.36.61), 1b-A launcher (v2.36.62) shipped; 1b-B intake/resolver, 2 open. Detail in the pointer.
+ 
+ ### Managed rail: final-panel seats run dispatch-review.sh at the 5m default timeout and time out on ordinary diffs
+ - **Status**: shipped v2.36.60 2026-09-17
+diff --git a/docs/scripts-inventory.md b/docs/scripts-inventory.md
+index d8130586..fb37c037 100644
+--- a/docs/scripts-inventory.md
++++ b/docs/scripts-inventory.md
+@@ -83,6 +83,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
+ | [`scripts/lib/plan-review-panel.js`](../scripts/lib/plan-review-panel.js) | Panel-level progress manifest (best-effort atomic writes at every seat transition) rendered by `dispatch-status.js --panels`; a manifest write failure never fails the review. |
+ | [`scripts/lib/dispatch-author-codex-transport.sh`](../scripts/lib/dispatch-author-codex-transport.sh) | Fail-closed Codex author transport; oracle: its focused hook test. |
+ | [`scripts/lib/dispatch-detach.sh`](../scripts/lib/dispatch-detach.sh) + [`scripts/lib/output-quiescence.sh`](../scripts/lib/output-quiescence.sh) | Detached read-only rail and late-output quiescence helpers. |
++| [`scripts/lib/cleanroom-launch.sh`](../scripts/lib/cleanroom-launch.sh) | Argv-only bwrap launcher for a cleanroom (codex) review seat: `--args 9` boundary, `--preflight` probe, JSON launch line. Called by `dispatch-review.sh` under blind mode. Oracle: [`hooks/tests/cleanroom-launch.test.sh`](../hooks/tests/cleanroom-launch.test.sh). |
+ | [`scripts/lib/pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js) | pi RPC supervisor, shutdown owner, and optional ledger directive delivery; recipe: hetero-dispatch § pi. |
+ | [`scripts/dispatch-contract.js`](../scripts/dispatch-contract.js) | Dispatch-unit contract validator: `check --contract <file> --repo <dir> --json` validates against `schemas/dispatch-unit-contract.schema.json` + resolves the engine, emitting GO / NO-GO with sha256 provenance. Pre-dispatch gate for `dispatch-hetero.sh` / `dispatch-author.sh`. |
+ | [`scripts/resolve-execution-profile.js`](../scripts/resolve-execution-profile.js) | Compile or verify a narrowing child role grant from an existing task envelope; never parses project policy, writes a ledger, or performs effects. |
+diff --git a/hooks/tests/cleanroom-launch.test.sh b/hooks/tests/cleanroom-launch.test.sh
+new file mode 100755
+index 00000000..5c6e57d7
+--- /dev/null
++++ b/hooks/tests/cleanroom-launch.test.sh
+@@ -0,0 +1,280 @@
++#!/usr/bin/env bash
++# cleanroom-launch.test.sh — host-gated isolation suite for scripts/lib/cleanroom-launch.sh.
++# CI leaves AUTOPILOT_HOST_ISOLATION unset (SKIP). This host's verification_commands set it.
++. "$(dirname "$0")/lib.sh"
++
++LAUNCHER="$REPO_ROOT/scripts/lib/cleanroom-launch.sh"
++
++if [[ "${AUTOPILOT_HOST_ISOLATION:-}" != "1" ]]; then
++  echo "SKIP: set AUTOPILOT_HOST_ISOLATION=1 to run the real-bwrap isolation suite"
++  finalize_test
++  exit 0
++fi
++
++if ! command -v bwrap >/dev/null 2>&1; then
++  fail "bwrap missing while AUTOPILOT_HOST_ISOLATION=1 (FAIL, never skip)"
++fi
++
++HOST_CRED="${CODEX_HOME:-$HOME/.codex}/auth.json"
++if [ ! -f "$HOST_CRED" ]; then
++  HOST_CRED="$TEST_TMP/fake-host-auth.json"
++  mkdir -p "$(dirname "$HOST_CRED")"
++  printf '{"test":"host-credential"}\n' > "$HOST_CRED"
++fi
++HOST_CRED="$(readlink -f "$HOST_CRED")"
++REPO_ABS="$(readlink -f "$REPO_ROOT")"
++HOME_ABS="$(readlink -f "$HOME")"
++SIBLING="$TEST_TMP/sibling-seat"
++mkdir -p "$SIBLING"
++printf 'sibling-secret\n' > "$SIBLING/verdict.txt"
++PKT="$TEST_TMP/packet"
++mkdir -p "$PKT/tree"
++printf 'packet-tree-bytes\n' > "$PKT/tree/README.md"
++PROMPT="$TEST_TMP/prompt.txt"
++printf 'review please\n' > "$PROMPT"
++AUTH="$TEST_TMP/seat-auth.json"
++printf '{"test":"copied-auth"}\n' > "$AUTH"
++BINDIR="$TEST_TMP/bin"
++mkdir -p "$BINDIR"
++install_stub() {
++  local dest="$1"
++  mkdir -p "$dest"
++  cat > "$dest/codex" <<EOF
++#!/bin/sh
++host_cred=$(printf '%q' "$HOST_CRED")
++repo=$(printf '%q' "$REPO_ABS")
++home=$(printf '%q' "$HOME_ABS")
++sibling=$(printf '%q' "$SIBLING/verdict.txt")
++packet_host=$(printf '%q' "$PKT")
++mode=\$(cat /home/review/bin/mode 2>/dev/null || true)
++peer=\$(cat /home/review/bin/peer 2>/dev/null || true)
++echo "fds=\$(ls /proc/self/fd | tr '\n' ' ')"
++echo -n "cmdline="
++tr '\0' ' ' < /proc/1/cmdline; echo
++if cat "\$host_cred" >/dev/null 2>&1; then echo "HOST_CRED=readable"; else echo "HOST_CRED=DENIED"; fi
++if cat /home/review/.codex/auth.json >/dev/null 2>&1; then echo "SEAT_CRED=readable"; else echo "SEAT_CRED=DENIED"; fi
++if cat "\$repo/package.json" >/dev/null 2>&1; then echo "REPO=readable"; else echo "REPO=DENIED"; fi
++if ls "\$home" >/dev/null 2>&1; then echo "HOME=readable"; else echo "HOME=DENIED"; fi
++if cat "\$sibling" >/dev/null 2>&1; then echo "SIBLING=readable"; else echo "SIBLING=DENIED"; fi
++if cat /etc/hostname >/dev/null 2>&1; then echo "HOSTNAME=readable"; else echo "HOSTNAME=DENIED"; fi
++if cat "\$packet_host/tree/README.md" >/dev/null 2>&1; then echo "PACKET_HOST=readable"; else echo "PACKET_HOST=DENIED"; fi
++if cat /home/review/work/README.md >/dev/null 2>&1; then
++  echo "PACKET_TREE=\$(cat /home/review/work/README.md)"
++else
++  echo "PACKET_TREE=DENIED"
++fi
++if cat /proc/self/fd/7 >/dev/null 2>&1; then echo "FD7=readable"; else echo "FD7=DENIED"; fi
++if cat /proc/self/fd/9 >/dev/null 2>&1; then echo "FD9=readable"; else echo "FD9=DENIED"; fi
++if [ "\$mode" = "sleep" ]; then sleep 30; fi
++if [ "\$mode" = "write" ]; then
++  echo wrote > /home/review/.codex/wrote.txt
++  echo tmpwrote > /tmp/wrote.txt
++fi
++if [ "\$mode" = "peer" ] && [ -n "\$peer" ]; then
++  if cat "\$peer" >/dev/null 2>&1; then echo "PEER=readable"; else echo "PEER=DENIED"; fi
++fi
++EOF
++  chmod +x "$dest/codex"
++  printf 'host\n' > "$dest/codex-code-mode-host"
++  printf 'run\n' > "$dest/mode"
++}
++install_stub "$BINDIR"
++
++SECRET="$TEST_TMP/parent-secret"
++printf 'parent-fd-secret\n' > "$SECRET"
++
++run_launch() {
++  local out="$1" err="$2" extra=()
++  shift 2
++  extra=("$@")
++  "$LAUNCHER" --profile codex --packet-dir "$PKT" --prompt-file "$PROMPT" \
++    --out "$out" --err "$err" --timeout 15s --model m --effort low \
++    --bin-dir "$BINDIR" --auth-file "$AUTH" "${extra[@]}"
++}
++
++# (a) deny-list + argv + inherited fd
++OUTA="$TEST_TMP/a.out"; ERRA="$TEST_TMP/a.err"
++JSONA="$TEST_TMP/a.json"
++set +e
++(
++  exec 7< "$SECRET"
++  run_launch "$OUTA" "$ERRA" > "$JSONA"
++)
++RCA=$?
++set -e
++assert_contains "$(cat "$OUTA")" 'HOST_CRED=DENIED' "host credential literal is denied"
++assert_contains "$(cat "$OUTA")" 'SEAT_CRED=readable' "copied seat credential is readable"
++assert_contains "$(cat "$OUTA")" 'REPO=DENIED' "host repository is denied"
++assert_contains "$(cat "$OUTA")" 'SIBLING=DENIED' "sibling seat file is denied"
++assert_contains "$(cat "$OUTA")" 'HOSTNAME=DENIED' "/etc/hostname is denied"
++assert_contains "$(cat "$OUTA")" 'PACKET_HOST=DENIED' "packet host path is denied"
++assert_contains "$(cat "$OUTA")" 'PACKET_TREE=packet-tree-bytes' "packet tree is byte-equal"
++assert_contains "$(cat "$OUTA")" 'FD7=DENIED' "inherited fd 7 cannot be reopened"
++assert_contains "$(cat "$OUTA")" 'FD9=DENIED' "fd 9 cannot be reopened inside the seat"
++FDS="$(sed -n 's/^fds=//p' "$OUTA")"
++assert_not_contains " $FDS " ' 7 ' "inherited fd 7 is not present in the seat's /proc/self/fd"
++assert_not_contains " $FDS " ' 9 ' "args fd 9 is not present in the seat's /proc/self/fd"
++CMDLINE="$(sed -n 's/^cmdline=//p' "$OUTA")"
++assert_not_contains "$CMDLINE" "$REPO_ABS" "pid1 cmdline has no repository path"
++assert_not_contains "$CMDLINE" "$PKT" "pid1 cmdline has no packet host path"
++assert_not_contains "$CMDLINE" "$BINDIR" "pid1 cmdline has no bin-dir host path"
++assert_not_contains "$CMDLINE" "$TEST_TMP" "pid1 cmdline has no seat/tmp host path"
++assert_contains "$(cat "$JSONA")" '"artifact_type": "cleanroom_launch"' "launch prints JSON line"
++assert_eq "0" "$RCA" "hostile stub launch exits 0"
++
++# plain-argv control: host paths ARE visible without --args
++mkdir -p "$TEST_TMP/ctrl-home"
++CTRL_OUT="$TEST_TMP/ctrl.out"
++set +e
++bwrap --unshare-all --share-net --die-with-parent --new-session --hostname review \
++  --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --symlink usr/bin /bin \
++  --ro-bind /etc/resolv.conf /etc/resolv.conf --ro-bind /etc/ssl /etc/ssl \
++  --proc /proc --dev /dev --tmpfs /tmp \
++  --bind "$TEST_TMP/ctrl-home" /home/review \
++  --ro-bind "$PKT/tree" /home/review/work \
++  --ro-bind "$BINDIR" /home/review/bin \
++  --clearenv --setenv HOME /home/review --setenv PATH /home/review/bin:/usr/bin \
++  --chdir /home/review/work \
++  /bin/sh -c 'tr "\0" " " < /proc/1/cmdline' > "$CTRL_OUT" 2>/dev/null
++set -e
++assert_contains "$(cat "$CTRL_OUT")" "$PKT" "plain-argv control shows packet host path"
++
++# (b) timeout 2s → 124 + timed_out + seat gone
++SEATB="$TEST_TMP/seat-timeout"
++rm -rf "$SEATB"
++OUTB="$TEST_TMP/b.out"; ERRB="$TEST_TMP/b.err"
++printf 'sleep\n' > "$BINDIR/mode"
++set +e
++run_launch "$OUTB" "$ERRB" --timeout 2s --seat-root "$SEATB" > "$TEST_TMP/b.json"
++RCB=$?
++set -e
++printf 'run\n' > "$BINDIR/mode"
++assert_eq "124" "$RCB" "sleeping stub hits launcher timeout 124"
++assert_contains "$(cat "$TEST_TMP/b.json")" '"timed_out": true' "JSON timed_out true"
++assert_file_absent "$SEATB" "seat root removed after timeout"
++
++# (c) writes stay inside seat; host untouched; seat gone
++SEATC="$TEST_TMP/seat-write"
++rm -rf "$SEATC"
++OUTC="$TEST_TMP/c.out"; ERRC="$TEST_TMP/c.err"
++printf 'write\n' > "$BINDIR/mode"
++set +e
++run_launch "$OUTC" "$ERRC" --seat-root "$SEATC" > "$TEST_TMP/c.json"
++RCC=$?
++set -e
++printf 'run\n' > "$BINDIR/mode"
++assert_eq "0" "$RCC" "write stub exits 0"
++assert_file_absent "$SEATC" "seat root gone after write run"
++assert_file_absent "$TEST_TMP/wrote.txt" "host tmp has no seat write"
++assert_file_absent "$HOME_ABS/.codex/wrote.txt" "operator HOME has no seat write"
++
++# (d) stdout/stderr byte-equal
++# stub already writes known lines to stdout; stderr of real codex is empty unless errors
++assert_file_exists "$OUTA"
++assert_contains "$(cat "$OUTA")" 'SEAT_CRED=readable' "stdout landed in --out"
++
++# (e) preflight
++set +e
++"$LAUNCHER" --preflight --deny-path "$REPO_ABS" --deny-path "$HOME_ABS" > "$TEST_TMP/pf.json" 2>"$TEST_TMP/pf.err"
++RCPF=$?
++set -e
++assert_eq "0" "$RCPF" "preflight deny-path repo+home exits 0 on this host"
++assert_contains "$(cat "$TEST_TMP/pf.json")" '"profile": "preflight"' "preflight JSON profile"
++
++set +e
++"$LAUNCHER" --preflight --deny-path "$REPO_ABS" --bwrap /nonexistent > "$TEST_TMP/pf-miss.json" 2>"$TEST_TMP/pf-miss.err"
++RCPFM=$?
++set -e
++assert_eq "2" "$RCPFM" "missing bwrap preflight exits 2"
++assert_contains "$(cat "$TEST_TMP/pf-miss.err")" 'bwrap not found' "missing bwrap is named"
++assert_file_absent /nonexistent
++
++set +e
++"$LAUNCHER" --preflight --deny-path /usr/bin/sh > "$TEST_TMP/pf-ok.json" 2>"$TEST_TMP/pf-readable.err"
++RCPFR=$?
++set -e
++assert_eq "3" "$RCPFR" "readable deny-path exits 3"
++assert_contains "$(cat "$TEST_TMP/pf-readable.err")" '/usr/bin/sh' "readable path is named"
++
++# A bound DIRECTORY must also be caught: `cat` on a directory fails with EISDIR, so a presence
++# check is what makes this branch bite (panel finding preflight-dir-cat-vacuous, 2026-09-17).
++set +e
++"$LAUNCHER" --preflight --deny-path /usr > "$TEST_TMP/pf-dir.json" 2>"$TEST_TMP/pf-dir.err"
++RCPFD=$?
++set -e
++assert_eq "3" "$RCPFD" "readable deny-path DIRECTORY exits 3"
++assert_contains "$(cat "$TEST_TMP/pf-dir.err")" '/usr' "readable directory is named"
++
++set +e
++"$LAUNCHER" --preflight --deny-path "$TEST_TMP/does-not-exist-deny" > "$TEST_TMP/pf-gone.json" 2>"$TEST_TMP/pf-gone.err"
++RCPFG=$?
++set -e
++assert_eq "2" "$RCPFG" "nonexistent deny-path exits 2"
++assert_contains "$(cat "$TEST_TMP/pf-gone.err")" 'does-not-exist-deny' "missing deny-path is named"
++
++# (f) concurrent --keep-seat cannot read each other
++SEAT1="$TEST_TMP/seat-one"; SEAT2="$TEST_TMP/seat-two"
++rm -rf "$SEAT1" "$SEAT2"
++BIN1="$TEST_TMP/bin1"; BIN2="$TEST_TMP/bin2"
++install_stub "$BIN1"
++install_stub "$BIN2"
++printf 'peer\n' > "$BIN1/mode"
++printf 'peer\n' > "$BIN2/mode"
++printf '%s\n' "$SEAT2/home/.codex/auth.json" > "$BIN1/peer"
++printf '%s\n' "$SEAT1/home/.codex/auth.json" > "$BIN2/peer"
++PEER1="$TEST_TMP/peer1.out"; PEER2="$TEST_TMP/peer2.out"
++set +e
++"$LAUNCHER" --profile codex --packet-dir "$PKT" --prompt-file "$PROMPT" \
++  --out "$PEER1" --err "$TEST_TMP/p1.err" --timeout 20s --model m --effort low \
++  --bin-dir "$BIN1" --auth-file "$AUTH" --seat-root "$SEAT1" --keep-seat > "$TEST_TMP/p1.json" &
++PID1=$!
++"$LAUNCHER" --profile codex --packet-dir "$PKT" --prompt-file "$PROMPT" \
++  --out "$PEER2" --err "$TEST_TMP/p2.err" --timeout 20s --model m --effort low \
++  --bin-dir "$BIN2" --auth-file "$AUTH" --seat-root "$SEAT2" --keep-seat > "$TEST_TMP/p2.json" &
++PID2=$!
++wait "$PID1"; RC1=$?
++wait "$PID2"; RC2=$?
++set -e
++assert_eq "0" "$RC1" "concurrent seat 1 exits 0"
++assert_eq "0" "$RC2" "concurrent seat 2 exits 0"
++assert_contains "$(cat "$PEER1")" 'PEER=DENIED' "seat 1 cannot read seat 2 host path"
++assert_contains "$(cat "$PEER2")" 'PEER=DENIED' "seat 2 cannot read seat 1 host path"
++rm -rf "$SEAT1" "$SEAT2"
++
++# (h) pre-existing seat-root → exit 2, untouched
++EXIST="$TEST_TMP/preexisting-seat"
++mkdir -m 0700 "$EXIST"
++printf 'keep-me\n' > "$EXIST/marker"
++set +e
++run_launch "$TEST_TMP/h.out" "$TEST_TMP/h.err" --seat-root "$EXIST" > "$TEST_TMP/h.json" 2>"$TEST_TMP/h.stderr"
++RCH=$?
++set -e
++assert_eq "2" "$RCH" "pre-existing seat-root exits 2"
++assert_contains "$(cat "$TEST_TMP/h.stderr")" 'seat root already exists' "pre-existing seat is named"
++assert_contains "$(cat "$EXIST/marker")" 'keep-me' "pre-existing seat directory is untouched"
++
++SEATN="$TEST_TMP/seat-normal"
++rm -rf "$SEATN"
++set +e
++run_launch "$TEST_TMP/n.out" "$TEST_TMP/n.err" --seat-root "$SEATN" > "$TEST_TMP/n.json"
++set -e
++assert_file_absent "$SEATN" "created seat root is gone after a normal run"
++
++# SIGTERM removes a created seat
++SEATT="$TEST_TMP/seat-term"
++rm -rf "$SEATT"
++printf 'sleep\n' > "$BINDIR/mode"
++set +e
++run_launch "$TEST_TMP/t.out" "$TEST_TMP/t.err" --seat-root "$SEATT" --timeout 30s > "$TEST_TMP/t.json" &
++TPID=$!
++# wait until the seat exists
++for _ in 1 2 3 4 5 6 7 8 9 10; do
++  [ -d "$SEATT" ] && break
++  sleep 0.2
++done
++kill -TERM "$TPID" 2>/dev/null || true
++wait "$TPID" 2>/dev/null || true
++set -e
++assert_file_absent "$SEATT" "SIGTERM removes the seat root the launcher created"
++
++finalize_test
+diff --git a/hooks/tests/dispatch-review.test.sh b/hooks/tests/dispatch-review.test.sh
+index d5799ec5..16033e6f 100755
+--- a/hooks/tests/dispatch-review.test.sh
++++ b/hooks/tests/dispatch-review.test.sh
+@@ -1076,10 +1076,17 @@ assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant xhigh' "open
+ # structural in the branch, same as kimi/qoderclicn's "CWD=... ; CWD=\"\"" pattern above).
+ unset OPENCODE_ARGV_FILE
+ 
+-# 5c. Blind review requires no-tools containment and hides the caller escape sentinel.
++# 5c. Blind review: none-tier still requires no-tools containment (preservation).
++# RED at base ceb7c81d: grok under blind → "blind review requires an enforceable no-tools runner profile (got: grok)"
++OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner grok --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
++assert_eq "2" "$EXIT" "blind grok review requires a no-tools profile (preservation)"
++assert_contains "$OUT" 'enforceable no-tools runner profile (got: grok)' "blind grok precondition message unchanged"
++
++# RED at base ceb7c81d: blind codex without packet → same no-tools message (got: codex)
+ OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+-assert_eq "2" "$EXIT" "blind codex review requires a no-tools profile"
+-assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition explains containment"
++assert_eq "2" "$EXIT" "blind codex without packet is a precondition failure"
++assert_contains "$OUT" 'cleanroom seat requires a review packet' "blind codex without packet names the packet gate"
++assert_not_contains "$OUT" 'enforceable no-tools runner profile' "blind codex is cleanroom-tier, not none-tier"
+ 
+ # RED at base 9b049c00: bash gate already agrees with the Node predicate for the
+ #   --runner vocabulary (preservation, green at base for the gate; Node side is new).
+@@ -1119,6 +1126,12 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
+     *) PARITY_LIST_CAPABLE=false ;;
+   esac
+   assert_eq "$PARITY_LIST_CAPABLE" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: predicate agrees with the exported constant"
++  if [ "$PARITY_RUNNER" = "codex" ]; then
++    # JS set stays as-is (codex is not packet-capable). Cleanroom routing is asserted below.
++    assert_eq "false" "$PARITY_NODE_CAPABLE" "codex: JS capable-runner set unchanged this cut"
++    assert_not_contains "$PARITY_OUT" "rc=99" "codex: blind mode never reaches the --bin stub"
++    continue
++  fi
+   if [ "$PARITY_NODE_CAPABLE" = "true" ]; then
+     assert_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: blind-capable runner reached the stub binary (rc=99 signature)"
+     assert_not_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: capable runner is not gated"
+@@ -1129,6 +1142,163 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
+   fi
+ done
+ 
++# --- cleanroom seat (portable stubs; RED at base ceb7c81d) ---
++CR_PKT="$TEST_TMP/cleanroom-packet"
++mkdir -p "$CR_PKT/tree"
++printf '{}\n' > "$CR_PKT/MANIFEST.json"
++printf 'tree-ok\n' > "$CR_PKT/tree/README.md"
++CR_AUTH="$TEST_TMP/cleanroom-auth.json"
++printf '{"dummy":true}\n' > "$CR_AUTH"
++CR_BINDIR="$TEST_TMP/cleanroom-codex-bin"
++mkdir -p "$CR_BINDIR"
++CR_CODEX="$CR_BINDIR/codex"
++printf '#!/usr/bin/env bash\nexit 99\n' > "$CR_CODEX"
++chmod +x "$CR_CODEX"
++printf 'host\n' > "$CR_BINDIR/codex-code-mode-host"
++CR_BWRAP="$TEST_TMP/fake-bwrap"
++printf '#!/usr/bin/env bash\nexit 0\n' > "$CR_BWRAP"
++chmod +x "$CR_BWRAP"
++CR_LAUNCHER="$TEST_TMP/stub-cleanroom-launch.sh"
++CR_LAUNCH_LOG="$TEST_TMP/cleanroom-launch-modes.log"
++CR_LAUNCH_ARGV="$TEST_TMP/cleanroom-launch.argv"
++cat > "$CR_LAUNCHER" <<'EOF'
++#!/usr/bin/env bash
++set -euo pipefail
++: "${CR_LAUNCH_LOG:?}"
++printf '%s\n' "$*" >> "$CR_LAUNCH_LOG"
++if [ "${1:-}" = "--preflight" ] || printf '%s\n' "$@" | grep -q -- '--preflight'; then
++  printf 'preflight\n' >> "$CR_LAUNCH_LOG"
++  if [ "${CR_PREFLIGHT_RC:-0}" != "0" ]; then
++    echo "${CR_PREFLIGHT_ERR:-preflight failed}" >&2
++    exit "${CR_PREFLIGHT_RC}"
++  fi
++  printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "preflight", "exit_status": 0, "timed_out": false, "seat_root_removed": true, "seat_root": "/tmp/x" }\n'
++  exit 0
++fi
++printf 'launch\n' >> "$CR_LAUNCH_LOG"
++printf '%s\n' "$@" > "$CR_LAUNCH_ARGV"
++out=""
++err=""
++prompt=""
++i=1
++while [ "$i" -le "$#" ]; do
++  eval "a=\${$i}"
++  if [ "$a" = "--out" ]; then i=$((i+1)); eval "out=\${$i}"; fi
++  if [ "$a" = "--err" ]; then i=$((i+1)); eval "err=\${$i}"; fi
++  if [ "$a" = "--prompt-file" ]; then i=$((i+1)); eval "prompt=\${$i}"; fi
++  i=$((i+1))
++done
++: "${out:?}" "${err:?}" "${prompt:?}"
++begin="$(sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' "$prompt" | sed -n '1p')"
++end="$(sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' "$prompt" | sed -n '1p')"
++if [ "${CR_LAUNCH_RC:-0}" = "124" ]; then
++  printf 'timed out\n' > "$out"
++  printf 'timeout chrome\n' > "$err"
++  printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "codex", "exit_status": 124, "timed_out": true, "seat_root_removed": true, "seat_root": "/tmp/x" }\n'
++  exit 124
++fi
++{
++  echo "$begin"
++  echo "VERDICT: SHIP-AS-IS"
++  echo "FINDINGS: none"
++  echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target behavior was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
++  echo "$end"
++} > "$out"
++printf '' > "$err"
++printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "codex", "exit_status": 0, "timed_out": false, "seat_root_removed": true, "seat_root": "/tmp/x" }\n'
++exit 0
++EOF
++chmod +x "$CR_LAUNCHER"
++
++# RED at base ceb7c81d: bwrap missing was never reached (no-tools gate first)
++OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
++  AUTOPILOT_CLEANROOM_BWRAP=/nonexistent AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
++  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
++  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
++assert_eq "2" "$EXIT" "blind cleanroom with missing bwrap is exit 2"
++assert_contains "$OUT" 'bwrap not found' "missing bwrap names bwrap"
++
++# Panel finding dr-auth-fallback (2026-09-17): an explicit credential override that is not a file
++# must refuse, never fall back to the operator's ~/.codex/auth.json.
++OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=0 \
++  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
++  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
++  AUTOPILOT_CLEANROOM_CODEX_AUTH="$TEST_TMP/no-such-auth.json" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
++  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
++assert_eq "2" "$EXIT" "explicit credential override that is missing is exit 2"
++assert_contains "$OUT" 'codex credential file not found: AUTOPILOT_CLEANROOM_CODEX_AUTH=' "missing explicit credential override is named, not silently replaced"
++
++# RED at base ceb7c81d: no launcher seam; preflight never ran
++: > "$CR_LAUNCH_LOG"
++OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=2 CR_PREFLIGHT_ERR='userns blocked' \
++  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
++  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
++  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
++  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
++assert_eq "2" "$EXIT" "preflight failure is exit 2"
++assert_contains "$OUT" 'cleanroom runtime unusable: userns blocked' "preflight stderr is named"
++assert_eq "0" "$(grep -cx launch "$CR_LAUNCH_LOG")" "failed preflight never calls launch mode"
++
++# RED at base ceb7c81d: npm-wrapper layout was not a named gate
++CR_BADBIN="$TEST_TMP/codex-npm-wrapper"
++mkdir -p "$CR_BADBIN"
++printf '#!/usr/bin/env bash\nexit 0\n' > "$CR_BADBIN/codex"
++chmod +x "$CR_BADBIN/codex"
++: > "$CR_LAUNCH_LOG"
++OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
++  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
++  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
++  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
++  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_BADBIN/codex" 2>&1)"; EXIT=$?
++assert_eq "2" "$EXIT" "codex without code-mode-host is exit 2"
++assert_contains "$OUT" 'codex binary directory unresolved' "missing helper names unresolved directory"
++
++# Argument shape + parser + JSON line; default --timeout 5m forwarded; no outer timeout wrapper
++: > "$CR_LAUNCH_LOG"
++rm -f "$CR_LAUNCH_ARGV"
++OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
++  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
++  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
++  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
++  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "cleanroom stub --out framed verdict is reviewed"
++assert_contains "$OUT" '"status": "reviewed"' "cleanroom --out is what the parser reads"
++CR_ARGV="$(tr '\n' ' ' < "$CR_LAUNCH_ARGV")"
++assert_contains "$CR_ARGV" '--profile codex' "launcher receives --profile codex"
++assert_contains "$CR_ARGV" "--packet-dir $CR_PKT" "launcher receives packet dir"
++assert_contains "$CR_ARGV" '--timeout 5m' "launcher receives default 5m timeout (coreutils grammar)"
++assert_contains "$CR_ARGV" '--model gpt-5.5' "launcher receives --model"
++assert_contains "$CR_ARGV" '--effort xhigh' "launcher receives --effort"
++assert_contains "$CR_ARGV" "--bin-dir $CR_BINDIR" "launcher receives resolved bin dir"
++assert_contains "$CR_ARGV" "--auth-file $CR_AUTH" "launcher receives --auth-file"
++assert_contains "$CR_ARGV" "--seat-root $CR_PKT/../seat" "launcher receives seat-root beside packet"
++RAW="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.raw_log||"")' "$OUT")"
++assert_file_exists "$RAW"
++assert_contains "$(cat "$RAW")" '--- cleanroom launch ---' "raw_log has cleanroom launch section"
++assert_contains "$(cat "$RAW")" '"artifact_type": "cleanroom_launch"' "raw_log contains launcher JSON line"
++
++# RED at base ceb7c81d: timeout was outer `timeout` + `codex exited non-zero`
++OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_LAUNCH_RC=124 \
++  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
++  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
++  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
++  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
++assert_eq "1" "$EXIT" "launcher 124 is no_verdict"
++assert_contains "$OUT" '"status": "no_verdict"' "launcher 124 → no_verdict"
++assert_contains "$OUT" 'cleanroom codex exited non-zero (rc=124)' "no_verdict names cleanroom rc"
++RAW="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.raw_log||"")' "$OUT")"
++assert_contains "$(cat "$RAW")" 'rc=124' "raw_log records rc=124"
++
++# Parity extension: codex under blind with stub launcher reaches the LAUNCHER, not the binary
++: > "$CR_LAUNCH_LOG"
++OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
++  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
++  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
++  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
++  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "parity extension: cleanroom launch succeeds via stub launcher"
++assert_eq "1" "$(grep -cx launch "$CR_LAUNCH_LOG")" "parity extension: launcher launch mode was called exactly once"
++
+ BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
+ BLIND_SCRIPT="$TEST_TMP/blind-probe"
+ printf '#!/usr/bin/env bash\nif [ -e escape-sentinel ]; then printf '\''%s\\n'\'' '\''{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null,"usage":null}'\''; else exit 1; fi\n' > "$BLIND_SCRIPT"; chmod +x "$BLIND_SCRIPT"
+diff --git a/platforms/codex/plugin/references/blind-dispatch.md b/platforms/codex/plugin/references/blind-dispatch.md
+index 94bdfa74..3f67c200 100644
+--- a/platforms/codex/plugin/references/blind-dispatch.md
++++ b/platforms/codex/plugin/references/blind-dispatch.md
+@@ -366,8 +366,42 @@ value — mixed presence is `final_panel_packet_hash_mixed`, distinct values are
+ `final_panel_packet_hash_mismatch` (engine and validator decide independently).
+ Cut 1b is the cleanroom tier.
+ 
+-**Later cuts (not this deliverable):** 1b is the cleanroom launcher (`bwrap`) and
+-a configurable deny-list; cut 2 is verify-once and concurrent seats.
++**Later cuts (not this deliverable):** 1b-B is the intake/resolver half; a
++configurable deny-list and cut 2 (verify-once, concurrent seats) remain open.
++
++## Cleanroom tier (v2.36.62)
++
++Cut 1b-A of the blind-review redesign: `dispatch-review.sh` maps every runner to
++exactly one **seat tier** (`review_seat_tier`):
++
++- **packet** — `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn`
++  (prompt-only; same path as v2.36.61).
++- **cleanroom** — `codex` (tool-capable; runs only inside
++  `scripts/lib/cleanroom-launch.sh` when `AUTOPILOT_BLIND_DISCOVERY=1`).
++- **none** — `agy`, `grok`, `kimi`, `cursor`, `opencode` (refused under blind
++  with the unchanged no-tools message).
++
++Without blind mode, every runner is unchanged. Non-blind codex keeps
++`--sandbox read-only` byte-for-byte.
++
++**Boundary (one list).** The seat sees: the packet `tree/` (ro, byte-equal), a
++writable throwaway HOME with one copied `auth.json` and a launcher-written
++two-line `config.toml`, `/usr` + TLS/DNS, `/proc`, `/dev`, a tmpfs `/tmp`.
++It does not see: the repository, the operator HOME, host credentials, host
++`/tmp`, `.autopilot`, a sibling seat, `/etc/hostname`, the packet's host path,
++the host argv (`bwrap --args 9` so `/proc/1/cmdline` holds no host path), or
++inherited descriptors above 2 (closed 3..1023 before fd 9 is opened on the
++args file). `--sandbox danger-full-access` is legal only inside the launcher
++(nested `read-only` cannot create a userns). Network stays on (model transport);
++`HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` / `SSL_CERT_FILE` are not passed
++through in this cut.
++
++**Proven this cut / not proven.** Isolation is proven with the real `bwrap` and
++a hostile stub `codex` (`hooks/tests/cleanroom-launch.test.sh` under
++`AUTOPILOT_HOST_ISOLATION=1`). There is **no live codex verdict** this cut
++(provider quota exhausted through 2026-09-19). Intake still refuses a codex
++seat (`final-panel-qualification.js` / `campaign-intake.js`); that table moves
++in **1b-B**.
+ 
+ ## Nested dispatch (subagents spawning subagents)
+ 
+diff --git a/platforms/codex/plugin/scripts/dispatch-review.sh b/platforms/codex/plugin/scripts/dispatch-review.sh
+index 592a8afd..d047a5e3 100755
+--- a/platforms/codex/plugin/scripts/dispatch-review.sh
++++ b/platforms/codex/plugin/scripts/dispatch-review.sh
+@@ -134,6 +134,19 @@
+ #
+ # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
+ #   NOT treat as pass) ; 2 = precondition_failed.
++#
++# Seat tiers (the table lives only in review_seat_tier below):
++#   packet     anthropic-compatible cc-shim claude-native qoderclicn (prompt-only, as today)
++#   cleanroom  codex (tool-capable; AUTOPILOT_BLIND_DISCOVERY=1 → scripts/lib/cleanroom-launch.sh)
++#   none       agy grok kimi cursor opencode (blind: existing no-tools message)
++# Blind cleanroom env:
++#   AUTOPILOT_CLEANROOM_LAUNCHER   replace the launcher script (test seam)
++#   AUTOPILOT_CLEANROOM_BWRAP      bwrap binary (must be AppArmor-allowed to create userns)
++#   AUTOPILOT_CLEANROOM_CODEX_AUTH credential file (else $CODEX_HOME/auth.json or ~/.codex/auth.json)
++# Codex in a cleanroom seat requires the release directory (codex beside
++#   codex-code-mode-host); the npm wrapper layout is not supported in this cut.
++# --sandbox danger-full-access is used only inside the launcher (nested read-only
++#   cannot create a userns). Non-blind codex keeps --sandbox read-only.
+ 
+ set -uo pipefail
+ 
+@@ -285,12 +298,68 @@ validate_d2_agy_claims() {
+ 
+ [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
+ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
+-# Defense in depth: the canonical set is BLIND_DISCOVERY_CAPABLE_RUNNERS in
+-# src/engine/final-panel-qualification.js. Intake refuses other runners first.
++# Defense in depth: the JS/resolver copies of the capable-runner set move in 1b-B.
++# This function is the ONLY place the seat-tier table lives in this script.
++review_seat_tier() {
++  case "$1" in
++    anthropic-compatible|cc-shim|claude-native|qoderclicn) printf '%s\n' packet ;;
++    codex) printf '%s\n' cleanroom ;;
++    *) printf '%s\n' none ;;
++  esac
++}
++CLEANROOM_BIN_DIR=""
++CLEANROOM_AUTH=""
++CLEANROOM_BWRAP=""
+ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
+-  case "$RUNNER" in
+-    qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
+-    *) die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)" ;;
++  case "$(review_seat_tier "$RUNNER")" in
++    packet) ;;
++    none)
++      die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)"
++      ;;
++    cleanroom)
++      if [ -z "${AUTOPILOT_REVIEW_PACKET_DIR:-}" ] \
++        || [ ! -d "${AUTOPILOT_REVIEW_PACKET_DIR}/tree" ] \
++        || [ ! -f "${AUTOPILOT_REVIEW_PACKET_DIR}/MANIFEST.json" ]; then
++        die_precondition "cleanroom seat requires a review packet"
++      fi
++      if [ -n "${AUTOPILOT_CLEANROOM_BWRAP:-}" ]; then
++        [ -x "${AUTOPILOT_CLEANROOM_BWRAP}" ] \
++          || die_precondition "bwrap not found"
++        CLEANROOM_BWRAP="${AUTOPILOT_CLEANROOM_BWRAP}"
++      else
++        command -v bwrap >/dev/null 2>&1 || die_precondition "bwrap not found"
++        CLEANROOM_BWRAP="$(command -v bwrap)"
++      fi
++      _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
++      _pf_err="$(mktemp -t dispatch-review-cleanroom-preflight-XXXXXX)"
++      _pf_rc=0
++      "$_CLEANROOM_LAUNCHER" --preflight --deny-path "$AUTOPILOT_REVIEW_PACKET_DIR" \
++        --bwrap "$CLEANROOM_BWRAP" >/dev/null 2>"$_pf_err" || _pf_rc=$?
++      if [ "$_pf_rc" -ne 0 ]; then
++        _pf_first="$(head -n 1 "$_pf_err" 2>/dev/null || true)"
++        die_precondition "cleanroom runtime unusable: ${_pf_first}"
++      fi
++      _codex_lookup="${BIN:-codex}"
++      command -v "$_codex_lookup" >/dev/null 2>&1 \
++        || die_precondition "codex binary not found: $_codex_lookup"
++      _codex_resolved="$(readlink -f "$(command -v "$_codex_lookup")")"
++      if [ ! -f "$_codex_resolved" ] \
++        || [ ! -f "$(dirname "$_codex_resolved")/codex-code-mode-host" ]; then
++        die_precondition "codex binary directory unresolved: ${_codex_resolved} — the codex release directory (codex beside codex-code-mode-host) is required; the npm wrapper layout is not supported in this cut"
++      fi
++      CLEANROOM_BIN_DIR="$(dirname "$_codex_resolved")"
++      if [ -n "${AUTOPILOT_CLEANROOM_CODEX_AUTH:-}" ]; then
++        # An explicit override never falls back: a typo here must not silently pick the operator's file.
++        [ -f "${AUTOPILOT_CLEANROOM_CODEX_AUTH}" ] || die_precondition "codex credential file not found: AUTOPILOT_CLEANROOM_CODEX_AUTH=${AUTOPILOT_CLEANROOM_CODEX_AUTH}"
++        CLEANROOM_AUTH="${AUTOPILOT_CLEANROOM_CODEX_AUTH}"
++      elif [ -n "${CODEX_HOME:-}" ] && [ -f "${CODEX_HOME}/auth.json" ]; then
++        CLEANROOM_AUTH="${CODEX_HOME}/auth.json"
++      elif [ -f "${HOME}/.codex/auth.json" ]; then
++        CLEANROOM_AUTH="${HOME}/.codex/auth.json"
++      else
++        die_precondition "codex credential file not found"
++      fi
++      ;;
+   esac
+ fi
+ [[ -z "$MAX_TOKENS_PARSE_ERROR" ]] || die_precondition "$MAX_TOKENS_PARSE_ERROR"
+@@ -948,22 +1017,48 @@ if [[ "$RUNNER" = "codex" ]]; then
+   # mktemp here is the fallback when that block was skipped.
+   [ -n "$CODEX_OUT" ] || CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
+   [ -n "$CODEX_ERR" ] || CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
++  if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
++    # Cleanroom path: the launcher owns the wall-clock cap (no outer timeout).
++    _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
++    _launch_json="$(mktemp -t dispatch-review-cleanroom-json-XXXXXX)"
++    "$_CLEANROOM_LAUNCHER" --profile codex \
++      --packet-dir "$AUTOPILOT_REVIEW_PACKET_DIR" \
++      --prompt-file "$PROMPT_FILE" \
++      --out "$CODEX_OUT" --err "$CODEX_ERR" \
++      --timeout "$TIMEOUT" --model "$MODEL" --effort "$EFFORT" \
++      --bin-dir "$CLEANROOM_BIN_DIR" --auth-file "$CLEANROOM_AUTH" \
++      --bwrap "$CLEANROOM_BWRAP" \
++      --seat-root "$AUTOPILOT_REVIEW_PACKET_DIR/../seat" \
++      > "$_launch_json"
++    CODEX_RC=$?
++  else
+   timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
+       --sandbox read-only \
+       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$CODEX_OUT" 2> "$CODEX_ERR"
+   CODEX_RC=$?
++  fi
+   wait_output_quiescent "$CODEX_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+   # JSON-exposed raw_log path must contain the full picture for humans and passive_capture:
+   # stdout content, then the separator, then the stderr content.
+   cat "$CODEX_OUT" > "$RAW_LOG"
+   printf '\n--- codex stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+   cat "$CODEX_ERR" >> "$RAW_LOG"
++  if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
++    printf '\n--- cleanroom launch ---\n' >> "$RAW_LOG"
++    cat "$_launch_json" >> "$RAW_LOG"
++  fi
+   # FAIL-CLOSED on any non-zero codex exit (quota/usage-limit, auth, timeout, bad flag):
+   # emit no_verdict and EXIT BEFORE the shared VERDICT parser — same rail as grok/cc-shim.
+   # Critical: codex can print a partial `VERDICT: SHIP-AS-IS` then hit a usage limit; letting
+   # that partial output reach the parser would accept a failed/quota-limited review as a real
+   # verdict (gpt-5.5 R6). Partial output stays in raw_log for debugging, never trusted.
+   if [ "$CODEX_RC" -ne 0 ]; then
++    if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
++      printf '\n[dispatch-review: cleanroom codex exited non-zero (rc=%s)]\n' \
++        "$CODEX_RC" >> "$RAW_LOG"
++      SALVAGE_CAPTURE="$CODEX_OUT"
++      emit_no_verdict "cleanroom codex exited non-zero (rc=$CODEX_RC)"
++    fi
+     printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
+       "$CODEX_RC" >> "$RAW_LOG"
+     SALVAGE_CAPTURE="$CODEX_OUT"
+diff --git a/platforms/codex/plugin/scripts/lib/cleanroom-launch.sh b/platforms/codex/plugin/scripts/lib/cleanroom-launch.sh
+new file mode 100755
+index 00000000..4dd18a66
+--- /dev/null
++++ b/platforms/codex/plugin/scripts/lib/cleanroom-launch.sh
+@@ -0,0 +1,352 @@
++#!/usr/bin/env bash
++# cleanroom-launch.sh — argv-only isolation launcher for a cleanroom review seat.
++#
++# Release-layout-only: bind a real codex *release* bin/ (codex beside
++# codex-code-mode-host). The npm wrapper layout is not supported in this cut.
++#
++# Env (optional; callers may also pass flags):
++#   AUTOPILOT_CLEANROOM_BWRAP   host bwrap binary (must be AppArmor-allowed to
++#                               create user namespaces)
++#
++# Exit codes:
++#   0     inner command succeeded (or preflight probe green)
++#   2     usage / precondition / bwrap missing or cannot start
++#   3     preflight: a --deny-path was readable, or a host path appeared in argv
++#   124   inner timed out (coreutils timeout; forwarded untouched)
++#   other inner command rc, passed through
++#
++# Modes:
++#   Launch:  --profile codex --packet-dir --prompt-file --out --err --timeout
++#            --model --effort --bin-dir --auth-file [--bwrap] [--seat-root]
++#            [--keep-seat]
++#   Preflight: --preflight --deny-path <p>… [--bwrap] [--seat-root]
++#            (no packet, prompt, credential, or binary; empty work/)
++#
++# Orphan note: a SIGKILL leaves a cleanroom-seat.* directory that holds a
++# copied credential; operators must sweep it. A token refresh performed
++# inside the seat is discarded with the seat HOME (limitation).
++# Proxy/private-CA env (HTTPS_PROXY/HTTP_PROXY/NO_PROXY/SSL_CERT_FILE) is
++# NOT passed through in this cut.
++#
++# --sandbox danger-full-access is legal ONLY here: nested --sandbox read-only
++# cannot create a userns inside bwrap (probe 2026-09-16). The bwrap boundary
++# is the sandbox.
++
++set -euo pipefail
++
++_SELF="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
++# shellcheck source=/dev/null
++. "$_SELF/json-emit.sh"
++
++PROFILE=""
++PREFLIGHT=0
++PACKET_DIR=""
++PROMPT_FILE=""
++OUT_FILE=""
++ERR_FILE=""
++TIMEOUT=""
++MODEL=""
++EFFORT=""
++BIN_DIR=""
++AUTH_FILE=""
++BWRAP_BIN="${AUTOPILOT_CLEANROOM_BWRAP:-}"
++SEAT_ROOT=""
++KEEP_SEAT=0
++DENY_PATHS=()
++CREATED_SEAT=0
++SEAT_REMOVED=0
++
++usage_die() {
++  printf '%s\n' "$1" >&2
++  exit 2
++}
++
++while [[ $# -gt 0 ]]; do
++  case "$1" in
++    --profile)     PROFILE="${2:-}"; shift 2 ;;
++    --preflight)   PREFLIGHT=1; shift ;;
++    --packet-dir)  PACKET_DIR="${2:-}"; shift 2 ;;
++    --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
++    --out)         OUT_FILE="${2:-}"; shift 2 ;;
++    --err)         ERR_FILE="${2:-}"; shift 2 ;;
++    --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
++    --model)       MODEL="${2:-}"; shift 2 ;;
++    --effort)      EFFORT="${2:-}"; shift 2 ;;
++    --bin-dir)     BIN_DIR="${2:-}"; shift 2 ;;
++    --auth-file)   AUTH_FILE="${2:-}"; shift 2 ;;
++    --bwrap)       BWRAP_BIN="${2:-}"; shift 2 ;;
++    --seat-root)   SEAT_ROOT="${2:-}"; shift 2 ;;
++    --keep-seat)   KEEP_SEAT=1; shift ;;
++    --deny-path)
++      [ -n "${2:-}" ] || usage_die "--deny-path requires a path"
++      DENY_PATHS+=("$2")
++      shift 2
++      ;;
++    -h|--help)
++      sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
++      exit 0
++      ;;
++    *) usage_die "unknown arg: $1" ;;
++  esac
++done
++
++if [ "$PREFLIGHT" -eq 1 ]; then
++  PROFILE="preflight"
++elif [ "$PROFILE" = "codex" ]; then
++  :
++elif [ -n "$PROFILE" ]; then
++  usage_die "unsupported cleanroom profile"
++else
++  usage_die "unsupported cleanroom profile"
++fi
++
++if [ "$PREFLIGHT" -eq 0 ]; then
++  [ -n "$PACKET_DIR" ] || usage_die "--packet-dir is required"
++  [ -n "$PROMPT_FILE" ] || usage_die "--prompt-file is required"
++  [ -n "$OUT_FILE" ] || usage_die "--out is required"
++  [ -n "$ERR_FILE" ] || usage_die "--err is required"
++  [ -n "$TIMEOUT" ] || usage_die "--timeout is required"
++  [ -n "$MODEL" ] || usage_die "--model is required"
++  [ -n "$EFFORT" ] || usage_die "--effort is required"
++  [ -n "$BIN_DIR" ] || usage_die "--bin-dir is required"
++  [ -n "$AUTH_FILE" ] || usage_die "--auth-file is required"
++  [ -d "$PACKET_DIR/tree" ] || usage_die "packet tree not found: $PACKET_DIR/tree"
++  [ -f "$PROMPT_FILE" ] || usage_die "prompt file not found: $PROMPT_FILE"
++  [ -d "$BIN_DIR" ] || usage_die "bin dir not found: $BIN_DIR"
++  [ -f "$AUTH_FILE" ] || usage_die "auth file not found: $AUTH_FILE"
++else
++  [ "${#DENY_PATHS[@]}" -gt 0 ] || usage_die "--preflight requires --deny-path"
++  for p in "${DENY_PATHS[@]}"; do
++    if [ ! -e "$p" ]; then
++      usage_die "deny-path does not exist: $p"
++    fi
++  done
++  TIMEOUT="${TIMEOUT:-30s}"
++fi
++
++if [ -n "$BWRAP_BIN" ]; then
++  [ -x "$BWRAP_BIN" ] || usage_die "bwrap not found: $BWRAP_BIN"
++else
++  command -v bwrap >/dev/null 2>&1 || usage_die "bwrap not found"
++  BWRAP_BIN="$(command -v bwrap)"
++fi
++
++if [ -n "$SEAT_ROOT" ]; then
++  if [ -e "$SEAT_ROOT" ]; then
++    usage_die "seat root already exists"
++  fi
++  mkdir -m 0700 -p "$SEAT_ROOT"
++  CREATED_SEAT=1
++else
++  SEAT_ROOT="$(mktemp -d -t cleanroom-seat.XXXXXX)"
++  chmod 0700 "$SEAT_ROOT"
++  CREATED_SEAT=1
++fi
++
++cleanup_seat() {
++  if [ "$KEEP_SEAT" -eq 1 ]; then
++    return 0
++  fi
++  if [ "$CREATED_SEAT" -eq 1 ] && [ -n "${SEAT_ROOT:-}" ] && [ -d "$SEAT_ROOT" ]; then
++    rm -rf "$SEAT_ROOT"
++    SEAT_REMOVED=1
++  fi
++}
++
++on_exit() {
++  cleanup_seat
++}
++
++on_signal() {
++  local sig="$1"
++  cleanup_seat
++  trap - EXIT INT TERM HUP
++  kill -s "$sig" "$$"
++}
++
++trap on_exit EXIT
++trap 'on_signal INT' INT
++trap 'on_signal TERM' TERM
++trap 'on_signal HUP' HUP
++
++mkdir -p "$SEAT_ROOT/home/.codex" "$SEAT_ROOT/work"
++chmod 0700 "$SEAT_ROOT/home" "$SEAT_ROOT/home/.codex" "$SEAT_ROOT/work"
++
++printf 'review:x:65534:65534:review:/home/review:/bin/false\nnobody:x:65534:65534:nobody:/nonexistent:/bin/false\n' \
++  > "$SEAT_ROOT/passwd"
++
++emit_json() {
++  local rc="$1"
++  local timed_out=false
++  local removed=false
++  [ "$rc" -eq 124 ] && timed_out=true
++  if [ "$KEEP_SEAT" -eq 0 ]; then
++    if [ "$CREATED_SEAT" -eq 1 ]; then
++      removed=true
++    fi
++  fi
++  printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "%s", "exit_status": %s, "timed_out": %s, "seat_root_removed": %s, "seat_root": "%s" }\n' \
++    "$(json_escape "$PROFILE")" "$rc" "$timed_out" "$removed" "$(json_escape "$SEAT_ROOT")"
++}
++
++write_args() {
++  local args="$1"
++  : > "$args"
++  append() { printf '%s\0' "$1" >> "$args"; }
++  append --unshare-all
++  append --share-net
++  append --die-with-parent
++  append --new-session
++  append --hostname
++  append review
++  append --ro-bind
++  append /usr
++  append /usr
++  append --symlink
++  append usr/lib
++  append /lib
++  append --symlink
++  append usr/lib64
++  append /lib64
++  append --symlink
++  append usr/bin
++  append /bin
++  append --ro-bind
++  append /etc/resolv.conf
++  append /etc/resolv.conf
++  append --ro-bind
++  append /etc/ssl
++  append /etc/ssl
++  append --ro-bind-try
++  append /etc/ca-certificates
++  append /etc/ca-certificates
++  append --ro-bind
++  append "$SEAT_ROOT/passwd"
++  append /etc/passwd
++  append --proc
++  append /proc
++  append --dev
++  append /dev
++  append --tmpfs
++  append /tmp
++  append --bind
++  append "$SEAT_ROOT/home"
++  append /home/review
++  if [ "$PREFLIGHT" -eq 1 ]; then
++    append --bind
++    append "$SEAT_ROOT/work"
++    append /home/review/work
++    append --ro-bind
++    append "$SEAT_ROOT/probe.sh"
++    append /home/review/probe.sh
++  else
++    append --ro-bind
++    append "$PACKET_DIR/tree"
++    append /home/review/work
++    append --ro-bind
++    append "$SEAT_ROOT/prompt"
++    append /home/review/prompt
++    append --ro-bind
++    append "$BIN_DIR"
++    append /home/review/bin
++  fi
++  append --clearenv
++  append --setenv
++  append HOME
++  append /home/review
++  append --setenv
++  append CODEX_HOME
++  append /home/review/.codex
++  append --setenv
++  append PATH
++  append /home/review/bin:/usr/bin
++  append --setenv
++  append TERM
++  append dumb
++  append --chdir
++  append /home/review/work
++}
++
++close_inherited_fds() {
++  local fd
++  for ((fd = 3; fd <= 1023; fd++)); do
++    eval "exec ${fd}>&-" 2>/dev/null || true
++  done
++}
++
++run_bwrap() {
++  local rc
++  (
++    close_inherited_fds
++    if [ "$PREFLIGHT" -eq 1 ]; then
++      timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh /home/review/probe.sh \
++        9< "$SEAT_ROOT/bwrap.args"
++    else
++      timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh -c 'exec "$0" "$@"' \
++        /home/review/bin/codex exec --model "$MODEL" \
++        --sandbox danger-full-access --skip-git-repo-check --ignore-user-config \
++        -c "model_reasoning_effort=\"$EFFORT\"" \
++        --output-last-message /home/review/last-message \
++        9< "$SEAT_ROOT/bwrap.args" < "$SEAT_ROOT/prompt" > "$OUT_FILE" 2> "$ERR_FILE"
++    fi
++  )
++  rc=$?
++  return "$rc"
++}
++
++if [ "$PREFLIGHT" -eq 1 ]; then
++  {
++    printf '#!/bin/sh\n'
++    printf 'cmdline=$(tr "\\0" " " < /proc/1/cmdline)\n'
++    printf 'check() {\n'
++    printf '  p=$1\n'
++    printf '  if [ -e "$p" ] || [ -L "$p" ]; then printf "%%s\\n" "$p" | tee /home/review/work/preflight.err >&2; exit 3; fi\n'
++    printf '  case "$cmdline" in *"$p"*) printf "%%s\\n" "$p" | tee /home/review/work/preflight.err >&2; exit 3 ;; esac\n'
++    printf '}\n'
++    printf 'check %q\n' "$SEAT_ROOT"
++    for p in "${DENY_PATHS[@]}"; do
++      printf 'check %q\n' "$p"
++    done
++    printf 'exit 0\n'
++  } > "$SEAT_ROOT/probe.sh"
++  chmod 0400 "$SEAT_ROOT/probe.sh"
++  write_args "$SEAT_ROOT/bwrap.args"
++  inner_rc=0
++  run_bwrap || inner_rc=$?
++  if [ -s "$SEAT_ROOT/work/preflight.err" ]; then
++    cat "$SEAT_ROOT/work/preflight.err" >&2
++  fi
++  if [ "$inner_rc" -eq 3 ]; then
++    emit_json "$inner_rc"
++    cleanup_seat
++    trap - EXIT INT TERM HUP
++    exit 3
++  fi
++  if [ "$inner_rc" -ne 0 ]; then
++    printf 'bwrap cannot start (rc=%s)\n' "$inner_rc" >&2
++    emit_json 2
++    cleanup_seat
++    trap - EXIT INT TERM HUP
++    exit 2
++  fi
++  emit_json 0
++  cleanup_seat
++  trap - EXIT INT TERM HUP
++  exit 0
++fi
++
++cp "$AUTH_FILE" "$SEAT_ROOT/home/.codex/auth.json"
++chmod 0600 "$SEAT_ROOT/home/.codex/auth.json"
++printf 'model = "%s"\nmodel_reasoning_effort = "%s"\n' "$MODEL" "$EFFORT" \
++  > "$SEAT_ROOT/home/.codex/config.toml"
++cp "$PROMPT_FILE" "$SEAT_ROOT/prompt"
++chmod 0400 "$SEAT_ROOT/prompt"
++: > "$OUT_FILE"
++: > "$ERR_FILE"
++write_args "$SEAT_ROOT/bwrap.args"
++inner_rc=0
++run_bwrap || inner_rc=$?
++emit_json "$inner_rc"
++cleanup_seat
++trap - EXIT INT TERM HUP
++exit "$inner_rc"
+diff --git a/references/blind-dispatch.md b/references/blind-dispatch.md
+index 94bdfa74..3f67c200 100644
+--- a/references/blind-dispatch.md
++++ b/references/blind-dispatch.md
+@@ -366,8 +366,42 @@ value — mixed presence is `final_panel_packet_hash_mixed`, distinct values are
+ `final_panel_packet_hash_mismatch` (engine and validator decide independently).
+ Cut 1b is the cleanroom tier.
+ 
+-**Later cuts (not this deliverable):** 1b is the cleanroom launcher (`bwrap`) and
+-a configurable deny-list; cut 2 is verify-once and concurrent seats.
++**Later cuts (not this deliverable):** 1b-B is the intake/resolver half; a
++configurable deny-list and cut 2 (verify-once, concurrent seats) remain open.
++
++## Cleanroom tier (v2.36.62)
++
++Cut 1b-A of the blind-review redesign: `dispatch-review.sh` maps every runner to
++exactly one **seat tier** (`review_seat_tier`):
++
++- **packet** — `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn`
++  (prompt-only; same path as v2.36.61).
++- **cleanroom** — `codex` (tool-capable; runs only inside
++  `scripts/lib/cleanroom-launch.sh` when `AUTOPILOT_BLIND_DISCOVERY=1`).
++- **none** — `agy`, `grok`, `kimi`, `cursor`, `opencode` (refused under blind
++  with the unchanged no-tools message).
++
++Without blind mode, every runner is unchanged. Non-blind codex keeps
++`--sandbox read-only` byte-for-byte.
++
++**Boundary (one list).** The seat sees: the packet `tree/` (ro, byte-equal), a
++writable throwaway HOME with one copied `auth.json` and a launcher-written
++two-line `config.toml`, `/usr` + TLS/DNS, `/proc`, `/dev`, a tmpfs `/tmp`.
++It does not see: the repository, the operator HOME, host credentials, host
++`/tmp`, `.autopilot`, a sibling seat, `/etc/hostname`, the packet's host path,
++the host argv (`bwrap --args 9` so `/proc/1/cmdline` holds no host path), or
++inherited descriptors above 2 (closed 3..1023 before fd 9 is opened on the
++args file). `--sandbox danger-full-access` is legal only inside the launcher
++(nested `read-only` cannot create a userns). Network stays on (model transport);
++`HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` / `SSL_CERT_FILE` are not passed
++through in this cut.
++
++**Proven this cut / not proven.** Isolation is proven with the real `bwrap` and
++a hostile stub `codex` (`hooks/tests/cleanroom-launch.test.sh` under
++`AUTOPILOT_HOST_ISOLATION=1`). There is **no live codex verdict** this cut
++(provider quota exhausted through 2026-09-19). Intake still refuses a codex
++seat (`final-panel-qualification.js` / `campaign-intake.js`); that table moves
++in **1b-B**.
+ 
+ ## Nested dispatch (subagents spawning subagents)
+ 
+diff --git a/scripts/dispatch-review.sh b/scripts/dispatch-review.sh
+index 592a8afd..d047a5e3 100755
+--- a/scripts/dispatch-review.sh
++++ b/scripts/dispatch-review.sh
+@@ -134,6 +134,19 @@
+ #
+ # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
+ #   NOT treat as pass) ; 2 = precondition_failed.
++#
++# Seat tiers (the table lives only in review_seat_tier below):
++#   packet     anthropic-compatible cc-shim claude-native qoderclicn (prompt-only, as today)
++#   cleanroom  codex (tool-capable; AUTOPILOT_BLIND_DISCOVERY=1 → scripts/lib/cleanroom-launch.sh)
++#   none       agy grok kimi cursor opencode (blind: existing no-tools message)
++# Blind cleanroom env:
++#   AUTOPILOT_CLEANROOM_LAUNCHER   replace the launcher script (test seam)
++#   AUTOPILOT_CLEANROOM_BWRAP      bwrap binary (must be AppArmor-allowed to create userns)
++#   AUTOPILOT_CLEANROOM_CODEX_AUTH credential file (else $CODEX_HOME/auth.json or ~/.codex/auth.json)
++# Codex in a cleanroom seat requires the release directory (codex beside
++#   codex-code-mode-host); the npm wrapper layout is not supported in this cut.
++# --sandbox danger-full-access is used only inside the launcher (nested read-only
++#   cannot create a userns). Non-blind codex keeps --sandbox read-only.
+ 
+ set -uo pipefail
+ 
+@@ -285,12 +298,68 @@ validate_d2_agy_claims() {
+ 
+ [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
+ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
+-# Defense in depth: the canonical set is BLIND_DISCOVERY_CAPABLE_RUNNERS in
+-# src/engine/final-panel-qualification.js. Intake refuses other runners first.
++# Defense in depth: the JS/resolver copies of the capable-runner set move in 1b-B.
++# This function is the ONLY place the seat-tier table lives in this script.
++review_seat_tier() {
++  case "$1" in
++    anthropic-compatible|cc-shim|claude-native|qoderclicn) printf '%s\n' packet ;;
++    codex) printf '%s\n' cleanroom ;;
++    *) printf '%s\n' none ;;
++  esac
++}
++CLEANROOM_BIN_DIR=""
++CLEANROOM_AUTH=""
++CLEANROOM_BWRAP=""
+ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
+-  case "$RUNNER" in
+-    qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
+-    *) die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)" ;;
++  case "$(review_seat_tier "$RUNNER")" in
++    packet) ;;
++    none)
++      die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)"
++      ;;
++    cleanroom)
++      if [ -z "${AUTOPILOT_REVIEW_PACKET_DIR:-}" ] \
++        || [ ! -d "${AUTOPILOT_REVIEW_PACKET_DIR}/tree" ] \
++        || [ ! -f "${AUTOPILOT_REVIEW_PACKET_DIR}/MANIFEST.json" ]; then
++        die_precondition "cleanroom seat requires a review packet"
++      fi
++      if [ -n "${AUTOPILOT_CLEANROOM_BWRAP:-}" ]; then
++        [ -x "${AUTOPILOT_CLEANROOM_BWRAP}" ] \
++          || die_precondition "bwrap not found"
++        CLEANROOM_BWRAP="${AUTOPILOT_CLEANROOM_BWRAP}"
++      else
++        command -v bwrap >/dev/null 2>&1 || die_precondition "bwrap not found"
++        CLEANROOM_BWRAP="$(command -v bwrap)"
++      fi
++      _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
++      _pf_err="$(mktemp -t dispatch-review-cleanroom-preflight-XXXXXX)"
++      _pf_rc=0
++      "$_CLEANROOM_LAUNCHER" --preflight --deny-path "$AUTOPILOT_REVIEW_PACKET_DIR" \
++        --bwrap "$CLEANROOM_BWRAP" >/dev/null 2>"$_pf_err" || _pf_rc=$?
++      if [ "$_pf_rc" -ne 0 ]; then
++        _pf_first="$(head -n 1 "$_pf_err" 2>/dev/null || true)"
++        die_precondition "cleanroom runtime unusable: ${_pf_first}"
++      fi
++      _codex_lookup="${BIN:-codex}"
++      command -v "$_codex_lookup" >/dev/null 2>&1 \
++        || die_precondition "codex binary not found: $_codex_lookup"
++      _codex_resolved="$(readlink -f "$(command -v "$_codex_lookup")")"
++      if [ ! -f "$_codex_resolved" ] \
++        || [ ! -f "$(dirname "$_codex_resolved")/codex-code-mode-host" ]; then
++        die_precondition "codex binary directory unresolved: ${_codex_resolved} — the codex release directory (codex beside codex-code-mode-host) is required; the npm wrapper layout is not supported in this cut"
++      fi
++      CLEANROOM_BIN_DIR="$(dirname "$_codex_resolved")"
++      if [ -n "${AUTOPILOT_CLEANROOM_CODEX_AUTH:-}" ]; then
++        # An explicit override never falls back: a typo here must not silently pick the operator's file.
++        [ -f "${AUTOPILOT_CLEANROOM_CODEX_AUTH}" ] || die_precondition "codex credential file not found: AUTOPILOT_CLEANROOM_CODEX_AUTH=${AUTOPILOT_CLEANROOM_CODEX_AUTH}"
++        CLEANROOM_AUTH="${AUTOPILOT_CLEANROOM_CODEX_AUTH}"
++      elif [ -n "${CODEX_HOME:-}" ] && [ -f "${CODEX_HOME}/auth.json" ]; then
++        CLEANROOM_AUTH="${CODEX_HOME}/auth.json"
++      elif [ -f "${HOME}/.codex/auth.json" ]; then
++        CLEANROOM_AUTH="${HOME}/.codex/auth.json"
++      else
++        die_precondition "codex credential file not found"
++      fi
++      ;;
+   esac
+ fi
+ [[ -z "$MAX_TOKENS_PARSE_ERROR" ]] || die_precondition "$MAX_TOKENS_PARSE_ERROR"
+@@ -948,22 +1017,48 @@ if [[ "$RUNNER" = "codex" ]]; then
+   # mktemp here is the fallback when that block was skipped.
+   [ -n "$CODEX_OUT" ] || CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
+   [ -n "$CODEX_ERR" ] || CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
++  if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
++    # Cleanroom path: the launcher owns the wall-clock cap (no outer timeout).
++    _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
++    _launch_json="$(mktemp -t dispatch-review-cleanroom-json-XXXXXX)"
++    "$_CLEANROOM_LAUNCHER" --profile codex \
++      --packet-dir "$AUTOPILOT_REVIEW_PACKET_DIR" \
++      --prompt-file "$PROMPT_FILE" \
++      --out "$CODEX_OUT" --err "$CODEX_ERR" \
++      --timeout "$TIMEOUT" --model "$MODEL" --effort "$EFFORT" \
++      --bin-dir "$CLEANROOM_BIN_DIR" --auth-file "$CLEANROOM_AUTH" \
++      --bwrap "$CLEANROOM_BWRAP" \
++      --seat-root "$AUTOPILOT_REVIEW_PACKET_DIR/../seat" \
++      > "$_launch_json"
++    CODEX_RC=$?
++  else
+   timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
+       --sandbox read-only \
+       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$CODEX_OUT" 2> "$CODEX_ERR"
+   CODEX_RC=$?
++  fi
+   wait_output_quiescent "$CODEX_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+   # JSON-exposed raw_log path must contain the full picture for humans and passive_capture:
+   # stdout content, then the separator, then the stderr content.
+   cat "$CODEX_OUT" > "$RAW_LOG"
+   printf '\n--- codex stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+   cat "$CODEX_ERR" >> "$RAW_LOG"
++  if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
++    printf '\n--- cleanroom launch ---\n' >> "$RAW_LOG"
++    cat "$_launch_json" >> "$RAW_LOG"
++  fi
+   # FAIL-CLOSED on any non-zero codex exit (quota/usage-limit, auth, timeout, bad flag):
+   # emit no_verdict and EXIT BEFORE the shared VERDICT parser — same rail as grok/cc-shim.
+   # Critical: codex can print a partial `VERDICT: SHIP-AS-IS` then hit a usage limit; letting
+   # that partial output reach the parser would accept a failed/quota-limited review as a real
+   # verdict (gpt-5.5 R6). Partial output stays in raw_log for debugging, never trusted.
+   if [ "$CODEX_RC" -ne 0 ]; then
++    if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
++      printf '\n[dispatch-review: cleanroom codex exited non-zero (rc=%s)]\n' \
++        "$CODEX_RC" >> "$RAW_LOG"
++      SALVAGE_CAPTURE="$CODEX_OUT"
++      emit_no_verdict "cleanroom codex exited non-zero (rc=$CODEX_RC)"
++    fi
+     printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
+       "$CODEX_RC" >> "$RAW_LOG"
+     SALVAGE_CAPTURE="$CODEX_OUT"
+diff --git a/scripts/lib/cleanroom-launch.sh b/scripts/lib/cleanroom-launch.sh
+new file mode 100755
+index 00000000..4dd18a66
+--- /dev/null
++++ b/scripts/lib/cleanroom-launch.sh
+@@ -0,0 +1,352 @@
++#!/usr/bin/env bash
++# cleanroom-launch.sh — argv-only isolation launcher for a cleanroom review seat.
++#
++# Release-layout-only: bind a real codex *release* bin/ (codex beside
++# codex-code-mode-host). The npm wrapper layout is not supported in this cut.
++#
++# Env (optional; callers may also pass flags):
++#   AUTOPILOT_CLEANROOM_BWRAP   host bwrap binary (must be AppArmor-allowed to
++#                               create user namespaces)
++#
++# Exit codes:
++#   0     inner command succeeded (or preflight probe green)
++#   2     usage / precondition / bwrap missing or cannot start
++#   3     preflight: a --deny-path was readable, or a host path appeared in argv
++#   124   inner timed out (coreutils timeout; forwarded untouched)
++#   other inner command rc, passed through
++#
++# Modes:
++#   Launch:  --profile codex --packet-dir --prompt-file --out --err --timeout
++#            --model --effort --bin-dir --auth-file [--bwrap] [--seat-root]
++#            [--keep-seat]
++#   Preflight: --preflight --deny-path <p>… [--bwrap] [--seat-root]
++#            (no packet, prompt, credential, or binary; empty work/)
++#
++# Orphan note: a SIGKILL leaves a cleanroom-seat.* directory that holds a
++# copied credential; operators must sweep it. A token refresh performed
++# inside the seat is discarded with the seat HOME (limitation).
++# Proxy/private-CA env (HTTPS_PROXY/HTTP_PROXY/NO_PROXY/SSL_CERT_FILE) is
++# NOT passed through in this cut.
++#
++# --sandbox danger-full-access is legal ONLY here: nested --sandbox read-only
++# cannot create a userns inside bwrap (probe 2026-09-16). The bwrap boundary
++# is the sandbox.
++
++set -euo pipefail
++
++_SELF="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
++# shellcheck source=/dev/null
++. "$_SELF/json-emit.sh"
++
++PROFILE=""
++PREFLIGHT=0
++PACKET_DIR=""
++PROMPT_FILE=""
++OUT_FILE=""
++ERR_FILE=""
++TIMEOUT=""
++MODEL=""
++EFFORT=""
++BIN_DIR=""
++AUTH_FILE=""
++BWRAP_BIN="${AUTOPILOT_CLEANROOM_BWRAP:-}"
++SEAT_ROOT=""
++KEEP_SEAT=0
++DENY_PATHS=()
++CREATED_SEAT=0
++SEAT_REMOVED=0
++
++usage_die() {
++  printf '%s\n' "$1" >&2
++  exit 2
++}
++
++while [[ $# -gt 0 ]]; do
++  case "$1" in
++    --profile)     PROFILE="${2:-}"; shift 2 ;;
++    --preflight)   PREFLIGHT=1; shift ;;
++    --packet-dir)  PACKET_DIR="${2:-}"; shift 2 ;;
++    --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
++    --out)         OUT_FILE="${2:-}"; shift 2 ;;
++    --err)         ERR_FILE="${2:-}"; shift 2 ;;
++    --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
++    --model)       MODEL="${2:-}"; shift 2 ;;
++    --effort)      EFFORT="${2:-}"; shift 2 ;;
++    --bin-dir)     BIN_DIR="${2:-}"; shift 2 ;;
++    --auth-file)   AUTH_FILE="${2:-}"; shift 2 ;;
++    --bwrap)       BWRAP_BIN="${2:-}"; shift 2 ;;
++    --seat-root)   SEAT_ROOT="${2:-}"; shift 2 ;;
++    --keep-seat)   KEEP_SEAT=1; shift ;;
++    --deny-path)
++      [ -n "${2:-}" ] || usage_die "--deny-path requires a path"
++      DENY_PATHS+=("$2")
++      shift 2
++      ;;
++    -h|--help)
++      sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
++      exit 0
++      ;;
++    *) usage_die "unknown arg: $1" ;;
++  esac
++done
++
++if [ "$PREFLIGHT" -eq 1 ]; then
++  PROFILE="preflight"
++elif [ "$PROFILE" = "codex" ]; then
++  :
++elif [ -n "$PROFILE" ]; then
++  usage_die "unsupported cleanroom profile"
++else
++  usage_die "unsupported cleanroom profile"
++fi
++
++if [ "$PREFLIGHT" -eq 0 ]; then
++  [ -n "$PACKET_DIR" ] || usage_die "--packet-dir is required"
++  [ -n "$PROMPT_FILE" ] || usage_die "--prompt-file is required"
++  [ -n "$OUT_FILE" ] || usage_die "--out is required"
++  [ -n "$ERR_FILE" ] || usage_die "--err is required"
++  [ -n "$TIMEOUT" ] || usage_die "--timeout is required"
++  [ -n "$MODEL" ] || usage_die "--model is required"
++  [ -n "$EFFORT" ] || usage_die "--effort is required"
++  [ -n "$BIN_DIR" ] || usage_die "--bin-dir is required"
++  [ -n "$AUTH_FILE" ] || usage_die "--auth-file is required"
++  [ -d "$PACKET_DIR/tree" ] || usage_die "packet tree not found: $PACKET_DIR/tree"
++  [ -f "$PROMPT_FILE" ] || usage_die "prompt file not found: $PROMPT_FILE"
++  [ -d "$BIN_DIR" ] || usage_die "bin dir not found: $BIN_DIR"
++  [ -f "$AUTH_FILE" ] || usage_die "auth file not found: $AUTH_FILE"
++else
++  [ "${#DENY_PATHS[@]}" -gt 0 ] || usage_die "--preflight requires --deny-path"
++  for p in "${DENY_PATHS[@]}"; do
++    if [ ! -e "$p" ]; then
++      usage_die "deny-path does not exist: $p"
++    fi
++  done
++  TIMEOUT="${TIMEOUT:-30s}"
++fi
++
++if [ -n "$BWRAP_BIN" ]; then
++  [ -x "$BWRAP_BIN" ] || usage_die "bwrap not found: $BWRAP_BIN"
++else
++  command -v bwrap >/dev/null 2>&1 || usage_die "bwrap not found"
++  BWRAP_BIN="$(command -v bwrap)"
++fi
++
++if [ -n "$SEAT_ROOT" ]; then
++  if [ -e "$SEAT_ROOT" ]; then
++    usage_die "seat root already exists"
++  fi
++  mkdir -m 0700 -p "$SEAT_ROOT"
++  CREATED_SEAT=1
++else
++  SEAT_ROOT="$(mktemp -d -t cleanroom-seat.XXXXXX)"
++  chmod 0700 "$SEAT_ROOT"
++  CREATED_SEAT=1
++fi
++
++cleanup_seat() {
++  if [ "$KEEP_SEAT" -eq 1 ]; then
++    return 0
++  fi
++  if [ "$CREATED_SEAT" -eq 1 ] && [ -n "${SEAT_ROOT:-}" ] && [ -d "$SEAT_ROOT" ]; then
++    rm -rf "$SEAT_ROOT"
++    SEAT_REMOVED=1
++  fi
++}
++
++on_exit() {
++  cleanup_seat
++}
++
++on_signal() {
++  local sig="$1"
++  cleanup_seat
++  trap - EXIT INT TERM HUP
++  kill -s "$sig" "$$"
++}
++
++trap on_exit EXIT
++trap 'on_signal INT' INT
++trap 'on_signal TERM' TERM
++trap 'on_signal HUP' HUP
++
++mkdir -p "$SEAT_ROOT/home/.codex" "$SEAT_ROOT/work"
++chmod 0700 "$SEAT_ROOT/home" "$SEAT_ROOT/home/.codex" "$SEAT_ROOT/work"
++
++printf 'review:x:65534:65534:review:/home/review:/bin/false\nnobody:x:65534:65534:nobody:/nonexistent:/bin/false\n' \
++  > "$SEAT_ROOT/passwd"
++
++emit_json() {
++  local rc="$1"
++  local timed_out=false
++  local removed=false
++  [ "$rc" -eq 124 ] && timed_out=true
++  if [ "$KEEP_SEAT" -eq 0 ]; then
++    if [ "$CREATED_SEAT" -eq 1 ]; then
++      removed=true
++    fi
++  fi
++  printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "%s", "exit_status": %s, "timed_out": %s, "seat_root_removed": %s, "seat_root": "%s" }\n' \
++    "$(json_escape "$PROFILE")" "$rc" "$timed_out" "$removed" "$(json_escape "$SEAT_ROOT")"
++}
++
++write_args() {
++  local args="$1"
++  : > "$args"
++  append() { printf '%s\0' "$1" >> "$args"; }
++  append --unshare-all
++  append --share-net
++  append --die-with-parent
++  append --new-session
++  append --hostname
++  append review
++  append --ro-bind
++  append /usr
++  append /usr
++  append --symlink
++  append usr/lib
++  append /lib
++  append --symlink
++  append usr/lib64
++  append /lib64
++  append --symlink
++  append usr/bin
++  append /bin
++  append --ro-bind
++  append /etc/resolv.conf
++  append /etc/resolv.conf
++  append --ro-bind
++  append /etc/ssl
++  append /etc/ssl
++  append --ro-bind-try
++  append /etc/ca-certificates
++  append /etc/ca-certificates
++  append --ro-bind
++  append "$SEAT_ROOT/passwd"
++  append /etc/passwd
++  append --proc
++  append /proc
++  append --dev
++  append /dev
++  append --tmpfs
++  append /tmp
++  append --bind
++  append "$SEAT_ROOT/home"
++  append /home/review
++  if [ "$PREFLIGHT" -eq 1 ]; then
++    append --bind
++    append "$SEAT_ROOT/work"
++    append /home/review/work
++    append --ro-bind
++    append "$SEAT_ROOT/probe.sh"
++    append /home/review/probe.sh
++  else
++    append --ro-bind
++    append "$PACKET_DIR/tree"
++    append /home/review/work
++    append --ro-bind
++    append "$SEAT_ROOT/prompt"
++    append /home/review/prompt
++    append --ro-bind
++    append "$BIN_DIR"
++    append /home/review/bin
++  fi
++  append --clearenv
++  append --setenv
++  append HOME
++  append /home/review
++  append --setenv
++  append CODEX_HOME
++  append /home/review/.codex
++  append --setenv
++  append PATH
++  append /home/review/bin:/usr/bin
++  append --setenv
++  append TERM
++  append dumb
++  append --chdir
++  append /home/review/work
++}
++
++close_inherited_fds() {
++  local fd
++  for ((fd = 3; fd <= 1023; fd++)); do
++    eval "exec ${fd}>&-" 2>/dev/null || true
++  done
++}
++
++run_bwrap() {
++  local rc
++  (
++    close_inherited_fds
++    if [ "$PREFLIGHT" -eq 1 ]; then
++      timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh /home/review/probe.sh \
++        9< "$SEAT_ROOT/bwrap.args"
++    else
++      timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh -c 'exec "$0" "$@"' \
++        /home/review/bin/codex exec --model "$MODEL" \
++        --sandbox danger-full-access --skip-git-repo-check --ignore-user-config \
++        -c "model_reasoning_effort=\"$EFFORT\"" \
++        --output-last-message /home/review/last-message \
++        9< "$SEAT_ROOT/bwrap.args" < "$SEAT_ROOT/prompt" > "$OUT_FILE" 2> "$ERR_FILE"
++    fi
++  )
++  rc=$?
++  return "$rc"
++}
++
++if [ "$PREFLIGHT" -eq 1 ]; then
++  {
++    printf '#!/bin/sh\n'
++    printf 'cmdline=$(tr "\\0" " " < /proc/1/cmdline)\n'
++    printf 'check() {\n'
++    printf '  p=$1\n'
++    printf '  if [ -e "$p" ] || [ -L "$p" ]; then printf "%%s\\n" "$p" | tee /home/review/work/preflight.err >&2; exit 3; fi\n'
++    printf '  case "$cmdline" in *"$p"*) printf "%%s\\n" "$p" | tee /home/review/work/preflight.err >&2; exit 3 ;; esac\n'
++    printf '}\n'
++    printf 'check %q\n' "$SEAT_ROOT"
++    for p in "${DENY_PATHS[@]}"; do
++      printf 'check %q\n' "$p"
++    done
++    printf 'exit 0\n'
++  } > "$SEAT_ROOT/probe.sh"
++  chmod 0400 "$SEAT_ROOT/probe.sh"
++  write_args "$SEAT_ROOT/bwrap.args"
++  inner_rc=0
++  run_bwrap || inner_rc=$?
++  if [ -s "$SEAT_ROOT/work/preflight.err" ]; then
++    cat "$SEAT_ROOT/work/preflight.err" >&2
++  fi
++  if [ "$inner_rc" -eq 3 ]; then
++    emit_json "$inner_rc"
++    cleanup_seat
++    trap - EXIT INT TERM HUP
++    exit 3
++  fi
++  if [ "$inner_rc" -ne 0 ]; then
++    printf 'bwrap cannot start (rc=%s)\n' "$inner_rc" >&2
++    emit_json 2
++    cleanup_seat
++    trap - EXIT INT TERM HUP
++    exit 2
++  fi
++  emit_json 0
++  cleanup_seat
++  trap - EXIT INT TERM HUP
++  exit 0
++fi
++
++cp "$AUTH_FILE" "$SEAT_ROOT/home/.codex/auth.json"
++chmod 0600 "$SEAT_ROOT/home/.codex/auth.json"
++printf 'model = "%s"\nmodel_reasoning_effort = "%s"\n' "$MODEL" "$EFFORT" \
++  > "$SEAT_ROOT/home/.codex/config.toml"
++cp "$PROMPT_FILE" "$SEAT_ROOT/prompt"
++chmod 0400 "$SEAT_ROOT/prompt"
++: > "$OUT_FILE"
++: > "$ERR_FILE"
++write_args "$SEAT_ROOT/bwrap.args"
++inner_rc=0
++run_bwrap || inner_rc=$?
++emit_json "$inner_rc"
++cleanup_seat
++trap - EXIT INT TERM HUP
++exit "$inner_rc"
+
+```
+<<<AUTOPILOT-END-5aadf96a562b9c051fe10548cf7c885c>>>
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 19th, 2026 8:26 AM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 19th, 2026 8:26 AM.
+
+--- cleanroom launch ---
+{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "codex", "exit_status": 1, "timed_out": false, "seat_root_removed": true, "seat_root": "/tmp/claude-1000/-home-cookys-projects-autopilot/ed4f4545-3dbb-4256-bdb4-80502ec4d221/scratchpad/dogfood-packet/../seat" }
+
+[dispatch-review: cleanroom codex exited non-zero (rc=1)]

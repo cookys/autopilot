@@ -170,7 +170,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    `node scripts/session-mode.js retire --session <id> --integration-receipt <record-integration
    receipt>` re-derives lineage claim + git ancestry (v2.36.48); never delete a marker by hand.
 6b. Run `bash scripts/resolve-review-loop.sh --check-scorecard --field override_admitted_seats` and
-    read the stderr ⚠ notes (a qc seat whose runner cannot run blind review is reported there and refused at intake). Every `qc_panel[N]` without evidence must be pinned first
+    read the stderr notes (packet-tier seats stay on the managed rail; a none-tier runner is a ⚠
+    refusal at intake; a cleanroom-tier runner is an advisory — intake probes the isolation
+    boundary before spend). Every `qc_panel[N]` without evidence must be pinned first
     (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with
     `final_panel_seat_unqualified`.
 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then

@@ -396,6 +396,12 @@ args file). `--sandbox danger-full-access` is legal only inside the launcher
 `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` / `SSL_CERT_FILE` are not passed
 through in this cut.
 
+**Intake probe (v2.36.63).** Campaign intake calls `defaultCleanroomProbe` once
+per distinct cleanroom runner (`spawnSync` of this launcher `--preflight`) and
+records a `cleanroom_probe` step. A near-expiry `auth.json` is not a preflight
+refusal; if a seat refresh invalidates the host credential: `codex login` on the
+host; the seat HOME is gone by construction.
+
 **Proven this cut / not proven.** Isolation is proven with the real `bwrap` and
 a hostile stub `codex` (`hooks/tests/cleanroom-launch.test.sh` under
 `AUTOPILOT_HOST_ISOLATION=1`). There is **no live codex verdict** this cut

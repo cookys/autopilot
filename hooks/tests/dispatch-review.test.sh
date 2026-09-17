@@ -1105,10 +1105,14 @@ chmod +x "$PARITY_FAKE_NODE/node"
 export AUTOPILOT_ENDPOINT_PARITYEP_URL="http://127.0.0.1:9/v1"
 export AUTOPILOT_ENDPOINT_PARITYEP_TOKEN="t"
 PARITY_CAPABLE="$(node -e '
-const { BLIND_DISCOVERY_CAPABLE_RUNNERS } = require(process.argv[1]);
-process.stdout.write(BLIND_DISCOVERY_CAPABLE_RUNNERS.join(" "));
+const { REVIEW_SEAT_TIERS } = require(process.argv[1]);
+process.stdout.write(REVIEW_SEAT_TIERS.packet.join(" "));
 ' "$REPO_ROOT/src/engine/final-panel-qualification.js")"
-for PARITY_RUNNER in codex agy grok cc-shim anthropic-compatible claude-native qoderclicn kimi cursor opencode; do
+SCHEMA_RUNNERS="$(node -e '
+const schema = require(process.argv[1]);
+process.stdout.write(schema.properties.reviewer_runner.enum.filter((r) => r !== "auto").join(" "));
+' "$REPO_ROOT/schemas/review-loop-contract.schema.json")"
+for PARITY_RUNNER in $SCHEMA_RUNNERS; do
   PARITY_EXTRA=()
   PARITY_PATH="$PATH"
   case "$PARITY_RUNNER" in
@@ -1117,6 +1121,15 @@ for PARITY_RUNNER in codex agy grok cc-shim anthropic-compatible claude-native q
   esac
   PARITY_OUT="$(PATH="$PARITY_PATH" AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
     "$SCRIPT" --runner "$PARITY_RUNNER" --model fixture --diff-file "$DIFF" --bin "$PARITY_STUB" "${PARITY_EXTRA[@]}" 2>&1)"; PARITY_EXIT=$?
+  JS_TIER="$(node -e '
+const { reviewSeatTier } = require(process.argv[1]);
+process.stdout.write(reviewSeatTier(process.argv[2]));
+' "$REPO_ROOT/src/engine/final-panel-qualification.js" "$PARITY_RUNNER")"
+  SHELL_TIER="$(bash -c '
+eval "$(sed -n "/^review_seat_tier()/,/^}/p" "$1")"
+review_seat_tier "$2"
+' bash "$REPO_ROOT/scripts/dispatch-review.sh" "$PARITY_RUNNER")"
+  assert_eq "$JS_TIER" "$SHELL_TIER" "$PARITY_RUNNER: JS reviewSeatTier equals shell review_seat_tier"
   PARITY_NODE_CAPABLE="$(node -e '
 const { isBlindDiscoveryCapableRunner } = require(process.argv[1]);
 process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
@@ -1125,21 +1138,66 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
     *" $PARITY_RUNNER "*) PARITY_LIST_CAPABLE=true ;;
     *) PARITY_LIST_CAPABLE=false ;;
   esac
-  assert_eq "$PARITY_LIST_CAPABLE" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: predicate agrees with the exported constant"
-  if [ "$PARITY_RUNNER" = "codex" ]; then
-    # JS set stays as-is (codex is not packet-capable). Cleanroom routing is asserted below.
-    assert_eq "false" "$PARITY_NODE_CAPABLE" "codex: JS capable-runner set unchanged this cut"
-    assert_not_contains "$PARITY_OUT" "rc=99" "codex: blind mode never reaches the --bin stub"
-    continue
-  fi
-  if [ "$PARITY_NODE_CAPABLE" = "true" ]; then
-    assert_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: blind-capable runner reached the stub binary (rc=99 signature)"
-    assert_not_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: capable runner is not gated"
+  if [ "$JS_TIER" = "packet" ]; then
+    assert_eq "true" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: packet alias is capable"
+    assert_eq "true" "$PARITY_LIST_CAPABLE" "$PARITY_RUNNER: packet is in REVIEW_SEAT_TIERS.packet"
+    assert_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: packet-tier runner reached the stub binary (rc=99 signature)"
+    assert_not_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: packet runner is not gated"
+  elif [ "$JS_TIER" = "cleanroom" ]; then
+    assert_eq "true" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: cleanroom alias is capable (tier !== none)"
+    assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: cleanroom never reaches the --bin stub without a packet"
+    assert_contains "$PARITY_OUT" "cleanroom seat requires a review packet" "$PARITY_RUNNER: cleanroom names the packet gate"
   else
+    assert_eq "false" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: none-tier is not capable"
+    assert_eq "false" "$PARITY_LIST_CAPABLE" "$PARITY_RUNNER: none-tier is not in the packet list"
     assert_eq "2" "$PARITY_EXIT" "$PARITY_RUNNER: incompatible runner is a precondition failure (exit 2)"
     assert_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: incompatible runner hits the no-tools gate"
     assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: incompatible runner never reaches the stub"
   fi
+done
+
+# Resolver mirror agrees for every contract enum member (minus auto).
+RESOLVER_SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+EMPTY_SCDIR="$TEST_TMP/parity-empty-scorecard"
+mkdir -p "$EMPTY_SCDIR"
+for PARITY_RUNNER in $SCHEMA_RUNNERS; do
+  RES_CFG="$TEST_TMP/parity-qc-${PARITY_RUNNER}.md"
+  printf -- '- qc_panel: fixture-model\n- qc_panel_runners: %s\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' "$PARITY_RUNNER" > "$RES_CFG"
+  RES_OVR="$TEST_TMP/parity-qc-${PARITY_RUNNER}-ovr.json"
+  printf '{"schema":1,"overrides":[{"engine":"fixture-model","runner":"%s","role":"qc_panel","reason":"parity fixture admission","operator":"test","expires":"2099-12-31"}]}\n' "$PARITY_RUNNER" > "$RES_OVR"
+  RES_STDOUT="$TEST_TMP/parity-res-${PARITY_RUNNER}.out"
+  RES_STDERR="$TEST_TMP/parity-res-${PARITY_RUNNER}.err"
+  ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" AUTOPILOT_QUALIFICATION_OVERRIDE="$RES_OVR" \
+    REVIEW_LOOP_CONFIG_OVERRIDE="$RES_CFG" \
+    bash "$RESOLVER_SCRIPT" --check-scorecard >"$RES_STDOUT" 2>"$RES_STDERR"
+  RES_ERR_TEXT="$(cat "$RES_STDERR")"
+  JS_TIER="$(node -e '
+const { reviewSeatTier } = require(process.argv[1]);
+process.stdout.write(reviewSeatTier(process.argv[2]));
+' "$REPO_ROOT/src/engine/final-panel-qualification.js" "$PARITY_RUNNER")"
+  RES_WARN="$(node -e '
+const fs = require("fs");
+const raw = fs.readFileSync(process.argv[1], "utf8").trim();
+const v = raw ? JSON.parse(raw) : {};
+process.stdout.write(JSON.stringify(v.capability_warnings || []));
+' "$RES_STDOUT")"
+  case "$JS_TIER" in
+    cleanroom)
+      assert_contains "$RES_WARN" "is a cleanroom-tier seat" "$PARITY_RUNNER: resolver advisory for cleanroom"
+      assert_not_contains "$RES_ERR_TEXT" "resolve-review-loop: ⚠ qc_panel[0] seat (fixture-model/${PARITY_RUNNER}) cannot execute" \
+        "$PARITY_RUNNER: resolver has no refusal ⚠ for cleanroom"
+      ;;
+    none)
+      assert_contains "$RES_ERR_TEXT" "resolve-review-loop: ⚠ qc_panel[0] seat (fixture-model/${PARITY_RUNNER}) cannot execute a managed blind-discovery review" \
+        "$PARITY_RUNNER: resolver stderr ⚠ for none"
+      assert_contains "$RES_WARN" "cannot execute a managed blind-discovery review" "$PARITY_RUNNER: resolver refusal for none"
+      ;;
+    packet)
+      assert_not_contains "$RES_WARN" "cannot execute a managed blind-discovery review" "$PARITY_RUNNER: packet has no refusal"
+      assert_not_contains "$RES_WARN" "is a cleanroom-tier seat" "$PARITY_RUNNER: packet has no cleanroom advisory"
+      assert_not_contains "$RES_ERR_TEXT" "cannot execute a managed blind-discovery review" "$PARITY_RUNNER: packet stderr has no refusal"
+      ;;
+  esac
 done
 
 # --- cleanroom seat (portable stubs; RED at base ceb7c81d) ---

@@ -1,6 +1,6 @@
 # Blind review redesign — cut 1b-B: intake probes the cleanroom boundary, the JS/resolver learn seat tiers, codex returns to the panel
 
-> Status: draft for plan hetero loop · Size: L · Base: `d7912c7e` (v2.36.62 shipped, 1b-A merge `94d44940`) · Parent:
+> Status: SHIPPED v2.36.63 (merge `bc4ea99e`, 2026-09-17) · Size: L · Base: `d7912c7e` (v2.36.62 shipped, 1b-A merge `94d44940`) · Parent:
 > `docs/plans/2026-09-16-blind-review-packet.md` §7 item 3; sibling `docs/plans/2026-09-17-blind-review-cleanroom-launcher.md`
 > (1b-A: launcher + `dispatch-review.sh` tiers, shipped). Evidence dir:
 > `docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/`.
@@ -300,3 +300,13 @@ parsed verdict → then and only then the pin swap (§1.5) and the first live cl
   the answering launcher and the deny paths (R3); resolver parity iterates the enum (R1); version
   pin re-stamp convention stated (R8). Growth 1.38× over the G2-reviewed bytes (cap reached, no
   further dispatch). Zero unaddressed blockers, zero deferred.
+- Campaign 2026-09-17 (/l5 attempt 1, `impl-run1-attempt1-blocked.json`): implement 71 min (cursor-grok-4.6-low,
+  hand `29d852e4`, 16 files ⊆ §2.5); in-rail scope + verification green (12 commands); in-rail MiniMax-M3
+  review `no_verdict` (NO-FINDING-PROOF tautological — instrument fault; raw block SHIP-AS-IS); the engine
+  said durable/resumable but `--resume` was refused (`campaign_resume_phase_unsupported`, phase REVIEWING) —
+  rail defect filed → l3 degrade. Depth-0 at `29d852e4`: 12/12 green (`head-suites-29d852e4.txt`), scope
+  clean; GLM-5.2 second review framing fault (block SHIP-AS-IS, not counted); claude-fable-5-1 second review
+  FIX-THEN-SHIP 1 🟡 (a rejected probe decision was not kept as a step) → repaired at `af1879cb` with a
+  RED-first routing case (`repair-red-at-29d852e4.log`), delta review SHIP-AS-IS, 12/12 green again
+  (`head-suites-af1879cb.txt`). §5 dogfood: `dogfood-resolver.txt`, `dogfood-probe.txt`. Pin swap (§1.5)
+  deferred to a BACKLOG row — no live codex verdict yet. Merge `bc4ea99e`.

@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.36.63 — blind review redesign 第四刀（1b-B）：intake 探 cleanroom 邊界、JS／resolver 學會 seat tier、codex 回 panel 改成條件式
+
+- `src/engine/final-panel-qualification.js`（＋鏡像）：`REVIEW_SEAT_TIERS`（packet＝`anthropic-compatible`／`cc-shim`／
+  `claude-native`／`qoderclicn`，cleanroom＝`codex`）＋`reviewSeatTier(runner)` → `packet|cleanroom|none`；舊的
+  `BLIND_DISCOVERY_CAPABLE_RUNNERS`／`isBlindDiscoveryCapableRunner` 留作別名（＝packet tier／tier≠none），既有 caller 不動。
+  `dispatch-review.test.sh` parity block 改成從 `review-loop-contract.schema.json` 的 `reviewer_runner.enum` 逐一比對 JS／shell／resolver 三份。
+- `src/engine/campaign-intake.js`（＋鏡像）：blind block 變 tier switch——`none` 席照舊 `final_panel_seat_blind_incompatible`
+  （訊息尾改「or use a cleanroom-tier runner」）；`cleanroom` 席呼叫 `adapters.cleanroomProbe || defaultCleanroomProbe`
+  **每個 runner 一次**，決策集合 `ready|rejected|unknown`：`ready`＝admitted 並留 `cleanroom_probe` step（`runner`、
+  `exit_status`、`launcher`（真正回答的絕對路徑）、`deny_paths`、`launcher_json`）；`rejected` → `final_panel_seat_cleanroom_unavailable`
+  帶 launcher 診斷原文，在 qualification／claim／spend 之前擋下（**rejected 的探測也是一個 step**——depth-0 修補）；`unknown`
+  只有一個意思＝沒有 launcher 可 spawn（ENOENT），shadow 下 admit、enforce 下在 `missionMode` 算出來那一點被拒；其他值
+  → `cleanroom_probe_adapter_invalid`。`defaultCleanroomProbe` 直接 `spawnSync(launcher --preflight --deny-path …, { timeout,
+  killSignal: SIGKILL })`（單一程序、無 coreutils timeout；launcher 的 bwrap `--die-with-parent` 收尾）；deny list＝repo、
+  git common dir（git 失敗就略）、operator HOME（未設就略）、contract dir，去重、去 `/`；outcome→decision 窮舉（exit 0＋JSON
+  行→ready；0 無行→rejected；ETIMEDOUT→rejected；非零→`exit <n>: <stderr 首行|no diagnostic>`；其他 spawn error→rejected）。
+- `scripts/resolve-review-loop.sh`（＋鏡像）：四 runner 的字面 `case` 改成 `review_seat_tier`；`none` 保留 refusal ⚠（尾巴
+  改）；`cleanroom` 改發 advisory「is a cleanroom-tier seat — intake probes the isolation boundary before any spend」進
+  `capability_warnings[]`（resolver 只報告、不探測；欄位集合不變，`check-contract-schema.js` 綠）。
+- 測試（RED-first 標 base `130b97a8`／`29d852e4`）：routing +10 assertions（grok 保留 refusal、codex 探測 rejected→unavailable
+  且 impl／review 0 次、ready→admitted 帶 step、兩個 codex 席只探一次、adapter 回怪值→invalid、真 `defaultCleanroomProbe` 配
+  stub launcher：exit 0／exit 2＋stderr／sleep 超時／launcher 不存在→unknown、無 git 無 HOME fixture argv 完整、shadow admit／
+  enforce refuse、**rejected 探測留 step**）；state 兩個 pin 改指 none tier＋step 形狀；qc-panel-rejection 八條保留＋codex advisory；
+  cleanroom-launch（host-gated）補 `HOME=DENIED` 斷言＋真 probe ready／缺 bwrap rejected。
+- 出貨路徑：/l5 managed campaign attempt 1——implement 71 分（cursor-grok-4.6-low，16 檔 +1166）、scope／verification（12 條）
+  rail 內全綠，in-rail MiniMax 席 `no_verdict`（NO-FINDING-PROOF tautological；raw log 其實有完整 SHIP-AS-IS 區塊，工具病
+  不算票）→ engine 回 `durable_wait:true, resumable:true`，但 `--resume` 被 `campaign_resume_phase_unsupported` 拒（REVIEWING
+  不在 durable-wait 集合）→ **rail 缺陷登 BACKLOG**，照文件降級 l3。depth-0：候選 `29d852e4` 十二條全綠、scope ⊆ §2.5、engine／
+  runner rail／launcher／schemas 逐位元組不變；GLM-5.2 二審 framing 病（END marker 後多一句＋code fence → no_verdict，區塊本身
+  SHIP-AS-IS，記錄不計票）；claude-fable-5-1 二審 FIX-THEN-SHIP 1 🟡（rejected 探測沒留 step）→ 在 mission branch 修
+  （`af1879cb`，RED-first case）→ delta 複審 SHIP-AS-IS；修補後十二條再全綠。
+- Plan §5 dogfood：resolver 對 codex qc 席發 advisory 不 refuse；真 `defaultCleanroomProbe` 在這台 `ready`（deny_paths＝repo／
+  `.git`／HOME／contract dir、seat root 已刪）、缺 bwrap `rejected exit 2`、缺 launcher `unknown/shadow`。**pin swap 沒做**：
+  還沒有 live codex 判決（額度 09-19 16:26 回來），§1.5 條件不成立 → BACKLOG row 帶探測證據。
+- 不在範圍：可設定 deny-list（1c，plan 草稿已寫）、cut 2、其他 cleanroom profile、proxy／CA 透傳。
+
+prose-justification: `references/blind-dispatch.md` Cleanroom tier 一節加「Intake probe (v2.36.63)」段＋憑證復原一句（含鏡像
+12 行）；`skills/l5/references/hetero-impl-loop.md` 6b 一句改寫（含鏡像 8 行）。
+
 ## v2.36.62 — blind review redesign 第三刀（1b-A）：cleanroom launcher，`dispatch-review.sh` 學會 seat tier
 
 - `scripts/lib/cleanroom-launch.sh`（新，＋codex 鏡像）：argv-only 的隔離啟動器。bwrap 選項全走 `--args 9`（NUL 檔），

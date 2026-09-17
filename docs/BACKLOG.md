@@ -152,6 +152,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md
 - **Context**: cosmetic against the script's existing mktemp idiom; one host-/tmp file per cleanroom dispatch; the dead block is duplication, not a wrong path. Fold with the next codex-block touch, with the mirror.
 
+### Managed rail: reviewer no_verdict leaves phase REVIEWING, which `--resume` refuses — durable wait not resumable
+- **Status**: open
+- **Trigger**: any managed campaign whose in-rail reviewer returns no_verdict (format fault) — the next run of that station
+- **Effort**: M
+- **Source**: 1b-B campaign 2026-09-17 (`impl-run1-attempt1-blocked.json` durable_wait:true/resumable:true; `impl-run2-resume-refused.json` campaign_resume_phase_unsupported)
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md
+- **Context**: v2.36.43 keeps the claim, but the persisted phase stays REVIEWING, outside NON_SUCCESS_DURABLE_STATES (campaign-intake.js ~:770-788), so resume is refused. Add that phase to the durable set, or re-administer/swap the seat in-rail.
+
+### Codex back on the qc panel: pin swap to gpt-5.6-sol/codex max waits for a live cleanroom verdict
+- **Status**: open
+- **Trigger**: codex quota returns (2026-09-19 16:26) — run cleanroom-launch.sh --profile codex against a real packet and get a parsed verdict on this host
+- **Effort**: S
+- **Source**: 1b-B plan §1.5 (ship the mechanism, swap the pin only on a recorded live verdict)
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md
+- **Context**: intake admits a codex seat after the probe (dogfood-probe.txt: real probe ready here); no verdict from the seat yet. Then: engine-capability-state.js pin-seat --role qc_panel gpt-5.6-sol/codex max + review-loop-config qc_panel[0].
+
 ### Managed rail: final panel has no repair loop — FIX-THEN-SHIP without a disposition provider blocks adjudication
 - **Status**: open
 - **Trigger**: a managed campaign reaches the final panel with a FIX-THEN-SHIP seat and no `--campaign-disposition-policy/authority` given

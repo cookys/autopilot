@@ -2476,10 +2476,12 @@ const proofRoster = {
   ],
 };
 
-function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, tautFullDiff = false } = {}) {
+function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, tautFullDiff = false, packetPanel = false, packetHashes = null } = {}) {
   spawnSync('git', ['-C', worktree, 'reset', '--hard', base], { stdio: 'ignore' });
   const attempts = [];
   const performOutcomes = [];
+  const reviewOptionsSeen = [];
+  let finalPanelOutcome = null;
   const reviewByTree = new Map();
   let implCalls = 0;
   let repairDispatcherCalls = 0;
@@ -2579,25 +2581,41 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
         model: 'fixture-implementer',
       });
     },
-    ...(proofPanel ? {
+    ...(proofPanel || packetPanel ? {
       campaignComposer(input, adapters) {
         const innerReview = adapters.review;
+        const innerFinal = adapters.finalPanel;
         adapters.review = (reviewInput) => {
           const outcome = innerReview(reviewInput);
           performOutcomes.push({ scope: reviewInput && reviewInput.scope, outcome });
           return outcome;
         };
+        if (typeof innerFinal === 'function') {
+          adapters.finalPanel = (reviewInput) => {
+            finalPanelOutcome = innerFinal(reviewInput);
+            return finalPanelOutcome;
+          };
+        }
         return require(path.join(root, 'src', 'engine', 'campaign-composition')).runCampaignComposition(input, adapters);
       },
     } : {}),
-    reviewDispatcher(args) {
-      if (proofPanel) {
+    reviewDispatcher(args, options) {
+      if (proofPanel || packetPanel) {
+        reviewOptionsSeen.push(options);
         const modelIdx = Array.isArray(args) ? args.indexOf('--model') : -1;
         const model = modelIdx >= 0 ? args[modelIdx + 1] : 'fixture-reviewer';
-        return transportFromEnvelope(proofEnvelope(
+        const transport = transportFromEnvelope(proofEnvelope(
           model,
-          (model === 'fixture-reviewer-b' || tautFullDiff) ? TAUT_PROOF_ENV : PERIOD_PROOF_ENV,
+          (proofPanel && (model === 'fixture-reviewer-b' || tautFullDiff)) ? TAUT_PROOF_ENV : PERIOD_PROOF_ENV,
         ));
+        if (packetHashes && Object.prototype.hasOwnProperty.call(packetHashes, model)) {
+          transport.packet = {
+            packet_hash: packetHashes[model],
+            entries_count: 1,
+            denied_paths: [],
+          };
+        }
+        return transport;
       }
       const headTree = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], {
         cwd: worktree, encoding: 'utf8',
@@ -2635,7 +2653,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
       return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
     },
     verifyCommandRunner({ commit, verifyCmd }) {
-      const failed = !proofPanel && commit === redCommit;
+      const failed = !proofPanel && !packetPanel && commit === redCommit;
       return {
         error: null,
         status: failed ? 1 : 0,
@@ -2650,7 +2668,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
     promptFile,
     branch: 'impl/red-path',
     base,
-    roster: proofPanel ? proofRoster : roster,
+    roster: (proofPanel || packetPanel) ? proofRoster : roster,
     campaignContract: contractPath,
     campaignSeal: sealPath,
     verificationEnv: { PATH: process.env.PATH || '', CI: 'red-path' },
@@ -2660,6 +2678,8 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
     result,
     attempts,
     performOutcomes,
+    reviewOptionsSeen,
+    finalPanelOutcome,
     reviewByTree,
     redTree,
     repairedTree,
@@ -2734,6 +2754,65 @@ if (mode === 'proof') {
   assert.strictEqual(tautFull[0].raw_log, PROOF_RAW_LOG, `performReview outcome raw_log=${tautFull[0].raw_log}`);
   assert.strictEqual(tautRun.result.status, 'blocked');
   console.log('proof_perform_review_outcome_raw_log=true');
+} else if (mode === 'packet-equal' || mode === 'packet-mismatch' || mode === 'packet-mixed' || mode === 'packet-absent') {
+  const HASH_B = 'b'.repeat(64);
+  const HASH_C = 'c'.repeat(64);
+  const packetHashes = mode === 'packet-equal'
+    ? { 'fixture-reviewer': HASH_B, 'fixture-reviewer-b': HASH_B }
+    : mode === 'packet-mismatch'
+      ? { 'fixture-reviewer': HASH_B, 'fixture-reviewer-b': HASH_C }
+      : mode === 'packet-mixed'
+        ? { 'fixture-reviewer': HASH_B }
+        : {};
+  const run = runRedPath({ packetPanel: true, packetHashes });
+  const findSeats = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+    for (const child of Object.values(value)) {
+      const found = findSeats(child);
+      if (found) return found;
+    }
+    return null;
+  };
+  const reviewedCommit = spawnSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+  assert.ok(run.reviewOptionsSeen.length >= 2, `dispatcher calls=${run.reviewOptionsSeen.length}`);
+  for (const options of run.reviewOptionsSeen) {
+    assert.strictEqual(options.blindDiscovery, true);
+    assert.ok(options.packet, `packet undefined at base bee8da3d; got ${JSON.stringify(options)}`);
+    assert.strictEqual(options.packet.repo, repo);
+    assert.strictEqual(options.packet.baseSha, base);
+    assert.strictEqual(options.packet.candidateSha, reviewedCommit);
+  }
+  const seats = findSeats(run.result);
+  assert.ok(Array.isArray(seats) && seats.length === 2, `seats=${JSON.stringify(seats)}`);
+  const panel = run.finalPanelOutcome;
+  assert.ok(panel, `missing finalPanelOutcome: ${JSON.stringify({ status: run.result.status, phase: run.result.phase, reason: run.result.reason })}`);
+  if (mode === 'packet-equal') {
+    assert.strictEqual(panel.reviewed, true, `panel=${JSON.stringify({ reviewed: panel.reviewed, verdict: panel.verdict, count: panel.final_panel_count })}`);
+    assert.notStrictEqual(panel.verdict, null);
+    for (const seat of seats) {
+      assert.strictEqual(seat.status, 'reviewed');
+      assert.strictEqual(seat.packet_hash, HASH_B);
+      const { receipt_digest: digest, ...body } = seat;
+      assert.strictEqual(canonicalDigest(body), digest);
+    }
+    console.log('packet_equal_reviewed=true');
+  } else if (mode === 'packet-mismatch') {
+    assert.strictEqual(panel.reviewed, false, `mismatch reviewed=${panel.reviewed}`);
+    assert.strictEqual(panel.verdict, null);
+    assert.strictEqual(panel.final_panel_count, 2);
+    console.log('packet_mismatch_unrefused=true');
+  } else if (mode === 'packet-mixed') {
+    assert.strictEqual(panel.reviewed, false, `mixed reviewed=${panel.reviewed}`);
+    assert.strictEqual(panel.verdict, null);
+    console.log('packet_mixed_unrefused=true');
+  } else {
+    assert.strictEqual(panel.reviewed, true, `absent hashes panel.reviewed=${panel.reviewed}`);
+    for (const seat of seats) {
+      assert.ok(!Object.prototype.hasOwnProperty.call(seat, 'packet_hash'), `unexpected packet_hash on ${seat.model}`);
+    }
+    console.log('packet_absent_legacy=true');
+  }
 } else if (mode === 't5') {
   const t5 = runRedPath({ throwOnGen1ReviewCompleted: true });
   const t5Auth = t5.attempts.filter(
@@ -2994,6 +3073,20 @@ done
 RED_PATH_PT_OUT="$(proof_parity_run taut proof-taut)"
 assert_contains "$RED_PATH_PT_OUT" "proof_perform_review_outcome_raw_log=true" \
   "proof-parity engine proves proof_perform_review_outcome_raw_log"
+
+# RED at base bee8da3d: options.packet undefined on every campaign reviewDispatcher call.
+RED_PATH_PE_OUT="$(proof_parity_run pkt-eq packet-equal)"
+assert_contains "$RED_PATH_PE_OUT" "packet_equal_reviewed=true" \
+  "equal packet_hash across reviewed seats is one panel identity"
+RED_PATH_PM_OUT="$(proof_parity_run pkt-mm packet-mismatch)"
+assert_contains "$RED_PATH_PM_OUT" "packet_mismatch_unrefused=true" \
+  "distinct packet_hash values refuse the panel"
+RED_PATH_PX_OUT="$(proof_parity_run pkt-mx packet-mixed)"
+assert_contains "$RED_PATH_PX_OUT" "packet_mixed_unrefused=true" \
+  "mixed packet_hash presence refuses the panel"
+RED_PATH_PA_OUT="$(proof_parity_run pkt-ab packet-absent)"
+assert_contains "$RED_PATH_PA_OUT" "packet_absent_legacy=true" \
+  "both seats without packet_hash stay reviewed (preservation, green at base)"
 
 PROOF_ENGINE_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 'use strict';

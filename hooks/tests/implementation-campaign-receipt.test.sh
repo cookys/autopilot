@@ -1025,6 +1025,99 @@ fs.writeFileSync(path.join(temp, 'seat-extra-key.json'), `${JSON.stringify({
   final_panel_seat_receipts: [extraSeat],
 }, null, 2)}\n`);
 console.log('unknown_key_rejected=true');
+
+// RED at base bee8da3d: validateFinalPanelReceipt reason=final_panel_metadata_incomplete
+// (unknown-key guard) for a reviewed seat carrying packet_hash; schema validate
+// of a receipt with that seat exited 1 ("$ must match exactly one oneOf branch; matched 0").
+const HASH_B = 'b'.repeat(64);
+const HASH_C = 'c'.repeat(64);
+const hashedBody = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 1,
+  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+  status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+  packet_hash: HASH_B,
+};
+const hashedSeat = { ...hashedBody, receipt_digest: canonicalDigest(hashedBody) };
+assert.strictEqual(canonicalDigest((({ receipt_digest, ...body }) => body)(hashedSeat)), hashedSeat.receipt_digest);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [hashedSeat],
+}, 1).passed, true);
+fs.writeFileSync(path.join(temp, 'seat-with-packet-hash.json'), `${JSON.stringify({
+  ...composition,
+  final_panel_seat_receipts: [hashedSeat],
+}, null, 2)}\n`);
+const upperBody = { ...hashedBody, packet_hash: 'B'.repeat(64) };
+upperBody.receipt_digest = canonicalDigest(upperBody);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [upperBody],
+}, 1).reason, 'final_panel_metadata_incomplete');
+const shortBody = { ...hashedBody, packet_hash: 'b'.repeat(63) };
+shortBody.receipt_digest = canonicalDigest(shortBody);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [shortBody],
+}, 1).reason, 'final_panel_metadata_incomplete');
+const failedHashBody = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 1,
+  runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+  status: 'no_verdict', verdict: null, review_digest: null,
+  reason: 'final_panel_seat_no_verdict',
+  packet_hash: HASH_B,
+};
+const failedHashSeat = { ...failedHashBody, receipt_digest: canonicalDigest(failedHashBody) };
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: false, verdict: null, findings: '[]', review_digest: null,
+  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [failedHashSeat],
+}, 1).reason, 'final_panel_metadata_incomplete');
+const seatB = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 2,
+  runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture',
+  status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+  packet_hash: HASH_C,
+};
+seatB.receipt_digest = canonicalDigest(seatB);
+const hashedA = { ...hashedBody, packet_hash: HASH_B };
+hashedA.receipt_digest = canonicalDigest(hashedA);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 2, final_panel_count: 2, final_panel_seat_receipts: [hashedA, seatB],
+}, 2).reason, 'final_panel_packet_hash_mismatch');
+const mixedB = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_final_panel_seat',
+  seat_index: 2,
+  runner: 'fixture', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture',
+  status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+};
+mixedB.receipt_digest = canonicalDigest(mixedB);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 2, final_panel_count: 2, final_panel_seat_receipts: [hashedA, mixedB],
+}, 2).reason, 'final_panel_packet_hash_mixed');
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [v1Seat],
+}, 1).passed, true);
+const tamperedHash = { ...hashedSeat, packet_hash: HASH_C };
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [tamperedHash],
+}, 1).reason, 'final_panel_receipt_digest_mismatch');
+const zzBody = { ...hashedBody, packet_hash: 'zz' };
+zzBody.receipt_digest = canonicalDigest(zzBody);
+fs.writeFileSync(path.join(temp, 'seat-packet-hash-zz.json'), `${JSON.stringify({
+  ...composition,
+  final_panel_seat_receipts: [{ ...zzBody }],
+}, null, 2)}\n`);
+console.log('packet_hash_validator=true');
 NODE
 )"
 assert_exit_code "$?" "0" "campaign receipt and composition tests execute"
@@ -1044,6 +1137,8 @@ assert_contains "$OUT" "failed_seat_raw_log_digest=true" \
   "failed seat raw_log is digested; empty raw_log rejected"
 assert_contains "$OUT" "unknown_key_rejected=true" \
   "unrelated extra key is rejected by composition validation"
+assert_contains "$OUT" "packet_hash_validator=true" \
+  "packet_hash validator and digest rules"
 
 node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
@@ -1069,5 +1164,17 @@ node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
   --document "$TEST_TMP/seat-extra-key.json" >/dev/null 2>&1
 assert_exit_code "$?" "1" "schema rejects an unrelated extra seat key (preservation)"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/seat-with-packet-hash.json" >/dev/null
+assert_exit_code "$?" "0" "schema accepts optional seat packet_hash (RED at base bee8da3d: exit 1 oneOf matched 0)"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/seat-packet-hash-zz.json" >/dev/null 2>&1
+assert_exit_code "$?" "1" "schema rejects non-hex packet_hash"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/seat-extra-key.json" >/dev/null 2>&1
+assert_exit_code "$?" "1" "seat-extra-key.json stays rejected (preservation)"
 
 finalize_test

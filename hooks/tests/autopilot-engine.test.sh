@@ -71,6 +71,165 @@ assert_contains "$OUT" "resolve_args=--check-scorecard" "AutopilotEngine resolve
 assert_contains "$OUT" "--runner test-review-runner --model test-review-model --diff-file $DIFF --effort test-review-effort" "AutopilotEngine builds review dispatcher args from roster"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,dispatch_review:reviewed" "AutopilotEngine emits dispatch ledger"
 
+# RED at base bee8da3d: packet undefined (hasOwnProperty false); reviewOptions.packet
+# forwarded as {"repo":"/bogus","baseSha":"bogus","candidateSha":"bogus"}; malformed
+# input.packet still dispatched (status=reviewed, dispatcher called=1).
+HASH_A="$(printf 'a%.0s' {1..64})"
+OUT="$(node - "$REPO_ROOT" "$DIFF" "$HASH_A" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const hashA = process.argv[4];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+function resolver() {
+  return {
+    error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+    result: {
+      reviewer_engine: 'test-review-model',
+      reviewer_effort: 'test-review-effort',
+      reviewer_runner: 'test-review-runner',
+      reviewer_qualified: true,
+    },
+  };
+}
+
+const engineOk = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      packet: { packet_hash: hashA, entries_count: 3, denied_paths: [] },
+      result: {
+        runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP', findings: 'stub finding', raw_log: '/tmp/log', error: null,
+      },
+    };
+  },
+});
+const withPacket = engineOk.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true });
+console.log(`surfaced_hash=${withPacket.packet && withPacket.packet.packet_hash}`);
+
+const engineNone = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP', findings: 'stub finding', raw_log: '/tmp/log', error: null,
+      },
+    };
+  },
+});
+const noKey = engineNone.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true });
+console.log(`no_packet_key=${Object.prototype.hasOwnProperty.call(noKey, 'packet')}`);
+
+const engineZz = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      packet: { packet_hash: 'zz', entries_count: 3, denied_paths: [] },
+      result: {
+        runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP', findings: 'stub finding', raw_log: '/tmp/log', error: null,
+      },
+    };
+  },
+});
+const zz = engineZz.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true });
+console.log(`zz_packet_key=${Object.prototype.hasOwnProperty.call(zz, 'packet')}`);
+
+let bogusSeen;
+let bogusCalls = 0;
+const engineBogus = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args, options) {
+    bogusCalls += 1;
+    bogusSeen = options;
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP', findings: 'stub finding', raw_log: '/tmp/log', error: null,
+      },
+    };
+  },
+});
+engineBogus.reviewDiff({
+  diffFile: diff,
+  requireQualifiedReviewer: true,
+  reviewOptions: { blindDiscovery: false, packet: { repo: '/bogus', baseSha: 'bogus', candidateSha: 'bogus' } },
+});
+console.log(`bogus_has_packet=${Object.prototype.hasOwnProperty.call(bogusSeen, 'packet')}`);
+console.log(`bogus_calls=${bogusCalls}`);
+
+let malformedCalls = 0;
+const engineMalformed = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher() {
+    malformedCalls += 1;
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP', findings: 'stub finding', raw_log: '/tmp/log', error: null,
+      },
+    };
+  },
+});
+const malformed = engineMalformed.reviewDiff({
+  diffFile: diff,
+  requireQualifiedReviewer: true,
+  packet: { repo: 'x' },
+});
+console.log(`malformed_status=${malformed.status}`);
+console.log(`malformed_phase=${malformed.phase}`);
+console.log(`malformed_reason=${malformed.reason}`);
+console.log(`malformed_calls=${malformedCalls}`);
+
+let wellFormedNonBlind;
+const engineNonBlind = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher(args, options) {
+    wellFormedNonBlind = options;
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        runner: 'test-review-runner', model: 'test-review-model', status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP', findings: 'stub finding', raw_log: '/tmp/log', error: null,
+      },
+    };
+  },
+});
+engineNonBlind.reviewDiff({
+  diffFile: diff,
+  requireQualifiedReviewer: true,
+  packet: { repo: '/repo', baseSha: 'b'.repeat(40), candidateSha: 'c'.repeat(40) },
+  reviewOptions: { blindDiscovery: false },
+});
+console.log(`nonblind_wellformed_has_packet=${Object.prototype.hasOwnProperty.call(wellFormedNonBlind, 'packet')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff packet identity tests exit 0"
+assert_contains "$OUT" "surfaced_hash=$HASH_A" "reviewDiff surfaces dispatcher packet_hash (RED at base bee8da3d: packet undefined)"
+assert_contains "$OUT" "no_packet_key=false" "reviewDiff omits packet when dispatcher returns none (preservation, green at base)"
+assert_contains "$OUT" "zz_packet_key=false" "reviewDiff omits packet when packet_hash is not 64 hex (preservation, green at base)"
+assert_contains "$OUT" "bogus_has_packet=false" "reviewDiff never forwards caller reviewOptions.packet (RED at base bee8da3d: bogus tuple forwarded)"
+assert_contains "$OUT" "malformed_status=blocked" "malformed input.packet blocks prepare_review (RED at base bee8da3d: status=reviewed dispatcher called)"
+assert_contains "$OUT" "malformed_phase=prepare_review" "malformed input.packet uses prepare_review phase"
+assert_contains "$OUT" "malformed_reason=packet must be { repo, baseSha, candidateSha }" "malformed packet reason"
+assert_contains "$OUT" "malformed_calls=0" "malformed input.packet never calls dispatcher"
+assert_contains "$OUT" "nonblind_wellformed_has_packet=false" "well-formed input.packet is ignored when blindDiscovery is false (green at base: input.packet ignored)"
+
+
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
@@ -4048,6 +4207,8 @@ const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 
 let reviewArgsDefault = null;
 let reviewArgsNoSpec = null;
+let reviewOptionsDefault = null;
+let reviewOptionsNoSpec = null;
 
 const createEngine = (noReviewSpec) => new AutopilotEngine({
   implementationDispatcher() {
@@ -4074,9 +4235,14 @@ const createEngine = (noReviewSpec) => new AutopilotEngine({
       },
     };
   },
-  reviewDispatcher(args) {
-    if (noReviewSpec) reviewArgsNoSpec = args;
-    else reviewArgsDefault = args;
+  reviewDispatcher(args, options) {
+    if (noReviewSpec) {
+      reviewArgsNoSpec = args;
+      reviewOptionsNoSpec = options;
+    } else {
+      reviewArgsDefault = args;
+      reviewOptionsDefault = options;
+    }
     return {
       error: null,
       status: 0,
@@ -4120,20 +4286,39 @@ const loopArgs = {
   base: '1111111111111111111111111111111111111111',
   maxRounds: 1,
   roster,
+  reviewOptions: {
+    packet: { repo: '/bogus', baseSha: 'bogus', candidateSha: 'bogus' },
+  },
 };
 
 createEngine(false).runLegacyImplementationReviewLoop(loopArgs);
 createEngine(true).runLegacyImplementationReviewLoop({ ...loopArgs, noReviewSpec: true });
 
+const expectedPacket = {
+  repo: path.resolve(process.cwd()),
+  baseSha: loopArgs.base,
+  candidateSha: '1234567890123456789012345678901234567890',
+};
 console.log(`default_has_spec=${reviewArgsDefault.includes('--spec-file')}`);
 console.log(`default_spec_value=${reviewArgsDefault[reviewArgsDefault.indexOf('--spec-file') + 1] === path.resolve('/tmp/some-prompt.md')}`);
 console.log(`no_spec_has_spec=${reviewArgsNoSpec.includes('--spec-file')}`);
+console.log(`default_blind=${reviewOptionsDefault && reviewOptionsDefault.blindDiscovery === true}`);
+console.log(`no_spec_blind=${reviewOptionsNoSpec && reviewOptionsNoSpec.blindDiscovery === true}`);
+console.log(`default_packet=${JSON.stringify(reviewOptionsDefault && reviewOptionsDefault.packet)}`);
+console.log(`no_spec_packet=${JSON.stringify(reviewOptionsNoSpec && reviewOptionsNoSpec.packet)}`);
+console.log(`expected_packet=${JSON.stringify(expectedPacket)}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine runLegacyImplementationReviewLoop spec-file tests exit 0"
 assert_contains "$OUT" "default_has_spec=true" "runLegacyImplementationReviewLoop passes spec-file by default"
 assert_contains "$OUT" "default_spec_value=true" "runLegacyImplementationReviewLoop uses prompt file as spec file by default"
 assert_contains "$OUT" "no_spec_has_spec=false" "runLegacyImplementationReviewLoop suppresses spec-file when noReviewSpec is true"
+
+DEFAULT_PKT="$(printf '%s\n' "$OUT" | sed -n 's/^expected_packet=//p')"
+assert_contains "$OUT" "default_blind=true" "terminal-site review is blindDiscovery"
+assert_contains "$OUT" "no_spec_blind=true" "noReviewSpec terminal-site review is blindDiscovery"
+assert_contains "$OUT" "default_packet=$DEFAULT_PKT" "terminal-site options.packet is engine-derived (RED at base bee8da3d: packet undefined; bogus tuple forwarded)"
+assert_contains "$OUT" "no_spec_packet=$DEFAULT_PKT" "noReviewSpec terminal-site options.packet is engine-derived (RED at base bee8da3d: packet undefined)"
 
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
 const fs = require('fs');

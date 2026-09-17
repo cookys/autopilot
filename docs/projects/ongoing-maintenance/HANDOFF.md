@@ -1,8 +1,8 @@
 ## 目標
-接續 autopilot 維護。2026-09-17 出貨 v2.36.62（1b-A cleanroom launcher＋seat tiers，merge `94d44940`）與 v2.36.63（1b-B intake cleanroom probe＋JS/resolver tier，merge `bc4ea99e`、release `f15e9e1e`）。兩刀 closeout 全清（worktree／branch reap、residue receipt zero、marker retire）。**下一刀 1c：可設定 packet deny-list**——plan 草稿已在 repo（DRAFT），從 plan loop 開始。
+接續 autopilot 維護。2026-09-17 出貨 v2.36.62（1b-A cleanroom launcher＋seat tiers，merge `94d44940`）與 v2.36.63（1b-B intake cleanroom probe＋JS/resolver tier，merge `bc4ea99e`、release `f15e9e1e`）。兩刀 closeout 全清（worktree／branch reap、residue receipt zero、marker retire）。**1c（可設定 packet deny-list）進行中**：plan loop G1（7 折）／G2（6 折，cap）跑完、freeze READY（graph `4a5a3a80…`、lineage `lineage-v1-16c3e9be…`）、session marker l5、campaign 派出（見「現況」）。
 
 ## 現況
-- `develop` = `origin/develop`（push 後）。無 active session marker；mission routing 仍指 1b-B graph（`blind-review-cleanroom-intake-2026-09-17`；campaign 在 REVIEWING blocked→l3 降級，adoption **不是** COMPLETE，rollover 走不了）；1c freeze 時照 1b-B 的 `freeze-c1d.js` 複製一份改 slug，跑 legacy reconcile 換 graph。
+- routing → `blind-review-packet-deny-config-2026-09-17`；marker **l5 active**（session `ed4f4545-3dbb-4256-bdb4-80502ec4d221`）；1c scratchpad `…/scratchpad/c1e/`（prepared.json、grant.json、impl-brief.md、impl-run1.{json,err}）；worktree `/tmp/hetero-mission-16c3e9be1a87-*`。**campaign 跑中不要動 plan／repo tree**。1c evidence：`docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/`（g1 attempt 1 transport-exhausted：claude-native 席在 scratch cwd 想跑工具→plan 加「citations are provenance」條款＋MiniMax fallback 席、fresh `--state-dir`）。
 - 1b-B evidence：`docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md`（時間線、MiniMax／GLM 工具病、claude 🟡 修補 `af1879cb`、§5 dogfood、resume rail 缺陷）。
 - **1c plan**：`docs/plans/2026-09-17-blind-review-packet-deny-config.md`＋`.rubric.md`（DRAFT；§0 行號以 `130b97a8` 校對，plan loop 前用 `d7912c7e`…`f15e9e1e` 之間的 HEAD 再校對一次、Base 釘 release commit）。範圍：`review_packet_deny_extra`（additive、單一 grammar owner＝`normalizeDenyList`、resolver conditional 欄位如 `qc_panel_endpoints`、engine `reviewPacketIdentity` 收 `denyExtra`、review.js 合成 effective list；builder／rail／launcher／intake byte-identical）。manifest／brief／freeze 尚未寫（抄 1b-B 的：`evidence/…-intake/scratch/{run-g.sh,dispatch.sh,freeze-c1d.js}`＋`impl-brief.md`）。
 - BACKLOG 新 open rows（多數已 fired；openclaw row 等 cookys 點頭）：final panel 無 repair 迴圈（1b-A）、**reviewer no_verdict 留 REVIEWING 不能 resume**（1b-B，rail 缺陷）、codex pin swap 等 live cleanroom verdict（09-19 16:26 後）、dispatch-review cleanroom path hygiene（S）、openclaw ruling relay（要 cookys 點頭）。
@@ -14,7 +14,7 @@
 - record-integration 要在 reap branch **之前**（需要活 ref）；做反了就從 `.git/autopilot-reap-bundles/` 的 bundle `git fetch <bundle> refs/heads/<b>:refs/heads/<b>` 還原再 record 再刪。
 
 ## 下一步（順序）
-1. 1c：校對 §0 → manifest（GLM anthropic-compatible＋claude-native；codex 回來可加 sol）→ base suites §4.1 九條（detached）→ classify → G1／G2（`cp plan → plan.as-reviewed-gN.md` 先、rubric 不動、`--disposition-file` G1 檔給 G2）→ freeze → l5 → grant → brief ≤8 KB（scratchpad 副本填 base）→ dispatch。
+1. 1c campaign 收尾：等 `impl-run1.err` 出 `rc=`；rail 停了就照 1b-B 路徑（降級 l3、驗候選九條、二審 full diff、§5 dogfood、修 MUST-FIX、delta 複審）→ merge → v2.36.64。
 2. campaign 跑時：起草 cut 2（verify-once、並行席）或處理 BACKLOG fired rows。
 3. 收尾同 1b-A／1b-B（驗候選、二審 full diff 不加路徑、§5 dogfood、merge trailer 末段、`sync-version.js --version 2.36.64 --hook-count 31 --skill-count 30`、CHANGELOG／INDEX／maintenance／BACKLOG、**record-integration → reap → receipt → retire**、preflight 8/8、push）。
 

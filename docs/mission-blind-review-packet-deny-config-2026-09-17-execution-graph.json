@@ -1,0 +1,112 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "blind-review-packet-deny-config-2026-09-17",
+   "acceptance_ids": [
+    "additive",
+    "grammar",
+    "plumbing",
+    "contract",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     ".claude",
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/project-config-template",
+     "platforms/codex/plugin/references",
+     "platforms/codex/plugin/schemas",
+     "platforms/codex/plugin/scripts",
+     "platforms/codex/plugin/src",
+     "project-config-template",
+     "references",
+     "schemas",
+     "scripts",
+     "src"
+    ],
+    "baseline_churn": 2400,
+    "max_changed_files": 21,
+    "max_extra_churn": 1200,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 7200,
+    "output_paths": [
+     "schemas/review-loop-contract.schema.json",
+     "platforms/codex/plugin/schemas/review-loop-contract.schema.json",
+     "scripts/resolve-review-loop.sh",
+     "platforms/codex/plugin/scripts/resolve-review-loop.sh",
+     "src/engine/resolve-review-loop.js",
+     "platforms/codex/plugin/src/engine/resolve-review-loop.js",
+     "src/engine/autopilot-engine.js",
+     "platforms/codex/plugin/src/engine/autopilot-engine.js",
+     "src/runners/review.js",
+     "platforms/codex/plugin/src/runners/review.js",
+     "hooks/tests/resolve-review-loop.test.sh",
+     "hooks/tests/review-runner.test.sh",
+     "hooks/tests/autopilot-engine.test.sh",
+     "references/blind-dispatch.md",
+     "platforms/codex/plugin/references/blind-dispatch.md",
+     ".claude/review-loop-config.md",
+     "project-config-template/review-loop-config.md",
+     "platforms/codex/plugin/project-config-template/review-loop-config.md",
+     "docs/BACKLOG.md"
+    ],
+    "authorized_creates": [],
+    "profile": "high",
+    "required_paths": [
+     "schemas/review-loop-contract.schema.json",
+     "scripts/resolve-review-loop.sh",
+     "src/engine/resolve-review-loop.js",
+     "src/runners/review.js",
+     "hooks/tests/resolve-review-loop.test.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-17-blind-review-packet-deny-config.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 21,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-ab90f44668199a0a0c78afb6250c533768b09301f605755de304b74e83a27ccf"
+   ],
+   "source_rubric_ids": [
+    "R17566807693255927221630743841889530346480960438663134738032692297697593453085",
+    "R3587597187154556056048347921792300542410404078129437570654912798949939716826",
+    "R53567934847387938894609466581197792985122752071586193433018632040276160773152",
+    "R58309935468761469118800099063729657037781671636730219420173705193894347928446",
+    "R84936970489205380319411230725692815951791476136364702403608155222094785194464",
+    "R87934478721383541462733161438064028795654088342986112819854963709182396751437",
+    "R97980042524760536851977460365233372080190414259702120879381401138409681742696",
+    "R99998023369935219689396193487050418754396401579600552335130428617466821046508"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh",
+    "bash hooks/tests/dispatch-review.test.sh",
+    "AUTOPILOT_HOST_ISOLATION=1 bash hooks/tests/cleanroom-launch.test.sh",
+    "bash hooks/tests/qc-panel-honesty.test.sh",
+    "bash hooks/tests/implementation-campaign-dogfood.test.sh",
+    "bash hooks/tests/resolve-review-loop.test.sh",
+    "node scripts/check-js-syntax.js",
+    "node scripts/check-contract-schema.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

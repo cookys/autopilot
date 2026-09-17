@@ -37,7 +37,7 @@ const graph = {
     acceptance_ids: ['additive', 'grammar', 'plumbing', 'contract', 'no-regression', 'scope-integrity'],
     campaign: {
       allowed_path_prefixes: [
-        '.claude', 'docs', 'hooks/tests', 'platforms/codex/plugin/references', 'platforms/codex/plugin/schemas',
+        '.claude', 'docs', 'hooks/tests', 'platforms/codex/plugin/project-config-template', 'platforms/codex/plugin/references', 'platforms/codex/plugin/schemas',
         'platforms/codex/plugin/scripts', 'platforms/codex/plugin/src', 'project-config-template', 'references',
         'schemas', 'scripts', 'src',
       ],

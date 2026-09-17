@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-17-blind-review-packet-deny-config.md",
+      "rubric_path": "plans/2026-09-17-blind-review-packet-deny-config.rubric.md",
+      "plan_sha256": "ab90f44668199a0a0c78afb6250c533768b09301f605755de304b74e83a27ccf",
+      "rubric_sha256": "6053919533c703253e84220fe88fd9681d3f1b1f918ad0b0053a74e45e883ced"
+    }
+  ]
+}

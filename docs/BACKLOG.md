@@ -121,12 +121,28 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Cut 1a-A (packet builder) shipped v2.36.59; 1a-B/1b/2 open. Detail in the pointer.
 
 ### Managed rail: final-panel seats run dispatch-review.sh at the 5m default timeout and time out on ordinary diffs
-- **Status**: open
+- **Status**: shipped v2.36.60 2026-09-17
 - **Trigger**: blind-review-packet campaign 2026-09-17: verify/review/full_suite green, then all three panel seats rc=124 on a 90 KB diff
 - **Effort**: Fix
 - **Source**: /l5 dogfood 2026-09-17 (lineage 2 attempt 1, `impl-run1.json`)
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-packet/README.md
 - **Context**: `performFinalPanel` → `reviewDiff` passes no `--timeout`; seats die at the rail default (5m) after ~1h of paid work. Pass a sealed/roster timeout (≥ 20m) to every managed review dispatch.
+
+### CI: hooks-suite step is `skipped` whenever the detached-dispatch smoke fails — a red smoke hides every other suite
+- **Status**: open
+- **Trigger**: run 35132044435 (v2.36.59): `Detached dispatch ledger smoke` failure → `Run hooks test suite` skipped; dogfood kill/resume case red since v2.36.58 unseen
+- **Effort**: S
+- **Source**: depth-0 while shipping v2.36.60 (fixture fix in the same release)
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: `.github/workflows/test.yml`: make the suite step `if: always()` (or run smoke after), so a smoke failure cannot mask suite regressions; "release-gated CI green" must mean the suites ran.
+
+### PEER-REPORTED (openclaw): briefs pairing `session-mode set --level l5` with non-strict dispatch burn foreman budgets
+- **Status**: open
+- **Trigger**: operator ruling on (a)-exemption; (b)/(c) mechanical, (a)-print S — see reply for the split
+- **Effort**: S
+- **Source**: `openclaw` msg `msg_01M2PHM6PWH6VY7WP059Y0Q1TT` (2026-09-17, /l5 ×3 on fleet-comms + chatgpt-tunnel-host); replied `msg_01M2PHNG5TTNXQYJQ2G3EKANFW`
+- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
+- **Context**: (a) `session-mode set` prints the AUTOPILOT_SESSION_MODE_DIR mask line; exempting plan/terminal review seats needs a ruling; (b) same `precondition_failed` twice → ladder stop; (c) brief linter rules file in dispatch-model-guard.
 
 ### Managed rail: graph-check admits `max_wall_seconds` to 14400, the contract schema caps 7200 — intake burns the attempt
 - **Status**: open

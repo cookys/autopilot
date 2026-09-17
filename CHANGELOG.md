@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.36.60 — managed rail：每次 review 派工都帶 sealed wall budget 推出來的 `--timeout`（Fix）
+
+- 根因：`performFinalPanel` → `performReview` → `reviewDiff` → `buildReviewArgs` 從來沒把 `--timeout` 交給
+  `scripts/dispatch-review.sh`，席位吃到腳本自己的 5m 預設。2026-09-17 dogfood（blind-review-packet lineage 2）
+  campaign 把 implement／verify／in-rail review／full_suite 全跑綠之後，三個 final-panel 席在 90 KB diff 上全部
+  rc=124；fleet-comms P3（09-16）的 in-loop reviewer 也死在同一點（`terminal_stop phase=full_diff_review`）。
+- `buildReviewArgs` 多一個 `timeoutSeconds`（正整數或 null）：有值就補 `--timeout <n>s`（秒；dispatch-review.sh
+  `timeout_to_ms`、GNU `timeout`、agy 的 Go duration `--print-timeout` 都收）；null 時 args **位元組相同**，所有非
+  campaign 呼叫端（`engine review`、legacy unmanaged loop）不變。`--timeout` 改為 builder-managed——像
+  `--endpoint` 一樣在 `extraReviewArgs` 保留，不能從外面塞。`reviewDiff` 原樣穿透 `input.timeoutSeconds`。
+- 新 helper `campaignWallRemainingSeconds(control, observedAt)`：跟 `campaignWallBudgetStatus` 讀**同一個**上限來源
+  （`initial_state.limits.max_wall_seconds`），回 `{ exhausted, seconds }`——耗盡就擋（既有 `campaign_wall_budget`
+  phase）；沒有 sealed budget（legacy）回 `seconds: null` → 不發旗標。
+- campaign `performReview`（in-rail 每輪＋final panel）帶 `min(requested, remaining)` 或 `remaining`；不變量：**一席
+  拿到的永遠不超過 campaign 剩餘 wall 秒數**。`performFinalPanel` 席位是依序跑的，每個合格席拿
+  `floor(remaining / 尚未跑的合格席數)`——均分是判斷，讓第一席吃不掉全部剩餘餓死後面的席（那樣 `allReviewed`
+  照樣失敗）；performReview 會再夾一次，所以只會變緊。`_runImplementationReviewLoop` 的 terminal review 站點同規則。
+- 測試：`autopilot-engine.test.sh` +9（發／不發／拒 0、負、小數、字串／保留旗標／無值時 args 與舊形狀逐字相同）；
+  `implementation-campaign-dogfood.test.sh` kill→resume campaign 斷言 in-loop review 與唯一 panel 席都帶
+  `--timeout 115s`（cap 120 s、時鐘 01:00:00→01:00:05）。RED 驗過：只還原 engine，dogfood 1 紅、engine 6 紅。
+- 順手修 fixture：dogfood kill／resume 的 qc 席 runner `fixture`→`cc-shim`（roster `reviewer_runner` 同步），因為
+  v2.36.58 intake 開始拒非 blind-capable 的 qc runner，這條 case 從那時起就紅，而 CI 沒抓到——CI 的 `Run hooks test
+  suite` 步驟自 detached smoke 紅了之後一直是 **skipped**（BACKLOG 新 row）。
+- 不在範圍：rail 缺陷 (2) graph-check 14400 vs schema 7200；receipt 鍵（1a-B）；dispatch-review.sh 預設值。
+
 ## v2.36.59 — blind review redesign 第一刀（1a-A）：content-addressed、deny-list 的審查包（review packet）
 
 - `src/runners/review-packet.js`（新）：`buildReviewPacket({ repo, baseSha, candidateSha, diffFile, specFile, outDir, denyList })`

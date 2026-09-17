@@ -775,10 +775,15 @@ function buildReviewArgs({
   extraReviewArgs = [],
   checklists = [],
   dispatchIdentity = null,
+  timeoutSeconds = null,
 }) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
+  }
+  if (timeoutSeconds !== null
+      && (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 1)) {
+    throw new TypeError('timeoutSeconds must be a positive safe integer when set');
   }
   validateExtraArgs(extraReviewArgs, new Set([
     '--runner',
@@ -788,6 +793,7 @@ function buildReviewArgs({
     '--spec-file',
     '--checklists',
     '--endpoint',
+    '--timeout',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
@@ -830,6 +836,14 @@ function buildReviewArgs({
   if (specFile && typeof specFile === 'string') {
     args.push('--spec-file', specFile);
   }
+  // `--timeout` is BUILDER-MANAGED (reserved above like `--endpoint`): the only source is
+  // a caller-derived wall budget in whole seconds. Absent → nothing is emitted and
+  // dispatch-review.sh keeps its own default, so every non-campaign caller is byte-identical.
+  // Seconds (`Ns`) are accepted by dispatch-review.sh timeout_to_ms, GNU timeout, and agy's
+  // Go-duration `--print-timeout` (default prints as `5m0s`).
+  if (timeoutSeconds !== null) {
+    args.push('--timeout', `${timeoutSeconds}s`);
+  }
   appendDispatchIdentity(args, identity);
   args.push(...extraReviewArgs);
   return args;
@@ -844,6 +858,7 @@ function validateExtraReviewArgs(extraReviewArgs) {
     '--spec-file',
     '--checklists',
     '--endpoint',
+    '--timeout',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
@@ -1435,6 +1450,23 @@ function campaignWallBudgetStatus(control, observedAt) {
     exhausted: elapsed >= limit,
     elapsed_seconds: elapsed,
   };
+}
+
+// Whole seconds left on the campaign's sealed wall budget at `observedAt`, from the SAME
+// limit source campaignWallBudgetStatus reads (initial_state.limits.max_wall_seconds), so
+// a review seat's `--timeout` can never disagree with the budget check that precedes it.
+// `{ exhausted: true }` when the budget is spent (callers block); `seconds: null` with
+// `exhausted: false` when there is no sealed budget at all (legacy unmanaged loop) — then no
+// `--timeout` is emitted and dispatch-review.sh keeps its own default, byte-identical to before.
+function campaignWallRemainingSeconds(control, observedAt) {
+  const budget = campaignWallBudgetStatus(control, observedAt);
+  if (budget.exhausted) return { exhausted: true, seconds: null };
+  if (!Number.isSafeInteger(budget.elapsed_seconds)) return { exhausted: false, seconds: null };
+  const limit = control.initial_state.limits.max_wall_seconds;
+  const remaining = limit - budget.elapsed_seconds;
+  return remaining >= 1
+    ? { exhausted: false, seconds: remaining }
+    : { exhausted: true, seconds: null };
 }
 
 function campaignMutationBudgetStatus(control, observedAt) {
@@ -3309,6 +3341,9 @@ class AutopilotEngine {
           : [],
         checklists: injectedChecklists,
         dispatchIdentity,
+        timeoutSeconds: Object.prototype.hasOwnProperty.call(input, 'timeoutSeconds')
+          ? input.timeoutSeconds
+          : null,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -4742,6 +4777,7 @@ class AutopilotEngine {
       pinReviewerTuple = false,
       prepared_review: preparedReview = null,
       reservation_identity: reservationIdentity = null,
+      review_timeout_seconds: requestedTimeoutSeconds = null,
     }) => {
       const prepared = preparedReview || prepareReview({
         candidate,
@@ -4808,11 +4844,34 @@ class AutopilotEngine {
           reason: 'campaign wall budget exhausted before review',
         };
       }
+      // Every managed review dispatch carries an explicit `--timeout` derived from the sealed
+      // wall budget — never dispatch-review.sh's 5m default, which killed all three final-panel
+      // seats on a 90 KB diff (dogfood 2026-09-17) after the campaign had already paid for
+      // implement/verify/review. Invariant: a seat is never handed more than the campaign's
+      // remaining wall seconds; a caller (performFinalPanel) may only tighten it.
+      const remainingWall = campaignWallRemainingSeconds(campaignControl, budgetAt);
+      if (remainingWall.exhausted) {
+        return {
+          reviewed: false,
+          phase: 'campaign_wall_budget',
+          reason: 'campaign wall budget exhausted before review',
+        };
+      }
+      const requestedValid = Number.isSafeInteger(requestedTimeoutSeconds) && requestedTimeoutSeconds >= 1;
+      let reviewTimeoutSeconds = null;
+      if (remainingWall.seconds !== null) {
+        reviewTimeoutSeconds = requestedValid
+          ? Math.min(requestedTimeoutSeconds, remainingWall.seconds)
+          : remainingWall.seconds;
+      } else if (requestedValid) {
+        reviewTimeoutSeconds = requestedTimeoutSeconds;
+      }
       const previousReviewForRemediation = repairGeneration > 0 ? latestReview : null;
       let reviewed = this.reviewDiff({
         diffFile,
         specFile: promptFile,
         roster: reviewRoster,
+        timeoutSeconds: reviewTimeoutSeconds,
         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
           ? input.rosterArgs
           : ['--check-scorecard'],
@@ -5046,7 +5105,19 @@ class AutopilotEngine {
           final_panel_seat_receipts: [],
         };
       }
+      // Seats run sequentially. Hand each qualified seat an even share of the wall budget
+      // still left over the seats not yet run, so the first seat cannot consume the whole
+      // remainder and starve the rest (which would fail `allReviewed` anyway). performReview
+      // re-clamps to the live remainder, so this only ever tightens.
       const outcomes = seats.map((seat, index) => {
+        const seatsNotYetRun = seats
+          .slice(index)
+          .filter((later, offset) => finalPanelSeatQualified(roster, later, index + offset))
+          .length;
+        const remainingNow = campaignWallRemainingSeconds(campaignControl, this.now()).seconds;
+        const seatTimeoutSeconds = remainingNow !== null && seatsNotYetRun > 0
+          ? Math.max(1, Math.floor(remainingNow / seatsNotYetRun))
+          : null;
         const reviewRoster = {
           ...roster,
           reviewer_runner: seat.runner,
@@ -5062,6 +5133,7 @@ class AutopilotEngine {
             reviewRoster,
             reviewStage: `campaign-final-review#seat-${index + 1}`,
             pinReviewerTuple: true,
+            review_timeout_seconds: seatTimeoutSeconds,
           })
           : {
             reviewed: false,
@@ -9658,12 +9730,39 @@ class AutopilotEngine {
         });
       }
 
+      // Same rule as the campaign path: the in-loop review dispatch carries the sealed wall
+      // budget's remainder as `--timeout`, never dispatch-review.sh's 5m default.
+      const reviewRemaining = campaignWallRemainingSeconds(campaignControl, reviewBudgetAt);
+      if (reviewRemaining.exhausted) {
+        ledger.push(this.ledgerEntry(
+          'campaign_wall_budget',
+          'blocked',
+          reviewBudgetAt,
+          { elapsed_seconds: reviewBudget.elapsed_seconds },
+        ));
+        return finish({
+          status: 'blocked',
+          phase: 'campaign_wall_budget',
+          reason: 'campaign has no wall-clock budget remaining before review dispatch',
+          rounds: round,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review: null,
+          implementationChain,
+          reviewChain,
+          ledger,
+        });
+      }
+
       const previousReviewForRemediation = round > 1 ? review : null;
       review = this.reviewDiff({
         priorStatus: round === 1 ? input.priorStatus : undefined,
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,
         roster: dynamicReviewRisk ? null : roster,
+        timeoutSeconds: reviewRemaining.seconds,
         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
           ? input.rosterArgs
           : ['--check-scorecard'],

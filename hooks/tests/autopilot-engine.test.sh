@@ -3998,6 +3998,47 @@ assert_eq "0" "$EXIT" "AutopilotEngine buildReviewArgs process exits 0"
 assert_contains "$OUT" "--spec-file some-spec.md" "buildReviewArgs appends specFile when set"
 assert_not_contains "$OUT" "args_without_spec=.*--spec-file" "buildReviewArgs omits specFile when absent"
 
+# --- managed review timeout (rail defect 2026-09-17): `--timeout` is builder-managed and
+# derived from the campaign wall budget; absent → byte-identical args (dispatch-review.sh default).
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { buildReviewArgs } = require(path.join(root, 'src', 'engine'));
+const roster = {
+  reviewer_engine: 'test-rev-model',
+  reviewer_effort: 'high',
+  reviewer_runner: 'test-rev-runner',
+};
+console.log(`args_with_timeout=${buildReviewArgs({ diffFile: 'd.diff', roster, timeoutSeconds: 1200 }).join(' ')}`);
+const argsWithoutTimeout = buildReviewArgs({ diffFile: 'd.diff', roster });
+console.log(`without_timeout_has_flag=${argsWithoutTimeout.includes('--timeout')}`);
+console.log(`without_timeout_matches_default=${argsWithoutTimeout.join(' ') === '--runner test-rev-runner --model test-rev-model --diff-file d.diff --effort high'}`);
+for (const [label, timeoutSeconds] of [['zero', 0], ['negative', -5], ['float', 1.5], ['string', '1200']]) {
+  try {
+    buildReviewArgs({ diffFile: 'd.diff', roster, timeoutSeconds });
+    console.log(`${label}=accepted`);
+  } catch (error) {
+    console.log(`${label}=${error.message}`);
+  }
+}
+try {
+  buildReviewArgs({ diffFile: 'd.diff', roster, extraReviewArgs: ['--timeout', '5m'] });
+  console.log('extra_timeout=accepted');
+} catch (error) {
+  console.log(`extra_timeout=${error.message}`);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine buildReviewArgs timeout process exits 0"
+assert_contains "$OUT" "--effort high --timeout 1200s" "buildReviewArgs emits --timeout in whole seconds when timeoutSeconds is set"
+assert_contains "$OUT" "without_timeout_has_flag=false" "buildReviewArgs emits no --timeout when timeoutSeconds is absent (dispatch-review.sh default preserved)"
+assert_contains "$OUT" "without_timeout_matches_default=true" "buildReviewArgs args are byte-identical to the pre-timeout shape when timeoutSeconds is absent"
+assert_contains "$OUT" "zero=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects timeoutSeconds=0"
+assert_contains "$OUT" "negative=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects negative timeoutSeconds"
+assert_contains "$OUT" "float=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects fractional timeoutSeconds"
+assert_contains "$OUT" "string=timeoutSeconds must be a positive safe integer" "buildReviewArgs rejects string timeoutSeconds"
+assert_contains "$OUT" "extra_timeout=extra args cannot override --timeout" "buildReviewArgs reserves --timeout: extraReviewArgs cannot smuggle it"
+
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const fs = require('fs');
 const os = require('os');

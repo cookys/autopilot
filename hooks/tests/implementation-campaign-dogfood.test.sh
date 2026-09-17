@@ -552,7 +552,7 @@ const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'e
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
-  reviewer_runner: 'fixture',
+  reviewer_runner: 'cc-shim',
   reviewer_qualified: true,
   implementer_engine: 'fixture-implementer',
   implementer_effort: 'high',
@@ -562,7 +562,9 @@ const roster = {
   min_panel_size: 1,
   qc_panel_seats_complete: true,
   qc_panel_seats: [{
-    role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    // v2.36.58 intake rejects a qc seat whose runner is not blind-discovery capable; the
+    // dispatcher is injected, so the runner name only has to pass that gate.
+    role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
   }],
 };
 const engine = new AutopilotEngine({
@@ -655,7 +657,7 @@ const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'e
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
-  reviewer_runner: 'fixture',
+  reviewer_runner: 'cc-shim',
   reviewer_qualified: true,
   implementer_engine: 'fixture-implementer',
   implementer_effort: 'high',
@@ -665,10 +667,13 @@ const roster = {
   min_panel_size: 1,
   qc_panel_seats_complete: true,
   qc_panel_seats: [{
-    role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    // v2.36.58 intake rejects a qc seat whose runner is not blind-discovery capable; the
+    // dispatcher is injected, so the runner name only has to pass that gate.
+    role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
   }],
 };
 let implementationCalls = 0;
+const reviewArgsSeen = [];
 const engine = new AutopilotEngine({
   cwd: repo,
   clock: () => '2026-07-28T01:00:05.000Z',
@@ -683,7 +688,8 @@ const engine = new AutopilotEngine({
     implementationCalls += 1;
     throw new Error('resume must not repeat implementation');
   },
-  reviewDispatcher() {
+  reviewDispatcher(args) {
+    reviewArgsSeen.push(args);
     return {
       error: null,
       status: 0,
@@ -764,11 +770,22 @@ assert.strictEqual(implementationCalls, 0);
 assert.strictEqual(Number(fs.readFileSync(countPath, 'utf8')), 1);
 assert.strictEqual(result.campaign_control.initial_state.phase, 'TERMINAL_READY');
 console.log('kill_resume_adopts_commit=true');
+// Rail defect 2026-09-17: every managed review dispatch (in-loop AND final panel) must carry an
+// explicit `--timeout` bounded by the sealed wall budget, never dispatch-review.sh's 5m default.
+// Kill run started the campaign at 01:00:00, this process observes 01:00:05, cap 120 s,
+// one qualified panel seat → 115 s remain for the in-loop review and for the single seat.
+assert.ok(reviewArgsSeen.length >= 2, `expected in-loop + final-panel review dispatches, saw ${reviewArgsSeen.length}`);
+const timeouts = reviewArgsSeen.map((args) => args[args.indexOf('--timeout') + 1]);
+console.log(`review_dispatch_timeouts=${timeouts.join(',')}`);
+assert.ok(timeouts.every((value) => value === '115s'),
+  `every managed review dispatch carries the remaining wall budget: ${JSON.stringify(reviewArgsSeen)}`);
 NODE
 )"
 assert_exit_code "$?" "0" "new engine process resumes the real durable campaign journal"
 assert_contains "$RESUME_OUT" "kill_resume_adopts_commit=true" \
   "resume adopts the committed candidate and leaves implementation count unchanged"
+assert_contains "$RESUME_OUT" "review_dispatch_timeouts=115s,115s" \
+  "in-loop review and every final-panel seat receive --timeout = remaining sealed wall budget (120 s cap − 5 s elapsed), not the 5m dispatcher default"
 
 # Case 6 uses the public WLB issuer/inspector, then hands the exact nonzero receipt to ICC and LSM.
 LIFECYCLE_ROOT="$(node - "$REPO_ROOT" "$TEST_TMP/057-intake.json" <<'NODE'

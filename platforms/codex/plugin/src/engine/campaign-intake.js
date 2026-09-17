@@ -1606,9 +1606,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
             };
           }
           probedRunners.set(runner, decision);
-          if (decision.status !== 'rejected') {
-            cleanroomProbeSteps.push(decision);
-          }
+          // Every probe decision is a receipt step — a rejected probe must still show which
+          // launcher answered and what was denied (plan §1.2; second review 🟡).
+          cleanroomProbeSteps.push(decision);
         }
         const decision = probedRunners.get(runner);
         if (decision.status === 'rejected') {
@@ -1640,7 +1640,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
         status: 'blocked',
         reason: rejection.reason,
         rejection,
-        steps: [rejection],
+        steps: [...cleanroomProbeSteps, rejection],
         pre_spend_no_effect_receipt: null,
       };
     }
@@ -1663,7 +1663,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
         status: 'blocked',
         reason: rejection.reason,
         rejection,
-        steps: [rejection],
+        steps: [...cleanroomProbeSteps, rejection],
         pre_spend_no_effect_receipt: null,
       };
     }

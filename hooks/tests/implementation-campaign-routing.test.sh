@@ -3704,6 +3704,40 @@ try {
   const probeStep = (shadowMissing.steps || []).find((s) => s && s.owner === 'cleanroom_probe');
   assert.ok(probeStep, JSON.stringify(shadowMissing));
   assert.strictEqual(probeStep.status, 'unknown');
+  // A REJECTED probe is still a receipt step (which launcher answered, what was denied).
+  // RED at 29d852e4: steps was [rejection] only — the rejected decision was dropped.
+  process.env.AUTOPILOT_CLEANROOM_LAUNCHER = errStub;
+  const shadowRejected = runCampaignIntake({
+    repo: shadowRepo,
+    roster: {
+      reviewer_engine: 'fixture-reviewer',
+      reviewer_effort: 'high',
+      reviewer_runner: 'cc-shim',
+      reviewer_qualified: true,
+      min_panel_size: 1,
+      qc_panel_seats_complete: true,
+      qc_panel_seats: [
+        { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+      ],
+      fallback_ladder: [
+        { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+      ],
+      implementer_engine: 'fixture-implementer',
+      implementer_effort: 'high',
+      implementer_runner: 'fixture',
+    },
+  }, {
+    now: () => '2026-07-26T00:00:00.000Z',
+  });
+  assert.ok(shadowRejected.rejection && shadowRejected.rejection.code === 'final_panel_seat_cleanroom_unavailable',
+    JSON.stringify(shadowRejected.rejection));
+  const rejectedStep = (shadowRejected.steps || []).find((s) => s && s.owner === 'cleanroom_probe');
+  assert.ok(rejectedStep, `rejected probe step missing: ${JSON.stringify(shadowRejected.steps)}`);
+  assert.strictEqual(rejectedStep.status, 'rejected');
+  assert.strictEqual(rejectedStep.runner, 'codex');
+  assert.strictEqual(rejectedStep.launcher, errStub);
+  assert.ok(Array.isArray(rejectedStep.deny_paths) && rejectedStep.deny_paths.length > 0);
+  assert.strictEqual(shadowRejected.steps[shadowRejected.steps.length - 1].code, 'final_panel_seat_cleanroom_unavailable');
 } finally {
   if (prevLauncher === undefined) delete process.env.AUTOPILOT_CLEANROOM_LAUNCHER;
   else process.env.AUTOPILOT_CLEANROOM_LAUNCHER = prevLauncher;

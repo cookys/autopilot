@@ -1220,7 +1220,8 @@ assert_contains "$OUT" 'bwrap not found' "missing bwrap names bwrap"
 
 # Panel finding dr-auth-fallback (2026-09-17): an explicit credential override that is not a file
 # must refuse, never fall back to the operator's ~/.codex/auth.json.
-OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=0 \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
   AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
   AUTOPILOT_CLEANROOM_CODEX_AUTH="$TEST_TMP/no-such-auth.json" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
   "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?

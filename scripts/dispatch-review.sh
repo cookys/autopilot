@@ -134,6 +134,19 @@
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
 #   NOT treat as pass) ; 2 = precondition_failed.
+#
+# Seat tiers (the table lives only in review_seat_tier below):
+#   packet     anthropic-compatible cc-shim claude-native qoderclicn (prompt-only, as today)
+#   cleanroom  codex (tool-capable; AUTOPILOT_BLIND_DISCOVERY=1 → scripts/lib/cleanroom-launch.sh)
+#   none       agy grok kimi cursor opencode (blind: existing no-tools message)
+# Blind cleanroom env:
+#   AUTOPILOT_CLEANROOM_LAUNCHER   replace the launcher script (test seam)
+#   AUTOPILOT_CLEANROOM_BWRAP      bwrap binary (must be AppArmor-allowed to create userns)
+#   AUTOPILOT_CLEANROOM_CODEX_AUTH credential file (else $CODEX_HOME/auth.json or ~/.codex/auth.json)
+# Codex in a cleanroom seat requires the release directory (codex beside
+#   codex-code-mode-host); the npm wrapper layout is not supported in this cut.
+# --sandbox danger-full-access is used only inside the launcher (nested read-only
+#   cannot create a userns). Non-blind codex keeps --sandbox read-only.
 
 set -uo pipefail
 
@@ -285,12 +298,66 @@ validate_d2_agy_claims() {
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
-# Defense in depth: the canonical set is BLIND_DISCOVERY_CAPABLE_RUNNERS in
-# src/engine/final-panel-qualification.js. Intake refuses other runners first.
+# Defense in depth: the JS/resolver copies of the capable-runner set move in 1b-B.
+# This function is the ONLY place the seat-tier table lives in this script.
+review_seat_tier() {
+  case "$1" in
+    anthropic-compatible|cc-shim|claude-native|qoderclicn) printf '%s\n' packet ;;
+    codex) printf '%s\n' cleanroom ;;
+    *) printf '%s\n' none ;;
+  esac
+}
+CLEANROOM_BIN_DIR=""
+CLEANROOM_AUTH=""
+CLEANROOM_BWRAP=""
 if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
-  case "$RUNNER" in
-    qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
-    *) die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)" ;;
+  case "$(review_seat_tier "$RUNNER")" in
+    packet) ;;
+    none)
+      die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)"
+      ;;
+    cleanroom)
+      if [ -z "${AUTOPILOT_REVIEW_PACKET_DIR:-}" ] \
+        || [ ! -d "${AUTOPILOT_REVIEW_PACKET_DIR}/tree" ] \
+        || [ ! -f "${AUTOPILOT_REVIEW_PACKET_DIR}/MANIFEST.json" ]; then
+        die_precondition "cleanroom seat requires a review packet"
+      fi
+      if [ -n "${AUTOPILOT_CLEANROOM_BWRAP:-}" ]; then
+        [ -x "${AUTOPILOT_CLEANROOM_BWRAP}" ] \
+          || die_precondition "bwrap not found"
+        CLEANROOM_BWRAP="${AUTOPILOT_CLEANROOM_BWRAP}"
+      else
+        command -v bwrap >/dev/null 2>&1 || die_precondition "bwrap not found"
+        CLEANROOM_BWRAP="$(command -v bwrap)"
+      fi
+      _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
+      _pf_err="$(mktemp -t dispatch-review-cleanroom-preflight-XXXXXX)"
+      _pf_rc=0
+      "$_CLEANROOM_LAUNCHER" --preflight --deny-path "$AUTOPILOT_REVIEW_PACKET_DIR" \
+        --bwrap "$CLEANROOM_BWRAP" >/dev/null 2>"$_pf_err" || _pf_rc=$?
+      if [ "$_pf_rc" -ne 0 ]; then
+        _pf_first="$(head -n 1 "$_pf_err" 2>/dev/null || true)"
+        die_precondition "cleanroom runtime unusable: ${_pf_first}"
+      fi
+      _codex_lookup="${BIN:-codex}"
+      command -v "$_codex_lookup" >/dev/null 2>&1 \
+        || die_precondition "codex binary not found: $_codex_lookup"
+      _codex_resolved="$(readlink -f "$(command -v "$_codex_lookup")")"
+      if [ ! -f "$_codex_resolved" ] \
+        || [ ! -f "$(dirname "$_codex_resolved")/codex-code-mode-host" ]; then
+        die_precondition "codex binary directory unresolved: ${_codex_resolved} — the codex release directory (codex beside codex-code-mode-host) is required; the npm wrapper layout is not supported in this cut"
+      fi
+      CLEANROOM_BIN_DIR="$(dirname "$_codex_resolved")"
+      if [ -n "${AUTOPILOT_CLEANROOM_CODEX_AUTH:-}" ] && [ -f "${AUTOPILOT_CLEANROOM_CODEX_AUTH}" ]; then
+        CLEANROOM_AUTH="${AUTOPILOT_CLEANROOM_CODEX_AUTH}"
+      elif [ -n "${CODEX_HOME:-}" ] && [ -f "${CODEX_HOME}/auth.json" ]; then
+        CLEANROOM_AUTH="${CODEX_HOME}/auth.json"
+      elif [ -f "${HOME}/.codex/auth.json" ]; then
+        CLEANROOM_AUTH="${HOME}/.codex/auth.json"
+      else
+        die_precondition "codex credential file not found"
+      fi
+      ;;
   esac
 fi
 [[ -z "$MAX_TOKENS_PARSE_ERROR" ]] || die_precondition "$MAX_TOKENS_PARSE_ERROR"
@@ -948,22 +1015,48 @@ if [[ "$RUNNER" = "codex" ]]; then
   # mktemp here is the fallback when that block was skipped.
   [ -n "$CODEX_OUT" ] || CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
   [ -n "$CODEX_ERR" ] || CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
+  if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
+    # Cleanroom path: the launcher owns the wall-clock cap (no outer timeout).
+    _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
+    _launch_json="$(mktemp -t dispatch-review-cleanroom-json-XXXXXX)"
+    "$_CLEANROOM_LAUNCHER" --profile codex \
+      --packet-dir "$AUTOPILOT_REVIEW_PACKET_DIR" \
+      --prompt-file "$PROMPT_FILE" \
+      --out "$CODEX_OUT" --err "$CODEX_ERR" \
+      --timeout "$TIMEOUT" --model "$MODEL" --effort "$EFFORT" \
+      --bin-dir "$CLEANROOM_BIN_DIR" --auth-file "$CLEANROOM_AUTH" \
+      --bwrap "$CLEANROOM_BWRAP" \
+      --seat-root "$AUTOPILOT_REVIEW_PACKET_DIR/../seat" \
+      > "$_launch_json"
+    CODEX_RC=$?
+  else
   timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
       --sandbox read-only \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$CODEX_OUT" 2> "$CODEX_ERR"
   CODEX_RC=$?
+  fi
   wait_output_quiescent "$CODEX_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   # JSON-exposed raw_log path must contain the full picture for humans and passive_capture:
   # stdout content, then the separator, then the stderr content.
   cat "$CODEX_OUT" > "$RAW_LOG"
   printf '\n--- codex stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$CODEX_ERR" >> "$RAW_LOG"
+  if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
+    printf '\n--- cleanroom launch ---\n' >> "$RAW_LOG"
+    cat "$_launch_json" >> "$RAW_LOG"
+  fi
   # FAIL-CLOSED on any non-zero codex exit (quota/usage-limit, auth, timeout, bad flag):
   # emit no_verdict and EXIT BEFORE the shared VERDICT parser — same rail as grok/cc-shim.
   # Critical: codex can print a partial `VERDICT: SHIP-AS-IS` then hit a usage limit; letting
   # that partial output reach the parser would accept a failed/quota-limited review as a real
   # verdict (gpt-5.5 R6). Partial output stays in raw_log for debugging, never trusted.
   if [ "$CODEX_RC" -ne 0 ]; then
+    if [[ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]]; then
+      printf '\n[dispatch-review: cleanroom codex exited non-zero (rc=%s)]\n' \
+        "$CODEX_RC" >> "$RAW_LOG"
+      SALVAGE_CAPTURE="$CODEX_OUT"
+      emit_no_verdict "cleanroom codex exited non-zero (rc=$CODEX_RC)"
+    fi
     printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$CODEX_RC" >> "$RAW_LOG"
     SALVAGE_CAPTURE="$CODEX_OUT"

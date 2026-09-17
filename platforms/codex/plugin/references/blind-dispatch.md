@@ -366,8 +366,42 @@ value — mixed presence is `final_panel_packet_hash_mixed`, distinct values are
 `final_panel_packet_hash_mismatch` (engine and validator decide independently).
 Cut 1b is the cleanroom tier.
 
-**Later cuts (not this deliverable):** 1b is the cleanroom launcher (`bwrap`) and
-a configurable deny-list; cut 2 is verify-once and concurrent seats.
+**Later cuts (not this deliverable):** 1b-B is the intake/resolver half; a
+configurable deny-list and cut 2 (verify-once, concurrent seats) remain open.
+
+## Cleanroom tier (v2.36.62)
+
+Cut 1b-A of the blind-review redesign: `dispatch-review.sh` maps every runner to
+exactly one **seat tier** (`review_seat_tier`):
+
+- **packet** — `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn`
+  (prompt-only; same path as v2.36.61).
+- **cleanroom** — `codex` (tool-capable; runs only inside
+  `scripts/lib/cleanroom-launch.sh` when `AUTOPILOT_BLIND_DISCOVERY=1`).
+- **none** — `agy`, `grok`, `kimi`, `cursor`, `opencode` (refused under blind
+  with the unchanged no-tools message).
+
+Without blind mode, every runner is unchanged. Non-blind codex keeps
+`--sandbox read-only` byte-for-byte.
+
+**Boundary (one list).** The seat sees: the packet `tree/` (ro, byte-equal), a
+writable throwaway HOME with one copied `auth.json` and a launcher-written
+two-line `config.toml`, `/usr` + TLS/DNS, `/proc`, `/dev`, a tmpfs `/tmp`.
+It does not see: the repository, the operator HOME, host credentials, host
+`/tmp`, `.autopilot`, a sibling seat, `/etc/hostname`, the packet's host path,
+the host argv (`bwrap --args 9` so `/proc/1/cmdline` holds no host path), or
+inherited descriptors above 2 (closed 3..1023 before fd 9 is opened on the
+args file). `--sandbox danger-full-access` is legal only inside the launcher
+(nested `read-only` cannot create a userns). Network stays on (model transport);
+`HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` / `SSL_CERT_FILE` are not passed
+through in this cut.
+
+**Proven this cut / not proven.** Isolation is proven with the real `bwrap` and
+a hostile stub `codex` (`hooks/tests/cleanroom-launch.test.sh` under
+`AUTOPILOT_HOST_ISOLATION=1`). There is **no live codex verdict** this cut
+(provider quota exhausted through 2026-09-19). Intake still refuses a codex
+seat (`final-panel-qualification.js` / `campaign-intake.js`); that table moves
+in **1b-B**.
 
 ## Nested dispatch (subagents spawning subagents)
 

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-17T18:41:27.354Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-3c712b1bc6f65619624b13f9d3b8e5ef665e8cef3769b404bdc15ad834da9737",
+  "observed_head": "d85f47106a4e05177897e59410aa1d5f84541720",
+  "worktree_observation_digest": "d8759aacf9521acb370c7cd1122cb07e0bf553e06466a6cf04e41cf3497821e6",
+  "journal_digest": "7e93e4ebd5d2b83d7f46c62df233f3042f85f322e7603651ed60b7d6b6f367a5",
+  "disposition_digest": "42f40edbea67b249455d8d46eb463683950d878e601d97454b3cbffe574518a4",
+  "branch_inventory_digest": "cf5fd467d13b711935053727b79ca4e79ae2c3aaa5a41c6a196f9767928ccf8a",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/16c3e9be1a87/blind-review-packet-deny-config-2026-09-17-a1",
+      "tip": "91f07aa7d2ae412f564201b9f61878cd6c903b17",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-17/reap-20260917T184118Z-709762.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "2bd1568cd742480e88e96117ab3de62b5da324f727d7d76b3616852da45d8ada"
+}

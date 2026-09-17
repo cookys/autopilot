@@ -1076,10 +1076,17 @@ assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant xhigh' "open
 # structural in the branch, same as kimi/qoderclicn's "CWD=... ; CWD=\"\"" pattern above).
 unset OPENCODE_ARGV_FILE
 
-# 5c. Blind review requires no-tools containment and hides the caller escape sentinel.
+# 5c. Blind review: none-tier still requires no-tools containment (preservation).
+# RED at base ceb7c81d: grok under blind → "blind review requires an enforceable no-tools runner profile (got: grok)"
+OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner grok --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "blind grok review requires a no-tools profile (preservation)"
+assert_contains "$OUT" 'enforceable no-tools runner profile (got: grok)' "blind grok precondition message unchanged"
+
+# RED at base ceb7c81d: blind codex without packet → same no-tools message (got: codex)
 OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "blind codex review requires a no-tools profile"
-assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition explains containment"
+assert_eq "2" "$EXIT" "blind codex without packet is a precondition failure"
+assert_contains "$OUT" 'cleanroom seat requires a review packet' "blind codex without packet names the packet gate"
+assert_not_contains "$OUT" 'enforceable no-tools runner profile' "blind codex is cleanroom-tier, not none-tier"
 
 # RED at base 9b049c00: bash gate already agrees with the Node predicate for the
 #   --runner vocabulary (preservation, green at base for the gate; Node side is new).
@@ -1119,6 +1126,12 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
     *) PARITY_LIST_CAPABLE=false ;;
   esac
   assert_eq "$PARITY_LIST_CAPABLE" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: predicate agrees with the exported constant"
+  if [ "$PARITY_RUNNER" = "codex" ]; then
+    # JS set stays as-is (codex is not packet-capable). Cleanroom routing is asserted below.
+    assert_eq "false" "$PARITY_NODE_CAPABLE" "codex: JS capable-runner set unchanged this cut"
+    assert_not_contains "$PARITY_OUT" "rc=99" "codex: blind mode never reaches the --bin stub"
+    continue
+  fi
   if [ "$PARITY_NODE_CAPABLE" = "true" ]; then
     assert_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: blind-capable runner reached the stub binary (rc=99 signature)"
     assert_not_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: capable runner is not gated"
@@ -1128,6 +1141,163 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
     assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: incompatible runner never reaches the stub"
   fi
 done
+
+# --- cleanroom seat (portable stubs; RED at base ceb7c81d) ---
+CR_PKT="$TEST_TMP/cleanroom-packet"
+mkdir -p "$CR_PKT/tree"
+printf '{}\n' > "$CR_PKT/MANIFEST.json"
+printf 'tree-ok\n' > "$CR_PKT/tree/README.md"
+CR_AUTH="$TEST_TMP/cleanroom-auth.json"
+printf '{"dummy":true}\n' > "$CR_AUTH"
+CR_BINDIR="$TEST_TMP/cleanroom-codex-bin"
+mkdir -p "$CR_BINDIR"
+CR_CODEX="$CR_BINDIR/codex"
+printf '#!/usr/bin/env bash\nexit 99\n' > "$CR_CODEX"
+chmod +x "$CR_CODEX"
+printf 'host\n' > "$CR_BINDIR/codex-code-mode-host"
+CR_BWRAP="$TEST_TMP/fake-bwrap"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$CR_BWRAP"
+chmod +x "$CR_BWRAP"
+CR_LAUNCHER="$TEST_TMP/stub-cleanroom-launch.sh"
+CR_LAUNCH_LOG="$TEST_TMP/cleanroom-launch-modes.log"
+CR_LAUNCH_ARGV="$TEST_TMP/cleanroom-launch.argv"
+cat > "$CR_LAUNCHER" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+: "${CR_LAUNCH_LOG:?}"
+printf '%s\n' "$*" >> "$CR_LAUNCH_LOG"
+if [ "${1:-}" = "--preflight" ] || printf '%s\n' "$@" | grep -q -- '--preflight'; then
+  printf 'preflight\n' >> "$CR_LAUNCH_LOG"
+  if [ "${CR_PREFLIGHT_RC:-0}" != "0" ]; then
+    echo "${CR_PREFLIGHT_ERR:-preflight failed}" >&2
+    exit "${CR_PREFLIGHT_RC}"
+  fi
+  printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "preflight", "exit_status": 0, "timed_out": false, "seat_root_removed": true, "seat_root": "/tmp/x" }\n'
+  exit 0
+fi
+printf 'launch\n' >> "$CR_LAUNCH_LOG"
+printf '%s\n' "$@" > "$CR_LAUNCH_ARGV"
+out=""
+err=""
+prompt=""
+i=1
+while [ "$i" -le "$#" ]; do
+  eval "a=\${$i}"
+  if [ "$a" = "--out" ]; then i=$((i+1)); eval "out=\${$i}"; fi
+  if [ "$a" = "--err" ]; then i=$((i+1)); eval "err=\${$i}"; fi
+  if [ "$a" = "--prompt-file" ]; then i=$((i+1)); eval "prompt=\${$i}"; fi
+  i=$((i+1))
+done
+: "${out:?}" "${err:?}" "${prompt:?}"
+begin="$(sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' "$prompt" | sed -n '1p')"
+end="$(sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' "$prompt" | sed -n '1p')"
+if [ "${CR_LAUNCH_RC:-0}" = "124" ]; then
+  printf 'timed out\n' > "$out"
+  printf 'timeout chrome\n' > "$err"
+  printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "codex", "exit_status": 124, "timed_out": true, "seat_root_removed": true, "seat_root": "/tmp/x" }\n'
+  exit 124
+fi
+{
+  echo "$begin"
+  echo "VERDICT: SHIP-AS-IS"
+  echo "FINDINGS: none"
+  echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target behavior was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
+  echo "$end"
+} > "$out"
+printf '' > "$err"
+printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "codex", "exit_status": 0, "timed_out": false, "seat_root_removed": true, "seat_root": "/tmp/x" }\n'
+exit 0
+EOF
+chmod +x "$CR_LAUNCHER"
+
+# RED at base ceb7c81d: bwrap missing was never reached (no-tools gate first)
+OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP=/nonexistent AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "blind cleanroom with missing bwrap is exit 2"
+assert_contains "$OUT" 'bwrap not found' "missing bwrap names bwrap"
+
+# Panel finding dr-auth-fallback (2026-09-17): an explicit credential override that is not a file
+# must refuse, never fall back to the operator's ~/.codex/auth.json.
+OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=0 \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$TEST_TMP/no-such-auth.json" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "explicit credential override that is missing is exit 2"
+assert_contains "$OUT" 'codex credential file not found: AUTOPILOT_CLEANROOM_CODEX_AUTH=' "missing explicit credential override is named, not silently replaced"
+
+# RED at base ceb7c81d: no launcher seam; preflight never ran
+: > "$CR_LAUNCH_LOG"
+OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=2 CR_PREFLIGHT_ERR='userns blocked' \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "preflight failure is exit 2"
+assert_contains "$OUT" 'cleanroom runtime unusable: userns blocked' "preflight stderr is named"
+assert_eq "0" "$(grep -cx launch "$CR_LAUNCH_LOG")" "failed preflight never calls launch mode"
+
+# RED at base ceb7c81d: npm-wrapper layout was not a named gate
+CR_BADBIN="$TEST_TMP/codex-npm-wrapper"
+mkdir -p "$CR_BADBIN"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$CR_BADBIN/codex"
+chmod +x "$CR_BADBIN/codex"
+: > "$CR_LAUNCH_LOG"
+OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_BADBIN/codex" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "codex without code-mode-host is exit 2"
+assert_contains "$OUT" 'codex binary directory unresolved' "missing helper names unresolved directory"
+
+# Argument shape + parser + JSON line; default --timeout 5m forwarded; no outer timeout wrapper
+: > "$CR_LAUNCH_LOG"
+rm -f "$CR_LAUNCH_ARGV"
+OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "cleanroom stub --out framed verdict is reviewed"
+assert_contains "$OUT" '"status": "reviewed"' "cleanroom --out is what the parser reads"
+CR_ARGV="$(tr '\n' ' ' < "$CR_LAUNCH_ARGV")"
+assert_contains "$CR_ARGV" '--profile codex' "launcher receives --profile codex"
+assert_contains "$CR_ARGV" "--packet-dir $CR_PKT" "launcher receives packet dir"
+assert_contains "$CR_ARGV" '--timeout 5m' "launcher receives default 5m timeout (coreutils grammar)"
+assert_contains "$CR_ARGV" '--model gpt-5.5' "launcher receives --model"
+assert_contains "$CR_ARGV" '--effort xhigh' "launcher receives --effort"
+assert_contains "$CR_ARGV" "--bin-dir $CR_BINDIR" "launcher receives resolved bin dir"
+assert_contains "$CR_ARGV" "--auth-file $CR_AUTH" "launcher receives --auth-file"
+assert_contains "$CR_ARGV" "--seat-root $CR_PKT/../seat" "launcher receives seat-root beside packet"
+RAW="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.raw_log||"")' "$OUT")"
+assert_file_exists "$RAW"
+assert_contains "$(cat "$RAW")" '--- cleanroom launch ---' "raw_log has cleanroom launch section"
+assert_contains "$(cat "$RAW")" '"artifact_type": "cleanroom_launch"' "raw_log contains launcher JSON line"
+
+# RED at base ceb7c81d: timeout was outer `timeout` + `codex exited non-zero`
+OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_LAUNCH_RC=124 \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "launcher 124 is no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "launcher 124 → no_verdict"
+assert_contains "$OUT" 'cleanroom codex exited non-zero (rc=124)' "no_verdict names cleanroom rc"
+RAW="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.raw_log||"")' "$OUT")"
+assert_contains "$(cat "$RAW")" 'rc=124' "raw_log records rc=124"
+
+# Parity extension: codex under blind with stub launcher reaches the LAUNCHER, not the binary
+: > "$CR_LAUNCH_LOG"
+OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "parity extension: cleanroom launch succeeds via stub launcher"
+assert_eq "1" "$(grep -cx launch "$CR_LAUNCH_LOG")" "parity extension: launcher launch mode was called exactly once"
 
 BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
 BLIND_SCRIPT="$TEST_TMP/blind-probe"

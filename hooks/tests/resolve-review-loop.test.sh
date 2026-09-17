@@ -1727,6 +1727,10 @@ const probes = [
   { p: 'trail/', kind: 'trailing' },
   { p: '**', kind: 'starstar' },
   { p: 'foo?bar', kind: 'qmark' },
+  { p: 'a[b', kind: 'lbracket' },
+  { p: 'a]b', kind: 'rbracket' },
+  { p: 'a{b', kind: 'lbrace' },
+  { p: 'a}b', kind: 'rbrace' },
 ];
 function shellResolve(pattern) {
   const cfg = path.join(tmp, `oracle-${Buffer.from(pattern).toString('hex') || 'empty'}.md`);

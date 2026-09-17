@@ -636,13 +636,19 @@ console.log(`denied_secret=${!extraHas && defaultHas}`);
 console.log(`hash_differs=${extraManifest.packet_hash !== defaultManifest.packet_hash}`);
 console.log(`extra_hash=${extraRun.packet && extraRun.packet.packet_hash === extraManifest.packet_hash}`);
 
-const callers = spawnSync('rg', [
-  '-n',
-  'buildReviewPacket\\(',
-  '--glob', '*.js',
-  path.join(root, 'src'),
-], { encoding: 'utf8' });
-const lines = (callers.stdout || '').split('\n').filter(Boolean);
+// Portable walk (no rg dependency — a missing tool must not make this assertion vacuous):
+// every `buildReviewPacket(` in src/**/*.js must be the definition or the review.js call.
+const lines = [];
+(function walk(dir) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, ent.name);
+    if (ent.isDirectory()) { walk(full); continue; }
+    if (!ent.name.endsWith('.js')) continue;
+    fs.readFileSync(full, 'utf8').split('\n').forEach((text, i) => {
+      if (text.includes('buildReviewPacket(')) lines.push(`${full}:${i + 1}:${text}`);
+    });
+  }
+}(path.join(root, 'src')));
 const unexpected = lines.filter((line) => !line.includes(`${path.sep}runners${path.sep}review.js:`)
   && !line.includes(`${path.sep}runners${path.sep}review-packet.js:`));
 console.log(`builder_callers=${lines.length}`);
@@ -656,5 +662,6 @@ assert_contains "$PKT_OUT" "has_extra=true" "MANIFEST deny_list contains extras"
 assert_contains "$PKT_OUT" "denied_secret=true" "extra pattern denies planted secret/leak.txt"
 assert_contains "$PKT_OUT" "hash_differs=true" "packet_hash differs from default-list build"
 assert_contains "$PKT_OUT" "unexpected_callers=0" "buildReviewPacket( is called only from review.js (definition in review-packet.js)"
+assert_contains "$PKT_OUT" "builder_callers=2" "the walk saw both the definition and the review.js call (not vacuous)"
 
 finalize_test

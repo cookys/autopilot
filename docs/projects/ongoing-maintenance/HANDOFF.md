@@ -1,8 +1,8 @@
 ## 目標
-接續 autopilot 維護。2026-09-17 出貨 v2.36.60（panel `--timeout`）、v2.36.61（1a-B：managed review 全 packet-backed＋seat receipt `packet_hash`）。**1b-A（cleanroom launcher＋`dispatch-review.sh` seat tiers）campaign 已走完整條 rail 到 final panel，停在 `final_adjudication`；depth-0 已在 mission branch 上修完 panel findings（`6d7dc38c`＋一個未 commit 的測試 env 小修），尚未合併、未出 v2.36.62。** 這個 session 在 context T2 停下；下一個 session 從「驗 worktree HEAD → merge → release v2.36.62 → closeout」接手，再開 **1b-B**（plan 草稿已 commit）。
+接續 autopilot 維護。2026-09-17 出貨 v2.36.60（panel `--timeout`）、v2.36.61（1a-B：managed review 全 packet-backed＋seat receipt `packet_hash`）。**1b-A（cleanroom launcher＋`dispatch-review.sh` seat tiers）campaign 已走完整條 rail 到 final panel，停在 `final_adjudication`；depth-0 已在 mission branch 上修完 panel findings（`6d7dc38c` → `4936e27c`，worktree 乾淨，dispatch-review 504 綠），尚未合併、未出 v2.36.62。** 這個 session 在 context T2 停下；下一個 session 從「驗 worktree HEAD → merge → release v2.36.62 → closeout」接手，再開 **1b-B**（plan 草稿已 commit）。
 
 ## 現況
-- `develop` = `origin/develop`（HEAD `980ee0af`）。**保留中的 mission worktree**：`/tmp/hetero-mission-6e6a15016119-blind-review-cleanroom-launcher-2026-09-17-a1-cdUy24`（branch `mission/6e6a15016119/blind-review-cleanroom-launcher-2026-09-17-a1`；hand `575a5fe0` → depth-0 repair `6d7dc38c` → **未 commit**：`hooks/tests/dispatch-review.test.sh` 新 credential-override case 補了 `CR_LAUNCH_LOG/CR_LAUNCH_ARGV/CR_PREFLIGHT_RC=0` env；重跑結果在 session scratchpad `c1c/repair-dr2.log`，scratchpad 會消失——直接在 worktree 重跑）。worktree 路徑也在 `evidence/2026-09-17-blind-review-cleanroom-launcher/scratch/worktree.path`。
+- `develop` = `origin/develop`（HEAD `980ee0af`）。**保留中的 mission worktree**：`/tmp/hetero-mission-6e6a15016119-blind-review-cleanroom-launcher-2026-09-17-a1-cdUy24`（branch `mission/6e6a15016119/blind-review-cleanroom-launcher-2026-09-17-a1`；hand `575a5fe0` → depth-0 repair `6d7dc38c` → test env fix `4936e27c`；worktree 乾淨）。worktree 路徑也在 `evidence/2026-09-17-blind-review-cleanroom-launcher/scratch/worktree.path`。
 - session marker 已降級 **l3**（`--entry-level l5 --fallback precondition_failed`），未 retire；routing 指 `blind-review-cleanroom-launcher-2026-09-17`（graph `754b5456…`）；grant attempt 1 已消耗，campaign TERMINAL_STOP。
 - **1b-A campaign（`evidence/…-cleanroom-launcher/impl-run1.json`）**：implement 46 分（cursor-grok-4.6-low，11 檔 +1411）；verification 8 條在 rail 內全綠（**隔離 suite 在 rail 的 detached checkout 也綠**）；in-rail MiniMax SHIP-AS-IS；**final panel 三席全回**：claude-fable-5-1 FIX-THEN-SHIP（2 🟠）、GLM-5.2 FIX-THEN-SHIP（2 🟡＋2 🔵）、MiniMax SHIP-AS-IS；四次 review 同一 `packet_hash 5ee8c79c…`（1a-B live ✓）、in-rail `--timeout` ✓（v2.36.60 live ✓）。停在 `final_adjudication: final finding registry is incomplete`——沒給 `--campaign-disposition-policy/authority`；rail 設計上 final-panel MUST-FIX 不進 repair（ready／FOLLOW_UP），所以照文件降級手修。raw log：`panel-raw-{vWvlYQ,tkGEU3,dAFzMg,xsEvcZ}.log`。
 - **Panel findings 裁定（都在 `6d7dc38c`）**：✅ preflight probe `cat` 對目錄 EISDIR 讓 deny 檢查 vacuous → `[ -e ] || [ -L ]`＋`--deny-path /usr` exit-3 case；✅ `assert_not_contains … $'\nlaunch\n'` 永不 match → `grep -cx launch`；✅ fds 列表補斷言（無 7/9）；✅ `AUTOPILOT_CLEANROOM_CODEX_AUTH` 指到不存在檔要拒、不 fallback（＋portable test）；✅ 死分支 `probe.stderr` 刪；❌ **GLM `cl-md-line-shape` 誤報**：CLAUDE.md 那行 806 B 超過 pre-commit 800 B 行上限，hand 換行是對的（我 rejoin 後被 pre-commit 擋下才發現，已撤回）。
@@ -19,7 +19,7 @@
 - final-panel MUST-FIX → 降級 l3 手修是文件路徑；「final panel 沒有 repair 迴圈、registry 沒 provider 就 blocked」登 rail 觀察 row。
 
 ## 下一步（順序）
-1. 在 worktree：`bash hooks/tests/dispatch-review.test.sh`（要 504 全綠）→ `git add -A && git commit -m "test: credential-override case passes stub launcher env"`。
+1. （已做）worktree HEAD `4936e27c`，dispatch-review 504 綠。
 2. 候選 = worktree HEAD。開臨時分支 scratch checkout 跑 §4.1 八條（`AUTOPILOT_HOST_ISOLATION=1` 那條要在**這台**）＋`git diff --stat c69f4bc5 -- src schemas bin/autopilot.js scripts/resolve-review-loop.sh scripts/qualification-review-provider.js`（空）。
 3. 二審：GLM-5.2 anthropic-compatible／glm，diff `git diff c69f4bc5..<head>`（**不加路徑**），spec 給 plan；MUST-FIX 逐條再導出（記得 pre-commit 規則會製造假格式 finding）。
 4. plan §5 dogfood → evidence README。
@@ -29,7 +29,7 @@
 
 ## 驗證方式
 - `git fetch -q origin && git status -sb` → `## develop...origin/develop`。
-- `git -C /tmp/hetero-mission-6e6a15016119-blind-review-cleanroom-launcher-2026-09-17-a1-cdUy24 log --oneline -3` → `6d7dc38c`、`575a5fe0`、`c69f4bc5`；`status --short` 有一個 M（測試小修）。
+- `git -C /tmp/hetero-mission-6e6a15016119-blind-review-cleanroom-launcher-2026-09-17-a1-cdUy24 log --oneline -3` → `4936e27c`、`6d7dc38c`、`575a5fe0`；`status --short` 空。
 - `node scripts/session-mode.js status --repo-root "$PWD"` → active l3 marker。
 - 在 worktree `AUTOPILOT_HOST_ISOLATION=1 bash hooks/tests/cleanroom-launch.test.sh` → 47+ 綠。
 

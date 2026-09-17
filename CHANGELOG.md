@@ -25,6 +25,8 @@
   suite` 步驟自 detached smoke 紅了之後一直是 **skipped**（BACKLOG 新 row）。
 - 不在範圍：rail 缺陷 (2) graph-check 14400 vs schema 7200；receipt 鍵（1a-B）；dispatch-review.sh 預設值。
 
+prose-justification: 本版對 prose 面沒有增量（純 engine／test／BACKLOG）。
+
 ## v2.36.59 — blind review redesign 第一刀（1a-A）：content-addressed、deny-list 的審查包（review packet）
 
 - `src/runners/review-packet.js`（新）：`buildReviewPacket({ repo, baseSha, candidateSha, diffFile, specFile, outDir, denyList })`

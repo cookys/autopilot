@@ -229,6 +229,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
+| 2026-09-17 | managed review 派工帶 sealed wall budget 推出的 `--timeout`（Fix，rail 缺陷 (1)）— `buildReviewArgs` timeoutSeconds／`--timeout` builder-managed、in-rail＋final panel 都涵蓋、panel 席均分剩餘、legacy 不變；dogfood kill／resume fixture 自 v2.36.58 起紅、CI 套件步驟被 skip 才沒看到 | v2.36.60 | f6964c3a |
 | 2026-09-17 | blind review redesign 1a-A — content-addressed、deny-list 的 review packet（`git archive` 不能用；隔離 GIT_DIR checkout＋object-id integrity；canonical diff 對齊切段）；/l5 campaign 全綠到 final panel 才被 5m timeout 打掉→l3 降級＋codex 二審五修 | v2.36.59 | ad852de2 |
 | 2026-09-16 | final panel blind-incompatible 席位 intake 就拒（Fix，/l5 managed campaign；cuda P1 之二）— canonical predicate、resolver ⚠、parity 測試證明 capable runner 真的到 stub；本機 pin 的 codex 席要換 | v2.36.58 | 931b31b2 |
 | 2026-09-16 | review proof 文法 bash／Node 對齊＋被拒 envelope 保留 raw_log（Fix，/l5 managed campaign；cuda P1 之一）— 真 engine proof 模式；resume 首次在活 ledger 走通到 REPAIR_AUTHORIZED、撞到 repair 分支名 rail 缺陷（fired） | v2.36.57 | 3079903f |

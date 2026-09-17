@@ -342,7 +342,9 @@ zero or more whole segments; `*` matches inside one segment; a pattern ending
 `/**` matches the directory itself and everything under it. Absolute paths,
 `..`, empty patterns, and other glob syntax are rejected. A section is dropped
 when old **or** new path is denied; a rename out of a denied dir also prunes the
-new tree path.
+new tree path. Widening it (`review_packet_deny_extra`) is additive: extra
+patterns are composed with the eight defaults, never replace them, and the
+effective list is visible in `MANIFEST.json` `deny_list` and `packet_hash`.
 
 **Hash preimage:** `packet_hash = sha256(JSON.stringify({ schema_version,
 base_sha, candidate_sha, deny_list, entries }))` — that key order, UTF-8, no

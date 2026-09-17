@@ -66,7 +66,24 @@ function reviewPacketIdentity(value) {
   if (!isObj(value) || !isStr(value.repo) || !isStr(value.baseSha) || !isStr(value.candidateSha)) {
     return null;
   }
-  return { repo: value.repo, baseSha: value.baseSha, candidateSha: value.candidateSha };
+  const extra = value.denyExtra;
+  let denyExtra;
+  if (extra === undefined) {
+    denyExtra = [];
+  } else if (!Array.isArray(extra) || extra.some((el) => typeof el !== 'string')) {
+    throw new Error('packet deny extra malformed');
+  } else {
+    const { normalizeDenyList } = require('../runners/review-packet');
+    for (const pattern of extra) {
+      try {
+        normalizeDenyList([pattern]);
+      } catch (_err) {
+        throw new Error(`packet deny extra invalid pattern: ${pattern}`);
+      }
+    }
+    denyExtra = extra;
+  }
+  return { repo: value.repo, baseSha: value.baseSha, candidateSha: value.candidateSha, denyExtra };
 }
 const {
   CAMPAIGN_EVENTS,
@@ -3387,7 +3404,28 @@ class AutopilotEngine {
         reviewOptions.idempotencyKey = reservationIdentity;
       }
       if (Object.prototype.hasOwnProperty.call(input, 'packet')) {
-        const identity = reviewPacketIdentity(input.packet);
+        let identity;
+        try {
+          identity = reviewPacketIdentity(input.packet);
+        } catch (error) {
+          const msg = error && error.message ? String(error.message) : String(error);
+          if (msg.startsWith('packet deny extra')) {
+            ledger.push(this.ledgerEntry('prepare_review', 'blocked', startedAt));
+            return {
+              status: 'blocked',
+              phase: 'prepare_review',
+              reason: msg,
+              verdict: null,
+              roster,
+              resolveResult,
+              reviewResult: null,
+              review: null,
+              reviewArgs,
+              ledger,
+            };
+          }
+          throw error;
+        }
         if (!identity) {
           ledger.push(this.ledgerEntry('prepare_review', 'blocked', startedAt));
           return {
@@ -4915,6 +4953,7 @@ class AutopilotEngine {
           repo: loopCwd,
           baseSha: base,
           candidateSha: candidate.commit,
+          denyExtra: reviewRoster.review_packet_deny_extra,
         },
         diffFile,
         specFile: promptFile,
@@ -9846,6 +9885,7 @@ class AutopilotEngine {
           repo: loopCwd,
           baseSha: immutableBase,
           candidateSha: commit,
+          denyExtra: roster.review_packet_deny_extra,
         },
         priorStatus: round === 1 ? input.priorStatus : undefined,
         diffFile,

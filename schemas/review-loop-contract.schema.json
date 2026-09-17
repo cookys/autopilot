@@ -25,6 +25,7 @@
     "cross_family_required",
     "cross_family_satisfied",
     "review_diff_scope",
+    "review_packet_deny_extra",
     "source",
     "work_domain",
     "domain_source",
@@ -268,6 +269,14 @@
       ],
       "x-shell-validated": true,
       "x-shell-var": "DIFF_SCOPE"
+    },
+    "review_packet_deny_extra": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
     },
     "source": {
       "type": "string",
@@ -870,6 +879,7 @@
     "cross_family_required",
     "cross_family_satisfied",
     "review_diff_scope",
+    "review_packet_deny_extra",
     "source",
     "work_domain",
     "domain_source",

@@ -1,0 +1,25 @@
+exports defaultCleanroomProbe: function
+{
+ "owner": "cleanroom_probe",
+ "status": "ready",
+ "runner": "codex",
+ "exit_status": 0,
+ "launcher": "/tmp/claude-1000/-home-cookys-projects-autopilot/ed4f4545-3dbb-4256-bdb4-80502ec4d221/scratchpad/c1d/cand/scripts/lib/cleanroom-launch.sh",
+ "deny_paths": [
+  "/tmp/claude-1000/-home-cookys-projects-autopilot/ed4f4545-3dbb-4256-bdb4-80502ec4d221/scratchpad/c1d/cand",
+  "/home/cookys/projects/autopilot/.git",
+  "/home/cookys",
+  "/tmp/claude-1000/-home-cookys-projects-autopilot/ed4f4545-3dbb-4256-bdb4-80502ec4d221/scratchpad/c1d/cand/.claude"
+ ],
+ "launcher_json": {
+  "schema_version": 1,
+  "artifact_type": "cleanroom_launch",
+  "profile": "preflight",
+  "exit_status": 0,
+  "timed_out": false,
+  "seat_root_removed": true,
+  "seat_root": "/tmp/cleanroom-seat.k7nAq2"
+ }
+}
+missing bwrap → rejected exit 2: bwrap not found: /nonexistent/bwrap
+missing launcher → unknown shadow launcher not present at /nonexistent/launcher.sh

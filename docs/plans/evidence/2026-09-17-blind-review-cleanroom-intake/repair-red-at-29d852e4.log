@@ -1,0 +1,29 @@
+node:internal/assert/utils:77
+    throw err;
+    ^
+
+AssertionError [ERR_ASSERTION]: rejected probe step missing: [{"owner":"campaign_generation","status":"rejected","code":"final_panel_seat_cleanroom_unavailable","reason":"exit 2: bwrap not found"}]
+    at [stdin]:164:10
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [stdin]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_stdin:51:5
+    at Socket.<anonymous> (node:internal/process/execution:205:5)
+    at Socket.emit (node:events:521:24) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.16.0
+FAIL [implementation-campaign-routing] defaultCleanroomProbe stubs: : expected exit 0, got 1
+FAIL [implementation-campaign-routing] defaultCleanroomProbe stub outcomes (RED at base 130b97a8: function missing): 'default_cleanroom_probe_stubs=true' not found in output
+FAIL [implementation-campaign-routing] 104 passed, 2 failed
+      - defaultCleanroomProbe stubs: : expected exit 0, got 1
+      - defaultCleanroomProbe stub outcomes (RED at base 130b97a8: function missing): 'default_cleanroom_probe_stubs=true' not found in output

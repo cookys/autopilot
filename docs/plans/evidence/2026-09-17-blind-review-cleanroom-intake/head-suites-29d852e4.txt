@@ -1,0 +1,12 @@
+bash hooks/tests/implementation-campaign-routing.test.sh | exit=0 | PASS [implementation-campaign-routing] 106 assertions | sha256=0a519b2bf7160c53
+bash hooks/tests/implementation-campaign-state.test.sh | exit=0 | PASS [implementation-campaign-state] 296 assertions | sha256=9da14ff5bdc0b41b
+bash hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh | exit=0 | PASS [resolve-review-loop-qc-panel-rejection] 38 assertions | sha256=97228f1deb4144df
+bash hooks/tests/dispatch-review.test.sh | exit=0 | PASS [dispatch-review] 547 assertions | sha256=302832b21be7a222
+AUTOPILOT_HOST_ISOLATION=1 bash hooks/tests/cleanroom-launch.test.sh | exit=0 | PASS [cleanroom-launch] 50 assertions | sha256=90ab4438c2839b29
+bash hooks/tests/qc-panel-honesty.test.sh | exit=0 | PASS [qc-panel-honesty] 1 assertions | sha256=58e57a7daf43c659
+bash hooks/tests/implementation-campaign-dogfood.test.sh | exit=0 | PASS [implementation-campaign-dogfood] 21 assertions | sha256=b6e3e0aafe5e13d6
+bash hooks/tests/resolve-review-loop.test.sh | exit=0 | PASS [resolve-review-loop] 430 assertions | sha256=622e2747e2a8483d
+node scripts/check-js-syntax.js | exit=0 |  | sha256=62f8ce31139f1f8e
+node scripts/check-contract-schema.js | exit=0 |  | sha256=219e05ca036fa327
+bash scripts/sync-codex-plugin-skills.sh --check | exit=0 |  | sha256=a061d5b31d473443
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md | exit=0 |  | sha256=45a88caba970be28

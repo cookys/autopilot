@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-a5c2d5acdd1b372cdbd4e3dd337fa752a0a2e2da22beff55f267f1aa5354691d",
+  "claim_id": "claim-v1-952f99d06e01255aacb0a2b3a2225b25f6449aa1e85c724aa60ec88d6a240c66",
+  "mission_grant_ref": "5fa83f58de856e82520f838310f648ef19a19f65725d793b6f281bec375f5920",
+  "mission_subject_digest": "9f650e4e293abb1cbd5a45c5fca765f74088c8b772943c82b4d2ce03eacab372",
+  "mission_campaign_id": "campaign-v2-79f9c72ed2d087a0c5ba10809b26579320a73323786e795a59027eb1358cda0a",
+  "graph_node_id": "blind-review-cleanroom-intake-2026-09-17",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/a5c2d5acdd1b372cdbd4e3dd337fa752a0a2e2da22beff55f267f1aa5354691d/blind-review-cleanroom-intake-2026-09-17/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/a5c2d5acdd1b372cdbd4e3dd337fa752a0a2e2da22beff55f267f1aa5354691d/blind-review-cleanroom-intake-2026-09-17/attempt-1/campaign.seal.json",
+  "branch": "mission/a5c2d5acdd1b/blind-review-cleanroom-intake-2026-09-17-a1",
+  "base_sha": "130b97a8dfa7f7a12f40f208cecd097ad7c7f306",
+  "state_hash": "092258b1f2f142a8aceae6c0daa067fb3afd25acf62e0b3cde372b3f5ed57a29"
+}

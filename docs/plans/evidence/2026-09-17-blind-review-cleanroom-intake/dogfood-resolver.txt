@@ -1,0 +1,2 @@
+# REVIEW_LOOP_CONFIG_OVERRIDE=<scratch copy with qc_panel[0]=gpt-5.6-sol/codex> resolve-review-loop.sh --check-scorecard --field capability_warnings (candidate 29d852e4)
+resolve-review-loop: qc_panel[0] seat (gpt-5.6-sol/codex) is a cleanroom-tier seat — intake probes the isolation boundary before any spend (bwrap required on this host)

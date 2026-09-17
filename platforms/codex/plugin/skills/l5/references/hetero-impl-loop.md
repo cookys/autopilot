@@ -155,6 +155,11 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     (sources sha → graph ids → graph check → legacy reconcile → authority) after every fold; take
     the receipt (`check-phase-review-receipt.js --plan-artifact --dispositions`, every disposition
     needs `candidate_blocker: true|false`) on the REVIEWED bytes, then fold and re-freeze.
+    The rubric is frozen at G1: write it as PROPERTIES (what must hold), never as the mechanism
+    (which git command); when a G1 blocker falsifies the rubric's own wording, the fold cannot be
+    reviewed under it (`frozen rubric/manifest drifted`) and the only path is a new
+    `logical_plan_id` AND a new `--ticket` (the old ticket stays bound to the old id), keeping the
+    earlier generation's artifact and dispositions as evidence (2026-09-17).
 6. `node scripts/session-mode.js set --level l5 --repo-root <repo>` → `READY`. First check
    `~/.autopilot/session-mode/` for another ACTIVE managed marker of this repo: the bridge scans
    every marker and one with a different graph digest blocks intake (a deliberate concurrency

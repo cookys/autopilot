@@ -144,6 +144,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: ruling relayed by openclaw 2026-09-17 (`msg_01M2PWEZ8WAVJ8S4F032MFTVGQ`): (a)=B no seat exemption — ship mask-line print + brief linter; (b) same refusal twice → ladder stop. Peer relay only; operator confirms in-session first.
 
+### dispatch-review cleanroom path hygiene: `_pf_err` mktemp never unlinked; legacy non-zero block unreachable under blind
+- **Status**: open
+- **Trigger**: next cut that edits the codex block of `scripts/dispatch-review.sh` (1b-B keeps the rail byte-identical)
+- **Effort**: S
+- **Source**: GLM-5.2 second review of 1b-A at `4936e27c` (`review-glm-r2.json`, 🔵 cr-pf-tmp-leak, cr-dead-fallthrough)
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md
+- **Context**: cosmetic against the script's existing mktemp idiom; one host-/tmp file per cleanroom dispatch; the dead block is duplication, not a wrong path. Fold with the next codex-block touch, with the mirror.
+
 ### Managed rail: final panel has no repair loop — FIX-THEN-SHIP without a disposition provider blocks adjudication
 - **Status**: open
 - **Trigger**: a managed campaign reaches the final panel with a FIX-THEN-SHIP seat and no `--campaign-disposition-policy/authority` given

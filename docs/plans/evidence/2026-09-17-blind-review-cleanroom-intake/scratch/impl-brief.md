@@ -12,11 +12,11 @@ Base for RED evidence and byte-identity: `<BASE>`.
    preflight contract) and `scripts/lib/cleanroom-launch.sh` header.
 3. `src/engine/final-panel-qualification.js` (whole file); `src/engine/campaign-intake.js`
    `runCampaignIntake` blind block ~`:1416-1447`, `defaultReadiness`/`defaultContextGate` ~`:208-260`
-   (adapter + `step()` shape), readiness gate ~`:1825`; `scripts/resolve-review-loop.sh:2113-2133`;
+   (adapter + `step()` shape), readiness gate ~`:1825`; `scripts/resolve-review-loop.sh:2113-2132`;
    `scripts/dispatch-review.sh` `review_seat_tier` (~`:303`).
 4. Tests: `implementation-campaign-routing.test.sh` ~`:3200-3330` (blind-incompat fixture),
    `implementation-campaign-state.test.sh` (grep `blind`), `resolve-review-loop-qc-panel-rejection.test.sh`
-   (the eight ⚠ asserts), `dispatch-review.test.sh` parity block ~`:1091-1125`,
+   (the eight ⚠ asserts), `dispatch-review.test.sh` parity block ~`:1097-1143`,
    `cleanroom-launch.test.sh` (host-gated idiom).
 
 ## Product (plan §1 normative)
@@ -29,7 +29,7 @@ Base for RED evidence and byte-identity: `<BASE>`.
    JSON; `unknown` admits only in shadow. `defaultCleanroomProbe`: `timeout 60 cleanroom-launch.sh
    --preflight --deny-path <repo> --deny-path <git common dir> --deny-path <HOME> --deny-path
    <contract dir>`, cwd repo, env `PATH`+`HOME` only.
-3. `resolve-review-loop.sh:2113-2133`: `review_seat_tier` copy; `none` ⚠ keeps refusal text (new
+3. `resolve-review-loop.sh:2113-2132`: `review_seat_tier` copy; `none` ⚠ keeps refusal text (new
    tail); `cleanroom` → advisory line into `capability_warnings[]`; no probe.
 4. Mirrors: `sync-codex-plugin-skills.sh` then `--check`.
 

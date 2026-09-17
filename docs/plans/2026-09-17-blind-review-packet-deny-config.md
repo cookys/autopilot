@@ -1,6 +1,6 @@
 # Blind review redesign — cut 1c: a configurable packet deny-list (additive, hash-bound)
 
-> Status: draft for plan hetero loop · Size: M · Base: `6a414c3c` (v2.36.63 shipped; 1b-B merge `bc4ea99e`) · Parent: `docs/plans/2026-09-16-blind-review-packet.md`
+> Status: SHIPPED v2.36.64 (merge `f6cb9a1a`, 2026-09-18) · Size: M · Base: `6a414c3c` (v2.36.63 shipped; 1b-B merge `bc4ea99e`) · Parent: `docs/plans/2026-09-16-blind-review-packet.md`
 > §3 (line 259: "revisit when the deny-list becomes configurable (1b)") and §7 item 3 (line 312:
 > "configurable deny-list"). Siblings: 1b-A launcher (v2.36.62), 1b-B intake probe (v2.36.63).
 > Evidence dir: `docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/`.
@@ -246,3 +246,12 @@ before any seat is spent.
   the template mirror is the 20th sealed path, `undefined`-only absence, real-builder tests with
   per-element JS validation and as-given emission, version-pin convention. Growth 1.19× over the
   G2-reviewed bytes. Zero unaddressed blockers, zero deferred.
+- Campaign 2026-09-18 (/l5 attempt 1, replayed after a pre-spend dirty-tree refusal; `impl-run2.json`):
+  implement 58 min (cursor-grok-4.6-low, hand `3d6b4c02`, 19 files ⊆ §2.5); scope, verification (9 commands)
+  and full suite green in-rail; in-rail MiniMax SHIP-AS-IS; final panel: claude-fable-5-1 FIX-THEN-SHIP
+  (1 🟡 + 3 🔵), GLM-5.2 and MiniMax-M3 rc=124 on the remaining budget → `final_panel_seat_transport_failed`
+  (rail observation filed) → l3 degrade. Depth-0 at `3d6b4c02`: 9/9 green, scope clean; panel 🟡 (schema
+  `pattern`) refuted on the G1 ruling; 🔵 vacuous `rg` caller grep and the brace probe repaired at `91f07aa7`
+  (Node walk + `builder_callers=2`, bracket probes); GLM-5.2 second review 🟠 (bash bracket class rejects
+  `\`) refuted empirically; delta review SHIP-AS-IS; 9/9 green again. §5 dogfood `dogfood-deny-extra.txt`.
+  Merge `f6cb9a1a`.

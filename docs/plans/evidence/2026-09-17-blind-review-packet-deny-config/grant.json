@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-16c3e9be1a874d3a416530bc79562e4344c18ecc1521132761b95bd54d44cd48",
+  "claim_id": "claim-v1-2bd3b0472432a035e90d64b3a5a41c714b2430057b6b637d8222e7f063fe1fe6",
+  "mission_grant_ref": "f334af1973c65f87510357b045bda6290c3f034f18ca1eeee0a521f2b7a0f6ec",
+  "mission_subject_digest": "3b549555fe7b541b84a7b7a310d8d76d47bb172b5a038a899012fe2fcaf5f8bf",
+  "mission_campaign_id": "campaign-v2-a6d93956d65eaca2b7729876247616897f93d2850fa30ae19465d36cfd9edf9f",
+  "graph_node_id": "blind-review-packet-deny-config-2026-09-17",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/16c3e9be1a874d3a416530bc79562e4344c18ecc1521132761b95bd54d44cd48/blind-review-packet-deny-config-2026-09-17/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/16c3e9be1a874d3a416530bc79562e4344c18ecc1521132761b95bd54d44cd48/blind-review-packet-deny-config-2026-09-17/attempt-1/campaign.seal.json",
+  "branch": "mission/16c3e9be1a87/blind-review-packet-deny-config-2026-09-17-a1",
+  "base_sha": "10c50297a4ee4e9c27f41c1ddc4b21846a7fd2c8",
+  "state_hash": "8ae50fafb16b758dfa2a59a67e97e1ce7e3cdc66e31e77a2911e8892eaf4e696"
+}

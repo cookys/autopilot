@@ -1,0 +1,9 @@
+bash hooks/tests/resolve-review-loop.test.sh | exit=0 | PASS [resolve-review-loop] 436 assertions | sha256=8ffd2712961a0c16
+bash hooks/tests/review-runner.test.sh | exit=0 | PASS [review-runner] 46 assertions | sha256=e18a3eb7b670594e
+bash hooks/tests/review-packet.test.sh | exit=0 | PASS [review-packet] 54 assertions | sha256=1cfb8b52583753b6
+bash hooks/tests/autopilot-engine.test.sh | exit=0 | PASS [autopilot-engine] 549 assertions | sha256=15f17e5b06444b47
+bash hooks/tests/contract-parity.test.sh | exit=0 | PASS [contract-parity] 42 assertions | sha256=61e953a69c2d709f
+node scripts/check-contract-schema.js | exit=0 |  | sha256=831f6da7c7e8a578
+node scripts/check-js-syntax.js | exit=0 |  | sha256=1997491a7e6ca722
+bash scripts/sync-codex-plugin-skills.sh --check | exit=0 |  | sha256=a061d5b31d473443
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md | exit=0 |  | sha256=842d965478541778

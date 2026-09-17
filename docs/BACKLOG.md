@@ -152,6 +152,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md
 - **Context**: cosmetic against the script's existing mktemp idiom; one host-/tmp file per cleanroom dispatch; the dead block is duplication, not a wrong path. Fold with the next codex-block touch, with the mirror.
 
+### Managed rail: final-panel seats starve on the sealed wall budget left after implement/verify/full-suite
+- **Status**: open
+- **Trigger**: any campaign whose earlier stations consume most of `max_wall_seconds` — the panel seats then get the remainder split per seat
+- **Effort**: M
+- **Source**: 1c campaign 2026-09-18 (`impl-run2.json`: claude seat back in 3 min, GLM-5.2 and MiniMax-M3 rc=124 after ~4/~3 min → final_panel_seat_transport_failed)
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/README.md
+- **Context**: v2.36.60 derives each seat `--timeout` from the remaining sealed budget; implement + verify + full suite leave minutes for a 70 KB diff. Reserve a per-seat panel floor at seal time, or run panel seats in parallel (cut 2).
+
 ### Managed rail: reviewer no_verdict leaves phase REVIEWING, which `--resume` refuses — durable wait not resumable
 - **Status**: open
 - **Trigger**: any managed campaign whose in-rail reviewer returns no_verdict (format fault) — the next run of that station

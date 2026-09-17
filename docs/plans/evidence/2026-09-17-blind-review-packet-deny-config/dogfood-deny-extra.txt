@@ -1,0 +1,9 @@
+# resolver emits the field (candidate 91f07aa7, scratch config)
+["docs/projects/ongoing-maintenance/HANDOFF.md"]
+# invalid pattern refused:
+resolve-review-loop: review_packet_deny_extra[0] invalid pattern: /abs/**
+rc=0
+# packet build through the real builder with the composed list
+default_hash 76ba11b79b7d53eb extra_hash fd4caeeb84e29571 differs true
+deny_list has extra true defaults present true
+HANDOFF in default tree true in extra tree false

@@ -1,0 +1,4 @@
+back\slash -> accept
+a?b -> REJECT
+a[b -> REJECT
+plain -> accept

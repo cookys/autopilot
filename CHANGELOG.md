@@ -1,5 +1,40 @@
 # Changelog
 
+## v2.36.64 — blind review redesign 第五刀（1c）：可設定的 packet deny-list（additive、hash-bound、一個 grammar owner）
+
+- `schemas/review-loop-contract.schema.json`（＋鏡像）：新 always-on 欄位 `review_packet_deny_extra`（array of non-empty
+  string，default `[]`；同一刀進 `x-field-order`／`properties`／`required` 三張表——schema 只宣告型別，**不放第二份
+  pattern**，文法唯一的擁有者是 builder 的 `normalizeDenyList`）。
+- `scripts/resolve-review-loop.sh`（＋鏡像）：`read_field … review_packet_deny_extra`，只用逗號切、去頭尾空白；每個元素用
+  `otherGlobSyntax` 同樣六條規則檢查（開頭 `/` 或絕對路徑、空字串、`.`／`..` 段、空段 `a//b`／結尾 `/`、段內 `?[]{}`、非整段的
+  `**`）——**沒有字元 allowlist**（空白、`+`、`@`、`~`、非 ASCII 都是合法路徑位元組）；不合法 fail-closed
+  `review_packet_deny_extra[i] invalid pattern: <p>`；輸出照原順序、JSON 逸出 `\` 與 `"`，兩個 printf 模板都有。
+- `src/engine/resolve-review-loop.js`（＋鏡像）：欄位從 schema 推導；逐元素 `normalizeDenyList([p])` 驗（帶 index 的錯誤訊息）。
+- `src/engine/autopilot-engine.js`（＋鏡像）：`reviewPacketIdentity` 收 optional `denyExtra`——只有 `undefined` 算「沒給 ⇒ `[]`」；
+  `null`／`''`／`0`／`false`／物件／非字串元素 → `prepare_review` block `packet deny extra malformed`；元素不合文法 →
+  `prepare_review` block `packet deny extra invalid pattern: <p>`（在派任何席位之前）；兩個 packet call site 原樣傳
+  `roster.review_packet_deny_extra`。
+- `src/runners/review.js`（＋鏡像）：`denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra]` 交給 `buildReviewPacket`——builder
+  只 normalize、不加預設，所以**唯一的 floor 就是這個 spread**（八個預設永遠在）；`review-packet.js` 逐位元組不變；
+  effective list 已經在 `MANIFEST.json deny_list` 與 `packet_hash` 前像裡，沒有新欄位、沒有新 receipt。
+- 測試（RED-first 標 base `10c50297`）：resolver 套件——缺欄位 ⇒ `[]`、原樣回、壞元素 fail-closed、**oracle parity**（一張表
+  ((g) 字串＋空白／`+`／`@`／`~`／非 ASCII 接受探針＋`"`／`\`／`a//b`／結尾 `/`／`?[]{}` 拒絕或逸出探針），shell 接受／拒絕與
+  輸出元素逐一等於 `normalizeDenyList`，雙向）；review-runner——真 builder 在暫存 git fixture 上：`deny_list` ⊇ 八個預設＋extras、
+  extra pattern 擋掉埋的檔、`packet_hash` 與預設版不同、`buildReviewPacket(` 只有 review.js 呼叫（Node 走訪 `src/**`，不靠 `rg`
+  ——depth-0 修：hand 版用 `rg`，缺工具就空過）；engine 套件——畸形 `denyExtra` 擋、roster 欄位到兩個 call site；
+  contract-parity／`check-contract-schema.js` 帶新欄位綠。
+- 出貨路徑：/l5 managed campaign attempt 1（第一次 intake 被 dirty tree 擋——evidence scratch 裡一個未追蹤檔；pre-spend 拒絕
+  不燒 attempt，grant 回 `replay`）——implement 58 分、scope／verification／full suite rail 內全綠、in-rail MiniMax SHIP-AS-IS、
+  **final panel**：claude-fable-5-1 FIX-THEN-SHIP（1 🟡＋3 🔵，3 分回），GLM-5.2 與 MiniMax-M3 都 rc=124（各只剩 ~4／3 分預算）→
+  `final_panel_seat_transport_failed` → 照文件降級 l3。**rail 觀察登 BACKLOG**：長 campaign 把 sealed wall 吃掉後，panel 席分到的
+  `--timeout` 餓死席位。depth-0：候選九條全綠、scope ⊆ §2.5；panel 🟡「schema 缺 pattern」依 plan G1 裁決駁回（單一 grammar owner）；
+  兩條 🔵 測試強度問題修在 mission branch（`91f07aa7`）；GLM-5.2 二審 🟠「bash 括號類會拒 `\`」實測駁回（`[[ == *[\?\[\]\{\}]* ]]`
+  裡反斜線是引號，`back\slash` 接受）；delta 複審 SHIP-AS-IS；修補後九條再全綠。
+- 不在範圍：拿掉預設、per-seat deny list、cut 2（verify-once、並行席）。
+
+prose-justification: `references/blind-dispatch.md` Deny-list 段加「Widening it」四行（含鏡像 8 行）；兩份 review-loop-config 文件各加
+欄位說明。
+
 ## v2.36.63 — blind review redesign 第四刀（1b-B）：intake 探 cleanroom 邊界、JS／resolver 學會 seat tier、codex 回 panel 改成條件式
 
 - `src/engine/final-panel-qualification.js`（＋鏡像）：`REVIEW_SEAT_TIERS`（packet＝`anthropic-compatible`／`cc-shim`／

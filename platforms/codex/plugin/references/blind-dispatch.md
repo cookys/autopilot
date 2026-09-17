@@ -353,9 +353,21 @@ encoding`); gitlinks fail closed (`unsupported submodule`) before any write;
 symlinks are kept as symlinks and never dereferenced; absolute, escaping, or
 deny-targeting links are pruned into `denied_paths`.
 
-**Later cuts (not this deliverable):** 1a-B threads `packet_hash` into engine
-receipts and the panel identity rule; 1b is the cleanroom launcher (`bwrap`) and
-a configurable deny-list.
+**Engine wiring (v2.36.61):** every managed review is packet-backed or blocks
+before dispatch. The engine derives `{ repo: loopCwd, baseSha, candidateSha }`
+from the same `(base, commit)` pair `diffProvider` received and passes it as
+`reviewDiff` input `packet` with `blindDiscovery: true`. `reviewDiff` always
+deletes a caller `reviewOptions.packet`, then sets the dispatcher option only
+for a well-formed identity in blind mode; a present-but-malformed identity is a
+`prepare_review` block. Success surfaces `packet` / seat `packet_hash` only
+when the hash is 64 lower-case hex (optional, inside the digested seat body,
+never on a failed seat). Reviewed seats must all omit the key or all share one
+value — mixed presence is `final_panel_packet_hash_mixed`, distinct values are
+`final_panel_packet_hash_mismatch` (engine and validator decide independently).
+Cut 1b is the cleanroom tier.
+
+**Later cuts (not this deliverable):** 1b is the cleanroom launcher (`bwrap`) and
+a configurable deny-list; cut 2 is verify-once and concurrent seats.
 
 ## Nested dispatch (subagents spawning subagents)
 

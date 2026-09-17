@@ -674,6 +674,7 @@ const roster = {
 };
 let implementationCalls = 0;
 const reviewArgsSeen = [];
+const reviewOptionsSeen = [];
 const engine = new AutopilotEngine({
   cwd: repo,
   clock: () => '2026-07-28T01:00:05.000Z',
@@ -688,8 +689,9 @@ const engine = new AutopilotEngine({
     implementationCalls += 1;
     throw new Error('resume must not repeat implementation');
   },
-  reviewDispatcher(args) {
+  reviewDispatcher(args, options) {
     reviewArgsSeen.push(args);
+    reviewOptionsSeen.push(options);
     return {
       error: null,
       status: 0,
@@ -779,6 +781,29 @@ const timeouts = reviewArgsSeen.map((args) => args[args.indexOf('--timeout') + 1
 console.log(`review_dispatch_timeouts=${timeouts.join(',')}`);
 assert.ok(timeouts.every((value) => value === '115s'),
   `every managed review dispatch carries the remaining wall budget: ${JSON.stringify(reviewArgsSeen)}`);
+assert.ok(reviewOptionsSeen.length === reviewArgsSeen.length);
+for (const options of reviewOptionsSeen) {
+  assert.strictEqual(options.blindDiscovery, true);
+  assert.ok(options.packet, `RED at base bee8da3d: packet undefined; got ${JSON.stringify(options)}`);
+  assert.strictEqual(options.packet.repo, repo);
+  assert.strictEqual(options.packet.baseSha, base);
+  assert.strictEqual(options.packet.candidateSha, candidate);
+}
+const findSeats = (value) => {
+  if (!value || typeof value !== 'object') return null;
+  if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+  for (const child of Object.values(value)) {
+    const found = findSeats(child);
+    if (found) return found;
+  }
+  return null;
+};
+const seats = findSeats(result);
+assert.ok(Array.isArray(seats) && seats.length >= 1, `seats=${JSON.stringify(seats)}`);
+for (const seat of seats) {
+  assert.ok(!Object.prototype.hasOwnProperty.call(seat, 'packet_hash'),
+    'stubbed dispatcher leaves packet_hash absent (preservation, green at base)');
+}
 NODE
 )"
 assert_exit_code "$?" "0" "new engine process resumes the real durable campaign journal"

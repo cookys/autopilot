@@ -330,6 +330,7 @@ const FINAL_PANEL_SEAT_KEYS = [
   'reason',
   'receipt_digest',
 ];
+const FINAL_PANEL_SEAT_OPTIONAL_KEYS = Object.freeze(['raw_log', 'packet_hash']);
 const FINAL_PANEL_FAILURE_STATUSES = new Set([
   'no_verdict',
   'transport_failed',
@@ -342,7 +343,7 @@ function hasFinalPanelSeatKeys(seat) {
   if (!FINAL_PANEL_SEAT_KEYS.every((key) => Object.prototype.hasOwnProperty.call(seat, key))) {
     return false;
   }
-  const allowed = new Set([...FINAL_PANEL_SEAT_KEYS, 'raw_log']);
+  const allowed = new Set([...FINAL_PANEL_SEAT_KEYS, ...FINAL_PANEL_SEAT_OPTIONAL_KEYS]);
   for (const key of Object.keys(seat)) {
     if (!allowed.has(key)) return false;
   }
@@ -411,6 +412,24 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
     } else {
       return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
     }
+  }
+  for (const seat of receipt.final_panel_seat_receipts) {
+    if (Object.prototype.hasOwnProperty.call(seat, 'packet_hash')) {
+      if (typeof seat.packet_hash !== 'string' || !/^[0-9a-f]{64}$/u.test(seat.packet_hash)
+          || seat.status !== 'reviewed') {
+        return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
+      }
+    }
+  }
+  const reviewedSeats = receipt.final_panel_seat_receipts
+    .filter((seat) => seat.status === 'reviewed');
+  const hashedSeats = reviewedSeats
+    .filter((seat) => Object.prototype.hasOwnProperty.call(seat, 'packet_hash'));
+  if (hashedSeats.length > 0 && hashedSeats.length < reviewedSeats.length) {
+    return { passed: false, reason: 'final_panel_packet_hash_mixed', ...detail };
+  }
+  if (new Set(hashedSeats.map((seat) => seat.packet_hash)).size >= 2) {
+    return { passed: false, reason: 'final_panel_packet_hash_mismatch', ...detail };
   }
   if (receipt.final_panel_count !== detail.final_panel_count) {
     return { passed: false, reason: 'final_panel_count_mismatch', ...detail };
@@ -3012,6 +3031,7 @@ module.exports = {
   classifyFullDiffReviewFault,
   runCampaignComposition,
   validateFinalPanelReceipt,
+  FINAL_PANEL_SEAT_OPTIONAL_KEYS,
   AWAITING_DISPOSITION,
   AWAITING_CONVERGENCE,
   BOUNDARY_REJECTED,

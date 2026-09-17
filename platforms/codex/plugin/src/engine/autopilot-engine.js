@@ -58,6 +58,16 @@ const {
 } = require('./controller-execution');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
+function packetHashOf(value) {
+  if (!isObj(value) || typeof value.packet_hash !== 'string') return null;
+  return /^[0-9a-f]{64}$/.test(value.packet_hash) ? value.packet_hash : null;
+}
+function reviewPacketIdentity(value) {
+  if (!isObj(value) || !isStr(value.repo) || !isStr(value.baseSha) || !isStr(value.candidateSha)) {
+    return null;
+  }
+  return { repo: value.repo, baseSha: value.baseSha, candidateSha: value.candidateSha };
+}
 const {
   CAMPAIGN_EVENTS,
   CAMPAIGN_STATES,
@@ -3368,12 +3378,34 @@ class AutopilotEngine {
       reviewOptions = {
         ...(input.reviewOptions || {}),
       };
+      delete reviewOptions.packet;
       if (reservationIdentity !== null) {
         reviewOptions.env = {
           ...((isObj(reviewOptions.env) && reviewOptions.env) || process.env),
           AUTOPILOT_EFFECT_RESERVATION_ID: reservationIdentity,
         };
         reviewOptions.idempotencyKey = reservationIdentity;
+      }
+      if (Object.prototype.hasOwnProperty.call(input, 'packet')) {
+        const identity = reviewPacketIdentity(input.packet);
+        if (!identity) {
+          ledger.push(this.ledgerEntry('prepare_review', 'blocked', startedAt));
+          return {
+            status: 'blocked',
+            phase: 'prepare_review',
+            reason: 'packet must be { repo, baseSha, candidateSha }',
+            verdict: null,
+            roster,
+            resolveResult,
+            reviewResult: null,
+            review: null,
+            reviewArgs,
+            ledger,
+          };
+        }
+        if (reviewOptions.blindDiscovery === true) {
+          reviewOptions.packet = identity;
+        }
       }
       reviewResult = this.reviewDispatcher(reviewArgs, reviewOptions);
     } catch (error) {
@@ -3426,7 +3458,7 @@ class AutopilotEngine {
       };
     }
 
-    return {
+    const success = {
       status: reviewResult.result.status,
       verdict: parsed.verdict,
       riskClassification,
@@ -3439,6 +3471,10 @@ class AutopilotEngine {
       reviewArgs,
       ledger,
     };
+    if (packetHashOf(reviewResult.packet)) {
+      success.packet = reviewResult.packet;
+    }
+    return success;
   }
 
   implementTask(input = {}) {
@@ -4867,7 +4903,19 @@ class AutopilotEngine {
         reviewTimeoutSeconds = requestedTimeoutSeconds;
       }
       const previousReviewForRemediation = repairGeneration > 0 ? latestReview : null;
+      if (!isStr(loopCwd) || !isStr(base) || !isStr(candidate && candidate.commit)) {
+        return {
+          reviewed: false,
+          phase: 'prepare_review',
+          reason: 'review packet identity unavailable',
+        };
+      }
       let reviewed = this.reviewDiff({
+        packet: {
+          repo: loopCwd,
+          baseSha: base,
+          candidateSha: candidate.commit,
+        },
         diffFile,
         specFile: promptFile,
         roster: reviewRoster,
@@ -5037,7 +5085,7 @@ class AutopilotEngine {
           }
         }
       }
-      return {
+      const success = {
         reviewed: true,
         verdict: reviewed.verdict,
         findings,
@@ -5048,6 +5096,10 @@ class AutopilotEngine {
         full_diff_required: true,
         raw: reviewed,
       };
+      if (reviewed.packet) {
+        success.packet_hash = reviewed.packet.packet_hash;
+      }
+      return success;
     };
 
     const finalPanelSeatReceipt = (seat, seatIndex, outcome) => {
@@ -5079,6 +5131,10 @@ class AutopilotEngine {
       if (!isReviewed && outcome && typeof outcome.raw_log === 'string'
           && outcome.raw_log.length > 0) {
         body.raw_log = outcome.raw_log;
+      }
+      if (isReviewed && typeof outcome.packet_hash === 'string'
+          && /^[0-9a-f]{64}$/.test(outcome.packet_hash)) {
+        body.packet_hash = outcome.packet_hash;
       }
       return { ...body, receipt_digest: campaignCanonicalDigest(body) };
     };
@@ -5173,11 +5229,23 @@ class AutopilotEngine {
         if (!findingsConsistent) break;
       }
       const allReviewed = reviewedOutcomes.length === outcomes.length;
+      const packetHashes = [];
+      let packetHashPresent = 0;
+      for (const { outcome } of reviewedOutcomes) {
+        if (outcome && Object.prototype.hasOwnProperty.call(outcome, 'packet_hash')) {
+          packetHashPresent += 1;
+          packetHashes.push(outcome.packet_hash);
+        }
+      }
+      const packetHashesConsistent = (
+        packetHashPresent === 0 || packetHashPresent === reviewedOutcomes.length
+      ) && new Set(packetHashes).size <= 1;
+      const panelReviewed = allReviewed && findingsConsistent && packetHashesConsistent;
       return {
-        reviewed: allReviewed && findingsConsistent,
-        verdict: allReviewed && findingsConsistent ? 'SHIP-AS-IS' : null,
+        reviewed: panelReviewed,
+        verdict: panelReviewed ? 'SHIP-AS-IS' : null,
         findings: JSON.stringify(mergedFindings),
-        review_digest: allReviewed && findingsConsistent
+        review_digest: panelReviewed
           ? (reviewedOutcomes.length === 1
             ? reviewedOutcomes[0].outcome.review_digest
             : campaignCanonicalDigest(seatReceipts.map((seat) => seat.review_digest)))
@@ -9757,7 +9825,28 @@ class AutopilotEngine {
       }
 
       const previousReviewForRemediation = round > 1 ? review : null;
+      if (!isStr(loopCwd) || !isStr(immutableBase) || !isStr(commit)) {
+        return finish({
+          status: 'blocked',
+          phase: 'prepare_review',
+          reason: 'review packet identity unavailable',
+          rounds: round,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review: null,
+          implementationChain,
+          reviewChain,
+          ledger,
+        });
+      }
       review = this.reviewDiff({
+        packet: {
+          repo: loopCwd,
+          baseSha: immutableBase,
+          candidateSha: commit,
+        },
         priorStatus: round === 1 ? input.priorStatus : undefined,
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,

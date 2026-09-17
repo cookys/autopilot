@@ -5,7 +5,7 @@
 - `develop` = `origin/develop`。工作樹乾淨；沒有 mission／verify worktree 或 branch（`lifecycle-receipt.json` `zero_residue: true`；merged 分支進 bundle）。plan-review state 留兩個 lineage（v1／v2）當證據。別的 session 的 `…/7ef6560a…/scratchpad/baseline` detached worktree 不是我們的、別動。
 - session marker 已 `retire` → `active: false`。routing 指 `blind-review-packet-2026-09-16`（graph `d3068a5e…`，已完成）→ admission READY。開下一個之前照 recipe：新 graph → routing 換 → `mission-terminal-reconcile.js legacy --graph-digest <new>`。
 - **pin 有動**（`004cb2da`，operator 決定 per 上版 HANDOFF 步驟 0 選項 (a)）：`qc_panel[0]` = `claude-fable-5-1/claude-native high @none`（packet tier），`MiniMax-M3/cc-shim` 也補了 standing pin（原本 `reviewer_qualified=false` 沒被 admit）。`.claude/review-loop-config.md` 同步改了（qc_panel／runners／efforts／endpoints）。**1b 落地後換回 `gpt-5.6-sol/codex max`**——config 檔＋`pin-seat`。grok 仍 402：consult 走 `dispatch-author.sh --runner codex --model gpt-5.6-sol --effort high --prompt-file … --timeout 20m`。
-- CI（release-gated）：run `35132044435`（這次 release）`completed failure`——只剩已知的 `dispatch-detached-campaign-authority`（8 passed, 2 failed；open row），executable gate 這次綠。
+- CI（release-gated）：run `35132044435`（v2.36.59）`completed failure`——`dispatch-detached-campaign-authority` 8 passed, 2 failed（open row）；**其餘步驟全 skipped**（見下）。v2.36.60 的 run 還沒看。
 - **兩個 suite 從 `acf3b06c` 起 base 紅**（`provider-readiness-consumer` 5、`autopilot-cli` 33），任何 campaign 的 `verification_commands` 都不要放。
 - rail 缺陷 (1)（panel 5m timeout）**v2.36.60 已修**：`buildReviewArgs({timeoutSeconds})`、`--timeout` builder-managed、`campaignWallRemainingSeconds` 與 budget check 同上限來源、legacy 無 budget 不發旗標；codex max 非 blind 審 SHIP-AS-IS（raw log 在 scratchpad `qc/`，`/tmp/dispatch-review-log-1BMNA0`）。**尚未在真 campaign 上驗過**——1a-B 的 campaign 就是第一次實跑，final panel 若再死要先看 receipt 的 `--timeout` 值。(2) **graph-check 放行 `max_wall_seconds` 14400、schema 上限 7200** 仍 open（是裁定不是機械修）。
 - **CI 假綠陷阱**：`test.yml` 的 `Run hooks test suite` 步驟在 `Detached dispatch ledger smoke` 紅時整步 **skipped**（run 35132044435 如此）——所以「只剩 detached 那條紅」其實是「其他套件根本沒跑」；dogfood kill／resume 自 v2.36.58 紅到 v2.36.60 都沒被看到。BACKLOG row（S，`if: always()`）。下次看 CI 先看 steps 的 conclusion，不只看 job。
@@ -36,8 +36,8 @@
 ## Read-order
 1. `docs/plans/2026-09-16-blind-review-packet.md` §1、§3、§7、Review log — 1a-B 的規格就在 §3。
 2. `docs/plans/evidence/2026-09-16-blind-review-packet/README.md` — 這次 campaign 怎麼死、怎麼降級、codex 抓到什麼。
-3. `docs/BACKLOG.md` — open：panel seat timeout（Fix）、wall-cap mismatch（Fix）、hash batching（S）、cut 1a-B（L）。
-4. `CHANGELOG.md` v2.36.59。
+3. `docs/BACKLOG.md` — open：wall-cap mismatch（Fix）、CI skipped-step（S）、PEER-REPORTED openclaw（S）、hash batching（S）、cut 1a-B（L）。
+4. `CHANGELOG.md` v2.36.60、v2.36.59。
 5. `skills/l5/references/hetero-impl-loop.md` 5b（本輪加了 rubric 性質／換 lineage 一段）。
 
 ## 陷阱

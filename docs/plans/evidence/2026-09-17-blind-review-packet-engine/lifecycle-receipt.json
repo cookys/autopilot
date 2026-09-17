@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-17T03:55:38.437Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-ab6a547c7e73f2e7ca1309c1bb5bbda4f8a31db582a81d54bbc02576d986e2c7",
+  "observed_head": "69c7668bcd2eee7884d2fcd2722a1dfd37018559",
+  "worktree_observation_digest": "09a4b830518c37912b651a2a1aff346c76d67d329ec651c8446d52c516563e74",
+  "journal_digest": "80bfd986a4ca9e2562b3ed625d4fb53777d033b3c641a15b7ba2bfd6bf3500ae",
+  "disposition_digest": "a14abf1aad01d12a5c543e62b6948ab5ebdd2c0444c39b464b67b367ce60525c",
+  "branch_inventory_digest": "ff2ed98f57b813efc61039c1a3f9330fec20abbddc8712c9046623308a73e694",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/7feb157fc2c9/blind-review-packet-engine-2026-09-17-a1",
+      "tip": "f81f94254ed8fa9004fbac513e9db2269063fb51",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-17/reap-20260917T035529Z-2975659.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "78f0e0fe547010520621a4dce207a0e5124c5474a31ed116491863995556af45"
+}

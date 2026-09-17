@@ -31,7 +31,15 @@
       "qualification_status": "qualified",
       "required": true,
       "excluded_families": [],
-      "fallbacks": []
+      "fallbacks": [
+        {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax",
+          "family": "minimax"
+        }
+      ]
     }
   ]
 }

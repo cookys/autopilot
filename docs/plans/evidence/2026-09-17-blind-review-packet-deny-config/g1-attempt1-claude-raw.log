@@ -1,0 +1,36 @@
+I'll check whether the referenced repo files are present here so I can verify the plan's claims before rendering a verdict.
+
+
+<invoke name="Bash">
+<parameter name="command">cd /tmp/tmp.3fmSb0PdCZ && ls -la && ls src/runners src/engine scripts schemas hooks/tests 2>&1 | head -50</parameter>
+</invoke>
+
+
+total 0
+drwx------  2 cookys cookys   40 Sep 17 07:11 .
+drwxrwxrwt 25 cookys cookys 1000 Sep 17 07:11 .
+
+ls: 2.0-3-4  nsi5Bnoc8uc
+ls: cannot ppr: xzczxzc: dxi
+
+
+<invoke name="Bash">
+<parameter name="command">cd /tmp/tmp.3fmSb0PdCZ && ls -la; find . -maxdepth 2 | head</parameter>
+</invoke>
+
+
+<invoke name="Bash">
+<parameter name="command">cd /tmp/tmp.3fmSb0PdCZ && ls -la; find . -maxdepth 2 | head</parameter>
+</invoke>
+
+
+
+<invoke name="Bash">
+<parameter name="command">cd /tmp/tmp.3fmSb0PdCZ && ls -la; find . -maxdepth 2 | head</parameter>
+</invoke>
+
+
+total 0
+drwx------  2 cookys cookys   40 Sep 17 07:11 .
+drwxrwxrwt 25 cookys cookys 1000 Sep 17 07:11 .
+.

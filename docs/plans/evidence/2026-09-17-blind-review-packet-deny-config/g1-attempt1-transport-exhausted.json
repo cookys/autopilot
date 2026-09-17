@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-packet-deny-config-2026-09-17",
+  "logical_plan_id": "blind-review-packet-deny-config-2026-09-17",
+  "session_id": "c1e-g1-1789660164",
+  "session_key": "64956d35ab7c89dcd5863c3f8ad7490cf0331051ad13153745e6e0f882a97ebb",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "required_seat_transport_exhausted",
+  "rubric_sha256": "6053919533c703253e84220fe88fd9681d3f1b1f918ad0b0053a74e45e883ced",
+  "manifest_sha256": "83964d0e4d51dbe75453ddf3c6a3d6d3a1090acd783fa9924e8f96868545741b",
+  "plan_sha256": "2c3befa5723f2f0d568d3052243d3975e6b727c11f3d637d651f2235c2f533b7",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "transport_exhausted",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "9beaba982a60be0be5c9d331a6cd7ceae408ec3444a7a6d2932e17809a08b2e7"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7cdb1d766e9614ef8181ba2b86ee1b677b3fe29c9e863abf7f9aa08f1fd1056f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-PkjF7C",
+          "digest": "7cdb1d766e9614ef8181ba2b86ee1b677b3fe29c9e863abf7f9aa08f1fd1056f"
+        },
+        "receipt_digest": "f45960fcffa7fa0b98a7aa244132a773d20d8296eb9ab19b808305ebc1ac78d5"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "68fe15286b93eca0b0c30cc66017b5ac0a99d6663d977db64eae7d87273fd50b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b0a88a7868cab7d384f1d92066b983b8ca0199752d58c1b9d456431770e2745f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-PTwmYa",
+          "digest": "b0a88a7868cab7d384f1d92066b983b8ca0199752d58c1b9d456431770e2745f"
+        },
+        "receipt_digest": "32b9ad1ceb3f03db59d5ae825a5c0840a859d016e1144609cf10a2caa25b22e1"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "4ba0a328afb13cf1334c24c83e8ffd601a94673e5cd29e7886638002bf77479f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7e1b3a2cf903eebe5fa244909417f4954237763260cce50d3e14485216660c49",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-RSq480",
+          "digest": "7e1b3a2cf903eebe5fa244909417f4954237763260cce50d3e14485216660c49"
+        },
+        "receipt_digest": "50c3f6b59ccf1edb69e09a78169fca69087cd18a93b9bede656d4dbcbac71ee8"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-17T15:50:01.779Z",
+  "unratified_observations": [
+    {
+      "kind": "completed_seat_review",
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL",
+      "findings": [
+        {
+          "rubric_id": "R6",
+          "class": "decision-now",
+          "severity": "non-blocking",
+          "affected_surface": "hooks/tests/resolve-review-loop.test.sh; hooks/tests/review-runner.test.sh; hooks/tests/autopilot-engine.test.sh",
+          "claim": "The plan commits to RED-first tests annotated with the observed base message, but the test section currently carries a placeholder annotation instead of the actual base failure message, so the RED-first contract is stated but not yet evidenced.",
+          "evidence": "Section 2 Tests bullet reads 'Tests (RED-first, `# RED at base 6a414c3c: <observed>`)' — the angle-bracket placeholder is in place of the concrete observed base message that R6 requires; §4 'grammar' criterion also defers the message class to implementation.",
+          "evidence_reference": "Plan §2, Tests bullet; plan §4 acceptance table, rows 'grammar' and 'plumbing'",
+          "repair": "Before implementation begins, run the new tests once against base 6a414c3c (detached checkout) and replace every `<observed>` placeholder with the exact failing assertion or error message observed at base, committing that transcript to the evidence dir.",
+          "blocks_next_slice_or_immediate_integrity": false,
+          "cannot_defer_to_spike": false
+        }
+      ]
+    }
+  ]
+}

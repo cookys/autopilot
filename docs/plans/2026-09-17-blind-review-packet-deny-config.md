@@ -122,6 +122,10 @@ docs/BACKLOG.md
 
 ### 2.6 Global constraints
 
+- Reviewers: this plan is self-contained. `file:line` citations are provenance for depth-0's
+  re-verification, never a reading assignment — review the text as given; the review seat has no
+  repository to read and must not try to.
+
 - Defaults are a floor: no code path can produce an effective list missing a default pattern.
 - One grammar owner (`normalizeDenyList`); the shell regex is parity-tested against it, never a
   second definition of the language.

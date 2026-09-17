@@ -1,0 +1,397 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-cleanroom-launcher-2026-09-17",
+  "logical_plan_id": "blind-review-cleanroom-launcher-2026-09-17",
+  "session_id": "c1c-g1-1789619146",
+  "session_key": "c8e6b9adf0fb9f4e06e5a1683521527cd83c2ddf9657cc785c9e09801e503f63",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "0042518cff8aa6829a394f9bdea0714f876391eab141ab35d86efe25c139a21a",
+  "manifest_sha256": "6b6532883f5a42fe4b20130b94b16904088d70c5a34f43c88e445b8cc2e1260b",
+  "plan_sha256": "b8205d6abd58a73ea5c6eb0a80fd3b206dea2306910f00a823352aa8d834916a",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "6ec4beba7a3840b2e786cd90a08f65df9d86848e7e3f3f430cc317aee4519120"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-hqWgh5",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "ff1ef178c0c6542a333cfebf86d88565a0464a493dfdb3a2ee354117369e32f2"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "9d3602dabc817cc311d881e84ae11dfc446ef62cbd90690fd48559181a65748a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "3bcdf77a1869b2f557682e356e88d4b5135a494033d64a1afd3eb7917712946d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-dl9Gmf",
+          "digest": "3bcdf77a1869b2f557682e356e88d4b5135a494033d64a1afd3eb7917712946d"
+        },
+        "receipt_digest": "3c5930880dbe07b90c6022f78764b245b6c548d9348aa6ad44c29dc4977af71b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/lib/cleanroom-launch.sh bwrap argv; hooks/tests/cleanroom-launch.test.sh assertion (a); acceptance row 'boundary'; --preflight argv-clean check",
+      "claim": "The plan's mechanism for hiding the host-side launch argv (an exec wrapper for codex) cannot make /proc/1/cmdline clean as specified, so the isolation suite and --preflight as written will be red or will assert the wrong thing.",
+      "evidence": "Section 0 records that /proc/1/cmdline shows the bwrap argv (host paths) and says 'an exec wrapper removes that'. But with --unshare-all and without --as-pid-1, bwrap keeps its own reaper process as pid 1 inside the pid namespace; the wrapper only changes the argv of the codex child (pid 2+), so pid 1's cmdline still carries every --ro-bind/--bind host path (<packet>/tree, <seat>/home, <bin-dir>). Even with --as-pid-1 the prefixes the plan pins are unreachable: the wrapper 'exec /home/review/bin.real/codex' yields argv[0] /home/review/bin.real/codex, not /home/review/bin/codex (section 1.5 (a), section 4 'boundary'), and a POSIX probe script executed as the command yields a cmdline starting with /bin/sh, not /home/review/bin/ (section 1.3 --preflight). The three pinned strings are mutually inconsistent with the launcher spec.",
+      "evidence_reference": "plan section 0 bullet 4 ('/proc/1/cmdline still shows the bwrap argv'); section 1.3 bwrap argv (no --as-pid-1); section 1.3 --preflight ('starts with /home/review/bin/'); section 1.5 (a) and section 4 row 'boundary' ('starts with /home/review/bin/codex')",
+      "repair": "Pick one mechanism and pin one assertion. Recommended: pass every bwrap option through 'bwrap --args FD' with a NUL-separated args file written under the unbound seat root, so pid 1's cmdline is only 'bwrap --args N' with no host path and no wrapper or --as-pid-1 is needed; then define the argv-clean check (suite (a) and --preflight) as 'no --deny-path string and no host seat/packet/bin path occurs anywhere in /proc/1/cmdline' instead of a fixed prefix. If the wrapper route is kept instead, add --as-pid-1, use 'exec -a' to set argv[0], accept pid-1 signal/reaping semantics in the header, and align all three pinned strings to the same argv[0].",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cd163e229b6893e57d33d4ab482fd543ae6714efb0ca455a75ddf3c55c532bc5"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/dispatch-review.sh cleanroom precondition list; engine status precondition_failed vs no_verdict",
+      "claim": "The precondition 'bwrap resolvable on PATH' does not establish a working isolation runtime, so a host whose user namespaces are blocked (AppArmor restriction, or AUTOPILOT_CLEANROOM_BWRAP pointing at a bwrap outside the distro's bwrap-userns-restrict profile) produces a no_verdict on every codex seat instead of an exit-2 precondition failure.",
+      "evidence": "Section 1.2 lists 'bwrap resolvable on PATH (or AUTOPILOT_CLEANROOM_BWRAP=<path>)' as the runtime precondition. Section 0 records apparmor_restrict_unprivileged_userns=1 with a per-binary profile, and section 6 says CI runners cannot create user namespaces. A bwrap that exists but cannot unshare fails after the precondition gate, which section 1.4 maps to emit_no_verdict, not to die_precondition.",
+      "evidence_reference": "plan section 1.2 (precondition list), section 1.4 (non-zero exit → emit_no_verdict), section 0 bullet 4 (AppArmor profile), section 6 bullet 1",
+      "repair": "In the dispatch precondition step, after resolving bwrap, run 'cleanroom-launch.sh --preflight --deny-path <packet host dir>' (no model, milliseconds) and treat a non-zero exit as die_precondition with a message naming the runtime; document that AUTOPILOT_CLEANROOM_BWRAP must point at a binary the host AppArmor policy permits to create user namespaces.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3358f19be3e0e0cf41ada1836e2f38e44833efcfa1f128703cb9a98321628ca8"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/dispatch-review.sh cleanroom launch block; scripts/lib/cleanroom-launch.sh EXIT trap and seat-root cleanup",
+      "claim": "Timeout ownership and cleanup on signals are unspecified: if dispatch-review.sh keeps its existing outer 'timeout \"$TIMEOUT\"' around the launcher, the outer timer can kill the launcher before the inner one fires, losing the JSON line and the seat-root removal, and a launcher killed by a signal leaves a 0700 seat root holding a copied credential in host /tmp.",
+      "evidence": "Section 0 says the existing codex block is wrapped in 'timeout \"$TIMEOUT\"'. Section 1.4 says the launcher is called with '--timeout \"$TIMEOUT\"' but does not say the outer wrapper is dropped, so both timers run with the same value and the outer one wins the race. Section 1.3 removes the seat root only via an EXIT trap; no INT/TERM/HUP handling and no naming convention for orphaned seat roots is stated.",
+      "evidence_reference": "plan section 0 bullet 3 ('timeout \"$TIMEOUT\" is the wall cap'), section 1.4, section 1.3 ('removes the seat root on EXIT (trap)'), section 1.3 seat layout ('.codex/auth.json copied 0600')",
+      "repair": "State that the cleanroom block does not wrap the launcher in an outer timeout (the launcher's timeout is the only wall cap, so 124 is unambiguous); have the launcher trap INT TERM HUP as well as EXIT and re-raise after cleanup; create the seat root with a fixed prefix such as 'cleanroom-seat.' so an operator can sweep orphans, and note the orphan case in the header.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "27ebeea8949f570677232501f876fed4467480e987ca78097fcdc5250d636f08"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "plan section 4 row 'no-regression'; evidence file base-suites-<base>.txt",
+      "claim": "The claim that the full section 4.1 set was green at base cannot hold as written, because hooks/tests/cleanroom-launch.test.sh does not exist at ceb7c81d, so line 2 fails at base with a missing-file error rather than exit 0.",
+      "evidence": "Section 2.5 lists hooks/tests/cleanroom-launch.test.sh under authorized_creates. Section 4.1 lists 'AUTOPILOT_HOST_ISOLATION=1 bash hooks/tests/cleanroom-launch.test.sh' and says 'Expected exit 0 for every line', while section 4 row 'no-regression' says 'same set recorded at base in the evidence dir'.",
+      "evidence_reference": "plan section 2.5 (authorized_creates), section 4.1, section 4 row 'no-regression'",
+      "repair": "No code change; amend the 'no-regression' row and the evidence-file convention to say the base run covers the seven pre-existing commands green and records the new suite as absent (expected), so the sealed claim matches what a detached base checkout can produce.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "16dbe26464f7ace30c574f0217297df40af404ac3c6121ac6fb81f6d79780783"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/dispatch-review.sh precondition 'binary dir is the release bin/'; launcher --bin-dir bind",
+      "claim": "The rule for turning the resolved codex command into a bindable release bin/ is not stated, so an npm-installed codex (a symlink to a JS shim under lib/node_modules, native binary in a sibling package) passes the precondition and then fails inside the seat as a no_verdict instead of an exit-2 precondition failure.",
+      "evidence": "Section 1.2 requires 'the runner binary resolves to a real file and its directory is the release bin/'. Section 0 bullet 4 says codex-code-mode-host must sit next to codex and the whole release bin/ is bound. Nothing says whether symlinks are followed (readlink -f) or what happens when the resolved file is a script whose real payload lives outside that directory.",
+      "evidence_reference": "plan section 1.2 (binary precondition), section 0 bullet 4 ('codex-code-mode-host must sit next to codex')",
+      "repair": "During implementation define the resolution as 'command -v then readlink -f; bind the directory of the resolved file; refuse with exit 2 when codex-code-mode-host is not present beside it', and add one portable stub test for the refusal.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "111d32cc03ad7c2d500a45cddfed4be39faaa9c68335a2c512008bc5e9c6987b"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "launcher credential copy semantics; section 5 dogfood; references/blind-dispatch.md 'not proven this cut'",
+      "claim": "Copying auth.json into a throwaway HOME discards any token refresh codex performs inside the seat; if the auth server rotates refresh tokens on refresh, one seat run can invalidate the operator's host credential and break every later seat and the operator's own codex.",
+      "evidence": "Section 1.3 copies .codex/auth.json into the seat home and removes the seat root on exit; section 2.6 requires that nothing the seat writes survives. Section 0 bullet 4 records that codex writes into CODEX_HOME. The plan does not say whether codex refreshed the token in the probe or whether the host auth.json remained valid afterwards.",
+      "evidence_reference": "plan section 1.3 (seat home layout, trap removal), section 2.6 bullet 3, section 0 bullet 4 ('codex WRITES into CODEX_HOME'), section 5",
+      "repair": "As part of the section 5 dogfood, record the host auth.json hash before and after the seat run and confirm the host credential still authenticates afterwards; state the refresh-loss limitation in the launcher header and in the blind-dispatch 'what is not proven' list, and decide in 1b-B whether a stale last_refresh should be a preflight refusal.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dd97590c57235464b4d19eee5b9190dfdad0302762323fb69bdd880addecaa6c"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "launcher default seat-root location (mktemp -d) and wrapper/probe exec inside the boundary",
+      "claim": "The default seat root lives under host TMPDIR, and the wrapper codex script and the preflight probe are executed from that bind; on hosts where /tmp is mounted noexec the bind keeps the flag and both execs fail with EACCES, turning every cleanroom seat into a no_verdict.",
+      "evidence": "Section 1.3 creates the seat root with mktemp -d and binds <seat>/bin at /home/review/bin, with PATH set to /home/review/bin first; the command executed is the wrapper script in that directory and, under --preflight, a probe script in the same boundary.",
+      "evidence_reference": "plan section 1.3 (mktemp -d seat root, --ro-bind <seat>/bin /home/review/bin, --setenv PATH /home/review/bin:/usr/bin)",
+      "repair": "Either default the seat root to a directory the launcher controls next to the packet (for example the blind dir's parent passed via --seat-root by dispatch-review.sh) or invoke the wrapper and the probe through /bin/sh explicitly so a noexec mount cannot break the seat; note the choice in the header.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "68894667f6cb4fec0278f2ff0c1da556937f7fa84c9b9a6a1702ba62ce7e1ec1"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "cleanroom-launch.sh --preflight argv contract consumed by 1b-B intake",
+      "claim": "The argv contract does not say which of the required options --preflight needs, and 1b-B's intake probe runs before any review packet exists, so if --preflight demands --packet-dir, --auth-file and --bin-dir the contract sealed now cannot be called from intake.",
+      "evidence": "Section 1.3 lists --packet-dir, --prompt-file, --out, --err, --timeout, --model, --effort, --bin-dir and --auth-file as the contract with no optional marker, and describes --preflight as 'used by 1b-B's intake probe'. Section 3 says intake calls '--preflight per cleanroom seat'. Whether preflight prints the JSON launch line and what profile it reports is also unstated.",
+      "evidence_reference": "plan section 1.3 (argv contract and --preflight paragraph), section 3 bullet 1",
+      "repair": "State that --preflight requires only --bwrap (optional) and one or more --deny-path, mounts an empty work dir in place of the packet tree, needs no credential, and still emits the JSON line with artifact_type cleanroom_launch and a preflight marker; add this to the launcher header and the portable stub test for the argument shape.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3460988c05d5878a6717ad58cde37e1ed3273e2d92c0bfe645412a4055c90f04"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "launcher --clearenv environment for the model transport",
+      "claim": "--clearenv drops HTTPS_PROXY, HTTP_PROXY, NO_PROXY and SSL_CERT_FILE, so on a proxied or private-CA host the non-blind codex block reaches the API while the cleanroom seat cannot, yielding a no_verdict with an unhelpful transport error.",
+      "evidence": "Section 1.3 sets only HOME, CODEX_HOME, PATH and TERM after --clearenv; section 0 bullet 3 shows the existing block inherits the host environment. This host is not proxied, so the section 5 dogfood will not surface it.",
+      "evidence_reference": "plan section 1.3 (--clearenv --setenv list), section 0 bullet 3",
+      "repair": "No current change; follow-up only. When a proxied host appears, pass through the proxy and CA variables via --setenv when set on the host and record them (names only) in the JSON launch line.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "989dc2a3c960085b9e9dfbe5b488c3560be6813dcb41d3f8c5be9151b9816b77"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "3358f19be3e0e0cf41ada1836e2f38e44833efcfa1f128703cb9a98321628ca8",
+      "rubric_id": "R2",
+      "affected_surface": "scripts/dispatch-review.sh cleanroom precondition list; engine status precondition_failed vs no_verdict",
+      "claim": "The precondition 'bwrap resolvable on PATH' does not establish a working isolation runtime, so a host whose user namespaces are blocked (AppArmor restriction, or AUTOPILOT_CLEANROOM_BWRAP pointing at a bwrap outside the distro's bwrap-userns-restrict profile) produces a no_verdict on every codex seat instead of an exit-2 precondition failure.",
+      "evidence_reference": "plan section 1.2 (precondition list), section 1.4 (non-zero exit → emit_no_verdict), section 0 bullet 4 (AppArmor profile), section 6 bullet 1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "27ebeea8949f570677232501f876fed4467480e987ca78097fcdc5250d636f08",
+      "rubric_id": "R4",
+      "affected_surface": "scripts/dispatch-review.sh cleanroom launch block; scripts/lib/cleanroom-launch.sh EXIT trap and seat-root cleanup",
+      "claim": "Timeout ownership and cleanup on signals are unspecified: if dispatch-review.sh keeps its existing outer 'timeout \"$TIMEOUT\"' around the launcher, the outer timer can kill the launcher before the inner one fires, losing the JSON line and the seat-root removal, and a launcher killed by a signal leaves a 0700 seat root holding a copied credential in host /tmp.",
+      "evidence_reference": "plan section 0 bullet 3 ('timeout \"$TIMEOUT\" is the wall cap'), section 1.4, section 1.3 ('removes the seat root on EXIT (trap)'), section 1.3 seat layout ('.codex/auth.json copied 0600')",
+      "disposition": null
+    },
+    {
+      "fingerprint": "16dbe26464f7ace30c574f0217297df40af404ac3c6121ac6fb81f6d79780783",
+      "rubric_id": "R7",
+      "affected_surface": "plan section 4 row 'no-regression'; evidence file base-suites-<base>.txt",
+      "claim": "The claim that the full section 4.1 set was green at base cannot hold as written, because hooks/tests/cleanroom-launch.test.sh does not exist at ceb7c81d, so line 2 fails at base with a missing-file error rather than exit 0.",
+      "evidence_reference": "plan section 2.5 (authorized_creates), section 4.1, section 4 row 'no-regression'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "111d32cc03ad7c2d500a45cddfed4be39faaa9c68335a2c512008bc5e9c6987b",
+      "rubric_id": "R2",
+      "affected_surface": "scripts/dispatch-review.sh precondition 'binary dir is the release bin/'; launcher --bin-dir bind",
+      "claim": "The rule for turning the resolved codex command into a bindable release bin/ is not stated, so an npm-installed codex (a symlink to a JS shim under lib/node_modules, native binary in a sibling package) passes the precondition and then fails inside the seat as a no_verdict instead of an exit-2 precondition failure.",
+      "evidence_reference": "plan section 1.2 (binary precondition), section 0 bullet 4 ('codex-code-mode-host must sit next to codex')",
+      "disposition": null
+    },
+    {
+      "fingerprint": "dd97590c57235464b4d19eee5b9190dfdad0302762323fb69bdd880addecaa6c",
+      "rubric_id": "R3",
+      "affected_surface": "launcher credential copy semantics; section 5 dogfood; references/blind-dispatch.md 'not proven this cut'",
+      "claim": "Copying auth.json into a throwaway HOME discards any token refresh codex performs inside the seat; if the auth server rotates refresh tokens on refresh, one seat run can invalidate the operator's host credential and break every later seat and the operator's own codex.",
+      "evidence_reference": "plan section 1.3 (seat home layout, trap removal), section 2.6 bullet 3, section 0 bullet 4 ('codex WRITES into CODEX_HOME'), section 5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "68894667f6cb4fec0278f2ff0c1da556937f7fa84c9b9a6a1702ba62ce7e1ec1",
+      "rubric_id": "R3",
+      "affected_surface": "launcher default seat-root location (mktemp -d) and wrapper/probe exec inside the boundary",
+      "claim": "The default seat root lives under host TMPDIR, and the wrapper codex script and the preflight probe are executed from that bind; on hosts where /tmp is mounted noexec the bind keeps the flag and both execs fail with EACCES, turning every cleanroom seat into a no_verdict.",
+      "evidence_reference": "plan section 1.3 (mktemp -d seat root, --ro-bind <seat>/bin /home/review/bin, --setenv PATH /home/review/bin:/usr/bin)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3460988c05d5878a6717ad58cde37e1ed3273e2d92c0bfe645412a4055c90f04",
+      "rubric_id": "R4",
+      "affected_surface": "cleanroom-launch.sh --preflight argv contract consumed by 1b-B intake",
+      "claim": "The argv contract does not say which of the required options --preflight needs, and 1b-B's intake probe runs before any review packet exists, so if --preflight demands --packet-dir, --auth-file and --bin-dir the contract sealed now cannot be called from intake.",
+      "evidence_reference": "plan section 1.3 (argv contract and --preflight paragraph), section 3 bullet 1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "989dc2a3c960085b9e9dfbe5b488c3560be6813dcb41d3f8c5be9151b9816b77",
+      "rubric_id": "R3",
+      "affected_surface": "launcher --clearenv environment for the model transport",
+      "claim": "--clearenv drops HTTPS_PROXY, HTTP_PROXY, NO_PROXY and SSL_CERT_FILE, so on a proxied or private-CA host the non-blind codex block reaches the API while the cleanroom seat cannot, yielding a no_verdict with an unhelpful transport error.",
+      "evidence_reference": "plan section 1.3 (--clearenv --setenv list), section 0 bullet 3",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-17T04:30:05.115Z"
+}

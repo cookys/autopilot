@@ -1,0 +1,61 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-cleanroom-launcher-2026-09-17",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "cd163e229b6893e57d33d4ab482fd543ae6714efb0ca455a75ddf3c55c532bc5",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: pid 1 inside the namespace is bwrap's reaper, a wrapper cannot clean it. Probed `bwrap --args 9` on this host \u2192 /proc/1/cmdline is exactly `bwrap --args 9 -- /bin/sh \u2026` with no host path. \u00a71.3 now passes every option through an args file, the argv assertion is 'no host path in pid-1 argv' with a no-`--args` control (\u00a71.5 (a), \u00a74 boundary, R4)."
+  },
+  {
+   "fingerprint": "3358f19be3e0e0cf41ada1836e2f38e44833efcfa1f128703cb9a98321628ca8",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: dispatch precondition now runs `--preflight --deny-path <packet dir>` (ms, no model) and a non-zero exit is die_precondition `cleanroom runtime unusable`; header notes AUTOPILOT_CLEANROOM_BWRAP must be AppArmor-permitted (\u00a71.2, \u00a71.6, \u00a72.6)."
+  },
+  {
+   "fingerprint": "27ebeea8949f570677232501f876fed4467480e987ca78097fcdc5250d636f08",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: no outer timeout around the launcher (its timer is the only wall cap, 124 unambiguous); launcher traps EXIT INT TERM HUP and re-raises after cleanup; seat roots use a fixed `cleanroom-seat.` prefix and dispatch-review passes --seat-root beside the packet; orphan note in header (\u00a71.3, \u00a71.4, \u00a76)."
+  },
+  {
+   "fingerprint": "16dbe26464f7ace30c574f0217297df40af404ac3c6121ac6fb81f6d79780783",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: \u00a74 no-regression row and \u00a74.1 now say the seven pre-existing commands are green at base and the new suite is recorded as `absent at base (created by this cut)`; the base evidence file already has that line."
+  },
+  {
+   "fingerprint": "111d32cc03ad7c2d500a45cddfed4be39faaa9c68335a2c512008bc5e9c6987b",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: resolution defined as `command -v` \u2192 `readlink -f`, regular file, `codex-code-mode-host` beside it, else exit 2 `codex binary directory unresolved`; portable stub test (g) added (\u00a71.2, \u00a71.5, \u00a71.6)."
+  },
+  {
+   "fingerprint": "dd97590c57235464b4d19eee5b9190dfdad0302762323fb69bdd880addecaa6c",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: \u00a75 dogfood records sha256 of ~/.codex/auth.json before/after and re-authenticates; limitation stated in the launcher header and blind-dispatch 'not proven' list; stale last_refresh preflight refusal deferred to 1b-B (\u00a73)."
+  },
+  {
+   "fingerprint": "68894667f6cb4fec0278f2ff0c1da556937f7fa84c9b9a6a1702ba62ce7e1ec1",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: scripts inside the boundary run via /bin/sh explicitly and dispatch-review passes --seat-root next to the packet (blind dir) instead of host TMPDIR; host /tmp here is rw,relatime (recorded) (\u00a70, \u00a71.3)."
+  },
+  {
+   "fingerprint": "3460988c05d5878a6717ad58cde37e1ed3273e2d92c0bfe645412a4055c90f04",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: preflight mode contract stated \u2014 only --deny-path (+ optional --bwrap/--seat-root), empty work dir, no credential/binary/packet, JSON line with profile 'preflight' (\u00a71.3, \u00a74 preflight row)."
+  },
+  {
+   "fingerprint": "989dc2a3c960085b9e9dfbe5b488c3560be6813dcb41d3f8c5be9151b9816b77",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted as recorded follow-up (no change this cut): proxy/CA env pass-through listed in \u00a71.3 and \u00a73 for the first proxied host; this host is not proxied."
+  }
+ ]
+}

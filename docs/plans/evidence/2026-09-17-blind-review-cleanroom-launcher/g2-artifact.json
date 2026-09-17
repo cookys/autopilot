@@ -1,0 +1,381 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-cleanroom-launcher-2026-09-17",
+  "logical_plan_id": "blind-review-cleanroom-launcher-2026-09-17",
+  "session_id": "c1c-g2-1789619661",
+  "session_key": "c8e6b9adf0fb9f4e06e5a1683521527cd83c2ddf9657cc785c9e09801e503f63",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "0042518cff8aa6829a394f9bdea0714f876391eab141ab35d86efe25c139a21a",
+  "manifest_sha256": "6b6532883f5a42fe4b20130b94b16904088d70c5a34f43c88e445b8cc2e1260b",
+  "plan_sha256": "5a2cde56e28da99f68e1f566a9ee68af09ec9d6d3c8c2899ae5da91ee0f6b096",
+  "growth_ratio": {
+    "numerator": 13804,
+    "denominator": 11239
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "d930126efb1d1193bf8624992fd0f7c232907eb2e3c4e71061e1c70afd7c8577"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "138a4f39e520176893afc84194c5bcc72c25a765f3eea986307ff19b89a36d95",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-u2NGcP",
+          "digest": "138a4f39e520176893afc84194c5bcc72c25a765f3eea986307ff19b89a36d95"
+        },
+        "receipt_digest": "c4c67240672eac5f0ac199970bf273fe3446f8d3c88e91572722ce5888ac9eb6"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "2190cde54f116e4de30ff561ab8c10958a8695248d46148065ed344947512e9b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "dfc895077c01470bb872296d8994f6cedc7016f1c1244b9cabe71e3c149ab360",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-22x9A7",
+          "digest": "dfc895077c01470bb872296d8994f6cedc7016f1c1244b9cabe71e3c149ab360"
+        },
+        "receipt_digest": "937f7729d5316c3940ec6acb0cae5533cec1ba85aee88491e5727ac1dc22775d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sealed scope: docs/BACKLOG.md, CLAUDE.md, §2.5 output_paths, §4.1 verification_commands",
+      "claim": "R6 requires the new launcher script to be registered in the scripts inventory AND the CLAUDE.md script list, but the plan deliberately keeps CLAUDE.md byte-identical to base in this cut and defers its registration to a later depth-0 release commit, so the frozen scope-integrity criterion cannot be satisfied as written.",
+      "evidence": "Rubric R6 states the new script is registered in the scripts inventory and the CLAUDE.md script list. The plan's §2 explicitly says CLAUDE.md registration happens in the release commit, not in this hand's §4.1, and the acceptance table's scope-integrity criterion asserts CLAUDE.md is byte-identical to ceb7c81d; §2.5's sealed output_paths omit CLAUDE.md entirely while including docs/scripts-inventory.md and docs/BACKLOG.md.",
+      "evidence_reference": "Plan §2 final paragraph (CLAUDE.md is a root-level file ... runs check-claude-md-inventory.js there (not in the hand's §4.1)); §2.5 sealed output_paths; acceptance table scope-integrity row (CLAUDE.md byte-identical); rubric R6",
+      "repair": "Decide now: either add CLAUDE.md to §2.5 sealed output_paths with the launcher's name added to the Dispatch rails group and include node scripts/check-claude-md-inventory.js in this hand's §4.1 (and drop the CLAUDE.md byte-identity clause from the scope-integrity criterion), or obtain a rubric amendment exempting CLAUDE.md from R6 for this cut with the depth-0 registration recorded as a tracked commitment. Silent deferral contradicts the frozen rubric.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eb57487dabc3fb182b5c975d9808057752c7697a1dce9a1fc825ea5569986ce0"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/lib/cleanroom-launch.sh boundary; hooks/tests/cleanroom-launch.test.sh assertion (a); plan §1.3, §1.5, §2.6",
+      "claim": "The boundary claim omits inherited file descriptors: any fd above 2 that dispatch-review.sh or the launcher shell holds open (raw log, lock, capture file, a stray exec N< redirection) is inherited by bwrap and then by the inner codex, and a process inside the namespace can reopen it through /proc/self/fd/N even though the backing file is not bind-mounted, so the read/write channel is not covered by the mount deny list and is not probed by the isolation suite.",
+      "evidence": "§1.3 enumerates mounts, --clearenv and --args as the whole boundary and lists no fd hygiene; §1.5(a) probes seven paths plus /proc/1/cmdline but never inventories /proc/self/fd or attempts a magic-link reopen; bwrap passes inherited descriptors through by design (that is how --file FD style options work), and --proc /proc is mounted, so /proc/self/fd/N links are available to the seat. The plan itself relies on fd 9 for --args; whether bwrap closes it after reading is asserted nowhere.",
+      "evidence_reference": "plan §1.3 bwrap.args list and §1.5 (a); rubric R3 read-only enumeration",
+      "repair": "State in §1.3 and §2.6 that the launcher closes every descriptor above 2 before exec (bash loop over 3..1023 with exec {fd}>&-, then open fd 9 for bwrap.args only), and add to §1.5(a): the stub lists /proc/self/fd and asserts exactly 0,1,2 are present and that cat /proc/self/fd/9 fails; drive the launcher from a parent shell that deliberately holds an extra fd on a host secret (for example exec 7< the operator auth.json before invoking the launcher) so the test proves inherited descriptors are dropped rather than assuming it.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d60ed21b6ad209c9deae0d92488a11dab2c1d7c5150f27a278cef6a55e133d41"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "plan §2 (CLAUDE.md deferral), §2.5 output_paths, §4 scope-integrity row, §4.1",
+      "claim": "The plan contradicts the frozen rubric on CLAUDE.md: R6 requires the new script to be registered in the CLAUDE.md script list at the candidate, but §2 defers that edit to the depth-0 release commit and §4 scope-integrity simultaneously asserts CLAUDE.md is byte-identical to base, so whichever commit is judged as the candidate fails one of the two checks.",
+      "evidence": "§2 says depth-0 adds lib/cleanroom-launch.sh to the Dispatch rails group and runs check-claude-md-inventory.js in the release commit, not in the hand; §2.5 omits CLAUDE.md; §4 scope-integrity lists CLAUDE.md among the byte-identical files; R6 reads: the new script is registered in the scripts inventory and the CLAUDE.md script list.",
+      "evidence_reference": "plan §2 last bullet, §2.5, §4 row scope-integrity; rubric R6",
+      "repair": "Decide now and align all three places: either add CLAUDE.md to §2.5 output_paths (if the scope tooling can carry a root-level file), add node scripts/check-claude-md-inventory.js to §4.1, and remove CLAUDE.md from the byte-identical list; or, if a root-level file truly cannot be scoped, write in §2 and §4 that R6's CLAUDE.md clause is discharged at the release commit, record that check's exit 0 in the evidence dir, and drop the byte-identical claim so the seal does not assert something the same plan forbids.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "aca56f785b5786cc80ca4a33ae1137844e412b0e1bb7cff5c1d84dc9afc1d5c9"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "cleanroom-launch.sh --preflight; plan §1.3 preflight bullet; 1b-B intake reliance",
+      "claim": "The preflight cannot distinguish a denied path from a path that does not exist on the host: a mistyped or stale --deny-path makes cat fail inside the seat for the wrong reason and the probe reports exit 0, so a green preflight can be produced by a typo, which matters because 1b-B intends to gate seat admission on it.",
+      "evidence": "§1.3: every --deny-path must be unreadable (cat fails) ... exit 0 only then; no host-side existence check is specified for the caller-named paths; §3 says intake in 1b-B will refuse a seat when preflight is not green.",
+      "evidence_reference": "plan §1.3 --preflight bullet; §1.5 (e)",
+      "repair": "Before entering the namespace the launcher runs test -e on each --deny-path and exits 2 naming the first missing one; add to §1.5(e) a case with a nonexistent --deny-path expecting exit 2, never 0.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7712cfae6aae1eadf192ff77364f62e765f39c8c54fa501e74b5612cd7d3bd0d"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "dispatch-review.sh cleanroom launch block (--timeout pass-through); launcher --timeout grammar; portable suite",
+      "claim": "The timeout grammars may not match: dispatch-review.sh passes $TIMEOUT verbatim, which coreutils timeout accepts as a bare number, while the launcher contract lists --timeout as Ns or Nm; if the launcher validates strictly, every cleanroom seat with the script default fails at usage (exit 2 to no_verdict) before any run.",
+      "evidence": "§0 third bullet: timeout \"$TIMEOUT\" is the wall cap (coreutils grammar); §1.3 launch mode: --timeout <Ns|Nm>; §1.6 pins only that the value is forwarded, not that the launcher accepts the script's default form.",
+      "evidence_reference": "plan §0, §1.3 launch mode argv, §1.4, §1.6",
+      "repair": "State that the launcher accepts exactly the coreutils DURATION grammar (bare number or s/m/h/d suffix) and forwards it untouched; have the portable test invoke the cleanroom path with the suite's real default --timeout value and the isolation suite (b) use 2s so both forms are covered.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d2d7715d34abbe771bb381b3c64f708a0005adc175aa50b134e7e38365aac6d8"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "cleanroom-launch.sh --seat-root create and remove semantics; dispatch-review.sh passing <blind dir>/seat",
+      "claim": "The launcher removes the seat root on EXIT/INT/TERM/HUP but the plan does not say it refuses a pre-existing --seat-root, so a retry after a crashed run, or a wrong path handed by a caller, leads either to silent reuse of a directory containing foreign content or to rm -rf of a path the launcher did not create.",
+      "evidence": "§1.3: creates a private seat root (mktemp -d ...; --seat-root uses that path) and traps remove the seat root; §1.4 passes a fixed path beside the packet; no exists-already rule and no not-created-by-me guard is written.",
+      "evidence_reference": "plan §1.3 first sub-bullet and trap sentence; §1.4",
+      "repair": "Specify that with --seat-root the launcher does mkdir -m 0700 of that exact path and exits 2 (seat root already exists) if it is present, records the created path, and removes only a path it created; add a portable stub-launcher test and an isolation test for the pre-existing seat root case.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7e36094cac6b0db57f1bb95f3149a7383a8b6ac3021050ff61d22f43792c2f6b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/cleanroom-launch.test.sh assertion (a)",
+      "claim": "Assertion (a) names $CODEX_HOME/auth.json as a denied read, but inside the seat CODEX_HOME is /home/review/.codex where the copied credential is readable by design; if the stub expands the variable inside the boundary the assertion is either wrong or vacuous, and the host operator credential path is never actually tried.",
+      "evidence": "§1.3 sets --setenv CODEX_HOME /home/review/.codex and copies auth.json there; §1.5(a) lists $CODEX_HOME/auth.json among paths that must be denied.",
+      "evidence_reference": "plan §1.3 bwrap.args --setenv list; §1.5 (a)",
+      "repair": "The test writes the host credential path as a literal into the stub script at generation time (resolved on the host before launch) and asserts that read is denied, and separately asserts /home/review/.codex/auth.json IS readable as the positive control.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "23915549a0594a58d3ad4fb6f6217cd3ae87e9b52b360b084c4b32ddd7714860"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "dispatch-review.sh codex binary directory precondition; launcher header docs",
+      "claim": "The binary-directory rule assumes the tarball release layout; an npm-installed codex resolves via readlink -f to bin/codex.js with no codex-code-mode-host beside it and is refused, which is fail-closed but the message and header do not tell the operator that only the release layout is supported.",
+      "evidence": "§1.2: the directory of the resolved file is the release bin/ to bind; the refusal text is codex binary directory unresolved: <path> with no mention of layout; §0 records only this host's layout.",
+      "evidence_reference": "plan §1.2 binary precondition; §1.7 header requirement",
+      "repair": "No current change to behaviour; add one header sentence and one line in the refusal message stating that the codex release directory (codex next to codex-code-mode-host) is required and the npm wrapper layout is not supported in this cut.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d77bad84dc4fe4ada5042ba7fcbfeaeb0bc66f90d0cac4580f393da7d95a7268"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "copied credential model; §5 dogfood; 1b-B preflight decision",
+      "claim": "Copying auth.json into a throwaway HOME risks more than a lost refresh: if the provider rotates refresh tokens on use, a refresh performed inside a seat can invalidate the operator's host credential, and a single §5 dogfood run only proves the host token survived once, not that rotation cannot occur.",
+      "evidence": "§1.3 header note: a token refresh performed inside a seat is discarded (limitation); §5 records one before/after sha256 check; §3 defers the stale last_refresh preflight question to 1b-B.",
+      "evidence_reference": "plan §1.3 header notes; §5; §3 last bullet",
+      "repair": "No current change; follow-up only: in 1b-B decide the near-expiry preflight refusal and document the recovery path (re-login) if a host credential is invalidated by a seat refresh.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "489873baf53237a46c71e31ffa13bfa2dd4b54000e37e4f440440f60e335dc9a"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "7712cfae6aae1eadf192ff77364f62e765f39c8c54fa501e74b5612cd7d3bd0d",
+      "rubric_id": "R4",
+      "affected_surface": "cleanroom-launch.sh --preflight; plan §1.3 preflight bullet; 1b-B intake reliance",
+      "claim": "The preflight cannot distinguish a denied path from a path that does not exist on the host: a mistyped or stale --deny-path makes cat fail inside the seat for the wrong reason and the probe reports exit 0, so a green preflight can be produced by a typo, which matters because 1b-B intends to gate seat admission on it.",
+      "evidence_reference": "plan §1.3 --preflight bullet; §1.5 (e)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d2d7715d34abbe771bb381b3c64f708a0005adc175aa50b134e7e38365aac6d8",
+      "rubric_id": "R2",
+      "affected_surface": "dispatch-review.sh cleanroom launch block (--timeout pass-through); launcher --timeout grammar; portable suite",
+      "claim": "The timeout grammars may not match: dispatch-review.sh passes $TIMEOUT verbatim, which coreutils timeout accepts as a bare number, while the launcher contract lists --timeout as Ns or Nm; if the launcher validates strictly, every cleanroom seat with the script default fails at usage (exit 2 to no_verdict) before any run.",
+      "evidence_reference": "plan §0, §1.3 launch mode argv, §1.4, §1.6",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7e36094cac6b0db57f1bb95f3149a7383a8b6ac3021050ff61d22f43792c2f6b",
+      "rubric_id": "R3",
+      "affected_surface": "cleanroom-launch.sh --seat-root create and remove semantics; dispatch-review.sh passing <blind dir>/seat",
+      "claim": "The launcher removes the seat root on EXIT/INT/TERM/HUP but the plan does not say it refuses a pre-existing --seat-root, so a retry after a crashed run, or a wrong path handed by a caller, leads either to silent reuse of a directory containing foreign content or to rm -rf of a path the launcher did not create.",
+      "evidence_reference": "plan §1.3 first sub-bullet and trap sentence; §1.4",
+      "disposition": null
+    },
+    {
+      "fingerprint": "23915549a0594a58d3ad4fb6f6217cd3ae87e9b52b360b084c4b32ddd7714860",
+      "rubric_id": "R5",
+      "affected_surface": "hooks/tests/cleanroom-launch.test.sh assertion (a)",
+      "claim": "Assertion (a) names $CODEX_HOME/auth.json as a denied read, but inside the seat CODEX_HOME is /home/review/.codex where the copied credential is readable by design; if the stub expands the variable inside the boundary the assertion is either wrong or vacuous, and the host operator credential path is never actually tried.",
+      "evidence_reference": "plan §1.3 bwrap.args --setenv list; §1.5 (a)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d77bad84dc4fe4ada5042ba7fcbfeaeb0bc66f90d0cac4580f393da7d95a7268",
+      "rubric_id": "R2",
+      "affected_surface": "dispatch-review.sh codex binary directory precondition; launcher header docs",
+      "claim": "The binary-directory rule assumes the tarball release layout; an npm-installed codex resolves via readlink -f to bin/codex.js with no codex-code-mode-host beside it and is refused, which is fail-closed but the message and header do not tell the operator that only the release layout is supported.",
+      "evidence_reference": "plan §1.2 binary precondition; §1.7 header requirement",
+      "disposition": null
+    },
+    {
+      "fingerprint": "489873baf53237a46c71e31ffa13bfa2dd4b54000e37e4f440440f60e335dc9a",
+      "rubric_id": "R3",
+      "affected_surface": "copied credential model; §5 dogfood; 1b-B preflight decision",
+      "claim": "Copying auth.json into a throwaway HOME risks more than a lost refresh: if the provider rotates refresh tokens on use, a refresh performed inside a seat can invalidate the operator's host credential, and a single §5 dogfood run only proves the host token survived once, not that rotation cannot occur.",
+      "evidence_reference": "plan §1.3 header notes; §5; §3 last bullet",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-17T04:38:49.970Z"
+}

@@ -73,9 +73,8 @@
    — a present bwrap whose user namespaces are blocked by AppArmor is refused here, not turned into a
    `no_verdict` an hour later); the runner binary: `command -v` then `readlink -f`, the resolved file
    must be a regular file and `codex-code-mode-host` must sit beside it (else `codex binary
-   directory unresolved: <path> — the codex release directory (codex beside codex-code-mode-host) is
-   required; the npm wrapper layout is not supported in this cut`, also stated in the header) — the
-   directory of the resolved file is the release `bin/` to bind; a credential source (`AUTOPILOT_CLEANROOM_CODEX_AUTH` or `$CODEX_HOME/auth.json` or
+   directory unresolved: <path>`) — the directory of the resolved file is the release `bin/` to
+   bind; a credential source (`AUTOPILOT_CLEANROOM_CODEX_AUTH` or `$CODEX_HOME/auth.json` or
    `~/.codex/auth.json`) exists and is a regular file. Then `scripts/lib/cleanroom-launch.sh` is
    invoked with `--seat-root <blind dir>/seat` (the launcher-controlled dir beside the packet; the
    `mktemp` default is for direct callers). `AUTOPILOT_CLEANROOM_BWRAP` must name a binary the host
@@ -117,17 +116,6 @@
      HOME, the repository, `.autopilot`, host `/tmp` or a sibling seat is bound; the network stays on
      (model transport; on a proxied / private-CA host `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY`/
      `SSL_CERT_FILE` are NOT passed through in this cut — a recorded follow-up, §3).
-   - descriptor hygiene: before `bwrap` the launcher closes every inherited descriptor above 2
-     (`for fd in 3..1023: exec {fd}>&-`) and only then opens fd 9 on `bwrap.args`; bwrap itself
-     passes inherited descriptors through and `/proc/self/fd/N` is a reopenable magic link inside a
-     mounted `/proc`, so an fd the caller holds on a host file would otherwise be a read/write channel
-     the mount deny-list never sees. `--timeout` accepts exactly the coreutils DURATION grammar (bare
-     number or `s`/`m`/`h`/`d` suffix) and forwards it untouched — `dispatch-review.sh`'s default
-     `5m` and a bare `300` both work. `--seat-root <dir>`: the launcher `mkdir -m 0700` that EXACT
-     path and exits 2 `seat root already exists` when it is present; it removes only a root it
-     created (a caller's stale or foreign directory is never reused or `rm -rf`ed). In preflight
-     mode every `--deny-path` is checked with `test -e` on the HOST before entering the namespace —
-     a missing path exits 2 naming it, so a typo can never produce a green preflight.
    - the launcher's `timeout` is the ONLY wall cap (`dispatch-review.sh` does not wrap it again); exit
      code = the inner exit code (124 passes through untouched); prints one JSON line on ITS stdout
      `{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "codex"|"preflight",
@@ -162,28 +150,19 @@
    hostile stub as the "codex" binary (`--bin-dir` pointing at a dir whose `codex` is a shell script)
    and runs the REAL launcher: (a) the stub tries to read the real repository root, the operator
    HOME, `$CODEX_HOME/auth.json`, a planted sibling seat file, `/etc/hostname`, the packet's host
-   path and `/proc/1/cmdline`; the host credential path is written into the stub as a LITERAL
-   resolved on the host before launch (never `$CODEX_HOME` expanded inside, where it names the
-   copied, readable seat credential — that read is the positive control and must succeed); every
-   host read is denied (`cat` fails) except the packet tree, which it reads byte-equal, and
-   `/proc/1/cmdline` contains no host path (not the seat root, packet dir, bin dir or repository
-   root) — a control run WITHOUT `--args` (plain argv) shows the host paths, proving the assertion
-   can fail; the suite drives the launcher from a parent shell that holds `exec 7<` on a host secret
-   file, and the stub asserts `ls /proc/self/fd` is exactly `0 1 2` (plus the fds `/bin/sh` opens for
-   the script itself, enumerated) and `cat /proc/self/fd/7` and `/proc/self/fd/9` both fail (RED at
-   base: launcher absent); (b) the stub sleeps past `--timeout 2s` → launcher exit 124, JSON `timed_out:
+   path and `/proc/1/cmdline`; every read is denied (`cat` fails) except the packet tree, which it
+   reads byte-equal, and `/proc/1/cmdline` contains no host path (not the seat root, packet dir,
+   bin dir or repository root) — a control run WITHOUT `--args` (plain argv) shows the host paths,
+   proving the assertion can fail (RED at base: launcher absent); (b) the stub sleeps past `--timeout 2s` → launcher exit 124, JSON `timed_out:
    true`, seat root removed; (c) the stub writes into `/home/review/.codex` and `/tmp` → succeeds, and
    nothing appears outside the seat root on the host; the seat root is gone after exit; (d) the
    stub's stdout/stderr land byte-equal in `--out`/`--err`; (e) `--preflight --deny-path <repo>
    --deny-path <home>` exits 0 on this host, and with `--bwrap /nonexistent` exits 2 (never 0) with a
-   named message, with a `--deny-path` that IS readable (a file the stub can read because the
-   test binds nothing extra — e.g. `/usr/bin/sh`) exits 3 naming it, and with a `--deny-path` that
-   does not exist on the host exits 2 naming it (never 0); (f) two launchers run
+   named message, and with a `--deny-path` that IS readable (a file the stub can read because the
+   test binds nothing extra — e.g. `/usr/bin/sh`) exits 3 naming it; (f) two launchers run
    concurrently with `--keep-seat`: each stub tries the other's seat root → denied; (g) a stub
    `codex` dir WITHOUT `codex-code-mode-host` → `dispatch-review.sh` exit 2 `codex binary directory
-   unresolved` (portable, in the dispatch-review suite); (h) `--seat-root` pointing at an existing
-   directory → exit 2 `seat root already exists`, the directory untouched; after a normal run the
-   created root is gone; portable stub-launcher variant in the dispatch-review suite. This suite is in this host's `verification_commands` with the env set; it is
+   unresolved` (portable, in the dispatch-review suite). This suite is in this host's `verification_commands` with the env set; it is
    NOT in CI's job.
 6. **Portable tests in `hooks/tests/dispatch-review.test.sh`** (no bwrap; `AUTOPILOT_CLEANROOM_LAUNCHER`
    stub): blind codex without `AUTOPILOT_REVIEW_PACKET_DIR` → exit 2 `cleanroom seat requires a review
@@ -192,9 +171,7 @@
    never called in launch mode; a codex stub dir lacking `codex-code-mode-host` → exit 2;
    with a stub launcher: it receives `--profile codex`, `--packet-dir <the env dir>`, `--timeout
    <the --timeout value>`, `--model`, `--effort`, a `--bin-dir` that contains the resolved binary,
-   `--auth-file`, `--seat-root <packet dir>/../seat`, and `--timeout` equal to the suite's real
-   default (`5m`, coreutils grammar, forwarded untouched); its stdout capture is what the parser
-   reads (stub writes a framed
+   `--auth-file`, and its stdout capture is what the parser reads (stub writes a framed
    `VERDICT: SHIP-AS-IS` into `--out` → `status: reviewed`); stub exit 124 → `status: no_verdict`
    with the cleanroom reason and rc in `raw_log`; the launcher JSON line is present in `raw_log`; a
    `none`-tier runner (grok) under blind mode still gets the unchanged message (preservation); codex
@@ -225,14 +202,14 @@
 - Docs: `references/blind-dispatch.md` (+ mirror) new section "Cleanroom tier (v2.36.62)" after
   "Packet blinding": tiers, the boundary in one list, what is and is not proven this cut (no live
   codex run until quota returns), pointer to 1b-B; `docs/scripts-inventory.md` one row for the
-  launcher; `CLAUDE.md` Dispatch rails group gains `lib/cleanroom-launch.sh` (the root-level path is
-  sealed as an exact `output_paths` entry and an exact `allowed_path_prefixes` entry — the contract
-  checker accepts `normalized === prefix`; the scope session's `<prefix>/**` glob governs NEW paths
-  only, and `CLAUDE.md` is modified, not created); `docs/BACKLOG.md` redesign row Context becomes
+  launcher; `docs/BACKLOG.md` redesign row Context becomes
   EXACTLY `packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary;
   verify-once; parallel seats. 1a-A (v2.36.59), 1a-B (v2.36.61), 1b-A launcher (v2.36.62) shipped;
   1b-B intake/resolver, 2 open. Detail in the pointer.` (Status `open`). `CHANGELOG.md` and version
-  manifests NOT sealed (depth-0 release commit; `v2.36.62` in text is a pin).
+  manifests NOT sealed (depth-0 release commit; `v2.36.62` in text is a pin). `CLAUDE.md` is a
+  root-level file and the campaign scope session turns prefixes into `<prefix>/**`, so depth-0 adds
+  the `lib/cleanroom-launch.sh` name to the Dispatch rails group in the release commit and runs
+  `check-claude-md-inventory.js` there (not in the hand's §4.1).
 
 ### 2.5 Sealed `output_paths` (exact)
 
@@ -246,12 +223,11 @@ hooks/tests/dispatch-review.test.sh
 references/blind-dispatch.md
 platforms/codex/plugin/references/blind-dispatch.md
 docs/scripts-inventory.md
-CLAUDE.md
 docs/BACKLOG.md
 ```
 
 Created (`authorized_creates`): the launcher, its mirror, `hooks/tests/cleanroom-launch.test.sh`.
-Every other path exists at base. `max_changed_files` is sealed at 14 (> 11).
+Every other path exists at base. `max_changed_files` is sealed at 14 (> 10).
 
 ### 2.6 Global constraints (copied verbatim into every dispatch)
 
@@ -263,8 +239,7 @@ Every other path exists at base. `max_changed_files` is sealed at 14 (> 11).
   is the only wall cap.
 - The seat sees: the packet tree (ro), its own writable HOME with one copied credential and a
   launcher-written config, the runtime and TLS/DNS; it does not see the repository, the operator
-  HOME, `.autopilot`, host `/tmp`, sibling seats, the host argv, or any inherited file descriptor
-  (all closed above 2 before `bwrap`, fd 9 opened after).
+  HOME, `.autopilot`, host `/tmp`, sibling seats or the host argv.
 - No `jq`, no `python`, no `git` in the launcher; Node not required either.
 - `src/**`, `schemas/**`, `bin/autopilot.js`, `scripts/resolve-review-loop.sh`,
   `scripts/qualification-review-provider.js` byte-identical to `ceb7c81d`.
@@ -289,9 +264,7 @@ Every other path exists at base. `max_changed_files` is sealed at 14 (> 11).
   consults). Proxy / private-CA pass-through (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`,
   `SSL_CERT_FILE` via `--setenv` when set on the host) is a recorded follow-up for the first proxied
   host; this host is not proxied. Whether a stale `auth.json` `last_refresh` should be a preflight
-  refusal, and the documented recovery path (re-login) if a provider that rotates refresh tokens on
-  use invalidates the host credential through a seat refresh, are decided in 1b-B — the §5 check
-  proves the host token survived one run, not that rotation cannot occur.
+  refusal is decided in 1b-B.
 
 ## 4. Acceptance
 
@@ -299,10 +272,10 @@ Every other path exists at base. `max_changed_files` is sealed at 14 (> 11).
 |----|-----------|----------|
 | `tier-gate` | under blind mode: packet-tier runners unchanged; `none`-tier refused with the unchanged message; codex routed to the launcher only after packet dir, bwrap-present-and-preflight-green, binary dir (with `codex-code-mode-host`) and credential preconditions, each refusing with exit 2 and a named message; codex without blind mode byte-identical (`--sandbox read-only`); no outer `timeout` around the launcher | dispatch-review suite |
 | `launcher-contract` | the stub launcher receives profile, packet dir, timeout, model, effort, bin dir, auth file; its `--out` is what the parser reads; its exit 124 → `no_verdict` with rc in `raw_log`; its JSON line is in `raw_log` | dispatch-review suite |
-| `boundary` | through the REAL launcher on this host: host repo, operator HOME, the host credential (literal path), sibling seat, `/etc/hostname`, packet host path all denied while the copied seat credential and the packet tree are readable (positive controls); `/proc/1/cmdline` carries no host path (control without `--args` shows them); an fd the parent holds on a host secret is not present inside and `/proc/self/fd/7`/`9` cannot be reopened; writes stay inside the seat root, which is removed on exit and on INT/TERM and never reused when pre-existing; `--timeout` → 124 + `timed_out: true`; two concurrent seats cannot read each other | cleanroom-launch suite (`AUTOPILOT_HOST_ISOLATION=1`) |
-| `preflight` | `--preflight --deny-path …` (no packet, prompt, credential or binary needed) exits 0 on this host with a `profile: "preflight"` JSON line; with a missing bwrap exits 2, never 0; with a path that IS readable exits 3 naming it; with a path that does not exist on the host exits 2 naming it | cleanroom-launch suite |
+| `boundary` | through the REAL launcher on this host: host repo, operator HOME, credentials, sibling seat, `/etc/hostname`, packet host path all denied; packet tree readable byte-equal; `/proc/1/cmdline` carries no host path (control without `--args` shows them); writes stay inside the seat root, which is removed on exit and on INT/TERM; `--timeout` → 124 + `timed_out: true`; two concurrent seats cannot read each other | cleanroom-launch suite (`AUTOPILOT_HOST_ISOLATION=1`) |
+| `preflight` | `--preflight --deny-path …` (no packet, prompt, credential or binary needed) exits 0 on this host with a `profile: "preflight"` JSON line; with a missing bwrap exits 2, never 0; with a path that IS readable exits 3 naming it | cleanroom-launch suite |
 | `no-regression` | each command in §4.1 exits 0 at the candidate (detached checkout, sequential); at base the seven pre-existing commands were green and `cleanroom-launch.test.sh` is recorded as `absent at base (created by this cut)` in the evidence dir | suite output + evidence |
-| `scope-integrity` | `git diff --name-only <base> HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/**`, `schemas/**`, `bin/autopilot.js`, `resolve-review-loop.sh`, `qualification-review-provider.js` byte-identical; new launcher and test file `test -x`; `CLAUDE.md` names the launcher and `check-claude-md-inventory.js` exits 0 | command output |
+| `scope-integrity` | `git diff --name-only <base> HEAD` ⊆ §2.5 plus committed plan/mission docs; `src/**`, `schemas/**`, `bin/autopilot.js`, `resolve-review-loop.sh`, `qualification-review-provider.js`, `CLAUDE.md` byte-identical; new launcher and test file `test -x` | command output |
 
 ### 4.1 No-regression commands (exact; also the graph's `verification_commands`)
 
@@ -313,13 +286,14 @@ bash hooks/tests/review-runner.test.sh
 bash hooks/tests/review-packet.test.sh
 node scripts/check-js-syntax.js
 bash scripts/sync-codex-plugin-skills.sh --check
-node scripts/check-claude-md-inventory.js
 node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
 ```
 
 The second line is host-only by design (this host has `bwrap`); in CI the same suite prints `SKIP`.
 Expected exit 0 for every line at the candidate. At base the second line's file does not exist
-(created by this cut) and the evidence file records it as absent.
+(created by this cut) and the evidence file records it as absent. Depth-0 runs
+`node scripts/check-claude-md-inventory.js` after adding the launcher's name to `CLAUDE.md` in the
+release commit.
 
 ## 5. Dogfood proof (depth-0)
 
@@ -358,33 +332,4 @@ configurable deny-list → 2.
 
 ## Review log
 
-- Unknown-escalation probe (`ladder-classify.json`): U1 (two coined names had zero repo hits); the
-  consult rail was attempted and failed on the codex quota (`consult-codex-quota-rail-failed.json`,
-  ladder row `rail-failed`); pointing the consult seat at GLM needs an operator pin, so no consult.
-- Plan hetero loop G1 2026-09-17 (GLM-5.2 READY, claude-fable-5-1 CONDITIONAL: 1 blocker + 7
-  non-blocking; evidence `g1-*`, `plan.as-reviewed-g1.md`): all nine accepted — (R3, blocker) a
-  wrapper cannot clean `/proc/1/cmdline` because pid 1 is bwrap's reaper → probed `bwrap --args 9`
-  (options in a NUL file) leaves no host path in the argv (`bwrap-probe-2026-09-17.md`), the
-  assertion is now "no host path in pid-1 argv" with a plain-argv control; (R2) `bwrap` present is
-  not `bwrap` working → dispatch runs `--preflight` as a precondition; (R4) one timer only, INT/TERM/
-  HUP traps, `cleanroom-seat.` prefix; (R7) base evidence records the new suite as absent; (R2)
-  binary resolution via `readlink -f` + `codex-code-mode-host`; (R3) token-refresh limitation checked
-  in §5; (R3) scripts run through `/bin/sh`, seat root beside the packet; (R4) preflight contract
-  needs no packet/credential; (R3) proxy/CA pass-through recorded as follow-up. Depth-0 also moved
-  `CLAUDE.md` out of the hand's scope in this fold — reverted in G2 (below). A rubric wording edit
-  made in the same fold drifted the frozen rubric (`frozen rubric/manifest drifted`, refused
-  attempt `g2-drifted-rubric-attempt.err`); the rubric was restored to its G1 bytes before G2.
-- Plan hetero loop G2 2026-09-17 (terminal at the cap; GLM-5.2 CONDITIONAL 1 blocker, claude-fable-5-1
-  CONDITIONAL 2 blockers + 6 non-blocking; evidence `g2-*`, `plan.as-reviewed-g2.md`): all nine
-  accepted — (R6, both seats) the G1 fold put `CLAUDE.md` outside the sealed scope while frozen R6
-  requires the CLAUDE.md registration at the candidate: the contract checker accepts an exact
-  root-level prefix and the `<prefix>/**` scope glob governs new paths only, so `CLAUDE.md` is back
-  in §2.5 / `allowed_path_prefixes`, `check-claude-md-inventory.js` is in §4.1, and the
-  byte-identity clause is gone; (R3, blocker) inherited descriptors are a channel the mount
-  deny-list never sees → the launcher closes 3..1023 before `bwrap`, opens fd 9 after, and suite (a)
-  holds `exec 7<` on a host secret in the parent and asserts the seat's `/proc/self/fd`; (R4)
-  `--deny-path` existence checked on the host (`test -e`, exit 2); (R2) coreutils DURATION grammar
-  forwarded untouched, both `5m` and `2s` covered; (R3) `--seat-root` must not pre-exist, only a
-  created root is removed; (R5) host credential path as a literal in the stub, copied credential as
-  the positive control; (R2) release-layout-only message and header sentence; (R3) refresh-rotation
-  recovery decided in 1b-B. Growth 1.23×. Zero unaddressed blockers, zero deferred.
+- (to be filled by the plan hetero loop)

@@ -1,0 +1,61 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-cleanroom-launcher-2026-09-17",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "eb57487dabc3fb182b5c975d9808057752c7697a1dce9a1fc825ea5569986ce0",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: CLAUDE.md returns to \u00a72.5 as an exact output_paths + allowed_path_prefixes entry (implementation-campaign-check accepts normalized === prefix; the scope session's <prefix>/** governs new paths only), check-claude-md-inventory.js is in \u00a74.1, the byte-identity clause is removed \u2014 R6 holds at the candidate as frozen."
+  },
+  {
+   "fingerprint": "d60ed21b6ad209c9deae0d92488a11dab2c1d7c5150f27a278cef6a55e133d41",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \u00a71.3 now closes every inherited descriptor above 2 before bwrap and opens fd 9 only afterwards; \u00a72.6 names inherited fds as a denied channel; \u00a71.5(a) drives the launcher from a parent holding exec 7< on a host secret and asserts /proc/self/fd and that /proc/self/fd/7 and /9 cannot be reopened."
+  },
+  {
+   "fingerprint": "aca56f785b5786cc80ca4a33ae1137844e412b0e1bb7cff5c1d84dc9afc1d5c9",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted (same defect as finding 0): all three places aligned \u2014 \u00a72 docs, \u00a72.5 sealed paths, \u00a74 scope-integrity and \u00a74.1 now carry CLAUDE.md + check-claude-md-inventory.js at the candidate."
+  },
+  {
+   "fingerprint": "7712cfae6aae1eadf192ff77364f62e765f39c8c54fa501e74b5612cd7d3bd0d",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: preflight runs test -e on each --deny-path on the host before entering the namespace and exits 2 naming a missing path; \u00a71.5(e) gains the nonexistent-path case (never 0); \u00a74 preflight row updated."
+  },
+  {
+   "fingerprint": "d2d7715d34abbe771bb381b3c64f708a0005adc175aa50b134e7e38365aac6d8",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: --timeout is the coreutils DURATION grammar forwarded untouched; \u00a71.6 uses the suite's real default 5m, \u00a71.5(b) uses 2s."
+  },
+  {
+   "fingerprint": "7e36094cac6b0db57f1bb95f3149a7383a8b6ac3021050ff61d22f43792c2f6b",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: --seat-root is mkdir -m 0700 of the exact path, exit 2 'seat root already exists' if present, and only a launcher-created root is removed; \u00a71.5(h) plus a portable stub case."
+  },
+  {
+   "fingerprint": "23915549a0594a58d3ad4fb6f6217cd3ae87e9b52b360b084c4b32ddd7714860",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the host credential path is a literal resolved on the host before launch; /home/review/.codex/auth.json readable is the positive control (\u00a71.5(a), \u00a74 boundary)."
+  },
+  {
+   "fingerprint": "d77bad84dc4fe4ada5042ba7fcbfeaeb0bc66f90d0cac4580f393da7d95a7268",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: refusal message and header state that the codex release directory (codex beside codex-code-mode-host) is required and the npm wrapper layout is unsupported in this cut (\u00a71.2)."
+  },
+  {
+   "fingerprint": "489873baf53237a46c71e31ffa13bfa2dd4b54000e37e4f440440f60e335dc9a",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted as recorded follow-up: \u00a73 now states the \u00a75 check proves one survival, not that rotation cannot occur; near-expiry refusal and the re-login recovery path are 1b-B decisions."
+  }
+ ]
+}

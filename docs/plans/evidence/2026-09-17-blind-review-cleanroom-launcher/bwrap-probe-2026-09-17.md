@@ -41,3 +41,11 @@ authenticated from the sanitized HOME. codex then had written into that HOME: `c
 shell_snapshots/ skills/ thread-writer-locks/ goals_1.sqlite logs_2.sqlite memories_1.sqlite models_cache.json
 queue_1.sqlite state_5.sqlite thread_history_1.sqlite installation_id` → the seat HOME must be writable and
 discarded per seat.
+
+## Argv probe (after plan-loop G1 blocker, 2026-09-17)
+
+`bwrap --args 9 -- /bin/sh /home/review/bin/argvprobe 9< bwrap.args` (all options in a NUL-separated
+file) → inside: `pid1=[bwrap --args 9 -- /bin/sh /home/review/bin/argvprobe]`, `ppid=1`, 4 pids — no host
+path in `/proc/1/cmdline`. With `--as-pid-1`: `pid1=[/bin/sh /home/review/bin/argvprobe]`, `ppid=0`, 3 pids
+(reaper gone; not used — signal/reaping semantics change). Plain argv (control): host bind paths visible.
+Host `/tmp`: `findmnt` shows it on `/` (`rw,relatime`), not `noexec`.

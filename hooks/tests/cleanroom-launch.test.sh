@@ -102,6 +102,7 @@ set +e
 )
 RCA=$?
 set -e
+assert_contains "$(cat "$OUTA")" 'HOME=DENIED' "operator HOME is denied"
 assert_contains "$(cat "$OUTA")" 'HOST_CRED=DENIED' "host credential literal is denied"
 assert_contains "$(cat "$OUTA")" 'SEAT_CRED=readable' "copied seat credential is readable"
 assert_contains "$(cat "$OUTA")" 'REPO=DENIED' "host repository is denied"
@@ -276,5 +277,34 @@ kill -TERM "$TPID" 2>/dev/null || true
 wait "$TPID" 2>/dev/null || true
 set -e
 assert_file_absent "$SEATT" "SIGTERM removes the seat root the launcher created"
+
+# REAL defaultCleanroomProbe on this host (RED at base 130b97a8: export missing).
+PROBE_HOST_OUT="$(node - "$REPO_ROOT" "$REPO_ABS" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root, repo] = process.argv.slice(2);
+const { defaultCleanroomProbe } = require(path.join(root, 'src', 'engine', 'campaign-intake.js'));
+const contractPath = path.join(root, 'package.json');
+const ready = defaultCleanroomProbe({ runner: 'codex', repo, contractPath });
+assert.strictEqual(ready.status, 'ready', JSON.stringify(ready));
+assert.strictEqual(ready.runner, 'codex');
+assert.ok(ready.launcher_json && ready.launcher_json.profile === 'preflight', JSON.stringify(ready.launcher_json));
+const prev = process.env.AUTOPILOT_CLEANROOM_BWRAP;
+process.env.AUTOPILOT_CLEANROOM_BWRAP = '/nonexistent';
+try {
+  const rejected = defaultCleanroomProbe({ runner: 'codex', repo, contractPath });
+  assert.strictEqual(rejected.status, 'rejected', JSON.stringify(rejected));
+  assert.match(String(rejected.reason), /exit 2:/);
+} finally {
+  if (prev === undefined) delete process.env.AUTOPILOT_CLEANROOM_BWRAP;
+  else process.env.AUTOPILOT_CLEANROOM_BWRAP = prev;
+}
+console.log('default_cleanroom_probe_host=true');
+NODE
+)"
+assert_exit_code "$?" "0" "host defaultCleanroomProbe: $PROBE_HOST_OUT"
+assert_contains "$PROBE_HOST_OUT" "default_cleanroom_probe_host=true" \
+  "defaultCleanroomProbe ready on host and rejected with missing bwrap"
 
 finalize_test

@@ -5363,11 +5363,11 @@ function baseRoster(seats, extra) {
   };
 }
 
-const codexNone = {
-  role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai',
+const grokNone = {
+  role: 'qc', runner: 'grok', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai',
 };
-const codexEp = {
-  role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: 'openai', family: 'openai',
+const grokEp = {
+  role: 'qc', runner: 'grok', model: 'grok-4.5', effort: 'high', endpoint: 'xai', family: 'xai',
 };
 const ccSeat = {
   role: 'qc', runner: 'cc-shim', model: 'GLM-5.2', effort: 'high', endpoint: null, family: 'other',
@@ -5381,6 +5381,9 @@ const nativeSeat = {
 const kimiSeat = {
   role: 'qc', runner: 'kimi', model: 'kimi-code/k3', effort: 'high', endpoint: null, family: 'moonshot',
 };
+const codexSeat = {
+  role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai',
+};
 
 function assertBlindBlock(result, spiesObj) {
   assert.strictEqual(result.status, 'blocked');
@@ -5392,27 +5395,27 @@ function assertBlindBlock(result, spiesObj) {
   assert.strictEqual(spiesObj.counts.claimGeneration, 0);
 }
 
-const ladderCodex = [{ runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' }];
+const ladderGrok = [{ runner: 'grok', model: 'grok-4.5', effort: 'high', family: 'xai' }];
 const s1 = spies();
 const r1 = runCampaignIntake({
   repo: process.cwd(),
-  roster: baseRoster([codexNone], { fallback_ladder: ladderCodex }),
+  roster: baseRoster([grokNone], { fallback_ladder: ladderGrok }),
 }, s1.adapters);
 assertBlindBlock(r1, s1);
-assert.match(r1.rejection.reason, /qc_panel\[0\] gpt-5\.6-sol\/codex@@none/);
+assert.match(r1.rejection.reason, /qc_panel\[0\] grok-4\.5\/grok@@none/);
 assert.strictEqual(r1.rejection.reason.split('\n').length, 1);
 
 const sEp = spies();
 const rEp = runCampaignIntake({
   repo: process.cwd(),
-  roster: baseRoster([codexEp], { fallback_ladder: [{ runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: 'openai', family: 'openai' }] }),
+  roster: baseRoster([grokEp], { fallback_ladder: [{ runner: 'grok', model: 'grok-4.5', effort: 'high', endpoint: 'xai', family: 'xai' }] }),
 }, sEp.adapters);
 assertBlindBlock(rEp, sEp);
-assert.match(rEp.rejection.reason, /qc_panel\[0\] gpt-5\.6-sol\/codex@openai/);
+assert.match(rEp.rejection.reason, /qc_panel\[0\] grok-4\.5\/grok@xai/);
 
-const twoSeats = [codexNone, ccSeat, cursorSeat];
+const twoSeats = [grokNone, ccSeat, cursorSeat];
 const twoLadder = [
-  ...ladderCodex,
+  ...ladderGrok,
   { runner: 'cc-shim', model: 'GLM-5.2', effort: 'high', family: 'other' },
   { runner: 'cursor', model: 'cursor-grok-4.6-low', effort: 'high', family: 'cursor' },
 ];
@@ -5424,13 +5427,13 @@ const r2 = runCampaignIntake({
 assertBlindBlock(r2, s2);
 const lines = r2.rejection.reason.split('\n');
 assert.strictEqual(lines.length, 2);
-assert.match(lines[0], /^qc_panel\[0\] gpt-5\.6-sol\/codex@@none /);
+assert.match(lines[0], /^qc_panel\[0\] grok-4\.5\/grok@@none /);
 assert.match(lines[1], /^qc_panel\[2\] cursor-grok-4\.6-low\/cursor@@none /);
 
 const sOvr = spies();
 const rOvr = runCampaignIntake({
   repo: process.cwd(),
-  roster: baseRoster([codexNone], { fallback_ladder: ladderCodex, override_admitted_seats: ['qc_panel[0]'] }),
+  roster: baseRoster([grokNone], { fallback_ladder: ladderGrok, override_admitted_seats: ['qc_panel[0]'] }),
 }, sOvr.adapters);
 assertBlindBlock(rOvr, sOvr);
 
@@ -5442,14 +5445,14 @@ assertBlindBlock(rOvr, sOvr);
 const sPin = spies();
 const rPin = runCampaignIntake({
   repo: process.cwd(),
-  roster: baseRoster([codexNone], { override_admitted_seats: ['qc_panel[0]'] }),
+  roster: baseRoster([grokNone], { override_admitted_seats: ['qc_panel[0]'] }),
 }, sPin.adapters);
 assertBlindBlock(rPin, sPin);
 
 const sPrec = spies();
 const rPrec = runCampaignIntake({
   repo: process.cwd(),
-  roster: baseRoster([codexNone], { fallback_ladder: [] }),
+  roster: baseRoster([grokNone], { fallback_ladder: [] }),
 }, sPrec.adapters);
 assertBlindBlock(rPrec, sPrec);
 assert.notStrictEqual(rPrec.rejection.code, 'final_panel_seat_unqualified');
@@ -5483,6 +5486,34 @@ function assertAdmitted(seat) {
 
 assertAdmitted(ccSeat);
 assertAdmitted(nativeSeat);
+
+const sProbe = spies();
+sProbe.adapters.cleanroomProbe = () => ({
+  owner: 'cleanroom_probe',
+  status: 'ready',
+  runner: 'codex',
+  exit_status: 0,
+  launcher: '/tmp/stub-launcher',
+  deny_paths: [process.cwd()],
+  launcher_json: { artifact_type: 'cleanroom_launch', profile: 'preflight' },
+});
+const rProbe = runCampaignIntake({
+  repo: process.cwd(),
+  roster: baseRoster([codexSeat], {
+    fallback_ladder: [{ runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' }],
+  }),
+}, sProbe.adapters);
+assert.ok(!rProbe.rejection || rProbe.rejection.code !== 'final_panel_seat_blind_incompatible',
+  JSON.stringify(rProbe.rejection));
+assert.strictEqual(sProbe.counts.missionClaim, 1);
+const probeStep = (rProbe.steps || []).find((s) => s && s.owner === 'cleanroom_probe');
+assert.ok(probeStep, JSON.stringify(rProbe.steps));
+assert.strictEqual(probeStep.status, 'ready');
+assert.strictEqual(probeStep.runner, 'codex');
+assert.strictEqual(probeStep.exit_status, 0);
+assert.ok(probeStep.launcher);
+assert.ok(Array.isArray(probeStep.deny_paths));
+assert.strictEqual(probeStep.launcher_json.profile, 'preflight');
 
 console.log('final-panel-blind-intake assertions passed');
 NODE

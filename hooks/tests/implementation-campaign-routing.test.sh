@@ -3299,10 +3299,10 @@ const result = engine.runImplementationReviewLoop({
     cross_family_required: false,
     qc_panel_seats_complete: true,
     qc_panel_seats: [
-      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+      { role: 'qc', runner: 'grok', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
     ],
     fallback_ladder: [
-      { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+      { runner: 'grok', model: 'grok-4.5', effort: 'high', family: 'xai' },
     ],
   },
   campaignContract: contractPath,
@@ -3345,6 +3345,458 @@ NODE
 assert_exit_code "$?" "0" "blind-incompatible engine intake: $BLIND_ENGINE_OUT"
 assert_contains "$BLIND_ENGINE_OUT" "blind_incompatible_pre_spend=true" \
   "engine run stops at campaign_intake with zero dispatcher calls"
+
+# RED at base 130b97a8: codex qc seat → final_panel_seat_blind_incompatible
+# (runner is not in the enforceable no-tools set … complete the codex containment
+# qualification). After this cut: injected probe rejected → cleanroom_unavailable.
+CLEANROOM_REJ_OUT="$(node - "$REPO_ROOT" "$BLIND_SBX" "$BLIND_WT" "$BLIND_CONTRACT" "$BLIND_SEAL" \
+  "$BLIND_PROMPT" "$BLIND_BASE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [
+  root, repo, worktree, contractPath, sealPath, promptFile, base,
+] = process.argv.slice(2);
+const { AutopilotEngine, appendCampaignEvent, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+let implCalls = 0;
+let reviewCalls = 0;
+let probeCalls = 0;
+const engine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-09-16T04:00:00.000Z',
+  campaignEventAppender: (input) => appendCampaignEvent(input),
+  campaignIntake(input) {
+    return runCampaignIntake(input, {
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      cleanroomProbe() {
+        probeCalls += 1;
+        return {
+          owner: 'cleanroom_probe',
+          status: 'rejected',
+          code: 'final_panel_seat_cleanroom_unavailable',
+          reason: 'exit 2: bwrap not found',
+        };
+      },
+    });
+  },
+  implementationDispatcher() {
+    implCalls += 1;
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'committed' } };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'reviewed' } };
+  },
+  diffProvider() { return promptFile; },
+});
+const result = engine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/blind-incompat',
+  base,
+  roster: {
+    reviewer_engine: 'fixture-reviewer',
+    reviewer_effort: 'high',
+    reviewer_runner: 'cc-shim',
+    reviewer_qualified: true,
+    implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+    loop_max_rounds: 3,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    min_panel_size: 1,
+    required_review_families: 1,
+    cross_family_required: false,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [
+      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+    ],
+    fallback_ladder: [
+      { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+    ],
+  },
+  campaignContract: contractPath,
+  campaignSeal: sealPath,
+  verificationEnv: { PATH: process.env.PATH || '', CI: 'blind-incompat' },
+  verificationEnvAllowlist: ['CI'],
+});
+assert.strictEqual(result.phase, 'campaign_intake');
+assert.strictEqual(result.status, 'blocked');
+const code = (Array.isArray(result.ledger)
+  && result.ledger.find((row) => row && row.unit === 'campaign_intake')
+  && result.ledger.find((row) => row && row.unit === 'campaign_intake').rejection_code)
+  || (result.campaign_control && result.campaign_control.rejection && result.campaign_control.rejection.code)
+  || '';
+assert.strictEqual(code, 'final_panel_seat_cleanroom_unavailable', JSON.stringify({ code, reason: result.reason }));
+assert.match(String(result.reason), /bwrap not found/);
+assert.strictEqual(implCalls, 0);
+assert.strictEqual(reviewCalls, 0);
+assert.strictEqual(probeCalls, 1);
+console.log('cleanroom_unavailable_pre_spend=true');
+NODE
+)"
+assert_exit_code "$?" "0" "codex probe rejected: $CLEANROOM_REJ_OUT"
+assert_contains "$CLEANROOM_REJ_OUT" "cleanroom_unavailable_pre_spend=true" \
+  "codex rejected probe refuses before spend (RED at base 130b97a8: blind_incompatible)"
+
+# RED at base 130b97a8: same codex seat refused; after: admitted with cleanroom_probe step.
+CLEANROOM_OK_OUT="$(node - "$REPO_ROOT" "$BLIND_SBX" "$BLIND_WT" "$BLIND_CONTRACT" "$BLIND_SEAL" \
+  "$BLIND_PROMPT" "$BLIND_BASE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [
+  root, repo, worktree, contractPath, sealPath, promptFile, base,
+] = process.argv.slice(2);
+const { AutopilotEngine, appendCampaignEvent, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+let probeCalls = 0;
+const engine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-09-16T04:00:00.000Z',
+  campaignEventAppender: (input) => appendCampaignEvent(input),
+  campaignIntake(input) {
+    return runCampaignIntake(input, {
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      cleanroomProbe() {
+        probeCalls += 1;
+        return {
+          owner: 'cleanroom_probe',
+          status: 'ready',
+          runner: 'codex',
+          exit_status: 0,
+          launcher: '/tmp/stub-launcher',
+          deny_paths: [repo],
+          launcher_json: { artifact_type: 'cleanroom_launch', profile: 'preflight' },
+        };
+      },
+    });
+  },
+  implementationDispatcher() {
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'committed' } };
+  },
+  reviewDispatcher() {
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null, result: { status: 'reviewed' } };
+  },
+  diffProvider() { return promptFile; },
+});
+const result = engine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/blind-incompat',
+  base,
+  roster: {
+    reviewer_engine: 'fixture-reviewer',
+    reviewer_effort: 'high',
+    reviewer_runner: 'cc-shim',
+    reviewer_qualified: true,
+    implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+    loop_max_rounds: 3,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    min_panel_size: 1,
+    required_review_families: 1,
+    cross_family_required: false,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [
+      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+    ],
+    fallback_ladder: [
+      { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+    ],
+  },
+  campaignContract: contractPath,
+  campaignSeal: sealPath,
+  verificationEnv: { PATH: process.env.PATH || '', CI: 'blind-incompat' },
+  verificationEnvAllowlist: ['CI'],
+});
+assert.notStrictEqual(result.phase, 'campaign_intake', `still blocked: ${result.reason}`);
+assert.strictEqual(probeCalls, 1, `probe called once per distinct runner, got ${probeCalls}`);
+const steps = (result.campaign_control && result.campaign_control.steps)
+  || (result.intake && result.intake.steps)
+  || [];
+const probe = steps.find((s) => s && s.owner === 'cleanroom_probe');
+assert.ok(probe, JSON.stringify(result.campaign_control || result));
+assert.strictEqual(probe.status, 'ready');
+assert.strictEqual(probe.runner, 'codex');
+console.log('cleanroom_probe_ready_admitted=true');
+NODE
+)"
+assert_exit_code "$?" "0" "codex probe ready: $CLEANROOM_OK_OUT"
+assert_contains "$CLEANROOM_OK_OUT" "cleanroom_probe_ready_admitted=true" \
+  "codex ready probe admits with cleanroom_probe step (RED at base 130b97a8: refused)"
+
+CLEANROOM_INV_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const result = runCampaignIntake({
+  repo: process.cwd(),
+  roster: {
+    reviewer_engine: 'fixture-reviewer',
+    reviewer_effort: 'high',
+    reviewer_runner: 'cc-shim',
+    reviewer_qualified: true,
+    min_panel_size: 1,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [
+      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+    ],
+    fallback_ladder: [
+      { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+    ],
+    implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+  },
+}, {
+  cleanroomProbe() {
+    return { owner: 'cleanroom_probe', status: 'unknown', reason: 'should not count as absent' };
+  },
+});
+assert.strictEqual(result.status, 'blocked');
+assert.strictEqual(result.rejection.code, 'cleanroom_probe_adapter_invalid');
+console.log('cleanroom_probe_adapter_invalid=true');
+NODE
+)"
+assert_exit_code "$?" "0" "injected unknown is invalid: $CLEANROOM_INV_OUT"
+assert_contains "$CLEANROOM_INV_OUT" "cleanroom_probe_adapter_invalid=true" \
+  "injected adapter returning unknown is cleanroom_probe_adapter_invalid"
+
+PROBE_STUB_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const tmp = process.argv[3];
+const { defaultCleanroomProbe, runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign-intake.js'));
+
+function writeStub(name, body) {
+  const p = path.join(tmp, name);
+  fs.writeFileSync(p, body, { mode: 0o755 });
+  fs.chmodSync(p, 0o755);
+  return p;
+}
+
+const jsonStub = writeStub('launch-ok.sh', `#!/bin/sh
+printf '%s\\n' '{"artifact_type":"cleanroom_launch","profile":"preflight","ok":true}'
+exit 0
+`);
+const ready = defaultCleanroomProbe(
+  { runner: 'codex', repo: root, contractPath: path.join(root, 'package.json') },
+  { launcher: jsonStub, timeoutMs: 5000 },
+);
+assert.strictEqual(ready.status, 'ready', JSON.stringify(ready));
+assert.strictEqual(ready.launcher_json.profile, 'preflight');
+assert.strictEqual(ready.launcher, jsonStub);
+
+const errStub = writeStub('launch-err.sh', `#!/bin/sh
+printf '%s\\n' 'bwrap not found' >&2
+exit 2
+`);
+const rejected = defaultCleanroomProbe(
+  { runner: 'codex', repo: root, contractPath: path.join(root, 'package.json') },
+  { launcher: errStub, timeoutMs: 5000 },
+);
+assert.strictEqual(rejected.status, 'rejected');
+assert.strictEqual(rejected.reason, 'exit 2: bwrap not found');
+
+const sleepStub = writeStub('launch-sleep.sh', `#!/bin/sh
+sleep 30
+exit 0
+`);
+const timed = defaultCleanroomProbe(
+  { runner: 'codex', repo: root, contractPath: path.join(root, 'package.json') },
+  { launcher: sleepStub, timeoutMs: 500 },
+);
+assert.strictEqual(timed.status, 'rejected', JSON.stringify(timed));
+assert.match(String(timed.reason), /timed out/);
+
+const missing = path.join(tmp, 'no-such-cleanroom-launcher');
+const unknown = defaultCleanroomProbe(
+  { runner: 'codex', repo: root, contractPath: path.join(root, 'package.json') },
+  { launcher: missing, timeoutMs: 5000 },
+);
+assert.strictEqual(unknown.status, 'unknown', JSON.stringify(unknown));
+assert.match(String(unknown.reason), /launcher not present at /);
+
+const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'no-git-home-'));
+const contractDir = path.join(fixture, 'nested');
+fs.mkdirSync(contractDir);
+const contractPath = path.join(contractDir, 'campaign.json');
+fs.writeFileSync(contractPath, '{}\n');
+const argvStub = writeStub('launch-argv.sh', `#!/bin/sh
+printf '%s\\n' '{"artifact_type":"cleanroom_launch","profile":"preflight"}'
+exit 0
+`);
+const prevHome = process.env.HOME;
+delete process.env.HOME;
+let noGit;
+try {
+  noGit = defaultCleanroomProbe(
+    { runner: 'codex', repo: fixture, contractPath },
+    { launcher: argvStub, timeoutMs: 5000 },
+  );
+} finally {
+  if (prevHome === undefined) delete process.env.HOME;
+  else process.env.HOME = prevHome;
+}
+assert.strictEqual(noGit.status, 'ready', JSON.stringify(noGit));
+assert.ok(Array.isArray(noGit.deny_paths) && noGit.deny_paths.length > 0);
+assert.ok(!noGit.deny_paths.includes('/'), JSON.stringify(noGit.deny_paths));
+
+const shadowRepo = path.join(tmp, 'shadow-admit-repo');
+fs.mkdirSync(path.join(shadowRepo, '.claude'), { recursive: true });
+const govSrc = JSON.parse(fs.readFileSync(path.join(root, '.claude', 'owner-kernel-governance.json'), 'utf8'));
+govSrc.mission_convergence = {
+  schema_version: 1,
+  enforcement_mode: 'shadow',
+  max_campaigns: 8,
+  max_wall_seconds: 7200,
+  max_tool_calls: 1000,
+  max_engine_attempts: 100,
+  max_external_wait_seconds: 600,
+  max_canonical_changed_files: 100,
+  max_output_bytes: 1000000,
+  max_deliverables: 8,
+  max_parallel: 3,
+  max_batches: 4,
+  max_graph_depth: 4,
+  max_gate_attempts: 16,
+  closure_ratio: 1,
+  max_stagnant_campaigns: 2,
+};
+fs.writeFileSync(path.join(shadowRepo, '.claude', 'owner-kernel-governance.json'), `${JSON.stringify(govSrc, null, 2)}\n`);
+const prevLauncher = process.env.AUTOPILOT_CLEANROOM_LAUNCHER;
+process.env.AUTOPILOT_CLEANROOM_LAUNCHER = missing;
+try {
+  const shadowMissing = runCampaignIntake({
+    repo: shadowRepo,
+    roster: {
+      reviewer_engine: 'fixture-reviewer',
+      reviewer_effort: 'high',
+      reviewer_runner: 'cc-shim',
+      reviewer_qualified: true,
+      min_panel_size: 1,
+      qc_panel_seats_complete: true,
+      qc_panel_seats: [
+        { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+      ],
+      fallback_ladder: [
+        { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+      ],
+      implementer_engine: 'fixture-implementer',
+      implementer_effort: 'high',
+      implementer_runner: 'fixture',
+    },
+  }, {
+    now: () => '2026-07-26T00:00:00.000Z',
+  });
+  assert.ok(!shadowMissing.rejection || shadowMissing.rejection.code !== 'final_panel_seat_cleanroom_unavailable',
+    JSON.stringify(shadowMissing.rejection));
+  const probeStep = (shadowMissing.steps || []).find((s) => s && s.owner === 'cleanroom_probe');
+  assert.ok(probeStep, JSON.stringify(shadowMissing));
+  assert.strictEqual(probeStep.status, 'unknown');
+  // A REJECTED probe is still a receipt step (which launcher answered, what was denied).
+  // RED at 29d852e4: steps was [rejection] only — the rejected decision was dropped.
+  process.env.AUTOPILOT_CLEANROOM_LAUNCHER = errStub;
+  const shadowRejected = runCampaignIntake({
+    repo: shadowRepo,
+    roster: {
+      reviewer_engine: 'fixture-reviewer',
+      reviewer_effort: 'high',
+      reviewer_runner: 'cc-shim',
+      reviewer_qualified: true,
+      min_panel_size: 1,
+      qc_panel_seats_complete: true,
+      qc_panel_seats: [
+        { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+      ],
+      fallback_ladder: [
+        { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+      ],
+      implementer_engine: 'fixture-implementer',
+      implementer_effort: 'high',
+      implementer_runner: 'fixture',
+    },
+  }, {
+    now: () => '2026-07-26T00:00:00.000Z',
+  });
+  assert.ok(shadowRejected.rejection && shadowRejected.rejection.code === 'final_panel_seat_cleanroom_unavailable',
+    JSON.stringify(shadowRejected.rejection));
+  const rejectedStep = (shadowRejected.steps || []).find((s) => s && s.owner === 'cleanroom_probe');
+  assert.ok(rejectedStep, `rejected probe step missing: ${JSON.stringify(shadowRejected.steps)}`);
+  assert.strictEqual(rejectedStep.status, 'rejected');
+  assert.strictEqual(rejectedStep.runner, 'codex');
+  assert.strictEqual(rejectedStep.launcher, errStub);
+  assert.ok(Array.isArray(rejectedStep.deny_paths) && rejectedStep.deny_paths.length > 0);
+  assert.strictEqual(shadowRejected.steps[shadowRejected.steps.length - 1].code, 'final_panel_seat_cleanroom_unavailable');
+} finally {
+  if (prevLauncher === undefined) delete process.env.AUTOPILOT_CLEANROOM_LAUNCHER;
+  else process.env.AUTOPILOT_CLEANROOM_LAUNCHER = prevLauncher;
+}
+console.log('default_cleanroom_probe_stubs=true');
+NODE
+)"
+assert_exit_code "$?" "0" "defaultCleanroomProbe stubs: $PROBE_STUB_OUT"
+assert_contains "$PROBE_STUB_OUT" "default_cleanroom_probe_stubs=true" \
+  "defaultCleanroomProbe stub outcomes (RED at base 130b97a8: function missing)"
+
+# enforce + missing launcher → refused
+ENFORCE_SBX="$TEST_TMP/blind-enforce-repo"
+mkdir -p "$ENFORCE_SBX/.claude"
+git -C "$ENFORCE_SBX" init -q
+git -C "$ENFORCE_SBX" config user.email "e@example.invalid"
+git -C "$ENFORCE_SBX" config user.name "E"
+write_mission_governance "$ENFORCE_SBX/.claude/owner-kernel-governance.json" enforce
+printf 'x\n' > "$ENFORCE_SBX/README"
+git -C "$ENFORCE_SBX" add .
+git -C "$ENFORCE_SBX" commit -qm "e"
+ENFORCE_OUT="$(node - "$REPO_ROOT" "$ENFORCE_SBX" "$TEST_TMP/no-such-cleanroom-launcher" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root, repo, missing] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign-intake.js'));
+process.env.AUTOPILOT_CLEANROOM_LAUNCHER = missing;
+const result = runCampaignIntake({
+  repo,
+  roster: {
+    reviewer_engine: 'fixture-reviewer',
+    reviewer_effort: 'high',
+    reviewer_runner: 'cc-shim',
+    reviewer_qualified: true,
+    min_panel_size: 1,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [
+      { role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai' },
+    ],
+    fallback_ladder: [
+      { runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', family: 'openai' },
+    ],
+    implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+  },
+}, {
+  now: () => '2026-07-26T00:00:00.000Z',
+});
+assert.strictEqual(result.status, 'blocked');
+assert.strictEqual(result.rejection.code, 'final_panel_seat_cleanroom_unavailable');
+assert.match(String(result.rejection.reason), /enforced intake requires a probe decision; launcher not present at /);
+console.log('enforce_unknown_cleanroom_refused=true');
+NODE
+)"
+assert_exit_code "$?" "0" "enforce unknown launcher: $ENFORCE_OUT"
+assert_contains "$ENFORCE_OUT" "enforce_unknown_cleanroom_refused=true" \
+  "enforced intake refuses unknown cleanroom probe"
 
 ROUTING="$(sed -n '1,240p' \
   "$REPO_ROOT/skills/l5/SKILL.md" \

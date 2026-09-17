@@ -6,15 +6,28 @@
 // the sealed seat is exactly that qualified tuple; every other terminal seat
 // needs an exact qualified scorecard-ladder row. Path (c) is a recorded
 // operator admission for that exact panel index.
-const BLIND_DISCOVERY_CAPABLE_RUNNERS = Object.freeze([
-  'anthropic-compatible',
-  'cc-shim',
-  'claude-native',
-  'qoderclicn',
-]);
+const REVIEW_SEAT_TIERS = Object.freeze({
+  packet: Object.freeze([
+    'anthropic-compatible',
+    'cc-shim',
+    'claude-native',
+    'qoderclicn',
+  ]),
+  cleanroom: Object.freeze(['codex']),
+});
+
+// Deprecated alias: packet-tier runners only (the historical allow-list).
+const BLIND_DISCOVERY_CAPABLE_RUNNERS = REVIEW_SEAT_TIERS.packet;
+
+function reviewSeatTier(runner) {
+  if (typeof runner !== 'string') return 'none';
+  if (REVIEW_SEAT_TIERS.packet.includes(runner)) return 'packet';
+  if (REVIEW_SEAT_TIERS.cleanroom.includes(runner)) return 'cleanroom';
+  return 'none';
+}
 
 function isBlindDiscoveryCapableRunner(runner) {
-  return typeof runner === 'string' && BLIND_DISCOVERY_CAPABLE_RUNNERS.includes(runner);
+  return reviewSeatTier(runner) !== 'none';
 }
 
 function finalPanelSeatQualified(roster, seat, index) {
@@ -46,6 +59,8 @@ function finalPanelSeatQualified(roster, seat, index) {
 }
 
 module.exports = {
+  REVIEW_SEAT_TIERS,
+  reviewSeatTier,
   BLIND_DISCOVERY_CAPABLE_RUNNERS,
   isBlindDiscoveryCapableRunner,
   finalPanelSeatQualified,

@@ -2110,25 +2110,45 @@ for (( _i = 0; _i < _qc_max; _i++ )); do
   [[ -n "$_qc_eng" ]] && _panel_div_runners="$_panel_div_runners $_qc_run"
 done
 
-# Literal mirror of BLIND_DISCOVERY_CAPABLE_RUNNERS in
-# src/engine/final-panel-qualification.js (parity test keeps them equal).
+# Literal mirror of reviewSeatTier in src/engine/final-panel-qualification.js
+# (parity test keeps the JS table, dispatch-review.sh, and this copy equal).
+review_seat_tier() {
+  case "$1" in
+    anthropic-compatible|cc-shim|claude-native|qoderclicn) printf '%s\n' packet ;;
+    codex) printf '%s\n' cleanroom ;;
+    *) printf '%s\n' none ;;
+  esac
+}
 if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
   for (( _i = 0; _i < _qc_max; _i++ )); do
     _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
     [[ -n "$_qc_run" ]] || continue
-    case "$_qc_run" in
-      anthropic-compatible|cc-shim|claude-native|qoderclicn) continue ;;
-    esac
     _qc_eng="${QC_PANEL[$_i]:-<unspecified>}"
-    _blind_warn="qc_panel[${_i}] seat (${_qc_eng}/${_qc_run}) cannot execute a managed blind-discovery review — the managed rail refuses it at intake (final_panel_seat_blind_incompatible); replace the seat or complete the containment qualification"
-    CAP_WARNINGS_JSON="$(node -e '
+    case "$(review_seat_tier "$_qc_run")" in
+      packet) continue ;;
+      cleanroom)
+        _blind_warn="qc_panel[${_i}] seat (${_qc_eng}/${_qc_run}) is a cleanroom-tier seat — intake probes the isolation boundary before any spend (bwrap required on this host)"
+        CAP_WARNINGS_JSON="$(node -e '
 let a = [];
 try { a = JSON.parse(process.argv[1]); } catch { a = []; }
 if (!Array.isArray(a)) a = [];
 a.push(process.argv[2]);
 process.stdout.write(JSON.stringify(a));
 ' "$CAP_WARNINGS_JSON" "$_blind_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
-    echo "resolve-review-loop: ⚠ ${_blind_warn}" >&2
+        echo "resolve-review-loop: ${_blind_warn}" >&2
+        ;;
+      none)
+        _blind_warn="qc_panel[${_i}] seat (${_qc_eng}/${_qc_run}) cannot execute a managed blind-discovery review — the managed rail refuses it at intake (final_panel_seat_blind_incompatible); replace the seat or use a cleanroom-tier runner"
+        CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "$_blind_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+        echo "resolve-review-loop: ⚠ ${_blind_warn}" >&2
+        ;;
+    esac
   done
 fi
 

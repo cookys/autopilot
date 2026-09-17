@@ -90,19 +90,28 @@ const w = (v.capability_warnings || []).filter((x) => /cannot execute a managed 
 process.stdout.write(JSON.stringify(w));
 ')"
 WARN_COUNT="$(JSON_VALUE="$WARN_JSON" node -e 'process.stdout.write(String(JSON.parse(process.env.JSON_VALUE).length));')"
-assert_eq "$WARN_COUNT" "2" "exactly two blind-incompatible capability_warnings in index order"
-assert_contains "$WARN_JSON" '"qc_panel[0] seat (gpt-5.6-sol/codex) cannot execute a managed blind-discovery review' \
-  "first warning names qc_panel[0] codex"
+assert_eq "$WARN_COUNT" "1" "exactly one none-tier blind-incompatible capability_warning"
 assert_contains "$WARN_JSON" '"qc_panel[2] seat (MiniMax-M3/cursor) cannot execute a managed blind-discovery review' \
-  "second warning names qc_panel[2] cursor"
+  "refusal warning names qc_panel[2] cursor (none-tier)"
+assert_not_contains "$WARN_JSON" "gpt-5.6-sol/codex" \
+  "codex is not a none-tier refusal (RED at base 130b97a8: codex produced the refusal ⚠)"
+ADV_JSON="$(JSON_VALUE="$RUN_STDOUT" node -e '
+const v = JSON.parse(process.env.JSON_VALUE);
+const w = (v.capability_warnings || []).filter((x) => /cleanroom-tier seat/.test(String(x)));
+process.stdout.write(JSON.stringify(w));
+')"
+assert_contains "$ADV_JSON" '"qc_panel[0] seat (gpt-5.6-sol/codex) is a cleanroom-tier seat — intake probes the isolation boundary before any spend (bwrap required on this host)"' \
+  "cleanroom advisory names qc_panel[0] codex"
 JSON_VALUE="$WARN_JSON" node -e '
 const w = JSON.parse(process.env.JSON_VALUE);
 if (w.some((x) => /pin-seat|AUTOPILOT_QUALIFICATION_OVERRIDE/.test(String(x)))) process.exit(1);
 ' || fail "blind warning text must not suggest pin-seat or AUTOPILOT_QUALIFICATION_OVERRIDE"
-assert_contains "$RUN_STDERR" "resolve-review-loop: ⚠ qc_panel[0] seat (gpt-5.6-sol/codex) cannot execute a managed blind-discovery review" \
-  "stderr ⚠ for qc_panel[0]"
+assert_not_contains "$RUN_STDERR" "resolve-review-loop: ⚠ qc_panel[0] seat (gpt-5.6-sol/codex) cannot execute a managed blind-discovery review" \
+  "stderr has no refusal ⚠ for cleanroom codex"
+assert_contains "$RUN_STDERR" "qc_panel[0] seat (gpt-5.6-sol/codex) is a cleanroom-tier seat" \
+  "stderr advisory for qc_panel[0] cleanroom"
 assert_contains "$RUN_STDERR" "resolve-review-loop: ⚠ qc_panel[2] seat (MiniMax-M3/cursor) cannot execute a managed blind-discovery review" \
-  "stderr ⚠ for qc_panel[2]"
+  "stderr ⚠ for qc_panel[2] none-tier"
 
 REVIEW_LOOP_CONFIG_OVERRIDE="$BLIND_CFG" AUTOPILOT_QUALIFICATION_OVERRIDE="$BLIND_OVR" \
   bash "$SCRIPT" >"$TEST_TMP/stdout-off" 2>"$TEST_TMP/stderr-off"

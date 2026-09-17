@@ -35,7 +35,7 @@ const {
 } = require('../readiness/receipt');
 const {
   finalPanelSeatQualified,
-  isBlindDiscoveryCapableRunner,
+  reviewSeatTier,
 } = require('./final-panel-qualification');
 const repoPreconditions = require('./repo-preconditions');
 
@@ -261,6 +261,143 @@ function defaultOccupancy() {
     enforcement: 'shadow',
     reason: 'worktree occupancy admission is not shipped yet',
   });
+}
+
+function parseLaunchLine(stdout) {
+  const text = String(stdout || '');
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parsed = parseJson(trimmed);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  }
+  return null;
+}
+
+function firstStderrLine(stderr) {
+  for (const line of String(stderr || '').split(/\r?\n/)) {
+    if (line.length > 0) return line;
+  }
+  return '';
+}
+
+function defaultCleanroomProbe(input = {}, opts = {}) {
+  const repo = path.resolve(input.repo || process.cwd());
+  const contractPath = input.contractPath ? path.resolve(input.contractPath) : null;
+  const launcher = path.resolve(
+    opts.launcher
+      || process.env.AUTOPILOT_CLEANROOM_LAUNCHER
+      || path.join(__dirname, '..', '..', 'scripts', 'lib', 'cleanroom-launch.sh'),
+  );
+  const timeoutMs = Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : 60000;
+  const bwrap = opts.bwrap
+    || process.env.AUTOPILOT_CLEANROOM_BWRAP
+    || '';
+  const runner = input.runner || 'codex';
+  const denyPaths = [];
+  const addDeny = (candidate) => {
+    if (candidate == null || String(candidate).length === 0) return;
+    const resolved = path.resolve(String(candidate));
+    if (resolved === '/' || denyPaths.includes(resolved)) return;
+    denyPaths.push(resolved);
+  };
+  addDeny(repo);
+  const gitCommon = spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], {
+    encoding: 'utf8',
+    cwd: repo,
+    env: {
+      PATH: process.env.PATH || '',
+      ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (!gitCommon.error && gitCommon.status === 0) {
+    const raw = String(gitCommon.stdout || '').trim();
+    if (raw) addDeny(path.isAbsolute(raw) ? raw : path.resolve(repo, raw));
+  }
+  if (process.env.HOME) addDeny(process.env.HOME);
+  if (contractPath) addDeny(path.dirname(contractPath));
+
+  const args = ['--preflight'];
+  for (const deny of denyPaths) {
+    args.push('--deny-path', deny);
+  }
+  if (bwrap) args.push('--bwrap', bwrap);
+
+  const result = spawnSync(launcher, args, {
+    cwd: repo,
+    env: {
+      PATH: process.env.PATH || '',
+      ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+    },
+    timeout: timeoutMs,
+    killSignal: 'SIGKILL',
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  const detail = {
+    runner,
+    exit_status: result.status,
+    launcher,
+    deny_paths: denyPaths,
+    launcher_json: parseLaunchLine(result.stdout),
+  };
+
+  if (result.error) {
+    if (result.error.code === 'ENOENT' && result.status == null) {
+      return step('cleanroom_probe', 'unknown', {
+        enforcement: 'shadow',
+        reason: `launcher not present at ${launcher}`,
+        runner,
+        exit_status: null,
+        launcher,
+        deny_paths: denyPaths,
+        launcher_json: null,
+      });
+    }
+    if (result.error.code === 'ETIMEDOUT') {
+      return rejected(
+        'cleanroom_probe',
+        'final_panel_seat_cleanroom_unavailable',
+        `probe timed out after ${timeoutMs / 1000} s, no diagnostic`,
+        {
+          ...detail,
+          exit_status: null,
+          launcher_json: null,
+        },
+      );
+    }
+    return rejected(
+      'cleanroom_probe',
+      'final_panel_seat_cleanroom_unavailable',
+      `spawn error ${result.error.code}`,
+      { ...detail, launcher_json: null },
+    );
+  }
+
+  if (result.status === 0) {
+    if (detail.launcher_json) {
+      return step('cleanroom_probe', 'ready', detail);
+    }
+    return rejected(
+      'cleanroom_probe',
+      'final_panel_seat_cleanroom_unavailable',
+      'launcher emitted no launch line',
+      { ...detail, launcher_json: null },
+    );
+  }
+
+  const errLine = firstStderrLine(result.stderr);
+  const reason = errLine
+    ? `exit ${result.status}: ${errLine}`
+    : `exit ${result.status}: no diagnostic`;
+  return rejected(
+    'cleanroom_probe',
+    'final_panel_seat_cleanroom_unavailable',
+    reason,
+    detail,
+  );
 }
 
 function runLedger(args, repo) {
@@ -1416,19 +1553,67 @@ function runCampaignIntake(input = {}, adapters = {}) {
   const qcSeats = input.roster && Array.isArray(input.roster.qc_panel_seats)
     ? input.roster.qc_panel_seats
     : null;
+  const cleanroomProbeSteps = [];
   if (qcSeats && qcSeats.length > 0) {
     const blindFailures = [];
+    const cleanroomUnavailable = [];
+    const probedRunners = new Map();
     for (let i = 0; i < qcSeats.length; i += 1) {
       const seat = qcSeats[i];
-      if (!isBlindDiscoveryCapableRunner(seat && seat.runner)) {
-        const endpoint = seat && seat.endpoint != null && String(seat.endpoint).length > 0
-          ? seat.endpoint
-          : '@none';
-        const model = seat && seat.model ? seat.model : '<unspecified>';
-        const runner = seat && seat.runner ? seat.runner : '<unspecified>';
+      const endpoint = seat && seat.endpoint != null && String(seat.endpoint).length > 0
+        ? seat.endpoint
+        : '@none';
+      const model = seat && seat.model ? seat.model : '<unspecified>';
+      const runner = seat && seat.runner ? seat.runner : '<unspecified>';
+      const tier = reviewSeatTier(seat && seat.runner);
+      if (tier === 'none') {
         blindFailures.push(
-          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn); replace it with a blind-capable seat or complete the codex containment qualification — pins and overrides do not bypass containment`,
+          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn); replace it with a blind-capable seat or use a cleanroom-tier runner — pins and overrides do not bypass containment`,
         );
+        continue;
+      }
+      if (tier === 'cleanroom') {
+        if (!probedRunners.has(runner)) {
+          const injected = typeof adapters.cleanroomProbe === 'function';
+          const probeFn = injected ? adapters.cleanroomProbe : defaultCleanroomProbe;
+          const allowed = injected
+            ? new Set(['ready', 'rejected'])
+            : new Set(['ready', 'rejected', 'unknown']);
+          let decision;
+          try {
+            decision = requireDecision(
+              probeFn({
+                runner,
+                repo,
+                contractPath,
+                roster: input.roster,
+              }),
+              'cleanroom_probe',
+              allowed,
+            );
+          } catch (error) {
+            const rejection = rejected(
+              'campaign_generation',
+              'cleanroom_probe_adapter_invalid',
+              error.message || String(error),
+            );
+            return {
+              status: 'blocked',
+              reason: rejection.reason,
+              rejection,
+              steps: [rejection],
+              pre_spend_no_effect_receipt: null,
+            };
+          }
+          probedRunners.set(runner, decision);
+          // Every probe decision is a receipt step — a rejected probe must still show which
+          // launcher answered and what was denied (plan §1.2; second review 🟡).
+          cleanroomProbeSteps.push(decision);
+        }
+        const decision = probedRunners.get(runner);
+        if (decision.status === 'rejected') {
+          cleanroomUnavailable.push(decision.reason);
+        }
       }
     }
     if (blindFailures.length > 0) {
@@ -1442,6 +1627,20 @@ function runCampaignIntake(input = {}, adapters = {}) {
         reason: rejection.reason,
         rejection,
         steps: [rejection],
+        pre_spend_no_effect_receipt: null,
+      };
+    }
+    if (cleanroomUnavailable.length > 0) {
+      const rejection = rejected(
+        'campaign_generation',
+        'final_panel_seat_cleanroom_unavailable',
+        cleanroomUnavailable.join('\n'),
+      );
+      return {
+        status: 'blocked',
+        reason: rejection.reason,
+        rejection,
+        steps: [...cleanroomProbeSteps, rejection],
         pre_spend_no_effect_receipt: null,
       };
     }
@@ -1464,7 +1663,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
         status: 'blocked',
         reason: rejection.reason,
         rejection,
-        steps: [rejection],
+        steps: [...cleanroomProbeSteps, rejection],
         pre_spend_no_effect_receipt: null,
       };
     }
@@ -1490,6 +1689,29 @@ function runCampaignIntake(input = {}, adapters = {}) {
       steps: [rejection],
       pre_spend_no_effect_receipt: null,
     };
+  }
+
+  const unknownCleanroom = cleanroomProbeSteps.find((s) => s
+    && s.owner === 'cleanroom_probe'
+    && s.status === 'unknown');
+  if (missionMode === 'enforce' && unknownCleanroom) {
+    const launchPath = unknownCleanroom.launcher
+      || 'unknown';
+    const rejection = rejected(
+      'campaign_generation',
+      'final_panel_seat_cleanroom_unavailable',
+      `enforced intake requires a probe decision; launcher not present at ${launchPath}`,
+    );
+    return {
+      status: 'blocked',
+      reason: rejection.reason,
+      rejection,
+      steps: [...cleanroomProbeSteps, rejection],
+      pre_spend_no_effect_receipt: null,
+    };
+  }
+  for (const probeStep of cleanroomProbeSteps) {
+    steps.push(probeStep);
   }
 
   if (typeof adapters.missionClaim === 'function'
@@ -1632,7 +1854,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       status: 'blocked',
       reason: rejection.reason,
       rejection,
-      steps: [missionClaim, rejection, release],
+      steps: [...cleanroomProbeSteps, missionClaim, rejection, release],
       pre_spend_no_effect_receipt: receipt,
     };
   }
@@ -1979,6 +2201,7 @@ module.exports = {
   completeCampaignAdmission,
   consumeEnforcedProviderReadiness,
   defaultCampaignSealPath,
+  defaultCleanroomProbe,
   repairLineageCleanupState,
   releaseCampaignAdmission,
   runCampaignIntake,

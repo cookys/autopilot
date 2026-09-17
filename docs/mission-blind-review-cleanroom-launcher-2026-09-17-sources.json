@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-17-blind-review-cleanroom-launcher.md",
+      "rubric_path": "plans/2026-09-17-blind-review-cleanroom-launcher.rubric.md",
+      "plan_sha256": "2f666f203e92eb5daf335fc1423da0091670d8490fb16a60076d4a585e0deec3",
+      "rubric_sha256": "0042518cff8aa6829a394f9bdea0714f876391eab141ab35d86efe25c139a21a"
+    }
+  ]
+}

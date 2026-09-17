@@ -1,0 +1,93 @@
+{
+  "acceptance": {
+    "contract_hash": "2f666f203e92eb5daf335fc1423da0091670d8490fb16a60076d4a585e0deec3",
+    "criteria_hash": "0042518cff8aa6829a394f9bdea0714f876391eab141ab35d86efe25c139a21a",
+    "required_evidence": [
+      "mirror-parity",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": []
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "project-default",
+    "data_egress": "local-only",
+    "data_egress_source": "project-default",
+    "guidance_profile": "guided",
+    "guidance_source": "project-default",
+    "topology_preference": "auto",
+    "topology_source": "project-default"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Ship docs/plans/2026-09-17-blind-review-cleanroom-launcher.md (cut 1b-A): scripts/lib/cleanroom-launch.sh runs a tool-capable reviewer inside a bwrap boundary that exposes only the review packet tree, a throwaway seat HOME and the runtime; dispatch-review.sh resolves seat tiers (packet/cleanroom/none) under blind mode and fails closed before any spend; a host-gated isolation suite drives the real launcher with a hostile stub.",
+    "requirements_hash": "2f666f203e92eb5daf335fc1423da0091670d8490fb16a60076d4a585e0deec3",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        "CLAUDE.md",
+        "docs",
+        "hooks",
+        "platforms",
+        "references",
+        "scripts"
+      ],
+      "domains": [
+        "autopilot",
+        "integration"
+      ],
+      "languages": [
+        "javascript",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "754b545697ae0213d72a324c1377e5d30f8cafa316454dc691ab5d1d270d157b",
+  "mission_lineage_id": "lineage-v1-6e6a15016119ff89f230af8d32ab853217ed75c5762811a2df8febbaee59f0b7",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_authority_id": "04792f1f24412119faf329737178792ea70d75018b9bfc68beb39fe76a28ef5b",
+  "task_id": "blind-review-cleanroom-launcher-2026-09-17"
+}

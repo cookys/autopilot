@@ -33,11 +33,15 @@
       "excluded_families": [],
       "fallbacks": [
         {
+          "id": "minimax_operations_skeptic",
           "runner": "cc-shim",
           "model": "MiniMax-M3",
           "effort": "high",
           "endpoint": "minimax",
-          "family": "minimax"
+          "role": "operations-skeptic",
+          "family": "minimax",
+          "readiness_status": "ready",
+          "qualification_status": "qualified"
         }
       ]
     }

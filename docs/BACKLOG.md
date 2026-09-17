@@ -144,6 +144,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: (a) `session-mode set` prints the AUTOPILOT_SESSION_MODE_DIR mask line; exempting plan/terminal review seats needs a ruling; (b) same `precondition_failed` twice → ladder stop; (c) brief linter rules file in dispatch-model-guard.
 
+### Managed rail: `changed_files >= max_changed_files` refuses repair when the hand touched every sealed path
+- **Status**: open
+- **Trigger**: 1a-B campaign 2026-09-17: hand changed all 13 `output_paths`, verification red → `campaign mutation budget exhausted` at repair_authorized (13 >= 13)
+- **Effort**: Fix
+- **Source**: /l5 dogfood 2026-09-17 (`impl-run1.json`, lineage 1 attempt 1)
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-engine/README.md
+- **Context**: `campaignMutationBudgetStatus` axis `changed_files` uses `>=` against the sealed cap, so a repair touching NO new file is refused; graph-check should require cap > |output_paths| or the axis should count new paths only.
+
+### Managed rail: a red `campaign_verification` keeps only digests — the failing command and its output are lost
+- **Status**: open
+- **Trigger**: 1a-B campaign 2026-09-17: verification red in-rail, all 13 commands green at the same commit out-of-rail; run output / work order / ledger carry only `receipt_digest`, `argv_hash`, `env_fingerprint`
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 (`impl-run1.json`, work order `blind-review-packet-engine-2026-09-17-a1.json`)
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-engine/README.md
+- **Context**: `createVerificationReceipt` gets stdout/stderr/exitStatus but nothing durable keeps the failing command or its tail; write a `raw_log` next to the receipt (like review seats) and name the command in the ledger entry.
+
 ### Managed rail: graph-check admits `max_wall_seconds` to 14400, the contract schema caps 7200 — intake burns the attempt
 - **Status**: open
 - **Trigger**: blind-review-packet lineage 1 attempt 1 sealed 12000 s: graph-check READY, grant claimed, intake `REJECTED: max_wall_seconds: expected integer in 1..7200`
@@ -161,7 +177,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: batch with one `git hash-object --stdin-paths --no-filters` process (symlinks hashed in-process) or reuse the packet across seats of one panel (cut 2 builds one packet per candidate).
 
 ### Blind review redesign cut 1a-B: engine passes `options.packet`; seat receipts carry `packet_hash`; one hash per panel
-- **Status**: open
+- **Status**: shipped v2.36.61 2026-09-17
 - **Trigger**: cut 1a-A (v2.36.59) shipped the builder + runner wiring; nothing in the engine calls it yet
 - **Effort**: L
 - **Source**: plan 2026-09-16-blind-review-packet §3 (consult split A/B)

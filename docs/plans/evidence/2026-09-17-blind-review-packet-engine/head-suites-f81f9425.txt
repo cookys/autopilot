@@ -1,0 +1,14 @@
+bash hooks/tests/autopilot-engine.test.sh | exit=0 | PASS [autopilot-engine] 516 assertions | sha256=3f197709b3e79081
+bash hooks/tests/implementation-campaign-receipt.test.sh | exit=0 | PASS [implementation-campaign-receipt] 21 assertions | sha256=97d528d054e7e541
+bash hooks/tests/implementation-campaign-dogfood.test.sh | exit=0 | PASS [implementation-campaign-dogfood] 21 assertions | sha256=60b402f301060a3d
+bash hooks/tests/implementation-campaign-state.test.sh | exit=0 | PASS [implementation-campaign-state] 296 assertions | sha256=9da14ff5bdc0b41b
+bash hooks/tests/implementation-campaign-routing.test.sh | exit=0 | PASS [implementation-campaign-routing] 96 assertions | sha256=a1ce6137e0e288b9
+bash hooks/tests/controller-execution-independent.test.sh | exit=0 | PASS [controller-execution-independent] 1 assertions | sha256=a92aba0b0c088db1
+bash hooks/tests/qc-panel-honesty.test.sh | exit=0 | PASS [qc-panel-honesty] 1 assertions | sha256=58e57a7daf43c659
+bash hooks/tests/status-task.test.sh | exit=0 | PASS [status-task] 5 assertions | sha256=534ec759a2dde78e
+bash hooks/tests/next-touch-validation.test.sh | exit=0 | PASS [next-touch-validation] 24 assertions | sha256=640e1b6aebe0a89f
+bash hooks/tests/review-runner.test.sh | exit=0 | PASS [review-runner] 39 assertions | sha256=50a0547dfe2209e3
+node scripts/check-js-syntax.js | exit=0 |  | sha256=e9f78308e3f47f71
+bash scripts/sync-codex-plugin-skills.sh --check | exit=0 |  | sha256=a061d5b31d473443
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md | exit=0 |  | sha256=23156e8c5810972b
+done

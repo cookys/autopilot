@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-7feb157fc2c966f72603cf3d8261e25b7cf419511ee6d25021ad05dfd7c530cb",
+  "claim_id": "claim-v1-95ee6751b766063d5195e35e84ebf2e0da6ae73ad046030046c3404f98deb7f0",
+  "mission_grant_ref": "a43bd4a87cfdc2401c01cdb3e4dae845ec33ef17ba97e3fafa531a45365521c9",
+  "mission_subject_digest": "2ba5adcf16bb63dcc5558ca41e7e6555b2b44c4b01211588e3c864befcee740c",
+  "mission_campaign_id": "campaign-v2-3cbb4662776787ae48b72a64b68d633d6b6586418097ed72b46767791922ed5a",
+  "graph_node_id": "blind-review-packet-engine-2026-09-17",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/7feb157fc2c966f72603cf3d8261e25b7cf419511ee6d25021ad05dfd7c530cb/blind-review-packet-engine-2026-09-17/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/7feb157fc2c966f72603cf3d8261e25b7cf419511ee6d25021ad05dfd7c530cb/blind-review-packet-engine-2026-09-17/attempt-1/campaign.seal.json",
+  "branch": "mission/7feb157fc2c9/blind-review-packet-engine-2026-09-17-a1",
+  "base_sha": "e097d782bbcbd95213e10697a876b5c1dda40ea0",
+  "state_hash": "5600947772d74648357f6bc8a63a0d4bb2d162aa727b5af3e2dd13fffce4e257"
+}

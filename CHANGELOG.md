@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.36.61 — blind review redesign 第二刀（1a-B）：engine 把 review packet 交給每一次 managed review，receipt 記下它的 hash
+
+- `src/engine/autopilot-engine.js`：campaign `performReview`（`_runManagedCampaignComposition`）與 terminal 站點
+  （`_runImplementationReviewLoop`）每次 review 派工都給 `reviewDiff` 一個 `packet: { repo: loopCwd, baseSha, candidateSha }`
+  ——就是 `diffProvider` 拿到的那組 `(base, commit)`，不是 `currentBase`、不是 tree sha；缺任一個就在叫 dispatcher **之前**
+  以 `prepare_review`／`review packet identity unavailable` 擋下（沒有退回舊 whole-diff copy 的 fallback）。`reviewDiff`
+  一律 `delete reviewOptions.packet`（caller 塞的永遠到不了 dispatcher），只在 `blindDiscovery === true` 且 `input.packet`
+  三欄都是非空字串時才設；`input.packet` 有但畸形 → `prepare_review` block。成功回傳只在 dispatcher 真的回了 64-hex
+  `packet_hash` 時多一個 `packet` 鍵（否則鍵**不存在**，不是 null——stub 的 suite 逐位元組不變）；`performReview` 同規則
+  回 `packet_hash`；`finalPanelSeatReceipt` 只在 reviewed 且有 64-hex 時把 `packet_hash` 放進被 digest 的 body（像
+  `raw_log`），failed 席永不帶；`performFinalPanel` 在 reviewed 席「有／無混合」或「兩個以上不同值」時 `reviewed:false`，
+  panel 物件本身不加鍵。
+- `src/engine/campaign-composition.js`：`FINAL_PANEL_SEAT_OPTIONAL_KEYS = ['raw_log','packet_hash']`（匯出）取代行內
+  allow-set；validator 從 receipt 自己判：非 64-lower-hex 或出現在非 reviewed 席 → `final_panel_metadata_incomplete`；
+  reviewed 席有／無混合 → `final_panel_packet_hash_mixed`；兩個不同值 → `final_panel_packet_hash_mismatch`；全無照舊有效。
+  `schemas/implementation-campaign-receipt.schema.json` `finalPanelSeat` 加 optional `packet_hash`（`$ref sha256`），
+  `additionalProperties:false` 不動；codex 鏡像同步。
+- 測試（全部 RED-first 標 base `bee8da3d`）：`autopilot-engine` +14（surfaced／absent／zz／bogus caller packet 不轉送／
+  畸形擋下／非 blind 不帶／terminal 站點 options.packet＝engine 推導）、`implementation-campaign-routing` +4（proofPanel
+  兩席 stub 各給 hash：相等綠、不同紅、混合紅、全無＝base 形狀）、`implementation-campaign-receipt` +4（validator 四種
+  reason＋schema 收 64-hex／拒 zz／unknown key 仍拒）、`implementation-campaign-dogfood`（kill→resume 每次派工都帶
+  `packet`；stub 不回 packet → receipt 沒鍵、照樣 converged）。八個手搭 seat receipt 的 suite 沒動、全綠。
+- 出貨路徑：/l5 managed campaign attempt 1——implement 綠（cursor-grok-4.6-low，33 分）、in-rail MiniMax review
+  SHIP-AS-IS（**第一次實測 v2.36.60：`--timeout 5024s`**）、verification 在 rail 內紅但 rail 只留 digest、repair 被
+  `changed_files 13 >= max_changed_files 13` 拒 → TERMINAL_STOP，照文件降級 l3。depth-0：13 條 §4.1 命令在候選
+  `f81f9425` 全綠、scope ⊆ §2.5、用候選 engine 對真 MiniMax 跑 `reviewDiff` 拿回 `packet_hash`（3382 entries／895 denied）；
+  GLM-5.2 二審兩條 🟠 以 git 證據駁回（我送審的 diff 漏了 mirrors 與 BACKLOG，commit 本身有）；codex 額度用盡到 09-19。
+  兩條 rail 缺陷登 BACKLOG（changed_files cap 用 `>=` 擋 repair；verification 紅只留 digest）。
+- 不在範圍：1b（cleanroom tier、可設定 deny-list、codex 回 panel）、2（verify-once、並行席）、`review_digest` 綁 packet。
+
+prose-justification: 本版對 prose 面沒有增量（`references/blind-dispatch.md` 一段 engine wiring 說明，含鏡像 18 行）。
+
 ## v2.36.60 — managed rail：每次 review 派工都帶 sealed wall budget 推出來的 `--timeout`（Fix）
 
 - 根因：`performFinalPanel` → `performReview` → `reviewDiff` → `buildReviewArgs` 從來沒把 `--timeout` 交給

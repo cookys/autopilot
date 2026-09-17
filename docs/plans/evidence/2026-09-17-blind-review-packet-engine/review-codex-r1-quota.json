@@ -1,0 +1,1 @@
+{ "runner": "codex", "model": "gpt-5.6-sol", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "/tmp/dispatch-review-log-qukVuo", "error": "codex exited non-zero (rc=1) — fail-closed, partial output not parsed", "usage": null, "unratified_verdict": null }

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-17T07:48:47.609Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-718a03c1e142272fb0df697edbd3619373101f7f914b859630ffbab8c973776f",
+  "observed_head": "1cf61c9b0a0bb4703f4146073cc9f54b5465eff2",
+  "worktree_observation_digest": "0173ec288382a5621cd8cd6ba4daecad920e4b5275fc148a77398dad988073b3",
+  "journal_digest": "6ed6ac442b5d37c8d8ac425a30a6a9bf1065d61da271da4f5e84ef5fe26cfb7a",
+  "disposition_digest": "e739d19b5808633539789e78209a1a189d3520f123319311189ea6bb40e194a7",
+  "branch_inventory_digest": "398813ff2726e55d8318f5b871c31cf9e4a8040cbe2f00a85ac56d14a9e5d8cb",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/6e6a15016119/blind-review-cleanroom-launcher-2026-09-17-a1",
+      "tip": "4936e27c4eeec7291836c97cb4f6887f1158ef37",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-17/reap-20260917T074839Z-4088826.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "6603831a51541464df0e57a473c3acae16aac97d0a4323ec36f245f56e638a8d"
+}

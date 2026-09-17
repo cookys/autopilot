@@ -13,7 +13,7 @@ Base `bee8da3d` (v2.36.60) · grant base `e097d782` (plan + mission docs committ
 ## Campaign (attempt 1, `grant.json`, `prepared.json`, `impl-brief.md`, `impl-run1.json`)
 - implement committed `f81f9425` (cursor-grok-4.6-low, 1994 s, 13 files = every sealed path), scope passed.
 - in-rail review MiniMax-M3/cc-shim SHIP-AS-IS (`review-minimax-inrail-raw.log`) — args carried `--timeout 5024s`: first live proof of v2.36.60.
-- `campaign_verification` FAILED in-rail; only `receipt_digest`/`argv_hash`/`env_fingerprint` recorded anywhere (run output, work order, ledger) — BACKLOG row.
+- `campaign_verification` FAILED in-rail; only `receipt_digest`/`argv_hash`/`env_fingerprint` recorded anywhere (run output, work order, ledger) — BACKLOG row. Cause (found after closeout, advisor cross-check): the rail verifies in an attested DETACHED checkout (`campaign-verification.js:322-341`) and `hooks/tests/next-touch-validation.test.sh:1765` runs `git symbolic-ref -q --short HEAD` on the repo root — the same failure `base-suites-bee8da3d.txt` first saw in the detached `basewt` before the re-run on a temp branch. Branch-coupled suite, not a product regression — BACKLOG S row; keep it out of `verification_commands` until fixed.
 - repair refused: `campaign mutation budget exhausted` because `changed_files 13 >= max_changed_files 13` — BACKLOG row. TERMINAL_STOP → `session-mode set --level l3 --entry-level l5 --fallback precondition_failed`.
 
 ## Depth-0 verification

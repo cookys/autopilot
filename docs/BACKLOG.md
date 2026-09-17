@@ -152,13 +152,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-engine/README.md
 - **Context**: `campaignMutationBudgetStatus` axis `changed_files` uses `>=` against the sealed cap, so a repair touching NO new file is refused; graph-check should require cap > |output_paths| or the axis should count new paths only.
 
+### `next-touch-validation.test.sh` reads `symbolic-ref HEAD` — always red in the rail's detached verification checkout
+- **Status**: open
+- **Trigger**: 1a-B campaign 2026-09-17: verification red in-rail, all 13 commands green on a branch; `basewt` detached reproduced `Command failed: git symbolic-ref -q --short HEAD`
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 + advisor cross-check (`campaign-verification.js:322-341` attests a DETACHED checkout by design)
+- **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-engine/README.md
+- **Context**: test line ~1765 builds `candidateRef` from the current branch; derive it from a fixed ref or skip the D8 rebind case when HEAD is detached. Until fixed, keep the suite out of `verification_commands` (l5 recipe step 3).
+
 ### Managed rail: a red `campaign_verification` keeps only digests — the failing command and its output are lost
 - **Status**: open
 - **Trigger**: 1a-B campaign 2026-09-17: verification red in-rail, all 13 commands green at the same commit out-of-rail; run output / work order / ledger carry only `receipt_digest`, `argv_hash`, `env_fingerprint`
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-17 (`impl-run1.json`, work order `blind-review-packet-engine-2026-09-17-a1.json`)
 - **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-engine/README.md
-- **Context**: `createVerificationReceipt` gets stdout/stderr/exitStatus but nothing durable keeps the failing command or its tail; write a `raw_log` next to the receipt (like review seats) and name the command in the ledger entry.
+- **Context**: `createVerificationReceipt` gets stdout/stderr/exitStatus but nothing durable keeps the failing command or its tail; write a `raw_log` next to the receipt and name the command in the ledger (1a-B cause: next row).
 
 ### Managed rail: graph-check admits `max_wall_seconds` to 14400, the contract schema caps 7200 — intake burns the attempt
 - **Status**: open

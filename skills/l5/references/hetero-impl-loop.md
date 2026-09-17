@@ -133,7 +133,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    time); `required_paths` must sit inside `allowed_path_prefixes`; `spec.path`/`section` must
    exist at the base commit — commit the plan BEFORE admission or admission says
    `spec.path missing at base`. Run EVERY `verification_commands` entry at the base commit before
-   sealing: a suite that is red at base fails the hand's acceptance after the paid round and the
+   sealing — in a DETACHED scratch checkout, because that is how the rail runs them
+   (`campaign-verification.js` attests a detached, immutable checkout; 2026-09-17: a suite that
+   reads `symbolic-ref HEAD` was green on the depth-0 branch and red in-rail, and the rail kept
+   only digests): a suite that is red at base fails the hand's acceptance after the paid round and the
    rail then cannot even journal the stop (2026-09-16, two suites red since a config change).
 4. `.claude/mission-routing-config.json` → the new graph + sources; then
    `scripts/mission-terminal-reconcile.js legacy --repo-root . --graph-digest <digest>` (the
@@ -194,7 +197,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     (some suites die on a detached HEAD) and run every verify command there; `test -x` every test
     file the hand created (`bash file` masks a 100644 mode that the CI executable gate rejects); probe the reviewer's MUST-FIX claims by re-derivation
     (probe + mutation) before accepting or refuting; run a second-family `dispatch-review.sh`
-    when the rail's seat returns `no_verdict`.
+    when the rail's seat returns `no_verdict` — on the FULL `git diff <base>..<head>` with no path
+    filter (mirrors and docs included): a path-filtered diff makes an honest reviewer report
+    "mirror not synced" / "BACKLOG not updated" as MUST-FIX (2026-09-17, two false 🟠).
 11. Known rail limits (BACKLOG rows): `status task` has no writer. Fixed since
     2026-09-14: `--campaign-ledger` intake v2.36.42, reviewer `no_verdict` durable wait v2.36.43,
     final-panel seats via standing pins v2.36.46, pre-claim repo facts v2.36.48,

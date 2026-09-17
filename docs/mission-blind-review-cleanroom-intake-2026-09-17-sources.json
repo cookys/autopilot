@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-17-blind-review-cleanroom-intake.md",
+      "rubric_path": "plans/2026-09-17-blind-review-cleanroom-intake.rubric.md",
+      "plan_sha256": "e0598502b51381c8e9d9970f9b1f4ca861744a0363b1c8a6925ba9e2d18b807a",
+      "rubric_sha256": "8e2f3823c49e016ccfb8fea803d09d7684993c3cc5a389e0554236020a80e69c"
+    }
+  ]
+}

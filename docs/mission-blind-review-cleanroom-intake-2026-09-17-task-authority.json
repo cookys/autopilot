@@ -1,0 +1,94 @@
+{
+  "acceptance": {
+    "contract_hash": "e0598502b51381c8e9d9970f9b1f4ca861744a0363b1c8a6925ba9e2d18b807a",
+    "criteria_hash": "8e2f3823c49e016ccfb8fea803d09d7684993c3cc5a389e0554236020a80e69c",
+    "required_evidence": [
+      "mirror-parity",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": []
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "project-default",
+    "data_egress": "local-only",
+    "data_egress_source": "project-default",
+    "guidance_profile": "guided",
+    "guidance_source": "project-default",
+    "topology_preference": "auto",
+    "topology_source": "project-default"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Ship docs/plans/2026-09-17-blind-review-cleanroom-intake.md (cut 1b-B): one JS seat-tier table with shell parity, intake probes the cleanroom boundary via the launcher preflight once per runner and refuses before any spend, the resolver reports a cleanroom advisory instead of a refusal, and the codex pin swap stays conditional on a recorded live verdict.",
+    "requirements_hash": "e0598502b51381c8e9d9970f9b1f4ca861744a0363b1c8a6925ba9e2d18b807a",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        "docs",
+        "hooks",
+        "platforms",
+        "references",
+        "scripts",
+        "skills",
+        "src"
+      ],
+      "domains": [
+        "autopilot",
+        "integration"
+      ],
+      "languages": [
+        "javascript",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "16ca5f07b48df56299f39957bcd7f7276646d1a896a4721e52bf29222fdb826c",
+  "mission_lineage_id": "lineage-v1-a5c2d5acdd1b372cdbd4e3dd337fa752a0a2e2da22beff55f267f1aa5354691d",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_authority_id": "e1d7c9fa3b046202ac972c4ca3497e852cacf24aeed5739cf99155312313eb74",
+  "task_id": "blind-review-cleanroom-intake-2026-09-17"
+}

@@ -49,26 +49,44 @@
    cleanroom-tier runner"; tier `cleanroom` → a new adapter `adapters.cleanroomProbe ||
    defaultCleanroomProbe` is called ONCE per distinct cleanroom runner (not per seat) with
    `{ runner, repo, contractPath, roster }` and must return a decision in the closed set
-   `ready | rejected` — there is no `unknown`: the adapter is never absent (the default exists),
-   and the blind block runs before `missionMode` is computed (`campaign-intake.js:1481-1483`), so
-   the probe never consults enforcement mode. A decision outside the set is refused as
-   `cleanroom_probe_adapter_invalid` through the same `requireDecision` rail the readiness adapter
-   uses (`:1825-1836`). Launcher exit → decision, exhaustively: exit 0 with one parseable JSON line on
-   stdout → `ready`; exit 0 without such a line → `rejected` (`launcher emitted no launch line`);
-   exit 124 (the probe's own `timeout`) → `rejected` (`probe timed out after <n> s (exit 124), no
-   diagnostic`); any other exit (2, 3, 137, …) → `rejected` (`exit <n>: <first stderr line>` or
-   `exit <n>: no diagnostic` when stderr is empty). `rejected` → `final_panel_seat_cleanroom_unavailable`
+   `ready | rejected | unknown`, where `unknown` has exactly one meaning — **the probe adapter is
+   absent**: no `adapters.cleanroomProbe` was injected AND the default probe found no launcher to
+   spawn (the resolved launcher path does not exist or is not executable; `spawnSync` reports
+   `ENOENT`/`EACCES` with `status: null`, so no process ran and no launcher diagnostic can exist).
+   Any other decision value is refused as `cleanroom_probe_adapter_invalid` through the same
+   `requireDecision` rail the readiness adapter uses (`:1825-1836`). `unknown` is recorded as
+   `step('cleanroom_probe', 'unknown', { enforcement: 'shadow', reason: 'launcher not present at
+   <path>' })` — the same shape `defaultReadiness`/`defaultOccupancy` use — and admits only under
+   shadow enforcement: enforcement mode is not known where the blind block runs (`missionMode` is
+   computed at `campaign-intake.js:1481-1483`), so immediately after that line an enforced intake
+   with any `unknown` `cleanroom_probe` step is refused with `final_panel_seat_cleanroom_unavailable`
+   (`enforced intake requires a probe decision; launcher not present at <path>`), before any claim
+   or spend, mirroring how enforced intake refuses unknown readiness (`:1300-1326`). Launcher
+   outcome → decision, exhaustively (the probe spawns the launcher directly with `spawnSync(launcher,
+   args, { timeout: timeoutMs, killSignal: 'SIGKILL' })` — one process, no coreutils `timeout`;
+   the launcher's `bwrap --die-with-parent` (`cleanroom-launch.sh:198`) takes the namespace down with
+   it): exit 0 with one parseable JSON line on stdout → `ready`; exit 0 without such a line →
+   `rejected` (`launcher emitted no launch line`); `ETIMEDOUT` (`status: null`) → `rejected` (`probe
+   timed out after <n> s, no diagnostic`); any non-zero exit (2, 3, 124, 137, …) → `rejected` (`exit
+   <n>: <first stderr line>` or `exit <n>: no diagnostic` when stderr is empty); a spawn error other
+   than the absent-launcher case (e.g. `EACCES` on an existing file) → `rejected` (`spawn error
+   <code>`). `rejected` → `final_panel_seat_cleanroom_unavailable`
    carrying that reason verbatim; the seat is refused BEFORE the qualification check, before any
    claim or spend, and the probe result is a `step('cleanroom_probe', …)` in the intake receipt
-   carrying `runner`, `exit_status`, `launcher_json` (the launcher's one line, parsed; `null` when
-   absent) — a step, not a receipt or attestation (ADR-0001). `defaultCleanroomProbe({ runner, repo,
-   contractPath, roster }, { launcher, timeoutMs, bwrap })` shells out to `<launcher> --preflight
-   --deny-path <repo> --deny-path <git common dir> --deny-path <operator HOME> --deny-path
-   <contractPath's directory>` (`--bwrap <bwrap>` when given) under `timeout <timeoutMs>`, cwd = repo,
-   child env = `PATH` + the operator `HOME` only; `launcher` defaults to
-   `scripts/lib/cleanroom-launch.sh` beside the engine (env `AUTOPILOT_CLEANROOM_LAUNCHER` overrides,
-   the same seam `dispatch-review.sh:333` honours), `timeoutMs` defaults to 60000, `bwrap` to env
-   `AUTOPILOT_CLEANROOM_BWRAP`. The operator `HOME` is passed only as a deny path: the launcher sets
+   carrying `runner`, `exit_status`, `launcher` (the resolved absolute path that answered, so an
+   env override is visible in the receipt), `deny_paths` (as passed), `launcher_json` (the launcher's
+   one line, parsed; `null` when absent) — a step, not a receipt or attestation (ADR-0001).
+   `defaultCleanroomProbe({ runner, repo, contractPath, roster }, { launcher, timeoutMs, bwrap })`
+   runs `<launcher> --preflight --deny-path … [--bwrap <bwrap>]`, cwd = repo, child env = `PATH` +
+   the operator `HOME` only. The deny list is built from `path.resolve`d candidates — `repo`,
+   `git -C <repo> rev-parse --git-common-dir` (omitted when git fails, e.g. a non-git fixture),
+   `process.env.HOME` (omitted when unset or empty), `path.dirname(contractPath)` — dropping
+   duplicates and any entry equal to `/` (which would deny everything and pin exit 3), so the argv
+   is well-formed for every fixture and the step's `deny_paths` shows what was actually checked.
+   `launcher` defaults to `<module dir>/../../scripts/lib/cleanroom-launch.sh` (the same relative
+   shape in the codex mirror, where `platforms/codex/plugin/scripts/lib/cleanroom-launch.sh` exists
+   at base); env `AUTOPILOT_CLEANROOM_LAUNCHER` overrides, the seam `dispatch-review.sh:333` honours;
+   `timeoutMs` defaults to 60000, `bwrap` to env `AUTOPILOT_CLEANROOM_BWRAP`. The operator `HOME` is passed only as a deny path: the launcher sets
    the seat HOME to `/home/review` itself (`cleanroom-launch.sh:253-256`) and the deny check runs
    inside the namespace where the operator HOME is not mounted, which is why
    `--preflight --deny-path <repo> --deny-path <HOME>` already exits 0 on this host
@@ -125,8 +143,11 @@
     plus the REAL `defaultCleanroomProbe` driven with a stub `launcher` (no bwrap, no host gate):
     a stub that prints one JSON line and exits 0 → `ready` with `launcher_json` parsed; a stub that
     writes one stderr line and exits 2 → `rejected`, reason `exit 2: <that line>`; a stub that sleeps
-    with `timeoutMs: 500` → `rejected`, reason names exit 124; an adapter returning `unknown` →
-    `cleanroom_probe_adapter_invalid`.
+    with `timeoutMs: 500` → `rejected`, reason names the timeout; `launcher` pointing at a path that
+    does not exist → `unknown` step (shadow) and the seat admitted in shadow mode, refused with
+    `final_panel_seat_cleanroom_unavailable` under `enforce`; an adapter returning any other value →
+    `cleanroom_probe_adapter_invalid`; a fixture without a git dir and with `HOME` unset still yields
+    a well-formed argv (`deny_paths` recorded, no `/`).
   - `hooks/tests/implementation-campaign-state.test.sh`: its two blind pins re-targeted to a
     `none`-tier runner (preservation) + one `cleanroom_probe` step-shape assertion.
   - `hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh`: the eight ⚠ assertions keep the
@@ -137,8 +158,9 @@
     `schemas/review-loop-contract.schema.json` `properties.reviewer_runner.enum` minus `auto`, read
     from the schema at test time (never a hard-coded list; a runner added to the enum is covered
     automatically), with both `packet` and `cleanroom` members reaching the right rail and `none`
-    refused, and that the resolver's mirror agrees (`--check-scorecard` on a fixture config with one
-    seat per tier).
+    refused, and that the resolver's mirror agrees for EVERY enum member (`--check-scorecard` on a
+    fixture config that lists each enum runner as a qc seat in turn, asserting the advisory line for
+    cleanroom members, the refusal ⚠ for `none` members, and neither for packet members).
   - `hooks/tests/cleanroom-launch.test.sh` (host-gated, from 1b-A): one added case — the REAL
     `defaultCleanroomProbe` (exported for the test) returns `ready` on this host and `rejected` with
     `AUTOPILOT_CLEANROOM_BWRAP=/nonexistent`; plus the 1b-A second-review carry-in: suite (a) asserts
@@ -151,7 +173,9 @@
   canary; verify-once; parallel seats. Shipped: 1a-A v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B
   v2.36.63. Open: deny-list config, cut 2. Detail in the pointer.` (234 bytes, under the 240-byte
   Context cap) with the row's Status field staying the literal `open`; `v2.36.63` in text is a pin
-  for the release commit, which is depth-0's, not the hand's.
+  for the release commit, which is depth-0's, not the hand's — if the release lands under another
+  number, depth-0 re-stamps the doc, mirror and row in the release commit (1b-A's `(v2.36.62)`
+  followed the same convention).
 
 ### 2.5 Sealed `output_paths` (exact; re-check mirrors at base)
 
@@ -183,10 +207,10 @@ path (BACKLOG row, hit on 1a-B); the headroom is the workaround until that row s
 - Intake decides, the resolver reports, the engine dispatches: no probe in the resolver, no tier
   logic in `autopilot-engine.js`, no new receipt/attestation type — the probe is a `step`.
 - A cleanroom seat is admitted only on a probe decision `ready` from the injected or default
-  adapter; the decision set is `ready | rejected` (anything else is `cleanroom_probe_adapter_invalid`);
-  a pin or override never bypasses `rejected`.
-- The probe spawns exactly one process per distinct cleanroom runner per intake, with a 60 s cap,
-  and never a model.
+  adapter, or on `unknown` (adapter absent = no launcher to spawn) under shadow enforcement only;
+  anything else is `cleanroom_probe_adapter_invalid`; a pin or override never bypasses `rejected`.
+- The probe spawns exactly one process per distinct cleanroom runner per intake (`spawnSync` with
+  its own `timeout`, no wrapper), with a 60 s cap, and never a model.
 - `dispatch-review.sh`, `cleanroom-launch.sh`, `review.js`, `review-packet.js`, `bin/autopilot.js`,
   schemas (unless §2 says otherwise after re-verification) byte-identical to base.
 - Deprecated JS aliases stay exported this cut; nothing else in the repo calls them after the change
@@ -205,7 +229,7 @@ path (BACKLOG row, hit on 1a-B); the headroom is the workaround until that row s
 | id | criterion | evidence |
 |----|-----------|----------|
 | `tier-table` | one JS tier table; deprecated aliases equal to it; shell `review_seat_tier` and the resolver mirror agree for every runner in the contract enum | dispatch-review parity block |
-| `intake-probe` | `none` seat → `final_panel_seat_blind_incompatible` (new tail); cleanroom seat → probe called once per runner; `rejected` → `final_panel_seat_cleanroom_unavailable` before any claim/spend with the launcher's stderr line; `ready` → admitted with a `cleanroom_probe` step; exit 124 / other exits / missing launch line each map to `rejected` with the stated reason; a non-binary adapter decision is `cleanroom_probe_adapter_invalid` | routing + state suites |
+| `intake-probe` | `none` seat → `final_panel_seat_blind_incompatible` (new tail); cleanroom seat → probe called once per runner; `rejected` → `final_panel_seat_cleanroom_unavailable` before any claim/spend with the launcher's stderr line; `ready` → admitted with a `cleanroom_probe` step; timeout / non-zero exits / missing launch line / spawn error each map to `rejected` with the stated reason; absent launcher → `unknown`, admitted in shadow, refused under enforce; any other adapter value is `cleanroom_probe_adapter_invalid` | routing + state suites |
 | `resolver-advisory` | codex qc seat yields the cleanroom advisory line, not a refusal ⚠; `none` seats keep the refusal ⚠ | qc-panel-rejection suite |
 | `host-probe` | `defaultCleanroomProbe` is `ready` on this host and `rejected` with a missing bwrap | cleanroom-launch suite (host-gated) |
 | `no-regression` | §4.1 all exit 0 at the candidate; base set recorded | evidence |
@@ -243,10 +267,11 @@ parsed verdict → then and only then the pin swap (§1.5) and the first live cl
 
 ## 6. Risks + inversion
 
-- **Probe cost at intake.** ~1 s per cleanroom runner, once; the 60 s cap is exit 124 → `rejected`
-  with a reason that says so (no launcher line exists on that path).
-- **No `unknown` decision.** The probe is binary; enforcement mode is not consulted (it is not
-  even computed yet where the blind block runs), so shadow and enforce behave identically.
+- **Probe cost at intake.** ~1 s per cleanroom runner, once; the 60 s cap is `spawnSync`'s own
+  `ETIMEDOUT` → `rejected` with a reason that says so (no launcher line exists on that path).
+- **`unknown` is narrow.** Only "no launcher to spawn" is `unknown`; it admits in shadow and is
+  refused in enforce at the point `missionMode` becomes known, so a launcher-less host degrades
+  exactly like unknown readiness does today.
 - **Suite drift.** Three suites pin the old message/code; the code stays, only the tail changes; the
   routing fixture moves its "incompatible" example to `grok`. `resolve-review-loop.test.sh` is run at
   base and at head because the resolver is touched.
@@ -258,4 +283,20 @@ parsed verdict → then and only then the pin swap (§1.5) and the first live cl
 
 ## Review log
 
-- (plan loop pending; consult seat still codex-bound — expect `rail-failed` unless the operator pins a GLM consult seat)
+- Unknown-escalation probe (`ladder-classify.json`): U0 — every coined name already had repo hits
+  (the draft, brief and handoff name them), so no consult rung was climbed.
+- Plan hetero loop G1 2026-09-17 (GLM-5.2 CONDITIONAL, claude-fable-5-1 CONDITIONAL; 5 blockers +
+  5 non-blocking; `g1-*`, `plan.as-reviewed-g1.md`): all ten accepted — exhaustive launcher exit →
+  decision map (R2), `unknown` removed in favour of a binary decision (R2; revisited in G2), HOME
+  semantics cited to the launcher and the existing host test (R3), schemas NONE verified at base
+  (R5), base record instead of a memory note (R7), grok's enum membership (R6), enum read from the
+  schema at test time (R1), Context bytes + Status pinned (R8 ×2).
+- Plan hetero loop G2 2026-09-17 (terminal at the cap; both seats CONDITIONAL, 1 blocker + 6
+  non-blocking; `g2-*`, `plan.as-reviewed-g2.md`): all seven accepted — the G1 fold had contradicted
+  frozen R2's "an absent probe adapter admits only under shadow enforcement", so `unknown` is
+  restored with one meaning (no launcher to spawn), admitted in shadow and refused under enforce at
+  the point `missionMode` is known; the probe spawns the launcher directly with `spawnSync`'s own
+  timeout (R3, one process); deny-list construction is total over fixtures (R2); the step records
+  the answering launcher and the deny paths (R3); resolver parity iterates the enum (R1); version
+  pin re-stamp convention stated (R8). Growth 1.38× over the G2-reviewed bytes (cap reached, no
+  further dispatch). Zero unaddressed blockers, zero deferred.

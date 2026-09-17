@@ -1,0 +1,368 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-cleanroom-intake-2026-09-17",
+  "logical_plan_id": "blind-review-cleanroom-intake-2026-09-17",
+  "session_id": "c1d-g2-1789632555",
+  "session_key": "29e3c9989b5bad1717387ab53c0a1a4cb3099efcc82606c2ad881e0f05cf8a3e",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "8e2f3823c49e016ccfb8fea803d09d7684993c3cc5a389e0554236020a80e69c",
+  "manifest_sha256": "58a39d02248508818f9054e281a46c9cabae89ec1002492586a704b7a8618291",
+  "plan_sha256": "04fd1f1f7106579763691fd12d8a585567651ef0b1916663d4210462955056a1",
+  "growth_ratio": {
+    "numerator": 19971,
+    "denominator": 16336
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "630058ea9e02da8f35943f86d8d8344b25db5900dc092c1fef253365a905a853"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b2eb8a11c8a5837f77482c49936bb65057262b95fbec414d9bfd7d409bd392fb",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-aNsp5z",
+          "digest": "b2eb8a11c8a5837f77482c49936bb65057262b95fbec414d9bfd7d409bd392fb"
+        },
+        "receipt_digest": "2d7ef429fd470751afd77c91f47d0c78e9f1f55d7c73ed21b489a2a4ba245612"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "a5ab875c185482eb02e2f22774cd6a6833ff46335c93bf302607c4d228dd0cd5"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "21dfa93554067a05afd79d32892a57cf994d5a813be19311fba878afda19fdb5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-pIaSEB",
+          "digest": "21dfa93554067a05afd79d32892a57cf994d5a813be19311fba878afda19fdb5"
+        },
+        "receipt_digest": "b5c8eb253dfc37333bb960b35fc2acbe53e6d3f4399a8b75479a8e995b65200b"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "201103ca831746751a7a8c779ce10c63e85c2e5ded70c2367220fcc6e54a9bec"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9497657412fa45572f2c2eb1ec1ab2a15f003dbd8301cd4350388100d690b7bb",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-oNIicn",
+          "digest": "9497657412fa45572f2c2eb1ec1ab2a15f003dbd8301cd4350388100d690b7bb"
+        },
+        "receipt_digest": "f33b4eb0f0be72d89be4e818fbb9ce09d8ef75f21f2446f9423f80ba21e23153"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/campaign-intake.js — cleanroom probe adapter contract (§1.2, §2.6)",
+      "claim": "The rubric specifies that an absent probe adapter admits only under shadow enforcement; the plan instead eliminates the absent case entirely by always installing defaultCleanroomProbe and collapsing the decision set to ready|rejected with no unknown, so the shadow-enforcement-only path for an absent adapter is neither implemented nor specified.",
+      "evidence": "Plan §1.2 states 'there is no unknown: the adapter is never absent (the default exists), and the blind block runs before missionMode is computed, so the probe never consults enforcement mode'; §2.6 states 'the decision set is ready | rejected (anything else is cleanroom_probe_adapter_invalid)'. The frozen rubric R2 wording is 'an absent probe adapter admits only under shadow enforcement'.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §1.2 (adapter decision mapping) and §2.6 (global constraints)",
+      "repair": "No current change to the design; add one sentence to §1.2 recording that the absent-adapter case is made structurally impossible (default adapter always present) and therefore the rubric's shadow-only admission branch is unreachable by construction, so future cuts reintroducing an optional adapter must restore the unknown/shadow semantics.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "35d108857f69f8d5337e1be5c3c702c3199227120f6da50d2ce276d00d36aa32"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-intake.js runCampaignIntake blind block; defaultCleanroomProbe; missionMode ordering",
+      "claim": "The plan contradicts the frozen R2 clause that an absent probe adapter admits only under shadow enforcement: it rules the decision set is binary (ready|rejected), that the adapter is never absent, and that enforcement mode is never consulted because the block runs before missionMode is computed, so a host whose launcher is missing (ENOENT) or whose bwrap is absent hard-refuses every cleanroom seat even in shadow mode.",
+      "evidence": "Plan §1.2: 'there is no unknown: the adapter is never absent (the default exists), and the blind block runs before missionMode is computed (campaign-intake.js:1481-1483), so the probe never consults enforcement mode'. Plan §6: 'shadow and enforce behave identically'. Rubric R2: 'an absent probe adapter admits only under shadow enforcement'. A missing launcher path under the plan's mapping is 'any other exit' (127) -> rejected in both modes.",
+      "evidence_reference": "plan §1.2 paragraph 2, §2.6 bullet 2, §6 bullet 2; rubric R2",
+      "repair": "Make the plan comply with R2 before dispatch: define the absent case explicitly (no injected adapter AND default launcher not present on disk, i.e. spawn ENOENT before any exit status) as decision unknown, recorded as the cleanroom_probe step with exit_status null and a diagnostic; admit only when the campaign's enforcement mode is shadow, refuse with final_panel_seat_cleanroom_unavailable under enforce. This requires computing missionMode (or reading the enforcement flag) before the tier block; state the new order in §1.2 and add one routing case per mode with the RED-at-base note. A launcher that exists but fails (exit 2/3/124) stays rejected in both modes, matching 'no pin or override bypasses a failed probe'.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9ae076643d47ba40816f0c2d486186047659eb2617cd25cac50c814f9b03e1d3"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/dispatch-review.test.sh parity block; scripts/resolve-review-loop.sh review_seat_tier copy",
+      "claim": "The resolver's copy of review_seat_tier is only proven equal for one seat per tier, not for every runner the contract enum admits, so a drift between the resolver copy and the engine table for any other enum member (for example a new runner added to the enum) would pass the parity test.",
+      "evidence": "Plan §2 parity bullet: the JS-vs-shell comparison iterates the schema enum, but the resolver check is '--check-scorecard on a fixture config with one seat per tier'. Rubric R1 requires the resolver's copy 'proven equal to it for every runner the contract admits'.",
+      "evidence_reference": "plan §2 dispatch-review.test.sh parity bullet; §4 tier-table row; rubric R1",
+      "repair": "Extend the parity block so the resolver check also iterates the enum minus auto: for each runner, run --check-scorecard on a one-seat fixture and assert the warning class (refusal, advisory, or none) matches reviewSeatTier(runner). Keep it schema-driven, no hard-coded list.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9c425a9f440753ee74a9f5f05ba6ddef1992907241cbd029696d051ad1865ba6"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "defaultCleanroomProbe process bound and spawn-error handling",
+      "claim": "The 60 s bound relies on the coreutils timeout wrapper and exit 124, which does not kill the launcher's bwrap grandchildren and is a second process on the path; spawn-level errors (launcher or timeout binary ENOENT, EACCES) are not exit statuses and have no mapping, so the exhaustive exit table is not actually exhaustive.",
+      "evidence": "Plan §1.2: 'under timeout <timeoutMs>' and 'exit 124 (the probe's own timeout)'; the mapping covers exit 0, 124, other exits, but spawnSync returns error with status null on ENOENT. Rubric R3: 'exactly one bounded, model-free process'.",
+      "evidence_reference": "plan §1.2 launcher exit mapping; §2.6 bullet 3; rubric R3",
+      "repair": "Spawn the launcher directly with Node's spawnSync timeout and killSignal (detached, kill the process group on timeout) instead of the coreutils wrapper, map error.code ETIMEDOUT to rejected 'probe timed out after n s' and any other spawn error to rejected 'spawn failed: <code>' (or to the R2 absent path when ENOENT on the default launcher); update the routing-suite timeout case to assert the timeout reason rather than the literal exit 124.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b1b32efc751ec186017915032b18ed2562787bd94cc005a27f51996b97b76750"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "defaultCleanroomProbe deny-path argv construction",
+      "claim": "The probe passes the operator HOME and the git common dir as deny paths but the plan does not say what happens when HOME is unset or is a root-like path (service accounts, CI) or when the repo has no git common dir (routing-suite fixtures drive the real probe with a stub launcher), so the argv may be malformed, include --deny-path / (everything denied, permanent exit 3), or throw before the step is recorded.",
+      "evidence": "Plan §1.2: '--deny-path <repo> --deny-path <git common dir> --deny-path <operator HOME> --deny-path <contractPath's directory>'; §2 routing bullet drives 'the REAL defaultCleanroomProbe driven with a stub launcher (no bwrap, no host gate)' from scratch fixtures.",
+      "evidence_reference": "plan §1.2 defaultCleanroomProbe argv; §2 routing suite bullet",
+      "repair": "State the rule: an unresolvable git common dir or absent HOME omits that deny path and is noted in the step's diagnostic; a HOME equal to / or the repo root is refused as rejected 'unsafe deny path' without spawning. Add one stub-launcher case asserting the recorded argv in the step for a non-git fixture.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dc7779d333c9be1cb7e111173feec885270ddad5a3fcf5475a01a90c6788bb1f"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "cleanroom_probe step fields; AUTOPILOT_CLEANROOM_LAUNCHER seam; platforms/codex/plugin mirror",
+      "claim": "The step does not record which launcher answered, yet the env override lets any script satisfy the probe, and the default path 'beside the engine' resolves differently in the codex plugin mirror where a launcher mirror is not listed in §2.5 and its existence at base is not verified.",
+      "evidence": "Plan §1.2: launcher defaults to scripts/lib/cleanroom-launch.sh beside the engine, env AUTOPILOT_CLEANROOM_LAUNCHER overrides; step carries runner, exit_status, launcher_json only. §2.5 lists platforms/codex/plugin mirrors for the engine files but none for scripts/lib/cleanroom-launch.sh.",
+      "evidence_reference": "plan §1.2 defaultCleanroomProbe defaults; §2.5 sealed output_paths; rubric R3 step contents",
+      "repair": "Add launcher (resolved absolute path) and argv to the cleanroom_probe step so the receipt shows which launcher produced the decision; verify at base whether platforms/codex/plugin/scripts/lib/cleanroom-launch.sh exists and state the mirror resolution rule in §1.2, and on non-zero exits still parse and record launcher_json when a line is present rather than only the first stderr line.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6aea293adb7aab4b9d5d19afa1dd1ced2e3ba752e04a5e31444306c4e29914a8"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "references/blind-dispatch.md; docs/BACKLOG.md redesign row Context",
+      "claim": "The docs and BACKLOG Context pin v2.36.63 as the shipping version before the release commit exists; if depth-0 releases under a different number the text is wrong at merge.",
+      "evidence": "Plan §2 docs bullet: 'Intake probe (v2.36.63)' and the Context string 'shipped: ... 1b-B v2.36.63' (counted at 234 bytes, within the 240 cap); the plan itself notes 'v2.36.63 in text is a pin for the release commit, which is depth-0's, not the hand's'.",
+      "evidence_reference": "plan §2 Docs bullet; rubric R8",
+      "repair": "No current change; follow-up only: depth-0 re-checks the version string at release and edits both doc mirrors and the BACKLOG row in the release commit if the number differs.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d52109502d207af7dce7d58172d8c10ce630c78e7fcf2adab0c3e579370e3b42"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "35d108857f69f8d5337e1be5c3c702c3199227120f6da50d2ce276d00d36aa32",
+      "rubric_id": "R2",
+      "affected_surface": "src/engine/campaign-intake.js — cleanroom probe adapter contract (§1.2, §2.6)",
+      "claim": "The rubric specifies that an absent probe adapter admits only under shadow enforcement; the plan instead eliminates the absent case entirely by always installing defaultCleanroomProbe and collapsing the decision set to ready|rejected with no unknown, so the shadow-enforcement-only path for an absent adapter is neither implemented nor specified.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §1.2 (adapter decision mapping) and §2.6 (global constraints)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9c425a9f440753ee74a9f5f05ba6ddef1992907241cbd029696d051ad1865ba6",
+      "rubric_id": "R1",
+      "affected_surface": "hooks/tests/dispatch-review.test.sh parity block; scripts/resolve-review-loop.sh review_seat_tier copy",
+      "claim": "The resolver's copy of review_seat_tier is only proven equal for one seat per tier, not for every runner the contract enum admits, so a drift between the resolver copy and the engine table for any other enum member (for example a new runner added to the enum) would pass the parity test.",
+      "evidence_reference": "plan §2 dispatch-review.test.sh parity bullet; §4 tier-table row; rubric R1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b1b32efc751ec186017915032b18ed2562787bd94cc005a27f51996b97b76750",
+      "rubric_id": "R3",
+      "affected_surface": "defaultCleanroomProbe process bound and spawn-error handling",
+      "claim": "The 60 s bound relies on the coreutils timeout wrapper and exit 124, which does not kill the launcher's bwrap grandchildren and is a second process on the path; spawn-level errors (launcher or timeout binary ENOENT, EACCES) are not exit statuses and have no mapping, so the exhaustive exit table is not actually exhaustive.",
+      "evidence_reference": "plan §1.2 launcher exit mapping; §2.6 bullet 3; rubric R3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "dc7779d333c9be1cb7e111173feec885270ddad5a3fcf5475a01a90c6788bb1f",
+      "rubric_id": "R2",
+      "affected_surface": "defaultCleanroomProbe deny-path argv construction",
+      "claim": "The probe passes the operator HOME and the git common dir as deny paths but the plan does not say what happens when HOME is unset or is a root-like path (service accounts, CI) or when the repo has no git common dir (routing-suite fixtures drive the real probe with a stub launcher), so the argv may be malformed, include --deny-path / (everything denied, permanent exit 3), or throw before the step is recorded.",
+      "evidence_reference": "plan §1.2 defaultCleanroomProbe argv; §2 routing suite bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6aea293adb7aab4b9d5d19afa1dd1ced2e3ba752e04a5e31444306c4e29914a8",
+      "rubric_id": "R3",
+      "affected_surface": "cleanroom_probe step fields; AUTOPILOT_CLEANROOM_LAUNCHER seam; platforms/codex/plugin mirror",
+      "claim": "The step does not record which launcher answered, yet the env override lets any script satisfy the probe, and the default path 'beside the engine' resolves differently in the codex plugin mirror where a launcher mirror is not listed in §2.5 and its existence at base is not verified.",
+      "evidence_reference": "plan §1.2 defaultCleanroomProbe defaults; §2.5 sealed output_paths; rubric R3 step contents",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d52109502d207af7dce7d58172d8c10ce630c78e7fcf2adab0c3e579370e3b42",
+      "rubric_id": "R8",
+      "affected_surface": "references/blind-dispatch.md; docs/BACKLOG.md redesign row Context",
+      "claim": "The docs and BACKLOG Context pin v2.36.63 as the shipping version before the release commit exists; if depth-0 releases under a different number the text is wrong at merge.",
+      "evidence_reference": "plan §2 Docs bullet; rubric R8",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-17T08:20:15.992Z"
+}

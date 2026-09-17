@@ -1,0 +1,49 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-cleanroom-intake-2026-09-17",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "35d108857f69f8d5337e1be5c3c702c3199227120f6da50d2ce276d00d36aa32",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted (with the blocker): `unknown` restored with one meaning — adapter absent = no launcher to spawn — admitted only under shadow, refused under enforce at the point missionMode is known."
+  },
+  {
+   "fingerprint": "9ae076643d47ba40816f0c2d486186047659eb2617cd25cac50c814f9b03e1d3",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: frozen R2 wording wins. §1.2 now defines the absent adapter (no injected adapter AND no launcher on disk: spawnSync ENOENT/EACCES-on-missing, status null) → step cleanroom_probe unknown/shadow, admitted in shadow, refused with final_panel_seat_cleanroom_unavailable right after missionMode is computed (campaign-intake.js:1481-1483) under enforce, mirroring the enforced-readiness refusal (:1300-1326). Any real launcher outcome (incl. a missing bwrap) stays rejected in both modes because a diagnostic exists. §2 tests, §2.6, §4, §6 aligned."
+  },
+  {
+   "fingerprint": "9c425a9f440753ee74a9f5f05ba6ddef1992907241cbd029696d051ad1865ba6",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the resolver parity now iterates the schema enum too — a fixture config lists each enum runner as a qc seat in turn and asserts advisory / refusal / neither per tier."
+  },
+  {
+   "fingerprint": "b1b32efc751ec186017915032b18ed2562787bd94cc005a27f51996b97b76750",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the probe spawns the launcher directly with spawnSync { timeout, killSignal: SIGKILL } (one process, no coreutils timeout); the launcher already passes bwrap --die-with-parent (cleanroom-launch.sh:198); ETIMEDOUT and spawn errors (status null) are mapped explicitly, so the table is exhaustive over spawnSync outcomes."
+  },
+  {
+   "fingerprint": "dc7779d333c9be1cb7e111173feec885270ddad5a3fcf5475a01a90c6788bb1f",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the deny list is built from resolved candidates with git-common-dir omitted when git fails, HOME omitted when unset/empty, duplicates and `/` dropped; the step records deny_paths; a no-git, no-HOME fixture case is added."
+  },
+  {
+   "fingerprint": "6aea293adb7aab4b9d5d19afa1dd1ced2e3ba752e04a5e31444306c4e29914a8",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the step records `launcher` (resolved absolute path) so an env override is visible; the default resolves relative to the module dir and the codex mirror has the same relative shape with platforms/codex/plugin/scripts/lib/cleanroom-launch.sh present at base (1b-A sealed it)."
+  },
+  {
+   "fingerprint": "d52109502d207af7dce7d58172d8c10ce630c78e7fcf2adab0c3e579370e3b42",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the plan states that depth-0 re-stamps doc, mirror and row in the release commit if the number differs, the same convention 1b-A used for (v2.36.62)."
+  }
+ ]
+}

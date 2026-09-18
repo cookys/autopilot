@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-b33ff20c07e9e811978fa09ce1b660f23dee29ef7b1d6a672c5ab41773bb3bb7",
+  "claim_id": "claim-v1-ed632042d0d5c1d67fb11ac82f186706c4963557d283049fcecc0acd95c11cf9",
+  "mission_grant_ref": "60818290e464e19ce3aa4f6c638334a61b7109bfa65ffdb7be84f7eb1d8726c9",
+  "mission_subject_digest": "7a0faf13bc7923153b8a49ed9ed80a3921b2fb2cc7f78e418f08e742289645e2",
+  "mission_campaign_id": "campaign-v2-049152d80582f41f16b398ce6bdebf21f19bef5121c3267535ec80c72f032d1e",
+  "graph_node_id": "shared-packet",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/b33ff20c07e9e811978fa09ce1b660f23dee29ef7b1d6a672c5ab41773bb3bb7/shared-packet/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/b33ff20c07e9e811978fa09ce1b660f23dee29ef7b1d6a672c5ab41773bb3bb7/shared-packet/attempt-1/campaign.seal.json",
+  "branch": "mission/b33ff20c07e9/shared-packet-a1",
+  "base_sha": "fd4ea3a6c061f336034ee8db109ceed5d364d8cb",
+  "state_hash": "4e2cf5af509bb78a632c8685495c51d65f105b6915c0135b445cc46b8de3a660"
+}

@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_disposition_authority",
+  "authority": "depth-0",
+  "actor_id": "depth-0:claude-opus-5:f25e2b00-010b-4238-b840-75793ad2a4c9",
+  "campaign_id": "campaign-v1-72aac3faa59f6250dc408d2ce7d1493705205ca42498b1ca8bc331ef1237ec2b",
+  "contract_digest": "6ac76f7667b1c31f0651b0e841b4e4439e9f4ee3b6f99541c283284aa6e4fb2c",
+  "reviews": [
+    {
+      "review_digest": "4f47556748d59fd7a7f90f29b89d40544d69e919cef8414f2853821229c51928",
+      "decisions": [
+        {
+          "finding_id": "stdin-paths-quote-prefix",
+          "evidence": {
+            "kind": "reproduced",
+            "probe_cmd": "cd /tmp/qprobe && printf 'hello\\n' > '\"quoted.txt' && printf '\"quoted.txt\\n' | git hash-object --stdin-paths --no-filters",
+            "expected_signature": "git 2.53.0 C-unquotes a line whose first byte is a double quote: exit 128 `fatal: line is badly quoted`; the same file by absolute path hashes ce013625",
+            "observed_output": "fatal: line is badly quoted\nrc=128\n(absolute path) ce013625030ba8dba906f756967f9e9ca394464a abs rc=0"
+          },
+          "disposition": {
+            "disposition": "must-fix-now",
+            "acceptance_id": "tree-hash-batch",
+            "rubric_id": "R5",
+            "task_surface": "src/runners/review-packet.js verifyTreeIntegrity batched hasher",
+            "deferral_harm": "a tracked file whose name starts with a double quote makes every packet build of that candidate die with a raw git error instead of the base `tree integrity: <rel>` verdict; R5 requires the batched hasher to yield the same verdict as per-file hashing on unusual names"
+          }
+        },
+        {
+          "finding_id": "runpanel-build-uncaught",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/engine/autopilot-engine.js runPanel (candidate 5d7ad66a): `sharedPacket = buildPacketOnce({...})` executes before the `try {` that wraps the seat loop",
+              "src/runners/review.js buildPacketOnce: rethrows every buildReviewPacket error (tree integrity, deny-list, git) after removing its temp root",
+              "base fd4ea3a6: the same errors were thrown inside prepareReviewLaunch and returned as `{ skipLaunch: true, error }`, i.e. one seat row with the reason and the panel receipt intact"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff fd4ea3a6..5d7ad66a (autopilot-engine.js hunk @@ -5366 and review.js buildPacketOnce)"
+          },
+          "disposition": {
+            "disposition": "must-fix-now",
+            "acceptance_id": "packet-once",
+            "rubric_id": "R4",
+            "task_surface": "src/engine/autopilot-engine.js runPanel shared build",
+            "deferral_harm": "one failed shared build throws out of the panel station with no seat receipts and no ledger row, so a candidate with a packet-build fault leaves the campaign without the durable/blocked receipt the station contract guarantees"
+          }
+        },
+        {
+          "finding_id": "shared-packet-caller-count",
+          "evidence": {
+            "kind": "refuted",
+            "probe_cmd": "cd /tmp/hetero-mission-b33ff20c07e9-shared-packet-a1-3RP21Y && grep -rn 'buildReviewPacket(' src | grep -v platforms",
+            "expected_signature": "the review-runner walk counts the literal `buildReviewPacket(`; the engine imports buildPacketOnce, which is a different identifier, so the count stays at the definition plus the one review.js call (builder_callers=2)",
+            "observed_output": "src/runners/review.js:216:    const built = buildReviewPacket({\nsrc/runners/review-packet.js:438:function buildReviewPacket({",
+            "mutation_desc": "scratch clone of 5d7ad66a: add `const __mut = () => require('../runners/review-packet').buildReviewPacket({});` to src/engine/autopilot-engine.js and re-run the grep",
+            "mutation_probe_output": "src/engine/autopilot-engine.js:21:const __mut = () => require(\"../runners/review-packet\").buildReviewPacket({});\nsrc/runners/review.js:216:    const built = buildReviewPacket({\nsrc/runners/review-packet.js:438:function buildReviewPacket({  (3 lines: the walk would report unexpected_callers=1, builder_callers=3)"
+          },
+          "disposition": null
+        },
+        {
+          "finding_id": "hashObject-export-stability",
+          "evidence": {
+            "kind": "refuted",
+            "probe_cmd": "cd /tmp/hetero-mission-b33ff20c07e9-shared-packet-a1-3RP21Y && env -u AUTOPILOT_SESSION_ID bash hooks/tests/review-packet.test.sh",
+            "expected_signature": "the finding's own text ends `This looks correct`; the suite whose hashObject wrap it questions passes at the candidate (symlinks via hashBlob are intentionally not counted, LF/CR names via module.exports.hashObject are: count 2 = fixture)",
+            "observed_output": "PASS [review-packet] 57 assertions",
+            "mutation_desc": "scratch clone of 5d7ad66a: route symlinks through module.exports.hashObject instead of hashBlob in verifyTreeIntegrity and re-run the suite",
+            "mutation_probe_output": "FAIL [review-packet] batched hashing / materialize isolation: hashObject_calls=3: expected '2', got '0'\nFAIL [review-packet] 54 passed, 3 failed"
+          },
+          "disposition": null
+        },
+        {
+          "finding_id": "shared-build-gate",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/engine/autopilot-engine.js reviewDiff: `reviewOptions.sharedPacket = input.sharedPacket` is set outside the `blindDiscovery === true` guard that sets reviewOptions.packet",
+              "src/runners/review.js prepareReviewLaunch: sharedPacket is consumed only inside the blindDiscovery branch, so a non-blind seat never receives a wrong artifact; the cost is one disposed build"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "A panel whose seats are not blind-discovery pays one shared build that is then disposed unused. No wrong artifact reaches a seat; cost only.",
+            "trigger": "Next touch of runPanel or a non-blind panel seat configuration.",
+            "proposed_backlog_title": "runPanel: gate the shared packet build on the same blind-discovery predicate as reviewOptions.packet"
+          }
+        },
+        {
+          "finding_id": "prepare-error-reclass",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/engine/autopilot-engine.js reviewDiff: the new early return fires on `reviewResult.skipLaunch === true` for every prepare-time error, not only the hash mismatch",
+              "base fd4ea3a6: those errors fell through to the existing error path (dispatch_review ledger row, transport classification)"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff (autopilot-engine.js hunk @@ -3505)"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Folded into the depth-0 repair of runpanel-build-uncaught: the early return is narrowed to phase === 'precondition_failed' so generic prepare errors keep base's classification. Recorded as follow-up because the disposition rail runs no repair round in this campaign (wall remainder 1765 s cannot fit implement + verify + panel).",
+            "trigger": "Closed by the repair commit on mission/b33ff20c07e9/shared-packet-a1; verify in the delta review.",
+            "proposed_backlog_title": "performReview: only the packet hash mismatch is precondition_failed; other prepare errors keep the base error path"
+          }
+        },
+        {
+          "finding_id": "skiplaunch-phase-labelling",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/engine/autopilot-engine.js reviewDiff early return: `phase: 'precondition_failed'` is hardcoded regardless of reviewResult.phase",
+              "src/runners/review.js prepareReviewLaunch: only the materialisation mismatch sets error.phase = 'precondition_failed'"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Same root as prepare-error-reclass; folded into the same repair (early return keyed on reviewResult.phase).",
+            "trigger": "Closed by the repair commit on mission/b33ff20c07e9/shared-packet-a1.",
+            "proposed_backlog_title": "performReview: only the packet hash mismatch is precondition_failed; other prepare errors keep the base error path"
+          }
+        },
+        {
+          "finding_id": "sha1-batch-cwd-discovery",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/runners/review-packet.js hashObjectsStdinPaths: sha1 case runs with cwd = treeDir and no GIT_DIR; git discovers whatever repository encloses os.tmpdir()",
+              "base fd4ea3a6 hashObject: cwd = entry.repo, so config discovery was the packet's source repository"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Folded into the depth-0 repair of stdin-paths-quote-prefix: the batch feeds absolute paths with cwd = entry.repo and the same -c objectFormat rule as base, which removes both the quote-prefix hazard and the temp-dir discovery.",
+            "trigger": "Closed by the repair commit on mission/b33ff20c07e9/shared-packet-a1.",
+            "proposed_backlog_title": "verifyTreeIntegrity batch: run with cwd = repo and absolute paths, not cwd = temp tree"
+          }
+        },
+        {
+          "finding_id": "solo-identity-not-pinned",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "hooks/tests/review-runner.test.sh (candidate): solo_hash_stable compares two current solo runs and the shared build to each other; no base-observed value is pinned",
+              "the fixture packet hash depends on the fixture tree the suite builds at run time, so a literal pin would pin the fixture, not base behaviour"
+            ],
+            "confirmed_by": "depth-0 read of the candidate test diff"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Test-strength item, not a product defect; base parity of the batch-of-one path is covered by the byte-identical launch env/arg shape assertions and by the engine suite's __packetBuildCount.",
+            "trigger": "Next change to prepareReviewLaunch's single-seat path.",
+            "proposed_backlog_title": "review-runner: pin the base-observed packet_hash and launch-arg shape for the batch-of-one path"
+          }
+        },
+        {
+          "finding_id": "lstat-before-compare-order",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/runners/review-packet.js verifyTreeIntegrity (candidate): pass 1 lstat/type-checks every entry, pass 2 compares oids in listing order",
+              "only a tree with BOTH a later missing/wrong-type entry AND an earlier oid mismatch names a different path than base; the text `tree integrity: <rel>` and the refusal are unchanged"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff; plan §1.2.3 pins first-mismatch order for content mismatches, which the ordered compare pass keeps"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Diagnostic-only difference under a contrived double corruption.",
+            "trigger": "If a tree-integrity failure report is ever ambiguous in practice.",
+            "proposed_backlog_title": "verifyTreeIntegrity: merge the type pre-pass into the ordered compare so a double corruption names the earliest entry"
+          }
+        },
+        {
+          "finding_id": "tree-integrity-mixed-fault-order",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "same mechanism as lstat-before-compare-order (GLM-5.2 seat's statement of the claude-fable-5-1 seat's finding)"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Duplicate of lstat-before-compare-order from a second seat.",
+            "trigger": "Same as lstat-before-compare-order.",
+            "proposed_backlog_title": "verifyTreeIntegrity: merge the type pre-pass into the ordered compare so a double corruption names the earliest entry"
+          }
+        },
+        {
+          "finding_id": "runpanel-extra-preparereview",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/engine/autopilot-engine.js runPanel (candidate): one prepareReview call sources diff_file for the shared identity, then each seat's performReview prepares again",
+              "cost is one extra diff materialisation per panel run; packet builds stay at one per candidate (engine suite __packetBuildCount)"
+            ],
+            "confirmed_by": "depth-0 read of the candidate diff"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Same family as the station's deferred 'prepared single-seat review computed then discarded in panel mode'.",
+            "trigger": "Next touch of runPanel's prepare path.",
+            "proposed_backlog_title": "runPanel: reuse the first seat's prepared diff_file for the shared packet identity instead of an extra prepareReview"
+          }
+        },
+        {
+          "finding_id": "engine-sealed-paths",
+          "evidence": {
+            "kind": "refuted",
+            "probe_cmd": "cd /tmp/hetero-mission-b33ff20c07e9-shared-packet-a1-3RP21Y && bash scripts/sync-codex-plugin-skills.sh --check",
+            "expected_signature": "platforms/codex/plugin/src/engine/autopilot-engine.js is in the sealed output_paths (plan §2.5 second list, contract output_paths) and is the synced twin of src/engine/autopilot-engine.js; the mirror check passes in the rail's verify station",
+            "observed_output": "rail verify station: `bash scripts/sync-codex-plugin-skills.sh --check` exit 0 (impl-run1-awaiting-disposition.json trace: verify passed); contract output_paths lists the twin",
+            "mutation_desc": "scratch clone of 5d7ad66a: append `// mutated` to platforms/codex/plugin/src/engine/autopilot-engine.js and run scripts/sync-codex-plugin-skills.sh --check",
+            "mutation_probe_output": "Files .../src/engine/autopilot-engine.js and .../platforms/codex/plugin/src/engine/autopilot-engine.js differ\nCodex plugin payload drift detected. To fix: scripts/sync-codex-plugin-skills.sh"
+          },
+          "disposition": null
+        }
+      ]
+    }
+  ]
+}

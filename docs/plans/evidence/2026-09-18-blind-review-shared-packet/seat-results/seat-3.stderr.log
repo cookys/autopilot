@@ -1,0 +1,2 @@
+dispatch-review: run_id=campaign-v1-72aac3faa59f6250dc408d2ce7d1493705205ca42498b1ca8bc331ef1237ec2b manifest=/tmp/autopilot-dispatch-runs/campaign-v1-72aac3faa59f6250dc408d2ce7d1493705205ca42498b1ca8bc331ef1237ec2b.manifest.json (watch: scripts/dispatch-status.js --run campaign-v1-72aac3faa59f6250dc408d2ce7d1493705205ca42498b1ca8bc331ef1237ec2b)
+dispatch-review: cc-shim/MiniMax-M3 (effort=high) may run for MINUTES — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.

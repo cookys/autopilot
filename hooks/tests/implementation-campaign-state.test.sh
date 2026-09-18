@@ -3001,7 +3001,7 @@ assert_contains "$INTAKE_OUT" \
   "intake adapters execute in the frozen owner order"
 assert_contains "$INTAKE_OUT" \
   "step_order=qc_panel_snapshot,mission,campaign_contract,provider_readiness,context_window,worktree_lifecycle,campaign_generation" \
-  "contract validation occupies the second intake slot"
+  "contract validation occupies the third intake slot"
 assert_contains "$INTAKE_OUT" "admitted=admitted" "valid ordered intake admits"
 assert_contains "$INTAKE_OUT" "full_enforcement=true" "all-known injected axes advertise full enforcement"
 assert_contains "$INTAKE_OUT" "unpaired_code=mission_adapter_pair_required" \
@@ -5551,10 +5551,39 @@ const parsedSnap = JSON.parse(fs.readFileSync(snapFile, 'utf8'));
 assert.strictEqual(parsedSnap.schema_version, 1);
 assert.strictEqual(parsedSnap.seats_complete, true);
 
+// RED at 3641cbef: an incomplete roster (base engine refuses such a panel) must never get a
+// snapshot written with a hard-coded seats_complete: true.
+const incompleteSnapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qc-snap-incomplete-'));
+const incompleteSnapContract = path.join(incompleteSnapDir, 'campaign.json');
+fs.writeFileSync(incompleteSnapContract, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'qc-snap-incomplete-state',
+  profile: 'poc',
+})}\n`);
+const incompleteSnapSpies = spies();
+const incompleteSnapResult = runCampaignIntake({
+  repo: process.cwd(),
+  contractPath: incompleteSnapContract,
+  roster: baseRoster([ccSeat], {
+    fallback_ladder: [{ runner: ccSeat.runner, model: ccSeat.model, effort: ccSeat.effort, family: ccSeat.family }],
+    min_panel_size: 1,
+    implementer_engine: 'fixture-implementer',
+    qc_panel_seats_complete: false,
+  }),
+}, incompleteSnapSpies.adapters);
+const incompleteSnapFile = path.join(incompleteSnapDir, 'qc_panel_snapshot.json');
+assert.ok(!fs.existsSync(incompleteSnapFile),
+  'incomplete roster must not get a qc_panel_snapshot.json');
+assert.ok(!(incompleteSnapResult.steps || []).some((s) => s && s.owner === 'qc_panel_snapshot'),
+  JSON.stringify(incompleteSnapResult.steps));
+console.log('incomplete_roster_no_snapshot=true');
+
 console.log('final-panel-blind-intake assertions passed');
 NODE
 )"
 assert_contains "$BLIND_INTAKE_OUT" "final-panel-blind-intake assertions passed" \
   "campaign intake refuses blind-incompatible qc seats before claim"
+assert_contains "$BLIND_INTAKE_OUT" "incomplete_roster_no_snapshot=true" \
+  "incomplete roster (qc_panel_seats_complete: false) never gets a qc_panel_snapshot.json"
 
 finalize_test

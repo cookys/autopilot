@@ -152,14 +152,13 @@ function parseJson(raw) {
   }
 }
 
-function modelFamilyOfEngineName(engine) {
+function modelFamilyOfEngine(engine) {
   const normalized = String(engine || '').toLowerCase();
   if (/(gpt|codex|o1|o3|o4)/.test(normalized)) return 'openai';
   if (/(claude|opus|sonnet|haiku)/.test(normalized)) return 'anthropic';
-  if (/(qwen|qwq)/.test(normalized)) return 'alibaba';
+  if (/(qwen|qwq|qoder)/.test(normalized)) return 'alibaba';
   if (/(gemini|flash|bison)/.test(normalized)) return 'google';
   if (/(grok|composer)/.test(normalized)) return 'xai';
-  if (/(qwen|qoder)/.test(normalized)) return 'alibaba';
   if (/(minimax|abab)/.test(normalized)) return 'minimax';
   if (/(glm|zhipu)/.test(normalized)) return 'zhipu';
   return 'unknown';
@@ -1760,7 +1759,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
     steps.push(probeStep);
   }
 
-  if (qcSeats && qcSeats.length > 0 && contractPath && rawContractDigest) {
+  if (qcSeats && qcSeats.length > 0 && contractPath && rawContractDigest
+      && input.roster && input.roster.qc_panel_seats_complete === true) {
     let sealedTicket = null;
     let snapshotCampaignId = null;
     try {
@@ -1796,7 +1796,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       seats: qcSeats,
       minPanelSize: minSize,
       requiredReviewFamilies: requiredFamilies,
-      implementerFamily: modelFamilyOfEngineName(input.roster && input.roster.implementer_engine),
+      implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
     });
     const snapPath = path.join(path.dirname(contractPath), 'qc_panel_snapshot.json');
     try {
@@ -2350,6 +2350,7 @@ module.exports = {
   consumeEnforcedProviderReadiness,
   defaultCampaignSealPath,
   defaultCleanroomProbe,
+  modelFamilyOfEngine,
   repairLineageCleanupState,
   releaseCampaignAdmission,
   runCampaignIntake,

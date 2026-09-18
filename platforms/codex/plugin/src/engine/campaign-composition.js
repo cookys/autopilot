@@ -456,7 +456,7 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
       || receipt.implementer_family.length === 0) {
     return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
   }
-  const panelRequiresDiversity = receipt.final_panel_seat_receipts.length > 1
+  const panelRequiresDiversity = reviewedSeats.length > 1
     || expectedMinimum > 1;
   const requiredFamilies = panelRequiresDiversity
     ? Math.max(2, receipt.sealed_required_review_families)
@@ -2806,9 +2806,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
           ? reusableJ.result.final_panel_count
           : reusablePanelCount,
         final_panel_seat_receipts: reusableJ.result.seat_receipts,
-        final_panel_quorum_met: reusableJ.result.final_panel_quorum_met,
-        sealed_required_review_families: reusableJ.result.sealed_required_review_families,
-        implementer_family: reusableJ.result.implementer_family,
+        ...(Object.prototype.hasOwnProperty.call(reusableJ.result, 'final_panel_quorum_met')
+          ? { final_panel_quorum_met: reusableJ.result.final_panel_quorum_met } : {}),
+        ...(Object.prototype.hasOwnProperty.call(reusableJ.result, 'sealed_required_review_families')
+          ? { sealed_required_review_families: reusableJ.result.sealed_required_review_families } : {}),
+        ...(Object.prototype.hasOwnProperty.call(reusableJ.result, 'implementer_family')
+          ? { implementer_family: reusableJ.result.implementer_family } : {}),
       };
       trace.push('final_panel_gate_reused');
     } else {

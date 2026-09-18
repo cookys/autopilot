@@ -6085,7 +6085,12 @@ runCase({
       .find((s) => s && s.owner === 'qc_panel_snapshot');
     assert.ok(step && step.status === 'ready', JSON.stringify(step));
     assert.ok(!step.live_drift);
+    const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
+    assert.ok(panelRow && !Object.prototype.hasOwnProperty.call(panelRow, 'roster_drift'),
+      JSON.stringify(panelRow));
+    assert.ok(!JSON.stringify(result).includes('final_panel_roster_drift'));
     console.log('snapshot_write_once=true');
+    console.log('undrifted_roster_no_drift_flag=true');
   },
 });
 
@@ -6182,6 +6187,8 @@ assert_contains "$PANEL_OUT" "verify_once_hit=true" "GREEN cache hit reuses full
 assert_contains "$PANEL_OUT" "real_batch_panel=true" "REAL fan-out path: 3 seats finish in index order with batch timestamps after a wall jump (RED at 30b69a1a: campaign_wall_budget on finish)"
 assert_contains "$PANEL_OUT" "standby_quorum_panel=true" "4-seat stub with one transport failure still reviews count 3"
 assert_contains "$PANEL_OUT" "snapshot_write_once=true" "first intake writes snapshot; wx second write refused"
+assert_contains "$PANEL_OUT" "undrifted_roster_no_drift_flag=true" \
+  "undrifted roster carries no roster_drift key and no final_panel_roster_drift trace entry"
 assert_contains "$PANEL_OUT" "snapshot_live_drift=true" "resume roster swap records live_drift and reviews snapshot seats"
 assert_contains "$PANEL_OUT" "snapshot_identity_invalid=true" "contract_digest mismatch blocks before spend"
 assert_contains "$PANEL_OUT" "no_snapshot_live_roster=true" "no snapshot uses live roster"

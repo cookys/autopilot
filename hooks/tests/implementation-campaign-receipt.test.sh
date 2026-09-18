@@ -1202,6 +1202,27 @@ assert.strictEqual(validateFinalPanelReceipt({
   final_panel_quorum_met: true, sealed_required_review_families: 2, implementer_family: 'xai',
 }, 2).passed, true);
 console.log('quorum_receipt_validator=true');
+
+// RED at 3641cbef: diversity threshold must key off REVIEWED rows, not all seat receipts
+// (including transport-failed rows), matching the engine's terminalPanelCrossFamilySatisfied
+// predicate (seats.length > 1 over the reviewed subset).
+const reviewedOnlySeat = quorumSeat(1, { family: 'anthropic', load_bearing: true });
+const failedOnlySeat = quorumSeat(2, {
+  family: 'openai',
+  status: 'transport_failed',
+  verdict: null,
+  review_digest: null,
+  reason: 'final_panel_seat_transport_failed',
+  load_bearing: false,
+});
+const reviewedRowsDiversity = validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1,
+  final_panel_seat_receipts: [reviewedOnlySeat, failedOnlySeat],
+  final_panel_quorum_met: true, sealed_required_review_families: 1, implementer_family: 'xai',
+}, 1);
+assert.strictEqual(reviewedRowsDiversity.passed, true, reviewedRowsDiversity.reason);
+console.log('reviewed_rows_diversity_threshold=true');
 NODE
 )"
 assert_exit_code "$?" "0" "campaign receipt and composition tests execute"
@@ -1225,6 +1246,8 @@ assert_contains "$OUT" "packet_hash_validator=true" \
   "packet_hash validator and digest rules"
 assert_contains "$OUT" "quorum_receipt_validator=true" \
   "quorum flag re-derive, load_bearing, legacy unanimity, failed-row packet ignore"
+assert_contains "$OUT" "reviewed_rows_diversity_threshold=true" \
+  "diversity threshold keys off reviewed rows, not all seat receipts"
 
 node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \

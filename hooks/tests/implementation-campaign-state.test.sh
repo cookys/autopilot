@@ -4484,6 +4484,39 @@ state2 = reduceCampaignState(state2, {
 assert.strictEqual(state2.phase, CAMPAIGN_STATES.ADJUDICATING);
 assert.strictEqual(state2.usage.elapsed_wall_seconds, 5);
 
+// (c') negative: after un-parking, the raw wall value measured from the ORIGINAL
+// started_at (not the shifted origin) is refused — the shifted origin is the clock.
+const postParkEvent = (elapsed, key) => ({
+  schema_version: 1,
+  event_type: CAMPAIGN_EVENTS.REPAIR_AUTHORIZED,
+  campaign_id: state2.campaign_id,
+  contract_digest: d2,
+  generation: state2.generation + 1,
+  idempotency_key: key,
+  input_artifact_digest: state2.last_output_artifact_digest,
+  output_artifact_digest: canonicalDigest('repair-post-park'),
+  timestamp: '2026-07-30T03:00:11.000Z',
+  stage_identity: 'ctrl-stage',
+  usage: {
+    repair_generations: state2.generation + 1,
+    elapsed_wall_seconds: elapsed,
+    changed_files: state2.usage.changed_files,
+    churn: state2.usage.churn,
+  },
+  payload: {
+    registry_complete: true,
+    registry_digest: 'f'.repeat(64),
+    repair_gate_passed: true,
+    repair_gate_digest: 'a'.repeat(64),
+  },
+});
+const rawWall = Math.floor(
+  (Date.parse('2026-07-30T03:00:11.000Z') - Date.parse(preParkStartedAt)) / 1000,
+);
+assert.notStrictEqual(rawWall, 15);
+assert.throws(() => reduceCampaignState(state2, postParkEvent(rawWall, 'repair-authorized-raw-wall')),
+  (e) => e.code === 'WALL_CLOCK_RESET');
+
 // (c) once un-parked, accrual continues from the frozen value: +10s later
 // carries 5 + 10 = 15.
 state2 = reduceCampaignState(state2, {

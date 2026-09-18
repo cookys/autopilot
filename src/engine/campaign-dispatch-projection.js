@@ -247,6 +247,23 @@ function normalizeCampaignAuthority(contract) {
   if (maxWallSeconds < 10 || maxWallSeconds > 14400) {
     throw new TypeError('strict_dispatch.budget.max_wall_seconds must be in 10..14400');
   }
+  let finalPanelReserveSeconds = 0;
+  if (Object.prototype.hasOwnProperty.call(contract, 'final_panel_reserve_seconds')) {
+    finalPanelReserveSeconds = requireInteger(
+      contract.final_panel_reserve_seconds,
+      'campaign final_panel_reserve_seconds',
+    );
+    if (finalPanelReserveSeconds > 1800) {
+      throw new TypeError('campaign final_panel_reserve_seconds must be in 0..1800');
+    }
+  }
+  let fullSuiteReuse = true;
+  if (Object.prototype.hasOwnProperty.call(contract, 'full_suite_reuse')) {
+    if (typeof contract.full_suite_reuse !== 'boolean') {
+      throw new TypeError('campaign full_suite_reuse must be a boolean');
+    }
+    fullSuiteReuse = contract.full_suite_reuse;
+  }
   requireInteger(budget.max_output_bytes, 'strict_dispatch.budget.max_output_bytes', 1);
   requireInteger(budget.max_tool_calls, 'strict_dispatch.budget.max_tool_calls', 1);
   const maxEngineAttempts = requireInteger(
@@ -324,6 +341,8 @@ function normalizeCampaignAuthority(contract) {
     verificationCommands,
     maxChangedFiles,
     maxWallSeconds,
+    finalPanelReserveSeconds,
+    fullSuiteReuse,
     maxEngineAttempts,
     maxDiffLines: Math.max(1, Math.min(ratioLimit, additiveLimit)),
   };

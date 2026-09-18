@@ -113,6 +113,11 @@ const LIMIT_KEYS = new Set([
   'max_changed_files',
   'baseline_churn',
   'max_churn',
+  // cut 2-A: the panel pocket (seconds, 0..1800) and the full-suite reuse knob sealed as an
+  // integer flag (1 = reuse an identity-equal green receipt, 0 = always run fresh) so every
+  // limit stays a non-negative safe integer.
+  'final_panel_reserve_seconds',
+  'full_suite_reuse',
 ]);
 const CAMPAIGN_PROFILES = new Set([
   'spike',
@@ -571,12 +576,26 @@ function normalizeLimits(contract) {
       fail('INVALID_LIMITS', `contract.${key} must be a non-negative safe integer`);
     }
   }
+  const reserve = Object.prototype.hasOwnProperty.call(contract, 'final_panel_reserve_seconds')
+    ? contract.final_panel_reserve_seconds
+    : 0;
+  if (!Number.isSafeInteger(reserve) || reserve < 0 || reserve > 1800) {
+    fail('INVALID_LIMITS', 'contract.final_panel_reserve_seconds must be an integer in 0..1800');
+  }
+  const reuse = Object.prototype.hasOwnProperty.call(contract, 'full_suite_reuse')
+    ? contract.full_suite_reuse
+    : true;
+  if (typeof reuse !== 'boolean') {
+    fail('INVALID_LIMITS', 'contract.full_suite_reuse must be a boolean');
+  }
   return {
     max_repair_generations: contract.max_repair_generations,
     max_wall_seconds: contract.max_wall_seconds,
     max_changed_files: contract.max_changed_files,
     baseline_churn: contract.baseline_churn,
     max_churn: contract.baseline_churn + contract.max_extra_churn,
+    final_panel_reserve_seconds: reserve,
+    full_suite_reuse: reuse ? 1 : 0,
   };
 }
 

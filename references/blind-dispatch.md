@@ -368,6 +368,19 @@ value — mixed presence is `final_panel_packet_hash_mixed`, distinct values are
 `final_panel_packet_hash_mismatch` (engine and validator decide independently).
 Cut 1b is the cleanroom tier.
 
+## Panel execution (v2.36.65)
+
+The composer stays synchronous. Concurrent panel seats live in
+`scripts/lib/review-fanout.js`: every qualified seat is prepared, then launched
+together under the sealed panel remainder (`--timeout` and helper
+`timeout_seconds` are that same number). Ledger rows for the seats and the
+`final_panel` unit share the batch `started_at`/`ended_at` so completion order
+is not an artifact. `final_panel_reserve_seconds` (0..1800, default 0) is a
+panel-only pocket measured from the same `started_at`; other wall consumers keep
+`max_wall_seconds`. `full_suite` reuses a GREEN `verificationCache` receipt only
+when tree, full sealed argv, and env fingerprint match (`full_suite_reuse`
+default true). Cut 2-B (standby, snapshot, in-rail-off) remains open.
+
 **Later cuts (not this deliverable):** 1b-B is the intake/resolver half; a
 configurable deny-list and cut 2 (verify-once, concurrent seats) remain open.
 

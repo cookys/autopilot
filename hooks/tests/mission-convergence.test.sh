@@ -2470,4 +2470,76 @@ do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done
 
+GRAPH_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const { freezeMissionExecutionGraph } = require(path.join(root, 'src', 'engine', 'mission-execution-graph'));
+const policy = {
+  schema_version: 1,
+  enforcement_mode: 'shadow',
+  max_campaigns: 8,
+  max_wall_seconds: 14400,
+  max_tool_calls: 100,
+  max_engine_attempts: 50,
+  max_external_wait_seconds: 1000,
+  max_canonical_changed_files: 10,
+  max_output_bytes: 1024,
+  max_deliverables: 8,
+  max_parallel: 8,
+  max_batches: 8,
+  max_graph_depth: 8,
+  max_gate_attempts: 8,
+  closure_ratio: 0.75,
+  max_stagnant_campaigns: 2,
+};
+const campaign = {
+  profile: 'poc',
+  allowed_path_prefixes: ['src'],
+  spec: { path: 'src/value.js', section: 'Budget' },
+  required_paths: ['src/value.js'],
+  output_paths: ['src/value.js'],
+  max_changed_files: 1,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 1,
+  max_wall_seconds: 10,
+};
+const node = {
+  id: 'n1',
+  source_plan_ids: ['plan-1'],
+  source_rubric_ids: ['R1'],
+  dependencies: [],
+  acceptance_ids: ['acc-1'],
+  verification_commands: ['node fixture.js'],
+  gate_attempt_budget: 2,
+  reservation: {
+    campaigns: 1, wall_seconds: 10, tool_calls: 3, engine_attempts: 1,
+    external_wait_seconds: 0, canonical_changed_files: 1, output_bytes: 128,
+  },
+  campaign,
+};
+const graph = { schema_version: 1, artifact_type: 'mission_execution_graph', nodes: [node] };
+function tryFreeze(extra) {
+  const next = JSON.parse(JSON.stringify(graph));
+  Object.assign(next.nodes[0].campaign, extra);
+  try {
+    freezeMissionExecutionGraph(next, policy);
+    return 'admitted';
+  } catch (err) {
+    return `refused:${err.message}`;
+  }
+}
+console.log(`absent=${tryFreeze({})}`);
+console.log(`zero=${tryFreeze({ final_panel_reserve_seconds: 0 })}`);
+console.log(`nine=${tryFreeze({ final_panel_reserve_seconds: 900 })}`);
+console.log(`over=${tryFreeze({ final_panel_reserve_seconds: 1801 })}`);
+NODE
+)"
+assert_contains "$GRAPH_OUT" "absent=admitted" "graph admits absent reserve"
+assert_contains "$GRAPH_OUT" "zero=admitted" "graph admits reserve 0"
+assert_contains "$GRAPH_OUT" "nine=admitted" "graph admits reserve 900"
+assert_contains "$GRAPH_OUT" "over=refused" "graph refuses reserve 1801"
+
 finalize_test

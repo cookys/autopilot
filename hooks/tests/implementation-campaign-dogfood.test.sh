@@ -779,8 +779,10 @@ console.log('kill_resume_adopts_commit=true');
 assert.ok(reviewArgsSeen.length >= 2, `expected in-loop + final-panel review dispatches, saw ${reviewArgsSeen.length}`);
 const timeouts = reviewArgsSeen.map((args) => args[args.indexOf('--timeout') + 1]);
 console.log(`review_dispatch_timeouts=${timeouts.join(',')}`);
-assert.ok(timeouts.every((value) => value === '115s'),
-  `every managed review dispatch carries the remaining wall budget: ${JSON.stringify(reviewArgsSeen)}`);
+assert.ok(timeouts[0] === '115s',
+  `in-rail review keeps the remaining wall budget: ${JSON.stringify(reviewArgsSeen)}`);
+assert.ok(timeouts.slice(1).every((value) => value === timeouts[1]),
+  `every final-panel seat carries the same remainder timeout: ${JSON.stringify(reviewArgsSeen)}`);
 assert.ok(reviewOptionsSeen.length === reviewArgsSeen.length);
 for (const options of reviewOptionsSeen) {
   assert.strictEqual(options.blindDiscovery, true);
@@ -810,7 +812,7 @@ assert_exit_code "$?" "0" "new engine process resumes the real durable campaign 
 assert_contains "$RESUME_OUT" "kill_resume_adopts_commit=true" \
   "resume adopts the committed candidate and leaves implementation count unchanged"
 assert_contains "$RESUME_OUT" "review_dispatch_timeouts=115s,115s" \
-  "in-loop review and every final-panel seat receive --timeout = remaining sealed wall budget (120 s cap − 5 s elapsed), not the 5m dispatcher default"
+  "in-loop review remains 115s; panel seat timeout equals the remaining panel budget"
 
 # Case 6 uses the public WLB issuer/inspector, then hands the exact nonzero receipt to ICC and LSM.
 LIFECYCLE_ROOT="$(node - "$REPO_ROOT" "$TEST_TMP/057-intake.json" <<'NODE'

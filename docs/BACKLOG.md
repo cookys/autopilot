@@ -118,7 +118,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
-- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B v2.36.63, 1c v2.36.64. Open: cut 2. Detail in the pointer.
+- **Context**: packet (tree+diff+spec, deny-list); packet/cleanroom; intake canary; verify-once; parallel seats. Shipped: 1a-A v2.36.59, 1a-B v2.36.61, 1b-A v2.36.62, 1b-B v2.36.63, 1c v2.36.64, 2-A v2.36.65. Open: 2-B (standby, snapshot, in-rail off).
 
 ### Managed rail: final-panel seats run dispatch-review.sh at the 5m default timeout and time out on ordinary diffs
 - **Status**: shipped v2.36.60 2026-09-17
@@ -161,7 +161,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: a scanner that cannot read its input must exit non-zero (or fall back to per-file scanning), never report zero findings. Same family as evidence-discipline "a green that verified nothing".
 
 ### Managed rail: final-panel seats starve on the sealed wall budget left after implement/verify/full-suite
-- **Status**: open
+- **Status**: shipped v2.36.65 2026-09-18
 - **Trigger**: any campaign whose earlier stations consume most of `max_wall_seconds` — the panel seats then get the remainder split per seat
 - **Effort**: M
 - **Source**: 1c campaign 2026-09-18 (`impl-run2.json`: claude seat back in 3 min, GLM-5.2 and MiniMax-M3 rc=124 after ~4/~3 min → final_panel_seat_transport_failed)

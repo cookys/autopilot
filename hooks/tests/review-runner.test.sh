@@ -664,4 +664,143 @@ assert_contains "$PKT_OUT" "hash_differs=true" "packet_hash differs from default
 assert_contains "$PKT_OUT" "unexpected_callers=0" "buildReviewPacket( is called only from review.js (definition in review-packet.js)"
 assert_contains "$PKT_OUT" "builder_callers=2" "the walk saw both the definition and the review.js call (not vacuous)"
 
+# RED at base 7f5d6ee8: no scripts/lib/review-fanout.js (ENOENT)
+FANOUT="$REPO_ROOT/scripts/lib/review-fanout.js"
+test -x "$FANOUT"
+assert_eq "0" "$?" "review-fanout.js is executable"
+STUB_DIR="$TEST_TMP/fanout-stubs"
+mkdir -p "$STUB_DIR"
+for pair in 2:a 3:b 4:c; do
+  secs="${pair%%:*}"
+  id="${pair##*:}"
+  cat > "$STUB_DIR/dispatch-$id.sh" <<STUB
+#!/usr/bin/env bash
+sleep $secs
+printf '{"runner":"stub","model":"%s","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"none","raw_log":"ok","error":null}\\n' "$id"
+STUB
+  chmod +x "$STUB_DIR/dispatch-$id.sh"
+done
+cat > "$STUB_DIR/hang.sh" <<'STUB'
+#!/usr/bin/env bash
+exec sleep 30
+STUB
+chmod +x "$STUB_DIR/hang.sh"
+cat > "$STUB_DIR/ok.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '{"runner":"stub","model":"ok","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"none","raw_log":"ok","error":null}\n'
+STUB
+chmod +x "$STUB_DIR/ok.sh"
+
+FAN_OUT="$(FANOUT="$FANOUT" STUB_DIR="$STUB_DIR" python3 - <<'PY'
+import json, os, subprocess, time
+root = os.environ["FANOUT"]
+stubs = os.environ["STUB_DIR"]
+jobs = {
+  "jobs": [
+    {"id": "a", "argv": [os.path.join(stubs, "dispatch-a.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 20},
+    {"id": "b", "argv": [os.path.join(stubs, "dispatch-b.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 20},
+    {"id": "c", "argv": [os.path.join(stubs, "dispatch-c.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 20},
+  ]
+}
+t0 = time.time()
+p = subprocess.run(["node", root], input=json.dumps(jobs), text=True, capture_output=True)
+elapsed = time.time() - t0
+rows = json.loads(p.stdout.strip())
+print(f"exit={p.returncode}")
+print(f"order={','.join(r['id'] for r in rows)}")
+starts = [r['started_at'] for r in rows]
+ends = [r['ended_at'] for r in rows]
+print(f"overlap={'true' if max(starts) < min(ends) else 'false'}")
+print(f"wall_lt_sum={'true' if elapsed < (2+3+4)-1 else 'false'}")
+PY
+)"
+assert_contains "$FAN_OUT" "exit=0" "fanout three-job helper exits 0"
+assert_contains "$FAN_OUT" "order=a,b,c" "fanout returns rows in job order"
+assert_contains "$FAN_OUT" "overlap=true" "fanout jobs overlap in wall time"
+assert_contains "$FAN_OUT" "wall_lt_sum=true" "fanout wall is less than sequential sum minus 1s"
+
+TO_OUT="$(FANOUT="$FANOUT" STUB_DIR="$STUB_DIR" python3 - <<'PY'
+import json, os, subprocess
+root = os.environ["FANOUT"]
+stubs = os.environ["STUB_DIR"]
+jobs = {
+  "jobs": [
+    {"id": "hang", "argv": [os.path.join(stubs, "hang.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 1},
+    {"id": "ok", "argv": [os.path.join(stubs, "ok.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 10},
+  ]
+}
+p = subprocess.run(["node", root], input=json.dumps(jobs), text=True, capture_output=True)
+rows = json.loads(p.stdout.strip())
+print(f"exit={p.returncode}")
+print(f"hang_signal={rows[0].get('signal')}")
+print(f"ok_status={rows[1].get('status')}")
+PY
+)"
+assert_contains "$TO_OUT" "exit=0" "timed-out job still yields an array at exit 0"
+assert_contains "$TO_OUT" "hang_signal=SIG" "timed-out job reports a signal"
+assert_contains "$TO_OUT" "ok_status=0" "sibling job still completes"
+
+# Host dogfood 2026-09-18 (claude-native seat on the helper itself) + depth-0 repro: three helper
+# defects, each RED at 30b69a1a. (1) a child that exits before draining stdin made the pending
+# write EPIPE an uncaught exception — the whole fan-out died and EVERY sibling's result was lost;
+# (2) per-chunk toString split multibyte sequences at 64 KiB pipe boundaries (U+FFFD);
+# (3) process.stdout.write + process.exit truncated any result array past ~64 KiB.
+HELPER_OUT="$(FANOUT="$FANOUT" TEST_TMP="$TEST_TMP" node - <<'NODE'
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const fanout = process.env.FANOUT;
+const tmp = process.env.TEST_TMP;
+const big = path.join(tmp, 'fanout-big-stdin.txt');
+fs.writeFileSync(big, 'x'.repeat(8 * 1024 * 1024));
+const run = (jobs) => spawnSync(process.execPath, [fanout], { input: JSON.stringify({ jobs }), maxBuffer: 64 * 1024 * 1024 });
+// (1) fast exit before stdin drains, with a sibling
+const r1 = run([
+  { id: 'a', argv: ['/bin/sh', '-c', 'head -c 10 >/dev/null; exit 3'], cwd: '/tmp', env: {}, stdin_file: big, timeout_seconds: 10 },
+  { id: 'b', argv: ['/bin/echo', 'ok'], cwd: '/tmp', env: {}, timeout_seconds: 10 },
+]);
+let rows1 = null; try { rows1 = JSON.parse(r1.stdout.toString('utf8')); } catch (_e) { rows1 = null; }
+console.log(`epipe_array=${Array.isArray(rows1) && rows1.length === 2 && rows1[0].status === 3 && rows1[1].status === 0 && rows1[1].stdout === 'ok\n'}`);
+// (2)+(3) 300k multibyte characters (≈900 KB) come back exact, in one parseable array
+const text = '\u00e9\u4e2d'.repeat(150000);
+const r2 = run([{ id: 'u', argv: [process.execPath, '-e', 'process.stdout.write("\\u00e9\\u4e2d".repeat(150000))'], cwd: '/tmp', env: {}, timeout_seconds: 20 }]);
+let rows2 = null; try { rows2 = JSON.parse(r2.stdout.toString('utf8')); } catch (_e) { rows2 = null; }
+console.log(`utf8_exact=${Array.isArray(rows2) && rows2[0].status === 0 && rows2[0].stdout === text && !rows2[0].stdout.includes('\uFFFD')}`);
+NODE
+)"
+assert_contains "$HELPER_OUT" "epipe_array=true" "a child exiting before stdin drains does not kill the fan-out (RED at 30b69a1a: uncaught EPIPE, no array)"
+assert_contains "$HELPER_OUT" "utf8_exact=true" "300k multibyte chars across pipe chunks come back exact in a >64 KiB array (RED at 30b69a1a: U+FFFD / truncated)"
+
+IDENT_OUT="$(node - "$REPO_ROOT" "$DIFF" "$STUB_VERDICT" <<'NODE'
+const path = require('path');
+const assert = require('assert');
+const root = process.argv[2];
+const diff = process.argv[3];
+const stub = process.argv[4];
+const { dispatchReviewJson, dispatchReviewJsonBatch } = require(path.join(root, 'src', 'runners', 'review'));
+const args = ['--runner', 'codex', '--model', 'gpt-5.5', '--diff-file', diff, '--bin', stub];
+const single = dispatchReviewJson(args);
+const batch = dispatchReviewJsonBatch([{ args }])[0];
+// Field-by-field identity of the WHOLE object (result JSON, envelope, packet fields): the
+// batch of one and the single dispatch share one launch path, so nothing may differ.
+// (second review 🟡 batch-identity-weak: the earlier check compared four fields only.)
+// Per-run nonces (dispatch run id, mktemp raw-log suffix) differ by construction on every
+// dispatch, and the envelope digests are functions of the text that carries them — those are
+// normalized; every other field of the whole object must be strictly equal.
+const norm = (o) => JSON.parse(JSON.stringify(o, (k, v) => {
+  if (k === 'error' && v instanceof Error) return String(v);
+  if (k === 'output_digests' || k === 'receipt_digest') return '<digest-of-normalized-text>';
+  if (typeof v === 'string') {
+    return v
+      .replace(/dispatch-review-log-[A-Za-z0-9]{6}/g, 'dispatch-review-log-NONCE')
+      .replace(/review-\d+-\d+-[0-9a-f]{4}/g, 'review-NONCE');
+  }
+  return v;
+}));
+assert.deepStrictEqual(norm(batch), norm(single));
+console.log('batch_of_one_identity=true');
+NODE
+)"
+assert_contains "$IDENT_OUT" "batch_of_one_identity=true" "batch of one matches dispatchReviewJson field-by-field"
+
 finalize_test

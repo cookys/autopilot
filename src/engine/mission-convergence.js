@@ -1419,6 +1419,16 @@ function graphGrantContext(state, payload) {
   const node = nodes.find((entry) => entry.id === payload.graph_node_id);
   const progress = state.graph_progress && state.graph_progress[payload.graph_node_id];
   if (!node || !progress) return { node: null, progress: null, error: 'binding_mismatch' };
+  if (Object.prototype.hasOwnProperty.call(node.campaign || {}, 'final_panel_reserve_seconds')) {
+    const reserve = node.campaign.final_panel_reserve_seconds;
+    if (!Number.isSafeInteger(reserve) || reserve < 0 || reserve > 1800) {
+      return { node: null, progress: null, error: 'binding_mismatch' };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(node.campaign || {}, 'full_suite_reuse')
+      && typeof node.campaign.full_suite_reuse !== 'boolean') {
+    return { node: null, progress: null, error: 'binding_mismatch' };
+  }
   const replayClaimId = claimIdFor(state.mission_lineage_id, payload.idempotency_key);
   const replayClaim = state.claims && state.claims[replayClaimId];
   const consumedGateAttempts = Object.values(state.claims || {}).filter((claim) => (

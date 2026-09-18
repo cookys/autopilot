@@ -1177,4 +1177,25 @@ node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --document "$TEST_TMP/seat-extra-key.json" >/dev/null 2>&1
 assert_exit_code "$?" "1" "seat-extra-key.json stays rejected (preservation)"
 
+node - "$TEST_TMP" "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" "$TEST_TMP/terminal.json" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [temp, schema, terminalPath] = process.argv.slice(2);
+const terminal = JSON.parse(fs.readFileSync(terminalPath, 'utf8'));
+terminal.budget_source = 'pocket';
+terminal.seat_timeout_seconds = 300;
+terminal.reused_from = 'campaign_verification';
+fs.writeFileSync(path.join(temp, 'terminal-optional.json'), `${JSON.stringify(terminal)}\n`);
+terminal.budget_source = 'nope';
+fs.writeFileSync(path.join(temp, 'terminal-unknown-budget.json'), `${JSON.stringify(terminal)}\n`);
+NODE
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/terminal-optional.json" >/dev/null
+assert_exit_code "$?" "0" "schema admits optional final_panel and full_suite reuse fields"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/terminal-unknown-budget.json" >/dev/null 2>&1
+assert_exit_code "$?" "1" "schema rejects unknown budget_source"
+
 finalize_test

@@ -1,5 +1,38 @@
 # Changelog
 
+## v2.36.69 — blind review redesign 第九刀（2-C shared-packet）：每候選一份 packet、每席私有材化、tree hash 批次
+
+- `src/runners/review-packet.js`（＋鏡像）：`verifyTreeIntegrity` 把路徑不含 LF/CR 的一般檔案批進**一支** `git hash-object
+  --stdin-paths --no-filters`（餵絕對路徑、`cwd` 是來源 repo、`-c extensions.objectFormat` 規則同逐檔版；LF/CR 檔名走逐檔
+  `hashObject`、symlink 在行程內 hash），比對照 tracked-file 順序、錯誤字串 `tree integrity: <rel>` 不變；新 export
+  `hashPacketDir(dir)`（builder 自己的 preimage 函式，`collectPacketEntries`＋`computePacketHash` 抽出共用）、
+  `materializePacket(src, dst)`（逐檔 `copyFileSync`，`COPYFILE_FICLONE` 可、**禁 hardlink**，symlink 重建，回傳重算 hash）。
+- `src/runners/review.js`（＋鏡像）：`buildPacketOnce(identity)` → `{ packet_dir, packet_hash, manifest, dispose }`，是
+  `buildReviewPacket(` 唯一的呼叫點；`prepareReviewLaunch(args, { sharedPacket })` 不建包、把共享包材化進該席自己的
+  `mkdtemp`，launch 前以 `hashPacketDir` 重 hash 不等於共享 `packet_hash` ⇒ 該席 `precondition_failed`、不啟動；沒給
+  `sharedPacket` 的單席＝同一路徑的 batch of one；`dispatchReviewBatch`／`dispatchReviewJsonBatch` 收 `{ sharedPacket }`
+  套到每個 job。
+- `src/engine/autopilot-engine.js`（＋鏡像）：`runPanel`（站內與終局兩站）每候選 `buildPacketOnce` 一次、交給每席，batch
+  後 `dispose`；共享建包失敗被接住（`sharedPacket = null`，各席走逐席路徑、照 base 失敗）；`reviewDiff` 只在
+  `skipLaunch && phase === 'precondition_failed'`（材化 hash 不符）短路成 `precondition_failed`，其他 prepare 錯誤照 base。
+- 測試（RED-first 標 base `fd4ea3a6`／`5d7ad66a`）：review-packet——批次＝逐檔（symlink、NUL 不安全名、LF 名、CR 名、`"` 開頭名；
+  `hashObject` 只為 LF/CR 檔被叫 2 次）、mismatch 字串與首個 mismatch 順序、材化為不同 inode 樹且 bytes／hash 相等、改一席不影響
+  他席與共享 hash、重 hash 不符拒啟動；review-runner——三 job 一包：`packet_hash` 全等、三個不同 launch dir、`buildReviewPacket`
+  恰 1 次、`hashPacketDir` 3 次分開計、batch of one env/args 形狀穩定、mismatch＝`precondition_failed`；engine——
+  `real_batch_panel` 三席一包（`__packetBuildCount` 2＝站內單席＋panel 一次）、共享建包拋錯不逃出 `runPanel`、非 mismatch 的
+  `skipLaunch` 不是 `precondition_failed`。
+- 量測（本 repo HEAD，3426 entries）：packet build **23.3 s → 2.0 s**；材化 0.38 s；重 hash 0.13 s。
+- 出貨路徑：/l5 managed campaign attempt 1（第二條 lineage，freeze 腳本以 objective 區分 adoption key）——hand cursor-grok-4.6-low
+  43 分、12 檔、`5d7ad66a`；rail 13/13；**panel station 第一次真跑**：四席、quorum、單一 `packet_hash`、`budget_source: wall`
+  → FIX-THEN-SHIP 13 findings → `awaiting_disposition`（時鐘停在 5435 s）。depth-0 裁決：2🟠 確認（`--stdin-paths` 對 `"` 開頭
+  檔名 `fatal: line is badly quoted`；共享建包在 try 外）、Qwen 席 2🟠1🔵 以 mutation probe 駁回、8🔵 follow-up（3 條折進修復）。
+  剩餘 wall 1765 s 塞不下一輪 repair ⇒ 不 resume、降級 l3：sonnet hand 修 A/B/C（`a59356c9`），13/13 綠、scope 精確、§2.6
+  byte-identical；delta 複審 claude SHIP-AS-IS 3🔵、GLM SHIP-AS-IS。§5 packet-once live 證明本次量不到（rail 跑的是主 checkout
+  的 base engine），下一個 campaign 才看得到；新 BACKLOG 列兩條（repair round 無 wall 保留；engine 類 deliverable 不能自證）。
+
+prose-justification: `references/blind-dispatch.md` "Packet blinding" 段改寫（含鏡像）；BACKLOG `verifyTreeIntegrity` 列 shipped、
+redesign 列 Context。
+
 ## v2.36.68 — blind review redesign 第八刀（2-C station）：有 sealed panel 時，panel 就是迴圈的 review 站
 
 - `schemas/review-loop-contract.schema.json`＋`scripts/resolve-review-loop.sh`＋`src/engine/resolve-review-loop.js`（＋鏡像）：

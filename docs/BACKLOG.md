@@ -20,6 +20,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-18-blind-review-panel-station/README.md
 - **Context**: v2.34.7 framing family — the model echoes the marker line once more inside the block; the locator should treat a repeated marker as chrome when the wrapped block is otherwise well-formed, not discard the verdict.
 
+### Managed rail: a park at `awaiting_disposition` reserves no wall for the repair round it authorises
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — 2-C shared-packet parked at 5435/7200 s (implement 60 min + verify 21 + panel 9); two must-fix findings needed a round the remaining 1765 s could not fit, so depth-0 degraded to l3 instead of `--resume`
+- **Effort**: M
+- **Source**: 2-C shared-packet campaign, `impl-run1-awaiting-disposition.json`
+- **Pointer**: docs/plans/evidence/2026-09-18-blind-review-shared-packet/README.md
+- **Context**: the pocket covers only the panel. Either seal a repair-round reserve (implement + verify measured from round 1) or refuse to park with `repair_authorized` reachable when the remaining wall is below it, naming the shortfall.
+
+### Engine-touching deliverables cannot self-prove live: the rail runs depth-0's checkout engine, not the candidate
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — the shared-packet campaign's own panel built four per-seat packets (~23 s each, no shared dir): `bin/autopilot.js` ran from the main checkout at base `fd4ea3a6`; the candidate's engine ran only in the verify suites
+- **Effort**: S
+- **Source**: 2-C shared-packet campaign README, timing probe
+- **Pointer**: docs/plans/evidence/2026-09-18-blind-review-shared-packet/README.md
+- **Context**: a plan §5 "live proof" of an engine change is only observable on the NEXT campaign after its merge; say so in the l5 recipe, and record such proofs one lineage late (packet-once: first observable on the campaign after v2.36.69).
+
 ### Test suites inherit the dispatcher's session env: `AUTOPILOT_SESSION_ID` makes `mission-runtime-v2` red in-rail
 - **Status**: open
 - **Trigger**: fired 2026-09-18 — 2-C station acceptance ran with `AUTOPILOT_SESSION_ID` exported by depth-0; `mission-runtime-v2.test.sh` fails under it on develop too (53 red); the candidate was fine

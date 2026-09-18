@@ -28,3 +28,35 @@
   + scope/verify (21 min) + panel (9 min, pocket-coverable), so `--resume --campaign-disposition-authority` would
   have burned the attempt at `WALL_BUDGET_EXCEEDED` mid-round. `session-mode set --level l3 --entry-level l5
   --fallback precondition_failed`; repair r2 by a sonnet hand in the retained worktree (`scratch/repair-brief-r2.md`).
+- Repair r2 `a59356c9` (sonnet hand, `scratch/repair-brief-r2.md`; RED at `5d7ad66a` recorded beside each assertion): A —
+  the batch feeds absolute paths with `cwd = entry.repo` and base's `-c objectFormat` rule (fake `GIT_DIR` block deleted;
+  `"quoted.txt` in the fixture); B — the shared build is caught, `sharedPacket = null`, seats take the per-seat path and
+  fail as base did; C — only `phase === 'precondition_failed'` short-circuits `reviewDiff`. Depth-0 at `a59356c9`: diff
+  ⊆ §2.5 (12 of 13), §2.6 byte-identical, mirrors identical, test modes 100755, 13/13 green on a temp-branch scratch
+  checkout (`head-suites-a59356c9.txt`). Delta reviews of `5d7ad66a..a59356c9` (full diff): claude-fable-5-1
+  SHIP-AS-IS 3 🔵 (`review-claude-r2.json`: `path.resolve` instead of `join` for the treeDir invariant; Fix-B RED text
+  not quoted in the test comment; Fix-C covered through a stub dispatcher) — deferred; GLM-5.2 SHIP-AS-IS, none
+  (`review-glm-r2.json`). `red-<suite>.txt`: the candidate's new cases at base (§4.1).
+- **Measurements (plan §5 and the three carried items).**
+  - 2-C station §5 — **produced**: one `full_diff_review` row `station: panel`, `seat_count: 4`, four seat receipts
+    (claude FIX-THEN-SHIP, GLM SHIP-AS-IS, MiniMax SHIP-AS-IS, Qwen FIX-THEN-SHIP → `union-on-verified-critical` =
+    FIX-THEN-SHIP), `final_panel_quorum_met`, one `packet_hash` `d4e110ee…` on every row, `budget_source: wall`,
+    `seat_timeout_seconds: 3215`; no single-seat review. `repair_authorized` → second station panel and
+    `final_panel_gate_reused` — **not observed** (the campaign parked; see below).
+  - 2-B §5 four seats + quorum — **produced** (same row).
+  - 2-A §5 pocket — **not observed**: the wall remainder sufficed (`budget_source: wall`); the contract carried the
+    projected `final_panel_reserve_seconds: 900`.
+  - v2.36.41 durable wait — **produced**: `awaiting_disposition` with `resumable: true`, clock paused at
+    `elapsed_wall_seconds: 5435` (v2.36.67). Resume — **not exercised**: 1765 s cannot fit a repair round (BACKLOG row
+    "a park reserves no wall for the repair round it authorises").
+  - packet-once live — **not producible by this campaign**: the rail runs depth-0's checkout engine (`bin/autopilot.js`
+    at base `fd4ea3a6`), so the live panel built four per-seat packets; the candidate's engine ran only inside the
+    verify suites (BACKLOG row "engine-touching deliverables cannot self-prove live"). First observable on the next
+    campaign after v2.36.69.
+  - `tree-hash-batch` timing on this repo (candidate `5d7ad66a`, 3426 packet entries after the deny-list): base
+    per-file build **23.3 s** → batched build **2.0 s**; `materializePacket` 0.38 s; `hashPacketDir` 0.13 s.
+- Merge `03a5666e` (no-ff); `integration-record.json` (source `a59356c9`, accepted `03a5666e`), `pin-anchors-scan.json`
+  (no unreachable), `reap-worktrees*.json`, `reap-branches.json` (bundle), `residue-receipt.json` (`zero_residue: true`);
+  marker retired against the integration receipt. Deferred 🔵 (follow-up rows in `disposition-authority.json`): shared
+  build gated on the blind predicate; extra `prepareReview` in `runPanel`; lstat pre-pass ordering; runner test pins a
+  base hash; `path.resolve(treeDir, rel)`.

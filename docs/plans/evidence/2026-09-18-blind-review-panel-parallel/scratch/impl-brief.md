@@ -4,20 +4,13 @@ ONE managed deliverable. The harness commits; never push, never `git stash`, nev
 sealed `output_paths`, never run a real reviewer model. Base for RED evidence and byte-identity: `<BASE>`.
 
 ## Read first
-1. `docs/plans/2026-09-18-blind-review-panel-parallel.md` — §0, §1 items 1–3 NORMATIVE, §2, §2.5, §2.6, §4,
-   §4.1. The plan wins over this brief. Then `.rubric.md` R1–R8.
-2. `src/runners/review.js` `dispatchReview` :199-290 (spawnSync :264, blind dir :218/:276);
-   `src/engine/autopilot-engine.js`: `campaignWallBudgetStatus`/`campaignWallRemainingSeconds` :1460-1494,
-   `reviewDispatcher` seam :2490/:3448, `performReview` clamp :4912-4942, `buildReviewArgs` :866-872,
-   `finalPanelSeatReceipt` :5144-5176, `performFinalPanel` :5181-5296, verification cache :4540/:7448-7455/:7596,
-   `fullSuite` :7632-7690; `src/engine/campaign-verification.js` `reusableGreenReceipt` :424-444;
-   `src/engine/campaign-intake.js` limits sealing (grep `initial_state.limits` / `max_wall_seconds`);
-   `src/engine/mission-execution-graph.js` :260 (int cap), `mission-convergence.js` :1465 (budget → contract),
-   `campaign-dispatch-projection.js` :243-248; both schemas.
-3. Tests: `review-runner.test.sh`, `autopilot-engine.test.sh` (packet cases :74-230, :4290-4321),
-   `implementation-campaign-dogfood.test.sh` :775-812 (`115s,115s` pin), `implementation-campaign-routing.test.sh`
-   :3068-3092 (`proof_parity_run` stubs), `implementation-campaign-receipt.test.sh`,
-   `campaign-dispatch-projection.test.sh`, `mission-convergence.test.sh`.
+1. `docs/plans/2026-09-18-blind-review-panel-parallel.md` — §0 (every anchor you need), §1 items 1–3 NORMATIVE,
+   §2, §2.5, §2.6, §4, §4.1. The plan wins over this brief. Then `.rubric.md` R1–R8.
+2. Code named in §0: `src/runners/review.js` `dispatchReview`; `src/engine/autopilot-engine.js` wall fns,
+   `reviewDispatcher` seam, `performReview`, `buildReviewArgs`, `finalPanelSeatReceipt`, `performFinalPanel`,
+   verification cache, `fullSuite`; `campaign-verification.js` `reusableGreenReceipt`; `campaign-intake.js`
+   limits sealing; `mission-execution-graph.js`, `mission-convergence.js` (budget → contract),
+   `campaign-dispatch-projection.js`; both schemas. Tests named in §0/§2.
 
 ## Product (plan §1 normative)
 1. `scripts/lib/review-fanout.js` (NEW, `chmod +x`, Node built-ins): stdin JSON `{ jobs: [{ id, argv, cwd, env,
@@ -91,28 +84,19 @@ node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
 git diff --stat <BASE> -- src/runners/review-packet.js scripts/dispatch-review.sh scripts/lib/cleanroom-launch.sh scripts/resolve-review-loop.sh src/engine/resolve-review-loop.js  # empty
 ```
 
-## Sealed output_paths (ONLY files you may change; the two review-fanout.js paths are CREATED)
+## Sealed output_paths (ONLY files you may change; the two review-fanout.js paths are CREATED; every
+`platforms/codex/plugin/...` twin of a listed path is also sealed — sync, don't hand-edit)
 ```
 scripts/lib/review-fanout.js
-platforms/codex/plugin/scripts/lib/review-fanout.js
 src/runners/review.js
-platforms/codex/plugin/src/runners/review.js
 src/engine/autopilot-engine.js
-platforms/codex/plugin/src/engine/autopilot-engine.js
 src/engine/campaign-intake.js
-platforms/codex/plugin/src/engine/campaign-intake.js
 src/engine/mission-execution-graph.js
-platforms/codex/plugin/src/engine/mission-execution-graph.js
 src/engine/mission-convergence.js
-platforms/codex/plugin/src/engine/mission-convergence.js
 src/engine/campaign-dispatch-projection.js
-platforms/codex/plugin/src/engine/campaign-dispatch-projection.js
 schemas/mission-execution-graph.schema.json
-platforms/codex/plugin/schemas/mission-execution-graph.schema.json
 schemas/implementation-campaign-contract.schema.json
-platforms/codex/plugin/schemas/implementation-campaign-contract.schema.json
 schemas/implementation-campaign-receipt.schema.json
-platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json
 hooks/tests/review-runner.test.sh
 hooks/tests/autopilot-engine.test.sh
 hooks/tests/implementation-campaign-dogfood.test.sh
@@ -121,9 +105,7 @@ hooks/tests/implementation-campaign-receipt.test.sh
 hooks/tests/campaign-dispatch-projection.test.sh
 hooks/tests/mission-convergence.test.sh
 references/blind-dispatch.md
-platforms/codex/plugin/references/blind-dispatch.md
 skills/l5/references/hetero-impl-loop.md
-platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
 docs/scripts-inventory.md
 CLAUDE.md
 docs/BACKLOG.md

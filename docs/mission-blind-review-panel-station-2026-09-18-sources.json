@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-18-blind-review-panel-station.md",
+      "rubric_path": "plans/2026-09-18-blind-review-panel-station.rubric.md",
+      "plan_sha256": "024aed0ebb1383d9521c455328cb02fc3321946cc6f23ea38af3ede4a001b78c",
+      "rubric_sha256": "72484844a406e8e07cd1d674bee6dd1ed0a0ba9bc2f8abbe6b5305cd7618517a"
+    }
+  ]
+}

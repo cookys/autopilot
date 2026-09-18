@@ -3508,7 +3508,8 @@ class AutopilotEngine {
     const salvagedRawLog = reviewResult && reviewResult.salvaged
       ? reviewResult.salvaged.raw_log
       : null;
-    if (reviewResult && reviewResult.skipLaunch === true) {
+    if (reviewResult && reviewResult.skipLaunch === true
+        && reviewResult.phase === 'precondition_failed') {
       return {
         status: 'blocked',
         phase: 'precondition_failed',
@@ -5402,14 +5403,18 @@ class AutopilotEngine {
         });
         if (identityPrepared && identityPrepared.prepared === true
             && isStr(identityPrepared.diff_file)) {
-          sharedPacket = buildPacketOnce({
-            repo: loopCwd,
-            baseSha: base,
-            candidateSha: reviewInput.candidate.commit,
-            diffFile: identityPrepared.diff_file,
-            specFile: promptFile,
-            denyExtra: roster.review_packet_deny_extra,
-          });
+          try {
+            sharedPacket = buildPacketOnce({
+              repo: loopCwd,
+              baseSha: base,
+              candidateSha: reviewInput.candidate.commit,
+              diffFile: identityPrepared.diff_file,
+              specFile: promptFile,
+              denyExtra: roster.review_packet_deny_extra,
+            });
+          } catch (_sharedBuildError) {
+            sharedPacket = null;
+          }
         }
       }
       try {

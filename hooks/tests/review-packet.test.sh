@@ -687,6 +687,10 @@ spawnSync('git', ['-C', repo, 'config', 'user.email', 't@t.example'], { stdio: '
 spawnSync('git', ['-C', repo, 'config', 'user.name', 't'], { stdio: 'ignore' });
 fs.writeFileSync(path.join(repo, 'ok.txt'), 'ok\n');
 fs.writeFileSync(path.join(repo, 'nul unsafe.txt'), 'nul\n');
+// RED at 5d7ad66a: git hash-object: fatal: line is badly quoted (batch fed
+// relative paths through cwd=treeDir; --stdin-paths C-unquotes any line whose
+// first byte is a double quote)
+fs.writeFileSync(path.join(repo, '"quoted.txt'), 'q\n');
 fs.symlinkSync('ok.txt', path.join(repo, 'link'));
 const nlName = 'new\nline.txt';
 fs.writeFileSync(path.join(repo, nlName), 'nl\n');

@@ -2,7 +2,6 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -266,42 +265,25 @@ function hashObject(repo, format, input) {
   return hashBlob(repo, format, input);
 }
 
-function hashObjectsStdinPaths(treeDir, format, relPaths) {
-  if (!relPaths.length) return [];
+function hashObjectsStdinPaths(repo, format, absPaths) {
+  if (!absPaths.length) return [];
   const args = [];
   if (format && format !== 'sha1') {
     args.push('-c', `extensions.objectFormat=${format}`);
   }
   args.push('hash-object', '--stdin-paths', '--no-filters');
   const chunks = [];
-  for (const rel of relPaths) {
-    chunks.push(Buffer.from(rel, 'utf8'), Buffer.from('\n'));
+  for (const abs of absPaths) {
+    chunks.push(Buffer.from(abs, 'utf8'), Buffer.from('\n'));
   }
-  let gitDir = null;
-  const extraEnv = {};
-  if (format && format !== 'sha1') {
-    gitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-hash-fmt-'));
-    fs.mkdirSync(path.join(gitDir, 'refs'), { recursive: true });
-    fs.mkdirSync(path.join(gitDir, 'objects'), { recursive: true });
-    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/none\n');
-    fs.writeFileSync(
-      path.join(gitDir, 'config'),
-      `[core]\n\trepositoryFormatVersion = 1\n[extensions]\n\tobjectFormat = ${format}\n`,
-    );
-    extraEnv.GIT_DIR = gitDir;
-  }
-  try {
-    const out = runGit('git hash-object', args, {
-      cwd: treeDir,
-      env: gitEnv(extraEnv),
-      input: Buffer.concat(chunks),
-      encoding: 'utf8',
-    });
-    const lines = String(out).replace(/\n$/, '').split('\n');
-    return lines.map((line) => String(line).trim());
-  } finally {
-    if (gitDir) rmIfExists(gitDir);
-  }
+  const out = runGit('git hash-object', args, {
+    cwd: repo,
+    env: gitEnv(),
+    input: Buffer.concat(chunks),
+    encoding: 'utf8',
+  });
+  const lines = String(out).replace(/\n$/, '').split('\n');
+  return lines.map((line) => String(line).trim());
 }
 
 function verifyTreeIntegrity(treeDir, listing) {
@@ -338,7 +320,9 @@ function verifyTreeIntegrity(treeDir, listing) {
   }
   if (batchRels.length > 0) {
     const sample = listing[batchIndex[0]];
-    const oids = hashObjectsStdinPaths(treeDir, sample.format || '', batchRels);
+    const batchRepo = sample.repo || path.resolve('.');
+    const batchAbsPaths = batchRels.map((rel) => path.join(treeDir, rel));
+    const oids = hashObjectsStdinPaths(batchRepo, sample.format || '', batchAbsPaths);
     if (oids.length !== batchRels.length) {
       throw new Error(`tree integrity: ${listing[batchIndex[0]].path}`);
     }

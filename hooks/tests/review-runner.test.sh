@@ -740,6 +740,37 @@ assert_contains "$TO_OUT" "exit=0" "timed-out job still yields an array at exit 
 assert_contains "$TO_OUT" "hang_signal=SIG" "timed-out job reports a signal"
 assert_contains "$TO_OUT" "ok_status=0" "sibling job still completes"
 
+# Host dogfood 2026-09-18 (claude-native seat on the helper itself) + depth-0 repro: three helper
+# defects, each RED at 30b69a1a. (1) a child that exits before draining stdin made the pending
+# write EPIPE an uncaught exception — the whole fan-out died and EVERY sibling's result was lost;
+# (2) per-chunk toString split multibyte sequences at 64 KiB pipe boundaries (U+FFFD);
+# (3) process.stdout.write + process.exit truncated any result array past ~64 KiB.
+HELPER_OUT="$(FANOUT="$FANOUT" TEST_TMP="$TEST_TMP" node - <<'NODE'
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const fanout = process.env.FANOUT;
+const tmp = process.env.TEST_TMP;
+const big = path.join(tmp, 'fanout-big-stdin.txt');
+fs.writeFileSync(big, 'x'.repeat(8 * 1024 * 1024));
+const run = (jobs) => spawnSync(process.execPath, [fanout], { input: JSON.stringify({ jobs }), maxBuffer: 64 * 1024 * 1024 });
+// (1) fast exit before stdin drains, with a sibling
+const r1 = run([
+  { id: 'a', argv: ['/bin/sh', '-c', 'head -c 10 >/dev/null; exit 3'], cwd: '/tmp', env: {}, stdin_file: big, timeout_seconds: 10 },
+  { id: 'b', argv: ['/bin/echo', 'ok'], cwd: '/tmp', env: {}, timeout_seconds: 10 },
+]);
+let rows1 = null; try { rows1 = JSON.parse(r1.stdout.toString('utf8')); } catch (_e) { rows1 = null; }
+console.log(`epipe_array=${Array.isArray(rows1) && rows1.length === 2 && rows1[0].status === 3 && rows1[1].status === 0 && rows1[1].stdout === 'ok\n'}`);
+// (2)+(3) 300k multibyte characters (≈900 KB) come back exact, in one parseable array
+const text = '\u00e9\u4e2d'.repeat(150000);
+const r2 = run([{ id: 'u', argv: [process.execPath, '-e', 'process.stdout.write("\\u00e9\\u4e2d".repeat(150000))'], cwd: '/tmp', env: {}, timeout_seconds: 20 }]);
+let rows2 = null; try { rows2 = JSON.parse(r2.stdout.toString('utf8')); } catch (_e) { rows2 = null; }
+console.log(`utf8_exact=${Array.isArray(rows2) && rows2[0].status === 0 && rows2[0].stdout === text && !rows2[0].stdout.includes('\uFFFD')}`);
+NODE
+)"
+assert_contains "$HELPER_OUT" "epipe_array=true" "a child exiting before stdin drains does not kill the fan-out (RED at 30b69a1a: uncaught EPIPE, no array)"
+assert_contains "$HELPER_OUT" "utf8_exact=true" "300k multibyte chars across pipe chunks come back exact in a >64 KiB array (RED at 30b69a1a: U+FFFD / truncated)"
+
 IDENT_OUT="$(node - "$REPO_ROOT" "$DIFF" "$STUB_VERDICT" <<'NODE'
 const path = require('path');
 const assert = require('assert');

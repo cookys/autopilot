@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 
 const MAX_BUFFER = 1024 * 1024;
 const KILL_GRACE_MS = 5000;
@@ -17,15 +18,23 @@ function readStdin() {
 }
 
 function captureStream(stream, bag, key, onOverflow) {
+  // One decoder per stream: a 64 KiB pipe read can split a multibyte UTF-8 sequence, and
+  // decoding each chunk on its own would leave U+FFFD in the captured text (dogfood 🟡).
+  const decoder = new StringDecoder('utf8');
+  let bytes = 0;
   stream.on('data', (chunk) => {
     if (bag.overflow) return;
-    const next = bag[key] + chunk.toString('utf8');
-    if (Buffer.byteLength(next, 'utf8') > MAX_BUFFER) {
+    bytes += chunk.length;
+    if (bytes > MAX_BUFFER) {
       bag.overflow = true;
+      bag.overflowStream = key;
       onOverflow();
       return;
     }
-    bag[key] = next;
+    bag[key] += decoder.write(chunk);
+  });
+  stream.on('end', () => {
+    if (!bag.overflow) bag[key] += decoder.end();
   });
 }
 
@@ -78,6 +87,13 @@ function runJob(job) {
     captureStream(child.stderr, bag, 'stderr', overflowKill);
     if (job.stdin_file && typeof job.stdin_file === 'string') {
       const input = fs.createReadStream(job.stdin_file);
+      // A child that exits (or is killed) before draining stdin makes the pending write fail
+      // with EPIPE on child.stdin; without a listener that is an uncaught exception that kills
+      // the whole fan-out and every sibling's result (dogfood 🟠 stdin-epipe-crash). The child's
+      // own exit status is the outcome; the write failure is not.
+      child.stdin.on('error', () => {
+        try { input.destroy(); } catch (_err) { /* already closed */ }
+      });
       input.pipe(child.stdin);
       input.on('error', () => {
         try { child.stdin.end(); } catch (_err) { /* closed */ }
@@ -119,7 +135,7 @@ function runJob(job) {
         finish({
           status: null,
           signal: signal || null,
-          error: 'stdout maxBuffer exceeded',
+          error: `${bag.overflowStream || 'stdout'} maxBuffer exceeded`,
         });
         return;
       }
@@ -132,6 +148,22 @@ function runJob(job) {
   });
 }
 
+// Write the whole array synchronously before exiting: process.stdout.write on a pipe is
+// asynchronous past ~64 KiB and process.exit() drops the unflushed tail — three seats' raw
+// output easily exceeds that, and a truncated array loses every seat (dogfood 2026-09-18).
+function emitArray(value) {
+  const buf = Buffer.from(`${JSON.stringify(value)}\n`, 'utf8');
+  let off = 0;
+  while (off < buf.length) {
+    try {
+      off += fs.writeSync(1, buf, off, buf.length - off);
+    } catch (error) {
+      if (error && error.code === 'EAGAIN') continue;
+      throw error;
+    }
+  }
+}
+
 async function main() {
   let jobs = [];
   try {
@@ -140,7 +172,7 @@ async function main() {
     jobs = parsed && Array.isArray(parsed.jobs) ? parsed.jobs : [];
   } catch (error) {
     jobs = [];
-    process.stdout.write(`${JSON.stringify([{
+    emitArray([{
       id: null,
       status: null,
       signal: null,
@@ -149,17 +181,17 @@ async function main() {
       stderr: '',
       started_at: new Date().toISOString(),
       ended_at: new Date().toISOString(),
-    }])}\n`);
+    }]);
     process.exit(0);
     return;
   }
   const results = await Promise.all(jobs.map((job) => runJob(job)));
-  process.stdout.write(`${JSON.stringify(results)}\n`);
+  emitArray(results);
   process.exit(0);
 }
 
 main().catch((error) => {
-  process.stdout.write(`${JSON.stringify([{
+  emitArray([{
     id: null,
     status: null,
     signal: null,
@@ -168,6 +200,6 @@ main().catch((error) => {
     stderr: '',
     started_at: new Date().toISOString(),
     ended_at: new Date().toISOString(),
-  }])}\n`);
+  }]);
   process.exit(0);
 });

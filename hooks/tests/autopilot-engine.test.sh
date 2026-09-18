@@ -5978,6 +5978,9 @@ runCase({
     assert.strictEqual(panelRows.length, 3);
     assert.strictEqual(new Set(panelRows.map((r) => `${r.started_at}|${r.ended_at}`)).size, 1,
       'panel seat ledger rows carry one batch started_at/ended_at pair');
+    const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
+    assert.strictEqual(panelRow && panelRow.seat_timeout_seconds, 120,
+      `seat_timeout_seconds is the whole remainder at prepare time (clock at started_at → 120 s), never a post-batch value: ${JSON.stringify(panelRow)}`);
     console.log('real_batch_panel=true');
   },
 });

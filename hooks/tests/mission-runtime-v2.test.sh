@@ -2078,7 +2078,9 @@ if (runtime) {
     && closeoutTerminal.status === 'applied'
     && successImplementationCalls === 2
     && successReviewCalls === 4
-    && successVerificationCalls === 4);
+    // 2 (runtime-control seals full_suite_reuse:false → verify + full_suite) + 1 (release-closeout keeps
+    // the v2.36.65 verify-once default → full_suite reuses the identity-equal green verification receipt).
+    && successVerificationCalls === 3);
   const closeoutRootRunId = closeoutResult.campaign_control
     && closeoutResult.campaign_control.campaign_id;
   const closeoutControllerRecords = closeoutRootRunId

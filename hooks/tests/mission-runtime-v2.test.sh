@@ -10,6 +10,8 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const [root, temp] = process.argv.slice(2);
+delete process.env.AUTOPILOT_SESSION_ID;
+process.env.CLAUDE_CODE_SESSION_ID = 'mission-runtime-v2-sess';
 let runtime = null;
 try {
   runtime = require(path.join(root, 'src', 'mission', 'runtime'));

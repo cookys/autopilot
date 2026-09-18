@@ -5738,7 +5738,7 @@ function stubReview() {
     packet: { packet_hash: 'b'.repeat(64) },
   };
 }
-function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride, failModel, intakeMutate, rosterMutate, plantSnapshotSeats, reviewByModel }) {
+function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride, failModel, intakeMutate, rosterMutate, plantSnapshotSeats, reviewByModel, inheritProcessEnv }) {
   const caseSeats = seatsOverride || seats;
   const caseRoster = {
     ...(seatsOverride
@@ -5856,8 +5856,8 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
     repairLineageCleanupTransaction() {
       return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
     },
-    verifyCommandRunner() {
-      if (typeof onVerify === 'function') onVerify();
+    verifyCommandRunner(args) {
+      if (typeof onVerify === 'function') onVerify(args);
       return {
         error: null, status: verifyStatus === undefined ? 0 : verifyStatus,
         signal: null, stdout: '', stderr: '', executed_argv: ['/bin/sh', '-c', 'true'],
@@ -5880,8 +5880,10 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
     promptFile, branch, base, roster: caseRoster,
     campaignContract: contractPath, campaignSeal: sealPath,
     campaignDispositionPolicy: 'acceptance-bound',
-    verificationEnv: { PATH: process.env.PATH || '', CI: ticket },
-    verificationEnvAllowlist: ['CI'],
+    ...(inheritProcessEnv ? {} : {
+      verificationEnv: { PATH: process.env.PATH || '', CI: ticket },
+      verificationEnvAllowlist: ['CI'],
+    }),
     ...(realBin ? { extraReviewArgs: ['--bin', realBin] } : {}),
   });
   collect({ result, reviewArgsSeen, reviewModels, worktrees, candidate, tree, caseSeats });
@@ -6382,6 +6384,40 @@ runCase({
   },
 });
 
+const { environmentFingerprint } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+const prevAutopilotSession = process.env.AUTOPILOT_SESSION_ID;
+process.env.AUTOPILOT_SESSION_ID = 'dispatcher-session';
+let capturedVerifyEnv = null;
+try {
+  runCase({
+    ticket: 'envscrub-session',
+    reserve: 0,
+    clock: clockEarly,
+    inheritProcessEnv: true,
+    onVerify(args) { capturedVerifyEnv = args && args.env; },
+    collect() {
+      // RED at d3ed3f818b2c42fb4b3dad437538faddcf0decce: captured env carries dispatcher-session
+      assert.ok(capturedVerifyEnv, 'verifyCommandRunner must receive env');
+      assert.strictEqual(
+        Object.prototype.hasOwnProperty.call(capturedVerifyEnv, 'AUTOPILOT_SESSION_ID'),
+        false,
+        `captured env must not carry AUTOPILOT_SESSION_ID; got ${capturedVerifyEnv.AUTOPILOT_SESSION_ID}`,
+      );
+      const dirty = { ...process.env };
+      const clean = { ...process.env };
+      delete clean.AUTOPILOT_SESSION_ID;
+      const expectedFp = environmentFingerprint(clean);
+      assert.strictEqual(environmentFingerprint(dirty), expectedFp,
+        'allowlist fingerprint of an already-clean env is byte-identical even when AUTOPILOT_SESSION_ID is present');
+      assert.strictEqual(environmentFingerprint(capturedVerifyEnv), expectedFp);
+      console.log('envscrub_session_id=true');
+    },
+  });
+} finally {
+  if (prevAutopilotSession === undefined) delete process.env.AUTOPILOT_SESSION_ID;
+  else process.env.AUTOPILOT_SESSION_ID = prevAutopilotSession;
+}
+
 NODE
 )"
 assert_contains "$PANEL_OUT" "panel_order=true" "3-seat stub dispatcher is called in index order (RED at base 7f5d6ee8: sequential split)"
@@ -6403,6 +6439,8 @@ assert_contains "$PANEL_OUT" "station_terminal_reuse=true" \
   "station panel fans out once and terminal reuses the same receipts"
 assert_contains "$PANEL_OUT" "station_collide_three_seats=true" \
   "three-seat finding-id qualification: a third identical-to-a-later-group occurrence folds in, no spurious third id"
+assert_contains "$PANEL_OUT" "envscrub_session_id=true" \
+  "verify env drops AUTOPILOT_SESSION_ID (RED at d3ed3f818b2c42fb4b3dad437538faddcf0decce: captured env carries dispatcher-session)"
 assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
 assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
 

@@ -116,6 +116,14 @@ const {
   reusableGreenReceipt,
   verificationArgv,
 } = require('./campaign-verification');
+
+function copyVerificationEnvironment(input) {
+  const verificationEnvironment = { ...(input.verificationEnv || process.env) };
+  // 2026-09-18: dispatcher AUTOPILOT_SESSION_ID made mission-runtime-v2 red in-rail.
+  delete verificationEnvironment.AUTOPILOT_SESSION_ID;
+  return verificationEnvironment;
+}
+
 const { adjudicateCampaignReview } = require('./campaign-adjudication');
 const { evaluateLoopConvergence } = require('../../scripts/check-loop-convergence');
 const {
@@ -6962,7 +6970,7 @@ class AutopilotEngine {
     // Freeze the exact verification command/environment and terminal reviewer
     // roster before composition. Gate keys and the effects they authorize must
     // observe the same material inputs even if ambient process state changes.
-    const verificationEnvironment = { ...(input.verificationEnv || process.env) };
+    const verificationEnvironment = copyVerificationEnvironment(input);
     const verificationEnvAllowlist = Array.isArray(input.verificationEnvAllowlist)
       ? [...input.verificationEnvAllowlist] : undefined;
     const verificationArgvHash = campaignCanonicalDigest(verificationArgv(verifyCmd));
@@ -10035,6 +10043,7 @@ class AutopilotEngine {
             verifyResult = this.verifyCommandRunner({
               verifyCmd,
               cwd: verifyWorktree,
+              env: copyVerificationEnvironment(input),
               round,
               commit,
               branch: currentBranch,

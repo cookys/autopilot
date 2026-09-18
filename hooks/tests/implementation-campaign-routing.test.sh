@@ -319,6 +319,22 @@ assert.deepStrictEqual(status.growth, { files: 2, churn: 12, ratio: 1.2 });
 assert.strictEqual(status.last_artifact, D);
 assert(!Object.prototype.hasOwnProperty.call(status, 'can_merge'));
 assert(!Object.prototype.hasOwnProperty.call(status, 'can_close'));
+
+// Wall-clock pause (2026-09-18): a campaign parked at AWAITING_DISPOSITION far
+// past max_wall_seconds must project the FROZEN park usage, not a raw delta
+// that would show a negative/zero wall_seconds_remaining while merely waiting.
+const pausedCampaignState = {
+  ...campaignState,
+  phase: 'AWAITING_DISPOSITION',
+  usage: { ...campaignState.usage, elapsed_wall_seconds: 10 },
+};
+const farFutureObservedAt = '2026-07-27T01:00:00.000Z';
+const pausedStatus = projectCampaignStatus({
+  state: pausedCampaignState,
+  latest_lease: { state: 'dead' },
+}, [], farFutureObservedAt);
+assert.strictEqual(pausedStatus.wall_seconds_remaining, 110);
+
 const reopenedLeafStatus = projectCampaignStatus({
   state: campaignState,
   latest_lease: { state: 'dead' },
@@ -1710,6 +1726,29 @@ console.log('t1_t2_admitted=true');
 
 restoreLedger();
 {
+  // Wall-clock pause regression (2026-09-18): the park at AWAITING_DISPOSITION
+  // lasts far longer than the contract's max_wall_seconds (120), but the
+  // durable clock freezes while parked — resume must still be admitted, never
+  // refused as WALL_BUDGET_EXCEEDED.
+  const farFuture = runCampaignIntake({
+    repo, contractPath, sealPath, promptFile,
+    branch: 'impl/disp-resume', base,
+    roster: { implementer_engine: 'fixture-implementer' },
+    observedAt: '2026-09-16T03:00:00.000Z',
+    resume: true,
+  }, resumeAdapters());
+  assert.strictEqual(
+    farFuture.status, 'admitted', JSON.stringify(farFuture.rejection || farFuture),
+  );
+  assert.strictEqual(
+    farFuture.generation_claim.resume_durable_wait.phase,
+    CAMPAIGN_STATES.AWAITING_DISPOSITION,
+  );
+}
+console.log('wall_clock_paused_resume_admitted=true');
+
+restoreLedger();
+{
   const moved = spawnSync('git', ['-C', worktree, 'reset', '--hard', base], {
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -1839,6 +1878,8 @@ NODE
 )"
 assert_exit_code "$?" "0" "T1–T3 durable-wait intake: $DISP_RESUME_OUT"
 assert_contains "$DISP_RESUME_OUT" "t1_t2_admitted=true" "T1/T2 admitted normalized resume_candidate"
+assert_contains "$DISP_RESUME_OUT" "wall_clock_paused_resume_admitted=true" \
+  "resume past max_wall_seconds admitted while parked at awaiting_disposition"
 assert_contains "$DISP_RESUME_OUT" "t3_preclaim_drift=true" "T3 pre-claim drift refused"
 
 DISP_ENGINE_OUT="$(

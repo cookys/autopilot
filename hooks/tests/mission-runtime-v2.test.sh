@@ -172,6 +172,8 @@ const graph = {
         max_extra_churn: 5,
         max_repair_generations: 1,
         max_wall_seconds: 100,
+        final_panel_reserve_seconds: 30,
+        full_suite_reuse: false,
       },
     },
     {
@@ -531,6 +533,10 @@ if (runtime) {
     && grantedContract.strict_dispatch.budget.max_engine_attempts === 2
     && grantedContract.strict_dispatch.verification_commands.join(',')
       === graph.nodes[0].verification_commands.join(','));
+  check('grant-projects-final-panel-reserve-seconds',
+    grantedContract.final_panel_reserve_seconds === 30);
+  check('grant-projects-full-suite-reuse',
+    grantedContract.full_suite_reuse === false);
   const canonicalCampaignCheck = spawnSync(process.execPath, [
     path.join(root, 'scripts', 'implementation-campaign-check.js'),
     'check',
@@ -759,6 +765,9 @@ if (runtime) {
   check('intake-keeps-both-campaign-identities', intake.status === 'admitted'
     && /^campaign-v1-/.test(intake.campaign_id)
     && intake.mission_claim.campaign_id === granted.payload.mission_campaign_id);
+  check('intake-seals-final-panel-reserve-seconds-from-node-contract',
+    intake.status === 'admitted'
+    && intake.initial_state.limits.final_panel_reserve_seconds === 30);
 
   // Durable zero-effect leaf after IMPLEMENTATION_STARTED: release Mission
   // admission without terminal receipt, stagnation, or MUTATION_FAILED.
@@ -1977,6 +1986,10 @@ if (runtime) {
     'grant', '--repo', repo, '--prepared', preparedPath,
     '--node', 'release-closeout', '--now', '2026-07-28T00:02:00.000Z',
   ]);
+  const grant2Contract = JSON.parse(fs.readFileSync(grant2.payload.contract_path, 'utf8'));
+  check('grant-node-without-knobs-omits-both-keys',
+    !Object.prototype.hasOwnProperty.call(grant2Contract, 'final_panel_reserve_seconds')
+    && !Object.prototype.hasOwnProperty.call(grant2Contract, 'full_suite_reuse'));
   const grant2State = store.load();
   const grant2TerminalBase = {
     state: grant2State,
@@ -2065,7 +2078,9 @@ if (runtime) {
     && closeoutTerminal.status === 'applied'
     && successImplementationCalls === 2
     && successReviewCalls === 4
-    && successVerificationCalls === 4);
+    // 2 (runtime-control seals full_suite_reuse:false → verify + full_suite) + 1 (release-closeout keeps
+    // the v2.36.65 verify-once default → full_suite reuses the identity-equal green verification receipt).
+    && successVerificationCalls === 3);
   const closeoutRootRunId = closeoutResult.campaign_control
     && closeoutResult.campaign_control.campaign_id;
   const closeoutControllerRecords = closeoutRootRunId

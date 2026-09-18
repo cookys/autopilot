@@ -1292,7 +1292,7 @@ function campaignDraftFor({ state, node, adoptionKey, attempt, repoInfo, baseSha
     strictDispatch.version_mirror_paths = [...campaign.version_mirror_paths];
     strictDispatch.version_mirror_generator = campaign.version_mirror_generator;
   }
-  return {
+  const draft = {
     schema_version: 1,
     ticket: ticketFor(adoptionKey, node.id, attempt),
     profile: implementationProfile(campaign.profile),
@@ -1308,6 +1308,14 @@ function campaignDraftFor({ state, node, adoptionKey, attempt, repoInfo, baseSha
     max_extra_churn: campaign.max_extra_churn,
     max_repair_generations: campaign.max_repair_generations,
     max_wall_seconds: campaign.max_wall_seconds,
+  };
+  if (Object.prototype.hasOwnProperty.call(campaign, 'final_panel_reserve_seconds')) {
+    draft.final_panel_reserve_seconds = campaign.final_panel_reserve_seconds;
+  }
+  if (Object.prototype.hasOwnProperty.call(campaign, 'full_suite_reuse')) {
+    draft.full_suite_reuse = campaign.full_suite_reuse;
+  }
+  return Object.assign(draft, {
     verify_cmd: node.verification_commands.join(' && '),
     rubric_ids: rubricIds,
     mission_runtime: {
@@ -1320,7 +1328,7 @@ function campaignDraftFor({ state, node, adoptionKey, attempt, repoInfo, baseSha
       graph_node_digest: graphNodeDigest,
     },
     strict_dispatch: strictDispatch,
-  };
+  });
 }
 
 function grantArtifactPaths(paths, nodeId, attempt) {

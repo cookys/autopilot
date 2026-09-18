@@ -1,0 +1,57 @@
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+Switched to a new branch 'sb-loop'
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: implementer=cursor/cursor-grok-4.6-low — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: implementer=cursor/cursor-grok-4.6-low — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: implementer=cursor/cursor-grok-4.6-low — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: implementer=cursor/cursor-grok-4.6-low — reason: advisory_default
+strict /l5 POLICY OVERRIDE — 1 seat(s) run without a capability claim: implementer=cursor/cursor-grok-4.6-low — reason: advisory_default
+node:assert:152
+  throw new AssertionError(obj);
+  ^
+
+AssertionError [ERR_ASSERTION]: every seat finished after the batch despite the wall jump: [["no_verdict","final_panel_seat_no_verdict"],["no_verdict","final_panel_seat_no_verdict"],["no_verdict","final_panel_seat_no_verdict"]]
++ actual - expected
+
+  [
++   'no_verdict',
++   'no_verdict',
++   'no_verdict'
+-   'reviewed',
+-   'reviewed',
+-   'reviewed'
+  ]
+
+    at collect ([stdin]:358:12)
+    at runCase ([stdin]:169:3)
+    at [stdin]:336:1
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [stdin]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_stdin:51:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [ 'no_verdict', 'no_verdict', 'no_verdict' ],
+  expected: [ 'reviewed', 'reviewed', 'reviewed' ],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.16.0
+FAIL [autopilot-engine] REAL fan-out path: 3 seats finish in index order with batch timestamps after a wall jump (RED at 30b69a1a: campaign_wall_budget on finish): 'real_batch_panel=true' not found in output
+FAIL [autopilot-engine] 558 passed, 1 failed
+      - REAL fan-out path: 3 seats finish in index order with batch timestamps after a wall jump (RED at 30b69a1a: campaign_wall_budget on finish): 'real_batch_panel=true' not found in output

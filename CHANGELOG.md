@@ -1,5 +1,50 @@
 # Changelog
 
+## v2.36.65 — blind review redesign 第六刀（2-A）：verify-once、final panel 三席並行、sealed panel pocket
+
+- `scripts/lib/review-fanout.js`（新，＋鏡像）：唯一的 review 啟動路徑。stdin 收 job 清單，`spawn` 全部同時起、每個 job 自己的
+  timeout（＝席位的 `--timeout`，SIGTERM 後 5 s SIGKILL）、1 MiB maxBuffer（溢出 → `status:null`＋error，與 `spawnSync` 同）、
+  每 stream 一個 `StringDecoder`、結果陣列用 `fs.writeSync` 整筆送出（不會被 exit 截斷）、`child.stdin` 掛 error listener（子程序
+  先退出不會讓整個 fan-out 崩）；job 失敗是一列，永不 throw；輸出照 job 順序。
+- `src/runners/review.js`（＋鏡像）：`dispatchReview` 拆成 `prepareReviewLaunch`／launch／`finishReviewLaunch` 三段，
+  `dispatchReviewBatch(list)` 一次 `spawnSync` helper；`dispatchReview(x)` ＝ batch of one，逐欄位相同（測試用整物件
+  `deepStrictEqual`，只正規化每次執行的 run id／mktemp nonce）。
+- `src/engine/autopilot-engine.js`（＋鏡像）：`campaignWallBudgetStatus`／`campaignWallRemainingSeconds` 收 `{ consumer }`——
+  `review`（今日行為）或 `panel`（limit＋sealed pocket）；`performReview` 收 `budget_consumer`，exhaustion 檢查與 clamp 用同一個
+  定義；`performFinalPanel`：cross-family 檢查後 ONE 次 `'panel'` 預算檢查（`final_panel_budget_exhausted`，任何 prepare 之前），
+  每個合格席 prepare（`review_timeout_seconds`＝整個 panel 剩餘，不再 ÷N）→ 一次 batch → 照 seat index finish（finish 階段沿用
+  prepared review 與帶入的 timeout，**不重跑 prepareReview、不重算預算**——否則最慢席跑滿會把全 panel 丟成
+  `campaign_wall_budget`）；panel 席 ledger 列與 `final_panel` 列都帶 batch 的 `started_at`／`ended_at`（沒有任何 artifact 記
+  每席時序），`final_panel` 列多 `budget_source: wall|pocket`、`seat_timeout_seconds`。注入 `reviewDispatcher` 的測試 seam 照舊
+  逐席呼叫。`fullSuite`：`verificationCache` 命中 `reusableGreenReceipt`（tree＋完整 argv＋env 同一 identity）就不建 worktree，
+  ledger `full_suite` `passed` 帶 `reused_from: campaign_verification`、trace `full_suite_reused_verification`；sealed
+  `full_suite_reuse` 為 0 一律重跑。
+- Plumbing（＋鏡像）：graph node `campaign.final_panel_reserve_seconds`（0..1800）／`full_suite_reuse` → `mission-execution-graph.js`
+  ＋schema → `campaign-dispatch-projection.js` → `mission-convergence.js` 建 contract → contract schema；**seal 進
+  `initial_state.limits` 的接縫是 `src/engine/implementation-campaign.js` `normalizeLimits`／`LIMIT_KEYS`（plan 寫錯成
+  campaign-intake.js；`src/status/task-status.js` 還有一份 key 副本，一起改）**，reuse 旗標以 0/1 整數封存；engine 只讀 sealed
+  limits。receipt schema：`full_suite` 列 optional `reused_from`，`final_panel` 列 optional `budget_source`／`seat_timeout_seconds`。
+- 測試（RED-first 標 base `7f5d6ee8`／`30b69a1a`）：review-runner 三個 stub 2/3/4 s 並行（`max(start) < min(end)`、wall < sum−1）、
+  超時 job 回 signal 其他照常、batch of one 整物件相等、**子程序先退出＋8 MB stdin 不炸、300k 多位元組輸出精確且 >64 KiB 陣列
+  完整**；engine：三席 stub panel 順序／timeout／digest 與循序相同、pocket 300 → `budget_source: pocket`、reserve 0 → 拒、
+  verify-once 命中／tree 變／RED／旗標 0、**真 fan-out 路徑三席（qoderclicn stub，sleep 3/1/2 亂序完成）在時鐘跳過 wall 後仍全
+  部 reviewed、seat index 順序、batch 時戳、`seat_timeout_seconds`**；dogfood `115s` in-rail pin 不變；projection／convergence
+  reserve 0/900/1801；receipt schema 收新 optional 欄位。
+- 出貨路徑：/l5 managed campaign attempt 1——hand 91 分、31 檔、commit `30b69a1a`，**然後 rail `boundary_rejected`（main
+  checkout 在該輪動了——是我在 campaign 跑中 commit 了 handoff；不是 rail 缺陷，教訓入 memory）**；`--resume`：第一次 strict-l5
+  readiness 暫時 not ready、第二次 `campaign resume from BOUNDARY_REJECTED cannot dispatch implementation` 被 terminal 化
+  （**rail 觀察登 BACKLOG**：BOUNDARY_REJECTED 在可 resume 集合裡，但 resume 還要 `resume_candidate`，boundary rejection 從不記錄
+  它）→ 照文件降級 l3，候選＝保留 worktree 的 `30b69a1a`。depth-0：15 條全綠、scope 檢查；claude／GLM 二審各 FIX-THEN-SHIP——
+  🟠 finish 重算預算（修）、🟠 reserve 沒 seal（兩席都抓到；修在真正的接縫，四檔超出 §2.5 如實記錄）、🟡 identity 測試太弱（修）、
+  🟡 acceptance gate（駁回：panel 自己的檢查才帶精確理由）、GLM 🟠 routing suite（駁回：套件綠，真 batch case 更強）；§5 dogfood
+  三席真並行 wall 62 s，claude 席順手審出 helper 兩個真 bug（EPIPE、UTF-8 切塊），重現時再抓到第三個（stdout 截斷）——全修＋
+  RED case；兩輪 delta 複審：r3 🟠 scope（＝已記錄的修正）＋2 🔵 折入，r4 SHIP-AS-IS。
+- 不在範圍（2-B）：standby seat、panel snapshot at intake、有 panel 時關掉 in-rail 單席 review、packet build 與 implementer
+  commit 重疊。
+
+prose-justification: `references/blind-dispatch.md` 新段「Panel execution (v2.36.65)」（含鏡像）；`skills/l5/references/
+hetero-impl-loop.md` step 3／9 各一句（含鏡像）；`docs/scripts-inventory.md` 一行；CLAUDE.md Dispatch rails 群加 `lib/review-fanout.js`。
+
 ## v2.36.64 — blind review redesign 第五刀（1c）：可設定的 packet deny-list（additive、hash-bound、一個 grammar owner）
 
 - `schemas/review-loop-contract.schema.json`（＋鏡像）：新 always-on 欄位 `review_packet_deny_extra`（array of non-empty

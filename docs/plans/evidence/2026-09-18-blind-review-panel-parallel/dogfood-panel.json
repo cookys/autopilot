@@ -1,0 +1,26 @@
+{
+ "wall_ms": 61863,
+ "seats": [
+  {
+   "status": 0,
+   "signal": null,
+   "verdict": "SHIP-AS-IS",
+   "rstatus": "reviewed",
+   "error": null
+  },
+  {
+   "status": 0,
+   "signal": null,
+   "verdict": "SHIP-AS-IS",
+   "rstatus": "reviewed",
+   "error": null
+  },
+  {
+   "status": 0,
+   "signal": null,
+   "verdict": "FIX-THEN-SHIP",
+   "rstatus": "reviewed",
+   "error": null
+  }
+ ]
+}

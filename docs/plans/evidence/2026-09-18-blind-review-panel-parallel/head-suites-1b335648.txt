@@ -1,0 +1,15 @@
+bash hooks/tests/review-runner.test.sh | exit=0 | PASS [review-runner] 57 assertions | sha256=8e4cc2ef164560e9
+bash hooks/tests/autopilot-engine.test.sh | exit=0 | PASS [autopilot-engine] 559 assertions | sha256=52870ae48cbd2df3
+bash hooks/tests/implementation-campaign-dogfood.test.sh | exit=0 | PASS [implementation-campaign-dogfood] 21 assertions | sha256=f3f93a25f8ca9f3e
+bash hooks/tests/implementation-campaign-routing.test.sh | exit=0 | PASS [implementation-campaign-routing] 106 assertions | sha256=0a519b2bf7160c53
+bash hooks/tests/implementation-campaign-receipt.test.sh | exit=0 | PASS [implementation-campaign-receipt] 23 assertions | sha256=443352574a1a2650
+bash hooks/tests/implementation-campaign-state.test.sh | exit=0 | PASS [implementation-campaign-state] 296 assertions | sha256=9da14ff5bdc0b41b
+bash hooks/tests/qc-panel-honesty.test.sh | exit=0 | PASS [qc-panel-honesty] 1 assertions | sha256=58e57a7daf43c659
+bash hooks/tests/review-packet.test.sh | exit=0 | PASS [review-packet] 54 assertions | sha256=1cfb8b52583753b6
+bash hooks/tests/contract-parity.test.sh | exit=0 | PASS [contract-parity] 42 assertions | sha256=61e953a69c2d709f
+bash hooks/tests/campaign-dispatch-projection.test.sh | exit=0 | PASS [campaign-dispatch-projection] 44 assertions | sha256=577678006527cb65
+bash hooks/tests/mission-convergence.test.sh | exit=0 | PASS [mission-convergence] 198 assertions | sha256=555d8ff559843440
+node scripts/check-js-syntax.js | exit=0 |  | sha256=98739ee540d06b81
+node scripts/check-claude-md-inventory.js | exit=0 |  | sha256=ecd04d3e3815b448
+bash scripts/sync-codex-plugin-skills.sh --check | exit=0 |  | sha256=a061d5b31d473443
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md | exit=0 |  | sha256=10474c61e5fa37ce

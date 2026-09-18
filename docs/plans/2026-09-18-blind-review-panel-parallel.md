@@ -1,6 +1,6 @@
 # Blind review redesign — cut 2-A: verify once per tree, panel seats in parallel, a sealed panel pocket
 
-> Status: draft for plan hetero loop · Size: L · Base: `aab9523d` (v2.36.64) · Parent:
+> Status: SHIPPED v2.36.65 (merge `67e3a560`, 2026-09-18) · Size: L · Base: `aab9523d` (v2.36.64) · Parent:
 > `docs/plans/2026-09-16-blind-review-packet.md` §7 item 4 (`:311-312`: "verify once per tree, in-rail single
 > review off when a panel exists, seats in separate processes concurrently, one standby seat, panel snapshot
 > at intake") and the design consult `evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md`
@@ -215,6 +215,11 @@ docs/BACKLOG.md
 
 `authorized_creates`: the two `review-fanout.js` paths. Thirty-four paths, `max_changed_files` sealed at 35.
 
+**Amended at ship (depth-0, `43c95f88`):** the sealed limits are built by `src/engine/implementation-campaign.js`
+(`normalizeLimits`, closed `LIMIT_KEYS`) with a key copy in `src/status/task-status.js`, not by `campaign-intake.js`
+as §2 said — so the two knobs were sealed there. Four paths beyond the list (the two + mirrors); recorded in the
+evidence README and the merge trailer.
+
 ### 2.6 Global constraints
 
 - Reviewers: this plan is self-contained; `file:line` citations are provenance for depth-0, never a reading
@@ -298,3 +303,12 @@ helper against MiniMax, GLM and claude-native on a small packet, timings in the 
   seat's own `--timeout` (no margin; kill grace is teardown, not budget); no artifact records per-seat
   timing (batch timestamps on every panel ledger row; per-job timing lives only in the helper's stdout).
   Growth 1.26× over the G2-reviewed bytes. Zero unaddressed blockers, zero deferred.
+- Campaign 2026-09-18 (/l5 attempt 1): hand cursor-grok-4.6-low 91 min, `30b69a1a` (31 files ⊆ §2.5 + mirrors);
+  the rail then returned `boundary_rejected` because depth-0 committed a docs handoff to `develop` mid-round
+  (own fault; memory `campaign-running-main-checkout-frozen`); `--resume` from BOUNDARY_REJECTED cannot dispatch
+  (rail observation, BACKLOG) → l3 degrade, candidate = the retained worktree commit. Depth-0: 15/15 green
+  (`head-suites-30b69a1a.txt`); claude + GLM second-family reviews → three repairs at `43c95f88` (finish phase
+  no re-prepare/re-budget with a REAL fan-out RED case; sealing in `implementation-campaign.js`; whole-object
+  identity test) and two refutations; §5 host dogfood (three real seats, wall 62 s) surfaced two helper defects
+  (EPIPE crash, UTF-8 chunk split) and reproducing them a third (stdout truncation) → `1b335648` with RED-first
+  cases; delta reviews r3/r4, 15/15 green at both repairs. Merge `67e3a560`.

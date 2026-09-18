@@ -1,0 +1,426 @@
+{
+  "schema_version": 1,
+  "artifact_type": "provider_readiness_receipt",
+  "issued_at": "2026-09-18T03:30:07.002Z",
+  "expires_at": "2026-09-18T03:35:07.002Z",
+  "roster_digest": "ed4c0f48eb525526a2fe94736ed243abc050f88770e0e0b414fcf9025b40c8f5",
+  "policy_digest": "046a59171624c56c28ff97ef47894688fa37b61daff20e8153ac21b234942409",
+  "observation_digest": "c74e8c3c1fd9667df2187ee01bb31a066c765e52c43d06c63398e7be4781697b",
+  "overall_status": "usable",
+  "seats": [
+    {
+      "seat_id": "implementer",
+      "required": true,
+      "family": "xai",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "implementer",
+          "runner": "cursor",
+          "model": "cursor-grok-4.6-low",
+          "effort": "low",
+          "endpoint": null
+        },
+        "tuple_digest": "bbec06214ef02edb84bc4c40a46f51053d08c0d3f4288ce90cd18178c8923e4e",
+        "observed_at": "2026-09-18T03:30:07.002Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "fd77ce2749b3028de49e08dc2bf0e0458d5e69eed959e9c43f23c70d312aa10d"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "xai",
+        "tuple": {
+          "role": "implementer",
+          "runner": "cursor",
+          "model": "cursor-grok-4.6-low",
+          "effort": "low",
+          "endpoint": null
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "reviewer",
+      "required": true,
+      "family": "minimax",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "reviewer",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        },
+        "tuple_digest": "b9d87ae3354e84d595a340368ccb3b43a75bac15a4a4807ba34eb065bbdac24f",
+        "observed_at": "2026-09-18T03:30:07.002Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "c29f91252e53b2368106537419a77d0df35e3dd9b60106d3a7201bc9da0c009d"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "minimax",
+        "tuple": {
+          "role": "reviewer",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "verification_author",
+      "required": true,
+      "family": "alibaba",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "verification_author",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max-Preview",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "81c16ac9c34b2f7030aee7c45d90884d2a6c821f6c659f64ddca4b814a9e7848",
+        "observed_at": "2026-09-18T03:30:07.002Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "1038574112ba037762bd079f381ce40ba5a4e2d9e08ebc52e20437366012d7b6"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "alibaba",
+        "tuple": {
+          "role": "verification_author",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max-Preview",
+          "effort": "high",
+          "endpoint": null
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "qc:1",
+      "required": true,
+      "family": "anthropic",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "9597a1db6d444c998013e277542d41ac3481fac124b2a00db63253565fe553f7",
+        "observed_at": "2026-09-18T03:30:07.002Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "e82594261404863686e49fa657488c9f0efb9eef01c469556e5754b32a601ef0"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "anthropic",
+        "tuple": {
+          "role": "qc",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "effort": "high",
+          "endpoint": null
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "qc:2",
+      "required": true,
+      "family": "zhipu",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "effort": "high",
+          "endpoint": "glm"
+        },
+        "tuple_digest": "0eb7d66f6927bec56f2c57df1ef2544a68ea2c264360367904ae23149425f7c2",
+        "observed_at": "2026-09-18T03:30:07.002Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "8a8fc9295697a3ff74036660de576d15a63a5409fefdf527dbfae5c5dd56b837"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "zhipu",
+        "tuple": {
+          "role": "qc",
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "effort": "high",
+          "endpoint": "glm"
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "qc:3",
+      "required": true,
+      "family": "minimax",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        },
+        "tuple_digest": "fd1904b8136236928e25042715bd642cb8d59df814bfa71a3360b27427bee7f6",
+        "observed_at": "2026-09-18T03:30:07.002Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-18T03:30:07.002Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "b6785f6a51f3024d1623a6e0f90c269d6b7f4649194a8f4a055cbe501ba0fcb6"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "minimax",
+        "tuple": {
+          "role": "qc",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    }
+  ],
+  "receipt_digest": "c70c003c7fa74ba7ea484ac228ad2e1e7301bc0d7aec583732f2e82914b759ab",
+  "brain_seat": {
+    "schema_version": 1,
+    "artifact_type": "brain_seat_status",
+    "identity_hash": "2e71cfd2ef9f47ad98212bd9916cffe417f655c3d62d92bd6ddb8a90bab05aa0",
+    "status": "no_record",
+    "strikes_since_pass": 0,
+    "strike_threshold": 3,
+    "baseline_evidence_id": null,
+    "baseline_observed_at": null,
+    "construct_scope": "per-round-exam.long-horizon-production-audit"
+  }
+}

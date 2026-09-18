@@ -152,6 +152,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/README.md
 - **Context**: cosmetic against the script's existing mktemp idiom; one host-/tmp file per cleanroom dispatch; the dead block is duplication, not a wrong path. Fold with the next codex-block touch, with the mirror.
 
+### Managed rail: `boundary_rejected` says "re-dispatch once quiescent" but `--resume` from it always terminalizes
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — 2-A attempt 1: boundary_rejected after a 91-min hand round; resume refused `campaign resume from BOUNDARY_REJECTED cannot dispatch implementation` and terminalized
+- **Effort**: M
+- **Source**: `impl-run1-attempt1-boundary-rejected.json`, `impl-run3-resume-refused.json` (2-A evidence)
+- **Pointer**: docs/plans/evidence/2026-09-18-blind-review-panel-parallel/README.md
+- **Context**: BOUNDARY_REJECTED is in durableResumablePhases but resume also needs generation_claim.resume_candidate, which a boundary rejection never records; the candidate is only recoverable at depth-0. Record one on rejection, or drop the promise.
+
 ### `secret-scan-diff.js --range` fails OPEN on a large range — ENOBUFS is printed and the exit code stays 0
 - **Status**: open
 - **Trigger**: fired 2026-09-18 — `--range 6a414c3c..HEAD` printed `git diff error: spawnSync git ENOBUFS`, returned `findings: []` and exit 0, and a `&&` chain pushed on it

@@ -1,0 +1,114 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "blind-review-panel-standby-2026-09-18",
+   "acceptance_ids": [
+    "quorum",
+    "receipt",
+    "snapshot",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     ".claude",
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/project-config-template",
+     "platforms/codex/plugin/references",
+     "platforms/codex/plugin/schemas",
+     "platforms/codex/plugin/skills",
+     "platforms/codex/plugin/src",
+     "project-config-template",
+     "references",
+     "schemas",
+     "skills",
+     "src"
+    ],
+    "baseline_churn": 2400,
+    "max_changed_files": 22,
+    "max_extra_churn": 1200,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 7200,
+    "final_panel_reserve_seconds": 900,
+    "full_suite_reuse": true,
+    "output_paths": [
+     "src/engine/autopilot-engine.js",
+     "platforms/codex/plugin/src/engine/autopilot-engine.js",
+     "src/engine/campaign-composition.js",
+     "platforms/codex/plugin/src/engine/campaign-composition.js",
+     "src/engine/campaign-intake.js",
+     "platforms/codex/plugin/src/engine/campaign-intake.js",
+     "schemas/implementation-campaign-receipt.schema.json",
+     "platforms/codex/plugin/schemas/implementation-campaign-receipt.schema.json",
+     "hooks/tests/qc-panel-honesty.test.sh",
+     "hooks/tests/implementation-campaign-receipt.test.sh",
+     "hooks/tests/autopilot-engine.test.sh",
+     "hooks/tests/implementation-campaign-routing.test.sh",
+     "hooks/tests/implementation-campaign-state.test.sh",
+     "references/blind-dispatch.md",
+     "platforms/codex/plugin/references/blind-dispatch.md",
+     ".claude/review-loop-config.md",
+     "project-config-template/review-loop-config.md",
+     "platforms/codex/plugin/project-config-template/review-loop-config.md",
+     "skills/l5/references/hetero-impl-loop.md",
+     "platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md",
+     "docs/BACKLOG.md"
+    ],
+    "authorized_creates": [],
+    "profile": "high",
+    "required_paths": [
+     "src/engine/autopilot-engine.js",
+     "src/engine/campaign-composition.js",
+     "src/engine/campaign-intake.js",
+     "hooks/tests/qc-panel-honesty.test.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-18-blind-review-panel-standby.md",
+     "section": "1. Ruling and shape"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 22,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-ac7345eb210f92cdb594b58e28ce2aec2674afa7675108f9f4b58b90321f0ab8"
+   ],
+   "source_rubric_ids": [
+    "R109943084037955891431526326538371771587585869183630638614601414944337566567064",
+    "R112594917927791007772065204433531689210695474632802318164707070653967453592996",
+    "R113511070743614357889262959606419196287474467987580029050324520744552789403949",
+    "R115022824321409035608298088268958971886257576268073462123905655161712859824325",
+    "R14580876902896952490106324266822695360202372187129272846434806255823675735834",
+    "R27137190283266301844130954619361570014412768398029795745067173433961740291171",
+    "R62731897806979401838788925444140537092551224473113998240767972486501798297979",
+    "R80266148163578081776893986366222194385115132504060646206152152158578222677356"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/resolve-review-loop-qc-panel-rejection.test.sh",
+    "bash hooks/tests/dispatch-review.test.sh",
+    "AUTOPILOT_HOST_ISOLATION=1 bash hooks/tests/cleanroom-launch.test.sh",
+    "bash hooks/tests/qc-panel-honesty.test.sh",
+    "bash hooks/tests/implementation-campaign-dogfood.test.sh",
+    "bash hooks/tests/resolve-review-loop.test.sh",
+    "node scripts/check-js-syntax.js",
+    "node scripts/check-contract-schema.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

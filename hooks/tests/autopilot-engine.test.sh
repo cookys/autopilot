@@ -216,6 +216,42 @@ engineNonBlind.reviewDiff({
   reviewOptions: { blindDiscovery: false },
 });
 console.log(`nonblind_wellformed_has_packet=${Object.prototype.hasOwnProperty.call(wellFormedNonBlind, 'packet')}`);
+
+// Fix C (2-C repair r2): only the materialisation-mismatch skipLaunch is precondition_failed;
+// every other prepare-time skipLaunch (mkdtemp, deny-list, git, ENOENT on a sharedPacket whose
+// packet_dir does not exist) keeps base's error path (dispatch_review ledger row, phase
+// dispatch_review). RED at 5d7ad66a: both cases collapsed to phase=precondition_failed.
+const engineMismatch = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher() {
+    return {
+      error: new Error('packet materialisation hash mismatch'),
+      status: null, signal: null, stdout: '', stderr: '', parseError: null, result: null,
+      skipLaunch: true, phase: 'precondition_failed', reason: 'packet materialisation hash mismatch',
+    };
+  },
+});
+const mismatch = engineMismatch.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true });
+console.log(`mismatch_status=${mismatch.status}`);
+console.log(`mismatch_phase=${mismatch.phase}`);
+
+const enoentError = new Error("ENOENT: no such file or directory, lstat '/nonexistent/packet_dir/MANIFEST.json'");
+const engineEnoent = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver: resolver,
+  reviewDispatcher() {
+    return {
+      error: enoentError,
+      status: null, signal: null, stdout: '', stderr: '', parseError: null, result: null,
+      skipLaunch: true, phase: undefined, reason: enoentError.message,
+    };
+  },
+});
+const enoent = engineEnoent.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true });
+console.log(`enoent_status=${enoent.status}`);
+console.log(`enoent_phase=${enoent.phase}`);
+console.log(`enoent_ledger=${enoent.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff packet identity tests exit 0"
@@ -228,6 +264,11 @@ assert_contains "$OUT" "malformed_phase=prepare_review" "malformed input.packet 
 assert_contains "$OUT" "malformed_reason=packet must be { repo, baseSha, candidateSha }" "malformed packet reason"
 assert_contains "$OUT" "malformed_calls=0" "malformed input.packet never calls dispatcher"
 assert_contains "$OUT" "nonblind_wellformed_has_packet=false" "well-formed input.packet is ignored when blindDiscovery is false (green at base: input.packet ignored)"
+assert_contains "$OUT" "mismatch_status=blocked" "materialisation-mismatch skipLaunch stays blocked"
+assert_contains "$OUT" "mismatch_phase=precondition_failed" "materialisation-mismatch skipLaunch is precondition_failed"
+assert_contains "$OUT" "enoent_status=blocked" "a non-mismatch skipLaunch (ENOENT) stays blocked"
+assert_contains "$OUT" "enoent_phase=dispatch_review" "a non-mismatch skipLaunch keeps base's dispatch_review phase, not precondition_failed (RED at 5d7ad66a: both cases collapsed to precondition_failed)"
+assert_contains "$OUT" "enoent_ledger=resolve_roster:resolved,dispatch_review:blocked" "a non-mismatch skipLaunch pushes the base dispatch_review ledger row"
 
 # RED at base 10c50297: packet deny extra is not a prepare_review gate (denyExtra absent from identity)
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
@@ -5623,6 +5664,13 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const [root, repo, base, tmp] = process.argv.slice(2);
 const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const rp = require(path.join(root, 'src', 'runners', 'review-packet'));
+globalThis.__packetBuildCount = 0;
+const origPacketBuild = rp.buildReviewPacket;
+rp.buildReviewPacket = function wrappedBuildReviewPacket(...args) {
+  globalThis.__packetBuildCount += 1;
+  return origPacketBuild.apply(this, args);
+};
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
 const common = fs.realpathSync(path.resolve(repo, git('rev-parse', '--git-common-dir')));
 const seats = [
@@ -5994,6 +6042,7 @@ console.log('cut2a_engine=true');
 // index order and every panel ledger row must carry the batch timestamps.
 const realStub = path.join(tmp, 'panel-2a-real-stub');
 const realMarker = path.join(tmp, 'panel-2a-real-marker');
+globalThis.__packetBuildCount = 0;
 const realSeats = [
   { role: 'qc', runner: 'qoderclicn', model: 'slow-a', effort: 'high', endpoint: null, family: 'fa' },
   { role: 'qc', runner: 'qoderclicn', model: 'fast-b', effort: 'high', endpoint: null, family: 'fb' },
@@ -6034,9 +6083,60 @@ runCase({
     const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
     assert.strictEqual(panelRow && panelRow.seat_timeout_seconds, 120,
       `seat_timeout_seconds is the whole remainder at prepare time (clock at started_at → 120 s), never a post-batch value: ${JSON.stringify(panelRow)}`);
+    const hashes = seatsOut.map((s) => s.packet_hash).filter(Boolean);
+    assert.strictEqual(new Set(hashes).size, 1, `one packet_hash across seats: ${JSON.stringify(hashes)}`);
+    // in-rail single seat is a batch-of-one build; the three-seat panel is a second
+    // shared build. RED at base fd4ea3a6: three panel seats each called buildReviewPacket.
+    assert.strictEqual(globalThis.__packetBuildCount, 2,
+      `in-rail + one shared panel build, got ${globalThis.__packetBuildCount}`);
     console.log('real_batch_panel=true');
   },
 });
+
+// Fix B (2-C repair r2): a shared-build failure (buildPacketOnce throwing, before the
+// try {} in runPanel) must not escape the panel — every seat falls back to its own
+// per-seat prepare (options.packet), which fails exactly as base did if it fails at all.
+// RED at 5d7ad66a: the throw escaped runCase/runImplementationReviewLoop entirely (no
+// seat receipts, no ledger row) — the message observed is recorded beside the assertion.
+// Call #1 to rp.buildReviewPacket is the in-rail single-seat review (already handled by
+// prepareReviewLaunch's own try/catch, unaffected by this fix); call #2 is the panel's
+// shared build — the one that lived outside runPanel's try {} at 5d7ad66a.
+let sharedBuildAttempts = 0;
+const preSharedFailBuild = rp.buildReviewPacket;
+rp.buildReviewPacket = function throwOnceBuildReviewPacket(...args) {
+  sharedBuildAttempts += 1;
+  if (sharedBuildAttempts === 2) {
+    throw new Error('injected shared-build failure (fixture)');
+  }
+  return preSharedFailBuild.apply(this, args);
+};
+try {
+  runCase({
+    ticket: 'panel-shared-build-fail',
+    reserve: 0,
+    clock: clockEarly,
+    realBin: realStub,
+    seatsOverride: realSeats,
+    collect({ result }) {
+      const seatsOut = (function find(value) {
+        if (!value || typeof value !== 'object') return null;
+        if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+        for (const child of Object.values(value)) {
+          const found = find(child);
+          if (found) return found;
+        }
+        return null;
+      })(result);
+      assert.ok(Array.isArray(seatsOut) && seatsOut.length === 3,
+        `panel must fall back to per-seat prepare instead of throwing, one row per seat: ${JSON.stringify(result).slice(0, 800)}`);
+      assert.deepStrictEqual(seatsOut.map((r) => r.status), ['reviewed', 'reviewed', 'reviewed'],
+        `every seat still reviews via its own per-seat packet: ${JSON.stringify(seatsOut.map((r) => [r.status, r.reason]))}`);
+      console.log('shared_build_failure_falls_back=true');
+    },
+  });
+} finally {
+  rp.buildReviewPacket = preSharedFailBuild;
+}
 
 const fourSeats = [
   ...seats,
@@ -6291,6 +6391,7 @@ assert_contains "$PANEL_OUT" "pocket_source=true" "wall exhausted + reserve 300 
 assert_contains "$PANEL_OUT" "pocket_refuse=true" "reserve 0 with exhausted wall refuses before later panel seats"
 assert_contains "$PANEL_OUT" "verify_once_hit=true" "GREEN cache hit reuses full_suite"
 assert_contains "$PANEL_OUT" "real_batch_panel=true" "REAL fan-out path: 3 seats finish in index order with batch timestamps after a wall jump (RED at 30b69a1a: campaign_wall_budget on finish)"
+assert_contains "$PANEL_OUT" "shared_build_failure_falls_back=true" "a throwing shared build does not escape runPanel; every seat still reviews via per-seat prepare (RED at 5d7ad66a: the throw escaped)"
 assert_contains "$PANEL_OUT" "standby_quorum_panel=true" "4-seat stub with one transport failure still reviews count 3"
 assert_contains "$PANEL_OUT" "snapshot_write_once=true" "first intake writes snapshot; wx second write refused"
 assert_contains "$PANEL_OUT" "undrifted_roster_no_drift_flag=true" \

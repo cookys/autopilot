@@ -150,7 +150,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
-- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats; quorum + snapshot; panel station. Shipped: 1a-A..2-B v2.36.59-66, 2-C station v2.36.68. Open: shared packet.
+- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats; quorum + snapshot; panel station; shared packet. Shipped: 1a-A..2-C v2.36.59-69. Open: 2-D overlap/pre-pass.
 
 ### Managed rail: final-panel seats run dispatch-review.sh at the 5m default timeout and time out on ordinary diffs
 - **Status**: shipped v2.36.60 2026-09-17
@@ -265,7 +265,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `mission-execution-graph.js:260` allows 1..14400; `schemas/implementation-campaign-contract.schema.json` maximum 7200. One limit, checked at graph time.
 
 ### Review packet: `verifyTreeIntegrity` spawns `git hash-object` once per tracked file (21 s for 4236 files)
-- **Status**: open
+- **Status**: shipped v2.36.69 2026-09-19
 - **Trigger**: dogfood build of this repo's HEAD 2026-09-17 took 21 s per packet; a 3-seat panel plus in-rail review pays it four times
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-17 (plan §5)

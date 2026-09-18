@@ -206,6 +206,60 @@ function timeoutSecondsFromArgs(args) {
   return Number(match[1]);
 }
 
+function buildPacketOnce(identity = {}) {
+  const { buildReviewPacket, DEFAULT_PACKET_DENY_LIST } = require('./review-packet');
+  const packetRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-shared-'));
+  fs.chmodSync(packetRoot, 0o700);
+  const packetDir = path.join(packetRoot, 'packet');
+  const denyExtra = identity.denyExtra === undefined ? [] : identity.denyExtra;
+  try {
+    const built = buildReviewPacket({
+      repo: identity.repo,
+      baseSha: identity.baseSha,
+      candidateSha: identity.candidateSha,
+      diffFile: identity.diffFile,
+      specFile: identity.specFile === undefined ? null : identity.specFile,
+      outDir: packetDir,
+      denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra],
+    });
+    const manifest = JSON.parse(fs.readFileSync(built.manifest_path, 'utf8'));
+    return {
+      packet_dir: packetDir,
+      packet_hash: built.packet_hash,
+      manifest,
+      entries_count: built.entries_count,
+      denied_paths: built.denied_paths,
+      dispose() {
+        fs.rmSync(packetRoot, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    fs.rmSync(packetRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function materializeSharedIntoSeat(sharedPacket, packetDir) {
+  const { materializePacket } = require('./review-packet');
+  const derived = materializePacket(sharedPacket.packet_dir, packetDir);
+  if (derived !== sharedPacket.packet_hash) {
+    const error = new Error('packet materialisation hash mismatch');
+    error.phase = 'precondition_failed';
+    throw error;
+  }
+  return {
+    dir: packetDir,
+    packet_hash: sharedPacket.packet_hash,
+    entries_count: sharedPacket.entries_count !== undefined
+      ? sharedPacket.entries_count
+      : (sharedPacket.manifest && Array.isArray(sharedPacket.manifest.entries)
+        ? sharedPacket.manifest.entries.length
+        : undefined),
+    denied_paths: sharedPacket.denied_paths || [],
+    manifest_path: path.join(packetDir, 'MANIFEST.json'),
+  };
+}
+
 function prepareReviewLaunch(args, options = {}) {
   const scriptPath = options.scriptPath || DISPATCH_REVIEW;
   if (!fs.existsSync(scriptPath)) {
@@ -229,8 +283,20 @@ function prepareReviewLaunch(args, options = {}) {
       blindCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-blind-'));
       fs.chmodSync(blindCwd, 0o700);
       launchArgs = [...args];
-      if (options.packet && typeof options.packet === 'object') {
-        const { buildReviewPacket, DEFAULT_PACKET_DENY_LIST } = require('./review-packet');
+      if (options.sharedPacket && typeof options.sharedPacket === 'object') {
+        const diffIndex = launchArgs.indexOf('--diff-file');
+        const specIndex = launchArgs.indexOf('--spec-file');
+        const packetDir = path.join(blindCwd, 'packet');
+        autopilotPacket = materializeSharedIntoSeat(options.sharedPacket, packetDir);
+        if (diffIndex >= 0) {
+          launchArgs[diffIndex + 1] = path.join(packetDir, 'diff.patch');
+        }
+        if (specIndex >= 0) {
+          launchArgs[specIndex + 1] = path.join(packetDir, 'spec.md');
+        }
+        launchEnv.AUTOPILOT_REVIEW_PACKET_DIR = packetDir;
+        launchEnv.AUTOPILOT_REVIEW_PACKET_HASH = options.sharedPacket.packet_hash;
+      } else if (options.packet && typeof options.packet === 'object') {
         const diffIndex = launchArgs.indexOf('--diff-file');
         const specIndex = launchArgs.indexOf('--spec-file');
         const diffFile = diffIndex >= 0 && typeof launchArgs[diffIndex + 1] === 'string'
@@ -241,15 +307,19 @@ function prepareReviewLaunch(args, options = {}) {
           : undefined;
         const packetDir = path.join(blindCwd, 'packet');
         const denyExtra = options.packet.denyExtra === undefined ? [] : options.packet.denyExtra;
-        autopilotPacket = buildReviewPacket({
+        const once = buildPacketOnce({
           repo: options.packet.repo,
           baseSha: options.packet.baseSha,
           candidateSha: options.packet.candidateSha,
           diffFile,
           specFile: specFile === undefined ? null : specFile,
-          outDir: packetDir,
-          denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra],
+          denyExtra,
         });
+        try {
+          autopilotPacket = materializeSharedIntoSeat(once, packetDir);
+        } finally {
+          once.dispose();
+        }
         if (diffIndex >= 0) {
           launchArgs[diffIndex + 1] = path.join(packetDir, 'diff.patch');
         }
@@ -285,7 +355,14 @@ function prepareReviewLaunch(args, options = {}) {
     };
   } catch (error) {
     if (blindCwd) fs.rmSync(blindCwd, { recursive: true, force: true });
-    return { error, status: null, signal: null, skipLaunch: true };
+    return {
+      error,
+      status: null,
+      signal: null,
+      skipLaunch: true,
+      phase: error && error.phase ? error.phase : undefined,
+      reason: error && error.message ? error.message : String(error),
+    };
   }
 }
 
@@ -297,6 +374,9 @@ function finishReviewLaunch(prepared, raw) {
         status: prepared.status === undefined ? null : prepared.status,
         signal: prepared.signal === undefined ? null : prepared.signal,
         packet: prepared.packet || null,
+        skipLaunch: true,
+        phase: prepared.phase,
+        reason: prepared.reason,
       };
     }
     const error = raw && raw.error
@@ -323,13 +403,17 @@ function finishReviewLaunch(prepared, raw) {
   }
 }
 
-function dispatchReviewBatch(optionsList) {
+function dispatchReviewBatch(optionsList, batchOpts = {}) {
   const list = Array.isArray(optionsList) ? optionsList : [];
+  const sharedPacket = batchOpts && batchOpts.sharedPacket;
   const preparedList = list.map((item) => {
     const args = item.args || item.argv || [];
     const options = { ...item };
     delete options.args;
     delete options.argv;
+    if (sharedPacket && options.sharedPacket === undefined) {
+      options.sharedPacket = sharedPacket;
+    }
     return prepareReviewLaunch(args, options);
   });
   const jobs = preparedList.map((prepared, index) => {
@@ -441,6 +525,9 @@ function interpretReviewChild(args, options, child) {
       parseError: null,
       transportEnvelope,
       packet: null,
+      skipLaunch: child.skipLaunch === true,
+      phase: child.phase,
+      reason: child.reason,
     };
   }
 
@@ -500,12 +587,12 @@ function dispatchReviewJson(args, options = {}) {
   return interpretReviewChild(args, options, child);
 }
 
-function dispatchReviewJsonBatch(optionsList) {
+function dispatchReviewJsonBatch(optionsList, batchOpts = {}) {
   const list = (Array.isArray(optionsList) ? optionsList : []).map((item) => ({
     ...item,
     stdio: ['ignore', 'pipe', 'pipe'],
   }));
-  const children = dispatchReviewBatch(list);
+  const children = dispatchReviewBatch(list, batchOpts);
   return children.map((child, index) => {
     const item = list[index] || {};
     const args = item.args || item.argv || [];
@@ -520,6 +607,7 @@ module.exports = {
   dispatchReviewJsonBatch,
   prepareReviewLaunch,
   finishReviewLaunch,
+  buildPacketOnce,
   parseReviewOutput,
   isValidNoFindingProof,
   DISPATCH_REVIEW,

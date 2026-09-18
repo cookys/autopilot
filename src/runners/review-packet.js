@@ -246,7 +246,7 @@ function typeForMode(mode, st) {
   return false;
 }
 
-function hashObject(repo, format, input) {
+function hashBlob(repo, format, input) {
   const args = [];
   if (format && format !== 'sha1') {
     args.push('-c', `extensions.objectFormat=${format}`);
@@ -261,9 +261,38 @@ function hashObject(repo, format, input) {
   return String(out).trim();
 }
 
+function hashObject(repo, format, input) {
+  return hashBlob(repo, format, input);
+}
+
+function hashObjectsStdinPaths(repo, format, absPaths) {
+  if (!absPaths.length) return [];
+  const args = [];
+  if (format && format !== 'sha1') {
+    args.push('-c', `extensions.objectFormat=${format}`);
+  }
+  args.push('hash-object', '--stdin-paths', '--no-filters');
+  const chunks = [];
+  for (const abs of absPaths) {
+    chunks.push(Buffer.from(abs, 'utf8'), Buffer.from('\n'));
+  }
+  const out = runGit('git hash-object', args, {
+    cwd: repo,
+    env: gitEnv(),
+    input: Buffer.concat(chunks),
+    encoding: 'utf8',
+  });
+  const lines = String(out).replace(/\n$/, '').split('\n');
+  return lines.map((line) => String(line).trim());
+}
+
 function verifyTreeIntegrity(treeDir, listing) {
   const listed = new Set();
-  for (const entry of listing) {
+  const hashedByIndex = [];
+  const batchRels = [];
+  const batchIndex = [];
+  for (let i = 0; i < listing.length; i += 1) {
+    const entry = listing[i];
     const rel = entry.path;
     listed.add(rel);
     const full = path.join(treeDir, rel);
@@ -276,12 +305,34 @@ function verifyTreeIntegrity(treeDir, listing) {
     if (!typeForMode(entry.mode, st)) {
       throw new Error(`tree integrity: ${rel}`);
     }
-    const bytes = st.isSymbolicLink()
-      ? fs.readlinkSync(full, { encoding: 'buffer' })
-      : fs.readFileSync(full);
-    const hashed = hashObject(entry.repo || path.resolve('.'), entry.format || '', bytes);
-    if (hashed !== entry.oid) {
-      throw new Error(`tree integrity: ${rel}`);
+    const repo = entry.repo || path.resolve('.');
+    const format = entry.format || '';
+    if (st.isSymbolicLink()) {
+      const bytes = fs.readlinkSync(full, { encoding: 'buffer' });
+      hashedByIndex[i] = hashBlob(repo, format, bytes);
+    } else if (rel.includes('\n') || rel.includes('\r')) {
+      const bytes = fs.readFileSync(full);
+      hashedByIndex[i] = module.exports.hashObject(repo, format, bytes);
+    } else {
+      batchRels.push(rel);
+      batchIndex.push(i);
+    }
+  }
+  if (batchRels.length > 0) {
+    const sample = listing[batchIndex[0]];
+    const batchRepo = sample.repo || path.resolve('.');
+    const batchAbsPaths = batchRels.map((rel) => path.join(treeDir, rel));
+    const oids = hashObjectsStdinPaths(batchRepo, sample.format || '', batchAbsPaths);
+    if (oids.length !== batchRels.length) {
+      throw new Error(`tree integrity: ${listing[batchIndex[0]].path}`);
+    }
+    for (let j = 0; j < batchRels.length; j += 1) {
+      hashedByIndex[batchIndex[j]] = oids[j];
+    }
+  }
+  for (let i = 0; i < listing.length; i += 1) {
+    if (hashedByIndex[i] !== listing[i].oid) {
+      throw new Error(`tree integrity: ${listing[i].path}`);
     }
   }
   for (const item of walkLstat(treeDir)) {
@@ -306,6 +357,66 @@ function resolveSymlinkTarget(treeDir, linkRel, target) {
 
 function rmIfExists(p) {
   fs.rmSync(p, { recursive: true, force: true });
+}
+
+function collectPacketEntries(dir) {
+  const entries = [];
+  for (const item of walkLstat(dir)) {
+    if (item.rel === 'MANIFEST.json') continue;
+    const isLink = item.st.isSymbolicLink();
+    const bytesBuf = isLink
+      ? fs.readlinkSync(item.full, { encoding: 'buffer' })
+      : fs.readFileSync(item.full);
+    entries.push({
+      path: item.rel,
+      type: isLink ? 'symlink' : 'file',
+      sha256: sha256Hex(bytesBuf),
+      bytes: bytesBuf.length,
+    });
+  }
+  entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return entries;
+}
+
+function computePacketHash({ base_sha, candidate_sha, deny_list, entries }) {
+  return sha256Hex(Buffer.from(JSON.stringify({
+    schema_version: 1,
+    base_sha,
+    candidate_sha,
+    deny_list,
+    entries,
+  }), 'utf8'));
+}
+
+function hashPacketDir(dir) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'MANIFEST.json'), 'utf8'));
+  return computePacketHash({
+    base_sha: manifest.base_sha,
+    candidate_sha: manifest.candidate_sha,
+    deny_list: manifest.deny_list,
+    entries: collectPacketEntries(dir),
+  });
+}
+
+function materializePacket(srcDir, dstDir) {
+  const srcAbs = path.resolve(srcDir);
+  const dstAbs = path.resolve(dstDir);
+  fs.mkdirSync(dstAbs, { recursive: true });
+  const cloneFlag = fs.constants && fs.constants.COPYFILE_FICLONE
+    ? fs.constants.COPYFILE_FICLONE
+    : 0;
+  for (const item of walkLstat(srcAbs)) {
+    const dest = path.join(dstAbs, item.rel.split('/').join(path.sep));
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    if (item.st.isSymbolicLink()) {
+      const target = fs.readlinkSync(item.full, { encoding: 'buffer' });
+      fs.symlinkSync(target, dest);
+    } else {
+      fs.copyFileSync(item.full, dest, cloneFlag);
+      fs.chmodSync(dest, item.st.mode);
+    }
+  }
+  return module.exports.hashPacketDir(dstAbs);
 }
 
 function buildReviewPacket({
@@ -530,30 +641,13 @@ function buildReviewPacket({
       fs.copyFileSync(specFile, specDest);
     }
 
-    const entries = [];
-    for (const item of walkLstat(outAbs)) {
-      if (item.rel === 'MANIFEST.json') continue;
-      const isLink = item.st.isSymbolicLink();
-      const bytesBuf = isLink
-        ? fs.readlinkSync(item.full, { encoding: 'buffer' })
-        : fs.readFileSync(item.full);
-      entries.push({
-        path: item.rel,
-        type: isLink ? 'symlink' : 'file',
-        sha256: sha256Hex(bytesBuf),
-        bytes: bytesBuf.length,
-      });
-    }
-    entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-
-    const preimageObj = {
-      schema_version: 1,
+    const entries = collectPacketEntries(outAbs);
+    const packetHash = computePacketHash({
       base_sha: baseOid,
       candidate_sha: candidateOid,
       deny_list: deny,
       entries,
-    };
-    const packetHash = sha256Hex(Buffer.from(JSON.stringify(preimageObj), 'utf8'));
+    });
     const manifest = {
       schema_version: 1,
       artifact_type: 'review_packet_manifest',
@@ -586,4 +680,7 @@ module.exports = {
   normalizeDenyList,
   DEFAULT_PACKET_DENY_LIST,
   verifyTreeIntegrity,
+  hashObject,
+  hashPacketDir,
+  materializePacket,
 };

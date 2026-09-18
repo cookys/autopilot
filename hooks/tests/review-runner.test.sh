@@ -664,4 +664,101 @@ assert_contains "$PKT_OUT" "hash_differs=true" "packet_hash differs from default
 assert_contains "$PKT_OUT" "unexpected_callers=0" "buildReviewPacket( is called only from review.js (definition in review-packet.js)"
 assert_contains "$PKT_OUT" "builder_callers=2" "the walk saw both the definition and the review.js call (not vacuous)"
 
+# RED at base 7f5d6ee8: no scripts/lib/review-fanout.js (ENOENT)
+FANOUT="$REPO_ROOT/scripts/lib/review-fanout.js"
+test -x "$FANOUT"
+assert_eq "0" "$?" "review-fanout.js is executable"
+STUB_DIR="$TEST_TMP/fanout-stubs"
+mkdir -p "$STUB_DIR"
+for pair in 2:a 3:b 4:c; do
+  secs="${pair%%:*}"
+  id="${pair##*:}"
+  cat > "$STUB_DIR/dispatch-$id.sh" <<STUB
+#!/usr/bin/env bash
+sleep $secs
+printf '{"runner":"stub","model":"%s","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"none","raw_log":"ok","error":null}\\n' "$id"
+STUB
+  chmod +x "$STUB_DIR/dispatch-$id.sh"
+done
+cat > "$STUB_DIR/hang.sh" <<'STUB'
+#!/usr/bin/env bash
+exec sleep 30
+STUB
+chmod +x "$STUB_DIR/hang.sh"
+cat > "$STUB_DIR/ok.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '{"runner":"stub","model":"ok","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"none","raw_log":"ok","error":null}\n'
+STUB
+chmod +x "$STUB_DIR/ok.sh"
+
+FAN_OUT="$(FANOUT="$FANOUT" STUB_DIR="$STUB_DIR" python3 - <<'PY'
+import json, os, subprocess, time
+root = os.environ["FANOUT"]
+stubs = os.environ["STUB_DIR"]
+jobs = {
+  "jobs": [
+    {"id": "a", "argv": [os.path.join(stubs, "dispatch-a.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 20},
+    {"id": "b", "argv": [os.path.join(stubs, "dispatch-b.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 20},
+    {"id": "c", "argv": [os.path.join(stubs, "dispatch-c.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 20},
+  ]
+}
+t0 = time.time()
+p = subprocess.run(["node", root], input=json.dumps(jobs), text=True, capture_output=True)
+elapsed = time.time() - t0
+rows = json.loads(p.stdout.strip())
+print(f"exit={p.returncode}")
+print(f"order={','.join(r['id'] for r in rows)}")
+starts = [r['started_at'] for r in rows]
+ends = [r['ended_at'] for r in rows]
+print(f"overlap={'true' if max(starts) < min(ends) else 'false'}")
+print(f"wall_lt_sum={'true' if elapsed < (2+3+4)-1 else 'false'}")
+PY
+)"
+assert_contains "$FAN_OUT" "exit=0" "fanout three-job helper exits 0"
+assert_contains "$FAN_OUT" "order=a,b,c" "fanout returns rows in job order"
+assert_contains "$FAN_OUT" "overlap=true" "fanout jobs overlap in wall time"
+assert_contains "$FAN_OUT" "wall_lt_sum=true" "fanout wall is less than sequential sum minus 1s"
+
+TO_OUT="$(FANOUT="$FANOUT" STUB_DIR="$STUB_DIR" python3 - <<'PY'
+import json, os, subprocess
+root = os.environ["FANOUT"]
+stubs = os.environ["STUB_DIR"]
+jobs = {
+  "jobs": [
+    {"id": "hang", "argv": [os.path.join(stubs, "hang.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 1},
+    {"id": "ok", "argv": [os.path.join(stubs, "ok.sh")], "cwd": stubs, "env": dict(os.environ), "stdin_file": None, "timeout_seconds": 10},
+  ]
+}
+p = subprocess.run(["node", root], input=json.dumps(jobs), text=True, capture_output=True)
+rows = json.loads(p.stdout.strip())
+print(f"exit={p.returncode}")
+print(f"hang_signal={rows[0].get('signal')}")
+print(f"ok_status={rows[1].get('status')}")
+PY
+)"
+assert_contains "$TO_OUT" "exit=0" "timed-out job still yields an array at exit 0"
+assert_contains "$TO_OUT" "hang_signal=SIG" "timed-out job reports a signal"
+assert_contains "$TO_OUT" "ok_status=0" "sibling job still completes"
+
+IDENT_OUT="$(node - "$REPO_ROOT" "$DIFF" "$STUB_VERDICT" <<'NODE'
+const path = require('path');
+const assert = require('assert');
+const root = process.argv[2];
+const diff = process.argv[3];
+const stub = process.argv[4];
+const { dispatchReviewJson, dispatchReviewJsonBatch } = require(path.join(root, 'src', 'runners', 'review'));
+const args = ['--runner', 'codex', '--model', 'gpt-5.5', '--diff-file', diff, '--bin', stub];
+const single = dispatchReviewJson(args);
+const batch = dispatchReviewJsonBatch([{ args }])[0];
+const keys = ['status', 'signal'];
+for (const key of keys) {
+  assert.strictEqual(batch[key], single[key], key);
+}
+assert.strictEqual(batch.result && batch.result.verdict, single.result && single.result.verdict);
+assert.strictEqual(batch.result && batch.result.status, single.result && single.result.status);
+console.log('batch_of_one_identity=true');
+NODE
+)"
+assert_contains "$IDENT_OUT" "batch_of_one_identity=true" "batch of one matches dispatchReviewJson field-by-field"
+
 finalize_test

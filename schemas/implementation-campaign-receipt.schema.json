@@ -112,6 +112,9 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "budget_source": { "type": "string", "enum": ["wall", "pocket"] },
+        "seat_timeout_seconds": { "type": "integer", "minimum": 1 },
+        "reused_from": { "type": "string", "const": "campaign_verification" },
         "receipt_digest": { "$ref": "#/$defs/sha256" }
       },
       "additionalProperties": false

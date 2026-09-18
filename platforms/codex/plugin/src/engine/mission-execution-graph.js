@@ -117,6 +117,8 @@ function normalizeCampaign(raw, label) {
     'authorized_creates',
     'version_mirror_paths',
     'version_mirror_generator',
+    'final_panel_reserve_seconds',
+    'full_suite_reuse',
   ]);
   const keys = new Set([...requiredKeys, ...optionalKeys]);
   only(value, keys, label);
@@ -259,6 +261,20 @@ function normalizeCampaign(raw, label) {
     max_repair_generations: maxRepairGenerations,
     max_wall_seconds: int(value.max_wall_seconds, `${label}.max_wall_seconds`, 1, 14400),
   };
+  if (Object.prototype.hasOwnProperty.call(value, 'final_panel_reserve_seconds')) {
+    result.final_panel_reserve_seconds = int(
+      value.final_panel_reserve_seconds,
+      `${label}.final_panel_reserve_seconds`,
+      0,
+      1800,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'full_suite_reuse')) {
+    if (typeof value.full_suite_reuse !== 'boolean') {
+      fail(`${label}.full_suite_reuse must be a boolean`);
+    }
+    result.full_suite_reuse = value.full_suite_reuse;
+  }
   // Optional path-role fields: only emit when present so legacy graph digests stay stable
   // when graphs omit them.
   if (requiredChangePaths.length > 0) result.required_change_paths = requiredChangePaths;

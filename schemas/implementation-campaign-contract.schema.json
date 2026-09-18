@@ -16,7 +16,9 @@
     "temp_capacity_limit",
     "max_prompt_bytes",
     "max_finding_recurrence",
-    "unit_class"
+    "unit_class",
+    "final_panel_reserve_seconds",
+    "full_suite_reuse"
   ],
   "type": "object",
   "required": [
@@ -105,6 +107,14 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 7200
+    },
+    "final_panel_reserve_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1800
+    },
+    "full_suite_reuse": {
+      "type": "boolean"
     },
     "max_owned_worktrees": {
       "description": "Joint six-axis absolute owned-worktree capacity for the controller. Equality may reach the limit; the next positive delta enters durable wait.",

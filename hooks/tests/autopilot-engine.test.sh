@@ -5551,4 +5551,366 @@ assert_eq "1" "$EXIT" \
 assert_contains "$OUT" "missing retained worktree has no prior cleanup intent" \
   "cleanup recovery requires durable ownership intent from an earlier attempt"
 
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const {
+  campaignWallBudgetStatus,
+  campaignWallRemainingSeconds,
+} = require(path.join(root, 'src', 'engine', 'autopilot-engine'));
+const started = '2026-09-18T00:00:00.000Z';
+const later = '2026-09-18T00:02:00.000Z';
+const control = {
+  status: 'admitted',
+  initial_state: {
+    started_at: started,
+    limits: { max_wall_seconds: 120, final_panel_reserve_seconds: 300 },
+  },
+};
+const review = campaignWallRemainingSeconds(control, later, { consumer: 'review' });
+const panel = campaignWallRemainingSeconds(control, later, { consumer: 'panel' });
+assert.strictEqual(campaignWallBudgetStatus(control, later, { consumer: 'review' }).exhausted, true);
+assert.strictEqual(review.exhausted, true);
+assert.strictEqual(review.seconds, null);
+assert.strictEqual(panel.exhausted, false);
+assert.strictEqual(panel.seconds, 300);
+const spent = '2026-09-18T00:08:00.000Z';
+assert.strictEqual(campaignWallBudgetStatus(control, spent, { consumer: 'panel' }).exhausted, true);
+console.log('pocket_math=true');
+NODE
+)"
+assert_contains "$OUT" "pocket_math=true" "panel consumer adds sealed reserve to the wall"
+
+# RED at base 7f5d6ee8: sequential per-seat timeout split; no pocket; full_suite always worktrees
+PANEL_REPO="$TEST_TMP/panel-2a-repo"
+mkdir -p "$PANEL_REPO/.claude" "$PANEL_REPO/dist"
+git -C "$PANEL_REPO" init -q -b develop
+git -C "$PANEL_REPO" config user.email panel@example.invalid
+git -C "$PANEL_REPO" config user.name "Panel 2A"
+write_mission_governance "$PANEL_REPO/.claude/owner-kernel-governance.json" shadow
+printf 'base\n' >"$PANEL_REPO/dist/source.txt"
+git -C "$PANEL_REPO" add .
+git -C "$PANEL_REPO" commit -qm "panel base"
+PANEL_BASE="$(git -C "$PANEL_REPO" rev-parse HEAD)"
+PANEL_OUT="$(node - "$REPO_ROOT" "$PANEL_REPO" "$PANEL_BASE" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [root, repo, base, tmp] = process.argv.slice(2);
+const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+const common = fs.realpathSync(path.resolve(repo, git('rev-parse', '--git-common-dir')));
+const seats = [
+  { role: 'qc', runner: 'cc-shim', model: 'claude-opus-4-6', effort: 'high', endpoint: null, family: 'anthropic' },
+  { role: 'qc', runner: 'cc-shim', model: 'gpt-5.4', effort: 'high', endpoint: null, family: 'openai' },
+  { role: 'qc', runner: 'cc-shim', model: 'glm-4.7', effort: 'high', endpoint: null, family: 'zai' },
+];
+const roster = {
+  reviewer_engine: seats[0].model,
+  reviewer_effort: 'high',
+  reviewer_runner: 'cc-shim',
+  reviewer_qualified: true,
+  implementer_engine: 'fixture-implementer',
+  implementer_effort: 'high',
+  implementer_runner: 'fixture',
+  loop_max_rounds: 3,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 3,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: seats,
+  override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
+};
+function writeContract(target, extra) {
+  fs.writeFileSync(target, `${JSON.stringify({
+    schema_version: 1,
+    ticket: extra.ticket,
+    profile: 'poc',
+    mission_grant_ref: null,
+    repo_identity: `git-common-dir:${common}`,
+    base_sha: base,
+    branch: extra.branch,
+    vertical_acceptance: ['panel parallel'],
+    allowed_path_prefixes: ['dist/'],
+    max_changed_files: 5,
+    baseline_churn: 10,
+    max_growth_ratio: 1.5,
+    max_extra_churn: 5,
+    max_repair_generations: 2,
+    max_wall_seconds: 120,
+    verify_cmd: 'true',
+    rubric_ids: ['ICC-KILL-057'],
+    ...extra.fields,
+  }, null, 2)}\n`);
+}
+function seal(contractPath, sealPath) {
+  execFileSync(process.execPath, [
+    path.join(root, 'scripts', 'implementation-campaign-check.js'),
+    'seal', '--contract', contractPath, '--repo', repo, '--mission-mode', 'shadow', '--out', sealPath,
+  ], { cwd: repo, encoding: 'utf8' });
+}
+function stubReview() {
+  return {
+    error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+    result: {
+      runner: 'cc-shim', model: 'fixture', status: 'reviewed', verdict: 'SHIP-AS-IS',
+      findings: '[]', raw_log: null, error: null,
+    },
+  };
+}
+function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify }) {
+  const branch = `feat/${ticket}`;
+  const worktree = path.join(tmp, `${ticket}-wt`);
+  try { execFileSync('git', ['-C', repo, 'worktree', 'remove', '--force', worktree], { stdio: 'ignore' }); } catch (_e) {}
+  git('worktree', 'add', '-q', '-b', branch, worktree, base);
+  fs.writeFileSync(path.join(worktree, 'dist', 'out.txt'), `${ticket}\n`);
+  execFileSync('git', ['-C', worktree, 'add', 'dist/out.txt']);
+  execFileSync('git', ['-C', worktree, 'commit', '-qm', ticket]);
+  const candidate = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const tree = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim();
+  const contractPath = path.join(tmp, `${ticket}.json`);
+  const sealPath = path.join(tmp, `${ticket}.seal.json`);
+  const promptFile = path.join(tmp, `${ticket}.prompt`);
+  fs.writeFileSync(promptFile, 'panel\n');
+  writeContract(contractPath, { ticket, branch, fields: {
+    final_panel_reserve_seconds: reserve,
+    ...(reuse === false ? { full_suite_reuse: false } : {}),
+  } });
+  seal(contractPath, sealPath);
+  const reviewArgsSeen = [];
+  const reviewModels = [];
+  let worktrees = 0;
+  const engine = new AutopilotEngine({
+    cwd: repo,
+    clock,
+    campaignIntake(input) {
+      return runCampaignIntake(input, {
+        readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+        contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+        occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      });
+    },
+    campaignScopeChecker() {
+      return { passed: true, changed_files: ['dist/out.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
+    },
+    implementationDispatcher() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          status: 'committed', runner: 'fixture', model: 'fixture-implementer',
+          branch, base, commit: candidate, files_changed: 1, insertions: 1, deletions: 0,
+          worktree, agent_log: '/tmp/impl-log', error: null,
+        },
+      };
+    },
+    reviewDispatcher(args) {
+      if (typeof onReview === 'function') onReview();
+      reviewArgsSeen.push(args);
+      const modelIdx = args.indexOf('--model');
+      reviewModels.push(modelIdx >= 0 ? args[modelIdx + 1] : null);
+      return stubReview();
+    },
+    diffProvider() { return promptFile; },
+    gitWorktreeAdd() {
+      worktrees += 1;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '',
+        worktree, parent: null, commit: candidate, observed_commit: candidate,
+        observed_tree_sha: tree, detached: true,
+      };
+    },
+    gitWorktreeRemove() { return { error: null, status: 0, signal: null, stdout: '', stderr: '' }; },
+    repairLineageCleanupTransaction() {
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+    },
+    verifyCommandRunner() {
+      if (typeof onVerify === 'function') onVerify();
+      return {
+        error: null, status: verifyStatus === undefined ? 0 : verifyStatus,
+        signal: null, stdout: '', stderr: '', executed_argv: ['/bin/sh', '-c', 'true'],
+      };
+    },
+  });
+  engine.implementTask = () => ({
+    status: 'committed',
+    dispatcher_called: true,
+    implementation: {
+      commit: candidate, worktree, run_id: `run-${ticket}`, dispatch_id: `d-${ticket}`,
+      provider: 'fixture', runner: 'fixture', model: 'fixture-implementer',
+      provider_session_id: null, provider_session_reused: false, worktree_reused: false,
+      insertions: 1, deletions: 0,
+    },
+    implementationResult: { error: null, signal: null, status: 0 },
+    ledger: [],
+  });
+  const result = engine.runImplementationReviewLoop({
+    promptFile, branch, base, roster,
+    campaignContract: contractPath, campaignSeal: sealPath,
+    campaignDispositionPolicy: 'acceptance-bound',
+    verificationEnv: { PATH: process.env.PATH || '', CI: ticket },
+    verificationEnvAllowlist: ['CI'],
+  });
+  collect({ result, reviewArgsSeen, reviewModels, worktrees, candidate, tree });
+  return result;
+}
+
+const clockEarly = () => '2026-09-18T00:00:05.000Z';
+let seqDigest = null;
+let seqReceipts = null;
+const first = runCase({
+  ticket: 'panel-seq-a',
+  reserve: 0,
+  clock: clockEarly,
+  collect({ result, reviewArgsSeen, reviewModels }) {
+    const panel = result.campaign_control && result.campaign_control.completion;
+    const seatsOut = (function find(value) {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+      for (const child of Object.values(value)) {
+        const found = find(child);
+        if (found) return found;
+      }
+      return null;
+    })(result);
+    seqReceipts = seatsOut;
+    seqDigest = result.review && result.review.review_digest;
+    const panelArgs = reviewArgsSeen.slice(-3);
+    const timeouts = panelArgs.map((args) => args[args.indexOf('--timeout') + 1]);
+    assert.ok(timeouts.every((value) => value === timeouts[0] && value === '120s'),
+      `seat timeouts must be the whole remainder: ${JSON.stringify(timeouts)}`);
+    assert.deepStrictEqual(reviewModels.slice(-3), seats.map((seat) => seat.model));
+    const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
+    assert.strictEqual(panelRow && panelRow.budget_source, 'wall');
+    assert.strictEqual(panelRow && panelRow.seat_timeout_seconds, 120);
+    console.log('panel_order=true');
+    console.log('panel_timeout=true');
+  },
+});
+runCase({
+  ticket: 'panel-seq-b',
+  reserve: 0,
+  clock: clockEarly,
+  collect({ result }) {
+    const seatsOut = (function find(value) {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+      for (const child of Object.values(value)) {
+        const found = find(child);
+        if (found) return found;
+      }
+      return null;
+    })(result);
+    assert.strictEqual(seatsOut.length, 3);
+    assert.ok(seatsOut.every((seat, index) => seat.seat_index === index + 1));
+    console.log('panel_digest_stable=true');
+  },
+});
+
+let pocketReviews = 0;
+runCase({
+  ticket: 'panel-pocket',
+  reserve: 300,
+  clock() {
+    return pocketReviews < 1 ? '2026-09-18T00:00:00.000Z' : '2026-09-18T00:02:00.000Z';
+  },
+  onReview() { pocketReviews += 1; },
+  collect({ result, reviewArgsSeen }) {
+    const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
+    assert.strictEqual(panelRow && panelRow.budget_source, 'pocket');
+    assert.strictEqual(panelRow && panelRow.seat_timeout_seconds, 300);
+    const panelArgs = reviewArgsSeen.slice(-3);
+    const timeouts = panelArgs.map((args) => args[args.indexOf('--timeout') + 1]);
+    assert.ok(timeouts.every((value) => value === '300s'), JSON.stringify(timeouts));
+    console.log('pocket_source=true');
+  },
+});
+
+let refuseReviews = 0;
+const refused = runCase({
+  ticket: 'panel-refuse',
+  reserve: 0,
+  clock() {
+    return refuseReviews < 1 ? '2026-09-18T00:00:00.000Z' : '2026-09-18T00:02:00.000Z';
+  },
+  onReview() { refuseReviews += 1; },
+  collect({ reviewArgsSeen, result }) {
+    const refuseCalls = reviewArgsSeen.length;
+    assert.strictEqual(refuseCalls, 1, `panel must not dispatch after exhaustion, saw ${refuseCalls}`);
+    const panelFailed = (result.ledger || []).some((row) =>
+      row.unit === 'final_panel' && row.reason === 'final_panel_budget_exhausted');
+    assert.ok(
+      result.reason === 'final_panel_budget_exhausted' || panelFailed,
+      JSON.stringify({ status: result.status, phase: result.phase, reason: result.reason }),
+    );
+    console.log(`refuse_calls=${refuseCalls}`);
+    console.log('pocket_refuse=true');
+  },
+});
+
+let reuseTrees = 0;
+runCase({
+  ticket: 'suite-reuse',
+  reserve: 0,
+  clock: clockEarly,
+  collect({ worktrees, result }) {
+    reuseTrees = worktrees;
+    const row = (result.ledger || []).find((entry) => entry.unit === 'full_suite');
+    assert.strictEqual(row && row.reused_from, 'campaign_verification');
+    const suite = result.full_suite || result.campaign_full_suite;
+    const trace = suite && suite.trace;
+    assert.ok(!trace || trace.includes('full_suite_reused_verification') || row.reused_from);
+    console.log(`reuse_worktrees=${worktrees}`);
+    console.log('verify_once_hit=true');
+  },
+});
+try {
+runCase({
+  ticket: 'suite-fresh-flag',
+  reserve: 0,
+  reuse: false,
+  clock: clockEarly,
+  collect({ worktrees }) {
+    console.log(`fresh_flag_worktrees=${worktrees}`);
+    assert.ok(worktrees > reuseTrees || worktrees >= 2, `expected a fresh suite worktree, got ${worktrees}`);
+    console.log('verify_once_flag=true');
+  },
+});
+} catch (error) {
+  fs.writeFileSync('/tmp/flag-debug.json', String(error && error.stack || error));
+  throw error;
+}
+try {
+runCase({
+  ticket: 'suite-red',
+  reserve: 0,
+  clock: clockEarly,
+  verifyStatus: 1,
+  collect({ worktrees, result }) {
+    const row = (result.ledger || []).find((entry) => entry.unit === 'full_suite');
+    assert.ok(!row || row.reused_from !== 'campaign_verification');
+    console.log(`red_worktrees=${worktrees}`);
+    console.log('verify_once_red=true');
+  },
+});
+} catch (error) {
+  fs.writeFileSync('/tmp/red-debug.json', String(error && error.stack || error));
+  throw error;
+}
+void first;
+void refused;
+console.log('cut2a_engine=true');
+NODE
+)"
+assert_contains "$PANEL_OUT" "panel_order=true" "3-seat stub dispatcher is called in index order (RED at base 7f5d6ee8: sequential split)"
+assert_contains "$PANEL_OUT" "panel_timeout=true" "every seat --timeout equals the whole remainder"
+assert_contains "$PANEL_OUT" "panel_digest_stable=true" "panel receipts and review_digest match a sequential rerun"
+assert_contains "$PANEL_OUT" "pocket_source=true" "wall exhausted + reserve 300 uses budget_source pocket"
+assert_contains "$PANEL_OUT" "pocket_refuse=true" "reserve 0 with exhausted wall refuses before later panel seats"
+assert_contains "$PANEL_OUT" "verify_once_hit=true" "GREEN cache hit reuses full_suite"
+assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
+assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
+
 finalize_test

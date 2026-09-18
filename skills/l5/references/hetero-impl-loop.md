@@ -137,7 +137,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    (`campaign-verification.js` attests a detached, immutable checkout; 2026-09-17: a suite that
    reads `symbolic-ref HEAD` was green on the depth-0 branch and red in-rail, and the rail kept
    only digests): a suite that is red at base fails the hand's acceptance after the paid round and the
-   rail then cannot even journal the stop (2026-09-16, two suites red since a config change).
+   rail then cannot even journal the stop (2026-09-16, two suites red since a config change). The
+   managed `full_suite` station reuses an identity-equal GREEN verification receipt (same tree,
+   sealed argv, env) instead of running the commands a second time unless `full_suite_reuse` is
+   sealed false.
 4. `.claude/mission-routing-config.json` → the new graph + sources; then
    `scripts/mission-terminal-reconcile.js legacy --repo-root . --graph-digest <digest>` (the
    legacy B/C disposition is bound to the current graph digest; without it admission fails with
@@ -194,7 +197,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    path is `campaign_ledger_path_mismatch` at intake and burns the attempt. Watch the hands
    worktree from a report-only monitor; the artifact is the commit on `<branch>`. On
    `awaiting_disposition`, resume with `--resume --campaign-disposition-authority <file>` and
-   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16).
+   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16). Panel seats
+   launch together under the remaining panel pocket (`final_panel_reserve_seconds`); each seat's
+   `--timeout` is the whole remainder, not a sequential share.
 10. **Verification is yours**: check out the hand's commit in a scratch worktree on a temp branch
     (some suites die on a detached HEAD) and run every verify command there; `test -x` every test
     file the hand created (`bash file` masks a 100644 mode that the CI executable gate rejects); probe the reviewer's MUST-FIX claims by re-derivation

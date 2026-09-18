@@ -9,6 +9,7 @@ const { createRunnerTransportEnvelope } = require('../transport/runner-envelope'
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_REVIEW = path.join(REPO_ROOT, 'scripts', 'dispatch-review.sh');
+const REVIEW_FANOUT = path.join(REPO_ROOT, 'scripts', 'lib', 'review-fanout.js');
 const REVIEW_RESULT_FIELDS = [
   'runner',
   'model',
@@ -196,7 +197,16 @@ function parseReviewOutput(stdout) {
   throw new Error('no JSON object found in review stdout');
 }
 
-function dispatchReview(args, options = {}) {
+function timeoutSecondsFromArgs(args) {
+  if (!Array.isArray(args)) return null;
+  const index = args.indexOf('--timeout');
+  if (index < 0 || typeof args[index + 1] !== 'string') return null;
+  const match = /^([0-9]+)s$/.exec(args[index + 1]);
+  if (!match) return null;
+  return Number(match[1]);
+}
+
+function prepareReviewLaunch(args, options = {}) {
   const scriptPath = options.scriptPath || DISPATCH_REVIEW;
   if (!fs.existsSync(scriptPath)) {
     return {
@@ -204,6 +214,7 @@ function dispatchReview(args, options = {}) {
       status: null,
       signal: null,
       packet: null,
+      skipLaunch: true,
     };
   }
   let launchArgs = args;
@@ -261,27 +272,147 @@ function dispatchReview(args, options = {}) {
       launchCwd = blindCwd;
       launchEnv.AUTOPILOT_BLIND_DISCOVERY = '1';
     }
-    const child = spawnSync(scriptPath, launchArgs, {
-      cwd: launchCwd,
-      env: launchEnv,
-      shell: false,
+    return {
+      scriptPath,
+      launchArgs,
+      launchCwd,
+      launchEnv,
+      blindCwd,
+      autopilotPacket,
       stdio: options.stdio || 'inherit',
-    });
-    child.autopilotLaunchCwd = launchCwd;
-    child.autopilotPacket = autopilotPacket;
-    return child;
+      timeoutSeconds: timeoutSecondsFromArgs(launchArgs),
+      skipLaunch: false,
+    };
   } catch (error) {
-    return { error, status: null, signal: null };
-  } finally {
     if (blindCwd) fs.rmSync(blindCwd, { recursive: true, force: true });
+    return { error, status: null, signal: null, skipLaunch: true };
   }
 }
 
-function dispatchReviewJson(args, options = {}) {
-  const child = dispatchReview(args, {
-    ...options,
-    stdio: ['ignore', 'pipe', 'pipe'],
+function finishReviewLaunch(prepared, raw) {
+  try {
+    if (prepared && prepared.skipLaunch) {
+      return {
+        error: prepared.error || null,
+        status: prepared.status === undefined ? null : prepared.status,
+        signal: prepared.signal === undefined ? null : prepared.signal,
+        packet: prepared.packet || null,
+      };
+    }
+    const error = raw && raw.error
+      ? (raw.error instanceof Error ? raw.error : new Error(String(raw.error)))
+      : null;
+    const child = {
+      error,
+      status: raw && raw.status !== undefined ? raw.status : null,
+      signal: raw && raw.signal !== undefined ? raw.signal : null,
+      stdout: raw && raw.stdout !== undefined ? raw.stdout : '',
+      stderr: raw && raw.stderr !== undefined ? raw.stderr : '',
+      autopilotLaunchCwd: prepared.launchCwd,
+      autopilotPacket: prepared.autopilotPacket,
+    };
+    if (prepared.stdio === 'inherit') {
+      if (child.stdout) process.stdout.write(child.stdout);
+      if (child.stderr) process.stderr.write(child.stderr);
+    }
+    return child;
+  } finally {
+    if (prepared && prepared.blindCwd) {
+      fs.rmSync(prepared.blindCwd, { recursive: true, force: true });
+    }
+  }
+}
+
+function dispatchReviewBatch(optionsList) {
+  const list = Array.isArray(optionsList) ? optionsList : [];
+  const preparedList = list.map((item) => {
+    const args = item.args || item.argv || [];
+    const options = { ...item };
+    delete options.args;
+    delete options.argv;
+    return prepareReviewLaunch(args, options);
   });
+  const jobs = preparedList.map((prepared, index) => {
+    if (prepared.skipLaunch) {
+      return {
+        id: String(index),
+        argv: ['/bin/true'],
+        cwd: process.cwd(),
+        env: process.env,
+        stdin_file: null,
+        timeout_seconds: 1,
+        skip: true,
+      };
+    }
+    return {
+      id: String(index),
+      argv: [prepared.scriptPath, ...prepared.launchArgs],
+      cwd: prepared.launchCwd,
+      env: prepared.launchEnv,
+      stdin_file: null,
+        timeout_seconds: Number.isSafeInteger(prepared.timeoutSeconds) ? prepared.timeoutSeconds : null,
+    };
+  });
+  const launchable = jobs.filter((job) => job.skip !== true);
+  let rows = preparedList.map((prepared, index) => (
+    prepared.skipLaunch
+      ? {
+        id: String(index),
+        status: prepared.status === undefined ? null : prepared.status,
+        signal: prepared.signal === undefined ? null : prepared.signal,
+        error: prepared.error ? prepared.error.message : null,
+        stdout: '',
+        stderr: '',
+      }
+      : null
+  ));
+  if (launchable.length > 0) {
+    const child = spawnSync(process.execPath, [REVIEW_FANOUT], {
+      input: JSON.stringify({ jobs: launchable }),
+      encoding: 'utf8',
+      maxBuffer: 8 * 1024 * 1024,
+      shell: false,
+    });
+    let parsed = [];
+    try {
+      parsed = JSON.parse(String(child.stdout || '').trim() || '[]');
+    } catch (_error) {
+      parsed = launchable.map((job) => ({
+        id: job.id,
+        status: null,
+        signal: null,
+        error: 'review-fanout produced no JSON array',
+        stdout: child.stdout || '',
+        stderr: child.stderr || '',
+      }));
+    }
+    if (!Array.isArray(parsed)) parsed = [];
+    const byId = new Map(parsed.map((row) => [String(row.id), row]));
+    for (const job of launchable) {
+      rows[Number(job.id)] = byId.get(String(job.id)) || {
+        id: job.id,
+        status: null,
+        signal: null,
+        error: 'review-fanout missing job row',
+        stdout: '',
+        stderr: '',
+      };
+    }
+  }
+  return preparedList.map((prepared, index) => finishReviewLaunch(prepared, rows[index] || {
+    status: null,
+    signal: null,
+    error: 'review-fanout missing job row',
+    stdout: '',
+    stderr: '',
+  }));
+}
+
+function dispatchReview(args, options = {}) {
+  return dispatchReviewBatch([{ args, ...options }])[0];
+}
+
+function interpretReviewChild(args, options, child) {
   const stdout = bufferToString(child.stdout);
   const stderr = bufferToString(child.stderr);
   const argValue = (flag) => {
@@ -361,10 +492,36 @@ function dispatchReviewJson(args, options = {}) {
   }
 }
 
+function dispatchReviewJson(args, options = {}) {
+  const child = dispatchReview(args, {
+    ...options,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return interpretReviewChild(args, options, child);
+}
+
+function dispatchReviewJsonBatch(optionsList) {
+  const list = (Array.isArray(optionsList) ? optionsList : []).map((item) => ({
+    ...item,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }));
+  const children = dispatchReviewBatch(list);
+  return children.map((child, index) => {
+    const item = list[index] || {};
+    const args = item.args || item.argv || [];
+    return interpretReviewChild(args, item, child);
+  });
+}
+
 module.exports = {
   dispatchReview,
+  dispatchReviewBatch,
   dispatchReviewJson,
+  dispatchReviewJsonBatch,
+  prepareReviewLaunch,
+  finishReviewLaunch,
   parseReviewOutput,
   isValidNoFindingProof,
   DISPATCH_REVIEW,
+  REVIEW_FANOUT,
 };

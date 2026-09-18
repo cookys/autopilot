@@ -620,4 +620,47 @@ assert_eq "1" "$STRICT_FALSE_RC" "projected strict unit rejects false verificati
 assert_contains "$STRICT_FALSE" '"status": "acceptance_failed"' \
   "false verification fails strict acceptance"
 
+RESERVE_OUT="$(node - "$REPO_ROOT" "$CAMPAIGN" "$CAMPAIGN_ID" "$ROOT_RUN_ID" "$BASE" <<'NODE'
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const [root, campaignPath, campaignId, rootRunId, base] = process.argv.slice(2);
+const projection = require(path.join(root, 'src', 'engine', 'campaign-dispatch-projection'));
+const graph = require(path.join(root, 'src', 'engine', 'mission-execution-graph'));
+const bytes = fs.readFileSync(campaignPath);
+const campaign = JSON.parse(bytes);
+const campaignDigest = crypto.createHash('sha256').update(bytes).digest('hex');
+const derive = (contract) => projection.deriveCampaignDispatchUnit({
+  campaignContract: contract,
+  campaignContractSha256: campaignDigest,
+  campaignId,
+  branch: campaign.branch,
+  base,
+  runner: 'fixture',
+  model: 'fixture-model',
+  stage: 'campaign-implementation',
+  rootRunId,
+});
+const absent = derive(campaign);
+console.log(`absent_ok=${absent.budget.wall_seconds === 120}`);
+campaign.final_panel_reserve_seconds = 0;
+console.log(`zero_ok=${derive(campaign).budget.wall_seconds === 120}`);
+campaign.final_panel_reserve_seconds = 900;
+console.log(`nine_ok=${derive(campaign).budget.wall_seconds === 120}`);
+campaign.final_panel_reserve_seconds = 1801;
+let refused = false;
+try { derive(campaign); } catch (_err) { refused = true; }
+console.log(`over_refused=${refused}`);
+campaign.final_panel_reserve_seconds = 0;
+delete campaign.full_suite_reuse;
+console.log(`reuse_default_ok=${derive(JSON.parse(bytes)).budget.wall_seconds === 120}`);
+NODE
+)"
+assert_contains "$RESERVE_OUT" "absent_ok=true" "absent reserve defaults to 0"
+assert_contains "$RESERVE_OUT" "reuse_default_ok=true" "absent full_suite_reuse defaults to true"
+assert_contains "$RESERVE_OUT" "zero_ok=true" "reserve 0 is admitted"
+assert_contains "$RESERVE_OUT" "nine_ok=true" "reserve 900 is admitted"
+assert_contains "$RESERVE_OUT" "over_refused=true" "reserve 1801 is refused"
+
 finalize_test

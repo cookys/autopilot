@@ -17,7 +17,7 @@ const {
   repairRoundFromImplementationRound,
   unitClassFromContract,
 } = require('./implementer-ladder');
-const { dispatchReviewJson } = require('../runners/review');
+const { dispatchReviewJson, dispatchReviewJsonBatch } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { finalPanelSeatQualified } = require('./final-panel-qualification');
@@ -1457,14 +1457,23 @@ function buildCampaignPreSpendRejection({
   return rejection;
 }
 
-function campaignWallBudgetStatus(control, observedAt) {
+function campaignWallBudgetStatus(control, observedAt, options = {}) {
   if (!control || control.status !== 'admitted') {
     return { exhausted: false, elapsed_seconds: null };
   }
   const state = control.initial_state;
   const startedAt = state && Date.parse(state.started_at);
   const observed = Date.parse(observedAt);
-  const limit = state && state.limits && state.limits.max_wall_seconds;
+  let limit = state && state.limits && state.limits.max_wall_seconds;
+  const consumer = options && options.consumer === 'panel' ? 'panel' : 'review';
+  if (consumer === 'panel' && Number.isSafeInteger(limit)) {
+    const fromContract = control.contract && control.contract.final_panel_reserve_seconds;
+    const fromLimits = state.limits && state.limits.final_panel_reserve_seconds;
+    const reserve = Number.isSafeInteger(fromContract)
+      ? fromContract
+      : (Number.isSafeInteger(fromLimits) ? fromLimits : 0);
+    limit += reserve;
+  }
   if (!Number.isFinite(startedAt)
       || !Number.isFinite(observed)
       || observed < startedAt
@@ -1485,11 +1494,21 @@ function campaignWallBudgetStatus(control, observedAt) {
 // `{ exhausted: true }` when the budget is spent (callers block); `seconds: null` with
 // `exhausted: false` when there is no sealed budget at all (legacy unmanaged loop) — then no
 // `--timeout` is emitted and dispatch-review.sh keeps its own default, byte-identical to before.
-function campaignWallRemainingSeconds(control, observedAt) {
-  const budget = campaignWallBudgetStatus(control, observedAt);
+function campaignWallRemainingSeconds(control, observedAt, options = {}) {
+  const budget = campaignWallBudgetStatus(control, observedAt, options);
   if (budget.exhausted) return { exhausted: true, seconds: null };
   if (!Number.isSafeInteger(budget.elapsed_seconds)) return { exhausted: false, seconds: null };
-  const limit = control.initial_state.limits.max_wall_seconds;
+  let limit = control.initial_state.limits.max_wall_seconds;
+  const consumer = options && options.consumer === 'panel' ? 'panel' : 'review';
+  if (consumer === 'panel') {
+    const fromContract = control.contract && control.contract.final_panel_reserve_seconds;
+    const fromLimits = control.initial_state.limits
+      && control.initial_state.limits.final_panel_reserve_seconds;
+    const reserve = Number.isSafeInteger(fromContract)
+      ? fromContract
+      : (Number.isSafeInteger(fromLimits) ? fromLimits : 0);
+    limit += reserve;
+  }
   const remaining = limit - budget.elapsed_seconds;
   return remaining >= 1
     ? { exhausted: false, seconds: remaining }
@@ -3356,7 +3375,18 @@ class AutopilotEngine {
       }
       : null;
 
-    try {
+    const startedAt = this.now();
+    let reviewResult;
+    let reviewOptions;
+    if (input.preparedLaunch) {
+      reviewArgs = input.preparedLaunch.reviewArgs;
+      reviewOptions = input.preparedLaunch.reviewOptions;
+      roster = input.preparedLaunch.roster || roster;
+      resolveResult = input.preparedLaunch.resolveResult;
+      riskClassification = input.preparedLaunch.riskClassification;
+      reviewRisk = input.preparedLaunch.reviewRisk;
+      reviewResult = input.providedReviewResult;
+    } else try {
       reviewArgs = buildReviewArgs({
         roster,
         diffFile: input.diffFile,
@@ -3373,7 +3403,6 @@ class AutopilotEngine {
           : null,
       });
     } catch (error) {
-      const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_review', 'blocked', startedAt));
       return {
         status: 'blocked',
@@ -3388,10 +3417,7 @@ class AutopilotEngine {
         ledger,
       };
     }
-    const startedAt = this.now();
-    let reviewResult;
-    let reviewOptions;
-    try {
+    if (!input.preparedLaunch) try {
       reviewOptions = {
         ...(input.reviewOptions || {}),
       };
@@ -3445,7 +3471,27 @@ class AutopilotEngine {
           reviewOptions.packet = identity;
         }
       }
-      reviewResult = this.reviewDispatcher(reviewArgs, reviewOptions);
+      if (input.deferDispatch === true) {
+        return {
+          status: 'prepared',
+          phase: 'prepare_review',
+          reason: null,
+          verdict: null,
+          roster,
+          resolveResult,
+          reviewResult: null,
+          review: null,
+          reviewArgs,
+          reviewOptions,
+          riskClassification,
+          reviewRisk,
+          ledger,
+          reservationIdentity,
+        };
+      }
+      reviewResult = input.providedReviewResult !== undefined
+        ? input.providedReviewResult
+        : this.reviewDispatcher(reviewArgs, reviewOptions);
     } catch (error) {
       reviewResult = {
         error,
@@ -4852,6 +4898,10 @@ class AutopilotEngine {
       prepared_review: preparedReview = null,
       reservation_identity: reservationIdentity = null,
       review_timeout_seconds: requestedTimeoutSeconds = null,
+      budget_consumer: budgetConsumer = 'review',
+      deferDispatch = false,
+      providedReviewResult = undefined,
+      preparedLaunch = null,
     }) => {
       const prepared = preparedReview || prepareReview({
         candidate,
@@ -4910,7 +4960,8 @@ class AutopilotEngine {
       }
       const diffFile = prepared.diff_file;
       const budgetAt = this.now();
-      const budget = campaignWallBudgetStatus(campaignControl, budgetAt);
+      const budgetOpts = { consumer: budgetConsumer === 'panel' ? 'panel' : 'review' };
+      const budget = campaignWallBudgetStatus(campaignControl, budgetAt, budgetOpts);
       if (budget.exhausted) {
         return {
           reviewed: false,
@@ -4923,7 +4974,7 @@ class AutopilotEngine {
       // seats on a 90 KB diff (dogfood 2026-09-17) after the campaign had already paid for
       // implement/verify/review. Invariant: a seat is never handed more than the campaign's
       // remaining wall seconds; a caller (performFinalPanel) may only tighten it.
-      const remainingWall = campaignWallRemainingSeconds(campaignControl, budgetAt);
+      const remainingWall = campaignWallRemainingSeconds(campaignControl, budgetAt, budgetOpts);
       if (remainingWall.exhausted) {
         return {
           reviewed: false,
@@ -4993,7 +5044,30 @@ class AutopilotEngine {
           ? true : requireQualifiedReviewer,
         pinReviewerTuple,
         reservationIdentity,
+        deferDispatch,
+        providedReviewResult,
+        preparedLaunch,
       });
+      if (deferDispatch === true && reviewed && reviewed.status === 'prepared') {
+        return {
+          deferred: true,
+          reviewTimeoutSeconds,
+          preparedLaunch: reviewed,
+          candidate,
+          verification,
+          scope,
+          repairGeneration,
+          reviewInputMode,
+          verticalFailed,
+          reviewRoster,
+          reviewStage,
+          pinReviewerTuple,
+          preparedReview,
+          reservationIdentity,
+          requestedTimeoutSeconds,
+          budgetConsumer,
+        };
+      }
       ledger.push(...reviewed.ledger);
       reviewChain.push(reviewed);
       latestReview = reviewed;
@@ -5200,19 +5274,41 @@ class AutopilotEngine {
           final_panel_seat_receipts: [],
         };
       }
-      // Seats run sequentially. Hand each qualified seat an even share of the wall budget
-      // still left over the seats not yet run, so the first seat cannot consume the whole
-      // remainder and starve the rest (which would fail `allReviewed` anyway). performReview
-      // re-clamps to the live remainder, so this only ever tightens.
+      const panelObservedAt = this.now();
+      const panelRemain = campaignWallRemainingSeconds(
+        campaignControl,
+        panelObservedAt,
+        { consumer: 'panel' },
+      );
+      if (panelRemain.exhausted) {
+        ledger.push(this.ledgerEntry('final_panel', 'failed', panelObservedAt, {
+          reason: 'final_panel_budget_exhausted',
+          budget_source: 'pocket',
+          seat_timeout_seconds: null,
+        }));
+        return {
+          reviewed: false,
+          phase: 'campaign_wall_budget',
+          reason: 'final_panel_budget_exhausted',
+          sealed_min_panel_size: minPanelSize,
+          final_panel_count: 0,
+          final_panel_seat_receipts: [],
+          started_at: panelObservedAt,
+          ended_at: panelObservedAt,
+          budget_source: 'pocket',
+          seat_timeout_seconds: null,
+        };
+      }
+      const wallRemain = campaignWallRemainingSeconds(
+        campaignControl,
+        panelObservedAt,
+        { consumer: 'review' },
+      );
+      const budgetSource = wallRemain.exhausted ? 'pocket' : 'wall';
+      const seatTimeoutSeconds = panelRemain.seconds;
+      const injectedDispatcher = this.reviewDispatcher !== dispatchReviewJson;
+      const preparedSeats = [];
       const outcomes = seats.map((seat, index) => {
-        const seatsNotYetRun = seats
-          .slice(index)
-          .filter((later, offset) => finalPanelSeatQualified(roster, later, index + offset))
-          .length;
-        const remainingNow = campaignWallRemainingSeconds(campaignControl, this.now()).seconds;
-        const seatTimeoutSeconds = remainingNow !== null && seatsNotYetRun > 0
-          ? Math.max(1, Math.floor(remainingNow / seatsNotYetRun))
-          : null;
         const reviewRoster = {
           ...roster,
           reviewer_runner: seat.runner,
@@ -5221,25 +5317,74 @@ class AutopilotEngine {
           reviewer_endpoint: seat.endpoint || '',
           reviewer_qualified: finalPanelSeatQualified(roster, seat, index),
         };
-        const outcome = finalPanelSeatQualified(roster, seat, index)
-          ? performReview({
-            ...reviewInput,
-            scope: 'final',
-            reviewRoster,
-            reviewStage: `campaign-final-review#seat-${index + 1}`,
-            pinReviewerTuple: true,
-            review_timeout_seconds: seatTimeoutSeconds,
-          })
-          : {
-            reviewed: false,
-            phase: 'reviewer_qualification',
-            reason: 'final panel seat is not an exact qualified reviewer tuple',
+        if (!finalPanelSeatQualified(roster, seat, index)) {
+          return {
+            seat,
+            outcome: {
+              reviewed: false,
+              phase: 'reviewer_qualification',
+              reason: 'final panel seat is not an exact qualified reviewer tuple',
+            },
           };
+        }
+        const outcome = performReview({
+          ...reviewInput,
+          scope: 'final',
+          reviewRoster,
+          reviewStage: `campaign-final-review#seat-${index + 1}`,
+          pinReviewerTuple: true,
+          review_timeout_seconds: seatTimeoutSeconds,
+          budget_consumer: 'panel',
+          deferDispatch: !injectedDispatcher,
+        });
+        if (outcome && outcome.deferred === true) {
+          preparedSeats.push({ seat, index, deferred: outcome });
+          return { seat, outcome: null, deferred: true, index };
+        }
         return { seat, outcome };
       });
+      if (preparedSeats.length > 0) {
+        const batchRows = dispatchReviewJsonBatch(preparedSeats.map((entry) => ({
+          args: entry.deferred.preparedLaunch.reviewArgs,
+          ...(entry.deferred.preparedLaunch.reviewOptions || {}),
+        })));
+        for (let i = 0; i < preparedSeats.length; i += 1) {
+          const entry = preparedSeats[i];
+          const finished = performReview({
+            ...reviewInput,
+            scope: 'final',
+            reviewRoster: {
+              ...roster,
+              reviewer_runner: entry.seat.runner,
+              reviewer_engine: entry.seat.model,
+              reviewer_effort: entry.seat.effort,
+              reviewer_endpoint: entry.seat.endpoint || '',
+              reviewer_qualified: true,
+            },
+            reviewStage: `campaign-final-review#seat-${entry.index + 1}`,
+            pinReviewerTuple: true,
+            review_timeout_seconds: seatTimeoutSeconds,
+            budget_consumer: 'panel',
+            preparedLaunch: entry.deferred.preparedLaunch,
+            providedReviewResult: batchRows[i],
+          });
+          outcomes[entry.index] = { seat: entry.seat, outcome: finished };
+        }
+      }
+      const panelEndedAt = this.now();
+      for (const row of outcomes) {
+        if (row && row.outcome && row.outcome.raw && Array.isArray(row.outcome.raw.ledger)) {
+          for (const entry of row.outcome.raw.ledger) {
+            if (entry && entry.unit === 'dispatch_review') {
+              entry.started_at = panelObservedAt;
+              entry.ended_at = panelEndedAt;
+            }
+          }
+        }
+      }
       const seatReceipts = outcomes.map(({ seat, outcome }, index) =>
         finalPanelSeatReceipt(seat, index, outcome));
-      const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome.reviewed === true);
+      const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome && outcome.reviewed === true);
       const mergedFindings = [];
       const findingIds = new Map();
       let findingsConsistent = true;
@@ -5280,6 +5425,12 @@ class AutopilotEngine {
         packetHashPresent === 0 || packetHashPresent === reviewedOutcomes.length
       ) && new Set(packetHashes).size <= 1;
       const panelReviewed = allReviewed && findingsConsistent && packetHashesConsistent;
+      ledger.push(this.ledgerEntry('final_panel', panelReviewed ? 'passed' : 'failed', panelObservedAt, {
+        budget_source: budgetSource,
+        seat_timeout_seconds: seatTimeoutSeconds,
+      }));
+      const last = ledger[ledger.length - 1];
+      if (last) last.ended_at = panelEndedAt;
       return {
         reviewed: panelReviewed,
         verdict: panelReviewed ? 'SHIP-AS-IS' : null,
@@ -5292,6 +5443,10 @@ class AutopilotEngine {
         sealed_min_panel_size: minPanelSize,
         final_panel_count: reviewedOutcomes.length,
         final_panel_seat_receipts: seatReceipts,
+        started_at: panelObservedAt,
+        ended_at: panelEndedAt,
+        budget_source: budgetSource,
+        seat_timeout_seconds: seatTimeoutSeconds,
       };
     };
 
@@ -7630,13 +7785,9 @@ class AutopilotEngine {
         };
       },
       fullSuite: ({ candidate, repair_generation: repairGeneration }) => {
-        // The sealed verify command is the campaign's complete declared
-        // command set.  Run it again as the authoritative full-suite gate on
-        // a fresh detached checkout; a focused/cached verification receipt
-        // cannot impersonate this execution.
-        // The full-suite command is the exact command admitted from the sealed
-        // campaign contract. An ambient/caller fullSuiteCommand is never
-        // executable authority (including a trivially successful "true").
+        // Identity, not timeline: a cached GREEN receipt whose request_digest
+        // equals this suite's (tree + full sealed argv + env fingerprint) is
+        // the same execution. A focused receipt cannot match argv_hash.
         const fullSuiteCmd = verifyCmd;
         const suiteRequest = createVerificationRequest({
           treeSha: candidate.tree_sha,
@@ -7644,6 +7795,49 @@ class AutopilotEngine {
           env: verificationEnvironment,
           envAllowlist: verificationEnvAllowlist,
         });
+        const reuseAllowed = !(campaignControl.contract
+          && campaignControl.contract.full_suite_reuse === false)
+          && !(campaignControl.initial_state
+            && campaignControl.initial_state.limits
+            && campaignControl.initial_state.limits.full_suite_reuse === false);
+        const cached = verificationCache.get(suiteRequest.request_digest);
+        if (reuseAllowed && reusableGreenReceipt(cached, suiteRequest)) {
+          const reusedAt = this.now();
+          ledger.push(this.ledgerEntry(
+            'full_suite',
+            'passed',
+            reusedAt,
+            {
+              reused_from: 'campaign_verification',
+              receipt_digest: cached.receipt_digest,
+              tree_sha: candidate.tree_sha,
+            },
+          ));
+          return {
+            schema_version: 1,
+            artifact_type: 'campaign_full_suite_receipt',
+            campaign_id: campaignControl.campaign_id,
+            candidate_commit: candidate.commit,
+            candidate_tree_sha: candidate.tree_sha,
+            command_digest: campaignCanonicalDigest(fullSuiteCmd),
+            argv_hash: suiteRequest.argv_hash,
+            env_fingerprint: suiteRequest.env_fingerprint,
+            request_digest: suiteRequest.request_digest,
+            runner_argv_attested: true,
+            checkout_attestation_digest: cached.checkout_attestation_digest,
+            executed: true,
+            exit_status: 0,
+            passed: true,
+            setup_reason: null,
+            cleanup_reason: null,
+            reason: null,
+            reused_from: 'campaign_verification',
+            receipt_digest: cached.receipt_digest,
+            started_at: reusedAt,
+            finished_at: this.now(),
+            trace: ['full_suite_reused_verification'],
+          };
+        }
         const startedAt = this.now();
         let addResult = null;
         let worktree = null;
@@ -7801,7 +7995,11 @@ class AutopilotEngine {
         next_repair_generation: nextGeneration,
         reason,
       }) => {
-        const budget = campaignWallBudgetStatus(campaignControl, this.now());
+        const budget = campaignWallBudgetStatus(
+          campaignControl,
+          this.now(),
+          { consumer: reason === 'acceptance' ? 'panel' : 'review' },
+        );
         convergenceArtifacts.push({
           artifact_generation: repairGeneration + 1,
           tests_executed: true,
@@ -7813,7 +8011,8 @@ class AutopilotEngine {
           // counts repairs after that candidate.
           generationCap: maxRepairGenerations + 1,
         });
-        let passed = !budget.exhausted && gate.verdict === 'PASS';
+        let passed = gate.verdict === 'PASS';
+        if (reason !== 'acceptance' && budget.exhausted) passed = false;
         let journalReason = null;
         if (passed && reason !== 'acceptance' && Number.isSafeInteger(nextGeneration)) {
           const registryDigest = reason === 'review_findings'
@@ -10130,6 +10329,8 @@ module.exports = {
   bindCampaignScopeReceipt,
   buildImplementationArgs,
   buildReviewArgs,
+  campaignWallBudgetStatus,
+  campaignWallRemainingSeconds,
   implementationResultBlocked,
   reviewLoopResultBlocked,
   reviewResultBlocked,

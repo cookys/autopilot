@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-panel-parallel-2026-09-18",
+  "logical_plan_id": "blind-review-panel-parallel-2026-09-18",
+  "session_id": "c2a-g1-1789694521",
+  "session_key": "5685043295b1defe97a9c4ab6b1faee4de84cc99ccc3fd51c4309eccef3aa75b",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "943f6b4bdeeeb717fe44fbd2a33ec337b01a2550d3c6266fe2a1311976aeff16",
+  "manifest_sha256": "fd37aebb1f8ecb42143bfb8f9c6b16a8b0b6da58c22cdd09f0d3bceffe1f7f99",
+  "plan_sha256": "bc9881e379c3439c42e7c2d04b9cf500602c8d50a67285a6e40b1d6290e6c5b3",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "0a1daac1b01601b6506577b3848d7a254b732ec751636f57264a98c9d6117666"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-qBvXQO",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "73c73003090c7f56b8ad43b01cc3cc62a0a3f86d9e60739b2a5a966321163a7a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "e418614efb2f68ec51502c02cf28365d277aecf4ebbb87134c0f82b440faa3c5"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "95d0fad84840bbdeea6278725f5fee95d5437429badab758ccd1d3103778ea6b",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-rb409q",
+          "digest": "95d0fad84840bbdeea6278725f5fee95d5437429badab758ccd1d3103778ea6b"
+        },
+        "receipt_digest": "c0b0e09967f1063340e6f791cbed9e57e5798584ffa12e53548d340ab740dc4b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/autopilot-engine.js performFinalPanel seat timeout rule; performReview live-remainder clamp",
+      "claim": "The plan gives every concurrent panel seat the whole panel remainder, but performReview still clamps each seat to the live remainder of the review wall, not the panel budget. Under the pocket the panel remainder can exceed the review remainder, which is zero when the wall is spent, so seats will be clamped to zero or refused despite the pocket, or the clamp must be bypassed and R3's no-more-than-consumer-remaining guarantee has two competing definitions.",
+      "evidence": "Plan section 0 states performReview clamps every seat to the live remainder at lines 4912-4942 with an invariant comment at 4921-4925, and buildReviewArgs appends the timeout. Section 1.3 says only campaignWallBudgetStatus and campaignWallRemainingSeconds gain a consumer parameter and performFinalPanel passes panel. Section 2 says performReview is unchanged except its dispatcher call goes through the batch-of-one API. No sentence says performReview's clamp takes or honours the panel consumer, so a wall-exhausted campaign with reserve 300 reaches the clamp with review remainder zero.",
+      "evidence_reference": "Plan section 0 bullet 1 (performReview clamp :4912-4942); section 1 item 3; section 2 autopilot-engine.js bullet",
+      "repair": "State explicitly that performFinalPanel does not route seats through performReview's clamp, or that performReview accepts the consumer and clamps against the panel remainder when called for a panel seat. Add an engine test where wall is exhausted, reserve is 300, and the seat's sealed --timeout equals the pocket remainder, not zero.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3e5fa559e3dd77c0ddeba63242648a763bec197f788f76eafae8bf15473bf2ea"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/lib/review-fanout.js job timeouts and started_at timestamps; final_panel ledger row; seat receipts",
+      "claim": "Concurrent seats produce per-seat timestamps and durations that differ from a sequential run, so receipts cannot be identical to a sequential run in seat-index order as R1 requires unless the plan defines which fields are excluded from identity.",
+      "evidence": "Section 5 promises the final_panel ledger row shows three seats whose started_at overlap and whose wall cost is the slowest seat. Section 1.2 claims seatReceipts, review_digest, ledger rows and receipts are identical to a sequential run that happened to finish in index order. Overlapping started_at values are by construction not equal to sequential started_at values, and a timed-out seat's elapsed time differs. The plan never enumerates which receipt fields the digest covers versus which timing fields are informational.",
+      "evidence_reference": "Plan section 1 item 2 final sentence; section 5 dogfood proof; section 6 order nondeterminism bullet",
+      "repair": "Define the identity precisely: the panel review_digest and seat receipt content fields exclude started_at, ended_at and elapsed, and the test compares those digests, not whole rows. Record that timing fields are informational and order-independent.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eba3ddac3fbd0bf026e6d155d89af86bcb602320da9f5407755fad5f7dbdfc48"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "campaignWallBudgetStatus consumer parameter; final_panel_budget_exhausted refusal; contract schema cap interaction",
+      "claim": "The refusal condition is specified as the pocket being gone, but the plan does not state that the refusal check happens once, before any seat is prepared, against the panel consumer, and does not state how the reserve interacts with the three differing wall caps already in the repo, so a reserve may be accepted at intake and rejected by a checker or vice versa.",
+      "evidence": "Section 0 records three inconsistent caps: schema 7200, graph checker 14400, projection 10..14400. Section 1.3 adds reserve with max 1800 only to the contract schema and intake; the graph checker and projection are not in the output paths in section 2.5. Section 1.3 says the panel is refused before any seat is spent only when the pocket is gone too but does not name the code point or say the check precedes prepareReviewLaunch, which builds packets and blind dirs.",
+      "evidence_reference": "Plan section 0 bullet 2 (caps); section 1 item 3; section 2.5 output_paths",
+      "repair": "Name the single refusal point in performFinalPanel that runs before any prepare call and reads the panel consumer. State that the reserve is validated only at intake and schema and that the graph checker and projection are untouched because they do not read limits.final_panel_reserve_seconds, or add them to output_paths.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3bc8ca544d781f29a5cbfffe9f5fe93faba6797e405b2088f264fa551f82b7ce"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/runners/review.js dispatchReview via fan-out helper; performReview in-rail seat; stub reviewDispatcher path",
+      "claim": "The plan claims one launch path yet defines two: the fan-out helper for real dispatch and a degenerate per-seat stub path when a test injects reviewDispatcher. The single-seat byte-identity claim also cannot hold for the helper envelope unless stdout, stderr, signal and timeout semantics of spawnSync are reproduced exactly, including the maxBuffer and killSignal defaults.",
+      "evidence": "Section 1.2 says stubs never see the helper and the batch degenerates to per-seat stub calls in index order. Section 2.6 says the helper is the single launch path for every review dispatch. Section 0 records dispatchReview as spawnSync at review.js:264; the fan-out helper uses spawn with SIGTERM then SIGKILL after 5 s, which differs from spawnSync timeout behaviour and from the observed rc=124 seats the 1c campaign produced.",
+      "evidence_reference": "Plan section 1 item 2; section 2.6 bullet 2; section 0 bullet 3",
+      "repair": "Rephrase R2 scope: the helper is the single process launch path, and the injected dispatcher is a test seam above it. Specify how a helper timeout maps to the existing rc=124 timed_out classification so finishReviewLaunch produces the same envelope as today, and add the byte-identity fixture for the timeout case.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9fe6d1ab0a441e9b084a27bfcea66db253ae321b9818246d4258d8f18c90331f"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "full_suite station reuse of verificationCache; reusableGreenReceipt predicate; env fingerprint",
+      "claim": "The reuse identity relies on request_digest equality but the plan does not state that full_suite builds its request with the same envAllowlist and the same env snapshot as the verification station at the same moment, nor whether the cached receipt is invalidated when a repair generation rewrites the tree and then returns to the earlier tree sha.",
+      "evidence": "Section 0 says the verification station builds the request with treeSha, verifyCmd, env and envAllowlist at :7448-7452 and full_suite builds an identical request at :7641-7645. Section 1.1 says a miss occurs on any repair generation whose tree changed. If the cache is keyed by request_digest and a later generation returns to a previously verified tree sha, the old GREEN receipt would match and be reused even though its worktree run is now stale relative to the campaign timeline. The plan does not say whether stale means older than the latest generation or merely tree mismatch.",
+      "evidence_reference": "Plan section 1 item 1; section 0 bullet 5",
+      "repair": "Define stale: full_suite reuses only a receipt produced during the current campaign for the exact candidate tree sha of the current generation, and additionally require the receipt's generation index to equal the current one or state why tree-sha equality alone is sufficient.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6d78549cee47d0615a46453c8ecf79d4198ffb8bbd2df5bdc62bc151f6c471a5"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/review-runner.test.sh concurrency assertions",
+      "claim": "The wall-approximately-slowest assertion with real sleeping processes is timing-sensitive and will flake on loaded CI hosts.",
+      "evidence": "Section 2 tests bullet says wall is approximately the slowest, not the sum, with three stub scripts with different sleeps. No tolerance or minimum sleep spread is specified.",
+      "evidence_reference": "Plan section 2 Tests bullet; section 4 fanout row",
+      "repair": "Specify sleeps of 1, 2 and 3 seconds and assert elapsed is less than 5 seconds, which separates concurrent from sequential with margin. No current change to the plan's shape.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a5d71e503fa5d008c6b1026ed6875a9b5c873d663e5810ae8252b04f390a6ca8"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 4.1 no-regression command list; base evidence file",
+      "claim": "The command list omits the campaign-intake and campaign-verification suites even though intake seals two new fields and verification cache reuse changes.",
+      "evidence": "Section 2 lists campaign-intake.js as changed and section 1.1 changes the reuse predicate consumer, but section 4.1 lists no intake or verification test suite. If such suites exist at base they must be green at candidate.",
+      "evidence_reference": "Plan section 4.1; section 2 campaign-intake.js bullet",
+      "repair": "Add the intake and verification test suites to section 4.1 if they exist at base, or record in the evidence file that none exist.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "910df6ecbde52affa69dbd510cb222d8d1711328c1d7c93ceb41458121dd15f2"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md rows; project-config-template campaign defaults",
+      "claim": "The plan mentions the project-config-template default of 0 and the repo graph setting 900 but neither file is in output_paths, so the docs edit is unowned.",
+      "evidence": "Section 1.3 says the default in project-config-template campaign defaults is 0 and this repo's own graph sets 900 for its next campaign, a docs edit not sealed here. Section 2.5 does not list either path.",
+      "evidence_reference": "Plan section 1 item 3 last sentence; section 2.5",
+      "repair": "No current change; follow-up only. Track the graph 900 edit as a BACKLOG follow-up row so it is not lost.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f711885259ddbb610535ee91f091db6d1ef894c527191380da5b9c528255952b"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "a5d71e503fa5d008c6b1026ed6875a9b5c873d663e5810ae8252b04f390a6ca8",
+      "rubric_id": "R6",
+      "affected_surface": "hooks/tests/review-runner.test.sh concurrency assertions",
+      "claim": "The wall-approximately-slowest assertion with real sleeping processes is timing-sensitive and will flake on loaded CI hosts.",
+      "evidence_reference": "Plan section 2 Tests bullet; section 4 fanout row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "910df6ecbde52affa69dbd510cb222d8d1711328c1d7c93ceb41458121dd15f2",
+      "rubric_id": "R7",
+      "affected_surface": "section 4.1 no-regression command list; base evidence file",
+      "claim": "The command list omits the campaign-intake and campaign-verification suites even though intake seals two new fields and verification cache reuse changes.",
+      "evidence_reference": "Plan section 4.1; section 2 campaign-intake.js bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f711885259ddbb610535ee91f091db6d1ef894c527191380da5b9c528255952b",
+      "rubric_id": "R8",
+      "affected_surface": "docs/BACKLOG.md rows; project-config-template campaign defaults",
+      "claim": "The plan mentions the project-config-template default of 0 and the repo graph setting 900 but neither file is in output_paths, so the docs edit is unowned.",
+      "evidence_reference": "Plan section 1 item 3 last sentence; section 2.5",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-18T01:31:28.079Z"
+}

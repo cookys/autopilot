@@ -1,0 +1,55 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-panel-parallel-2026-09-18",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "3e5fa559e3dd77c0ddeba63242648a763bec197f788f76eafae8bf15473bf2ea",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: one definition of remaining — the consumer's. performReview gains budget_consumer (default review) used for both its exhaustion check and its clamp; performFinalPanel passes panel with every seat; the in-rail seat is byte-identical."
+  },
+  {
+   "fingerprint": "eba3ddac3fbd0bf026e6d155d89af86bcb602320da9f5407755fad5f7dbdfc48",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: \"identical\" is now defined as every digested body (seat receipt body :5156-5176 carries no timestamp; panel review_digest over seat digests in index order; validator view); ledger started_at/ended_at are informational and the one place concurrency is visible, by design."
+  },
+  {
+   "fingerprint": "3bc8ca544d781f29a5cbfffe9f5fe93faba6797e405b2088f264fa551f82b7ce",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the refusal is one check at the top of performFinalPanel after the cross-family check and before any prepare; the reserve is its own field capped 0..1800 identically at graph checker, graph schema, projection, contract (mission-convergence :1465), contract schema and intake — all added to §2.5 with their mirrors and suites; the three max_wall_seconds caps are untouched."
+  },
+  {
+   "fingerprint": "9fe6d1ab0a441e9b084a27bfcea66db253ae321b9818246d4258d8f18c90331f",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the helper is the only production launch path; the reviewDispatcher option (:2490/:3448) is a constructor test seam that replaces dispatchReviewJson before review.js is reached — not a second path. Byte identity is specified as reproducing spawnSync's observable contract (1 MiB maxBuffer with overflow → status null + error, status/signal as the child ended, cwd/env/stdin), pinned field-by-field; production timeouts stay dispatch-review.sh's own --timeout (rc=124), the helper backstop at --timeout+60 s reports signal like spawnSync."
+  },
+  {
+   "fingerprint": "6d78549cee47d0615a46453c8ecf79d4198ffb8bbd2df5bdc62bc151f6c471a5",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: both stations read the same verificationEnvironment snapshot (:6589 → :7451/:7644) and allowlist; identity is content not timeline — the verification station already reuses across generations on the same rule (:7454-7455 recordGreenVerification(cached, repairGeneration)); stale ≡ identity mismatch."
+  },
+  {
+   "fingerprint": "a5d71e503fa5d008c6b1026ed6875a9b5c873d663e5810ae8252b04f390a6ca8",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: concurrency asserted from per-job started_at/ended_at (max(start) < min(end)) plus wall < sum − 1 s with 2/3/4 s sleeps — no approximate-slowest comparison."
+  },
+  {
+   "fingerprint": "910df6ecbde52affa69dbd510cb222d8d1711328c1d7c93ceb41458121dd15f2",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: campaign-dispatch-projection.test.sh and mission-convergence.test.sh added to §4.1 and §2.5 (intake pins live in the routing/state suites already listed)."
+  },
+  {
+   "fingerprint": "f711885259ddbb610535ee91f091db6d1ef894c527191380da5b9c528255952b",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the template/graph sentence is gone; the reserve default is 0 at every layer and a per-campaign graph sets it at that campaign's freeze."
+  }
+ ]
+}

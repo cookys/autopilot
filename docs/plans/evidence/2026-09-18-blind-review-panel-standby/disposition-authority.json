@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_disposition_authority",
+  "authority": "depth-0",
+  "actor_id": "depth-0:claude-opus-5:71623dad-e5ab-461f-bfec-7f0243acc899",
+  "campaign_id": "campaign-v1-6e8e8cf03f36d44b89a0b886215e8b4e96e627b0d2f680396c476ab76dca4128",
+  "contract_digest": "be174ce2d4fac61d1d520d2e3cefb43911870df3c6b113c5c5fd8db41756d30f",
+  "reviews": [
+    {
+      "review_digest": "6e843744ff94bfa1ff79f0e0a841bfa815e7129dda1567ffc0888149dc04d309",
+      "decisions": [
+        {
+          "finding_id": "duplicate-qwen-regex",
+          "evidence": {
+            "kind": "reproduced",
+            "probe_cmd": "grep -n 'qwen' src/engine/campaign-intake.js src/engine/autopilot-engine.js",
+            "expected_signature": "two qwen arms in modelFamilyOfEngineName (lines 159, 162) — identical to the pre-existing modelFamilyOfEngine (autopilot-engine.js:393, 396) on base 83e3ac9c",
+            "observed_output": "src/engine/campaign-intake.js:159:  if (/(qwen|qwq)/.test(normalized)) return 'alibaba';\nsrc/engine/campaign-intake.js:162:  if (/(qwen|qoder)/.test(normalized)) return 'alibaba';\nsrc/engine/autopilot-engine.js:393:  if (/(qwen|qwq)/.test(normalized)) return 'alibaba';\nsrc/engine/autopilot-engine.js:396:  if (/(qwen|qoder)/.test(normalized)) return 'alibaba';"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "The second arm is only partly dead (qoder still reaches it); the pattern is a verbatim copy of the pre-existing modelFamilyOfEngine, so the 2-B cut does not change behaviour. Cleaning it belongs with unifying the two helpers.",
+            "trigger": "Next touch of family derivation (2-C shared packet, or any new engine alias).",
+            "proposed_backlog_title": "Unify modelFamilyOfEngine / modelFamilyOfEngineName into one shared helper and drop the duplicate qwen arm"
+          }
+        },
+        {
+          "finding_id": "family-derivation-parallel",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "src/engine/campaign-intake.js:155 modelFamilyOfEngineName (new, snapshot implementer_family)",
+              "src/engine/autopilot-engine.js:389 modelFamilyOfEngine (pre-existing, live cross-family check)",
+              "both bodies byte-identical at candidate 3641cbef; divergence is only possible on a future alias edit"
+            ],
+            "confirmed_by": "depth-0 read of both functions in the candidate worktree"
+          },
+          "disposition": {
+            "disposition": "follow-up",
+            "context": "Same root as duplicate-qwen-regex: two identical family tables that can drift. Plan §1 forbids changing the rail's live derivation in this cut (R5 byte-identical rail).",
+            "trigger": "Next touch of family derivation (2-C shared packet, or any new engine alias).",
+            "proposed_backlog_title": "Unify modelFamilyOfEngine / modelFamilyOfEngineName into one shared helper and drop the duplicate qwen arm"
+          }
+        },
+        {
+          "finding_id": "session-marker-test-fiddling",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "hooks/tests/implementation-campaign-state.test.sh:1945-1947 pins CLAUDE_CODE_SESSION_ID/CLAUDE_SESSION_ID inside runDurableStrictIdentityCase before sealSessionMarker",
+              "scripts/session-mode.js getSessionId() reads AUTOPILOT_SESSION_ID || CLAUDE_CODE_SESSION_ID || CLAUDE_SESSION_ID || cwd, so an inherited harness session id would make the sealed marker's session_id mismatch",
+              "file is in the sealed output_paths; no src/ or schema path touched by the change"
+            ],
+            "confirmed_by": "depth-0 diff read 83e3ac9c..3641cbef"
+          },
+          "disposition": {
+            "disposition": "reject-out-of-scope",
+            "rationale": "Test-only env pinning that makes the durable strict-identity case hermetic against the harness's inherited session id; no production path changes and the file is an authorised output path."
+          }
+        },
+        {
+          "finding_id": "acceptance-bound-test-policy",
+          "evidence": {
+            "kind": "trace",
+            "trace_chain": [
+              "hooks/tests/implementation-campaign-routing.test.sh:2694 spreads campaignDispositionPolicy:'acceptance-bound' only under standbyPanel",
+              "the standby scenario drives review -> adjudicate without a depth-0 authority file, so a deterministic policy is required for the test to reach the final panel",
+              "no engine or schema path references the knob differently after the change"
+            ],
+            "confirmed_by": "depth-0 diff read 83e3ac9c..3641cbef"
+          },
+          "disposition": {
+            "disposition": "reject-out-of-scope",
+            "rationale": "Test-only fixture knob needed for the standby scenario to reach the final panel without an authority file; not a spec surface of this cut."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -12,6 +12,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### Managed rail: 2-A graph knobs `final_panel_reserve_seconds` / `full_suite_reuse` never reach the sealed contract
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — the 2-B graph node set reserve 900 / reuse true; intake sealed the defaults (0 / true) and the campaign ran without a pocket
+- **Effort**: M
+- **Source**: 2-B depth-0, `impl-run1-awaiting-disposition.json` `campaign_control.contract`
+- **Pointer**: docs/plans/evidence/2026-09-18-blind-review-panel-standby/README.md
+- **Context**: `mission-convergence.js` `expectedDispatch` and the contract draft omit both fields — 2-A added validation, not projection; the 2-A §5 pocket proof stays open until fixed.
+
+### Managed rail: the durable wait for a disposition counts against `max_wall_seconds`, so a late resume is refused
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — 2-B parked `awaiting_disposition` at 6686 s of 7200; depth-0 resumed 12 min later → intake `WALL_BUDGET_EXCEEDED`, unresumable
+- **Effort**: S
+- **Source**: 2-B depth-0, `impl-run2-resume-wall-budget-exceeded.json`
+- **Pointer**: docs/plans/evidence/2026-09-18-blind-review-panel-standby/README.md
+- **Context**: `implementation-campaign.js` measures elapsed from `started_at` on every event; stop the clock while parked, or budget the wait apart from the campaign wall.
+
 ### Managed rail: a reviewer no_verdict releases the campaign claim instead of retrying the seat
 - **Status**: shipped v2.36.43 2026-09-14
 - **Trigger**: fired 2026-09-14 — a no_verdict review (MiniMax format fault) blocked the campaign at full_diff_review and released the claim; --resume then met "claim is released or terminal"

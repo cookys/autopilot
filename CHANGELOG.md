@@ -1,5 +1,46 @@
 # Changelog
 
+## v2.36.66 — blind review redesign 第七刀（2-B）：quorum panel＋standby seat、intake 時的 panel snapshot
+
+- `src/engine/autopilot-engine.js`（＋鏡像）：`performFinalPanel` 的「全部席位都 reviewed」改成 **quorum**——reviewed 席數 ≥ sealed
+  `min_panel_size` 且 cross-family 規則在 **reviewed 子集**上成立（`terminalPanelCrossFamilySatisfied(panelRoster, reviewedSeats)`）；
+  失敗席保留 receipt 列並標 `load_bearing:false`（quorum 未達時所有列 `load_bearing:true`，沒有一列被丟掉）；terminal 多三欄
+  `final_panel_quorum_met`／`sealed_required_review_families`／`implementer_family`；有 snapshot 時席位、`seats_complete`、
+  minimum、family 需求全部取自 snapshot，live roster 不同就 trace `final_panel_roster_drift:<snap>:<live>`＋`final_panel` 列
+  `roster_drift:true`，照 snapshot 跑；`finalPanelSeatQualified` 不對 live roster 重跑（intake 的資格判定是 sealed 的）；沒有
+  snapshot 的輸入 byte-identical。family 分類器只剩一份（`campaign-intake.js` `modelFamilyOfEngine`，engine import；qwen 兩個
+  重複 arm 合成一個）。
+- `src/engine/campaign-intake.js`（＋鏡像）：資格區塊之後、claim 之前，**只在 `qc_panel_seats_complete === true`** 時以 `wx`
+  寫 `qc_panel_snapshot.json` 到 sealed contract 旁（campaign_id、contract_digest、seats 完整物件、min、families、
+  implementer_family、digest）；`EEXIST` 就讀舊檔，campaign_id／contract_digest 不符 → `qc_panel_snapshot_identity_invalid`
+  在 spend 前擋；live 不同記 step `live_drift`；step `qc_panel_snapshot` ready 進 receipt，parsed snapshot 掛在 admitted result。
+- `src/engine/campaign-composition.js`（＋鏡像）：`validateFinalPanelReceipt` 有 `final_panel_quorum_met` 就從列重導
+  quorum（count ≥ sealed min、families 從 reviewed 列＋sealed `implementer_family` 規則；diversity 門檻看 **reviewed** 列數而
+  不是派出列數——二審抓到的 engine／validator 分歧），旗標不符 `final_panel_quorum_flag_mismatch`、`load_bearing` 逐列比對、
+  未達 quorum 才拿 `final_panel_families_below_minimum`／首個失敗理由／`final_panel_below_minimum` 擋；沒有旗標的 legacy receipt
+  走原本 unanimity 規則；gate-reuse 分支三欄只在存在時 spread（否則舊 gate 變 `final_panel_metadata_incomplete`）；terminal
+  trace 轉入 composition trace。receipt schema 三欄＋席位列 `load_bearing` 都 optional。
+- 文件：`references/blind-dispatch.md` Quorum/standby＋Snapshot 段、`.claude/review-loop-config.md`／template／`hetero-impl-loop.md`
+  各一句（含鏡像）；BACKLOG redesign row Context 更新。
+- 測試（RED-first 標 base `83e3ac9c`／`3641cbef`）：honesty 3+4／3+3／3+4-with-failed-family；receipt quorum 旗標、`load_bearing`、
+  legacy unanimity、packet-hash 只看 reviewed 列、**min 1／兩席／一失敗**；engine panel-standby、snap-write（write-once、無 drift）、
+  snap-drift、snap-id、no-snap；routing proof-parity 四席 no_verdict 仍 ready＋snapshot step；state step 順序、
+  incomplete roster 不寫 snapshot。
+- 出貨路徑：/l5 managed campaign attempt 1——hand 84 分、21 檔＝§2.5、commit `3641cbef`；verify／MiniMax 全 diff 二審
+  （SHIP-AS-IS，1 🟠 3 🔵 全 CUT/FOLLOW-UP）／full_suite 過，rail 在 sealed 7200 s 的第 6686 s 停在 `awaiting_disposition`；
+  depth-0 逐條重導寫 authority，12 分鐘後 `--resume --campaign-disposition-authority` 在 intake 被 `WALL_BUDGET_EXCEEDED` 擋掉
+  ——**rail 缺陷登 BACKLOG：durable wait 算進 wall budget，晚 resume 就不可恢復**；v2.36.41 的 disposition-resume 路徑因此
+  **仍未 e2e 量到**。另抓到 2-A 的 `final_panel_reserve_seconds`／`full_suite_reuse` 只驗不投影（contract 封 0／1，campaign 沒
+  pocket）→ BACKLOG。降級 l3：11/11 綠、scope 精確；claude 二審 FIX-THEN-SHIP（3 🟠 1 🟡 4 🔵）、GLM SHIP-AS-IS（2 🔵）→ sonnet
+  hand 修五項（`67b10726`）、1 🟠 refuted（packet-hash 早就只看 reviewed 列）、2 🔵 給 2-C；delta 複審 SHIP-AS-IS（1 🟡 2-C）。
+  **§5 live 證明（四席 min 3＋intake 後改 pin）沒有產生**——這場只有三席且 final panel 沒跑到；留給 2-C campaign（第四個
+  qc family 要先 pin）。
+- 不在範圍（2-C）：有 panel 時關 in-rail 單席 review＋panel 驅動的 repair round；每候選一份共用 packet；snapshot 寫在 claim 之後、
+  resume 時驗 snapshot digest、live roster 翻 `qc_panel_seats_complete` 仍讀既有 snapshot。
+
+prose-justification: `references/blind-dispatch.md` Quorum/standby＋Snapshot 兩段（含鏡像）；`skills/l5/references/hetero-impl-loop.md`
+一句（含鏡像）；`.claude/review-loop-config.md`／template 一句。
+
 ## v2.36.65 — blind review redesign 第六刀（2-A）：verify-once、final panel 三席並行、sealed panel pocket
 
 - `scripts/lib/review-fanout.js`（新，＋鏡像）：唯一的 review 啟動路徑。stdin 收 job 清單，`spawn` 全部同時起、每個 job 自己的

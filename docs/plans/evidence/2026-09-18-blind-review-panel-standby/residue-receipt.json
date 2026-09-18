@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-18T09:07:16.694Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-6e8e8cf03f36d44b89a0b886215e8b4e96e627b0d2f680396c476ab76dca4128",
+  "observed_head": "9f17bdc12e456c7e87572e61a733bedf4df956d2",
+  "worktree_observation_digest": "70e4b9907712a4f85d703f7e458e48d03c3d3a9fa6e357e7336dcfd74ca93dfc",
+  "journal_digest": "15375c1044268eca91612a231fbd1faf18c7ddfc1309110968ce54fb48af65a1",
+  "disposition_digest": "8f16368ae1f7a9a41edfce9dfe3e3edf7f3e4775c0011e152ff2fa7c3a730623",
+  "branch_inventory_digest": "cf44d11ad7abef42f01a3d0845f1986f02c3fb5716ff65d4afc43513eb8f8141",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/1077fd40c74c/blind-review-panel-standby-2026-09-18-a1",
+      "tip": "67b1072642c85ea6e135025d18fba8aff6ebc51b",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-18/reap-20260918T090659Z-562225.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "b075201173afa2f05aabebfd036e219b68b7b8df70a340e4a3ce6e15eab5ea08"
+}

@@ -64,10 +64,10 @@
      也會被擋，所以 redesign 期間 qc_panel[0] 暫時換成 packet-tier 的
      claude-fable-5-1 @ claude-native。redesign 落地（cleanroom tier 讓 codex 合法）後
      換回 gpt-5.6-sol @ codex max。這是 operator 決定，不是資格評定。 -->
-- qc_panel: claude-fable-5-1, GLM-5.2, MiniMax-M3
-- qc_panel_runners: claude-native, cc-shim, cc-shim
-- qc_panel_efforts: high, high, high
-- qc_panel_endpoints: @none, glm, minimax
+- qc_panel: claude-fable-5-1, GLM-5.2, MiniMax-M3, Qwen3.8-Max-Preview
+- qc_panel_runners: claude-native, cc-shim, cc-shim, qoderclicn
+- qc_panel_efforts: high, high, high, high
+- qc_panel_endpoints: @none, glm, minimax, @none
 <!-- review_packet_deny_extra: comma-separated extra packet deny patterns (additive
      floor = DEFAULT_PACKET_DENY_LIST). Empty = []. Grammar: normalizeDenyList. -->
 - review_packet_deny_extra:

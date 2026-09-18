@@ -6480,4 +6480,178 @@ assert_contains "$PANEL_OUT" "envscrub_session_id=true" \
 assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
 assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
 
+# RED at dec4a01b: injected acceptance_failed with a hand commit journals MUTATION_FAILED
+# whose campaign_terminal reference carries repair_lineage; intake digested the wrapper
+# while the reducer bound {kind, digest} → blocked / campaign_terminal_journal /
+# MUTATION_FAILURE_EVIDENCE_REQUIRED. GREEN: terminal receipt names acceptance_failed,
+# phase TERMINAL_STOP, last event MUTATION_FAILED, live_lease null, inspect shows it.
+ACCEPT_FAIL_REPO="$TEST_TMP/acceptance-failed-repo"
+mkdir -p "$ACCEPT_FAIL_REPO/.claude" "$ACCEPT_FAIL_REPO/dist"
+git -C "$ACCEPT_FAIL_REPO" init -q -b develop
+git -C "$ACCEPT_FAIL_REPO" config user.email "engine-test@example.invalid"
+git -C "$ACCEPT_FAIL_REPO" config user.name "Engine Test"
+write_mission_governance "$ACCEPT_FAIL_REPO/.claude/owner-kernel-governance.json" shadow
+printf 'base\n' > "$ACCEPT_FAIL_REPO/dist/out.txt"
+git -C "$ACCEPT_FAIL_REPO" add .
+git -C "$ACCEPT_FAIL_REPO" commit -qm base
+ACCEPT_FAIL_BASE="$(git -C "$ACCEPT_FAIL_REPO" rev-parse HEAD)"
+ACCEPT_FAIL_OUT="$(node - "$REPO_ROOT" "$ACCEPT_FAIL_REPO" "$ACCEPT_FAIL_BASE" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [root, repo, base, tmp] = process.argv.slice(2);
+const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+const common = fs.realpathSync(path.resolve(repo, git('rev-parse', '--git-common-dir')));
+const seats = [{
+  role: 'qc', runner: 'cc-shim', model: 'claude-opus-4-6', effort: 'high',
+  endpoint: null, family: 'anthropic',
+}];
+const roster = {
+  reviewer_engine: seats[0].model,
+  reviewer_effort: 'high',
+  reviewer_runner: 'cc-shim',
+  reviewer_qualified: true,
+  implementer_engine: 'fixture-implementer',
+  implementer_effort: 'high',
+  implementer_runner: 'fixture',
+  loop_max_rounds: 1,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 1,
+  in_rail_review: 'single',
+  qc_panel_seats_complete: true,
+  qc_panel_seats: seats,
+  override_admitted_seats: ['qc_panel[0]'],
+};
+const ticket = 'accept-fail-hand';
+const branch = `feat/${ticket}`;
+const worktree = path.join(tmp, `${ticket}-wt`);
+try { execFileSync('git', ['-C', repo, 'worktree', 'remove', '--force', worktree], { stdio: 'ignore' }); } catch (_e) {}
+git('worktree', 'add', '-q', '-b', branch, worktree, base);
+fs.writeFileSync(path.join(worktree, 'dist', 'out.txt'), `${ticket}\n`);
+execFileSync('git', ['-C', worktree, 'add', 'dist/out.txt']);
+execFileSync('git', ['-C', worktree, 'commit', '-qm', ticket]);
+const candidate = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const tree = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim();
+const contractDir = path.join(tmp, `${ticket}-campaign`);
+fs.mkdirSync(contractDir, { recursive: true });
+const contractPath = path.join(contractDir, 'campaign.json');
+const sealPath = path.join(contractDir, 'campaign.seal.json');
+const promptFile = path.join(tmp, `${ticket}.prompt`);
+fs.writeFileSync(promptFile, 'accept fail\n');
+fs.writeFileSync(contractPath, `${JSON.stringify({
+  schema_version: 1,
+  ticket,
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${common}`,
+  base_sha: base,
+  branch,
+  vertical_acceptance: ['panel parallel'],
+  allowed_path_prefixes: ['dist/'],
+  max_changed_files: 5,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 120,
+  verify_cmd: 'true',
+  rubric_ids: ['ICC-KILL-057'],
+  final_panel_reserve_seconds: 0,
+}, null, 2)}\n`);
+execFileSync(process.execPath, [
+  path.join(root, 'scripts', 'implementation-campaign-check.js'),
+  'seal', '--contract', contractPath, '--repo', repo, '--mission-mode', 'shadow', '--out', sealPath,
+], { cwd: repo, encoding: 'utf8' });
+const engine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-09-19T00:00:05.000Z',
+  campaignIntake(input) {
+    return runCampaignIntake(input, {
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    });
+  },
+  campaignScopeChecker() {
+    return { passed: true, changed_files: ['dist/out.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
+  },
+  implementationDispatcher() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: {
+        status: 'acceptance_failed', runner: 'fixture', model: 'fixture-implementer',
+        branch, base, commit: candidate, files_changed: 1, insertions: 1, deletions: 0,
+        worktree, agent_log: '/tmp/impl-log', error: 'acceptance_failed',
+        possibly_effectful: true, dispatcher_called: true, model_calls: 1,
+      },
+    };
+  },
+  reviewDispatcher() {
+    throw new Error('review must not run after acceptance_failed');
+  },
+  diffProvider() { return promptFile; },
+  gitWorktreeAdd() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '',
+      worktree, parent: null, commit: candidate, observed_commit: candidate,
+      observed_tree_sha: tree, detached: true,
+    };
+  },
+  gitWorktreeRemove() { return { error: null, status: 0, signal: null, stdout: '', stderr: '' }; },
+  repairLineageCleanupTransaction() {
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+  },
+  verifyCommandRunner() {
+    return {
+      error: null, status: 0, signal: null, stdout: '', stderr: '',
+      executed_argv: ['/bin/sh', '-c', 'true'],
+    };
+  },
+});
+const result = engine.runImplementationReviewLoop({
+  promptFile, branch, base, roster,
+  campaignContract: contractPath, campaignSeal: sealPath,
+  campaignDispositionPolicy: 'acceptance-bound',
+  verificationEnv: { PATH: process.env.PATH || '', CI: ticket },
+  verificationEnvAllowlist: ['CI'],
+});
+const summary = JSON.stringify(result);
+const state = result.campaign_control && result.campaign_control.initial_state;
+const lastEvent = result.campaign_control && result.campaign_control.terminal_event;
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`summary_bytes=${Buffer.byteLength(summary)}`);
+console.log(`live_lease=${state && state.live_lease === null ? 'null' : JSON.stringify(state && state.live_lease)}`);
+console.log(`last_event=${lastEvent && lastEvent.event_type}`);
+console.log(`campaign_id=${result.campaign_control && result.campaign_control.campaign_id}`);
+const inspect = execFileSync(process.execPath, [
+  path.join(root, 'bin', 'autopilot.js'),
+  'campaign', 'inspect',
+  '--campaign-id', result.campaign_control.campaign_id,
+], { cwd: repo, encoding: 'utf8' });
+assert.ok(inspect.length > 0, 'inspect stdout must be non-empty');
+assert.ok(inspect.includes('"phase"') && inspect.includes('TERMINAL_STOP'), inspect.slice(0, 800));
+console.log('inspect_terminal_phase=true');
+NODE
+)"
+ACCEPT_FAIL_EXIT=$?
+assert_eq "0" "$ACCEPT_FAIL_EXIT" "acceptance_failed managed loop process exits 0"
+assert_contains "$ACCEPT_FAIL_OUT" "status=acceptance_failed" \
+  "GREEN: run status names acceptance_failed (RED at dec4a01b: blocked / campaign_terminal_journal / MUTATION_FAILURE_EVIDENCE_REQUIRED)"
+assert_contains "$ACCEPT_FAIL_OUT" "phase=TERMINAL_STOP" \
+  "GREEN: phase is the journaled MUTATION_FAILED terminal (RED at dec4a01b: campaign_terminal_journal)"
+assert_contains "$ACCEPT_FAIL_OUT" "last_event=mutation_failed" \
+  "GREEN: journal last event is MUTATION_FAILED"
+assert_contains "$ACCEPT_FAIL_OUT" "live_lease=null" \
+  "GREEN: live_lease released"
+assert_contains "$ACCEPT_FAIL_OUT" "inspect_terminal_phase=true" \
+  "campaign inspect projects TERMINAL_STOP"
+SUMMARY_BYTES="$(printf '%s\n' "$ACCEPT_FAIL_OUT" | sed -n 's/^summary_bytes=//p' | tail -n 1)"
+test "${SUMMARY_BYTES:-0}" -gt 0
+assert_eq "0" "$?" "summary JSON on stdout is complete (never 0 bytes)"
+
 finalize_test

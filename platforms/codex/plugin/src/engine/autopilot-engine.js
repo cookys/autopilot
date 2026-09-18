@@ -2865,6 +2865,7 @@ class AutopilotEngine {
             reason: terminalReason,
             failure_receipt_digest: receiptDigest,
             possibly_effectful: true,
+            ...(repairLineage ? { repair_lineage: { ...repairLineage } } : {}),
           }
           : {
             reason: terminalReason,
@@ -4451,6 +4452,22 @@ class AutopilotEngine {
           possibly_effectful: Boolean(parsed.commit || parsed.candidate_ref || parsed.tip),
           mutation_failed: false,
           unknown_status: false,
+          roster,
+          resolveResult,
+          implementationResult,
+          implementationArgs,
+          implementation: parsed,
+          dispatcher_called: true,
+          model_calls: Number.isSafeInteger(parsed.model_calls)
+            && parsed.model_calls >= 0 ? parsed.model_calls : 1,
+          ledger,
+        };
+      }
+      if (parsed && parsed.status === 'acceptance_failed') {
+        return {
+          status: 'acceptance_failed',
+          phase: 'dispatch_implementation',
+          reason: parsed.error || parsed.reason || 'acceptance_failed',
           roster,
           resolveResult,
           implementationResult,
@@ -7555,6 +7572,7 @@ class AutopilotEngine {
           }
           return {
             committed: false,
+            status: implementation.status,
             phase: implementation.phase || 'dispatch_implementation',
             reason: implementation.reason || `implementation status ${implementation.status}`,
             dispatcher_called: implementation.dispatcher_called === true,
@@ -8918,11 +8936,26 @@ class AutopilotEngine {
 
     const lastImplementation = implementationChain.at(-1) || null;
     const converged = composition.status === 'ready';
+    const journaledAcceptanceFailure = Boolean(
+      campaignControl
+      && campaignControl.terminal_failure
+      && campaignControl.terminal_failure.status === 'terminalized'
+      && campaignControl.initial_state
+      && campaignControl.initial_state.phase === CAMPAIGN_STATES.TERMINAL_STOP
+      && lastImplementation
+      && lastImplementation.status === 'acceptance_failed',
+    );
     return {
       status: converged ? 'converged' : (
-        composition.status === 'follow_up' ? 'follow_up' : 'blocked'
+        composition.status === 'follow_up' ? 'follow_up' : (
+          journaledAcceptanceFailure ? 'acceptance_failed' : 'blocked'
+        )
       ),
-      phase: converged ? 'campaign_terminal_ready' : composition.phase || 'campaign_terminal',
+      phase: converged ? 'campaign_terminal_ready' : (
+        journaledAcceptanceFailure
+          ? campaignControl.initial_state.phase
+          : (composition.phase || 'campaign_terminal')
+      ),
       reason: converged ? null : composition.reason || 'campaign requires follow-up',
       rounds: implementationChain.length,
       verdict: latestReview ? latestReview.verdict : null,

@@ -243,6 +243,41 @@ function canonicalDigest(value) {
   return sha256(JSON.stringify(canonicalize(value)));
 }
 
+// Kinds whose reducer-bound output_artifact_digest is canonicalDigest({kind, digest}).
+// Extra keys such as repair_lineage may ride on the wrapper; they must not enter the
+// digest the reducer recomputes, or MUTATION_FAILED is refused as evidence mismatch.
+const DIGEST_ARTIFACT_KINDS = new Set([
+  'verification_receipt',
+  'product_review',
+  'finding_registry',
+  'campaign_terminal',
+  'campaign_boundary_rejected',
+  'campaign_awaiting_disposition',
+  'campaign_convergence_budget',
+  'controller_progress_receipt',
+  'controller_gate_journal',
+  'controller_resource_debt',
+  'controller_repair_ticket',
+  'controller_orphan_adoption_receipt',
+  'controller_postcompact_adapter_receipt',
+]);
+
+function boundCampaignArtifactDigest(reference) {
+  if (reference
+      && DIGEST_ARTIFACT_KINDS.has(reference.kind)
+      && isSha256(reference.digest)) {
+    const bound = {
+      kind: reference.kind,
+      digest: reference.digest,
+    };
+    if (Object.prototype.hasOwnProperty.call(reference, 'repair_lineage')) {
+      bound.repair_lineage = reference.repair_lineage;
+    }
+    return canonicalDigest(bound);
+  }
+  return canonicalDigest(reference);
+}
+
 function repairLineageCleanupId({
   lineageId,
   branch,
@@ -270,21 +305,7 @@ function normalizeCampaignArtifactReference(value) {
   // Digest-bound artifact kinds emitted by the campaign reducer and controller
   // helpers. Every kind the reducer can bind as output_artifact_digest must be
   // accepted here so intake/CLI projection never rejects durable evidence.
-  const digestKinds = new Set([
-    'verification_receipt',
-    'product_review',
-    'finding_registry',
-    'campaign_terminal',
-    'campaign_boundary_rejected',
-    'campaign_awaiting_disposition',
-    'campaign_convergence_budget',
-    'controller_progress_receipt',
-    'controller_gate_journal',
-    'controller_resource_debt',
-    'controller_repair_ticket',
-    'controller_orphan_adoption_receipt',
-    'controller_postcompact_adapter_receipt',
-  ]);
+  const digestKinds = DIGEST_ARTIFACT_KINDS;
   if (digestKinds.has(value.kind)) {
     const hasRepairLineage = new Set(['product_review', 'campaign_terminal']).has(value.kind)
       && Object.prototype.hasOwnProperty.call(value, 'repair_lineage');
@@ -870,6 +891,11 @@ function reduceCampaignState(currentState, event) {
   const common = validateCommonEvent(currentState, event);
   if (common.duplicate) return currentState;
   const payloadKeys = new Set(EVENT_PAYLOAD_KEYS[event.event_type]);
+  if (event.event_type === CAMPAIGN_EVENTS.MUTATION_FAILED
+      && event.payload
+      && Object.prototype.hasOwnProperty.call(event.payload, 'repair_lineage')) {
+    payloadKeys.add('repair_lineage');
+  }
   const terminalEvent = new Set([
     CAMPAIGN_EVENTS.TERMINAL_READY,
     CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP,
@@ -951,9 +977,12 @@ function reduceCampaignState(currentState, event) {
     requireLease(currentState, event);
     if (event.payload.possibly_effectful !== true
         || !isSha256(event.payload.failure_receipt_digest)
-        || event.output_artifact_digest !== canonicalDigest({
+        || event.output_artifact_digest !== boundCampaignArtifactDigest({
           kind: 'campaign_terminal',
           digest: event.payload.failure_receipt_digest,
+          ...(Object.prototype.hasOwnProperty.call(event.payload, 'repair_lineage')
+            ? { repair_lineage: event.payload.repair_lineage }
+            : {}),
         })
         || typeof event.payload.reason !== 'string'
         || event.payload.reason.trim() === '') {
@@ -1166,6 +1195,7 @@ module.exports = {
   campaignClockElapsedSeconds,
   campaignIdFor,
   canonicalDigest,
+  boundCampaignArtifactDigest,
   createCampaignState,
   isLeaseBoundCampaignEvent,
   resolveCampaignEventLeaseIdentity,

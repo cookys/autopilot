@@ -17,6 +17,7 @@ const {
   campaignClockElapsedSeconds,
   campaignIdFor,
   canonicalDigest,
+  boundCampaignArtifactDigest,
   createCampaignState,
   normalizeCampaignArtifactReference,
   repairLineageCleanupId,
@@ -558,7 +559,7 @@ function appendCampaignEvent(input = {}) {
       : state.usage.churn,
   };
   const outputDigest = artifactReference
-    ? canonicalDigest(artifactReference)
+    ? boundCampaignArtifactDigest(artifactReference)
     : canonicalDigest({
       event_type: input.eventType,
       stage_identity: input.stageIdentity,

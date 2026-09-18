@@ -465,6 +465,47 @@ expectCode('MUTATION_FAILURE_EVIDENCE_REQUIRED', () => reduceCampaignState(
   },
 ));
 
+// RED at dec4a01b: controller MUTATION_FAILED wrapping campaign_terminal +
+// repair_lineage digested the wrapper while the reducer recomputed {kind, digest}
+// only → MUTATION_FAILURE_EVIDENCE_REQUIRED. Both sides now bind the same
+// reference (kind + failure-receipt digest + repair_lineage when present);
+// omitting lineage from the digest or naming the wrong receipt is still refused.
+const repairLineageStub = {
+  lineage_id: `campaign-v1-${'c'.repeat(64)}`,
+  branch: 'owned-branch',
+};
+const lineageControllerDigest = canonicalDigest({
+  kind: 'campaign_terminal',
+  digest: failureDigest,
+  repair_lineage: repairLineageStub,
+});
+expectCode('MUTATION_FAILURE_EVIDENCE_REQUIRED', () => reduceCampaignState(
+  mutationLeased,
+  {
+    ...mutationFailure,
+    idempotency_key: 'lineage-wrong-digest',
+    output_artifact_digest: canonicalDigest({
+      kind: 'campaign_terminal',
+      digest: failureDigest,
+    }),
+    payload: {
+      ...mutationFailure.payload,
+      repair_lineage: repairLineageStub,
+    },
+  },
+));
+const lineageControllerBinding = reduceCampaignState(mutationLeased, {
+  ...mutationFailure,
+  idempotency_key: 'lineage-controller-binding',
+  output_artifact_digest: lineageControllerDigest,
+  payload: {
+    ...mutationFailure.payload,
+    repair_lineage: repairLineageStub,
+  },
+});
+assert.strictEqual(lineageControllerBinding.phase, S.TERMINAL_STOP);
+assert.strictEqual(lineageControllerBinding.live_lease, null);
+
 console.log('valid_terminal=true');
 console.log('contract_digest_namespaces_campaign=true');
 console.log('valid_resume=true');
@@ -493,6 +534,8 @@ console.log('mutation_failure_terminalizes_lease=true');
 console.log('mutation_failure_replay_safe=true');
 console.log('mutation_failure_owner_fenced=true');
 console.log('mutation_failure_effect_state_required=true');
+console.log('mutation_failure_lineage_digest_refused=true');
+console.log('mutation_failure_controller_binding_accepted=true');
 NODE
 )"
 PURE_EXIT=$?
@@ -506,7 +549,8 @@ for key in valid_terminal contract_digest_namespaces_campaign valid_resume valid
   artifact_chain_break_rejected terminal_registry_required initial_identity_recomputed \
   resume_authority_preserved mutation_requires_remaining_wall_budget \
   mutation_failure_terminalizes_lease mutation_failure_replay_safe \
-  mutation_failure_owner_fenced mutation_failure_effect_state_required; do
+  mutation_failure_owner_fenced mutation_failure_effect_state_required \
+  mutation_failure_lineage_digest_refused mutation_failure_controller_binding_accepted; do
   assert_contains "$PURE_OUT" "$key=true" "pure reducer proves $key"
 done
 

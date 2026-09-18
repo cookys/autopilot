@@ -7,6 +7,7 @@ const {
   CAMPAIGN_STATES,
   CAMPAIGN_EVENTS,
   NON_SUCCESS_DURABLE_STATES,
+  campaignClockElapsedSeconds,
   canonicalDigest,
   resolveCampaignEventLeaseIdentity,
   normalizeCampaignArtifactReference,
@@ -661,7 +662,7 @@ function buildTerminalizeMutationFailedEvent(projection, now, reason) {
   const leaseIdentity = resolveCampaignEventLeaseIdentity(state, CAMPAIGN_EVENTS.MUTATION_FAILED);
   const elapsedWallSeconds = Number.isFinite(Date.parse(state.started_at))
     && Number.isFinite(Date.parse(observedAt))
-      ? Math.floor((Date.parse(observedAt) - Date.parse(state.started_at)) / 1000)
+      ? campaignClockElapsedSeconds(state, Date.parse(observedAt))
       : 0;
   const base = {
     schema_version: 1,

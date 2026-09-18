@@ -4399,11 +4399,119 @@ step(CAMPAIGN_EVENTS.AWAITING_DISPOSITION, 0, {
   candidate_ref: '3'.repeat(40),
 }, 5, canonicalDigest('w'));
 assert.strictEqual(state2.phase, CAMPAIGN_STATES.AWAITING_DISPOSITION);
-step(CAMPAIGN_EVENTS.DISPOSITION_RESUMED, 0, {
-  registry_complete: true,
-  registry_digest: 'e'.repeat(64),
-}, 6, canonicalDigest('x'));
+
+// Wall-clock pause while parked: (a) a RESUMED replay observed far past the
+// contract's max_wall_seconds (3600) must be accepted with the FROZEN park
+// value (5), not the raw wall delta, and started_at shifts forward by the
+// parked interval so accrual resumes from the frozen value once un-parked.
+const preParkStartedAt = state2.started_at;
+const preParkLastEventAt = state2.last_event_at;
+state2 = reduceCampaignState(state2, {
+  schema_version: 1,
+  event_type: CAMPAIGN_EVENTS.RESUMED,
+  campaign_id: state2.campaign_id,
+  contract_digest: d2,
+  generation: state2.generation,
+  idempotency_key: 'resumed-far-past-wall',
+  input_artifact_digest: state2.last_output_artifact_digest,
+  output_artifact_digest: state2.last_output_artifact_digest,
+  timestamp: '2026-07-30T03:00:00.000Z',
+  stage_identity: 'ctrl-stage',
+  usage: {
+    repair_generations: state2.generation,
+    elapsed_wall_seconds: 5,
+    changed_files: state2.usage.changed_files,
+    churn: state2.usage.churn,
+  },
+  payload: {},
+});
+assert.strictEqual(state2.phase, CAMPAIGN_STATES.AWAITING_DISPOSITION);
+assert.strictEqual(state2.usage.elapsed_wall_seconds, 5);
+const expectedShiftedStartedAt = new Date(
+  Date.parse(preParkStartedAt)
+    + (Date.parse('2026-07-30T03:00:00.000Z') - Date.parse(preParkLastEventAt)),
+).toISOString();
+assert.strictEqual(state2.started_at, expectedShiftedStartedAt);
+assert.notStrictEqual(state2.started_at, preParkStartedAt);
+
+// (d) negative: un-parking with the raw (unfrozen) wall value throws WALL_CLOCK_RESET.
+assert.throws(() => reduceCampaignState(state2, {
+  schema_version: 1,
+  event_type: CAMPAIGN_EVENTS.DISPOSITION_RESUMED,
+  campaign_id: state2.campaign_id,
+  contract_digest: d2,
+  generation: state2.generation,
+  idempotency_key: 'disposition-resumed-bad',
+  input_artifact_digest: state2.last_output_artifact_digest,
+  output_artifact_digest: canonicalDigest('x'),
+  timestamp: '2026-07-30T03:00:01.000Z',
+  stage_identity: 'ctrl-stage',
+  usage: {
+    repair_generations: state2.generation,
+    elapsed_wall_seconds: 6,
+    changed_files: state2.usage.changed_files,
+    churn: state2.usage.churn,
+  },
+  payload: {
+    registry_complete: true,
+    registry_digest: 'e'.repeat(64),
+  },
+}), (e) => e.code === 'WALL_CLOCK_RESET');
+
+// (b) DISPOSITION_RESUMED un-parks with the frozen value (5) → ADJUDICATING.
+state2 = reduceCampaignState(state2, {
+  schema_version: 1,
+  event_type: CAMPAIGN_EVENTS.DISPOSITION_RESUMED,
+  campaign_id: state2.campaign_id,
+  contract_digest: d2,
+  generation: state2.generation,
+  idempotency_key: 'disposition-resumed-ok',
+  input_artifact_digest: state2.last_output_artifact_digest,
+  output_artifact_digest: canonicalDigest('x'),
+  timestamp: '2026-07-30T03:00:01.000Z',
+  stage_identity: 'ctrl-stage',
+  usage: {
+    repair_generations: state2.generation,
+    elapsed_wall_seconds: 5,
+    changed_files: state2.usage.changed_files,
+    churn: state2.usage.churn,
+  },
+  payload: {
+    registry_complete: true,
+    registry_digest: 'e'.repeat(64),
+  },
+});
 assert.strictEqual(state2.phase, CAMPAIGN_STATES.ADJUDICATING);
+assert.strictEqual(state2.usage.elapsed_wall_seconds, 5);
+
+// (c) once un-parked, accrual continues from the frozen value: +10s later
+// carries 5 + 10 = 15.
+state2 = reduceCampaignState(state2, {
+  schema_version: 1,
+  event_type: CAMPAIGN_EVENTS.REPAIR_AUTHORIZED,
+  campaign_id: state2.campaign_id,
+  contract_digest: d2,
+  generation: state2.generation + 1,
+  idempotency_key: 'repair-authorized-post-park',
+  input_artifact_digest: state2.last_output_artifact_digest,
+  output_artifact_digest: canonicalDigest('repair-post-park'),
+  timestamp: '2026-07-30T03:00:11.000Z',
+  stage_identity: 'ctrl-stage',
+  usage: {
+    repair_generations: state2.generation + 1,
+    elapsed_wall_seconds: 15,
+    changed_files: state2.usage.changed_files,
+    churn: state2.usage.churn,
+  },
+  payload: {
+    registry_complete: true,
+    registry_digest: 'f'.repeat(64),
+    repair_gate_passed: true,
+    repair_gate_digest: 'a'.repeat(64),
+  },
+});
+assert.strictEqual(state2.phase, CAMPAIGN_STATES.REPAIRING);
+assert.strictEqual(state2.usage.elapsed_wall_seconds, 15);
 
 // Repair tickets append without successor identity.
 let woCtrl = ctrl.emptyControllerState({

@@ -14,6 +14,7 @@ const {
   CAMPAIGN_EVENTS,
   CAMPAIGN_STATES,
   NON_SUCCESS_DURABLE_STATES,
+  campaignClockElapsedSeconds,
   campaignIdFor,
   canonicalDigest,
   createCampaignState,
@@ -515,7 +516,7 @@ function appendCampaignEvent(input = {}) {
   const generation = Number.isSafeInteger(input.generation)
     ? input.generation
     : state.generation;
-  const elapsed = Math.floor((Date.parse(observedAt) - Date.parse(state.started_at)) / 1000);
+  const elapsed = campaignClockElapsedSeconds(state, Date.parse(observedAt));
   const usage = {
     repair_generations: generation,
     elapsed_wall_seconds: elapsed,
@@ -653,7 +654,6 @@ function buildResumeEvent({
   stageIdentity,
 }) {
   const observedMs = Date.parse(observedAt);
-  const startedMs = Date.parse(existingState.started_at);
   return {
     schema_version: 1,
     event_type: CAMPAIGN_EVENTS.RESUMED,
@@ -667,7 +667,7 @@ function buildResumeEvent({
     stage_identity: stageIdentity,
     usage: {
       ...existingState.usage,
-      elapsed_wall_seconds: Math.floor((observedMs - startedMs) / 1000),
+      elapsed_wall_seconds: campaignClockElapsedSeconds(existingState, observedMs),
     },
     payload: {},
   };

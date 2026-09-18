@@ -90,6 +90,7 @@ function reviewPacketIdentity(value) {
 const {
   CAMPAIGN_EVENTS,
   CAMPAIGN_STATES,
+  campaignClockElapsedSeconds,
   campaignIdFor,
   repairLineageCleanupId,
   resolveCampaignEventLeaseIdentity,
@@ -1472,7 +1473,7 @@ function campaignWallBudgetStatus(control, observedAt, options = {}) {
       || limit < 0) {
     return { exhausted: true, elapsed_seconds: null };
   }
-  const elapsed = Math.floor((observed - startedAt) / 1000);
+  const elapsed = campaignClockElapsedSeconds(state, observed);
   return {
     exhausted: elapsed >= limit,
     elapsed_seconds: elapsed,

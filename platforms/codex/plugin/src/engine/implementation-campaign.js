@@ -51,6 +51,22 @@ const NON_SUCCESS_DURABLE_STATES = new Set([
   CAMPAIGN_STATES.AWAITING_DISPOSITION,
   CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION,
 ]);
+// The durable wall clock pauses while the campaign is parked here: a resume
+// after a long real-world wait must not be refused for exceeding the budget
+// it never actively consumed.
+const WALL_CLOCK_PAUSED_STATES = new Set([
+  CAMPAIGN_STATES.AWAITING_DISPOSITION,
+]);
+// Elapsed durable wall-clock seconds as of `observedMs`. Frozen at the parked
+// usage value while `state.phase` is paused; otherwise the live delta from
+// `state.started_at`. Every producer and validator of `usage.elapsed_wall_seconds`
+// must derive it through this helper so they never disagree.
+function campaignClockElapsedSeconds(state, observedMs) {
+  if (WALL_CLOCK_PAUSED_STATES.has(state.phase)) {
+    return state.usage.elapsed_wall_seconds;
+  }
+  return Math.floor((observedMs - Date.parse(state.started_at)) / 1000);
+}
 const MUTATION_START_EVENTS = new Set([
   CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
   CAMPAIGN_EVENTS.REPAIR_STARTED,
@@ -698,10 +714,10 @@ function validateUsage(state, event, expectedGeneration, options = {}) {
     }
   }
   const eventMs = parseTimestamp(event.timestamp, 'event.timestamp');
-  const startedMs = parseTimestamp(state.started_at, 'state.started_at');
+  parseTimestamp(state.started_at, 'state.started_at');
   const lastMs = parseTimestamp(state.last_event_at, 'state.last_event_at');
   if (eventMs < lastMs) fail('TIME_RESET', 'event timestamp precedes durable campaign time');
-  const elapsed = Math.floor((eventMs - startedMs) / 1000);
+  const elapsed = campaignClockElapsedSeconds(state, eventMs);
   if (event.usage.elapsed_wall_seconds !== elapsed) {
     fail('WALL_CLOCK_RESET', 'elapsed wall time must equal the durable campaign clock');
   }
@@ -1117,6 +1133,13 @@ function reduceCampaignState(currentState, event) {
     }
   }
   next.usage = { ...event.usage };
+  if (WALL_CLOCK_PAUSED_STATES.has(currentState.phase)) {
+    const eventMs = parseTimestamp(event.timestamp, 'event.timestamp');
+    next.started_at = new Date(
+      Date.parse(currentState.started_at)
+        + (eventMs - Date.parse(currentState.last_event_at)),
+    ).toISOString();
+  }
   next.last_event_at = event.timestamp;
   next.last_input_artifact_digest = event.input_artifact_digest;
   next.last_output_artifact_digest = event.output_artifact_digest;
@@ -1138,7 +1161,9 @@ module.exports = {
   CAMPAIGN_SCHEMA_VERSION,
   CAMPAIGN_STATES,
   NON_SUCCESS_DURABLE_STATES,
+  WALL_CLOCK_PAUSED_STATES,
   CampaignStateError,
+  campaignClockElapsedSeconds,
   campaignIdFor,
   canonicalDigest,
   createCampaignState,

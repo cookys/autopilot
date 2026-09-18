@@ -1467,11 +1467,10 @@ function campaignWallBudgetStatus(control, observedAt, options = {}) {
   let limit = state && state.limits && state.limits.max_wall_seconds;
   const consumer = options && options.consumer === 'panel' ? 'panel' : 'review';
   if (consumer === 'panel' && Number.isSafeInteger(limit)) {
-    const fromContract = control.contract && control.contract.final_panel_reserve_seconds;
+    // The pocket is read ONLY from the sealed limits (implementation-campaign.js seals it at
+    // intake from the contract; a control rebuilt from its durable state carries it too).
     const fromLimits = state.limits && state.limits.final_panel_reserve_seconds;
-    const reserve = Number.isSafeInteger(fromContract)
-      ? fromContract
-      : (Number.isSafeInteger(fromLimits) ? fromLimits : 0);
+    const reserve = Number.isSafeInteger(fromLimits) ? fromLimits : 0;
     limit += reserve;
   }
   if (!Number.isFinite(startedAt)
@@ -1501,13 +1500,9 @@ function campaignWallRemainingSeconds(control, observedAt, options = {}) {
   let limit = control.initial_state.limits.max_wall_seconds;
   const consumer = options && options.consumer === 'panel' ? 'panel' : 'review';
   if (consumer === 'panel') {
-    const fromContract = control.contract && control.contract.final_panel_reserve_seconds;
     const fromLimits = control.initial_state.limits
       && control.initial_state.limits.final_panel_reserve_seconds;
-    const reserve = Number.isSafeInteger(fromContract)
-      ? fromContract
-      : (Number.isSafeInteger(fromLimits) ? fromLimits : 0);
-    limit += reserve;
+    limit += Number.isSafeInteger(fromLimits) ? fromLimits : 0;
   }
   const remaining = limit - budget.elapsed_seconds;
   return remaining >= 1
@@ -4959,9 +4954,16 @@ class AutopilotEngine {
         };
       }
       const diffFile = prepared.diff_file;
+      // Finish phase of a batched (parallel) seat: the budget was checked and the timeout
+      // clamped when the launch was PREPARED; re-checking after the batch ran would discard a
+      // seat that already returned a verdict merely because the slowest sibling used the
+      // remainder (second review 🟠 panel-finish-rebudget). The carried timeout is the one the
+      // seat was actually handed.
       const budgetAt = this.now();
       const budgetOpts = { consumer: budgetConsumer === 'panel' ? 'panel' : 'review' };
-      const budget = campaignWallBudgetStatus(campaignControl, budgetAt, budgetOpts);
+      const budget = preparedLaunch
+        ? { exhausted: false, elapsed_seconds: null }
+        : campaignWallBudgetStatus(campaignControl, budgetAt, budgetOpts);
       if (budget.exhausted) {
         return {
           reviewed: false,
@@ -4974,7 +4976,9 @@ class AutopilotEngine {
       // seats on a 90 KB diff (dogfood 2026-09-17) after the campaign had already paid for
       // implement/verify/review. Invariant: a seat is never handed more than the campaign's
       // remaining wall seconds; a caller (performFinalPanel) may only tighten it.
-      const remainingWall = campaignWallRemainingSeconds(campaignControl, budgetAt, budgetOpts);
+      const remainingWall = preparedLaunch
+        ? { exhausted: false, seconds: null }
+        : campaignWallRemainingSeconds(campaignControl, budgetAt, budgetOpts);
       if (remainingWall.exhausted) {
         return {
           reviewed: false,
@@ -5052,6 +5056,7 @@ class AutopilotEngine {
         return {
           deferred: true,
           reviewTimeoutSeconds,
+          prepared,
           preparedLaunch: reviewed,
           candidate,
           verification,
@@ -5363,8 +5368,9 @@ class AutopilotEngine {
             },
             reviewStage: `campaign-final-review#seat-${entry.index + 1}`,
             pinReviewerTuple: true,
-            review_timeout_seconds: seatTimeoutSeconds,
+            review_timeout_seconds: entry.deferred.reviewTimeoutSeconds,
             budget_consumer: 'panel',
+            prepared_review: entry.deferred.prepared,
             preparedLaunch: entry.deferred.preparedLaunch,
             providedReviewResult: batchRows[i],
           });
@@ -7795,11 +7801,10 @@ class AutopilotEngine {
           env: verificationEnvironment,
           envAllowlist: verificationEnvAllowlist,
         });
-        const reuseAllowed = !(campaignControl.contract
-          && campaignControl.contract.full_suite_reuse === false)
-          && !(campaignControl.initial_state
-            && campaignControl.initial_state.limits
-            && campaignControl.initial_state.limits.full_suite_reuse === false);
+        // Sealed knob only (limits are integers: 1 = reuse allowed, 0 = always run fresh).
+        const reuseAllowed = !(campaignControl.initial_state
+          && campaignControl.initial_state.limits
+          && campaignControl.initial_state.limits.full_suite_reuse === 0);
         const cached = verificationCache.get(suiteRequest.request_digest);
         if (reuseAllowed && reusableGreenReceipt(cached, suiteRequest)) {
           const reusedAt = this.now();
@@ -8011,6 +8016,10 @@ class AutopilotEngine {
           // counts repairs after that candidate.
           generationCap: maxRepairGenerations + 1,
         });
+        // The acceptance path's budget check is the final panel's single pre-prepare check
+        // (same 'panel' consumer, same clock) which refuses with the specific
+        // `final_panel_budget_exhausted`; tripping the generic convergence gate here would
+        // make that reason unreachable. Repair generations keep the gate's own check.
         let passed = gate.verdict === 'PASS';
         if (reason !== 'acceptance' && budget.exhausted) passed = false;
         let journalReason = null;

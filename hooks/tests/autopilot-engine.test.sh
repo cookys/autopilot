@@ -5594,6 +5594,26 @@ printf 'base\n' >"$PANEL_REPO/dist/source.txt"
 git -C "$PANEL_REPO" add .
 git -C "$PANEL_REPO" commit -qm "panel base"
 PANEL_BASE="$(git -C "$PANEL_REPO" rev-parse HEAD)"
+# Stub runner for the REAL fan-out case (created here: a template literal cannot carry sed's \1).
+cat > "$TEST_TMP/panel-2a-real-stub" <<'STUB'
+#!/usr/bin/env bash
+prompt="$(cat)"
+model=""
+while [ "$#" -gt 0 ]; do if [ "$1" = "--model" ]; then model="$2"; fi; shift; done
+case "$model" in
+  slow-a) sleep 3; : > "$(dirname "$0")/panel-2a-real-marker" ;;
+  fast-b) sleep 1; : > "$(dirname "$0")/panel-2a-real-marker" ;;
+  mid-c)  sleep 2; : > "$(dirname "$0")/panel-2a-real-marker" ;;
+esac
+begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=dist/out.txt one-line hunk against the panel spec; evidence=the hunk adds a single fixture line and touches no code path; conclusion=nothing to fix in a one-line fixture change"
+echo "$end"
+STUB
+chmod +x "$TEST_TMP/panel-2a-real-stub"
 PANEL_OUT="$(node - "$REPO_ROOT" "$PANEL_REPO" "$PANEL_BASE" "$TEST_TMP" <<'NODE'
 'use strict';
 const assert = require('assert');
@@ -5661,7 +5681,11 @@ function stubReview() {
     },
   };
 }
-function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify }) {
+function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride }) {
+  const caseSeats = seatsOverride || seats;
+  const caseRoster = seatsOverride
+    ? { ...roster, reviewer_engine: 'inrail-x', reviewer_runner: seatsOverride[0].runner, qc_panel_seats: seatsOverride }
+    : roster;
   const branch = `feat/${ticket}`;
   const worktree = path.join(tmp, `${ticket}-wt`);
   try { execFileSync('git', ['-C', repo, 'worktree', 'remove', '--force', worktree], { stdio: 'ignore' }); } catch (_e) {}
@@ -5706,14 +5730,19 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
         },
       };
     },
-    reviewDispatcher(args) {
-      if (typeof onReview === 'function') onReview();
-      reviewArgsSeen.push(args);
-      const modelIdx = args.indexOf('--model');
-      reviewModels.push(modelIdx >= 0 ? args[modelIdx + 1] : null);
-      return stubReview();
-    },
-    diffProvider() { return promptFile; },
+    // realBin: NO injected dispatcher — the real dispatchReviewJson → review-fanout.js →
+    // dispatch-review.sh path runs, with the runner binary stubbed via --bin.
+    ...(realBin ? {} : {
+      reviewDispatcher(args) {
+        if (typeof onReview === 'function') onReview();
+        reviewArgsSeen.push(args);
+        const modelIdx = args.indexOf('--model');
+        reviewModels.push(modelIdx >= 0 ? args[modelIdx + 1] : null);
+        return stubReview();
+      },
+    }),
+    // realBin: the real path checks the diff is canonical, so the default git diff provider runs.
+    ...(realBin ? {} : { diffProvider() { return promptFile; } }),
     gitWorktreeAdd() {
       worktrees += 1;
       return {
@@ -5747,13 +5776,14 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
     ledger: [],
   });
   const result = engine.runImplementationReviewLoop({
-    promptFile, branch, base, roster,
+    promptFile, branch, base, roster: caseRoster,
     campaignContract: contractPath, campaignSeal: sealPath,
     campaignDispositionPolicy: 'acceptance-bound',
     verificationEnv: { PATH: process.env.PATH || '', CI: ticket },
     verificationEnvAllowlist: ['CI'],
+    ...(realBin ? { extraReviewArgs: ['--bin', realBin] } : {}),
   });
-  collect({ result, reviewArgsSeen, reviewModels, worktrees, candidate, tree });
+  collect({ result, reviewArgsSeen, reviewModels, worktrees, candidate, tree, caseSeats });
   return result;
 }
 
@@ -5902,6 +5932,56 @@ runCase({
 void first;
 void refused;
 console.log('cut2a_engine=true');
+
+// REAL batch path (no injected dispatcher): three qoderclicn seats through review-fanout.js and
+// dispatch-review.sh with a stub binary that sleeps 3/1/2 s (completion order 2,3,1) and touches
+// a marker; the engine clock jumps PAST the wall once any seat has run, so the finish phase sees
+// an exhausted wall. RED at 30b69a1a: every seat came back phase=campaign_wall_budget (the finish
+// phase re-ran prepareReview and re-checked the budget after the batch); seat order must still be
+// index order and every panel ledger row must carry the batch timestamps.
+const realStub = path.join(tmp, 'panel-2a-real-stub');
+const realMarker = path.join(tmp, 'panel-2a-real-marker');
+const realSeats = [
+  { role: 'qc', runner: 'qoderclicn', model: 'slow-a', effort: 'high', endpoint: null, family: 'fa' },
+  { role: 'qc', runner: 'qoderclicn', model: 'fast-b', effort: 'high', endpoint: null, family: 'fb' },
+  { role: 'qc', runner: 'qoderclicn', model: 'mid-c', effort: 'high', endpoint: null, family: 'fc' },
+];
+const t0 = Date.parse('2026-09-18T00:00:05.000Z');
+const jumpingClock = () => (fs.existsSync(realMarker)
+  ? new Date(t0 + 200 * 1000).toISOString()   // beyond the 120 s wall
+  : new Date(t0).toISOString());
+runCase({
+  ticket: 'panel-real-batch',
+  reserve: 0,
+  clock: jumpingClock,
+  realBin: realStub,
+  seatsOverride: realSeats,
+  collect({ result }) {
+    const seatsOut = (function find(value) {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+      for (const child of Object.values(value)) {
+        const found = find(child);
+        if (found) return found;
+      }
+      return null;
+    })(result);
+    if (!Array.isArray(seatsOut)) {
+      console.error(`real_batch_debug=${JSON.stringify({ status: result.status, phase: result.phase, reason: result.reason, ledger: (result.ledger || []).map((r) => [r.unit, r.status, r.reason || r.rejection_code || '']) })}`);
+    }
+    assert.ok(Array.isArray(seatsOut) && seatsOut.length === 3, `three seat receipts expected: ${JSON.stringify(seatsOut)}`);
+    assert.deepStrictEqual(seatsOut.map((r) => r.seat_index), [1, 2, 3]);
+    assert.deepStrictEqual(seatsOut.map((r) => r.model), realSeats.map((s) => s.model), 'receipts in seat-index order');
+    assert.deepStrictEqual(seatsOut.map((r) => r.status), ['reviewed', 'reviewed', 'reviewed'],
+      `every seat finished after the batch despite the wall jump: ${JSON.stringify(seatsOut.map((r) => [r.status, r.reason]))}`);
+    const panelRows = (result.ledger || []).filter((row) => row.unit === 'dispatch_review').slice(-3);
+    assert.strictEqual(panelRows.length, 3);
+    assert.strictEqual(new Set(panelRows.map((r) => `${r.started_at}|${r.ended_at}`)).size, 1,
+      'panel seat ledger rows carry one batch started_at/ended_at pair');
+    console.log('real_batch_panel=true');
+  },
+});
+
 NODE
 )"
 assert_contains "$PANEL_OUT" "panel_order=true" "3-seat stub dispatcher is called in index order (RED at base 7f5d6ee8: sequential split)"
@@ -5910,6 +5990,7 @@ assert_contains "$PANEL_OUT" "panel_digest_stable=true" "panel receipts and revi
 assert_contains "$PANEL_OUT" "pocket_source=true" "wall exhausted + reserve 300 uses budget_source pocket"
 assert_contains "$PANEL_OUT" "pocket_refuse=true" "reserve 0 with exhausted wall refuses before later panel seats"
 assert_contains "$PANEL_OUT" "verify_once_hit=true" "GREEN cache hit reuses full_suite"
+assert_contains "$PANEL_OUT" "real_batch_panel=true" "REAL fan-out path: 3 seats finish in index order with batch timestamps after a wall jump (RED at 30b69a1a: campaign_wall_budget on finish)"
 assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
 assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
 

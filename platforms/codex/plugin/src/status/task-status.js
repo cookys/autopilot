@@ -130,6 +130,10 @@ const CAMPAIGN_LIMIT_KEYS = Object.freeze([
   'max_changed_files',
   'baseline_churn',
   'max_churn',
+  // cut 2-A (v2.36.65): sealed panel pocket + full-suite reuse flag (both integers) —
+  // must stay equal to LIMIT_KEYS in src/engine/implementation-campaign.js.
+  'final_panel_reserve_seconds',
+  'full_suite_reuse',
 ]);
 
 const CAMPAIGN_USAGE_KEYS = Object.freeze([

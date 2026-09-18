@@ -750,12 +750,23 @@ const { dispatchReviewJson, dispatchReviewJsonBatch } = require(path.join(root, 
 const args = ['--runner', 'codex', '--model', 'gpt-5.5', '--diff-file', diff, '--bin', stub];
 const single = dispatchReviewJson(args);
 const batch = dispatchReviewJsonBatch([{ args }])[0];
-const keys = ['status', 'signal'];
-for (const key of keys) {
-  assert.strictEqual(batch[key], single[key], key);
-}
-assert.strictEqual(batch.result && batch.result.verdict, single.result && single.result.verdict);
-assert.strictEqual(batch.result && batch.result.status, single.result && single.result.status);
+// Field-by-field identity of the WHOLE object (result JSON, envelope, packet fields): the
+// batch of one and the single dispatch share one launch path, so nothing may differ.
+// (second review 🟡 batch-identity-weak: the earlier check compared four fields only.)
+// Per-run nonces (dispatch run id, mktemp raw-log suffix) differ by construction on every
+// dispatch, and the envelope digests are functions of the text that carries them — those are
+// normalized; every other field of the whole object must be strictly equal.
+const norm = (o) => JSON.parse(JSON.stringify(o, (k, v) => {
+  if (k === 'error' && v instanceof Error) return String(v);
+  if (k === 'output_digests' || k === 'receipt_digest') return '<digest-of-normalized-text>';
+  if (typeof v === 'string') {
+    return v
+      .replace(/dispatch-review-log-[A-Za-z0-9]{6}/g, 'dispatch-review-log-NONCE')
+      .replace(/review-\d+-\d+-[0-9a-f]{4}/g, 'review-NONCE');
+  }
+  return v;
+}));
+assert.deepStrictEqual(norm(batch), norm(single));
 console.log('batch_of_one_identity=true');
 NODE
 )"

@@ -1,0 +1,5 @@
+FAIL [review-runner] a child exiting before stdin drains does not kill the fan-out (RED at 30b69a1a: uncaught EPIPE, no array): 'epipe_array=true' not found in output
+FAIL [review-runner] 300k multibyte chars across pipe chunks come back exact in a >64 KiB array (RED at 30b69a1a: U+FFFD / truncated): 'utf8_exact=true' not found in output
+FAIL [review-runner] 55 passed, 2 failed
+      - a child exiting before stdin drains does not kill the fan-out (RED at 30b69a1a: uncaught EPIPE, no array): 'epipe_array=true' not found in output
+      - 300k multibyte chars across pipe chunks come back exact in a >64 KiB array (RED at 30b69a1a: U+FFFD / truncated): 'utf8_exact=true' not found in output

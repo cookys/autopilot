@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### dispatch-review parser refuses a complete GLM verdict when the envelope repeats the BEGIN marker
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — 2-C station second-family review: GLM-5.2 returned VERDICT/FINDINGS/NO-FINDING-PROOF intact, parser said `duplicate derived BEGIN marker found inside capture` → `no_verdict`; adopted from raw
+- **Effort**: S
+- **Source**: 2-C station campaign, `review-glm-r2-no-verdict.json` + `review-glm-r2-raw.log`
+- **Pointer**: docs/plans/evidence/2026-09-18-blind-review-panel-station/README.md
+- **Context**: v2.34.7 framing family — the model echoes the marker line once more inside the block; the locator should treat a repeated marker as chrome when the wrapped block is otherwise well-formed, not discard the verdict.
+
 ### Test suites inherit the dispatcher's session env: `AUTOPILOT_SESSION_ID` makes `mission-runtime-v2` red in-rail
 - **Status**: open
 - **Trigger**: fired 2026-09-18 — 2-C station acceptance ran with `AUTOPILOT_SESSION_ID` exported by depth-0; `mission-runtime-v2.test.sh` fails under it on develop too (53 red); the candidate was fine

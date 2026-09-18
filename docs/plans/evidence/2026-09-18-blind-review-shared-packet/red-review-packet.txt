@@ -1,0 +1,6 @@
+# hooks/tests/review-packet.test.sh from 5d7ad66a run at base fd4ea3a6 (detached checkout)
+FAIL [review-packet] batched hashing / materialize isolation: hashObject_calls=0: expected '2', got '0'
+FAIL [review-packet] batched hashing equals per-file (RED at base fd4ea3a6: hashObject used for every tracked file): 'batch_equals_per_file=true' not found in output
+FAIL [review-packet] materializePacket distinct inodes and mutation isolation (RED at base fd4ea3a6: TypeError: rp.materializePacket is not a function): 'inode_copy_isolated=true' not found in output
+FAIL [review-packet] 54 passed, 3 failed
+rc=1

@@ -1,0 +1,13 @@
+# hooks/tests/review-runner.test.sh from 5d7ad66a run at base fd4ea3a6 (detached checkout)
+FAIL [review-runner] shared packet runner: : expected '1', got '0'
+FAIL [review-runner] three jobs one shared packet_hash (RED at base fd4ea3a6: per-seat builds): 'shared_hash_equal=true' not found in output
+FAIL [review-runner] three distinct launch dirs: 'distinct_dirs=3' not found in output
+FAIL [review-runner] launch dirs are not the shared dir: 'none_shared_dir=true' not found in output
+FAIL [review-runner] exactly one buildReviewPacket for three shared jobs plus once from buildPacketOnce: 'build_count=1' not found in output
+FAIL [review-runner] N=3 hashPacketDir calls for three seats: 'hash_count=3' not found in output
+FAIL [review-runner] batch of one without sharedPacket hash equals shared build: 'solo_hash_stable=true' not found in output
+FAIL [review-runner] batch of one env keys match: 'solo_env_keys=true' not found in output
+FAIL [review-runner] mutated seat dir refused skipLaunch (RED at base fd4ea3a6: no skipLaunch on hash mismatch): 'skip_launch=true' not found in output
+FAIL [review-runner] mismatch is precondition_failed: 'precondition=true' not found in output
+FAIL [review-runner] 57 passed, 10 failed
+rc=1

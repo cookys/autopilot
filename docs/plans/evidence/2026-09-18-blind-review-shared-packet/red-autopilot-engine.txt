@@ -1,0 +1,14 @@
+# hooks/tests/autopilot-engine.test.sh from 5d7ad66a run at base fd4ea3a6 (detached checkout)
+FAIL [autopilot-engine] REAL fan-out path: 3 seats finish in index order with batch timestamps after a wall jump (RED at 30b69a1a: campaign_wall_budget on finish): 'real_batch_panel=true' not found in output
+FAIL [autopilot-engine] 4-seat stub with one transport failure still reviews count 3: 'standby_quorum_panel=true' not found in output
+FAIL [autopilot-engine] first intake writes snapshot; wx second write refused: 'snapshot_write_once=true' not found in output
+FAIL [autopilot-engine] undrifted roster carries no roster_drift key and no final_panel_roster_drift trace entry: 'undrifted_roster_no_drift_flag=true' not found in output
+FAIL [autopilot-engine] resume roster swap records live_drift and reviews snapshot seats: 'snapshot_live_drift=true' not found in output
+FAIL [autopilot-engine] contract_digest mismatch blocks before spend: 'snapshot_identity_invalid=true' not found in output
+FAIL [autopilot-engine] no snapshot uses live roster: 'no_snapshot_live_roster=true' not found in output
+FAIL [autopilot-engine] station panel fans out once and terminal reuses the same receipts: 'station_terminal_reuse=true' not found in output
+FAIL [autopilot-engine] three-seat finding-id qualification: a third identical-to-a-later-group occurrence folds in, no spurious third id: 'station_collide_three_seats=true' not found in output
+FAIL [autopilot-engine] 558 passed, 9 failed
+rc=1
+
+(note: the engine node block hosts the 2-B cases after `real_batch_panel`; its `__packetBuildCount` assertion throws first at base, so the later `not found` lines are the cascade of that one throw, not independent REDs)

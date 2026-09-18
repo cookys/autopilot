@@ -8,11 +8,7 @@ campaign — do not touch `src/runners/*`.
 ## Read first
 1. `docs/plans/2026-09-18-blind-review-panel-station.md` — §0, §1.1 items 1–5 NORMATIVE, §2.1, §2.5 (first list),
    §2.6, §4, §4.1. The plan wins over this brief. Then `.rubric.md` R1–R3, R6–R8.
-2. Code named in §0: `campaign-composition.js` `runCampaignComposition` (`full_diff_review` station ~:1822-2004,
-   loop adjudication ~:2530-2695, terminal `joint_review`/`final_panel` block ~:2718-2936), `autopilot-engine.js`
-   `performReview`, `performFinalPanel`, the adapters at ~:8019 (`review`) and the adjudicate closure ~:8019-8050,
-   `campaign-intake.js` `buildQcPanelSnapshot` + snapshot block, `resolve-review-loop.sh`/`.js` field tables,
-   `review-loop-contract.schema.json` `x-field-order`/`properties`/`required`.
+2. Code named in §0 (composition station, loop adjudication, terminal block; engine performReview/performFinalPanel/adapters; intake snapshot; resolver field tables; contract schema).
 
 ## Product (plan §1.1 normative)
 1. KNOB. Resolver field `in_rail_review` (`auto|single|panel`, default `auto`) in schema (three tables, same cut),
@@ -65,8 +61,7 @@ both qualified, park on them, resume with dispositions keyed by the qualified id
 REAL fan-out path with the 2-A stubs; terminal reuse asserts the terminal `final_panel_count`/receipts equal the
 station's. state: snapshot carries `review_station`; a 2-B fixture snapshot without the key resolves to `single` and
 passes identity; drift on a flipped live value. resolve-review-loop: field, `auto` rule, refusal, oracle parity.
-Save each RED observation as `red-<suite>.txt` text in your final report (depth-0 files it). Run each suite at base
-BEFORE edits.
+Report each RED observation verbatim (depth-0 files them). Run each suite at base BEFORE edits.
 
 ## Verify (§4.1; one at a time, foreground, all exit 0)
 ```

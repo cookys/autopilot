@@ -1,0 +1,15 @@
+bash hooks/tests/review-runner.test.sh | exit=0 | PASS [review-runner] 46 assertions | sha256=e18a3eb7b670594e
+bash hooks/tests/autopilot-engine.test.sh | exit=0 | PASS [autopilot-engine] 549 assertions | sha256=15f17e5b06444b47
+bash hooks/tests/implementation-campaign-dogfood.test.sh | exit=0 | PASS [implementation-campaign-dogfood] 21 assertions | sha256=c153923fa3d7461f
+bash hooks/tests/implementation-campaign-routing.test.sh | exit=0 | PASS [implementation-campaign-routing] 106 assertions | sha256=0a519b2bf7160c53
+bash hooks/tests/implementation-campaign-receipt.test.sh | exit=0 | PASS [implementation-campaign-receipt] 21 assertions | sha256=97d528d054e7e541
+bash hooks/tests/implementation-campaign-state.test.sh | exit=0 | PASS [implementation-campaign-state] 296 assertions | sha256=9da14ff5bdc0b41b
+bash hooks/tests/qc-panel-honesty.test.sh | exit=0 | PASS [qc-panel-honesty] 1 assertions | sha256=58e57a7daf43c659
+bash hooks/tests/review-packet.test.sh | exit=0 | PASS [review-packet] 54 assertions | sha256=1cfb8b52583753b6
+bash hooks/tests/contract-parity.test.sh | exit=0 | PASS [contract-parity] 42 assertions | sha256=61e953a69c2d709f
+node scripts/check-js-syntax.js | exit=0 |  | sha256=1dd895fa6e7eaaf3
+node scripts/check-claude-md-inventory.js | exit=0 |  | sha256=966102b36405c5a3
+bash scripts/sync-codex-plugin-skills.sh --check | exit=0 |  | sha256=a061d5b31d473443
+node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md | exit=0 |  | sha256=97c272413acb1dd3
+bash hooks/tests/campaign-dispatch-projection.test.sh | exit=0 | PASS [campaign-dispatch-projection] 39 assertions | sha256=62c959c246b3c3a0
+bash hooks/tests/mission-convergence.test.sh | exit=0 | PASS [mission-convergence] 194 assertions | sha256=d6b8b075e3a53c86

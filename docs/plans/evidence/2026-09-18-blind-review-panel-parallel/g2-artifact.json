@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-panel-parallel-2026-09-18",
+  "logical_plan_id": "blind-review-panel-parallel-2026-09-18",
+  "session_id": "c2a-g2-1789695266",
+  "session_key": "5685043295b1defe97a9c4ab6b1faee4de84cc99ccc3fd51c4309eccef3aa75b",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_2_terminal",
+  "rubric_sha256": "943f6b4bdeeeb717fe44fbd2a33ec337b01a2550d3c6266fe2a1311976aeff16",
+  "manifest_sha256": "fd37aebb1f8ecb42143bfb8f9c6b16a8b0b6da58c22cdd09f0d3bceffe1f7f99",
+  "plan_sha256": "cb2f6dbb266293e2e8aa9ec9fcf5cd222afcd14d969b0af0bab244ee374a8169",
+  "growth_ratio": {
+    "numerator": 7405,
+    "denominator": 5883
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "545da080385f37120234ce02a03e289f6def3465711856b517dc604b85425a05"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0aae96c7d376b06280e2eb61a09be837f7cd470c328866550f7a25155f086b7e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-IXZVWD",
+          "digest": "0aae96c7d376b06280e2eb61a09be837f7cd470c328866550f7a25155f086b7e"
+        },
+        "receipt_digest": "f9c64fb04f6761f6554a7be21eb58ff2046feeed8dc23d34f5a699198e535251"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "10913bc03f016597c966ee4192d4c95123895f98716997d36e08f9fa55955596"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "77faa8d4307ae7dbbff88589fad8ab6e3c5f62356e1486f1324e7675e34abe6d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sopHTw",
+          "digest": "77faa8d4307ae7dbbff88589fad8ab6e3c5f62356e1486f1324e7675e34abe6d"
+        },
+        "receipt_digest": "889dc712ddf354ad3694ee33a93c43089a5fd7190872f008ab96e868dcd0cf5c"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "10ff6ee83999530de2a8562d3714e72924b14d1bb146506e103b4e4a045d5a24"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a29d056d4a90d19506058a1c28ac6ab1938cefd4cd9c96c09f54fcf6cd9aac63",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-7mkHk8",
+          "digest": "a29d056d4a90d19506058a1c28ac6ab1938cefd4cd9c96c09f54fcf6cd9aac63"
+        },
+        "receipt_digest": "57c3b97e8325bc7053512177f59e5a45231f5fff4a26478c0cf22c08cd600eb5"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [
+    {
+      "seat_id": "claude_operations_skeptic",
+      "from_id": "claude_operations_skeptic",
+      "to_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "reason": "retry_substitution"
+    }
+  ],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/lib/review-fanout.js (job backstop timeout) and performFinalPanel seat launch path",
+      "claim": "The fan-out helper's per-job backstop timeout is set to --timeout + 60 s, so a seat whose dispatch-review.sh ignores or fails to enforce its own --timeout can consume up to 60 s beyond the panel consumer's remaining budget before SIGTERM, which is a bounded but real overshoot of the 'never handed more than its consumer's remaining budget' contract.",
+      "evidence": "Plan §1.2 states the helper's job timeout is 'a backstop at --timeout + 60 s (SIGTERM, SIGKILL after 5 s)', while the seat's real budget bound is dispatch-review.sh's own rc=124 --timeout; R3's wording admits no overshoot of the consumer's remainder, and the engine suite's panel-timeout test asserts only the --timeout value, not the backstop margin.",
+      "evidence_reference": "Plan §1.2 (timeouts paragraph), §4 acceptance row panel-timeout; rubric R3",
+      "repair": "Clamp the helper's backstop for production panel seats to min(--timeout + 60 s, consumer-remaining-at-launch + 60 s) or record the backstop margin as informational overshoot in the design note and add an engine test that a stalled seat is killed within the backstop; no current change to the slice if the team accepts the documented 60 s margin as transport-failure territory.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6a6054261793edc5a3dcad3208cc3e84a279e83822a281b6cfc626b60d183c5f"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/autopilot-engine.js performFinalPanel ledger row emission; final_panel ledger schema (per-seat started_at/ended_at)",
+      "claim": "completion order is never observable in any artifact",
+      "evidence": "Plan §1.2 explicitly states: 'Timing fields (started_at/ended_at on ledger rows, elapsed) are informational, never digested, and are the one place concurrency is visible — by design (§5 reads them).' A parallel run's final_panel row therefore carries per-seat timestamps whose order reveals which seat finished first; §5 dogfood proof relies on this visibility ('overlap', 'slowest seat'). Strict reading of R1 says 'every artifact ... is identical to a sequential run in seat-index order; completion order is never observable', and per-row started_at/ended_at differ between the parallel and any sequential run, so the ledger rows are not byte-identical to a sequential run's.",
+      "evidence_reference": "docs/plans/2026-09-18-blind-review-panel-parallel.md §1.2 timing-field admission; §5 dogfood proof; existing ledger started_at/ended_at fields referenced in §0",
+      "repair": "No current code change; the design choice is explicit in §1.2. Pick one: (a) drop per-seat started_at/ended_at from the final_panel ledger row and record only the panel started_at/ended_at window so seat completion order is not exposed; (b) keep per-seat timestamps and amend the panel-execution paragraph plus R1 wording to make 'the one observable concurrency signal' explicit. The current 'informational, never digested' rationale does not satisfy the strict 'never observable' reading.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b3cc16141e58e8e5d75a4223bdbc12d79dfa74b861c211d5e8fe5acb325bdf84"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "6a6054261793edc5a3dcad3208cc3e84a279e83822a281b6cfc626b60d183c5f",
+      "rubric_id": "R3",
+      "affected_surface": "scripts/lib/review-fanout.js (job backstop timeout) and performFinalPanel seat launch path",
+      "claim": "The fan-out helper's per-job backstop timeout is set to --timeout + 60 s, so a seat whose dispatch-review.sh ignores or fails to enforce its own --timeout can consume up to 60 s beyond the panel consumer's remaining budget before SIGTERM, which is a bounded but real overshoot of the 'never handed more than its consumer's remaining budget' contract.",
+      "evidence_reference": "Plan §1.2 (timeouts paragraph), §4 acceptance row panel-timeout; rubric R3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b3cc16141e58e8e5d75a4223bdbc12d79dfa74b861c211d5e8fe5acb325bdf84",
+      "rubric_id": "R1",
+      "affected_surface": "src/engine/autopilot-engine.js performFinalPanel ledger row emission; final_panel ledger schema (per-seat started_at/ended_at)",
+      "claim": "completion order is never observable in any artifact",
+      "evidence_reference": "docs/plans/2026-09-18-blind-review-panel-parallel.md §1.2 timing-field admission; §5 dogfood proof; existing ledger started_at/ended_at fields referenced in §0",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-18T01:37:54.299Z"
+}

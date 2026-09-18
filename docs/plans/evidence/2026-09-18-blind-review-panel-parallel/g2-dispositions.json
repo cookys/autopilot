@@ -1,0 +1,19 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-panel-parallel-2026-09-18",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "6a6054261793edc5a3dcad3208cc3e84a279e83822a281b6cfc626b60d183c5f",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the helper backstop equals the seat's --timeout with no margin (SIGTERM then SIGKILL 5 s later, teardown not budget); the engine test asserts argv --timeout and helper timeout_seconds are the same number."
+  },
+  {
+   "fingerprint": "b3cc16141e58e8e5d75a4223bdbc12d79dfa74b861c211d5e8fe5acb325bdf84",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: no artifact records per-seat timing — panel seat ledger rows and the final_panel row carry the batch started_at/ended_at; per-job timing lives only in the helper stdout (tests + evidence dir), so completion order is unobservable in ledger, receipt or digest; §5 reworded."
+  }
+ ]
+}

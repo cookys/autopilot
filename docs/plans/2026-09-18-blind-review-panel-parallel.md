@@ -73,9 +73,12 @@
    sequential run" means every digested body: the seat receipt body (`finalPanelSeatReceipt` `:5156-5176`:
    `seat_index`, runner, model, effort, endpoint, family, status, verdict, `review_digest`, reason, optional
    `raw_log`/`packet_hash` — it carries no timestamp), the panel `review_digest` over those seat digests in
-   index order, and the receipt validator's view. Timing fields (`started_at`/`ended_at` on ledger rows,
-   `elapsed`) are informational, never digested, and are the one place concurrency is visible — by design
-   (§5 reads them). The composer stays
+   index order, and the receipt validator's view. No artifact records per-seat timing: the panel's seat
+   ledger rows all carry the batch's `started_at` and `ended_at` (the panel launched and finished as one
+   unit), and the `final_panel` row carries the same pair — so completion order is not observable in any
+   ledger row, receipt or digest. Per-job timing exists only in the fan-out helper's stdout, which the
+   engine discards after parsing; the review-runner suite reads it to prove concurrency, and depth-0 may
+   copy it into the evidence dir (§5), never into a campaign artifact. The composer stays
    synchronous. Concurrency lives in ONE new Node helper, `scripts/lib/review-fanout.js` (built-ins only):
    it reads a JSON job list on stdin (`{ jobs: [{ id, argv, cwd, env, stdin_file, timeout_seconds }] }`),
    `spawn`s every job at once, enforces each job's own timeout (SIGTERM, then SIGKILL after 5 s), and
@@ -95,8 +98,12 @@
    exactly as the child ended, and the same `cwd`/`env`/`stdin` plumbing; the review-runner suite pins this
    with a fixture compared field-by-field against the pre-split result. Timeouts: a production seat is
    bounded by `dispatch-review.sh`'s own `--timeout` (rc=124 from inside, the 1c shape); the helper's job
-   timeout is a backstop at `--timeout + 60 s` (SIGTERM, SIGKILL after 5 s) reported as `signal`, the way
-   `spawnSync`'s `timeout` does. The engine mirrors the split: `performFinalPanel` prepares every qualified
+   timeout is the SAME number as the seat's `--timeout` (no margin): at that instant SIGTERM, SIGKILL 5 s
+   later, reported as `signal` the way `spawnSync`'s `timeout` does. In the normal case the child has
+   already exited 124 by then; the helper's kill is the fail-closed guarantee for a child that ignores its
+   own cap. The 5 s kill grace is process teardown, not budget: no seat is ever *handed* more than its
+   consumer's remainder, and the engine test asserts both the `--timeout` argv and the helper's
+   `timeout_seconds` are that same number. The engine mirrors the split: `performFinalPanel` prepares every qualified
    seat, launches the batch, finishes each seat in **seat-index order**. Each seat's `--timeout` is the
    **whole** panel remainder (§1.3), not a share: with concurrent seats the panel's wall cost is the slowest
    seat, not the sum.
@@ -260,9 +267,10 @@ Base record: `evidence/…-panel-parallel/base-suites-<base>.txt` (detached chec
 
 ## 5. Dogfood proof (depth-0)
 The next managed campaign on this repo (2-B or a BACKLOG row) runs with `final_panel_reserve_seconds: 900`:
-its ledger shows `full_suite` with `reused_from: campaign_verification`, the `final_panel` row with three
-seats whose `started_at` overlap and whose wall cost is the slowest seat, and — if the earlier stations
-overran — `budget_source: pocket`. Before that, on this host: a three-seat panel through the real fan-out
+its ledger shows `full_suite` with `reused_from: campaign_verification`, a `final_panel` row whose wall
+(`ended_at − started_at`) is well under the sum of the three seats' historical durations (1b-A panel raw
+logs: 3 + 4 + 3 min), and — if the earlier stations overran — `budget_source: pocket`; the helper's
+per-job timings captured from the depth-0 host run go in the evidence dir. Before that, on this host: a three-seat panel through the real fan-out
 helper against MiniMax, GLM and claude-native on a small packet, timings in the evidence dir.
 
 ## 6. Risks + inversion
@@ -277,4 +285,16 @@ helper against MiniMax, GLM and claude-native on a small packet, timings in the 
 1a-A ✓ → 1a-B ✓ → 1b-A ✓ → 1b-B ✓ → 1c ✓ → **2-A (this)** → 2-B.
 
 ## Review log
-- (pending)
+- Unknown-escalation probe (`ladder-classify.json`): U1 (four coined names, zero repo hits); consult rail
+  attempted and failed on the codex quota (`consult-codex-quota-rail-failed.json`, ladder `rail-failed`).
+- Plan hetero loop G1 2026-09-18 (GLM-5.2 READY, claude-fable-5-1 CONDITIONAL: 5 blockers + 3
+  non-blocking; `g1-*`, `plan.as-reviewed-g1.md`): all eight accepted — one budget definition (`budget_consumer`
+  through `performReview`), identity = digested bodies, single pre-prepare refusal + reserve plumbing
+  graph→projection→contract under one cap (six more sealed paths + two suites), the helper as the only
+  launch path with `spawnSync`'s observable contract, env snapshot + content identity for reuse,
+  timestamp-overlap assertions, projection/convergence suites, template sentence dropped.
+- G2 2026-09-18 (terminal at the cap; GLM-5.2 CONDITIONAL, MiniMax-M3 (fallback for the claude seat)
+  CONDITIONAL; 2 non-blocking; `g2-*`, `plan.as-reviewed-g2.md`): both accepted — the helper backstop is the
+  seat's own `--timeout` (no margin; kill grace is teardown, not budget); no artifact records per-seat
+  timing (batch timestamps on every panel ledger row; per-job timing lives only in the helper's stdout).
+  Growth 1.26× over the G2-reviewed bytes. Zero unaddressed blockers, zero deferred.

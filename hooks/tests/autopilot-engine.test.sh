@@ -5623,6 +5623,13 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const [root, repo, base, tmp] = process.argv.slice(2);
 const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const rp = require(path.join(root, 'src', 'runners', 'review-packet'));
+globalThis.__packetBuildCount = 0;
+const origPacketBuild = rp.buildReviewPacket;
+rp.buildReviewPacket = function wrappedBuildReviewPacket(...args) {
+  globalThis.__packetBuildCount += 1;
+  return origPacketBuild.apply(this, args);
+};
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
 const common = fs.realpathSync(path.resolve(repo, git('rev-parse', '--git-common-dir')));
 const seats = [
@@ -5994,6 +6001,7 @@ console.log('cut2a_engine=true');
 // index order and every panel ledger row must carry the batch timestamps.
 const realStub = path.join(tmp, 'panel-2a-real-stub');
 const realMarker = path.join(tmp, 'panel-2a-real-marker');
+globalThis.__packetBuildCount = 0;
 const realSeats = [
   { role: 'qc', runner: 'qoderclicn', model: 'slow-a', effort: 'high', endpoint: null, family: 'fa' },
   { role: 'qc', runner: 'qoderclicn', model: 'fast-b', effort: 'high', endpoint: null, family: 'fb' },
@@ -6034,6 +6042,12 @@ runCase({
     const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
     assert.strictEqual(panelRow && panelRow.seat_timeout_seconds, 120,
       `seat_timeout_seconds is the whole remainder at prepare time (clock at started_at → 120 s), never a post-batch value: ${JSON.stringify(panelRow)}`);
+    const hashes = seatsOut.map((s) => s.packet_hash).filter(Boolean);
+    assert.strictEqual(new Set(hashes).size, 1, `one packet_hash across seats: ${JSON.stringify(hashes)}`);
+    // in-rail single seat is a batch-of-one build; the three-seat panel is a second
+    // shared build. RED at base fd4ea3a6: three panel seats each called buildReviewPacket.
+    assert.strictEqual(globalThis.__packetBuildCount, 2,
+      `in-rail + one shared panel build, got ${globalThis.__packetBuildCount}`);
     console.log('real_batch_panel=true');
   },
 });

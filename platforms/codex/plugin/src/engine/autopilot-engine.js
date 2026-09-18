@@ -17,7 +17,7 @@ const {
   repairRoundFromImplementationRound,
   unitClassFromContract,
 } = require('./implementer-ladder');
-const { dispatchReviewJson, dispatchReviewJsonBatch } = require('../runners/review');
+const { dispatchReviewJson, dispatchReviewJsonBatch, buildPacketOnce } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { finalPanelSeatQualified } = require('./final-panel-qualification');
@@ -3460,6 +3460,9 @@ class AutopilotEngine {
           reviewOptions.packet = identity;
         }
       }
+      if (input.sharedPacket) {
+        reviewOptions.sharedPacket = input.sharedPacket;
+      }
       if (input.deferDispatch === true) {
         return {
           status: 'prepared',
@@ -3505,6 +3508,22 @@ class AutopilotEngine {
     const salvagedRawLog = reviewResult && reviewResult.salvaged
       ? reviewResult.salvaged.raw_log
       : null;
+    if (reviewResult && reviewResult.skipLaunch === true) {
+      return {
+        status: 'blocked',
+        phase: 'precondition_failed',
+        reason: reviewResult.reason
+          || (reviewResult.error && reviewResult.error.message)
+          || 'packet materialisation hash mismatch',
+        verdict: null,
+        roster,
+        resolveResult,
+        reviewResult,
+        review: null,
+        reviewArgs,
+        ledger,
+      };
+    }
     ledger.push(
       this.ledgerEntry('dispatch_review', blockedReason ? 'blocked' : reviewResult.result.status, startedAt, {
         runner: roster.reviewer_runner,
@@ -4891,6 +4910,7 @@ class AutopilotEngine {
       deferDispatch = false,
       providedReviewResult = undefined,
       preparedLaunch = null,
+      sharedPacket = null,
     }) => {
       const prepared = preparedReview || prepareReview({
         candidate,
@@ -5045,6 +5065,7 @@ class AutopilotEngine {
         deferDispatch,
         providedReviewResult,
         preparedLaunch,
+        sharedPacket,
       });
       if (deferDispatch === true && reviewed && reviewed.status === 'prepared') {
         return {
@@ -5223,7 +5244,9 @@ class AutopilotEngine {
           && (outcome.raw.reviewResult.error || outcome.raw.reviewResult.signal
             || outcome.raw.reviewResult.status !== 0)) {
         status = 'transport_failed';
-      } else if (!isReviewed && outcome && outcome.phase === 'reviewer_qualification') {
+      } else if (!isReviewed && outcome && (
+        outcome.phase === 'reviewer_qualification' || outcome.phase === 'precondition_failed'
+      )) {
         status = 'precondition_failed';
       }
       const body = {
@@ -5366,6 +5389,30 @@ class AutopilotEngine {
       const budgetSource = wallRemain.exhausted ? 'pocket' : 'wall';
       const seatTimeoutSeconds = panelRemain.seconds;
       const injectedDispatcher = this.reviewDispatcher !== dispatchReviewJson;
+      let sharedPacket = null;
+      if (!injectedDispatcher && isStr(loopCwd) && isStr(base)
+          && reviewInput && reviewInput.candidate && isStr(reviewInput.candidate.commit)) {
+        const identityPrepared = prepareReview({
+          candidate: reviewInput.candidate,
+          verification: reviewInput.verification,
+          scope: 'final',
+          repair_generation: reviewInput.repair_generation,
+          review_input_mode: reviewInput.review_input_mode,
+          vertical_failed: reviewInput.vertical_failed,
+        });
+        if (identityPrepared && identityPrepared.prepared === true
+            && isStr(identityPrepared.diff_file)) {
+          sharedPacket = buildPacketOnce({
+            repo: loopCwd,
+            baseSha: base,
+            candidateSha: reviewInput.candidate.commit,
+            diffFile: identityPrepared.diff_file,
+            specFile: promptFile,
+            denyExtra: roster.review_packet_deny_extra,
+          });
+        }
+      }
+      try {
       const preparedSeats = [];
       const outcomes = seats.map((seat, index) => {
         const reviewRoster = {
@@ -5397,6 +5444,7 @@ class AutopilotEngine {
           review_timeout_seconds: seatTimeoutSeconds,
           budget_consumer: 'panel',
           deferDispatch: !injectedDispatcher,
+          sharedPacket,
         });
         if (outcome && outcome.deferred === true) {
           preparedSeats.push({ seat, index, deferred: outcome });
@@ -5408,7 +5456,7 @@ class AutopilotEngine {
         const batchRows = dispatchReviewJsonBatch(preparedSeats.map((entry) => ({
           args: entry.deferred.preparedLaunch.reviewArgs,
           ...(entry.deferred.preparedLaunch.reviewOptions || {}),
-        })));
+        })), { sharedPacket });
         for (let i = 0; i < preparedSeats.length; i += 1) {
           const entry = preparedSeats[i];
           const finished = performReview({
@@ -5429,6 +5477,7 @@ class AutopilotEngine {
             prepared_review: entry.deferred.prepared,
             preparedLaunch: entry.deferred.preparedLaunch,
             providedReviewResult: batchRows[i],
+            sharedPacket,
           });
           outcomes[entry.index] = { seat: entry.seat, outcome: finished };
         }
@@ -5607,6 +5656,11 @@ class AutopilotEngine {
         }
       }
       return receipt;
+      } finally {
+        if (sharedPacket && typeof sharedPacket.dispose === 'function') {
+          sharedPacket.dispose();
+        }
+      }
     };
 
     const performFinalPanel = (reviewInput) => runPanel(reviewInput, { station: 'terminal' });

@@ -669,4 +669,120 @@ assert_eq "attrs.real" "$(readlink "$TEST_TMP/ks-out/tree/.gitattributes" 2>/dev
 node -e 'const {DEFAULT_PACKET_DENY_LIST}=require(process.argv[1]); if(DEFAULT_PACKET_DENY_LIST.length!==8) process.exit(2)' "$MODULE"
 assert_eq "0" "$?" "DEFAULT_PACKET_DENY_LIST has eight patterns"
 
+# RED at base fd4ea3a6: TypeError: rp.materializePacket is not a function
+# RED at base fd4ea3a6: TypeError: rp.hashPacketDir is not a function
+# RED at base fd4ea3a6: verifyTreeIntegrity has stdin-paths=false
+# RED at base fd4ea3a6: missing=review-packet.materializePacket,review-packet.hashPacketDir
+BATCH_OUT="$(node - "$MODULE" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const rp = require(process.argv[2]);
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pkt-batch-'));
+const repo = path.join(tmp, 'repo');
+fs.mkdirSync(repo);
+spawnSync('git', ['init', '-q', '--object-format=sha1', repo], { stdio: 'ignore' });
+spawnSync('git', ['-C', repo, 'config', 'user.email', 't@t.example'], { stdio: 'ignore' });
+spawnSync('git', ['-C', repo, 'config', 'user.name', 't'], { stdio: 'ignore' });
+fs.writeFileSync(path.join(repo, 'ok.txt'), 'ok\n');
+fs.writeFileSync(path.join(repo, 'nul unsafe.txt'), 'nul\n');
+fs.symlinkSync('ok.txt', path.join(repo, 'link'));
+const nlName = 'new\nline.txt';
+fs.writeFileSync(path.join(repo, nlName), 'nl\n');
+const crName = 'cr\rname.txt';
+fs.writeFileSync(path.join(repo, crName), 'cr\n');
+spawnSync('git', ['-C', repo, 'add', '-A'], { stdio: 'ignore' });
+spawnSync('git', ['-C', repo, 'commit', '-q', '-m', 'b'], { stdio: 'ignore' });
+fs.appendFileSync(path.join(repo, 'ok.txt'), 'x\n');
+spawnSync('git', ['-C', repo, 'add', 'ok.txt'], { stdio: 'ignore' });
+spawnSync('git', ['-C', repo, 'commit', '-q', '-m', 'c'], { stdio: 'ignore' });
+const base = spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD^'], { encoding: 'utf8' }).stdout.trim();
+const cand = spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+const diff = path.join(tmp, 'd.diff');
+fs.writeFileSync(diff, spawnSync('git', ['-C', repo, 'diff', '--no-ext-diff', '--no-textconv', `${base}..${cand}`]).stdout);
+const out = path.join(tmp, 'pkt');
+rp.buildReviewPacket({
+  repo, baseSha: base, candidateSha: cand, diffFile: diff, specFile: null, outDir: out, denyList: [],
+});
+const tree = path.join(out, 'tree');
+const ls = spawnSync('git', ['-C', repo, 'ls-tree', '-r', '-z', cand]);
+const raw = ls.stdout;
+const listing = [];
+let start = 0;
+const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+for (let i = 0; i < buf.length; i += 1) {
+  if (buf[i] !== 0) continue;
+  const rec = buf.subarray(start, i);
+  start = i + 1;
+  if (!rec.length) continue;
+  const tab = rec.indexOf(0x09);
+  const meta = rec.subarray(0, tab).toString('utf8');
+  const p = rec.subarray(tab + 1).toString('utf8');
+  const [mode, , oid] = meta.split(' ');
+  listing.push({ mode, oid, path: p, repo });
+}
+let hashCalls = 0;
+const origHash = rp.hashObject;
+rp.hashObject = function wrappedHashObject(...args) {
+  hashCalls += 1;
+  return origHash.apply(this, args);
+};
+rp.verifyTreeIntegrity(tree, listing);
+if (hashCalls !== 2) {
+  console.log(`hashObject_calls=${hashCalls}`);
+  process.exit(2);
+}
+const mutated = listing.map((e) => ({ ...e }));
+const mismatchTargets = mutated.filter((e) => e.mode !== '120000');
+mismatchTargets[0].oid = '0'.repeat(40);
+if (mismatchTargets[1]) mismatchTargets[1].oid = '1'.repeat(40);
+let msg = '';
+try {
+  rp.verifyTreeIntegrity(tree, mutated);
+  msg = 'NO-THROW';
+} catch (e) {
+  msg = e.message;
+}
+if (msg !== `tree integrity: ${mismatchTargets[0].path}`) {
+  console.log(`mismatch_msg=${msg}`);
+  process.exit(3);
+}
+const seatA = path.join(tmp, 'seat-a');
+const seatB = path.join(tmp, 'seat-b');
+const hashA = rp.materializePacket(out, seatA);
+const hashB = rp.materializePacket(out, seatB);
+const shared = rp.hashPacketDir(out);
+if (hashA !== shared || hashB !== shared) process.exit(4);
+function walkFiles(root, acc = []) {
+  for (const name of fs.readdirSync(root).sort()) {
+    const full = path.join(root, name);
+    const st = fs.lstatSync(full);
+    if (st.isDirectory()) walkFiles(full, acc);
+    else if (st.isFile()) acc.push({ rel: path.relative(root, full).split(path.sep).join('/'), ino: st.ino, nlink: st.nlink, full });
+  }
+  return acc;
+}
+const srcFiles = walkFiles(out);
+const aFiles = walkFiles(seatA);
+if (srcFiles.length !== aFiles.length) process.exit(5);
+for (let i = 0; i < srcFiles.length; i += 1) {
+  if (srcFiles[i].ino === aFiles[i].ino) process.exit(6);
+  if (aFiles[i].nlink !== 1) process.exit(7);
+  if (!fs.readFileSync(srcFiles[i].full).equals(fs.readFileSync(aFiles[i].full))) process.exit(8);
+}
+const target = aFiles.find((f) => f.rel.replace(/\\/g, '/').endsWith('ok.txt')) || aFiles[0];
+fs.appendFileSync(target.full, 'mut\n');
+if (rp.hashPacketDir(seatB) !== shared) process.exit(9);
+if (rp.hashPacketDir(out) !== shared) process.exit(10);
+if (rp.hashPacketDir(seatA) === shared) process.exit(11);
+console.log('batch_equals_per_file=true');
+console.log(`first_mismatch=${mismatchTargets[0].path}`);
+console.log('inode_copy_isolated=true');
+NODE
+)"
+assert_eq "0" "$?" "batched hashing / materialize isolation: $BATCH_OUT"
+assert_contains "$BATCH_OUT" "batch_equals_per_file=true" "batched hashing equals per-file (RED at base fd4ea3a6: hashObject used for every tracked file)"
+assert_contains "$BATCH_OUT" "inode_copy_isolated=true" "materializePacket distinct inodes and mutation isolation (RED at base fd4ea3a6: TypeError: rp.materializePacket is not a function)"
+
 finalize_test

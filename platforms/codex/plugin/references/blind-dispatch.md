@@ -314,9 +314,16 @@ Mechanically, the spec travels via dispatch-review.sh --spec-file (dispatcher-au
 ## Packet blinding (v2.36.59)
 
 Cut 1a-A of the blind-review redesign builds one **content-addressed packet** per
-review dispatch (`src/runners/review-packet.js`, wired through `dispatchReview`
-when `options.packet` is set). The seat still sees only artifacts; the packet is
-what those artifacts are.
+candidate (`src/runners/review-packet.js`, wired through `dispatchReview` /
+`buildPacketOnce` when `options.packet` is set). A panel builds that packet
+**once** and materialises a **private per-seat copy** (`materializePacket`:
+`fs.copyFileSync`, `COPYFILE_FICLONE` allowed, never a hardlink) into the seat's
+own `mkdtemp` before launch. Each copy is re-hashed with `hashPacketDir` and
+must equal the shared `packet_hash` or that seat is `precondition_failed` with
+no launch. `verifyTreeIntegrity` batches regular files whose paths contain
+neither LF nor CR through one `git hash-object --stdin-paths --no-filters`
+process; LF/CR names and symlink targets use the per-file hasher. The seat still
+sees only artifacts; the packet is what those artifacts are.
 
 **Contents** under the packet directory:
 

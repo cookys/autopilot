@@ -664,6 +664,120 @@ assert_contains "$PKT_OUT" "hash_differs=true" "packet_hash differs from default
 assert_contains "$PKT_OUT" "unexpected_callers=0" "buildReviewPacket( is called only from review.js (definition in review-packet.js)"
 assert_contains "$PKT_OUT" "builder_callers=2" "the walk saw both the definition and the review.js call (not vacuous)"
 
+# RED at base fd4ea3a6: missing=review.buildPacketOnce; three jobs each call buildReviewPacket
+SHARED_OUT="$(node - "$REPO_ROOT" "$PKT_REPO" "$PKT_BASE" "$PKT_CAND" "$PKT_DIFF" "$PKT_SPEC" "$PKT_STUB" "$TEST_TMP" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const repo = process.argv[3];
+const base = process.argv[4];
+const cand = process.argv[5];
+const diff = process.argv[6];
+const spec = process.argv[7];
+const stub = process.argv[8];
+const tmp = process.argv[9];
+const review = require(path.join(root, 'src', 'runners', 'review'));
+const rp = require(path.join(root, 'src', 'runners', 'review-packet'));
+let builds = 0;
+let hashes = 0;
+const origBuild = rp.buildReviewPacket;
+rp.buildReviewPacket = function wrappedBuild(...args) {
+  builds += 1;
+  return origBuild.apply(this, args);
+};
+const origHash = rp.hashPacketDir;
+rp.hashPacketDir = function wrappedHash(...args) {
+  hashes += 1;
+  return origHash.apply(this, args);
+};
+const identity = { repo, baseSha: base, candidateSha: cand, diffFile: diff, specFile: spec, denyExtra: [] };
+const shared = review.buildPacketOnce(identity);
+hashes = 0;
+rp.buildReviewPacket = function wrappedBuild(...args) {
+  builds += 1;
+  return origBuild.apply(this, args);
+};
+rp.hashPacketDir = function wrappedHash(...args) {
+  hashes += 1;
+  return origHash.apply(this, args);
+};
+const args = [
+  '--runner', 'codex', '--model', 'gpt-5.5',
+  '--diff-file', diff, '--spec-file', spec, '--bin', stub,
+];
+const prepared = [0, 1, 2].map(() => review.prepareReviewLaunch(args, {
+  scriptPath: stub,
+  blindDiscovery: true,
+  packet: { repo, baseSha: base, candidateSha: cand, denyExtra: [] },
+  sharedPacket: shared,
+}));
+const hashesEq = prepared.every((p) => !p.skipLaunch && p.launchEnv.AUTOPILOT_REVIEW_PACKET_HASH === shared.packet_hash);
+const distinct = new Set(prepared.map((p) => p.launchEnv.AUTOPILOT_REVIEW_PACKET_DIR));
+const noneShared = [...distinct].every((d) => path.resolve(d) !== path.resolve(shared.packet_dir));
+console.log(`shared_hash_equal=${hashesEq}`);
+console.log(`distinct_dirs=${distinct.size}`);
+console.log(`none_shared_dir=${noneShared}`);
+console.log(`build_count=${builds}`);
+console.log(`hash_count=${hashes}`);
+for (const p of prepared) {
+  if (p.blindCwd) fs.rmSync(p.blindCwd, { recursive: true, force: true });
+}
+builds = 0;
+const soloA = review.prepareReviewLaunch(args, {
+  scriptPath: stub,
+  blindDiscovery: true,
+  packet: { repo, baseSha: base, candidateSha: cand, denyExtra: [] },
+});
+const keysA = Object.keys(soloA.launchEnv).filter((k) => k.startsWith('AUTOPILOT_REVIEW_PACKET')).sort().join(',');
+const hashA = soloA.launchEnv.AUTOPILOT_REVIEW_PACKET_HASH;
+const argsShapeA = soloA.launchArgs.map((a, i) => (String(a).includes(path.sep) ? `<path:${i}>` : a)).join(' ');
+if (soloA.blindCwd) fs.rmSync(soloA.blindCwd, { recursive: true, force: true });
+const soloB = review.prepareReviewLaunch(args, {
+  scriptPath: stub,
+  blindDiscovery: true,
+  packet: { repo, baseSha: base, candidateSha: cand, denyExtra: [] },
+});
+const keysB = Object.keys(soloB.launchEnv).filter((k) => k.startsWith('AUTOPILOT_REVIEW_PACKET')).sort().join(',');
+const hashB = soloB.launchEnv.AUTOPILOT_REVIEW_PACKET_HASH;
+const argsShapeB = soloB.launchArgs.map((a, i) => (String(a).includes(path.sep) ? `<path:${i}>` : a)).join(' ');
+if (soloB.blindCwd) fs.rmSync(soloB.blindCwd, { recursive: true, force: true });
+console.log(`solo_hash_stable=${hashA === hashB && hashA === shared.packet_hash}`);
+console.log(`solo_env_keys=${keysA === keysB && keysA === 'AUTOPILOT_REVIEW_PACKET_DIR,AUTOPILOT_REVIEW_PACKET_HASH'}`);
+console.log(`solo_args_shape=${argsShapeA === argsShapeB}`);
+const corruptRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pkt-corrupt-'));
+rp.materializePacket(shared.packet_dir, corruptRoot);
+const victim = path.join(corruptRoot, 'tree', 'keep.txt');
+fs.appendFileSync(victim, 'x');
+const badShared = {
+  packet_dir: corruptRoot,
+  packet_hash: shared.packet_hash,
+  manifest: shared.manifest,
+  dispose() {},
+};
+const refused = review.prepareReviewLaunch(args, {
+  scriptPath: stub,
+  blindDiscovery: true,
+  packet: { repo, baseSha: base, candidateSha: cand, denyExtra: [] },
+  sharedPacket: badShared,
+});
+console.log(`skip_launch=${refused.skipLaunch === true}`);
+console.log(`precondition=${refused.phase === 'precondition_failed' || String(refused.reason || refused.error && refused.error.message).includes('hash mismatch')}`);
+shared.dispose();
+fs.rmSync(corruptRoot, { recursive: true, force: true });
+NODE
+)"
+assert_eq "0" "$?" "shared packet runner: $SHARED_OUT"
+assert_contains "$SHARED_OUT" "shared_hash_equal=true" "three jobs one shared packet_hash (RED at base fd4ea3a6: per-seat builds)"
+assert_contains "$SHARED_OUT" "distinct_dirs=3" "three distinct launch dirs"
+assert_contains "$SHARED_OUT" "none_shared_dir=true" "launch dirs are not the shared dir"
+assert_contains "$SHARED_OUT" "build_count=1" "exactly one buildReviewPacket for three shared jobs plus once from buildPacketOnce"
+assert_contains "$SHARED_OUT" "hash_count=3" "N=3 hashPacketDir calls for three seats"
+assert_contains "$SHARED_OUT" "solo_hash_stable=true" "batch of one without sharedPacket hash equals shared build"
+assert_contains "$SHARED_OUT" "solo_env_keys=true" "batch of one env keys match"
+assert_contains "$SHARED_OUT" "skip_launch=true" "mutated seat dir refused skipLaunch (RED at base fd4ea3a6: no skipLaunch on hash mismatch)"
+assert_contains "$SHARED_OUT" "precondition=true" "mismatch is precondition_failed"
+
 # RED at base 7f5d6ee8: no scripts/lib/review-fanout.js (ENOENT)
 FANOUT="$REPO_ROOT/scripts/lib/review-fanout.js"
 test -x "$FANOUT"

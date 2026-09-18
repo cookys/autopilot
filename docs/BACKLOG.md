@@ -134,7 +134,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
-- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A..1c v2.36.59-64, 2-A v2.36.65, 2-B v2.36.66. Open: 2-C (in-rail off, panel repair, shared packet).
+- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats; quorum + snapshot; panel station. Shipped: 1a-A..2-B v2.36.59-66, 2-C station v2.36.68. Open: shared packet.
 
 ### Managed rail: final-panel seats run dispatch-review.sh at the 5m default timeout and time out on ordinary diffs
 - **Status**: shipped v2.36.60 2026-09-17
@@ -209,7 +209,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: intake admits a codex seat after the probe (dogfood-probe.txt: real probe ready here); no verdict from the seat yet. Then: engine-capability-state.js pin-seat --role qc_panel gpt-5.6-sol/codex max + review-loop-config qc_panel[0].
 
 ### Managed rail: final panel has no repair loop — FIX-THEN-SHIP without a disposition provider blocks adjudication
-- **Status**: open
+- **Status**: shipped v2.36.68 2026-09-18
 - **Trigger**: a managed campaign reaches the final panel with a FIX-THEN-SHIP seat and no `--campaign-disposition-policy/authority` given
 - **Effort**: M
 - **Source**: 1b-A campaign 2026-09-17 (`impl-run1.json`, `final_adjudication: final finding registry is incomplete`), after every earlier station was green

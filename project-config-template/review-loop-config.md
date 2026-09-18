@@ -61,6 +61,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - qc_panel_endpoints: @none, @none, @none
 - review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical
+<!-- in_rail_review: auto|single|panel. auto uses the sealed panel as the in-loop review station when the QC panel is complete. -->
+- in_rail_review: auto
 - provider_readiness_receipt_ttl_seconds: 300
 - provider_readiness_fallback_family_constraint: different
 - review_diff_scope: full
@@ -192,6 +194,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `qc_panel_runners` / `qc_panel_efforts` / `qc_panel_endpoints` | positional exact-tuple metadata for readiness. All three lists must align 1:1 with `qc_panel`; endpoint `@none` means literal null. Missing/invalid/misaligned metadata leaves legacy review dispatch unchanged but makes `qc_panel_seats_complete=false`, so readiness fails closed instead of guessing | comma lists; reviewer runner allowlist, effort `low\|medium\|high\|xhigh\|max`, endpoint `@none` or `[A-Za-z0-9_]` |
 | `review_packet_deny_extra` | additional packet deny-list patterns, composed with the eight shipped defaults (`DEFAULT_PACKET_DENY_LIST`). Additive only — extras cannot remove a default. Grammar is `normalizeDenyList`: relative `/`-joined globs; `**` whole-segment; `*` inside a segment. Invalid element fails closed. Visible in `MANIFEST.json` `deny_list` / `packet_hash` | comma list (default empty) |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
+| `in_rail_review` | which engine runs the implementation loop's `full_diff_review` station. `auto` becomes `panel` when `qc_panel_seats_complete` is true, else `single`; `panel` with an incomplete panel is a resolver refusal | `auto\|single\|panel` (default `auto`) |
 | `provider_readiness_receipt_ttl_seconds` | lifetime of one content-bound readiness receipt and its explicit probe observations | integer `1..86400` (default 300; invalid values fail safe to default) |
 | `provider_readiness_fallback_family_constraint` | family admission for ordered readiness fallbacks; unknown family never satisfies `different` | `different` (default) `\| any` |
 | `min_panel_size` | **minimum panel-size floor** for a homogeneous (single-family) qc panel — a homogeneous panel must not drop below this many distinct-lens reviewers. Emitted **separately** from `required_review_families` on purpose: lens diversity ≠ family decorrelation, and same-family lenses can still share blind spots, so panel size and family count are independent knobs. Standalone integer — NOT coupled to review_risk / families / source-trust. List one more seat than the minimum to get a standby | integer ≥ 1 (default 3); garbage / missing / `0` / negative → fail-safe 3 |

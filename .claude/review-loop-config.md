@@ -72,6 +72,8 @@
      floor = DEFAULT_PACKET_DENY_LIST). Empty = []. Grammar: normalizeDenyList. -->
 - review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical
+<!-- in_rail_review: auto|single|panel. auto uses the sealed panel as the in-loop review station when the QC panel is complete. -->
+- in_rail_review: auto
 - min_panel_size: 3
 <!-- list one more seat than the minimum to get a standby -->
 - provider_readiness_receipt_ttl_seconds: 300

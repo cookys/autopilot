@@ -1072,6 +1072,7 @@ const roster = {
   required_review_families: 2,
   cross_family_required: true,
   qc_panel_seats_complete: true,
+  in_rail_review: 'single',
   qc_panel_seats: [
     { role: 'qc', runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
     { role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
@@ -2449,6 +2450,7 @@ const roster = {
   required_review_families: 1,
   cross_family_required: false,
   qc_panel_seats_complete: true,
+  in_rail_review: 'single',
   qc_panel_seats: [
     { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture' },
   ],
@@ -3184,6 +3186,350 @@ assert_contains "$RED_PATH_PA_OUT" "packet_absent_legacy=true" \
 RED_PATH_SB_OUT="$(proof_parity_run standby standby)"
 assert_contains "$RED_PATH_SB_OUT" "standby_no_verdict_ready=true" \
   "4-seat standby with one no_verdict is ready and records qc_panel_snapshot"
+
+# RED at base ae7ea5ce: full_diff_review is a single seat; terminal panel always fans out.
+STATION_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync, spawnSync } = require('child_process');
+const [root, tmp] = process.argv.slice(2);
+const { AutopilotEngine, runCampaignIntake, compileCampaignDispositionPolicy } = require(path.join(root, 'src', 'engine'));
+const git = (repo, ...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+const sbx = path.join(tmp, 'station-repo');
+fs.mkdirSync(path.join(sbx, '.claude'), { recursive: true });
+fs.mkdirSync(path.join(sbx, 'src'), { recursive: true });
+spawnSync('git', ['-C', sbx, 'init', '-q']);
+spawnSync('git', ['-C', sbx, 'config', 'user.email', 'station@example.invalid']);
+spawnSync('git', ['-C', sbx, 'config', 'user.name', 'Station']);
+const gov = JSON.parse(fs.readFileSync(path.join(root, '.claude', 'owner-kernel-governance.json'), 'utf8'));
+gov.mission_convergence = {
+  schema_version: 1,
+  enforcement_mode: 'shadow',
+  max_campaigns: 8,
+  max_wall_seconds: 7200,
+  max_tool_calls: 1000,
+  max_engine_attempts: 100,
+  max_external_wait_seconds: 600,
+  max_canonical_changed_files: 100,
+  max_output_bytes: 1000000,
+  max_deliverables: 8,
+  max_parallel: 3,
+  max_batches: 4,
+  max_graph_depth: 4,
+  max_gate_attempts: 16,
+  closure_ratio: 1,
+  max_stagnant_campaigns: 2,
+};
+fs.writeFileSync(
+  path.join(sbx, '.claude', 'owner-kernel-governance.json'),
+  `${JSON.stringify(gov, null, 2)}\n`,
+);
+fs.writeFileSync(path.join(sbx, 'src', 'value.txt'), 'base\n');
+execFileSync('git', ['-C', sbx, 'add', '.']);
+execFileSync('git', ['-C', sbx, 'commit', '-qm', 'base']);
+const base = git(sbx, 'rev-parse', 'HEAD');
+const common = fs.realpathSync(path.resolve(sbx, git(sbx, 'rev-parse', '--git-common-dir')));
+const seats = [
+  { role: 'qc', runner: 'cc-shim', model: 'claude-opus-4-6', effort: 'high', endpoint: null, family: 'anthropic' },
+  { role: 'qc', runner: 'cc-shim', model: 'gpt-5.4', effort: 'high', endpoint: null, family: 'openai' },
+  { role: 'qc', runner: 'cc-shim', model: 'glm-4.7', effort: 'high', endpoint: null, family: 'zai' },
+];
+function runStation(tag, opts) {
+  const branch = `feat/${tag}`;
+  const worktree = path.join(tmp, `${tag}-wt`);
+  try { execFileSync('git', ['-C', sbx, 'worktree', 'remove', '--force', worktree], { stdio: 'ignore' }); } catch (_e) {}
+  git(sbx, 'worktree', 'add', '-q', '-b', branch, worktree, base);
+  fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `${tag}\n`);
+  execFileSync('git', ['-C', worktree, 'add', 'src/value.txt']);
+  execFileSync('git', ['-C', worktree, 'commit', '-qm', tag]);
+  const candidate = git(worktree, 'rev-parse', 'HEAD');
+  const tree = git(worktree, 'rev-parse', 'HEAD^{tree}');
+  const dir = path.join(tmp, `${tag}-campaign`);
+  fs.mkdirSync(dir, { recursive: true });
+  const contractPath = path.join(dir, 'campaign.json');
+  const sealPath = path.join(dir, 'campaign.seal.json');
+  const promptFile = path.join(tmp, `${tag}.prompt`);
+  fs.writeFileSync(promptFile, 'station\n');
+  fs.writeFileSync(contractPath, `${JSON.stringify({
+    schema_version: 1, ticket: tag, profile: 'poc', mission_grant_ref: null,
+    repo_identity: `git-common-dir:${common}`, base_sha: base, branch,
+    vertical_acceptance: opts.acceptance || ['src/value.txt must change'],
+    allowed_path_prefixes: ['src/'], max_changed_files: 5, baseline_churn: 10,
+    max_growth_ratio: 1.5, max_extra_churn: 5, max_repair_generations: 2,
+    max_wall_seconds: opts.wall === undefined ? 600 : opts.wall,
+    final_panel_reserve_seconds: opts.reserve === undefined ? 0 : opts.reserve,
+    verify_cmd: 'true', rubric_ids: ['ICC-STATION1'],
+  }, null, 2)}\n`);
+  execFileSync(process.execPath, [
+    path.join(root, 'scripts', 'implementation-campaign-check.js'),
+    'seal', '--contract', contractPath, '--repo', sbx, '--mission-mode', 'shadow', '--out', sealPath,
+  ], { cwd: sbx, encoding: 'utf8' });
+  let impl = 0;
+  let repaired = null;
+  const reviewModels = [];
+  let panelCalls = 0;
+  let finalPanelCalls = 0;
+  let reviewCalls = 0;
+  let nowMs = Date.parse('2026-09-18T00:00:05.000Z');
+  const engine = new AutopilotEngine({
+    cwd: sbx,
+    clock: opts.clock || (() => new Date(nowMs).toISOString()),
+    ...(opts.policy === null ? {} : {
+      campaignDispositionProvider: compileCampaignDispositionPolicy(opts.policy || 'acceptance-bound'),
+    }),
+    campaignIntake(input) {
+      return runCampaignIntake(input, {
+        readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+        contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+        occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      });
+    },
+    campaignScopeChecker() {
+      return { passed: true, changed_files: ['src/value.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
+    },
+    campaignComposer(input, adapters) {
+      const innerPanel = adapters.reviewPanel;
+      const innerReview = adapters.review;
+      const innerFinalPanel = adapters.finalPanel;
+      adapters.reviewPanel = (reviewInput) => {
+        if (Number.isSafeInteger(opts.advanceMs)) nowMs += opts.advanceMs;
+        panelCalls += 1;
+        return innerPanel(reviewInput);
+      };
+      adapters.finalPanel = (reviewInput) => {
+        finalPanelCalls += 1;
+        return innerFinalPanel(reviewInput);
+      };
+      adapters.review = (reviewInput) => {
+        reviewCalls += 1;
+        return innerReview(reviewInput);
+      };
+      return require(path.join(root, 'src', 'engine', 'campaign-composition')).runCampaignComposition(input, adapters);
+    },
+    implementationDispatcher() {
+      impl += 1;
+      if (impl > 1) {
+        fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `${tag}-fixed\n`);
+        execFileSync('git', ['-C', worktree, 'add', 'src/value.txt']);
+        execFileSync('git', ['-C', worktree, 'commit', '-qm', `${tag}-fix`]);
+        repaired = {
+          commit: git(worktree, 'rev-parse', 'HEAD'),
+          tree: git(worktree, 'rev-parse', 'HEAD^{tree}'),
+        };
+      }
+      const commit = impl > 1 ? repaired.commit : candidate;
+      const treeSha = impl > 1 ? repaired.tree : tree;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          status: 'committed', runner: 'fixture', model: 'fixture-implementer',
+          branch, base, commit, files_changed: 1, insertions: 1, deletions: 0, worktree,
+        },
+      };
+    },
+    reviewDispatcher(args) {
+      const modelIdx = args.indexOf('--model');
+      reviewModels.push(modelIdx >= 0 ? args[modelIdx + 1] : null);
+      const isFirstCandidate = !repaired;
+      const collide = opts.collide === true;
+      const findings = collide
+        ? JSON.stringify([{
+          finding_id: 'dup-1',
+          claim: opts.acceptance[0],
+          severity: '🟠',
+          source: `seat-${reviewModels.length}`,
+        }])
+        : (isFirstCandidate && opts.fixFirst
+          ? JSON.stringify([{
+            finding_id: 'src-value',
+            claim: opts.acceptance[0],
+            severity: '🟠',
+            source: 'product-review',
+          }])
+          : '[]');
+      const verdict = (isFirstCandidate && (opts.fixFirst || collide)) ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
+      if (opts.failSeat && reviewModels[reviewModels.length - 1] === opts.failSeat) {
+        return {
+          error: null, status: 124, signal: 'SIGTERM', stdout: '', stderr: 'timeout',
+          parseError: null, result: { status: 'no_verdict', error: 'timeout' },
+        };
+      }
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          runner: 'cc-shim', model: reviewModels[reviewModels.length - 1],
+          status: 'reviewed', verdict, findings, raw_log: null, error: null,
+        },
+        // packetHashOf (autopilot-engine.js) reads a sibling `packet: {packet_hash}`
+        // object on the dispatcher result, not a field inside `result` (item D).
+        ...(opts.withPacketHash ? { packet: { packet_hash: 'b'.repeat(64) } } : {}),
+      };
+    },
+    diffProvider() { return promptFile; },
+    gitWorktreeAdd({ commit } = {}) {
+      const useCommit = commit || candidate;
+      const verifyWt = path.join(tmp, `${tag}-verify-${String(useCommit).slice(0, 12)}`);
+      try { execFileSync('git', ['-C', sbx, 'worktree', 'remove', '--force', verifyWt], { stdio: 'ignore' }); } catch (_e) {}
+      execFileSync('git', ['-C', sbx, 'worktree', 'add', '-q', '--detach', verifyWt, useCommit]);
+      const useTree = git(verifyWt, 'rev-parse', 'HEAD^{tree}');
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '',
+        worktree: verifyWt, parent: null, commit: useCommit, observed_commit: useCommit,
+        observed_tree_sha: useTree, detached: true,
+      };
+    },
+    gitWorktreeRemove({ worktree: wt } = {}) {
+      if (wt) {
+        try { execFileSync('git', ['-C', sbx, 'worktree', 'remove', '--force', wt], { stdio: 'ignore' }); } catch (_e) {}
+      }
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+    },
+    repairLineageCleanupTransaction({ record }) {
+      if (record && record.worktree) {
+        execFileSync('git', ['-C', sbx, 'worktree', 'remove', '--force', record.worktree], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      }
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+    },
+    verifyCommandRunner() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '',
+        executed_argv: ['/bin/sh', '-c', 'true'],
+      };
+    },
+  });
+  engine.implementTask = () => {
+    impl += 1;
+    if (impl > 1) {
+      fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `${tag}-fixed\n`);
+      execFileSync('git', ['-C', worktree, 'add', 'src/value.txt']);
+      execFileSync('git', ['-C', worktree, 'commit', '-qm', `${tag}-fix`]);
+      repaired = {
+        commit: git(worktree, 'rev-parse', 'HEAD'),
+        tree: git(worktree, 'rev-parse', 'HEAD^{tree}'),
+      };
+    }
+    return {
+      status: 'committed', dispatcher_called: true,
+      implementation: {
+        commit: impl > 1 ? repaired.commit : candidate, worktree, run_id: `run-${tag}`,
+        dispatch_id: `d-${tag}`, provider: 'fixture', runner: 'fixture',
+        model: 'fixture-implementer', insertions: 1, deletions: 0,
+      },
+      implementationResult: { error: null, signal: null, status: 0 },
+      ledger: [],
+    };
+  };
+  const roster = {
+    reviewer_engine: seats[0].model, reviewer_effort: 'high', reviewer_runner: 'cc-shim',
+    reviewer_qualified: true, implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high', implementer_runner: 'fixture',
+    loop_max_rounds: 3, loop_convergence_verdict: 'SHIP-AS-IS',
+    min_panel_size: opts.minPanel === undefined ? 3 : opts.minPanel,
+    qc_panel_seats_complete: true, qc_panel_seats: seats,
+    in_rail_review: opts.station || 'panel',
+    override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
+  };
+  const result = engine.runImplementationReviewLoop({
+    promptFile, branch, base, roster,
+    campaignContract: contractPath, campaignSeal: sealPath,
+    campaignDispositionPolicy: opts.policy || 'acceptance-bound',
+    verificationEnv: { PATH: process.env.PATH || '', CI: tag },
+    verificationEnvAllowlist: ['CI'],
+  });
+  return { result, panelCalls, finalPanelCalls, reviewCalls, reviewModels, impl };
+}
+
+const repair = runStation('station-repair', {
+  station: 'panel',
+  fixFirst: true,
+  withPacketHash: true,
+  acceptance: ['src/value.txt must change'],
+});
+const repairTrace = repair.result.trace || (repair.result.campaign_receipt && repair.result.campaign_receipt.trace) || [];
+assert.ok(repairTrace.includes('repair') && repairTrace.includes('final_panel_gate_reused'),
+  JSON.stringify({ status: repair.result.status, phase: repair.result.phase, reason: repair.result.reason, trace: repairTrace }));
+assert.strictEqual(repair.panelCalls, 2, `fan-outs=${repair.panelCalls}`);
+assert.strictEqual(repair.reviewCalls, 0, `single-seat calls=${repair.reviewCalls}`);
+console.log('station_repair_reuse=true');
+
+// Reuse needs a real packet identity (item D): a station panel receipt with
+// packet_hash: null must never be reused for the terminal fan-out — the terminal
+// dispatches fresh (a second, real fan-out), never `final_panel_gate_reused`. RED
+// at 316c1d4b: stationPanelReuse accepted a null packet_hash (hasOwnProperty +
+// equality against another null), so this fixture wrongly reused.
+const noPacketHash = runStation('station-no-packet-hash', {
+  station: 'panel', fixFirst: false, withPacketHash: false,
+});
+const noPacketHashTrace = noPacketHash.result.trace
+  || (noPacketHash.result.campaign_receipt && noPacketHash.result.campaign_receipt.trace) || [];
+assert.ok(!String(noPacketHashTrace).includes('final_panel_gate_reused'),
+  `a station panel with no packet_hash must never be reused: ${JSON.stringify(noPacketHashTrace)}`);
+assert.strictEqual(noPacketHash.panelCalls, 1, `loop station fan-outs=${noPacketHash.panelCalls}`);
+assert.strictEqual(noPacketHash.finalPanelCalls, 1,
+  `terminal must fan out fresh (a real finalPanel dispatch, not a reuse) when the station panel had no packet_hash: ${noPacketHash.finalPanelCalls}`);
+console.log('station_no_packet_hash_no_reuse=true');
+
+const singleA = runStation('station-single-a', { station: 'single', fixFirst: false });
+const singleB = runStation('station-single-b', { station: 'single', fixFirst: false });
+const traceOf = (run) => run.result.trace || (run.result.campaign_receipt && run.result.campaign_receipt.trace) || [];
+assert.deepStrictEqual(traceOf(singleA), traceOf(singleB));
+assert.strictEqual(singleA.panelCalls, 0);
+assert.ok(singleA.reviewCalls >= 1);
+console.log('station_single_control=true');
+
+const below = runStation('station-below', { station: 'panel', minPanel: 3, failSeat: seats[0].model, failAll: true });
+assert.notStrictEqual(below.result.status, 'converged');
+assert.ok(!String(below.result.trace || []).includes('full_diff_review') || below.reviewCalls === 0);
+assert.strictEqual(below.reviewCalls, 0);
+// A below-quorum station must surface the concrete 2-B reason and phase, not just
+// zero single-seat dispatch calls: one seat timing out (transport failure) is a
+// gate-transient seat fault, so this fixture takes the durable-wait resumable path
+// (never a plain terminal block) at the full_diff_review phase.
+assert.strictEqual(below.result.status, 'blocked', JSON.stringify(below.result));
+assert.strictEqual(below.result.phase, 'full_diff_review', JSON.stringify(below.result));
+assert.strictEqual(below.result.reason, 'final_panel_seat_transport_failed', JSON.stringify(below.result));
+assert.strictEqual(below.result.durable_wait, true, JSON.stringify(below.result));
+console.log('station_below_quorum=true');
+
+const pocket = runStation('station-pocket', {
+  station: 'panel', wall: 5, reserve: 300, fixFirst: false, advanceMs: 5000,
+});
+const pocketRow = (pocket.result.ledger || []).find((row) => row.unit === 'full_diff_review');
+assert.ok(pocketRow, JSON.stringify(pocket.result.ledger && pocket.result.ledger.map((r) => r.unit)));
+assert.strictEqual(pocketRow.budget_source, 'pocket');
+console.log('station_pocket=true');
+
+const exhausted = runStation('station-exhausted', {
+  station: 'panel', wall: 5, reserve: 0, fixFirst: false, advanceMs: 5000,
+});
+assert.ok(
+  exhausted.result.reason === 'final_panel_budget_exhausted'
+    || JSON.stringify(exhausted.result).includes('final_panel_budget_exhausted'),
+  JSON.stringify({ status: exhausted.result.status, reason: exhausted.result.reason, phase: exhausted.result.phase }),
+);
+assert.strictEqual(exhausted.reviewCalls, 0);
+console.log('station_budget_exhausted=true');
+
+const collide = runStation('station-collide', {
+  station: 'panel', collide: true, policy: null,
+  acceptance: ['src/value.txt must change'],
+});
+const parked = JSON.stringify(collide.result);
+assert.ok(parked.includes('s0.dup-1') && parked.includes('s1.dup-1'), parked.slice(0, 1500));
+assert.ok(collide.result.status === 'awaiting_disposition' || collide.result.phase === 'awaiting_disposition'
+  || collide.result.status === 'blocked', collide.result.status + collide.result.reason);
+console.log('station_collide_ids=true');
+NODE
+)"
+assert_exit_code "$?" "0" "panel station routing: $STATION_OUT"
+for key in station_repair_reuse station_no_packet_hash_no_reuse station_single_control station_below_quorum station_pocket \
+  station_budget_exhausted station_collide_ids; do
+  assert_contains "$STATION_OUT" "$key=true" "panel station proves $key"
+done
 
 PROOF_ENGINE_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 'use strict';

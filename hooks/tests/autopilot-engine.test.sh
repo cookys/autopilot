@@ -3993,6 +3993,7 @@ const validPayload = {
   independent_harness: 'off',
   qc_panel: ['test-reviewer'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -5640,6 +5641,7 @@ const roster = {
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
   min_panel_size: 3,
+  in_rail_review: 'single',
   qc_panel_seats_complete: true,
   qc_panel_seats: seats,
   override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
@@ -5679,9 +5681,16 @@ function stubReview() {
       runner: 'cc-shim', model: 'fixture', status: 'reviewed', verdict: 'SHIP-AS-IS',
       findings: '[]', raw_log: null, error: null,
     },
+    // A real single-seat/panel review reports a shared-packet hash (1.2, `packetHashOf`
+    // in autopilot-engine.js: a sibling `packet: {packet_hash}` object on the dispatcher
+    // result, not a field inside `result`). Station-panel reuse (item D) requires a real
+    // one, so the station-reuse case needs this. The terminal receipt never surfaces
+    // packet_hash regardless (item A, gated to stationKind === 'panel'), so adding it
+    // here is inert everywhere else.
+    packet: { packet_hash: 'b'.repeat(64) },
   };
 }
-function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride, failModel, intakeMutate, rosterMutate, plantSnapshotSeats }) {
+function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride, failModel, intakeMutate, rosterMutate, plantSnapshotSeats, reviewByModel }) {
   const caseSeats = seatsOverride || seats;
   const caseRoster = {
     ...(seatsOverride
@@ -5767,6 +5776,19 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
           return {
             error: null, status: 124, signal: 'SIGTERM', stdout: '', stderr: 'timeout',
             parseError: null, result: { status: 'no_verdict', error: 'timeout' },
+          };
+        }
+        if (reviewByModel && Object.prototype.hasOwnProperty.call(
+          reviewByModel, reviewModels[reviewModels.length - 1],
+        )) {
+          const override = reviewByModel[reviewModels[reviewModels.length - 1]];
+          return {
+            error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+            result: {
+              runner: 'cc-shim', model: reviewModels[reviewModels.length - 1], status: 'reviewed',
+              verdict: override.verdict || 'SHIP-AS-IS', findings: override.findings || '[]',
+              raw_log: null, error: null,
+            },
           };
         }
         return stubReview();
@@ -6176,6 +6198,90 @@ runCase({
   },
 });
 
+const stationReuse = runCase({
+  ticket: 'panel-station-2c',
+  reserve: 0,
+  clock: clockEarly,
+  rosterMutate() { return { in_rail_review: 'panel' }; },
+  collect({ result, reviewModels }) {
+    const findPanel = (value) => {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts)) return value;
+      for (const child of Object.values(value)) {
+        const found = findPanel(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    const terminal = findPanel(result);
+    assert.ok(result.trace && result.trace.includes('final_panel_gate_reused')
+      || JSON.stringify(result).includes('final_panel_gate_reused'),
+      JSON.stringify({ status: result.status, phase: result.phase, reason: result.reason, trace: result.trace }).slice(0, 800));
+    assert.ok(terminal);
+    assert.strictEqual(terminal.final_panel_count, 3);
+    assert.strictEqual(terminal.final_panel_seat_receipts.length, 3);
+    assert.ok(reviewModels.length === 3, `dispatcher calls ${reviewModels.length}`);
+    const stationRow = (result.ledger || []).find((row) => row.unit === 'full_diff_review' && row.station === 'panel');
+    assert.ok(stationRow, JSON.stringify(result.ledger && result.ledger.map((r) => r.unit)));
+    console.log('station_terminal_reuse=true');
+  },
+});
+
+// Three-seat finding-id qualification (2-C repair r2, item G): seat A and seat C
+// report a byte-identical 'dup-1' (folds into whichever seat first qualified that
+// digest); seat B reports a distinct 'dup-1'. A digest-keyed prior pointer (rather
+// than a group per distinct digest) makes seat C's identical-to-B-but-not-to-A
+// occurrence compare against the wrong (first) group and spuriously mint a THIRD
+// merged id — RED at 316c1d4b: findings included a spurious "s2.dup-1" duplicate
+// of "s1.dup-1" alongside "s0.dup-1"/"s1.dup-1".
+runCase({
+  ticket: 'panel-station-collide3',
+  reserve: 0,
+  clock: clockEarly,
+  rosterMutate() { return { in_rail_review: 'panel' }; },
+  reviewByModel: {
+    'claude-opus-4-6': {
+      verdict: 'SHIP-AS-IS',
+      findings: JSON.stringify([{
+        finding_id: 'dup-1', claim: 'shared defect X', severity: '🟡', source: 'seat-A',
+      }]),
+    },
+    'gpt-5.4': {
+      verdict: 'SHIP-AS-IS',
+      findings: JSON.stringify([{
+        finding_id: 'dup-1', claim: 'different defect Y', severity: '🟡', source: 'seat-B',
+      }]),
+    },
+    'glm-4.7': {
+      verdict: 'SHIP-AS-IS',
+      findings: JSON.stringify([{
+        finding_id: 'dup-1', claim: 'different defect Y', severity: '🟡', source: 'seat-B',
+      }]),
+    },
+  },
+  collect({ result }) {
+    const findPanel = (value) => {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts) && typeof value.findings === 'string') {
+        return value;
+      }
+      for (const child of Object.values(value)) {
+        const found = findPanel(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    const terminal = findPanel(result);
+    assert.ok(terminal, JSON.stringify(result).slice(0, 800));
+    const items = JSON.parse(terminal.findings);
+    const ids = items.map((item) => item.finding_id).sort();
+    assert.deepStrictEqual(ids, ['s0.dup-1', 's1.dup-1'],
+      `qualified ids must be exactly s0.dup-1 and s1.dup-1 (C folded into s1.dup-1): ${JSON.stringify(ids)}`);
+    assert.strictEqual(items.length, 2, `no spurious duplicate merged row: ${JSON.stringify(items)}`);
+    console.log('station_collide_three_seats=true');
+  },
+});
+
 NODE
 )"
 assert_contains "$PANEL_OUT" "panel_order=true" "3-seat stub dispatcher is called in index order (RED at base 7f5d6ee8: sequential split)"
@@ -6192,6 +6298,10 @@ assert_contains "$PANEL_OUT" "undrifted_roster_no_drift_flag=true" \
 assert_contains "$PANEL_OUT" "snapshot_live_drift=true" "resume roster swap records live_drift and reviews snapshot seats"
 assert_contains "$PANEL_OUT" "snapshot_identity_invalid=true" "contract_digest mismatch blocks before spend"
 assert_contains "$PANEL_OUT" "no_snapshot_live_roster=true" "no snapshot uses live roster"
+assert_contains "$PANEL_OUT" "station_terminal_reuse=true" \
+  "station panel fans out once and terminal reuses the same receipts"
+assert_contains "$PANEL_OUT" "station_collide_three_seats=true" \
+  "three-seat finding-id qualification: a third identical-to-a-later-group occurrence folds in, no spurious third id"
 assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
 assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
 

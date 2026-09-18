@@ -176,6 +176,32 @@ function snapshotSeatRecord(seat) {
   };
 }
 
+function resolveReviewStation(roster) {
+  const knob = roster && roster.in_rail_review;
+  if (knob === 'panel') return 'panel';
+  if (knob === 'auto') {
+    return roster.qc_panel_seats_complete === true ? 'panel' : 'single';
+  }
+  return 'single';
+}
+
+function qcPanelSnapshotIdentityBody(snapshot) {
+  const body = {
+    schema_version: snapshot.schema_version,
+    campaign_id: snapshot.campaign_id,
+    contract_digest: snapshot.contract_digest,
+    seats: Array.isArray(snapshot.seats) ? snapshot.seats.map(snapshotSeatRecord) : [],
+    seats_complete: snapshot.seats_complete,
+    min_panel_size: snapshot.min_panel_size,
+    required_review_families: snapshot.required_review_families,
+    implementer_family: snapshot.implementer_family,
+  };
+  if (snapshot && Object.prototype.hasOwnProperty.call(snapshot, 'review_station')) {
+    body.review_station = snapshot.review_station;
+  }
+  return body;
+}
+
 function buildQcPanelSnapshot({
   campaignId,
   contractDigest,
@@ -183,6 +209,7 @@ function buildQcPanelSnapshot({
   minPanelSize,
   requiredReviewFamilies,
   implementerFamily,
+  reviewStation,
 }) {
   const body = {
     schema_version: 1,
@@ -194,6 +221,9 @@ function buildQcPanelSnapshot({
     required_review_families: requiredReviewFamilies,
     implementer_family: implementerFamily,
   };
+  if (reviewStation === 'panel' || reviewStation === 'single') {
+    body.review_station = reviewStation;
+  }
   return { ...body, digest: canonicalDigest(body) };
 }
 
@@ -1797,6 +1827,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       minPanelSize: minSize,
       requiredReviewFamilies: requiredFamilies,
       implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
+      reviewStation: resolveReviewStation(input.roster),
     });
     const snapPath = path.join(path.dirname(contractPath), 'qc_panel_snapshot.json');
     try {
@@ -1851,12 +1882,23 @@ function runCampaignIntake(input = {}, adapters = {}) {
       }
       qcPanelSnapshot = existing;
     }
-    const liveDrift = qcPanelSnapshot.digest !== liveSnapshot.digest;
+    const driftLive = Object.prototype.hasOwnProperty.call(qcPanelSnapshot, 'review_station')
+      ? liveSnapshot
+      : buildQcPanelSnapshot({
+        campaignId: snapshotCampaignId,
+        contractDigest: rawContractDigest,
+        seats: qcSeats,
+        minPanelSize: minSize,
+        requiredReviewFamilies: requiredFamilies,
+        implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
+      });
+    const liveDrift = qcPanelSnapshot.digest !== driftLive.digest;
     steps.push(step('qc_panel_snapshot', 'ready', {
       digest: qcPanelSnapshot.digest,
       seat_count: Array.isArray(qcPanelSnapshot.seats) ? qcPanelSnapshot.seats.length : 0,
       path: snapPath,
-      ...(liveDrift ? { live_drift: liveSnapshot.digest } : {}),
+      review_station: qcPanelSnapshot.review_station === 'panel' ? 'panel' : 'single',
+      ...(liveDrift ? { live_drift: driftLive.digest } : {}),
     }));
   }
 
@@ -2346,6 +2388,8 @@ module.exports = {
   CampaignIntakeError,
   buildNoEffectReceipt,
   buildQcPanelSnapshot,
+  resolveReviewStation,
+  qcPanelSnapshotIdentityBody,
   completeCampaignAdmission,
   consumeEnforcedProviderReadiness,
   defaultCampaignSealPath,

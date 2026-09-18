@@ -94,6 +94,7 @@ function validateReviewLoopConfig(value) {
     'plan_review',
     'independent_harness',
     'qc_panel_aggregation',
+    'in_rail_review',
     'review_risk',
     'review_diff_scope',
     'source',
@@ -152,6 +153,7 @@ function validateReviewLoopConfig(value) {
     }
   }
   assertOneOf(value, 'qc_panel_aggregation', schemaEnum('qc_panel_aggregation'));
+  assertOneOf(value, 'in_rail_review', schemaEnum('in_rail_review'));
   assertOneOf(value, 'review_risk', schemaEnum('review_risk'));
   assertOneOf(value, 'review_diff_scope', schemaEnum('review_diff_scope'));
   assertField(value, 'review_packet_deny_extra', Array.isArray, 'an array');

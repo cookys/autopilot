@@ -200,7 +200,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    `awaiting_disposition`, resume with `--resume --campaign-disposition-authority <file>` and
    DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16). Panel seats
    launch together under the remaining panel pocket (`final_panel_reserve_seconds`); each seat's
-   `--timeout` is the whole remainder, not a sequential share.
+   `--timeout` is the whole remainder, not a sequential share. When the snapshot seals
+   `review_station: panel`, that fan-out *is* the in-loop review station (a repair round
+   reruns the panel; the terminal panel reuses the last matching receipt).
 10. **Verification is yours**: check out the hand's commit in a scratch worktree on a temp branch
     (some suites die on a detached HEAD) and run every verify command there; `test -x` every test
     file the hand created (`bash file` masks a 100644 mode that the CI executable gate rejects); probe the reviewer's MUST-FIX claims by re-derivation

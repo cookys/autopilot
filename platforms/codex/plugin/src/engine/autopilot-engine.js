@@ -32,6 +32,7 @@ const {
   runCampaignIntake,
   buildQcPanelSnapshot,
   modelFamilyOfEngine,
+  resolveReviewStation,
 } = require('./campaign-intake');
 const {
   projectMissionMode,
@@ -46,7 +47,7 @@ const {
   openPreparedMissionStateStore,
   reconcileMissionCampaignTerminal,
 } = require('../mission/runtime');
-const { runCampaignComposition } = require('./campaign-composition');
+const { runCampaignComposition, validateFinalPanelReceipt } = require('./campaign-composition');
 const {
   emptyControllerState,
   buildFrozenDenominator,
@@ -5251,7 +5252,9 @@ class AutopilotEngine {
       return { ...body, receipt_digest: campaignCanonicalDigest(body) };
     };
 
-    const performFinalPanel = (reviewInput) => {
+    const runPanel = (reviewInput, panelOpts = {}) => {
+      const stationKind = panelOpts.station === 'panel' ? 'panel' : 'terminal';
+      const ledgerUnit = stationKind === 'panel' ? 'full_diff_review' : 'final_panel';
       const snapshot = campaignControl && campaignControl.qc_panel_snapshot
         && typeof campaignControl.qc_panel_snapshot === 'object'
         && !Array.isArray(campaignControl.qc_panel_snapshot)
@@ -5300,6 +5303,9 @@ class AutopilotEngine {
             ? roster.required_review_families
             : 1,
           implementerFamily: modelFamilyOfEngine(roster.implementer_engine),
+          ...(Object.prototype.hasOwnProperty.call(snapshot, 'review_station')
+            ? { reviewStation: resolveReviewStation(roster) }
+            : {}),
         });
         liveDigest = liveSnap.digest;
         if (liveDigest !== snapshot.digest) rosterDrift = true;
@@ -5332,10 +5338,11 @@ class AutopilotEngine {
         { consumer: 'panel' },
       );
       if (panelRemain.exhausted) {
-        ledger.push(this.ledgerEntry('final_panel', 'failed', panelObservedAt, {
+        ledger.push(this.ledgerEntry(ledgerUnit, 'failed', panelObservedAt, {
           reason: 'final_panel_budget_exhausted',
           budget_source: 'pocket',
           seat_timeout_seconds: null,
+          ...(stationKind === 'panel' ? { station: 'panel', seat_count: seats.length } : {}),
         }));
         return {
           reviewed: false,
@@ -5439,9 +5446,15 @@ class AutopilotEngine {
       }
       const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome && outcome.reviewed === true);
       const mergedFindings = [];
-      const findingIds = new Map();
+      // finding_id -> array of { digest, seatIndex, slot, qualified }, one entry per
+      // DISTINCT digest seen for that id (not one entry per occurrence). An occurrence
+      // whose digest matches an already-known group — bare or already qualified — folds
+      // into that group (no new merged row); only a genuinely new digest for an id that
+      // already has one qualifies both the original and the new occurrence.
+      const findingGroups = new Map();
       let findingsConsistent = true;
-      for (const { outcome } of reviewedOutcomes) {
+      outcomes.forEach(({ outcome }, seatIndex) => {
+        if (!outcome || outcome.reviewed !== true) return;
         let items;
         try {
           items = outcome.findings && outcome.findings.trim().length > 0
@@ -5449,22 +5462,50 @@ class AutopilotEngine {
             : [];
         } catch (_error) {
           findingsConsistent = false;
-          break;
+          return;
+        }
+        if (!Array.isArray(items)) {
+          findingsConsistent = false;
+          return;
         }
         for (const item of items) {
-          const prior = findingIds.get(item.finding_id);
+          if (!item || typeof item.finding_id !== 'string') continue;
           const digest = campaignCanonicalDigest(item);
-          if (prior && prior !== digest) {
-            findingsConsistent = false;
-            break;
+          let groups = findingGroups.get(item.finding_id);
+          if (!groups) {
+            groups = [];
+            findingGroups.set(item.finding_id, groups);
           }
-          if (!prior) {
-            findingIds.set(item.finding_id, digest);
-            mergedFindings.push(item);
+          if (groups.some((g) => g.digest === digest)) {
+            // Identical to an already-known occurrence (whichever seat first reported
+            // it) — fold in, never a new merged row and never re-derived against a
+            // stale/unqualified key.
+            continue;
           }
+          if (groups.length === 0) {
+            groups.push({
+              digest, seatIndex, slot: mergedFindings.length, qualified: false,
+            });
+            mergedFindings.push({ ...item });
+            continue;
+          }
+          if (groups.length === 1 && !groups[0].qualified) {
+            const first = groups[0];
+            mergedFindings[first.slot] = {
+              ...mergedFindings[first.slot],
+              finding_id: `s${first.seatIndex}.${item.finding_id}`,
+            };
+            first.qualified = true;
+          }
+          groups.push({
+            digest, seatIndex, slot: mergedFindings.length, qualified: true,
+          });
+          mergedFindings.push({
+            ...item,
+            finding_id: `s${seatIndex}.${item.finding_id}`,
+          });
         }
-        if (!findingsConsistent) break;
-      }
+      });
       const packetHashes = [];
       let packetHashPresent = 0;
       for (const { outcome } of reviewedOutcomes) {
@@ -5487,16 +5528,35 @@ class AutopilotEngine {
           outcome,
           quorumMet ? !!(outcome && outcome.reviewed === true) : true,
         ));
-      ledger.push(this.ledgerEntry('final_panel', panelReviewed ? 'passed' : 'failed', panelObservedAt, {
+      ledger.push(this.ledgerEntry(ledgerUnit, panelReviewed ? 'passed' : 'failed', panelObservedAt, {
         budget_source: budgetSource,
         seat_timeout_seconds: seatTimeoutSeconds,
+        ...(stationKind === 'panel'
+          ? { station: 'panel', seat_count: seats.length }
+          : {}),
         ...(rosterDrift ? { roster_drift: true } : {}),
       }));
       const last = ledger[ledger.length - 1];
       if (last) last.ended_at = panelEndedAt;
-      return {
+      // Aggregation (union-on-verified-critical) is a station-panel concept (plan
+      // §1.1.1); the terminal branch keeps base's hardcoded 'SHIP-AS-IS', matching
+      // performFinalPanel at base ae7ea5ce byte-for-byte when reviewed.
+      let aggregatedVerdict = 'SHIP-AS-IS';
+      if (stationKind === 'panel') {
+        for (const { outcome } of reviewedOutcomes) {
+          if (outcome && outcome.verdict && outcome.verdict !== 'SHIP-AS-IS') {
+            aggregatedVerdict = outcome.verdict;
+            break;
+          }
+        }
+      }
+      const packetHash = packetHashesConsistent && packetHashes.length > 0
+        ? packetHashes[0]
+        : undefined;
+      const receipt = {
         reviewed: panelReviewed,
-        verdict: panelReviewed ? 'SHIP-AS-IS' : null,
+        ...(stationKind === 'panel' ? { success: panelReviewed } : {}),
+        verdict: panelReviewed ? aggregatedVerdict : null,
         findings: JSON.stringify(mergedFindings),
         review_digest: panelReviewed
           ? (reviewedOutcomes.length === 1
@@ -5513,9 +5573,44 @@ class AutopilotEngine {
         ended_at: panelEndedAt,
         budget_source: budgetSource,
         seat_timeout_seconds: seatTimeoutSeconds,
+        ...(stationKind === 'panel' && packetHash ? { packet_hash: packetHash } : {}),
         ...(driftTrace.length > 0 ? { trace: driftTrace } : {}),
       };
+      if (!panelReviewed && stationKind === 'panel') {
+        const validation = validateFinalPanelReceipt(receipt, minPanelSize);
+        receipt.reason = validation.reason || 'final_panel_not_reviewed';
+        receipt.phase = receipt.reason === 'final_panel_budget_exhausted'
+          ? 'campaign_wall_budget'
+          : 'full_diff_review';
+      } else if (stationKind === 'panel' && panelReviewed && reviewInput && reviewInput.vertical_failed !== true) {
+        try {
+          recordCampaignEvent({
+            eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+            generation: Number.isSafeInteger(reviewInput && reviewInput.repair_generation)
+              ? reviewInput.repair_generation
+              : undefined,
+            stageIdentity: `campaign-review-panel:${Number.isSafeInteger(reviewInput && reviewInput.repair_generation) ? reviewInput.repair_generation : 'n'}`,
+            payload: { review_digest: receipt.review_digest },
+            artifactReference: {
+              kind: 'product_review',
+              digest: receipt.review_digest,
+            },
+          });
+        } catch (error) {
+          return {
+            ...receipt,
+            reviewed: false,
+            success: false,
+            phase: 'campaign_event_journal',
+            reason: error.message || String(error),
+          };
+        }
+      }
+      return receipt;
     };
+
+    const performFinalPanel = (reviewInput) => runPanel(reviewInput, { station: 'terminal' });
+    const performReviewPanel = (reviewInput) => runPanel(reviewInput, { station: 'panel' });
 
     const maxRepairGenerations = Math.min(
       campaignControl.contract.max_repair_generations,
@@ -6817,9 +6912,14 @@ class AutopilotEngine {
       verificationEnvAllowlist,
     );
     const jointReviewRosterDigest = campaignCanonicalDigest(roster);
+    const snapshotStation = campaignControl && campaignControl.qc_panel_snapshot
+      && campaignControl.qc_panel_snapshot.review_station === 'panel'
+      ? 'panel'
+      : 'single';
     const composition = this.campaignComposer({
       maxRepairGenerations,
       minPanelSize: roster.min_panel_size,
+      reviewStation: snapshotStation,
       lifecycleReceiptRef,
       controller: campaignController,
       frozenDenominator,
@@ -8018,6 +8118,7 @@ class AutopilotEngine {
         };
       },
       review: (reviewInput) => performReview(reviewInput),
+      reviewPanel: (reviewInput) => performReviewPanel(reviewInput),
       prepareReview: (reviewInput) => prepareReview(reviewInput),
       adjudicate: ({ review, repair_generation: repairGeneration, final }) => {
         let dispositionAuthority = null;

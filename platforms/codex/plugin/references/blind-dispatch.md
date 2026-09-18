@@ -381,6 +381,16 @@ panel-only pocket measured from the same `started_at`; other wall consumers keep
 when tree, full sealed argv, and env fingerprint match (`full_suite_reuse`
 default true).
 
+**The panel as the review station (2-C).** When intake seals `review_station: panel`
+on `qc_panel_snapshot.json`, the loop's `full_diff_review` station *is* the panel
+(same fan-out, quorum, and pocket as the terminal panel). The single `reviewer_engine`
+seat is not dispatched. A FIX-THEN-SHIP panel authorises a bounded repair; the
+station runs again on the repaired candidate. The terminal `final_panel` reuses that
+last in-loop receipt when the candidate tree, roster digest, and packet hash match
+(`final_panel_gate_reused`). `in_rail_review=single` and snapshots without
+`review_station` stay the two-station path. A below-quorum station never falls back
+to one seat.
+
 **Quorum and standby.** `min_panel_size` is the sealed quorum, not unanimity.
 The panel is `reviewed` when the number of `reviewed` seats is at least that
 minimum, the surviving seats still satisfy the cross-family predicate, findings

@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-07f86eff432f23eddbc4ee9bbab234ef0663889857f582cc47f9274c37ce0881",
+  "claim_id": "claim-v1-8bed17eeaee07b9b2bcff1c4dfa40c330f402d56a65e6a9fee1ecf81d3444b8b",
+  "mission_grant_ref": "851391a35a9465d89d42ddca050a30b8541262b0b33b4346f6273073e969fca0",
+  "mission_subject_digest": "f2f1810bf7bd8fff0ee72f74f22c88c5a6f53f8aeb4392e88458cb0645fa840e",
+  "mission_campaign_id": "campaign-v2-b0579a7d1979b7efe15561c7be8f1837c5270f81631fd51a4ea968f9a3794604",
+  "graph_node_id": "panel-review-station",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/07f86eff432f23eddbc4ee9bbab234ef0663889857f582cc47f9274c37ce0881/panel-review-station/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/07f86eff432f23eddbc4ee9bbab234ef0663889857f582cc47f9274c37ce0881/panel-review-station/attempt-1/campaign.seal.json",
+  "branch": "mission/07f86eff432f/panel-review-station-a1",
+  "base_sha": "ae7ea5cea0a824f06633ea9e753ed77f57c4b811",
+  "state_hash": "cc4a40754675ea3a1acde3b99b2fdb4a0da159f178d851de32576e8c0d21f221"
+}

@@ -1,0 +1,277 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-panel-standby-2026-09-18",
+  "logical_plan_id": "blind-review-panel-standby-2026-09-18",
+  "session_id": "c2b-g1-1789708947",
+  "session_key": "35fa631916ea207104deb439871afcc012118e72d9812a20234066299fcf45e9",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "14fa043d834e14d9fb132bf70cc54dacd05cb495a296976b334ff3e6f2d7d27e",
+  "manifest_sha256": "13bfb961f783ea5238ed32838eba474bf9a3037111fb04e88d15e163b31c98c5",
+  "plan_sha256": "e7d872a6e7fa0ff3506564126a50ea5c3c75282a590170c89807eadacfb435d9",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "5561999affa34989a04062faf6f7da561c0f05fe29f44dab06c50f602e016777"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-J55Oh8",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "8e37b1a3227f86b39488e05075d15baa9272265450933ca19a32147518117158"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "00bc92d048f8e9395bc68378c4d25663f950aa183112beb39a508c35b20a483e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0609e876f523168d68fdb44242d5ffd77ef102005799c0fbd15132b1c8fbf81e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-q1ZWDr",
+          "digest": "0609e876f523168d68fdb44242d5ffd77ef102005799c0fbd15132b1c8fbf81e"
+        },
+        "receipt_digest": "85a706db3ce0b4decba5aa57375cd08d2413908d62593b9a69b3a92596315969"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-intake.js; src/engine/autopilot-engine.js performFinalPanel; docs/plans/2026-09-18-blind-review-panel-standby.md §1.2",
+      "claim": "The resume clause lets the live roster win: §1.2 says on resume intake re-runs and re-snapshots from the live roster, recording only redrawn_from. That is a drift where the live roster replaces the sealed panel, which R4 forbids (a live roster that differs is recorded as drift and never wins). It also does not say where the prior digest is read from, since createCampaignState stores no roster and the intake result is not persisted per §0.",
+      "evidence": "Plan §1.2: 'On resume the intake re-runs and re-snapshots from the live roster; if its digest differs from the recorded step's, it records step(qc_panel_snapshot, ready, { …, redrawn_from: <old> })'. Plan §0: 'createCampaignState (implementation-campaign.js:602-639) stores no roster'. Rubric R4: 'a live roster that differs is recorded as drift and never wins'.",
+      "evidence_reference": "plan §1.2 resume sentence; plan §0 bullet 3; rubric R4",
+      "repair": "Rule: the snapshot is written once, on first admission, and persisted in campaign state (or the intake receipt is the durable source and intake reuses it). On resume, intake reads the stored snapshot; a live roster whose digest differs produces the same final_panel_roster_drift record and the stored snapshot still resolves the panel. Remove the redrawn_from path, or restrict it to an explicit operator reseal that is out of scope for 2-B. Add the resume case to the engine and state suites.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b8831cef2fe4fc4032dbd88c4c1a5e1f68c8e197719da946b9778c5ee646de42"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-intake.js qc_panel_snapshot shape; src/engine/autopilot-engine.js performFinalPanel seat preparation and qc_panel_seats_complete gate",
+      "claim": "The plan's own drift scenario (roster swaps C for D, panel dispatches A,B,C) requires launching seat C when the live roster no longer contains it, but the snapshot holds only tuples plus minimum and family requirement. If seat preparation needs anything beyond the tuple (binary, pins, per-seat timeout, probe result, tier data used by the 2-A prepare step at :5345-5378), the snapshot cannot resolve the panel without touching the live roster, and the plan does not say whether the live roster's qc_panel_seats_complete gate still applies when a snapshot exists.",
+      "evidence": "Plan §1.2: 'qc_panel_snapshot = { seats: [tuples in order], min_panel_size, required_review_families, digest }'. Plan §2 engine test: 'a loop input whose roster swaps C for D → the panel dispatches A,B,C'. Plan §0: seats are read from roster.qc_panel_seats only when qc_panel_seats_complete === true (:5262-5265) and every qualified seat is prepared and launched from those seat objects (:5345-5378).",
+      "evidence_reference": "plan §1.2 snapshot definition; plan §2 autopilot-engine.test.sh snapshot case; plan §0 bullet 1",
+      "repair": "State the snapshot payload explicitly: either the full seat objects as admitted (everything prepare/launch reads), so the panel is launchable from the snapshot alone, or a rule that when the snapshot's tuple is absent from the live roster the panel records drift and refuses (precondition_failed for that seat) rather than dispatching from a spec it does not have. Also state that the qc_panel_seats_complete gate is evaluated against the snapshot, not the live roster, when a snapshot exists.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a7141feb3c162fc95d4e7a577daf57560023e57bc9324562e0481d933a32500e"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-composition.js validateFinalPanelReceipt; schemas/implementation-campaign-receipt.schema.json terminal object",
+      "claim": "R2 requires the validator to re-derive final_panel_quorum_met from the rows and refuse a receipt whose flag disagrees. The plan defines quorum as reviewed count plus families plus consistency, but the validator spec only adds 'firstFailure only below quorum; load_bearing consistency; final_panel_quorum_met required'. Family diversity cannot be re-derived from the rows because the terminal object seals only sealed_min_panel_size, not the family requirement or the implementer's family, so quorum_met would be a trusted flag, not a re-derived one.",
+      "evidence": "Plan §1.1: 'The validator mirrors this exactly: firstFailure blocks only when reviewed < sealed_min_panel_size or final_panel_quorum_met is false; a receipt whose load_bearing flags disagree with its statuses/count is final_panel_metadata_incomplete'. Plan §0: terminal object requires sealed_min_panel_size, final_panel_count, final_panel_seat_receipts only (:61-63,78-83,120). Rubric R2: 'the validator re-derives both from the rows and refuses any receipt whose flags disagree with its rows'.",
+      "evidence_reference": "plan §1.1 validator sentence; plan §0 bullet 2; rubric R2",
+      "repair": "Decide the definition of final_panel_quorum_met and make it re-derivable. Option A (recommended): quorum_met = reviewed count >= sealed_min_panel_size AND families over reviewed rows >= sealed family requirement; seal sealed_required_review_families and implementer family on the terminal object (two more required fields in this cut) and have the validator recompute and emit final_panel_metadata_incomplete on any mismatch, in either direction. Option B: define quorum_met as count-only and give the family loss its own re-derivable field. Update §2 schema and receipt-suite lines accordingly.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e0509f18d3ec60746e198c2a7e4e4a1f87e4c0ac343a324d280e1d739c62133c"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-composition.js validateFinalPanelReceipt packet-hash rule (:416-433); src/engine/autopilot-engine.js packetHashesConsistent (:5433)",
+      "claim": "The validator's packet-hash rule is all-or-none across every row. Today a failed seat never reaches that check because firstFailure blocks first. Once a failed seat is allowed to sit in a reviewed panel, a precondition_failed or transport_failed row without a packet hash trips the all-or-none rule and blocks the very quorum-met-with-failure case the cut exists to deliver. The plan does not scope hash consistency to reviewed or load-bearing rows.",
+      "evidence": "Plan §0: 'firstFailure — any failure-status seat — blocks with that seat's reason regardless of how many seats reviewed (:411,437)' and 'packet-hash all-or-none + one value (:416-433)'. Plan §1.1 validator changes list only firstFailure, load_bearing consistency and the quorum flag.",
+      "evidence_reference": "plan §0 bullet 2; plan §1.1 validator sentence; plan §2 campaign-composition.js line",
+      "repair": "State that packet-hash all-or-none and one-value checks, and the findings-consistency check, apply to reviewed rows only in both the engine and the validator; failed rows may carry a hash or omit it. Add a receipt-suite case: quorum met with one precondition_failed row lacking packet_hash → ready.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0bb8882ec566c4d004850ea356cdc5f40de5b50ce81584e418c32a232bd5e2ca"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/implementation-campaign-receipt.test.sh extraSeat case (:973-1025); hooks/tests/implementation-campaign-dogfood.test.sh",
+      "claim": "The plan asserts no assertion is weakened but does not say what the base extraSeat receipt case asserts. If it encodes 'an extra dispatched seat with a failure blocks', the quorum rule flips it and the change must be justified in the RED note rather than silently rewritten. Separately, two new required schema booleans will reject any committed receipt or ledger fixture validated by the dogfood suite that predates this cut.",
+      "evidence": "Plan §0: 'implementation-campaign-receipt.test.sh:973-1025 (noVerdict/failedMeta/extraSeat)'. Plan §6: 'hand-built fixtures in the suites are updated in this cut'. Plan §4.1 includes implementation-campaign-dogfood.test.sh.",
+      "evidence_reference": "plan §0 tests bullet; plan §6 schema tightening bullet; plan §4.1",
+      "repair": "No current plan change required. During the spike, read the extraSeat case at base and record in the RED note whether its expectation changes and why; grep committed receipt/ledger fixtures for final_panel_seat_receipts and list the ones that need the two booleans added.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1326d8784ee7a81fc544fe0d862ad1f388986f7408af2a60433d3e2308baba41"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md redesign row Context",
+      "claim": "The BACKLOG Context text is given only as an elided fragment, so the 240-byte limit and Status open cannot be checked from the plan; check-backlog-entries.js in §4.1 will catch overflow but only after edits are made.",
+      "evidence": "Plan §2 docs bullet: 'docs/BACKLOG.md redesign row Context → … 2-A v2.36.65, 2-B v2.36.66. Open: 2-C (in-rail off + panel repair, shared packet). … (≤240 B, Status open)'.",
+      "evidence_reference": "plan §2 docs bullet; plan §4.1 last command",
+      "repair": "No current change; follow-up only. Paste the full replacement Context string into the plan or the evidence dir before sealing so byte length is verifiable.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fc542b2d1a099804b4133f9d39a63a1c0fc1eab074594f59ac65f1209e7f8648"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "1326d8784ee7a81fc544fe0d862ad1f388986f7408af2a60433d3e2308baba41",
+      "rubric_id": "R6",
+      "affected_surface": "hooks/tests/implementation-campaign-receipt.test.sh extraSeat case (:973-1025); hooks/tests/implementation-campaign-dogfood.test.sh",
+      "claim": "The plan asserts no assertion is weakened but does not say what the base extraSeat receipt case asserts. If it encodes 'an extra dispatched seat with a failure blocks', the quorum rule flips it and the change must be justified in the RED note rather than silently rewritten. Separately, two new required schema booleans will reject any committed receipt or ledger fixture validated by the dogfood suite that predates this cut.",
+      "evidence_reference": "plan §0 tests bullet; plan §6 schema tightening bullet; plan §4.1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "fc542b2d1a099804b4133f9d39a63a1c0fc1eab074594f59ac65f1209e7f8648",
+      "rubric_id": "R8",
+      "affected_surface": "docs/BACKLOG.md redesign row Context",
+      "claim": "The BACKLOG Context text is given only as an elided fragment, so the 240-byte limit and Status open cannot be checked from the plan; check-backlog-entries.js in §4.1 will catch overflow but only after edits are made.",
+      "evidence_reference": "plan §2 docs bullet; plan §4.1 last command",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-18T05:24:23.533Z"
+}

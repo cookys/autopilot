@@ -1,0 +1,43 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-panel-standby-2026-09-18",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "b8831cef2fe4fc4032dbd88c4c1a5e1f68c8e197719da946b9778c5ee646de42",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the snapshot is a write-once file beside the sealed contract (O_EXCL), identity-checked on read; resume never re-snapshots — a differing live roster is recorded as live_drift and ignored; the live roster never wins at admission, resume or panel."
+  },
+  {
+   "fingerprint": "a7141feb3c162fc95d4e7a577daf57560023e57bc9324562e0481d933a32500e",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the snapshot stores the admitted seat objects (role, runner, model, effort, endpoint, family) plus seats_complete, minimum, families and implementer family — everything the 2-A prepare step reads — and intake's qualification decision is the sealed one, so finalPanelSeatQualified is not re-run against the live roster; the seats_complete gate reads the snapshot."
+  },
+  {
+   "fingerprint": "e0509f18d3ec60746e198c2a7e4e4a1f87e4c0ac343a324d280e1d739c62133c",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the terminal object seals sealed_required_review_families and implementer_family; the validator re-derives quorum_met from the rows and those fields and refuses a disagreeing flag (final_panel_quorum_flag_mismatch); load_bearing patterns are checked row by row."
+  },
+  {
+   "fingerprint": "0bb8882ec566c4d004850ea356cdc5f40de5b50ce81584e418c32a232bd5e2ca",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the packet-hash all-or-none/one-value rule is scoped to reviewed rows in both engine and validator; failed rows never carry a hash."
+  },
+  {
+   "fingerprint": "1326d8784ee7a81fc544fe0d862ad1f388986f7408af2a60433d3e2308baba41",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: extraSeat is the duplicate-tuple case (unchanged); the four new fields are OPTIONAL in the schema with legacy (unanimity) semantics when absent, so the nine suites that hand-build seat receipts pass untouched while the engine always emits them and the receipt suite pins that."
+  },
+  {
+   "fingerprint": "fc542b2d1a099804b4133f9d39a63a1c0fc1eab074594f59ac65f1209e7f8648",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the full Context string is written out with its byte count (under 240) and Status open; the version is a release-commit pin."
+  }
+ ]
+}

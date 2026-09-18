@@ -1,5 +1,39 @@
 # Changelog
 
+## v2.36.68 — blind review redesign 第八刀（2-C station）：有 sealed panel 時，panel 就是迴圈的 review 站
+
+- `schemas/review-loop-contract.schema.json`＋`scripts/resolve-review-loop.sh`＋`src/engine/resolve-review-loop.js`（＋鏡像）：
+  新欄位 `in_rail_review`（`auto|single|panel`，default `auto`；`auto` 在 `qc_panel_seats_complete` 時＝`panel`，否則 `single`；
+  `panel` 配不完整 panel 是 resolver 拒收）；兩份 review-loop-config 各一列。
+- `src/engine/campaign-intake.js`（＋鏡像）：`qc_panel_snapshot.json` 多 `review_station`（進 digest）；2-B 寫的舊 snapshot 沒這鍵
+  ⇒ `single`，identity 只比既有欄位、永不重算 digest。
+- `src/engine/campaign-composition.js`（＋鏡像）：`review_station === 'panel'` 時 `full_diff_review` 站改呼叫新 adapter `reviewPanel`
+  （單席不派），receipt 保留 review 形狀（`verdict`＝panel 彙總、`findings`＝合併後 normalized 字串、`review_digest`＝panel digest、
+  `packet_hash`）＋2-B panel 欄位，迴圈裁決照舊：must-fix → `repair_authorized` → 修完 panel 再審；無 authority → `awaiting_disposition`
+  （時鐘已停，v2.36.67）；quorum 未達照 2-B 理由 block／席位故障 durable wait，**永不退成單席**。終局 `final_panel`：同 candidate tree＋
+  roster digest＋canonical `packet_hash` 的站內 panel receipt 直接 `final_panel_gate_reused`（一席也算；`packet_hash` 為 null 不重用）。
+  `single`／無 snapshot：gate identity、`lastReview`、trace、receipts 與 base byte-identical（`station` 等鍵只在 panel 模式出現）。
+- `src/engine/autopilot-engine.js`（＋鏡像）：`performFinalPanel` 抽成 `runPanel(reviewInput, { station })`，站內 panel 用 pocket 規則
+  預算（`budget_source`、`final_panel_budget_exhausted` 在 prepare 前）、ledger `full_diff_review` 列帶 `station`／`seat_count`／
+  `seat_timeout_seconds`；finding id 撞名（同 id 不同 digest）全部以席位限定 `s<i>.<id>`，相同者折成一個；站內 panel 成功時記
+  `REVIEW_COMPLETED`；**終局 panel receipt 與 base byte-identical**（彙總 verdict、`success`、`packet_hash`、`reason/phase` 只在站內）。
+- 測試（RED-first 標 base `ae7ea5ce`／`316c1d4b`）：routing——三席 stub station、FIX-THEN-SHIP → repair → 再 panel → `final_panel_gate_reused`
+  恰兩次 fan-out；`single` 控制組 trace 相同；below-quorum 站（seat fault → `final_panel_seat_transport_failed`＋durable wait）；
+  `packet_hash: null` 不重用；撞名 id 停車再 resume；engine——真 fan-out 站、終局重用、三席撞名 `s0.dup-1`／`s1.dup-1`；state——snapshot
+  帶 `review_station`、2-B fixture 無鍵＝single、drift；resolver——欄位、auto 規則、拒收、oracle parity。
+- 出貨路徑：/l5 managed campaign attempt 1——contract 首次帶 `final_panel_reserve_seconds: 900`（v2.36.67 投影量到）；hand 85 分、
+  26 檔、`316c1d4b`；rail acceptance 第 10 條 `mission-runtime-v2` 紅 → terminal journal `MUTATION_FAILURE_EVIDENCE_REQUIRED`
+  （既有 BACKLOG 列）卡 IMPLEMENTING。**原因是 depth-0 在 dispatch 環境 export 了 `AUTOPILOT_SESSION_ID`**——那條 suite 在 develop 上
+  有這變數也 53 紅（engine 子程序讀到該 session 的 live marker），候選本身綠；新 BACKLOG 列（suites 要 pin 自己的 session id、acceptance
+  runner 要洗 `AUTOPILOT_*`）。降級 l3：13/13 綠、scope 精確；claude 二審 FIX-THEN-SHIP 3🟠1🟡4🔵、GLM FIX-THEN-SHIP 4🟠2🔵（parser 被重複
+  BEGIN marker 拒，從 raw 採用）→ sonnet hand 修八項（`ac57dc8d`），1🟠 refuted；delta 複審 SHIP-AS-IS 2🔵。**§5 live 證明沒有產生**
+  （rail 在 acceptance 就停）——連同 2-A pocket、2-B 四席、v2.36.41 resume e2e 一起留給下一條 lineage（`shared-packet`）。
+- 不在範圍（下一條 lineage）：每候選一份 packet＋每席 per-file 材化＋批次 tree hash（plan §1.2）；panel 模式下多算一次的
+  `prepareReview`；終局重用寫 `joint_review` gate。
+
+prose-justification: `references/blind-dispatch.md` 新段「The panel as the review station (2-C)」（含鏡像）；`skills/l5/references/
+hetero-impl-loop.md` step 9 一句（含鏡像）；兩份 review-loop-config 各一列。
+
 ## v2.36.67 — managed rail：parked 時 wall clock 暫停；`mission grant` 把 2-A panel knobs 投影進 contract
 
 - `src/engine/implementation-campaign.js`（＋鏡像）：`WALL_CLOCK_PAUSED_STATES = {awaiting_disposition}`；新 helper

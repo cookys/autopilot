@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### Test suites inherit the dispatcher's session env: `AUTOPILOT_SESSION_ID` makes `mission-runtime-v2` red in-rail
+- **Status**: open
+- **Trigger**: fired 2026-09-18 — 2-C station acceptance ran with `AUTOPILOT_SESSION_ID` exported by depth-0; `mission-runtime-v2.test.sh` fails under it on develop too (53 red); the candidate was fine
+- **Effort**: S
+- **Source**: 2-C station campaign, `impl-run1-acceptance-failed-session-env.json`
+- **Pointer**: docs/plans/evidence/2026-09-18-blind-review-panel-station/README.md
+- **Context**: tests that spawn the engine read the live marker of whatever session id the env names; each suite should pin its own session id (as the state suite does since 2-B) and the acceptance runner should scrub `AUTOPILOT_*` session vars.
+
 ### Managed rail: 2-A graph knobs `final_panel_reserve_seconds` / `full_suite_reuse` never reach the sealed contract
 - **Status**: shipped v2.36.67 2026-09-18
 - **Trigger**: fired 2026-09-18 — the 2-B graph node set reserve 900 / reuse true; intake sealed the defaults (0 / true) and the campaign ran without a pocket

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-09-18T15:29:12.656Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "root_run_id": "campaign-v1-5b44004942128f0534c1d2a274d43b0f38e9e898eb555e1e5f43c92b36b031cd",
+  "observed_head": "21ecc030ec2e2fd8e7e69f5831c6ed2a998198a0",
+  "worktree_observation_digest": "93b97de934ea43188ef71076427fe309b6bfac44a200625d08cf1115d17ebf32",
+  "journal_digest": "cb4b909b6e661920c4efe8dce6bcf060fdb19a80c5d5869b322648daad0f6714",
+  "disposition_digest": "7fbe3cb2dbe7e9388360fd0b4e2f737312985e3a3e37ac4a03bbeb8d9b027e36",
+  "branch_inventory_digest": "7a8ce595e21f3f41c68048698a07cbc66f378e39777d37debfd7c3233190b1c6",
+  "owned_worktrees": [],
+  "branches": [
+    {
+      "name": "mission/07f86eff432f/panel-review-station-a1",
+      "tip": "ac57dc8de28f72397a3f18f37f4fc9796ab1e2e3",
+      "disposition": "reaped",
+      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-18/reap-20260918T152902Z-436017.bundle",
+      "acknowledged": false
+    }
+  ],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "81ae0149aacf268f0fe8a9df0af1ce40188205e2db11d5d7d20e7df6801cce6d"
+}

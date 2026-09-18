@@ -1,0 +1,1 @@
+{ "role": "consult", "status": "transport_failed", "engine": "gpt-5.6-sol", "runner": "codex", "effort": "max", "endpoint": null, "response": null, "error": "transport status=runner_failed" }

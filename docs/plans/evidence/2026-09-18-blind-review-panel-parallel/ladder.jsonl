@@ -1,0 +1,1 @@
+{"schema_version":1,"ts":"2026-09-18T01:21:48.682Z","kind":"ladder","rung":"U1","unknown_type":"how","terms":["review-fanout","dispatchReviewBatch","final_panel_reserve_seconds","full_suite_reuse"],"signal_ids":["S4"],"heterogeneous":true,"reason":"rail-failed","dispatch_run_id":"consult-20260918T012148Z-1040016","work_unit":"plan-2a"}

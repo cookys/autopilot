@@ -187,7 +187,12 @@ const frozen = kernel.freezeTaskAuthorityEnvelope({
   policy: policy.policy,
   policyHash: policy.policy_hash,
   intent: {
-    objective: 'Ship docs/plans/2026-09-18-blind-review-panel-station.md (cut 2-C): with a sealed panel the implementation loop reviews through the panel (no single seat, repair rounds re-panel, terminal panel reused, station choice sealed in the snapshot), and one review packet per candidate is built once, materialised privately per seat and tree-hashed in one batch.',
+    // The adoption key and lineage id derive from {repo, intent, acceptance hashes}; the two lineages share
+    // the plan bytes, so the objective names the deliverable — otherwise the packet prepare finds the station's
+    // registry entry and fails MISSION_BINDING_MISMATCH (graph digest differs under the same key).
+    objective: NODE === 'packet'
+      ? 'Ship docs/plans/2026-09-18-blind-review-panel-station.md §1.2 (cut 2-C, deliverable shared-packet; the station deliverable shipped as v2.36.68): one review packet per candidate is built once, materialised privately per seat (plain copies, re-hashed against the shared packet_hash before launch) and tree-hashed in one batch.'
+      : 'Ship docs/plans/2026-09-18-blind-review-panel-station.md (cut 2-C): with a sealed panel the implementation loop reviews through the panel (no single seat, repair rounds re-panel, terminal panel reused, station choice sealed in the snapshot), and one review packet per candidate is built once, materialised privately per seat and tree-hashed in one batch.',
     requirements_hash: planSha,
     scope: {
       allowed_tools: ['bash', 'git', 'node'],

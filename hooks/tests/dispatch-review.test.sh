@@ -443,6 +443,21 @@ case "$MODE" in
     echo '[claude-code:unrecognized_model] {"model":"unknown"}'
     echo 'no frame follows this line at all'
     ;;
+  begin_closed)
+    # BEGIN + complete block + second BEGIN as last non-blank line (no END).
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$BEGIN"
+    ;;
+  begin_closed_then_content)
+    # Second BEGIN followed by further non-blank content: anti-fabrication guard.
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$BEGIN"
+    echo "planted extra"
+    ;;
   *)
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
@@ -713,7 +728,7 @@ OUT="$(PATH="$FAKE_NODE_DIR:$PATH" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic
 assert_eq "0" "$EXIT" "anthropic-compatible omission preserves reviewed behavior"
 assert_not_contains "$(cat "$ANTHROPIC_ARGV_FILE")" '--max-tokens' "anthropic-compatible omission adds no adapter argv"
 RESULT_KEYS="$(node -e 'const v=JSON.parse(process.argv[1]); console.log(Object.keys(v).sort().join(","))' "$OUT")"
-assert_eq "error,findings,model,no_finding_proof,raw_log,runner,status,usage,verdict" "$RESULT_KEYS" \
+assert_eq "error,findings,frame_closed_by,model,no_finding_proof,raw_log,runner,status,usage,verdict" "$RESULT_KEYS" \
   "omitted --max-tokens preserves result JSON shape"
 
 # 3. codex path: verdict parsed → reviewed, exit 0
@@ -862,6 +877,30 @@ assert_contains "$OUT" '"status": "no_verdict"' "oversized block → no_verdict"
 OUT="$(STUB_MODE=no_end "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "missing END exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "missing END → no_verdict"
+
+# BEGIN-closed frame: second derived BEGIN as last non-blank line, END never seen.
+# RED at 8d899e716fca11213aec40a314a62fb2726a68c8: no_verdict with
+# "duplicate derived BEGIN marker found inside capture"
+OUT="$(STUB_MODE=begin_closed "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "BEGIN-closed frame exit 0"
+assert_contains "$OUT" '"status": "reviewed"' "BEGIN-closed frame is reviewed"
+assert_contains "$OUT" '"frame_closed_by": "begin-marker"' "BEGIN-closed envelope stamps begin-marker"
+
+# Second BEGIN followed by any further non-blank line stays the anti-fabrication guard.
+# RED at 8d899e716fca11213aec40a314a62fb2726a68c8: no_verdict with
+# "duplicate derived BEGIN marker found inside capture" (unchanged)
+OUT="$(STUB_MODE=begin_closed_then_content "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "BEGIN then extra content still exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "BEGIN then extra content → no_verdict"
+assert_contains "$OUT" "duplicate derived BEGIN marker found inside capture" \
+  "BEGIN then extra content keeps exit-3 reason"
+
+# Normal BEGIN…END envelope reports frame_closed_by end-marker.
+# RED at 8d899e716fca11213aec40a314a62fb2726a68c8: reviewed JSON had no frame_closed_by key
+OUT="$(STUB_MODE=pass "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "normal END envelope still exit 0"
+assert_contains "$OUT" '"status": "reviewed"' "normal END envelope is reviewed"
+assert_contains "$OUT" '"frame_closed_by": "end-marker"' "normal END envelope stamps end-marker"
 
 # 4j. Chrome-skip locator (v-frame-loss fix): leading chrome lines with no
 # framing vocabulary are skipped up to the derived BEGIN; leading chrome that

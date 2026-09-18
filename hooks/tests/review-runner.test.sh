@@ -289,6 +289,41 @@ const path = require('path');
 const root = process.argv[2];
 const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
 const base = {
+  runner: 'codex',
+  model: 'gpt-5.5',
+  status: 'reviewed',
+  verdict: 'FIX-THEN-SHIP',
+  findings: 'fixture',
+  no_finding_proof: null,
+  raw_log: '/tmp/log',
+  error: null,
+  usage: null,
+};
+try {
+  parseReviewOutput(JSON.stringify({ ...base, frame_closed_by: 'begin-marker' }));
+  parseReviewOutput(JSON.stringify({ ...base, frame_closed_by: 'end-marker' }));
+  console.log('frame-closed-ok');
+} catch (error) {
+  console.log(error.message);
+}
+try {
+  parseReviewOutput(JSON.stringify({ ...base, frame_closed_by: 'bogus' }));
+  console.log('unexpected-ok');
+} catch (error) {
+  console.log(error.message);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "review output parser frame_closed_by pin process exits 0"
+assert_contains "$OUT" "frame-closed-ok" "review output parser admits frame_closed_by end-marker|begin-marker"
+assert_contains "$OUT" "frame_closed_by must be end-marker or begin-marker" \
+  "review output parser rejects bogus frame_closed_by"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+const base = {
   runner: 'agy',
   model: 'Gemini 3.6 Flash (High)',
   status: 'reviewed',

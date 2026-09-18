@@ -46,6 +46,10 @@
     "unratified_verdict": {
       "type": ["string", "null"],
       "enum": ["SHIP-AS-IS", "FIX-THEN-SHIP", null]
+    },
+    "frame_closed_by": {
+      "type": "string",
+      "enum": ["end-marker", "begin-marker"]
     }
   },
   "oneOf": [

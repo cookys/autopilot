@@ -26,7 +26,7 @@ const REVIEW_RESULT_FIELDS = [
 // verdict for HUMAN adjudication only — it is never copied into `verdict` or
 // `status`, and non-null is admitted only on status:no_verdict. Consumers deriving
 // authority from it are rejected by the check-canonical-invariants reader guard.
-const REVIEW_RESULT_OPTIONAL_FIELDS = ['unratified_verdict'];
+const REVIEW_RESULT_OPTIONAL_FIELDS = ['unratified_verdict', 'frame_closed_by'];
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
 const NO_FINDING_TAUTOLOGIES = new Set([
@@ -109,6 +109,11 @@ function validateReviewResult(value) {
   for (const field of Object.keys(value)) {
     if (!REVIEW_RESULT_FIELDS.includes(field) && !REVIEW_RESULT_OPTIONAL_FIELDS.includes(field)) {
       throw new Error(`review output JSON has unknown field: ${field}`);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'frame_closed_by')) {
+    if (!['end-marker', 'begin-marker'].includes(value.frame_closed_by)) {
+      throw new Error('review output JSON frame_closed_by must be end-marker or begin-marker');
     }
   }
   if (Object.prototype.hasOwnProperty.call(value, 'unratified_verdict')) {

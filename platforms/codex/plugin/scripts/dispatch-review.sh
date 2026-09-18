@@ -729,6 +729,7 @@ emit_no_verdict() {
 PROMPT_FILE="$(mktemp -t dispatch-review-prompt-XXXXXX)"
 RAW_LOG="$(mktemp -t dispatch-review-log-XXXXXX)"
 BLOCK_FILE="$(mktemp -t dispatch-review-block-XXXXXX)"
+FRAME_CLOSE_FILE=""
 CODEX_OUT=""
 CODEX_ERR=""
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
@@ -760,6 +761,7 @@ cleanup() {
   # Captured FIRST, before rm/rmdir can clobber it.
   _cleanup_rc=$?
   rm -f "$PROMPT_FILE" "$BLOCK_FILE"
+  [ -n "$FRAME_CLOSE_FILE" ] && rm -f "$FRAME_CLOSE_FILE"
   [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
@@ -1570,9 +1572,11 @@ fi
 # than not bounding it.
 CHROME_MAX_LINES="${AUTOPILOT_REVIEW_CHROME_MAX_LINES:-200}"
 CHROME_MAX_BYTES="${AUTOPILOT_REVIEW_CHROME_MAX_BYTES:-65536}"
+FRAME_CLOSE_FILE="$(mktemp -t dispatch-review-frame-close-XXXXXX)"
 awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
-    -v chrome_max_lines="$CHROME_MAX_LINES" -v chrome_max_bytes="$CHROME_MAX_BYTES" '
-  BEGIN { started=0; ended=0; leading=1; chrome_lines=0; chrome_bytes=0; bail=0 }
+    -v chrome_max_lines="$CHROME_MAX_LINES" -v chrome_max_bytes="$CHROME_MAX_BYTES" \
+    -v close_file="$FRAME_CLOSE_FILE" '
+  BEGIN { started=0; ended=0; leading=1; chrome_lines=0; chrome_bytes=0; bail=0; pending_close=0 }
   {
     sub(/\r$/, "", $0)
     if (leading) {
@@ -1610,7 +1614,18 @@ awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
       next
     }
     if (!started) { next }
-    if ($0 == begin) { bail=3; exit 3 }
+    if ($0 == begin) {
+      # Second derived BEGIN: buffer as a possible BEGIN-closed frame. A later
+      # non-blank line is still the anti-fabrication guard (exit 3). After END
+      # has already been seen, a second BEGIN stays exit 3 (unchanged).
+      if (ended || pending_close) { bail=3; exit 3 }
+      pending_close=1
+      next
+    }
+    if (pending_close) {
+      if ($0 !~ /^[[:space:]]*$/) { bail=3; exit 3 }
+      next
+    }
     if (ended) {
       if ($0 !~ /^[[:space:]]*$/) {
         bail=6; exit 6
@@ -1628,10 +1643,19 @@ awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
     # (exit 3 -> 5, exit 7/8 -> 2), so the emitted reason names the wrong failure.
     if (bail) { exit bail }
     if (!started) { exit 2 }
+    if (pending_close) { ended=1 }
     if (!ended) { exit 5 }
+    if (close_file != "") {
+      print (pending_close ? "begin-marker" : "end-marker") > close_file
+    }
   }
 ' "$PARSE_INPUT" > "$BLOCK_FILE"
 PARSE_RC=$?
+FRAME_CLOSED_BY="end-marker"
+if [ -s "$FRAME_CLOSE_FILE" ]; then
+  FRAME_CLOSED_BY="$(cat "$FRAME_CLOSE_FILE")"
+fi
+rm -f "$FRAME_CLOSE_FILE"
 if [ "$PARSE_RC" -ne 0 ]; then
   case "$PARSE_RC" in
     2) emit_no_verdict "no derived BEGIN frame found in response" ;;
@@ -1664,8 +1688,8 @@ if [ "$VERDICT" = "SHIP-AS-IS" ]; then
   NO_FINDING_PROOF="$BATTERY_PROOF"
 fi
 
-printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s }\n' \
+printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s, "frame_closed_by": "%s" }\n' \
   "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
   "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \
-  "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON"
+  "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON" "$(json_escape "$FRAME_CLOSED_BY")"
 exit 0

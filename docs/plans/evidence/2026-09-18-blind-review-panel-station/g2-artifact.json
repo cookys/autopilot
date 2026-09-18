@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-panel-station-2026-09-18",
+  "logical_plan_id": "blind-review-panel-station-2026-09-18",
+  "session_id": "c2c-g2-1789727408",
+  "session_key": "1e396dc1f135315df87d1f48e510c5e28f40a187d99311c2da083e7b303588b8",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "72484844a406e8e07cd1d674bee6dd1ed0a0ba9bc2f8abbe6b5305cd7618517a",
+  "manifest_sha256": "b528ce2cc9c763c486568d6d0e8568602cee6937dbfbac7ae426bad6bd7cb030",
+  "plan_sha256": "46c901b2f79d0964524aaea7214af9bfd703ed20e2f88ea01043d1e015d007e0",
+  "growth_ratio": {
+    "numerator": 23905,
+    "denominator": 22324
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "cd3e0f0b72b145b96762957f2620d4036df2acf7c2bb2855a75d969e1c01f9e4"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-OToDtW",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "adf548caee9bf74264d577f861ebf695c9b3808222d5e7106f7bbdee1d69aba0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "bb36ef8abeb10d0ac3eebbd283076e50b366736c5be525ac21493f9c067d1429"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8d8c7a0878dccfdfbb4a85da70882a16dfb7abc085ecc0e26453011b27c26235",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-vxRj4Z",
+          "digest": "8d8c7a0878dccfdfbb4a85da70882a16dfb7abc085ecc0e26453011b27c26235"
+        },
+        "receipt_digest": "94c9d35fa236a897cb60ff54bccff4762effc1717c260c584e9ad638a1c5448b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/campaign-composition.js full_diff_review station budget; src/engine/autopilot-engine.js runPanel seat timeouts; plan §1.1.4 and §3",
+      "claim": "The station panel is timed against the wall with consumer 'review' (single-seat sizing) while the 2-A pocket reserved for the panel is never spent, so a repair-round station panel can time out seats, fall below quorum and block; the plan defers this to a follow-up row even though §5 dogfood depends on it.",
+      "evidence": "Plan §1.1.4: 'The station's seat timeouts follow 2-A (campaignWallRemainingSeconds with consumer review)' and 'the pocket is for the terminal station and is unspent when the terminal panel is reused ... consumer panel ... is out of scope — see §3'. §1.1.2 makes terminal reuse the universal case, so the pocket is unspent on every campaign that follows the new path. §0 records that the pocket exists because the panel is slower than a seat (final_panel_reserve_seconds, budget_source: pocket). §5 expects 'a repair_authorized round followed by a second station panel' on a four-seat panel late in the wall.",
+      "evidence_reference": "plan §1.1.4, §1.1.2, §3, §5; autopilot-engine.js performFinalPanel budget_source (2-A)",
+      "repair": "Decide now: when review_station is panel, the station's fan-out uses the same budget rule performFinalPanel uses today (wall remaining, falling back to the pocket with budget_source: pocket when wall remaining is below the pocket), since the station panel is the only panel that will run. Record budget_source on the station ledger row. Add a routing case: wall nearly exhausted at the station, pocket available, panel completes with budget_source pocket; and one where neither suffices, station blocks with final_panel_below_minimum. Remove the 'out of scope' clause from §3.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "97b2176f8d3a6473d503e64ed0c9a385e9f993082828aaf46b33f29cc8416777"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/campaign-intake.js buildQcPanelSnapshot; src/engine/campaign-composition.js snapshot read; hooks/tests/implementation-campaign-state.test.sh",
+      "claim": "A 2-B snapshot written before this cut has no review_station key and a digest computed without it; the plan only defines behaviour for 'no snapshot', so resume of an in-flight 2-B campaign after upgrade is unspecified and could either flip to panel or fail digest verification.",
+      "evidence": "Plan §1.1.3: 'No snapshot (unmanaged loop, hand-built control, pre-2-B receipts) → single' and 'snapshot digest covers it'. Nothing covers a snapshot that exists with seats_complete: true but lacks review_station.",
+      "evidence_reference": "plan §1.1.3, §2.1 campaign-intake.js bullet",
+      "repair": "State the rule: a snapshot without review_station resolves to single, the digest check for such a snapshot is computed over the fields present (no re-digest), and this is byte-identical to base. Pin with a state-suite case using a 2-B fixture snapshot.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eb97e728cd95fc93a05f3026d64c6cfc93041be2596818fc1291d4b4ce94acbc"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "src/runners/review-packet.js verifyTreeIntegrity batched path",
+      "claim": "git hash-object --stdin-paths reads one path per line and has no NUL-delimited input mode, so the plan's 'paths fed on stdin, NUL-safe' cannot hold for a file name containing a newline; the batched path needs a per-file fallback for such names and must preserve iteration order so the first-mismatch text matches base.",
+      "evidence": "Plan §1.2.3: 'one git hash-object --stdin-paths --no-filters process for regular files (paths fed on stdin, NUL-safe)'. The git hash-object interface offers --stdin-paths with newline-separated input only; §2.2 fixture includes 'a NUL-unsafe name', which will exercise exactly this.",
+      "evidence_reference": "plan §1.2.3, §2.2 review-packet.test.sh bullet",
+      "repair": "In the spike: route any path containing a newline (or CR) through the per-file hasher, keep the batched process for the rest, and compare results in the original tracked-file order so 'tree integrity: <rel>' names the same first mismatch as base. Extend the fixture with a newline-bearing name in addition to the NUL-unsafe one.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5f9e13af80b06e4e1aed8dc98b3cd313a616dbdc80bbcaa2c0da56a8b60a704d"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/campaign-composition.js AWAITING_DISPOSITION payload (unresolved_findings, findings_snapshot) from a panel review",
+      "claim": "Merged findings from several seats can carry colliding finding ids (each seat numbers its own), so a durable park on panel findings may be un-resolvable by the disposition provider unless ids are seat-qualified.",
+      "evidence": "Plan §1.1.1: 'awaiting_disposition ... with the panel's merged findings as the registry'; §0 notes the terminal path already stops with 'final finding registry is incomplete' (:2933-2935) when dispositions do not line up with the panel registry.",
+      "evidence_reference": "plan §1.1.1, §0 bullet 1 (:2933-2935)",
+      "repair": "Specify that merged finding ids are qualified by seat (for example seat index or engine id) in the station receipt, that unresolved_findings and findings_snapshot use those ids, and add a routing case that parks on panel findings and resumes with dispositions keyed by the qualified ids.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fe0c05fa1eee462b702ee748685a487793fbd9dd37d849a5b4a3302ab418c9bc"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/review-runner.test.sh injectable hasher count; src/runners/review-packet.js hashPacketDir vs verifyTreeIntegrity",
+      "claim": "The 'one verifyTreeIntegrity call counted via an injectable hasher' assertion conflicts with the per-seat pre-launch re-hash that uses the builder's own hash function; if both go through the injected hasher the count is 1 plus N, not 1.",
+      "evidence": "Plan §1.2.2: 'its directory is re-hashed with the packet builder's own hash function'; §2.2: 'one verifyTreeIntegrity call counted via an injectable hasher'.",
+      "evidence_reference": "plan §1.2.2, §2.2 review-runner.test.sh bullet",
+      "repair": "Decide in the spike which layer is counted: count buildReviewPacket invocations (exactly one) and assert the per-seat re-hash separately as N hashPacketDir calls. Keep the hash-equality assertion between the shared build and a base per-seat build.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "52a3dab730e260852773011ed86a4c17354e31f29c9a046b26425abcf2d32800"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "plan §2.5 output_paths and §4 scope-integrity; docs/plans/evidence/2026-09-18-blind-review-panel-station/",
+      "claim": "The plan says nothing is created and diff must be a subset of §2.5, yet §4 and §1.2.3 require evidence files (base-suites record, timing README) under the evidence dir, which is not in either output_paths list.",
+      "evidence": "Plan §2.5: 'Nothing created.'; §4 no-regression evidence: 'evidence/…-panel-station/base-suites-<base>.txt'; §1.2.3: 'measured on this repo's HEAD in the evidence README'; §4 scope-integrity: 'diff ⊆ §2.5 per deliverable'.",
+      "evidence_reference": "plan §2.5, §4, §1.2.3",
+      "repair": "State whether evidence files are written outside the campaign commit (then say so in §4) or add the evidence dir to output_paths and raise max_changed_files accordingly.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "09ef6f4b226b02383148e4dea5c2a70604394204e60768c8dc5145f0020e7829"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests RED-first records; evidence dir",
+      "claim": "The plan labels tests RED-first but does not name where the observed base failure messages are recorded, so R7's 'observed base message' cannot be checked from the plan.",
+      "evidence": "Plan §2.1 and §2.2 open with 'Tests (RED-first)' but list no red-run artefact; §4.1 base record covers green suites only ('base-suites-<base>.txt').",
+      "evidence_reference": "plan §2.1, §2.2, §4.1",
+      "repair": "No current change; follow-up only. At implementation, save one red-<suite>.txt per new case in the evidence dir with the exact base assertion message.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2466db6f3be53e0923683c398315c3dda342c8469a11da60c627ca3f2bf088e4"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "eb97e728cd95fc93a05f3026d64c6cfc93041be2596818fc1291d4b4ce94acbc",
+      "rubric_id": "R3",
+      "affected_surface": "src/engine/campaign-intake.js buildQcPanelSnapshot; src/engine/campaign-composition.js snapshot read; hooks/tests/implementation-campaign-state.test.sh",
+      "claim": "A 2-B snapshot written before this cut has no review_station key and a digest computed without it; the plan only defines behaviour for 'no snapshot', so resume of an in-flight 2-B campaign after upgrade is unspecified and could either flip to panel or fail digest verification.",
+      "evidence_reference": "plan §1.1.3, §2.1 campaign-intake.js bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5f9e13af80b06e4e1aed8dc98b3cd313a616dbdc80bbcaa2c0da56a8b60a704d",
+      "rubric_id": "R5",
+      "affected_surface": "src/runners/review-packet.js verifyTreeIntegrity batched path",
+      "claim": "git hash-object --stdin-paths reads one path per line and has no NUL-delimited input mode, so the plan's 'paths fed on stdin, NUL-safe' cannot hold for a file name containing a newline; the batched path needs a per-file fallback for such names and must preserve iteration order so the first-mismatch text matches base.",
+      "evidence_reference": "plan §1.2.3, §2.2 review-packet.test.sh bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "fe0c05fa1eee462b702ee748685a487793fbd9dd37d849a5b4a3302ab418c9bc",
+      "rubric_id": "R1",
+      "affected_surface": "src/engine/campaign-composition.js AWAITING_DISPOSITION payload (unresolved_findings, findings_snapshot) from a panel review",
+      "claim": "Merged findings from several seats can carry colliding finding ids (each seat numbers its own), so a durable park on panel findings may be un-resolvable by the disposition provider unless ids are seat-qualified.",
+      "evidence_reference": "plan §1.1.1, §0 bullet 1 (:2933-2935)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "52a3dab730e260852773011ed86a4c17354e31f29c9a046b26425abcf2d32800",
+      "rubric_id": "R4",
+      "affected_surface": "hooks/tests/review-runner.test.sh injectable hasher count; src/runners/review-packet.js hashPacketDir vs verifyTreeIntegrity",
+      "claim": "The 'one verifyTreeIntegrity call counted via an injectable hasher' assertion conflicts with the per-seat pre-launch re-hash that uses the builder's own hash function; if both go through the injected hasher the count is 1 plus N, not 1.",
+      "evidence_reference": "plan §1.2.2, §2.2 review-runner.test.sh bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "09ef6f4b226b02383148e4dea5c2a70604394204e60768c8dc5145f0020e7829",
+      "rubric_id": "R8",
+      "affected_surface": "plan §2.5 output_paths and §4 scope-integrity; docs/plans/evidence/2026-09-18-blind-review-panel-station/",
+      "claim": "The plan says nothing is created and diff must be a subset of §2.5, yet §4 and §1.2.3 require evidence files (base-suites record, timing README) under the evidence dir, which is not in either output_paths list.",
+      "evidence_reference": "plan §2.5, §4, §1.2.3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "2466db6f3be53e0923683c398315c3dda342c8469a11da60c627ca3f2bf088e4",
+      "rubric_id": "R7",
+      "affected_surface": "hooks/tests RED-first records; evidence dir",
+      "claim": "The plan labels tests RED-first but does not name where the observed base failure messages are recorded, so R7's 'observed base message' cannot be checked from the plan.",
+      "evidence_reference": "plan §2.1, §2.2, §4.1",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-18T10:40:34.135Z"
+}

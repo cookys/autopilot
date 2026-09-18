@@ -1,0 +1,21 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-panel-station-2026-09-18",
+ "generation": 2,
+ "findings": [
+  {"fingerprint": "97b2176f8d3a6473d503e64ed0c9a385e9f993082828aaf46b33f29cc8416777", "disposition": "accepted_blocker", "candidate_blocker": true,
+   "rationale": "Accepted: with review_station=panel the station fan-out uses performFinalPanel's budget rule (wall remaining, else the sealed pocket with budget_source: pocket) because it is the only panel that runs; budget_source on the station ledger row; two routing cases (pocket completes; neither suffices → final_panel_below_minimum); the §3 out-of-scope clause removed."},
+  {"fingerprint": "eb97e728cd95fc93a05f3026d64c6cfc93041be2596818fc1291d4b4ce94acbc", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted: a snapshot without review_station resolves to single; its digest is checked over the fields present (never re-digested); state-suite case with a 2-B fixture snapshot."},
+  {"fingerprint": "5f9e13af80b06e4e1aed8dc98b3cd313a616dbdc80bbcaa2c0da56a8b60a704d", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted: --stdin-paths is newline-delimited; names containing LF or CR go through the per-file hasher, the rest through one batched process, results compared in tracked-file order so the first-mismatch text matches base; fixture gains a newline-bearing name."},
+  {"fingerprint": "fe0c05fa1eee462b702ee748685a487793fbd9dd37d849a5b4a3302ab418c9bc", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted: when two seats report the same finding_id with different digests the station qualifies both ids by seat index (s<i>.<id>); identical reports keep one unqualified id as today; unresolved_findings/findings_snapshot carry the qualified ids; routing case parks on panel findings and resumes with dispositions keyed by them."},
+  {"fingerprint": "52a3dab730e260852773011ed86a4c17354e31f29c9a046b26425abcf2d32800", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted: the runner case counts buildReviewPacket invocations (exactly one) and hashPacketDir calls (N) separately; the shared-vs-per-seat hash equality stays."},
+  {"fingerprint": "09ef6f4b226b02383148e4dea5c2a70604394204e60768c8dc5145f0020e7829", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted: evidence files (base/head suite records, timing, red-<suite>.txt) are depth-0 artefacts committed outside the campaign, as in 2-A/2-B; stated in §4."},
+  {"fingerprint": "2466db6f3be53e0923683c398315c3dda342c8469a11da60c627ca3f2bf088e4", "disposition": "accepted_nonblocking", "candidate_blocker": false,
+   "rationale": "Accepted as practice: at implementation depth-0 saves one red-<suite>.txt per new case in the evidence dir with the exact base assertion message (§4 sentence)."}
+ ]
+}

@@ -66,10 +66,7 @@ Two deliverables, independent, each its own campaign.
    panel fields (`sealed_min_panel_size`, `final_panel_count`, `final_panel_seat_receipts`,
    `final_panel_quorum_met`, `sealed_required_review_families`, `implementer_family`, `budget_source`,
    `seat_timeout_seconds`): `verdict` = the panel aggregation (`union-on-verified-critical`, as `performFinalPanel`
-   computes it), `findings` = the merged findings, `review_digest` = the panel digest over the seat receipts.
-   Finding ids: when two seats report the same `finding_id` with different digests, the station qualifies BOTH by
-   seat index (`s<i>.<id>`); identical reports keep one unqualified id (2-A dedupe); `unresolved_findings`,
-   `findings_snapshot` and a disposition authority use the ids as the station wrote them. So
+   computes it), `findings` = the merged findings, `review_digest` = the panel digest over the seat receipts. So
    the loop adjudication (`adjudicate`, `final: false`) sees a panel review exactly as it sees a single review:
    `must_fix_now` → `repair_authorized` → repair generation → the station runs the panel AGAIN on the repaired
    candidate (one more fan-out; bounded by `max_repair_generations` and the wall); findings without an authority →
@@ -92,16 +89,13 @@ Two deliverables, independent, each its own campaign.
    `review_station: "panel"|"single"` (snapshot digest covers it); the composition reads
    `campaignControl.qc_panel_snapshot.review_station`, never the live roster, so a resume cannot flip stations
    mid-campaign (a live value that differs is `live_drift`, 2-B). No snapshot (unmanaged loop, hand-built control,
-   pre-2-B receipts) → `single`, byte-identical to today. **A snapshot written before this cut** (2-B, no
-   `review_station` key) resolves to `single`; its identity check is the 2-B check over the fields present — it is
-   never re-digested with the new key, so an in-flight 2-B campaign resumes after the upgrade byte-identically.
-4. **Cost is bounded and visible, and the pocket is the station's.** A repair round now costs a panel, not a
-   seat: the ledger `full_diff_review` row carries `station: "panel"`, `seat_count`, `budget_source`,
-   `seat_timeout_seconds`. Because the station panel is the only panel that runs, it is budgeted exactly as
-   `performFinalPanel` budgets the terminal panel today (2-A): consumer `panel` — the wall remainder, and when that
-   is below the sealed pocket the pocket (`final_panel_reserve_seconds`) with `budget_source: pocket`; when neither
-   suffices the station blocks with `final_panel_budget_exhausted` before any seat is prepared (2-A rule) — never a
-   silently starved fan-out. The single station (`review_station: single`) keeps consumer `review`.
+   pre-2-B receipts) → `single`, byte-identical to today.
+4. **Cost is bounded and visible.** A repair round now costs a panel, not a seat: the ledger `full_diff_review`
+   row carries `station: "panel"`, `seat_count`, `budget_source`; the existing wall budget (`campaignWallRemaining
+   Seconds`, consumer `review` in the loop — the pocket is for the terminal station and is unspent when the terminal
+   panel is reused, so it is credited to the last in-loop panel: consumer `panel` when `repair_generation ===
+   max_repair_generations` or when the station runs on the final candidate is out of scope — see §3) is unchanged.
+   The station's seat timeouts follow 2-A (`campaignWallRemainingSeconds` with consumer `review`).
 5. **Not in this deliverable**: a smarter aggregation than `union-on-verified-critical`; running the rail's suites
    concurrently with the panel (consult "overlap"); the single seat as a cheap first pass before the panel.
 
@@ -125,10 +119,8 @@ Two deliverables, independent, each its own campaign.
    seat receipt, so the 2-B all-or-none/one-value rule holds by construction and stays in the validator; the
    cleanroom launcher's bind/HOME rules (1b-A) are unchanged.
 3. **Hash the tree once.** `verifyTreeIntegrity` batches: one `git hash-object --stdin-paths --no-filters`
-   process for regular files whose path contains neither LF nor CR (`--stdin-paths` is newline-delimited); a name
-   containing LF or CR goes through today's per-file hasher; symlinks hashed in-process as today; results are
-   compared in tracked-file order so the first mismatch names the same file as base, with the same error text
-   `tree integrity: <rel>`; measured on this repo's HEAD in the evidence README (baseline 21 s).
+   process for regular files (paths fed on stdin, NUL-safe), symlinks hashed in-process as today; same mismatch
+   error text `tree integrity: <rel>`; measured on this repo's HEAD in the evidence README (baseline 21 s).
 4. **Not in this deliverable**: a cross-process packet cache (a packet lives as long as its `performFinalPanel`
    call); changing what a packet contains (deny-list, spec, diff — 1a-A/1c own that).
 
@@ -158,13 +150,9 @@ re-verified on resume, snapshot read when the live roster flips `qc_panel_seats_
 - Tests (RED-first): `implementation-campaign-routing.test.sh` (`proof_parity_run` panel-station scenario: three
   stub seats at the station, FIX-THEN-SHIP → `repair_authorized` → repaired candidate → panel again → converged
   → `final_panel_gate_reused`, exactly two fan-outs; `single` control byte-identical trace; panel below quorum at
-  the station → blocked/durable, never a single seat; wall nearly exhausted at the station with a pocket → the
-  station panel completes with `budget_source: pocket`; neither suffices → `final_panel_budget_exhausted`; a
-  colliding finding id across two seats → both qualified, park on them, resume with dispositions keyed by the
-  qualified ids); `autopilot-engine.test.sh` (station panel via the real
+  the station → blocked/durable, never a single seat); `autopilot-engine.test.sh` (station panel via the real
   fan-out path with the 2-A stubs; terminal reuse asserts `final_panel_count` and receipts equal the station's);
-  `implementation-campaign-state.test.sh` (snapshot carries `review_station`, drift on a flipped live value; a
-  2-B fixture snapshot without the key resolves to `single` and passes the identity check unchanged);
+  `implementation-campaign-state.test.sh` (snapshot carries `review_station`, drift on a flipped live value);
   `resolve-review-loop.test.sh` + oracle parity (field, `auto` rule, refusal).
 - Docs: `references/blind-dispatch.md` "Panel execution" gains "The panel as the review station (2-C)";
   `skills/l5/references/hetero-impl-loop.md` step 9 sentence; BACKLOG rows "final panel has no repair loop" →
@@ -181,11 +169,11 @@ re-verified on resume, snapshot read when the live roster flips `qc_panel_seats_
   deliverables touch disjoint functions in this file; the graph lists the file under both `output_paths` and the
   second campaign bases on the first's merge) builds once, passes the packet to every seat.
 - Tests (RED-first): `review-packet.test.sh` (batched hashing equals per-file hashing on a fixture tree with
-  symlinks, a NUL-unsafe name and a newline-bearing name; mismatch text and first-mismatch order unchanged; materialised copy is a distinct inode tree — every
+  symlinks and a NUL-unsafe name; mismatch text unchanged; materialised copy is a distinct inode tree — every
   regular file's `ino` differs from the source's — with equal bytes and hash; **mutating a file in one seat dir
   leaves the other seat dirs and the shared hash unchanged**, and a seat dir whose pre-launch re-hash differs is
   refused as `precondition_failed`); `review-runner.test.sh` (three jobs, one packet: `packet_hash` equal on all, three distinct
-  launch dirs, exactly ONE `buildReviewPacket` invocation and N `hashPacketDir` calls counted separately); `autopilot-engine.test.sh`
+  launch dirs, one `verifyTreeIntegrity` call counted via an injectable hasher); `autopilot-engine.test.sh`
   (`real_batch_panel` asserts one packet build for three seats).
 - Docs: `references/blind-dispatch.md` packet paragraph; BACKLOG `verifyTreeIntegrity` row → shipped;
   `docs/scripts-inventory.md` only if a new script appears (none planned).
@@ -249,13 +237,14 @@ Nothing created. `max_changed_files` sealed at 27 / 13.
   other than `resolve-review-loop.*` are byte-identical.
 
 ## 3. Out of scope
-§1.3; a cross-process packet cache.
+§1.3; the pocket credited to an in-loop panel (today the terminal reuse leaves the pocket unspent — a follow-up
+row if a campaign starves at the station); a cross-process packet cache.
 
 ## 4. Acceptance
 | id | criterion | evidence |
 |----|-----------|----------|
 | `station` | with a sealed panel the loop's review station is the panel; FIX-THEN-SHIP authorises a repair and the panel runs again on the repaired candidate; the terminal panel is reused, exactly N fan-outs for N candidates; `single` and no-snapshot controls byte-identical | routing + engine suites |
-| `station-safety` | a below-quorum station panel blocks/parks with the 2-B reason; never a single-seat dispatch; the station is budgeted like the terminal panel (pocket, `budget_source`) | routing suite |
+| `station-safety` | a below-quorum station panel blocks/parks with the 2-B reason; never a single-seat dispatch | routing suite |
 | `knob` | `in_rail_review` resolves (`auto` rule, refusal), is sealed in the snapshot, drift recorded | resolver + state suites |
 | `packet-once` | one `buildReviewPacket` per candidate for a panel; per-seat private dirs; equal `packet_hash` on every row; hash equal to base's per-seat build | runner + engine suites |
 | `tree-hash-batch` | batched integrity equals per-file on a fixture with symlinks; timing on this repo recorded | packet suite + evidence |
@@ -278,9 +267,7 @@ node scripts/check-js-syntax.js
 bash scripts/sync-codex-plugin-skills.sh --check
 node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
 ```
-Base record: `evidence/…-panel-station/base-suites-<base>.txt` (detached checkout, sequential). Evidence files
-(base/head suite records, the timing README, one `red-<suite>.txt` per new case carrying the exact base assertion
-message) are depth-0 artefacts committed OUTSIDE the campaign, as in 2-A/2-B; they are not in §2.5.
+Base record: `evidence/…-panel-station/base-suites-<base>.txt` (detached checkout, sequential).
 
 ## 5. Dogfood proof (depth-0)
 The `shared-packet` campaign (second) runs on the `panel-review-station` merge with four qc seats
@@ -308,10 +295,3 @@ pocket` when the terminal panel is not reused — expected NOT to occur; record 
   findings; `g1-*`, `plan.as-reviewed-g1.md`): accepted — hardlink materialisation is not isolation (shared inode);
   §1.2.2 now requires plain per-file copies (reflink only as copy-on-write), forbids hardlinks, re-hashes every seat
   dir against the shared `packet_hash` before launch, and §2.2 pins the mutation-isolation case.
-- G2 2026-09-18 (terminal at the cap; GLM-5.2 READY, claude-fable-5-1 CONDITIONAL: 1 blocker + 6 non-blocking;
-  `g2-*`, `plan.as-reviewed-g2.md`): all seven accepted — the station panel is budgeted like the terminal panel
-  (pocket, `budget_source`, `final_panel_budget_exhausted`; §3 clause removed); a 2-B snapshot without
-  `review_station` is `single` with its digest checked over the fields present; newline/CR names bypass the batched
-  hasher with order preserved; colliding finding ids qualified by seat index; the runner case counts
-  `buildReviewPacket` (1) and `hashPacketDir` (N) separately; evidence files live outside the campaign; `red-<suite>.txt`
-  per new case. Growth 1.07×. Zero unaddressed blockers, zero deferred.

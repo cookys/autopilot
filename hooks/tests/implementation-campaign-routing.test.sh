@@ -319,6 +319,22 @@ assert.deepStrictEqual(status.growth, { files: 2, churn: 12, ratio: 1.2 });
 assert.strictEqual(status.last_artifact, D);
 assert(!Object.prototype.hasOwnProperty.call(status, 'can_merge'));
 assert(!Object.prototype.hasOwnProperty.call(status, 'can_close'));
+
+// Wall-clock pause (2026-09-18): a campaign parked at AWAITING_DISPOSITION far
+// past max_wall_seconds must project the FROZEN park usage, not a raw delta
+// that would show a negative/zero wall_seconds_remaining while merely waiting.
+const pausedCampaignState = {
+  ...campaignState,
+  phase: 'AWAITING_DISPOSITION',
+  usage: { ...campaignState.usage, elapsed_wall_seconds: 10 },
+};
+const farFutureObservedAt = '2026-07-27T01:00:00.000Z';
+const pausedStatus = projectCampaignStatus({
+  state: pausedCampaignState,
+  latest_lease: { state: 'dead' },
+}, [], farFutureObservedAt);
+assert.strictEqual(pausedStatus.wall_seconds_remaining, 110);
+
 const reopenedLeafStatus = projectCampaignStatus({
   state: campaignState,
   latest_lease: { state: 'dead' },

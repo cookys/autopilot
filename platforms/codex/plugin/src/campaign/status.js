@@ -1,5 +1,7 @@
 'use strict';
 
+const { campaignClockElapsedSeconds } = require('../engine/implementation-campaign');
+
 const TERMINAL = new Set([
   'TERMINAL_READY',
   'TERMINAL_FOLLOW_UP',
@@ -73,7 +75,7 @@ function projectCampaignStatus(projection, rows = [], observedAt, options = {}) 
   const observed = Date.parse(observedAt);
   const started = Date.parse(state.started_at);
   const elapsed = Number.isFinite(observed) && Number.isFinite(started) && observed >= started
-    ? Math.floor((observed - started) / 1000)
+    ? campaignClockElapsedSeconds(state, observed)
     : state.limits.max_wall_seconds;
   const baseline = state.limits.baseline_churn;
   const ratio = Number.isFinite(baseline) && baseline > 0

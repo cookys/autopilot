@@ -132,7 +132,7 @@
 - Docs: `references/blind-dispatch.md` (+ mirror) "Panel execution" paragraph gains "Quorum and standby" and
   "Snapshot at intake"; `.claude/review-loop-config.md` + `project-config-template/review-loop-config.md` (+ mirror)
   `min_panel_size` row: "list one more seat than the minimum to get a standby"; `skills/l5/references/
-  hetero-impl-loop.md` (+ mirror) step 6b sentence; `docs/BACKLOG.md` redesign row Context → EXACTLY `packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A..1c v2.36.59-64, 2-A v2.36.65, 2-B v2.36.66. Open: 2-C (in-rail off, panel repair, shared packet). Pointer has detail.` (244 bytes, Status
+  hetero-impl-loop.md` (+ mirror) step 6b sentence; `docs/BACKLOG.md` redesign row Context → EXACTLY `packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A..1c v2.36.59-64, 2-A v2.36.65, 2-B v2.36.66. Open: 2-C (in-rail off, panel repair, shared packet).` (224 bytes, Status
   `open`; `v2.36.66` is the release-commit pin depth-0 re-stamps if the number differs).
 
 ### 2.5 Sealed `output_paths` (exact; re-check mirrors at base)
@@ -161,7 +161,9 @@ platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
 docs/BACKLOG.md
 ```
 
-Nothing created. Twenty-one paths, `max_changed_files` sealed at 22.
+Nothing created. Twenty-one paths, `max_changed_files` sealed at 22. `docs/BACKLOG.md` has no codex mirror
+(`docs/` is not a mirror root — `sync-codex-plugin-skills.sh --mirror-roots-json`), so it is listed alone on
+purpose; "mirrors in sync" applies to the six paths that have one.
 
 ### 2.6 Global constraints
 
@@ -225,4 +227,13 @@ intake receipt carries the `qc_panel_snapshot` step; a deliberate pin change aft
 1a-A ✓ → 1a-B ✓ → 1b-A ✓ → 1b-B ✓ → 1c ✓ → 2-A ✓ → **2-B (this)** → 2-C (in-rail off + panel repair, shared packet).
 
 ## Review log
-- (pending)
+- Unknown-escalation probe (`ladder-classify.json`): U1; consult rail attempted and failed on the codex quota
+  (`consult-codex-quota-rail-failed.json`, ladder `rail-failed`).
+- Plan hetero loop G1 2026-09-18 (GLM-5.2 READY, claude-fable-5-1 CONDITIONAL: 4 blockers + 2 non-blocking;
+  `g1-*`, `plan.as-reviewed-g1.md`): all six accepted — write-once snapshot file beside the contract that resume
+  never redraws, full seat objects + sealed qualification, validator re-derives the quorum from sealed terminal
+  fields, packet-hash rule over reviewed rows, optional-with-legacy-semantics schema fields, full Context string.
+- G2 2026-09-18 (terminal at the cap; GLM-5.2 STOP, MiniMax-M3 (fallback) STOP; 2 blockers + 1 non-blocking;
+  `g2-*`, `plan.as-reviewed-g2.md`): all three accepted — the G1 fold's Context string was 244 bytes (depth-0
+  miscounted and wrote the overflow into the plan) → trimmed to 224 bytes (measured with `wc -c`, not counted by hand); BACKLOG has no codex mirror, stated. Growth
+  1.24×. Zero unaddressed blockers, zero deferred.

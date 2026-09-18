@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-panel-standby-2026-09-18",
+  "logical_plan_id": "blind-review-panel-standby-2026-09-18",
+  "session_id": "c2b-g2-1789709205",
+  "session_key": "35fa631916ea207104deb439871afcc012118e72d9812a20234066299fcf45e9",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "14fa043d834e14d9fb132bf70cc54dacd05cb495a296976b334ff3e6f2d7d27e",
+  "manifest_sha256": "13bfb961f783ea5238ed32838eba474bf9a3037111fb04e88d15e163b31c98c5",
+  "plan_sha256": "dc435871c6d9265cfc198fb36dbb902e0a61d95ea5791b5c46dc514995e603af",
+  "growth_ratio": {
+    "numerator": 276,
+    "denominator": 223
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "d130a56db87d2e3b8e4367054d24d97e40aee272ab05010f3aa2b15f382c367b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0085ab1eff1802ee64ed915755692d21a8aee632d01a9365010b3a79c5574f6f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-gn5zjq",
+          "digest": "0085ab1eff1802ee64ed915755692d21a8aee632d01a9365010b3a79c5574f6f"
+        },
+        "receipt_digest": "8b9dd1742dda3b424ceceb185b79a002edbdaca66afe19aab6a160bc4d13efe1"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "367aa90d5d08de52d0e55384c5489a90d0acaf521fdf7d7eca16a376ebc42a57"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6d2ad8faa362c77267d59db7a38e222eef010062549ddd015313eedb1d0b9c5c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-hgnlRg",
+          "digest": "6d2ad8faa362c77267d59db7a38e222eef010062549ddd015313eedb1d0b9c5c"
+        },
+        "receipt_digest": "e7dad607aa2780b33f794f4795275c6af9f6b20a53f0c90f6f83bb34a59ab3fa"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "d15411ecc565b21f037b2159b729d3897f78df4e403fc56feea949c9c8abde29"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b9e2232d037b152d13ae662fd8752db0f387959cbe5f1986b60072549ffab57f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-RvbCzX",
+          "digest": "b9e2232d037b152d13ae662fd8752db0f387959cbe5f1986b60072549ffab57f"
+        },
+        "receipt_digest": "bdfcb9cd97fdf8e3dcb89cd2ab44debdbfbd3fbe9ce90e35f6b43347b4a8aa96"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [
+    {
+      "seat_id": "claude_operations_skeptic",
+      "from_id": "claude_operations_skeptic",
+      "to_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "reason": "retry_substitution"
+    }
+  ],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "family": "minimax",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "docs/BACKLOG.md redesign row (plan §2 Docs, quoted Context string)",
+      "claim": "The plan's own quoted BACKLOG Context is 244 bytes, exceeding the frozen R8 limit of 240 bytes.",
+      "evidence": "Plan §2 Docs quotes the Context verbatim and annotates it as '(244 bytes, Status open)', while R8 requires 'Context ≤240 bytes, Status open'. The plan acknowledges the overflow instead of trimming it, so the sealed acceptance as written cannot satisfy R8; the parenthetical also suggests relying on re-stamp luck rather than conformance.",
+      "evidence_reference": "Plan §2 Docs paragraph, quote ending 'Open: 2-C (in-rail off, panel repair, shared packet). Pointer has detail.' annotated 244 bytes; frozen rubric R8.",
+      "repair": "Shorten the Context string to ≤240 bytes in the plan before sealing, e.g. drop 'verify-once; ' or compress 'Shipped: 1a-A..1c v2.36.59-64, 2-A v2.36.65, 2-B v2.36.66.' to 'Shipped: 1a-A..1c, 2-A, 2-B (v2.36.59-66).', and restate the byte count as ≤240 in the plan text.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dcfcd512bbe728df48624ce29ea1ea280853c15c604b8107b40e7a447441d481"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "docs/BACKLOG.md redesign row Context field",
+      "claim": "Plan §2 specifies a BACKLOG redesign row Context string of ~243-244 bytes (plan self-reports 244), which exceeds R8's ≤240-byte cap; the check_backlog validator listed in §4.1 will reject this value at implementation time.",
+      "evidence": "Plan §2 quotes the Context verbatim: 'packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats. Shipped: 1a-A..1c v2.36.59-64, 2-A v2.36.65, 2-B v2.36.66. Open: 2-C (in-rail off, panel repair, shared packet). Pointer has detail.' Manual character count is ~243; the plan self-reports 244. R8 mandates 'Context ≤240 bytes'.",
+      "evidence_reference": "Plan §2 BACKLOG.md Context block vs R8 'Context ≤240 bytes'.",
+      "repair": "Re-decide the Context string to ≤240 bytes (e.g. drop 'Pointer has detail.' and shorten the Shipped/Open enumeration), restate the exact byte count in §2, and verify under 'node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md' before sealing the plan.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1adcd4da76290e9f30a9fce3b528a4bb42b6ef9a112f68d7df7997618b7341c9"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md codex mirror in §2.5 sealed output paths",
+      "claim": "R8 requires the updated docs to be 'updated with mirrors in sync'; §2.5 lists every other doc with an explicit codex mirror path, but docs/BACKLOG.md is listed alone with no codex companion path, leaving R8's in-sync obligation ambiguous for BACKLOG.",
+      "evidence": "§2.5 sealed output_paths pairs references/blind-dispatch.md with platforms/codex/plugin/references/blind-dispatch.md, the two review-loop-config docs with their codex mirror, the l5 hetero-impl-loop doc with its codex mirror, and docs/BACKLOG.md on its own with no codex companion path.",
+      "evidence_reference": "Plan §2.5 output_paths vs R8 'mirrors in sync'.",
+      "repair": "Either add the codex mirror path to §2.5 if BACKLOG.md is mirrored under codex, or state explicitly in §2 that BACKLOG.md has no codex mirror so R8 'mirrors in sync' is vacuously satisfied before sealing.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "272eb4e89f02fe8f4163f8861adb573b39ff64e2a36690aa8c8e6f25dc99cb7b"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "272eb4e89f02fe8f4163f8861adb573b39ff64e2a36690aa8c8e6f25dc99cb7b",
+      "rubric_id": "R8",
+      "affected_surface": "docs/BACKLOG.md codex mirror in §2.5 sealed output paths",
+      "claim": "R8 requires the updated docs to be 'updated with mirrors in sync'; §2.5 lists every other doc with an explicit codex mirror path, but docs/BACKLOG.md is listed alone with no codex companion path, leaving R8's in-sync obligation ambiguous for BACKLOG.",
+      "evidence_reference": "Plan §2.5 output_paths vs R8 'mirrors in sync'.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-18T05:39:06.040Z"
+}

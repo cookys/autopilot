@@ -1,0 +1,25 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-panel-standby-2026-09-18",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "dcfcd512bbe728df48624ce29ea1ea280853c15c604b8107b40e7a447441d481",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: depth-0 miscounted; the string is trimmed to a wc-measured 224 bytes and the plan states the count."
+  },
+  {
+   "fingerprint": "1adcd4da76290e9f30a9fce3b528a4bb42b6ef9a112f68d7df7997618b7341c9",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: same fix \u2014 measured under the 240 cap the backlog gate enforces."
+  },
+  {
+   "fingerprint": "272eb4e89f02fe8f4163f8861adb573b39ff64e2a36690aa8c8e6f25dc99cb7b",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: \u00a72.5 now states docs/BACKLOG.md has no codex mirror (docs/ is not a mirror root), so the in-sync obligation covers the six mirrored paths."
+  }
+ ]
+}

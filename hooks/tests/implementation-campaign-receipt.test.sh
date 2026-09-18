@@ -1118,6 +1118,111 @@ fs.writeFileSync(path.join(temp, 'seat-packet-hash-zz.json'), `${JSON.stringify(
   final_panel_seat_receipts: [{ ...zzBody }],
 }, null, 2)}\n`);
 console.log('packet_hash_validator=true');
+
+// RED at base 83e3ac9c: quorum flag / load_bearing / legacy unanimity / failed-row packet ignore.
+function quorumSeat(index, overrides = {}) {
+  const body = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: index,
+    runner: `runner-${index}`,
+    model: `model-${index}`,
+    effort: 'high',
+    endpoint: null,
+    family: `family-${index}`,
+    status: 'reviewed',
+    verdict: 'SHIP-AS-IS',
+    review_digest: String(index).repeat(64).slice(0, 64),
+    reason: null,
+    load_bearing: true,
+    ...overrides,
+  };
+  return { ...body, receipt_digest: canonicalDigest(body) };
+}
+const qSeats = [quorumSeat(1, { family: 'anthropic' }), quorumSeat(2, { family: 'openai' }),
+  quorumSeat(3, { family: 'zhipu' }), quorumSeat(4, {
+    family: 'minimax',
+    status: 'transport_failed',
+    verdict: null,
+    review_digest: null,
+    reason: 'final_panel_seat_transport_failed',
+    load_bearing: false,
+  })];
+const qOk = validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 3, final_panel_count: 3, final_panel_seat_receipts: qSeats,
+  final_panel_quorum_met: true, sealed_required_review_families: 2, implementer_family: 'xai',
+}, 3);
+assert.strictEqual(qOk.passed, true, qOk.reason);
+const qMismatch = validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 3, final_panel_count: 3, final_panel_seat_receipts: qSeats,
+  final_panel_quorum_met: false, sealed_required_review_families: 2, implementer_family: 'xai',
+}, 3);
+assert.strictEqual(qMismatch.reason, 'final_panel_quorum_flag_mismatch');
+const qBearing = qSeats.map((s, i) => {
+  if (i !== 3) return s;
+  const body = { ...s };
+  delete body.receipt_digest;
+  body.load_bearing = true;
+  return { ...body, receipt_digest: canonicalDigest(body) };
+});
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 3, final_panel_count: 3, final_panel_seat_receipts: qBearing,
+  final_panel_quorum_met: true, sealed_required_review_families: 2, implementer_family: 'xai',
+}, 3).reason, 'final_panel_metadata_incomplete');
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: false, verdict: null, findings: '[]', review_digest: null,
+  sealed_min_panel_size: 1, final_panel_count: 0, final_panel_seat_receipts: [failedSeat],
+}, 1).reason, 'final_panel_seat_no_verdict');
+const failedNoHash = quorumSeat(4, {
+  family: 'minimax',
+  status: 'transport_failed',
+  verdict: null,
+  review_digest: null,
+  reason: 'final_panel_seat_transport_failed',
+  load_bearing: false,
+});
+const hashedReviewed = { ...hashedBody, family: 'anthropic', load_bearing: true, model: 'claude-x' };
+hashedReviewed.receipt_digest = canonicalDigest(hashedReviewed);
+const hashedReviewedB = {
+  ...hashedBody,
+  seat_index: 2,
+  family: 'openai',
+  load_bearing: true,
+  model: 'gpt-x',
+  runner: 'runner-b',
+};
+hashedReviewedB.receipt_digest = canonicalDigest(hashedReviewedB);
+assert.strictEqual(validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 2, final_panel_count: 2,
+  final_panel_seat_receipts: [hashedReviewed, hashedReviewedB, failedNoHash],
+  final_panel_quorum_met: true, sealed_required_review_families: 2, implementer_family: 'xai',
+}, 2).passed, true);
+console.log('quorum_receipt_validator=true');
+
+// RED at 3641cbef: diversity threshold must key off REVIEWED rows, not all seat receipts
+// (including transport-failed rows), matching the engine's terminalPanelCrossFamilySatisfied
+// predicate (seats.length > 1 over the reviewed subset).
+const reviewedOnlySeat = quorumSeat(1, { family: 'anthropic', load_bearing: true });
+const failedOnlySeat = quorumSeat(2, {
+  family: 'openai',
+  status: 'transport_failed',
+  verdict: null,
+  review_digest: null,
+  reason: 'final_panel_seat_transport_failed',
+  load_bearing: false,
+});
+const reviewedRowsDiversity = validateFinalPanelReceipt({
+  reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+  sealed_min_panel_size: 1, final_panel_count: 1,
+  final_panel_seat_receipts: [reviewedOnlySeat, failedOnlySeat],
+  final_panel_quorum_met: true, sealed_required_review_families: 1, implementer_family: 'xai',
+}, 1);
+assert.strictEqual(reviewedRowsDiversity.passed, true, reviewedRowsDiversity.reason);
+console.log('reviewed_rows_diversity_threshold=true');
 NODE
 )"
 assert_exit_code "$?" "0" "campaign receipt and composition tests execute"
@@ -1139,6 +1244,10 @@ assert_contains "$OUT" "unknown_key_rejected=true" \
   "unrelated extra key is rejected by composition validation"
 assert_contains "$OUT" "packet_hash_validator=true" \
   "packet_hash validator and digest rules"
+assert_contains "$OUT" "quorum_receipt_validator=true" \
+  "quorum flag re-derive, load_bearing, legacy unanimity, failed-row packet ignore"
+assert_contains "$OUT" "reviewed_rows_diversity_threshold=true" \
+  "diversity threshold keys off reviewed rows, not all seat receipts"
 
 node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \

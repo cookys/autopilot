@@ -525,8 +525,9 @@ git -C "$SBX" commit -qm "fixture"
 BASE_SHA="$(git -C "$SBX" rev-parse HEAD)"
 COMMON_RAW="$(git -C "$SBX" rev-parse --git-common-dir)"
 COMMON_DIR="$(realpath "$SBX/$COMMON_RAW")"
-CONTRACT="$TEST_TMP/campaign.json"
-SEAL="$TEST_TMP/campaign.seal.json"
+mkdir -p "$TEST_TMP/campaign" "$TEST_TMP/drift-campaign"
+CONTRACT="$TEST_TMP/campaign/campaign.json"
+SEAL="$TEST_TMP/campaign/campaign.seal.json"
 PROMPT="$TEST_TMP/prompt.txt"
 printf 'bounded implementation\n' > "$PROMPT"
 node - "$CONTRACT" "$COMMON_DIR" "$BASE_SHA" <<'NODE'
@@ -557,8 +558,8 @@ node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
   --contract "$CONTRACT" --repo "$SBX" --mission-mode shadow --out "$SEAL" >/dev/null
 assert_exit_code "$?" "0" "state fixture campaign contract seals"
 
-DRIFT_CONTRACT="$TEST_TMP/drift-campaign.json"
-DRIFT_SEAL="$TEST_TMP/drift-campaign.seal.json"
+DRIFT_CONTRACT="$TEST_TMP/drift-campaign/campaign.json"
+DRIFT_SEAL="$TEST_TMP/drift-campaign/campaign.seal.json"
 cp "$CONTRACT" "$DRIFT_CONTRACT"
 node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
   --contract "$DRIFT_CONTRACT" --repo "$SBX" --mission-mode shadow \
@@ -1941,6 +1942,9 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
   });
   // Mission-backed, so managed dev-flow admission does apply here and wants an
   // admitted session before the strict root-identity check is even reached.
+  delete process.env.AUTOPILOT_SESSION_ID;
+  process.env.CLAUDE_CODE_SESSION_ID = 'autopilot-test-session';
+  process.env.CLAUDE_SESSION_ID = 'autopilot-test-session';
   sealSessionMarker({
     root,
     dir: path.join(repo, '.autopilot', 'session-mode'),
@@ -2996,8 +3000,8 @@ assert_contains "$INTAKE_OUT" \
   "ordered=mission,provider_readiness,context_window,worktree_lifecycle,campaign_generation" \
   "intake adapters execute in the frozen owner order"
 assert_contains "$INTAKE_OUT" \
-  "step_order=mission,campaign_contract,provider_readiness,context_window,worktree_lifecycle,campaign_generation" \
-  "contract validation occupies the second intake slot"
+  "step_order=qc_panel_snapshot,mission,campaign_contract,provider_readiness,context_window,worktree_lifecycle,campaign_generation" \
+  "contract validation occupies the third intake slot"
 assert_contains "$INTAKE_OUT" "admitted=admitted" "valid ordered intake admits"
 assert_contains "$INTAKE_OUT" "full_enforcement=true" "all-known injected axes advertise full enforcement"
 assert_contains "$INTAKE_OUT" "unpaired_code=mission_adapter_pair_required" \
@@ -5322,6 +5326,8 @@ assert_contains "$PANEL_INTAKE_OUT" "final-panel-intake assertions passed" \
 BLIND_INTAKE_OUT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const root = process.argv[2];
 const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
@@ -5515,10 +5521,69 @@ assert.ok(probeStep.launcher);
 assert.ok(Array.isArray(probeStep.deny_paths));
 assert.strictEqual(probeStep.launcher_json.profile, 'preflight');
 
+const snapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qc-snap-'));
+const snapContract = path.join(snapDir, 'campaign.json');
+fs.writeFileSync(snapContract, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'qc-snap-state',
+  profile: 'poc',
+})}\n`);
+const snapSpies = spies();
+const snapResult = runCampaignIntake({
+  repo: process.cwd(),
+  contractPath: snapContract,
+  roster: baseRoster([ccSeat], {
+    fallback_ladder: [{ runner: ccSeat.runner, model: ccSeat.model, effort: ccSeat.effort, family: ccSeat.family }],
+    min_panel_size: 1,
+    implementer_engine: 'fixture-implementer',
+  }),
+}, snapSpies.adapters);
+const snapFile = path.join(snapDir, 'qc_panel_snapshot.json');
+assert.ok(fs.existsSync(snapFile), 'intake writes qc_panel_snapshot.json beside the contract');
+const snapStep = (snapResult.steps || []).find((s) => s && s.owner === 'qc_panel_snapshot');
+assert.ok(snapStep, JSON.stringify(snapResult.steps));
+assert.strictEqual(snapStep.status, 'ready');
+assert.ok(typeof snapStep.digest === 'string' && /^[0-9a-f]{64}$/.test(snapStep.digest));
+assert.strictEqual(snapStep.seat_count, 1);
+assert.ok(typeof snapStep.path === 'string' && snapStep.path.length > 0);
+assert.ok(!Object.prototype.hasOwnProperty.call(snapStep, 'live_drift'));
+const parsedSnap = JSON.parse(fs.readFileSync(snapFile, 'utf8'));
+assert.strictEqual(parsedSnap.schema_version, 1);
+assert.strictEqual(parsedSnap.seats_complete, true);
+
+// RED at 3641cbef: an incomplete roster (base engine refuses such a panel) must never get a
+// snapshot written with a hard-coded seats_complete: true.
+const incompleteSnapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qc-snap-incomplete-'));
+const incompleteSnapContract = path.join(incompleteSnapDir, 'campaign.json');
+fs.writeFileSync(incompleteSnapContract, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'qc-snap-incomplete-state',
+  profile: 'poc',
+})}\n`);
+const incompleteSnapSpies = spies();
+const incompleteSnapResult = runCampaignIntake({
+  repo: process.cwd(),
+  contractPath: incompleteSnapContract,
+  roster: baseRoster([ccSeat], {
+    fallback_ladder: [{ runner: ccSeat.runner, model: ccSeat.model, effort: ccSeat.effort, family: ccSeat.family }],
+    min_panel_size: 1,
+    implementer_engine: 'fixture-implementer',
+    qc_panel_seats_complete: false,
+  }),
+}, incompleteSnapSpies.adapters);
+const incompleteSnapFile = path.join(incompleteSnapDir, 'qc_panel_snapshot.json');
+assert.ok(!fs.existsSync(incompleteSnapFile),
+  'incomplete roster must not get a qc_panel_snapshot.json');
+assert.ok(!(incompleteSnapResult.steps || []).some((s) => s && s.owner === 'qc_panel_snapshot'),
+  JSON.stringify(incompleteSnapResult.steps));
+console.log('incomplete_roster_no_snapshot=true');
+
 console.log('final-panel-blind-intake assertions passed');
 NODE
 )"
 assert_contains "$BLIND_INTAKE_OUT" "final-panel-blind-intake assertions passed" \
   "campaign intake refuses blind-incompatible qc seats before claim"
+assert_contains "$BLIND_INTAKE_OUT" "incomplete_roster_no_snapshot=true" \
+  "incomplete roster (qc_panel_seats_complete: false) never gets a qc_panel_snapshot.json"
 
 finalize_test

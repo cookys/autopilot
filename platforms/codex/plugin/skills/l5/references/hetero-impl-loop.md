@@ -177,7 +177,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     refusal at intake; a cleanroom-tier runner is an advisory — intake probes the isolation
     boundary before spend). Every `qc_panel[N]` without evidence must be pinned first
     (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with
-    `final_panel_seat_unqualified`.
+    `final_panel_seat_unqualified`. List one more `qc_panel` seat than `min_panel_size` to
+    keep a standby; intake snapshots the admitted seats beside the contract.
 7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
    `mission grant --repo . --prepared prepared.json --node <id>` → `contract_path`, `seal_path`,
    `branch`, `base_sha`. Each grant is one attempt; a rejected INTAKE still consumes it. The graph's

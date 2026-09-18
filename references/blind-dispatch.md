@@ -379,7 +379,21 @@ is not an artifact. `final_panel_reserve_seconds` (0..1800, default 0) is a
 panel-only pocket measured from the same `started_at`; other wall consumers keep
 `max_wall_seconds`. `full_suite` reuses a GREEN `verificationCache` receipt only
 when tree, full sealed argv, and env fingerprint match (`full_suite_reuse`
-default true). Cut 2-B (standby, snapshot, in-rail-off) remains open.
+default true).
+
+**Quorum and standby.** `min_panel_size` is the sealed quorum, not unanimity.
+The panel is `reviewed` when the number of `reviewed` seats is at least that
+minimum, the surviving seats still satisfy the cross-family predicate, findings
+are consistent, and the packet hash is one value. Extra listed seats are
+standby: they dispatch with the others and keep a receipt row (`load_bearing`
+false when a failure is unused). A roster that cannot satisfy families even if
+every seat returns is still refused before spend.
+
+**Snapshot at intake.** The first admitted intake writes `qc_panel_snapshot.json`
+beside the sealed contract (`O_EXCL`). Resume reads that file and never rewrites
+it; a live roster that drifted is recorded (`live_drift`) and ignored. The panel
+reviews the snapshot seats. Without a snapshot, the live roster is used
+byte-identically.
 
 **Later cuts (not this deliverable):** 1b-B is the intake/resolver half; a
 configurable deny-list and cut 2 (verify-once, concurrent seats) remain open.

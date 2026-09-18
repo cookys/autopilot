@@ -568,7 +568,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"review_packet_deny_extra":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"plan_review_same_family_as_depth0":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"in_rail_review":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"review_packet_deny_extra":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"plan_review_same_family_as_depth0":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
@@ -1778,5 +1778,36 @@ NODE
 )"
 assert_eq "0" "$?" "oracle parity process exits 0: $ORACLE_OUT"
 assert_contains "$ORACLE_OUT" "oracle_parity=true" "shell accept/reject and emitted element match normalizeDenyList both ways"
+
+# RED at base ae7ea5ce: in_rail_review is not a resolver field.
+assert_eq "panel" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field in_rail_review)" \
+  "in_rail_review auto with the built-in complete panel metadata resolves to panel"
+IN_RAIL_INCOMPLETE_CFG="$TEST_TMP/in-rail-incomplete.md"
+cat > "$IN_RAIL_INCOMPLETE_CFG" <<'CFG'
+# Review-Loop Config
+- in_rail_review: auto
+- qc_panel: gpt-5.5
+CFG
+assert_eq "single" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$IN_RAIL_INCOMPLETE_CFG" bash "$SCRIPT" --field in_rail_review)" \
+  "in_rail_review auto with incomplete panel metadata resolves to single"
+IN_RAIL_FORCE_CFG="$TEST_TMP/in-rail-force.md"
+cat > "$IN_RAIL_FORCE_CFG" <<'CFG'
+# Review-Loop Config
+- in_rail_review: panel
+- qc_panel: gpt-5.5
+CFG
+IN_RAIL_FORCE_ERR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$IN_RAIL_FORCE_CFG" bash "$SCRIPT" --field in_rail_review 2>&1)"; IN_RAIL_FORCE_EXIT=$?
+assert_eq "3" "$IN_RAIL_FORCE_EXIT" "panel with incomplete seats fails closed"
+assert_contains "$IN_RAIL_FORCE_ERR" "in_rail_review" "refusal names the field"
+cat > "$TEST_TMP/in-rail-single.md" <<'CFG'
+# Review-Loop Config
+- in_rail_review: single
+- qc_panel: gpt-5.5, claude-opus, gemini-flash
+- qc_panel_runners: codex, claude-native, agy
+- qc_panel_efforts: xhigh, high, high
+- qc_panel_endpoints: @none, @none, @none
+CFG
+assert_eq "single" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/in-rail-single.md" bash "$SCRIPT" --field in_rail_review)" \
+  "explicit single stays single even with a complete panel"
 
 finalize_test

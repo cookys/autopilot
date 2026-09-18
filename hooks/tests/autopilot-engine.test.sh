@@ -3993,6 +3993,7 @@ const validPayload = {
   independent_harness: 'off',
   qc_panel: ['test-reviewer'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -5640,6 +5641,7 @@ const roster = {
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
   min_panel_size: 3,
+  in_rail_review: 'single',
   qc_panel_seats_complete: true,
   qc_panel_seats: seats,
   override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
@@ -6176,6 +6178,35 @@ runCase({
   },
 });
 
+const stationReuse = runCase({
+  ticket: 'panel-station-2c',
+  reserve: 0,
+  clock: clockEarly,
+  rosterMutate() { return { in_rail_review: 'panel' }; },
+  collect({ result, reviewModels }) {
+    const findPanel = (value) => {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts)) return value;
+      for (const child of Object.values(value)) {
+        const found = findPanel(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    const terminal = findPanel(result);
+    assert.ok(result.trace && result.trace.includes('final_panel_gate_reused')
+      || JSON.stringify(result).includes('final_panel_gate_reused'),
+      JSON.stringify({ status: result.status, phase: result.phase, reason: result.reason, trace: result.trace }).slice(0, 800));
+    assert.ok(terminal);
+    assert.strictEqual(terminal.final_panel_count, 3);
+    assert.strictEqual(terminal.final_panel_seat_receipts.length, 3);
+    assert.ok(reviewModels.length === 3, `dispatcher calls ${reviewModels.length}`);
+    const stationRow = (result.ledger || []).find((row) => row.unit === 'full_diff_review' && row.station === 'panel');
+    assert.ok(stationRow, JSON.stringify(result.ledger && result.ledger.map((r) => r.unit)));
+    console.log('station_terminal_reuse=true');
+  },
+});
+
 NODE
 )"
 assert_contains "$PANEL_OUT" "panel_order=true" "3-seat stub dispatcher is called in index order (RED at base 7f5d6ee8: sequential split)"
@@ -6192,6 +6223,8 @@ assert_contains "$PANEL_OUT" "undrifted_roster_no_drift_flag=true" \
 assert_contains "$PANEL_OUT" "snapshot_live_drift=true" "resume roster swap records live_drift and reviews snapshot seats"
 assert_contains "$PANEL_OUT" "snapshot_identity_invalid=true" "contract_digest mismatch blocks before spend"
 assert_contains "$PANEL_OUT" "no_snapshot_live_roster=true" "no snapshot uses live roster"
+assert_contains "$PANEL_OUT" "station_terminal_reuse=true" \
+  "station panel fans out once and terminal reuses the same receipts"
 assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
 assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
 

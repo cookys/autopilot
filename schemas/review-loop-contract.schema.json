@@ -19,6 +19,7 @@
     "independent_harness",
     "qc_panel",
     "qc_panel_aggregation",
+    "in_rail_review",
     "review_risk",
     "required_review_families",
     "l1_required",
@@ -241,6 +242,17 @@
       ],
       "x-shell-validated": true,
       "x-shell-var": "QC_AGG"
+    },
+    "in_rail_review": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "single",
+        "panel"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "IN_RAIL_REVIEW",
+      "description": "Who runs the implementation loop's full_diff_review station. auto becomes panel when qc_panel_seats_complete is true, else single. panel with an incomplete panel is a resolver refusal."
     },
     "review_risk": {
       "type": "string",
@@ -873,6 +885,7 @@
     "independent_harness",
     "qc_panel",
     "qc_panel_aggregation",
+    "in_rail_review",
     "review_risk",
     "required_review_families",
     "l1_required",

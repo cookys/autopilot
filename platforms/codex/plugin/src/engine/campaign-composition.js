@@ -239,6 +239,18 @@ function noDispatchContradictions(mutation) {
 function classifyFullDiffReviewFault(fullDiff) {
   if (!isObj(fullDiff)) return 'terminal';
   if (fullDiff.phase === 'product_review_normalization') return 'gate_transient';
+  if (typeof fullDiff.reason === 'string'
+      && /^final_panel_seat_(no_verdict|transport_failed|parser_failed)$/.test(fullDiff.reason)) {
+    return 'gate_transient';
+  }
+  if (Array.isArray(fullDiff.final_panel_seat_receipts)) {
+    const seatFault = fullDiff.final_panel_seat_receipts.some((seat) => seat && (
+      seat.status === 'no_verdict'
+      || seat.status === 'transport_failed'
+      || seat.status === 'parser_failed'
+    ));
+    if (seatFault) return 'gate_transient';
+  }
   const raw = isObj(fullDiff.raw) ? fullDiff.raw : null;
   // Pre-dispatch blocks (qualification, resolver, wall budget) never carry a
   // reviewResult; a reviewed-but-rejected replay carries a parsed 'reviewed'.
@@ -582,6 +594,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
   const scopeCheck = requireAdapter(adapters, 'scopeCheck');
   const verify = requireAdapter(adapters, 'verify');
   const review = requireAdapter(adapters, 'review');
+  const reviewStation = input.reviewStation === 'panel' ? 'panel' : 'single';
+  const reviewPanel = reviewStation === 'panel'
+    ? requireAdapter(adapters, 'reviewPanel')
+    : (typeof adapters.reviewPanel === 'function' ? adapters.reviewPanel : null);
   const prepareReview = typeof adapters.prepareReview === 'function'
     ? adapters.prepareReview : null;
   const adjudicate = requireAdapter(adapters, 'adjudicate');
@@ -1870,6 +1886,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       reviewer_digest: canonicalDigest(reviewAuthority.reviewer),
       review_authority_digest: reviewAuthorityDigest,
       vertical_failed: verticalFailed === true,
+      station: reviewStation,
     };
     const reusable = findReusableGate(controller.gate_journal, 'full_diff_review', gateInput);
     if (reusable
@@ -1950,11 +1967,16 @@ function runCampaignComposition(input = {}, adapters = {}) {
         ),
       };
     }
-    const fullDiff = requireReceipt(review({
-      ...reviewPayload,
-      prepared_review: preparedReview,
-      reservation_identity: reviewReservation.reservation_identity,
-    }), 'review');
+    const fullDiff = requireReceipt(reviewStation === 'panel'
+      ? reviewPanel({
+        ...reviewPayload,
+        reservation_identity: reviewReservation.reservation_identity,
+      })
+      : review({
+        ...reviewPayload,
+        prepared_review: preparedReview,
+        reservation_identity: reviewReservation.reservation_identity,
+      }), reviewStation === 'panel' ? 'reviewPanel' : 'review');
     const fullDiffResultIdentity = canonicalDigest(fullDiff);
     const fullDiffInvocationIdentity = chargeEffect({
       stage: 'full_diff_review',
@@ -2079,7 +2101,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
     });
     lastReview = {
       ...fullDiff,
+      success: fullDiff.reviewed === true || fullDiff.success === true,
       review_authority_digest: reviewAuthorityDigest,
+      station: reviewStation,
+      candidate_tree_sha: candidate && candidate.tree_sha || null,
+      reviewer_roster_digest: input.jointReviewRosterDigest || null,
+      packet_hash: fullDiff.packet_hash || null,
     };
     return { stop: null, review: lastReview };
   };
@@ -2768,6 +2795,18 @@ function runCampaignComposition(input = {}, adapters = {}) {
     const reusableJ = isCanonicalSha256(reviewerRosterDigest)
       ? findReusableGate(controller.gate_journal, 'joint_review', jInput)
       : null;
+    const stationPanelReuse = reviewStation === 'panel'
+      && lastReview
+      && lastReview.station === 'panel'
+      && (lastReview.reviewed === true || lastReview.success === true)
+      && Array.isArray(lastReview.final_panel_seat_receipts)
+      && lastReview.final_panel_seat_receipts.length > 1
+      && lastReview.candidate_tree_sha === (candidate && candidate.tree_sha || null)
+      && lastReview.reviewer_roster_digest === reviewerRosterDigest
+      && Object.prototype.hasOwnProperty.call(lastReview, 'packet_hash')
+      && lastReview.packet_hash === (fullDiffReview && Object.prototype.hasOwnProperty.call(fullDiffReview, 'packet_hash')
+        ? fullDiffReview.packet_hash
+        : lastReview.packet_hash);
     const reusablePanelBound = reusableJ
       && reusableJ.result
       && reusableJ.result.panel_payload_digest === jInput.panel_payload_digest
@@ -2785,7 +2824,24 @@ function runCampaignComposition(input = {}, adapters = {}) {
       && (reusableJ.result.findings === null
         || typeof reusableJ.result.findings === 'string'
         || Array.isArray(reusableJ.result.findings));
-    if (reusableJ && reusableJ.result && reusableJ.result.success === true
+    if (stationPanelReuse) {
+      const reusedSeats = lastReview.final_panel_seat_receipts;
+      const reusedPanelCount = Number.isSafeInteger(lastReview.final_panel_count)
+        ? lastReview.final_panel_count
+        : reusedSeats.filter((seat) => seat && seat.status === 'reviewed').length;
+      terminalReview = {
+        ...lastReview,
+        reviewed: true,
+        success: true,
+        gate_reused: true,
+        sealed_min_panel_size: Number.isSafeInteger(lastReview.sealed_min_panel_size)
+          ? lastReview.sealed_min_panel_size
+          : minPanelSize,
+        final_panel_count: reusedPanelCount,
+        final_panel_seat_receipts: reusedSeats,
+      };
+      trace.push('final_panel_gate_reused');
+    } else if (reusableJ && reusableJ.result && reusableJ.result.success === true
         && reusablePanelBound
         && reusableAdjudicationStateComplete
         && Array.isArray(reusableJ.result.seat_receipts)

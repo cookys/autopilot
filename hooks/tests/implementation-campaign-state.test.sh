@@ -5677,6 +5677,7 @@ const snapResult = runCampaignIntake({
     fallback_ladder: [{ runner: ccSeat.runner, model: ccSeat.model, effort: ccSeat.effort, family: ccSeat.family }],
     min_panel_size: 1,
     implementer_engine: 'fixture-implementer',
+    in_rail_review: 'panel',
   }),
 }, snapSpies.adapters);
 const snapFile = path.join(snapDir, 'qc_panel_snapshot.json');
@@ -5691,6 +5692,73 @@ assert.ok(!Object.prototype.hasOwnProperty.call(snapStep, 'live_drift'));
 const parsedSnap = JSON.parse(fs.readFileSync(snapFile, 'utf8'));
 assert.strictEqual(parsedSnap.schema_version, 1);
 assert.strictEqual(parsedSnap.seats_complete, true);
+assert.strictEqual(parsedSnap.review_station, 'panel');
+assert.strictEqual(snapStep.review_station, 'panel');
+
+const fixtureSnapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qc-snap-2b-'));
+const fixtureContract = path.join(fixtureSnapDir, 'campaign.json');
+fs.writeFileSync(fixtureContract, `${JSON.stringify({
+  schema_version: 1,
+  ticket: 'qc-snap-2b-legacy',
+  profile: 'poc',
+})}\n`);
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+const { campaignIdFor } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+const { canonicalRepoIdentity } = require(path.join(root, 'scripts', 'implementation-campaign-check'));
+const crypto = require('crypto');
+const fixtureDigest = crypto.createHash('sha256').update(fs.readFileSync(fixtureContract)).digest('hex');
+const fixtureId = campaignIdFor(canonicalRepoIdentity(process.cwd()), 'qc-snap-2b-legacy', fixtureDigest);
+const legacyBody = {
+  schema_version: 1,
+  campaign_id: fixtureId,
+  contract_digest: fixtureDigest,
+  seats: [ {
+    role: ccSeat.role, runner: ccSeat.runner, model: ccSeat.model,
+    effort: ccSeat.effort, endpoint: ccSeat.endpoint === undefined ? null : ccSeat.endpoint,
+    family: ccSeat.family,
+  } ],
+  seats_complete: true,
+  min_panel_size: 1,
+  required_review_families: 1,
+  implementer_family: 'unknown',
+};
+const legacySnap = { ...legacyBody, digest: canonicalDigest(legacyBody) };
+assert.ok(!Object.prototype.hasOwnProperty.call(legacySnap, 'review_station'));
+fs.writeFileSync(path.join(fixtureSnapDir, 'qc_panel_snapshot.json'), `${JSON.stringify(legacySnap)}\n`, { flag: 'wx' });
+const fixtureSpies = spies();
+const fixtureResult = runCampaignIntake({
+  repo: process.cwd(),
+  contractPath: fixtureContract,
+  roster: baseRoster([ccSeat], {
+    fallback_ladder: [{ runner: ccSeat.runner, model: ccSeat.model, effort: ccSeat.effort, family: ccSeat.family }],
+    min_panel_size: 1,
+    implementer_engine: 'fixture-implementer',
+    in_rail_review: 'panel',
+  }),
+}, fixtureSpies.adapters);
+const fixtureStep = (fixtureResult.steps || []).find((s) => s && s.owner === 'qc_panel_snapshot');
+assert.ok(fixtureStep, JSON.stringify(fixtureResult));
+assert.strictEqual(fixtureStep.status, 'ready');
+assert.strictEqual(fixtureStep.review_station, 'single');
+assert.ok(!Object.prototype.hasOwnProperty.call(fixtureStep, 'live_drift'), JSON.stringify(fixtureStep));
+const fixtureOnDisk = JSON.parse(fs.readFileSync(path.join(fixtureSnapDir, 'qc_panel_snapshot.json'), 'utf8'));
+assert.strictEqual(fixtureOnDisk.digest, legacySnap.digest);
+assert.ok(!Object.prototype.hasOwnProperty.call(fixtureOnDisk, 'review_station'));
+
+const driftSpies = spies();
+const driftResult = runCampaignIntake({
+  repo: process.cwd(),
+  contractPath: snapContract,
+  roster: baseRoster([ccSeat], {
+    fallback_ladder: [{ runner: ccSeat.runner, model: ccSeat.model, effort: ccSeat.effort, family: ccSeat.family }],
+    min_panel_size: 1,
+    implementer_engine: 'fixture-implementer',
+    in_rail_review: 'single',
+  }),
+}, driftSpies.adapters);
+const driftStep = (driftResult.steps || []).find((s) => s && s.owner === 'qc_panel_snapshot');
+assert.ok(driftStep.live_drift, JSON.stringify(driftStep));
+console.log('review_station_snapshot=true');
 
 // RED at 3641cbef: an incomplete roster (base engine refuses such a panel) must never get a
 // snapshot written with a hard-coded seats_complete: true.
@@ -5724,7 +5792,7 @@ NODE
 )"
 assert_contains "$BLIND_INTAKE_OUT" "final-panel-blind-intake assertions passed" \
   "campaign intake refuses blind-incompatible qc seats before claim"
-assert_contains "$BLIND_INTAKE_OUT" "incomplete_roster_no_snapshot=true" \
-  "incomplete roster (qc_panel_seats_complete: false) never gets a qc_panel_snapshot.json"
+assert_contains "$BLIND_INTAKE_OUT" "review_station_snapshot=true" \
+  "snapshot carries review_station; 2-B fixture without the key is single; live flip is drift"
 
 finalize_test

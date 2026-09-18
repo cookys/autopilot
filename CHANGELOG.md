@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.36.67 — managed rail：parked 時 wall clock 暫停；`mission grant` 把 2-A panel knobs 投影進 contract
+
+- `src/engine/implementation-campaign.js`（＋鏡像）：`WALL_CLOCK_PAUSED_STATES = {awaiting_disposition}`；新 helper
+  `campaignClockElapsedSeconds(state, observedMs)`——phase 在暫停集合就回凍結在 park 當下的 `usage.elapsed_wall_seconds`，
+  否則照 `started_at` 算；`validateUsage` 與 reducer 都走它，reducer 在離開暫停 phase 時把 `started_at` 往前推 parked 區間，
+  之後累計從凍結值接續（`last_event_at ≥ started_at` 不變）。**所有** `usage.elapsed_wall_seconds` 的生產者同源：
+  `campaign-intake.js`（event builder、RESUMED builder）、`autopilot-engine.js` `campaignWallBudgetStatus`、
+  `src/campaign/cli.js` terminalize、`src/campaign/status.js` 狀態投影。2-B 量到的病：campaign 停在 6686/7200 s，depth-0
+  12 分鐘後 resume 在 intake 被 `WALL_BUDGET_EXCEEDED` 擋掉、整場不可恢復——現在 durable wait 不燒 wall。
+- `src/mission/runtime.js`（＋鏡像）：contract draft 在 node campaign 有 `final_panel_reserve_seconds`／`full_suite_reuse`
+  時原樣投影到 contract 頂層（`normalizeLimits` 讀的就是頂層；`strict_dispatch` 不動，convergence／checker 的凍結圖比對照舊）。
+  2-A 只加了驗證沒加投影，2-B campaign 因此沒有 pocket。
+- 測試（RED-first）：state suite——parked 後遠超 wall 的 RESUMED 被接受、`started_at` 位移、un-park 帶凍結值、之後 +10 s 帶
+  凍結＋10、帶原始 wall 值（兩處）都 `WALL_CLOCK_RESET`；routing suite——intake 在 wall 之外 resume 仍 admitted；status
+  投影 `wall_seconds_remaining`；mission-runtime-v2——grant 的 contract 帶 30／false、無 knob 的 node 沒有這兩鍵、canonical
+  checker 照過、intake seal `limits.final_panel_reserve_seconds === 30`。**順帶**：mission-runtime-v2 第二個 node 的
+  verification 次數期望從 4 改 3——v2.36.65 verify-once 後這條 suite 就紅在 develop 上（2-A／2-B §4.1 都沒列它）。
+- 出貨路徑：Fix workflow，sonnet hand 三個 commit＋depth-0 兩個測試 commit；claude 二審 FIX-THEN-SHIP（1 🟡 補負向斷言，
+  2 🔵 記入 commit body）；八條 suite 綠。
+
+prose-justification: 本版不動任何 skill／reference 文字（prose 16909 與 v2.36.66 相同）；成長仍是 v2.36.59–66 blind review redesign 系列已在各版說明的段落。
+
 ## v2.36.66 — blind review redesign 第七刀（2-B）：quorum panel＋standby seat、intake 時的 panel snapshot
 
 - `src/engine/autopilot-engine.js`（＋鏡像）：`performFinalPanel` 的「全部席位都 reviewed」改成 **quorum**——reviewed 席數 ≥ sealed

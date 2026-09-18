@@ -13,7 +13,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
 ### Managed rail: 2-A graph knobs `final_panel_reserve_seconds` / `full_suite_reuse` never reach the sealed contract
-- **Status**: open
+- **Status**: shipped v2.36.67 2026-09-18
 - **Trigger**: fired 2026-09-18 — the 2-B graph node set reserve 900 / reuse true; intake sealed the defaults (0 / true) and the campaign ran without a pocket
 - **Effort**: M
 - **Source**: 2-B depth-0, `impl-run1-awaiting-disposition.json` `campaign_control.contract`
@@ -21,7 +21,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `mission-convergence.js` `expectedDispatch` and the contract draft omit both fields — 2-A added validation, not projection; the 2-A §5 pocket proof stays open until fixed.
 
 ### Managed rail: the durable wait for a disposition counts against `max_wall_seconds`, so a late resume is refused
-- **Status**: open
+- **Status**: shipped v2.36.67 2026-09-18
 - **Trigger**: fired 2026-09-18 — 2-B parked `awaiting_disposition` at 6686 s of 7200; depth-0 resumed 12 min later → intake `WALL_BUDGET_EXCEEDED`, unresumable
 - **Effort**: S
 - **Source**: 2-B depth-0, `impl-run2-resume-wall-budget-exceeded.json`

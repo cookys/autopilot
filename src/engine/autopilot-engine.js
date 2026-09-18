@@ -30,6 +30,7 @@ const {
   completeCampaignAdmission,
   releaseCampaignAdmission,
   runCampaignIntake,
+  buildQcPanelSnapshot,
 } = require('./campaign-intake');
 const {
   projectMissionMode,
@@ -1201,7 +1202,10 @@ function terminalPanelCrossFamilySatisfied(roster, seats) {
     families.add(derived === 'unknown' ? seat.family : derived);
   }
   if (families.size < required) return false;
-  const implementerFamily = modelFamilyOfEngine(roster.implementer_engine);
+  const implementerFamily = typeof roster.implementer_family === 'string'
+    && roster.implementer_family.length > 0
+    ? roster.implementer_family
+    : modelFamilyOfEngine(roster.implementer_engine);
   if (implementerFamily === 'unknown') return required < 2 || families.size >= required;
   return [...families].some((family) => family !== implementerFamily);
 }
@@ -5220,7 +5224,7 @@ class AutopilotEngine {
       return success;
     };
 
-    const finalPanelSeatReceipt = (seat, seatIndex, outcome) => {
+    const finalPanelSeatReceipt = (seat, seatIndex, outcome, loadBearing) => {
       const isReviewed = outcome && outcome.reviewed === true;
       let status = 'no_verdict';
       if (!isReviewed && outcome && outcome.phase === 'product_review_normalization') {
@@ -5245,6 +5249,7 @@ class AutopilotEngine {
         verdict: isReviewed ? outcome.verdict : null,
         review_digest: isReviewed ? outcome.review_digest : null,
         reason: isReviewed ? null : `final_panel_seat_${status}`,
+        load_bearing: loadBearing === true,
       };
       if (!isReviewed && outcome && typeof outcome.raw_log === 'string'
           && outcome.raw_log.length > 0) {
@@ -5258,25 +5263,77 @@ class AutopilotEngine {
     };
 
     const performFinalPanel = (reviewInput) => {
-      const minPanelSize = roster.min_panel_size;
-      const seats = roster.qc_panel_seats_complete === true
-        && Array.isArray(roster.qc_panel_seats)
-        ? roster.qc_panel_seats
+      const snapshot = campaignControl && campaignControl.qc_panel_snapshot
+        && typeof campaignControl.qc_panel_snapshot === 'object'
+        && !Array.isArray(campaignControl.qc_panel_snapshot)
+        ? campaignControl.qc_panel_snapshot
         : null;
+      const minPanelSize = snapshot && Number.isSafeInteger(snapshot.min_panel_size)
+        ? snapshot.min_panel_size
+        : roster.min_panel_size;
+      const seats = snapshot && snapshot.seats_complete === true && Array.isArray(snapshot.seats)
+        ? snapshot.seats
+        : (roster.qc_panel_seats_complete === true && Array.isArray(roster.qc_panel_seats)
+          ? roster.qc_panel_seats
+          : null);
+      const panelRoster = snapshot ? {
+        ...roster,
+        min_panel_size: minPanelSize,
+        required_review_families: Number.isSafeInteger(snapshot.required_review_families)
+          ? snapshot.required_review_families
+          : roster.required_review_families,
+        implementer_family: snapshot.implementer_family,
+        qc_panel_seats: seats,
+        qc_panel_seats_complete: snapshot.seats_complete === true,
+      } : roster;
+      const sealedRequired = Number.isSafeInteger(panelRoster.required_review_families)
+        && panelRoster.required_review_families >= 1
+        ? panelRoster.required_review_families
+        : 1;
+      const implementerFamily = typeof panelRoster.implementer_family === 'string'
+        && panelRoster.implementer_family.length > 0
+        ? panelRoster.implementer_family
+        : modelFamilyOfEngine(roster.implementer_engine);
+      const quorumFields = {
+        final_panel_quorum_met: false,
+        sealed_required_review_families: sealedRequired,
+        implementer_family: implementerFamily,
+      };
+      let rosterDrift = false;
+      let liveDigest = null;
+      if (snapshot && Array.isArray(roster.qc_panel_seats)) {
+        const liveSnap = buildQcPanelSnapshot({
+          campaignId: snapshot.campaign_id,
+          contractDigest: snapshot.contract_digest,
+          seats: roster.qc_panel_seats,
+          minPanelSize: roster.min_panel_size,
+          requiredReviewFamilies: Number.isSafeInteger(roster.required_review_families)
+            ? roster.required_review_families
+            : 1,
+          implementerFamily: modelFamilyOfEngine(roster.implementer_engine),
+        });
+        liveDigest = liveSnap.digest;
+        if (liveDigest !== snapshot.digest) rosterDrift = true;
+      }
+      const driftTrace = rosterDrift
+        ? [`final_panel_roster_drift:${snapshot.digest}:${liveDigest}`]
+        : [];
       if (!Number.isSafeInteger(minPanelSize) || minPanelSize < 1 || !seats) {
         return {
           reviewed: false,
           sealed_min_panel_size: minPanelSize,
           final_panel_count: 0,
           final_panel_seat_receipts: [],
+          ...quorumFields,
         };
       }
-      if (!terminalPanelCrossFamilySatisfied(roster, seats)) {
+      if (!terminalPanelCrossFamilySatisfied(panelRoster, seats)) {
         return {
           reviewed: false,
           sealed_min_panel_size: minPanelSize,
           final_panel_count: 0,
           final_panel_seat_receipts: [],
+          ...quorumFields,
         };
       }
       const panelObservedAt = this.now();
@@ -5298,6 +5355,7 @@ class AutopilotEngine {
           sealed_min_panel_size: minPanelSize,
           final_panel_count: 0,
           final_panel_seat_receipts: [],
+          ...quorumFields,
           started_at: panelObservedAt,
           ended_at: panelObservedAt,
           budget_source: 'pocket',
@@ -5320,9 +5378,11 @@ class AutopilotEngine {
           reviewer_engine: seat.model,
           reviewer_effort: seat.effort,
           reviewer_endpoint: seat.endpoint || '',
-          reviewer_qualified: finalPanelSeatQualified(roster, seat, index),
+          reviewer_qualified: snapshot
+            ? true
+            : finalPanelSeatQualified(roster, seat, index),
         };
-        if (!finalPanelSeatQualified(roster, seat, index)) {
+        if (!snapshot && !finalPanelSeatQualified(roster, seat, index)) {
           return {
             seat,
             outcome: {
@@ -5388,8 +5448,6 @@ class AutopilotEngine {
           }
         }
       }
-      const seatReceipts = outcomes.map(({ seat, outcome }, index) =>
-        finalPanelSeatReceipt(seat, index, outcome));
       const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome && outcome.reviewed === true);
       const mergedFindings = [];
       const findingIds = new Map();
@@ -5418,7 +5476,6 @@ class AutopilotEngine {
         }
         if (!findingsConsistent) break;
       }
-      const allReviewed = reviewedOutcomes.length === outcomes.length;
       const packetHashes = [];
       let packetHashPresent = 0;
       for (const { outcome } of reviewedOutcomes) {
@@ -5430,10 +5487,21 @@ class AutopilotEngine {
       const packetHashesConsistent = (
         packetHashPresent === 0 || packetHashPresent === reviewedOutcomes.length
       ) && new Set(packetHashes).size <= 1;
-      const panelReviewed = allReviewed && findingsConsistent && packetHashesConsistent;
+      const reviewedSeats = reviewedOutcomes.map(({ seat }) => seat);
+      const familiesSatisfied = terminalPanelCrossFamilySatisfied(panelRoster, reviewedSeats);
+      const quorumMet = reviewedOutcomes.length >= minPanelSize && familiesSatisfied;
+      const panelReviewed = quorumMet && findingsConsistent && packetHashesConsistent;
+      const seatReceipts = outcomes.map(({ seat, outcome }, index) =>
+        finalPanelSeatReceipt(
+          seat,
+          index,
+          outcome,
+          quorumMet ? !!(outcome && outcome.reviewed === true) : true,
+        ));
       ledger.push(this.ledgerEntry('final_panel', panelReviewed ? 'passed' : 'failed', panelObservedAt, {
         budget_source: budgetSource,
         seat_timeout_seconds: seatTimeoutSeconds,
+        ...(rosterDrift ? { roster_drift: true } : {}),
       }));
       const last = ledger[ledger.length - 1];
       if (last) last.ended_at = panelEndedAt;
@@ -5449,10 +5517,14 @@ class AutopilotEngine {
         sealed_min_panel_size: minPanelSize,
         final_panel_count: reviewedOutcomes.length,
         final_panel_seat_receipts: seatReceipts,
+        final_panel_quorum_met: quorumMet,
+        sealed_required_review_families: sealedRequired,
+        implementer_family: implementerFamily,
         started_at: panelObservedAt,
         ended_at: panelEndedAt,
         budget_source: budgetSource,
         seat_timeout_seconds: seatTimeoutSeconds,
+        ...(driftTrace.length > 0 ? { trace: driftTrace } : {}),
       };
     };
 

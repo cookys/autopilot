@@ -699,8 +699,9 @@ CANDIDATE_SHA="$(git -C "$CANDIDATE_WORKTREE" rev-parse HEAD)"
 CANDIDATE_TREE="$(git -C "$CANDIDATE_WORKTREE" rev-parse HEAD^{tree})"
 COMMON_RAW="$(git -C "$SBX" rev-parse --git-common-dir)"
 COMMON_DIR="$(realpath "$SBX/$COMMON_RAW")"
-CONTRACT="$TEST_TMP/resume-campaign.json"
-SEAL="$TEST_TMP/resume-campaign.seal.json"
+mkdir -p "$TEST_TMP/resume-campaign"
+CONTRACT="$TEST_TMP/resume-campaign/campaign.json"
+SEAL="$TEST_TMP/resume-campaign/campaign.seal.json"
 PROMPT="$TEST_TMP/resume-prompt.txt"
 printf 'resume without duplicate implementation\n' > "$PROMPT"
 node - "$CONTRACT" "$COMMON_DIR" "$BASE_SHA" <<'NODE'
@@ -1397,8 +1398,9 @@ C1_TREE="$(git -C "$DISP_WT" rev-parse HEAD^{tree})"
 assert_neq "$C0" "$C1" "fixture C0 and C1 are distinct commits"
 DISP_COMMON_RAW="$(git -C "$DISP_SBX" rev-parse --git-common-dir)"
 DISP_COMMON="$(realpath "$DISP_SBX/$DISP_COMMON_RAW")"
-DISP_CONTRACT="$TEST_TMP/disp-resume-campaign.json"
-DISP_SEAL="$TEST_TMP/disp-resume-campaign.seal.json"
+mkdir -p "$TEST_TMP/disp-resume-campaign"
+DISP_CONTRACT="$TEST_TMP/disp-resume-campaign/campaign.json"
+DISP_SEAL="$TEST_TMP/disp-resume-campaign/campaign.seal.json"
 DISP_PROMPT="$TEST_TMP/disp-resume-prompt.txt"
 printf 'durable-wait resume binds scope_implementation_sha\n' > "$DISP_PROMPT"
 node - "$DISP_CONTRACT" "$DISP_COMMON" "$DISP_BASE" <<'NODE'
@@ -2338,8 +2340,9 @@ RED_PATH_WT="$TEST_TMP/red-verify-repair-wt"
 git -C "$RED_PATH_SBX" worktree add -q -b impl/red-path "$RED_PATH_WT" "$RED_PATH_BASE"
 RED_PATH_COMMON_RAW="$(git -C "$RED_PATH_SBX" rev-parse --git-common-dir)"
 RED_PATH_COMMON="$(realpath "$RED_PATH_SBX/$RED_PATH_COMMON_RAW")"
-RED_PATH_CONTRACT="$TEST_TMP/red-path-campaign.json"
-RED_PATH_SEAL="$TEST_TMP/red-path-campaign.seal.json"
+mkdir -p "$TEST_TMP/red-path-campaign"
+RED_PATH_CONTRACT="$TEST_TMP/red-path-campaign/campaign.json"
+RED_PATH_SEAL="$TEST_TMP/red-path-campaign/campaign.seal.json"
 RED_PATH_PROMPT="$TEST_TMP/red-path-prompt.txt"
 printf 'red verification takes the repair path\n' > "$RED_PATH_PROMPT"
 node - "$RED_PATH_CONTRACT" "$RED_PATH_COMMON" "$RED_PATH_BASE" <<'NODE'
@@ -2475,8 +2478,24 @@ const proofRoster = {
     { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture' },
   ],
 };
+const standbyRoster = {
+  ...roster,
+  min_panel_size: 3,
+  fallback_ladder: [
+    { runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', family: 'anthropic' },
+    { runner: 'cc-shim', model: 'fixture-reviewer-b', effort: 'high', family: 'openai' },
+    { runner: 'cc-shim', model: 'fixture-reviewer-c', effort: 'high', family: 'zhipu' },
+    { runner: 'cc-shim', model: 'fixture-reviewer-d', effort: 'high', family: 'minimax' },
+  ],
+  qc_panel_seats: [
+    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'anthropic' },
+    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'openai' },
+    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer-c', effort: 'high', endpoint: null, family: 'zhipu' },
+    { role: 'qc', runner: 'cc-shim', model: 'fixture-reviewer-d', effort: 'high', endpoint: null, family: 'minimax' },
+  ],
+};
 
-function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, tautFullDiff = false, packetPanel = false, packetHashes = null } = {}) {
+function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, tautFullDiff = false, packetPanel = false, packetHashes = null, standbyPanel = false } = {}) {
   spawnSync('git', ['-C', worktree, 'reset', '--hard', base], { stdio: 'ignore' });
   const attempts = [];
   const performOutcomes = [];
@@ -2581,7 +2600,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
         model: 'fixture-implementer',
       });
     },
-    ...(proofPanel || packetPanel ? {
+    ...(proofPanel || packetPanel || standbyPanel ? {
       campaignComposer(input, adapters) {
         const innerReview = adapters.review;
         const innerFinal = adapters.finalPanel;
@@ -2600,13 +2619,14 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
       },
     } : {}),
     reviewDispatcher(args, options) {
-      if (proofPanel || packetPanel) {
+      if (proofPanel || packetPanel || standbyPanel) {
         reviewOptionsSeen.push(options);
         const modelIdx = Array.isArray(args) ? args.indexOf('--model') : -1;
         const model = modelIdx >= 0 ? args[modelIdx + 1] : 'fixture-reviewer';
         const transport = transportFromEnvelope(proofEnvelope(
           model,
-          (proofPanel && (model === 'fixture-reviewer-b' || tautFullDiff)) ? TAUT_PROOF_ENV : PERIOD_PROOF_ENV,
+          (proofPanel && (model === 'fixture-reviewer-b' || tautFullDiff)
+            || standbyPanel && model === 'fixture-reviewer-b') ? TAUT_PROOF_ENV : PERIOD_PROOF_ENV,
         ));
         if (packetHashes && Object.prototype.hasOwnProperty.call(packetHashes, model)) {
           transport.packet = {
@@ -2653,7 +2673,7 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
       return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
     },
     verifyCommandRunner({ commit, verifyCmd }) {
-      const failed = !proofPanel && !packetPanel && commit === redCommit;
+      const failed = !proofPanel && !packetPanel && !standbyPanel && commit === redCommit;
       return {
         error: null,
         status: failed ? 1 : 0,
@@ -2668,9 +2688,10 @@ function runRedPath({ throwOnGen1ReviewCompleted = false, proofPanel = false, ta
     promptFile,
     branch: 'impl/red-path',
     base,
-    roster: (proofPanel || packetPanel) ? proofRoster : roster,
+    roster: standbyPanel ? standbyRoster : ((proofPanel || packetPanel) ? proofRoster : roster),
     campaignContract: contractPath,
     campaignSeal: sealPath,
+    ...(standbyPanel ? { campaignDispositionPolicy: 'acceptance-bound' } : {}),
     verificationEnv: { PATH: process.env.PATH || '', CI: 'red-path' },
     verificationEnvAllowlist: ['CI'],
   });
@@ -2723,7 +2744,7 @@ if (mode === 'proof') {
   // (preservation) the reviewed seat keeps the exact base v1 key set and its digest is the
   // canonical digest of that body — byte-identical to what base emitted for this seat.
   const BASE_SEAT_KEYS = ['schema_version', 'artifact_type', 'seat_index', 'runner', 'model', 'effort',
-    'endpoint', 'family', 'status', 'verdict', 'review_digest', 'reason', 'receipt_digest'];
+    'endpoint', 'family', 'status', 'verdict', 'review_digest', 'reason', 'receipt_digest', 'load_bearing'];
   assert.deepStrictEqual(Object.keys(seatA).sort(), [...BASE_SEAT_KEYS].sort());
   const { receipt_digest: seatADigest, ...seatABody } = seatA;
   assert.strictEqual(canonicalDigest(seatABody), seatADigest);
@@ -2731,6 +2752,7 @@ if (mode === 'proof') {
     schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat', seat_index: 1,
     runner: 'cc-shim', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
     status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: seatA.review_digest, reason: null,
+    load_bearing: true,
   }));
   assert.ok(['no_verdict', 'parser_failed'].includes(seatB.status), `seat B status ${seatB.status}`);
   assert.strictEqual(seatB.verdict, null);
@@ -2813,6 +2835,35 @@ if (mode === 'proof') {
     }
     console.log('packet_absent_legacy=true');
   }
+} else if (mode === 'standby') {
+  const run = runRedPath({ standbyPanel: true });
+  const findSeats = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+    for (const child of Object.values(value)) {
+      const found = findSeats(child);
+      if (found) return found;
+    }
+    return null;
+  };
+  const seats = findSeats(run.result);
+  assert.ok(Array.isArray(seats) && seats.length === 4, JSON.stringify(seats && seats.map((s) => s.status)));
+  const failed = seats.find((s) => s.model === 'fixture-reviewer-b');
+  assert.ok(failed && failed.status !== 'reviewed');
+  assert.strictEqual(failed.load_bearing, false);
+  assert.ok(run.finalPanelOutcome && run.finalPanelOutcome.reviewed === true,
+    `panel=${JSON.stringify({
+      reviewed: run.finalPanelOutcome && run.finalPanelOutcome.reviewed,
+      count: run.finalPanelOutcome && run.finalPanelOutcome.final_panel_count,
+      status: run.result.status,
+      reason: run.result.reason,
+    })}`);
+  assert.strictEqual(run.finalPanelOutcome.final_panel_quorum_met, true);
+  assert.strictEqual(run.finalPanelOutcome.final_panel_count, 3);
+  const snapStep = (run.result.campaign_control && run.result.campaign_control.steps || [])
+    .find((s) => s && s.owner === 'qc_panel_snapshot');
+  assert.ok(snapStep && snapStep.status === 'ready', JSON.stringify(snapStep));
+  console.log('standby_no_verdict_ready=true');
 } else if (mode === 't5') {
   const t5 = runRedPath({ throwOnGen1ReviewCompleted: true });
   const t5Auth = t5.attempts.filter(
@@ -2980,8 +3031,9 @@ RED_PATH_T5_WT="$TEST_TMP/red-verify-repair-t5-wt"
 git -C "$RED_PATH_T5_SBX" worktree add -q -b impl/red-path "$RED_PATH_T5_WT" "$RED_PATH_T5_BASE"
 RED_PATH_T5_COMMON_RAW="$(git -C "$RED_PATH_T5_SBX" rev-parse --git-common-dir)"
 RED_PATH_T5_COMMON="$(realpath "$RED_PATH_T5_SBX/$RED_PATH_T5_COMMON_RAW")"
-RED_PATH_T5_CONTRACT="$TEST_TMP/red-path-t5-campaign.json"
-RED_PATH_T5_SEAL="$TEST_TMP/red-path-t5-campaign.seal.json"
+mkdir -p "$TEST_TMP/red-path-t5-campaign"
+RED_PATH_T5_CONTRACT="$TEST_TMP/red-path-t5-campaign/campaign.json"
+RED_PATH_T5_SEAL="$TEST_TMP/red-path-t5-campaign/campaign.seal.json"
 node - "$RED_PATH_T5_CONTRACT" "$RED_PATH_T5_COMMON" "$RED_PATH_T5_BASE" <<'NODE'
 const fs = require('fs');
 const [target, commonDir, base] = process.argv.slice(2);
@@ -3034,8 +3086,9 @@ proof_parity_run() {
   git -C "$sbx" worktree add -q -b impl/red-path "$wt" "$base"
   common_raw="$(git -C "$sbx" rev-parse --git-common-dir)"
   common="$(realpath "$sbx/$common_raw")"
-  contract="$TEST_TMP/proof-parity-$tag-campaign.json"
-  seal="$TEST_TMP/proof-parity-$tag-campaign.seal.json"
+  contract="$TEST_TMP/proof-parity-$tag/campaign.json"
+  seal="$TEST_TMP/proof-parity-$tag/campaign.seal.json"
+  mkdir -p "$TEST_TMP/proof-parity-$tag"
   node - "$contract" "$common" "$base" "$tag" <<'NODE'
 const fs = require('fs');
 const [target, commonDir, base, tag] = process.argv.slice(2);
@@ -3087,6 +3140,9 @@ assert_contains "$RED_PATH_PX_OUT" "packet_mixed_unrefused=true" \
 RED_PATH_PA_OUT="$(proof_parity_run pkt-ab packet-absent)"
 assert_contains "$RED_PATH_PA_OUT" "packet_absent_legacy=true" \
   "both seats without packet_hash stay reviewed (preservation, green at base)"
+RED_PATH_SB_OUT="$(proof_parity_run standby standby)"
+assert_contains "$RED_PATH_SB_OUT" "standby_no_verdict_ready=true" \
+  "4-seat standby with one no_verdict is ready and records qc_panel_snapshot"
 
 PROOF_ENGINE_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 'use strict';
@@ -3211,8 +3267,9 @@ BLIND_WT="$TEST_TMP/blind-incompat-wt"
 git -C "$BLIND_SBX" worktree add -q -b impl/blind-incompat "$BLIND_WT" "$BLIND_BASE"
 BLIND_COMMON_RAW="$(git -C "$BLIND_SBX" rev-parse --git-common-dir)"
 BLIND_COMMON="$(realpath "$BLIND_SBX/$BLIND_COMMON_RAW")"
-BLIND_CONTRACT="$TEST_TMP/blind-incompat-campaign.json"
-BLIND_SEAL="$TEST_TMP/blind-incompat-campaign.seal.json"
+mkdir -p "$TEST_TMP/blind-incompat-campaign"
+BLIND_CONTRACT="$TEST_TMP/blind-incompat-campaign/campaign.json"
+BLIND_SEAL="$TEST_TMP/blind-incompat-campaign/campaign.seal.json"
 BLIND_PROMPT="$TEST_TMP/blind-incompat-prompt.txt"
 printf 'blind incompatible final panel seat is refused at intake\n' > "$BLIND_PROMPT"
 node - "$BLIND_CONTRACT" "$BLIND_COMMON" "$BLIND_BASE" <<'NODE'

@@ -330,7 +330,7 @@ const FINAL_PANEL_SEAT_KEYS = [
   'reason',
   'receipt_digest',
 ];
-const FINAL_PANEL_SEAT_OPTIONAL_KEYS = Object.freeze(['raw_log', 'packet_hash']);
+const FINAL_PANEL_SEAT_OPTIONAL_KEYS = Object.freeze(['raw_log', 'packet_hash', 'load_bearing']);
 const FINAL_PANEL_FAILURE_STATUSES = new Set([
   'no_verdict',
   'transport_failed',
@@ -349,6 +349,10 @@ function hasFinalPanelSeatKeys(seat) {
   }
   if (Object.prototype.hasOwnProperty.call(seat, 'raw_log')
       && (typeof seat.raw_log !== 'string' || seat.raw_log.length < 1)) {
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(seat, 'load_bearing')
+      && typeof seat.load_bearing !== 'boolean') {
     return false;
   }
   return true;
@@ -434,9 +438,59 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
   if (receipt.final_panel_count !== detail.final_panel_count) {
     return { passed: false, reason: 'final_panel_count_mismatch', ...detail };
   }
-  if (firstFailure) return { passed: false, reason: firstFailure, ...detail };
-  if (detail.final_panel_count < expectedMinimum) {
-    return { passed: false, reason: 'final_panel_below_minimum', ...detail };
+  const hasQuorumFlag = Object.prototype.hasOwnProperty.call(receipt, 'final_panel_quorum_met');
+  if (!hasQuorumFlag) {
+    if (firstFailure) return { passed: false, reason: firstFailure, ...detail };
+    if (detail.final_panel_count < expectedMinimum) {
+      return { passed: false, reason: 'final_panel_below_minimum', ...detail };
+    }
+    if (receipt.reviewed !== true) {
+      return { passed: false, reason: 'final_panel_not_reviewed', ...detail };
+    }
+    return { passed: true, ...detail };
+  }
+  if (typeof receipt.final_panel_quorum_met !== 'boolean'
+      || !Number.isSafeInteger(receipt.sealed_required_review_families)
+      || receipt.sealed_required_review_families < 1
+      || typeof receipt.implementer_family !== 'string'
+      || receipt.implementer_family.length === 0) {
+    return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
+  }
+  const panelRequiresDiversity = receipt.final_panel_seat_receipts.length > 1
+    || expectedMinimum > 1;
+  const requiredFamilies = panelRequiresDiversity
+    ? Math.max(2, receipt.sealed_required_review_families)
+    : receipt.sealed_required_review_families;
+  const families = new Set();
+  for (const seat of reviewedSeats) {
+    if (typeof seat.family === 'string' && seat.family.length > 0) {
+      families.add(seat.family);
+    }
+  }
+  let familiesOk = families.size >= requiredFamilies;
+  if (receipt.implementer_family === 'unknown') {
+    familiesOk = requiredFamilies < 2 || families.size >= requiredFamilies;
+  } else {
+    familiesOk = familiesOk && [...families].some((family) => family !== receipt.implementer_family);
+  }
+  const quorumMetDerived = detail.final_panel_count >= expectedMinimum && familiesOk;
+  if (receipt.final_panel_quorum_met !== quorumMetDerived) {
+    return { passed: false, reason: 'final_panel_quorum_flag_mismatch', ...detail };
+  }
+  for (const seat of receipt.final_panel_seat_receipts) {
+    const expectedBearing = quorumMetDerived ? seat.status === 'reviewed' : true;
+    if (seat.load_bearing !== expectedBearing) {
+      return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
+    }
+  }
+  if (!quorumMetDerived) {
+    if (!familiesOk && receipt.final_panel_seat_receipts.length > 1) {
+      return { passed: false, reason: 'final_panel_families_below_minimum', ...detail };
+    }
+    if (firstFailure) return { passed: false, reason: firstFailure, ...detail };
+    if (detail.final_panel_count < expectedMinimum) {
+      return { passed: false, reason: 'final_panel_below_minimum', ...detail };
+    }
   }
   if (receipt.reviewed !== true) {
     return { passed: false, reason: 'final_panel_not_reviewed', ...detail };
@@ -2752,6 +2806,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
           ? reusableJ.result.final_panel_count
           : reusablePanelCount,
         final_panel_seat_receipts: reusableJ.result.seat_receipts,
+        final_panel_quorum_met: reusableJ.result.final_panel_quorum_met,
+        sealed_required_review_families: reusableJ.result.sealed_required_review_families,
+        implementer_family: reusableJ.result.implementer_family,
       };
       trace.push('final_panel_gate_reused');
     } else {
@@ -2816,6 +2873,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
             && panelAdjudicationStateComplete,
           sealed_min_panel_size: panelValidationEarly.sealed_min_panel_size,
           final_panel_count: panelValidationEarly.final_panel_count,
+          final_panel_quorum_met: terminalReview.final_panel_quorum_met,
+          sealed_required_review_families: terminalReview.sealed_required_review_families,
+          implementer_family: terminalReview.implementer_family,
           seat_receipts: panelValidationEarly.final_panel_seat_receipts || [],
           review_digest: terminalReview.review_digest || terminalReview.receipt_digest || null,
           verdict: terminalReview.verdict || null,
@@ -2837,6 +2897,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
           : null,
       });
       persistGateResult(jGate, panelInvocationIdentity, panelResultIdentity);
+      if (Array.isArray(terminalReview.trace)) {
+        for (const entry of terminalReview.trace) {
+          if (typeof entry === 'string' && entry.length > 0) trace.push(entry);
+        }
+      }
       if (panelValidationEarly.passed === true && !panelAdjudicationStateComplete) {
         return blocked(
           'final_panel',
@@ -2889,6 +2954,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
     sealed_min_panel_size: minPanelSize,
     final_panel_count: finalPanelValidation.final_panel_count,
     final_panel_seat_receipts: finalPanelValidation.final_panel_seat_receipts,
+    ...(Object.prototype.hasOwnProperty.call(terminalReview, 'final_panel_quorum_met')
+      ? { final_panel_quorum_met: terminalReview.final_panel_quorum_met } : {}),
+    ...(Object.prototype.hasOwnProperty.call(terminalReview, 'sealed_required_review_families')
+      ? { sealed_required_review_families: terminalReview.sealed_required_review_families } : {}),
+    ...(Object.prototype.hasOwnProperty.call(terminalReview, 'implementer_family')
+      ? { implementer_family: terminalReview.implementer_family } : {}),
     follow_up: followUps,
     rejected_findings: rejectedFindings,
     unresolved_final_findings: finalMustFix,

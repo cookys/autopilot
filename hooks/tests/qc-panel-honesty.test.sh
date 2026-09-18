@@ -109,6 +109,80 @@ assert.strictEqual(noVerdict.status, 'blocked');
 assert.strictEqual(noVerdict.reason, 'final_panel_seat_no_verdict');
 assert.strictEqual(noVerdict.final_panel_count, 2);
 
+// RED at base 83e3ac9c: min 3 + 4 seats + one transport_failed blocked with
+// final_panel_seat_transport_failed (unanimity; quorum_met ignored).
+const standbyFailed = seat(4, {
+  status: 'transport_failed',
+  verdict: null,
+  review_digest: null,
+  reason: 'final_panel_seat_transport_failed',
+  load_bearing: false,
+});
+const standbyOk = [
+  seat(1, { load_bearing: true, family: 'anthropic' }),
+  seat(2, { load_bearing: true, family: 'openai' }),
+  seat(3, { load_bearing: true, family: 'zhipu' }),
+  standbyFailed,
+];
+const standby = run(3, panel(3, standbyOk, {
+  final_panel_quorum_met: true,
+  sealed_required_review_families: 2,
+  implementer_family: 'xai',
+}));
+assert.strictEqual(standby.status, 'ready');
+assert.strictEqual(standby.final_panel_count, 3);
+assert.strictEqual(standby.final_panel_quorum_met, true);
+assert.strictEqual(standby.final_panel_seat_receipts[3].load_bearing, false);
+
+// RED at base 83e3ac9c: min 3 + 3 seats + one failure still blocked with that reason.
+const threeFail = run(3, panel(3, [
+  seat(1, { load_bearing: true, family: 'anthropic' }),
+  seat(2, { load_bearing: true, family: 'openai' }),
+  seat(3, {
+    status: 'transport_failed',
+    verdict: null,
+    review_digest: null,
+    reason: 'final_panel_seat_transport_failed',
+    load_bearing: true,
+    family: 'zhipu',
+  }),
+], {
+  reviewed: false,
+  verdict: null,
+  review_digest: null,
+  final_panel_quorum_met: false,
+  sealed_required_review_families: 2,
+  implementer_family: 'xai',
+}));
+assert.strictEqual(threeFail.status, 'blocked');
+assert.strictEqual(threeFail.reason, 'final_panel_seat_transport_failed');
+
+// RED at base 83e3ac9c: only second-family seat failed → still ready under unanimity
+// (or firstFailure of that seat), not final_panel_families_below_minimum.
+const familyFail = run(3, panel(3, [
+  seat(1, { load_bearing: true, family: 'anthropic', model: 'claude-a' }),
+  seat(2, { load_bearing: true, family: 'anthropic', model: 'claude-b' }),
+  seat(3, { load_bearing: true, family: 'anthropic', model: 'claude-c' }),
+  seat(4, {
+    status: 'transport_failed',
+    verdict: null,
+    review_digest: null,
+    reason: 'final_panel_seat_transport_failed',
+    load_bearing: true,
+    family: 'openai',
+    model: 'gpt-x',
+  }),
+], {
+  reviewed: false,
+  verdict: null,
+  review_digest: null,
+  final_panel_quorum_met: false,
+  sealed_required_review_families: 2,
+  implementer_family: 'xai',
+}));
+assert.strictEqual(familyFail.status, 'blocked');
+assert.strictEqual(familyFail.reason, 'final_panel_families_below_minimum');
+
 const qualifiedRoster = {
   reviewer_qualified: true,
   reviewer_runner: 'primary-runner',

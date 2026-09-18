@@ -77,6 +77,9 @@
         "repair_generations": { "type": "integer", "minimum": 0 },
         "sealed_min_panel_size": { "type": "integer", "minimum": 1 },
         "final_panel_count": { "type": "integer", "minimum": 0 },
+        "final_panel_quorum_met": { "type": "boolean" },
+        "sealed_required_review_families": { "type": "integer", "minimum": 1 },
+        "implementer_family": { "type": "string", "minLength": 1 },
         "final_panel_seat_receipts": {
           "type": "array",
           "items": { "$ref": "#/$defs/finalPanelSeat" }
@@ -234,7 +237,8 @@
         "reason": { "type": ["string", "null"] },
         "receipt_digest": { "$ref": "#/$defs/sha256" },
         "raw_log": { "type": "string", "minLength": 1 },
-        "packet_hash": { "$ref": "#/$defs/sha256" }
+        "packet_hash": { "$ref": "#/$defs/sha256" },
+        "load_bearing": { "type": "boolean" }
       },
       "additionalProperties": false
     },

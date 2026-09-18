@@ -5681,11 +5681,16 @@ function stubReview() {
     },
   };
 }
-function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride }) {
+function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride, failModel, intakeMutate, rosterMutate, plantSnapshotSeats }) {
   const caseSeats = seatsOverride || seats;
-  const caseRoster = seatsOverride
-    ? { ...roster, reviewer_engine: 'inrail-x', reviewer_runner: seatsOverride[0].runner, qc_panel_seats: seatsOverride }
-    : roster;
+  const caseRoster = {
+    ...(seatsOverride
+      ? { ...roster, reviewer_engine: 'inrail-x', reviewer_runner: seatsOverride[0].runner, qc_panel_seats: seatsOverride }
+      : roster),
+    override_admitted_seats: caseSeats.map((_, index) => `qc_panel[${index}]`),
+    qc_panel_seats: caseSeats,
+    ...(typeof rosterMutate === 'function' ? rosterMutate(roster) : {}),
+  };
   const branch = `feat/${ticket}`;
   const worktree = path.join(tmp, `${ticket}-wt`);
   try { execFileSync('git', ['-C', repo, 'worktree', 'remove', '--force', worktree], { stdio: 'ignore' }); } catch (_e) {}
@@ -5695,8 +5700,10 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
   execFileSync('git', ['-C', worktree, 'commit', '-qm', ticket]);
   const candidate = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const tree = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim();
-  const contractPath = path.join(tmp, `${ticket}.json`);
-  const sealPath = path.join(tmp, `${ticket}.seal.json`);
+  const contractDir = path.join(tmp, `${ticket}-campaign`);
+  fs.mkdirSync(contractDir, { recursive: true });
+  const contractPath = path.join(contractDir, 'campaign.json');
+  const sealPath = path.join(contractDir, 'campaign.seal.json');
   const promptFile = path.join(tmp, `${ticket}.prompt`);
   fs.writeFileSync(promptFile, 'panel\n');
   writeContract(contractPath, { ticket, branch, fields: {
@@ -5704,6 +5711,23 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
     ...(reuse === false ? { full_suite_reuse: false } : {}),
   } });
   seal(contractPath, sealPath);
+  if (Array.isArray(plantSnapshotSeats)) {
+    const { buildQcPanelSnapshot } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
+    const { campaignIdFor } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+    const { canonicalRepoIdentity } = require(path.join(root, 'scripts', 'implementation-campaign-check'));
+    const crypto = require('crypto');
+    const rawDigest = crypto.createHash('sha256').update(fs.readFileSync(contractPath)).digest('hex');
+    const planted = buildQcPanelSnapshot({
+      campaignId: campaignIdFor(canonicalRepoIdentity(repo), ticket, rawDigest),
+      contractDigest: rawDigest,
+      seats: plantSnapshotSeats,
+      minPanelSize: 3,
+      requiredReviewFamilies: Number.isSafeInteger(roster.required_review_families)
+        ? roster.required_review_families : 1,
+      implementerFamily: 'unknown',
+    });
+    fs.writeFileSync(path.join(contractDir, 'qc_panel_snapshot.json'), `${JSON.stringify(planted)}\n`, { flag: 'wx' });
+  }
   const reviewArgsSeen = [];
   const reviewModels = [];
   let worktrees = 0;
@@ -5711,11 +5735,12 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
     cwd: repo,
     clock,
     campaignIntake(input) {
-      return runCampaignIntake(input, {
+      const admitted = runCampaignIntake(input, {
         readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
         contextGate: () => ({ owner: 'context_window', status: 'ready' }),
         occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
       });
+      return typeof intakeMutate === 'function' ? intakeMutate(admitted) : admitted;
     },
     campaignScopeChecker() {
       return { passed: true, changed_files: ['dist/out.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
@@ -5738,6 +5763,12 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
         reviewArgsSeen.push(args);
         const modelIdx = args.indexOf('--model');
         reviewModels.push(modelIdx >= 0 ? args[modelIdx + 1] : null);
+        if (failModel && reviewModels[reviewModels.length - 1] === failModel) {
+          return {
+            error: null, status: 124, signal: 'SIGTERM', stdout: '', stderr: 'timeout',
+            parseError: null, result: { status: 'no_verdict', error: 'timeout' },
+          };
+        }
         return stubReview();
       },
     }),
@@ -5985,6 +6016,161 @@ runCase({
   },
 });
 
+const fourSeats = [
+  ...seats,
+  { role: 'qc', runner: 'cc-shim', model: 'standby-d', effort: 'high', endpoint: null, family: 'minimax' },
+];
+runCase({
+  ticket: 'panel-standby',
+  reserve: 0,
+  clock: clockEarly,
+  seatsOverride: fourSeats,
+  failModel: 'standby-d',
+  collect({ result }) {
+    const seatsOut = (function find(value) {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts)) return value.final_panel_seat_receipts;
+      for (const child of Object.values(value)) {
+        const found = find(child);
+        if (found) return found;
+      }
+      return null;
+    })(result);
+    assert.ok(Array.isArray(seatsOut) && seatsOut.length === 4, JSON.stringify(seatsOut && seatsOut.map((s) => s.status)));
+    assert.strictEqual(seatsOut.filter((s) => s.status === 'reviewed').length, 3);
+    const failed = seatsOut.find((s) => s.model === 'standby-d');
+    assert.ok(failed);
+    assert.notStrictEqual(failed.status, 'reviewed');
+    assert.strictEqual(failed.load_bearing, false);
+    const receipt = result.campaign_receipt || result.campaign_control && result.campaign_control.completion;
+    const terminal = (function find(value) {
+      if (!value || typeof value !== 'object') return null;
+      if (value.artifact_type === 'implementation_campaign_terminal') return value;
+      for (const child of Object.values(value)) {
+        const found = find(child);
+        if (found) return found;
+      }
+      return null;
+    })(result);
+    assert.ok(terminal, `no terminal: status=${result.status} reason=${result.reason}`);
+    assert.strictEqual(terminal.final_panel_count, 3);
+    assert.strictEqual(terminal.final_panel_quorum_met, true);
+    assert.ok(Object.prototype.hasOwnProperty.call(terminal, 'sealed_required_review_families'));
+    assert.ok(typeof terminal.implementer_family === 'string');
+    const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
+    assert.strictEqual(panelRow && panelRow.status, 'passed');
+    console.log('standby_quorum_panel=true');
+  },
+});
+
+runCase({
+  ticket: 'panel-snap-write',
+  reserve: 0,
+  clock: clockEarly,
+  collect({ result }) {
+    const snapPath = path.join(tmp, 'panel-snap-write-campaign', 'qc_panel_snapshot.json');
+    assert.ok(fs.existsSync(snapPath), 'first intake writes qc_panel_snapshot.json');
+    let secondWrite = false;
+    try {
+      fs.writeFileSync(snapPath, '{}\n', { flag: 'wx' });
+      secondWrite = true;
+    } catch (error) {
+      assert.strictEqual(error.code, 'EEXIST');
+    }
+    assert.strictEqual(secondWrite, false);
+    const snap = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
+    assert.strictEqual(snap.seats_complete, true);
+    assert.strictEqual(snap.seats.length, 3);
+    const step = (result.campaign_control && result.campaign_control.steps || [])
+      .find((s) => s && s.owner === 'qc_panel_snapshot');
+    assert.ok(step && step.status === 'ready', JSON.stringify(step));
+    assert.ok(!step.live_drift);
+    console.log('snapshot_write_once=true');
+  },
+});
+
+const seatD = { role: 'qc', runner: 'cc-shim', model: 'drift-d', effort: 'high', endpoint: null, family: 'minimax' };
+runCase({
+  ticket: 'panel-snap-drift',
+  reserve: 0,
+  clock: clockEarly,
+  plantSnapshotSeats: seats,
+  rosterMutate() {
+    return {
+      qc_panel_seats: [seats[0], seats[1], seatD],
+      override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
+    };
+  },
+  collect({ result, reviewModels }) {
+    const snapPath = path.join(tmp, 'panel-snap-drift-campaign', 'qc_panel_snapshot.json');
+    const snapAfter = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
+    assert.deepStrictEqual(snapAfter.seats.map((s) => s.model), seats.map((s) => s.model));
+    const snapStep = (result.campaign_control && result.campaign_control.steps || [])
+      .find((s) => s && s.owner === 'qc_panel_snapshot');
+    assert.ok(snapStep && snapStep.live_drift, JSON.stringify(snapStep));
+    assert.deepStrictEqual(reviewModels.slice(-3), seats.map((s) => s.model));
+    assert.ok(JSON.stringify(result).includes('final_panel_roster_drift'));
+    const panelRow = (result.ledger || []).filter((row) => row.unit === 'final_panel').pop();
+    assert.strictEqual(panelRow && panelRow.roster_drift, true);
+    console.log('snapshot_live_drift=true');
+  },
+});
+
+{
+  const ticket = 'panel-snap-id';
+  const contractDir = path.join(tmp, `${ticket}-campaign`);
+  fs.mkdirSync(contractDir, { recursive: true });
+  const contractPath = path.join(contractDir, 'campaign.json');
+  const sealPath = path.join(contractDir, 'campaign.seal.json');
+  writeContract(contractPath, { ticket, branch: `feat/${ticket}`, fields: { final_panel_reserve_seconds: 0 } });
+  seal(contractPath, sealPath);
+  fs.writeFileSync(path.join(contractDir, 'qc_panel_snapshot.json'), `${JSON.stringify({
+    schema_version: 1,
+    campaign_id: 'wrong-id',
+    contract_digest: 'a'.repeat(64),
+    seats: [],
+    seats_complete: true,
+    min_panel_size: 3,
+    required_review_families: 2,
+    implementer_family: 'xai',
+    digest: 'b'.repeat(64),
+  })}\n`);
+  let claimReached = false;
+  const blocked = runCampaignIntake({
+    repo,
+    contractPath,
+    sealPath,
+    base,
+    branch: `feat/${ticket}`,
+    roster,
+  }, {
+    readiness: () => { claimReached = true; return { owner: 'provider_readiness', status: 'ready' }; },
+    contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+    occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    missionClaim: () => { claimReached = true; return { owner: 'mission', status: 'unknown' }; },
+  });
+  assert.strictEqual(blocked.status, 'blocked');
+  assert.strictEqual(blocked.rejection && blocked.rejection.code, 'qc_panel_snapshot_identity_invalid');
+  assert.strictEqual(claimReached, false);
+  console.log('snapshot_identity_invalid=true');
+}
+
+runCase({
+  ticket: 'panel-no-snap',
+  reserve: 0,
+  clock: clockEarly,
+  intakeMutate(control) {
+    if (control && typeof control === 'object') {
+      delete control.qc_panel_snapshot;
+    }
+    return control;
+  },
+  collect({ result, reviewModels }) {
+    assert.deepStrictEqual(reviewModels.slice(-3), seats.map((s) => s.model));
+    console.log('no_snapshot_live_roster=true');
+  },
+});
+
 NODE
 )"
 assert_contains "$PANEL_OUT" "panel_order=true" "3-seat stub dispatcher is called in index order (RED at base 7f5d6ee8: sequential split)"
@@ -5994,6 +6180,11 @@ assert_contains "$PANEL_OUT" "pocket_source=true" "wall exhausted + reserve 300 
 assert_contains "$PANEL_OUT" "pocket_refuse=true" "reserve 0 with exhausted wall refuses before later panel seats"
 assert_contains "$PANEL_OUT" "verify_once_hit=true" "GREEN cache hit reuses full_suite"
 assert_contains "$PANEL_OUT" "real_batch_panel=true" "REAL fan-out path: 3 seats finish in index order with batch timestamps after a wall jump (RED at 30b69a1a: campaign_wall_budget on finish)"
+assert_contains "$PANEL_OUT" "standby_quorum_panel=true" "4-seat stub with one transport failure still reviews count 3"
+assert_contains "$PANEL_OUT" "snapshot_write_once=true" "first intake writes snapshot; wx second write refused"
+assert_contains "$PANEL_OUT" "snapshot_live_drift=true" "resume roster swap records live_drift and reviews snapshot seats"
+assert_contains "$PANEL_OUT" "snapshot_identity_invalid=true" "contract_digest mismatch blocks before spend"
+assert_contains "$PANEL_OUT" "no_snapshot_live_roster=true" "no snapshot uses live roster"
 assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
 assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
 

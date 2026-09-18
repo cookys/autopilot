@@ -152,6 +152,51 @@ function parseJson(raw) {
   }
 }
 
+function modelFamilyOfEngineName(engine) {
+  const normalized = String(engine || '').toLowerCase();
+  if (/(gpt|codex|o1|o3|o4)/.test(normalized)) return 'openai';
+  if (/(claude|opus|sonnet|haiku)/.test(normalized)) return 'anthropic';
+  if (/(qwen|qwq)/.test(normalized)) return 'alibaba';
+  if (/(gemini|flash|bison)/.test(normalized)) return 'google';
+  if (/(grok|composer)/.test(normalized)) return 'xai';
+  if (/(qwen|qoder)/.test(normalized)) return 'alibaba';
+  if (/(minimax|abab)/.test(normalized)) return 'minimax';
+  if (/(glm|zhipu)/.test(normalized)) return 'zhipu';
+  return 'unknown';
+}
+
+function snapshotSeatRecord(seat) {
+  return {
+    role: seat && seat.role,
+    runner: seat && seat.runner,
+    model: seat && seat.model,
+    effort: seat && seat.effort,
+    endpoint: seat && seat.endpoint === undefined ? null : seat.endpoint,
+    family: seat && seat.family,
+  };
+}
+
+function buildQcPanelSnapshot({
+  campaignId,
+  contractDigest,
+  seats,
+  minPanelSize,
+  requiredReviewFamilies,
+  implementerFamily,
+}) {
+  const body = {
+    schema_version: 1,
+    campaign_id: campaignId,
+    contract_digest: contractDigest,
+    seats: Array.isArray(seats) ? seats.map(snapshotSeatRecord) : [],
+    seats_complete: true,
+    min_panel_size: minPanelSize,
+    required_review_families: requiredReviewFamilies,
+    implementer_family: implementerFamily,
+  };
+  return { ...body, digest: canonicalDigest(body) };
+}
+
 function step(owner, status, detail = {}) {
   return {
     owner,
@@ -1478,6 +1523,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
     ? input.observedAt
     : (typeof adapters.now === 'function' ? adapters.now() : new Date().toISOString());
   const steps = [];
+  let qcPanelSnapshot = null;
   // `--campaign-ledger` accepts exactly one value: the canonical Git common-dir
   // ledger. That is pure argv validation and needs no contract, seal, or Mission
   // claim — reject it here, BEFORE the claim adapter runs, so a mistyped flag
@@ -1712,6 +1758,106 @@ function runCampaignIntake(input = {}, adapters = {}) {
   }
   for (const probeStep of cleanroomProbeSteps) {
     steps.push(probeStep);
+  }
+
+  if (qcSeats && qcSeats.length > 0 && contractPath && rawContractDigest) {
+    let sealedTicket = null;
+    let snapshotCampaignId = null;
+    try {
+      const sealed = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+      sealedTicket = sealed && typeof sealed.ticket === 'string' ? sealed.ticket : null;
+      const identity = canonicalRepoIdentity(repo);
+      snapshotCampaignId = campaignIdFor(identity, sealedTicket, rawContractDigest);
+    } catch (error) {
+      const rejection = rejected(
+        'qc_panel_snapshot',
+        'qc_panel_snapshot_identity_invalid',
+        error.message || String(error),
+      );
+      return {
+        status: 'blocked',
+        reason: rejection.reason,
+        rejection,
+        steps: [...steps, rejection],
+        pre_spend_no_effect_receipt: null,
+      };
+    }
+    const requiredFamilies = input.roster
+      && Number.isSafeInteger(input.roster.required_review_families)
+      && input.roster.required_review_families >= 1
+      ? input.roster.required_review_families
+      : 1;
+    const minSize = input.roster && Number.isSafeInteger(input.roster.min_panel_size)
+      ? input.roster.min_panel_size
+      : 3;
+    const liveSnapshot = buildQcPanelSnapshot({
+      campaignId: snapshotCampaignId,
+      contractDigest: rawContractDigest,
+      seats: qcSeats,
+      minPanelSize: minSize,
+      requiredReviewFamilies: requiredFamilies,
+      implementerFamily: modelFamilyOfEngineName(input.roster && input.roster.implementer_engine),
+    });
+    const snapPath = path.join(path.dirname(contractPath), 'qc_panel_snapshot.json');
+    try {
+      fs.writeFileSync(snapPath, `${JSON.stringify(liveSnapshot)}\n`, { flag: 'wx' });
+      qcPanelSnapshot = liveSnapshot;
+    } catch (error) {
+      if (!error || error.code !== 'EEXIST') {
+        const rejection = rejected(
+          'qc_panel_snapshot',
+          'qc_panel_snapshot_identity_invalid',
+          error && error.message ? error.message : String(error),
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [...steps, rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+      let existing;
+      try {
+        existing = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
+      } catch (readError) {
+        const rejection = rejected(
+          'qc_panel_snapshot',
+          'qc_panel_snapshot_identity_invalid',
+          readError.message || String(readError),
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [...steps, rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+      if (!existing || existing.campaign_id !== snapshotCampaignId
+          || existing.contract_digest !== rawContractDigest) {
+        const rejection = rejected(
+          'qc_panel_snapshot',
+          'qc_panel_snapshot_identity_invalid',
+          'qc_panel_snapshot campaign_id/contract_digest do not match the sealed contract',
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [...steps, rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+      qcPanelSnapshot = existing;
+    }
+    const liveDrift = qcPanelSnapshot.digest !== liveSnapshot.digest;
+    steps.push(step('qc_panel_snapshot', 'ready', {
+      digest: qcPanelSnapshot.digest,
+      seat_count: Array.isArray(qcPanelSnapshot.seats) ? qcPanelSnapshot.seats.length : 0,
+      path: snapPath,
+      ...(liveDrift ? { live_drift: liveSnapshot.digest } : {}),
+    }));
   }
 
   if (typeof adapters.missionClaim === 'function'
@@ -2190,6 +2336,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
     full_enforcement: shadowAxes.length === 0,
     shadow_axes: shadowAxes,
     steps,
+    qc_panel_snapshot: qcPanelSnapshot,
     pre_spend_no_effect_receipt: null,
   };
 }
@@ -2198,6 +2345,7 @@ module.exports = {
   appendCampaignEvent,
   CampaignIntakeError,
   buildNoEffectReceipt,
+  buildQcPanelSnapshot,
   completeCampaignAdmission,
   consumeEnforcedProviderReadiness,
   defaultCampaignSealPath,

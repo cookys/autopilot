@@ -6386,7 +6386,10 @@ runCase({
 
 const { environmentFingerprint } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
 const prevAutopilotSession = process.env.AUTOPILOT_SESSION_ID;
+const prevClaudeSession = process.env.CLAUDE_CODE_SESSION_ID;
 process.env.AUTOPILOT_SESSION_ID = 'dispatcher-session';
+process.env.CLAUDE_CODE_SESSION_ID = 'envscrub-sibling-session';
+const siblingPath = process.env.PATH;
 let capturedVerifyEnv = null;
 try {
   runCase({
@@ -6395,7 +6398,7 @@ try {
     clock: clockEarly,
     inheritProcessEnv: true,
     onVerify(args) { capturedVerifyEnv = args && args.env; },
-    collect() {
+    collect({ result }) {
       // RED at d3ed3f818b2c42fb4b3dad437538faddcf0decce: captured env carries dispatcher-session
       assert.ok(capturedVerifyEnv, 'verifyCommandRunner must receive env');
       assert.strictEqual(
@@ -6410,12 +6413,45 @@ try {
       assert.strictEqual(environmentFingerprint(dirty), expectedFp,
         'allowlist fingerprint of an already-clean env is byte-identical even when AUTOPILOT_SESSION_ID is present');
       assert.strictEqual(environmentFingerprint(capturedVerifyEnv), expectedFp);
+      const findReceipt = (value) => {
+        if (!value || typeof value !== 'object') return null;
+        if (typeof value.env_fingerprint === 'string' && /^[0-9a-f]{64}$/.test(value.env_fingerprint)) {
+          return value;
+        }
+        if (value.receipt && typeof value.receipt.env_fingerprint === 'string') {
+          return value.receipt;
+        }
+        for (const child of Object.values(value)) {
+          const found = findReceipt(child);
+          if (found) return found;
+        }
+        return null;
+      };
+      const receipt = findReceipt(result)
+        || (result.campaign_control
+          && result.campaign_control.controller
+          && result.campaign_control.controller.verification_receipt
+          && (result.campaign_control.controller.verification_receipt.receipt
+            || result.campaign_control.controller.verification_receipt));
+      assert.ok(receipt && receipt.env_fingerprint, `loop result must carry a verification receipt: ${JSON.stringify({
+        status: result.status, keys: Object.keys(result),
+      }).slice(0, 400)}`);
+      assert.strictEqual(receipt.env_fingerprint, expectedFp);
+      assert.strictEqual(
+        capturedVerifyEnv.CLAUDE_CODE_SESSION_ID,
+        'envscrub-sibling-session',
+        'sibling CLAUDE_CODE_SESSION_ID must survive the AUTOPILOT_SESSION_ID scrub',
+      );
+      assert.ok(Object.prototype.hasOwnProperty.call(capturedVerifyEnv, 'PATH'), 'PATH must survive the scrub');
+      assert.strictEqual(capturedVerifyEnv.PATH, siblingPath);
       console.log('envscrub_session_id=true');
     },
   });
 } finally {
   if (prevAutopilotSession === undefined) delete process.env.AUTOPILOT_SESSION_ID;
   else process.env.AUTOPILOT_SESSION_ID = prevAutopilotSession;
+  if (prevClaudeSession === undefined) delete process.env.CLAUDE_CODE_SESSION_ID;
+  else process.env.CLAUDE_CODE_SESSION_ID = prevClaudeSession;
 }
 
 NODE

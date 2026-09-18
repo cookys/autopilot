@@ -882,3 +882,33 @@ output contract, and a claim needs the same evidence as any other.
 **Prevention artifact**: `hooks/tests/autopilot-engine.test.sh` "no_verdict is a
 resumable gate fault" — drives the real `reviewDiff`, asserts the collapsed shape it
 actually emits, then feeds that into the exported classifier.
+
+## 36. A suite that is green in your shell and red in the rail is measuring your shell, not the candidate
+
+**2026-09-18, v2.36.68, the 2-C station campaign.** The hand's commit was green on all
+thirteen §4.1 commands in a detached scratch checkout; the rail's acceptance ran the same
+thirteen and `mission-runtime-v2.test.sh` went 50/53 red, the terminal journal refused the
+acceptance failure (an open BACKLOG row), the campaign was stuck IMPLEMENTING, and 85 hand
+minutes had to be closed out by hand. The candidate was not the variable. Depth-0 had
+exported `AUTOPILOT_SESSION_ID` in the dispatch environment; the acceptance runner inherited
+it; the suite spawns the engine, the engine reads the live marker of whatever session the
+environment names, and that session had an active `l5` marker. The same suite goes red on
+`develop` under the same variable.
+
+Two guards failed at once. The suite trusted its environment (it never pinned its own session
+identity, so its verdict was a function of who ran it), and the operator's verification ran in
+a different environment from the rail's, so "green here" said nothing about "red there". The
+bisection that found it — one variable at a time, on the candidate and then on `develop` —
+is what should have preceded any conclusion about the candidate.
+
+- **A test that spawns a process which reads ambient identity must pin that identity.**
+  Session ids, HOME, config dirs, marker directories: set them in the test, from the test's
+  own fixture, so the verdict is the same in every shell (`implementation-campaign-state`
+  does this since 2-B; every suite that drives the engine should).
+- **Verify in the rail's environment or reproduce the rail's environment before blaming the
+  candidate.** When a rail and a shell disagree, diff the environments first (`env -u` one
+  variable at a time), and check the base under the rail's environment — a base that is red
+  the same way clears the candidate in one run.
+- **Export nothing into a dispatch that the rail does not need.** Every extra variable is a
+  new input to every process the rail spawns; the intake matched the marker through
+  `CLAUDE_CODE_SESSION_ID` without help.

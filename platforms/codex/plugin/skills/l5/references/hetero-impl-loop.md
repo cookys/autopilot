@@ -179,7 +179,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     (`engine-capability-state.js pin-seat --role qc_panel …`); else intake refuses with
     `final_panel_seat_unqualified`. List one more `qc_panel` seat than `min_panel_size` to
     keep a standby; intake snapshots the admitted seats beside the contract.
-7. `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
+7. One plan file yields ONE source plan id and the graph checker maps each plan id to exactly one node, so
+   a plan with two deliverables ships as two lineages sealing the same plan bytes (2-C: `NODE=station`, then
+   `NODE=packet`); each graph must still claim every rubric id (a coverage rule, not the node's acceptance).
+   `mission prepare --repo . --authority <envelope> --graph <graph> --out prepared.json`, then
    `mission grant --repo . --prepared prepared.json --node <id>` → `contract_path`, `seal_path`,
    `branch`, `base_sha`. Each grant is one attempt; a rejected INTAKE still consumes it. The graph's
    `required_paths` must exist at `base_sha` — a file the hand will CREATE goes in `authorized_creates`
@@ -195,10 +198,15 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    `node bin/autopilot.js engine implement-review --campaign-contract <contract> --campaign-seal
    <seal> --mission-prepared prepared.json --prompt-file <brief> --branch <branch> --base
    <base_sha> --cwd <repo> --max-rounds 3` — do NOT pass `--campaign-ledger`: any non-canonical
-   path is `campaign_ledger_path_mismatch` at intake and burns the attempt. Watch the hands
+   path is `campaign_ledger_path_mismatch` at intake and burns the attempt. Export ONLY `AUTOPILOT_LEVEL`
+   and `AUTOPILOT_ROOT_RUN_ID` — never `AUTOPILOT_SESSION_ID`: the acceptance runner inherits the dispatch
+   environment, and a suite that spawns the engine then reads YOUR live marker and goes red
+   (`mission-runtime-v2`, 2026-09-18; intake matches the marker through `CLAUDE_CODE_SESSION_ID` unaided).
+   Verify a candidate in a scratch checkout with `env -u AUTOPILOT_SESSION_ID` for the same reason. Watch the hands
    worktree from a report-only monitor; the artifact is the commit on `<branch>`. On
    `awaiting_disposition`, resume with `--resume --campaign-disposition-authority <file>` and
-   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16). Panel seats
+   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16). The durable
+   wait pauses the wall clock (v2.36.67) — before that a late resume was `WALL_BUDGET_EXCEEDED`. Panel seats
    launch together under the remaining panel pocket (`final_panel_reserve_seconds`); each seat's
    `--timeout` is the whole remainder, not a sequential share. When the snapshot seals
    `review_station: panel`, that fan-out *is* the in-loop review station (a repair round

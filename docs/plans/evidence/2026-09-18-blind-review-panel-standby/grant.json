@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-1077fd40c74c41b797107832e076785fe781c32a652c2c0fce2e20833ffe2d48",
+  "claim_id": "claim-v1-bd6016c504dc28c421f6d8bd6320674394ca9c05a8a4f08cda7af8c7deda5fdb",
+  "mission_grant_ref": "dd40fbded05883c836b7101c8eda36859b5dc4d05c75023e523b3f5b8ebc450d",
+  "mission_subject_digest": "f368ea82124b30664923450fe7d094379f37618669fdeb88394155d8f38a238f",
+  "mission_campaign_id": "campaign-v2-7ca7ed49bd43c4cc517e9d12e3614789898556ad7f76dc1d87a3fb7bfab990e1",
+  "graph_node_id": "blind-review-panel-standby-2026-09-18",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/1077fd40c74c41b797107832e076785fe781c32a652c2c0fce2e20833ffe2d48/blind-review-panel-standby-2026-09-18/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/1077fd40c74c41b797107832e076785fe781c32a652c2c0fce2e20833ffe2d48/blind-review-panel-standby-2026-09-18/attempt-1/campaign.seal.json",
+  "branch": "mission/1077fd40c74c/blind-review-panel-standby-2026-09-18-a1",
+  "base_sha": "83e3ac9c3ba7ac083d22d48d4e1b57dfbfa3eeb2",
+  "state_hash": "f05767e1ba9f588e01c70fd24cf8a30e1fdab42e5af8d05e63b62b738e100a9d"
+}

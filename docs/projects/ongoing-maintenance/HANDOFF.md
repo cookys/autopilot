@@ -1,43 +1,40 @@
 ## 目標
-接續 autopilot 維護。2026-09-17／18 連出三刀：v2.36.62（1b-A cleanroom launcher，merge `94d44940`）、v2.36.63（1b-B intake probe，merge `bc4ea99e`）、**v2.36.64（1c 可設定 packet deny-list，merge `f6cb9a1a`、release `d85f4710`）**。三刀 closeout 全清（record-integration → reap wt／branch → residue receipt zero → marker retire）。**v2.36.65（2-A：fan-out helper、並行 final panel、sealed panel pocket、verify-once，merge `67e3a560`、release `b247e2e4`）也出了**，closeout 全清。**2-B（quorum panel＋standby seat＋panel snapshot at intake）campaign 跑中**：plan loop G1（6 折）／G2（3 折）完、freeze READY（graph `54093811…`、lineage `lineage-v1-1077fd40…`，這場 graph 也封了 2-A 的 `final_panel_reserve_seconds: 900`＋`full_suite_reuse`）、marker l5、attempt 1 派出（scratchpad `…/c2b/impl-run1.{json,err}`）。in-rail off＋panel repair＋shared packet 是 **2-C**。
+接續 autopilot 維護。2026-09-17／18 已出 v2.36.62（1b-A）、v2.36.63（1b-B）、v2.36.64（1c）、v2.36.65（2-A，merge `67e3a560`），全部 push。**2-B（quorum panel＋standby seat＋panel snapshot at intake）已 freeze、grant（attempt 1 claimed），尚未 dispatch**——上個 session 在 context T2 停下。接手：dispatch → 等 rail → 收尾 → v2.36.66。
 
 ## 現況
-- marker **l5 active**；routing → `blind-review-panel-standby-2026-09-18`。**campaign 跑中 repo 完全唯讀（連 commit／fetch 都不行）**。rail 停了照 2-A 路徑收尾（降級 l3、驗候選十一條、二審 full diff、§5、merge、v2.36.66）。2-A evidence：`docs/plans/evidence/2026-09-18-blind-review-panel-parallel/README.md`（**我在 campaign 跑中 commit handoff 害 rail boundary_rejected** 的完整記錄、resume 走不了的 rail 觀察、四條二審裁決、dogfood 抓到 helper 三 bug）。
-- 下一個 managed campaign 可在 graph node 放 `final_panel_reserve_seconds: 900`（0..1800）與 `full_suite_reuse: true` 實測 pocket／verify-once（§5 後半）。1c evidence：`docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/README.md`（G1 attempt 1 transport-exhausted 教訓、dirty-tree pre-spend 拒絕、panel 兩席 rc=124、panel 🟡 與 GLM 🟠 駁回證據、§5 dogfood）。
-- 1b-B evidence：`docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md`（時間線、MiniMax／GLM 工具病、claude 🟡 修補 `af1879cb`、§5 dogfood、resume rail 缺陷）。
-- **1c plan**：`docs/plans/2026-09-17-blind-review-packet-deny-config.md`＋`.rubric.md`（DRAFT；§0 行號以 `130b97a8` 校對，plan loop 前用 `d7912c7e`…`f15e9e1e` 之間的 HEAD 再校對一次、Base 釘 release commit）。範圍：`review_packet_deny_extra`（additive、單一 grammar owner＝`normalizeDenyList`、resolver conditional 欄位如 `qc_panel_endpoints`、engine `reviewPacketIdentity` 收 `denyExtra`、review.js 合成 effective list；builder／rail／launcher／intake byte-identical）。manifest／brief／freeze 尚未寫（抄 1b-B 的：`evidence/…-intake/scratch/{run-g.sh,dispatch.sh,freeze-c1d.js}`＋`impl-brief.md`）。
-- BACKLOG open rows（多數已 fired；openclaw row 等 cookys 點頭）：final panel 無 repair 迴圈（1b-A）、reviewer no_verdict 留 REVIEWING 不能 resume（1b-B）、**boundary_rejected 後 `--resume` 必 terminal**（2-A）、secret-scan `--range` fail-open（S）、codex pin swap 等 live cleanroom verdict（09-19 16:26 後）、dispatch-review cleanroom path hygiene（S）、openclaw ruling relay（要 cookys 點頭）。panel 餓死 row 已 shipped v2.36.65。
-- codex 額度 2026-09-19 16:26 回來後：plan §5 尾段——`cleanroom-launch.sh --profile codex` 對真 packet 拿 parsed verdict → `engine-capability-state.js pin-seat --role qc_panel --engine gpt-5.6-sol --runner codex --effort max …`＋`review-loop-config.md qc_panel[0]` 換回；也可讓 consult 席回 codex。
+- `develop` 領先 `origin/develop`（2-B prep commits 未 push；push 前先 `git fetch` 查 canonical version，2-A 是 2.36.65）。
+- session marker **l5 active**（session `ed4f4545-3dbb-4256-bdb4-80502ec4d221`）；routing → `blind-review-panel-standby-2026-09-18`（graph `54093811…`、lineage `lineage-v1-1077fd40…`）。grant：branch `mission/1077fd40c74c/blind-review-panel-standby-2026-09-18-a1`，base `83e3ac9c`（＝freeze commit；HEAD 之後多了 handoff commit，intake 不要求 HEAD＝base——1c 也是這樣過的；若 intake pre-spend 拒絕，grant 回 `replay` 不燒 attempt）。
+- **dispatch 指令**（自含、絕對路徑）：`SCRATCH=/tmp/claude-1000/<你的 scratchpad>/c2b bash docs/plans/evidence/2026-09-18-blind-review-panel-standby/scratch/dispatch.sh`（用 `setsid nohup … &`）。派出前 `git status --short` 必須空；**派出後到 `rc=` 出現前主 checkout 完全唯讀（不 commit、不 fetch、不 checkout）**——2-A 就是被我 mid-run 的 docs commit 打成 `boundary_rejected` 丟掉 91 分鐘。
+- plan：`docs/plans/2026-09-18-blind-review-panel-standby.md`（SHIPPED 前狀態 draft；G1 6 折／G2 3 折、receipts rc 0）；rubric R1–R8 frozen；brief `evidence/…-panel-standby/impl-brief.md`（已填 base）；base suites 11/11 `base-suites-aeea2ca7.txt`。
+- **新發現的 2-A live 缺陷（登 BACKLOG，closeout 時）**：graph node 的 `final_panel_reserve_seconds: 900`／`full_suite_reuse: true` 沒有進 contract（`mission-convergence.js:1469-1481` 的 `expectedDispatch` 與 draft 都不帶這兩欄；2-A 的 hand 只加了驗證沒加投影）→ intake 封的是預設 0／true。這場 campaign 因此**沒有 pocket**；verify-once 預設 true 仍會生效（`full_suite` reuse 看 limits.full_suite_reuse === 0）。2-B 不修（rail byte-identical 是 R5）；下一刀或 BACKLOG row。
+- 2-A 剩餘 §5 live 證明（pocket）要等這缺陷修好。
 
 ## 已決事項(不重議)
-- 承接上版全部。1c＝additive deny-list（不能拿掉預設）、一個 grammar owner、conditional 欄位不動 `x-field-order`。
-- 兩個 in-rail／二審工具病（MiniMax tautological、GLM END 後多字）都不算票；換席補乾淨判決（claude-native）。
-- record-integration 要在 reap branch **之前**（需要活 ref）；做反了就從 `.git/autopilot-reap-bundles/` 的 bundle `git fetch <bundle> refs/heads/<b>:refs/heads/<b>` 還原再 record 再刪。
+- 承接上版全部。2-B 範圍＝plan §1 兩條（quorum：`min_panel_size` 是 quorum、failed seat 留 row 標 `load_bearing:false`、terminal `final_panel_quorum_met`＋`sealed_required_review_families`＋`implementer_family`、validator 從 rows 重導、schema 四欄 optional＋legacy 語意；snapshot：`qc_panel_snapshot.json` O_EXCL 寫在 contract 旁、resume 永不重畫、live drift 記 step、panel 從 snapshot 取席）。in-rail off＋panel repair＋shared packet ＝ 2-C。
+- 收尾照 2-A：降級 l3（若 rail 停）、驗候選十一條（`evidence/…/scratch/suites.sh` 沒存——照 §4.1 寫）、二審 full diff `git diff 83e3ac9c..<head>` 不加路徑（GLM anthropic-compatible＋claude-native；20m）、§5 dogfood、merge `--no-ff` trailer 末段、`sync-version.js --version 2.36.66 --hook-count 31 --skill-count 30`、CHANGELOG／INDEX／maintenance／BACKLOG（redesign row Context 224 B 字串在 brief）、evidence README、**record-integration（accepted＝HEAD、source 要活 ref）→ reap wt／branch（root-run-id＝`campaign_control.campaign_id`）→ residue receipt → retire marker** → preflight 8/8 → push。
 
 ## 下一步（順序）
-1. 2-B campaign 收尾 → merge → v2.36.66 → closeout → push。然後 2-C plan（in-rail off when panel ＋ panel-driven repair round（同時關掉 BACKLOG「final panel 無 repair 迴圈」row）＋ shared packet per candidate）。
-1b. 或先收 BACKLOG fired rows：REVIEWING resume（M）、panel 預算 floor（M，可能併進 cut 2）、final panel repair 迴圈（M）、dispatch-review hygiene（S）。
-2. campaign 跑時：起草 cut 2（verify-once、並行席）或處理 BACKLOG fired rows。
-3. 收尾同 1b-A／1b-B（驗候選、二審 full diff 不加路徑、§5 dogfood、merge trailer 末段、`sync-version.js --version 2.36.64 --hook-count 31 --skill-count 30`、CHANGELOG／INDEX／maintenance／BACKLOG、**record-integration → reap → receipt → retire**、preflight 8/8、push）。
+1. dispatch（上面指令）→ Monitor `impl-run1.err` 出 `rc=`（30 分鐘會過期要重掛）。
+2. rail 停了照「已決事項」收尾。
+3. closeout 時 BACKLOG 新增：2-A knobs 沒進 contract（M）。
+4. 之後 2-C plan（in-rail off when panel＋panel-driven repair round＋shared packet per candidate）。
 
 ## 驗證方式
-- `git fetch -q origin && git status -sb` → `## develop...origin/develop`。
-- `node scripts/session-mode.js status --repo-root "$PWD"` → `"active": false`。
-- `git worktree list` 只剩主 checkout（`7ef6560a…/baseline` 是別的 session 的，別動）；`git branch --list 'mission/*'` 空。
+- `node scripts/session-mode.js status --repo-root "$PWD"` → `"active": true, "level": "l5"`。
+- `git status --short` 空；`git worktree list` 只剩主 checkout（`7ef6560a…/baseline` 是別的 session 的，別動）。
+- `ls .git/autopilot/mission/artifacts/1077fd40c74c*/blind-review-panel-standby-2026-09-18/attempt-1/` 有 `campaign.json`、`campaign.seal.json`。
 
 ## Read-order
-1. `docs/plans/2026-09-17-blind-review-packet-deny-config.md`＋rubric。
-2. `docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/README.md`、`scratch/`（配方）。
+1. `docs/plans/2026-09-18-blind-review-panel-standby.md`＋rubric、`evidence/…-panel-standby/impl-brief.md`。
+2. `docs/plans/evidence/2026-09-18-blind-review-panel-parallel/README.md`（2-A 全程：boundary_rejected 教訓、二審裁決、helper 三 bug）。
 3. `skills/l5/references/hetero-impl-loop.md` Depth-0 recipe。
-4. `docs/BACKLOG.md` open rows（上面列的）。
+4. memory：`campaign-running-main-checkout-frozen`、`managed-campaign-depth0-recipe`。
 
 ## 陷阱
-- **frozen rubric 一字不動**；receipt 用被審那版 bytes；G2 要 `--disposition-file <g1-dispositions.json>`（`generation: 1`），漏了 rc=3 不派。
-- disposition 詞彙：`accepted_blocker`／`accepted_nonblocking`／`deferred`／`rejected`（沒有 `accepted`）。
-- **二審 diff 不加路徑**；reviewer 說格式錯先查 pre-commit（CLAUDE.md 800 B 行）。
-- zsh：`echo ===` 炸、`$PIPESTATUS` 要 bash、**`"$B:refs/…"` 會被 `:r` 修飾子吃掉**（用 `${B}:` 或 bash -c）；`load-endpoints-env.sh` 包 `bash -c`。
-- 套件一次一個；長工作 setsid nohup＋Monitor（30 分鐘會過期要重掛）；scratchpad 隨 session 消失——產物先進 repo。
-- **campaign 派出前 `git status --short` 必須空**（1c：未追蹤檔 → intake 拒，pre-spend 不燒 attempt）；**跑中主 checkout 完全唯讀——連 docs-only commit、fetch 都不行**（2-A：我 commit 了 handoff → rail `boundary_rejected` 丟掉 91 分鐘的 hand 輪，且 resume 走不了）。handoff 寫 scratchpad，`rc=` 出來再進 repo。
-- plan review 的 claude-native 席會想在 scratch cwd 跑工具（1c G1 attempt 1）：plan §2.6 放「citations are provenance, not reading assignments」條款，manifest 給 MiniMax fallback，重跑用 fresh `--state-dir`。
-- bash `[[ == *[\?\[\]\{\}]* ]]` 裡反斜線是引號不是成員（GLM 二審誤報）；reviewer 講 shell 語意先實測。
-- reaper root-run-id 給 campaign_id（`impl-run1*.json` `campaign_control.campaign_id`）。
+- **主 checkout 在 campaign 跑中唯讀**（見上）。handoff 寫 scratchpad，`rc=` 後再進 repo。
+- BACKLOG Context／Title 上限（240／120 B）**用 `wc -c` 量**，別心算（2-B G2 就是我算錯兩次）。
+- frozen rubric 一字不動；receipt 用被審那版 bytes（`plan.as-reviewed-gN.md`）；G2 要 `--disposition-file`（`generation:1`）。
+- 二審 diff 不加路徑；reviewer 說格式錯先查 pre-commit（CLAUDE.md 800 B 行）。
+- resume：REVIEWING 與 BOUNDARY_REJECTED 都 resume 不了（BACKLOG）；rail 停就降級 l3 用保留 worktree 的 hand commit。
+- record-integration 要在 reap branch 之前；反了從 `.git/autopilot-reap-bundles/` `git fetch <bundle> "refs/heads/${B}:refs/heads/${B}"`（zsh 要 `${B}:` 避免 `:r` 修飾子）。
+- zsh：`echo ===` 炸、`$PIPESTATUS` 要 bash、`load-endpoints-env.sh` 包 `bash -c`；套件一次一個；長工作 setsid nohup＋Monitor。

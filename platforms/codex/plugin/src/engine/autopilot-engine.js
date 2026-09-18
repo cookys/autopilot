@@ -5446,7 +5446,12 @@ class AutopilotEngine {
       }
       const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome && outcome.reviewed === true);
       const mergedFindings = [];
-      const findingIds = new Map();
+      // finding_id -> array of { digest, seatIndex, slot, qualified }, one entry per
+      // DISTINCT digest seen for that id (not one entry per occurrence). An occurrence
+      // whose digest matches an already-known group — bare or already qualified — folds
+      // into that group (no new merged row); only a genuinely new digest for an id that
+      // already has one qualifies both the original and the new occurrence.
+      const findingGroups = new Map();
       let findingsConsistent = true;
       outcomes.forEach(({ outcome }, seatIndex) => {
         if (!outcome || outcome.reviewed !== true) return;
@@ -5466,28 +5471,39 @@ class AutopilotEngine {
         for (const item of items) {
           if (!item || typeof item.finding_id !== 'string') continue;
           const digest = campaignCanonicalDigest(item);
-          const prior = findingIds.get(item.finding_id);
-          if (!prior) {
-            findingIds.set(item.finding_id, {
-              digest,
-              seatIndex,
-              slot: mergedFindings.length,
-              qualified: false,
+          let groups = findingGroups.get(item.finding_id);
+          if (!groups) {
+            groups = [];
+            findingGroups.set(item.finding_id, groups);
+          }
+          if (groups.some((g) => g.digest === digest)) {
+            // Identical to an already-known occurrence (whichever seat first reported
+            // it) — fold in, never a new merged row and never re-derived against a
+            // stale/unqualified key.
+            continue;
+          }
+          if (groups.length === 0) {
+            groups.push({
+              digest, seatIndex, slot: mergedFindings.length, qualified: false,
             });
             mergedFindings.push({ ...item });
-          } else if (prior.digest !== digest) {
-            if (!prior.qualified) {
-              mergedFindings[prior.slot] = {
-                ...mergedFindings[prior.slot],
-                finding_id: `s${prior.seatIndex}.${item.finding_id}`,
-              };
-              prior.qualified = true;
-            }
-            mergedFindings.push({
-              ...item,
-              finding_id: `s${seatIndex}.${item.finding_id}`,
-            });
+            continue;
           }
+          if (groups.length === 1 && !groups[0].qualified) {
+            const first = groups[0];
+            mergedFindings[first.slot] = {
+              ...mergedFindings[first.slot],
+              finding_id: `s${first.seatIndex}.${item.finding_id}`,
+            };
+            first.qualified = true;
+          }
+          groups.push({
+            digest, seatIndex, slot: mergedFindings.length, qualified: true,
+          });
+          mergedFindings.push({
+            ...item,
+            finding_id: `s${seatIndex}.${item.finding_id}`,
+          });
         }
       });
       const packetHashes = [];
@@ -5522,11 +5538,16 @@ class AutopilotEngine {
       }));
       const last = ledger[ledger.length - 1];
       if (last) last.ended_at = panelEndedAt;
+      // Aggregation (union-on-verified-critical) is a station-panel concept (plan
+      // §1.1.1); the terminal branch keeps base's hardcoded 'SHIP-AS-IS', matching
+      // performFinalPanel at base ae7ea5ce byte-for-byte when reviewed.
       let aggregatedVerdict = 'SHIP-AS-IS';
-      for (const { outcome } of reviewedOutcomes) {
-        if (outcome && outcome.verdict && outcome.verdict !== 'SHIP-AS-IS') {
-          aggregatedVerdict = outcome.verdict;
-          break;
+      if (stationKind === 'panel') {
+        for (const { outcome } of reviewedOutcomes) {
+          if (outcome && outcome.verdict && outcome.verdict !== 'SHIP-AS-IS') {
+            aggregatedVerdict = outcome.verdict;
+            break;
+          }
         }
       }
       const packetHash = packetHashesConsistent && packetHashes.length > 0
@@ -5534,7 +5555,7 @@ class AutopilotEngine {
         : undefined;
       const receipt = {
         reviewed: panelReviewed,
-        success: panelReviewed,
+        ...(stationKind === 'panel' ? { success: panelReviewed } : {}),
         verdict: panelReviewed ? aggregatedVerdict : null,
         findings: JSON.stringify(mergedFindings),
         review_digest: panelReviewed
@@ -5552,16 +5573,16 @@ class AutopilotEngine {
         ended_at: panelEndedAt,
         budget_source: budgetSource,
         seat_timeout_seconds: seatTimeoutSeconds,
-        ...(packetHash ? { packet_hash: packetHash } : {}),
+        ...(stationKind === 'panel' && packetHash ? { packet_hash: packetHash } : {}),
         ...(driftTrace.length > 0 ? { trace: driftTrace } : {}),
       };
-      if (!panelReviewed) {
+      if (!panelReviewed && stationKind === 'panel') {
         const validation = validateFinalPanelReceipt(receipt, minPanelSize);
         receipt.reason = validation.reason || 'final_panel_not_reviewed';
         receipt.phase = receipt.reason === 'final_panel_budget_exhausted'
           ? 'campaign_wall_budget'
           : 'full_diff_review';
-      } else if (stationKind === 'panel' && reviewInput && reviewInput.vertical_failed !== true) {
+      } else if (stationKind === 'panel' && panelReviewed && reviewInput && reviewInput.vertical_failed !== true) {
         try {
           recordCampaignEvent({
             eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,

@@ -5681,9 +5681,16 @@ function stubReview() {
       runner: 'cc-shim', model: 'fixture', status: 'reviewed', verdict: 'SHIP-AS-IS',
       findings: '[]', raw_log: null, error: null,
     },
+    // A real single-seat/panel review reports a shared-packet hash (1.2, `packetHashOf`
+    // in autopilot-engine.js: a sibling `packet: {packet_hash}` object on the dispatcher
+    // result, not a field inside `result`). Station-panel reuse (item D) requires a real
+    // one, so the station-reuse case needs this. The terminal receipt never surfaces
+    // packet_hash regardless (item A, gated to stationKind === 'panel'), so adding it
+    // here is inert everywhere else.
+    packet: { packet_hash: 'b'.repeat(64) },
   };
 }
-function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride, failModel, intakeMutate, rosterMutate, plantSnapshotSeats }) {
+function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onReview, onVerify, realBin, seatsOverride, failModel, intakeMutate, rosterMutate, plantSnapshotSeats, reviewByModel }) {
   const caseSeats = seatsOverride || seats;
   const caseRoster = {
     ...(seatsOverride
@@ -5769,6 +5776,19 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
           return {
             error: null, status: 124, signal: 'SIGTERM', stdout: '', stderr: 'timeout',
             parseError: null, result: { status: 'no_verdict', error: 'timeout' },
+          };
+        }
+        if (reviewByModel && Object.prototype.hasOwnProperty.call(
+          reviewByModel, reviewModels[reviewModels.length - 1],
+        )) {
+          const override = reviewByModel[reviewModels[reviewModels.length - 1]];
+          return {
+            error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+            result: {
+              runner: 'cc-shim', model: reviewModels[reviewModels.length - 1], status: 'reviewed',
+              verdict: override.verdict || 'SHIP-AS-IS', findings: override.findings || '[]',
+              raw_log: null, error: null,
+            },
           };
         }
         return stubReview();
@@ -6207,6 +6227,61 @@ const stationReuse = runCase({
   },
 });
 
+// Three-seat finding-id qualification (2-C repair r2, item G): seat A and seat C
+// report a byte-identical 'dup-1' (folds into whichever seat first qualified that
+// digest); seat B reports a distinct 'dup-1'. A digest-keyed prior pointer (rather
+// than a group per distinct digest) makes seat C's identical-to-B-but-not-to-A
+// occurrence compare against the wrong (first) group and spuriously mint a THIRD
+// merged id — RED at 316c1d4b: findings included a spurious "s2.dup-1" duplicate
+// of "s1.dup-1" alongside "s0.dup-1"/"s1.dup-1".
+runCase({
+  ticket: 'panel-station-collide3',
+  reserve: 0,
+  clock: clockEarly,
+  rosterMutate() { return { in_rail_review: 'panel' }; },
+  reviewByModel: {
+    'claude-opus-4-6': {
+      verdict: 'SHIP-AS-IS',
+      findings: JSON.stringify([{
+        finding_id: 'dup-1', claim: 'shared defect X', severity: '🟡', source: 'seat-A',
+      }]),
+    },
+    'gpt-5.4': {
+      verdict: 'SHIP-AS-IS',
+      findings: JSON.stringify([{
+        finding_id: 'dup-1', claim: 'different defect Y', severity: '🟡', source: 'seat-B',
+      }]),
+    },
+    'glm-4.7': {
+      verdict: 'SHIP-AS-IS',
+      findings: JSON.stringify([{
+        finding_id: 'dup-1', claim: 'different defect Y', severity: '🟡', source: 'seat-B',
+      }]),
+    },
+  },
+  collect({ result }) {
+    const findPanel = (value) => {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.final_panel_seat_receipts) && typeof value.findings === 'string') {
+        return value;
+      }
+      for (const child of Object.values(value)) {
+        const found = findPanel(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    const terminal = findPanel(result);
+    assert.ok(terminal, JSON.stringify(result).slice(0, 800));
+    const items = JSON.parse(terminal.findings);
+    const ids = items.map((item) => item.finding_id).sort();
+    assert.deepStrictEqual(ids, ['s0.dup-1', 's1.dup-1'],
+      `qualified ids must be exactly s0.dup-1 and s1.dup-1 (C folded into s1.dup-1): ${JSON.stringify(ids)}`);
+    assert.strictEqual(items.length, 2, `no spurious duplicate merged row: ${JSON.stringify(items)}`);
+    console.log('station_collide_three_seats=true');
+  },
+});
+
 NODE
 )"
 assert_contains "$PANEL_OUT" "panel_order=true" "3-seat stub dispatcher is called in index order (RED at base 7f5d6ee8: sequential split)"
@@ -6225,6 +6300,8 @@ assert_contains "$PANEL_OUT" "snapshot_identity_invalid=true" "contract_digest m
 assert_contains "$PANEL_OUT" "no_snapshot_live_roster=true" "no snapshot uses live roster"
 assert_contains "$PANEL_OUT" "station_terminal_reuse=true" \
   "station panel fans out once and terminal reuses the same receipts"
+assert_contains "$PANEL_OUT" "station_collide_three_seats=true" \
+  "three-seat finding-id qualification: a third identical-to-a-later-group occurrence folds in, no spurious third id"
 assert_contains "$PANEL_OUT" "verify_once_flag=true" "full_suite_reuse false forces a fresh suite"
 assert_contains "$PANEL_OUT" "verify_once_red=true" "RED verification does not reuse full_suite"
 

@@ -5794,5 +5794,7 @@ assert_contains "$BLIND_INTAKE_OUT" "final-panel-blind-intake assertions passed"
   "campaign intake refuses blind-incompatible qc seats before claim"
 assert_contains "$BLIND_INTAKE_OUT" "review_station_snapshot=true" \
   "snapshot carries review_station; 2-B fixture without the key is single; live flip is drift"
+assert_contains "$BLIND_INTAKE_OUT" "incomplete_roster_no_snapshot=true" \
+  "an incomplete roster never gets a snapshot written with a hard-coded seats_complete: true"
 
 finalize_test

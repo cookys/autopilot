@@ -1886,7 +1886,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       reviewer_digest: canonicalDigest(reviewAuthority.reviewer),
       review_authority_digest: reviewAuthorityDigest,
       vertical_failed: verticalFailed === true,
-      station: reviewStation,
+      ...(reviewStation === 'panel' ? { station: reviewStation } : {}),
     };
     const reusable = findReusableGate(controller.gate_journal, 'full_diff_review', gateInput);
     if (reusable
@@ -2101,12 +2101,14 @@ function runCampaignComposition(input = {}, adapters = {}) {
     });
     lastReview = {
       ...fullDiff,
-      success: fullDiff.reviewed === true || fullDiff.success === true,
       review_authority_digest: reviewAuthorityDigest,
-      station: reviewStation,
-      candidate_tree_sha: candidate && candidate.tree_sha || null,
-      reviewer_roster_digest: input.jointReviewRosterDigest || null,
-      packet_hash: fullDiff.packet_hash || null,
+      ...(reviewStation === 'panel' ? {
+        success: fullDiff.reviewed === true || fullDiff.success === true,
+        station: reviewStation,
+        candidate_tree_sha: candidate && candidate.tree_sha || null,
+        reviewer_roster_digest: input.jointReviewRosterDigest || null,
+        packet_hash: fullDiff.packet_hash || null,
+      } : {}),
     };
     return { stop: null, review: lastReview };
   };
@@ -2800,10 +2802,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
       && lastReview.station === 'panel'
       && (lastReview.reviewed === true || lastReview.success === true)
       && Array.isArray(lastReview.final_panel_seat_receipts)
-      && lastReview.final_panel_seat_receipts.length > 1
+      && lastReview.final_panel_seat_receipts.length >= 1
       && lastReview.candidate_tree_sha === (candidate && candidate.tree_sha || null)
       && lastReview.reviewer_roster_digest === reviewerRosterDigest
-      && Object.prototype.hasOwnProperty.call(lastReview, 'packet_hash')
+      && typeof lastReview.packet_hash === 'string'
+      && isCanonicalSha256(lastReview.packet_hash)
       && lastReview.packet_hash === (fullDiffReview && Object.prototype.hasOwnProperty.call(fullDiffReview, 'packet_hash')
         ? fullDiffReview.packet_hash
         : lastReview.packet_hash);

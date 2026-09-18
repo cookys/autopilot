@@ -198,7 +198,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    path is `campaign_ledger_path_mismatch` at intake and burns the attempt. Watch the hands
    worktree from a report-only monitor; the artifact is the commit on `<branch>`. On
    `awaiting_disposition`, resume with `--resume --campaign-disposition-authority <file>` and
-   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16).    Panel seats
+   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16). Panel seats
    launch together under the remaining panel pocket (`final_panel_reserve_seconds`); each seat's
    `--timeout` is the whole remainder, not a sequential share. When the snapshot seals
    `review_station: panel`, that fan-out *is* the in-loop review station (a repair round

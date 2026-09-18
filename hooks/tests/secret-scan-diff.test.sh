@@ -75,4 +75,34 @@ EXIT_FILES=$?
 # because the range was filtered to big.txt.
 assert_eq "0" "$EXIT_FILES" "--files restricting to the clean 3 MiB file exits 0"
 
+# --- quoted-paths: non-ASCII filename must not be C-quoted and skipped ---
+git init -q "$TEST_TMP/quoterepo"
+cd "$TEST_TMP/quoterepo"
+git config user.email "test@example.com"
+git config user.name "Test"
+git config core.quotePath true
+echo "initial" > file.txt
+git add file.txt
+git commit -q -m "initial"
+printf '%s\n' "sk-ant-1234567890123456789012345" > $'\321\201onfig.txt'
+git add -- $'\321\201onfig.txt'
+OUT_QUOTE="$(node "$REPO_ROOT/scripts/secret-scan-diff.js" --staged 2>&1)"
+EXIT_QUOTE=$?
+assert_eq "1" "$EXIT_QUOTE" "exit 1 on secret in C-quotable non-ASCII path"
+assert_contains "$OUT_QUOTE" "anthropic" "quoted-path finding is not silently skipped"
+
+# --- bare --files: unstaged worktree edits (not --cached) ---
+git init -q "$TEST_TMP/filesrepo"
+cd "$TEST_TMP/filesrepo"
+git config user.email "test@example.com"
+git config user.name "Test"
+echo "clean" > unstaged.txt
+git add unstaged.txt
+git commit -q -m "initial"
+echo "sk-ant-1234567890123456789012345" >> unstaged.txt
+OUT_UNSTAGED="$(node "$REPO_ROOT/scripts/secret-scan-diff.js" --files unstaged.txt 2>&1)"
+EXIT_UNSTAGED=$?
+assert_eq "1" "$EXIT_UNSTAGED" "bare --files scans unstaged worktree edits"
+assert_contains "$OUT_UNSTAGED" "unstaged.txt" "bare --files finding names the unstaged file"
+
 finalize_test

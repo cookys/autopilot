@@ -31,6 +31,7 @@ for (let i = 0; i < args.length; i++) {
       process.exit(2);
     }
   } else if (args[i] === '--files') {
+    if (mode !== 'range') mode = 'files';
     files = args.slice(i + 1);
     break;
   } else if (args[i] === '-h' || args[i] === '--help') {
@@ -47,7 +48,7 @@ function gitBaseArgs(unified) {
   if (unified) {
     diffArgs.push('-U0');
   } else {
-    diffArgs.push('--name-only');
+    diffArgs.push('-z', '--name-only');
   }
   diffArgs.push('--diff-filter=ACMR');
   if (mode === 'range') {
@@ -124,19 +125,18 @@ if (files.length > 0) {
   nameArgs.push('--', ...files);
 }
 
-const nameProc = gitCall(nameArgs);
+const nameProc = gitCall(nameArgs, FILE_DIFF_MAX_BUFFER);
 reportGitFailure(nameProc);
 
 const paths = (nameProc.stdout || '')
-  .split('\n')
-  .map((p) => p.replace(/\r$/, ''))
+  .split('\0')
   .filter((p) => p.length > 0);
 
 const findings = [];
 for (const path of paths) {
   const fileArgs = gitBaseArgs(true);
   fileArgs.push('--', path);
-  const diffProc = gitCall(fileArgs, FILE_DIFF_MAX_BUFFER);
+  const diffProc = gitCall(['--literal-pathspecs', ...fileArgs], FILE_DIFF_MAX_BUFFER);
   if (diffProc.error) {
     const msg = diffProc.error.message || '';
     const code = diffProc.error.code || '';

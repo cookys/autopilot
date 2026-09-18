@@ -107,17 +107,11 @@ Two deliverables, independent, each its own campaign.
    the station of 1.1) builds the packet ONCE per candidate and hands every seat the built packet; `performReview`
    for the single seat is a batch of one over the same path (byte-identical hash for the same identity — pinned
    by test: the hash of a shared build equals the hash of a per-seat build at base).
-2. **Materialise per seat — a real copy, verified before launch.** Each seat launches against its OWN
-   materialisation of the built packet directory in the seat's `mkdtemp`, never the shared directory. A
-   materialisation is a plain per-file copy (`fs.copyFileSync`; `COPYFILE_FICLONE` reflink is allowed only because
-   it is copy-on-write — the call falls back to a byte copy by itself); **hardlinks are forbidden** (a hardlink
-   shares the inode, so an in-place write by one tools-capable seat would change the bytes every other seat reads
-   while the shared hash stayed the same — G1 blocker). Before any seat launches, its directory is re-hashed with the
-   packet builder's own hash function and must equal the shared `packet_hash` (mismatch → that seat is
-   `precondition_failed` before spend, receipt row with the reason); after the batch nothing is re-hashed (a seat may
-   write into its own view; that is the point of a private copy). `packet_hash` is the shared build's hash on every
-   seat receipt, so the 2-B all-or-none/one-value rule holds by construction and stays in the validator; the
-   cleanroom launcher's bind/HOME rules (1b-A) are unchanged.
+2. **Materialise per seat.** Each seat launches against its OWN copy of the built packet directory (hardlink or
+   reflink copy, `cp -al`/`--reflink=auto` fallback to plain copy, in the seat's `mkdtemp`), never the shared
+   directory: a tools-capable seat that writes build artefacts cannot leak them into another seat's view, and the
+   cleanroom launcher's bind/HOME rules (1b-A) are unchanged. `packet_hash` is the shared build's hash on every
+   seat receipt, so the 2-B all-or-none/one-value rule holds by construction and stays in the validator.
 3. **Hash the tree once.** `verifyTreeIntegrity` batches: one `git hash-object --stdin-paths --no-filters`
    process for regular files (paths fed on stdin, NUL-safe), symlinks hashed in-process as today; same mismatch
    error text `tree integrity: <rel>`; measured on this repo's HEAD in the evidence README (baseline 21 s).
@@ -162,17 +156,13 @@ re-verified on resume, snapshot read when the live roster flips `qc_panel_seats_
 - `src/runners/review.js`: `buildPacketOnce(identity)` + `prepareReviewLaunch(options, { packet })` taking a
   pre-built packet (materialise into the seat's dir); `dispatchReviewJsonBatch` accepts a shared packet for all
   jobs; batch of one unchanged when no packet is passed (byte-identical).
-- `src/runners/review-packet.js`: `verifyTreeIntegrity` batched via `--stdin-paths`; `materializePacket(src, dst)`
-  (per-file copy, no hardlinks, returns the re-derived hash) and `hashPacketDir(dir)` (the builder's own function,
-  exported so the pre-launch check and the test use the same digest).
+- `src/runners/review-packet.js`: `verifyTreeIntegrity` batched via `--stdin-paths`; `materializePacket(src, dst)`.
 - `src/engine/autopilot-engine.js`: `performFinalPanel` (and the 1.1 station, if 1.1 lands first — the two
   deliverables touch disjoint functions in this file; the graph lists the file under both `output_paths` and the
   second campaign bases on the first's merge) builds once, passes the packet to every seat.
 - Tests (RED-first): `review-packet.test.sh` (batched hashing equals per-file hashing on a fixture tree with
-  symlinks and a NUL-unsafe name; mismatch text unchanged; materialised copy is a distinct inode tree — every
-  regular file's `ino` differs from the source's — with equal bytes and hash; **mutating a file in one seat dir
-  leaves the other seat dirs and the shared hash unchanged**, and a seat dir whose pre-launch re-hash differs is
-  refused as `precondition_failed`); `review-runner.test.sh` (three jobs, one packet: `packet_hash` equal on all, three distinct
+  symlinks and a NUL-unsafe name; mismatch text unchanged; materialised copy is a distinct inode tree with equal
+  bytes and hash); `review-runner.test.sh` (three jobs, one packet: `packet_hash` equal on all, three distinct
   launch dirs, one `verifyTreeIntegrity` call counted via an injectable hasher); `autopilot-engine.test.sh`
   (`real_batch_panel` asserts one packet build for three seats).
 - Docs: `references/blind-dispatch.md` packet paragraph; BACKLOG `verifyTreeIntegrity` row → shipped;
@@ -283,15 +273,9 @@ pocket` when the terminal panel is not reused — expected NOT to occur; record 
   it visible; `single` keeps today's cost.
 - **Terminal reuse hides a stale panel** — reuse is by candidate tree + roster digest + packet hash; a repaired
   candidate has a new tree and was reviewed by the station.
-- **A shared build leaks between seats** — never shared: private per-file copies (no hardlinks), each re-hashed
-  against the shared `packet_hash` before launch; the mutation-isolation and hash-equality cases pin it.
+- **A shared build leaks between seats** — never shared: private materialisation per seat; the hash equality is
+  pinned by test against a per-seat build.
 - **Batched hashing changes a verdict** — pinned equal to per-file hashing on symlinks and odd names; same error.
 
 ## 7. Where this sits
 1a-A ✓ → 1a-B ✓ → 1b-A ✓ → 1b-B ✓ → 1c ✓ → 2-A ✓ → 2-B ✓ → **2-C (this: station, packet)** → 2-D (overlap, pre-pass).
-
-## Review log
-- Plan hetero loop G1 2026-09-18 (GLM-5.2 STOP: 1 blocker; claude seat fell to the MiniMax-M3 fallback, READY, no
-  findings; `g1-*`, `plan.as-reviewed-g1.md`): accepted — hardlink materialisation is not isolation (shared inode);
-  §1.2.2 now requires plain per-file copies (reflink only as copy-on-write), forbids hardlinks, re-hashes every seat
-  dir against the shared `packet_hash` before launch, and §2.2 pins the mutation-isolation case.

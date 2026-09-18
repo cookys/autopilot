@@ -1,0 +1,13 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-panel-station-2026-09-18",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "fdf235a9c84d4c1006bb7add4905302d0c36be2cd6856a312b1d398d81fe19f7",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: a hardlink shares the inode and is not a private copy. Materialisation is a plain per-file copy (reflink only where the copy call itself reports copy-on-write success), never a hardlink; before any seat launch the seat directory is re-hashed and must equal the shared packet_hash; the packet suite mutates a file in one seat dir and asserts the other seat dirs and the shared hash are unaffected."
+  }
+ ]
+}

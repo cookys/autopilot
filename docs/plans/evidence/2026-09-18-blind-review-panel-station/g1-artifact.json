@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "blind-review-panel-station-2026-09-18",
+  "logical_plan_id": "blind-review-panel-station-2026-09-18",
+  "session_id": "c2c-g1-1789727154",
+  "session_key": "1e396dc1f135315df87d1f48e510c5e28f40a187d99311c2da083e7b303588b8",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "72484844a406e8e07cd1d674bee6dd1ed0a0ba9bc2f8abbe6b5305cd7618517a",
+  "manifest_sha256": "b528ce2cc9c763c486568d6d0e8568602cee6937dbfbac7ae426bad6bd7cb030",
+  "plan_sha256": "83ad8a61e88963f898c356dc8b408fe189dfffa8772fd35299d25720a9f1f373",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "f67a595438c4e3520b3d8e754d130c8564725cfc541b2181d321f55c492d628e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "91977722ad984c0f335b962bd3d22e2fe1df9ffaccce86fae5077ca0e55bb1d9",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-A8p2xV",
+          "digest": "91977722ad984c0f335b962bd3d22e2fe1df9ffaccce86fae5077ca0e55bb1d9"
+        },
+        "receipt_digest": "15029c2c4a651646fe7a10f8d42a8fb99a2bef2cb2368482448edf17acaf5d35"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "772fec3bd2498e68f1fff305de656c7bd284cd01e540f56a24f060393d32608f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2533ccc5bee35261a297da7788c22d04de0cd2be9f228c96949b469ccdba5290",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-AYGlvt",
+          "digest": "2533ccc5bee35261a297da7788c22d04de0cd2be9f228c96949b469ccdba5290"
+        },
+        "receipt_digest": "d0e75628e5467099e9a4dd5cd374cd6638f0f075f5bbbd29e08d3472b0792733"
+      },
+      "transport_status": "success",
+      "parser_status": "invalid",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "9ae40df616d96979a4c94360194fcb4e28ada3f4cda0224e694f0370849e1ee6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "dc697f4efbb02f930019ef5d7dcf35fe390d396ce9b162b7f20d2da109eefc6e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-64xxXX",
+          "digest": "dc697f4efbb02f930019ef5d7dcf35fe390d396ce9b162b7f20d2da109eefc6e"
+        },
+        "receipt_digest": "795528b893860f61e3c36504fd60e59618e9f7cf8eda7e16ab24585fe4bfdd7c"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [
+    {
+      "seat_id": "claude_operations_skeptic",
+      "from_id": "claude_operations_skeptic",
+      "to_id": "minimax_operations_skeptic",
+      "attempt": 2,
+      "reason": "retry_substitution"
+    }
+  ],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/runners/review-packet.js (materializePacket) and §1.2.2 of the plan under review",
+      "claim": "The proposed per-seat materialisation via hardlink copy ('cp -al', with 'plain copy' only as a fallback) does not guarantee that no seat can write into another seat's view: hardlinked regular files share the inode, so a tools-capable seat that appends to or overwrites a packet file in place mutates the bytes every other seat sees, and the shared build's hash silently diverges from what any seat actually read.",
+      "evidence": "Plan §1.2.2 states each seat launches against its own copy of the built packet directory via 'hardlink or reflink copy, cp -al/--reflink=auto fallback to plain copy'; §2.2 lists 'materializePacket(src, dst)' in review-packet.js. A hardlink is not a private copy for content writes; only file replacement (unlink+create) is isolated, and the plan never requires copy-on-write or unlink-before-write semantics, nor a post-materialisation hash check per seat dir.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §1.2.2 (\"hardlink or reflink copy, cp -al/--reflink=auto fallback to plain copy\") and §2.2 (materializePacket)",
+      "repair": "Decide now: materialise with plain per-file copies (or reflink where the filesystem guarantees it), or if hardlinks are kept for cost, require a post-materialisation verify (re-hash the seat's directory against the shared packet_hash) plus a documented write-isolation contract before any seat launch; pin it in review-packet.test.sh with a test that mutates a file in one seat dir and asserts the other seat dirs and the shared hash are unaffected.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fdf235a9c84d4c1006bb7add4905302d0c36be2cd6856a312b1d398d81fe19f7"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-18T10:29:09.047Z"
+}

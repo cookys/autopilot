@@ -1,10 +1,10 @@
 ## 目標
-接續 autopilot 維護。本 session 出貨 v2.36.71：`/next` 排出的七條 fired BACKLOG 列以六個 sonnet 工頭（Agent 子代理）平行修掉，
+接續 autopilot 維護。本 session 出貨 v2.36.71 與 v2.36.72（第二輪：repair branch 由 rail 導出、backlog table migration 三缺陷、被拒 intake 的 stranded_claim；consult 裁定永不自動 release）：`/next` 排出的七條 fired BACKLOG 列以六個 sonnet 工頭（Agent 子代理）平行修掉，
 另關兩條狀態過時的列、新增一條 S 列（impl dispatch timeout floor）。教訓已 land（evidence-discipline §39–41、l5 recipe
 「Parallel units」加 sonnet 工頭段）。沒有進行中的工作；下一步由 `/next` 決定。
 
 ## 現況
-- branch `develop`，release commit `2263ab90`（v2.36.71，QC trailer）已 push；之上只有這份 handoff＋lessons 的 docs commit。
+- branch `develop`，release commits `2263ab90`（v2.36.71）、`11eeaa5c`（v2.36.72）已 push；之上只有 docs commit。
   push 前 `git fetch`——roundtable session 仍在推文件。
 - marker 已清（`session-mode.js` 以 `set --level l3 --entry-level l5 --fallback precondition_failed` 降級後 `clear`：平行 clone rail
   沒有 managed campaign，l5 receipt 路徑不可得）；`git worktree list` 只剩主 checkout＋別人的 `7ef6560a…/baseline`；
@@ -21,9 +21,9 @@
 - 消費者 sweep 迴圈每個子行程 `< /dev/null`，row 數要對 list 長度（§40）。
 
 ## 下一步
-1. `/next`。候選：2-D plan（overlap＋pre-pass，需 plan hetero loop G1/G2）；BACKLOG fired 列剩：`run.sh` 紅（L，名單已更新）、
-   `Managed rail: already-scrambled carry-only ledger segments`（Fix）、`disposition resume refuses caller --branch`（Fix）、
-   `backlog table migration`（Fix）、intake claim release inconsistency（S）、check-phase-review-receipt 驗證列（S）；新 S 列 timeout floor。
+1. `/next`。fired 列已清到只剩 L：`run.sh` 紅（名單在 v2.36.71 evidence full-run-summary）、carry-only ledger segments（重估 L，需自己的 plan＋hetero loop）、
+   Domain-aware routing（前提未齊）；未 fired 的 S：timeout floor、opencode usage、arm strike threshold（dated）。候選新工作：2-D plan、ledger recovery plan。
+   cuda 已收到 v2.36.72 的回覆（msg_01M2X07C31ER0MN123YZ30JQMY），等它重跑 revival.3d dry-run。
 2. 下一個 managed campaign：記 packet-once live 證明（2-C README 一行）＋ A 的 `wall_expired`／C 的 `repair_round_fits` 第一次 live 觀察。
 
 ## 驗證方式
@@ -37,6 +37,7 @@
 4. docs/BACKLOG.md 前段。
 
 ## 陷阱
-- 全部已 land；這裡只指：Agent 派工第一行 `Engine: <model>`；hand 建的 test 檔要 `test -x`；`while read` sweep 要 `< /dev/null`；
+- 另一個 session 正在這台跑真的 grok dispatch（`wave-0919d`，strikes.jsonl 42-44）——full run.sh 會報 REAL-STORE POLLUTION，先看 receipt_ref 再歸因。
+- 全部已 land；這裡只指：`mkdir -p <rel>` 後 cwd 會被重設回主 checkout——clone 一律絕對路徑，否則 clone 落進 repo 裡讓 pre-commit gate 掃到；Agent 派工第一行 `Engine: <model>`；hand 建的 test 檔要 `test -x`；`while read` sweep 要 `< /dev/null`；
   `record-integration.js` 要 accepted==HEAD 且要在 branch 上（detached 會 `symbolic-ref failed`）——整合當下就記，別事後補；
   exec-boundary 擋 cwd 外遞迴刪除 → `mv` 進 `/tmp` 再刪；BACKLOG 欄位 240/120/64 上限；Status 文法只有 `open|fired|shipped|dropped <date>`。

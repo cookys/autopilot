@@ -394,4 +394,125 @@ gout="$(node "$GATE" --backlog "$O/docs/projects/BACKLOG.md" --json --config "$O
 assert_eq "$(json_field "$gout" exit)" "0" "(o) rewritten table passes the gate"
 
 
+# ── (p) unmapped status + foreign column (revival.3d shape). RED at 488dc6dc:
+#     Status: open for the unmapped word; owner cells absent from output and every
+#     sidecar; preserved:true; bytes_before − bytes_after ≠ moved_bytes.
+P="$(repo table-unmapped)"
+mkdir -p "$P/docs/tickets/048/runs"; printf 'run\n' > "$P/docs/tickets/048/runs/a.md"
+cat > "$P/docs/projects/BACKLOG.md" <<'EOB'
+# revival BACKLOG
+
+## 換裝線
+
+| id | 標題 | 狀態 | 體量 | 來源 | spec | 備註 | owner |
+|----|------|------|------|------|------|------|-------|
+| **GC-p** | **mystery row** | **mystery**（待裁定） | **M** | **058 換裝線** | 票 048 | short note |  |
+| **OK-p** | mapped extra-col row | **planned** | S | user | — | — | Alice |
+EOB
+cat > "$P/.claude/backlog-config.md" <<'EOC'
+- style: table
+- mode: warn
+
+## Pointer roots
+- docs/backlog
+- docs/tickets
+
+## Columns
+- id: Id
+- 標題: Title
+- 狀態: Status
+- 體量: Effort
+- 來源: Source
+- spec: Context
+- 備註: Pointer
+
+## Status map
+- planned: open
+EOC
+git -C "$P" add -A >/dev/null; git -C "$P" -c user.email=t@t -c user.name=t commit -qm base
+cp "$P/docs/projects/BACKLOG.md" "$P/before.md"
+ORIG_MYSTERY="$(grep 'GC-p' "$P/docs/projects/BACKLOG.md")"
+dry="$(node "$MIG" --backlog "$P/docs/projects/BACKLOG.md" --config "$P/.claude/backlog-config.md" --json)"
+assert_eq "$?" "0" "(p) dry-run exits 0" # RED at 488dc6dc: dry-run invented open and dropped owner
+assert_contains "$(first_json "$dry")" '"unmapped_status"' "(p) dry-run lists unmapped_status" # RED at 488dc6dc: no errors array
+assert_contains "$(first_json "$dry")" '"unmapped_column"' "(p) dry-run lists unmapped_column" # RED at 488dc6dc: no errors array
+assert_contains "$(first_json "$dry")" '## Columns' "(p) unmapped_column names the ## Columns line" # RED at 488dc6dc: silent drop
+node "$MIG" --backlog "$P/docs/projects/BACKLOG.md" --config "$P/.claude/backlog-config.md" --apply --json >/tmp/mig-p-apply.json 2>/tmp/mig-p-apply.err || p_apply=$?
+assert_eq "${p_apply:-0}" "1" "(p) --apply refuses without --allow-unmapped-to-sidecar" # RED at 488dc6dc: apply exited 0
+cmp -s "$P/docs/projects/BACKLOG.md" "$P/before.md"; assert_eq "$?" "0" "(p) refuse leaves the backlog byte-identical"
+assert_file_absent "$P/docs/backlog/gc-p.md" "(p) refuse writes no sidecar"
+node "$MIG" --backlog "$P/docs/projects/BACKLOG.md" --config "$P/.claude/backlog-config.md" --apply --allow-unmapped-to-sidecar --json >/tmp/mig-p-flag.json 2>/tmp/mig-p-flag.err || p_flag=$?
+assert_eq "${p_flag:-0}" "1" "(p) --allow-unmapped-to-sidecar still refuses while a column is unmapped" # RED at 488dc6dc: apply wrote
+cmp -s "$P/docs/projects/BACKLOG.md" "$P/before.md"; assert_eq "$?" "0" "(p) column error writes nothing"
+
+# status-only table: foreign column gone so apply can proceed with the flag
+P2="$(repo table-unmapped-status)"
+mkdir -p "$P2/docs/tickets/048/runs"; printf 'run\n' > "$P2/docs/tickets/048/runs/a.md"
+cat > "$P2/docs/projects/BACKLOG.md" <<'EOB'
+# revival BACKLOG
+
+## 換裝線
+
+| id | 標題 | 狀態 | 體量 | 來源 | spec | 備註 |
+|----|------|------|------|------|------|------|
+| **GC-p** | **mystery row** | **mystery**（待裁定） | **M** | **058 換裝線** | 票 048 | short note |
+| **OK-p** | mapped extra-col row | **planned** | S | user | — | — |
+EOB
+cat > "$P2/.claude/backlog-config.md" <<'EOC'
+- style: table
+- mode: warn
+
+## Pointer roots
+- docs/backlog
+- docs/tickets
+
+## Columns
+- id: Id
+- 標題: Title
+- 狀態: Status
+- 體量: Effort
+- 來源: Source
+- spec: Context
+- 備註: Pointer
+
+## Status map
+- planned: open
+EOC
+git -C "$P2" add -A >/dev/null; git -C "$P2" -c user.email=t@t -c user.name=t commit -qm base
+cp "$P2/docs/projects/BACKLOG.md" "$P2/before.md"
+ORIG_MYSTERY2="$(grep 'GC-p' "$P2/docs/projects/BACKLOG.md")"
+node "$MIG" --backlog "$P2/docs/projects/BACKLOG.md" --config "$P2/.claude/backlog-config.md" --apply --json >/tmp/mig-p2.json 2>/tmp/mig-p2.err || p2=$?
+assert_eq "${p2:-0}" "1" "(p) status-only --apply refuses without the flag" # RED at 488dc6dc: invented open
+cmp -s "$P2/docs/projects/BACKLOG.md" "$P2/before.md"; assert_eq "$?" "0" "(p) status-only refuse is a no-write"
+out="$(node "$MIG" --backlog "$P2/docs/projects/BACKLOG.md" --config "$P2/.claude/backlog-config.md" --apply --allow-unmapped-to-sidecar --json)"
+assert_eq "$?" "0" "(p) --allow-unmapped-to-sidecar apply exits 0" # RED at 488dc6dc: flag unknown (usage 2)
+assert_file_exists "$P2/docs/backlog/gc-p.md" "(p) sidecar named from the Id"
+side="$(cat "$P2/docs/backlog/gc-p.md")"
+printf '%s' "$side" | grep -qF -- "$ORIG_MYSTERY2" && ok=0 || ok=1
+assert_eq "$ok" "0" "(p) sidecar holds the unmapped-status row verbatim" # RED at 488dc6dc: Status: open in the table
+rew="$(cat "$P2/docs/projects/BACKLOG.md")"
+printf '%s' "$rew" | grep -q 'Status: open' && ok=1 || ok=0
+assert_eq "$ok" "0" "(p) open is never synthesised for the unmapped word" # RED at 488dc6dc: | GC-p | … | open |
+printf '%s' "$rew" | grep -q '| GC-p |' && ok=1 || ok=0
+assert_eq "$ok" "0" "(p) unmapped-status row is not rewritten into the table"
+assert_contains "$rew" "| OK-p | mapped extra-col row | open |" "(p) mapped row still migrates" # negative control inside (p)
+assert_contains "$(first_json "$out")" '"unmapped_status"' "(p) apply manifest records unmapped_status" # RED at 488dc6dc: preserved:true with no errors
+assert_eq "$(json_field "$(first_json "$out")" preserved)" "true" "(p) preserved reflects accounted bytes"
+bb="$(json_field "$(first_json "$out")" totals.bytes_before)"
+ba="$(json_field "$(first_json "$out")" totals.bytes_after)"
+mb="$(json_field "$(first_json "$out")" totals.moved_bytes)"
+nb="$(json_field "$(first_json "$out")" totals.normalized_bytes)"
+set +e
+node -e 'const [bb,ba,mb,nb]=process.argv.slice(1).map(Number); process.exit(bb===ba+mb+nb?0:1)' "$bb" "$ba" "$mb" "$nb"
+rec_bytes=$?
+set -e
+assert_eq "$rec_bytes" "0" "(p) bytes_before === bytes_after + moved_bytes + normalized_bytes" # RED at 488dc6dc: 277-258 != 122
+assert_contains "$(first_json "$out")" '"gate"' "(p) gate report embedded in the manifest"
+assert_eq "$(json_field "$(first_json "$out")" gate.exit)" "0" "(p) embedded gate is green"
+
+# negative control: case (n) fixture shape still migrates with zero errors
+n_err="$(node "$MIG" --backlog "$N/docs/projects/BACKLOG.md" --config "$N/.claude/backlog-config.md" --json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const j=JSON.parse(d.split("\n")[0]);process.stdout.write(String((j.errors||[]).length))})')"
+assert_eq "$n_err" "0" "(p) fully mapped table (n) still has zero errors"
+
+
 finalize_test

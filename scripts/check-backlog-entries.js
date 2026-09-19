@@ -995,4 +995,5 @@ module.exports = {
   gitToplevel,
   pointerOk,
   splitTableCells,
+  runCheck,
 };

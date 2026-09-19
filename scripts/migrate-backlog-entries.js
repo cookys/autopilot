@@ -7,7 +7,8 @@
  *
  * Usage:
  *   node scripts/migrate-backlog-entries.js --backlog <file>
- *     [--config <file>] [--out-dir docs/backlog] [--apply] [--json]
+ *     [--config <file>] [--out-dir docs/backlog] [--apply]
+ *     [--allow-unmapped-to-sidecar] [--json]
  *
  * Default is dry-run: print the manifest JSON and a unified diff, write nothing.
  * --apply writes only after every sidecar re-read contains moved_sha256 text.
@@ -38,12 +39,14 @@ const {
   builtinConfig,
   parseConfigFile,
   gitToplevel,
+  runCheck,
 } = gate;
 
 function usage(code) {
   process.stderr.write(
     'Usage: node scripts/migrate-backlog-entries.js --backlog <file> ' +
-    '[--config <file>] [--out-dir docs/backlog] [--apply] [--json]\n'
+    '[--config <file>] [--out-dir docs/backlog] [--apply] ' +
+    '[--allow-unmapped-to-sidecar] [--json]\n'
   );
   process.exit(code);
 }
@@ -55,6 +58,7 @@ function parseArgs(argv) {
     outDir: null,
     apply: false,
     json: false,
+    allowUnmappedToSidecar: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -67,6 +71,7 @@ function parseArgs(argv) {
     else if (a === '--config') out.config = need();
     else if (a === '--out-dir') out.outDir = need();
     else if (a === '--apply') out.apply = true;
+    else if (a === '--allow-unmapped-to-sidecar') out.allowUnmappedToSidecar = true;
     else if (a === '--json') out.json = true;
     else usage(2);
   }
@@ -306,6 +311,12 @@ function tableHeaderLines() {
 
 // The Status cell of a foreign table carries the state word, the trigger and often a log:
 // `**planned**（Trigger：after 09-17；…）`. Split it into a schema status and a trigger.
+function mappedColumnField(header, colMap) {
+  if (colMap[header]) return colMap[header];
+  if (TABLE_FIELDS.includes(header)) return header;
+  return null;
+}
+
 function tableStatusAndTrigger(statusCell, rowText, when, statusMap) {
   const raw = stripBold(statusCell);
   const word = (raw.match(/^([A-Za-z][\w-]*)/) || [, ''])[1].toLowerCase();
@@ -314,7 +325,11 @@ function tableStatusAndTrigger(statusCell, rowText, when, statusMap) {
   if (canon.test(raw)) {
     status = raw;
   } else {
-    const kind = statusMap[word] || DEFAULT_STATUS_MAP[word] || 'open';
+    const kind = statusMap[word] || DEFAULT_STATUS_MAP[word];
+    if (!kind) {
+      const tmMiss = raw.match(/Trigger\s*[：:]\s*([^；;）)]+)/i);
+      return { status: null, trigger: tmMiss ? tmMiss[1].trim() : '', unmapped: true, word: word || '(empty)' };
+    }
     // FIRED is read from the Status cell only — a log elsewhere in the row that mentions a
     // past alert must not flip a done row (reviewer, 2026-09-16).
     if (/\bFIRED\b/.test(raw)) status = 'fired ' + findDate(raw, when);
@@ -323,11 +338,11 @@ function tableStatusAndTrigger(statusCell, rowText, when, statusMap) {
       const vm = rowText.match(/\bv(\d+[\w.-]*)/);
       status = 'shipped ' + (vm ? 'v' + vm[1] : 'unknown') + ' ' + findDate(raw, findDate(rowText, when));
     } else if (kind === 'dropped') status = 'dropped ' + findDate(raw, findDate(rowText, when));
-    else status = 'open';
+    else status = kind === 'open' ? 'open' : kind;
   }
   const tm = raw.match(/Trigger\s*[：:]\s*([^；;）)]+)/i);
   const trigger = tm ? tm[1].trim() : '';
-  return { status, trigger };
+  return { status, trigger, unmapped: false, word };
 }
 
 function planTableMigration(text, cfg, repoRoot, opts) {
@@ -353,6 +368,9 @@ function planTableMigration(text, cfg, repoRoot, opts) {
   const outLines = [];
   const planned = [];
   const sidecars = [];
+  const errors = [];
+  const originalRows = [];
+  const dropped = [];
   let section = '';
   let i = 0;
   const isRow = (l) => /^\s*\|/.test(l);
@@ -363,15 +381,69 @@ function planTableMigration(text, cfg, repoRoot, opts) {
   const headerIndex = (cells) => {
     const idx = {};
     cells.map((c) => stripBold(c)).forEach((h, n) => {
-      const mapped = colMap[h] || h;
-      if (TABLE_FIELDS.includes(mapped) && idx[mapped] == null) idx[mapped] = n;
+      const mapped = mappedColumnField(h, colMap);
+      if (mapped && TABLE_FIELDS.includes(mapped) && idx[mapped] == null) idx[mapped] = n;
     });
     if (idx.Title == null && idx.Id != null) idx.Title = idx.Id;
     return idx;
   };
+
+  // Plan-time scan: unmapped headers with non-empty cells, unmapped status words.
+  {
+    let scanFence = false;
+    for (let s = 0; s < lines.length; s++) {
+      if (/^\s*(```|~~~)/.test(lines[s])) scanFence = !scanFence;
+      const hidx = !scanFence && isRow(lines[s]) ? headerIndex(cellsOf(lines[s])) : null;
+      if (!hidx || hidx.Title == null) continue;
+      const headerCells = cellsOf(lines[s]).map((c) => stripBold(c));
+      let r = s + 1;
+      if (r < lines.length && isRow(lines[r]) && isSep(cellsOf(lines[r]))) r += 1;
+      const tableRows = [];
+      while (r < lines.length && isRow(lines[r]) && !/^\s*(```|~~~)/.test(lines[r])) {
+        tableRows.push({ line: lines[r], lineNo: r + 1, cells: cellsOf(lines[r]), headers: headerCells });
+        r += 1;
+      }
+      headerCells.forEach((h, n) => {
+        const mapped = mappedColumnField(h, colMap);
+        if (mapped && TABLE_FIELDS.includes(mapped)) return;
+        const cell_count = tableRows.filter((row) => stripBold(row.cells[n] || '')).length;
+        if (cell_count > 0) {
+          errors.push({
+            code: 'unmapped_column',
+            header: h,
+            cell_count,
+            fix: `add '- ${h}: <Field>' under ## Columns`,
+          });
+        }
+      });
+      const statusIdx = hidx.Status;
+      for (const row of tableRows) {
+        originalRows.push(row);
+        if (row.cells.length !== headerCells.length) continue;
+        if (statusIdx == null) continue;
+        const st = tableStatusAndTrigger(row.cells[statusIdx] || '', row.line, when, statusMap);
+        if (st.unmapped) {
+          errors.push({ code: 'unmapped_status', word: st.word, line: row.lineNo });
+        }
+      }
+      s = r - 1;
+    }
+  }
+
+  const abortRewrite = errors.some((e) => e.code === 'unmapped_column');
+
   // A verbatim move: the row cannot be read positionally (cell count differs from the header)
   // or its cells hold text the schema columns cannot carry; the original line goes to a sidecar
   // and the rewritten row points there. Nothing is dropped.
+  const sidecarOnly = (rowLine, titleRaw, id, bytesBefore) => {
+    const slug = uniqueSlug(slugify(id || titleRaw), usedSlugs);
+    const sidecarAbs = path.join(outDirAbs, slug + '.md');
+    const pointer = posixRel(repoRoot, sidecarAbs);
+    const moved = rowLine + '\n';
+    const body = `# ${titleRaw}\n\nSource: ${backlogRel}@${headSha}, migrated ${when}` + (section ? `\nSection: ${section}` : '') + `\nOriginal row (verbatim):\n\n` + moved;
+    sidecars.push({ abs: sidecarAbs, contents: body, moved });
+    planned.push({ title: titleRaw, slug, bytes_before: bytesBefore, bytes_after: 0, moved_bytes: byteLen(moved), moved_sha256: sha256(moved), sidecar: pointer });
+  };
   const moveVerbatim = (rowLine, rowFields, titleRaw, id, bytesBefore) => {
     const slug = uniqueSlug(slugify(id || titleRaw), usedSlugs);
     const sidecarAbs = path.join(outDirAbs, slug + '.md');
@@ -388,6 +460,27 @@ function planTableMigration(text, cfg, repoRoot, opts) {
     sidecars.push({ abs: sidecarAbs, contents: body, moved });
     planned.push({ title: titleRaw, slug, bytes_before: bytesBefore, bytes_after: byteLen(rewritten), moved_bytes: byteLen(moved), moved_sha256: sha256(moved), sidecar: rowFields.Pointer });
   };
+
+  if (abortRewrite) {
+    const newText = text;
+    const migrateCount = 0;
+    const bytes_before = byteLen(text);
+    const bytes_after = byteLen(newText);
+    const moved_bytes = 0;
+    const normalized_bytes = bytes_before - bytes_after - moved_bytes;
+    const manifest = {
+      preserved: false,
+      errors,
+      dropped,
+      entries: planned,
+      totals: {
+        entries: planned.length, migrate: migrateCount,
+        moved_bytes, bytes_before, bytes_after, normalized_bytes,
+      },
+    };
+    return { newText, sidecars, planned, manifest, outDirAbs, when, migrateCount, errors, dropped, abortRewrite: true };
+  }
+
   while (i < lines.length) {
     const line = lines[i];
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
@@ -417,7 +510,13 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       const get = (f) => (idx[f] != null ? (cells[idx[f]] || '') : '');
       const id = stripBold(get('Id'));
       const titleRaw = stripBold(get('Title')).replace(/[.。]\s*$/, '') || id;
-      const { status, trigger: triggerFromStatus } = tableStatusAndTrigger(get('Status'), rowLine, when, statusMap);
+      const st = tableStatusAndTrigger(get('Status'), rowLine, when, statusMap);
+      if (st.unmapped) {
+        sidecarOnly(rowLine, titleRaw, id, byteLen(rowLine));
+        continue;
+      }
+      const status = st.status;
+      const triggerFromStatus = st.trigger;
       const trigger = stripBold(get('Trigger')) || triggerFromStatus || 'see pointer';
       const effort = normaliseEffort({ Effort: stripBold(get('Effort')) }, '');
       const source = truncBytes(stripBold(get('Source')), 160) || 'unknown';
@@ -465,8 +564,8 @@ function planTableMigration(text, cfg, repoRoot, opts) {
         // only the Status cell may lose its state word and the `Trigger：` wrapper — and only
         // when the state word itself survived as a status of the same kind
         const word = (norm.match(/^([A-Za-z][\w-]*)/) || [, ''])[1].toLowerCase();
-        const kind = statusMap[word] || DEFAULT_STATUS_MAP[word] || 'open';
-        if (!rowFields.Status.startsWith(kind)) return true;
+        const kind = statusMap[word] || DEFAULT_STATUS_MAP[word];
+        if (!kind || !rowFields.Status.startsWith(kind)) return true;
         const stripped = norm.replace(/^[A-Za-z][\w-]*\s*[（(]?/, '').replace(/Trigger\s*[：:]\s*/i, '').replace(/[）)]\s*$/, '').trim();
         return stripped.length > 0 && !retained.includes(stripped);
       });
@@ -480,17 +579,37 @@ function planTableMigration(text, cfg, repoRoot, opts) {
     }
   }
   const newText = outLines.join('\n');
+  const hay = newText + '\n' + sidecars.map((s) => s.contents).join('\n');
+  for (const rec of originalRows) {
+    if (hay.includes(rec.line)) continue;
+    (rec.headers || []).forEach((h, n) => {
+      const mapped = mappedColumnField(h, colMap);
+      if (mapped && TABLE_FIELDS.includes(mapped)) return;
+      const raw = stripBold(rec.cells[n] || '');
+      if (!raw) return;
+      if (!hay.includes(raw) && !hay.includes(raw.replace(/\|/g, '\\|'))) {
+        dropped.push({ header: h, text: raw, line: rec.lineNo });
+      }
+    });
+  }
   const migrateCount = planned.filter((e) => e.sidecar).length;
+  const bytes_before = byteLen(text);
+  const bytes_after = byteLen(newText);
+  const moved_bytes = planned.reduce((n, e) => n + e.moved_bytes, 0);
+  const normalized_bytes = bytes_before - bytes_after - moved_bytes;
+  const preserved = dropped.length === 0 && errors.filter((e) => e.code === 'unmapped_column').length === 0
+    && bytes_before === bytes_after + moved_bytes + normalized_bytes;
   const manifest = {
-    preserved: null,
+    preserved,
+    errors,
+    dropped,
     entries: planned,
     totals: {
       entries: planned.length, migrate: migrateCount,
-      moved_bytes: planned.reduce((n, e) => n + e.moved_bytes, 0),
-      bytes_before: byteLen(text), bytes_after: byteLen(newText),
+      moved_bytes, bytes_before, bytes_after, normalized_bytes,
     },
   };
-  return { newText, sidecars, planned, manifest, outDirAbs, when, migrateCount };
+  return { newText, sidecars, planned, manifest, outDirAbs, when, migrateCount, errors, dropped, abortRewrite: false };
 }
 
 function planMigration(text, cfg, repoRoot, opts) {
@@ -732,6 +851,15 @@ function main() {
     process.exit(0);
   }
 
+  const hasUnmappedColumn = (planned.errors || []).some((e) => e.code === 'unmapped_column');
+  const hasUnmappedStatus = (planned.errors || []).some((e) => e.code === 'unmapped_status');
+  if (hasUnmappedColumn || (hasUnmappedStatus && !args.allowUnmappedToSidecar)) {
+    planned.manifest.preserved = false;
+    fs.writeSync(1, JSON.stringify(planned.manifest) + '\n');
+    process.exit(1);
+  }
+
+  const originalText = text;
   const result = applyWrites(
     backlogPath,
     planned.newText,
@@ -740,9 +868,40 @@ function main() {
     planned.outDirAbs,
     planned.when
   );
-  planned.manifest.preserved = result.preserved;
+  planned.manifest.preserved = result.preserved && planned.manifest.preserved !== false;
+  if (result.ok && result.preserved && !result.noop) {
+    const { report } = runCheck({ backlog: backlogPath, config: args.config });
+    planned.manifest.gate = report;
+    if (report.exit !== 0) {
+      fs.writeFileSync(backlogPath, originalText);
+      for (const s of planned.sidecars) {
+        try { fs.unlinkSync(s.abs); } catch { /* ignore */ }
+      }
+      try {
+        fs.unlinkSync(path.join(planned.outDirAbs, 'MIGRATION-' + planned.when + '.json'));
+      } catch { /* ignore */ }
+      planned.manifest.preserved = false;
+      fs.writeSync(1, JSON.stringify(planned.manifest) + '\n');
+      process.exit(1);
+    }
+  } else if (result.ok && result.preserved && result.noop) {
+    const { report } = runCheck({ backlog: backlogPath, config: args.config });
+    planned.manifest.gate = report;
+  }
+  if (result.ok && result.preserved && planned.dropped && planned.dropped.length) {
+    fs.writeFileSync(backlogPath, originalText);
+    for (const s of planned.sidecars) {
+      try { fs.unlinkSync(s.abs); } catch { /* ignore */ }
+    }
+    try {
+      fs.unlinkSync(path.join(planned.outDirAbs, 'MIGRATION-' + planned.when + '.json'));
+    } catch { /* ignore */ }
+    planned.manifest.preserved = false;
+    fs.writeSync(1, JSON.stringify(planned.manifest) + '\n');
+    process.exit(1);
+  }
   fs.writeSync(1, JSON.stringify(planned.manifest) + '\n');
-  process.exit(result.ok && result.preserved ? 0 : 1);
+  process.exit(result.ok && planned.manifest.preserved ? 0 : 1);
 }
 
 if (require.main === module) main();

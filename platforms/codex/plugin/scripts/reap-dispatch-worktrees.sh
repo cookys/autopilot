@@ -1202,8 +1202,12 @@ printf ',"branch_inventory_records":'; emit_array inventory_record_items
 printf ',"journal_branch_inventory":%s' "$_JOURNAL_BRANCH_INVENTORY"
 lease_gc_json='{"scanned":0,"dead":0,"skipped":[],"appended":0}'
 if [ "$command_name" = "reap" ]; then
-  _lease_path="$repo/.autopilot/run-ledger.jsonl"
-  if [ -f "$_lease_path" ]; then
+  # Same git-common-dir join as mission-terminal-reconcile / campaign CLI:
+  # host leases live at <common>/autopilot/implementation-campaign.jsonl, not
+  # $repo/.autopilot/run-ledger.jsonl (that path is not what dispatchers pass).
+  _lease_git="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  _lease_path="${_lease_git:+$_lease_git/autopilot/implementation-campaign.jsonl}"
+  if [ -n "$_lease_path" ] && [ -f "$_lease_path" ]; then
     _lease_out="$(bash "$self_dir/run-ledger.sh" lease-gc --ledger "$_lease_path" --json 2>/dev/null || true)"
     if printf '%s' "$_lease_out" | jq -e '.scanned != null and .dead != null and .appended != null and .skipped' >/dev/null 2>&1; then
       lease_gc_json="$_lease_out"

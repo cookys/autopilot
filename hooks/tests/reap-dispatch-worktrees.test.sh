@@ -328,4 +328,24 @@ assert_exit_code "$?" "0" "mirror crash recovery remains reappable"
 assert_file_absent "$MIRROR_WT/.git" \
   "recovered mirror transaction eventually removes its worktree"
 
+# RED at a5299a4ccf3e8c1b1f50287b6dc36508b544cd51: reap hard-coded
+# $repo/.autopilot/run-ledger.jsonl so .lease_gc.scanned stayed 0 even with a
+# fixture at git-common-dir/autopilot/implementation-campaign.jsonl.
+GC_REPO="$TEST_TMP/lease-gc-path-repo"
+mkdir -p "$GC_REPO"
+git -C "$GC_REPO" init -q -b develop
+git -C "$GC_REPO" -c user.email=wlb@test -c user.name=wlb \
+  commit -q --allow-empty -m "lease-gc path fixture"
+GC_COMMON="$(git -C "$GC_REPO" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$GC_COMMON/autopilot"
+GC_LEDGER="$GC_COMMON/autopilot/implementation-campaign.jsonl"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$GC_LEDGER" >/dev/null
+bash "$REPO_ROOT/scripts/run-ledger.sh" stage-acquire --ledger "$GC_LEDGER" \
+  --run-id "reap-gc-scan" --stage implement --pid $$ >/dev/null
+"$CONTROLLER" reap --repo "$GC_REPO" --root-run-id "lease-gc-path-root" --yes \
+  > "$TEST_TMP/lease-gc-path-reap.json"
+assert_exit_code "$?" "0" "reap with sandbox campaign ledger succeeds"
+assert_eq "$(jq -r '.lease_gc.scanned' < "$TEST_TMP/lease-gc-path-reap.json")" "1" \
+  "lease_gc.scanned reflects the git-common-dir campaign ledger"
+
 finalize_test

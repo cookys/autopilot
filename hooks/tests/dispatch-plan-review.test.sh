@@ -485,6 +485,7 @@ assert_contains "$(json_field "$OUT" attempts.0.error)" \
 assert_contains "$(json_field "$OUT" policy_reason)" \
   "seat architect precondition_failed: active session-mode=l5 blocks non-strict dispatch" \
   "artifact policy_reason names the precondition"
+assert_artifact_schema "$OUT" "precondition_failed artifact matches schema"
 
 # Fallback is allowed only from the frozen manifest and preserves family count.
 FALLBACK_SEQUENCE="$(sequence \

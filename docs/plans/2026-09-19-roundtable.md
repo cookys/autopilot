@@ -1,6 +1,6 @@
 # Plan — roundtable: a moderated, multi-harness discussion the operator sits in
 
-> Status: draft, awaiting Board read · Owner: cookys (depth-0) · Branch: `develop` (docs only until Phase 1) ·
+> Status: **Phase 0 done 2026-09-19, operator verdict: worth it; parked in BACKLOG until ≥3 more manual rooms have run** · Owner: cookys (depth-0) · Branch: `develop` (docs only until Phase 1) ·
 > Size: S (Phase 0 spike) + L (Phase 1 skill) + S (Phase 2 hangar conventions) · Frame: brainstorm/plan, not review.
 > Raised 2026-09-19 from the operator's question: the hetero plan loop is "everyone submits, one agent
 > aggregates", which fits review but not plan/brainstorm — *especially when I want to be in the room*. We now have
@@ -247,6 +247,28 @@ What would guarantee this fails:
 2. Should the operator's phone path (OpenClaw → `fleet send --instance <moderator>`) be exercised in Phase 0, or is
    TUI-only steering enough for the first run?
 3. Default round budget 3 / deadline 10 min — right order of magnitude for the models you'd seat?
+
+## Phase 0 result (2026-09-19)
+
+Ran on hangar `docs/plans/peer-advisory-availability.md`: three seats (aimax395/claude, cuda/claude, cuda/grok), three rounds,
+~45 min, unanimous on every question, the plan changed shape (offer/lessons split, tool-written stub + one-line asker obligation
++ gate, falsifiable P4). Evidence: `evidence/2026-09-19-roundtable/` (transcript, sends log, notes F1–F7, cost). Write-back
+landed in hangar `b9438dd`. **Operator's verdict (cookys, 2026-09-19): worth it** — "值". Decision: **do not build Phase 1 yet;
+run more rooms by hand first** (each one under the same protocol, evidence dir per room), so the skill is distilled from several
+transcripts rather than one. Trigger for Phase 1 is in BACKLOG.
+
+What Phase 0 changed in this plan (carried into §2.5 / Phase 1 when it opens):
+- **Only Claude channel seats are addressable from the hub.** A non-Claude seat means ssh + `tmux paste-buffer -p` in and shell
+  `fleet send --instance <moderator>` out; never `fleet send --to <host> --local <pane>` — on a host with no switchboard courier
+  that conscripts every Claude session there and reaches no pane (F1; root cause tracked in hangar, agent-call address system).
+- **Liveness probe before round 1** (F3/F6): codex and kimi seats died on their own quotas with healthy-looking registrations;
+  agent-call's kimi adapter no longer matches kimi 2.0.1. A one-line "say READY" paste with a 60 s deadline, per seat.
+- **Exact MCP call shapes** go in protocol.md (F2): `send_to_peer` with `to:"@group"` + `to_filter:{instance}`; replies via
+  `reply_to_peer`; a late-joining seat gets the missed round as a moderator summary, not verbatim.
+- The plan under discussion is a **single file copied into a scratch dir** on each seat host (hangar clones are forbidden
+  off-hub, ADR-_global/0008) — "checked out in your cwd" in the template is wrong for hangar plans.
+- Roster changes mid-room are normal (a dead seat replaced, a conscripted session kept by operator decision); the transcript
+  records them as a roster block between rounds.
 
 ## Review log
 

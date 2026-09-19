@@ -41,7 +41,7 @@ Three seats, three rounds, ~45 min wall, every question answered by every live s
 grok ~20 s). The plan changed shape (offer/lessons split, tool-written stub + one-line asker obligation + gate, falsifiable P4). A
 conscripted-by-accident session contributed the framing line of the room. Two things the moderator relay did that a flat chat
 would not: forced each seat to attack the other side in R2, and carried R2 to a late-joining seat as a summary so R3 was still
-three-way. Operator's verdict on worth: **pending** (§ Phase 0 step 9) — to be filled by cookys, not the moderator.
+three-way. Operator's verdict on worth (cookys, 2026-09-19): **worth it** — 「值」. Next: more manual rooms by hand before Phase 1 (BACKLOG row).
 
 ## Phase 1 consequences (from F1–F6)
 - Claude channel seats are the only class the skill can address from the hub; a non-Claude seat means ssh + tmux paste in and shell

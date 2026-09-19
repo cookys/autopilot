@@ -12,6 +12,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### roundtable Phase 1 — the `/roundtable` skill, distilled from several manual rooms
+- **Status**: open
+- **Trigger**: ≥3 more manual rooms have run under the Phase 0 protocol with an evidence dir each, OR the operator asks for the skill by name
+- **Effort**: L
+- **Source**: operator 2026-09-19 after Phase 0 ("值,先詳細寫成 plan 留 backlog,我們應該多經歷幾輪再來繼續")
+- **Pointer**: docs/plans/2026-09-19-roundtable.md
+- **Context**: Phase 0 (3 seats, 3 rounds, unanimous, plan changed shape) proved the moderator-relay protocol; the skill is written from transcripts, not from one run
+
+### roundtable — non-Claude seats are unreachable from the hub without a switchboard courier
+- **Status**: open
+- **Trigger**: the hangar agent-call address fix ships (a `--local` send narrowed to the courier instance, or peers ignoring foreign `local_target`), OR a room needs a non-Claude seat before then
+- **Effort**: S
+- **Source**: Phase 0 finding F1 (7 cuda sessions received a message meant for one codex pane; the pane got nothing)
+- **Pointer**: docs/plans/evidence/2026-09-19-roundtable/notes.md
+- **Context**: until fixed the protocol uses ssh + tmux paste in and shell `fleet send --instance` out; the skill must never emit `--to <host> --local`
+
 ### dispatch-review parser refuses a complete GLM verdict when the envelope repeats the BEGIN marker
 - **Status**: shipped v2.36.70 2026-09-19
 - **Trigger**: fired 2026-09-18 — 2-C station second-family review: GLM-5.2 returned VERDICT/FINDINGS/NO-FINDING-PROOF intact, parser said `duplicate derived BEGIN marker found inside capture` → `no_verdict`; adopted from raw

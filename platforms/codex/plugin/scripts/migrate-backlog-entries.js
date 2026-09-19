@@ -294,6 +294,22 @@ function stripBold(s) {
   return /^[—–-]$/.test(t) ? '' : t;  // a lone dash cell means "none"
 }
 
+function cellNormDelta(cell) {
+  const raw = String(cell == null ? '' : cell);
+  const stripped = stripBold(raw);
+  return byteLen(raw) - byteLen(stripped);
+}
+
+function titlePeriodDelta(strippedTitle) {
+  const t = String(strippedTitle || '').replace(/[.。]\s*$/, '');
+  return byteLen(strippedTitle || '') - byteLen(t);
+}
+
+function statusRemainder(raw) {
+  const norm = String(raw || '').replace(/\s+/g, ' ');
+  return norm.replace(/^[A-Za-z][\w-]*\s*[（(]?/, '').replace(/Trigger\s*[：:]\s*/i, '').replace(/[）)]\s*$/, '').trim();
+}
+
 function escapeCell(s) {
   return String(s == null ? '' : s).replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').trim();
 }
@@ -371,6 +387,33 @@ function planTableMigration(text, cfg, repoRoot, opts) {
   const errors = [];
   const originalRows = [];
   const dropped = [];
+  let normalized_bytes = 0;
+  let synthesized_bytes = 0;
+  const accountHeaderSwap = (oldHeader, oldSep) => {
+    normalized_bytes += byteLen(oldHeader) + byteLen(oldSep || '');
+    const neu = tableHeaderLines();
+    synthesized_bytes += byteLen(neu[0]) + byteLen(neu[1]);
+  };
+  const accountInPlaceRow = (rowLine, cells, idx, rowFields, rewritten) => {
+    cells.forEach((c) => { normalized_bytes += cellNormDelta(c); });
+    const titleStripped = idx.Title != null ? stripBold(cells[idx.Title] || '') : '';
+    normalized_bytes += titlePeriodDelta(titleStripped);
+    const origOf = (f) => (idx[f] != null ? stripBold(cells[idx[f]] || '') : '');
+    if (rowFields.Trigger === 'see pointer' && origOf('Trigger') !== 'see pointer') synthesized_bytes += byteLen('see pointer');
+    if (rowFields.Pointer === 'none' && origOf('Pointer') !== 'none') synthesized_bytes += byteLen('none');
+    if (rowFields.Source === 'unknown' && origOf('Source') !== 'unknown') synthesized_bytes += byteLen('unknown');
+    const oldSt = origOf('Status');
+    if (rowFields.Status && rowFields.Status !== oldSt) {
+      synthesized_bytes += byteLen(rowFields.Status);
+      normalized_bytes += byteLen(oldSt);
+    }
+    const unescapeExtra = (rowLine.match(/\\\|/g) || []).length;
+    const oldWrap = byteLen(rowLine) - cells.reduce((n, c) => n + byteLen(c), 0) - unescapeExtra;
+    const fieldStr = TABLE_FIELDS.map((f) => escapeCell(rowFields[f] == null ? '' : rowFields[f])).join('');
+    const newWrap = byteLen(rewritten) - byteLen(fieldStr);
+    normalized_bytes += oldWrap;
+    synthesized_bytes += newWrap;
+  };
   let section = '';
   let i = 0;
   const isRow = (l) => /^\s*\|/.test(l);
@@ -455,6 +498,7 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       rewritten = renderTableRow(rowFields);
     }
     outLines.push(rewritten);
+    synthesized_bytes += byteLen(rewritten) + 1;
     const moved = rowLine + '\n';
     const body = `# ${titleRaw}\n\nSource: ${backlogRel}@${headSha}, migrated ${when}` + (section ? `\nSection: ${section}` : '') + `\nOriginal row (verbatim):\n\n` + moved;
     sidecars.push({ abs: sidecarAbs, contents: body, moved });
@@ -467,7 +511,6 @@ function planTableMigration(text, cfg, repoRoot, opts) {
     const bytes_before = byteLen(text);
     const bytes_after = byteLen(newText);
     const moved_bytes = 0;
-    const normalized_bytes = bytes_before - bytes_after - moved_bytes;
     const manifest = {
       preserved: false,
       errors,
@@ -475,7 +518,7 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       entries: planned,
       totals: {
         entries: planned.length, migrate: migrateCount,
-        moved_bytes, bytes_before, bytes_after, normalized_bytes,
+        moved_bytes, bytes_before, bytes_after, normalized_bytes: 0, synthesized_bytes: 0,
       },
     };
     return { newText, sidecars, planned, manifest, outDirAbs, when, migrateCount, errors, dropped, abortRewrite: true };
@@ -491,8 +534,13 @@ function planTableMigration(text, cfg, repoRoot, opts) {
     if (!headerIdx || headerIdx.Title == null) { outLines.push(line); i += 1; continue; }
     const headerCells = cellsOf(line).map((c) => stripBold(c));
     i += 1;
-    if (i < lines.length && isRow(lines[i]) && isSep(cellsOf(lines[i]))) i += 1;
+    let sepLine = '';
+    if (i < lines.length && isRow(lines[i]) && isSep(cellsOf(lines[i]))) {
+      sepLine = lines[i];
+      i += 1;
+    }
     const idx = headerIdx;
+    accountHeaderSwap(line, sepLine);
     outLines.push(...tableHeaderLines());
     while (i < lines.length && isRow(lines[i]) && !/^\s*(```|~~~)/.test(lines[i])) {
       const rowLine = lines[i];
@@ -528,7 +576,9 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       // first backticked token that resolves as the Pointer and keep the rest as Context.
       let pointerPath = '';
       let pointerRest = pointerCell;
-      if (pointerCell && gate.pointerOk(pointerCell, cfg, repoRoot).ok === true) {
+      if (!pointerCell || pointerCell === 'none') {
+        pointerPath = ''; pointerRest = '';
+      } else if (gate.pointerOk(pointerCell, cfg, repoRoot).ok === true) {
         pointerPath = pointerCell; pointerRest = '';
       } else {
         for (const m of pointerCell.matchAll(/`([^`]+)`/g)) {
@@ -554,7 +604,7 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       // Lossy = some original cell text would not survive the rewrite (a log inside the Status
       // cell, a truncated Context, prose beyond the first sentence). That text goes to a sidecar;
       // a row the schema columns carry in full stays in place with `none`.
-      const retained = [rowFields.Status, rowFields.Trigger, rowFields.Context, rowFields.Source, rowFields.Effort, rowFields.Id, pointerPath].join(' ');
+      const retained = [rowFields.Status, rowFields.Trigger, rowFields.Context, rowFields.Source, rowFields.Effort, rowFields.Id, rowFields.Pointer, pointerPath].join(' ');
       const originalCells = [['Status', get('Status')], ['Source', get('Source')], ['Context', get('Context')], ['Pointer', get('Pointer')], ['Effort', get('Effort')], ['Id', get('Id')]]
         .map(([f, c]) => [f, stripBold(c)]).filter(([, c]) => c);
       const lossy = originalCells.some(([f, c]) => {
@@ -571,6 +621,7 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       });
       if (!lossy && !needsMigration(probe, cfg, repoRoot, now)) {
         const kept = renderTableRow(rowFields);
+        accountInPlaceRow(rowLine, cells, idx, rowFields, kept);
         outLines.push(kept);
         planned.push({ title: titleRaw, slug: null, bytes_before: bytesBefore, bytes_after: byteLen(kept), moved_bytes: 0, moved_sha256: sha256(''), sidecar: null });
         continue;
@@ -584,9 +635,17 @@ function planTableMigration(text, cfg, repoRoot, opts) {
     if (hay.includes(rec.line)) continue;
     (rec.headers || []).forEach((h, n) => {
       const mapped = mappedColumnField(h, colMap);
-      if (mapped && TABLE_FIELDS.includes(mapped)) return;
-      const raw = stripBold(rec.cells[n] || '');
+      const raw = stripBold(rec.cells[n] || '').trim();
       if (!raw) return;
+      if (mapped === 'Status') {
+        const norm = raw.replace(/\s+/g, ' ');
+        const word = (norm.match(/^([A-Za-z][\w-]*)/) || [, ''])[1].toLowerCase();
+        const kind = statusMap[word] || DEFAULT_STATUS_MAP[word];
+        if (kind) {
+          const stripped = statusRemainder(norm);
+          if (!stripped || hay.includes(stripped) || hay.includes(stripped.replace(/\|/g, '\\|'))) return;
+        }
+      }
       if (!hay.includes(raw) && !hay.includes(raw.replace(/\|/g, '\\|'))) {
         dropped.push({ header: h, text: raw, line: rec.lineNo });
       }
@@ -596,9 +655,8 @@ function planTableMigration(text, cfg, repoRoot, opts) {
   const bytes_before = byteLen(text);
   const bytes_after = byteLen(newText);
   const moved_bytes = planned.reduce((n, e) => n + e.moved_bytes, 0);
-  const normalized_bytes = bytes_before - bytes_after - moved_bytes;
-  const preserved = dropped.length === 0 && errors.filter((e) => e.code === 'unmapped_column').length === 0
-    && bytes_before === bytes_after + moved_bytes + normalized_bytes;
+  const preserved = dropped.length === 0
+    && bytes_before === bytes_after + moved_bytes + normalized_bytes - synthesized_bytes;
   const manifest = {
     preserved,
     errors,
@@ -606,7 +664,7 @@ function planTableMigration(text, cfg, repoRoot, opts) {
     entries: planned,
     totals: {
       entries: planned.length, migrate: migrateCount,
-      moved_bytes, bytes_before, bytes_after, normalized_bytes,
+      moved_bytes, bytes_before, bytes_after, normalized_bytes, synthesized_bytes,
     },
   };
   return { newText, sidecars, planned, manifest, outDirAbs, when, migrateCount, errors, dropped, abortRewrite: false };

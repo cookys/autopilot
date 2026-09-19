@@ -502,13 +502,63 @@ bb="$(json_field "$(first_json "$out")" totals.bytes_before)"
 ba="$(json_field "$(first_json "$out")" totals.bytes_after)"
 mb="$(json_field "$(first_json "$out")" totals.moved_bytes)"
 nb="$(json_field "$(first_json "$out")" totals.normalized_bytes)"
+sb="$(json_field "$(first_json "$out")" totals.synthesized_bytes)"
 set +e
-node -e 'const [bb,ba,mb,nb]=process.argv.slice(1).map(Number); process.exit(bb===ba+mb+nb?0:1)' "$bb" "$ba" "$mb" "$nb"
+# Independent of totals.normalized_bytes: entry residuals must not be used as the
+# reconciler (that identity is bb===ba+mb+(bb-ba-mb)). RED at repair: vacuous nb.
+node -e 'const j=JSON.parse(process.argv[1]); const exp=j.entries.reduce((n,e)=>n+(e.bytes_before-e.bytes_after-e.moved_bytes),0); process.exit(Number(j.totals.normalized_bytes)===exp?1:0)' "$(first_json "$out")"
+vacuous=$?
+set -e
+assert_eq "$vacuous" "0" "(p) normalized_bytes is not the totals residual" # RED at repair: nb defined as bb-ba-mb
+set +e
+node -e 'const [bb,ba,mb,nb,sb]=process.argv.slice(1).map(Number); process.exit(bb===ba+mb+nb-sb?0:1)' "$bb" "$ba" "$mb" "$nb" "$sb"
 rec_bytes=$?
 set -e
-assert_eq "$rec_bytes" "0" "(p) bytes_before === bytes_after + moved_bytes + normalized_bytes" # RED at 488dc6dc: 277-258 != 122
+assert_eq "$rec_bytes" "0" "(p) bytes_before === bytes_after + moved_bytes + normalized_bytes - synthesized_bytes" # RED at 488dc6dc: 277-258 != 122
 assert_contains "$(first_json "$out")" '"gate"' "(p) gate report embedded in the manifest"
 assert_eq "$(json_field "$(first_json "$out")" gate.exit)" "0" "(p) embedded gate is green"
+
+# lossy in-place row: title period strip + no sidecar → dropped + preserved:false
+P3="$(repo table-lossy-inplace)"
+mkdir -p "$P3/docs/tickets/048/runs"; printf 'run\n' > "$P3/docs/tickets/048/runs/a.md"
+cat > "$P3/docs/projects/BACKLOG.md" <<'EOB'
+# revival BACKLOG
+
+## 換裝線
+
+| id | 標題 | 狀態 | 體量 | 來源 | spec | 備註 |
+|----|------|------|------|------|------|------|
+| **LOSS-p** | mapped extra-col row. | **planned** | S | user | — | — |
+EOB
+cat > "$P3/.claude/backlog-config.md" <<'EOC'
+- style: table
+- mode: warn
+
+## Pointer roots
+- docs/backlog
+- docs/tickets
+
+## Columns
+- id: Id
+- 標題: Title
+- 狀態: Status
+- 體量: Effort
+- 來源: Source
+- spec: Context
+- 備註: Pointer
+
+## Status map
+- planned: open
+EOC
+git -C "$P3" add -A >/dev/null; git -C "$P3" -c user.email=t@t -c user.name=t commit -qm base
+set +e
+p3out="$(node "$MIG" --backlog "$P3/docs/projects/BACKLOG.md" --config "$P3/.claude/backlog-config.md" --apply --json)"
+p3=$?
+set -e
+assert_eq "$p3" "1" "(p) in-place title-period loss exits 1" # RED at repair: preserved structurally true
+assert_eq "$(json_field "$(first_json "$p3out")" preserved)" "false" "(p) preserved flips to false when a mapped cell is not in hay"
+assert_contains "$(first_json "$p3out")" "mapped extra-col row." "(p) dropped lists the stripped title"
+assert_file_absent "$P3/docs/backlog/loss-p.md" "(p) title-period row is not moved to a sidecar"
 
 # negative control: case (n) fixture shape still migrates with zero errors
 n_err="$(node "$MIG" --backlog "$N/docs/projects/BACKLOG.md" --config "$N/.claude/backlog-config.md" --json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const j=JSON.parse(d.split("\n")[0]);process.stdout.write(String((j.errors||[]).length))})')"

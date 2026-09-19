@@ -36,6 +36,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-18-blind-review-panel-station/README.md
 - **Context**: v2.34.7 framing family — the model echoes the marker line once more inside the block; the locator should treat a repeated marker as chrome when the wrapped block is otherwise well-formed, not discard the verdict.
 
+### `secret-scan-diff.test.sh` plants key literals in-repo — the scanner's own fixture is a finding on diffs touching it
+- **Status**: open
+- **Trigger**: v2.36.70 release range scan exits 1 naming `hooks/tests/secret-scan-diff.test.sh` (`AKIA…`, `sk-ant-…` literals; the `sk-ant-` one predates v2.36.70)
+- **Effort**: S
+- **Source**: 2026-09-18 parallel run, unit C report
+- **Pointer**: docs/plans/evidence/2026-09-18-parallel-kimi-foremen/c/REPORT.md
+- **Context**: build the planted strings at runtime by concatenation (`'AKIA' + 'IOSFODNN7EXAMPLE'`) so no literal sits in the tree; an L0 gate over a diff touching the suite would otherwise flag the scanner's own fixture.
+
 ### Managed rail: a park at `awaiting_disposition` reserves no wall for the repair round it authorises
 - **Status**: open
 - **Trigger**: fired 2026-09-18 — 2-C shared-packet parked at 5435/7200 s (implement 60 min + verify 21 + panel 9); two must-fix findings needed a round the remaining 1765 s could not fit, so depth-0 degraded to l3 instead of `--resume`

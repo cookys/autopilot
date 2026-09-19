@@ -131,7 +131,9 @@ function estimateRepairRoundSeconds(rows) {
   const vertical = roundOne.find(
     (row) => row.event_type === CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
   );
-  const verifyRow = roundOne.find((row) => row.unit === 'verify_round');
+  const verifyRow = roundOne.find(
+    (row) => row.unit === 'verify_round' || row.unit === 'campaign_verification',
+  );
   const reviewed = roundOne.find(
     (row) => row.event_type === CAMPAIGN_EVENTS.REVIEW_COMPLETED,
   );

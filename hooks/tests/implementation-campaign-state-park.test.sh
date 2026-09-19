@@ -103,6 +103,22 @@ const engineRows = estimateRepairRoundSeconds([
   },
 ]);
 assert.strictEqual(engineRows.repair_round_estimate_seconds, 5400);
+const verificationUnit = estimateRepairRoundSeconds([
+  { unit: 'dispatch_implementation', round: 1, wall_secs: 3600 },
+  {
+    unit: 'campaign_verification',
+    round: 1,
+    started_at: '2026-07-26T01:00:00.000Z',
+    ended_at: '2026-07-26T01:21:00.000Z',
+  },
+  {
+    unit: 'dispatch_review',
+    round: 1,
+    started_at: '2026-07-26T01:21:00.000Z',
+    ended_at: '2026-07-26T01:30:00.000Z',
+  },
+]);
+assert.strictEqual(verificationUnit.repair_round_estimate_seconds, 5400);
 console.log('estimate_engine_rows=true');
 
 function isoAt(seconds) {
@@ -475,6 +491,7 @@ const repairResume = runCampaignIntake({
   campaignDispositionAuthority: authority,
 }, adapters);
 assert.strictEqual(repairResume.status, 'blocked', JSON.stringify(repairResume));
+// RED at 56e2c097: status=admitted (repair-authorising resume accepted; remaining 1765 s < round-1 cost 5400 s, no refusal)
 assert.strictEqual(
   repairResume.rejection.code,
   'campaign_wall_budget_insufficient_for_repair',

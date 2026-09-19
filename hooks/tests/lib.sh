@@ -408,6 +408,53 @@ poll_until() {
   done
 }
 
+# Hermetic D4 strict-roster fixture (provider-readiness-consumer + autopilot-cli).
+# Roster names ONLY the six STRICT_L5_PROVIDER_POLICY tuples. Scorecard rows are
+# written via the real engine-scorecard.js record CLI into TEST_TMP — never the
+# host capability dir. Caller exports REVIEW_LOOP_CONFIG_OVERRIDE /
+# ENGINE_SCORECARD_DIR; the helper only sets HERMETIC_REVIEW_LOOP_CFG and
+# HERMETIC_SCORECARD_DIR.
+write_d4_strict_roster_fixture() {
+  HERMETIC_REVIEW_LOOP_CFG="$TEST_TMP/hermetic-review-loop-config.md"
+  HERMETIC_SCORECARD_DIR="$TEST_TMP/hermetic-scorecard"
+  mkdir -p "$HERMETIC_SCORECARD_DIR"
+  cat > "$HERMETIC_REVIEW_LOOP_CFG" <<'CFG'
+- reviewer_engine: MiniMax-M3
+- reviewer_effort: high
+- reviewer_runner: cc-shim
+- reviewer_endpoint: minimax
+- reviewer_limitation: minimax-false-central-claim-5-of-6
+- reviewer_limitation_required: true
+- implementer_engine: grok-4.5
+- implementer_effort: high
+- implementer_runner: grok
+- verification_author_present: true
+- verification_author_engine: GLM-5.2
+- verification_author_runner: cc-shim
+- verification_author_effort: high
+- verification_author_endpoint: glm
+- qc_panel: gpt-5.6-sol, GLM-5.2, MiniMax-M3
+- qc_panel_runners: codex, cc-shim, cc-shim
+- qc_panel_efforts: max, high, high
+- qc_panel_endpoints: @none, glm, minimax
+- qc_panel_aggregation: union-on-verified-critical
+- min_panel_size: 3
+- provider_readiness_receipt_ttl_seconds: 300
+- provider_readiness_fallback_family_constraint: different
+CFG
+  _hermetic_scorecard_row() {
+    local engine="$1" runner="$2" family="$3" role="$4"
+    local rec="$HERMETIC_SCORECARD_DIR/rec-${role}-${engine}.json"
+    cat > "$rec" <<JSON
+{"engine":"${engine}","runner":"${runner}","family":"${family}","role":"${role}","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+JSON
+    ENGINE_SCORECARD_DIR="$HERMETIC_SCORECARD_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$rec" >/dev/null
+  }
+  _hermetic_scorecard_row grok-4.5 grok xai implementer
+  _hermetic_scorecard_row MiniMax-M3 cc-shim minimax reviewer
+  _hermetic_scorecard_row GLM-5.2 cc-shim zhipu verification_author
+}
+
 # Call once at end of each *.test.sh file.
 # Terminates the suite â€” it EXITS, it does not return. Anything appended after
 # the finalize_test call never runs, and the suite still reports PASS, so a new

@@ -3,6 +3,66 @@
 
 CLI="$REPO_ROOT/bin/autopilot.js"
 
+# RED at 4360c58b: 40 FAIL — implement-review default blocks at reviewer qualification;
+# implement-review qualification block explains reason; managed CLI uses the uniform
+# dev-flow admission phase; managed CLI uses the uniform dev-flow admission rejection
+# code; absent marker rejection preserves zero effect counter "mutation_attempts":0;
+# absent marker rejection preserves zero effect counter "resources_created":0; absent
+# marker rejection distinguishes its reason; strict L5 executable fixture consumes a
+# fresh host-owned readiness bundle; strict L5 executable fixture records the frozen
+# policy digest; strict L5 executable fixture records canonical claim provenance;
+# strict L6 executable fixture consumes a fresh host-owned readiness bundle; strict L6
+# executable fixture receipt carries the actual level, not the l5 literal; strict L6
+# executable fixture records the frozen policy digest; strict L6 executable fixture
+# records canonical claim provenance; strict L4 executable fixture consumes a fresh
+# host-owned readiness bundle (KR1); strict L4 executable fixture receipt carries the
+# actual level, not an l5 literal; strict L4 executable fixture reaches campaign
+# intake (the v2.36.7 wall is gone); strict L4 executable fixture records the frozen
+# policy digest (D4 claim set untouched); strict L4 CLI warns loudly on an advisory
+# derivation (KR2c: stderr line present); strict L4 CLI records advisory_default when
+# no override reason is configured (KR2a); strict L4 CLI names the uncertified
+# reviewer seat in the override line (KR2b); strict L4 CLI proceeds to readiness
+# under advisory policy; strict L4 advisory run still stamps the actual level;
+# KR3(i) l5: a VA-less roster with a complete QC panel is refused before spend;
+# KR3(i) l5: the refusal names verification_author_present: true; KR3(i) l5: the
+# refusal names review-loop-config.md; KR3(ii) l5: VA present with an unresolved QC
+# panel is refused before spend; KR3(ii) l5: the refusal names the QC roster;
+# KR3(i) l6: a VA-less roster with a complete QC panel is refused before spend;
+# KR3(i) l6: the refusal names verification_author_present: true; KR3(i) l6: the
+# refusal names review-loop-config.md; KR3(ii) l6: VA present with an unresolved QC
+# panel is refused before spend; KR3(ii) l6: the refusal names the QC roster; strict
+# L5 CLI warns loudly on every advisory derivation over a drifted roster; strict L5
+# CLI records the advisory_default audit reason when no override is configured;
+# strict L5 CLI proceeds to readiness under advisory policy; l4 default: the full
+# roster derives under the l4 profile (VA + QC included when present); l4 +
+# --require-qualified-reviewer: readiness consumed before the requirement is checked;
+# implement-review --resume fails closed as resume_invalid on a missing branch;
+# implement-review --resume explains the missing branch
+unset REVIEW_LOOP_CONFIG_OVERRIDE AUTOPILOT_QUALIFICATION_OVERRIDE
+write_d4_strict_roster_fixture
+export REVIEW_LOOP_CONFIG_OVERRIDE="$HERMETIC_REVIEW_LOOP_CFG"
+export ENGINE_SCORECARD_DIR="$HERMETIC_SCORECARD_DIR"
+
+copy_hermetic_repo() {
+  local dest="$1"
+  local common
+  mkdir -p "$dest"
+  tar -C "$REPO_ROOT" --exclude='./.git' -cf - . | tar -C "$dest" -xf -
+  common="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+  cp -a "$common" "$dest/.git"
+  rm -rf "$dest/.git/worktrees"
+  git -C "$dest" config --unset-all core.worktree 2>/dev/null || true
+  node - "$REPO_ROOT/.claude/owner-kernel-governance.json" \
+    "$dest/.claude/owner-kernel-governance.json" <<'NODE'
+const fs = require('fs');
+const [source, target] = process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(source, 'utf8'));
+value.mission_convergence = { ...(value.mission_convergence || {}), enforcement_mode: 'enforce' };
+fs.mkdirSync(require('path').dirname(target), { recursive: true });
+fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+}
+
 DIFF="$TEST_TMP/d.diff"
 printf '+def f(): return x[::1]\n' > "$DIFF"
 
@@ -148,12 +208,14 @@ done
 # a hermetic linked repository, and the campaign projection is derived from
 # that exact admission rather than caller-minted digests.
 D3_REPO="$TEST_TMP/d3-repo"
-git clone -q --no-local "$REPO_ROOT" "$D3_REPO"
+copy_hermetic_repo "$D3_REPO"
 D3_MARKER_DIR="$TEST_TMP/d3-markers"
 D3_SESSION_ID="autopilot-cli-d3"
 AUTOPILOT_SESSION_MODE_DIR="$D3_MARKER_DIR" CLAUDE_CODE_SESSION_ID="$D3_SESSION_ID" \
   node "$REPO_ROOT/scripts/session-mode.js" set --level l5 --entry-level l5 \
   --repo-root "$D3_REPO" >/dev/null
+assert_eq "0" "$?" "D3 session-mode set exits 0 (enforce governance on the copied repo)"
+assert_file_exists "$D3_MARKER_DIR/$D3_SESSION_ID.json" "D3 session marker exists after set"
 D3_MARKER="$D3_MARKER_DIR/$D3_SESSION_ID.json"
 D3_CAMPAIGN="$TEST_TMP/d3-campaign.json"
 node - "$REPO_ROOT" "$D3_REPO" "$D3_MARKER" "$D3_CAMPAIGN" <<'NODE'
@@ -281,7 +343,7 @@ assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac355
 # is isolated from the pre-existing, unrelated Mission execution-graph source
 # digest drift on this repo (BACKLOG "hooks/tests/run.sh is red on develop").
 D6_REPO="$TEST_TMP/d6-repo"
-git clone -q --no-local "$REPO_ROOT" "$D6_REPO"
+copy_hermetic_repo "$D6_REPO"
 
 OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
   NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
@@ -312,9 +374,9 @@ assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac355
 STRICT_L4_CFG="$TEST_TMP/strict-l4-review-loop.md"
 sed -e 's/^- verification_author_present: true/- verification_author_present: false/' \
   -e '/^- verification_author_\(engine\|runner\|effort\|endpoint\|family\)/d' \
-  "$REPO_ROOT/.claude/review-loop-config.md" > "$STRICT_L4_CFG"
+  "$HERMETIC_REVIEW_LOOP_CFG" > "$STRICT_L4_CFG"
 D4_REPO="$TEST_TMP/d4-repo"
-git clone -q --no-local "$REPO_ROOT" "$D4_REPO"
+copy_hermetic_repo "$D4_REPO"
 
 OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
   NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
@@ -369,7 +431,7 @@ assert_contains "$OUT" '"strict_level":"l4"' \
 # (qc_panel_seats_complete:false with seats present) cannot be produced from a config file
 # and is pinned at unit level in provider-readiness-consumer.test.sh. All before spend.
 STRICT_QC_EMPTY_CFG="$TEST_TMP/strict-qc-empty-review-loop.md"
-sed -e '/^- qc_panel/d' "$REPO_ROOT/.claude/review-loop-config.md" > "$STRICT_QC_EMPTY_CFG"
+sed -e '/^- qc_panel/d' "$HERMETIC_REVIEW_LOOP_CFG" > "$STRICT_QC_EMPTY_CFG"
 printf -- '- qc_panel:\n' >> "$STRICT_QC_EMPTY_CFG"
 for strict_level in l5 l6; do
   OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
@@ -408,7 +470,7 @@ done
 # with claim_id null, and readiness continues to the live/fixture probe.
 STRICT_DRIFT_CFG="$TEST_TMP/strict-l5-drift-review-loop.md"
 sed 's/reviewer_engine: MiniMax-M3/reviewer_engine: unknown-reviewer-model/' \
-  "$REPO_ROOT/.claude/review-loop-config.md" > "$STRICT_DRIFT_CFG"
+  "$HERMETIC_REVIEW_LOOP_CFG" > "$STRICT_DRIFT_CFG"
 OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
   NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
   AUTOPILOT_LEVEL=l5 REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_DRIFT_CFG" \
@@ -502,6 +564,12 @@ assert_contains "$OUT" '"reviewer_qualified": false' "engine review-loop preserv
 OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard --enforce 2>&1)"; EXIT=$?
 assert_eq "3" "$EXIT" "engine review-loop preserves enforce exit 3"
 assert_contains "$OUT" '"reviewer_qualified": false' "engine review-loop emits data on enforce block"
+
+mkdir -p "$TEST_TMP/empty-scorecard-negative"
+OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard-negative" REVIEW_LOOP_CONFIG_OVERRIDE="$HERMETIC_REVIEW_LOOP_CFG" node "$CLI" engine review-loop --check-scorecard 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "negative control: empty ENGINE_SCORECARD_DIR still resolves the fixture roster"
+assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "negative control: fixture reviewer is independent of the host qualified set"
+assert_contains "$OUT" '"implementer_engine": "grok-4.5"' "negative control: fixture implementer is independent of the host qualified set"
 
 OUT="$(node "$CLI" engine 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing engine subcommand exits 2"

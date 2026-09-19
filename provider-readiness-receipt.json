@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "artifact_type": "provider_readiness_receipt",
+  "issued_at": "2026-07-27T12:00:00.000Z",
+  "expires_at": "2026-07-27T12:05:00.000Z",
+  "roster_digest": "a1b8729eed4b0e1d4a93c83a14004c765af69459de5930bef29ce5d337897a67",
+  "policy_digest": "046a59171624c56c28ff97ef47894688fa37b61daff20e8153ac21b234942409",
+  "observation_digest": "fe6b19e8baa3bee7d1af70eb86f081fecb84676a2249785688988e16541f35a4",
+  "overall_status": "usable",
+  "seats": [
+    {
+      "seat_id": "reviewer",
+      "required": true,
+      "family": "xai",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "reviewer",
+          "runner": "grok",
+          "model": "grok-4.5",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "cddfe145637787e67ffa6ee5ad0c3c9113d4e58a929adc7d0c5d9958e1011bac",
+        "observed_at": "2026-07-27T12:00:00.000Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-07-27T11:59:00.000Z",
+            "ttl_seconds": 600,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "blocked",
+            "observed_status": null,
+            "observed_at": "2026-07-27T11:59:00.000Z",
+            "ttl_seconds": 600,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": "quota_exhausted"
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-07-27T11:59:00.000Z",
+            "ttl_seconds": 600,
+            "evidence_class": "scorecard",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": false,
+        "probe_required": false,
+        "blocking_reasons": [
+          {
+            "axis": "live",
+            "reason": "quota_exhausted"
+          }
+        ],
+        "fallbacks": [],
+        "decision_digest": "b5f9953852f568840cdf71110f094ea36555e2d67da54c0b21a990b5b65f6164"
+      },
+      "fallbacks": [
+        {
+          "order": 3,
+          "family": "minimax",
+          "eligible": true,
+          "exclusion_reason": null,
+          "decision": {
+            "schema_version": 1,
+            "artifact_type": "provider_readiness_decision",
+            "tuple": {
+              "role": "reviewer",
+              "runner": "cc-shim",
+              "model": "MiniMax-M3",
+              "effort": "high",
+              "endpoint": "minimax"
+            },
+            "tuple_digest": "b9d87ae3354e84d595a340368ccb3b43a75bac15a4a4807ba34eb065bbdac24f",
+            "observed_at": "2026-07-27T12:00:00.000Z",
+            "axes": {
+              "transport": {
+                "status": "ready",
+                "observed_status": null,
+                "observed_at": "2026-07-27T11:59:00.000Z",
+                "ttl_seconds": 600,
+                "evidence_class": "safe-surface",
+                "freshness": "fresh",
+                "reason": null
+              },
+              "live": {
+                "status": "ready",
+                "observed_status": null,
+                "observed_at": "2026-07-27T11:59:00.000Z",
+                "ttl_seconds": 600,
+                "evidence_class": "live-probe",
+                "freshness": "fresh",
+                "reason": null
+              },
+              "qualification": {
+                "status": "ready",
+                "observed_status": null,
+                "observed_at": "2026-07-27T11:59:00.000Z",
+                "ttl_seconds": 600,
+                "evidence_class": "scorecard",
+                "freshness": "fresh",
+                "reason": null
+              }
+            },
+            "usable_now": true,
+            "probe_required": false,
+            "blocking_reasons": [],
+            "fallbacks": [],
+            "decision_digest": "b1c9a4e9a776c9ad8bf588ab4e617ecd095c6eccf9e12a235e422102dc0d6695"
+          }
+        },
+        {
+          "order": 4,
+          "family": "alibaba",
+          "eligible": true,
+          "exclusion_reason": null,
+          "decision": {
+            "schema_version": 1,
+            "artifact_type": "provider_readiness_decision",
+            "tuple": {
+              "role": "reviewer",
+              "runner": "qoderclicn",
+              "model": "Qwen3.8-Max-Preview",
+              "effort": "max",
+              "endpoint": null
+            },
+            "tuple_digest": "25a5c022dde2d9d519bf4ece495af3aa2028bd5f1c67c7e674a5a0b5a40f81cc",
+            "observed_at": "2026-07-27T12:00:00.000Z",
+            "axes": {
+              "transport": {
+                "status": "ready",
+                "observed_status": null,
+                "observed_at": "2026-07-27T11:59:00.000Z",
+                "ttl_seconds": 600,
+                "evidence_class": "safe-surface",
+                "freshness": "fresh",
+                "reason": null
+              },
+              "live": {
+                "status": "ready",
+                "observed_status": null,
+                "observed_at": "2026-07-27T11:59:00.000Z",
+                "ttl_seconds": 600,
+                "evidence_class": "live-probe",
+                "freshness": "fresh",
+                "reason": null
+              },
+              "qualification": {
+                "status": "ready",
+                "observed_status": null,
+                "observed_at": "2026-07-27T11:59:00.000Z",
+                "ttl_seconds": 600,
+                "evidence_class": "scorecard",
+                "freshness": "fresh",
+                "reason": null
+              }
+            },
+            "usable_now": true,
+            "probe_required": false,
+            "blocking_reasons": [],
+            "fallbacks": [],
+            "decision_digest": "5bb9b48c7553e461cbeb129b1c211c3a0a25a7e392c822c58dcda8015276da9b"
+          }
+        }
+      ],
+      "selected": {
+        "source": "fallback",
+        "fallback_order": 3,
+        "family": "minimax",
+        "tuple": {
+          "role": "reviewer",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        }
+      },
+      "status": "usable",
+      "failing_axes": [
+        {
+          "axis": "live",
+          "status": "blocked",
+          "reason": "quota_exhausted"
+        }
+      ]
+    }
+  ],
+  "receipt_digest": "ca117d31f7c811a10116b98dd15a5d78c49c7ca4e444efba420dc18f4677ee93"
+}

@@ -620,11 +620,25 @@ assert_contains "$ADAPTER_OUT" "adapter_outcomes_distinct=true" \
 
 # D4 strict /l5 trust root: exact frozen policy, canonical roster projection,
 # fresh host-owned closures, and the complete pre-dispatch negative matrix.
-STRICT_BOOTSTRAP_OUT="$(node - "$REPO_ROOT" <<'NODE'
+#
+# RED at 4360c58b: 5 FAIL — strict /l5 provider policy bootstrap is available;
+# strict /l5 policy is the exact frozen six-claim contract; strict /l5 accepts a
+# fresh host-owned exact-roster readiness bundle; strict /l5 negative matrix
+# rejects before workflow dispatch; v2.36.8: l4 roster profile derives, issues
+# and consumes an l4 bundle; l5/l6 invariants pinned by isolated controls
+unset REVIEW_LOOP_CONFIG_OVERRIDE AUTOPILOT_QUALIFICATION_OVERRIDE
+write_d4_strict_roster_fixture
+export REVIEW_LOOP_CONFIG_OVERRIDE="$HERMETIC_REVIEW_LOOP_CFG"
+export ENGINE_SCORECARD_DIR="$HERMETIC_SCORECARD_DIR"
+mkdir -p "$TEST_TMP/empty-scorecard-negative"
+STRICT_BOOTSTRAP_OUT="$(node - "$REPO_ROOT" "$HERMETIC_REVIEW_LOOP_CFG" "$HERMETIC_SCORECARD_DIR" "$TEST_TMP/empty-scorecard-negative" <<'NODE'
 'use strict';
 const assert = require('assert');
 const path = require('path');
 const root = process.argv[2];
+const fixtureCfg = process.argv[3];
+const fixtureScorecard = process.argv[4];
+const emptyScorecard = process.argv[5];
 const {
   LEVEL_ROSTER_PROFILE,
   STRICT_L5_CLAIM_IDS,
@@ -651,12 +665,25 @@ const {
 
 const NOW = '2026-08-04T08:00:00.000Z';
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const fixtureEnv = (scorecardDir) => ({
+  ...process.env,
+  REVIEW_LOOP_CONFIG_OVERRIDE: fixtureCfg,
+  ENGINE_SCORECARD_DIR: scorecardDir,
+});
 const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
   cwd: root,
-  env: process.env,
+  env: fixtureEnv(fixtureScorecard),
 });
 assert.strictEqual(resolvedResult.status, 0);
 assert.strictEqual(resolvedResult.error, null);
+const emptyResolved = resolveReviewLoopJson(['--check-scorecard'], {
+  cwd: root,
+  env: fixtureEnv(emptyScorecard),
+});
+assert.strictEqual(emptyResolved.status, 0);
+assert.strictEqual(emptyResolved.error, null);
+assert.strictEqual(emptyResolved.result.reviewer_engine, 'MiniMax-M3');
+assert.strictEqual(emptyResolved.result.implementer_engine, 'grok-4.5');
 const resolved = resolvedResult.result;
 
 const readyObservation = (tuple, axis, now, ttl) => ({
@@ -743,6 +770,19 @@ assert.strictEqual(consumed.status, 'ready');
 assert.strictEqual(consumed.strict_level, 'l5');
 assert.strictEqual(consumed.policy_digest, STRICT_L5_PROVIDER_POLICY_DIGEST);
 assert.deepStrictEqual(consumed.claim_ids, STRICT_L5_CLAIM_IDS);
+const emptyBootstrap = createStrictL5ProviderBootstrap({ cwd: root }, {
+  resolvedRoster: clone(emptyResolved.result),
+  collectReadiness: readyCollector,
+  now: () => NOW,
+});
+const emptyBundle = emptyBootstrap.providerReadinessAuthority({ roster: emptyBootstrap.roster });
+const emptyConsumed = consumeStrictL5ProviderReadiness(
+  emptyBootstrap.providerReadinessAuthority,
+  emptyBundle,
+  { roster: emptyBootstrap.roster, now: NOW },
+);
+assert.strictEqual(emptyConsumed.status, 'ready');
+console.log('hermetic_empty_scorecard=true');
 
 // L6 twin: the same strict provider-readiness bootstrap must compile for l6,
 // and every receipt/claim field carries the actual level instead of the l5
@@ -1139,6 +1179,8 @@ assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_negative_matrix_zero_dispatch=tr
   "strict /l5 negative matrix rejects before workflow dispatch"
 assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_l4_profile=true" \
   "v2.36.8: l4 roster profile derives, issues and consumes an l4 bundle; l5/l6 invariants pinned by isolated controls"
+assert_contains "$STRICT_BOOTSTRAP_OUT" "hermetic_empty_scorecard=true" \
+  "negative control: empty ENGINE_SCORECARD_DIR still compiles the fixture roster"
 
 # v2.36.7: an enforce-mode intake with NO compiled readiness authority is refused by name,
 # with the level and the two legal remedies (shadow, or a level that compiles the bootstrap) — never a waiver, never a hint to

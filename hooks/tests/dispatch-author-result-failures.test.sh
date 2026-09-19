@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # hooks/tests/dispatch-author-result-failures.test.sh
 # Unit 2c.ii verification oracle: strict failure-outcome provenance matrix
+# Exit table: 0 authored, 1 empty_output, 2 precondition_failed, 3 runner_failed,
+# 4 containment_breach, 5 truncated.
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
@@ -26,6 +28,8 @@ validate_json_result() {
   local raw_log_null="$6"
   local error_substr="$7"
 
+  local json_line
+  json_line="$(printf '%s\n' "$out" | grep '^{' | tail -n1)"
   PY_OUT="$(python3 -c "
 import sys, json
 
@@ -113,7 +117,7 @@ for val in forbidden_values:
 if errors:
     print(\"; \".join(errors))
     sys.exit(1)
-" "$out" "$status" "$endpoint" "$path" "$forbidden" "$raw_log_null" "$error_substr" 2>&1)"
+" "$json_line" "$status" "$endpoint" "$path" "$forbidden" "$raw_log_null" "$error_substr" 2>&1)"
   assert_eq "0" "$?" "JSON validation failed: $PY_OUT"
 }
 
@@ -124,6 +128,8 @@ cleanup_env() {
   unset AUTOPILOT_ENDPOINT_READY_FAIL_EP_TOKEN
   unset AUTOPILOT_ENDPOINT_READY_EMPTY_EP_URL
   unset AUTOPILOT_ENDPOINT_READY_EMPTY_EP_TOKEN
+  unset AUTOPILOT_ENDPOINT_READY_TRUNC_EP_URL
+  unset AUTOPILOT_ENDPOINT_READY_TRUNC_EP_TOKEN
   unset ANTHROPIC_BASE_URL
   unset ANTHROPIC_AUTH_TOKEN
   unset ANTHROPIC_COMPATIBLE_BASE_URL
@@ -276,6 +282,38 @@ ABS_EXPECTED_PATH3="$(cd "$CASE3_DIR" && pwd)/.claude/review-loop-config.md"
 
 # Assert endpoint URL and token fixture values are absent from the JSON result
 validate_json_result "$OUT" "empty_output" "READY_EMPTY_EP" "$ABS_EXPECTED_PATH3" "$EP_URL_FIXTURE3,$EP_TOKEN_FIXTURE3" "false" "no non-whitespace output from runner"
+
+# --- Case 4: truncated (exit 5) — non-empty output without the AUTHOR/END frame ---
+cleanup_env
+EP_URL_FIXTURE4="https://api.ready-trunc-fixture.org/v1"
+EP_TOKEN_FIXTURE4="endpoint-token-secret-fixture-trunc"
+export AUTOPILOT_ENDPOINT_READY_TRUNC_EP_URL="$EP_URL_FIXTURE4"
+export AUTOPILOT_ENDPOINT_READY_TRUNC_EP_TOKEN="$EP_TOKEN_FIXTURE4"
+CASE4_DIR="$TEST_TMP/case4"
+mkdir -p "$CASE4_DIR/.claude"
+EXPECTED_PATH4="$CASE4_DIR/.claude/review-loop-config.md"
+cat <<EOF > "$EXPECTED_PATH4"
+- verification_author_present: true
+- verification_author_engine: glm-5.2
+- verification_author_runner: cc-shim
+- verification_author_effort: high
+- verification_author_endpoint: READY_TRUNC_EP
+- implementer_engine: gpt-5.3-codex-spark
+EOF
+FAKE_RUNNER4="$TEST_TMP/fake-runner-4"
+cat <<'EOF' > "$FAKE_RUNNER4"
+#!/usr/bin/env bash
+touch "$SENTINEL"
+echo "started" >> "$RUN_COUNT_FILE"
+printf '%s' 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx['
+exit 0
+EOF
+chmod +x "$FAKE_RUNNER4"
+rm -f "$SENTINEL" "$RUN_COUNT_FILE"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE4_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER4" 2>&1)"; EXIT=$?
+assert_eq "5" "$EXIT" "Case 4: exit code 5"
+ABS_EXPECTED_PATH4="$(cd "$CASE4_DIR" && pwd)/.claude/review-loop-config.md"
+validate_json_result "$OUT" "truncated" "READY_TRUNC_EP" "$ABS_EXPECTED_PATH4" "$EP_URL_FIXTURE4,$EP_TOKEN_FIXTURE4" "false" "frame_missing"
 
 cleanup_env
 finalize_test

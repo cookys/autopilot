@@ -55,7 +55,20 @@ assert_not_contains "$OUT" "Diff under review" "codex prompt is not diff-wrapper
 
 # qoder author path (grok-shaped read-only, stderr discarded so the non-git-cwd git fatal
 # never pollutes the authored text): status authored, runner reported qoderclicn.
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+STUB_QODER="$TEST_TMP/runner-qoder"
+cat > "$STUB_QODER" <<'EOF'
+#!/usr/bin/env bash
+prompt=$(cat || true)
+begin=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+end=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+if [ -n "$begin" ] && [ -n "$end" ]; then
+  printf '%s\n%s\n%s\n' "$begin" "OK-WRITTEN" "$end"
+else
+  echo "OK-WRITTEN"
+fi
+EOF
+chmod +x "$STUB_QODER"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --prompt-file "$PROMPT" --bin "$STUB_QODER" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "qoder authored exit 0"
 assert_contains "$OUT" '"status": "authored"' "qoder status authored"
 assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
@@ -124,6 +137,24 @@ chmod +x "$STUB_OK"
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "normal output exits 0"
 assert_contains "$OUT" '"status": "authored"' "normal output returns authored status"
+
+# --- RED: 100-byte preamble ending in `[` (non-codex fake-runner seam) ---
+# RED at 6d19cd18ca676318440fac9e40b7fa7a95971a0e: observed
+#   status: authored  exit: 0  error: null
+#   (first 100 bytes of OUT JSON: {"runner": "grok", "model": "grok-build", "status": "authored", "raw_log": )
+STUB_PREAMBLE="$TEST_TMP/runner-preamble-trunc"
+cat > "$STUB_PREAMBLE" <<'EOF'
+#!/usr/bin/env bash
+# 99 bytes of filler + '[' = 100 bytes, exit 0
+printf '%s' 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx['
+exit 0
+EOF
+chmod +x "$STUB_PREAMBLE"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" --bin "$STUB_PREAMBLE" 2>&1)"; EXIT=$?
+assert_eq "5" "$EXIT" "preamble-only draft exits 5"
+assert_contains "$OUT" '"status": "truncated"' "preamble-only maps to truncated"
+assert_contains "$OUT" "frame_missing" "preamble-only truncated reason is frame_missing"
+
 python3 -c 'import json,sys; json.load(sys.stdin)' <<<"$OUT"
 assert_eq "0" "$?" "author output is valid JSON"
 RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
@@ -178,7 +209,25 @@ POL_RECEIPT="$TEST_TMP/polarity-valid.json"
 STUB_GROK="$TEST_TMP/runner-grok"
 cat > "$STUB_GROK" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "grok polarity fixture"
+pf=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--prompt-file" ]; then
+    i=$((i + 1)); pf="${args[$i]}"
+  fi
+  i=$((i + 1))
+done
+begin=""; end=""
+if [ -n "$pf" ] && [ -f "$pf" ]; then
+  begin=$(grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+  end=$(grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+fi
+if [ -n "$begin" ] && [ -n "$end" ]; then
+  printf '%s\n%s\n%s\n' "$begin" "grok polarity fixture" "$end"
+else
+  printf '%s\n' "grok polarity fixture"
+fi
 EOF
 chmod +x "$STUB_GROK"
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model gpt-test --prompt-file "$PROMPT" \
@@ -234,11 +283,35 @@ if [ "${1:-}" = "models" ]; then
   printf '%s\n' 'gemini-3.6-flash-low' 'gemini-3.6-flash-medium' 'gemini-3.6-flash-high'
   exit 0
 fi
-if [ "$1" = "-p" ]; then
-  printf '%s' "$2" | sha256sum | awk '{print "PROMPT_SHA256=" $1}'
+begin=""; end=""
+contains=0
+for a in "$@"; do
+  if [ -z "$begin" ]; then
+    begin=$(printf '%s\n' "$a" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+  fi
+  if [ -z "$end" ]; then
+    end=$(printf '%s\n' "$a" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+  fi
+  printf '%s' "$a" | grep -q "Write a verification plan for the change" && contains=1
+done
+body=""
+skip_next=0
+for a in "$@"; do
+  if [ "$skip_next" = "1" ]; then skip_next=0; continue; fi
+  if [ "$a" = "-p" ]; then
+    body="${body}ARG=-p"$'\n'
+    skip_next=1
+    continue
+  fi
+  body="${body}ARG=${a}"$'\n'
+done
+[ "$contains" = "1" ] && body="${body}CONTAINS_ORIGINAL=1"$'\n'
+body="${body}ok from agy"
+if [ -n "$begin" ] && [ -n "$end" ]; then
+  printf '%s\n%s\n%s\n' "$begin" "$body" "$end"
+else
+  printf '%s\n' "$body"
 fi
-printf 'ARG=%s\n' "$@"
-echo "ok from agy"
 EOF
   chmod +x "$STUB_AGY_OK"
   STUB_BIN_DIR="$TEST_TMP/fake-bin"
@@ -255,8 +328,7 @@ EOF
   AGY_RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
   assert_file_exists "$AGY_RAW_LOG_PATH" "agy path raw_log exists"
   AGY_RAW_LOG_TEXT="$(cat "$AGY_RAW_LOG_PATH")"
-  EXPECTED_PROMPT_SHA="$(sha256sum "$PROMPT" | awk '{print $1}')"
-  assert_contains "$AGY_RAW_LOG_TEXT" "PROMPT_SHA256=$EXPECTED_PROMPT_SHA" "agy uses exact prompt bytes"
+  assert_contains "$AGY_RAW_LOG_TEXT" "CONTAINS_ORIGINAL=1" "agy -p payload still contains the original authoring prompt"
   assert_contains "$AGY_RAW_LOG_TEXT" "ok from agy" "agy raw_log contains stub output"
 
   OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash --prompt-file "$PROMPT" --bin "$STUB_AGY_OK" 2>&1)"; EXIT=$?
@@ -309,7 +381,28 @@ fi
 STUB_GROK_LATE_FLUSH="$TEST_TMP/runner-grok-late-flush"
 cat > "$STUB_GROK_LATE_FLUSH" <<'EOF'
 #!/usr/bin/env bash
-( sleep 1; echo "the answer" ) &
+pf=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--prompt-file" ]; then
+    i=$((i + 1)); pf="${args[$i]}"
+  fi
+  i=$((i + 1))
+done
+(
+  sleep 1
+  begin=""; end=""
+  if [ -n "$pf" ] && [ -f "$pf" ]; then
+    begin=$(grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+    end=$(grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+  fi
+  if [ -n "$begin" ] && [ -n "$end" ]; then
+    printf '%s\n%s\n%s\n' "$begin" "the answer" "$end"
+  else
+    echo "the answer"
+  fi
+) &
 exit 0
 EOF
 chmod +x "$STUB_GROK_LATE_FLUSH"
@@ -320,6 +413,42 @@ assert_contains "$OUT" '"status": "authored"' "grok late-flush returns authored 
 RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
 assert_file_exists "$RAW_LOG_PATH" "grok late-flush raw_log exists"
 assert_contains "$(cat "$RAW_LOG_PATH")" "the answer" "grok raw_log contains late-flushed output"
+
+# --- RED: tool-narration fences inside a draft (non-codex fake-runner seam) ---
+# RED at 6d19cd18ca676318440fac9e40b7fa7a95971a0e: observed
+#   status: authored  exit: 0  error: null
+#   raw_log body included the ```tool fence and was treated as a complete draft.
+STUB_TOOL_NARR="$TEST_TMP/runner-tool-narration"
+cat > "$STUB_TOOL_NARR" <<'EOF'
+#!/usr/bin/env bash
+body=$'draft with narration\n```tool\ncall something\n```'
+pf=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--prompt-file" ]; then
+    i=$((i + 1))
+    pf="${args[$i]}"
+  fi
+  i=$((i + 1))
+done
+begin=""; end=""
+if [ -n "$pf" ] && [ -f "$pf" ]; then
+  begin=$(grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+  end=$(grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+fi
+if [ -n "$begin" ] && [ -n "$end" ]; then
+  printf '%s\n%s\n%s\n' "$begin" "$body" "$end"
+else
+  printf '%s\n' "$body"
+fi
+exit 0
+EOF
+chmod +x "$STUB_TOOL_NARR"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" --bin "$STUB_TOOL_NARR" 2>&1)"; EXIT=$?
+assert_eq "5" "$EXIT" "tool-narration draft exits 5"
+assert_contains "$OUT" '"status": "truncated"' "tool-narration maps to truncated"
+assert_contains "$OUT" "tool_narration" "tool-narration truncated reason is tool_narration"
 
 # Regression Test 5: grok truly-empty stub
 STUB_GROK_EMPTY="$TEST_TMP/runner-grok-empty"
@@ -341,10 +470,17 @@ export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="fake-token-value-12345"
 STUB_CC_ENV_DUMP="$TEST_TMP/runner-cc-env-dump"
 cat > "$STUB_CC_ENV_DUMP" <<'EOF'
 #!/usr/bin/env bash
-echo "BASE:$ANTHROPIC_BASE_URL"
-echo "TOKEN:$ANTHROPIC_AUTH_TOKEN"
-# We must output something so it is not treated as empty_output
-echo "dummy response"
+prompt=$(cat || true)
+begin=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+end=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+body="BASE:$ANTHROPIC_BASE_URL
+TOKEN:$ANTHROPIC_AUTH_TOKEN
+dummy response"
+if [ -n "$begin" ] && [ -n "$end" ]; then
+  printf '%s\n%s\n%s\n' "$begin" "$body" "$end"
+else
+  printf '%s\n' "$body"
+fi
 exit 0
 EOF
 chmod +x "$STUB_CC_ENV_DUMP"
@@ -385,7 +521,17 @@ assert_eq "0" "$EXIT" "--endpoint @none: exit 0 with the codex stub"
 STUB_ANTHRO_JS="$TEST_TMP/runner-anthropic-compatible-ok.js"
 cat > "$STUB_ANTHRO_JS" <<'EOF'
 #!/usr/bin/env node
-process.stdout.write("authoring body line 1\nauthoring body line 2");
+const fs = require('fs');
+let prompt = '';
+const idx = process.argv.indexOf('--prompt-file');
+if (idx >= 0 && process.argv[idx + 1]) {
+  try { prompt = fs.readFileSync(process.argv[idx + 1], 'utf8'); } catch (e) { prompt = ''; }
+}
+const begin = (prompt.match(/^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$/m) || [])[0];
+const end = (prompt.match(/^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$/m) || [])[0];
+const body = "authoring body line 1\nauthoring body line 2";
+if (begin && end) process.stdout.write(begin + "\n" + body + "\n" + end + "\n");
+else process.stdout.write(body);
 EOF
 chmod +x "$STUB_ANTHRO_JS"
 
@@ -420,7 +566,17 @@ assert_contains "$OUT" "--endpoint 'UNKNOWN_EP' not ready" "anthropic-compatible
 STUB_CC_LATE_FLUSH="$TEST_TMP/runner-cc-late-flush"
 cat > "$STUB_CC_LATE_FLUSH" <<'EOF'
 #!/usr/bin/env bash
-( sleep 5; echo "late response" ) &
+prompt=$(cat || true)
+(
+  sleep 5
+  begin=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+  end=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+  if [ -n "$begin" ] && [ -n "$end" ]; then
+    printf '%s\n%s\n%s\n' "$begin" "late response" "$end"
+  else
+    echo "late response"
+  fi
+) &
 exit 0
 EOF
 chmod +x "$STUB_CC_LATE_FLUSH"
@@ -477,8 +633,28 @@ if [ "\${1:-}" = "models" ]; then
   printf '%s\n' 'gemini-3.6-flash-low' 'gemini-3.6-flash-medium' 'gemini-3.6-flash-high' 'gemini-3.6-flash'
   exit 0
 fi
-printf 'ARG=%s\n' "\$@"
-echo "ok from agy effort"
+begin=""; end=""
+for a in "\$@"; do
+  [ -z "\$begin" ] && begin=\$(printf '%s\n' "\$a" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+  [ -z "\$end" ] && end=\$(printf '%s\n' "\$a" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+done
+body=""
+skip_next=0
+for a in "\$@"; do
+  if [ "\$skip_next" = "1" ]; then skip_next=0; continue; fi
+  if [ "\$a" = "-p" ]; then
+    body="\${body}ARG=-p"\$'\\n'
+    skip_next=1
+    continue
+  fi
+  body="\${body}ARG=\${a}"\$'\\n'
+done
+body="\${body}ok from agy effort"
+if [ -n "\$begin" ] && [ -n "\$end" ]; then
+  printf '%s\\n%s\\n%s\\n' "\$begin" "\$body" "\$end"
+else
+  printf '%s\\n' "\$body"
+fi
 EOF
   chmod +x "$STUB_AGY_EFFORT"
   author_agy_effort() {
@@ -546,7 +722,25 @@ AUTHOR_GROK_ARGV="$TEST_TMP/author-grok.argv"
 cat > "$TEST_TMP/author-grok-argv" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$@" > "$AUTHOR_GROK_ARGV"
-echo grok-ok
+pf=""
+args=("\$@")
+i=0
+while [ "\$i" -lt "\${#args[@]}" ]; do
+  if [ "\${args[\$i]}" = "--prompt-file" ]; then
+    i=\$((i + 1)); pf="\${args[\$i]}"
+  fi
+  i=\$((i + 1))
+done
+begin=""; end=""
+if [ -n "\$pf" ] && [ -f "\$pf" ]; then
+  begin=\$(grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' "\$pf" | head -n1)
+  end=\$(grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' "\$pf" | head -n1)
+fi
+if [ -n "\$begin" ] && [ -n "\$end" ]; then
+  printf '%s\n%s\n%s\n' "\$begin" "grok-ok" "\$end"
+else
+  echo grok-ok
+fi
 EOF
 chmod +x "$TEST_TMP/author-grok-argv"
 OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner grok --model grok-4.6 \
@@ -583,7 +777,14 @@ AUTHOR_CC_ARGV="$TEST_TMP/author-cc.argv"
 cat > "$TEST_TMP/author-cc-argv" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$@" > "$AUTHOR_CC_ARGV"
-echo cc-ok
+prompt=\$(cat || true)
+begin=\$(printf '%s\n' "\$prompt" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+end=\$(printf '%s\n' "\$prompt" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+if [ -n "\$begin" ] && [ -n "\$end" ]; then
+  printf '%s\n%s\n%s\n' "\$begin" "cc-ok" "\$end"
+else
+  echo cc-ok
+fi
 EOF
 chmod +x "$TEST_TMP/author-cc-argv"
 OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
@@ -593,5 +794,66 @@ assert_eq "0" "$EXIT" "author cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV")" "$(printf '%s\n' \
   -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
   "author cc-shim argv matches frozen literal (preservation, green at base)"
+
+# Well-framed non-codex draft → authored; artifact/raw_log has no frame lines.
+STUB_FRAMED_OK="$TEST_TMP/runner-framed-ok"
+cat > "$STUB_FRAMED_OK" <<'EOF'
+#!/usr/bin/env bash
+pf=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--prompt-file" ]; then
+    i=$((i + 1)); pf="${args[$i]}"
+  fi
+  i=$((i + 1))
+done
+begin=""; end=""
+if [ -n "$pf" ] && [ -f "$pf" ]; then
+  begin=$(grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+  end=$(grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' "$pf" | head -n1)
+fi
+printf '%s\n%s\n%s\n' "$begin" "complete framed draft body" "$end"
+EOF
+chmod +x "$STUB_FRAMED_OK"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" --bin "$STUB_FRAMED_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "well-framed draft exits 0"
+assert_contains "$OUT" '"status": "authored"' "well-framed draft returns authored"
+RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+assert_file_exists "$RAW_LOG_PATH" "well-framed raw_log exists"
+assert_contains "$(cat "$RAW_LOG_PATH")" "complete framed draft body" "well-framed artifact is the inner body"
+assert_not_contains "$(cat "$RAW_LOG_PATH")" "AUTOPILOT-AUTHOR-" "authored artifact has no AUTHOR frame line"
+assert_not_contains "$(cat "$RAW_LOG_PATH")" "AUTOPILOT-END-" "authored artifact has no END frame line"
+
+# Frame present but foreign nonce → truncated
+STUB_FOREIGN="$TEST_TMP/runner-foreign-nonce"
+cat > "$STUB_FOREIGN" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '<<<AUTOPILOT-AUTHOR-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa>>>' 'foreign nonce body' '<<<AUTOPILOT-END-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa>>>'
+exit 0
+EOF
+chmod +x "$STUB_FOREIGN"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" --bin "$STUB_FOREIGN" 2>&1)"; EXIT=$?
+assert_eq "5" "$EXIT" "foreign nonce exits 5"
+assert_contains "$OUT" '"status": "truncated"' "foreign nonce maps to truncated"
+assert_contains "$OUT" "frame_missing" "foreign nonce truncated reason is frame_missing"
+
+# Exported AUTOPILOT_ROOT_RUN_ID appears in the manifest (hetero-style lineage).
+LINEAGE_RUNS="$TEST_TMP/author-lineage-runs"
+mkdir -p "$LINEAGE_RUNS"
+OUT="$(
+  AUTOPILOT_DISPATCH_RUNS_DIR="$LINEAGE_RUNS" \
+  AUTOPILOT_PARENT_RUN_ID="parent-run-abc" \
+  AUTOPILOT_ROOT_RUN_ID="root-run-xyz" \
+  AUTOPILOT_DISPATCH_DEPTH=2 \
+  DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" \
+    --bin "$STUB_FRAMED_OK" --run-id author-lineage-root-probe 2>&1
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "lineage probe authored exit 0"
+MANIFEST="$LINEAGE_RUNS/author-lineage-root-probe.manifest.json"
+assert_file_exists "$MANIFEST" "lineage manifest exists"
+assert_contains "$(cat "$MANIFEST")" '"root_run_id": "root-run-xyz"' "exported AUTOPILOT_ROOT_RUN_ID appears in the manifest"
+assert_contains "$(cat "$MANIFEST")" '"parent_run_id": "parent-run-abc"' "exported AUTOPILOT_PARENT_RUN_ID appears in the manifest"
+assert_contains "$(cat "$MANIFEST")" '"depth": 2' "exported AUTOPILOT_DISPATCH_DEPTH appears in the manifest"
 
 finalize_test

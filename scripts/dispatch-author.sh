@@ -82,7 +82,7 @@
 #   {
 #     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor",
 #     "model": "...",
-#     "status": "authored|empty_output|precondition_failed|runner_failed",
+#     "status": "authored|empty_output|precondition_failed|runner_failed|truncated",
 #     "raw_log": "<path>",
 #     "error": "...",
 #     "selection_source": "explicit_cli|strict_roster",
@@ -99,7 +99,15 @@
 #
 #   On strict-contract containment violations (repo-state changed), status becomes
 #   containment_breach with exit code 4.
-# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed, 4 = containment_breach.
+# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed, 4 = containment_breach, 5 = truncated
+#   (non-codex: missing/incomplete AUTHOR/END frame or tool-narration inside the frame;
+#   error is one of frame_missing / end_missing / tool_narration). Codex transport is
+#   unchanged and never emits truncated.
+# Follow-up: AUTHOR/END locator awk is duplicated from dispatch-review.sh (v2.36.4
+# grok glued-preamble split + v2.36.70 duplicate-BEGIN handling). Extract a shared
+# lib rather than a third hand-rolled parser.
+# dispatch-plan-review.js is not touched; its generic non-authored+error handling
+# carries truncated.
 
 set -uo pipefail
 
@@ -391,6 +399,7 @@ emit_result() {
   local error_message="$3"
   local exit_code="$4"
   local extra_fields="${5-}"
+  AUTHOR_FINAL_STATUS="$status"
 
   # Identity containment rail: compare + restore consuming-repo identity when a
   # pre-run snapshot was taken. Drift FLAGS only (additive JSON field + warning);
@@ -809,6 +818,30 @@ RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 # never worker self-report.
 AUTHOR_RUN_ID="${RUN_ID:-}"
 [ -n "$AUTHOR_RUN_ID" ] || AUTHOR_RUN_ID="author-$(date +%s)-$$"
+PROMPT_FILE_ORIG="${PROMPT_FILE_ORIG:-$PROMPT_FILE}"
+# Lineage — same env names as dispatch-hetero.sh. parent/root JSON null and depth 0
+# when the corresponding env is unexported; with a parent, root falls back to parent.
+LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
+LINEAGE_ROOT=""
+LINEAGE_DEPTH=0
+if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
+  LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID}"
+  LINEAGE_ROOT="${AUTOPILOT_ROOT_RUN_ID:-$LINEAGE_PARENT}"
+  LINEAGE_DEPTH="${AUTOPILOT_DISPATCH_DEPTH:-1}"
+  case "$LINEAGE_DEPTH" in *[!0-9]*|"") LINEAGE_DEPTH=1 ;; esac
+  if [ "${#LINEAGE_DEPTH}" -gt 7 ]; then
+    LINEAGE_DEPTH=1
+  elif [ "$((10#$LINEAGE_DEPTH))" -eq 0 ] \
+      || [ "$((10#$LINEAGE_DEPTH))" -gt 1000000 ]; then
+    LINEAGE_DEPTH=1
+  fi
+else
+  LINEAGE_ROOT="$AUTHOR_RUN_ID"
+  LINEAGE_DEPTH=0
+fi
+[ -n "$LINEAGE_PARENT" ] && LINEAGE_PARENT="$(printf '%s' "$LINEAGE_PARENT" | tr -c 'A-Za-z0-9._-' '-')"
+[ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
+LINEAGE_DEPTH=$((10#$LINEAGE_DEPTH))
 AUTHOR_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 AUTHOR_STARTED_EPOCH="$(date +%s)"
 AUTHOR_MANIFEST_FILE=""
@@ -838,13 +871,17 @@ write_author_manifest() {
   fi
   local final_json="null"
   [ -n "$AUTHOR_FINAL_STATUS" ] && final_json="\"$(json_escape "$AUTHOR_FINAL_STATUS")\""
+  local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
+  local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
+  local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "author", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": null, "root_run_id": null, "depth": 0 }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "author", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
       "$(json_escape "$AUTHOR_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
-      "$(json_escape "$PROMPT_FILE")" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+      "$(json_escape "${PROMPT_FILE_ORIG:-$PROMPT_FILE}")" \
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" \
+      "$parent_json" "$root_json" "$depth_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$AUTHOR_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -896,6 +933,12 @@ QODER_CWD=""
 CNATIVE_CWD=""
 CURSOR_CWD=""
 CURSOR_ERR=""
+AUTHOR_WRAP_FILE=""
+AUTHOR_PARSE_FILE=""
+AUTHOR_BLOCK_FILE=""
+BEGIN=""
+END=""
+DERIVED=""
 cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
@@ -904,6 +947,9 @@ cleanup() {
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD" || true
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR" || true
+  [ -n "$AUTHOR_WRAP_FILE" ] && rm -f "$AUTHOR_WRAP_FILE" || true
+  [ -n "$AUTHOR_PARSE_FILE" ] && rm -f "$AUTHOR_PARSE_FILE" || true
+  [ -n "$AUTHOR_BLOCK_FILE" ] && rm -f "$AUTHOR_BLOCK_FILE" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
   # Stamp the manifest terminal so a watcher can tell "finished" from "hung" — the
   # whole point of emitting it. Runs last so it records the real end of the process.
@@ -925,6 +971,46 @@ if [ -n "$REPO_ROOT" ]; then
   IDENTITY_PRE_NAME="$(git -C "$REPO_ROOT" config --local user.name 2>/dev/null || true)"
   IDENTITY_PRE_EMAIL="$(git -C "$REPO_ROOT" config --local user.email 2>/dev/null || true)"
   IDENTITY_SNAPSHOT_TAKEN=1
+fi
+
+# Non-codex: wrap the prompt with a derived nonce-keyed AUTHOR/END frame (same
+# family as dispatch-review). Codex keeps exact prompt bytes.
+PROMPT_FILE_ORIG="$PROMPT_FILE"
+if [[ "$RUNNER" != "codex" ]]; then
+  NONCE=""
+  NONCE_TRIES=0
+  while :; do
+    NONCE="$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    if ! grep -qF "$NONCE" "$PROMPT_FILE_ORIG"; then
+      break
+    fi
+    NONCE_TRIES=$((NONCE_TRIES + 1))
+    if [ "$NONCE_TRIES" -ge 4 ]; then
+      die_precondition "failed to generate a non-colliding author nonce (4 attempts)"
+    fi
+  done
+  DERIVED="$(printf 'autopilot-author-v1:%s' "$NONCE" | sha256sum | awk '{print substr($1,1,32)}')"
+  BEGIN="<<<AUTOPILOT-AUTHOR-${DERIVED}>>>"
+  END="<<<AUTOPILOT-END-${DERIVED}>>>"
+  AUTHOR_WRAP_FILE="$(mktemp -t dispatch-author-wrap-XXXXXX)"
+  {
+    cat <<EOF
+You are an authoring engine. Output ONLY a wrapped block (no other text/fences), beginning with:
+${BEGIN}
+
+and ending with:
+${END}
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=${NONCE}
+
+Do NOT echo these instructions. Your VERY FIRST output character MUST be the start of the opening marker line above. Output ONLY the wrapped block. Do not emit a Markdown fence whose info string is tool, tool_call, or function_call, and do not emit a <tool_call> tag.
+
+AUTHORING TASK:
+EOF
+    cat "$PROMPT_FILE_ORIG"
+  } > "$AUTHOR_WRAP_FILE"
+  PROMPT_FILE="$AUTHOR_WRAP_FILE"
 fi
 
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: ${RUNNER}/${MODEL} (effort=${EFFORT}, timeout=${TIMEOUT})" >&2
@@ -1206,6 +1292,118 @@ if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \
   | grep -c '[^[:space:]]' > /dev/null; then
   emit_result "empty_output" "$RAW_LOG" "no non-whitespace output from runner — fail-closed" 1
+fi
+
+# Positive completion predicate for non-codex runners: exactly one derived BEGIN
+# and one END (dispatch-review locator family, including grok glued-preamble split
+# and duplicate-BEGIN handling). Missing/incomplete frame or tool-narration inside
+# the frame ⇒ truncated/5. Codex transport is skipped — its checks stay below.
+if [[ "${CODEX_TRANSPORT:-0}" -ne 1 ]]; then
+  PARSE_INPUT="$RAW_LOG"
+  AUTHOR_PARSE_FILE="$(mktemp -t dispatch-author-parse-XXXXXX)"
+  tr -d '\r' < "$RAW_LOG" | sed '/^Script started on /d; /^Script done on /d' > "$AUTHOR_PARSE_FILE"
+  PARSE_INPUT="$AUTHOR_PARSE_FILE"
+  if [[ "$RUNNER" = "grok" ]]; then
+    GROK_SPLIT="$(mktemp -t dispatch-author-grok-parse-XXXXXX)"
+    awk -v begin="$BEGIN" '
+      { line = $0; sub(/\r$/, "", line) }
+      !done && line == begin { done = 1 }
+      !done {
+        i = index($0, "<<<AUTOPILOT-AUTHOR-")
+        if (i > 1) { print substr($0, 1, i - 1); print substr($0, i); done = 1; next }
+      }
+      { print }
+    ' "$PARSE_INPUT" > "$GROK_SPLIT"
+    rm -f "$AUTHOR_PARSE_FILE"
+    AUTHOR_PARSE_FILE="$GROK_SPLIT"
+    PARSE_INPUT="$AUTHOR_PARSE_FILE"
+  fi
+  AUTHOR_BLOCK_FILE="$(mktemp -t dispatch-author-block-XXXXXX)"
+  FRAME_CLOSE_FILE="$(mktemp -t dispatch-author-frame-close-XXXXXX)"
+  CHROME_MAX_LINES="${AUTOPILOT_AUTHOR_CHROME_MAX_LINES:-200}"
+  CHROME_MAX_BYTES="${AUTOPILOT_AUTHOR_CHROME_MAX_BYTES:-65536}"
+  set +e
+  awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
+      -v chrome_max_lines="$CHROME_MAX_LINES" -v chrome_max_bytes="$CHROME_MAX_BYTES" \
+      -v close_file="$FRAME_CLOSE_FILE" '
+    BEGIN { started=0; ended=0; leading=1; chrome_lines=0; chrome_bytes=0; bail=0; pending_close=0 }
+    {
+      sub(/\r$/, "", $0)
+      if (leading) {
+        if ($0 ~ /^[[:space:]]*$/) { next }
+        if ($0 == begin) { leading=0; started=1; next }
+        if (index($0, "AUTOPILOT-AUTHOR") || index($0, "AUTOPILOT-END") || index($0, derived)) {
+          bail=7; exit 7
+        }
+        echo_line = $0
+        sub(/^[[:space:]]*>[[:space:]]?/, "", echo_line)
+        sub(/^[[:space:]]+/, "", echo_line)
+        if (echo_line ~ /^diff --git [^[:space:]]+ [^[:space:]]+$/ \
+            || echo_line ~ /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ \
+            || echo_line ~ /^Diff under review:[[:space:]]*$/ \
+            || echo_line ~ /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ \
+            || echo_line ~ /^<one finding per line>[[:space:]]*$/) {
+          bail=9; exit 9
+        }
+        chrome_lines += 1
+        chrome_bytes += length($0) + 1
+        if (chrome_lines > chrome_max_lines || chrome_bytes > chrome_max_bytes) { bail=8; exit 8 }
+        next
+      }
+      if (!started) { next }
+      if ($0 == begin) {
+        if (ended || pending_close) { bail=3; exit 3 }
+        pending_close=1
+        next
+      }
+      if (pending_close) {
+        if ($0 !~ /^[[:space:]]*$/) { bail=3; exit 3 }
+        next
+      }
+      if (ended) {
+        if ($0 !~ /^[[:space:]]*$/) {
+          bail=6; exit 6
+        }
+        next
+      }
+      if ($0 == end) {
+        ended=1
+        next
+      }
+      print $0
+    }
+    END {
+      if (bail) { exit bail }
+      if (!started) { exit 2 }
+      if (pending_close) { ended=1 }
+      if (!ended) { exit 5 }
+      if (close_file != "") {
+        print (pending_close ? "begin-marker" : "end-marker") > close_file
+      }
+    }
+  ' "$PARSE_INPUT" > "$AUTHOR_BLOCK_FILE"
+  PARSE_RC=$?
+  set -e
+  rm -f "$FRAME_CLOSE_FILE"
+  if [ "$PARSE_RC" -ne 0 ]; then
+    case "$PARSE_RC" in
+      5) emit_result "truncated" "$RAW_LOG" "end_missing" 5 ;;
+      *) emit_result "truncated" "$RAW_LOG" "frame_missing" 5 ;;
+    esac
+  fi
+  if awk '
+    BEGIN { found = 0 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line ~ /^```[[:space:]]*(tool|tool_call|function_call)([[:space:]]|$)/) found = 1
+      if (index(line, "<tool_call>")) found = 1
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$AUTHOR_BLOCK_FILE"; then
+    emit_result "truncated" "$RAW_LOG" "tool_narration" 5
+  fi
+  cat "$AUTHOR_BLOCK_FILE" > "$RAW_LOG"
 fi
 
 # Codex hardened content checks — unconditional once stdout is non-empty.

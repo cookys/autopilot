@@ -427,6 +427,65 @@ assert_eq "$(json_field "$OUT" semantic_verdict)" "null" "transport failure is n
 assert_eq "$(json_field "$OUT" attempts.1.attempt)" "2" "retry remains generation-1 attempt 2"
 assert_artifact_schema "$OUT" "transport-exhausted artifact matches schema"
 
+# RED at 15ae809f898104212d14dfb4cce1869c0dc17ed1: a dispatch-author exit-2
+# precondition_failed envelope with empty raw_log classified as exit_failure,
+# retried, and the artifact was transport_exhausted with policy_reason
+# required_seat_transport_exhausted and no trace of
+# "active session-mode=l5 blocks non-strict dispatch". Observed at base:
+# attempts.0.transport_status=exit_failure attempts.length=2
+# policy_reason=required_seat_transport_exhausted
+# (reason absent from artifact JSON).
+PREC_PRELOAD="$TEST_TMP/precondition-author.cjs"
+cat >"$PREC_PRELOAD" <<'NODE'
+'use strict';
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+childProcess.spawnSync = function preconditionAuthor(command, args, options) {
+  if (path.resolve(String(command)) !== path.resolve(process.env.PLAN_REVIEW_PROBE_AUTHOR)) {
+    return originalSpawnSync.call(this, command, args, options);
+  }
+  const error = 'active session-mode=l5 blocks non-strict dispatch (repo=fixture)';
+  return {
+    status: 2,
+    signal: null,
+    error: null,
+    stdout: `${JSON.stringify({
+      runner: args[args.indexOf('--runner') + 1],
+      model: args[args.indexOf('--model') + 1],
+      status: 'precondition_failed',
+      error,
+      raw_log: null,
+    })}\n`,
+    stderr: '',
+  };
+};
+NODE
+PREC_MANIFEST="$TEST_TMP/precondition-manifest.json"
+copy_manifest precondition-l5-plan "$PREC_MANIFEST"
+PREC_SEQUENCE="$(sequence "operations=$READY" "skeptic=$READY" "product=$READY")"
+OUT="$(PLAN_REVIEW_PROBE_AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh" \
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require=$PREC_PRELOAD" \
+  AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+  AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$PREC_SEQUENCE" \
+  node "$SCRIPT" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+    --ticket precondition-l5 --session-id session-precondition-l5 --generation 1 \
+    --manifest-file "$PREC_MANIFEST" --state-dir "$STATE_DIR")"; EXIT=$?
+assert_exit_code "$EXIT" "4" "precondition_failed required seat still exits 4"
+assert_eq "$(json_field "$OUT" transport_status)" "transport_exhausted" \
+  "precondition_failed does not widen transport_status"
+assert_eq "$(json_field "$OUT" attempts.0.transport_status)" "precondition_failed" \
+  "seat outcome is precondition_failed not exit_failure"
+assert_eq "$(json_length "$OUT" attempts)" "4" \
+  "precondition_failed is not retried (one architect attempt + three READY seats)"
+assert_contains "$(json_field "$OUT" attempts.0.error)" \
+  "active session-mode=l5 blocks non-strict dispatch" \
+  "seat record carries the author envelope error"
+assert_contains "$(json_field "$OUT" policy_reason)" \
+  "seat architect precondition_failed: active session-mode=l5 blocks non-strict dispatch" \
+  "artifact policy_reason names the precondition"
+
 # Fallback is allowed only from the frozen manifest and preserves family count.
 FALLBACK_SEQUENCE="$(sequence \
   "architect=$READY" "operations=$AMBIGUOUS" \

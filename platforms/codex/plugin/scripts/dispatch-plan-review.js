@@ -1050,7 +1050,7 @@ function dispatchSeat(
         digest: sha256(raw),
       },
     });
-    return { envelope, raw };
+    return { envelope, raw, authorError: null };
   }
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-plan-review-'));
@@ -1081,10 +1081,22 @@ function dispatchSeat(
     } catch (error) {
       // Mechanical failure remains in the shared transport envelope.
     }
+    const authorStatus = authorEnvelope && typeof authorEnvelope.status === 'string'
+      ? authorEnvelope.status
+      : null;
+    const authorError = authorEnvelope && typeof authorEnvelope.error === 'string'
+      ? authorEnvelope.error
+      : null;
     const rawPath = authorEnvelope && authorEnvelope.raw_log
       ? canonicalFile(authorEnvelope.raw_log, 'dispatch-author raw_log')
       : path.join(tempDir, 'missing.raw');
     const raw = fs.existsSync(rawPath) ? fs.readFileSync(rawPath) : Buffer.alloc(0);
+    const policyRefuse = authorStatus === 'precondition_failed'
+      || (Boolean(authorStatus)
+        && authorStatus !== 'authored'
+        && Boolean(authorError)
+        && raw.length === 0
+        && run.status === 2);
     const success = run.status === 0
       && authorEnvelope
       && authorEnvelope.status === 'authored'
@@ -1104,13 +1116,16 @@ function dispatchSeat(
         stdout: raw,
         stderr: run.stderr || '',
       },
+      outcomeHints: {
+        preconditionFailed: policyRefuse,
+      },
       privateRawReference: raw.length > 0 ? {
         kind: 'private-file',
         locator: rawPath,
         digest: sha256(raw),
       } : null,
     });
-    return { envelope, raw };
+    return { envelope, raw, authorError: policyRefuse ? authorError : null };
   } finally {
     fs.rmSync(promptPath, { force: true });
     try {
@@ -1281,6 +1296,7 @@ function reviewSeat({
       } : {}),
       transport_envelope: dispatched.envelope,
       transport_status: normalized.transport_status,
+      ...(dispatched.authorError ? { error: dispatched.authorError } : {}),
       parser_status: normalized.parser_status,
       semantic_status: normalized.semantic_status,
       unratified_semantic_status: unratified ? 'available' : 'unavailable',
@@ -1312,6 +1328,8 @@ function reviewSeat({
         ...(transportRetry ? { transport_retry: { ...transportRetry, attempt } } : {}),
       };
     }
+    // A precondition does not heal by retrying the same or a fallback pipe.
+    if (normalized.transport_status === 'precondition_failed') break;
     // Arm the second transport for the next attempt, but only when the PIPE is what failed and
     // this seat's frozen manifest authorized a specific alternative. Never inferred, never
     // defaulted, and never re-armed: one authorized transport, one retry.
@@ -1388,6 +1406,18 @@ function growthRatioValue(planBytes, baselineBytes) {
 
 function publicArtifact(base) {
   return base;
+}
+
+function firstPreconditionPolicyReason(seatReviews) {
+  for (const seat of seatReviews) {
+    if (!seat.exhausted) continue;
+    for (const record of seat.attempts) {
+      if (record.transport_status !== 'precondition_failed') continue;
+      const detail = typeof record.error === 'string' ? record.error : '';
+      return `seat ${seat.seat_id} precondition_failed: ${detail}`.slice(0, 512);
+    }
+  }
+  return null;
 }
 
 function policyArtifact(context, reason, details = {}) {
@@ -1849,7 +1879,10 @@ function main() {
       };
     } else if (requiredExhausted.length > 0) {
       artifact = {
-        ...policyArtifact(context, 'required_seat_transport_exhausted'),
+        ...policyArtifact(
+          context,
+          firstPreconditionPolicyReason(requiredExhausted) || 'required_seat_transport_exhausted',
+        ),
         verdict: 'CONDITIONAL',
         semantic_verdict: null,
         transport_status: 'transport_exhausted',
@@ -1859,7 +1892,10 @@ function main() {
       };
     } else if (familyCount < manifest.minimum_distinct_families) {
       artifact = {
-        ...policyArtifact(context, 'panel_family_diversity_exhausted'),
+        ...policyArtifact(
+          context,
+          firstPreconditionPolicyReason(seatReviews) || 'panel_family_diversity_exhausted',
+        ),
         // Public verdict stays CONDITIONAL for schema consumers; transport
         // exhaustion has no semantic plan verdict.
         verdict: 'CONDITIONAL',

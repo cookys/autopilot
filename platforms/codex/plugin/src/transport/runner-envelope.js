@@ -9,6 +9,7 @@ const OUTCOMES = new Set([
   'quota',
   'unavailable',
   'interrupted',
+  'precondition_failed',
 ]);
 const ROOT_KEYS = new Set([
   'schema_version',
@@ -165,6 +166,7 @@ function validateRunnerTransportEnvelope(value) {
 }
 
 function classifyOutcome(child, hints = {}) {
+  if (hints.preconditionFailed === true) return 'precondition_failed';
   if (hints.quota === true) return 'quota';
   if (hints.unavailable === true) return 'unavailable';
   if (hints.timedOut === true || (child.error && child.error.code === 'ETIMEDOUT')) {

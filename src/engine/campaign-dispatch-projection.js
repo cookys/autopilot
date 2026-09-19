@@ -107,7 +107,8 @@ function generationForStage(stage) {
 
 function expectedBranch({ campaignBranch, base, generation }) {
   if (generation === 0) return campaignBranch;
-  return `${campaignBranch}-repair-r${generation + 1}-${base.slice(0, 7)}`;
+  const short = base ? String(base).slice(0, 7) : 'base';
+  return `${campaignBranch}-repair-r${generation + 1}-${short}`;
 }
 
 function normalizeCampaignAuthority(contract) {
@@ -596,6 +597,7 @@ module.exports = {
   buildMissionZeroDiffReceipt,
   canonicalDigest,
   deriveCampaignDispatchUnit,
+  expectedBranch,
   generationForStage,
   hasCampaignDispatchAuthority,
   normalizeCampaignAuthority,

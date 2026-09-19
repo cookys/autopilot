@@ -132,6 +132,7 @@ const {
 } = require('../../scripts/lifecycle-residue-receipt');
 const {
   buildMissionZeroDiffReceipt,
+  expectedBranch,
   hasCampaignDispatchAuthority,
   normalizeCampaignAuthority,
   writeCampaignDispatchUnit,
@@ -1174,8 +1175,11 @@ function deriveCampaignLifecycleRoot({
 }
 
 function buildRepairBranchName({ branch, round, previousCommit }) {
-  const short = previousCommit ? previousCommit.slice(0, 7) : 'base';
-  return `${branch}-repair-r${round}-${short}`;
+  return expectedBranch({
+    campaignBranch: branch,
+    base: previousCommit,
+    generation: round - 1,
+  });
 }
 
 function reviewerQualificationViable(roster) {
@@ -7392,7 +7396,23 @@ class AutopilotEngine {
           };
         }
         const candidateImplementationRound = implementationRound + 1;
-        const currentBranch = branch;
+        let sealedContract = campaignControl.contract;
+        if (typeof campaignControl.contract_path === 'string'
+            && campaignControl.contract_path.length > 0) {
+          try {
+            sealedContract = JSON.parse(fs.readFileSync(campaignControl.contract_path, 'utf8'));
+          } catch (_error) {
+            sealedContract = campaignControl.contract;
+          }
+        }
+        const currentBranch = candidateImplementationRound === 1
+          || !hasCampaignDispatchAuthority(sealedContract)
+          ? branch
+          : buildRepairBranchName({
+            branch,
+            round: candidateImplementationRound,
+            previousCommit: currentBase,
+          });
         let authorizedFindingState = null;
         if (kind !== 'initial') {
           if (!new Set(['full_diff_generation', 'focused_delta_round']).has(

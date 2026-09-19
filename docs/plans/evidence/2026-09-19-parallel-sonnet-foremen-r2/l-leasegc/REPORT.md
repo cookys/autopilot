@@ -69,3 +69,9 @@ red consumers found.
 - 🟡 `gc-abort-midloop` finding is a legitimate hardening gap (mid-loop transition failure not tolerated) —
   recommend a BACKLOG row if not already tracked; not filed by me (foreman scope).
 - Cursor hand used `--effort low` both rounds per brief; wall times 667s (r1) + 279s (r2).
+
+## Depth-0 live proof (after the v2.36.73 push, 2026-09-19)
+- Dry-run on the host ledger `.git/autopilot/implementation-campaign.jsonl`: scanned 184, dead 184, skipped 0 (62 s).
+- Real run (`host-lease-gc-live.json`): appended 184 `leased → dead` rows; backup of all five segments taken first.
+- Live segment: 2.5 MB → 259 092 B; latest state per (run_id, stage) is now `dead` for every carried row (26), zero `leased`,
+  so the next rotation carries no journal rows for them. Older segments `.1`–`.4` shrink as they roll off.

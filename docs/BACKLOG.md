@@ -182,7 +182,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-16 (measured while shipping v2.36.54; split out of the rotation-order row)
 - **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
-- **Context**: `run-ledger.sh lease-gc` (pid dead + heartbeat silent > 12 h + worktree absent/no flock → `leased→dead`, named reason; `--dry-run`/`--json`), wired into `reap-dispatch-worktrees.sh reap`. Host dry-run 2026-09-19: 184/184 dead.
+- **Context**: `run-ledger.sh lease-gc` (pid dead + heartbeat silent > 12 h + worktree absent/no flock → `leased→dead`), wired into `reap-dispatch-worktrees.sh reap`. Host run 2026-09-19: 184/184 dead, live segment 2.5 MB → 259 KB.
 
 ### Managed rail: a disposition resume into a repair round refuses the caller's --branch (expects the derived one)
 - **Status**: shipped v2.36.72 2026-09-19

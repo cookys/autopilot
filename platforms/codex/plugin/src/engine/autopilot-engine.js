@@ -27,13 +27,13 @@ const {
 } = require('../readiness/provider-bootstrap');
 const {
   appendCampaignEvent,
-  buildStrandedClaim,
   completeCampaignAdmission,
   releaseCampaignAdmission,
   runCampaignIntake,
   buildQcPanelSnapshot,
   modelFamilyOfEngine,
   resolveReviewStation,
+  strandedClaimForSealedGrant,
   withStrandedClaim,
 } = require('./campaign-intake');
 const {
@@ -9836,7 +9836,7 @@ class AutopilotEngine {
       }
       // Fail closed when the admitted control's grant ref differs from the
       // sealed binding used to construct trusted adapters. Do not release.
-      // See buildStrandedClaim — name the live unused claim and its recovery.
+      // See strandedClaimForSealedGrant — name the live unused claim and its recovery.
       const admittedGrantRef = intake.contract
         && typeof intake.contract.mission_grant_ref === 'string'
         && /^[0-9a-f]{64}$/.test(intake.contract.mission_grant_ref)
@@ -9847,20 +9847,8 @@ class AutopilotEngine {
             || admittedGrantRef === null
             || admittedGrantRef !== trustedMissionGrantRef) {
           const mismatchReason = 'admitted campaign mission_grant_ref does not match sealed Mission grant binding';
-          const claimId = intake.mission_claim && intake.mission_claim.claim_id;
-          let liveClaim = null;
-          try {
-            const state = this.missionCampaignStore && this.missionCampaignStore.load
-              ? this.missionCampaignStore.load()
-              : null;
-            liveClaim = state && state.claims && claimId ? state.claims[claimId] : null;
-          } catch (_error) {
-            liveClaim = null;
-          }
-          const stranded = buildStrandedClaim({
-            claim: liveClaim || intake.mission_claim,
-            repo: loopCwd,
-            statePath: this.missionCampaignStore && this.missionCampaignStore.state_path,
+          const stranded = strandedClaimForSealedGrant(loopCwd, input.campaignContract, {
+            campaignLedgerPath: input.campaignLedger,
           });
           campaignControl = withStrandedClaim({
             ...intake,
@@ -9994,7 +9982,7 @@ class AutopilotEngine {
       try {
         // Thread the exact constructor-owned adapter object from intake.
         // Never rebuild; never fall back to runtime contract/adapters.
-        // Do not release. See buildStrandedClaim.
+        // Do not release. See strandedClaimForSealedGrant.
         const liveGrantRef = campaignControl.contract
           && typeof campaignControl.contract.mission_grant_ref === 'string'
           && /^[0-9a-f]{64}$/.test(campaignControl.contract.mission_grant_ref)
@@ -10004,20 +9992,8 @@ class AutopilotEngine {
           if (trustedMissionGrantRef === null
               || liveGrantRef === null
               || liveGrantRef !== trustedMissionGrantRef) {
-            const claimId = campaignControl.mission_claim && campaignControl.mission_claim.claim_id;
-            let liveClaim = null;
-            try {
-              const state = this.missionCampaignStore && this.missionCampaignStore.load
-                ? this.missionCampaignStore.load()
-                : null;
-              liveClaim = state && state.claims && claimId ? state.claims[claimId] : null;
-            } catch (_error) {
-              liveClaim = null;
-            }
-            const stranded = buildStrandedClaim({
-              claim: liveClaim || campaignControl.mission_claim,
-              repo: loopCwd,
-              statePath: this.missionCampaignStore && this.missionCampaignStore.state_path,
+            const stranded = strandedClaimForSealedGrant(loopCwd, input.campaignContract, {
+              campaignLedgerPath: input.campaignLedger,
             });
             release = {
               status: 'blocked',

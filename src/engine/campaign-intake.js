@@ -273,10 +273,15 @@ function withStrandedClaim(result, stranded) {
 
 function strandedClaimForSealedGrant(repo, contractPath, extra = {}) {
   if (typeof contractPath !== 'string' || contractPath.length === 0) return null;
+  const absolute = path.isAbsolute(contractPath)
+    ? contractPath
+    : (typeof repo === 'string' && repo.length > 0
+      ? path.resolve(repo, contractPath)
+      : contractPath);
   let grantRef = extra.grantRef || null;
   if (!grantRef) {
     try {
-      const sealed = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+      const sealed = JSON.parse(fs.readFileSync(absolute, 'utf8'));
       grantRef = sealed && typeof sealed.mission_grant_ref === 'string'
         ? sealed.mission_grant_ref
         : null;
@@ -2282,8 +2287,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
   }
   steps.push(missionClaim);
   if (missionClaim.status === 'rejected') {
-    // Do not release. See buildStrandedClaim — a live unused claim must be
-    // named with an exact recovery command, never skipped silently.
+    // Do not release. See strandedClaimForSealedGrant — a live unused claim
+    // must be named with an exact recovery command, never skipped silently.
     const stranded = strandedClaimForSealedGrant(repo, contractPath, {
       campaignLedgerPath: requestedLedgerPath,
     });
@@ -2628,6 +2633,7 @@ module.exports = {
   appendCampaignEvent,
   CampaignIntakeError,
   buildStrandedClaim,
+  strandedClaimForSealedGrant,
   withStrandedClaim,
   buildNoEffectReceipt,
   buildQcPanelSnapshot,

@@ -237,8 +237,6 @@ function cmdGrantV2(flags, options = {}) {
         graph_attempt: error.details.graph_attempt,
         base_sha: error.details.base_sha,
         head_sha: error.details.head_sha,
-        recovery: error.details.recovery,
-        stranded_claim: error.details.stranded_claim,
       }, options);
       return 1;
     }

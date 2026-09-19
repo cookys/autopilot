@@ -22,6 +22,7 @@ try {
 }
 const mission = require(path.join(root, 'src', 'engine', 'mission-convergence'));
 const { runCampaignIntake, buildStrandedClaim } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine', 'autopilot-engine'));
 const { runMissionCli } = require(path.join(root, 'src', 'mission', 'cli'));
 
 const lines = [];
@@ -238,10 +239,12 @@ if (runtime) {
   }, adapters);
 
   const dump = JSON.stringify(intake);
-  // RED at <base sha>: intake result/steps named neither claim A nor recovery.
+  // RED at 1cea5a7e: intake.status blocked + rejection.code mission_grant_ref_mismatch
+  // already held; Object.prototype.hasOwnProperty.call(intake, 'stranded_claim') === false.
   check('mismatch-rejects', intake.status === 'blocked'
     && intake.rejection && intake.rejection.code === 'mission_grant_ref_mismatch');
-  // RED at base: result/journal carried no stranded_claim / no recovery naming claim A.
+  // RED at 1cea5a7e: intake.stranded_claim === undefined; JSON.stringify(intake)
+  // named neither claim A nor a recovery command; steps had no stranded_claim status.
   check('stranded-claim-emitted',
     intake.stranded_claim
     && intake.stranded_claim.claim_id === claimId
@@ -254,14 +257,17 @@ if (runtime) {
     Array.isArray(intake.steps)
     && intake.steps.some((step) => step && step.status === 'stranded_claim'
       && step.stranded_claim && step.stranded_claim.claim_id === claimId));
+  // RED at 1cea5a7e: dump had no no_effect_release (correct); still no stranded_claim key.
   check('no-no-effect-release',
     !/no_effect_release/.test(dump)
     && intake.pre_spend_no_effect_receipt === null);
   const liveAfterIntake = JSON.parse(fs.readFileSync(statePath, 'utf8')).claims[claimId];
+  // RED at 1cea5a7e: claim A stayed live (released falsy) — that part was already correct.
   check('claim-a-still-live',
     liveAfterIntake && liveAfterIntake.released !== true && liveAfterIntake.terminal !== true
     && liveAfterIntake.graph_node_id === 'solo-node'
     && liveAfterIntake.reservation);
+  // RED at 1cea5a7e: buildStrandedClaim did not exist; no helper shape to match.
   check('helper-shape-matches', (() => {
     const expected = buildStrandedClaim({
       claim: liveBefore, repo, statePath, campaignLedgerPath: ledgerPath,
@@ -271,13 +277,95 @@ if (runtime) {
       && intake.stranded_claim.resolution === expected.resolution;
   })());
 
-  const blocked = runCli(['grant', '--repo', repo, '--prepared', preparedPath, '--node', 'solo-node', '--now', '2026-08-31T00:06:00.000Z']);
-  check('open-claim-blocks-not-replays', blocked.code !== 0
-    && blocked.payload && blocked.payload.status === 'rejected'
-    && blocked.payload.code === 'attempt_blocked_by_open_claim'
-    && blocked.payload.claim_id === claimId
-    && blocked.payload.recovery === intake.stranded_claim.recovery);
-  // RED at base: attempt_blocked_by_open_claim named claim A with no recovery field.
+  // Engine layer: admitted control's grant_ref disagrees with the sealed
+  // contract; locator must still name claim A (not a degraded adapter step).
+  const engineContractPath = path.join(temp, 'engine-sealed-grant.json');
+  fs.writeFileSync(engineContractPath, `${JSON.stringify({
+    mission_grant_ref: grant1.payload.mission_grant_ref,
+  })}\n`);
+  fs.writeFileSync(path.join(temp, 'prompt.txt'), 'engine stranded-claim fixture\n');
+  const mismatchedGrantRef = '0'.repeat(64);
+  const engine = new AutopilotEngine({
+    cwd: repo,
+    missionPreparedReceipt: prepared.receipt,
+    campaignIntake: () => ({
+      status: 'admitted',
+      campaign_id: grant1.payload.mission_campaign_id,
+      contract: {
+        mission_grant_ref: mismatchedGrantRef,
+        verify_cmd: 'true',
+        max_repair_generations: 1,
+      },
+      initial_state: { generation: 1 },
+      generation_claim: { ledger: ledgerPath },
+      steps: [],
+    }),
+    implementationDispatcher() {
+      throw new Error('engine-layer stranded_claim must block before spend');
+    },
+    reviewDispatcher() {
+      throw new Error('engine-layer stranded_claim must block before review');
+    },
+  });
+  const engineResult = engine.runImplementationReviewLoop({
+    promptFile: path.join(temp, 'prompt.txt'),
+    branch: grant1.payload.branch || 'HEAD',
+    base: newHead,
+    campaignContract: engineContractPath,
+    campaignSeal: grant1.payload.seal_path,
+    campaignLedger: ledgerPath,
+    verifyCmd: 'true',
+    noVerifyFirst: true,
+    roster: {
+      reviewer_engine: 'fixture-reviewer',
+      reviewer_effort: 'high',
+      reviewer_runner: 'fixture',
+      reviewer_qualified: true,
+      implementer_engine: 'fixture-implementer',
+      implementer_effort: 'high',
+      implementer_runner: 'fixture',
+      loop_max_rounds: 1,
+      loop_convergence_verdict: 'SHIP-AS-IS',
+      min_panel_size: 1,
+      qc_panel_seats_complete: true,
+      qc_panel_seats: [{
+        role: 'qc',
+        runner: 'fixture',
+        model: 'fixture-reviewer',
+        effort: 'high',
+        endpoint: null,
+        family: 'fixture',
+      }],
+    },
+  });
+  // RED at 1cea5a7e: engine layer had no stranded_claim locator; claim_id
+  // would be undefined / silent skip when missionCampaignStore was absent.
+  check('engine-layer-stranded-claim',
+    engineResult
+    && engineResult.campaign_control
+    && engineResult.campaign_control.stranded_claim
+    && engineResult.campaign_control.stranded_claim.claim_id === claimId
+    && engineResult.campaign_control.rejection
+    && engineResult.campaign_control.rejection.code === 'mission_grant_ref_mismatch');
+
+  let blockedDetails = null;
+  try {
+    runtime.grantMissionCampaign({
+      repo,
+      preparedReceipt: prepared.receipt,
+      nodeId: 'solo-node',
+      now: '2026-08-31T00:06:00.000Z',
+    });
+  } catch (error) {
+    blockedDetails = error && error.details ? error.details : null;
+  }
+  // RED at 1cea5a7e: grant throw details.code === attempt_blocked_by_open_claim
+  // naming claim A; details.recovery === undefined (no recovery field).
+  check('open-claim-blocks-not-replays',
+    blockedDetails
+    && blockedDetails.code === 'attempt_blocked_by_open_claim'
+    && blockedDetails.claim_id === claimId
+    && blockedDetails.recovery === intake.stranded_claim.recovery);
 
   // ticket_present variant: plant an ICC intake root for the claim ticket.
   const ticket = liveBefore.campaign_contract_draft && liveBefore.campaign_contract_draft.ticket;
@@ -299,6 +387,7 @@ if (runtime) {
   const ticketStranded = buildStrandedClaim({
     claim: liveBefore, repo, statePath, campaignLedgerPath: ledgerPath,
   });
+  // RED at 1cea5a7e: no ticket_present recovery helper; resolution/recovery undefined.
   check('ticket-present-recovery',
     ticketStranded
     && ticketStranded.resolution === 'ticket_present'
@@ -342,6 +431,7 @@ for id in \
   no-no-effect-release \
   claim-a-still-live \
   helper-shape-matches \
+  engine-layer-stranded-claim \
   open-claim-blocks-not-replays \
   ticket-present-recovery \
   withdraw-never-started-frees \

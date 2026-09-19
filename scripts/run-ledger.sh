@@ -17,6 +17,7 @@
 #   stage-apply
 #   journal-add
 #   stage-probe
+#   lease-gc
 #   stage-reconcile
 #   resume
 #   gc-check
@@ -49,11 +50,13 @@ DEFAULT_LOCK_TIMEOUT=15
 DEFAULT_MAX_BYTES=${RUN_LEDGER_MAX_BYTES:-262144}
 DEFAULT_MAX_ROTATIONS=${RUN_LEDGER_MAX_ROTATIONS:-4}
 DEFAULT_QUARANTINE_TTL_SECS=${RUN_LEDGER_QUARANTINE_TTL_SECS:-43200}
+DEFAULT_LEASE_GC_TTL_SECS=${RUN_LEDGER_LEASE_GC_TTL_SECS:-43200}
 DEFAULT_INQUIRY_WAIT_SECS=${RUN_LEDGER_INQUIRY_WAIT_SECS:-30}
 DEFAULT_TERMINATION_GRACE_SECS=${RUN_LEDGER_TERMINATION_GRACE_SECS:-5}
 DEFAULT_LOCK_DIR_SUFFIX=".run-ledger-lock"
 
 SCRIPT_NAME="$(basename "$0")"
+RUN_LEDGER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TERMINAL_STATES="committed reviewed verified merged"
 BLOCKED_STATES="stale_ignored quarantined dead"
@@ -1057,6 +1060,7 @@ command_journal_add() {
 command_stage_transition() {
   local ledger="" run_id="" stage="" generation="" nonce="" to_state="" idempotency_key=""
   local git_ref="" git_sha="" worktree="" required_side_effect_keys="" timeout="$DEFAULT_LOCK_TIMEOUT"
+  local reason="transition"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -1072,6 +1076,7 @@ command_stage_transition() {
       --worktree) worktree="$2"; shift 2 ;;
       --required-side-effect-keys) required_side_effect_keys="$2"; shift 2 ;;
       --timeout) timeout="$2"; shift 2 ;;
+      --reason) reason="$2"; shift 2 ;;
       *) usage ;;
     esac
   done
@@ -1212,7 +1217,7 @@ command_stage_transition() {
     --arg rid "$run_id" \
     --arg stg "$stage" \
     --arg state "$to_state" \
-    --arg reason "transition" \
+    --arg reason "$reason" \
     --arg id_key "$idempotency_key" \
     --arg from "$current_state" \
     --argjson gen "$generation" \
@@ -2080,6 +2085,147 @@ command_stage_probe() {
   fi
 
   echo '{"status":"updated","to":"'"$target_state"'","reason":"'"$reason"'"}'
+}
+
+lease_gc_worktree_facts() {
+  local wt="$1"
+  node -e '
+const path = require("path");
+const { classifyWorktree, lockHolderPid } = require(process.argv[1]);
+const wt = process.argv[2] || "";
+if (!wt) {
+  process.stdout.write(JSON.stringify({ state: "none", holder: null }));
+  process.exit(0);
+}
+const disk = classifyWorktree(wt);
+const holder = lockHolderPid(path.join(wt, ".autopilot-worktree.lock"));
+process.stdout.write(JSON.stringify({ state: disk.state, holder }));
+' "$RUN_LEDGER_DIR/lib/worktree-activity.js" "$wt"
+}
+
+command_lease_gc() {
+  local ledger="" ttl="$DEFAULT_LEASE_GC_TTL_SECS" dry_run=0 json_out=0
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;;
+      --ttl-secs) ttl="$2"; shift 2 ;;
+      --dry-run) dry_run=1; shift ;;
+      --json) json_out=1; shift ;;
+      *) usage ;;
+    esac
+  done
+
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  local scanned=0 dead=0 appended=0
+  local skipped_json="[]"
+
+  if [ ! -f "$ledger" ]; then
+    if [ "$json_out" -eq 1 ]; then
+      jq -nc --argjson scanned 0 --argjson dead 0 --argjson appended 0 --argjson skipped '[]' \
+        '{scanned:$scanned,dead:$dead,skipped:$skipped,appended:$appended}'
+    fi
+    return 0
+  fi
+
+  local now cutoff
+  now="$(now_ts)"
+  cutoff=$((now - ttl))
+
+  local leases
+  leases="$(ledger_jq_slurp "$ledger" -c '
+    [ .[] | select(.kind=="stage") ]
+    | group_by((.run_id // "") + "\u0000" + (.stage // ""))
+    | map(.[-1] | select(.state=="leased"))
+    | .[]
+  ' 2>/dev/null || true)"
+
+  local row run_id stage generation nonce pid start_time hb_stage worktree
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    scanned=$((scanned + 1))
+    run_id="$(jq -r '.run_id' <<<"$row")"
+    stage="$(jq -r '.stage' <<<"$row")"
+    generation="$(jq -r '.generation // 0' <<<"$row")"
+    nonce="$(jq -r '.nonce // empty' <<<"$row")"
+    pid="$(jq -r '.pid // "0"' <<<"$row")"
+    start_time="$(jq -r '.start_time // "0"' <<<"$row")"
+    hb_stage="$(jq -r '.heartbeat_ts // "0"' <<<"$row")"
+    worktree="$(jq -r '.worktree // ""' <<<"$row")"
+
+    if is_process_alive "$pid" "$start_time"; then
+      skipped_json="$(jq -c --arg rid "$run_id" --arg stg "$stage" '. + [{run_id:$rid,stage:$stg,reason:"pid_alive"}]' <<<"$skipped_json")"
+      [ "$json_out" -eq 1 ] || printf 'skip %s %s pid_alive\n' "$run_id" "$stage"
+      continue
+    fi
+
+    local hb_row_max
+    hb_row_max="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" '
+      [.[] | select(.kind=="heartbeat" and .run_id==$rid and .stage==$stg
+        and ((.generation // 0)|tostring)==$gen and .nonce==$nonce_v)
+        | (.heartbeat_ts // 0 | tonumber)]
+      | if length==0 then 0 else max end
+    ' 2>/dev/null || echo 0)"
+    [ -n "$hb_row_max" ] || hb_row_max=0
+
+    local newest_hb
+    newest_hb="$hb_stage"
+    if [ "$hb_row_max" -gt "$newest_hb" ]; then
+      newest_hb="$hb_row_max"
+    fi
+
+    if [ "$newest_hb" -ge "$cutoff" ]; then
+      skipped_json="$(jq -c --arg rid "$run_id" --arg stg "$stage" '. + [{run_id:$rid,stage:$stg,reason:"heartbeat_fresh"}]' <<<"$skipped_json")"
+      [ "$json_out" -eq 1 ] || printf 'skip %s %s heartbeat_fresh\n' "$run_id" "$stage"
+      continue
+    fi
+
+    local facts disk_state holder
+    facts="$(lease_gc_worktree_facts "$worktree")"
+    disk_state="$(jq -r '.state' <<<"$facts")"
+    holder="$(jq -r '.holder // empty' <<<"$facts")"
+
+    local wt_tag="none"
+    if [ -n "$worktree" ]; then
+      wt_tag="absent"
+    fi
+
+    if [ -n "$worktree" ] && [ "$disk_state" != "absent" ] && [ "$disk_state" != "none" ]; then
+      skipped_json="$(jq -c --arg rid "$run_id" --arg stg "$stage" --arg r "worktree_${disk_state}" '. + [{run_id:$rid,stage:$stg,reason:$r}]' <<<"$skipped_json")"
+      [ "$json_out" -eq 1 ] || printf 'skip %s %s worktree_%s\n' "$run_id" "$stage" "$disk_state"
+      continue
+    fi
+
+    if [ -n "$holder" ] && [ "$holder" != "null" ] && is_process_alive "$holder" ""; then
+      skipped_json="$(jq -c --arg rid "$run_id" --arg stg "$stage" '. + [{run_id:$rid,stage:$stg,reason:"flock_held"}]' <<<"$skipped_json")"
+      [ "$json_out" -eq 1 ] || printf 'skip %s %s flock_held\n' "$run_id" "$stage"
+      continue
+    fi
+
+    local age=$((now - newest_hb))
+    [ "$age" -ge 0 ] || age=0
+    local gc_reason="lease_gc: pid_dead heartbeat_silent_${age}s worktree_${wt_tag}"
+    dead=$((dead + 1))
+    if [ "$dry_run" -eq 1 ]; then
+      [ "$json_out" -eq 1 ] || printf 'dead %s %s %s\n' "$run_id" "$stage" "$gc_reason"
+      continue
+    fi
+    command_stage_transition \
+      --ledger "$ledger" \
+      --run-id "$run_id" \
+      --stage "$stage" \
+      --generation "$generation" \
+      --nonce "$nonce" \
+      --to-state dead \
+      --reason "$gc_reason" >/dev/null
+    appended=$((appended + 1))
+    [ "$json_out" -eq 1 ] || printf 'appended %s %s %s\n' "$run_id" "$stage" "$gc_reason"
+  done <<<"$leases"
+
+  if [ "$json_out" -eq 1 ]; then
+    jq -nc --argjson scanned "$scanned" --argjson dead "$dead" --argjson appended "$appended" --argjson skipped "$skipped_json" \
+      '{scanned:$scanned,dead:$dead,skipped:$skipped,appended:$appended}'
+  fi
 }
 
 command_resource_mark() {
@@ -3243,6 +3389,9 @@ case "$command" in
 
   stage-probe)
     command_stage_probe "$@" ;;
+
+  lease-gc)
+    command_lease_gc "$@" ;;
 
   stage-reconcile)
     command_stage_reconcile "$@" ;;

@@ -1200,6 +1200,17 @@ printf ',"reaped":'; emit_array reaped_items
 printf ',"branch_inventory":'; emit_array reaped_items
 printf ',"branch_inventory_records":'; emit_array inventory_record_items
 printf ',"journal_branch_inventory":%s' "$_JOURNAL_BRANCH_INVENTORY"
+lease_gc_json='{"scanned":0,"dead":0,"skipped":[],"appended":0}'
+if [ "$command_name" = "reap" ]; then
+  _lease_path="$repo/.autopilot/run-ledger.jsonl"
+  if [ -f "$_lease_path" ]; then
+    _lease_out="$(bash "$self_dir/run-ledger.sh" lease-gc --ledger "$_lease_path" --json 2>/dev/null || true)"
+    if printf '%s' "$_lease_out" | jq -e '.scanned != null and .dead != null and .appended != null and .skipped' >/dev/null 2>&1; then
+      lease_gc_json="$_lease_out"
+    fi
+  fi
+fi
+printf ',"lease_gc":%s' "$lease_gc_json"
 printf '}\n'
 
 exec {lifecycle_fd}>&-

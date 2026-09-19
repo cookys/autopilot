@@ -28,16 +28,35 @@ cat > "$PROMPT_FILE" <<EOF
 Prompt body for tests.
 EOF
 
-cat > "$FAKE_JS" <<'EOF'
+cat > "$FAKE_JS" <<EOF
 #!/usr/bin/env node
 const fs = require('fs');
+const {execFileSync} = require('child_process');
 if (process.env.RUN_MARKER_PATH) {
-  try { fs.writeFileSync(process.env.RUN_MARKER_PATH, 'RAN\n'); } catch (e) {}
+  try { fs.writeFileSync(process.env.RUN_MARKER_PATH, 'RAN\\n'); } catch (e) {}
 }
 if (process.env.BREACH_TARGET) {
-  try { fs.appendFileSync(process.env.BREACH_TARGET, 'BREACH\n'); } catch (e) {}
+  try { fs.appendFileSync(process.env.BREACH_TARGET, 'BREACH\\n'); } catch (e) {}
 }
-process.stdout.write('Fake deterministic author output.\n');
+const body = 'Fake deterministic author output.';
+let markers = '';
+try {
+  markers = execFileSync('bash', ['-c',
+    'AUTOPILOT_TEST_LIB_HELPERS_ONLY=1; . "\$1"; shift; print_autopilot_frame_markers "\$@"',
+    'print_autopilot_frame_markers',
+    '$REPO_ROOT/hooks/tests/lib.sh',
+    'AUTOPILOT-AUTHOR',
+    ...process.argv.slice(2),
+  ], {encoding: 'utf8'});
+} catch (e) {
+  markers = '';
+}
+const parts = String(markers || '').trim().split('\\n').filter(Boolean);
+if (parts.length >= 2) {
+  process.stdout.write(parts[0] + '\\n' + body + '\\n' + parts[1] + '\\n');
+} else {
+  process.stdout.write(body + '\\n');
+}
 EOF
 
 IMPL_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'

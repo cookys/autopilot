@@ -15,36 +15,48 @@ printf '%s' "Write a verification plan." > "$PROMPT"
 
 export SENTINEL="$TEST_TMP/sentinel_touched"
 export RUN_COUNT_FILE="$TEST_TMP/run_count"
+export AUTOPILOT_TEST_LIB="$REPO_ROOT/hooks/tests/lib.sh"
 FAKE_RUNNER="$TEST_TMP/fake-runner"
-cat <<'EOF' > "$FAKE_RUNNER"
+cat <<EOF > "$FAKE_RUNNER"
 #!/usr/bin/env bash
+$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
 echo "OpenAI Codex v0.test.0" >&2
 echo "--------" >&2
 echo "session id: 00000000-0000-4000-8000-000000000000" >&2
 echo "--------" >&2
 
 sidecar=""
-args=("$@")
+args=("\$@")
 i=0
-while [ "$i" -lt "${#args[@]}" ]; do
-  if [ "${args[$i]}" = "--output-last-message" ]; then
-    i=$((i + 1))
-    if [ "$i" -lt "${#args[@]}" ]; then
-      sidecar="${args[$i]}"
+while [ "\$i" -lt "\${#args[@]}" ]; do
+  if [ "\${args[\$i]}" = "--output-last-message" ]; then
+    i=\$((i + 1))
+    if [ "\$i" -lt "\${#args[@]}" ]; then
+      sidecar="\${args[\$i]}"
     fi
   fi
-  i=$((i + 1))
+  i=\$((i + 1))
 done
 
-touch "$SENTINEL"
-if [ -n "$RUN_COUNT_FILE" ]; then
-  echo "1" >> "$RUN_COUNT_FILE"
+touch "\$SENTINEL"
+if [ -n "\$RUN_COUNT_FILE" ]; then
+  echo "1" >> "\$RUN_COUNT_FILE"
 fi
 msg="Success from stub runner"
-if [ -n "$sidecar" ]; then
-  printf '%s\n' "$msg" > "$sidecar"
+if MARKERS="\$(print_autopilot_frame_markers AUTOPILOT-AUTHOR "\$@")"; then
+  BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
+  END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
+  framed=\$(printf '%s\\n%s\\n%s\\n' "\$BEGIN" "\$msg" "\$END")
+  if [ -n "\$sidecar" ]; then
+    printf '%s' "\$framed" > "\$sidecar"
+  fi
+  printf '%s' "\$framed"
+else
+  if [ -n "\$sidecar" ]; then
+    printf '%s\\n' "\$msg" > "\$sidecar"
+  fi
+  printf '%s\\n' "\$msg"
 fi
-printf '%s\n' "$msg"
 exit 0
 EOF
 chmod +x "$FAKE_RUNNER"

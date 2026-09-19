@@ -11,15 +11,24 @@ export SENTINEL="$TEST_TMP/sentinel_touched"
 export RUN_COUNT_FILE="$TEST_TMP/run_count"
 export RECORDED_ARGV="$TEST_TMP/recorded_argv"
 export RECORDED_ENV="$TEST_TMP/recorded_env"
+export AUTOPILOT_TEST_LIB="$REPO_ROOT/hooks/tests/lib.sh"
 
 FAKE_RUNNER="$TEST_TMP/fake-runner"
-cat <<'EOF' > "$FAKE_RUNNER"
+cat <<EOF > "$FAKE_RUNNER"
 #!/usr/bin/env bash
-touch "$SENTINEL"
-echo "started" >> "$RUN_COUNT_FILE"
-echo "$@" > "$RECORDED_ARGV"
-printf '%s\n' "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL" "ANTHROPIC_AUTH_TOKEN=$ANTHROPIC_AUTH_TOKEN" > "$RECORDED_ENV"
-echo "OK-WRITTEN"
+$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
+touch "\$SENTINEL"
+echo "started" >> "\$RUN_COUNT_FILE"
+echo "\$@" > "\$RECORDED_ARGV"
+printf '%s\\n' "ANTHROPIC_BASE_URL=\$ANTHROPIC_BASE_URL" "ANTHROPIC_AUTH_TOKEN=\$ANTHROPIC_AUTH_TOKEN" > "\$RECORDED_ENV"
+BODY="OK-WRITTEN"
+if MARKERS="\$(print_autopilot_frame_markers AUTOPILOT-AUTHOR "\$@")"; then
+  BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
+  END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
+  printf '%s\\n%s\\n%s\\n' "\$BEGIN" "\$BODY" "\$END"
+else
+  printf '%s\\n' "\$BODY"
+fi
 exit 0
 EOF
 chmod +x "$FAKE_RUNNER"

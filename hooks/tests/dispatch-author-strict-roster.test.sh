@@ -7,6 +7,7 @@ PROMPT="$TEST_TMP/prompt.txt"
 printf '%s' "Write a verification plan." > "$PROMPT"
 
 export SENTINEL="$TEST_TMP/sentinel_touched"
+export AUTOPILOT_TEST_LIB="$REPO_ROOT/hooks/tests/lib.sh"
 FAKE_RUNNER="$TEST_TMP/fake-runner"
 cat <<'EOF' > "$FAKE_RUNNER"
 #!/usr/bin/env bash
@@ -149,11 +150,19 @@ EOF
 GROK_ARGS="$TEST_TMP/grok-args"
 export GROK_ARGS
 FAKE_GROK_RUNNER="$TEST_TMP/fake-grok-runner"
-cat <<'EOF' > "$FAKE_GROK_RUNNER"
+cat <<EOF > "$FAKE_GROK_RUNNER"
 #!/usr/bin/env bash
-printf '%s\n' "$@" > "$GROK_ARGS"
-touch "$SENTINEL"
-printf '%s\n' "GROK-AUTHORED"
+$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
+printf '%s\\n' "\$@" > "\$GROK_ARGS"
+touch "\$SENTINEL"
+BODY="GROK-AUTHORED"
+if MARKERS="\$(print_autopilot_frame_markers AUTOPILOT-AUTHOR "\$@")"; then
+  BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
+  END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
+  printf '%s\\n%s\\n%s\\n' "\$BEGIN" "\$BODY" "\$END"
+else
+  printf '%s\\n' "\$BODY"
+fi
 EOF
 chmod +x "$FAKE_GROK_RUNNER"
 
@@ -189,11 +198,27 @@ cat <<'EOF' > "$CASE8_DIR/.claude/review-loop-config.md"
 EOF
 
 FAKE_AGY_RUNNER="$TEST_TMP/fake-agy-runner"
-cat <<'EOF' > "$FAKE_AGY_RUNNER"
+cat <<EOF > "$FAKE_AGY_RUNNER"
 #!/usr/bin/env bash
-touch "$SENTINEL" 2>/dev/null || true
-printf 'ARG=%s\n' "$@"
-printf '%s\n' "AGY-AUTHORED"
+$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
+touch "\$SENTINEL" 2>/dev/null || true
+BODY="AGY-AUTHORED"
+MARKERS=""
+for _arg in "\$@"; do
+  if MARKERS="\$(extract_autopilot_frame_markers AUTOPILOT-AUTHOR "\$_arg")"; then
+    break
+  fi
+done
+if [ -z "\$MARKERS" ]; then
+  MARKERS="\$(print_autopilot_frame_markers AUTOPILOT-AUTHOR "\$@")" || MARKERS=""
+fi
+if [ -n "\$MARKERS" ]; then
+  BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
+  END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
+  printf '%s\\n%s\\n%s\\n' "\$BEGIN" "\$BODY" "\$END"
+else
+  printf '%s\\n' "\$BODY"
+fi
 EOF
 chmod +x "$FAKE_AGY_RUNNER"
 

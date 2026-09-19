@@ -16,6 +16,67 @@
 
 set -uo pipefail   # NOT -e — we want to handle assertion failures explicitly
 
+# Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
+# AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review.test.sh so consumer
+# suites do not duplicate the parser. Source with AUTOPILOT_TEST_LIB_HELPERS_ONLY=1
+# from a --bin stub so this file does not create a nested TEST_TMP / EXIT trap.
+read_fake_runner_prompt() {
+  local prompt=""
+  local i=1
+  local arg next_index next_arg
+  while [ "$i" -le "$#" ]; do
+    arg="${!i}"
+    if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then
+      next_index=$((i + 1))
+      next_arg="${!next_index}"
+      case "$next_arg" in
+        ''|-*) : ;;
+        *)
+          if [ -f "$next_arg" ]; then
+            prompt="$(cat "$next_arg")"
+          else
+            prompt="$next_arg"
+          fi
+          break
+          ;;
+      esac
+    fi
+    i=$((i + 1))
+  done
+  if [ -z "$prompt" ]; then
+    prompt="$(cat)"
+  fi
+  printf '%s' "$prompt"
+}
+
+extract_autopilot_frame_markers() {
+  local prefix="$1"
+  local prompt="$2"
+  local begin end
+  if [ -z "$prompt" ]; then
+    return 1
+  fi
+  begin="$(printf '%s\n' "$prompt" | sed -n "s/^\\(<<<${prefix}-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p" | sed -n '1p')"
+  end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+  if [ -z "$begin" ] || [ -z "$end" ]; then
+    return 1
+  fi
+  printf '%s\n%s\n' "$begin" "$end"
+}
+
+print_autopilot_frame_markers() {
+  local prefix="$1"
+  shift
+  local prompt
+  prompt="$(read_fake_runner_prompt "$@")"
+  extract_autopilot_frame_markers "$prefix" "$prompt"
+}
+
+if [ "${AUTOPILOT_TEST_LIB_HELPERS_ONLY:-}" = 1 ]; then
+  return 0 2>/dev/null || exit 0
+fi
+
+
 # Hermetic assert_eq: Node util.inspect under FORCE_COLOR wraps numbers in ANSI
 # (e.g. expected '2' vs got '[33m2[39m'). Disable color for all hook tests.
 export NO_COLOR=1

@@ -3,7 +3,7 @@
 
 ## 現況
 - branch `develop`，HEAD = v2.36.70 release `580395ce`（QC trailer）＋docs commits，tree 乾淨，`origin/develop` 同 HEAD。marker 已 clear。
-- **殘留要使用者處理**：`/home/cookys/projects/autopilot-par/` 下四個平行 clone（716 MB，各含一個「LOCAL ONLY shadow governance」commit；hands 都已 cherry-pick 進 develop）——exec-boundary 不讓 session 遞迴刪 cwd 外目錄，請使用者自己刪掉整個 `autopilot-par` 目錄。
+- 平行 clone（`autopilot-par/`）、foreman／hands worktree 與 branch、tmp-suites branch 都已清；主 repo 只剩主 checkout＋別人的 baseline worktree。
 - routing 指 packet graph（`docs/mission-blind-review-shared-packet-2026-09-18-*.json`，digest `4e4a8299…`，lineage `b33ff20c…`）；node 已 integrated、marker 已 retire、worktree／branch 已 reap、zero residue。mission state 跟 station 一樣停在 ACTIVE（非 terminal）——先例是下一條 lineage 用新 adoption key 直接 prepare，不需要 reconcile；若要換到別的 graph，先 `mission-terminal-reconcile.js legacy --graph-digest <new>`。
 - 四席 qc 仍 pin（claude-fable-5-1、GLM-5.2、MiniMax-M3、Qwen3.8-Max-Preview；`min_panel_size: 3`、`in_rail_review: auto`）。
 - `stash@{0}`（別的 session：evidence-discipline §20/§21 pending QC）別動也別 pop；`7ef6560a…/baseline` worktree 是別的 session 的。

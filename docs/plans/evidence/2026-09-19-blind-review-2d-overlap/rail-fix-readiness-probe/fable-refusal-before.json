@@ -1,0 +1,1 @@
+{ "runner": "claude-native", "model": "claude-fable-5-1", "status": "truncated", "raw_log": "/tmp/dispatch-author-log-Qt9MMU", "error": "frame_missing", "selection_source": "explicit_cli", "selection_path": null, "verification_author": null }

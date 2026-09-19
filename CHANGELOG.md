@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.36.74 — Fix：strict /l5 provider readiness probe 被 claude-native 拒答（v2.36.71 author frame 的消費者）
+
+- 2-D D2 campaign 在 intake 前就 `provider_readiness … strict_l5_provider_not_ready`：readiness live probe 經 `dispatch-author.sh`
+  送 `Respond only with OK.`，v2.36.71 起每個非 codex prompt 都被包進 nonce 框（「You are an authoring engine… Do NOT echo these
+  instructions… VERY FIRST output character MUST…」），claude-fable-5-1 把這個組合當成操弄而拒答（raw：「I'm not going to do that…
+  Neither reflects a real task」）→ `truncated/frame_missing` → qc:1 席永遠 `probe-needed`，每個 strict campaign 都起不來。
+  cursor／cc-shim／qoderclicn 都照答 `OK`，所以是「身分覆寫語氣＋看起來不像任務的請求」觸發，不是框本身。
+- `src/readiness/probe.js`：probe 句改成自我描述的誠實請求（「This is the autopilot dispatcher's provider readiness probe: it only
+  checks that this provider answers. Reply with the single word OK and nothing else.」）；期望回應 `OK` 與包裝容忍不變；
+  `request_digest` 隨句子派生。`scripts/dispatch-author.sh`（＋鏡像）：框前言改為 dispatcher 的輸出格式契約口吻、刪「Do NOT echo
+  these instructions」，marker／nonce／tool-fence 禁令／首字元規則不動。live 證明：fable 與 Qwen 都 `authored`、raw `OK`。
+- 測試：`provider-readiness-consumer` prompt 斷言更新（RED 註記舊字節）、`dispatch-author` 新案（框裡沒有舊前言、仍有 BEGIN／NONCE／
+  `AUTHORING TASK:`）。教訓：改 rail 輸出契約時，消費者不只在 `hooks/tests/*.test.sh`——`src/readiness/live-probe.js` 也吃
+  `dispatch-author.sh`；§39 的 grep 要含 `src/`。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.73 — stale campaign leases become collectable（`run-ledger.sh lease-gc`）；2-D plan 凍結 g2
 
 - **`scripts/run-ledger.sh lease-gc [--ttl-secs N] [--dry-run] [--json]`**（＋鏡像）：對每個最新狀態為 `leased` 的 (run_id, stage)，

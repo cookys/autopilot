@@ -1,0 +1,473 @@
+{
+  "schema_version": 1,
+  "artifact_type": "provider_readiness_receipt",
+  "issued_at": "2026-09-19T17:23:34.901Z",
+  "expires_at": "2026-09-19T17:23:59.353Z",
+  "roster_digest": "b4a56204fe33e3e399f8a1d8c2ab0c0080be1b4867197fbbae99ce8d58d9348a",
+  "policy_digest": "046a59171624c56c28ff97ef47894688fa37b61daff20e8153ac21b234942409",
+  "observation_digest": "4b14b4db3090975f7c3ab300f5f97767f8f536522493a3e32588f3142d3071f4",
+  "overall_status": "probe-needed",
+  "seats": [
+    {
+      "seat_id": "implementer",
+      "required": true,
+      "family": "xai",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "implementer",
+          "runner": "cursor",
+          "model": "cursor-grok-4.6-low",
+          "effort": "low",
+          "endpoint": null
+        },
+        "tuple_digest": "bbec06214ef02edb84bc4c40a46f51053d08c0d3f4288ce90cd18178c8923e4e",
+        "observed_at": "2026-09-19T17:23:34.901Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:18:59.353Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "6d1d2efa81c2ef0ad832c9af64bdf29a24c88fb035c34a18d42dc10474798db5"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "xai",
+        "tuple": {
+          "role": "implementer",
+          "runner": "cursor",
+          "model": "cursor-grok-4.6-low",
+          "effort": "low",
+          "endpoint": null
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "reviewer",
+      "required": true,
+      "family": "minimax",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "reviewer",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        },
+        "tuple_digest": "b9d87ae3354e84d595a340368ccb3b43a75bac15a4a4807ba34eb065bbdac24f",
+        "observed_at": "2026-09-19T17:23:34.901Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:18:59.353Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "cb475dbd5d397336b98f2e850b52e7d9c451b2d4ec213ac2e00c33b0c969ba92"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "minimax",
+        "tuple": {
+          "role": "reviewer",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "verification_author",
+      "required": true,
+      "family": "alibaba",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "verification_author",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max-Preview",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "81c16ac9c34b2f7030aee7c45d90884d2a6c821f6c659f64ddca4b814a9e7848",
+        "observed_at": "2026-09-19T17:23:34.901Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "unknown",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:18:59.353Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": "transport_failure"
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": false,
+        "probe_required": true,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "e007e84667aa2600221a6cbbebdd2f0995f6862c425cdf643e7ece030f95ef24"
+      },
+      "fallbacks": [],
+      "selected": null,
+      "status": "probe-needed",
+      "failing_axes": [
+        {
+          "axis": "live",
+          "status": "unknown",
+          "reason": "transport_failure"
+        }
+      ]
+    },
+    {
+      "seat_id": "qc:1",
+      "required": true,
+      "family": "anthropic",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "9597a1db6d444c998013e277542d41ac3481fac124b2a00db63253565fe553f7",
+        "observed_at": "2026-09-19T17:23:34.901Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "unknown",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:18:59.353Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": "transport_failure"
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": false,
+        "probe_required": true,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "c684bc283b86d4b7c90db7e060ac3d5072789a3de90c4a4372590bc71b4f84ba"
+      },
+      "fallbacks": [],
+      "selected": null,
+      "status": "probe-needed",
+      "failing_axes": [
+        {
+          "axis": "live",
+          "status": "unknown",
+          "reason": "transport_failure"
+        }
+      ]
+    },
+    {
+      "seat_id": "qc:2",
+      "required": true,
+      "family": "zhipu",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "effort": "high",
+          "endpoint": "glm"
+        },
+        "tuple_digest": "0eb7d66f6927bec56f2c57df1ef2544a68ea2c264360367904ae23149425f7c2",
+        "observed_at": "2026-09-19T17:23:34.901Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:18:59.353Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "f0cebd8982ada44acfa7b357e119de75cb49119761fd55a451dd4965e555f0d5"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "zhipu",
+        "tuple": {
+          "role": "qc",
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "effort": "high",
+          "endpoint": "glm"
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "qc:3",
+      "required": true,
+      "family": "minimax",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax"
+        },
+        "tuple_digest": "fd1904b8136236928e25042715bd642cb8d59df814bfa71a3360b27427bee7f6",
+        "observed_at": "2026-09-19T17:23:34.901Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "unknown",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:18:59.353Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": "transport_failure"
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": false,
+        "probe_required": true,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "ea7d623ed3a467b566807fcfdc3863929df92ba6a3aa3a424da67624d9be40b8"
+      },
+      "fallbacks": [],
+      "selected": null,
+      "status": "probe-needed",
+      "failing_axes": [
+        {
+          "axis": "live",
+          "status": "unknown",
+          "reason": "transport_failure"
+        }
+      ]
+    },
+    {
+      "seat_id": "qc:4",
+      "required": true,
+      "family": "alibaba",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max-Preview",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "3b966425146b1b37556edbbde017267205838774e8a2e0a7137015589e55ee16",
+        "observed_at": "2026-09-19T17:23:34.901Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "safe-surface",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "unknown",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:18:59.353Z",
+            "ttl_seconds": 300,
+            "evidence_class": "live-probe",
+            "freshness": "fresh",
+            "reason": "transport_failure"
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-09-19T17:23:34.901Z",
+            "ttl_seconds": 300,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": false,
+        "probe_required": true,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "1769bbeca7c7128be9fa00a42f395950875caa8d32e7db35eb2d7bf43052887b"
+      },
+      "fallbacks": [],
+      "selected": null,
+      "status": "probe-needed",
+      "failing_axes": [
+        {
+          "axis": "live",
+          "status": "unknown",
+          "reason": "transport_failure"
+        }
+      ]
+    }
+  ],
+  "receipt_digest": "b4d185b0a9e7f6b102911a858e09a00431499d1d770d5d23b51f323efa627cf4",
+  "brain_seat": {
+    "schema_version": 1,
+    "artifact_type": "brain_seat_status",
+    "identity_hash": "2e71cfd2ef9f47ad98212bd9916cffe417f655c3d62d92bd6ddb8a90bab05aa0",
+    "status": "no_record",
+    "strikes_since_pass": 0,
+    "strike_threshold": 3,
+    "baseline_evidence_id": null,
+    "baseline_observed_at": null,
+    "construct_scope": "per-round-exam.long-horizon-production-audit"
+  }
+}

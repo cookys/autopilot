@@ -24,7 +24,7 @@ Owner request 2026-09-18 after v2.36.69: "maximise parallelism, foreman = kimi k
 ## Units (file-disjoint by construction; B and D touch `autopilot-engine.js` in different hunks — cherry-picks were clean)
 | unit | BACKLOG row | hands (cursor-grok-4.6-low) | review (claude-fable-5-1) | foreman | landed as |
 |---|---|---|---|---|---|
-| **A** parser | dispatch-review parser refuses a complete GLM verdict on a repeated BEGIN marker | `parser-a@2d8813ad` (feature + schema), `parser-a-r2@c7006c53` (dropped the schema hunks → suite red, created REPAIR-BLOCKED.md) | FIX-THEN-SHIP: 🟠 scope-schema-edit (the brief omitted `schemas/review-result.schema.json`, whose `additionalProperties: false` is validated by the suite), 2 🔵 | **escalated** (12 calls, 44 min) — depth 0 authorised the schema files (`a/ANSWER.md`) and adopted r1 | `3bc0c67c` |
+| **A** parser | dispatch-review parser refuses a complete GLM verdict on a repeated BEGIN marker | `parser-a@2d8813ad` (feature + schema), `parser-a-r2@c7006c53` (dropped the schema hunks → suite red, created REPAIR-BLOCKED.md) | FIX-THEN-SHIP: 🟠 scope-schema-edit (the brief omitted `schemas/review-result.schema.json`, whose `additionalProperties: false` is validated by the suite), 2 🔵 | **escalated** (12 calls, 44 min) — depth 0 authorised the schema files (`a/ANSWER.md`) and adopted r1 | `4051f7a4` |
 | **B** envscrub | Test suites inherit the dispatcher's session env (`AUTOPILOT_SESSION_ID`) | `envscrub-b@810a3622`, `envscrub-b-r2@1ff2fed8` | FIX-THEN-SHIP: 🟠 test strength (receipt `env_fingerprint` + sibling-variable survival not asserted), 2 🔵 → r2 → SHIP-AS-IS | completed (12 calls, 36 min) | `b1e97df1`, `c8408e83` |
 | **C** secretscan | `secret-scan-diff.js --range` ENOBUFS | `secretscan-c@2e7eaf37`, `secretscan-c-r2@3c79b26f` | FIX-THEN-SHIP: 🟠 `core.quotePath` C-quoted paths silently skipped, 🟡 bare `--files` semantics changed, 🔵×3 → r2 → SHIP-AS-IS | completed (9 calls, 9 min) | `51cd4ac8`, `f2771311` |
 | **D** terminal | acceptance_failed cannot be journaled — `MUTATION_FAILURE_EVIDENCE_REQUIRED` | `terminal-d@f82398f0` | SHIP-AS-IS, 3 🔵 | completed (8 calls, 38 min) | `faf738ee` |
@@ -35,7 +35,7 @@ Every foreman: `main_checkout_boundary: verified`, no foreman commits, hands onl
 - Each unit's diff ⊆ its allowed files (A after the schema authorisation); codex mirrors byte-identical (`--check`);
   C's report corrects the BACKLOG row ("exit 0" was a pipeline artefact — base exits 2 on ENOBUFS; the defect was that
   the range was never scanned at all); D's report leaves the wall-expiry row open (different code path, per brief).
-- Integrated verification on the cherry-picked head `3bc0c67c` in a scratch checkout (`int-suites-3bc0c67c.txt`,
+- Integrated verification on the cherry-picked head `3bc0c67c` (pre-rebase; the same tree landed as `4051f7a4` after a rebase onto a docs-only push) in a scratch checkout (`int-suites-3bc0c67c.txt`,
   `suites-int.sh`): the union of the four verify lists plus `qc-panel` and `check-canonical-invariants` (the other two
   enumerators of review-result keys) — see the file for the tally.
 - Measured: four foremen in parallel finished in 44 min wall (longest unit) for four PATCH-class rows; the serial

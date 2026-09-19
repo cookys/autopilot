@@ -67,6 +67,133 @@ function campaignClockElapsedSeconds(state, observedMs) {
   }
   return Math.floor((observedMs - Date.parse(state.started_at)) / 1000);
 }
+
+function nonnegativeSeconds(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function durationSecondsBetween(start, end) {
+  const from = Date.parse(start);
+  const to = Date.parse(end);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return null;
+  return Math.floor((to - from) / 1000);
+}
+
+function unwrapCampaignLedgerRow(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  if (row.event && typeof row.event === 'object' && !Array.isArray(row.event)) {
+    return row.event;
+  }
+  if (row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
+      && row.payload.event && typeof row.payload.event === 'object') {
+    return row.payload.event;
+  }
+  if (typeof row.payload === 'string') {
+    try {
+      const parsed = JSON.parse(row.payload);
+      if (parsed && parsed.event && typeof parsed.event === 'object') return parsed.event;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch (_error) {
+      return row;
+    }
+  }
+  return row;
+}
+
+function isRoundOneLedgerRow(row) {
+  if (Number.isSafeInteger(row.generation)) return row.generation === 0;
+  if (Number.isSafeInteger(row.round)) return row.round === 1;
+  return true;
+}
+
+function emptyRepairRoundEstimate() {
+  return {
+    repair_round_estimate_seconds: null,
+    implement_seconds: null,
+    verify_seconds: null,
+    review_seconds: null,
+  };
+}
+
+// Round-1 implement wall + verify duration + in-loop review/panel duration.
+// Missing any of the three rows ⇒ null estimate (never a guess).
+function estimateRepairRoundSeconds(rows) {
+  if (!Array.isArray(rows)) return emptyRepairRoundEstimate();
+  const events = rows.map(unwrapCampaignLedgerRow).filter(Boolean);
+  const roundOne = events.filter(isRoundOneLedgerRow);
+  const implStarted = roundOne.find(
+    (row) => row.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
+  );
+  const implCompleted = roundOne.find(
+    (row) => row.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED
+      || row.unit === 'dispatch_implementation',
+  );
+  const vertical = roundOne.find(
+    (row) => row.event_type === CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
+  );
+  const verifyRow = roundOne.find((row) => row.unit === 'verify_round');
+  const reviewed = roundOne.find(
+    (row) => row.event_type === CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+  );
+  const reviewRow = roundOne.find((row) => row.unit === 'dispatch_review'
+    || row.unit === 'review_panel'
+    || row.unit === 'final_panel');
+
+  let implement = null;
+  if (implCompleted) {
+    implement = nonnegativeSeconds(implCompleted.payload && implCompleted.payload.wall_secs)
+      ?? nonnegativeSeconds(implCompleted.wall_secs)
+      ?? durationSecondsBetween(
+        implStarted && implStarted.timestamp,
+        implCompleted.timestamp,
+      );
+  }
+  let verify = null;
+  if (vertical && implCompleted && implCompleted.timestamp) {
+    verify = durationSecondsBetween(implCompleted.timestamp, vertical.timestamp);
+  } else if (verifyRow) {
+    verify = nonnegativeSeconds(verifyRow.duration_seconds)
+      ?? durationSecondsBetween(verifyRow.started_at, verifyRow.ended_at);
+  }
+  let review = null;
+  if (reviewed && vertical && vertical.timestamp) {
+    review = durationSecondsBetween(vertical.timestamp, reviewed.timestamp);
+  } else if (reviewRow) {
+    review = nonnegativeSeconds(reviewRow.duration_seconds)
+      ?? durationSecondsBetween(reviewRow.started_at, reviewRow.ended_at);
+  }
+
+  if (implement == null || verify == null || review == null) {
+    return {
+      repair_round_estimate_seconds: null,
+      implement_seconds: implement,
+      verify_seconds: verify,
+      review_seconds: review,
+    };
+  }
+  return {
+    repair_round_estimate_seconds: implement + verify + review,
+    implement_seconds: implement,
+    verify_seconds: verify,
+    review_seconds: review,
+  };
+}
+
+function formatRepairRoundBudgetShortfall({ remaining, estimate }) {
+  const remainingSecs = nonnegativeSeconds(remaining);
+  const total = nonnegativeSeconds(estimate && estimate.repair_round_estimate_seconds);
+  const implement = nonnegativeSeconds(estimate && estimate.implement_seconds);
+  const verify = nonnegativeSeconds(estimate && estimate.verify_seconds);
+  const review = nonnegativeSeconds(estimate && estimate.review_seconds);
+  if (remainingSecs == null || total == null
+      || implement == null || verify == null || review == null) {
+    return null;
+  }
+  const shortfall = total - remainingSecs;
+  return `remaining ${remainingSecs} s < repair round estimate ${total} s `
+    + `(implement ${implement} + verify ${verify} + review ${review}), `
+    + `shortfall ${shortfall} s`;
+}
 const MUTATION_START_EVENTS = new Set([
   CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
   CAMPAIGN_EVENTS.REPAIR_STARTED,
@@ -896,6 +1023,15 @@ function reduceCampaignState(currentState, event) {
       && Object.prototype.hasOwnProperty.call(event.payload, 'repair_lineage')) {
     payloadKeys.add('repair_lineage');
   }
+  if (event.event_type === CAMPAIGN_EVENTS.AWAITING_DISPOSITION && event.payload) {
+    for (const key of [
+      'wall_seconds_remaining',
+      'repair_round_estimate_seconds',
+      'repair_round_fits',
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(event.payload, key)) payloadKeys.add(key);
+    }
+  }
   const terminalEvent = new Set([
     CAMPAIGN_EVENTS.TERMINAL_READY,
     CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP,
@@ -1054,6 +1190,32 @@ function reduceCampaignState(currentState, event) {
       findings_digest: event.payload.findings_digest,
       candidate_ref: event.payload.candidate_ref || null,
     };
+    if (Object.prototype.hasOwnProperty.call(event.payload, 'wall_seconds_remaining')) {
+      if (nonnegativeSeconds(event.payload.wall_seconds_remaining) == null) {
+        fail('INVALID_PAYLOAD', 'awaiting_disposition wall_seconds_remaining must be a nonnegative integer');
+      }
+      next.awaiting_disposition.wall_seconds_remaining = event.payload.wall_seconds_remaining;
+    }
+    if (Object.prototype.hasOwnProperty.call(event.payload, 'repair_round_estimate_seconds')) {
+      const estimate = event.payload.repair_round_estimate_seconds;
+      if (estimate !== null && nonnegativeSeconds(estimate) == null) {
+        fail(
+          'INVALID_PAYLOAD',
+          'awaiting_disposition repair_round_estimate_seconds must be a nonnegative integer or null',
+        );
+      }
+      next.awaiting_disposition.repair_round_estimate_seconds = estimate;
+    }
+    if (Object.prototype.hasOwnProperty.call(event.payload, 'repair_round_fits')) {
+      const fits = event.payload.repair_round_fits;
+      if (fits !== null && typeof fits !== 'boolean') {
+        fail(
+          'INVALID_PAYLOAD',
+          'awaiting_disposition repair_round_fits must be a boolean or null',
+        );
+      }
+      next.awaiting_disposition.repair_round_fits = fits;
+    }
   } else if (currentState.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION
       && event.event_type === CAMPAIGN_EVENTS.DISPOSITION_RESUMED) {
     if (event.payload.registry_complete !== true
@@ -1193,6 +1355,8 @@ module.exports = {
   WALL_CLOCK_PAUSED_STATES,
   CampaignStateError,
   campaignClockElapsedSeconds,
+  estimateRepairRoundSeconds,
+  formatRepairRoundBudgetShortfall,
   campaignIdFor,
   canonicalDigest,
   boundCampaignArtifactDigest,

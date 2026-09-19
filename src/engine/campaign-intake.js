@@ -17,6 +17,8 @@ const {
   campaignClockElapsedSeconds,
   campaignIdFor,
   canonicalDigest,
+  estimateRepairRoundSeconds,
+  formatRepairRoundBudgetShortfall,
   boundCampaignArtifactDigest,
   createCampaignState,
   normalizeCampaignArtifactReference,
@@ -849,6 +851,32 @@ function verifyResumeCandidate({ projection, repo, base }) {
   };
 }
 
+function dispositionAuthorizesRepairRound(authority) {
+  if (!authority || typeof authority !== 'object' || Array.isArray(authority)) return false;
+  const reviews = Array.isArray(authority.reviews) ? authority.reviews : [];
+  for (const review of reviews) {
+    const decisions = review && Array.isArray(review.decisions) ? review.decisions : [];
+    for (const decision of decisions) {
+      const disposition = decision && decision.disposition;
+      if (disposition && disposition.disposition === 'must-fix-now') return true;
+    }
+  }
+  return false;
+}
+
+function loadDispositionAuthorityValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(fs.readFileSync(value, 'utf8'));
+    } catch (_error) {
+      return null;
+    }
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  return null;
+}
+
 function defaultGenerationClaim({
   campaignId,
   contractDigest,
@@ -858,6 +886,8 @@ function defaultGenerationClaim({
   resume,
   observedAt,
   base,
+  campaignDispositionAuthority,
+  repairRoundEstimateSeconds,
 }) {
   let existing = null;
   let ledgerRows = [];
@@ -1117,6 +1147,35 @@ function defaultGenerationClaim({
         'campaign_generation',
         'campaign_wall_budget_exhausted',
         'durable campaign has no wall-clock budget remaining',
+      );
+    }
+    const remaining = resumePreflight.limits.max_wall_seconds
+      - resumePreflight.usage.elapsed_wall_seconds;
+    const awaiting = existing.state.awaiting_disposition || {};
+    const fromLedger = estimateRepairRoundSeconds(ledgerRows);
+    const estimateSeconds = Number.isSafeInteger(repairRoundEstimateSeconds)
+      ? repairRoundEstimateSeconds
+      : (Number.isSafeInteger(awaiting.repair_round_estimate_seconds)
+        ? awaiting.repair_round_estimate_seconds
+        : fromLedger.repair_round_estimate_seconds);
+    const estimate = {
+      ...fromLedger,
+      repair_round_estimate_seconds: Number.isSafeInteger(estimateSeconds)
+        ? estimateSeconds
+        : fromLedger.repair_round_estimate_seconds,
+    };
+    const authority = loadDispositionAuthorityValue(campaignDispositionAuthority);
+    if (dispositionAuthorizesRepairRound(authority)
+        && Number.isSafeInteger(estimate.repair_round_estimate_seconds)
+        && remaining < estimate.repair_round_estimate_seconds) {
+      const reason = formatRepairRoundBudgetShortfall({ remaining, estimate })
+        || `remaining ${remaining} s < repair round estimate ${
+          estimate.repair_round_estimate_seconds
+        } s`;
+      return rejected(
+        'campaign_generation',
+        'campaign_wall_budget_insufficient_for_repair',
+        reason,
       );
     }
   }
@@ -2335,6 +2394,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
       resume: input.resume === true,
       observedAt: now,
       base: input.base,
+      campaignDispositionAuthority: input.campaignDispositionAuthority,
+      repairRoundEstimateSeconds: input.repairRoundEstimateSeconds,
     }), 'campaign_generation', new Set(['claimed', 'rejected']));
   } catch (error) {
     return releaseAfterRejection(rejected(

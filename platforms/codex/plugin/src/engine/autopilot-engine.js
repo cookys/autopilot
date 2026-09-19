@@ -93,6 +93,7 @@ const {
   CAMPAIGN_STATES,
   campaignClockElapsedSeconds,
   campaignIdFor,
+  estimateRepairRoundSeconds,
   repairLineageCleanupId,
   resolveCampaignEventLeaseIdentity,
 } = require('./implementation-campaign');
@@ -7165,6 +7166,27 @@ class AutopilotEngine {
           AWAITING_CONVERGENCE: CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
         };
         const mapped = typeMap[eventType] || eventType;
+        let eventPayload = payload || {};
+        if (mapped === CAMPAIGN_EVENTS.AWAITING_DISPOSITION && campaignControl
+            && campaignControl.initial_state) {
+          const estimate = estimateRepairRoundSeconds(ledger);
+          const remaining = Math.max(
+            0,
+            campaignControl.initial_state.limits.max_wall_seconds
+              - campaignClockElapsedSeconds(
+                campaignControl.initial_state,
+                Date.parse(this.now()),
+              ),
+          );
+          eventPayload = {
+            ...eventPayload,
+            wall_seconds_remaining: remaining,
+            repair_round_estimate_seconds: estimate.repair_round_estimate_seconds,
+            repair_round_fits: estimate.repair_round_estimate_seconds == null
+              ? null
+              : remaining >= estimate.repair_round_estimate_seconds,
+          };
+        }
         // Lease-bound events (BOUNDARY_REJECTED, AWAITING_CONVERGENCE, …) are
         // fenced against the live mutation lease and RELEASE it on reduction. A
         // synthesized `controller-<event>:<gen>` identity is not the lease owner,
@@ -7184,7 +7206,7 @@ class AutopilotEngine {
             eventType: mapped,
             generation: identity.generation,
             stageIdentity: identity.stage_identity,
-            payload: payload || {},
+            payload: eventPayload,
             // Without this the appender derives output_artifact_digest from the
             // stage identity instead, and BOUNDARY_REJECTED — whose reducer
             // branch compares it against canonicalDigest({kind:
@@ -8410,7 +8432,7 @@ class AutopilotEngine {
       durableAwaitConvergence,
       durableBoundaryRejected,
     ]);
-    if (durableWaitStatuses.has(composition.status)
+      if (durableWaitStatuses.has(composition.status)
         || composition.durable_wait === true
         || composition.terminalize === false
         || composition.awaiting_convergence_adjudication === true) {
@@ -8421,6 +8443,20 @@ class AutopilotEngine {
           campaignControl.controller = composition.controller;
         } catch (_e) { /* already persisted or not */ }
       }
+      const parkEstimate = estimateRepairRoundSeconds(ledger);
+      const parkState = campaignControl && campaignControl.initial_state;
+      const parkRemaining = parkState
+        ? Math.max(
+          0,
+          parkState.limits.max_wall_seconds
+            - campaignClockElapsedSeconds(parkState, Date.parse(this.now())),
+        )
+        : null;
+      const parkFits = parkEstimate.repair_round_estimate_seconds == null
+        ? null
+        : (Number.isSafeInteger(parkRemaining)
+          ? parkRemaining >= parkEstimate.repair_round_estimate_seconds
+          : null);
       return {
         status: composition.status === 'boundary_rejected' ? 'blocked' : composition.status,
         phase: composition.phase || composition.status,
@@ -8439,6 +8475,9 @@ class AutopilotEngine {
         durable_wait: true,
         resumable: true,
         ledger,
+        wall_seconds_remaining: parkRemaining,
+        repair_round_estimate_seconds: parkEstimate.repair_round_estimate_seconds,
+        repair_round_fits: parkFits,
       };
     }
 
@@ -9524,6 +9563,7 @@ class AutopilotEngine {
             resume: input.resume === true,
             observedAt: intakeStartedAt,
             level: String(process.env.AUTOPILOT_LEVEL || '').toLowerCase(),
+            campaignDispositionAuthority: input.campaignDispositionAuthority,
           }, trustedMissionAdapters || undefined);
         }
       } catch (error) {

@@ -67,6 +67,7 @@ function projectCampaignStatus(projection, rows = [], observedAt, options = {}) 
     && COMPLETED.has(projection.latest_lease.state);
   if (campaignLiveness === 'alive' || liveLeaves.length > 0) activity = 'active';
   else if (terminal && campaignLeaseCompleted) activity = 'completed';
+  else if (terminal && state.live_lease === null) activity = 'terminal';
   else if (terminal) activity = 'dead';
   else if (durableWait) activity = 'awaiting';
   else if (state.phase === 'PREPARED' && state.event_count === 0) activity = 'idle';

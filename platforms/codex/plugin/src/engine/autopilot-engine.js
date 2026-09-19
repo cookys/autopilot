@@ -914,6 +914,7 @@ function buildImplementationArgs({
   retentionOwner = null,
   retentionReason = null,
   retentionExpiresAt = null,
+  timeoutSeconds = null,
 }) {
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
@@ -924,6 +925,10 @@ function buildImplementationArgs({
   }
   if (!base || typeof base !== 'string') {
     throw new TypeError('base is required');
+  }
+  if (timeoutSeconds !== null
+      && (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 1)) {
+    throw new TypeError('timeoutSeconds must be a positive safe integer when set');
   }
   validateExtraArgs(extraImplementationArgs, new Set([
     '--runner',
@@ -944,6 +949,7 @@ function buildImplementationArgs({
     '--retain-owner',
     '--retain-reason',
     '--retain-until',
+    '--timeout',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
   if (campaignContractFile !== null
@@ -1062,6 +1068,9 @@ function buildImplementationArgs({
       '--retain-until',
       String(retentionExpiresAt),
     );
+  }
+  if (timeoutSeconds !== null) {
+    args.push('--timeout', `${timeoutSeconds}s`);
   }
   args.push(...extraImplementationArgs);
   return args;
@@ -2772,6 +2781,9 @@ class AutopilotEngine {
     cwd,
     observedAt = null,
     repairLineage = null,
+    wall = null,
+    candidate = null,
+    forceTerminal = false,
   }) {
     const state = campaignControl && campaignControl.initial_state;
     if (!campaignControl || campaignControl.status !== 'admitted'
@@ -2779,10 +2791,19 @@ class AutopilotEngine {
         || campaignControl.generation_claim.durable_journal !== true) {
       return { status: 'not_applicable' };
     }
+    if (state.phase === CAMPAIGN_STATES.TERMINAL_STOP
+        && campaignControl.terminal_failure
+        && campaignControl.terminal_failure.status === 'terminalized') {
+      return {
+        ...campaignControl.terminal_failure,
+        status: 'terminalized',
+        event: campaignControl.terminal_event,
+      };
+    }
     const possiblyEffectful = state.event_count > 0
       || state.phase !== CAMPAIGN_STATES.PREPARED
       || state.live_lease !== null;
-    if (!possiblyEffectful) return { status: 'no_effect' };
+    if (!possiblyEffectful && forceTerminal !== true) return { status: 'no_effect' };
     // Repair ladder (KR3, plan R2' 2026-08-21; STATELESS form after the
     // 2026-08-21 pre-merge review killed the durable-lock variant — a lock
     // with no reachable release is a worse failure mode than the expansion it
@@ -2838,6 +2859,8 @@ class AutopilotEngine {
       repair_lineage_disposition: repairLineage
         ? repairLineage.terminal_worktree_disposition
         : null,
+      ...(wall && typeof wall === 'object' ? { wall: { ...wall } } : {}),
+      ...(candidate && typeof candidate === 'object' ? { candidate: { ...candidate } } : {}),
     };
     const receiptDigest = campaignCanonicalDigest(receiptBody);
     const hasLiveLease = state.live_lease !== null;
@@ -3882,6 +3905,9 @@ class AutopilotEngine {
         retentionReason: input.retentionReason || null,
         retentionExpiresAt: input.retentionExpiresAt || null,
         expectedWorktreeInstanceId: input.expectedWorktreeInstanceId || null,
+        timeoutSeconds: Object.prototype.hasOwnProperty.call(input, 'timeoutSeconds')
+          ? input.timeoutSeconds
+          : null,
       });
     } catch (error) {
       if (campaignUnit) {
@@ -4782,6 +4808,38 @@ class AutopilotEngine {
       campaignControl.initial_state = appended.state;
       return appended;
     };
+    const isWallBudgetJournalError = (error) => (
+      Boolean(error)
+      && (error.code === 'WALL_BUDGET_EXCEEDED' || error.code === 'WALL_BUDGET_EXHAUSTED')
+    );
+    const terminalizeWallExpiry = ({ stage, candidate = null }) => {
+      const observedAt = this.now();
+      const budget = campaignWallBudgetStatus(campaignControl, observedAt);
+      const limits = campaignControl.initial_state && campaignControl.initial_state.limits;
+      const named = candidate && (candidate.commit || candidate.branch)
+        ? {
+          commit: candidate.commit || null,
+          branch: candidate.branch || null,
+        }
+        : null;
+      const failure = this.terminalizeManagedCampaignFailure({
+        campaignControl,
+        reason: `campaign wall budget exhausted before ${stage}`,
+        phase: 'campaign_wall_budget',
+        cwd: loopCwd,
+        observedAt,
+        repairLineage,
+        wall: {
+          max_wall_seconds: limits && limits.max_wall_seconds,
+          elapsed_wall_seconds: budget.elapsed_seconds,
+          stage,
+        },
+        candidate: named,
+        forceTerminal: true,
+      });
+      campaignControl.terminal_failure = failure;
+      return failure;
+    };
     const recordGreenVerification = (receipt, repairGeneration) => {
       if (resumeReviewDigest
           && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
@@ -5006,6 +5064,7 @@ class AutopilotEngine {
         ? { exhausted: false, elapsed_seconds: null }
         : campaignWallBudgetStatus(campaignControl, budgetAt, budgetOpts);
       if (budget.exhausted) {
+        terminalizeWallExpiry({ stage: 'review', candidate });
         return {
           reviewed: false,
           phase: 'campaign_wall_budget',
@@ -5021,6 +5080,7 @@ class AutopilotEngine {
         ? { exhausted: false, seconds: null }
         : campaignWallRemainingSeconds(campaignControl, budgetAt, budgetOpts);
       if (remainingWall.exhausted) {
+        terminalizeWallExpiry({ stage: 'review', candidate });
         return {
           reviewed: false,
           phase: 'campaign_wall_budget',
@@ -5236,6 +5296,15 @@ class AutopilotEngine {
               },
             });
           } catch (error) {
+            if (isWallBudgetJournalError(error)) {
+              terminalizeWallExpiry({ stage: 'review' });
+              return {
+                reviewed: false,
+                phase: 'campaign_wall_budget',
+                reason: 'campaign wall budget exhausted before review',
+                raw: reviewed,
+              };
+            }
             return {
               reviewed: false,
               phase: 'campaign_event_journal',
@@ -5388,6 +5457,7 @@ class AutopilotEngine {
         { consumer: 'panel' },
       );
       if (panelRemain.exhausted) {
+        terminalizeWallExpiry({ stage: 'review' });
         ledger.push(this.ledgerEntry(ledgerUnit, 'failed', panelObservedAt, {
           reason: 'final_panel_budget_exhausted',
           budget_source: 'pocket',
@@ -5677,6 +5747,16 @@ class AutopilotEngine {
             },
           });
         } catch (error) {
+          if (isWallBudgetJournalError(error)) {
+            terminalizeWallExpiry({ stage: 'review' });
+            return {
+              ...receipt,
+              reviewed: false,
+              success: false,
+              phase: 'campaign_wall_budget',
+              reason: 'campaign wall budget exhausted before review',
+            };
+          }
           return {
             ...receipt,
             reviewed: false,
@@ -7216,6 +7296,12 @@ class AutopilotEngine {
             artifactReference: artifactReference || null,
           });
         } catch (error) {
+          if (isWallBudgetJournalError(error)) {
+            terminalizeWallExpiry({ stage: 'implement' });
+            const err = new Error('campaign wall budget exhausted before implement');
+            err.code = error.code;
+            throw err;
+          }
           // Event journal failure must stop effects.
           const err = new Error(error.message || String(error));
           err.code = error.code || 'campaign_event_journal';
@@ -7274,11 +7360,20 @@ class AutopilotEngine {
         }
         const budgetAt = this.now();
         const budget = campaignMutationBudgetStatus(campaignControl, budgetAt);
-        if (budget.exhausted) {
+        const remain = campaignWallRemainingSeconds(campaignControl, budgetAt);
+        if (budget.exhausted && budget.axis && budget.axis !== 'wall') {
           return {
             committed: false,
             phase: 'campaign_wall_budget',
             reason: 'campaign mutation budget exhausted',
+          };
+        }
+        if (budget.exhausted || remain.exhausted || !Number.isSafeInteger(remain.seconds)) {
+          terminalizeWallExpiry({ stage: 'implement' });
+          return {
+            committed: false,
+            phase: 'campaign_wall_budget',
+            reason: 'campaign wall budget exhausted before implement',
           };
         }
         const candidateImplementationRound = implementationRound + 1;
@@ -7403,6 +7498,14 @@ class AutopilotEngine {
             artifactReference: null,
           });
         } catch (error) {
+          if (isWallBudgetJournalError(error)) {
+            terminalizeWallExpiry({ stage: 'implement' });
+            return {
+              committed: false,
+              phase: 'campaign_wall_budget',
+              reason: 'campaign wall budget exhausted before implement',
+            };
+          }
           return {
             committed: false,
             phase: 'campaign_event_journal',
@@ -7440,6 +7543,7 @@ class AutopilotEngine {
           retentionOwner: campaignControl.campaign_id,
           retentionReason: 'implementation-campaign-repair-lineage',
           retentionExpiresAt,
+          timeoutSeconds: remain.seconds,
           implementationOptions: {
             ...(input.implementationOptions || {}),
             cwd: loopCwd,
@@ -7850,12 +7954,23 @@ class AutopilotEngine {
               });
             }
           } catch (error) {
-            receipt = {
-              ...receipt,
-              passed: false,
-              reason: error.message || String(error),
-              phase: 'campaign_event_journal',
-            };
+            if (isWallBudgetJournalError(error)) {
+              terminalizeWallExpiry({ stage: 'verify', candidate });
+              receipt = {
+                ...receipt,
+                passed: false,
+                retriable: false,
+                reason: 'campaign wall budget exhausted before verify',
+                phase: 'campaign_wall_budget',
+              };
+            } else {
+              receipt = {
+                ...receipt,
+                passed: false,
+                reason: error.message || String(error),
+                phase: 'campaign_event_journal',
+              };
+            }
           }
         }
         return receipt;
@@ -7863,11 +7978,12 @@ class AutopilotEngine {
       verify: ({ candidate, repair_generation: repairGeneration }) => {
         const budget = campaignWallBudgetStatus(campaignControl, this.now());
         if (budget.exhausted) {
+          terminalizeWallExpiry({ stage: 'verify', candidate });
           return {
             passed: false,
             retriable: false,
             phase: 'campaign_wall_budget',
-            reason: 'campaign wall budget exhausted before verification',
+            reason: 'campaign wall budget exhausted before verify',
             receipt_digest: campaignCanonicalDigest({
               tree_sha: candidate.tree_sha,
               elapsed_seconds: budget.elapsed_seconds,
@@ -7886,6 +8002,16 @@ class AutopilotEngine {
           try {
             recordGreenVerification(cached, repairGeneration);
           } catch (error) {
+            if (isWallBudgetJournalError(error)) {
+              terminalizeWallExpiry({ stage: 'verify', candidate });
+              return {
+                passed: false,
+                retriable: false,
+                phase: 'campaign_wall_budget',
+                reason: 'campaign wall budget exhausted before verify',
+                receipt_digest: cached.receipt_digest,
+              };
+            }
             return {
               passed: false,
               retriable: false,
@@ -8041,6 +8167,17 @@ class AutopilotEngine {
           try {
             recordGreenVerification(receipt, repairGeneration);
           } catch (error) {
+            if (isWallBudgetJournalError(error)) {
+              terminalizeWallExpiry({ stage: 'verify', candidate });
+              return {
+                passed: false,
+                retriable: false,
+                phase: 'campaign_wall_budget',
+                reason: 'campaign wall budget exhausted before verify',
+                receipt_digest: receipt.receipt_digest,
+                receipt,
+              };
+            }
             return {
               passed: false,
               retriable: false,
@@ -8325,8 +8462,14 @@ class AutopilotEngine {
               },
             });
           } catch (error) {
-            passed = false;
-            journalReason = error.message || String(error);
+            if (isWallBudgetJournalError(error)) {
+              terminalizeWallExpiry({ stage: 'repair' });
+              passed = false;
+              journalReason = 'campaign wall budget exhausted before repair';
+            } else {
+              passed = false;
+              journalReason = error.message || String(error);
+            }
           }
         }
         return {
@@ -8494,14 +8637,17 @@ class AutopilotEngine {
       // prepare failures remain fail-closed possibly effectful.
       const soleInitialExactZeroEffectLeaf = implementationChain.length === 1
         && isExactZeroEffectLeafProof(finalImplementation);
-      if (!durableJournal && soleInitialPreSpend) {
+      const alreadyWallExpired = Boolean(
+        campaignControl.failure_receipt && campaignControl.failure_receipt.wall,
+      );
+      if (!alreadyWallExpired && !durableJournal && soleInitialPreSpend) {
         releaseCampaignNoEffect(buildCampaignPreSpendRejection({
           owner: 'campaign_composition',
           code: 'campaign_pre_effect_blocked',
           reason: composition.reason || 'campaign composition blocked before mutation',
           result: finalImplementation,
         }), { leafProof: finalImplementation });
-      } else if (durableJournal && soleInitialExactZeroEffectLeaf) {
+      } else if (!alreadyWallExpired && durableJournal && soleInitialExactZeroEffectLeaf) {
         // Durable journals record IMPLEMENTATION_STARTED before dispatch. When
         // the sole initial leaf is the exact fail-closed zero-effect shape,
         // release Mission/ICC admission instead of terminalizing as effectful.
@@ -8547,6 +8693,33 @@ class AutopilotEngine {
           phase: composition.phase,
           cwd: loopCwd,
           repairLineage,
+          ...(composition.phase === 'campaign_wall_budget' || (
+            typeof composition.reason === 'string'
+            && /wall/.test(composition.reason)
+          ) ? {
+            forceTerminal: true,
+            wall: (
+              campaignControl.failure_receipt
+              && campaignControl.failure_receipt.wall
+            ) || {
+              max_wall_seconds: campaignControl.initial_state
+                && campaignControl.initial_state.limits
+                && campaignControl.initial_state.limits.max_wall_seconds,
+              elapsed_wall_seconds: campaignWallBudgetStatus(
+                campaignControl,
+                this.now(),
+              ).elapsed_seconds,
+              stage: composition.phase === 'campaign_wall_budget'
+                ? 'implement'
+                : 'verify',
+            },
+            candidate: composition.candidate && (
+              composition.candidate.commit || composition.candidate.branch
+            ) ? {
+              commit: composition.candidate.commit || null,
+              branch: composition.candidate.branch || null,
+            } : null,
+          } : {}),
         });
         campaignControl.terminal_failure = failure;
         if (failure.status === 'rejected') {
@@ -8984,14 +9157,25 @@ class AutopilotEngine {
       && lastImplementation
       && lastImplementation.status === 'acceptance_failed',
     );
+    const journaledWallExpiry = Boolean(
+      campaignControl
+      && campaignControl.terminal_failure
+      && campaignControl.terminal_failure.status === 'terminalized'
+      && campaignControl.initial_state
+      && campaignControl.initial_state.phase === CAMPAIGN_STATES.TERMINAL_STOP
+      && campaignControl.failure_receipt
+      && campaignControl.failure_receipt.wall,
+    );
     return {
       status: converged ? 'converged' : (
         composition.status === 'follow_up' ? 'follow_up' : (
-          journaledAcceptanceFailure ? 'acceptance_failed' : 'blocked'
+          journaledAcceptanceFailure ? 'acceptance_failed' : (
+            journaledWallExpiry ? 'wall_expired' : 'blocked'
+          )
         )
       ),
       phase: converged ? 'campaign_terminal_ready' : (
-        journaledAcceptanceFailure
+        journaledAcceptanceFailure || journaledWallExpiry
           ? campaignControl.initial_state.phase
           : (composition.phase || 'campaign_terminal')
       ),

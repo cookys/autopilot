@@ -207,6 +207,61 @@
         "receipt_digest": { "$ref": "#/$defs/sha256" }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "campaign_id",
+        "contract_digest",
+        "generation",
+        "phase",
+        "reason",
+        "possibly_effectful",
+        "observed_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": {
+          "type": "string",
+          "const": "implementation_campaign_failure"
+        },
+        "campaign_id": { "type": "string", "minLength": 1 },
+        "contract_digest": { "$ref": "#/$defs/sha256" },
+        "generation": { "type": "integer", "minimum": 0 },
+        "phase": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "possibly_effectful": { "type": "boolean" },
+        "observed_at": { "type": "string", "minLength": 1 },
+        "repair_lineage_disposition": { "type": ["string", "null"] },
+        "wall": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_wall_seconds", "elapsed_wall_seconds", "stage"],
+          "properties": {
+            "max_wall_seconds": { "type": "integer", "minimum": 0 },
+            "elapsed_wall_seconds": { "type": ["integer", "null"] },
+            "stage": { "type": "string", "minLength": 1 }
+          }
+        },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "commit": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "#/$defs/gitObject" }
+              ]
+            },
+            "branch": { "type": ["string", "null"] }
+          }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
     }
   ],
   "$defs": {

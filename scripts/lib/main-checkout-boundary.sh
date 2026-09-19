@@ -31,6 +31,13 @@
 # Outputs:
 #   main_checkout_fingerprint → 64-hex digest or UNVERIFIABLE-… on stdout
 #   build_hands_git_env       → HANDS_GIT_ENV array (prepends to any inherited GIT_CONFIG_COUNT)
+#   main_checkout_validate_sibling_ref_prefix / _path_prefix → shared validators for the two
+#     --sibling-* flags (308 BACKLOG #46); print an error on stdout and return 1, or return 0.
+#   main_checkout_seed_sibling_env_defaults → appends AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX /
+#     AUTOPILOT_DISPATCH_SIBLING_PATH_PREFIX (colon-separated) into the two exclude arrays, so a
+#     parent rail can pre-set a child's sibling exclusions via environment instead of an argv
+#     flag it has to remember to pass every time (dispatch-foreman.sh does this for every hand
+#     it spawns — see its own header). Requires the caller's die_precondition to already exist.
 #
 # Every function here must stay in dispatch-hetero.sh's `declare -f` list for its detached child.
 
@@ -111,6 +118,61 @@ $hooks"
   fi
   printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$head" "$sym" "$refs" "$dirty" "$walk" "$cfg" "$hooks" "$idx" | sha256sum 2>/dev/null | cut -c1-64 | grep -E '^[0-9a-f]{64}$' \
     || _fp_unverifiable digest
+}
+
+# --- sibling-namespace validators (308 BACKLOG #46) -------------------------------------
+# Shared so dispatch-foreman.sh's own --sibling-ref-prefix / --sibling-path-prefix (added for
+# two concurrent foremen on one repo) validate identically to dispatch-hetero.sh's long-standing
+# flags of the same name, instead of a second hand-copied rule set drifting from the first.
+# Each prints its error text on stdout (rc 1) or nothing (rc 0); the caller's own
+# die_precondition decides how to fail — every rail here already defines one.
+main_checkout_validate_sibling_ref_prefix() {
+  case "$1" in
+    refs/heads/) printf '%s' "--sibling-ref-prefix refs/heads/ would exempt every branch; name the namespace"; return 1 ;;
+    *//*) printf '%s' "--sibling-ref-prefix has an empty path segment (got '$1')"; return 1 ;;
+    refs/heads/*/) return 0 ;;
+    *) printf '%s' "--sibling-ref-prefix must look like refs/heads/<namespace>/ (got '$1')"; return 1 ;;
+  esac
+}
+main_checkout_validate_sibling_path_prefix() {
+  case "$1" in
+    ""|/|./|.) printf '%s' "--sibling-path-prefix would exempt the whole checkout; name the directory"; return 1 ;;
+    /*) printf '%s' "--sibling-path-prefix must be checkout-relative (got '$1')"; return 1 ;;
+    .git|.git/|.git/*) printf '%s' "--sibling-path-prefix may not name .git"; return 1 ;;
+    ..|../*|*/..|*/../*) printf '%s' "--sibling-path-prefix may not contain .. (got '$1')"; return 1 ;;
+    ./*|*/./*) printf '%s' "--sibling-path-prefix may not contain a ./ segment (got '$1')"; return 1 ;;
+    *//*) printf '%s' "--sibling-path-prefix has an empty path segment (got '$1')"; return 1 ;;
+    */) return 0 ;;
+    *) printf '%s' "--sibling-path-prefix must look like <dir>/ (got '$1')"; return 1 ;;
+  esac
+}
+
+# main_checkout_seed_sibling_env_defaults — optional env-var defaults for the two flags above,
+# read once by any caller that sources this file AFTER declaring MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES
+# / MAIN_CHECKOUT_FP_EXCLUDE_PATHS and its own die_precondition (308 BACKLOG #46, gap 1): a rail
+# that spawns children (dispatch-foreman.sh spawning dispatch-hetero.sh hands) can pre-set these
+# in the child's environment so the child gets the right exclusion WITHOUT the foreman's own
+# prompt/protocol having to remember the flag by name. CLI flags always ADD to these; the env
+# vars never replace an explicit flag, they only widen the same array. Colon-separated (":"
+# cannot appear in a ref name or a path component here, so it is an unambiguous delimiter).
+main_checkout_seed_sibling_env_defaults() {
+  local _v _list
+  if [ -n "${AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX:-}" ]; then
+    IFS=':' read -r -a _list <<<"$AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX"
+    for _v in "${_list[@]}"; do
+      [ -n "$_v" ] || continue
+      _err="$(main_checkout_validate_sibling_ref_prefix "$_v")" || die_precondition "AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX: $_err"
+      MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES+=("$_v")
+    done
+  fi
+  if [ -n "${AUTOPILOT_DISPATCH_SIBLING_PATH_PREFIX:-}" ]; then
+    IFS=':' read -r -a _list <<<"$AUTOPILOT_DISPATCH_SIBLING_PATH_PREFIX"
+    for _v in "${_list[@]}"; do
+      [ -n "$_v" ] || continue
+      _err="$(main_checkout_validate_sibling_path_prefix "$_v")" || die_precondition "AUTOPILOT_DISPATCH_SIBLING_PATH_PREFIX: $_err"
+      MAIN_CHECKOUT_FP_EXCLUDE_PATHS+=("$_v")
+    done
+  fi
 }
 
 build_hands_git_env() {

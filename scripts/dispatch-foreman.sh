@@ -21,6 +21,18 @@
 #       [--poll <secs>]           # stream poll interval; default 1
 #       [--env-passthrough NAME]  # repeatable: an extra env var the foreman may see
 #       [--kimi-bin <bin>]        # test seam
+#       [--sibling-ref-prefix refs/heads/x/]  # repeatable: a ref namespace ANOTHER concurrent
+#                                 #   run on this repo owns (e.g. a sibling foreman's own
+#                                 #   refs/heads/foreman/ or refs/heads/hands/<other-run>/) —
+#                                 #   same flag, same validation as dispatch-hetero.sh's (308
+#                                 #   BACKLOG #46, gap 2: two foremen on one repo otherwise mark
+#                                 #   each other main_checkout_mutated). This run's own
+#                                 #   refs/heads/foreman/<run-id> and hands/<run-id>/* are ALWAYS
+#                                 #   exempt without this flag; declare siblings explicitly.
+#       [--sibling-path-prefix <dir>/]  # repeatable: a checkout-relative directory ANOTHER
+#                                 #   concurrent run writes its own rail I/O into; pruned from
+#                                 #   the fingerprint's stat walk only (same semantics as
+#                                 #   dispatch-hetero.sh's flag of the same name).
 #       [--keep]                  # retain the worktree on success too
 #       [--json]                  # (default) one JSON object on stdout
 #   dispatch-foreman.sh --resume --run-dir <dir> --answer-file <path> [same knobs]
@@ -88,6 +100,11 @@ BRIEF_FILE=""; PLAN_FILE=""; MODEL="kimi-code/k3"; BASE_REF=""; RUN_ID=""; RUN_D
 LEDGER=""; TOOL_CAP=""; TIMEOUT_SECS=3600; HANDOFF_TIMEOUT=300; POLL=1
 KIMI_BIN="kimi"; KEEP=0; RESUME=0; ANSWER_FILE=""
 ENV_PASSTHROUGH=()
+# --sibling-ref-prefix / --sibling-path-prefix (308 BACKLOG #46, gap 2): declared here, raw and
+# unvalidated, so the arg loop below can stay a plain case statement; validated once the shared
+# lib (and its die_precondition-calling validators) is sourced, right before the fingerprint.
+MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()
+MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()
 ORIG_ARGS=("$@")
 
 while [ $# -gt 0 ]; do
@@ -105,6 +122,8 @@ while [ $# -gt 0 ]; do
     --poll) POLL="${2:-}"; shift 2 ;;
     --env-passthrough) ENV_PASSTHROUGH+=("${2:-}"); shift 2 ;;
     --kimi-bin) KIMI_BIN="${2:-}"; shift 2 ;;
+    --sibling-ref-prefix) MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES+=("${2:-}"); shift 2 ;;
+    --sibling-path-prefix) MAIN_CHECKOUT_FP_EXCLUDE_PATHS+=("${2:-}"); shift 2 ;;
     --keep) KEEP=1; shift ;;
     --resume) RESUME=1; shift ;;
     --answer-file) ANSWER_FILE="${2:-}"; shift 2 ;;
@@ -206,7 +225,28 @@ fi
 # ---------------------------------------------------------------- boundary (shared lib)
 # shellcheck source=lib/main-checkout-boundary.sh
 source "$SELF_DIR/lib/main-checkout-boundary.sh"
-MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=("refs/heads/hands/$RUN_ID/")
+# Validate any --sibling-ref-prefix / --sibling-path-prefix the operator declared (gap 2: two
+# foremen dispatched concurrently on one repo should name each other's namespaces here) with the
+# SAME rules dispatch-hetero.sh applies to its own flags of the same name.
+for _sib in "${MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES[@]}"; do
+  _err="$(main_checkout_validate_sibling_ref_prefix "$_sib")" || die_precondition "$_err"
+done
+for _sib in "${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[@]}"; do
+  _err="$(main_checkout_validate_sibling_path_prefix "$_sib")" || die_precondition "$_err"
+done
+# This run's own hands are ALWAYS exempt from ITS OWN fingerprint — unconditional, not an
+# operator-declared sibling (a foreman's hands committing under its own namespace is the
+# expected shape of every run, not a peer to be named).
+MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES+=("refs/heads/hands/$RUN_ID/")
+# Env-var default for any dispatch-hetero.sh this foreman's kimi process spawns as a hand (gap
+# 1: parallel hands on the same repo otherwise reject each other's sibling branch as a
+# main_checkout_mutated / boundary_rejected). Belt: this env var. Suspenders: protocol.md below
+# also tells the foreman to pass --sibling-ref-prefix explicitly, in case a hand is spawned
+# through a path that does not inherit FOREMAN_ENV.
+FOREMAN_SIBLING_REF_PREFIX="refs/heads/hands/$RUN_ID/"
+# An operator dispatching several foremen concurrently may set these instead of repeating
+# --sibling-ref-prefix per foreman invocation (same env vars dispatch-hetero.sh reads).
+main_checkout_seed_sibling_env_defaults
 MAIN_CHECKOUT_BEFORE="$(main_checkout_fingerprint)"
 build_hands_git_env
 
@@ -250,12 +290,23 @@ depth 0 (the dispatcher that started you), and it is reached from git, not from 
   — never poll with a shell loop. Any \`scripts/qc-panel.js\` you run MUST pass
   \`--out "\$RUN_DIR/panel/<node>"\` — \`--out\` rooted at \`\$RUN_DIR\` is the only
   accepted form; \`--run-id\` is an optional extra component, never a substitute for \`--out\`.
+- Dispatching MULTIPLE hands in PARALLEL (more than one \`dispatch-hetero.sh\` running at once
+  from this worktree): give EVERY one of them
+  \`--sibling-ref-prefix refs/heads/hands/$RUN_ID/\`, and its own
+  \`--sibling-path-prefix <dir>/\` if it writes rail I/O inside this worktree. Your environment
+  already carries \`AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/$RUN_ID/\` as a
+  default for this, but pass the flag yourself too — omit both and a sibling hand's branch
+  moving mid-round becomes YOUR hand's own \`boundary_rejected\` / \`main_checkout_mutated\`.
 - Budget: at most $TOOL_CAP Bash tool calls in this turn. At the cap you are stopped; a
   handoff turn follows. Write \`$RUN_DIR/HANDOFF.md\` yourself BEFORE the cap when you can see it
   coming.
 - Outputs: \`$RUN_DIR/REPORT.md\` when done — list what was completed AND what was not, by name.
   A question only depth 0 can answer: write it to \`$RUN_DIR/ESCALATION.md\` and stop; you will be
   resumed with the answer in \`$RUN_DIR/ANSWER.md\`.
+- If this run's OWN status ever comes back \`main_checkout_mutated\` for a reason you did not
+  cause: the 308 SOP rule is that depth 0 (the operator) must not touch the main checkout while
+  a hand or foreman is still running. That is depth 0's mistake, not yours — the round is
+  discarded and your worktree is retained for inspection; report it in your next turn.
 EOF
 fi
 
@@ -276,6 +327,13 @@ if [ "${ENV_PASSTHROUGH[*]+set}" = set ]; then
   for _n in "${ENV_PASSTHROUGH[@]}"; do [ -n "${!_n:-}" ] && FOREMAN_ENV+=("$_n=${!_n}"); done
 fi
 FOREMAN_ENV+=("AUTOPILOT_DISPATCH_DEPTH=1" "AUTOPILOT_PARENT_RUN_ID=$RUN_ID")
+# 308 BACKLOG #46 gap 1: every hand this foreman spawns (a nested dispatch-hetero.sh, which
+# reads this env var via main_checkout_seed_sibling_env_defaults) exempts EVERY sibling hand
+# under this run's own namespace from its own boundary check by default — so parallel hands
+# dispatched from the same worktree do not reject each other when one hand's branch moves
+# during another hand's round. The foreman is still told to pass --sibling-ref-prefix itself
+# in protocol.md, since this only reaches a CHILD process that inherits FOREMAN_ENV.
+FOREMAN_ENV+=("AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=$FOREMAN_SIBLING_REF_PREFIX")
 FOREMAN_ENV+=("${HANDS_GIT_ENV[@]}")
 
 # ---------------------------------------------------------------- stream counting
@@ -377,7 +435,7 @@ fi
 
 # ---------------------------------------------------------------- classify (precedence: main > content > stop > exit)
 if [ "$MAIN_CHECKOUT_BOUNDARY" != "verified" ]; then
-  STATUS="$MAIN_CHECKOUT_BOUNDARY"; ERROR="main checkout fingerprint changed or could not be measured across the foreman turn; the round is discarded, worktree retained"
+  STATUS="$MAIN_CHECKOUT_BOUNDARY"; ERROR="main checkout fingerprint changed or could not be measured across the foreman turn; the round is discarded, worktree retained; if you (depth 0) touched the main checkout while this foreman was running, that is the 308 SOP rule this rejects — hand/foreman 跑時 depth-0 不改主樹 tracked 檔 — not a bug in the run"
 elif [ -n "$GATE_STATUS" ]; then
   STATUS="$GATE_STATUS"; ERROR="$GATE_ERR"
 elif [ "$FIRST_STOP" = cap ]; then

@@ -105,6 +105,14 @@
 #                                              #   round (creating it touches the root mtime).
 #                                              #   Rail I/O should live OUTSIDE the checkout —
 #                                              #   this is the declared exception.
+#       [env AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX / _PATH_PREFIX]  # colon-separated defaults
+#                                              #   for the two flags above, ADDED to whatever the
+#                                              #   CLI gave (never replacing it); a parent rail can
+#                                              #   set these in a hand's environment instead of
+#                                              #   the hand's own prompt having to pass the flag
+#                                              #   (308 BACKLOG #46 — dispatch-foreman.sh sets
+#                                              #   AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX to its
+#                                              #   own hands/<run>/ namespace for every hand).
 #       [--retain-owner <id> --retain-reason <text> --retain-until <epoch>]
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
 #       [--expected-worktree-instance <sha256>] # required identity fence for retained reuse
@@ -3012,6 +3020,10 @@ MAIN_CHECKOUT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 # scripts/lib/main-checkout-boundary.sh (extracted 2026-09-13, behaviour unchanged).
 # shellcheck source=lib/main-checkout-boundary.sh
 source "$SELF_DIR/lib/main-checkout-boundary.sh"
+# 308 BACKLOG #46: a parent rail (dispatch-foreman.sh) can pre-set the sibling namespace this
+# hand should ignore via env instead of an argv flag; CLI --sibling-ref-prefix/--sibling-path-
+# prefix above still apply and this only ADDS to the same arrays.
+main_checkout_seed_sibling_env_defaults
 MAIN_CHECKOUT_BEFORE="$(main_checkout_fingerprint)"
 build_hands_git_env
 

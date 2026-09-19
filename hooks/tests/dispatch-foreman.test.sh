@@ -308,6 +308,42 @@ assert_contains "$(field "$OUT" hands_branches)" '"branch":"hands/r12/u1"' "12: 
 HAND_HEAD="$(git -C "$SBX" rev-parse --verify --quiet hands/r12/u1)"
 assert_neq "$HAND_HEAD" "$BASE" "12: hand branch carries the commit"
 
+# ======================================================================= 13 308 BACKLOG #46
+# gap 1: protocol.md tells the foreman about parallel-hands sibling-ref-prefix, and the rail
+# wires a default via env so a nested dispatch-hetero.sh gets it without the foreman naming it.
+assert_contains "$(cat "$RD/protocol.md")" 'sibling-ref-prefix refs/heads/hands/r2/' "13: protocol names the parallel-hands sibling flag for this run"
+assert_contains "$(cat "$RD/protocol.md")" 'AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/r2/' "13: protocol names the env default it already carries"
+assert_contains "$ENV0" "AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/r2/" "13: foreman env carries the sibling-ref-prefix default for its own run"
+
+# gap 3: the boundary error names the 308 SOP rule (does not change behaviour — same status).
+STUB_SCRIPT="$TEST_TMP/touch-main2.sh"; printf 'echo tainted2 >> "%s/README.md"\n' "$SBX" > "$STUB_SCRIPT"
+run_foreman script r13c
+assert_eq "$(field "$OUT" status)" "main_checkout_mutated" "13: SOP-message case is still main_checkout_mutated (behaviour unchanged)"
+assert_contains "$(field "$OUT" error)" "depth-0" "13: boundary error names the depth-0-must-not-touch rule"
+rm -f "$SBX/README.md"
+
+# gap 2: a SIBLING foreman's own branch namespace moving mid-round is, by default, this
+# foreman's own main_checkout_mutated too (the fingerprint only exempts THIS run's namespace);
+# --sibling-ref-prefix lets an operator declare the other foreman's namespace and clears it.
+STUB_SCRIPT="$TEST_TMP/sibling-foreman.sh"; cat > "$STUB_SCRIPT" <<'EOF'
+git branch -f foreman/other-run HEAD
+EOF
+run_foreman script r13a
+assert_eq "$(field "$OUT" status)" "main_checkout_mutated" "13: control — a sibling foreman's branch appearing mid-round rejects without the flag"
+git -C "$SBX" branch -D foreman/other-run >/dev/null 2>&1 || true
+
+run_foreman script r13b --sibling-ref-prefix refs/heads/foreman/
+assert_eq "$(field "$OUT" status)" "completed" "13: with --sibling-ref-prefix refs/heads/foreman/ the sibling foreman's branch is exempt"
+git -C "$SBX" branch -D foreman/other-run >/dev/null 2>&1 || true
+
+# argument validation mirrors dispatch-hetero.sh's own (shared validators in the lib).
+OUT="$(cd "$SBX" && PATH="$STUBDIR:$PATH" bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" --run-id r13d --run-dir "$RUNS/r13d" --sibling-ref-prefix refs/heads/ 2>/dev/null)"; RC=$?
+assert_eq "$RC" "2" "13: --sibling-ref-prefix refs/heads/ is refused"
+assert_contains "$OUT" 'sibling-ref-prefix' "13: …naming the flag"
+OUT="$(cd "$SBX" && PATH="$STUBDIR:$PATH" bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" --run-id r13e --run-dir "$RUNS/r13e" --sibling-path-prefix /abs 2>/dev/null)"; RC=$?
+assert_eq "$RC" "2" "13: --sibling-path-prefix /abs (not checkout-relative) is refused"
+assert_contains "$OUT" 'sibling-path-prefix' "13: …naming the flag"
+
 # --- cleanup: retained worktrees + branches in the sandbox --------------------------------
 git -C "$SBX" worktree list --porcelain | awk '/^worktree /{print $2}' | grep -v "^$SBX$" | while read -r wt; do
   git -C "$SBX" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"

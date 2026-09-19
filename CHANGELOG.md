@@ -1,5 +1,50 @@
 # Changelog
 
+## v2.36.71 — 七條 fired BACKLOG 列平行修掉：六個 sonnet 工頭（Agent 子代理）、各自獨立 clone、cursor-grok-4.6-low hands
+
+- **A wall 到期**（`src/engine/autopilot-engine.js`、`src/campaign/status.js`、`schemas/implementation-campaign-receipt.schema.json`＋鏡像）：
+  迴圈內每個 wall 檢查點（派工前、verify 前、review 前、reducer 的 `WALL_BUDGET_EXCEEDED`）都走
+  `terminalizeManagedCampaignFailure`——receipt 帶 `wall:{max_wall_seconds,elapsed_wall_seconds,stage}` 與保留的候選
+  commit/branch；有 live lease 記 `MUTATION_FAILED`、否則 `TERMINAL_STOP`；run result `status: wall_expired`、summary JSON 永不
+  0 byte、`campaign inspect` 不再 `activity=dead`。managed implementation dispatch 補上 `--timeout <剩餘 wall>s`（builder-managed，
+  呼叫端不得傳），剩餘低於下限就拒派並終結。
+- **B `boundary_rejected` resume**（`campaign-composition.js`、`implementation-campaign.js`、`campaign-intake.js`、`autopilot-engine.js`、
+  `src/campaign/cli.js`＋鏡像）：hand 已 commit 後才撞 boundary 時，`BOUNDARY_REJECTED` 事件多帶一份 `git_candidate` 形狀的引用
+  （commit／tree／branch／`createWriterFence` 真 fence／repair_lineage），replay 填 `candidate_reference` → `resume_candidate`；
+  `--resume` 通過 `verifyResumeCandidate` 就從保留的候選續跑 verify→review，不再 `cannot dispatch implementation` 終結；
+  沒 commit 的 rejection 改說實話（`next_action` 不再承諾 resume）。
+- **C park 的 repair 輪預算**（`implementation-campaign.js`、`campaign-intake.js`、`autopilot-engine.js`＋鏡像；不動 schema）：
+  從 ledger 導出 `repair_round_estimate_seconds`（round-1 implement `wall_secs`＋verify＋review；缺列＝null），park 時
+  `awaiting_disposition` 帶 `wall_seconds_remaining`／`repair_round_estimate_seconds`／`repair_round_fits`；resume 若授權 repair
+  且剩餘 < 估價，intake 以 `campaign_wall_budget_insufficient_for_repair` 具名拒收（含短缺秒數），campaign 留在 parked。
+  reviewer 抓到 estimator 讀錯 ledger 列名（`verify_round`→`campaign_verification`），r2 修。
+- **D `dispatch-author.sh` 正向判定**（＋鏡像）：非 codex runner 的 prompt 包 derived nonce `<<<AUTOPILOT-AUTHOR-…>>>`／
+  `<<<AUTOPILOT-END-…>>>` 框（dispatch-review 同族 locator），恰一 BEGIN／END 且框內無 tool-narration fence 才 `authored`；
+  否則新狀態 `truncated`（exit 5，reason `frame_missing|end_missing|tool_narration`）；artifact／raw_log 寫去框內容，消費者契約不變；
+  manifest 帶 `AUTOPILOT_PARENT_RUN_ID`／`AUTOPILOT_ROOT_RUN_ID`／depth。r2 修 reviewer 兩條 🟠（`set -e` 外洩、codex 門條件不一致）；
+  r3 由 depth-0 改判 🟡 為 must-fix（測試 harness 的 forbidden-substring 掃描縮到只剩 JSON 行）；r4 由 §37 消費者 sweep 觸發：
+  六條 sibling suite 的假 runner 改吐框（共用 `hooks/tests/lib.sh` helper）。
+- **F 兩條紅 suite 改 hermetic**（`hooks/tests/provider-readiness-consumer.test.sh`、`autopilot-cli.test.sh`、`lib.sh`）：
+  `write_d4_strict_roster_fixture` 在 `TEST_TMP` 建 `REVIEW_LOOP_CONFIG_OVERRIDE`＋`ENGINE_SCORECARD_DIR`（用真 `engine-scorecard.js record`
+  寫 row），每個 `--check-scorecard`／strict bootstrap 都吃 fixture；負控制證明不看主機資格；`env -i` 也綠。r2 刪 hand 誤 commit 的
+  `provider-readiness-receipt.json`。
+- **G plan-review seat 的 precondition 理由**（`scripts/dispatch-plan-review.js`、`src/transport/runner-envelope.js`＋鏡像）：
+  `dispatchSeat` 帶出 author envelope 的 `status`／`error`，precondition 是自己的分類、不重試，seat record 帶 `error`，artifact
+  `policy_reason` 具名（`seat <id> precondition_failed: active session-mode=l5 blocks non-strict dispatch …`）；enum 不動。
+  `hooks/tests/secret-scan-diff.test.sh` 五個 key 字面改 runtime 拼接，scanner 掃自己 `findings: []`。
+- 測試（RED-first 標 base，三個 engine unit 各開新 suite 檔避免 EOF 衝突）：`autopilot-engine-wall-expiry`、`implementation-campaign-state-wall`、
+  `autopilot-engine-boundary-resume`、`implementation-campaign-state-boundary`、`autopilot-engine-park-reserve`、`implementation-campaign-state-park`；
+  既有 `campaign-boundary-receipt-e2e`、`dispatch-plan-review`、`dispatch-author*`、`secret-scan-diff` 擴案。
+- 出貨路徑（`docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`）：六個 sonnet 工頭是本 session 的 Agent 子代理（`foreman-guard`
+  40 次上限＋`dispatch-model-guard` 生效），一 unit 一 clone、clone-local shadow governance commit 不併；hand 以 `run_in_background`
+  ＋背景死人開關等；review claude-fable-5-1 每 unit 一到兩輪。15 個 hand commit cherry-pick 全無衝突；整合 checkout 逐條跑
+  34 suite（2 條既有紅在 base 同組失敗）；§37 sweep 71 條抓到 D 的契約變更打紅八條 sibling suite → r4/r5，以及 A 的兩個新 suite
+  沒 exec bit 讓 `run.sh` 拒跑（`suite-oracle-lock` 因此紅）→ depth-0 chmod。
+- BACKLOG：七列 shipped；新增 S 列「impl dispatch timeout floor 1 s」（A 的 reviewer 接受的下限只是避開 0 s）；「engine-touching cannot self-prove live」列關閉（答案已在 recipe 9b／§38）；「staged credentials」列狀態
+  補正為 v2.35.5 已出貨。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.70 — 四條 rail 缺陷平行修掉：四個 kimi-code/k3 工頭、各自獨立 clone、cursor-grok-4.6-low hands
 
 - `scripts/dispatch-review.sh`（＋鏡像）：awk locator 對「第二次出現的 derived BEGIN 行且其後只剩空白」視為關閉框（GLM-5.2 兩次用

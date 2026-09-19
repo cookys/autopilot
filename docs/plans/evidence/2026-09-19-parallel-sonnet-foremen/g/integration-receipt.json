@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "artifact_type": "merge_execution_receipt",
+  "manifest_seal": null,
+  "root_run_id": null,
+  "status": "complete",
+  "halt_reason": null,
+  "halt_edge": null,
+  "edges": [
+    {
+      "sequence": 1,
+      "source_ref": "refs/heads/hg",
+      "target_ref": "refs/heads/rec-g",
+      "mode": "ff-only",
+      "status": "executed",
+      "source_validation": {
+        "ref": "refs/heads/hg",
+        "expected_sha": "8ddc69fd165f00c6d6862539f8b0fff8da7ab569",
+        "actual_sha": "8ddc69fd165f00c6d6862539f8b0fff8da7ab569",
+        "from_edge": null
+      },
+      "target_validation": {
+        "ref": "refs/heads/rec-g",
+        "expected_sha": "b6ab35304634f9b99bbbb5fd70032f8d7b434468",
+        "actual_sha": "b6ab35304634f9b99bbbb5fd70032f8d7b434468",
+        "from_edge": null
+      },
+      "before_sha": "da5d9610d39f785be198a2a9263b194e18498c3a",
+      "after_sha": "b6ab35304634f9b99bbbb5fd70032f8d7b434468",
+      "merge_commit": null,
+      "source_sha": "8ddc69fd165f00c6d6862539f8b0fff8da7ab569",
+      "accepted_sha": "b6ab35304634f9b99bbbb5fd70032f8d7b434468",
+      "integration_method": "cherry-pick",
+      "unit_id": "par3-g",
+      "conflicts": [],
+      "error": null,
+      "preservation": {
+        "approved_paths": [],
+        "protected_paths": [],
+        "action": "none",
+        "restored": true,
+        "verification": "exact"
+      },
+      "edge_receipt_digest": "06848b12197839f9557e84bb77a4e2325f7a13c59b199cf7805bcef2af803249"
+    }
+  ],
+  "receipt_digest": "8c09e85c9da838b26d58cdd9aefe1a7d1ed909fc6c039458a128006103459abd"
+}

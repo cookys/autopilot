@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### Managed implementation dispatch timeout floor is 1 s — a 2 s hand dies as a runner timeout, not a wall expiry
+- **Status**: open
+- **Trigger**: the next managed campaign that logs an implementation dispatch with `--timeout` under 60 s, OR any work on `buildImplementationArgs`
+- **Effort**: S
+- **Source**: v2.36.71 unit A review (🟠 wall-min-timeout-floor accepted with `MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS = 1`)
+- **Pointer**: docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/a/REPORT.md
+- **Context**: the brief asked for the rail's minimum useful timeout; a 1 s floor only avoids a 0 s argv. Derive the floor from the rail's timing data (shortest committed `wall_secs`) or seal a knob; below it, terminalize `wall_expired` before spend.
+
 ### roundtable Phase 1 — the `/roundtable` skill, distilled from several manual rooms
 - **Status**: open
 - **Trigger**: ≥3 more manual rooms have run under the Phase 0 protocol with an evidence dir each, OR the operator asks for the skill by name
@@ -37,7 +45,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: v2.34.7 framing family — the model echoes the marker line once more inside the block; the locator should treat a repeated marker as chrome when the wrapped block is otherwise well-formed, not discard the verdict.
 
 ### `secret-scan-diff.test.sh` plants key literals in-repo — the scanner's own fixture is a finding on diffs touching it
-- **Status**: open
+- **Status**: shipped v2.36.71 2026-09-19
 - **Trigger**: v2.36.70 release range scan exits 1 naming `hooks/tests/secret-scan-diff.test.sh` (`AKIA…`, `sk-ant-…` literals; the `sk-ant-` one predates v2.36.70)
 - **Effort**: S
 - **Source**: 2026-09-18 parallel run, unit C report
@@ -45,7 +53,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: build the planted strings at runtime by concatenation (`'AKIA' + 'IOSFODNN7EXAMPLE'`) so no literal sits in the tree; an L0 gate over a diff touching the suite would otherwise flag the scanner's own fixture.
 
 ### Managed rail: a park at `awaiting_disposition` reserves no wall for the repair round it authorises
-- **Status**: open
+- **Status**: shipped v2.36.71 2026-09-19
 - **Trigger**: fired 2026-09-18 — 2-C shared-packet parked at 5435/7200 s (implement 60 min + verify 21 + panel 9); two must-fix findings needed a round the remaining 1765 s could not fit, so depth-0 degraded to l3 instead of `--resume`
 - **Effort**: M
 - **Source**: 2-C shared-packet campaign, `impl-run1-awaiting-disposition.json`
@@ -53,12 +61,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: the pocket covers only the panel. Either seal a repair-round reserve (implement + verify measured from round 1) or refuse to park with `repair_authorized` reachable when the remaining wall is below it, naming the shortfall.
 
 ### Engine-touching deliverables cannot self-prove live: the rail runs depth-0's checkout engine, not the candidate
-- **Status**: open
+- **Status**: shipped 6c77dc6b 2026-09-19
 - **Trigger**: fired 2026-09-18 — the shared-packet campaign's own panel built four per-seat packets (~23 s each, no shared dir): `bin/autopilot.js` ran from the main checkout at base `fd4ea3a6`; the candidate's engine ran only in the verify suites
 - **Effort**: S
 - **Source**: 2-C shared-packet campaign README, timing probe
 - **Pointer**: docs/plans/evidence/2026-09-18-blind-review-shared-packet/README.md
-- **Context**: a plan §5 "live proof" of an engine change is only observable on the NEXT campaign after its merge; say so in the l5 recipe, and record such proofs one lineage late (packet-once: first observable on the campaign after v2.36.69).
+- **Context**: closed 2026-09-19 — answered by l5 recipe step 9b + evidence-discipline §38 (6c77dc6b), no code; live proofs of engine changes are recorded one lineage late.
 
 ### Test suites inherit the dispatcher's session env: `AUTOPILOT_SESSION_ID` makes `mission-runtime-v2` red in-rail
 - **Status**: shipped v2.36.70 2026-09-19
@@ -225,7 +233,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: cosmetic against the script's existing mktemp idiom; one host-/tmp file per cleanroom dispatch; the dead block is duplication, not a wrong path. Fold with the next codex-block touch, with the mirror.
 
 ### Managed rail: `boundary_rejected` says "re-dispatch once quiescent" but `--resume` from it always terminalizes
-- **Status**: open
+- **Status**: shipped v2.36.71 2026-09-19
 - **Trigger**: fired 2026-09-18 — 2-A attempt 1: boundary_rejected after a 91-min hand round; resume refused `campaign resume from BOUNDARY_REJECTED cannot dispatch implementation` and terminalized
 - **Effort**: M
 - **Source**: `impl-run1-attempt1-boundary-rejected.json`, `impl-run3-resume-refused.json` (2-A evidence)
@@ -377,7 +385,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `hooks/context-budget.js` reads the live file, else `inferWindowTokens(observedMax)`; add the transcript model id (`[1m]` → 1M) as a source before the ratchet.
 
 ### provider-readiness-consumer / autopilot-cli suites track the live review-loop config — red since acf3b06c
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.71 2026-09-19
 - **Trigger**: `resolveReviewLoopJson(['--check-scorecard'])` inside the suites exits 3 (cursor implementer has no row in the sandboxed capability dir); 5 + 33 failures at base fe225ff5
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-16 (mission agy-effort-rail-wording, `acceptance_failed` on command #6)
@@ -513,7 +521,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: engine resolves with bare `--check-scorecard`; `resolve-review-loop.sh:1498` needs both files to emit a ladder.
 
 ### /l5 recipe: set the l5 marker AFTER the plan hetero loop — under it codex seats are refused as non-strict dispatch
-- **Status**: fired 2026-09-15
+- **Status**: shipped v2.36.71 2026-09-19
 - **Trigger**: plan-review codex seat exit 2 with `active session-mode=l5 blocks non-strict dispatch`; the artifact recorded empty stdout and transport_exhausted
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-15
@@ -1501,7 +1509,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `src/engine/autopilot-engine.js:6477` writes composition events with `controller-<event>:<gen>` stage identities; `src/engine/implementation-campaign.js:886/738` lease-fences `BOUNDARY_REJECTED` (and `AWAITING_CONVERGENCE`, `:971`)…
 
 ### `dispatch-author.sh` success predicate is "non-empty stdout" — truncated / tool-narrating output reports `authored`
-- **Status**: open
+- **Status**: shipped v2.36.71 2026-09-19
 - **Trigger**: already fired twice (2026-08-29, qoderclicn/Qwen3.8-Max-Preview: a 100-byte preamble ending at `[` and a 130 KB mid-file draft with 36 text-form ```` ```tool ```` fences both returned `status:authored`, exit 0, `final_status:null`).
 - **Effort**: S
 - **Source**: l6-verdict-stability-p1 attempt 1 (author-1788027293-2263145, author-1788027402-2269364).
@@ -1530,7 +1538,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
-- **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so every campaign fails acceptance. Red at 4d025177: autopilot-cli, context-window, controller-execution-independent, hetero-review-loop, provider-readiness-consumer.
+- **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so every campaign fails acceptance. Host-red set at v2.36.71 (16/358, all pre-existing): `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/full-run-summary.txt`.
 
 ### Campaign bridge resolves lease identity from `campaignControl.initial_state` — correct today only because every append refreshes it
 - **Status**: open
@@ -1573,7 +1581,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: pairs with the existing "Killed/dead managed campaign stuck at IMPLEMENTING" row: the fix must release BOTH the campaign lease (MUTATION_FAILED with the live lease identity) and the Mission claim, gated on provable leaf death, and be…
 
 ### A managed campaign whose wall expires leaves no terminal summary and no journal disposition
-- **Status**: open
+- **Status**: shipped v2.36.71 2026-09-19
 - **Trigger**: already fired twice 2026-08-30 (campaigns attempt-3 `d240ef14…` and `…a3` D5): the leaf committed, `max_wall_seconds` (3600, schema max) elapsed before the review round, the `engine implement-review` process ended with a 0-byte…
 - **Effort**: S
 - **Source**: phase-2 foremen (D4, D5) 2026-08-30.
@@ -1589,12 +1597,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `schemas/mission-execution-graph.schema.json` caps `campaign.max_wall_seconds` at 3600 and `max_engine_attempts` at 3.
 
 ### Qualification recipes seed staged credentials only when the staged file is absent — rotating OAuth runners reuse stale material
-- **Status**: open
+- **Status**: shipped v2.35.5 2026-08-31
 - **Trigger**: already fired 2026-08-30 (D7): kimi and grok seats returned 240/240 `provider_process_failed` each (480 case attempts, ~1600 s) because the `if [ ! -f <staged> ]` guard kept 2026-08-29 credentials while the live ones had rotated;…
 - **Effort**: S
 - **Source**: D7 administration ledger 2026-08-30.
 - **Pointer**: docs/backlog/qualification-recipes-seed-staged-credentials-only-when-the-staged-file-is-absen.md
-- **Context**: every `run.sh` under `docs/plans/evidence/*/administration/*/` copies this block.
+- **Context**: every `run.sh` under `docs/plans/evidence/*/administration/*/` copies this block. Row status was stale until 2026-09-19; the sidecar already recorded the U2 ship.
 
 ### `engine-scorecard.js current/seat-status --require-evidence` cannot be run standalone
 - **Status**: open

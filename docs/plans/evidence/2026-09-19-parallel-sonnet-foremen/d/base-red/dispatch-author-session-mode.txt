@@ -1,0 +1,1 @@
+FAIL [dispatch-author-session-mode] Case 2: status is authored: expected 'authored', got ''

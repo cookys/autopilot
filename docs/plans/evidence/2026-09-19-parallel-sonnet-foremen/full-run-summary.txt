@@ -1,0 +1,25 @@
+# full hooks/tests/run.sh on the integrated head (15 hand commits + chmod), 2026-09-19
+════════ Summary ════════
+❌ 16 / 358 test files FAILED:
+   - hooks/tests/calibration.test.sh
+   - hooks/tests/context-window.test.sh
+   - hooks/tests/controller-execution-independent.test.sh
+   - hooks/tests/dispatch-author-contract.test.sh
+   - hooks/tests/dispatch-author-result-provenance.test.sh
+   - hooks/tests/dispatch-author-session-mode.test.sh
+   - hooks/tests/dispatch-author-strict-roster.test.sh
+   - hooks/tests/dispatch-detached-campaign-authority.test.sh
+   - hooks/tests/dispatch-foreman.test.sh
+   - hooks/tests/dispatch-worktree-lifecycle.test.sh
+   - hooks/tests/hetero-review-loop.test.sh
+   - hooks/tests/resolve-review-loop-consult-discuss-gate.test.sh
+   - hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh
+   - hooks/tests/resolve-review-loop.test.sh [TIMEOUT]
+   - hooks/tests/review-loop-runner.test.sh
+   - hooks/tests/scaffold-config.test.sh
+rc=1
+DONE
+
+# attribution (each red re-run alone in the integrated tree, then at base da5d9610; failing-assertion counts int/base):
+calibration 2/2 · context-window (known) · controller-execution-independent 2/2 · dispatch-author-contract 13/13 · dispatch-author-result-provenance 1/1 · dispatch-author-session-mode 1/1 · dispatch-author-strict-roster 9/9 · dispatch-detached-campaign-authority 3/3 · dispatch-foreman 40/40 · dispatch-worktree-lifecycle 2/2 · hetero-review-loop (known) · resolve-review-loop-consult-discuss-gate 1/1 · resolve-review-loop-consult-discuss-switch 2/2 · resolve-review-loop [TIMEOUT under run.sh, rc=0 alone] · review-loop-runner 12/12 · scaffold-config 2/2
+=> 0 regressions; the two suites this release set out to heal (provider-readiness-consumer, autopilot-cli) are no longer in the red set.

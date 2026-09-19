@@ -1,0 +1,9 @@
+FAIL [dispatch-author-strict-roster] Case 8: fake AGY runner produced a raw log:  does not exist
+FAIL [dispatch-author-strict-roster] Case 8: fake AGY runner executed: 'AGY-AUTHORED' not found in output
+FAIL [dispatch-author-strict-roster] Case 8: AGY prompt flag composition: '-p' not found in output
+FAIL [dispatch-author-strict-roster] Case 8: AGY prompt composition: 'Write a verification plan.' not found in output
+FAIL [dispatch-author-strict-roster] Case 8: AGY model flag composition: '--model' not found in output
+FAIL [dispatch-author-strict-roster] Case 8: AGY model composition: 'Gemini 3.1 Pro (High)' not found in output
+FAIL [dispatch-author-strict-roster] Case 8: AGY permission composition: '--dangerously-skip-permissions' not found in output
+FAIL [dispatch-author-strict-roster] Case 8: AGY effort flag composition (agy 1.1.26 requires it; roster effort, not a manual flag): '--effort' not found in output
+FAIL [dispatch-author-strict-roster] Case 8: AGY effort value is the roster effort: 'ARG=high' not found in output

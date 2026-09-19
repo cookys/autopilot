@@ -1,0 +1,11 @@
+# Rubric — 2026-09-19-blind-review-2d-overlap.md
+
+> Source plan: docs/plans/2026-09-19-blind-review-2d-overlap.md
+
+R1: The plan names, from the code at base, exactly which two stations it overlaps and proves from their inputs that neither depends on the other's output; the join point before adjudication is explicit, and a failure in either station keeps that station's failure shape while the other's receipt is still recorded.
+R2: Overlap never double-spends or double-counts the single wall clock: both stations derive their deadlines from one reading at a shared start, neither shrinks because the other started, and the plan states the budgeting with the pocket rule unchanged; a fixture that fits concurrently but not serially completes, and the same fixture blocks at base.
+R3: Every campaign outside the overlap condition — single review station, verification-cache hit, pre-2-D journals — is byte-identical in trace, ledger and receipts, and the plan names the existing control cases that pin this.
+R4: The panel snapshot becomes a contract: it is written only after the Mission claim succeeds (a rejected claim leaves no file), a resume whose recomputed digest over every carried field differs is refused at intake naming the fields and leaves the campaign parked, and a live roster flip after sealing is journaled while the sealed station still runs.
+R5: The plan explicitly excludes per-seat weights, majority aggregation, any reducer change and any new contract knob, and defers the single-seat pre-pass with a measurable reason rather than designing it without evidence.
+R6: Tests are RED-first with the observed base output beside each new assertion; new suites are executable and run through the suite runner; the acceptance list per deliverable names every consuming suite and the consumer sweep; no existing assertion is weakened except the two whose ordering is the subject of D2, each with a RED note.
+R7: The plan is implementable as two independent deliverables of bounded size with an evidence dir, states that the overlap's live proof is observable only on the next campaign after the merge, and its risks name the shared-writer race and the CPU-contention risk with a mitigation each.

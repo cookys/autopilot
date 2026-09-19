@@ -912,3 +912,41 @@ is what should have preceded any conclusion about the candidate.
 - **Export nothing into a dispatch that the rail does not need.** Every extra variable is a
   new input to every process the rail spawns; the intake matched the marker through
   `CLAUDE_CODE_SESSION_ID` without help.
+
+## 37. A verify list written by the brief's author covers the author's model of the change, not its consumers
+
+**2026-09-18, v2.36.70, four rail rows fixed in parallel.** Each brief carried a verify list
+(the suites the author knew touched the files) and each hand ran it green; the integrated
+head ran the union of the four lists plus two more, 18/18. The advisor's question was the
+right one: three interfaces had moved — the dispatch-review result JSON gained a key, the
+engine's run result gained a `status` value, a journal event gained a payload key — and the
+consumers of those interfaces are not enumerated in any brief. `grep -l` over
+`hooks/tests/*.test.sh` for the moved identifiers minus the suites already run gave 44 more;
+38 green, 6 red. The six were then run at the pre-release base: red with the identical 65
+failing assertions, so the release was clean — but that was known only after the sweep, not
+before the push.
+
+- **Derive the consumer set mechanically after the change, never from the brief.** Grep the
+  test tree for the identifiers that moved (file names, JSON keys, enum values, exported
+  functions) and run whatever the verify lists did not cover.
+- **A red found by the sweep is attributed at the base before it is called a regression.**
+  Run the same suites on the commit before the change; equal failure sets clear the release,
+  a superset names the regression. Normalise temp paths before diffing the sets.
+- **The sweep is part of the release, not a follow-up.** It costs one background run; a
+  v2.36.N+1 that could have been avoided costs a release cycle.
+
+## 38. A live proof measured by a rail that runs the base engine is a proof about the base
+
+**2026-09-18, v2.36.69, the shared-packet campaign.** Plan §5 asked the campaign to prove
+"one packet build per candidate" live; the panel station built four per-seat packets and no
+shared directory ever appeared. Not a defect: `bin/autopilot.js` runs from the main checkout
+at the sealed base, so the engine executing the campaign was the pre-change engine, and the
+candidate's engine ran only inside the verify station's suites. Every plan whose deliverable
+IS the engine or a runner has this shape.
+
+- **Before claiming a live proof, say which code executed the measurement.** If the change
+  is in the code that runs the campaign, the earliest live observation is the next campaign
+  after the merge; record "not producible this campaign" and where it will show.
+- **A missing artefact during a run is a fact to explain, not to file.** The absence of the
+  shared directory was visible during the run; the explanation (which engine ran) was one
+  `ps` and one path away, and it changed what the evidence README could honestly claim.

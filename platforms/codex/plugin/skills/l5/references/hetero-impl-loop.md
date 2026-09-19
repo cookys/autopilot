@@ -210,7 +210,15 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    launch together under the remaining panel pocket (`final_panel_reserve_seconds`); each seat's
    `--timeout` is the whole remainder, not a sequential share. When the snapshot seals
    `review_station: panel`, that fan-out *is* the in-loop review station (a repair round
-   reruns the panel; the terminal panel reuses the last matching receipt).
+   reruns the panel; the terminal panel reuses the last matching receipt). On
+   `awaiting_disposition` read `usage.elapsed_wall_seconds` from the journal FIRST: a resumed
+   repair round costs implement + verify + panel (60 + 21 + 9 min measured 2026-09-18) and the
+   pocket covers only the panel — when the remainder cannot hold that, do not resume (the attempt
+   burns at `WALL_BUDGET_EXCEEDED` mid-round); degrade to l3 and repair in the retained worktree.
+9b. The rail runs the engine of the MAIN checkout at the sealed base; a candidate that changes the
+    engine or a runner runs only inside the verify station's suites. A plan §5 "live proof" of such a
+    change is first observable on the NEXT campaign after its merge — record it as "not producible
+    this campaign" (`references/evidence-discipline.md` §38).
 10. **Verification is yours**: check out the hand's commit in a scratch worktree on a temp branch
     (some suites die on a detached HEAD) and run every verify command there; `test -x` every test
     file the hand created (`bash file` masks a 100644 mode that the CI executable gate rejects); probe the reviewer's MUST-FIX claims by re-derivation
@@ -234,6 +242,21 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     When the rail stops, degrade per the documented fallback
     (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed`), repair on
     the mission branch in its retained worktree, merge on git evidence, and file the rail defect.
+
+## Parallel units (measured 2026-09-18, v2.36.70: four rows, four kimi-code/k3 foremen, 44 min)
+
+One `.git` holds one rail: `scripts/lib/main-checkout-boundary.sh` fingerprints every ref except the
+rail's own, so a second foreman on the same checkout (worktrees included) is `main_checkout_mutated`
+for the first. To run N file-disjoint units at once: one `git clone` per unit; one
+`scripts/dispatch-foreman.sh --model kimi-code/k3` per clone (a non-Claude foreman has no session
+marker, so it cannot drive `engine implement-review` — its hands go through `dispatch-hetero.sh`,
+review through `dispatch-review.sh`, verdict at depth 0 from git); the tracked enforce governance
+refuses a hand without a sealed contract, so each clone carries one clone-local "shadow" commit
+that is never merged — land the hands' commits by cherry-pick. Briefs must list every file the
+change reaches including schemas and validators (a strict `additionalProperties: false` schema
+turned one unit into an escalation); unit names must be globally unique (the dispatch-run manifest
+directory is shared). Fetch the hands' branches into the main checkout only after EVERY foreman has returned `rc=` (a fetch is a ref change, i.e. `main_checkout_mutated` for a still-running rail). After the merge, run the consumer sweep of `references/evidence-discipline.md` §37.
+Full recipe, brief template and receipts: `docs/plans/evidence/2026-09-18-parallel-kimi-foremen/`.
 
 ## Degradation
 

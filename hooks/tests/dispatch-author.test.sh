@@ -73,6 +73,31 @@ assert_eq "0" "$EXIT" "qoder authored exit 0"
 assert_contains "$OUT" '"status": "authored"' "qoder status authored"
 assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
+# Wrapped non-codex prompt is a dispatcher output-format contract, not an identity override.
+WRAP_DUMP="$TEST_TMP/wrapped-prompt.dump"
+STUB_WRAP="$TEST_TMP/runner-wrap-dump"
+cat > "$STUB_WRAP" <<EOF
+#!/usr/bin/env bash
+prompt=\$(cat || true)
+printf '%s\n' "\$prompt" > "$WRAP_DUMP"
+begin=\$(printf '%s\n' "\$prompt" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+end=\$(printf '%s\n' "\$prompt" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+if [ -n "\$begin" ] && [ -n "\$end" ]; then
+  printf '%s\n%s\n%s\n' "\$begin" "OK-WRITTEN" "\$end"
+else
+  echo "OK-WRITTEN"
+fi
+EOF
+chmod +x "$STUB_WRAP"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner claude-native --model claude-fable-5-1 --prompt-file "$PROMPT" --bin "$STUB_WRAP" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "wrap-dump authored exit 0"
+WRAP_BODY="$(cat "$WRAP_DUMP")"
+assert_not_contains "$WRAP_BODY" "You are an authoring engine" "wrapped prompt is not an identity override"
+assert_not_contains "$WRAP_BODY" "Do NOT echo these instructions" "wrapped prompt does not echo-instruction ban"
+assert_contains "$WRAP_BODY" "<<<AUTOPILOT-AUTHOR-" "wrapped prompt keeps BEGIN marker line"
+assert_contains "$WRAP_BODY" "NONCE=" "wrapped prompt keeps NONCE line"
+assert_contains "$WRAP_BODY" "AUTHORING TASK:" "wrapped prompt keeps AUTHORING TASK"
+
 # --- 2. empty output → empty_output, exit 1, fail-closed ---
 STUB_EMPTY="$TEST_TMP/runner-empty"
 cat > "$STUB_EMPTY" <<'EOF'

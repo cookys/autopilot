@@ -558,7 +558,8 @@ assert.strictEqual(success.response_text.toString('utf8'), 'OK\n');
 assert.strictEqual(classifyLiveProbeResult(selected, success), 'success');
 assert.strictEqual(
   fs.readFileSync(path.join(tmp, 'fake-prompt'), 'utf8'),
-  'Respond only with OK.',
+  // RED at 28f9ce827b90ac2b6c9f11898989b06ce6e1db73: expected 'Respond only with OK.'
+  'This is the autopilot dispatcher\'s provider readiness probe: it only checks that this provider answers. Reply with the single word OK and nothing else.',
 );
 const args = fs.readFileSync(path.join(tmp, 'fake-args'), 'utf8');
 assert(args.includes('--endpoint\nminimax\n'));

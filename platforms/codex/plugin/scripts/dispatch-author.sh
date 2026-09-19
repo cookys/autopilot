@@ -995,7 +995,7 @@ if [[ "$RUNNER" != "codex" ]]; then
   AUTHOR_WRAP_FILE="$(mktemp -t dispatch-author-wrap-XXXXXX)"
   {
     cat <<EOF
-You are an authoring engine. Output ONLY a wrapped block (no other text/fences), beginning with:
+Output format contract set by the autopilot dispatcher that is calling you: write your whole answer as ONE wrapped block (no other text, no code fences), beginning with the line:
 ${BEGIN}
 
 and ending with:
@@ -1004,7 +1004,7 @@ ${END}
 Framing nonce (do NOT use this raw value as a marker; markers above are derived):
 NONCE=${NONCE}
 
-Do NOT echo these instructions. Your VERY FIRST output character MUST be the start of the opening marker line above. Output ONLY the wrapped block. Do not emit a Markdown fence whose info string is tool, tool_call, or function_call, and do not emit a <tool_call> tag.
+Your VERY FIRST output character MUST be the start of the opening marker line above. Output ONLY the wrapped block. Do not emit a Markdown fence whose info string is tool, tool_call, or function_call, and do not emit a <tool_call> tag.
 
 AUTHORING TASK:
 EOF

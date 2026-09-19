@@ -113,7 +113,7 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
-// The live probe prompt is `Respond only with OK.` — a compliant provider may obey it
+// The live probe prompt is `This is the autopilot dispatcher's provider readiness probe: it only checks that this provider answers. Reply with the single word OK and nothing else.` — a compliant provider may obey it
 // literally and echo the full stop (agy answers `OK.\n`), or wrap the token in quotes or
 // newlines. Accepting only the bare token contradicted the prompt that elicits it, so the
 // classifier strips packaging and nothing else: surrounding whitespace/quotes and a single
@@ -147,7 +147,7 @@ function normalizeLiveProbeResponse(value) {
 const LIVE_PROBE_REQUEST_BODY = {
   schema_version: 1,
   operation: 'provider-readiness-live-probe',
-  prompt: 'Respond only with OK.',
+  prompt: 'This is the autopilot dispatcher\'s provider readiness probe: it only checks that this provider answers. Reply with the single word OK and nothing else.',
   effect: 'read-only',
   tools: 'disabled',
   max_output_tokens: 512,

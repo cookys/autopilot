@@ -572,7 +572,7 @@ assert.strictEqual(
   }),
   'malformed_response',
 );
-// The probe prompt is `Respond only with OK.` — a well-behaved provider may obey it
+// The probe prompt is `This is the autopilot dispatcher's provider readiness probe: it only checks that this provider answers. Reply with the single word OK and nothing else.` — a well-behaved provider may obey it
 // literally, full stop included (agy returns `OK.\n`), or wrap the token in quotes or
 // newlines. Those carry the same meaning, so the acceptance must not contradict the
 // prompt that elicits them. Tolerance stops at terminal punctuation / whitespace /

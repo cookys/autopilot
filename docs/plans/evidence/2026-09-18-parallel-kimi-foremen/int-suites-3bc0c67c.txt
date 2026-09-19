@@ -1,0 +1,20 @@
+sha=3bc0c67c wt=/tmp/autopilot-suites-grCKRA start=2026-09-18T23:45:33Z
+PASS rc=0  bash hooks/tests/dispatch-review.test.sh
+PASS rc=0  bash hooks/tests/review-runner.test.sh
+PASS rc=0  bash hooks/tests/review-packet.test.sh
+PASS rc=0  bash hooks/tests/dispatch-review-prompt-skeleton.test.sh
+PASS rc=0  bash hooks/tests/qc-panel.test.sh
+PASS rc=0  bash hooks/tests/check-canonical-invariants.test.sh
+PASS rc=0  bash hooks/tests/secret-scan-diff.test.sh
+PASS rc=0  bash hooks/tests/autopilot-engine.test.sh
+PASS rc=0  bash hooks/tests/mission-runtime-v2.test.sh
+PASS rc=0  bash hooks/tests/implementation-campaign-state.test.sh
+PASS rc=0  bash hooks/tests/implementation-campaign-routing.test.sh
+PASS rc=0  bash hooks/tests/implementation-campaign-receipt.test.sh
+PASS rc=0  bash hooks/tests/campaign-terminalize.test.sh
+PASS rc=0  bash hooks/tests/implementation-campaign-dogfood.test.sh
+PASS rc=0  bash hooks/tests/qc-panel-honesty.test.sh
+PASS rc=0  node scripts/check-js-syntax.js
+PASS rc=0  bash scripts/sync-codex-plugin-skills.sh --check
+PASS rc=0  node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
+summary pass=18 fail=0 end=2026-09-19T00:00:20Z

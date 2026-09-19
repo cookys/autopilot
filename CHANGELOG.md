@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.36.70 — 四條 rail 缺陷平行修掉：四個 kimi-code/k3 工頭、各自獨立 clone、cursor-grok-4.6-low hands
+
+- `scripts/dispatch-review.sh`（＋鏡像）：awk locator 對「第二次出現的 derived BEGIN 行且其後只剩空白」視為關閉框（GLM-5.2 兩次用
+  BEGIN 代替 END 收尾，判決完整卻被 `duplicate derived BEGIN marker` 打成 `no_verdict`）；第二個 BEGIN 後還有非空白內容仍是 exit 3
+  （反偽造守衛不動）；結果 JSON 新增 `frame_closed_by: end-marker|begin-marker`。`src/runners/review.js` optional field＋值檢查；
+  `schemas/review-result.schema.json`（＋鏡像）加該 key。
+- `src/engine/autopilot-engine.js`（＋鏡像）：verify 站的環境用 `copyVerificationEnvironment()` 只刪 `AUTOPILOT_SESSION_ID`（派工者
+  的覆寫；`CLAUDE_CODE_SESSION_ID` 等保留，base suites 的量測基準不變）——2-C station 整輪報廢的根因；`hooks/tests/mission-runtime-v2.test.sh`
+  自己 pin session id，`AUTOPILOT_SESSION_ID=zzz` 下 103/103。
+- `scripts/secret-scan-diff.js`（＋鏡像）：`--range` 改 name-only（`-z`、`--literal-pathspecs`）＋逐檔 `-U0` diff 走同一支行掃描器，
+  256 MiB per-call 上限，超過的單檔具名 exit 2；`--files` 單獨模式維持 worktree-vs-index；exit 0/1/2 與 `{ findings }` 形狀不變。
+  BACKLOG 列文字修正：base 本來就 exit 2（「exit 0」是管線吃掉狀態），真缺陷是 >1 MiB 範圍完全沒掃。
+- `src/engine/implementation-campaign.js`／`campaign-intake.js`／`autopilot-engine.js`（＋鏡像）：`campaign_terminal` reference 帶
+  `repair_lineage` 時 appender 與 reducer 的 `output_artifact_digest` 不對稱 → `MUTATION_FAILED` 被 `MUTATION_FAILURE_EVIDENCE_REQUIRED`
+  拒收、campaign 卡 IMPLEMENTING（2-C station 的死法）。共用 `boundCampaignArtifactDigest`，payload 帶 `repair_lineage`，evidence
+  規則不放寬（錯 digest 仍拒）；hand 的 `acceptance_failed` 現在是一等結果（`status: acceptance_failed`、journal 已終結、lease 釋放、
+  summary JSON 一定寫）。wall-expiry 是另一條路徑，列仍 open。
+- 測試（RED-first 標 base）：dispatch-review（BEGIN 收尾接受／BEGIN 後有內容仍拒／end-marker 收據）、review-runner（optional field）、
+  autopilot-engine（verify env 無 `AUTOPILOT_SESSION_ID`、fingerprint byte-identical、acceptance_failed → 終結 receipt）、
+  implementation-campaign-state（帶 lineage 的正確 digest 收、錯 digest 拒）、secret-scan-diff（3 MiB 範圍、引號路徑、`--files`）。
+- 出貨路徑（`docs/plans/evidence/2026-09-18-parallel-kimi-foremen/`）：一 unit 一 clone（同一 `.git` 上兩個 rail 會互判
+  `main_checkout_mutated`），四個 `dispatch-foreman.sh --model kimi-code/k3` 同時起；第一輪全被 tracked 的 enforce governance 擋在
+  `dispatch-hetero` 門口（kimi 正確 ESCALATION），clone-local 改 shadow 後第二輪 44 分鐘四條全到；hand commit cherry-pick 進 develop、
+  governance commit 不併；A 因 brief 漏列 schema 檔而 escalated，depth-0 授權採 r1。BACKLOG 兩條 U1 已出貨列（v2.35.5）狀態漂移一併校正。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.69 — blind review redesign 第九刀（2-C shared-packet）：每候選一份 packet、每席私有材化、tree hash 批次
 
 - `src/runners/review-packet.js`（＋鏡像）：`verifyTreeIntegrity` 把路徑不含 LF/CR 的一般檔案批進**一支** `git hash-object

@@ -13,7 +13,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
 ### dispatch-review parser refuses a complete GLM verdict when the envelope repeats the BEGIN marker
-- **Status**: open
+- **Status**: shipped v2.36.70 2026-09-19
 - **Trigger**: fired 2026-09-18 — 2-C station second-family review: GLM-5.2 returned VERDICT/FINDINGS/NO-FINDING-PROOF intact, parser said `duplicate derived BEGIN marker found inside capture` → `no_verdict`; adopted from raw
 - **Effort**: S
 - **Source**: 2-C station campaign, `review-glm-r2-no-verdict.json` + `review-glm-r2-raw.log`
@@ -37,7 +37,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: a plan §5 "live proof" of an engine change is only observable on the NEXT campaign after its merge; say so in the l5 recipe, and record such proofs one lineage late (packet-once: first observable on the campaign after v2.36.69).
 
 ### Test suites inherit the dispatcher's session env: `AUTOPILOT_SESSION_ID` makes `mission-runtime-v2` red in-rail
-- **Status**: open
+- **Status**: shipped v2.36.70 2026-09-19
 - **Trigger**: fired 2026-09-18 — 2-C station acceptance ran with `AUTOPILOT_SESSION_ID` exported by depth-0; `mission-runtime-v2.test.sh` fails under it on develop too (53 red); the candidate was fine
 - **Effort**: S
 - **Source**: 2-C station campaign, `impl-run1-acceptance-failed-session-env.json`
@@ -209,12 +209,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: BOUNDARY_REJECTED is in durableResumablePhases but resume also needs generation_claim.resume_candidate, which a boundary rejection never records; the candidate is only recoverable at depth-0. Record one on rejection, or drop the promise.
 
 ### `secret-scan-diff.js --range` fails OPEN on a large range — ENOBUFS is printed and the exit code stays 0
-- **Status**: open
+- **Status**: shipped v2.36.70 2026-09-19
 - **Trigger**: fired 2026-09-18 — `--range 6a414c3c..HEAD` printed `git diff error: spawnSync git ENOBUFS`, returned `findings: []` and exit 0, and a `&&` chain pushed on it
 - **Effort**: S
 - **Source**: 1c release push 2026-09-18; the `--files` re-scan of the same 71 files was clean, so the push was safe — the gate was not
 - **Pointer**: docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/README.md
-- **Context**: a scanner that cannot read its input must exit non-zero (or fall back to per-file scanning), never report zero findings. Same family as evidence-discipline "a green that verified nothing".
+- **Context**: corrected 2026-09-18: base exited 2 on ENOBUFS (the exit-0 came from a pipeline); the real defect was a >1 MiB range never being scanned. Now name-only + per-file `-z` diffs through the unchanged scanner; an oversize file is a named exit 2.
 
 ### Managed rail: final-panel seats starve on the sealed wall budget left after implement/verify/full-suite
 - **Status**: shipped v2.36.65 2026-09-18
@@ -361,7 +361,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: the d0b95eff config does not heal them either (6 / 25 failures); the suites need a hermetic `REVIEW_LOOP_CONFIG_OVERRIDE` fixture and host-independent expectations.
 
 ### Managed rail: acceptance_failed cannot be journaled — terminal journal says MUTATION_FAILURE_EVIDENCE_REQUIRED
-- **Status**: open
+- **Status**: shipped v2.36.70 2026-09-19
 - **Trigger**: a hand commit whose verification command fails → `campaign_terminal_journal` refuses, exit 1, no durable wait, no receipt; the lease joins the stale pile
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-16 (mission agy-effort-rail-wording, campaign-v1-fee713e8…)
@@ -1525,7 +1525,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `is_suite_timeout_ec` treats any 124/137 as the wrapper's timeout.
 
 ### Killed/dead managed campaign stuck at IMPLEMENTING with a held lease has no operator remedy
-- **Status**: open
+- **Status**: shipped v2.35.5 2026-08-31
 - **Trigger**: already fired three times 2026-08-29/30 (campaigns `3b6a9770…`, `d240ef14…`, `e9bcae52…`): leaf died (wall cap / host kill / acceptance failure before terminal journal), journal holds `live_lease`, `--resume` refuses with…
 - **Effort**: S
 - **Source**: l6-verdict-stability-p1 campaigns 2/3 + salvage, 2026-08-29/30.
@@ -1541,7 +1541,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: the idempotency key resolves to `graph-node:<id>:attempt:<n>` while `active_claim_id` is set; nothing tells the caller the attempt cannot advance.
 
 ### No operator-level release for a claim whose campaign died without a terminal receipt (second instance)
-- **Status**: open
+- **Status**: shipped v2.35.5 2026-08-31
 - **Trigger**: already fired again 2026-08-30 — depth-0 had to emit `no_effect_release` through the reducer module API (`reduceMissionState`) on the local state file (backup taken) because `mission control` exposes only…
 - **Effort**: S
 - **Source**: phase-2 foreman escalation + depth-0 operator action, 2026-08-30.

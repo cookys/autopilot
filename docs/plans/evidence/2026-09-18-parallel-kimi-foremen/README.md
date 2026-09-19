@@ -45,3 +45,14 @@ Every foreman: `main_checkout_boundary: verified`, no foreman commits, hands onl
 A: RED comment wording on the guard-unchanged case. B: the ~:10043 spawn passes a fresh scrubbed copy rather than the
 frozen object (byte-identical under the allowlist). C: user-supplied `--files` globs in the name-only listing. D:
 comment wording on `boundCampaignArtifactDigest`; a CLI-stdout capture test for the summary bytes.
+
+## Consumer-suite sweep after the push (advisor's point: the verify lists were the brief author's, not the interface consumers')
+`grep -l` over `hooks/tests/*.test.sh` for every interface the four units moved (dispatch-review output, `runners/review`,
+`implementation-campaign`/`campaign-intake`, `secret-scan-diff`, `frame_closed`, `no_finding_proof`, `acceptance_failed`)
+minus the 18 already run = 44 suites, run at the pushed head `853e3ae7` (`consumer-suites-853e3ae7.txt`): 38 green, 6 red
+(`autopilot-cli`, `context-window`, `controller-execution-independent`, `dispatch-detached-campaign-authority`,
+`hetero-review-loop`, `provider-readiness-consumer`). The same six at the pre-release base `4d025177`
+(`consumer-suites-red6-at-base-4d025177.txt`): red with the **identical 65 failing assertions** (normalised diff empty) —
+pre-existing, not a v2.36.70 regression. CI `tests` on `580395ce` shows the same single known red as on v2.36.69
+(`dispatch-detached-campaign-authority`, BACKLOG row). The five host-red suites belong to the open "hooks/tests/run.sh is red
+on develop" row.

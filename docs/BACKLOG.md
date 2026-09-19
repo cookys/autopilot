@@ -1506,7 +1506,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
-- **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so any campaign on this base fails acceptance regardless of the candidate.
+- **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so every campaign fails acceptance. Red at 4d025177: autopilot-cli, context-window, controller-execution-independent, hetero-review-loop, provider-readiness-consumer.
 
 ### Campaign bridge resolves lease identity from `campaignControl.initial_state` — correct today only because every append refreshes it
 - **Status**: open

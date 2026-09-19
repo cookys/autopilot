@@ -1,0 +1,103 @@
+sha=4d025177 wt=/tmp/autopilot-suites-17YDld start=2026-09-19T00:46:33Z
+FAIL rc=1 bash hooks/tests/autopilot-cli.test.sh
+          - strict L4 CLI names the uncertified reviewer seat in the override line (KR2b): 'reviewer=cc-shim/unknown-reviewer-model' not found in output
+          - strict L4 CLI proceeds to readiness under advisory policy: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+          - strict L4 advisory run still stamps the actual level: '"strict_level":"l4"' not found in output
+          - KR3(i) l5: a VA-less roster with a complete QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+          - KR3(i) l5: the refusal names verification_author_present: true: 'verification_author_present: true' not found in output
+          - KR3(i) l5: the refusal names review-loop-config.md: '.claude/review-loop-config.md' not found in output
+          - KR3(ii) l5: VA present with an unresolved QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+          - KR3(ii) l5: the refusal names the QC roster: 'exact QC roster is incomplete' not found in output
+          - KR3(i) l6: a VA-less roster with a complete QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+          - KR3(i) l6: the refusal names verification_author_present: true: 'verification_author_present: true' not found in output
+          - KR3(i) l6: the refusal names review-loop-config.md: '.claude/review-loop-config.md' not found in output
+          - KR3(ii) l6: VA present with an unresolved QC panel is refused before spend: '"rejection_code":"strict_l5_provider_roster_incomplete"' not found in output
+          - KR3(ii) l6: the refusal names the QC roster: 'exact QC roster is incomplete' not found in output
+          - strict L5 CLI warns loudly on every advisory derivation over a drifted roster: 'strict /l5 POLICY OVERRIDE' not found in output
+          - strict L5 CLI records the advisory_default audit reason when no override is configured: 'reason: advisory_default' not found in output
+          - strict L5 CLI proceeds to readiness under advisory policy: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+          - l4 default: the full roster derives under the l4 profile (VA + QC included when present): '"strict_level":"l4"' not found in output
+          - l4 + --require-qualified-reviewer: readiness consumed before the requirement is checked: '"strict_l5_provider_readiness":{"status":"ready"' not found in output
+          - implement-review --resume fails closed as resume_invalid on a missing branch: '"phase":"resume_invalid"' not found in output
+          - implement-review --resume explains the missing branch: 'does not exist or has no commit' not found in output
+FAIL rc=1 bash hooks/tests/context-window.test.sh
+    error: No valid patches in input (allow with "--allow-empty")
+    FAIL [context-window] resolver emits exactly the schema x-field-order surface while window checks reuse capability_warnings: expected '91', got 'ERR'
+    FAIL [context-window] resolver reports an over-budget seat: 'cannot hold the intended input' not found in output
+    FAIL [context-window] in-budget resolve emits no warnings: '"capability_warnings": []' not found in output
+    FAIL [context-window] no --input-bytes ⇒ no window checks: '"capability_warnings": []' not found in output
+    FAIL [context-window] 48 passed, 4 failed
+          - resolver emits exactly the schema x-field-order surface while window checks reuse capability_warnings: expected '91', got 'ERR'
+          - resolver reports an over-budget seat: 'cannot hold the intended input' not found in output
+          - in-budget resolve emits no warnings: '"capability_warnings": []' not found in output
+          - no --input-bytes ⇒ no window checks: '"capability_warnings": []' not found in output
+FAIL rc=1 bash hooks/tests/controller-execution-independent.test.sh
+    
+        at [stdin]:2061:10
+        at runScriptInThisContext (node:internal/vm:219:10)
+        at node:internal/process/execution:451:12
+        at [stdin]-wrapper:6:24
+        at runScriptInContext (node:internal/process/execution:449:60)
+        at evalFunction (node:internal/process/execution:283:30)
+        at evalTypeScript (node:internal/process/execution:295:3)
+        at node:internal/main/eval_stdin:51:5
+        at ReadStream.<anonymous> (node:internal/process/execution:205:5)
+        at ReadStream.emit (node:events:509:28) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 'blocked',
+      expected: 'ready',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.16.0
+FAIL rc=1 bash hooks/tests/dispatch-detached-campaign-authority.test.sh
+    FAIL [dispatch-detached-campaign-authority] detached campaign strict dispatch returns committed: expected '', got 'committed'
+    FAIL [dispatch-detached-campaign-authority] detached campaign strict dispatch changes only the narrow subset: expected 'src/out.txt', got ''
+    FAIL [dispatch-detached-campaign-authority] 8 passed, 2 failed
+          - detached campaign strict dispatch returns committed: expected '', got 'committed'
+          - detached campaign strict dispatch changes only the narrow subset: expected 'src/out.txt', got ''
+FAIL rc=1 bash hooks/tests/hetero-review-loop.test.sh
+          - case 1 (fin): exits 0 when all findings refuted: expected exit 0, got 2
+          - case 1 (fin): receipt-p_fin1.json exists: /tmp/autopilot-test-hetero-review-loop-uwkM47/ledger/receipt-p_fin1.json does not exist
+          - case 1 (fin): receipt verdict is SHIP-AS-IS: '"verdict": "SHIP-AS-IS"' not found in output
+          - case 2 (fin): exits 0 on verified Critical: expected exit 0, got 2
+          - case 2 (fin): receipt exists: /tmp/autopilot-test-hetero-review-loop-uwkM47/ledger/receipt-p_fin2.json does not exist
+          - case 2 (fin): receipt verdict is FIX-THEN-SHIP: '"verdict": "FIX-THEN-SHIP"' not found in output
+          - case 3 (fin): exits 0 on refuted Critical: expected exit 0, got 2
+          - case 3 (fin): verdict is SHIP-AS-IS: '"verdict": "SHIP-AS-IS"' not found in output
+          - case 4 (fin): exits 0 on verified Major: expected exit 0, got 2
+          - case 4 (fin): verdict is SHIP-AS-IS: '"verdict": "SHIP-AS-IS"' not found in output
+          - case 4 (fin): open_findings has exactly 1 entry: expected '1', got ''
+          - case 7 (fin): gen 1 finalize exits 0: expected exit 0, got 2
+          - case 7 (fin): gen 1 verdict is FIX-THEN-SHIP: '"verdict": "FIX-THEN-SHIP"' not found in output
+          - case 7 (fin): gen 2 finalize exits 0: expected exit 0, got 2
+          - case 7 (fin): gen 2 verdict is SHIP-AS-IS: '"verdict": "SHIP-AS-IS"' not found in output
+          - case 7d (fin): successful finalize exits 0: expected exit 0, got 2
+          - test 2g: finalizing g2 after an aborted g1 exits 0: expected exit 0, got 2
+          - test 2g: receipt written: /tmp/autopilot-test-hetero-review-loop-uwkM47/ledger/receipt-p_test2.json does not exist
+          - test 2g: receipt checker accepts a chain that passes through an aborted generation (was: exit 1, 'expected finalized'): expected exit 0, got 1
+          - test 2h: the refusal names the aborted generation: 'aborted' not found in output
+FAIL rc=1 bash hooks/tests/provider-readiness-consumer.test.sh
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 3,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.16.0
+    FAIL [provider-readiness-consumer] strict /l5 provider policy bootstrap is available: expected exit 0, got 1
+    FAIL [provider-readiness-consumer] strict /l5 policy is the exact frozen six-claim contract: 'strict_policy_exact=true' not found in output
+    FAIL [provider-readiness-consumer] strict /l5 accepts a fresh host-owned exact-roster readiness bundle: 'strict_positive_ready=true' not found in output
+    FAIL [provider-readiness-consumer] strict /l5 negative matrix rejects before workflow dispatch: 'strict_negative_matrix_zero_dispatch=true' not found in output
+    FAIL [provider-readiness-consumer] v2.36.8: l4 roster profile derives, issues and consumes an l4 bundle; l5/l6 invariants pinned by isolated controls: 'strict_l4_profile=true' not found in output
+    FAIL [provider-readiness-consumer] 30 passed, 5 failed
+          - strict /l5 provider policy bootstrap is available: expected exit 0, got 1
+          - strict /l5 policy is the exact frozen six-claim contract: 'strict_policy_exact=true' not found in output
+          - strict /l5 accepts a fresh host-owned exact-roster readiness bundle: 'strict_positive_ready=true' not found in output
+          - strict /l5 negative matrix rejects before workflow dispatch: 'strict_negative_matrix_zero_dispatch=true' not found in output
+          - v2.36.8: l4 roster profile derives, issues and consumes an l4 bundle; l5/l6 invariants pinned by isolated controls: 'strict_l4_profile=true' not found in output
+summary pass=0 fail=6 end=2026-09-19T00:49:46Z

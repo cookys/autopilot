@@ -54,3 +54,11 @@ three-way. Operator's verdict on worth (cookys, 2026-09-19): **worth it** — �
 aimax395/claude seat: ctx 59,481 · out 4,985 · 9 turns (fleet-cockpit status, before /exit). cuda/claude: not separable — it is
 the operator's working session. grok: not cockpit-tracked. codex, kimi: died before spending. Moderator: one hangar session,
 ~30 tool calls for the room itself.
+
+## F1 — root cause (found after the room, 2026-09-19)
+cuda's switchboard courier answers to the handle **`cuda-kimi`** (presence `caps` contains `switchboard`, `repos` lists what its
+`agent-call list` reaches), not `cuda`. `--to cuda --local <pane>` therefore hit the host's Claude handle with `all_sessions`, and
+nothing on that path reads `local_target`. `--to cuda-kimi --local <pane>` matched exactly the courier and the nonce landed in the
+pane. The CLI now narrows a `--local` send to the courier instance and refuses a handle without one (dotfiles main). Two deeper
+layers are in hangar BACKLOG: peers should drop foreign `local_target` envelopes; courier naming / cockpit-owned final mile is an
+ADR-level choice. Corrects the Phase 1 consequence above: non-Claude seats ARE addressable from the hub — through the courier.

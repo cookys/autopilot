@@ -20,13 +20,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-19-roundtable.md
 - **Context**: Phase 0 (3 seats, 3 rounds, unanimous, plan changed shape) proved the moderator-relay protocol; the skill is written from transcripts, not from one run
 
-### roundtable — non-Claude seats are unreachable from the hub without a switchboard courier
+### roundtable — a non-Claude seat is addressed through the host's switchboard courier handle, not its Claude handle
 - **Status**: open
-- **Trigger**: the hangar agent-call address fix ships (a `--local` send narrowed to the courier instance, or peers ignoring foreign `local_target`), OR a room needs a non-Claude seat before then
+- **Trigger**: the next manual room seats a non-Claude harness (verify `fleet send --to <courier> --local <pane>` in and `fleet reply` out from the pasted frame)
 - **Effort**: S
-- **Source**: Phase 0 finding F1 (7 cuda sessions received a message meant for one codex pane; the pane got nothing)
+- **Source**: Phase 0 finding F1; root cause + CLI fix in hangar gotcha a-local-send-to-the-wrong-handle-is-a-host-broadcast (2026-09-19)
 - **Pointer**: docs/plans/evidence/2026-09-19-roundtable/notes.md
-- **Context**: until fixed the protocol uses ssh + tmux paste in and shell `fleet send --instance` out; the skill must never emit `--to <host> --local`
+- **Context**: `fleet peers` now tags couriers `[switchboard: …]` and refuses a handle without one; protocol.md must name the courier lookup, never `--to <host> --local`
 
 ### dispatch-review parser refuses a complete GLM verdict when the envelope repeats the BEGIN marker
 - **Status**: shipped v2.36.70 2026-09-19

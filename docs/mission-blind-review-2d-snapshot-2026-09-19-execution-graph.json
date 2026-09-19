@@ -1,0 +1,95 @@
+{
+ "artifact_type": "mission_execution_graph",
+ "schema_version": 1,
+ "nodes": [
+  {
+   "id": "snapshot-contract",
+   "acceptance_ids": [
+    "write-after-claim",
+    "digest-drift-refused",
+    "claim-without-file-rule",
+    "live-flip-journaled",
+    "no-regression",
+    "scope-integrity"
+   ],
+   "campaign": {
+    "allowed_path_prefixes": [
+     "docs",
+     "hooks/tests",
+     "platforms/codex/plugin/references",
+     "platforms/codex/plugin/src",
+     "references",
+     "src"
+    ],
+    "baseline_churn": 1200,
+    "max_changed_files": 10,
+    "max_extra_churn": 600,
+    "max_growth_ratio": 1.5,
+    "max_repair_generations": 2,
+    "max_wall_seconds": 7200,
+    "final_panel_reserve_seconds": 900,
+    "full_suite_reuse": true,
+    "output_paths": [
+     "src/engine/campaign-intake.js",
+     "platforms/codex/plugin/src/engine/campaign-intake.js",
+     "src/engine/autopilot-engine.js",
+     "platforms/codex/plugin/src/engine/autopilot-engine.js",
+     "hooks/tests/implementation-campaign-state-snapshot-contract.test.sh",
+     "hooks/tests/implementation-campaign-state.test.sh",
+     "hooks/tests/autopilot-engine.test.sh",
+     "references/blind-dispatch.md",
+     "platforms/codex/plugin/references/blind-dispatch.md",
+     "docs/BACKLOG.md"
+    ],
+    "authorized_creates": [
+     "hooks/tests/implementation-campaign-state-snapshot-contract.test.sh"
+    ],
+    "profile": "high",
+    "required_paths": [
+     "src/engine/campaign-intake.js",
+     "src/engine/autopilot-engine.js",
+     "hooks/tests/implementation-campaign-state.test.sh"
+    ],
+    "spec": {
+     "path": "docs/plans/2026-09-19-blind-review-2d-overlap.md",
+     "section": "4. Phases (two independent deliverables; D2 has no dependency on D1)"
+    }
+   },
+   "dependencies": [],
+   "gate_attempt_budget": 6,
+   "reservation": {
+    "campaigns": 1,
+    "canonical_changed_files": 10,
+    "engine_attempts": 3,
+    "external_wait_seconds": 1800,
+    "output_bytes": 3000000,
+    "tool_calls": 300,
+    "wall_seconds": 7200
+   },
+   "source_plan_ids": [
+    "plan-9a92d3defd1df4d829be05e6955955cdb233e74869e783eae9a7399b564fb6c0"
+   ],
+   "source_rubric_ids": [
+    "R101365426037383548928633299235044130471568959470677140891997851420076972337606",
+    "R110868919623749271309999021395701485572958241408712175205319466414369291370968",
+    "R30008558641224333225636998617008975074738256363015794784201594930101609125536",
+    "R53873385281088783413175605226660694707904981160534727366145251168472920865066",
+    "R66801685932822063312536241444238169994240227118937670947833457849944134915349",
+    "R70427416035951521299560856471932631841446453344567649825898973160973879397760",
+    "R7771567295940861619412655329161686369958736804682015439042090205187395340039"
+   ],
+   "verification_commands": [
+    "bash hooks/tests/implementation-campaign-state.test.sh",
+    "bash hooks/tests/autopilot-engine.test.sh",
+    "bash hooks/tests/implementation-campaign-routing.test.sh",
+    "bash hooks/tests/mission-runtime-v2.test.sh",
+    "bash hooks/tests/mission-routing-campaign-bridge.test.sh",
+    "bash hooks/tests/autopilot-engine-park-reserve.test.sh",
+    "bash hooks/tests/autopilot-engine-boundary-resume.test.sh",
+    "node scripts/check-js-syntax.js",
+    "bash scripts/sync-codex-plugin-skills.sh --check",
+    "node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md"
+   ]
+  }
+ ]
+}

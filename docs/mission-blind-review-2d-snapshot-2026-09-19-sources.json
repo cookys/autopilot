@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-19-blind-review-2d-overlap.md",
+      "rubric_path": "plans/2026-09-19-blind-review-2d-overlap.rubric.md",
+      "plan_sha256": "9a92d3defd1df4d829be05e6955955cdb233e74869e783eae9a7399b564fb6c0",
+      "rubric_sha256": "ce52fdb5ededb8a0f94bd4188fe096c088bc13054e57290972ef1c08214525d7"
+    }
+  ]
+}

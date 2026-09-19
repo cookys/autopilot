@@ -20,6 +20,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/a/REPORT.md
 - **Context**: the brief asked for the rail's minimum useful timeout; a 1 s floor only avoids a 0 s argv. Derive the floor from the rail's timing data (shortest committed `wall_secs`) or seal a knob; below it, terminalize `wall_expired` before spend.
 
+### `run-ledger.sh lease-gc` aborts mid-loop on a failed transition and the reap wrapper masks it as zeros
+- **Status**: open
+- **Trigger**: a `lease-gc --json` run whose `appended` is lower than `dead` without a `skipped` reason, OR the reap receipt's `lease_gc` block reads all zeros on a host whose ledger still rotates
+- **Effort**: S
+- **Source**: v2.36.73 unit L review (🟡 gc-abort-midloop, claude-fable-5-1)
+- **Pointer**: docs/plans/evidence/2026-09-19-parallel-sonnet-foremen-r2/l-leasegc/REPORT.md
+- **Context**: a failing `command_stage_transition` exits the loop with no JSON and the reap wrapper's `|| true` shows zeros. Catch per lease, count `failed`, keep going; the wrapper surfaces a non-zero `failed`.
+
 ### roundtable Phase 1 — the `/roundtable` skill, distilled from several manual rooms
 - **Status**: open
 - **Trigger**: ≥3 more manual rooms have run under the Phase 0 protocol with an evidence dir each, OR the operator asks for the skill by name
@@ -169,12 +177,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: plan §6 — reader recovery for `_rotation_carry` rows (digest-chain linearisation inside the fail-closed reducer) or a locked migration proving digests unchanged. Re-sized L 2026-09-19; needs its own plan + hetero loop.
 
 ### Managed rail: stale campaign leases are never released — 109 runs leased since July keep the ~2 MB carry alive
-- **Status**: open
+- **Status**: shipped v2.36.73 2026-09-19
 - **Trigger**: any append to this repo's `implementation-campaign.jsonl` still rotates (carry ≈ whole ledger); a parked or dead campaign's `leased` stage row is carried forever
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-16 (measured while shipping v2.36.54; split out of the rotation-order row)
 - **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
-- **Context**: plan §6 — a lease GC (dead pid + no heartbeat past TTL → `released`/`expired` row) so the live segment can shrink; A's `fd316019` and D's `409e89d2` parked campaigns join the pile.
+- **Context**: `run-ledger.sh lease-gc` (pid dead + heartbeat silent > 12 h + worktree absent/no flock → `leased→dead`, named reason; `--dry-run`/`--json`), wired into `reap-dispatch-worktrees.sh reap`. Host dry-run 2026-09-19: 184/184 dead.
 
 ### Managed rail: a disposition resume into a repair round refuses the caller's --branch (expects the derived one)
 - **Status**: shipped v2.36.72 2026-09-19

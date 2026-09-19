@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.36.73 — stale campaign leases become collectable（`run-ledger.sh lease-gc`）；2-D plan 凍結 g2
+
+- **`scripts/run-ledger.sh lease-gc [--ttl-secs N] [--dry-run] [--json]`**（＋鏡像）：對每個最新狀態為 `leased` 的 (run_id, stage)，
+  三個述詞全成立才判死——`is_process_alive(pid,start_time)` 為假；stage 列與 `kind:"heartbeat"` 列的最新心跳都早於 `now − TTL`
+  （`RUN_LEDGER_LEASE_GC_TTL_SECS`，預設 43200 s，沿用 quarantine TTL 先例，不是 120 s 的 acquire 窗）；記錄的 worktree 不存在或
+  `worktree-activity.js` 判 `absent` 且 `lockHolderPid` 找不到活的 flock 持有者（CC-native 工頭記的是已死 shell pid，只看 pid 會誤殺）。
+  判死的走一般 transition 路徑 append `leased → dead`，reason `lease_gc: pid_dead heartbeat_silent_<age>s worktree_<absent|none>`；
+  任一述詞不成立就 `skipped` 具名。carry 只帶 `leased`，所以 GC 後下一次 rotation 自然丟掉這些 run 的 journal 列，live segment 縮小。
+- `scripts/reap-dispatch-worktrees.sh reap`（＋鏡像）呼叫 `lease-gc --json` 並把摘要放進輸出；ledger 路徑由
+  `git rev-parse --git-common-dir` 解析（reviewer 抓到 r1 寫死 `.autopilot/run-ledger.jsonl`——主機上不存在，會靜默零作為）。
+  `docs/scripts-inventory.md` 列更新。
+- 測試：新 `hooks/tests/run-ledger-lease-gc.test.sh`（RED 先：死 pid＋心跳沉默＋worktree 不存在的 lease 在 base 仍被 carry；GREEN：
+  判死、carry 縮小、活 pid／活 flock／新心跳各自 skipped、`--dry-run` 不寫、`--json` 形狀）；`reap-dispatch-worktrees` 補 fixture ledger
+  在真實解析路徑的斷言。主機 dry-run：184 個 lease 全判死、0 skipped、62 s。
+- BACKLOG：stale leases 列 shipped；新 S 列「lease-gc 迴圈中 transition 失敗會中止且被 `|| true` 遮成零」（reviewer 🟡）。
+- 文件：`docs/plans/2026-09-19-blind-review-2d-overlap.md` 凍結 g2（plan hetero loop G1 4 blocker＋4 non-blocking、G2 3 blocker 全 R4
+  ＋4 non-blocking，全部 accept；證據 `docs/plans/evidence/2026-09-19-blind-review-2d-overlap/`）——後審 suite 與 panel 重疊、panel
+  snapshot 成為契約；下一步是兩個 managed campaign。「already-scrambled carry-only ledger segments」列重估 L。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.72 — 第二輪平行：三條 fired 列（managed rail 兩條＋cuda 回報的 backlog migration），三個 sonnet 工頭、各自 clone、grok hands
 
 - **A repair branch 由 rail 自己導出**（`src/engine/autopilot-engine.js`、`campaign-dispatch-projection.js`＋鏡像）：row 說的是

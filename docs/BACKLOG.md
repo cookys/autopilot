@@ -334,7 +334,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: plan 2026-09-16-blind-review-packet §3 (consult split A/B)
 - **Pointer**: docs/plans/2026-09-16-blind-review-packet.md
-- **Context**: `performReview` ~4812 + terminal site ~9692 (`baseSha: immutableBase`, `noReviewSpec`); `reviewDiff` return; `finalPanelSeatReceipt.packet_hash`; `FINAL_PANEL_SEAT_OPTIONAL_KEYS` (mixed presence rejected); receipt schema + mirror.
+- **Context**: `performReview` ~4812 + terminal site ~9692 (`baseSha: immutableBase`, `noReviewSpec`); `reviewDiff` return; `finalPanelSeatReceipt.packet_hash`; mixed-presence keys; 2-D D2 shipped v2.36.77
 
 ### Managed rail: ADJUDICATING / VERTICAL_VERIFICATION resumes still spend the Mission claim before the git-drift check
 - **Status**: open

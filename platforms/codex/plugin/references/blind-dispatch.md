@@ -407,10 +407,13 @@ false when a failure is unused). A roster that cannot satisfy families even if
 every seat returns is still refused before spend.
 
 **Snapshot at intake.** The first admitted intake writes `qc_panel_snapshot.json`
-beside the sealed contract (`O_EXCL`). Resume reads that file and never rewrites
-it; a live roster that drifted is recorded (`live_drift`) and ignored. The panel
-reviews the snapshot seats. Without a snapshot, the live roster is used
-byte-identically.
+beside the sealed contract (`O_EXCL`) immediately after a successful Mission
+claim — a rejected claim never produces a file, and there is no unlink path.
+Resume verifies the stored `digest` over the fields the file carries; identity
+or digest mismatch parks with `qc_panel_snapshot_drift` (non-blocking
+`live_drift` is unchanged). A live `qc_panel_seats_complete` flip is journaled
+(`qc_panel_snapshot_live_flip`) and the sealed station still runs. Without a
+snapshot, the live roster is used byte-identically.
 
 **Later cuts (not this deliverable):** 1b-B is the intake/resolver half; a
 configurable deny-list and cut 2 (verify-once, concurrent seats) remain open.

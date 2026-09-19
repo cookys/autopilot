@@ -409,6 +409,45 @@ function buildQcPanelSnapshot({
   return { ...body, digest: canonicalDigest(body) };
 }
 
+function snapshotDigestOf(snapshot) {
+  return canonicalDigest(qcPanelSnapshotIdentityBody(snapshot || {}));
+}
+
+function snapshotFieldDiffs(stored, live) {
+  const storedBody = qcPanelSnapshotIdentityBody(stored || {});
+  const liveBody = qcPanelSnapshotIdentityBody(live || {});
+  const names = new Set([...Object.keys(storedBody), ...Object.keys(liveBody)]);
+  const fields = [];
+  for (const name of names) {
+    if (JSON.stringify(storedBody[name]) !== JSON.stringify(liveBody[name])) {
+      fields.push(name);
+    }
+  }
+  return fields.sort();
+}
+
+function campaignJournalHasEvents(repo, campaignId, requestedLedgerPath) {
+  if (typeof campaignId !== 'string' || campaignId.length === 0) return false;
+  try {
+    const identity = canonicalRepoIdentity(repo);
+    const ledgerPath = requestedLedgerPath || campaignLedgerPathFor(identity);
+    if (!ledgerPath || !fs.existsSync(ledgerPath)) return false;
+    const text = fs.readFileSync(ledgerPath, 'utf8');
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (row && row.campaign_id === campaignId) return true;
+      } catch (_parseError) {
+        continue;
+      }
+    }
+    return false;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function step(owner, status, detail = {}) {
   return {
     owner,
@@ -2028,8 +2067,13 @@ function runCampaignIntake(input = {}, adapters = {}) {
     steps.push(probeStep);
   }
 
-  if (qcSeats && qcSeats.length > 0 && contractPath && rawContractDigest
-      && input.roster && input.roster.qc_panel_seats_complete === true) {
+  let pendingQcPanelSnapshot = null;
+  const snapPathCandidate = contractPath
+    ? path.join(path.dirname(contractPath), 'qc_panel_snapshot.json')
+    : null;
+  const snapshotExistsOnDisk = Boolean(snapPathCandidate && fs.existsSync(snapPathCandidate));
+  if (qcSeats && qcSeats.length > 0 && contractPath && rawContractDigest && input.roster
+      && (input.roster.qc_panel_seats_complete === true || snapshotExistsOnDisk)) {
     let sealedTicket = null;
     let snapshotCampaignId = null;
     try {
@@ -2068,26 +2112,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
       implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
       reviewStation: resolveReviewStation(input.roster),
     });
-    const snapPath = path.join(path.dirname(contractPath), 'qc_panel_snapshot.json');
-    try {
-      fs.writeFileSync(snapPath, `${JSON.stringify(liveSnapshot)}\n`, { flag: 'wx' });
-      qcPanelSnapshot = liveSnapshot;
-    } catch (error) {
-      if (!error || error.code !== 'EEXIST') {
-        const rejection = rejected(
-          'qc_panel_snapshot',
-          'qc_panel_snapshot_identity_invalid',
-          error && error.message ? error.message : String(error),
-        );
-        return {
-          status: 'blocked',
-          reason: rejection.reason,
-          rejection,
-          steps: [...steps, rejection],
-          pre_spend_no_effect_receipt: null,
-        };
-      }
-      let existing;
+    const snapPath = snapPathCandidate;
+    let existing = null;
+    if (fs.existsSync(snapPath)) {
       try {
         existing = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
       } catch (readError) {
@@ -2119,26 +2146,15 @@ function runCampaignIntake(input = {}, adapters = {}) {
           pre_spend_no_effect_receipt: null,
         };
       }
-      qcPanelSnapshot = existing;
     }
-    const driftLive = Object.prototype.hasOwnProperty.call(qcPanelSnapshot, 'review_station')
-      ? liveSnapshot
-      : buildQcPanelSnapshot({
-        campaignId: snapshotCampaignId,
-        contractDigest: rawContractDigest,
-        seats: qcSeats,
-        minPanelSize: minSize,
-        requiredReviewFamilies: requiredFamilies,
-        implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
-      });
-    const liveDrift = qcPanelSnapshot.digest !== driftLive.digest;
-    steps.push(step('qc_panel_snapshot', 'ready', {
-      digest: qcPanelSnapshot.digest,
-      seat_count: Array.isArray(qcPanelSnapshot.seats) ? qcPanelSnapshot.seats.length : 0,
-      path: snapPath,
-      review_station: qcPanelSnapshot.review_station === 'panel' ? 'panel' : 'single',
-      ...(liveDrift ? { live_drift: driftLive.digest } : {}),
-    }));
+    pendingQcPanelSnapshot = {
+      liveSnapshot,
+      snapPath,
+      snapshotCampaignId,
+      existing,
+      requiredFamilies,
+      minSize,
+    };
   }
 
   if (typeof adapters.missionClaim === 'function'
@@ -2299,6 +2315,167 @@ function runCampaignIntake(input = {}, adapters = {}) {
       steps,
       pre_spend_no_effect_receipt: null,
     }, stranded);
+  }
+
+  if (pendingQcPanelSnapshot) {
+    const {
+      liveSnapshot,
+      snapPath,
+      snapshotCampaignId,
+      requiredFamilies,
+      minSize,
+    } = pendingQcPanelSnapshot;
+    let existing = pendingQcPanelSnapshot.existing;
+    if (!existing && !fs.existsSync(snapPath)) {
+      const hasPostClaimEvents = campaignJournalHasEvents(
+        repo,
+        snapshotCampaignId,
+        requestedLedgerPath,
+      );
+      if (hasPostClaimEvents) {
+        const rejection = rejected(
+          'qc_panel_snapshot',
+          'qc_panel_snapshot_missing_after_claim',
+          'qc_panel_snapshot missing after a held Mission claim',
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [...steps, rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+      try {
+        fs.writeFileSync(snapPath, `${JSON.stringify(liveSnapshot)}\n`, { flag: 'wx' });
+        qcPanelSnapshot = liveSnapshot;
+      } catch (error) {
+        if (!error || error.code !== 'EEXIST') {
+          const rejection = rejected(
+            'qc_panel_snapshot',
+            'qc_panel_snapshot_identity_invalid',
+            error && error.message ? error.message : String(error),
+          );
+          return {
+            status: 'blocked',
+            reason: rejection.reason,
+            rejection,
+            steps: [...steps, rejection],
+            pre_spend_no_effect_receipt: null,
+          };
+        }
+        try {
+          existing = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
+        } catch (readError) {
+          const rejection = rejected(
+            'qc_panel_snapshot',
+            'qc_panel_snapshot_identity_invalid',
+            readError.message || String(readError),
+          );
+          return {
+            status: 'blocked',
+            reason: rejection.reason,
+            rejection,
+            steps: [...steps, rejection],
+            pre_spend_no_effect_receipt: null,
+          };
+        }
+      }
+    } else if (!existing && fs.existsSync(snapPath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
+      } catch (readError) {
+        const rejection = rejected(
+          'qc_panel_snapshot',
+          'qc_panel_snapshot_identity_invalid',
+          readError.message || String(readError),
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [...steps, rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+    }
+    if (existing) {
+      if (!existing.campaign_id || existing.campaign_id !== snapshotCampaignId
+          || existing.contract_digest !== rawContractDigest) {
+        const rejection = rejected(
+          'qc_panel_snapshot',
+          'qc_panel_snapshot_identity_invalid',
+          'qc_panel_snapshot campaign_id/contract_digest do not match the sealed contract',
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [...steps, rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+      const storedDigest = typeof existing.digest === 'string' ? existing.digest : '';
+      const recomputedDigest = snapshotDigestOf(existing);
+      if (storedDigest !== recomputedDigest) {
+        const driftLive = Object.prototype.hasOwnProperty.call(existing, 'review_station')
+          ? liveSnapshot
+          : buildQcPanelSnapshot({
+            campaignId: snapshotCampaignId,
+            contractDigest: rawContractDigest,
+            seats: qcSeats,
+            minPanelSize: minSize,
+            requiredReviewFamilies: requiredFamilies,
+            implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
+          });
+        const rejection = rejected(
+          'qc_panel_snapshot',
+          'qc_panel_snapshot_drift',
+          'qc_panel_snapshot digest does not match the fields the file carries',
+          {
+            fields: snapshotFieldDiffs(existing, driftLive),
+            stored_digest: storedDigest,
+            recomputed_digest: recomputedDigest,
+          },
+        );
+        return {
+          status: 'blocked',
+          reason: rejection.reason,
+          rejection,
+          steps: [...steps, rejection],
+          pre_spend_no_effect_receipt: null,
+        };
+      }
+      qcPanelSnapshot = existing;
+    }
+    const driftLive = Object.prototype.hasOwnProperty.call(qcPanelSnapshot, 'review_station')
+      ? liveSnapshot
+      : buildQcPanelSnapshot({
+        campaignId: snapshotCampaignId,
+        contractDigest: rawContractDigest,
+        seats: qcSeats,
+        minPanelSize: minSize,
+        requiredReviewFamilies: requiredFamilies,
+        implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
+      });
+    const liveDrift = qcPanelSnapshot.digest !== driftLive.digest;
+    const sealedOnResume = !pendingQcPanelSnapshot.existing
+      && input.resume === true
+      && qcPanelSnapshot === liveSnapshot;
+    steps.push(step('qc_panel_snapshot', 'ready', {
+      digest: qcPanelSnapshot.digest,
+      seat_count: Array.isArray(qcPanelSnapshot.seats) ? qcPanelSnapshot.seats.length : 0,
+      path: snapPath,
+      review_station: qcPanelSnapshot.review_station === 'panel' ? 'panel' : 'single',
+      ...(liveDrift ? { live_drift: driftLive.digest } : {}),
+      ...(sealedOnResume ? { sealed_on_resume: true } : {}),
+    }));
+    if (sealedOnResume) {
+      steps.push(step('qc_panel_snapshot_sealed_on_resume', 'ready', {
+        path: snapPath,
+        digest: qcPanelSnapshot.digest,
+      }));
+    }
   }
 
   const releaseAfterRejection = (rejection) => {

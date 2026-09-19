@@ -704,8 +704,11 @@ function validateReviewRoster(roster, options = {}) {
   if (!Number.isSafeInteger(roster.min_panel_size) || roster.min_panel_size < 1) {
     throw new TypeError('managed review roster min_panel_size must be an integer >= 1');
   }
-  if (roster.qc_panel_seats_complete !== true) {
+  if (roster.qc_panel_seats_complete !== true && options.allowIncompleteQcSeats !== true) {
     throw new TypeError('managed review roster requires complete exact QC seat metadata');
+  }
+  if (roster.qc_panel_seats_complete !== true && options.allowIncompleteQcSeats === true) {
+    return roster;
   }
   if (!Array.isArray(roster.qc_panel_seats)
       || roster.qc_panel_seats.length < roster.min_panel_size) {
@@ -7096,10 +7099,22 @@ class AutopilotEngine {
       verificationEnvAllowlist,
     );
     const jointReviewRosterDigest = campaignCanonicalDigest(roster);
-    const snapshotStation = campaignControl && campaignControl.qc_panel_snapshot
-      && campaignControl.qc_panel_snapshot.review_station === 'panel'
+    const sealedSnapshot = campaignControl && campaignControl.qc_panel_snapshot
+      && typeof campaignControl.qc_panel_snapshot === 'object'
+      && !Array.isArray(campaignControl.qc_panel_snapshot)
+      ? campaignControl.qc_panel_snapshot
+      : null;
+    const snapshotStation = sealedSnapshot && sealedSnapshot.review_station === 'panel'
       ? 'panel'
       : 'single';
+    if (sealedSnapshot
+        && Object.prototype.hasOwnProperty.call(sealedSnapshot, 'review_station')
+        && (roster.qc_panel_seats_complete === true) !== (snapshotStation === 'panel')) {
+      ledger.push(this.ledgerEntry('qc_panel_snapshot_live_flip', 'noted', this.now(), {
+        sealed_station: snapshotStation,
+        live_seats_complete: roster.qc_panel_seats_complete === true,
+      }));
+    }
     const composition = this.campaignComposer({
       maxRepairGenerations,
       minPanelSize: roster.min_panel_size,
@@ -9465,7 +9480,15 @@ class AutopilotEngine {
     }
 
     try {
-      validateReviewRoster(roster, { requireTerminalPanel: campaignRequested });
+      const rosterOpts = { requireTerminalPanel: campaignRequested };
+      if (campaignRequested && typeof input.campaignContract === 'string') {
+        const contractAbs = path.isAbsolute(input.campaignContract)
+          ? input.campaignContract
+          : path.resolve(loopCwd, input.campaignContract);
+        const sealedSnap = path.join(path.dirname(contractAbs), 'qc_panel_snapshot.json');
+        if (fs.existsSync(sealedSnap)) rosterOpts.allowIncompleteQcSeats = true;
+      }
+      validateReviewRoster(roster, rosterOpts);
       validateImplementerRoster(roster);
     } catch (error) {
       const startedAt = this.now();

@@ -3044,8 +3044,9 @@ assert_contains "$INTAKE_OUT" \
   "ordered=mission,provider_readiness,context_window,worktree_lifecycle,campaign_generation" \
   "intake adapters execute in the frozen owner order"
 assert_contains "$INTAKE_OUT" \
-  "step_order=qc_panel_snapshot,mission,campaign_contract,provider_readiness,context_window,worktree_lifecycle,campaign_generation" \
+  "step_order=mission,qc_panel_snapshot,campaign_contract,provider_readiness,context_window,worktree_lifecycle,campaign_generation" \
   "contract validation occupies the third intake slot"
+# RED at base df26dbe8: step_order=qc_panel_snapshot,mission,... (snapshot written before claim)
 assert_contains "$INTAKE_OUT" "admitted=admitted" "valid ordered intake admits"
 assert_contains "$INTAKE_OUT" "full_enforcement=true" "all-known injected axes advertise full enforcement"
 assert_contains "$INTAKE_OUT" "unpaired_code=mission_adapter_pair_required" \

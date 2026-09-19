@@ -108,16 +108,17 @@ if expected_error_substr != \"null\":
 else:
     check_val(\"error\", None)
 
-# Verify forbidden values are absent from the entire raw JSON string
-raw_json = sys.argv[1]
+# Forbidden-substring scan covers full captured stdout+stderr (argv[8]), not
+# only the last JSON object line. Shape checks above parse json_line.
+raw_scan = sys.argv[8]
 for val in forbidden_values:
-    if val and val in raw_json:
+    if val and val in raw_scan:
         errors.append(f\"Forbidden value {chr(39)}{val}{chr(39)} found in result JSON\")
 
 if errors:
     print(\"; \".join(errors))
     sys.exit(1)
-" "$json_line" "$status" "$endpoint" "$path" "$forbidden" "$raw_log_null" "$error_substr" 2>&1)"
+  " "$json_line" "$status" "$endpoint" "$path" "$forbidden" "$raw_log_null" "$error_substr" "$out" 2>&1)"
   assert_eq "0" "$?" "JSON validation failed: $PY_OUT"
 }
 

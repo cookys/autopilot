@@ -950,3 +950,42 @@ IS the engine or a runner has this shape.
 - **A missing artefact during a run is a fact to explain, not to file.** The absence of the
   shared directory was visible during the run; the explanation (which engine ran) was one
   `ps` and one path away, and it changed what the evidence README could honestly claim.
+
+## 39. A brief that changes a rail's output contract must list the contract's consumers before it lists its tests
+
+**2026-09-19, v2.36.71, unit D.** The brief made `dispatch-author.sh` demand a nonce-keyed frame in
+the runner's output. Its Verify block listed six suites — the author's, the schema's, the two
+downstream consumers the author knew about. Eight sibling suites drive `dispatch-author.sh` with
+fake runners that print unframed text; every one went red, and none was in the brief. The §37
+sweep caught them after the fact, at the price of two more hand rounds and a shared fixture
+helper written under time pressure.
+
+- **Run the §37 consumer grep while WRITING the brief, not after the merge.** If the change
+  alters what a rail emits or accepts, `grep -l <rail-name> hooks/tests/*.test.sh` is the Verify
+  block, and the fake runners in those suites are part of the deliverable.
+- **A fixture that fakes the rail's counterpart must be updated by the same hand that changed
+  the contract.** Leaving it to a later round splits one change across two reviewers who each
+  see half of it.
+
+## 40. A sweep loop that reads its list from stdin hands the list to the suites
+
+**2026-09-19, v2.36.71.** `while read -r s; do bash "$s"; done < list` ran 13 of 71 suites and
+reported DONE: the first suite that read stdin consumed the remaining 58 lines. Nothing failed;
+the tally simply had 13 rows where 71 were expected, and the count was the only tell.
+
+- **Every child in a `while read` loop gets `< /dev/null`.** Suites spawn processes that read
+  stdin (engine CLIs, `node -e`, interactive fallbacks); assume they will.
+- **A sweep's row count is an assertion.** Compare it to the list length before reading the
+  verdicts; a short tally is a broken sweep, not a fast one.
+
+## 41. A hand-created test file is not a test until it is executable
+
+**2026-09-19, v2.36.71, unit A.** Two new `*.test.sh` suites were committed as 100644.
+They passed when invoked as `bash <file>` (every verify command did) and `run.sh` refused the
+whole L2 layer — surfacing as an unrelated suite (`suite-oracle-lock`) going red in the sweep,
+two hops from the cause.
+
+- **`test -x` on every new `*.test.sh` belongs in the hand prompt's Verify block**, next to the
+  suite itself; `bash <file>` cannot see the mode bit.
+- **The rail's own runner (`run.sh <filter>`) is the verify command for a new suite**, because
+  it enforces the rules `bash <file>` does not — mode, name pattern, registration.

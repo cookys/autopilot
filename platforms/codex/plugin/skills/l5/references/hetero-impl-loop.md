@@ -258,6 +258,20 @@ turned one unit into an escalation); unit names must be globally unique (the dis
 directory is shared). Fetch the hands' branches into the main checkout only after EVERY foreman has returned `rc=` (a fetch is a ref change, i.e. `main_checkout_mutated` for a still-running rail). After the merge, run the consumer sweep of `references/evidence-discipline.md` §37.
 Full recipe, brief template and receipts: `docs/plans/evidence/2026-09-18-parallel-kimi-foremen/`.
 
+**Sonnet foremen as Agent subagents (measured 2026-09-19, v2.36.71: six units, 15 hand commits, ~3 h wall incl. two sweep-driven fixture rounds).**
+Same clone-per-unit shape, but the foreman is a `sonnet` Agent subagent of the depth-0 session rather than `dispatch-foreman.sh`
+(kimi-only). What the brief must then carry: the hand dispatch runs with the Bash tool's `run_in_background: true` (a 40-min
+foreground call hits the tool timeout) paired with a background dead-man (`sleep N; echo WAKE-<unit>`) started in the SAME turn,
+and the foreman ends its turn — on any wake it checks `rc=` in the dispatch stderr, else waits once more via
+`wait-dispatch-results.js --timeout 500`; every rail call is prefixed `env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID`
+so the hand's suites cannot read the depth-0 marker; `dispatch-model-guard` needs `Engine: sonnet` as the prompt's first line;
+`foreman-guard`'s 40-call cap is live. The depth-0 l5 marker never applies to the clones (`repo_root` mismatch → INACTIVE), which
+is what lets hands run without a sealed campaign — and it also means the marker cannot be cleared through the l5 receipt path;
+degrade it (`set --level l3 --entry-level l5 --fallback precondition_failed`) and clear. Engine units must add cases in NEW
+suite files (not appended to a shared suite — three EOF appends = a certain cherry-pick conflict) and the brief's Verify must
+include `test -x` on each new `*.test.sh` and every consumer suite of a changed output contract (evidence-discipline §39–41).
+Receipts: `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`.
+
 ## Degradation
 
 `--solo` → fall back to the `/l3` inline engine. This is also the automatic

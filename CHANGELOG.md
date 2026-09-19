@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.36.75 — Fix：strict-contract preflight 拒收 controller 的 remaining-wall `--timeout`（v2.36.71 A 的消費者）
+
+- 2-D D2 campaign intake admitted 後 1 秒在 `dispatch_implementation` `precondition_failed`：v2.36.71 A 讓 managed 派工帶
+  `--timeout <剩餘 wall>s`（7199s），`scripts/dispatch-hetero.sh:1162-1169` 嚴格契約 preflight 要求 caller `--timeout` **等於**
+  `contract budget.wall_seconds`（7200s）→ 每個 strict campaign 都起不來。等於規則的目的是不讓 caller 延長 sealed wall；controller
+  給的較短 deadline 正是剩餘預算。
+- `scripts/dispatch-hetero.sh`（＋鏡像）：`--timeout ≤ wall` 接受並採 caller 值、`> wall` 才拒（訊息改 `exceeds`）、省略仍＝contract wall；
+  結果 JSON 新增 `timeout_seconds`／`timeout_source: contract_wall|caller_within_wall`。`hooks/tests/dispatch-hetero-contract.test.sh`
+  四案（較短接受／相等接受／較長拒／省略＝wall，RED 註記 base 訊息）。
+- 與 v2.36.74 同一族教訓：契約變更的消費者不只 `hooks/tests`——`src/readiness/live-probe.js` 吃 author frame、`dispatch-hetero.sh`
+  嚴格 preflight 吃 engine 的 argv；§39 的消費者 grep 要含 `src/` 與 `scripts/`。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.74 — Fix：strict /l5 provider readiness probe 被 claude-native 拒答（v2.36.71 author frame 的消費者）
 
 - 2-D D2 campaign 在 intake 前就 `provider_readiness … strict_l5_provider_not_ready`：readiness live probe 經 `dispatch-author.sh`

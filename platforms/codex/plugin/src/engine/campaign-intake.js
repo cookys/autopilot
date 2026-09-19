@@ -2461,4 +2461,5 @@ module.exports = {
   releaseCampaignAdmission,
   runCampaignIntake,
   verifyResumeCandidate,
+  claimCampaignGeneration: defaultGenerationClaim,
 };

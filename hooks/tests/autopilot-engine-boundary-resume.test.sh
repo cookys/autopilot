@@ -142,6 +142,7 @@ const red = new AutopilotEngine({
   roster,
   campaignContract: fxRed.contractPath,
   campaignSeal: fxRed.sealPath,
+  resume: true,
 });
 console.log(`red_status=${red.status}`);
 console.log(`red_reason=${red.reason}`);

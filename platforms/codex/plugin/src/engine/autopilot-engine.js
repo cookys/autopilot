@@ -9809,6 +9809,7 @@ class AutopilotEngine {
     ]);
     const boundaryRejectedNoCandidate = campaignControl
       && campaignControl.status === 'admitted'
+      && input.resume === true
       && (campaignControl.initial_state.phase === CAMPAIGN_STATES.BOUNDARY_REJECTED
         || campaignControl.initial_state.phase === 'boundary_rejected')
       && !durableResumeCandidate;
@@ -9840,7 +9841,7 @@ class AutopilotEngine {
         status: 'rejected',
         code: 'campaign_resume_phase_unsupported',
         reason: `campaign resume from ${campaignControl.initial_state.phase} cannot dispatch implementation`,
-      }
+      };
       const terminalFailure = this.terminalizeManagedCampaignFailure({
         campaignControl,
         reason: rejection.reason,

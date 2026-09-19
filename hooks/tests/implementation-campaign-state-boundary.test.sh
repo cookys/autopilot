@@ -247,6 +247,45 @@ const withCandidate = reduceCampaignState(startedOnly, event(
 ));
 assert.strictEqual(withCandidate.phase, S.BOUNDARY_REJECTED);
 console.log('reducer_accepts_git_candidate=true');
+
+const reviewing = reduceCampaignState(withCandidate, event(
+  E.VERTICAL_VERIFIED,
+  0,
+  { passed: true, evidence_digest: D },
+  {
+    input: withCandidate.last_output_artifact_digest,
+    output: canonicalDigest({ k: 'vertical' }),
+    stage: 'campaign-verification:0',
+  },
+));
+assert.strictEqual(reviewing.phase, S.REVIEWING);
+console.log('boundary_vertical_verified=REVIEWING');
+
+let preparedRefuse = null;
+try {
+  reduceCampaignState(reducerOnly, event(
+    E.VERTICAL_VERIFIED,
+    0,
+    { passed: true, evidence_digest: D },
+    { input: reducerOnly.last_output_artifact_digest, output: canonicalDigest({ k: 'vv-p' }) },
+  ));
+} catch (error) {
+  preparedRefuse = error instanceof CampaignStateError ? error.code : String(error);
+}
+assert.strictEqual(preparedRefuse, 'INVALID_TRANSITION');
+let implementingRefuse = null;
+try {
+  reduceCampaignState(startedOnly, event(
+    E.VERTICAL_VERIFIED,
+    0,
+    { passed: true, evidence_digest: D },
+    { input: startedOnly.last_output_artifact_digest, output: canonicalDigest({ k: 'vv-i' }) },
+  ));
+} catch (error) {
+  implementingRefuse = error instanceof CampaignStateError ? error.code : String(error);
+}
+assert.strictEqual(implementingRefuse, 'INVALID_TRANSITION');
+console.log(`vertical_verified_refusals=${preparedRefuse},${implementingRefuse}`);
 NODE
 )"
 PURE_EXIT=$?
@@ -258,3 +297,7 @@ assert_contains "$PURE_OUT" "wrong_digest=BOUNDARY_EVIDENCE_REQUIRED" \
   "wrong boundary digest is still refused"
 assert_contains "$PURE_OUT" "reducer_accepts_git_candidate=true" \
   "reducer accepts BOUNDARY_REJECTED with git_candidate"
+assert_contains "$PURE_OUT" "boundary_vertical_verified=REVIEWING" \
+  "BOUNDARY_REJECTED + vertical_verified advances to REVIEWING"
+assert_contains "$PURE_OUT" "vertical_verified_refusals=INVALID_TRANSITION,INVALID_TRANSITION" \
+  "vertical_verified from PREPARED and IMPLEMENTING is still refused"

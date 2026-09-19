@@ -1,6 +1,6 @@
 'use strict';
 
-const { canonicalDigest } = require('./campaign-verification');
+const { canonicalDigest, createWriterFence } = require('./campaign-verification');
 // The durable reducer recomputes output_artifact_digest with ITS canonicalDigest.
 // Any digest this module hands the journal as an artifact reference must be built
 // with the same helper — never a second implementation that merely looks alike.
@@ -346,26 +346,38 @@ function boundaryGitCandidate({ mutation, input, campaignId }) {
   if (!treeSha || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(treeSha)) return null;
   let fence = isObj(mutation.writer_fence) ? mutation.writer_fence : null;
   if (!fence) {
-    const fenceBody = {
-      schema_version: 1,
-      artifact_type: 'implementation_campaign_writer_fence',
-      campaign_id: campaignId,
-      stage_identity: 'campaign-implementation',
-      candidate_commit: commit,
-      candidate_tree_sha: treeSha,
-      status: 'closed',
-      evidence_mode: 'dispatch_exit',
-      closure_evidence_digest: reducerCanonicalDigest({
-        exit_status: 1,
-        signal: null,
-        candidate_commit: commit,
-        boundary: true,
-      }),
+    const raw = isObj(mutation.raw) ? mutation.raw : mutation;
+    const fenceInput = {
+      campaignId,
+      stageIdentity: 'campaign-implementation',
+      candidateCommit: commit,
+      candidateTreeSha: treeSha,
+      implementationResult: raw,
     };
-    fence = {
-      ...fenceBody,
-      receipt_digest: reducerCanonicalDigest(fenceBody),
-    };
+    try {
+      fence = createWriterFence(fenceInput);
+    } catch (_direct) {
+      const impl = isObj(raw.implementation) ? raw.implementation : null;
+      const transport = isObj(raw.implementationResult) ? raw.implementationResult : null;
+      if (!impl || !transport
+          || transport.error
+          || transport.signal
+          || transport.status !== 0) {
+        return null;
+      }
+      try {
+        fence = createWriterFence({
+          ...fenceInput,
+          implementationResult: {
+            status: 'committed',
+            implementation: { ...impl, commit },
+            implementationResult: transport,
+          },
+        });
+      } catch (_closed) {
+        return null;
+      }
+    }
   }
   try {
     return normalizeCampaignArtifactReference({

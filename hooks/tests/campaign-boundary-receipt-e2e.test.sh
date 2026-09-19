@@ -241,7 +241,7 @@ function runScenario(fx, options = {}) {
       return { status: 'released' };
     },
     implementationDispatcher() {
-      return transport(boundaryDispatchResult(fx), 1);
+      return transport(boundaryDispatchResult(fx), 0);
     },
     ...(options.campaignEventAppender
       ? { campaignEventAppender: options.campaignEventAppender }
@@ -407,11 +407,29 @@ try {
 assert.strictEqual(refusedCode, 'BOUNDARY_EVIDENCE_REQUIRED');
 console.log(`a_negative_control=${refusedCode}`);
 
-const resumeCandidateBound = intake.verifyResumeCandidate({
-  projection,
+execFileSync('bash', [
+  path.join(root, 'scripts', 'run-ledger.sh'),
+  'stage-transition',
+  '--ledger', fxA.ledger,
+  '--run-id', fxA.campaignId,
+  '--stage', 'campaign',
+  '--generation', String(fxA.campaignControl.generation_claim.generation),
+  '--nonce', fxA.campaignControl.generation_claim.nonce,
+  '--to-state', 'dead',
+  '--idempotency-key', `e2e-park:${fxA.campaignId}`,
+], { cwd: fxA.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const claimed = intake.claimCampaignGeneration({
+  campaignId: fxA.campaignId,
+  contractDigest: fxA.campaignControl.contract_digest,
+  initialState: preparedStateA,
+  ledgerPath: fxA.ledger,
   repo: fxA.repo,
+  resume: true,
+  observedAt: '2026-08-30T00:00:05.000Z',
   base: fxA.base,
 });
+assert.strictEqual(claimed.status, 'claimed', JSON.stringify(claimed));
+const resumeCandidateBound = claimed.resume_candidate;
 assert.notStrictEqual(resumeCandidateBound, null);
 assert.strictEqual(resumeCandidateBound.commit, fxA.candidate);
 console.log(`a_resume_candidate=${resumeCandidateBound !== null}`);

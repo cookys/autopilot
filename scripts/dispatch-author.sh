@@ -1297,8 +1297,10 @@ fi
 # Positive completion predicate for non-codex runners: exactly one derived BEGIN
 # and one END (dispatch-review locator family, including grok glued-preamble split
 # and duplicate-BEGIN handling). Missing/incomplete frame or tool-narration inside
-# the frame ⇒ truncated/5. Codex transport is skipped — its checks stay below.
-if [[ "${CODEX_TRANSPORT:-0}" -ne 1 ]]; then
+# the frame ⇒ truncated/5. Gated on the same RUNNER != codex condition as wrap
+# so --runner codex without CODEX_TRANSPORT is not classified truncated, and a
+# non-codex runner with CODEX_TRANSPORT=1 still strips the frame.
+if [[ "$RUNNER" != "codex" ]]; then
   PARSE_INPUT="$RAW_LOG"
   AUTHOR_PARSE_FILE="$(mktemp -t dispatch-author-parse-XXXXXX)"
   tr -d '\r' < "$RAW_LOG" | sed '/^Script started on /d; /^Script done on /d' > "$AUTHOR_PARSE_FILE"
@@ -1322,7 +1324,7 @@ if [[ "${CODEX_TRANSPORT:-0}" -ne 1 ]]; then
   FRAME_CLOSE_FILE="$(mktemp -t dispatch-author-frame-close-XXXXXX)"
   CHROME_MAX_LINES="${AUTOPILOT_AUTHOR_CHROME_MAX_LINES:-200}"
   CHROME_MAX_BYTES="${AUTOPILOT_AUTHOR_CHROME_MAX_BYTES:-65536}"
-  set +e
+  PARSE_RC=0
   awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
       -v chrome_max_lines="$CHROME_MAX_LINES" -v chrome_max_bytes="$CHROME_MAX_BYTES" \
       -v close_file="$FRAME_CLOSE_FILE" '
@@ -1381,9 +1383,7 @@ if [[ "${CODEX_TRANSPORT:-0}" -ne 1 ]]; then
         print (pending_close ? "begin-marker" : "end-marker") > close_file
       }
     }
-  ' "$PARSE_INPUT" > "$AUTHOR_BLOCK_FILE"
-  PARSE_RC=$?
-  set -e
+  ' "$PARSE_INPUT" > "$AUTHOR_BLOCK_FILE" || PARSE_RC=$?
   rm -f "$FRAME_CLOSE_FILE"
   if [ "$PARSE_RC" -ne 0 ]; then
     case "$PARSE_RC" in

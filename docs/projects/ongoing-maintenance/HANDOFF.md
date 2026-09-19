@@ -1,44 +1,34 @@
 ## 目標
-接續 autopilot 維護。本 session 出貨 v2.36.71、v2.36.72、v2.36.73（lease-gc；主機 184 個死 lease 已回收，live segment 2.5 MB→259 KB）（第二輪：repair branch 由 rail 導出、backlog table migration 三缺陷、被拒 intake 的 stranded_claim；consult 裁定永不自動 release）：`/next` 排出的七條 fired BACKLOG 列以六個 sonnet 工頭（Agent 子代理）平行修掉，
-另關兩條狀態過時的列、新增一條 S 列（impl dispatch timeout floor）。教訓已 land（evidence-discipline §39–41、l5 recipe
-「Parallel units」加 sonnet 工頭段）。沒有進行中的工作；下一步由 `/next` 決定。
+接續 autopilot 維護。2026-09-19～20 本 session 出貨 v2.36.71–v2.36.74；2-D plan 凍結 g2；**2-D D2 managed campaign 進行中，卡在第二個 rail 缺陷，修補 hand 正在跑**。Context 到 T2 才寫這份。
 
-## 現況
-- branch `develop`，release commits `2263ab90`（v2.36.71）、`11eeaa5c`（v2.36.72）、`85cf69b2`（v2.36.73）已 push；之上只有 docs commit。
-- 2-D plan `docs/plans/2026-09-19-blind-review-2d-overlap.md` 已凍結 g2（兩個 deliverable：D1 verify-panel-overlap L、D2 snapshot-contract S）；下一步是 /l5 managed campaign，先 `mission-terminal-reconcile.js legacy --graph-digest` 換 graph（routing 仍指 2-C packet graph）。
-  push 前 `git fetch`——roundtable session 仍在推文件。
-- marker 已清（`session-mode.js` 以 `set --level l3 --entry-level l5 --fallback precondition_failed` 降級後 `clear`：平行 clone rail
-  沒有 managed campaign，l5 receipt 路徑不可得）；`git worktree list` 只剩主 checkout＋別人的 `7ef6560a…/baseline`；
-  `/home/cookys/projects/autopilot-par2/` 已刪；`/tmp` 無 `par3`／hetero-hands-par3 殘留；dispatch-run manifests 已刪。
-- routing 仍指 packet graph（digest `4e4a8299…`）；mission state 停 ACTIVE（先例同前）。
-- 四席 qc pin 不變。`stash@{0}`（別的 session）別動。
-- 主機 run.sh 紅名單（16/358，全部 base 既有）：`docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/full-run-summary.txt`；
-  BACKLOG `run.sh` 列 Context 指向它。autopilot-cli／provider-readiness-consumer 兩條已從紅名單消失。
+## 現況（2026-09-20，HEAD `8dc1814e` = v2.36.74 已 push）
+- **l5 marker ACTIVE**（session `38a23a44…`，repo_root 主 checkout，graph digest `9ad752a5…`）——新 session 接手要先 `node scripts/session-mode.js status`；marker 綁舊 session id，新 session 的 marker 會是另一個檔；同 repo 兩個 ACTIVE marker 會被 bridge 擋（recipe 6）。處置：舊 marker 由新 session 用 `set --level l3 --entry-level l5 --fallback precondition_failed` 無法碰（不同 session id）——直接 `session-mode.js retire --session 38a23a44-ca0a-4350-96bd-315ba7dd269d --integration-receipt <receipt>` 需要 integration receipt（沒有），所以：**等它 24h 過期（2026-09-20T~15:30Z）或以同 session id 環境變數 `AUTOPILOT_SESSION_ID=38a23a44-ca0a-4350-96bd-315ba7dd269d node scripts/session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed && … clear`**（marker 路徑由 session id 派生，見 `session-mode.js getSessionId`）。
+- routing → 2-D D2 graph（`docs/mission-blind-review-2d-snapshot-2026-09-19-*.json`，commit `28f9ce82`），legacy reconcile 已綁；`mission prepare` 收據 `/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/d2/prepared.json`（scratchpad，session 專屬——新 session 要重跑 prepare，同 adoption key 會 adopted=true）。
+- D2 attempt-1：grant claim `claim-v1-b88565b9…`，run1 在 provider_readiness 被擋（rail 缺陷 → v2.36.74 修）；run2 intake **admitted** 後在 dispatch_implementation `precondition_failed`：`caller --timeout (7199s) disagrees with contract budget.wall_seconds (7200s)`（v2.36.71 A 的 remaining-wall `--timeout` 撞上 dispatch-hetero 嚴格契約的「等於」規則），claim 已 `campaign_admission_release` 釋放。attempt 1 已消耗；下一次 grant = attempt 2（budget 6）。
+- **修補 hand 在跑**：clone `/home/cookys/projects/autopilot-par6-timeout`（shadow commit 之上），branch `hands/par7/timeout`，brief `/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/par7/hand-timeout.md`，結果 `/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/par7/timeout.dispatch.json`（`rc=` 在 `.err` 末行）。修法：dispatch-hetero.sh:1162-1169 改「caller --timeout ≤ wall 接受、> wall 拒」。落地流程同 v2.36.74：fable review（`dispatch-review.sh --runner claude-native --model claude-fable-5-1`，spec 第一行寫 NO tools）→ cherry-pick 進 develop → 套件（dispatch-hetero-contract、dispatch-hetero、dispatch-contract；在 marker 下會紅的 suite 到 clone 裡跑）→ v2.36.75 release（trailer 同前）→ push → 刪 clone（mv 到 /tmp 再 rm）。
+- 然後 D2：`mission grant --repo . --prepared <prepared> --node snapshot-contract` → 新 contract/seal/branch（`…-a2`）→ 改 `/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/d2/dispatch.sh` 的 contract/seal/branch/root_run_id → 跑。brief `/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/d2/impl-brief.md`（6.9 KB，base 寫 `28f9ce82`——attempt 2 的 base_sha 會是新 HEAD，brief 開頭那個 base 要改）。base suites 在 28f9ce82 10/10 綠（`/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/d2/base-suites.txt`）；新 base 要重跑 `/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/d2/suites.sh <sha> <out>`。
+- 兩個 rail 缺陷都是 v2.36.71 契約變更的**非 test 消費者**（`src/readiness/live-probe.js` 吃 dispatch-author frame；`dispatch-hetero.sh` 嚴格 preflight 吃 engine 的 `--timeout`）——§39 的消費者 grep 要含 `src/` 與 `scripts/`，不只 `hooks/tests`。寫進 evidence-discipline 時當 §42。
+- 其他：cuda 已收 v2.36.72 回覆；四席 qc pin 不變；`stash@{0}` 別動；主機 run.sh 紅名單見 v2.36.71 evidence；另一個 session 在這台跑真 grok dispatch（strikes.jsonl 42–44）。
 
 ## 已決事項(不重議)
-- sonnet 工頭拓樸（clone-per-unit、`run_in_background`＋死人開關、`env -u CLAUDE_CODE_SESSION_ID`、marker 不管 clone、
-  engine unit 開新 suite 檔）已寫進 l5 recipe；下次同形直接抄 `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/common.md`。
-- 改 rail 輸出契約的 brief，Verify 必含 §37 消費者 grep 的全部 suite＋新 `*.test.sh` 的 `test -x`（§39／§41）。
-- 消費者 sweep 迴圈每個子行程 `< /dev/null`，row 數要對 list 長度（§40）。
+- 2-D 走兩個 lineage：D2（S）先、D1（L）後；D1 是新 lineage（amend intent.objective、新 graph、同 plan bytes）。
+- D2 brief 已定稿（寫在 claim 後、EEXIST digest 重算列漂移欄位、claim-held-no-file 規則、live flip journal；只有兩條既有斷言可改）。
+- rail 缺陷一律 Fix 版釋出再重派，不繞。
 
 ## 下一步
-1. `/next` → 預期推 2-D D2（S）或 D1（L）的 managed campaign；或 ledger reader-recovery plan。fired 列已清到只剩 L：`run.sh` 紅（名單在 v2.36.71 evidence full-run-summary）、carry-only ledger segments（重估 L，需自己的 plan＋hetero loop）、
-   Domain-aware routing（前提未齊）；未 fired 的 S：timeout floor、opencode usage、arm strike threshold（dated）。候選新工作：2-D plan、ledger recovery plan。
-   cuda 已收到 v2.36.72 的回覆（msg_01M2X07C31ER0MN123YZ30JQMY），等它重跑 revival.3d dry-run。
-2. 下一個 managed campaign：記 packet-once live 證明（2-C README 一行）＋ A 的 `wall_expired`／C 的 `repair_round_fits` 第一次 live 觀察。
+1. 等 `/tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/par7/timeout.dispatch.err` 出 `rc=` → 上述落地流程 → v2.36.75。
+2. attempt 2 → 跑到 awaiting_disposition／converged；disposition 用 `--resume --campaign-disposition-authority`（recipe 9）；先算剩餘 wall 塞不塞 repair 輪。
+3. D2 integrated 後：record-integration（accepted==HEAD、在 branch 上）、reap、v2.36.76、然後 D1 lineage。
 
 ## 驗證方式
-- `git log --oneline -3` → `2263ab90` 之上只有 docs commit；`git status --short` 空；`node scripts/session-mode.js status --repo-root "$PWD"` → `active:false`。
-- `AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh` → 8/8 for v2.36.71。
+`git status --short` 空；`git log --oneline -1` = 8dc1814e 之上只有 handoff；`node scripts/session-mode.js status --repo-root "$PWD"` 顯示 active（舊 session）；`ls /home/cookys/projects/ | grep autopilot-par` 只剩 `autopilot-par6-timeout`。
 
 ## Read-order
-1. docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/README.md — 拓樸、六 unit 結果、sweep、deferred。
-2. skills/l5/references/hetero-impl-loop.md § Parallel units（kimi 段＋sonnet 段）。
-3. references/evidence-discipline.md §39–41。
-4. docs/BACKLOG.md 前段。
+1. skills/l5/references/hetero-impl-loop.md § Depth-0 recipe（步驟 6–11）。
+2. docs/plans/2026-09-19-blind-review-2d-overlap.md §4 D2；docs/plans/evidence/2026-09-19-blind-review-2d-overlap/README.md。
+3. /tmp/claude-1000/-home-cookys-projects-autopilot/38a23a44-ca0a-4350-96bd-315ba7dd269d/scratchpad/d2/（prepared.json、grant.json、dispatch.sh、impl-run2.json、impl-brief.md）——scratchpad 是 session 專屬路徑，新 session 先 cp 走。
 
 ## 陷阱
-- 另一個 session 正在這台跑真的 grok dispatch（`wave-0919d`，strikes.jsonl 42-44）——full run.sh 會報 REAL-STORE POLLUTION，先看 receipt_ref 再歸因。
-- 全部已 land；這裡只指：`mkdir -p <rel>` 後 cwd 會被重設回主 checkout——clone 一律絕對路徑，否則 clone 落進 repo 裡讓 pre-commit gate 掃到；Agent 派工第一行 `Engine: <model>`；hand 建的 test 檔要 `test -x`；`while read` sweep 要 `< /dev/null`；
-  `record-integration.js` 要 accepted==HEAD 且要在 branch 上（detached 會 `symbolic-ref failed`）——整合當下就記，別事後補；
-  exec-boundary 擋 cwd 外遞迴刪除 → `mv` 進 `/tmp` 再刪；BACKLOG 欄位 240/120/64 上限；Status 文法只有 `open|fired|shipped|dropped <date>`。
+- 主 checkout 在 campaign 跑時凍結（連 fetch）；marker 在時從主 checkout 派 dispatch-author/consult 會 precondition_failed → 到 clone 跑。
+- `mkdir -p <相對路徑>` 後 cwd 重設 → clone 用絕對路徑。
+- 每個 hand 建的 test 檔 `test -x`；sweep 迴圈子行程 `< /dev/null`。

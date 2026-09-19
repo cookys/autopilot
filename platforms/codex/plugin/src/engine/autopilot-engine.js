@@ -795,6 +795,11 @@ function appendDispatchIdentity(args, identity) {
   );
 }
 
+// Same floor managed review `--timeout` uses (buildReviewArgs / remaining >= 1).
+// Remaining wall below this refuses implement dispatch and terminalizes instead
+// of handing the rail a 0s/sub-floor timeout. Null remaining is unbounded, not expired.
+const MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS = 1;
+
 function buildReviewArgs({
   roster,
   diffFile,
@@ -809,7 +814,8 @@ function buildReviewArgs({
     throw new TypeError('diffFile is required');
   }
   if (timeoutSeconds !== null
-      && (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 1)) {
+      && (!Number.isSafeInteger(timeoutSeconds)
+        || timeoutSeconds < MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS)) {
     throw new TypeError('timeoutSeconds must be a positive safe integer when set');
   }
   validateExtraArgs(extraReviewArgs, new Set([
@@ -927,7 +933,8 @@ function buildImplementationArgs({
     throw new TypeError('base is required');
   }
   if (timeoutSeconds !== null
-      && (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 1)) {
+      && (!Number.isSafeInteger(timeoutSeconds)
+        || timeoutSeconds < MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS)) {
     throw new TypeError('timeoutSeconds must be a positive safe integer when set');
   }
   validateExtraArgs(extraImplementationArgs, new Set([
@@ -5297,7 +5304,7 @@ class AutopilotEngine {
             });
           } catch (error) {
             if (isWallBudgetJournalError(error)) {
-              terminalizeWallExpiry({ stage: 'review' });
+              terminalizeWallExpiry({ stage: 'review', candidate });
               return {
                 reviewed: false,
                 phase: 'campaign_wall_budget',
@@ -5457,7 +5464,10 @@ class AutopilotEngine {
         { consumer: 'panel' },
       );
       if (panelRemain.exhausted) {
-        terminalizeWallExpiry({ stage: 'review' });
+        terminalizeWallExpiry({
+          stage: 'review',
+          candidate: reviewInput && reviewInput.candidate,
+        });
         ledger.push(this.ledgerEntry(ledgerUnit, 'failed', panelObservedAt, {
           reason: 'final_panel_budget_exhausted',
           budget_source: 'pocket',
@@ -5748,7 +5758,10 @@ class AutopilotEngine {
           });
         } catch (error) {
           if (isWallBudgetJournalError(error)) {
-            terminalizeWallExpiry({ stage: 'review' });
+            terminalizeWallExpiry({
+              stage: 'review',
+              candidate: reviewInput && reviewInput.candidate,
+            });
             return {
               ...receipt,
               reviewed: false,
@@ -7368,7 +7381,9 @@ class AutopilotEngine {
             reason: 'campaign mutation budget exhausted',
           };
         }
-        if (budget.exhausted || remain.exhausted || !Number.isSafeInteger(remain.seconds)) {
+        const remainingBelowFloor = Number.isSafeInteger(remain.seconds)
+          && remain.seconds < MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS;
+        if (budget.exhausted || remain.exhausted || remainingBelowFloor) {
           terminalizeWallExpiry({ stage: 'implement' });
           return {
             committed: false,
@@ -8405,6 +8420,7 @@ class AutopilotEngine {
         repair_generation: repairGeneration,
         next_repair_generation: nextGeneration,
         reason,
+        candidate: repairCandidate,
       }) => {
         const budget = campaignWallBudgetStatus(
           campaignControl,
@@ -8463,7 +8479,12 @@ class AutopilotEngine {
             });
           } catch (error) {
             if (isWallBudgetJournalError(error)) {
-              terminalizeWallExpiry({ stage: 'repair' });
+              terminalizeWallExpiry({
+                stage: 'repair',
+                candidate: repairCandidate
+                  || (campaignController && campaignController.candidate)
+                  || resumeCandidate,
+              });
               passed = false;
               journalReason = 'campaign wall budget exhausted before repair';
             } else {

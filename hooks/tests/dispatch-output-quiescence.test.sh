@@ -143,8 +143,16 @@ assert_ge() {
   fi
 }
 
-late_stub=$(make_stub "ccshim-late-flush" 'setsid bash -c '"'"'sleep 2; printf "LATE-ANSWER\n"'"'"' &
-exit 0')
+late_stub=$(make_stub "ccshim-late-flush" "$(cat <<EOF
+$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
+MARKERS="\$(print_autopilot_frame_markers AUTOPILOT-AUTHOR "\$@")" || MARKERS=""
+BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
+END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
+export BEGIN END
+setsid bash -c 'sleep 2; if [ -n "\$BEGIN" ]; then printf "%s\\n%s\\n%s\\n" "\$BEGIN" "LATE-ANSWER" "\$END"; else printf "LATE-ANSWER\\n"; fi' &
+exit 0
+EOF
+)")
 run_dispatch "$late_stub" cc-shim env ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test-token
 assert_eq "$DISPATCH_EXIT" "0" "ccshim-late-flush exit"
 assert_eq "$DISPATCH_STATUS" "authored" "ccshim-late-flush status"
@@ -200,8 +208,16 @@ assert_eq "$DISPATCH_EXIT" "0" "over-budget-control exit"
 assert_eq "$DISPATCH_STATUS" "authored" "over-budget-control status"
 assert_poll_budget_rejects "$DISPATCH_QUIESCENCE_POLLS" "4" "over-budget-control is rejected"
 
-drip_stub=$(make_stub "ccshim-drip-writer" 'setsid bash -c '"'"'for i in $(seq 1 50); do printf x; sleep 0.2; done'"'"' &
-exit 0')
+drip_stub=$(make_stub "ccshim-drip-writer" "$(cat <<EOF
+$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
+MARKERS="\$(print_autopilot_frame_markers AUTOPILOT-AUTHOR "\$@")" || MARKERS=""
+BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
+END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
+export BEGIN END
+setsid bash -c 'for i in \$(seq 1 50); do if [ -n "\$BEGIN" ] && [ -n "\$END" ]; then if [ "\$i" -eq 1 ]; then printf "%s\\n" "\$BEGIN"; for _j in \$(seq 1 50); do printf x; done; printf "\\n%s\\n" "\$END"; else printf "\\n"; fi; else printf x; fi; sleep 0.2; done' &
+exit 0
+EOF
+)")
 run_dispatch "$drip_stub" cc-shim env ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test-token AUTOPILOT_SETTLE_MS=1500
 assert_eq "$DISPATCH_EXIT" "0" "ccshim-drip-writer-deadline-bounded exit"
 assert_eq "$DISPATCH_STATUS" "authored" "ccshim-drip-writer-deadline-bounded status"

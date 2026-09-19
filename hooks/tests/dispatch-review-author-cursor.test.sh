@@ -67,20 +67,28 @@ FULL_MODEL="cursor-grok-4.6-high-fast"
 #                         stdout, exit 0 — the no-salvage negative control
 # If CURSOR_ARGV_FILE is set, argv is recorded there (one arg per line) on every call.
 STUB="$TEST_TMP/cursor-agent-stub"
-cat > "$STUB" <<'EOF'
+cat > "$STUB" <<EOF
 #!/usr/bin/env bash
-[ -z "${CURSOR_ARGV_FILE:-}" ] || printf '%s\n' "$@" > "$CURSOR_ARGV_FILE"
-PROMPT_TEXT="$(cat)"
-BEGIN="$(printf '%s\n' "$PROMPT_TEXT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
-END="$(printf '%s\n' "$PROMPT_TEXT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
+[ -z "\${CURSOR_ARGV_FILE:-}" ] || printf '%s\\n' "\$@" > "\$CURSOR_ARGV_FILE"
+PROMPT_TEXT="\$(read_fake_runner_prompt "\$@")"
+BEGIN="\$(printf '%s\\n' "\$PROMPT_TEXT" | sed -n 's/^\\(<<<AUTOPILOT-REVIEW-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
+END="\$(printf '%s\\n' "\$PROMPT_TEXT" | sed -n 's/^\\(<<<AUTOPILOT-END-[0-9a-f]\\{32\\}>>>\\)\$/\\1/p' | sed -n '1p')"
 emit_block() {
-  echo "$BEGIN"
-  echo "VERDICT: SHIP-AS-IS"
-  echo "FINDINGS: none"
-  echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
-  echo "$END"
+  BODY=\$(printf '%s\\n' "VERDICT: SHIP-AS-IS" "FINDINGS: none" "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed")
+  if [ -n "\$BEGIN" ]; then
+    echo "\$BEGIN"
+    printf '%s\\n' "\$BODY"
+    echo "\$END"
+  elif MARKERS="\$(extract_autopilot_frame_markers AUTOPILOT-AUTHOR "\$PROMPT_TEXT")"; then
+    AUTHOR_BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
+    AUTHOR_END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
+    printf '%s\\n%s\\n%s\\n' "\$AUTHOR_BEGIN" "\$BODY" "\$AUTHOR_END"
+  else
+    printf '%s\\n' "\$BODY"
+  fi
 }
-case "${CURSOR_STUB_MODE:-pass}" in
+case "\${CURSOR_STUB_MODE:-pass}" in
   pass)
     emit_block
     exit 0
@@ -101,7 +109,7 @@ case "${CURSOR_STUB_MODE:-pass}" in
     exit 0
     ;;
   *)
-    echo "unknown CURSOR_STUB_MODE: ${CURSOR_STUB_MODE:-}" >&2
+    echo "unknown CURSOR_STUB_MODE: \${CURSOR_STUB_MODE:-}" >&2
     exit 99
     ;;
 esac

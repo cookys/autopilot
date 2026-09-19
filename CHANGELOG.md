@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.36.76 — Fix：strict /l5 readiness live probe 對「答了但不是 OK」重試一次（Qwen 席位拒答 flake）
+
+- 2-D D2 attempt 2 連三次在 intake 前 `provider_readiness … strict_l5_provider_not_ready`：每次都是兩個 qoderclicn／Qwen3.8-Max-Preview
+  席位（verification_author、qc:4）之一回非 `OK`——「I'm here and ready to help…」或「I can't comply with requests to … pretend
+  to be an automated system probe」（`truncated/frame_missing`）；同 tuple 下一次就答 `OK`（手動 6 次 5 次 OK）。是模型服從度
+  flake 不是傳輸；unknown 判定還被 receipt TTL 快取 300 s，立即重派也無效。
+- `src/readiness/live-probe.js`（＋鏡像）：`isComplianceFlake` 命中（子程序正常跑完、result 有 status、且 `truncated` 或 authored 但
+  正規化後 ≠ `OK`）時再呼叫 dispatch-author 一次，上限兩次；auth／quota／429／timeout／generic exit／precondition 一律不重試。
+  envelope 形狀不變。`probe.js` 匯出 `LIVE_PROBE_EXPECTED_RESPONSE`／`normalizeLiveProbeResponse`。
+- 新套件 `hooks/tests/provider-readiness-live-retry.test.sh`（base RED 7 案：refuse→ok、chat→ok、兩連 flake 停在 2 次、
+  ok／auth／quota／generic 只 1 次）。同族第三例（v2.36.74 fable 拒答、v2.36.75 timeout 等於規則）：rail 對模型輸出的期望要容忍
+  一次非確定性。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.75 — Fix：strict-contract preflight 拒收 controller 的 remaining-wall `--timeout`（v2.36.71 A 的消費者）
 
 - 2-D D2 campaign intake admitted 後 1 秒在 `dispatch_implementation` `precondition_failed`：v2.36.71 A 讓 managed 派工帶

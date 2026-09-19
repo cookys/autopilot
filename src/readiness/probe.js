@@ -635,6 +635,8 @@ function runProviderProbe(value, dependencies = {}) {
 }
 
 module.exports = {
+  LIVE_PROBE_EXPECTED_RESPONSE,
+  normalizeLiveProbeResponse,
   LIVE_PROBE_REQUEST,
   MAX_PROBE_TTL_SECONDS,
   classifyLiveProbeResult,

@@ -14,11 +14,23 @@ const {
 } = require('./provider-readiness');
 const {
   LIVE_PROBE_REQUEST,
+  LIVE_PROBE_EXPECTED_RESPONSE,
+  normalizeLiveProbeResponse,
 } = require('./probe');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_AUTHOR = path.join(REPO_ROOT, 'scripts', 'dispatch-author.sh');
 const MAX_PRIVATE_RESPONSE_BYTES = 4096;
+// A provider that ANSWERED but not with `OK` is a compliance flake, not a transport
+// fault. Measured 2026-09-20 on qoderclicn/Qwen3.8-Max-Preview: 1 reply in ~6 is a
+// refusal ("I can't comply with requests to … pretend to be an automated system
+// probe") or small talk ("I'm here and ready to help"), which dispatch-author reports
+// as `truncated/frame_missing`; the same tuple answers `OK` on the next call. Two
+// Qwen seats (verification_author + qc:4) made three consecutive strict campaigns
+// die at provider_readiness and the unknown verdict was then cached for the receipt
+// TTL. One retry is bounded spend (a two-token reply) and only fires on that class:
+// timeouts, quota, auth, rate limits and dispatch/precondition failures never retry.
+const LIVE_PROBE_MAX_ATTEMPTS = 2;
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -114,6 +126,20 @@ function readPrivateResponse(rawLog) {
   }
 }
 
+// True only when the provider ran and answered something other than `OK`: the
+// dispatcher saw the model but the model ignored the probe (frame missing, or an
+// authored reply that does not normalise to OK). Every transport-class outcome
+// (spawn error, timeout, non-zero exit that is not `truncated`, precondition) is
+// returned as-is so it stays attributable.
+function isComplianceFlake(child, result, success, response) {
+  if (!child || child.error || child.signal) return false;
+  if (!result || typeof result.status !== 'string') return false;
+  if (success) {
+    return normalizeLiveProbeResponse(response.toString('utf8')) !== LIVE_PROBE_EXPECTED_RESPONSE;
+  }
+  return result.status === 'truncated';
+}
+
 function dispatchAuthorLiveProbe(input, options = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new TypeError('provider live adapter input must be an object');
@@ -176,36 +202,43 @@ function dispatchAuthorLiveProbe(input, options = {}) {
   if (tuple.endpoint !== null) args.push('--endpoint', tuple.endpoint);
 
   let child;
+  let result;
+  let success;
+  let response;
+  let failure;
   try {
-    // The readiness request is deliberately repo-independent and read-only. Run
-    // the adapter from its private scratch cwd so an active managed L5/L6 marker
-    // cannot mistake this pre-spend probe for an unmanaged repository dispatch.
-    // The adapter receives its absolute script path and resolves credentials
-    // independently; no repository trust or mutation surface is needed here.
-    child = spawnSync('bash', args, {
-      cwd: scratch,
-      env: {
-        ...process.env,
-        // Must track LIVE_PROBE_REQUEST_BODY.max_output_tokens in probe.js —
-        // this is the same budget expressed to the dispatcher.
-        AUTOPILOT_AUTHOR_MAX_TOKENS: '512',
-        DISPATCH_QUIET: '1',
-      },
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 200000,
-      maxBuffer: 1024 * 1024,
-    });
+    for (let attempt = 1; attempt <= LIVE_PROBE_MAX_ATTEMPTS; attempt += 1) {
+      // The readiness request is deliberately repo-independent and read-only. Run
+      // the adapter from its private scratch cwd so an active managed L5/L6 marker
+      // cannot mistake this pre-spend probe for an unmanaged repository dispatch.
+      // The adapter receives its absolute script path and resolves credentials
+      // independently; no repository trust or mutation surface is needed here.
+      child = spawnSync('bash', args, {
+        cwd: scratch,
+        env: {
+          ...process.env,
+          // Must track LIVE_PROBE_REQUEST_BODY.max_output_tokens in probe.js —
+          // this is the same budget expressed to the dispatcher.
+          AUTOPILOT_AUTHOR_MAX_TOKENS: '512',
+          DISPATCH_QUIET: '1',
+        },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 200000,
+        maxBuffer: 1024 * 1024,
+      });
+      result = parseDispatchResult(child.stdout);
+      success = child.status === 0 && result && result.status === 'authored';
+      response = success ? readPrivateResponse(result.raw_log) : Buffer.alloc(0);
+      failure = success
+        ? { code: null, timedOut: false, quota: false, unavailable: false }
+        : classifyFailure(child, result);
+      if (!isComplianceFlake(child, result, success, response)) break;
+    }
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 
-  const result = parseDispatchResult(child.stdout);
-  const success = child.status === 0 && result && result.status === 'authored';
-  const response = success ? readPrivateResponse(result.raw_log) : Buffer.alloc(0);
-  const failure = success
-    ? { code: null, timedOut: false, quota: false, unavailable: false }
-    : classifyFailure(child, result);
   const envelopeChild = {
     status: success ? 0 : (Number.isInteger(child.status) ? child.status : null),
     signal: typeof child.signal === 'string' ? child.signal : null,

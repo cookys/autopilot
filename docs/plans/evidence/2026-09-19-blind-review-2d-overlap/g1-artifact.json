@@ -1,0 +1,341 @@
+{
+ "schema_version": 1,
+ "artifact_type": "plan_review_artifact",
+ "ticket": "2d-overlap-g1",
+ "logical_plan_id": "blind-review-2d-overlap-2026-09-19",
+ "session_id": "2d-overlap-1789829987",
+ "session_key": "61083c0d31f2f62478a43a8ff5ecac3f82dc9ffc61de976ca43b20a41e4d5e0b",
+ "generation": 1,
+ "verdict": "CONDITIONAL",
+ "semantic_verdict": "CONDITIONAL",
+ "terminal": false,
+ "policy_reason": "depth_0_adjudication_required",
+ "rubric_sha256": "ce52fdb5ededb8a0f94bd4188fe096c088bc13054e57290972ef1c08214525d7",
+ "manifest_sha256": "e3e9e850eee11ebe30af248aeab53b761b3a246717d521bbcbb19947eae673f7",
+ "plan_sha256": "39ae308fd355334da754d7581464c6360d49e24415407fb71cdf9a4cb5f2f0f9",
+ "growth_ratio": {
+  "numerator": 1,
+  "denominator": 1
+ },
+ "growth_warning": false,
+ "transport_status": "complete",
+ "attempts": [
+  {
+   "seat_id": "glm_architecture",
+   "target_id": "glm_architecture",
+   "attempt": 1,
+   "transport_envelope": {
+    "schema_version": 1,
+    "artifact_type": "runner_transport_envelope",
+    "request_binding": {
+     "runner": "anthropic-compatible",
+     "model": "glm-5.2",
+     "operation": "plan-review",
+     "request_digest": "ae3c9a469c9afc8d86aed455dfc10e5cc3c37ecd631cea249681a3823fc1d25c"
+    },
+    "outcome": {
+     "classification": "success",
+     "exit_status": 0,
+     "signal": null,
+     "error_code": null
+    },
+    "output_digests": {
+     "stdout_sha256": "e23b7b17b0418a0f7bac232f55ff1f91e9203a989e8e8ab2eed1e9208e4cdeb3",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "private_raw_reference": {
+     "kind": "private-file",
+     "locator": "/tmp/dispatch-author-log-BRU20H",
+     "digest": "e23b7b17b0418a0f7bac232f55ff1f91e9203a989e8e8ab2eed1e9208e4cdeb3"
+    },
+    "receipt_digest": "d0cdc07d5a554ca40ecab3106ec8ab6810f391c8d5840939672b5f4d4060f94c"
+   },
+   "transport_status": "success",
+   "parser_status": "strict",
+   "semantic_status": "available",
+   "unratified_semantic_status": "unavailable"
+  },
+  {
+   "seat_id": "claude_operations_skeptic",
+   "target_id": "claude_operations_skeptic",
+   "attempt": 1,
+   "transport_envelope": {
+    "schema_version": 1,
+    "artifact_type": "runner_transport_envelope",
+    "request_binding": {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "operation": "plan-review",
+     "request_digest": "21bdd35ea9ef42d3d3973636fcd66361b8228881510210828e97cee276f92056"
+    },
+    "outcome": {
+     "classification": "success",
+     "exit_status": 0,
+     "signal": null,
+     "error_code": null
+    },
+    "output_digests": {
+     "stdout_sha256": "71409dd9d98909e58a9770a20f05a69c3f32b7aeee7cddae41b04af6e4f5da82",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "private_raw_reference": {
+     "kind": "private-file",
+     "locator": "/tmp/dispatch-author-log-BsDwCq",
+     "digest": "71409dd9d98909e58a9770a20f05a69c3f32b7aeee7cddae41b04af6e4f5da82"
+    },
+    "receipt_digest": "ee83a9178d0af1943f9a2a903f0a2b4ed135d638c919c18f91b8b16162be239c"
+   },
+   "transport_status": "success",
+   "parser_status": "strict",
+   "semantic_status": "available",
+   "unratified_semantic_status": "unavailable"
+  }
+ ],
+ "substitutions": [],
+ "reviewer_verdicts": [
+  {
+   "seat_id": "glm_architecture",
+   "target_id": "glm_architecture",
+   "family": "zhipu",
+   "verdict": "CONDITIONAL"
+  },
+  {
+   "seat_id": "claude_operations_skeptic",
+   "target_id": "claude_operations_skeptic",
+   "family": "anthropic",
+   "verdict": "CONDITIONAL"
+  }
+ ],
+ "findings": [
+  {
+   "rubric_id": "R2",
+   "class": "decision-now",
+   "severity": "non-blocking",
+   "affected_surface": "docs/plans/2026-09-19-blind-review-2d-overlap.md §4 D1 step 3 and §6 (budget/pocket narrative)",
+   "claim": "The plan demonstrates the single-clock, single-reading deadline derivation and the no-shrink rule, but never states in one sentence that budgeting proceeds with the pocket rule (final_panel_reserve_seconds with consumer:panel) unchanged; the pocket is discussed only in the risk section as a sizing observation.",
+   "evidence": "Section 0 documents campaignWallBudgetStatus adding final_panel_reserve_seconds for consumer:panel (:1497-1500) and D1 step 3 says the panel reads with consumer:'panel' and the suite without, implying the pocket is untouched, but no explicit 'pocket rule unchanged' statement exists in §4 D1 or §2.5 as R2 requires.",
+   "evidence_reference": "plan §0 bullet 2; §4 D1 step 3; §6 risk 2",
+   "repair": "Add one sentence to D1 step 3 (and optionally §2.5): 'Budgeting keeps the existing pocket rule unchanged: the panel keeps final_panel_reserve_seconds via consumer:panel, the suite draws only the unreserved remainder, and neither adapter re-derives its deadline after the join.' No code change implied.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": false,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "glm_architecture",
+     "runner": "anthropic-compatible",
+     "model": "glm-5.2"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "506b31dcfc86ef80e6a2e50697cc6a2b3e1bf95ecc700a9ff04718f7f53740a8"
+  },
+  {
+   "rubric_id": "R1",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "src/engine/campaign-composition.js runCampaignComposition (D1 step 2); focused_review_supplement station",
+   "claim": "The join point is not fully specified: the plan overlaps full_diff_review with full_suite but never says where the optional focused_review_supplement (which today runs after review and before full_suite, and consumes the review output) sits in the overlapped generation, and the stated failure semantics (other receipt still recorded) contradict the named primitive (Promise.all rejects on the first rejection and drops the sibling result).",
+   "evidence": "§0 lists the serial order as focused_verification -> full_diff_review -> optional focused_review_supplement (:2425-2478) -> full_suite -> adjudicate. §4 D1 step 2 says dispatch full_suite and full_diff_review via Promise.all with one startedAt and that a failure in either station keeps today's failure shape and the other receipt is still recorded, never discarded. No sentence in §0, §3 or §4 mentions the supplement in the overlap path, and Promise.all cannot deliver the never-discarded guarantee if either adapter throws.",
+   "evidence_reference": "Plan §0 bullet 1 (station order incl. :2425-2478); Plan §4 D1 step 2 (Promise.all, failure shape)",
+   "repair": "In D1 step 2 state explicitly: (a) the supplement stays strictly after full_diff_review and is joined with full_suite before adjudicate, i.e. join = allSettled(full_suite, review-then-supplement), or the supplement is excluded from the overlap with the reason; (b) replace Promise.all with Promise.allSettled (or adapters that never reject and return a failure receipt) so both receipts are always journaled; (c) add the RED case: injected reviewPanel throws, assert the full_suite receipt row is still present in the trace and ledger.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "claude_operations_skeptic",
+     "runner": "claude-native",
+     "model": "claude-fable-5-1"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "59557fa1a8673a38ad90619115392fb14388ea722e3025da73d4ce08f596edc3"
+  },
+  {
+   "rubric_id": "R2",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "campaign_wall_budget gate; campaignWallBudgetStatus / repair_round_estimate_seconds in autopilot-engine.js; terminalizeWallExpiry",
+   "claim": "KR2 asserts the fixture blocks campaign_wall_budget at base and completes after D1, but the plan never names which pre-station budget check currently sums panel plus suite, nor how that check changes to a concurrent estimate, so KR2 either cannot flip or flips for an unstated reason; and the wall-expiry rule (terminalize on whichever station reports exhaustion first) does not say what happens to the sibling station process that is still running.",
+   "evidence": "KR2 text: the same fixture at base blocks campaign_wall_budget. §4 D1 step 3 only describes per-adapter timeout derivation from one campaignWallRemainingSeconds read and says terminalizeWallExpiry applies to whichever station reports exhaustion first; the other result is still journaled. §3 lists no budget-gate file change and §1 references repair_round_estimate_seconds (v2.36.71) as the estimate the operator sees, without saying whether it is the gate or whether it changes from sum to max.",
+   "evidence_reference": "Plan §2 KR2; Plan §4 D1 step 3; Plan §3 file map (no budget gate row); Plan §1 (repair_round_estimate_seconds)",
+   "repair": "Name the exact gate and line that produces campaign_wall_budget at base, state whether its estimate changes from panel+suite to max(panel,suite) only when reviewStation is panel and the suite is not a cache hit, and add that file to §3. For wall expiry, state the rule for the still-running sibling: it is allowed to finish within its own already-computed deadline and its receipt is journaled, or it is cancelled via the existing kill path, and add a RED case pinning that no orphan seat process survives terminalization.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "claude_operations_skeptic",
+     "runner": "claude-native",
+     "model": "claude-fable-5-1"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "017903edc8cac34546f69679b40e100136ee0540b17bcfa8464e4f2c46f3f699"
+  },
+  {
+   "rubric_id": "R3",
+   "class": "decision-now",
+   "severity": "non-blocking",
+   "affected_surface": "hooks/tests control cases for cache-hit full_suite path and pre-2-D journal replay",
+   "claim": "The plan names an existing control case only for the single-station path (station_single_control); the verification-cache-hit control and the pre-2-D journal replay control are asserted as unchanged without naming an existing case that pins them.",
+   "evidence": "KR4 names station_single_control at implementation-campaign-routing.test.sh:3482 and says the 2-B/2-C fixtures stay green untouched; D1 step 4 says cache-hit control unchanged without a suite or case name; no replay fixture for a pre-2-D journal is named anywhere in §2, §4 or §5.",
+   "evidence_reference": "Plan §2 KR4; Plan §4 D1 step 4 (GREEN list)",
+   "repair": "Name the existing test case (file and line) that exercises full_suite with reused_from campaign_verification and the existing journal-replay fixture used for byte-identity, or state that none exists and add both as new control cases in autopilot-engine-station-overlap.test.sh with a RED note showing base output.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "claude_operations_skeptic",
+     "runner": "claude-native",
+     "model": "claude-fable-5-1"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "79be346dda892d30868df238a5030e033fd931292bff51851e86890ad84f3caa"
+  },
+  {
+   "rubric_id": "R4",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "src/engine/campaign-intake.js snapshot write ordering and EEXIST digest verification (D2 steps 2-3)",
+   "claim": "Moving the O_EXCL write after the Mission claim opens a crash window (claim held, no snapshot file) in which the next resume builds a fresh snapshot from the live roster and seals it silently, defeating the contract; and the full-digest re-verify presumes a stored whole-file digest that pre-2-D snapshots do not carry, with no stated resume rule for those files.",
+   "evidence": "§2 KR3 and §4 D2 step 2 require write AFTER the Mission claim with a rejected claim leaving no file; §0 bullet 3 documents that a missing snapshot at resume is handled by writing a new one with O_EXCL (:2071-2073). D2 step 2 says recompute the digest over every field the file carries and compare with the file, but only addresses the pre-2-C file lacking review_station, not a pre-2-D file lacking any stored full-field digest.",
+   "evidence_reference": "Plan §2 KR3; Plan §4 D2 step 2; Plan §0 bullet 3 (:2071-2073, :2107-2113)",
+   "repair": "State the resume rule when a claim exists but no snapshot file exists: refuse to seal from the live roster and park with a named block reason (e.g. qc_panel_snapshot_missing_after_claim) unless the journal shows the claim was created in this same intake; add the RED case. State how the digest is stored (new optional field, e.g. snapshot_digest) and the rule for a pre-2-D file without it: either fall back to the 2-B two-field check with a journaled note, or recompute from carried fields only. Add the fixture for each.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "claude_operations_skeptic",
+     "runner": "claude-native",
+     "model": "claude-fable-5-1"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "86b81b4c72141ac687de0fe7020f4a6ea100eb910edf92fc571cc10418f5f231"
+  },
+  {
+   "rubric_id": "R5",
+   "class": "decision-now",
+   "severity": "non-blocking",
+   "affected_surface": "Plan §6 risk 2, §8 open question 2, §3 implementation-campaign.js row",
+   "claim": "The plan leaves a new contract knob (station_overlap: off) open for this cut via §8 Q2 and hedges the reducer with no reducer change expected, so the exclusion of new knobs and reducer changes is not unconditional.",
+   "evidence": "§6 bullet 2: D1 gets a station_overlap: off escape in the contract (a follow-up, not this cut). §8 Q2: Is a station_overlap: off contract escape wanted in this cut. §3 implementation-campaign.js: no reducer change expected. §7 says Any new contract knob is out of scope.",
+   "evidence_reference": "Plan §6 bullet 2; Plan §8 item 2; Plan §3 row implementation-campaign.js; Plan §7",
+   "repair": "Close §8 Q2 in the plan text as out of scope for this cut (knob only in a follow-up, with the measured trigger), and change the reducer row to an unconditional statement: no reducer change; if the ledger rows lack started_at/ended_at the deliverable stops and re-plans.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "claude_operations_skeptic",
+     "runner": "claude-native",
+     "model": "claude-fable-5-1"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "ec4e4c5294a41c52f28fcd8cb5d5d719ca63e1edb395c0792e9b18c5860386ae"
+  },
+  {
+   "rubric_id": "R6",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "hooks/tests/autopilot-engine.test.sh panel-snap-drift and review_station_snapshot cases; D1/D2 RED notes",
+   "claim": "D2 step 4 changes existing assertions beyond the two ordering assertions permitted by the rubric (it names panel-snap-drift and review_station_snapshot as updated where drift severity is under test), and the D1 RED steps state predicted base behaviour rather than observed base output.",
+   "evidence": "D2 step 2 says panel-snap-write and the step-order fixture are the ONLY existing assertions that change; D2 step 4 then says panel-snap-drift/panel-snap-write/review_station_snapshot updated only where the order or the drift severity is the assertion under test. D1 step 1 says at base the two entries are >= 200 ms apart and KR2's fixture blocks campaign_wall_budget at base, with no recorded base output, sha or failure text.",
+   "evidence_reference": "Plan §4 D2 step 2 vs D2 step 4; Plan §4 D1 step 1; Plan §2.5 RED-first constraint",
+   "repair": "Reconcile D2 so that panel-snap-drift (live digest mismatch -> step.live_drift, panel still runs) is left byte-identical and the new rejection is asserted only in the new suite against an EEXIST file mismatch; if review_station_snapshot must change, downgrade the drift-rejection to a new case and keep the old one untouched. For D1 step 1 and KR2, record the actual observed base output (timestamps delta and the exact campaign_wall_budget block payload) in the RED comments before GREEN work starts.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "claude_operations_skeptic",
+     "runner": "claude-native",
+     "model": "claude-fable-5-1"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "671be24fb996c999bf44ca34ef6a57249248277309037e91b08b172c02683373"
+  },
+  {
+   "rubric_id": "R7",
+   "class": "implementation-spike",
+   "severity": "non-blocking",
+   "affected_surface": "runCampaignComposition async surface; CPU-contention mitigation in §6",
+   "claim": "The plan assumes the composition loop and both adapters are already async and process-spawning so that in-process overlap is real, without stating it, and the CPU-contention mitigation is a measurement plus a deferred knob rather than an in-cut safeguard.",
+   "evidence": "§4 D1 step 2 uses Promise.all on the two adapters; §0 documents call sites (:2092, :2484-2593) but does not say whether runCampaignComposition or the fullSuite adapter is async/awaited today. §6 bullet 2 mitigation: measure full_suite_seconds on the first live campaign; if it grows > 20 % the escape is a follow-up.",
+   "evidence_reference": "Plan §4 D1 step 2; Plan §0 bullet 1; Plan §6 bullet 2",
+   "repair": "No current change to scope; in the D1 spike verify at base that both adapters return promises backed by child processes (not synchronous execSync) and record it in the evidence README; record the serial full_suite_seconds baseline from the last pre-merge campaign so the 20 % threshold has a denominator.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": false,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "claude_operations_skeptic",
+     "runner": "claude-native",
+     "model": "claude-fable-5-1"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "9ed018956aa1f0296802766be9daac7c7c9edcb86df5dbdfb41741415f86d906"
+  }
+ ],
+ "backlog_candidates": [
+  {
+   "fingerprint": "506b31dcfc86ef80e6a2e50697cc6a2b3e1bf95ecc700a9ff04718f7f53740a8",
+   "rubric_id": "R2",
+   "affected_surface": "docs/plans/2026-09-19-blind-review-2d-overlap.md §4 D1 step 3 and §6 (budget/pocket narrative)",
+   "claim": "The plan demonstrates the single-clock, single-reading deadline derivation and the no-shrink rule, but never states in one sentence that budgeting proceeds with the pocket rule (final_panel_reserve_seconds with consumer:panel) unchanged; the pocket is discussed only in the risk section as a sizing observation.",
+   "evidence_reference": "plan §0 bullet 2; §4 D1 step 3; §6 risk 2",
+   "disposition": null
+  },
+  {
+   "fingerprint": "79be346dda892d30868df238a5030e033fd931292bff51851e86890ad84f3caa",
+   "rubric_id": "R3",
+   "affected_surface": "hooks/tests control cases for cache-hit full_suite path and pre-2-D journal replay",
+   "claim": "The plan names an existing control case only for the single-station path (station_single_control); the verification-cache-hit control and the pre-2-D journal replay control are asserted as unchanged without naming an existing case that pins them.",
+   "evidence_reference": "Plan §2 KR4; Plan §4 D1 step 4 (GREEN list)",
+   "disposition": null
+  },
+  {
+   "fingerprint": "ec4e4c5294a41c52f28fcd8cb5d5d719ca63e1edb395c0792e9b18c5860386ae",
+   "rubric_id": "R5",
+   "affected_surface": "Plan §6 risk 2, §8 open question 2, §3 implementation-campaign.js row",
+   "claim": "The plan leaves a new contract knob (station_overlap: off) open for this cut via §8 Q2 and hedges the reducer with no reducer change expected, so the exclusion of new knobs and reducer changes is not unconditional.",
+   "evidence_reference": "Plan §6 bullet 2; Plan §8 item 2; Plan §3 row implementation-campaign.js; Plan §7",
+   "disposition": null
+  },
+  {
+   "fingerprint": "9ed018956aa1f0296802766be9daac7c7c9edcb86df5dbdfb41741415f86d906",
+   "rubric_id": "R7",
+   "affected_surface": "runCampaignComposition async surface; CPU-contention mitigation in §6",
+   "claim": "The plan assumes the composition loop and both adapters are already async and process-spawning so that in-process overlap is real, without stating it, and the CPU-contention mitigation is a measurement plus a deferred knob rather than an in-cut safeguard.",
+   "evidence_reference": "Plan §4 D1 step 2; Plan §0 bullet 1; Plan §6 bullet 2",
+   "disposition": null
+  }
+ ],
+ "accepted_blocker_count": 0,
+ "repair_authorized": false,
+ "next_generation": 2,
+ "reviewed_at": "2026-09-19T15:01:43.814Z"
+}

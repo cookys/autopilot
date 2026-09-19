@@ -1,0 +1,55 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-2d-overlap-2026-09-19",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "506b31dcfc86ef80e6a2e50697cc6a2b3e1bf95ecc700a9ff04718f7f53740a8",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: one sentence added to D1 step 3 — pocket rule unchanged, suite draws the unreserved remainder, no re-derivation after the join."
+  },
+  {
+   "fingerprint": "59557fa1a8673a38ad90619115392fb14388ea722e3025da73d4ce08f596edc3",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the supplement stays inside chain A after the panel; join is Promise.allSettled over chain A (panel→supplement) and chain B (full_suite); adapters return failure receipts, never throw; RED case pins the suite row surviving a throwing reviewPanel."
+  },
+  {
+   "fingerprint": "017903edc8cac34546f69679b40e100136ee0540b17bcfa8464e4f2c46f3f699",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the gate is the full_suite pre-station wall check (autopilot-engine.js:7842, 'campaign wall budget exhausted before verification', phase campaign_wall_budget, terminalized wall_expired since v2.36.71); nothing sums stations — overlap moves the suite's check to the panel's start instant. Sibling on wall expiry finishes within its own precomputed deadline and is journaled; RED pins no surviving seat process after terminalization."
+  },
+  {
+   "fingerprint": "79be346dda892d30868df238a5030e033fd931292bff51851e86890ad84f3caa",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: cache-hit control and pre-2-D journal replay control added as new cases in the overlap suite with RED notes; station_single_control named."
+  },
+  {
+   "fingerprint": "86b81b4c72141ac687de0fe7020f4a6ea100eb910edf92fc571cc10418f5f231",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted with a different mechanism: the write stays before the claim; a claim rejected in the same intake unlinks only the file this call created, so no claim-held-without-snapshot window exists. Digest verification recomputes over the fields the file carries against the file's own stored digest (every 2-B+ file has one; pre-2-C files digest without review_station per 2-C) — no new stored field."
+  },
+  {
+   "fingerprint": "ec4e4c5294a41c52f28fcd8cb5d5d719ca63e1edb395c0792e9b18c5860386ae",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: §8 Q2 closed as out of scope; §7 excludes any knob and any reducer change unconditionally; reducer row now says 'not touched; stop and re-plan if rows lack timestamps'."
+  },
+  {
+   "fingerprint": "671be24fb996c999bf44ca34ef6a57249248277309037e91b08b172c02683373",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: D2 edits no existing assertion; qc_panel_snapshot_drift is asserted only in the new suite against an EEXIST mismatch; panel-snap-drift, panel-snap-write, review_station_snapshot and the step-order fixture stay byte-identical. D1 RED comments record the observed base timestamps delta and the exact campaign_wall_budget block payload."
+  },
+  {
+   "fingerprint": "9ed018956aa1f0296802766be9daac7c7c9edcb86df5dbdfb41741415f86d906",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted as spike text in D1 step 2: verify at base both adapters are async child-process backed and record the serial full_suite_seconds baseline before coding."
+  }
+ ]
+}

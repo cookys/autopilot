@@ -1,6 +1,6 @@
 # Blind review redesign — cut 2-D: the post-review suite runs alongside the panel, and the panel snapshot is a contract
 
-> Status: frozen g2 (2026-09-19) — ready for implementation as two managed campaigns · Size: L (two independent deliverables) · Base: `b3e7b6f6` (v2.36.72) · Parent:
+> Status: draft for plan hetero loop · Size: L (two independent deliverables) · Base: `b3e7b6f6` (v2.36.72) · Parent:
 > `docs/plans/2026-09-18-blind-review-panel-station.md` §1.3 "Not in this cut (2-D candidates)" (`:135-138`) and the
 > design consult `evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md` §3 "Speed cuts" ("overlap").
 > 2-C (v2.36.68/69) shipped the panel as the loop's review station and one packet per candidate; its own §1.3 named
@@ -19,12 +19,6 @@
   `verificationCache` keyed by `request_digest` (`autopilot-engine.js:8228-8281`, `reused_from:
   'campaign_verification'`). `adjudicate` is the only reader of both (`lastReview`/`fullDiff` from `:2092+`,
   `verification.passed` from `:2337+`).
-- **Every ledger row carries `started_at`/`ended_at`**: `ledgerEntry(unit, status, startedAt, detail)`
-  (`autopilot-engine.js:2950-2957`) is the only constructor; `campaign_verification` (`:8168`, `:8193`), `full_suite`
-  (`:8254`, incl. the `reused_from` cache hit `:8281`) and the panel's `dispatch_review` rows (`:5491`, `:5738`) all go
-  through it — KR1's measurement precondition holds at base. Test clock seam: `new AutopilotEngine({ clock })` is
-  consumed by `this.now()` everywhere (`autopilot-engine.test.sh:6560`, `:19`), so a fixture authors elapsed time without
-  touching the reducer.
 - **One wall clock, drawn down serially**: `campaignWallBudgetStatus` (`autopilot-engine.js:1485-1512`) reads
   `campaignClockElapsedSeconds` (`implementation-campaign.js`, paused only in `awaiting_disposition`); the panel's
   `consumer: 'panel'` adds `final_panel_reserve_seconds` (`:1497-1500`), verify's default consumer does not. Seat
@@ -67,17 +61,15 @@ exists, re-verified only by two fields, and ignored when the live roster flips �
   before the suite's check ran. There is no summed estimate anywhere — each station checks the shared elapsed clock
   when it starts; overlap only moves the suite's check to the same instant as the panel's. Neither station's
   `--timeout` shrinks because the other started. The RED comment records the exact block payload observed at base.
-- **KR3 (snapshot is a contract)** — the snapshot is written (O_EXCL, same content, same path) only AFTER
-  `missionClaimAdapter` succeeds, so a file's existence implies a held claim and a rejected claim leaves no file. On
-  `EEXIST` the file's stored `digest` is recomputed over the fields it carries (2-C's rule: `review_station` only when
-  present) and, on mismatch or identity mismatch (`campaign_id`, `contract_digest`), intake is `blocked` with
-  `qc_panel_snapshot_drift` whose payload lists every carried field whose value differs from a live snapshot rebuilt
-  from the same contract, plus the stored and recomputed digests; the campaign stays parked (no terminalization —
-  verified as in v2.36.71 C). A claim held with NO file (crash between claim and write): if the campaign journal shows
-  no event after the claim, intake seals a fresh snapshot and journals `qc_panel_snapshot_sealed_on_resume`; otherwise
-  it parks with `qc_panel_snapshot_missing_after_claim`. `step.live_drift` (live roster vs sealed file) keeps its 2-B/2-C
-  meaning and stays non-blocking. A live roster flip of `qc_panel_seats_complete` after sealing is journaled
-  (`qc_panel_snapshot_live_flip`) and the sealed station still runs.
+- **KR3 (snapshot is a contract)** — on `EEXIST` at intake, the file's stored `digest` is recomputed over the fields the
+  file carries (2-C's rule: `review_station` only when present) and a file whose stored digest does not match its own
+  fields, or whose identity (`campaign_id`, `contract_digest`) does not match the run, is `blocked` at intake with
+  `qc_panel_snapshot_drift` naming the field(s) and the campaign stays parked (no terminalization — verified as in
+  v2.36.71 C). `step.live_drift` (live roster vs sealed file) keeps its 2-B/2-C meaning and stays non-blocking. A
+  live roster flip of `qc_panel_seats_complete` after sealing is journaled (`qc_panel_snapshot_live_flip`) and the
+  sealed station still runs. The write stays BEFORE the Mission claim (O_EXCL, unchanged); when the claim this intake
+  just minted is rejected, the intake unlinks the file it wrote in this same call (never a file it found) — so a
+  rejected claim leaves no file and there is no claim-held-without-snapshot window to reason about.
 - **KR4 (byte-identical elsewhere)** — single-station campaigns (`review_station: single`), campaigns without a
   `full_suite` (verification cache hit), and every pre-2-D journal replay are unchanged: `station_single_control`
   (`implementation-campaign-routing.test.sh:3482`) and the 2-B/2-C fixtures stay green untouched.
@@ -99,7 +91,7 @@ exists, re-verified only by two fields, and ignored when the live roster flips �
 
 - **Compatibility impact**: `internal-only` — no CLI flag, no config knob, no contract field changes; the run summary
   and the intake steps gain optional fields; the snapshot file's write moves after the claim (same content, same
-  path, same O_EXCL semantics — only the call site moves).
+  path).
 - **Dependency decision**: `none` — built-ins only.
 
 ## 3. File-structure map
@@ -108,7 +100,7 @@ exists, re-verified only by two fields, and ignored when the live roster flips �
 |---|---|
 | `src/engine/campaign-composition.js` | D1: start `full_suite` and `full_diff_review` (panel station only) together, join before `adjudicate`; `station_overlap` on the trace |
 | `src/engine/autopilot-engine.js` | D1: adapters `fullSuite`/`reviewPanel` accept a shared `startedAt`; summary field; D2: `snapshotStation` reconciles against the live flip and journals it |
-| `src/engine/campaign-intake.js` | D2: snapshot write moves after a successful `missionClaimAdapter`; `EEXIST` digest re-verify → `qc_panel_snapshot_drift` (field list from a live rebuild); claim-without-file rule; live-flip journal |
+| `src/engine/campaign-intake.js` | D2: snapshot write after `missionClaimAdapter`; full-digest re-verify on `EEXIST` → `qc_panel_snapshot_drift` rejection; live-flip journal |
 | `src/engine/implementation-campaign.js` | not touched: no reducer change; if the `full_suite`/`dispatch_review` ledger rows turn out to lack `started_at`/`ended_at`, D1 stops and re-plans instead of editing the reducer |
 | `schemas/implementation-campaign-receipt.schema.json` | D1: optional `station_overlap` on the run receipt (if the receipt schema is closed) |
 | `hooks/tests/autopilot-engine-station-overlap.test.sh` (new) | D1 KR1/KR2/KR4 cases |
@@ -138,13 +130,11 @@ exists, re-verified only by two fields, and ignored when the live roster flips �
    `startedAt` (panel with `consumer:'panel'`, suite without); neither re-reads after the other finishes. Budgeting
    keeps the existing pocket rule unchanged: the panel keeps `final_panel_reserve_seconds` via `consumer:'panel'`, the
    suite draws only the unreserved remainder, and neither adapter re-derives its deadline after the join. Run summary
-   gains `station_overlap`. Wall expiry (`terminalizeWallExpiry`, v2.36.71) is invoked only AFTER the `allSettled` join: when the first chain
-   reports exhaustion the sibling still finishes within its own precomputed deadline, so the worst-case extra wall
-   after the first exhaustion equals the sibling's precomputed deadline (bounded by the panel pocket); both receipts
-   are journaled before the terminal event. The unit suite asserts receipt shape only; "no seat process survives
-   terminalization" is checked on the first live post-merge campaign (`dispatch-status.js --run <seat>` per seat)
-   and recorded in the evidence README. `station_overlap` also carries `suite_failed_during_overlap: boolean` so a
-   contention-induced suite failure is diagnosable from the receipt.
+   gains `station_overlap`. Wall expiry (`terminalizeWallExpiry`, v2.36.71) fires when the first chain reports
+   exhaustion; the sibling chain is allowed to finish within its own already-computed deadline (its seat/suite
+   processes carry that deadline as `--timeout`, so nothing outlives it) and its receipt is journaled before the
+   terminal event; RED case: after terminalization no seat process for the campaign survives (pin via the runner's
+   own pid/manifest listing, `dispatch-status.js --run <seat>`).
 4. GREEN: KR1 (entries ≤ 5 s apart; adjudicate after both), KR2 (clock fixture completes; base blocks), KR4:
    `station_single_control` (`implementation-campaign-routing.test.sh:3482`) untouched; the verification-cache-hit
    path has no existing control — add one in the new suite (`fullSuite` returns `reused_from: 'campaign_verification'`
@@ -157,38 +147,32 @@ exists, re-verified only by two fields, and ignored when the live roster flips �
 
 ### D2 — `snapshot-contract` (S-size deliverable)
 1. RED (`implementation-campaign-state-snapshot-contract.test.sh`, all new cases; no existing suite edited): (a) a
-   rejected Mission claim leaves the snapshot file on disk (observed base: file present; step order
-   `qc_panel_snapshot, mission, …` per the fixture at `implementation-campaign-state.test.sh:3047`); (b) an `EEXIST`
-   file with a mutated `min_panel_size` but unchanged stored `digest` and matching identity is accepted with only
-   `step.live_drift`; (c) a live roster flip after sealing is invisible in the journal; (d) a held claim with no file
-   is silently re-sealed from the live roster. Record the observed base outputs in the RED comments.
-2. Intake: move the O_EXCL write to immediately after a successful `missionClaimAdapter` (`campaign-intake.js:2227-2230`
-   today precedes it at `:2071-2073`); a rejected claim therefore never produces a file and no unlink path exists.
-   Two intakes racing for one campaign are decided by the claim, not the file: the loser has no claim and writes
-   nothing. On `EEXIST`: verify identity (as today) AND recompute the digest over the fields the file carries (2-C's
-   rule; pre-2-C files without `review_station` digest without it, as 2-C already does; every 2-B+ file carries
-   `digest`, so no new stored field) against the file's stored `digest`; on mismatch, rebuild a live snapshot from the
-   same contract and block with `qc_panel_snapshot_drift { fields: [names whose values differ], stored_digest,
-   recomputed_digest }` — the block reason is the digest mismatch, the field list is diagnostic; campaign parked, no
-   terminalization (assert both). Claim held, no file: journal shows no event after the claim →
-   seal + `qc_panel_snapshot_sealed_on_resume`; otherwise park `qc_panel_snapshot_missing_after_claim`.
-   `step.live_drift` unchanged.
+   rejected Mission claim leaves the snapshot file this intake just wrote on disk (observed base: file present,
+   step order `qc_panel_snapshot, mission, …` from the fixture at `implementation-campaign-state.test.sh:3047`);
+   (b) an `EEXIST` file with a mutated `min_panel_size` but unchanged stored `digest` and same
+   `campaign_id`/`contract_digest` is accepted with only `step.live_drift`; (c) a live roster flip after sealing is
+   invisible in the journal. Record the observed base outputs in the RED comments.
+2. Intake: keep the O_EXCL write before the claim; remember whether THIS call created the file; when the claim minted
+   in this call is rejected, unlink only a file this call created (a found file is never touched) — a rejected claim
+   leaves no file, and a crash between write and claim leaves a file whose identity/digest the next intake verifies
+   exactly as any other `EEXIST` file. On `EEXIST`: verify identity (as today) AND recompute the digest over the
+   fields the file carries (2-C's rule — `review_station` only when present; pre-2-C files without it digest without
+   it, exactly as 2-C already does — no new stored field is needed because every 2-B+ file already carries `digest`)
+   and compare with the file's stored `digest`; a mismatch is `blocked` with `qc_panel_snapshot_drift` naming the
+   fields, campaign parked, no terminalization (assert both). `step.live_drift` unchanged.
 3. `snapshotStation`: read the live `qc_panel_seats_complete`; when it differs from what the sealed `review_station`
    implies, journal `qc_panel_snapshot_live_flip {sealed_station, live_seats_complete}` and run the SEALED station.
-4. GREEN: KR3 in the new suite only. The ONLY existing assertions that change are the two that pin the pre-2-D step
-   order (`implementation-campaign-state.test.sh:3047` fixture and `panel-snap-write`'s "file exists after a rejected
-   claim" if it asserts that — check; each gets a `# RED at <base sha>: order was … ; a rejected claim left the file`
-   note). `panel-snap-drift` and `review_station_snapshot` are byte-identical. Codex mirrors.
+4. GREEN: KR3 in the new suite only; `panel-snap-write`, `panel-snap-drift`, `review_station_snapshot` and the
+   step-order fixture are byte-identical (no existing assertion changes in D2). Codex mirrors.
    Acceptance: new suite, `autopilot-engine`, `implementation-campaign-state`, `implementation-campaign-routing`,
    `mission-runtime-v2`, `mission-routing-campaign-bridge` green; sync-check; consumer sweep of
-   `qc_panel_snapshot|live_drift|snapshotStation|steps\[`.
+   `qc_panel_snapshot|live_drift|snapshotStation`.
 
 ## 5. Test / validation
 
 Script-gated: every acceptance list above, run one suite at a time in a scratch clone, then the §37 consumer sweep
-(one Bash call, `< /dev/null`), then `hooks/tests/run.sh` with the host-red set attributed at base. Human-gated: pre-merge hold — if the recorded serial `full_suite_seconds` baseline is
-within 20 % of the unreserved wall remainder typically observed at the suite's start, D1 is not merged until that is
-understood; the live proof of KR1 (`saved_seconds > 0`) is observable only on the NEXT managed campaign after the merge
+(one Bash call, `< /dev/null`), then `hooks/tests/run.sh` with the host-red set attributed at base. Human-gated:
+the live proof of KR1 (`saved_seconds > 0`) is observable only on the NEXT managed campaign after the merge
 (evidence-discipline §38) — record it one lineage late in the evidence README.
 
 ## 6. Risks + inversion
@@ -201,8 +185,9 @@ understood; the live proof of KR1 (`saved_seconds > 0`) is observable only on th
   spike); the first live campaign after the merge records the overlapped value; if it grows > 20 % the follow-up
   BACKLOG row (a `station_overlap: off` contract knob) is filed with that measurement as its trigger. No knob in
   this cut.
-- Crash between the claim and the write leaves a held claim with no file. Mitigation: the resume rule above (seal only
-  when the journal shows nothing consumed the contract yet; otherwise park with a named reason); RED case (d) pins it.
+- Unlinking a snapshot on claim rejection must never remove a file another intake wrote. Mitigation: the unlink is
+  gated on the O_EXCL write having succeeded in this call; the RED case seeds a foreign file and asserts it survives
+  a rejected claim.
 - Reader asymmetry: a rejected `qc_panel_snapshot_drift` at resume leaves the campaign parked — verify (as C did in
   v2.36.71) that the rejection path does not terminalize.
 
@@ -235,11 +220,3 @@ understood; the live proof of KR1 (`saved_seconds > 0`) is observable only on th
   unlinks only the file this intake created (no claim-held-without-snapshot window), digest verified against the file's
   own stored digest; D2 edits no existing assertion; pocket sentence, cache-hit/replay controls, §8 Q2 closed, async
   spike noted. Growth 1.24×.
-- G2 2026-09-19 (terminal at the cap; GLM-5.2 READY; claude-fable-5-1 CONDITIONAL: 3 blockers all on R4 + 4
-  non-blocking; `g2-*`, `plan.as-reviewed-g2.md`): all seven accepted — the G1 unlink design contradicted the frozen
-  rubric and was unsafe under two racing intakes (A creates, B accepts+claims, A rejected → unlinks B's file); the plan
-  now writes the snapshot only after a successful claim (file ⇒ held claim, no unlink), defines the claim-without-file
-  resume rule, and names drifted fields from a live rebuild beside the digest pair; terminalization after the join with
-  the worst-case extra wall stated; `suite_failed_during_overlap` + pre-merge hold; ledger timestamps and the `clock`
-  seam verified at base and written into §0. Growth: G2 reviewed 1.29× of R0; after the G2 fold 1.47× of R0 (over the 1.25 warn line, under the 1.5 hard stop;
-  cap reached so no further dispatch — next cut starts leaner). Zero unaddressed blockers, zero deferred — **frozen g2**.

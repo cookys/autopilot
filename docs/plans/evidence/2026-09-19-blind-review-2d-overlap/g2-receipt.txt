@@ -1,0 +1,318 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "2d-overlap-g1",
+  "logical_plan_id": "blind-review-2d-overlap-2026-09-19",
+  "session_id": "2d-overlap-1789829987",
+  "session_key": "61083c0d31f2f62478a43a8ff5ecac3f82dc9ffc61de976ca43b20a41e4d5e0b",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "ce52fdb5ededb8a0f94bd4188fe096c088bc13054e57290972ef1c08214525d7",
+  "manifest_sha256": "e3e9e850eee11ebe30af248aeab53b761b3a246717d521bbcbb19947eae673f7",
+  "plan_sha256": "dec407049b67d46ad27fe30a9328f2aaf34c0e70ec81921e531766b722e0b4ad",
+  "growth_ratio": {
+    "numerator": 3997,
+    "denominator": 3099
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "3c4a81527c8bd58903634b04e0f34e69f8fba7c4a35751ebf02cb1c97c054fcc"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-Iq6a84",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "1b9d6767420a0d19fda7727640296d300e22ff0bdf1684b9c99117f3ba320b89"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "c0df9410caba100ba14b492d1abd72106a060ce8a38b7bea0da81eae698fffde"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "645924c67c921e3877e267b088771cfb88b48ec602f50503fe87db8aef890dd4",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-QiTvHn",
+          "digest": "645924c67c921e3877e267b088771cfb88b48ec602f50503fe87db8aef890dd4"
+        },
+        "receipt_digest": "b5f59b62c08e8ee6ccf32c43a96aa4e911c51ad67135738d0f11f16f8e080969"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "claude_operations_skeptic",
+      "target_id": "claude_operations_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "D2 snapshot-contract: campaign-intake.js write ordering of qc_panel_snapshot.json relative to missionClaimAdapter",
+      "claim": "The plan contradicts itself on the single design decision R4 turns on: three places say the snapshot write moves AFTER the Mission claim, two places say it stays BEFORE the claim with an unlink on rejection. The frozen rubric requires the file to be written only after the claim succeeds. D2 cannot be implemented as written because the RED fixture, the file map and the KR describe different code.",
+      "evidence": "Section 2.6 states 'the snapshot file's write moves after the claim (same content, same path)'. Section 3 file map for campaign-intake.js states 'D2: snapshot write after missionClaimAdapter'. KR3 states 'The write stays BEFORE the Mission claim (O_EXCL, unchanged)' and D2 step 2 states 'keep the O_EXCL write before the claim ... unlink only a file this call created'. The review log records G1 accepting the before-the-claim variant, so sections 2.6 and 3 were not updated after that acceptance.",
+      "evidence_reference": "Plan section 2.6 'Compatibility impact'; section 3 row for src/engine/campaign-intake.js; section 2 KR3; section 4 D2 step 2; Review log G1 entry; rubric R4 first clause",
+      "repair": "Choose one ordering and state it identically in 2.6, 3, KR3, D2 step 1-2 and section 6. Recommended: write the snapshot only after missionClaimAdapter succeeds, as the frozen rubric says, which removes the unlink path and the race in the next finding entirely; the O_EXCL semantics and file content stay unchanged, only the call site moves. If the author insists on write-before-claim, the deviation from R4 must be recorded in the review log as an explicit rubric departure with the reason.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bacdf87fb322b43eecb70315df6060b270098a2251ead3171c7120f0c0c82a0c"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "D2 snapshot-contract: unlink-on-rejected-claim path in campaign-intake.js and the section 6 RED case for it",
+      "claim": "Unlink-on-rejection is unsafe under the exact concurrency that produces a rejected claim. Two intakes racing for the same campaign: A creates the file with O_EXCL, B hits EEXIST, verifies identity and digest, and wins the claim; A's claim is then rejected and A unlinks the file that B just sealed against. B is now running with no durable snapshot, and a later resume re-seals from the live roster, which silently rebinds the contract the cut is meant to freeze. The section 6 RED case only seeds a foreign file and does not exercise this interleaving.",
+      "evidence": "D2 step 2: 'when the claim minted in this call is rejected, unlink only a file this call created (a found file is never touched)'. Section 6 third risk: 'the unlink is gated on the O_EXCL write having succeeded in this call; the RED case seeds a foreign file and asserts it survives a rejected claim'. The gate 'this call created it' is exactly true for intake A in the interleaving above, so the gate does not prevent the deletion. Section 0 notes runPanel 'falls back to the live roster only when the snapshot is null/incomplete', which is the silent rebinding path once the file is gone.",
+      "evidence_reference": "Plan section 4 D2 step 2; section 6 risk 3; section 0 bullet 3 (runPanel fallback at autopilot-engine.js:5387-5401); rubric R4 clauses on rejected claim and resume refusal",
+      "repair": "Adopt write-after-successful-claim from the previous finding, which makes the file's existence imply a held claim and removes the unlink path. If write-before-claim is kept anyway, the RED suite must add a two-intake interleaving case (A creates, B EEXIST-accepts and claims, A rejected) and the code must not unlink unless it can prove no other intake has accepted the file, which the current O_EXCL-only signal cannot prove.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d76a1287ae7f400740957447af57ca61a80a65db9515370cc2820392a5f77df9"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "D2 snapshot-contract: qc_panel_snapshot_drift rejection payload and its RED assertion",
+      "claim": "The plan promises a rejection that names the drifted field(s), but the mechanism it specifies is a single stored digest compared against a recomputation over the same file. A one-hash comparison can only say 'mismatch'; it cannot identify which carried field changed. The RED assertion for the payload therefore cannot be written until the author decides how field names are produced.",
+      "evidence": "KR3: 'is blocked at intake with qc_panel_snapshot_drift naming the field(s)'. D2 step 2: 'recompute the digest over the fields the file carries ... and compare with the file's stored digest; a mismatch is blocked with qc_panel_snapshot_drift naming the fields'. No per-field digests, no comparison against a rebuilt snapshot, and no other field-level source is described. Rubric R4 requires the refusal to name the fields.",
+      "evidence_reference": "Plan section 2 KR3; section 4 D2 step 2; rubric R4 middle clause",
+      "repair": "Pick one of: (a) on digest mismatch, rebuild the live snapshot from the same contract and report every carried field whose value differs from the file, with the digest pair attached, while keeping the block reason as the digest mismatch; (b) store per-field digests alongside the whole-file digest in new 2-D files and name fields only when present, falling back to the carried field list for older files; (c) change the payload to name the carried field set plus stored and recomputed digests and record in the review log that R4's 'naming the fields' is satisfied at the field-set level. State the choice in KR3 and D2 step 2 and give the RED comment the exact payload shape.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "052f0030fcd61085bf9203e98e02c146bef97e69ca7d1c6550955ebeba8b0216"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "D1 wall-expiry semantics under overlap and the process-survival RED case in D1 step 3",
+      "claim": "D1 step 3 says wall expiry fires when the first chain reports exhaustion, yet the sibling finishes within its precomputed deadline and its receipt is journaled before the terminal event. Read together, terminalization is deferred to the join, so a wall-expired campaign keeps running seat or suite processes for up to the panel pocket. That is acceptable but must be said plainly. The RED case 'after terminalization no seat process survives' is placed in a suite whose adapters are injected sleepers that spawn no processes, so it cannot be pinned there.",
+      "evidence": "D1 step 3: 'Wall expiry ... fires when the first chain reports exhaustion; the sibling chain is allowed to finish within its own already-computed deadline ... and its receipt is journaled before the terminal event; RED case: after terminalization no seat process for the campaign survives (pin via ... dispatch-status.js --run <seat>)'. D1 step 1: adapters 'record Date.now() on entry and sleep 200 ms'.",
+      "evidence_reference": "Plan section 4 D1 step 1 and step 3; section 2 KR2",
+      "repair": "State in D1 step 3 that terminalizeWallExpiry is invoked only after the allSettled join, and that the worst-case extra wall after the first exhaustion equals the sibling's precomputed deadline. Move the no-surviving-seat-process check to the live evidence README for the first post-merge campaign, or to a runner-level test that actually spawns seats; keep the unit suite to receipt-shape assertions.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bab25a0923992cb7fb234aa3b95b78331d72a2b3800985837d6f4b9b2bb98863"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "D1 CPU-contention risk and the full_suite failure attribution in the run receipt",
+      "claim": "The suite's deadline is fixed at startedAt, so CPU contention from concurrent seat processes can push the suite past a timeout it would have met serially, turning a campaign that passes at base into a verification failure. The only mitigation offered is a measurement and a backlog row after the fact, which does nothing for the first live campaign and leaves such a failure indistinguishable from a genuine suite regression.",
+      "evidence": "Section 6 risk 2: 'a suite that overruns now competes with seat processes for CPU. Mitigation: the serial full_suite_seconds baseline is recorded ... if it grows > 20 % the follow-up BACKLOG row ... is filed'. D1 step 3: 'neither re-reads after the other finishes'. Nothing in the receipt distinguishes a suite timeout that occurred under overlap from one that did not.",
+      "evidence_reference": "Plan section 6 risk 2; section 4 D1 step 3; rubric R7 CPU-contention clause",
+      "repair": "Add to the station_overlap summary field a boolean or reason that marks a full_suite failure as having occurred while the panel was running, so the first live overrun is diagnosable from the receipt. Add a pre-merge hold: if the recorded serial full_suite_seconds baseline is within 20 % of the unreserved wall remainder typically observed at the suite's start, do not merge D1 until that is understood. No code beyond the summary field.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "66b4c5f2cfb176cb1da8560fa092f9bc3e27497d8d2068648a86fd19d4ca587a"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "KR1 measurable and the section 3 reducer stop-condition",
+      "claim": "KR1 is measured from ledger.full_suite.started_at and ledger.dispatch_review.started_at, but section 0 never verifies at base that those ledger rows carry started_at and ended_at, and section 3 explicitly plans to stop and re-plan if they do not. The primary KR therefore rests on an unverified precondition that could have been checked in the same pass that produced section 0.",
+      "evidence": "Section 3 row for implementation-campaign.js: 'if the full_suite/dispatch_review ledger rows turn out to lack started_at/ended_at, D1 stops and re-plans instead of editing the reducer'. Section 0 cites campaign-composition.js line ranges for station order but no reducer lines for ledger row fields. KR1 depends on both timestamps.",
+      "evidence_reference": "Plan section 0 bullet 1; section 2 KR1; section 3 row for src/engine/implementation-campaign.js",
+      "repair": "Verify at base now and add to section 0 the reducer lines that write started_at and ended_at for the full_suite and dispatch_review ledger rows. If they are absent, restate KR1 over the trace rows the composer pushes after the join, which D1 controls, and delete the stop-and-re-plan clause.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7da51b4dc52f15d4c6b9da9002c9a2963388c2d40fdc4a61b0853a1bd8071546"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "KR2 injected-clock fixture in autopilot-engine-station-overlap.test.sh",
+      "claim": "KR2 needs a clock injected so the two stations exceed max_wall_seconds serially but fit concurrently, and needs the same fixture to block at base. Section 0 describes campaignClockElapsedSeconds as derived from campaign state but names no injection seam, so it is unknown whether the fixture can be built without touching the reducer, which section 7 forbids.",
+      "evidence": "KR2: 'with a clock injected so that panel + suite serially would exceed max_wall_seconds but concurrently would not'. Section 0 bullet 2 cites campaignWallBudgetStatus and campaignClockElapsedSeconds with no now-source or injection point. Section 7: 'Any reducer change ... unconditionally' out of scope.",
+      "evidence_reference": "Plan section 2 KR2; section 0 bullet 2; section 7 first bullet; rubric R6 RED-first clause",
+      "repair": "No current change; follow-up only. In the D1 spike note, name the seam used for the fixture (an injectable now function, or journal timestamps authored so elapsed lands at the intended value) and confirm it exists at base without a reducer edit. Record the exact base block payload observed with that fixture next to the RED comment.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_operations_skeptic",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b2594ad685e2433fa7e13c56adcd35fa05ad7400a3dad4da7760ed0abc223548"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "bab25a0923992cb7fb234aa3b95b78331d72a2b3800985837d6f4b9b2bb98863",
+      "rubric_id": "R2",
+      "affected_surface": "D1 wall-expiry semantics under overlap and the process-survival RED case in D1 step 3",
+      "claim": "D1 step 3 says wall expiry fires when the first chain reports exhaustion, yet the sibling finishes within its precomputed deadline and its receipt is journaled before the terminal event. Read together, terminalization is deferred to the join, so a wall-expired campaign keeps running seat or suite processes for up to the panel pocket. That is acceptable but must be said plainly. The RED case 'after terminalization no seat process survives' is placed in a suite whose adapters are injected sleepers that spawn no processes, so it cannot be pinned there.",
+      "evidence_reference": "Plan section 4 D1 step 1 and step 3; section 2 KR2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "66b4c5f2cfb176cb1da8560fa092f9bc3e27497d8d2068648a86fd19d4ca587a",
+      "rubric_id": "R7",
+      "affected_surface": "D1 CPU-contention risk and the full_suite failure attribution in the run receipt",
+      "claim": "The suite's deadline is fixed at startedAt, so CPU contention from concurrent seat processes can push the suite past a timeout it would have met serially, turning a campaign that passes at base into a verification failure. The only mitigation offered is a measurement and a backlog row after the fact, which does nothing for the first live campaign and leaves such a failure indistinguishable from a genuine suite regression.",
+      "evidence_reference": "Plan section 6 risk 2; section 4 D1 step 3; rubric R7 CPU-contention clause",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7da51b4dc52f15d4c6b9da9002c9a2963388c2d40fdc4a61b0853a1bd8071546",
+      "rubric_id": "R1",
+      "affected_surface": "KR1 measurable and the section 3 reducer stop-condition",
+      "claim": "KR1 is measured from ledger.full_suite.started_at and ledger.dispatch_review.started_at, but section 0 never verifies at base that those ledger rows carry started_at and ended_at, and section 3 explicitly plans to stop and re-plan if they do not. The primary KR therefore rests on an unverified precondition that could have been checked in the same pass that produced section 0.",
+      "evidence_reference": "Plan section 0 bullet 1; section 2 KR1; section 3 row for src/engine/implementation-campaign.js",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b2594ad685e2433fa7e13c56adcd35fa05ad7400a3dad4da7760ed0abc223548",
+      "rubric_id": "R6",
+      "affected_surface": "KR2 injected-clock fixture in autopilot-engine-station-overlap.test.sh",
+      "claim": "KR2 needs a clock injected so the two stations exceed max_wall_seconds serially but fit concurrently, and needs the same fixture to block at base. Section 0 describes campaignClockElapsedSeconds as derived from campaign state but names no injection seam, so it is unknown whether the fixture can be built without touching the reducer, which section 7 forbids.",
+      "evidence_reference": "Plan section 2 KR2; section 0 bullet 2; section 7 first bullet; rubric R6 RED-first clause",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-19T15:07:09.301Z"
+}
+rc=0

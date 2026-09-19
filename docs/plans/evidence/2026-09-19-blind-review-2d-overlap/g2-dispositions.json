@@ -1,0 +1,49 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "blind-review-2d-overlap-2026-09-19",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "bacdf87fb322b43eecb70315df6060b270098a2251ead3171c7120f0c0c82a0c",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the plan contradicted itself; write-after-successful-claim adopted everywhere (2.6, 3, KR3, D2, 6) as the frozen rubric says; the unlink path is gone."
+  },
+  {
+   "fingerprint": "d76a1287ae7f400740957447af57ca61a80a65db9515370cc2820392a5f77df9",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted: the two-intake race (A creates, B EEXIST-accepts and claims, A rejected and unlinks) is real under O_EXCL-only signals; write-after-claim makes file ⇒ held claim and removes the race; the claim-without-file resume rule covers the crash window."
+  },
+  {
+   "fingerprint": "052f0030fcd61085bf9203e98e02c146bef97e69ca7d1c6550955ebeba8b0216",
+   "disposition": "accepted_blocker",
+   "candidate_blocker": true,
+   "rationale": "Accepted, option (a): on digest mismatch rebuild the live snapshot from the same contract and list every carried field whose value differs, with stored and recomputed digests; the block reason stays the digest mismatch."
+  },
+  {
+   "fingerprint": "bab25a0923992cb7fb234aa3b95b78331d72a2b3800985837d6f4b9b2bb98863",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: terminalizeWallExpiry only after the allSettled join; worst-case extra wall = sibling's precomputed deadline (bounded by the pocket); the process-survival check moves to the first live post-merge campaign; unit suite asserts receipt shape."
+  },
+  {
+   "fingerprint": "66b4c5f2cfb176cb1da8560fa092f9bc3e27497d8d2068648a86fd19d4ca587a",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: station_overlap.suite_failed_during_overlap flag; pre-merge hold when the serial full_suite baseline is within 20 % of the unreserved remainder."
+  },
+  {
+   "fingerprint": "7da51b4dc52f15d4c6b9da9002c9a2963388c2d40fdc4a61b0853a1bd8071546",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted and verified at base: every ledger row is built by ledgerEntry (autopilot-engine.js:2950-2957) with started_at/ended_at — full_suite :8254, campaign_verification :8168/:8193, panel dispatch_review :5491/:5738; written into §0; stop-and-re-plan clause kept only as the guard it already is."
+  },
+  {
+   "fingerprint": "b2594ad685e2433fa7e13c56adcd35fa05ad7400a3dad4da7760ed0abc223548",
+   "disposition": "accepted_nonblocking",
+   "candidate_blocker": false,
+   "rationale": "Accepted: the injection seam is the AutopilotEngine({clock}) constructor option consumed by this.now(); named in §0; the base block payload is recorded beside the RED comment."
+  }
+ ]
+}

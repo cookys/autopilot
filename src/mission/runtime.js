@@ -6,6 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const mission = require('../engine/mission-convergence');
+const { buildStrandedClaim } = require('../engine/campaign-intake');
 const {
   missionCampaignIdFor,
   missionSubjectDigest,
@@ -1445,6 +1446,11 @@ function grantMissionCampaign(input = {}) {
     if (live) {
       const headSha = git(repoInfo.repo, ['rev-parse', 'HEAD']);
       if (live.base_sha !== headSha) {
+        const stranded = buildStrandedClaim({
+          claim: live,
+          repo: repoInfo.repo,
+          statePath: store.state_path,
+        });
         fail(
           'MISSION_GRANT_ATTEMPT_BLOCKED',
           `mission grant blocked for graph node ${nodeId}: live claim ${live.claim_id} on attempt ${live.graph_attempt} is stale for head ${headSha} (claim base ${live.base_sha})`,
@@ -1456,6 +1462,8 @@ function grantMissionCampaign(input = {}) {
             graph_attempt: live.graph_attempt,
             base_sha: live.base_sha,
             head_sha: headSha,
+            recovery: stranded && stranded.recovery,
+            stranded_claim: stranded,
           },
         );
       }

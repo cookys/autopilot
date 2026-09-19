@@ -30,9 +30,11 @@ const {
   missionSubjectDigest,
 } = require('./mission-campaign-identity');
 const {
+  defaultCampaignLedgerPath,
   loadRows,
   processLiveness,
   projectCampaign,
+  resolveCampaignForClaim,
 } = require('../campaign/cli');
 const {
   consumeProviderReadinessBeforeSpend,
@@ -120,6 +122,178 @@ function defaultCampaignSealPath(contractPath) {
   return absolute.endsWith('.json')
     ? `${absolute.slice(0, -5)}.seal.json`
     : `${absolute}.seal.json`;
+}
+
+function ledgerRowsForStrandedClaim(campaignLedgerPath) {
+  if (typeof campaignLedgerPath !== 'string' || campaignLedgerPath.length === 0) return [];
+  if (!fs.existsSync(campaignLedgerPath)) return [];
+  try {
+    return loadRows(campaignLedgerPath);
+  } catch (_error) {
+    try {
+      const lines = fs.readFileSync(campaignLedgerPath, 'utf8').split('\n').filter((line) => line.trim() !== '');
+      return lines.map((line) => JSON.parse(line));
+    } catch (_parseError) {
+      return [];
+    }
+  }
+}
+
+function liveClaimAndStatePath(repo, grantRef) {
+  if (typeof grantRef !== 'string' || !/^[0-9a-f]{64}$/.test(grantRef)) {
+    return { claim: null, statePath: null };
+  }
+  let identity;
+  try {
+    identity = canonicalRepoIdentity(repo);
+  } catch (_error) {
+    return { claim: null, statePath: null };
+  }
+  const prefix = 'git-common-dir:';
+  if (typeof identity !== 'string' || !identity.startsWith(prefix)) {
+    return { claim: null, statePath: null };
+  }
+  const statesDir = path.join(identity.slice(prefix.length), 'autopilot', 'mission', 'states');
+  let names;
+  try {
+    names = fs.readdirSync(statesDir);
+  } catch (_error) {
+    return { claim: null, statePath: null };
+  }
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const statePath = path.join(statesDir, name);
+    let state;
+    try {
+      state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    } catch (_error) {
+      continue;
+    }
+    const claims = state && state.claims && typeof state.claims === 'object' ? state.claims : {};
+    for (const claim of Object.values(claims)) {
+      if (claim && claim.binding_digest === grantRef
+          && claim.released !== true && claim.terminal !== true) {
+        return { claim, statePath };
+      }
+    }
+  }
+  return { claim: null, statePath: null };
+}
+
+function strandedClaimResolution(kind) {
+  if (kind === 'absent' || kind === 'ticket_present' || kind === 'unknown_v2') return kind;
+  if (kind === 'direct') return 'ticket_present';
+  return 'unknown_v2';
+}
+
+function strandedClaimRecovery(resolution, {
+  claim,
+  resolved,
+  statePath,
+  campaignLedgerPath,
+}) {
+  const claimId = claim.claim_id;
+  const state = typeof statePath === 'string' && statePath.length > 0
+    ? statePath
+    : '<mission-state.json>';
+  const ledger = typeof campaignLedgerPath === 'string' && campaignLedgerPath.length > 0
+    ? campaignLedgerPath
+    : '<campaign-ledger.jsonl>';
+  if (resolution === 'absent') {
+    return `mission withdraw --state ${state} --out ${state} --claim-id ${claimId} --campaign-ledger ${ledger} --never-started true`;
+  }
+  if (resolution === 'ticket_present') {
+    const campaignId = resolved && resolved.kind === 'direct'
+      ? resolved.campaign_id
+      : (resolved && Array.isArray(resolved.roots) && resolved.roots[0]
+        ? resolved.roots[0].campaign_id
+        : claim.campaign_id);
+    return `campaign terminalize --campaign-id ${campaignId} --ledger ${ledger} --leaf-manifest <ended-leaf-manifest.json>`;
+  }
+  return `mission withdraw --state ${state} --out ${state} --claim-id ${claimId} --campaign-ledger ${ledger}`;
+}
+
+// Do not release a live claim this run will not use. One exported helper for
+// campaign-intake and autopilot-engine (and grant-block recovery).
+function buildStrandedClaim(input = {}) {
+  const claim = input.claim;
+  if (!claim || typeof claim !== 'object' || typeof claim.claim_id !== 'string'
+      || claim.claim_id.length === 0
+      || claim.released === true
+      || claim.terminal === true) {
+    return null;
+  }
+  const repo = input.repo;
+  let campaignLedgerPath = input.campaignLedgerPath;
+  if (typeof campaignLedgerPath !== 'string' || campaignLedgerPath.length === 0) {
+    try {
+      campaignLedgerPath = typeof repo === 'string' && repo.length > 0
+        ? defaultCampaignLedgerPath(repo)
+        : campaignLedgerPathFor(canonicalRepoIdentity(repo));
+    } catch (_error) {
+      campaignLedgerPath = null;
+    }
+  }
+  const rows = Array.isArray(input.rows) ? input.rows : ledgerRowsForStrandedClaim(campaignLedgerPath);
+  let resolved;
+  try {
+    resolved = resolveCampaignForClaim(rows, claim);
+  } catch (_error) {
+    resolved = { kind: 'unknown_v2' };
+  }
+  const resolution = strandedClaimResolution(resolved && resolved.kind);
+  return {
+    claim_id: claim.claim_id,
+    campaign_id: claim.campaign_id,
+    graph_node_id: claim.graph_node_id || null,
+    base_sha: claim.base_sha || null,
+    resolution,
+    recovery: strandedClaimRecovery(resolution, {
+      claim,
+      resolved,
+      statePath: input.statePath,
+      campaignLedgerPath,
+    }),
+  };
+}
+
+function withStrandedClaim(result, stranded) {
+  if (!stranded) return result;
+  const step = {
+    owner: 'mission',
+    status: 'stranded_claim',
+    stranded_claim: stranded,
+  };
+  return {
+    ...result,
+    stranded_claim: stranded,
+    steps: Array.isArray(result.steps) ? result.steps.concat([step]) : [step],
+  };
+}
+
+function strandedClaimForSealedGrant(repo, contractPath, extra = {}) {
+  if (typeof contractPath !== 'string' || contractPath.length === 0) return null;
+  let grantRef = extra.grantRef || null;
+  if (!grantRef) {
+    try {
+      const sealed = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+      grantRef = sealed && typeof sealed.mission_grant_ref === 'string'
+        ? sealed.mission_grant_ref
+        : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+  const located = extra.claim
+    ? { claim: extra.claim, statePath: extra.statePath || null }
+    : liveClaimAndStatePath(repo, grantRef);
+  return buildStrandedClaim({
+    claim: located.claim,
+    repo,
+    statePath: extra.statePath || located.statePath,
+    campaignLedgerPath: extra.campaignLedgerPath,
+    rows: extra.rows,
+  });
 }
 
 function campaignLedgerPathFor(repoIdentity) {
@@ -2108,13 +2282,18 @@ function runCampaignIntake(input = {}, adapters = {}) {
   }
   steps.push(missionClaim);
   if (missionClaim.status === 'rejected') {
-    return {
+    // Do not release. See buildStrandedClaim — a live unused claim must be
+    // named with an exact recovery command, never skipped silently.
+    const stranded = strandedClaimForSealedGrant(repo, contractPath, {
+      campaignLedgerPath: requestedLedgerPath,
+    });
+    return withStrandedClaim({
       status: 'blocked',
       reason: missionClaim.reason,
       rejection: missionClaim,
       steps,
       pre_spend_no_effect_receipt: null,
-    };
+    }, stranded);
   }
 
   const releaseAfterRejection = (rejection) => {
@@ -2448,6 +2627,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
 module.exports = {
   appendCampaignEvent,
   CampaignIntakeError,
+  buildStrandedClaim,
+  withStrandedClaim,
   buildNoEffectReceipt,
   buildQcPanelSnapshot,
   resolveReviewStation,

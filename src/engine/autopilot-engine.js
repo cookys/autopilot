@@ -27,12 +27,14 @@ const {
 } = require('../readiness/provider-bootstrap');
 const {
   appendCampaignEvent,
+  buildStrandedClaim,
   completeCampaignAdmission,
   releaseCampaignAdmission,
   runCampaignIntake,
   buildQcPanelSnapshot,
   modelFamilyOfEngine,
   resolveReviewStation,
+  withStrandedClaim,
 } = require('./campaign-intake');
 const {
   projectMissionMode,
@@ -9834,6 +9836,7 @@ class AutopilotEngine {
       }
       // Fail closed when the admitted control's grant ref differs from the
       // sealed binding used to construct trusted adapters. Do not release.
+      // See buildStrandedClaim — name the live unused claim and its recovery.
       const admittedGrantRef = intake.contract
         && typeof intake.contract.mission_grant_ref === 'string'
         && /^[0-9a-f]{64}$/.test(intake.contract.mission_grant_ref)
@@ -9844,7 +9847,22 @@ class AutopilotEngine {
             || admittedGrantRef === null
             || admittedGrantRef !== trustedMissionGrantRef) {
           const mismatchReason = 'admitted campaign mission_grant_ref does not match sealed Mission grant binding';
-          campaignControl = {
+          const claimId = intake.mission_claim && intake.mission_claim.claim_id;
+          let liveClaim = null;
+          try {
+            const state = this.missionCampaignStore && this.missionCampaignStore.load
+              ? this.missionCampaignStore.load()
+              : null;
+            liveClaim = state && state.claims && claimId ? state.claims[claimId] : null;
+          } catch (_error) {
+            liveClaim = null;
+          }
+          const stranded = buildStrandedClaim({
+            claim: liveClaim || intake.mission_claim,
+            repo: loopCwd,
+            statePath: this.missionCampaignStore && this.missionCampaignStore.state_path,
+          });
+          campaignControl = withStrandedClaim({
             ...intake,
             status: 'blocked',
             reason: mismatchReason,
@@ -9853,7 +9871,7 @@ class AutopilotEngine {
               code: 'mission_grant_ref_mismatch',
               reason: mismatchReason,
             },
-          };
+          }, stranded);
           ledger.push(this.ledgerEntry(
             'campaign_intake',
             'blocked',
@@ -9862,6 +9880,7 @@ class AutopilotEngine {
               campaign_id: intake.campaign_id || null,
               rejection_owner: 'mission',
               rejection_code: 'mission_grant_ref_mismatch',
+              stranded_claim: stranded,
             },
           ));
           return finish({
@@ -9975,6 +9994,7 @@ class AutopilotEngine {
       try {
         // Thread the exact constructor-owned adapter object from intake.
         // Never rebuild; never fall back to runtime contract/adapters.
+        // Do not release. See buildStrandedClaim.
         const liveGrantRef = campaignControl.contract
           && typeof campaignControl.contract.mission_grant_ref === 'string'
           && /^[0-9a-f]{64}$/.test(campaignControl.contract.mission_grant_ref)
@@ -9984,11 +10004,31 @@ class AutopilotEngine {
           if (trustedMissionGrantRef === null
               || liveGrantRef === null
               || liveGrantRef !== trustedMissionGrantRef) {
+            const claimId = campaignControl.mission_claim && campaignControl.mission_claim.claim_id;
+            let liveClaim = null;
+            try {
+              const state = this.missionCampaignStore && this.missionCampaignStore.load
+                ? this.missionCampaignStore.load()
+                : null;
+              liveClaim = state && state.claims && claimId ? state.claims[claimId] : null;
+            } catch (_error) {
+              liveClaim = null;
+            }
+            const stranded = buildStrandedClaim({
+              claim: liveClaim || campaignControl.mission_claim,
+              repo: loopCwd,
+              statePath: this.missionCampaignStore && this.missionCampaignStore.state_path,
+            });
             release = {
               status: 'blocked',
               error: 'mission_grant_ref_mismatch',
               reason: 'campaign mission_grant_ref does not match sealed Mission grant binding',
+              stranded_claim: stranded,
             };
+            campaignControl = withStrandedClaim({
+              ...campaignControl,
+              stranded_claim: stranded,
+            }, stranded);
           }
         }
         if (!release) {

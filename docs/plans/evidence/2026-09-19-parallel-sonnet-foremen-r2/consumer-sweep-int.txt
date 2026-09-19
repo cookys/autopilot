@@ -1,0 +1,10 @@
+rc=0 6s hooks/tests/campaign-boundary-receipt-e2e.test.sh
+rc=0 0s hooks/tests/cleanroom-launch.test.sh
+rc=0 563s hooks/tests/dispatch-hetero.test.sh
+rc=0 2s hooks/tests/implementation-campaign-cli-seam.test.sh
+rc=0 2s hooks/tests/implementation-campaign-state-boundary.test.sh
+rc=0 1s hooks/tests/mission-enforce-roundtrip.test.sh
+rc=0 31s hooks/tests/mission-routing-admission.test.sh
+rc=0 29s hooks/tests/provider-readiness-consumer.test.sh
+rc=0 4s hooks/tests/run-ledger-rotation-order.test.sh
+rc=0 0s hooks/tests/sealed-zero-diff-validator-parity.test.sh

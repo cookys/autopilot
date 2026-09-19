@@ -1,0 +1,28 @@
+# full hooks/tests/run.sh on the round-2 integrated head (5 hand commits), 2026-09-19
+════════ Summary ════════
+❌ 18 / 360 test files FAILED:
+   - hooks/tests/calibration.test.sh
+   - hooks/tests/context-window.test.sh
+   - hooks/tests/controller-execution-independent.test.sh
+   - hooks/tests/dispatch-author-contract.test.sh
+   - hooks/tests/dispatch-author-result-provenance.test.sh
+   - hooks/tests/dispatch-author-session-mode.test.sh
+   - hooks/tests/dispatch-author-strict-roster.test.sh
+   - hooks/tests/dispatch-detached-campaign-authority.test.sh
+   - hooks/tests/dispatch-foreman.test.sh
+   - hooks/tests/dispatch-worktree-lifecycle.test.sh
+   - hooks/tests/hetero-review-loop.test.sh
+   - hooks/tests/probe-runner-coverage.test.sh
+   - hooks/tests/resolve-review-loop-consult-discuss-gate.test.sh
+   - hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh
+   - hooks/tests/resolve-review-loop.test.sh [TIMEOUT]
+   - hooks/tests/review-loop-runner.test.sh
+   - hooks/tests/scaffold-config.test.sh
+   - REAL-STORE POLLUTION (see above)
+rc=1
+DONE
+
+# attribution: 16 of the 18 are the v2.36.71 host-red set (see ../2026-09-19-parallel-sonnet-foremen/full-run-summary.txt), unchanged.
+# probe-runner-coverage: red only under run.sh (1 assertion 'codex has no live-spend branch'), 23/23 green re-run alone in the integrated tree — interference.
+# REAL-STORE POLLUTION: ~/.autopilot/engine-capability/strikes.jsonl gained event_id 42-44 during the run — writer dispatch_hetero_failclosed, receipt_ref log=/tmp/hetero-hands-wave-0919d-readiness1src-fix2 (another live session's real grok-4.6 dispatch on this host, boundary_rejected), not a test in this tree.
+=> 0 regressions.

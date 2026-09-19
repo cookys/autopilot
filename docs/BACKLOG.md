@@ -163,10 +163,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 ### Managed rail: already-scrambled carry-only ledger segments cannot project — reader recovery or locked migration
 - **Status**: open
 - **Trigger**: host ledgers already rotated under the sorted `group_by` carry (zero original journals; file order is base64, not append) still throw `event input artifact must match the prior output artifact`
-- **Effort**: Fix
+- **Effort**: L
 - **Source**: l5 implementation plan 2026-09-16 (writer-only ship; reader recovery out of scope)
 - **Pointer**: docs/plans/2026-09-16-ledger-rotation-order.md
-- **Context**: plan §6 — provenance-gated reader recovery for `_rotation_carry` rows, or a locked migration that proves projected digests unchanged.
+- **Context**: plan §6 — reader recovery for `_rotation_carry` rows (digest-chain linearisation inside the fail-closed reducer) or a locked migration proving digests unchanged. Re-sized L 2026-09-19; needs its own plan + hetero loop.
 
 ### Managed rail: stale campaign leases are never released — 109 runs leased since July keep the ~2 MB carry alive
 - **Status**: open
@@ -177,15 +177,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: plan §6 — a lease GC (dead pid + no heartbeat past TTL → `released`/`expired` row) so the live segment can shrink; A's `fd316019` and D's `409e89d2` parked campaigns join the pile.
 
 ### Managed rail: a disposition resume into a repair round refuses the caller's --branch (expects the derived one)
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.72 2026-09-19
 - **Trigger**: `--resume --campaign-disposition-authority` with must-fix-now findings passes intake → REPAIR_AUTHORIZED, then `prepare_implementation`: `caller branch disagrees with campaign stage (expected <branch>-repair-r2-<sha7>)`
 - **Effort**: Fix
 - **Source**: /l5 dogfood 2026-09-16 (mission proof-parity-raw-log, campaign-v1-aa64ebe3…; first live resume after v2.36.53/54)
 - **Pointer**: docs/plans/evidence/2026-09-16-proof-parity-raw-log/README.md
-- **Context**: `deriveCampaignDispatchUnit` compares the CALLER branch to `expectedBranch(generation)`; an in-run repair derives the name (`buildRepairBranchName`), the resume path passes the original `--branch` through. Derive on resume.
+- **Context**: fixed at the managed loop's `implement` closure (never derived the repair branch — hit the first in-run repair round of any strict campaign, not only resume); `buildRepairBranchName` now delegates to `expectedBranch`.
 
 ### PEER-REPORTED (cuda): backlog table migration — unmapped Status → open, extra column dropped, gate 305 after
-- **Status**: fired 2026-09-16
+- **Status**: shipped v2.36.72 2026-09-19
 - **Trigger**: revival.3d dry-run on the real 196 KB table: 34 unmapped statuses became `open` (`preserved:true`); a header column outside `## Columns` lost 13 cells; the gate on the output reports 305; bytes_before−after ≠ moved
 - **Effort**: Fix
 - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2MPAGM6AT3V3419FMB54XGP`
@@ -561,12 +561,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: the QC panel (GLM-5.2, 2026-09-11) raised four Suggestion-level items against the v1 pin store, all reproduced at depth 0 and all hardening rather than regressions.
 
 ### Managed campaign intake: a rejected intake sometimes releases the Mission claim and sometimes strands it
-- **Status**: open
+- **Status**: shipped v2.36.72 2026-09-19
 - **Trigger**: the next managed `engine implement-review` run that hits `attempt_blocked_by_open_claim` naming a claim from a rejection that already reported failure, or any work on `src/engine/campaign-intake.js`'s rejection paths.
 - **Effort**: S
 - **Source**: /l5 dogfood on the operator pin store, 2026-09-11 — D1 (5 attempts, 3 lost to this class) and D2 (3 attempts, repair deadlocked identically).
 - **Pointer**: docs/backlog/managed-campaign-intake-a-rejected-intake-sometimes-releases-the-mission-claim-a.md
-- **Context**: measured 2026-09-11 across five attempts on one lineage.
+- **Context**: measured 2026-09-11 across five attempts on one lineage. Consult ruling 2026-09-19: never auto-release; both layers emit `stranded_claim` + exact recovery; grant refusal carries it too.
 
 ### PEER-REPORTED (chatgpt-tunnel-host via cuda): a non-Claude foreman rail — and two contract defects that are not really about foremen
 - **Status**: shipped v2.36.45 2026-09-15
@@ -823,12 +823,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: either copy on entry or drop the purity claim (GLM FOLLOW-UP, core review g2)
 
 ### check-phase-review-receipt: open_findings comparison ignores severity; reviewed_seats/total_seats not cross-checked against seat artifacts
-- **Status**: open
+- **Status**: shipped v2.36.72 2026-09-19
 - **Trigger**: verify after the g2 repairs land whether the deep-equality and seat-coverage fixes already cover both; close the row if so
 - **Effort**: S
 - **Source**: same g2 dir
 - **Pointer**: docs/backlog/check-phase-review-receipt-open-findings-comparison-ignores-severity-reviewed-se.md
-- **Context**: MiniMax + GLM FOLLOW-UP, core review g2
+- **Context**: closed 2026-09-19 after verification: `check-phase-review-receipt.js:1040` compares id/severity/disposition element-wise; `:847-869` derives reviewed seats only from sha-verified seat artifacts (case 1n/1p pin). Gap left: no severity-only negative case.
 
 ### resolve-review-loop.test.sh capability-warning assertion messages still say "no warning" while expecting the topology fallback lines
 - **Status**: open
@@ -895,12 +895,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: the plan defines closure as absence-in-later-findings; tightening to "explicitly re-verified" needs a policy decision (MiniMax CUT/FOLLOW-UP)
 
 ### Opt-out receipt with a non-existent config path hashes the empty buffer
-- **Status**: open
+- **Status**: shipped v2.36.72 2026-09-19
 - **Trigger**: D2-repair R2/R3 does not already require the config path to exist (it is in that brief; verify at closeout)
 - **Effort**: S
 - **Source**: same ledger dir as above
 - **Pointer**: docs/backlog/opt-out-receipt-with-a-non-existent-config-path-hashes-the-empty-buffer.md
-- **Context**: sha256 of empty matches a receipt claiming the empty-file hash; the resolver's `off` re-derivation is the real boundary (MiniMax CUT/FOLLOW-UP)
+- **Context**: closed 2026-09-19 after verification: `hetero-review-loop.js:1277-1280` exits 1 before hashing when the config path is missing; `hetero-review-loop.test.sh` case 9 pins exit 1 + no receipt.
 
 ### scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`
 - **Status**: open

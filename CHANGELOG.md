@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.36.72 — 第二輪平行：三條 fired 列（managed rail 兩條＋cuda 回報的 backlog migration），三個 sonnet 工頭、各自 clone、grok hands
+
+- **A repair branch 由 rail 自己導出**（`src/engine/autopilot-engine.js`、`campaign-dispatch-projection.js`＋鏡像）：row 說的是
+  「disposition resume 拒 caller `--branch`」，實際是 managed loop 的 `implement` closure 從不導 repair branch（`currentBranch = branch`），
+  任何 strict campaign 第一個 in-run repair 輪就撞 `caller branch disagrees with campaign stage`。round ≥ 2 且 strict 才用
+  `buildRepairBranchName(branch, round, currentBase)`，該函式改委派 projection 的 `expectedBranch`（單一擁有者，null base → `-base`）；
+  非 strict 與 round 1 行為不變。新 suite `autopilot-engine-repair-branch` 含 strict round-1 對照與 generation 1..3 parity pin。
+- **B backlog table migration 三缺陷**（`scripts/migrate-backlog-entries.js`、`check-backlog-entries.js` 匯出 `runCheck`、
+  `references/backlog-entry.md`＋鏡像；cuda 2026-09-16 回報）：未映射 status 不再默默變 `open`——整列 verbatim 進 sidecar＋manifest
+  `unmapped_status` error，`--apply` 沒 `--allow-unmapped-to-sidecar` 就拒；`## Columns` 外的欄位在 plan 期報 `unmapped_column`、不寫檔；
+  `preserved` 改為位元組帳算（output＋sidecar＋dropped=∅，`bytes_before === bytes_after + moved + normalized − synthesized`，
+  normalized 從真正的 normaliser 算，不是殘差——reviewer 抓到 r1 的 `x === x`）；`--apply` 跑 gate、紅就還原原檔。
+- **C 被拒 intake 不再默默卡住 claim**（`src/engine/campaign-intake.js`、`autopilot-engine.js`、`src/mission/runtime.js`＋鏡像）：
+  hetero consult（gpt-5.6-sol）裁定**永不自動 release**（`absent` 不證明這次 run 擁有那個 claim；no-effect release 讓下一次 grant 免費鑄
+  attempt N+1，正是 v2.36.42 那族）。改為兩層共用 `buildStrandedClaim`：rejection 結果與 journal 帶
+  `stranded_claim{claim_id, campaign_id, graph_node_id, base_sha, resolution, recovery}`，`attempt_blocked_by_open_claim` detail 帶同一
+  `recovery` 指令；claim 保持 live，只有明確 `mission withdraw`／terminalize 能清。新 suite `campaign-intake-rejection-release`。
+- 關列：`check-phase-review-receipt` severity/seat 列與 opt-out receipt 列驗證已被覆蓋（`:1040` 三欄比對、`:847-869` 只信 seat
+  artifact；`hetero-review-loop.js:1277` 路徑不存在先 exit 1），直接關；「already-scrambled carry-only ledger segments」重估 **L**
+  （reducer 內 digest-chain 線性化或活 ledger 改寫，需自己的 plan＋hetero loop）。
+- 出貨路徑（`docs/plans/evidence/2026-09-19-parallel-sonnet-foremen-r2/`）：同 v2.36.71 拓樸；brief 依 §39–41 加 `test -x`、消費者 grep、
+  一次 Bash 的 sweep；5 個 hand commit cherry-pick 無衝突；整合 24 suite（1 既有紅同 base）＋消費者 sweep；A 的工頭自己抓到
+  對錯誤 tree 跑 verify（`git checkout` 被 worktree 佔用靜默失敗）並重跑；C 的工頭 40 次上限用盡，sweep 由 depth-0 補。
+
+prose-justification: none（無 SKILL/reference 文字變動；`references/backlog-entry.md` 兩句是契約文件不是 skill prose）。
+
 ## v2.36.71 — 七條 fired BACKLOG 列平行修掉：六個 sonnet 工頭（Agent 子代理）、各自獨立 clone、cursor-grok-4.6-low hands
 
 - **A wall 到期**（`src/engine/autopilot-engine.js`、`src/campaign/status.js`、`schemas/implementation-campaign-receipt.schema.json`＋鏡像）：

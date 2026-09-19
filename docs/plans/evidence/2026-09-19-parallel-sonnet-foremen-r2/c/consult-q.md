@@ -1,0 +1,11 @@
+Design question for the managed campaign rail (autopilot, src/engine/campaign-intake.js + mission-convergence.js + autopilot-engine.js).
+
+Situation: `mission grant` mints a claim for attempt N (claim A, bound to base X). The run's intake is then rejected before any spend — specifically the missionClaim adapter resolves the live claim by grant_ref and rejects `mission_grant_ref_mismatch` (subject/campaign_id/base_sha no longer match, e.g. HEAD moved). Today intake returns `blocked` and never touches claim A; it stays live in the Mission store; the next `mission grant` for the node fails `attempt_blocked_by_open_claim` naming claim A. Measured 2026-09-11: 5 attempts, 3 lost this way.
+
+History that cuts the other way: on 2026-09-14 a post-claim rejection that DID release with a no-effect receipt let `mission grant` mint attempt 2 for a mistyped flag (v2.36.42 "ledger flag burns a grant") — the fix was to move that validation before the claim, not to release better. The engine-level guard (`autopilot-engine.js:9815`, "Do not release") exists for the same reason: never release a claim you did not prove is yours and unstarted.
+
+Proposed rule (one helper, both layers): when a rejection leaves a live claim this run will not use —
+ (a) if `resolveCampaignForClaim` reports the claim has NO intake root in the campaign ledger (kind `absent`, i.e. the `mission withdraw --never-started` condition) → release it via `releaseMission` with a no-effect receipt naming the rejection code + claim id;
+ (b) otherwise (`ticket_present` / `unknown_v2`) → do NOT release; the rejection result and the journal carry `stranded_claim {claim_id, campaign_id, graph_node_id, base_sha, resolution, recovery: '<exact withdraw/terminalize command>'}`; `attempt_blocked_by_open_claim` also carries `recovery`.
+
+Question: Is (a) safe, or does auto-releasing a never-started prior-attempt claim re-open the "burns a grant" class (next grant mints attempt N+1 freely)? Alternatives on the table: (i) (a)+(b) as proposed; (ii) never auto-release — only (b), operator runs withdraw; (iii) release only when the rejection code is in an allowlist (which?). Answer with a recommendation, the failure mode you are protecting against, and what invariant the RED test should pin. Keep it under 400 words.

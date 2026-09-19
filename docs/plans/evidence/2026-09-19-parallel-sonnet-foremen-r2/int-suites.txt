@@ -1,0 +1,26 @@
+rc=0 25s hooks/tests/autopilot-engine-repair-branch.test.sh
+rc=0 32s hooks/tests/campaign-dispatch-projection.test.sh
+rc=0 14s hooks/tests/migrate-backlog-entries.test.sh
+rc=0 12s hooks/tests/check-backlog-entries.test.sh
+rc=0 1s hooks/tests/campaign-intake-rejection-release.test.sh
+rc=0 0s hooks/tests/mission-grant-open-claim.test.sh
+rc=0 1s hooks/tests/campaign-claim-resolve.test.sh
+rc=0 57s hooks/tests/mission-routing-campaign-bridge.test.sh
+rc=0 2s hooks/tests/mission-convergence.test.sh
+rc=0 1s hooks/tests/mission-enforce-failclosed.test.sh
+rc=0 74s hooks/tests/implementation-campaign-routing.test.sh
+rc=0 13s hooks/tests/implementation-campaign-state.test.sh
+rc=0 174s hooks/tests/autopilot-engine.test.sh
+rc=0 6s hooks/tests/autopilot-engine-park-reserve.test.sh
+rc=0 3s hooks/tests/autopilot-engine-boundary-resume.test.sh
+rc=0 6s hooks/tests/autopilot-engine-wall-expiry.test.sh
+rc=0 23s hooks/tests/mission-runtime-v2.test.sh
+rc=0 2s hooks/tests/mission-icc-runtime.test.sh
+rc=0 0s hooks/tests/mission-convergence-integration.test.sh
+rc=1 12s hooks/tests/dispatch-detached-campaign-authority.test.sh
+rc=0 sync-check
+rc=0 check-js-syntax
+rc=0 secret-scan-range
+rc=0 backlog-gate
+rc=0 migrate-dry
+DONE

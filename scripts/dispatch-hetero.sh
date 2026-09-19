@@ -166,6 +166,7 @@ MODEL_SUPPLIED=0
 BASE_SUPPLIED=0
 RUNNER_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
+TIMEOUT_SOURCE=""
 AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
@@ -897,12 +898,18 @@ emit() { # status commit files ins del worktree error
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     identity_fields=', "identity_drift": true'
   fi
+  local timeout_fields=""
+  local emit_timeout_secs=""
+  emit_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
+  if [ -n "${TIMEOUT_SOURCE:-}" ] && [ -n "$emit_timeout_secs" ]; then
+    timeout_fields=", \"timeout_seconds\": $emit_timeout_secs, \"timeout_source\": \"$(_flat_json_escape "$TIMEOUT_SOURCE")\""
+  fi
   local dispatcher_called_json="true" zero_diff_receipt_json="null"
   [ "${OUTCOME_DISPATCHER_CALLED:-1}" -eq 0 ] && dispatcher_called_json="false"
   if [[ "${OUTCOME_ZERO_DIFF_RECEIPT_DIGEST:-}" =~ ^[0-9a-f]{64}$ ]]; then
     zero_diff_receipt_json="\"$OUTCOME_ZERO_DIFF_RECEIPT_DIGEST\""
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -912,7 +919,8 @@ emit() { # status commit files ins del worktree error
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
-    "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields"
+    "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
+    "$timeout_fields"
 }
 
 check_session_mode_gate() {
@@ -1161,12 +1169,14 @@ run_strict_contract_preflight() {
 
   if [ "$TIMEOUT_SUPPLIED" -eq 0 ]; then
     TIMEOUT="${contract_wall_seconds}s"
+    TIMEOUT_SOURCE="contract_wall"
   else
     normalized_timeout="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null || true)"
     [ -n "$normalized_timeout" ] || die_precondition "invalid --timeout value: $TIMEOUT"
-    if [ "$normalized_timeout" -ne "$contract_wall_seconds" ]; then
-      die_precondition "caller --timeout ($TIMEOUT) disagrees with contract budget.wall_seconds (${contract_wall_seconds}s)"
+    if [ "$normalized_timeout" -gt "$contract_wall_seconds" ]; then
+      die_precondition "caller --timeout ($TIMEOUT) exceeds contract budget.wall_seconds (${contract_wall_seconds}s)"
     fi
+    TIMEOUT_SOURCE="caller_within_wall"
   fi
 }
 

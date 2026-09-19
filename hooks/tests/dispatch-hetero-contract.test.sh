@@ -259,6 +259,10 @@ json=$(get_last_json "$out")
 assert_contains "$json" '"status": "committed"'
 assert_contains "$json" '"unit_id": "c2-fixture-unit"'
 assert_contains "$json" '"go": "GO"'
+# RED at 8dc1814e1aec46e0f125bba1101f15edff004f95: omitted --timeout already dispatched,
+# but result JSON had no timeout_seconds / timeout_source (defaults to contract wall 120).
+assert_eq "$(json_get "$json" "timeout_seconds")" "120"
+assert_eq "$(json_get "$json" "timeout_source")" "contract_wall"
 
 CONTRACT_SHA=$(json_get "$json" "contract_sha256")
 assert_eq "$CONTRACT_SHA" "$EXPECTED_CONTRACT_SHA"
@@ -373,6 +377,35 @@ assert_eq "$rc" 2
 assert_contains "$out" "precondition_failed"
 assert_file_absent "$RUN_MARKER_PATH"
 
+echo "--- R4: Caller --timeout shorter than contract wall is accepted ---"
+CASE_TMP="$TEST_TMP/case-r4c-short"
+mkdir -p "$CASE_TMP"
+# RED at 8dc1814e1aec46e0f125bba1101f15edff004f95: wall 120 + --timeout 60s → rc 2
+# precondition_failed error:
+# caller --timeout (60s) disagrees with contract budget.wall_seconds (120s)
+out=$(run_dispatch "t5c-short" --strict-contract --contract-file "$VALID_CONTRACT" --timeout 60s)
+rc=$?
+assert_eq "$rc" 0
+json=$(get_last_json "$out")
+assert_contains "$json" '"status": "committed"'
+assert_eq "$(json_get "$json" "timeout_seconds")" "60"
+assert_eq "$(json_get "$json" "timeout_source")" "caller_within_wall"
+assert_file_exists "$RUN_MARKER_PATH"
+
+echo "--- R4: Caller --timeout equal to contract wall is accepted ---"
+CASE_TMP="$TEST_TMP/case-r4c-eq"
+mkdir -p "$CASE_TMP"
+# RED at 8dc1814e1aec46e0f125bba1101f15edff004f95: equal --timeout 120s already GO,
+# but result JSON omitted timeout_source (now caller_within_wall).
+out=$(run_dispatch "t5c-eq" --strict-contract --contract-file "$VALID_CONTRACT" --timeout 120s)
+rc=$?
+assert_eq "$rc" 0
+json=$(get_last_json "$out")
+assert_contains "$json" '"status": "committed"'
+assert_eq "$(json_get "$json" "timeout_seconds")" "120"
+assert_eq "$(json_get "$json" "timeout_source")" "caller_within_wall"
+assert_file_exists "$RUN_MARKER_PATH"
+
 echo "--- R4: Disagreement on --timeout ---"
 CASE_TMP="$TEST_TMP/case-r4c"
 mkdir -p "$CASE_TMP"
@@ -380,6 +413,9 @@ out=$(run_dispatch "t5c" --strict-contract --contract-file "$VALID_CONTRACT" --t
 rc=$?
 assert_eq "$rc" 2
 assert_contains "$out" "precondition_failed"
+# RED at 8dc1814e1aec46e0f125bba1101f15edff004f95: same 9m>120 refusal, message was
+# "disagrees with" rather than "exceeds".
+assert_contains "$out" "exceeds contract budget.wall_seconds"
 assert_file_absent "$RUN_MARKER_PATH"
 
 

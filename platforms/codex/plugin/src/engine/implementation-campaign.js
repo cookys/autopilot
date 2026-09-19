@@ -1038,7 +1038,34 @@ function reduceCampaignState(currentState, event) {
     CAMPAIGN_EVENTS.TERMINAL_READY,
     CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP,
   ]).has(event.event_type);
-  assertExactKeys(event.payload, payloadKeys, `${event.event_type}.payload`);
+  if (event.event_type === CAMPAIGN_EVENTS.BOUNDARY_REJECTED) {
+    const optional = new Set(['git_candidate']);
+    if (!isPlainObject(event.payload)) {
+      fail('INVALID_SHAPE', `${event.event_type}.payload must be a plain object`);
+    }
+    for (const key of Object.keys(event.payload)) {
+      if (!payloadKeys.has(key) && !optional.has(key)) {
+        fail('UNKNOWN_FIELD', `${event.event_type}.payload has unknown field "${key}"`);
+      }
+    }
+    for (const key of payloadKeys) {
+      if (!Object.prototype.hasOwnProperty.call(event.payload, key)) {
+        fail('MISSING_FIELD', `${event.event_type}.payload is missing "${key}"`);
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(event.payload, 'git_candidate')
+        && event.payload.git_candidate !== null) {
+      const gitCandidate = normalizeCampaignArtifactReference(event.payload.git_candidate);
+      if (gitCandidate.kind !== 'git_candidate') {
+        fail(
+          'INVALID_ARTIFACT_REFERENCE',
+          'boundary_rejected git_candidate must be a git_candidate reference',
+        );
+      }
+    }
+  } else {
+    assertExactKeys(event.payload, payloadKeys, `${event.event_type}.payload`);
+  }
   if (terminalEvent) {
     validateLifecycleReceiptReference(event.payload.lifecycle_receipt_ref, event.campaign_id);
   }
@@ -1165,7 +1192,8 @@ function reduceCampaignState(currentState, event) {
       candidate_ref: event.payload.candidate_ref,
       receipt_digest: event.payload.boundary_receipt_digest,
     };
-  } else if (currentState.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION
+  } else if ((currentState.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION
+      || currentState.phase === CAMPAIGN_STATES.BOUNDARY_REJECTED)
       && event.event_type === CAMPAIGN_EVENTS.VERTICAL_VERIFIED) {
     if (event.payload.passed !== true || !isSha256(event.payload.evidence_digest)) {
       fail('VERTICAL_EVIDENCE_REQUIRED', 'review requires passing digest-bound vertical evidence');

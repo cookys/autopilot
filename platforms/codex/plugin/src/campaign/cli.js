@@ -507,6 +507,15 @@ function projectCampaign(rows, campaignId) {
         candidateReference = reference;
         if (!initialCandidateReference) initialCandidateReference = reference;
       }
+      const eventPayload = payload.event && payload.event.payload;
+      if (payload.event
+          && payload.event.event_type === CAMPAIGN_EVENTS.BOUNDARY_REJECTED
+          && eventPayload
+          && eventPayload.git_candidate) {
+        const gitCandidate = normalizeCampaignArtifactReference(eventPayload.git_candidate);
+        candidateReference = gitCandidate;
+        if (!initialCandidateReference) initialCandidateReference = gitCandidate;
+      }
     }
   }
   return {

@@ -6,6 +6,7 @@ const { canonicalDigest } = require('./campaign-verification');
 // with the same helper — never a second implementation that merely looks alike.
 const {
   canonicalDigest: reducerCanonicalDigest,
+  normalizeCampaignArtifactReference,
 } = require('./implementation-campaign');
 const {
   AWAITING_DISPOSITION,
@@ -305,6 +306,80 @@ function boundaryOffendingPaths(reason) {
     match = pattern.exec(reason);
   }
   return found;
+}
+
+function boundaryGitCandidate({ mutation, input, campaignId }) {
+  const commit = (isStr(mutation.commit)
+      && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(mutation.commit))
+    ? mutation.commit
+    : (isStr(mutation.candidate_ref)
+      && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(mutation.candidate_ref)
+      ? mutation.candidate_ref
+      : null);
+  const lineage = isObj(mutation.repair_lineage) ? mutation.repair_lineage : null;
+  const branch = isStr(mutation.branch)
+    ? mutation.branch
+    : (lineage && isStr(lineage.branch) ? lineage.branch : null);
+  const base = isStr(mutation.base)
+    ? mutation.base
+    : (isStr(input.baseSha) ? input.baseSha : null);
+  if (!commit || !lineage || !isStr(branch) || !isStr(base) || !isStr(campaignId)) {
+    return null;
+  }
+  let treeSha = isStr(mutation.tree_sha) && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(mutation.tree_sha)
+    ? mutation.tree_sha
+    : null;
+  const gitCwd = (lineage && typeof lineage.worktree === 'string' && lineage.worktree)
+    ? lineage.worktree
+    : (isStr(input.gitCwd) ? input.gitCwd : input.repo);
+  if (!treeSha && isStr(gitCwd)) {
+    try {
+      treeSha = require('child_process').execFileSync(
+        'git',
+        ['-C', gitCwd, 'rev-parse', '--verify', `${commit}^{tree}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+    } catch (_error) {
+      return null;
+    }
+  }
+  if (!treeSha || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(treeSha)) return null;
+  let fence = isObj(mutation.writer_fence) ? mutation.writer_fence : null;
+  if (!fence) {
+    const fenceBody = {
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_writer_fence',
+      campaign_id: campaignId,
+      stage_identity: 'campaign-implementation',
+      candidate_commit: commit,
+      candidate_tree_sha: treeSha,
+      status: 'closed',
+      evidence_mode: 'dispatch_exit',
+      closure_evidence_digest: reducerCanonicalDigest({
+        exit_status: 1,
+        signal: null,
+        candidate_commit: commit,
+        boundary: true,
+      }),
+    };
+    fence = {
+      ...fenceBody,
+      receipt_digest: reducerCanonicalDigest(fenceBody),
+    };
+  }
+  try {
+    return normalizeCampaignArtifactReference({
+      kind: 'git_candidate',
+      commit,
+      tree_sha: treeSha,
+      branch,
+      base,
+      writer_fence: fence,
+      repair_lineage: lineage,
+    });
+  } catch (_error) {
+    return null;
+  }
 }
 
 function boundaryRejected(boundary, trace, detail = {}) {
@@ -1659,7 +1734,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
         candidate = mutation.committed === true ? mutation : {
           ...mutation,
           committed: Boolean(boundary.candidate_ref),
-          commit: boundary.candidate_ref,
+          commit: boundary.candidate_ref || mutation.commit || null,
+          branch: mutation.branch
+            || (mutation.repair_lineage && mutation.repair_lineage.branch)
+            || null,
+          base: mutation.base || input.baseSha || null,
         };
       }
       const bound = boundaryRejected(boundary, trace, {
@@ -1667,6 +1746,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
         controller,
         durable_wait: true,
         terminalize: false,
+      });
+      const gitCandidate = boundaryGitCandidate({
+        mutation: candidate && isObj(candidate) ? candidate : mutation,
+        input,
+        campaignId: input.rootRunId || null,
       });
       // The reducer demands digest-bound boundary evidence: a non-empty
       // boundary_reason, a sha256 boundary_receipt_digest, and an
@@ -1730,6 +1814,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
         boundary_reason: boundaryReasonText,
         candidate_ref: bound.candidate_ref,
         boundary_receipt_digest: boundaryReceiptDigest,
+        ...(gitCandidate ? { git_candidate: gitCandidate } : {}),
       }, {
         kind: 'campaign_boundary_rejected',
         digest: boundaryReceiptDigest,
@@ -1738,7 +1823,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
       persistController({
         ...controller,
         phase: BOUNDARY_REJECTED,
-        next_action: 'await_boundary_disposition',
+        next_action: gitCandidate
+          ? 'await_boundary_disposition'
+          : 'no candidate — re-dispatch is a new attempt',
+        ...(gitCandidate ? { candidate: gitCandidate } : {}),
       });
       return {
         stop: {

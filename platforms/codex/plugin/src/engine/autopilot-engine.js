@@ -9807,6 +9807,29 @@ class AutopilotEngine {
       'boundary_rejected',
       'DISPOSITION_RESUMED',
     ]);
+    const boundaryRejectedNoCandidate = campaignControl
+      && campaignControl.status === 'admitted'
+      && (campaignControl.initial_state.phase === CAMPAIGN_STATES.BOUNDARY_REJECTED
+        || campaignControl.initial_state.phase === 'boundary_rejected')
+      && !durableResumeCandidate;
+    if (boundaryRejectedNoCandidate) {
+      const reason = 'no candidate — re-dispatch is a new attempt';
+      return finish({
+        status: 'blocked',
+        phase: 'campaign_resume',
+        reason,
+        remedy: null,
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      });
+    }
     if (campaignControl
         && campaignControl.status === 'admitted'
         && campaignControl.initial_state.phase !== CAMPAIGN_STATES.PREPARED
@@ -9817,7 +9840,7 @@ class AutopilotEngine {
         status: 'rejected',
         code: 'campaign_resume_phase_unsupported',
         reason: `campaign resume from ${campaignControl.initial_state.phase} cannot dispatch implementation`,
-      };
+      }
       const terminalFailure = this.terminalizeManagedCampaignFailure({
         campaignControl,
         reason: rejection.reason,

@@ -2460,4 +2460,5 @@ module.exports = {
   repairLineageCleanupState,
   releaseCampaignAdmission,
   runCampaignIntake,
+  verifyResumeCandidate,
 };

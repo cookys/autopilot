@@ -137,6 +137,7 @@ function fixture(name) {
     base,
     branch,
     candidate,
+    worktree,
     offendingPath,
     contract,
     contractPath,
@@ -194,7 +195,7 @@ function boundaryDispatchResult(fx) {
     files_changed: 1,
     insertions: 1,
     deletions: 0,
-    worktree: fx.repo,
+    worktree: fx.worktree,
     agent_log: null,
     error: `boundary_rejected: changed path '${fx.offendingPath}' is outside sealed output surface`,
     boundary: 'rejected',
@@ -406,6 +407,15 @@ try {
 assert.strictEqual(refusedCode, 'BOUNDARY_EVIDENCE_REQUIRED');
 console.log(`a_negative_control=${refusedCode}`);
 
+const resumeCandidateBound = intake.verifyResumeCandidate({
+  projection,
+  repo: fxA.repo,
+  base: fxA.base,
+});
+assert.notStrictEqual(resumeCandidateBound, null);
+assert.strictEqual(resumeCandidateBound.commit, fxA.candidate);
+console.log(`a_resume_candidate=${resumeCandidateBound !== null}`);
+
 // What this suite does NOT prove, stated rather than implied: the Mission graph
 // claim is still held after BOUNDARY_REJECTED, and that is by design —
 // runImplementationReviewLoop classifies boundary_rejected as a durable resumable
@@ -498,6 +508,8 @@ assert_contains "$E2E_OUT" "a_receipt_verifiable=true" \
   "the persisted boundary receipt re-derives its own digest"
 assert_contains "$E2E_OUT" "a_negative_control=BOUNDARY_EVIDENCE_REQUIRED" \
   "the reducer still refuses an unbound boundary event"
+assert_contains "$E2E_OUT" "a_resume_candidate=true" \
+  "claimCampaignGeneration({resume:true}) binds resume_candidate after BOUNDARY_REJECTED"
 assert_contains "$E2E_OUT" "a_receipt_before_phase=true" \
   "the boundary receipt is durably persisted before the phase advances to BOUNDARY_REJECTED"
 assert_contains "$E2E_OUT" "b_dispatcher_called=true" \

@@ -234,5 +234,82 @@ EOF
 
 assert_r132_live_state_base_on_w
 
+# assert_r133_live_state_dir_lefto
+# Row 133: fstypeViaFindmnt must scan every findmnt -T FSTYPE row (prefer RAM);
+# fstypeViaProcMounts must unescape \040 \011 \012 \134 in one pass.
+#
+# # RED 2026-09-21 on this worktree: multi-row findmnt with only row 2 tmpfs
+# resolved to ssd-fallback (first row only). /proc/mounts \011 mountpoint
+# also ssd-fallback (\040-only unescape).
+assert_r133_live_state_dir_lefto() {
+  local LIB="$REPO_ROOT/scripts/lib/live-state-dir.js"
+  local TMP CAND TABDIR NLDIR PROC
+  TMP="$(mktemp -d "/dev/shm/r133-live-state-dir-XXXXXX")"
+  CAND="$TMP/cand"
+  mkdir -m 0700 "$CAND"
+
+  local OUT RC
+  OUT="$(node -e '
+const { resolveLiveDir } = require(process.argv[1]);
+const dir = process.argv[2];
+const r = resolveLiveDir({
+  env: { AUTOPILOT_LIVE_DIR: dir },
+  execFile: () => "ext4\ntmpfs\n",
+  warn: () => {},
+});
+process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
+' "$LIB" "$CAND")"
+  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$CAND"; then
+    ok "multi-row findmnt prefers RAM fstype on row 2 (got $OUT)"
+  else
+    bad "multi-row findmnt expected override, got $OUT"
+  fi
+
+  TABDIR="$TMP/foo"$'\t'"bar"
+  NLDIR="$TMP/foo"$'\n'"baz"
+  mkdir -m 0700 "$TABDIR"
+  mkdir -m 0700 "$NLDIR"
+  PROC="$TMP/mounts"
+  {
+    printf 'tmpfs %s tmpfs rw 0 0\n' "${TABDIR//$'\t'/\\011}"
+    printf 'tmpfs %s tmpfs rw 0 0\n' "${NLDIR//$'\n'/\\012}"
+  } > "$PROC"
+
+  run_proc() {
+    node -e '
+const { resolveLiveDir } = require(process.argv[1]);
+const dir = process.argv[2];
+const proc = process.argv[3];
+const { execFileSync } = require("child_process");
+const env = { ...process.env, PATH: "/nonexistent-bin-dir" };
+const r = resolveLiveDir({
+  env: { AUTOPILOT_LIVE_DIR: dir },
+  execFile: (file, args, opts) => execFileSync(file, args, { ...opts, env }),
+  procMountsPath: proc,
+  warn: () => {},
+});
+process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
+' "$LIB" "$1" "$PROC"
+  }
+
+  OUT="$(run_proc "$TABDIR")"
+  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+    ok "proc mounts unescapes \011 tab mountpoint (got $OUT)"
+  else
+    bad "tab-escaped mountpoint expected override, got $OUT"
+  fi
+
+  OUT="$(run_proc "$NLDIR")"
+  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+    ok "proc mounts unescapes \012 newline mountpoint (got $OUT)"
+  else
+    bad "newline-escaped mountpoint expected override, got $OUT"
+  fi
+
+  rm -rf "$TMP"
+}
+
+assert_r133_live_state_dir_lefto
+
 printf '\n%s\n' "hooks-live-state-misc: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

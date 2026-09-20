@@ -73,8 +73,12 @@ function fstypeViaFindmnt(dir, execFileFn) {
     const out = execFileFn('findmnt', ['-T', target, '-o', 'FSTYPE', '-n'], {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000,
     });
-    const line = out.trim().split('\n')[0] || '';
-    return { fstype: line.trim() || null, notFound: false };
+    // findmnt -T can emit multiple FSTYPE rows (bind/overlay stacks). Prefer any
+    // RAM fstype in the table; otherwise keep the first non-empty row.
+    const lines = String(out).split('\n').map((l) => l.trim()).filter(Boolean);
+    const ram = lines.find((l) => RAM_FSTYPES.has(l));
+    const line = ram || lines[0] || '';
+    return { fstype: line || null, notFound: false };
   } catch (err) {
     return { fstype: null, notFound: !!(err && err.code === 'ENOENT') };
   }
@@ -95,7 +99,14 @@ function fstypeViaProcMounts(dir, procMountsPath) {
   for (const line of content.split('\n')) {
     const parts = line.split(' ');
     if (parts.length < 3) continue;
-    const mp = parts[1].replace(/\\040/g, ' ');
+    // /proc/mounts octal escapes: space, tab, newline, backslash. Single-pass so
+    // \134 is not later re-interpreted as the start of another escape.
+    const mp = parts[1].replace(/\\(040|011|012|134)/g, (_, code) => ({
+      '040': ' ',
+      '011': '\t',
+      '012': '\n',
+      '134': '\\',
+    }[code]));
     const isPrefix = mp === '/' || target === mp || target.startsWith(mp.endsWith('/') ? mp : `${mp}/`);
     if (isPrefix && mp.length > bestLen) {
       bestLen = mp.length;

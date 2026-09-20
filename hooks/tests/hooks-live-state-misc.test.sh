@@ -84,5 +84,75 @@ assert_r59_foreman_model_is_har() {
 
 assert_r59_foreman_model_is_har
 
+# assert_r79_cc_shim_framing_chro
+# Row 79: generate_session_title chrome prepends an exact unrecognized_model
+# line ahead of an intact wrapped block. Launch-env
+# CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT (v2.34.7) does not
+# cover this sub-call; claude --help has no session-title disable. Locator
+# skips that one line by exact match; truncated blocks stay no_verdict.
+assert_r79_cc_shim_framing_chro() {
+  local SCRIPT="$REPO_ROOT/scripts/dispatch-review.sh"
+  local CHROME='[claude-code:unrecognized_model] {"query_source":"generate_session_title"}'
+  if grep -qF "$CHROME" "$SCRIPT"; then
+    ok "locator names generate_session_title chrome by exact string"
+  else
+    bad "locator names generate_session_title chrome by exact string"
+  fi
+  if grep -q 'claude --help' "$SCRIPT" && grep -q 'generate_session_title' "$SCRIPT"; then
+    ok "documents why launch-env cannot disable session-title generation"
+  else
+    bad "documents why launch-env cannot disable session-title generation"
+  fi
+
+  local TMP STUB DIFF OUT RC ERR
+  TMP="$(mktemp -d "/dev/shm/r79-cc-shim-framing-XXXXXX")"
+  DIFF="$TMP/d.diff"
+  printf '+def f(): return x[::1]\n' > "$DIFF"
+  STUB="$TMP/stub"
+  cat > "$STUB" <<'EOF'
+#!/usr/bin/env bash
+set +eu
+PROMPT="$(cat || true)"
+begin="$(printf '%s\n' "$PROMPT" | grep -E '^<<<AUTOPILOT-REVIEW-[0-9a-f]{32}>>>$' | head -n 1)"
+end="$(printf '%s\n' "$PROMPT" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n 1)"
+printf '%s\n' '[claude-code:unrecognized_model] {"query_source":"generate_session_title"}'
+printf '%s\n' "$begin"
+printf '%s\n' "VERDICT: FIX-THEN-SHIP"
+printf '%s\n' "FINDINGS: the slice does not reverse"
+if [ "${R79_TRUNCATE:-0}" != 1 ]; then
+  printf '%s\n' "$end"
+fi
+exit 0
+EOF
+  chmod +x "$STUB"
+
+  OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
+    AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+    "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
+    --diff-file "$DIFF" --bin "$STUB" 2>/dev/null)"
+  RC=$?
+  ERR="$(printf '%s' "$OUT" | sed -n 's/.*"error": "\([^"]*\)".*/\1/p')"
+  if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q '"status": "reviewed"'; then
+    ok "chrome + complete block parses to reviewed (rc=$RC)"
+  else
+    bad "chrome + complete block expected reviewed, got rc=$RC status-line=[$OUT] reason=[$ERR]"
+  fi
+
+  OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
+    AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+    R79_TRUNCATE=1 "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
+    --diff-file "$DIFF" --bin "$STUB" 2>/dev/null)"
+  RC=$?
+  ERR="$(printf '%s' "$OUT" | sed -n 's/.*"error": "\([^"]*\)".*/\1/p')"
+  if [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q '"status": "no_verdict"'; then
+    ok "chrome + truncated block stays no_verdict (rc=$RC reason=[$ERR])"
+  else
+    bad "chrome + truncated block expected no_verdict, got rc=$RC out=[$OUT]"
+  fi
+  rm -rf "$TMP"
+}
+
+assert_r79_cc_shim_framing_chro
+
 printf '\n%s\n' "hooks-live-state-misc: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

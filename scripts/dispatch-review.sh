@@ -1413,6 +1413,13 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # a real `VERDICT: SHIP-AS-IS` inside an intact nonce block, discarded. Suppressing
   # the notice fixes it at the source; relaxing the parser would have reopened the
   # prompt-echo hole that hooks/tests/dispatch-review.test.sh pins.
+  # generate_session_title chrome is a DIFFERENT prepend (2026-08-18): an internal
+  # sub-call writes `[claude-code:unrecognized_model] {"query_source":"generate_session_title"}`
+  # ahead of an intact wrapped block. `claude --help` (checked this change) mentions
+  # only picker/terminal title — no `-p` flag or env var disables session-title
+  # generation, so the launch-env route used above is unavailable. The locator
+  # skips that one line by exact string match; every other leading line still hits
+  # the first-non-blank / vocabulary / prompt-echo guards.
   CCSHIM_CWD="$(mktemp -d -t dispatch-review-ccshimcwd-XXXXXX)"
   timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 \
@@ -1580,6 +1587,10 @@ awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
   {
     sub(/\r$/, "", $0)
     if (leading) {
+      # 2026-08-18 generate_session_title chrome: exact-match skip only (not a
+      # general first-non-blank relaxation). claude --help has no session-title
+      # disable for -p; launch-env cannot suppress this sub-call.
+      if ($0 == "[claude-code:unrecognized_model] {\"query_source\":\"generate_session_title\"}") { next }
       if ($0 ~ /^[[:space:]]*$/) { next }
       if ($0 == begin) { leading=0; started=1; next }
       # Chrome-skip guard: a leading line may be skipped ONLY if it carries no

@@ -7107,11 +7107,24 @@ class AutopilotEngine {
     const snapshotStation = sealedSnapshot && sealedSnapshot.review_station === 'panel'
       ? 'panel'
       : 'single';
+    // Live station uses the same seats-complete-AND-in_rail_review signal as
+    // resolveReviewStation() in campaign-intake.js: panel only when the roster both asks
+    // for the panel knob and currently reports complete seats; anything else (including a
+    // managed roster that always reports qc_panel_seats_complete === true) is single-station.
+    // Requiring both keeps a static 'panel' knob from masking a real seat-completeness change
+    // (case (c) below) while a plain seats-complete flag can no longer, by itself, flip a
+    // single-station campaign that was never asking for a panel (the pre-fix bug).
+    const liveStation = roster
+      && roster.in_rail_review === 'panel'
+      && roster.qc_panel_seats_complete === true
+      ? 'panel'
+      : 'single';
     if (sealedSnapshot
         && Object.prototype.hasOwnProperty.call(sealedSnapshot, 'review_station')
-        && (roster.qc_panel_seats_complete === true) !== (snapshotStation === 'panel')) {
+        && liveStation !== snapshotStation) {
       ledger.push(this.ledgerEntry('qc_panel_snapshot_live_flip', 'noted', this.now(), {
         sealed_station: snapshotStation,
+        live_station: liveStation,
         live_seats_complete: roster.qc_panel_seats_complete === true,
       }));
     }

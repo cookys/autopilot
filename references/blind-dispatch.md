@@ -409,9 +409,10 @@ every seat returns is still refused before spend.
 **Snapshot at intake.** The first admitted intake writes `qc_panel_snapshot.json`
 beside the sealed contract (`O_EXCL`) immediately after a successful Mission
 claim — a rejected claim never produces a file, and there is no unlink path.
-Resume verifies the stored `digest` over the fields the file carries; identity
-or digest mismatch parks with `qc_panel_snapshot_drift` (non-blocking
-`live_drift` is unchanged). A live `qc_panel_seats_complete` flip is journaled
+Resume verifies the stored `digest` over the fields the file carries; a digest
+mismatch parks with `qc_panel_snapshot_drift` (non-blocking `live_drift` is
+unchanged), while an identity mismatch (`campaign_id` / `contract_digest`)
+keeps `qc_panel_snapshot_identity_invalid`. A live `qc_panel_seats_complete` flip is journaled
 (`qc_panel_snapshot_live_flip`) and the sealed station still runs. Without a
 snapshot, the live roster is used byte-identically.
 

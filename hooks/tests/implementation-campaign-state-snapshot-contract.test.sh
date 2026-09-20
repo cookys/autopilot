@@ -42,14 +42,17 @@ const ccSeat = {
 };
 
 function spies(extra) {
-  const counts = { missionClaim: 0, claimGeneration: 0 };
+  const counts = { missionClaim: 0, claimGeneration: 0, releaseMission: 0 };
   const adapters = {
     now: () => '2026-07-26T00:00:00.000Z',
     missionClaim() {
       counts.missionClaim += 1;
       return { owner: 'mission', status: 'claimed', claim_id: 'claim-1' };
     },
-    releaseMission() { return { owner: 'mission_release', status: 'released' }; },
+    releaseMission() {
+      counts.releaseMission += 1;
+      return { owner: 'mission_release', status: 'released' };
+    },
     claimGeneration() {
       counts.claimGeneration += 1;
       return {
@@ -180,6 +183,7 @@ function ownerOrder(result) {
     beforePhase = proj && proj.state && proj.state.phase;
     beforeLease = proj && proj.latest_lease;
   }
+  const secondSpy = spies();
   const second = runCampaignIntake({
     repo,
     contractPath,
@@ -188,10 +192,13 @@ function ownerOrder(result) {
       min_panel_size: 1,
       in_rail_review: 'panel',
     }),
-  }, spies().adapters);
+  }, secondSpy.adapters);
   // RED at base df26dbe8: accepted with only step.live_drift
   assert.strictEqual(second.status, 'blocked');
   assert.strictEqual(second.rejection && second.rejection.code, 'qc_panel_snapshot_drift');
+  assert.strictEqual(secondSpy.counts.missionClaim, 1, 'drift rejection must still claim the Mission once');
+  assert.strictEqual(secondSpy.counts.releaseMission, 1,
+    'drift rejection after a held claim must release the Mission claim exactly once');
   assert.ok(Array.isArray(second.rejection.fields) && second.rejection.fields.includes('min_panel_size'),
     JSON.stringify(second.rejection));
   assert.strictEqual(second.rejection.stored_digest, storedDigest);
@@ -246,6 +253,7 @@ function ownerOrder(result) {
     generation: 1,
     timestamp: '2026-07-26T00:00:01.000Z',
   })}\n`);
+  const missSpy = spies();
   const missResult = runCampaignIntake({
     repo,
     contractPath: missContract,
@@ -254,11 +262,14 @@ function ownerOrder(result) {
       fallback_ladder: [{ runner: ccSeat.runner, model: ccSeat.model, effort: ccSeat.effort, family: ccSeat.family }],
       in_rail_review: 'panel',
     }),
-  }, spies().adapters);
+  }, missSpy.adapters);
   assert.strictEqual(fs.existsSync(missSnap), false);
   assert.ok(missResult.rejection && missResult.rejection.code === 'qc_panel_snapshot_missing_after_claim',
     JSON.stringify(missResult));
   assert.ok(!(missResult.steps || []).some((st) => st && /terminal/i.test(st.owner || '')));
+  assert.strictEqual(missSpy.counts.missionClaim, 1, 'missing-after-claim rejection must still claim the Mission once');
+  assert.strictEqual(missSpy.counts.releaseMission, 1,
+    'missing-after-claim rejection must release the held Mission claim exactly once');
 }
 
 // (e) no-snapshot campaign projection bytes
@@ -274,15 +285,30 @@ function ownerOrder(result) {
     implementer_runner: 'fixture',
   };
   const result = runCampaignIntake({ repo, contractPath, roster }, spies().adapters);
-  const snapOwners = (result.steps || []).filter((st) => st && st.owner === 'qc_panel_snapshot');
-  assert.strictEqual(snapOwners.length, 0);
+  // Zero steps whose owner touches the snapshot-contract machinery at all (not just the exact
+  // 'qc_panel_snapshot' owner) — the no-snapshot control must be untouched by any qc_panel_snapshot* step.
+  const snapOwners = (result.steps || []).filter(
+    (st) => st && typeof st.owner === 'string' && st.owner.startsWith('qc_panel_snapshot'),
+  );
+  assert.strictEqual(snapOwners.length, 0, JSON.stringify(result.steps));
   assert.ok(!result.qc_panel_snapshot);
   const identity = canonicalRepoIdentity(repo);
   const digest = crypto.createHash('sha256').update(fs.readFileSync(contractPath)).digest('hex');
   const campaignId = campaignIdFor(identity, 'qc-snap-none', digest);
-  const projection = JSON.stringify(projectCampaign([], campaignId));
-  assert.ok(typeof projection === 'string');
-  console.log(`e_nosnap_projection=${projection}`);
+  const ledgerPath = defaultCampaignLedgerPath(repo);
+  // This roster never engages the snapshot feature, so it must never journal a row for this
+  // campaign_id — the real on-disk ledger rows for it must equal the empty set the "feature not
+  // engaged" base case assumes, and the two derived projections must be byte-identical.
+  const rowsForCampaign = fs.existsSync(ledgerPath)
+    ? loadRows(ledgerPath).filter((row) => row && row.campaign_id === campaignId)
+    : [];
+  assert.strictEqual(rowsForCampaign.length, 0,
+    'no-snapshot control must not journal any row for this campaign_id');
+  const projectionFromRepo = JSON.stringify(projectCampaign(rowsForCampaign, campaignId));
+  const projectionBaseSemantics = JSON.stringify(projectCampaign([], campaignId));
+  assert.strictEqual(projectionFromRepo, projectionBaseSemantics,
+    'no-snapshot campaign projection must equal the projection produced when the snapshot feature is not engaged');
+  console.log(`e_nosnap_projection=${projectionFromRepo}`);
 }
 
 // (e) pre-2-C file without review_station
@@ -501,8 +527,187 @@ function ownerOrder(result) {
   assert.strictEqual(flip.sealed_station, 'panel');
   assert.strictEqual(flip.live_seats_complete, false);
   const stationRow = (result.ledger || []).find((row) => row.unit === 'full_diff_review' && row.station === 'panel');
-  assert.ok(stationRow || reviewModels.length >= 3,
-    `station missing models=${reviewModels.length} status=${result.status}`);
+  // The sealed station (panel) must be dispatched unambiguously: require the station row itself
+  // rather than falling back to a loose seat-count heuristic that a single-station run could also satisfy.
+  assert.ok(stationRow,
+    `sealed panel station row missing models=${reviewModels.length} status=${result.status} `
+    + `ledger_units=${JSON.stringify((result.ledger || []).map((row) => row.unit))}`);
+}
+
+// single-station control: a sealed 'single' station plus a live roster with
+// qc_panel_seats_complete === true (as every managed roster reports) must NOT
+// journal a spurious qc_panel_snapshot_live_flip — the pre-fix comparison
+// `(qc_panel_seats_complete === true) !== (sealed_station === 'panel')` fires
+// for every single-station campaign because managed rosters always report seats
+// complete; the fixed rule must compute the live station the same way
+// resolveReviewStation() does and only flip on a genuine station change.
+{
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+  const common = fs.realpathSync(path.resolve(repo, git('rev-parse', '--git-common-dir')));
+  const seats = [
+    { role: 'qc', runner: 'cc-shim', model: 'claude-opus-4-6', effort: 'high', endpoint: null, family: 'anthropic' },
+  ];
+  const ticket = 'panel-single-station-control';
+  const branch = `feat/${ticket}`;
+  const worktree = path.join(tmp, `${ticket}-wt`);
+  try { execFileSync('git', ['-C', repo, 'worktree', 'remove', '--force', worktree], { stdio: 'ignore' }); } catch (_e) {}
+  git('worktree', 'add', '-q', '-b', branch, worktree, base);
+  fs.mkdirSync(path.join(worktree, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(worktree, 'dist', 'out.txt'), `${ticket}\n`);
+  execFileSync('git', ['-C', worktree, 'add', 'dist/out.txt']);
+  execFileSync('git', ['-C', worktree, 'commit', '-qm', ticket]);
+  const candidate = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const tree = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim();
+  const contractDir = path.join(tmp, `${ticket}-campaign`);
+  fs.mkdirSync(contractDir, { recursive: true });
+  const contractPath = path.join(contractDir, 'campaign.json');
+  const sealPath = path.join(contractDir, 'campaign.seal.json');
+  const promptFile = path.join(tmp, `${ticket}.prompt`);
+  fs.writeFileSync(promptFile, 'single\n');
+  fs.writeFileSync(contractPath, `${JSON.stringify({
+    schema_version: 1,
+    ticket,
+    profile: 'poc',
+    mission_grant_ref: null,
+    repo_identity: `git-common-dir:${common}`,
+    base_sha: base,
+    branch,
+    vertical_acceptance: ['single station control'],
+    allowed_path_prefixes: ['dist/'],
+    max_changed_files: 5,
+    baseline_churn: 10,
+    max_growth_ratio: 1.5,
+    max_extra_churn: 5,
+    max_repair_generations: 2,
+    max_wall_seconds: 120,
+    verify_cmd: 'true',
+    rubric_ids: ['ICC-KILL-057'],
+    final_panel_reserve_seconds: 0,
+  }, null, 2)}\n`);
+  execFileSync(process.execPath, [
+    path.join(root, 'scripts', 'implementation-campaign-check.js'),
+    'seal', '--contract', contractPath, '--repo', repo, '--mission-mode', 'shadow', '--out', sealPath,
+  ], { cwd: repo, encoding: 'utf8' });
+  const rawDigest = crypto.createHash('sha256').update(fs.readFileSync(contractPath)).digest('hex');
+  const planted = buildQcPanelSnapshot({
+    campaignId: campaignIdFor(canonicalRepoIdentity(repo), ticket, rawDigest),
+    contractDigest: rawDigest,
+    seats,
+    minPanelSize: 1,
+    requiredReviewFamilies: 1,
+    implementerFamily: 'unknown',
+    reviewStation: 'single',
+  });
+  fs.writeFileSync(path.join(contractDir, 'qc_panel_snapshot.json'), `${JSON.stringify(planted)}\n`, { flag: 'wx' });
+  const liveRoster = {
+    reviewer_engine: seats[0].model,
+    reviewer_effort: 'high',
+    reviewer_runner: 'cc-shim',
+    reviewer_qualified: true,
+    implementer_engine: 'fixture-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+    loop_max_rounds: 3,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    min_panel_size: 1,
+    in_rail_review: 'single',
+    // Every managed roster reports this true regardless of station — this is exactly the field
+    // the pre-fix flip comparison keyed on.
+    qc_panel_seats_complete: true,
+    qc_panel_seats: seats,
+    override_admitted_seats: ['qc_panel[0]'],
+  };
+  let clock = 0;
+  const engine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => { clock += 1; return new Date(Date.UTC(2026, 8, 18, 0, 0, clock)).toISOString(); },
+    campaignIntake(input) {
+      return runCampaignIntake(input, {
+        readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+        contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+        occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      });
+    },
+    campaignScopeChecker() {
+      return { passed: true, changed_files: ['dist/out.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
+    },
+    implementationDispatcher() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          status: 'committed', runner: 'fixture', model: 'fixture-implementer',
+          branch, base, commit: candidate, files_changed: 1, insertions: 1, deletions: 0,
+          worktree, agent_log: '/tmp/impl-log', error: null,
+        },
+      };
+    },
+    reviewDispatcher(args) {
+      const modelIdx = args.indexOf('--model');
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          runner: 'cc-shim', model: modelIdx >= 0 ? args[modelIdx + 1] : 'fixture', status: 'reviewed',
+          verdict: 'SHIP-AS-IS', findings: '[]', raw_log: null, error: null,
+        },
+        packet: { packet_hash: 'b'.repeat(64) },
+      };
+    },
+    diffProvider() { return promptFile; },
+    gitWorktreeAdd() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '',
+        worktree, parent: null, commit: candidate, observed_commit: candidate,
+        observed_tree_sha: tree, detached: true,
+      };
+    },
+    gitWorktreeRemove() { return { error: null, status: 0, signal: null, stdout: '', stderr: '' }; },
+    repairLineageCleanupTransaction() {
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+    },
+    verifyCommandRunner() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '',
+        executed_argv: ['/bin/sh', '-c', 'true'],
+      };
+    },
+  });
+  engine.implementTask = () => ({
+    status: 'committed',
+    dispatcher_called: true,
+    implementation: {
+      commit: candidate, worktree, run_id: 'run-single-control', dispatch_id: 'd-single-control',
+      provider: 'fixture', runner: 'fixture', model: 'fixture-implementer',
+      provider_session_id: null, provider_session_reused: false, worktree_reused: false,
+      insertions: 1, deletions: 0,
+    },
+    implementationResult: { error: null, signal: null, status: 0 },
+    ledger: [],
+  });
+  const result = engine.runImplementationReviewLoop({
+    promptFile,
+    branch,
+    base,
+    roster: liveRoster,
+    campaignManaged: true,
+    campaignContract: contractPath,
+    campaignSeal: sealPath,
+    campaignDispositionPolicy: 'acceptance-bound',
+    verificationEnv: { PATH: process.env.PATH || '', CI: ticket },
+    verificationEnvAllowlist: ['CI'],
+    verifyCmd: 'true',
+  });
+  console.log(`single_control_status=${result.status}`);
+  console.log(`single_control_phase=${result.phase}`);
+  console.log(`single_control_reason=${result.reason}`);
+  console.log(`single_control_units=${JSON.stringify(result.ledger && result.ledger.map((row) => row.unit))}`);
+  const flip = (result.ledger || []).find((row) => row && row.unit === 'qc_panel_snapshot_live_flip');
+  assert.strictEqual(flip, undefined,
+    `spurious live_flip for a single-station campaign: ${JSON.stringify(flip)} status=${result.status} `
+    + `phase=${result.phase} reason=${result.reason}`);
+  const singleStationRow = (result.ledger || []).find((row) => row && row.unit === 'final_panel');
+  assert.ok(singleStationRow,
+    `sealed single station row missing status=${result.status} phase=${result.phase} `
+    + `ledger_units=${JSON.stringify((result.ledger || []).map((row) => row.unit))}`);
 }
 
 console.log('snapshot-contract assertions passed');

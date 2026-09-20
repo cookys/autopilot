@@ -7,6 +7,14 @@ const process = require('process');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const deriveReceiptState = require('./lib/review-chain-derive');
+const { isSafeSeatId } = require('./lib/seat-id-guard');
+
+function assertSafeSeatId(id) {
+  if (!isSafeSeatId(id)) {
+    console.error(`ERROR: Unsafe seat id '${id}'`);
+    process.exit(1);
+  }
+}
 
 function writeFileSyncAtomic(targetPath, content) {
   const dir = path.dirname(targetPath);
@@ -201,7 +209,11 @@ function parseSeatSpec(spec, id) {
 function resolveSeats(seatsArg, repoRoot) {
   if (seatsArg) {
     const specs = seatsArg.split(',').map((s) => s.trim()).filter(Boolean);
-    return specs.map((spec, idx) => parseSeatSpec(spec, `s${idx}`));
+    return specs.map((spec, idx) => {
+      const id = `s${idx}`;
+      assertSafeSeatId(id);
+      return parseSeatSpec(spec, id);
+    });
   }
 
   const resolver = getResolverPath(repoRoot);
@@ -225,8 +237,10 @@ function resolveSeats(seatsArg, repoRoot) {
     if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
       endpoint = undefined;
     }
+    const id = `s${idx}`;
+    assertSafeSeatId(id);
     return {
-      id: `s${idx}`,
+      id,
       runner: seatObj.runner || '',
       engine: seatObj.model || '',
       effort: seatObj.effort || '',
@@ -617,6 +631,7 @@ async function handleCollect(flags) {
   // Write per-seat JSON files and compute hashes
   const seatArtifactSha256 = {};
   for (const res of seatResults) {
+    assertSafeSeatId(res.seat.id);
     const seatPath = path.join(gDir, `seat-${res.seat.id}.json`);
     const seatContent = JSON.stringify(res.rawOutput, null, 2) + '\n';
     writeFileSyncAtomic(seatPath, seatContent);

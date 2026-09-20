@@ -207,4 +207,31 @@ STUB_EOF
 
 assert_r35_hetero_review_loop_c
 
+assert_r37_hetero_review_loop_c() {
+  local mod="$REPO_ROOT/scripts/lib/seat-id-guard.js"
+  assert_file_exists "$mod" "r37: seat-id-guard.js exists"
+
+  local results
+  results=$(node -e "
+    const { isSafeSeatId } = require('$mod');
+    const cases = [
+      ['../evil', false],
+      ['/etc/passwd', false],
+      ['s0', true],
+      ['qc', true],
+    ];
+    for (const [id, expected] of cases) {
+      const got = isSafeSeatId(id);
+      if (got !== expected) {
+        process.stdout.write('fail:' + id + ':' + got);
+        process.exit(0);
+      }
+    }
+    process.stdout.write('ok');
+  ")
+  assert_eq "$results" "ok" "r37: isSafeSeatId rejects traversal and absolute paths; accepts s0 and qc"
+}
+
+assert_r37_hetero_review_loop_c
+
 finalize_test

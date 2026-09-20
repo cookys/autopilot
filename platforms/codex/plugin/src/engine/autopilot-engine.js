@@ -7371,8 +7371,22 @@ class AutopilotEngine {
         // fenced against the live mutation lease and RELEASE it on reduction. A
         // synthesized `controller-<event>:<gen>` identity is not the lease owner,
         // so the reducer answers LEASE_FENCED and the journal strands mid-mutation
-        // with the lease held. Take the identity from the durable lease, exactly
-        // as the terminal-failure path does.
+        // with the lease held. Re-derive live state from the durable journal at
+        // call time rather than trusting campaignControl.initial_state, which a
+        // bypass appender can leave stale. Re-seat the field so the subsequent
+        // append reduces against the same live snapshot.
+        const claim = campaignControl && campaignControl.generation_claim;
+        const ledgerPath = claim && claim.durable_journal === true && claim.ledger;
+        if (typeof ledgerPath === 'string' && ledgerPath.length > 0) {
+          const { loadRows, projectCampaign } = require('../campaign/cli');
+          const projection = projectCampaign(
+            loadRows(ledgerPath),
+            campaignControl.campaign_id,
+          );
+          if (projection && projection.state) {
+            campaignControl.initial_state = projection.state;
+          }
+        }
         const identity = resolveCampaignEventLeaseIdentity(
           campaignControl.initial_state,
           mapped,

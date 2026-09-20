@@ -862,4 +862,216 @@ NODE
 }
 
 assert_r121_managed_campaign_con
+
+# R125: onCampaignEvent must re-derive live journal state at call time. After
+# a real IMPLEMENTATION_STARTED, overwrite campaignControl.initial_state with
+# a stale snapshot that has no live_lease (bypass appender that forgot to
+# refresh), then fire BOUNDARY_REJECTED through the real composition bridge.
+assert_r125_campaign_bridge_reso() {
+  local R125_OUT
+  R125_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const [root, testTmp] = process.argv.slice(2);
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const icc = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+const campaignCli = require(path.join(root, 'src', 'campaign', 'cli'));
+const {
+  campaignLedgerContract,
+  openCampaignLedger,
+} = require(path.join(root, 'hooks', 'tests', 'lib', 'implementation-campaign-ledger-fixture'));
+
+const roster = {
+  reviewer_engine: 'fixture-reviewer',
+  reviewer_effort: 'high',
+  reviewer_runner: 'fixture',
+  reviewer_qualified: true,
+  min_panel_size: 1,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [{
+    role: 'qc', runner: 'fixture', model: 'fixture-reviewer',
+    effort: 'high', endpoint: null, family: 'fixture',
+  }],
+  implementer_engine: 'fixture-implementer',
+  implementer_effort: 'high',
+  implementer_runner: 'fixture',
+  loop_max_rounds: 2,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+  cross_family_required: false,
+};
+
+function git(repo, args) {
+  return execFileSync('git', ['-C', repo, ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+}
+
+function fixture(name) {
+  const repo = path.join(testTmp, name, 'repo');
+  fs.mkdirSync(repo, { recursive: true });
+  git(repo, ['init', '-q']);
+  git(repo, ['config', 'user.email', 'r125-boundary@example.invalid']);
+  git(repo, ['config', 'user.name', 'R125 Boundary Test']);
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'src', 'seed.txt'), `${name}\n`);
+  git(repo, ['add', 'src/seed.txt']);
+  git(repo, ['commit', '-qm', 'fixture']);
+  const base = git(repo, ['rev-parse', 'HEAD']);
+  const commonRaw = git(repo, ['rev-parse', '--git-common-dir']);
+  const commonDir = fs.realpathSync(
+    path.isAbsolute(commonRaw) ? commonRaw : path.join(repo, commonRaw),
+  );
+  const branch = `impl/${name}`;
+  const contract = campaignLedgerContract({
+    repoIdentity: `git-common-dir:${commonDir}`,
+    ticket: `r125-${name}`,
+    baseSha: base,
+    branch,
+  });
+  const contractPath = path.join(testTmp, name, 'campaign.json');
+  const sealPath = path.join(testTmp, name, 'campaign.seal.json');
+  const promptFile = path.join(testTmp, name, 'prompt.txt');
+  fs.writeFileSync(contractPath, `${JSON.stringify(contract, null, 2)}\n`);
+  fs.writeFileSync(sealPath, '{}\n');
+  fs.writeFileSync(promptFile, 'bounded implementation\n');
+  const opened = openCampaignLedger({
+    root,
+    repo,
+    ledger: path.join(commonDir, 'autopilot', 'implementation-campaign.jsonl'),
+    contract,
+    startedAt: '2026-08-30T00:00:00.000Z',
+  });
+  const offendingPath = 'docs/leak.md';
+  const worktree = path.join(testTmp, name, 'candidate');
+  execFileSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', branch, worktree, base]);
+  fs.mkdirSync(path.join(worktree, 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(worktree, offendingPath), 'leaked outside src/\n');
+  execFileSync('git', ['-C', worktree, 'add', offendingPath]);
+  execFileSync('git', ['-C', worktree, 'commit', '-qm', 'candidate outside output surface']);
+  const candidate = git(worktree, ['rev-parse', 'HEAD']);
+  const campaignControl = {
+    ...opened.control,
+    contract_path: contractPath,
+    seal_path: sealPath,
+    full_enforcement: false,
+    shadow_axes: ['mission'],
+    steps: [],
+  };
+  return {
+    repo, base, branch, candidate, worktree, offendingPath,
+    contract, contractPath, sealPath, promptFile, campaignControl,
+    ledger: opened.ledger, campaignId: opened.campaignId,
+  };
+}
+
+function boundaryDispatchResult(fx) {
+  return {
+    status: 'boundary_rejected',
+    runner: 'fixture',
+    model: 'fixture-implementer',
+    containment: 'plain',
+    contained: true,
+    branch: fx.branch,
+    base: fx.base,
+    commit: fx.candidate,
+    files_changed: 1,
+    insertions: 1,
+    deletions: 0,
+    worktree: fx.worktree,
+    agent_log: null,
+    error: `boundary_rejected: changed path '${fx.offendingPath}' is outside sealed output surface`,
+    boundary: 'rejected',
+    boundary_code: 'unauthorized_output_path',
+    boundary_reason: `boundary_rejected: changed path '${fx.offendingPath}' is outside sealed output surface`,
+    candidate_ref: fx.candidate,
+    possibly_effectful: true,
+    mutation_failed: false,
+    unknown_status: false,
+    dispatcher_called: true,
+    model_calls: 1,
+    mutation_attempts: 1,
+    gate_attempts: 1,
+    resources_created: 1,
+    zero_diff_receipt_digest: null,
+  };
+}
+
+function transport(value) {
+  const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+  const stdout = `${JSON.stringify(value)}\n`;
+  return {
+    error: null, status: 0, signal: null, stdout, stderr: '',
+    parseError: null, result: parseImplementationOutput(stdout),
+  };
+}
+
+const fx = fixture('r125-stale-initial');
+assert.strictEqual(fx.campaignControl.initial_state.phase, 'PREPARED');
+assert.strictEqual(fx.campaignControl.initial_state.live_lease, null);
+const staleSnapshot = JSON.parse(JSON.stringify(fx.campaignControl.initial_state));
+assert.strictEqual(staleSnapshot.live_lease, null);
+
+let journalErrorCode = null;
+const engine = new AutopilotEngine({
+  cwd: fx.repo,
+  clock: () => '2026-08-30T00:00:01.000Z',
+  campaignIntake() { return fx.campaignControl; },
+  campaignAdmissionReleaser() { return { status: 'released' }; },
+  implementationDispatcher() {
+    const live = fx.campaignControl.initial_state;
+    assert.ok(live && live.live_lease, 'IMPLEMENTATION_STARTED must hold a live lease before the stale overwrite');
+    fx.campaignControl.initial_state = JSON.parse(JSON.stringify(staleSnapshot));
+    assert.strictEqual(fx.campaignControl.initial_state.live_lease, null);
+    return transport(boundaryDispatchResult(fx));
+  },
+});
+let result;
+try {
+  result = engine.runImplementationReviewLoop({
+    promptFile: fx.promptFile,
+    branch: fx.branch,
+    base: fx.base,
+    roster,
+    campaignContract: fx.contractPath,
+    campaignSeal: fx.sealPath,
+  });
+} catch (error) {
+  journalErrorCode = error.code || null;
+  throw error;
+}
+
+assert.notStrictEqual(journalErrorCode, 'LEASE_FENCED');
+assert.strictEqual(result.status, 'blocked');
+assert.strictEqual(result.phase, 'boundary_rejected');
+
+const projection = campaignCli.projectCampaign(
+  campaignCli.loadRows(fx.ledger),
+  fx.campaignId,
+);
+assert.ok(projection, 'campaign projection is missing');
+assert.strictEqual(projection.state.phase, icc.CAMPAIGN_STATES.BOUNDARY_REJECTED);
+assert.strictEqual(projection.state.live_lease, null);
+
+console.log(JSON.stringify({
+  r125_journal_phase: projection.state.phase,
+  r125_lease_released: projection.state.live_lease === null,
+  r125_not_lease_fenced: journalErrorCode !== 'LEASE_FENCED',
+}));
+NODE
+)"
+  assert_exit_code "$?" "0" "r125 stale initial_state still journals BOUNDARY_REJECTED: $R125_OUT"
+  assert_contains "$R125_OUT" '"r125_journal_phase":"BOUNDARY_REJECTED"' \
+    "durable journal phase is BOUNDARY_REJECTED despite stale initial_state"
+  assert_contains "$R125_OUT" '"r125_lease_released":true' \
+    "mutation lease is released when identity is re-derived from the journal"
+  assert_contains "$R125_OUT" '"r125_not_lease_fenced":true' \
+    "stale initial_state must not synthesize a LEASE_FENCED fallback identity"
+}
+
+assert_r125_campaign_bridge_reso
 finalize_test

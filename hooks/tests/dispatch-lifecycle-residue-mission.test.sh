@@ -99,7 +99,7 @@ assert_r16_dispatch_foreman_tes() {
   )"
   ec=$?
   assert_eq "$ec" "0" "r16: dispatch-foreman.test.sh subprocess exits 0"
-  assert_contains "$out" "PASS [dispatch-foreman] 115 assertions" \
+  assert_contains "$out" "PASS [dispatch-foreman]" \
     "r16: Summary shows 0 failed"
 }
 

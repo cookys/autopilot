@@ -329,6 +329,24 @@ function cmdDoctor(io, jsonMode) {
 function cmdTest(io, rest) {
   const name = rest[0];
   const jsonMode = rest.includes('--json');
+  // Default stays the historical probe id. GLM/MiniMax gateways map claude-* ;
+  // local servers that validate model ids need --model. Do not modernize the
+  // default without a live per-gateway spike.
+  const DEFAULT_TEST_MODEL = 'claude-3-haiku-20240307';
+  let model = DEFAULT_TEST_MODEL;
+  const mi = rest.indexOf('--model');
+  if (mi !== -1) {
+    const id = rest[mi + 1];
+    if (!id || String(id).startsWith('--')) {
+      if (jsonMode) {
+        io.stdout.write(JSON.stringify({ outcome: 'not_configured' }) + '\n');
+      } else {
+        io.stderr.write('ERROR: endpoints test --model requires an id\n');
+      }
+      return { status: 2 };
+    }
+    model = id;
+  }
   if (!name || !NAME_RE.test(name)) {
     if (jsonMode) {
       io.stdout.write(JSON.stringify({ outcome: 'not_configured' }) + '\n');
@@ -360,6 +378,7 @@ function cmdTest(io, rest) {
 const { URL } = require('url');
 const url = process.env.TEST_URL;
 const token = process.env.TEST_TOKEN;
+const model = process.env.TEST_MODEL || 'claude-3-haiku-20240307';
 const timeoutMs = Number(process.env.AUTOPILOT_TEST_TIMEOUT_MS) || 15000;
 
 function resolveEndpointUrl(baseUrl) {
@@ -384,7 +403,7 @@ const payload = JSON.stringify({
   // Connectivity/auth probe only. Compatible gateways (GLM/MiniMax) map claude-* ids
   // to their own models — same mechanism cc-shim relies on. Modernizing this id needs
   // a live spike against each gateway; do not swap it blind.
-  model: 'claude-3-haiku-20240307',
+  model: model,
   max_tokens: 1,
   messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
 });
@@ -462,6 +481,7 @@ req.end();
     env: Object.assign({}, io.env, {
       TEST_URL: url,
       TEST_TOKEN: token,
+      TEST_MODEL: model,
     }),
     encoding: 'utf8',
     timeout: 18000,
@@ -503,7 +523,7 @@ function printHelp(io) {
                                 write url (+ token via STDIN only) to base or the per-repo overlay;
                                 plaintext-private permits http:// to a PRIVATE-RANGE IP literal
                                 (local model on your own LAN) and is disclosed in list/which/doctor
-  test <name> [--json]          sends one tiny live request; costs tokens (verify auth + latency)
+  test <name> [--json] [--model <id>]  sends one tiny live request; costs tokens (verify auth + latency)
   doctor [--json]               diagnose file perms + unresolved endpoints (no network)
 Tokens are NEVER printed and NEVER read from argv.
 `);

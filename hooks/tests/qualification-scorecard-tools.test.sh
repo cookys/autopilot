@@ -185,4 +185,63 @@ assert_r53_runner_opencode_usag() {
 
 assert_r53_runner_opencode_usag
 
+assert_r55_autopilot_endpoints() {
+  # endpoints test --model must reach the probe payload; default stays haiku.
+  local work stub_js port_file bodies_file port stub_pid home_dir base_env
+  local with_model without_model
+  work="$(mktemp -d "$TEST_TMP/r55-XXXXXX")"
+  stub_js="$work/echo-stub.js"
+  port_file="$work/port.txt"
+  bodies_file="$work/bodies.jsonl"
+  home_dir="$work/home"
+  base_env="$work/endpoints.env"
+  mkdir -p "$home_dir"
+  cat > "$stub_js" <<'EOF'
+const http = require('http');
+const fs = require('fs');
+const bodiesPath = process.argv[3];
+fs.writeFileSync(bodiesPath, '');
+const server = http.createServer((req, res) => {
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    fs.appendFileSync(bodiesPath, Buffer.concat(chunks).toString('utf8') + '\n');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ id: 'msg_1', content: [{ type: 'text', text: 'OK' }] }));
+  });
+});
+server.listen(0, '127.0.0.1', () => {
+  fs.writeFileSync(process.argv[2], String(server.address().port));
+});
+EOF
+  node "$stub_js" "$port_file" "$bodies_file" &
+  stub_pid=$!
+  local i
+  for i in $(seq 1 50); do
+    if [ -f "$port_file" ]; then break; fi
+    sleep 0.05
+  done
+  [ -f "$port_file" ] || fail "r55: stub server did not bind"
+  port="$(cat "$port_file")"
+  printf 'tok' | env HOME="$home_dir" AUTOPILOT_ENDPOINTS_ENV="$base_env" \
+    node "$REPO_ROOT/bin/autopilot.js" endpoints set stubok --url "http://127.0.0.1:$port" --token-stdin >/dev/null \
+    || fail "r55: endpoints set failed"
+  with_model="$(env HOME="$home_dir" AUTOPILOT_ENDPOINTS_ENV="$base_env" \
+    node "$REPO_ROOT/bin/autopilot.js" endpoints test stubok --model some-other-id --json 2>&1)"
+  without_model="$(env HOME="$home_dir" AUTOPILOT_ENDPOINTS_ENV="$base_env" \
+    node "$REPO_ROOT/bin/autopilot.js" endpoints test stubok --json 2>&1)"
+  kill "$stub_pid" 2>/dev/null || true
+  wait "$stub_pid" 2>/dev/null || true
+  local bodies
+  bodies="$(cat "$bodies_file")"
+  # RED at 503b6d25170915d2dd14f0b04b625a83b64277b2: --model some-other-id silently ignored; both probe bodies sent {"model":"claude-3-haiku-20240307",...}
+  assert_contains "$with_model" '"outcome":"ok"' "r55: --model probe still reports ok against echo stub"
+  assert_contains "$bodies" '"model":"some-other-id"' "r55: --model some-other-id is sent in the probe body"
+  assert_contains "$bodies" '"model":"claude-3-haiku-20240307"' "r55: omitting --model still sends the historical default"
+  printf '%s' "$bodies" | awk 'NR==1 && /some-other-id/ {found=1} END {exit found?0:1}' \
+    || fail "r55: first request must carry some-other-id, not the hardcoded default"
+}
+
+assert_r55_autopilot_endpoints
+
 finalize_test

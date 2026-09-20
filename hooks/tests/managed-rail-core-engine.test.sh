@@ -293,6 +293,9 @@ NODE
 #   park_phase=campaign_repair_scope_seal
 #   park_reason=repair scope cannot be sealed without initial changed paths
 #   park_engine_status=blocked
+# GREEN park_engine_* (engine honors durable_wait / terminalize:false / awaiting_disposition):
+#   park_engine_phase=awaiting_disposition
+#   park_engine_status=blocked
 
 
 OUT="$(node "$SUITE" "$REPO_ROOT" "$REPO" "$BASE" "$PROMPT" "$TEST_TMP" < /dev/null)"
@@ -313,6 +316,14 @@ assert_r1_managed_rail_repair() {
   assert_not_contains "$(printf '%s\n' "$OUT" | sed -n '/^park_/p')" \
     "campaign_repair_scope_seal" \
     "park case must not terminalize via campaign_repair_scope_seal"
+  assert_not_contains "$OUT" "park_engine_status=terminal_stop" \
+    "park case engine status must not be terminal_stop"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 's/^park_engine_status=//p' | head -n 1)" \
+    "blocked" \
+    "park case engine status is blocked (awaiting disposition)"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 's/^park_engine_phase=//p' | head -n 1)" \
+    "awaiting_disposition" \
+    "park case engine phase is awaiting_disposition"
 }
 
 assert_r1_managed_rail_repair

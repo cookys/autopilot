@@ -1942,6 +1942,16 @@ function defaultDiffProvider({ base, commit, branch, round, cwd }) {
   return file;
 }
 
+const VERIFY_LEDGER_TAIL_BYTES = 4 * 1024;
+
+function boundedVerifyOutputTail(text) {
+  const buf = Buffer.from(String(text || ''), 'utf8');
+  if (buf.length <= VERIFY_LEDGER_TAIL_BYTES) {
+    return buf.toString('utf8');
+  }
+  return buf.subarray(buf.length - VERIFY_LEDGER_TAIL_BYTES).toString('utf8');
+}
+
 function defaultVerifyCommandRunner({ verifyCmd, cwd, env = process.env }) {
   const [file, ...args] = verificationArgv(verifyCmd);
   const child = spawnSync(file, args, {
@@ -1977,6 +1987,8 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
       detached: false,
     };
   }
+  // Detached verify worktree: no shared node_modules/dist from the parent
+  // checkout. verify_cmd must self-bootstrap its own dependencies.
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-verify-wt-'));
   const worktree = path.join(parent, 'wt');
   let child;
@@ -8292,6 +8304,8 @@ class AutopilotEngine {
             receipt_digest: receipt.receipt_digest,
             cached: false,
             cleanup_warning: cleanupReason,
+            verify_stdout_tail: boundedVerifyOutputTail(verifyResult.stdout),
+            verify_stderr_tail: boundedVerifyOutputTail(verifyResult.stderr),
           },
         ));
         if (receipt.verdict === 'GREEN') {

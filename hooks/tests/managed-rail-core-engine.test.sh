@@ -284,6 +284,188 @@ console.log(`park_reason=${parkCase.repairResult && parkCase.repairResult.reason
 console.log(`park_engine_phase=${parkCase.engine.phase}`);
 console.log(`park_engine_status=${parkCase.engine.status}`);
 console.log(`park_dispatches=${parkCase.dispatchCount}`);
+
+function runVerifyLedgerCase({ ticket, stdout, stderr }) {
+  const autopilot = path.join(repo, '.autopilot');
+  if (fs.existsSync(autopilot)) {
+    fs.rmSync(autopilot, { recursive: true, force: true });
+  }
+  execFileSync('git', ['-C', repo, 'checkout', '--', '.'], { stdio: 'ignore' });
+  execFileSync('git', ['-C', repo, 'clean', '-fd', '-e', '.autopilot'], { stdio: 'ignore' });
+  const { campaignPath, sealPath, campaign } = writeCampaign(ticket);
+  const admitted = runCampaignIntake({
+    repo,
+    contractPath: campaignPath,
+    sealPath,
+    promptFile,
+    base,
+    branch: campaign.branch,
+    roster,
+  }, {
+    now: () => '2026-07-26T00:00:00.000Z',
+    readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+    contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+    occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    claimGeneration: () => ({
+      owner: 'campaign_generation',
+      status: 'claimed',
+      generation: 1,
+      nonce: ticket,
+      ledger: path.join(repo, '.autopilot', 'injected-ledger.jsonl'),
+      stage_identity: `run-ledger:1:${ticket}`,
+    }),
+  });
+  assert.strictEqual(admitted.status, 'admitted', JSON.stringify(admitted).slice(0, 800));
+  const campaignId = campaignIdFor(
+    admitted.initial_state.repo_identity,
+    admitted.contract.ticket,
+    admitted.contract_digest,
+  );
+  const treeSha = spawnSync(
+    'git',
+    ['rev-parse', `${base}^{tree}`],
+    { cwd: repo, encoding: 'utf8' },
+  ).stdout.trim();
+  const engine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => '2026-07-26T00:00:01.000Z',
+    campaignIntake() {
+      return {
+        ...admitted,
+        campaign_id: campaignId,
+        contract: {
+          ...admitted.contract,
+          verify_cmd: 'test -f src/fixture.js',
+          max_repair_generations: 2,
+        },
+        generation_claim: {
+          ledger: path.join(repo, '.autopilot', 'identity-ledger.jsonl'),
+          generation: 1,
+          nonce: ticket,
+          stage_identity: `run-ledger:1:${ticket}`,
+        },
+      };
+    },
+    campaignScopeChecker() {
+      return {
+        passed: true,
+        verdict: 'PASS',
+        changed_files: ['src/fixture.js'],
+        total_churn: 0,
+        receipt_digest: 'a'.repeat(64),
+      };
+    },
+    campaignComposer(_input, adapters) {
+      const initial = adapters.implement({
+        kind: 'initial',
+        repair_generation: 0,
+        repair_finding_ids: [],
+        repair_findings: [],
+      });
+      if (!initial.committed) return { status: 'blocked', ...initial };
+      const verified = adapters.verify({
+        candidate: initial,
+        repair_generation: 0,
+      });
+      return {
+        status: verified && verified.passed ? 'ready' : 'blocked',
+        phase: verified && verified.phase ? verified.phase : 'campaign_verification',
+        reason: verified && verified.reason ? verified.reason : null,
+      };
+    },
+    implementationDispatcher(args) {
+      return dispatchOk(args, false);
+    },
+    repairPromptWriter() {
+      return promptFile;
+    },
+    campaignTreeResolver() {
+      return treeSha;
+    },
+    gitWorktreeAdd({ commit }) {
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        worktree: path.join(tmp, `${ticket}-wt`),
+        parent: path.join(tmp, `${ticket}-parent`),
+        commit,
+        observed_commit: commit,
+        observed_tree_sha: treeSha,
+        detached: true,
+      };
+    },
+    gitWorktreeRemove() {
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+      };
+    },
+    verifyWorktreeCleanup() {},
+    verifyCommandRunner({ verifyCmd }) {
+      return {
+        error: null,
+        status: 1,
+        signal: null,
+        stdout,
+        stderr,
+        executed_argv: ['/bin/sh', '-c', verifyCmd],
+      };
+    },
+  }).runImplementationReviewLoop({
+    promptFile,
+    branch: campaign.branch,
+    base,
+    roster,
+    campaignManaged: true,
+    campaignContract: campaignPath,
+    implementationOptions: {
+      env: {
+        AUTOPILOT_ROOT_RUN_ID: campaignId,
+        AUTOPILOT_DISPATCH_DEPTH: '1',
+      },
+    },
+  });
+  const entries = (engine.ledger || []).filter((row) => row.unit === 'campaign_verification');
+  assert.strictEqual(entries.length, 1, JSON.stringify(engine.ledger).slice(0, 2000));
+  return entries[0];
+}
+
+const distinctive = runVerifyLedgerCase({
+  ticket: 'rail-verify-fail',
+  stdout: 'R10_DISTINCT_STDOUT',
+  stderr: 'R10_DISTINCT_STDERR',
+});
+assert.strictEqual(distinctive.status, 'failed');
+assert.strictEqual(distinctive.verify_stdout_tail, 'R10_DISTINCT_STDOUT');
+assert.strictEqual(distinctive.verify_stderr_tail, 'R10_DISTINCT_STDERR');
+console.log(`r10_verify_status=${distinctive.status}`);
+console.log(`r10_stdout_tail=${distinctive.verify_stdout_tail}`);
+console.log(`r10_stderr_tail=${distinctive.verify_stderr_tail}`);
+
+const hugeStdout = `HEAD_MARKER_R10${'x'.repeat(12000)}TAIL_MARKER_R10`;
+const hugeStderr = `HEAD_ERR_R10${'y'.repeat(12000)}TAIL_ERR_R10`;
+const capped = runVerifyLedgerCase({
+  ticket: 'rail-verify-huge',
+  stdout: hugeStdout,
+  stderr: hugeStderr,
+});
+const ledgerJson = JSON.stringify(capped);
+assert.ok(capped.verify_stdout_tail.includes('TAIL_MARKER_R10'), capped.verify_stdout_tail.slice(-80));
+assert.ok(capped.verify_stderr_tail.includes('TAIL_ERR_R10'), capped.verify_stderr_tail.slice(-80));
+assert.ok(!capped.verify_stdout_tail.includes('HEAD_MARKER_R10'), 'stdout tail must drop the head');
+assert.ok(!capped.verify_stderr_tail.includes('HEAD_ERR_R10'), 'stderr tail must drop the head');
+assert.ok(Buffer.byteLength(capped.verify_stdout_tail, 'utf8') <= 4096);
+assert.ok(Buffer.byteLength(capped.verify_stderr_tail, 'utf8') <= 4096);
+assert.ok(ledgerJson.length < 20000, `ledger entry too large: ${ledgerJson.length}`);
+console.log(`r10_stdout_tail_bytes=${Buffer.byteLength(capped.verify_stdout_tail, 'utf8')}`);
+console.log(`r10_stderr_tail_bytes=${Buffer.byteLength(capped.verify_stderr_tail, 'utf8')}`);
+console.log(`r10_ledger_json_len=${ledgerJson.length}`);
 console.log('managed_rail_core_engine=true');
 NODE
 # RED at 88c7189721b7b63224624935efb9c322a1e7d65f:
@@ -328,4 +510,43 @@ assert_r1_managed_rail_repair() {
 
 assert_r1_managed_rail_repair
 assert_contains "$OUT" "managed_rail_core_engine=true" "managed-rail suite completed"
+
+assert_r10_managed_rail_verifyc() {
+  assert_contains "$OUT" "r10_verify_status=failed" \
+    "failing verify_cmd records campaign_verification as failed"
+  assert_contains "$OUT" "r10_stdout_tail=R10_DISTINCT_STDOUT" \
+    "ledger campaign_verification carries bounded verify stdout"
+  assert_contains "$OUT" "r10_stderr_tail=R10_DISTINCT_STDERR" \
+    "ledger campaign_verification carries bounded verify stderr"
+  local stdout_bytes stderr_bytes
+  stdout_bytes="$(printf '%s\n' "$OUT" | sed -n 's/^r10_stdout_tail_bytes=//p' | head -n 1)"
+  stderr_bytes="$(printf '%s\n' "$OUT" | sed -n 's/^r10_stderr_tail_bytes=//p' | head -n 1)"
+  assert_eq "$stdout_bytes" "4096" "huge stdout is capped at 4 KiB"
+  assert_eq "$stderr_bytes" "4096" "huge stderr is capped at 4 KiB"
+  local engine="$REPO_ROOT/src/engine/autopilot-engine.js"
+  if ! grep -q 'verify_stdout_tail' "$engine"; then
+    fail "ledger call site must set verify_stdout_tail"
+  fi
+  if ! grep -q 'verify_stderr_tail' "$engine"; then
+    fail "ledger call site must set verify_stderr_tail"
+  fi
+  if ! grep -n "autopilot-verify-wt-" "$engine" | grep -q .; then
+    fail "defaultGitWorktreeAdd still uses detached verify worktree prefix"
+  fi
+  awk '
+    /autopilot-verify-wt-/ {
+      for (i = 1; i <= n; i++) print buf[i]
+      print
+      exit
+    }
+    {
+      if (n < 4) { n++; buf[n] = $0; next }
+      for (i = 1; i < 4; i++) buf[i] = buf[i + 1]
+      buf[4] = $0
+    }
+  ' "$engine" | grep -q 'self-bootstrap' \
+    || fail "detached verify worktree comment must say verify_cmd self-bootstraps deps"
+}
+
+assert_r10_managed_rail_verifyc
 finalize_test

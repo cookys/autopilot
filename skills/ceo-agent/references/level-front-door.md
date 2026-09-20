@@ -157,8 +157,12 @@ CEO (depth 0, this session)
 - **Foreman = `sub-orchestrator`, NOT `manager`.** `manager` is non-dispatchable
   by tool-enforced invariant (`scripts/resolve-dispatch.sh --tree --role manager`
   exit 3, Amendment 11). Resolve the foreman's model with
-  `scripts/resolve-dispatch.sh --tree --role sub-orchestrator` (→ `opus`). The
-  `--tree` flag is **required** — `sub-orchestrator` lives only in the task-tree
+  `scripts/resolve-dispatch.sh --tree --role sub-orchestrator`. The role table's
+  own default is `opus` (`scripts/resolve-dispatch.sh:71` `TREE_DEFAULTS`), but a
+  project's routing-config override wins — matching the dispatch rule below
+  (foreman/sub-orchestrator defaults to `sonnet`; opus only when the brief states
+  why). The `--tree` flag is **required** — `sub-orchestrator` lives only in the
+  task-tree
   role table; without `--tree` the command exits 1 "unknown role".
 - **The foreman runs dev-flow's admitted deliverables INLINE at depth 1** (planning + gating it
   does itself). It only **leaf-dispatches** the implementer and the first-pass

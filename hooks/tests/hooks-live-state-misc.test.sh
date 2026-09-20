@@ -56,5 +56,33 @@ assert_r12_context_budget_no_mo() {
 
 assert_r12_context_budget_no_mo
 
+# assert_r59_foreman_model_is_har
+# Row 59: level-front-door.md must keep `--tree --role sub-orchestrator` but must
+# not frame its model as a fixed `(→ opus)`. TREE_DEFAULTS opus is the table
+# default; a project routing-config override wins (same file § Dispatching the
+# foreman).
+assert_r59_foreman_model_is_har() {
+  local DOC="$REPO_ROOT/skills/ceo-agent/references/level-front-door.md"
+  local RESOLVE_LINE
+  RESOLVE_LINE="$(grep -n 'resolve-dispatch.sh --tree --role sub-orchestrator' "$DOC" | head -1)"
+  if [ -z "$RESOLVE_LINE" ]; then
+    bad "must keep resolve-dispatch.sh --tree --role sub-orchestrator instruction"
+  else
+    ok "keeps --tree --role sub-orchestrator instruction (${RESOLVE_LINE%%:*})"
+  fi
+  if echo "$RESOLVE_LINE" | grep -qE '\(→[[:space:]]*`?opus`?\)'; then
+    bad "absolute (→ opus) framing still on resolve-dispatch instruction"
+  else
+    ok "no absolute (→ opus) framing on resolve-dispatch instruction"
+  fi
+  if grep -q 'TREE_DEFAULTS' "$DOC" && grep -qiE 'routing-config override' "$DOC"; then
+    ok "role-table TREE_DEFAULTS opus + project routing-config override documented"
+  else
+    bad "must cite TREE_DEFAULTS default and routing-config override"
+  fi
+}
+
+assert_r59_foreman_model_is_har
+
 printf '\n%s\n' "hooks-live-state-misc: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

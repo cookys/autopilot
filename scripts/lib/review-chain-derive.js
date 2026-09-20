@@ -26,7 +26,9 @@
  *     closedFindings: alias for closed_findings
  *   }
  *
- * Purity: No side effects (no fs, no process, no network).
+ * Mutation: mutates input chain entry objects in place to populate closed_findings;
+ * callers (hetero-review-loop finalize) rely on those stamps reaching chain.json.
+ * No fs, process, or network I/O.
  */
 
 function toList(val) {

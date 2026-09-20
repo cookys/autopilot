@@ -345,4 +345,44 @@ EOF
 
 assert_r38_check_phase_review_r
 
+# RED at base: scripts/lib/review-chain-derive.js advertised "No side effects"
+# while deriveReceiptState mutates input chain entries' closed_findings in place.
+# Pin the mutation as intentional; callers write those stamps back to chain.json.
+assert_r40_review_chain_derive() {
+  local SRC="$REPO_ROOT/scripts/lib/review-chain-derive.js"
+  local GREP_RC=0
+  grep -q "No side effects" "$SRC" || GREP_RC=$?
+  assert_neq "$GREP_RC" "0" "r40: ! grep -q 'No side effects' scripts/lib/review-chain-derive.js"
+  local body
+  body=$(cat "$SRC")
+  assert_not_contains "$body" "No side effects" "r40: file content has no 'No side effects'"
+
+  local MUTATION
+  MUTATION=$(node -e '
+    const derive = require(process.argv[1]);
+    const g1 = { generation: 1, status: "finalized" };
+    const g2 = { generation: 2, status: "finalized" };
+    const chain = [g1, g2];
+    const findings = new Map([
+      [1, [{ id: "F1", severity: "Major", seat: "s0", text: "unchecked null" }]],
+      [2, []],
+    ]);
+    const dispositions = new Map([
+      [1, [{ id: "F1", disposition: "verified" }]],
+      [2, []],
+    ]);
+    derive.deriveReceiptState(chain, findings, dispositions);
+    const stamps = g1.closed_findings;
+    if (!Array.isArray(stamps) || stamps.length < 1) {
+      process.stdout.write("missing");
+      process.exit(0);
+    }
+    const hit = stamps.some((cf) => cf && cf.id === "F1" && cf.closed_by_generation === 2);
+    process.stdout.write(hit ? "ok" : "mismatch:" + JSON.stringify(stamps));
+  ' "$SRC")
+  assert_eq "$MUTATION" "ok" "r40: passed-in g1 object has closed_findings populated after deriveReceiptState"
+}
+
+assert_r40_review_chain_derive
+
 finalize_test

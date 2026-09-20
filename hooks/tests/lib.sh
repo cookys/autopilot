@@ -486,7 +486,7 @@ poll_until() {
 
 # Hermetic D4 strict-roster fixture (provider-readiness-consumer + autopilot-cli).
 # Roster names ONLY the six STRICT_L5_PROVIDER_POLICY tuples. Scorecard rows are
-# written via the real engine-scorecard.js record CLI into TEST_TMP � never the
+# written via the real engine-scorecard.js record CLI into TEST_TMP — never the
 # host capability dir. Caller exports REVIEW_LOOP_CONFIG_OVERRIDE /
 # ENGINE_SCORECARD_DIR; the helper only sets HERMETIC_REVIEW_LOOP_CFG and
 # HERMETIC_SCORECARD_DIR.

@@ -35,8 +35,8 @@ const isStr = (v) => typeof v === 'string' && v.length > 0;
 // review.findings is the normalized JSON string ('[]' when clean). Return the raw
 // finding objects (exact 4-key grammar the adjudicator re-normalizes on resume);
 // fail closed to []. On the AUTHORITY_REQUIRED path the string has already been
-// normalized successfully, so [] only occurs for the other malformed-findings
-// codes (which the identityInvalid gate below does not cover — see BACKLOG).
+// normalized successfully. Other normalizeFindings error codes are blocked
+// below (closed enum) and never park an empty findings snapshot.
 const rawFindingsList = (raw) => {
   if (Array.isArray(raw)) return raw;
   if (typeof raw !== 'string' || raw.trim().length === 0) return [];
@@ -2693,6 +2693,26 @@ function runCampaignComposition(input = {}, adapters = {}) {
         return blocked(
           'adjudication',
           adjudication.reason || 'malformed or identity-mismatched findings remain fail-closed',
+          trace,
+          {
+            candidate,
+            adjudication,
+            code: adjudication.error_code,
+            resumable: false,
+          },
+        );
+      }
+      // Closed enum from campaign-adjudication.normalizeFindings — never a
+      // resumable wait (rawFindingsList would snapshot []). Free-text matching
+      // is forbidden (same convention as identityInvalid above).
+      const malformedFindings = adjudication.error_code === 'UNSTRUCTURED_FINDINGS'
+        || adjudication.error_code === 'INVALID_FINDINGS'
+        || adjudication.error_code === 'INVALID_FINDING'
+        || adjudication.error_code === 'DUPLICATE_FINDING';
+      if (malformedFindings) {
+        return blocked(
+          'adjudication',
+          adjudication.reason || 'malformed findings remain fail-closed',
           trace,
           {
             candidate,

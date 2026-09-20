@@ -549,4 +549,92 @@ assert_r10_managed_rail_verifyc() {
 }
 
 assert_r10_managed_rail_verifyc
+
+# R17: non-identity normalizeFindings codes must not park AWAITING_DISPOSITION
+# with an empty findings snapshot. RED at base: UNSTRUCTURED_FINDINGS falls
+# through to durable wait + []. GREEN: blocked, resumable:false, named reason.
+# FINDING_IDENTITY_INVALID remains the existing hard-fail (non-resumable).
+assert_r17_managed_rail_a_malfo() {
+  local R17_OUT
+  R17_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root] = process.argv.slice(2);
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+const seat = () => {
+  const { canonicalDigest } = require(path.join(root, 'src/engine/campaign-verification'));
+  const s = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'f', model: 'm', effort: 'high', endpoint: null, family: 'f',
+    status: 'reviewed', verdict: 'SHIP-AS-IS',
+    review_digest: 'f'.repeat(64), reason: null,
+  };
+  s.receipt_digest = canonicalDigest(s);
+  return s;
+};
+const adapters = (error_code, reason) => ({
+  preflight: () => ({ passed: true }),
+  implement: () => ({ committed: true, commit: 'a'.repeat(40), tree_sha: 'b'.repeat(40) }),
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: 'c'.repeat(64) }),
+  review: () => ({
+    reviewed: true,
+    review_input_mode: 'full_diff_generation',
+    review_digest: 'd'.repeat(64),
+    findings: 'not-json',
+    verdict: 'REWORK',
+  }),
+  adjudicate: () => ({
+    registry_complete: false,
+    repair_gate_passed: false,
+    reason,
+    error_code,
+    must_fix_now: [],
+    follow_up: [],
+    rejected: [],
+  }),
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({
+    reviewed: true,
+    verdict: 'SHIP-AS-IS',
+    findings: '[]',
+    review_digest: 'f'.repeat(64),
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [seat()],
+  }),
+});
+const malformed = runCampaignComposition(
+  { maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 },
+  adapters('UNSTRUCTURED_FINDINGS', 'review findings are not exact structured JSON'),
+);
+assert.strictEqual(malformed.status, 'blocked');
+assert.notStrictEqual(malformed.status, 'awaiting_disposition');
+assert.strictEqual(malformed.resumable, false);
+assert.strictEqual(malformed.code, 'UNSTRUCTURED_FINDINGS');
+assert.strictEqual(malformed.reason, 'review findings are not exact structured JSON');
+const identity = runCampaignComposition(
+  { maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 },
+  adapters('FINDING_IDENTITY_INVALID', 'malformed or identity-mismatched findings remain fail-closed'),
+);
+assert.strictEqual(identity.status, 'blocked');
+assert.strictEqual(identity.resumable, false);
+assert.strictEqual(identity.code, 'FINDING_IDENTITY_INVALID');
+console.log(JSON.stringify({
+  r17_malformed_blocked: true,
+  r17_identity_invalid_hard_fail: true,
+}));
+NODE
+)"
+  assert_exit_code "$?" "0" "r17 malformed-findings composition hard-fail exits zero: $R17_OUT"
+  assert_contains "$R17_OUT" '"r17_malformed_blocked":true' \
+    "UNSTRUCTURED_FINDINGS is blocked non-resumable with named reason"
+  assert_contains "$R17_OUT" '"r17_identity_invalid_hard_fail":true' \
+    "FINDING_IDENTITY_INVALID remains blocked non-resumable"
+}
+
+assert_r17_managed_rail_a_malfo
 finalize_test

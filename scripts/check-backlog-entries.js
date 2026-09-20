@@ -8,6 +8,10 @@
  * This script never rewrites a backlog. Allowlist ratchet: --update-allowlist
  * may only remove (fingerprint, code) pairs that no longer violate.
  *
+ * BACKLOG is a queue: a `shipped`/`dropped` row is done_not_moved immediately
+ * (done_retention_days default 0 — history is in git, not the row). A consumer
+ * config may raise done_retention_days for a deliberate grace window.
+ *
  * Usage:
  *   node scripts/check-backlog-entries.js --backlog <file>
  *     [--config <file>] [--allowlist <file>] [--mode warn|block]
@@ -170,7 +174,10 @@ function builtinConfig() {
     id_pattern: null,
     mode: 'warn',
     allowlist_path: null,
-    done_retention_days: 30,
+    // BACKLOG is a queue (plan-graduation DESIGN sentence 1): a shipped/dropped row is
+    // done_not_moved on sight. done_retention_days remains an override knob for a
+    // consumer that genuinely wants a grace window.
+    done_retention_days: 0,
     caps: {},
   };
 }
@@ -599,12 +606,16 @@ function checkEntry(entry, cfg, repoRoot, now) {
   const st = fields.Status && String(fields.Status).trim();
   if (st && /^(shipped|dropped)\b/.test(st)) {
     const d = statusDate(st);
-    if (d && daysAgo(d, now) > (cfg.done_retention_days || 30)) {
+    // done_retention_days default is 0: `>=` so a same-day shipped/dropped row is
+    // already done_not_moved, not just one that has aged past the threshold. `|| 30`
+    // would be wrong here — 0 is a valid, falsy retention value.
+    const retention = cfg.done_retention_days != null ? cfg.done_retention_days : 0;
+    if (d && daysAgo(d, now) >= retention) {
       vios.push({
         code: 'done_not_moved',
         title,
         field: 'Status',
-        detail: `${st} older than ${cfg.done_retention_days} days`,
+        detail: `${st} older than ${retention} days`,
       });
     }
   }

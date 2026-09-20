@@ -18,7 +18,7 @@ Every style carries the same fields. `Context` is the only optional field.
 
 **Entry cap**: 900 B total. Nothing but these fields — an extra bullet, sub-list, or code fence is `extra_content`.
 
-**Done handling**: `shipped` / `dropped` rows older than `done_retention_days` (default 30) are `done_not_moved`. The fix is **deleting the row** (history is in git and at the pointer).
+**Done handling**: BACKLOG is a queue — a row exists only while nothing else owns the item. `shipped` / `dropped` rows are `done_not_moved` immediately (`done_retention_days` default 0; a consumer config may raise it for a deliberate grace window), and a row whose Pointer already resolves to an existing `docs/plans/*.md` is redundant with that plan the moment the plan exists. The fix is **deleting the row** (history is in git and at the pointer) — `scripts/check-plan-graduation.js --fix` does this mechanically.
 
 ## Styles
 

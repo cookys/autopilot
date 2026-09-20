@@ -238,7 +238,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     the checkout HEAD, source needs a live ref); do not edit the plan afterwards — even a Review-log
     line drifts the frozen source sha and every `session-mode set` is refused until routing is
     rolled back to a completed graph whose sources still match plus `mission-terminal-reconcile.js
-    legacy` (2026-09-15).
+    legacy` (2026-09-15). Then run `node scripts/check-plan-graduation.js --fix` — the plan
+    graduates to `docs/plans/_archive/` once its slug lands in a released CHANGELOG section, and
+    any BACKLOG row this campaign's plan now supersedes is deleted in the same pass.
     When the rail stops, degrade per the documented fallback
     (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed`), repair on
     the mission branch in its retained worktree, merge on git evidence, and file the rail defect.

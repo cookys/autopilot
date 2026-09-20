@@ -278,6 +278,32 @@ check_per_skill_ratchet() {
   return 1
 }
 
+# ─── 9. plan graduation clean ───
+# BACKLOG is a queue: a row with an existing plan Pointer or a shipped/dropped
+# Status, or a released plan still sitting outside docs/plans/_archive/, blocks a
+# release the same way a stale CHANGELOG/INDEX mirror does. plan_orphan
+# (report-only) never fails this check.
+check_plan_graduation() {
+  local out
+  out="$(mktemp)"
+  node scripts/check-plan-graduation.js --repo-root "$REPO" --json > "$out" 2>&1
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    node -e '
+      const fs = require("fs");
+      let j; try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
+      for (const v of j.violations || []) {
+        if (v.code === "plan_orphan") continue;
+        const where = v.kind === "backlog_row" ? `BACKLOG row "${v.title}"` : v.path;
+        console.error(`    ${v.code}: ${where} — ${v.detail}`);
+      }
+      console.error("    fix: node scripts/check-plan-graduation.js --fix");
+    ' "$out" >&2
+  fi
+  rm -f "$out"
+  return "$rc"
+}
+
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then
   if check_slash_entry_probe; then
     exit 0
@@ -297,6 +323,7 @@ run_check "all project README links in INDEX resolve to existing files" check_in
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
 run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
+run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
 
 # ─── advisory: roster-field report ───────────────────────────────────────────
 # NOT a check and NOT counted in $FAILS — it prints the roster's

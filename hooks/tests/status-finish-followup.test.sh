@@ -317,4 +317,82 @@ CAMPAIGN_BACKLOG_AFTER="$(sha256sum "$TEST_TMP/campaign-BACKLOG.md" | cut -d' ' 
 assert_eq "$CAMPAIGN_BACKLOG_BEFORE" "$CAMPAIGN_BACKLOG_AFTER" \
   "noncanonical campaign does not mutate backlog"
 
+# RED at plan-graduation base: severity 🔵 and no-Trigger findings were folded into the
+# generic noncanonical_artifact / unsupported_evidence buckets — never refused by name,
+# and nothing stopped a 🔵 suggestion from ever reaching the backlog queue.
+cp "$REPO_ROOT/docs/BACKLOG.md" "$TEST_TMP/severity-BACKLOG.md"
+node - "$TEST_TMP/blue-and-notrigger-campaign.json" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+const body = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_terminal',
+  status: 'follow_up',
+  candidate_tree_sha: 'a'.repeat(40),
+  verification_receipt_digest: 'b'.repeat(64),
+  repair_generations: 0,
+  final_panel_count: 1,
+  follow_up: [{
+    id: 'blue-suggestion',
+    claim: 'A 🔵 suggestion must never queue as a BACKLOG row.',
+    severity: '🔵',
+    source: 'review-a',
+    evidence: { classification: 'actionable', digest: 'c'.repeat(64) },
+    adjudication_authority: {
+      authority: 'depth-0',
+      actor_id: 'root',
+      review_digest: 'e'.repeat(64),
+    },
+    disposition: {
+      disposition: 'follow-up',
+      context: 'Blue findings are recorded in the plan evidence README, not BACKLOG.',
+      trigger: 'When a reviewer reports a 🔵 suggestion.',
+      proposed_backlog_title: 'Must not admit a blue-severity finding',
+    },
+  }, {
+    id: 'no-trigger-major',
+    claim: 'A 🟠 finding with an empty Trigger must be refused, not silently admitted.',
+    severity: '🟠',
+    source: 'review-b',
+    evidence: { classification: 'actionable', digest: 'd'.repeat(64) },
+    adjudication_authority: {
+      authority: 'depth-0',
+      actor_id: 'root',
+      review_digest: 'f'.repeat(64),
+    },
+    disposition: {
+      disposition: 'follow-up',
+      context: 'A row without a Trigger has nothing for the queue to fire on.',
+      trigger: '',
+      proposed_backlog_title: 'Must not admit a finding with no Trigger',
+    },
+  }],
+  rejected_findings: [],
+  unresolved_final_findings: [],
+  trace: ['terminal'],
+};
+body.receipt_digest = crypto.createHash('sha256').update(canonical(body)).digest('hex');
+fs.writeFileSync(process.argv[2], JSON.stringify(body));
+NODE
+SEVERITY_BACKLOG_BEFORE="$(sha256sum "$TEST_TMP/severity-BACKLOG.md" | cut -d' ' -f1)"
+SEVERITY_ADMISSION="$(node "$REPO_ROOT/scripts/admit-backlog-follow-ups.js" \
+  --input "$TEST_TMP/blue-and-notrigger-campaign.json" \
+  --backlog "$TEST_TMP/severity-BACKLOG.md" --current-ticket seq21)"
+assert_eq "0" "$?" "blue-severity and no-trigger findings are refused without crashing"
+assert_contains "$SEVERITY_ADMISSION" '"reason": "blue_severity_excluded"' \
+  "RED: a 🔵 finding is refused by name, not folded into unsupported_evidence"
+assert_contains "$SEVERITY_ADMISSION" '"reason": "missing_trigger"' \
+  "RED: a no-Trigger finding is refused by name, not folded into unsupported_evidence"
+SEVERITY_BACKLOG_AFTER="$(sha256sum "$TEST_TMP/severity-BACKLOG.md" | cut -d' ' -f1)"
+assert_eq "$SEVERITY_BACKLOG_BEFORE" "$SEVERITY_BACKLOG_AFTER" \
+  "neither refused finding mutates the backlog"
+
 finalize_test

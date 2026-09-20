@@ -233,7 +233,13 @@ gate_codes="$(node "$REPO_ROOT/scripts/check-backlog-entries.js" --backlog "$J/d
 # reshaped (2026-09-14) it no longer does. Either shape is fine — the assertion is that nothing
 # but Title caps (and possibly that header block) survives the migration.
 gate_codes_no_header="$(printf '%s' "$gate_codes" | sed 's/,unparseable_entry//; s/unparseable_entry,//')"
-assert_eq "$gate_codes_no_header" "cap_exceeded:Title" "(j) only Title caps (plus at most the header block) remain (got: $gate_codes)"
+# RED at plan-graduation base: done_retention_days default dropped from 30 to 0 (BACKLOG is a
+# queue), so a `shipped`/`dropped` row this recent now legitimately surfaces done_not_moved
+# without --config's own override — this is the new gate telling the truth about the real
+# backlog's own content, not a migration defect. needsMigration() excludes done_not_moved
+# deliberately (its fix is row deletion via check-plan-graduation.js, not sidecar migration).
+assert_eq "$gate_codes_no_header" "cap_exceeded:Title,done_not_moved:Status" \
+  "(j) only Title caps and done_not_moved (plus at most the header block) remain (got: $gate_codes)"
 
 # ── (k) a small entry that only lacks Status/Pointer IS migrated; a lone over-cap Title is NOT ──
 K="$(repo k-small)"

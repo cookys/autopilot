@@ -206,10 +206,19 @@ function normaliseEffort(fields, entryText) {
 // nothing but the Title cap and leaves it alone (depth-0 probe 2026-09-14: the first version
 // re-migrated long-titled rows into new sidecars on every run, and skipped small rows that
 // only lacked Status/Pointer).
+//
+// done_not_moved is ALSO excluded (plan-graduation, done_retention_days default 0): it flags a
+// row whose fix is deletion (BACKLOG is a queue — scripts/check-plan-graduation.js --fix does
+// this), never a schema-shape defect this migrator should "fix" by moving prose to a sidecar. A
+// freshly-synthesized `shipped <ver> <today>` row would otherwise be misclassified as lossy on
+// day one.
 function needsMigration(entry, cfg, repoRoot, now) {
   if (!entry || entry.unparseable) return false;
   const vios = checkEntry(entry, cfg, repoRoot, now);
-  return vios.some((v) => !(v.code === 'cap_exceeded' && v.field === 'Title'));
+  return vios.some((v) => !(
+    (v.code === 'cap_exceeded' && v.field === 'Title')
+    || v.code === 'done_not_moved'
+  ));
 }
 
 function renderEntry(title, fields) {

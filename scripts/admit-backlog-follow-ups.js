@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
+// Admits candidate rows from a portfolio artifact or a campaign terminal receipt's
+// follow_up findings into docs/BACKLOG.md. Refuses two shapes of row regardless of
+// otherwise-canonical evidence (plan-graduation DESIGN sentence 3): a 🔵-severity
+// finding (reason: blue_severity_excluded) and any row with no Trigger
+// (reason: missing_trigger).
+
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -153,6 +159,32 @@ function fromCampaign(value, sourceFile) {
   return value.follow_up.map((finding) => {
     const disposition = finding && finding.disposition;
     const evidence = finding && finding.evidence;
+    const material = {
+      context: disposition && disposition.context,
+      evidence_digest: evidence && evidence.digest,
+      finding_id: finding && finding.id,
+      source: finding && finding.source,
+      title: disposition && disposition.proposed_backlog_title,
+      trigger: disposition && disposition.trigger,
+    };
+    const common = {
+      fingerprint: digest(material),
+      expected_fingerprint: digest(material),
+      title: disposition && disposition.proposed_backlog_title,
+      context: disposition && disposition.context,
+      trigger: disposition && disposition.trigger,
+      sources: [finding && finding.source, sourceFile].filter(nonEmpty),
+    };
+    // A 🔵 finding is a suggestion, never a queue row (DESIGN sentence 3): refuse it
+    // before touching artifact canonicality, so it never masquerades as unsupported_evidence.
+    if (finding && finding.severity === '🔵') {
+      return { ...common, eligible: false, reason: 'blue_severity_excluded' };
+    }
+    // A row with no Trigger has nothing for the queue to fire on; refuse with a
+    // specific reason rather than folding it into the generic canonicality bucket.
+    if (!nonEmpty(disposition && disposition.trigger)) {
+      return { ...common, eligible: false, reason: 'missing_trigger' };
+    }
     const eligible = Boolean(
       canonicalArtifact
       && finding
@@ -167,22 +199,9 @@ function fromCampaign(value, sourceFile) {
       && nonEmpty(disposition.trigger)
       && nonEmpty(disposition.proposed_backlog_title),
     );
-    const material = {
-      context: disposition && disposition.context,
-      evidence_digest: evidence && evidence.digest,
-      finding_id: finding && finding.id,
-      source: finding && finding.source,
-      title: disposition && disposition.proposed_backlog_title,
-      trigger: disposition && disposition.trigger,
-    };
     return {
+      ...common,
       eligible,
-      fingerprint: digest(material),
-      expected_fingerprint: digest(material),
-      title: disposition && disposition.proposed_backlog_title,
-      context: disposition && disposition.context,
-      trigger: disposition && disposition.trigger,
-      sources: [finding && finding.source, sourceFile].filter(nonEmpty),
       reason: canonicalArtifact
         ? (eligible ? null : 'unsupported_evidence')
         : 'noncanonical_artifact',

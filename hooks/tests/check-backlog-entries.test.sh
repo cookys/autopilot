@@ -87,6 +87,22 @@ d="$(repo c-done)"
 printf '%s\n' '### Old dropped row' '- **Status**: dropped 2020-01-01' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' > "$d/docs/BACKLOG.md"
 code_case done_not_moved "$d"
 
+# RED at pre-plan-graduation base (done_retention_days default was 30): a `shipped` row
+# dated today would NOT have fired done_not_moved for another 30 days. BACKLOG is a
+# queue now — a shipped/dropped row is done_not_moved on sight, no default grace.
+TODAY="$(date -u +%Y-%m-%d)"
+d="$(repo c-done-today)"
+printf '%s\n' '### Shipped today row' "- **Status**: shipped v9.9.9 $TODAY" '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' > "$d/docs/BACKLOG.md"
+code_case done_not_moved "$d"
+
+# --- done_retention_days is still an override knob: a consumer config may raise it ---
+d="$(repo c-done-override)"
+printf '%s\n' '### Shipped today, retained row' "- **Status**: shipped v9.9.9 $TODAY" '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' > "$d/docs/BACKLOG.md"
+printf '%s\n' 'style: heading' 'done_retention_days: 30' > "$d/.claude/backlog-config.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --json --config "$d/.claude/backlog-config.md")"
+assert_eq "$(json_has_code "$o" "done_not_moved")" "no" \
+  "an explicit done_retention_days override still grants a grace window"
+
 d="$(repo c-unp)"
 printf '%s\n' '- **Status**: open' '- **Trigger**: x' > "$d/docs/BACKLOG.md"
 code_case unparseable_entry "$d"

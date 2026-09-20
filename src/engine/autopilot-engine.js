@@ -1612,29 +1612,70 @@ function repairScopeSealValid(seal) {
     && campaignCanonicalDigest(body) === sealDigest;
 }
 
-function findingBoundRepairPaths(findings, allowedPrefixes) {
-  const prefixes = allowedPrefixes.map((prefix) => (
+function isAllowedRepairPath(candidate, prefixes) {
+  return typeof candidate === 'string'
+    && candidate.length > 0
+    && !path.isAbsolute(candidate)
+    && !candidate.split('/').includes('..')
+    && prefixes.some((prefix) => (
+      candidate === prefix.slice(0, -1) || candidate.startsWith(prefix)
+    ));
+}
+
+function collectFindingBoundPathsFromText(text, prefixes) {
+  const found = new Set();
+  if (typeof text !== 'string' || text.length === 0) return found;
+  for (const match of text.matchAll(
+    /(?:^|[\s`'"(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)(?=[:#]?\d*(?:[\s`'",)]|$))/gu,
+  )) {
+    const candidate = match[1];
+    if (isAllowedRepairPath(candidate, prefixes)) found.add(candidate);
+  }
+  return found;
+}
+
+function findingTaskSurface(finding) {
+  const surface = finding
+    && finding.disposition
+    && finding.disposition.task_surface;
+  return typeof surface === 'string' && surface.length > 0 ? surface : null;
+}
+
+function findingBoundRepairPaths(findings, allowedPrefixes, options = {}) {
+  const prefixes = (allowedPrefixes || []).map((prefix) => (
     prefix.endsWith('/') ? prefix : `${prefix}/`
   ));
+  const roundChangedPaths = Array.isArray(options.roundChangedPaths)
+    ? options.roundChangedPaths.filter((item) => isAllowedRepairPath(item, prefixes))
+    : [];
   const allPaths = new Set();
   for (const finding of findings) {
-    const findingPaths = new Set();
-    const evidence = `${finding.claim || ''}\n${finding.source || ''}`;
-    for (const match of evidence.matchAll(
-      /(?:^|[\s`'"(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)(?=[:#]?\d*(?:[\s`'",)]|$))/gu,
-    )) {
-      const candidate = match[1];
-      if (candidate.split('/').includes('..')
-          || path.isAbsolute(candidate)
-          || !prefixes.some((prefix) => candidate.startsWith(prefix))) continue;
-      findingPaths.add(candidate);
-      allPaths.add(candidate);
+    const findingPaths = collectFindingBoundPathsFromText(
+      `${finding.claim || ''}\n${finding.source || ''}`,
+      prefixes,
+    );
+    if (findingPaths.size === 0) {
+      const surface = findingTaskSurface(finding);
+      if (surface) {
+        for (const candidate of collectFindingBoundPathsFromText(surface, prefixes)) {
+          findingPaths.add(candidate);
+        }
+        const trimmed = surface.replace(/\/+$/u, '');
+        if (!surface.endsWith('/') && isAllowedRepairPath(trimmed, prefixes)) {
+          findingPaths.add(trimmed);
+        }
+        if (findingPaths.size === 0) {
+          const prefix = `${trimmed}/`;
+          for (const file of roundChangedPaths) {
+            if (file === trimmed || file.startsWith(prefix)) findingPaths.add(file);
+          }
+        }
+      }
     }
     if (findingPaths.size === 0) {
-      throw new Error(
-        `finding ${finding.finding_id || finding.id} has no explicit allowed repair path`,
-      );
+      for (const file of roundChangedPaths) findingPaths.add(file);
     }
+    for (const candidate of findingPaths) allPaths.add(candidate);
   }
   return [...allPaths].sort();
 }
@@ -7481,8 +7522,9 @@ class AutopilotEngine {
               non_reduction_rounds: nextNonReductionRounds,
             };
           }
-          if (!Array.isArray(repairLineage.repair_scope_paths)
-              || repairLineage.repair_scope_paths.length === 0) {
+          if (kind === 'vertical_repair'
+              && (!Array.isArray(repairLineage.repair_scope_paths)
+                || repairLineage.repair_scope_paths.length === 0)) {
             return {
               committed: false,
               phase: 'campaign_repair_scope_seal',
@@ -7490,23 +7532,47 @@ class AutopilotEngine {
             };
           }
           let findingPaths;
-          try {
-            if (kind === 'vertical_repair'
-                && Array.isArray(repairFindings)
-                && repairFindings.length === 1
-                && repairFindings[0].id === 'vertical-acceptance') {
-              findingPaths = [...repairLineage.repair_scope_paths].sort();
-            } else {
-              findingPaths = findingBoundRepairPaths(
-                repairFindings,
-                campaignControl.contract.allowed_path_prefixes,
-              );
-            }
-          } catch (error) {
+          if (kind === 'vertical_repair'
+              && Array.isArray(repairFindings)
+              && repairFindings.length === 1
+              && repairFindings[0].id === 'vertical-acceptance') {
+            findingPaths = [...repairLineage.repair_scope_paths].sort();
+          } else {
+            const boundFindings = (Array.isArray(repairFindings) ? repairFindings : [])
+              .map((finding) => {
+                if (findingTaskSurface(finding)) return finding;
+                const findingId = finding.finding_id || finding.id;
+                const adjudicated = latestAdjudication
+                  && Array.isArray(latestAdjudication.must_fix_now)
+                  ? latestAdjudication.must_fix_now.find((row) => (
+                    (row.finding_id || row.id) === findingId
+                  ))
+                  : null;
+                const surface = findingTaskSurface(adjudicated);
+                if (!surface) return finding;
+                return {
+                  ...finding,
+                  disposition: {
+                    ...(finding.disposition && typeof finding.disposition === 'object'
+                      ? finding.disposition : {}),
+                    task_surface: surface,
+                  },
+                };
+              });
+            findingPaths = findingBoundRepairPaths(
+              boundFindings,
+              campaignControl.contract.allowed_path_prefixes,
+              { roundChangedPaths: repairLineage.repair_scope_paths },
+            );
+          }
+          if (!Array.isArray(findingPaths) || findingPaths.length === 0) {
             return {
               committed: false,
-              phase: 'campaign_repair_scope_seal',
-              reason: error.message || String(error),
+              phase: 'awaiting_disposition',
+              reason: 'repair scope cannot be sealed without a task_surface or changed paths',
+              durable_wait: true,
+              terminalize: false,
+              awaiting_disposition: true,
             };
           }
           repairLineage.repair_scope_seal = createRepairScopeSeal({

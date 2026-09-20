@@ -99,9 +99,16 @@ const FROZEN_EVIDENCE_SHA256 = Object.freeze({
 });
 const PLAN_PATH = 'docs/plans/2026-08-03-next-touch-debt-retirement.md';
 const RUBRIC_PATH = 'docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md';
+// Live checkout location (integration candidates are cut from the current tree); the project archive moved to
+// the dated layout in v2.36.80.
 const ARCHIVE_DIR = 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement';
+// Sealed bundles (G8b bodies, product candidate b3dd078a) still name the flat layout; compare and read them there.
+const HISTORICAL_ARCHIVE_DIR = 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement';
 const AUTHORIZATION_PATH = 'docs/projects/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
+// Live checkout location (read from the working tree): the project archive moved to the dated layout in v2.36.80.
 const ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
+// Sealed location: the value a historical bundle carries in `historical_archive_authorization_path`.
+const HISTORICAL_ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
 const SOURCE_MANIFEST_PATH = 'docs/mission-next-touch-debt-retirement-sources.json';
 const EXPECTED_AUTH_KEYS = [
   'schema_version', 'ticket', 'project', 'base_sha', 'branch', 'mission_lineage_id',
@@ -1062,9 +1069,9 @@ function validateG8bIntegrationAuthorization(bundle, loaded, repoInfo, source, a
   }
   if (value.source_plan_path !== PLAN_PATH
       || value.source_rubric_path !== RUBRIC_PATH
-      || value.archive_plan_path !== `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.md`
-      || value.archive_rubric_path !== `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.rubric.md`
-      || value.historical_archive_authorization_path !== ARCHIVE_AUTHORIZATION_PATH
+      || value.archive_plan_path !== `${HISTORICAL_ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.md`
+      || value.archive_rubric_path !== `${HISTORICAL_ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.rubric.md`
+      || value.historical_archive_authorization_path !== HISTORICAL_ARCHIVE_AUTHORIZATION_PATH
       || value.d8_report_path !== D8_REPORT_PATH
       || value.admission_base_sha !== ADMISSION_BASE_SHA
       || value.mission_claim_base_sha !== REVIEW_BASE_SHA

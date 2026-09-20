@@ -1,6 +1,6 @@
 # Rubric — 2026-09-16-agy-effort-and-rail-wording.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-16-agy-effort-and-rail-wording.md
+> Source plan: docs/plans/2026-09-16-agy-effort-and-rail-wording.md
 
 R1: `agy_effort_for_model <resolved-model> <effort>` in `scripts/lib/agy-model-alias.sh` prints the id's tier when the resolved id ends in `-low|-medium|-high`, otherwise `agy_effort_clamp <effort>`; it never prints an empty or non-`low|medium|high` value.
 R2: The agy exec sites of `dispatch-hetero.sh`, `dispatch-review.sh`, and `dispatch-author.sh` pass `--effort "$(agy_effort_for_model "$MODEL" "$EFFORT")"` with the RESOLVED model; a `gemini-flash-medium` alias under the default effort reaches the agy stub as `--effort medium` (RED at base: `high`), and `gemini-flash-high` with `--effort low` reaches it as `--effort high`.

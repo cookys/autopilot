@@ -177,7 +177,7 @@ prints the ⚠. Then depth-0 re-pins the seat (operator decision) and the next c
 ## Review log
 
 - Design consult 2026-09-16 (codex gpt-5.6-sol; evidence
-  `docs/plans/_archive/2026/09/evidence/2026-09-16-proof-parity-raw-log/consult-codex-answer.md`, "Deliverable 1"):
+  `docs/plans/evidence/2026-09-16-proof-parity-raw-log/consult-codex-answer.md`, "Deliverable 1"):
   recommends A1 now with a distinct rejection code (not "unqualified" — a pin cannot fix
   containment), one canonical predicate with a bash parity test, report-only resolver warning that
   never suggests a pin, and A2 as a bounded spike with the probe list above; names A1's residual

@@ -1,6 +1,6 @@
 # Rubric — 2026-09-16-ledger-rotation-order.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-16-ledger-rotation-order.md
+> Source plan: docs/plans/2026-09-16-ledger-rotation-order.md
 
 R1: After two forced rotations (`RUN_LEDGER_MAX_BYTES=1`, `RUN_LEDGER_MAX_ROTATIONS=1`) with no original journal row left in any segment, BOTH `${ledger}.1` and the live segment list the campaign's intake + three event journals in append order, every copy `_rotation_carry:true`, each `_rotation_root` exactly once per segment.
 R2: `projectCampaign(loadRows(ledger), campaignId)` on that carry-only snapshot does not throw and returns the expected phase, event count and `last_output_artifact_digest`; at base it throws `event input artifact must match the prior output artifact`.

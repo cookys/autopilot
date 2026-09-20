@@ -1,6 +1,6 @@
 # Rubric — 2026-09-15-peer-residue-config-ladder-qc-namespace.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-15-peer-residue-config-ladder-qc-namespace.md
+> Source plan: docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md
 
 R1: `resolve_config_ladder` tier 3 fires only when realpath(git toplevel of $PWD) == realpath(REPO_ROOT); a foreign git repo with no `.claude/<basename>` resolves `source: template` and the template's values.
 R2: Running from a subdirectory of the autopilot repo still resolves tier 3 (`source: project-repo`); running outside any git checkout resolves template.

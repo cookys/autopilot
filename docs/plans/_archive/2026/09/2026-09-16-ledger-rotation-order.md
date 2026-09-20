@@ -196,14 +196,14 @@ is GC'd; if it parks, degrade per HANDOFF, do not `--resume`.
 ## Review log
 
 - Design consult 2026-09-16 (grok seat still 402 → codex gpt-5.6-sol via the raw-prompt rail,
-  evidence `docs/plans/_archive/2026/09/evidence/2026-09-16-ledger-rotation-order/consult-codex-answer.md`):
+  evidence `docs/plans/evidence/2026-09-16-ledger-rotation-order/consult-codex-answer.md`):
   recommends (c) writer + provenance-gated reader recovery; confirms keep-first and names the
   two-rotation `.1`+live assertion, the equal-`ts` guard and the fixture precondition, all folded
   into §2.3. Depth-0 ruling: (a) only — the owner froze D's scope to carry-order preservation, no
   live caller needs the old bytes healed, and the reader recovery is a DFS inside the fail-closed
   projection core that deserves its own plan and hetero loop (§6).
 - Plan hetero loop G1 2026-09-16 (GLM-5.2 CONDITIONAL, gpt-5.6-sol STOP; evidence
-  `docs/plans/_archive/2026/09/evidence/2026-09-16-ledger-rotation-order/g1-*`): two blockers (the §2.1
+  `docs/plans/evidence/2026-09-16-ledger-rotation-order/g1-*`): two blockers (the §2.1
   `to_entries/group_by/min_by/sort_by` alternative contradicted R4) accepted — alternative removed;
   one non-blocking (version reseal could diverge from R9) accepted — §2.4 reseals plan and rubric
   together.

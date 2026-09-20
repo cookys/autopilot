@@ -1,6 +1,6 @@
 # Rubric — 2026-09-16-disposition-resume-scope-sha.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-16-disposition-resume-scope-sha.md
+> Source plan: docs/plans/2026-09-16-disposition-resume-scope-sha.md
 
 R1: `runCampaignIntake({ resume: true })` on a ledger whose projection phase is `awaiting_disposition` with a `git_candidate` artifact reference returns `status: 'admitted'` and `generation_claim.resume_candidate` in the exact `verifyResumeCandidate` shape: `committed === true`, `commit` = current candidate, `tree_sha`, `branch`, `writer_fence`, `repair_lineage`, and a 40-hex `scope_implementation_sha`.
 R2: `scope_implementation_sha` equals the FIRST `git_candidate` reference's commit (`initial_candidate_reference`), not the current tip: with two candidates `c1` (initial) and `c2` (repair tip) the resume exposes `scope_implementation_sha === c1` and `commit === c2`.

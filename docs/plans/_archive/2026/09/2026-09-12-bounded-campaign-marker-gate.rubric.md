@@ -1,6 +1,6 @@
 # Rubric — 2026-09-12-bounded-campaign-marker-gate.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-12-bounded-campaign-marker-gate.md
+> Source plan: docs/plans/2026-09-12-bounded-campaign-marker-gate.md
 
 R1: This is a SUPERSESSION of the rule asserted by 8d7e61c2 on 2026-07-28 and must be recorded as one, in the commit message and at the code anchor, so no later reader finds a stale absolute.
 R2: `hooks/tests/dispatch-hetero.test.sh:966-979` is rewritten under a name stating the new rule, never deleted and never left asserting the old one.

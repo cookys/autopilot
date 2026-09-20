@@ -16,7 +16,7 @@
 ## 0. Context / thesis
 
 The consult/discuss qualification exams shipped in v2.35.x
-(`docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md`, evidence under
+(`docs/plans/2026-08-28-consult-discuss-qualification.md`, evidence under
 `docs/plans/evidence/2026-08-28-consult-discuss-qualify/`) decide *qualified/failed* on a **single
 administration** against a **100%-correct bar** (consult `20/20`, discuss `16/16`; two internal trials,
 both clearing their own `10/10` / `8/8`). The verdict is computed in `scripts/engine-qualify.js` by
@@ -865,7 +865,7 @@ it explicitly does **not** authorize or perform spend (that is a separate Board 
   `plan/qualification-verdict-stability`, base `origin/develop @ 7253db18`. `logical_plan_id:
   qualification-verdict-stability`. `BASE` for the anti-gaming gate is frozen at D0 =
   `git merge-base origin/develop HEAD` (record the SHA at execution).
-  - Precedent: `docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md` (D-item style, bounded DAG,
+  - Precedent: `docs/plans/2026-08-28-consult-discuss-qualification.md` (D-item style, bounded DAG,
     Review-log discipline). Evidence rules cited by number from `references/evidence-discipline.md`
     (§2 planted-negative, §3 no-shadow-oracle, §13 bidirectional pin, §14 no dead gate, §19 count
     what is spent).

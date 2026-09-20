@@ -1,6 +1,6 @@
 # Rubric — 2026-09-12-integration-receipt-sha-ledger.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-12-integration-receipt-sha-ledger.md
+> Source plan: docs/plans/2026-09-12-integration-receipt-sha-ledger.md
 
 R1: Node >= 20.10, built-ins only; no new npm dependency.
 R2: ADR-0001 binding — the receipt records observable git facts, never an attestation; no hash chain, witness receipt or tamper-evidence.

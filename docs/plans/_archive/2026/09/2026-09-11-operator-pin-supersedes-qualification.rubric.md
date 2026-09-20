@@ -1,6 +1,6 @@
 # Rubric — 2026-09-11-operator-pin-supersedes-qualification.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md
+> Source plan: docs/plans/2026-09-11-operator-pin-supersedes-qualification.md
 
 R1: Node ≥ 20.10, built-ins only; no new npm dependency; the pin store reuses `lib/jsonl-store.js` primitives.
 R2: ADR-0001 binding — a pin is an operator preference record, never an attestation; no hash chain, witness receipt or tamper-evidence may be added.

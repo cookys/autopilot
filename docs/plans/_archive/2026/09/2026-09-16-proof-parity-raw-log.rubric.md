@@ -1,6 +1,6 @@
 # Rubric — 2026-09-16-proof-parity-raw-log.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-16-proof-parity-raw-log.md
+> Source plan: docs/plans/2026-09-16-proof-parity-raw-log.md
 
 R1: A shared vector table (one heredoc of `proof|expected` rows) is driven through BOTH the bash battery (real `dispatch-review.sh` with a stub runner) and Node `parseReviewOutput`; every row yields the same accept/reject on both sides, including `.`, `,`, space and mixed-punctuation separators and a `;` inside a substantive field value; at base `0e3ea3cc` the `.`/`,`/space rows disagree (Node rejects).
 R2: Node distinguishes a shape failure (labels missing/reordered, empty field, unsupported separator such as `|`) from a semantic failure (a field normalizes to a blacklist entry) with two different messages; the bash battery's two existing `BATTERY_FAIL_REASON` strings map to the same two classes; the blacklist contents are unchanged.

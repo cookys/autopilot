@@ -100,7 +100,7 @@ This is the portfolio finish gate inside the existing Mission closeout, not a fo
    digests in project `dev-info.md`. Failures are repaired/reconciled in this Mission lineage; they do
    not open a replacement graph, ticket, branch, foreman, or implementer.
 6. After local integration and the terminal receipts, move the complete project directory—including
-   all three node evidence files—to `docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/`
+   all three node evidence files—to `docs/projects/_archive/2026-08-02-backlog-actionable-successor/`
    and update the index. The frozen graph authorizes both active source and archive destination paths.
 
 ## Scope boundary

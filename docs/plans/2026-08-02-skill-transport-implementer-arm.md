@@ -3,7 +3,7 @@
 > Status: FROZEN FOR EXECUTION
 > Owner: depth-0 CEO
 > Size: L
-> Source: `docs/plans/_archive/2026/07/2026-07-15-skill-transport-payoff-ab.md` § Phase 2 and `docs/BACKLOG.md`
+> Source: `docs/plans/2026-07-15-skill-transport-payoff-ab.md` § Phase 2 and `docs/BACKLOG.md`
 > Frame: paired measurement; the deliverable is evidence plus a decision, not a production default change
 
 ## Context
@@ -50,7 +50,7 @@ Run one deterministic paired experiment over exactly eight S-size micro-reposito
 | `evals/skill-transport/test/implementer-matrix-mechanics.test.sh` | Negative controls for drift, base-green, reroll, arm isolation, fail-closed rows, and report math |
 | `evals/skill-transport/results/implementer-*` | Seed, 16-cell result ledger, JSON report, and human-readable report; no raw logs |
 | `evals/skill-transport/README.md` | Operator contract and reproducible commands for both completed experiment arms |
-| `docs/plans/_archive/2026/07/2026-07-15-skill-transport-payoff-ab.md` | Historical plan terminal status and execution note only |
+| `docs/plans/2026-07-15-skill-transport-payoff-ab.md` | Historical plan terminal status and execution note only |
 | `docs/BACKLOG.md` | Remove this one triggered item after terminal evidence, or retain it with an exact infrastructure trigger |
 | `docs/projects/2026-08-02-skill-transport-implementer-arm/` | Progress, evidence, decision, and lifecycle record |
 

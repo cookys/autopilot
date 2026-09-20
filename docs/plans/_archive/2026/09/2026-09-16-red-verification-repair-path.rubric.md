@@ -1,6 +1,6 @@
 # Rubric — 2026-09-16-red-verification-repair-path.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-16-red-verification-repair-path.md
+> Source plan: docs/plans/2026-09-16-red-verification-repair-path.md
 
 R1: With a RED generation-0 verification, the engine attempts ZERO `review_completed` campaign-event appends for generation 0 (asserted on a spy wrapping `campaignEventAppender` that records every attempt before delegating), and the run does not return `phase: 'campaign_event_journal'`; at base it returns exactly that with reason `cannot apply review_completed while campaign is VERTICAL_VERIFICATION`.
 R2: Exactly one `repair_authorized` append at generation 1 follows; the state it returns has `generation === 1` and `phase === REPAIRING`; `projectCampaign` over the sandbox ledger replays to generation ≥ 1.

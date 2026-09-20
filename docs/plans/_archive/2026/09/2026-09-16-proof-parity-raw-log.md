@@ -195,7 +195,7 @@ proof is `reviewed`, not `dispatch_review blocked`; and a deliberately tautologi
 ## Review log
 
 - Design consult 2026-09-16 (codex gpt-5.6-sol on the raw-prompt rail; evidence
-  `docs/plans/_archive/2026/09/evidence/2026-09-16-proof-parity-raw-log/consult-codex-answer.md`): recommends two
+  `docs/plans/evidence/2026-09-16-proof-parity-raw-log/consult-codex-answer.md`): recommends two
   deliverables (A1 alone; B+C together), one-or-more separator grammar on both sides with distinct
   shape/semantic failures and a shared vector table, schema-lenient salvage with runner/model from
   the invocation, optional `raw_log` on the failed seat receipt with old receipts still valid; names

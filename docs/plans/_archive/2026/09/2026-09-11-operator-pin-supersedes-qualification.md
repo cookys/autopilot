@@ -7,7 +7,7 @@
 
 Two Board rulings currently make the qualification exam a gate that binds the **operator**:
 
-- **KR6** (`docs/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md:72-74`, FROZEN): no fresh evidence →
+- **KR6** (`docs/plans/2026-08-17-autonomous-brain-integration.md:72-74`, FROZEN): no fresh evidence →
   an explicit **per-invocation** override artifact is required; absent both, refusal. "**Among qualified
   candidates**, the user's preference config beats any system ranking."
 - **Strike precedence** (`scripts/dispatch-contract.js:1240-1253`, 2026-08-22): a `requalify_required`
@@ -432,8 +432,8 @@ No open questions remain. G2 reviews a plan with no unresolved Board input.
 ## Review log
 
 - **R0** authored 2026-09-11 by depth-0. `logical_plan_id`: `operator-pin-supersedes-qualification-2026-09-11`.
-  Rubric: `docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.rubric.md` (20 IDs, frozen).
-  Manifest: `docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.plan-review-manifest.json`.
+  Rubric: `docs/plans/2026-09-11-operator-pin-supersedes-qualification.rubric.md` (20 IDs, frozen).
+  Manifest: `docs/plans/2026-09-11-operator-pin-supersedes-qualification.plan-review-manifest.json`.
 - **G1** 2026-09-11, 3 seats, all transports complete. Verdict **CONDITIONAL**
   (`policy_reason: depth_0_adjudication_required`); seat verdicts grok CONDITIONAL, MiniMax **STOP**,
   sol **STOP**. 31 findings / 22 candidate blockers. Artifact:

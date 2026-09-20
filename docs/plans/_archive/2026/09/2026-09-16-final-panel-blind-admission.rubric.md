@@ -1,6 +1,6 @@
 # Rubric — 2026-09-16-final-panel-blind-admission.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-16-final-panel-blind-admission.md
+> Source plan: docs/plans/2026-09-16-final-panel-blind-admission.md
 
 R1: `src/engine/final-panel-qualification.js` exports `BLIND_DISCOVERY_CAPABLE_RUNNERS` (exactly `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn`) and `isBlindDiscoveryCapableRunner(runner)`; it is the only Node source of that set (intake and any Node caller use it).
 R2: `runCampaignIntake` refuses, BEFORE the Mission claim and the generation claim, any `qc_panel_seats[i]` whose runner is not blind-capable with `rejection.code === 'final_panel_seat_blind_incompatible'`, `status: 'blocked'`, one message line per seat naming `qc_panel[<i>] <model>/<runner>@<endpoint|@none>` and containing `pins and overrides do not bypass containment`; the `missionClaim` and `claimGeneration` adapters are called zero times; at base `9b049c00` the same roster is admitted and the claim adapter is called.

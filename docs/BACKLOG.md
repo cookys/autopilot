@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### `check-plan-graduation.js` reference rewrite rewrote sha-bound plan bytes (26 sealed sources drifted)
+- **Status**: open
+- **Trigger**: the next `--fix`/`--archive`/`--migrate-archive-layout` run, OR any edit to `rewritePlanReferences`
+- **Effort**: S
+- **Source**: v2.36.80 landing (next-touch-validation red after the migration; 26 files restored from history)
+- **Pointer**: docs/backlog/plan-rewriter-must-skip-sha-bound-sources.md
+- **Context**: exclude every `plan_path`/`rubric_path` named by a `docs/mission-*-sources.json` from text rewrites; report as `plan_reference_frozen`.
+
 ### Foreman ↔ depth-0 coordination: typed `worker_condition` was planned (r6) and never built
 - **Status**: open
 - **Trigger**: a foreman wait loop that must tell "hand parked on a question" from "hand still working" without reading the transcript

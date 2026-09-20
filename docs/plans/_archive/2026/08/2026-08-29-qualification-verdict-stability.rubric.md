@@ -3,7 +3,7 @@
 > Content-bound source for the Mission execution graph
 > `docs/mission-qualification-verdict-stability-execution-graph.json`. Each `R<n>` below is the
 > checkable form of the plan's KRs, constraints and risks
-> (`docs/plans/_archive/2026/08/2026-08-29-qualification-verdict-stability.md`, APPROVED 2026-08-30).
+> (`docs/plans/2026-08-29-qualification-verdict-stability.md`, APPROVED 2026-08-30).
 
 R1: The verdict is a two-tier decision — Tier-1 trust is zero-tolerance and fail-fast on a single
 occurrence, Tier-2 competence is a full-N pooled Wilson lower bound against the frozen case mixture.

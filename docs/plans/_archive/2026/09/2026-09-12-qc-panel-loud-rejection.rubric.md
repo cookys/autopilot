@@ -1,6 +1,6 @@
 # Rubric — 2026-09-12-qc-panel-loud-rejection.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-12-qc-panel-loud-rejection.md
+> Source plan: docs/plans/2026-09-12-qc-panel-loud-rejection.md
 
 R1: Shell only; this script is a dev/CI-time resolver and stays `.sh`. No port to Node.
 R2: All FOUR sites emit, not three. A diff touching only the per-seat cases fails this plan.

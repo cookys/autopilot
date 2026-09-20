@@ -1,6 +1,6 @@
 # Rubric — 2026-09-15-final-panel-per-seat-pins.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-15-final-panel-per-seat-pins.md
+> Source plan: docs/plans/2026-09-15-final-panel-per-seat-pins.md
 
 R1: `engine-capability-state.js pin-seat --role qc_panel` keeps one row per engine+runner+endpoint (two different engines → two rows; same tuple twice → one row with the second reason); every other role keeps exactly one row per role (replacement unchanged).
 R2: `unpin-seat --role qc_panel --engine X --runner Y [--endpoint E]` removes exactly that row; without a selector it removes all qc_panel rows and reports the count; a selector on any other role exits non-zero naming the rule.

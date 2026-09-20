@@ -1,6 +1,6 @@
 # Rubric — 2026-09-14-backlog-entry-schema.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-14-backlog-entry-schema.md
+> Source plan: docs/plans/2026-09-14-backlog-entry-schema.md
 
 R1: The schema is stated exactly ONCE (`references/backlog-entry.md`); every other file links it and quotes only field names. A second field list anywhere fails.
 R2: Every field has a byte cap (UTF-8 bytes, measured by the gate) or a closed value set; the plan names the numbers, not "reasonable".

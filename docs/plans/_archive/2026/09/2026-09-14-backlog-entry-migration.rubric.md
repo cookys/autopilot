@@ -1,6 +1,6 @@
 # Rubric — 2026-09-14-backlog-entry-migration.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-14-backlog-entry-migration.md
+> Source plan: docs/plans/2026-09-14-backlog-entry-migration.md
 
 R1: The migration parses with the gate's grammar (the gate exports its parser; no second parser).
 R2: Byte preservation is verified by re-reading each sidecar and locating the moved text verbatim; `preserved: true` only then.

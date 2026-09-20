@@ -303,7 +303,7 @@ bash hooks/tests/resolve-dispatch.test.sh
 Inside D8/G8a, before freezing each candidate, the cumulative diff removes exactly A01–A14 (set
 difference against `base_sha`, no other heading), doc
 drift is clean, and lifecycle moves the project, plan and authorization receipt under
-`docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/`. The persisted attempt ledger keys on
+`docs/projects/_archive/2026-08-03-next-touch-debt-retirement/`. The persisted attempt ledger keys on
 the admission `base_sha`, candidate SHA and source-deliverable lineage. For every initial or repaired
 candidate the named verifier reruns all commands below, then the named reviewer independently reviews
 exactly `base_sha..candidate_sha`; receipts bind actor/model/version, command bytes/results and SHAs.

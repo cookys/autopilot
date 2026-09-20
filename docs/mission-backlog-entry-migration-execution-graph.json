@@ -45,7 +45,7 @@
      "docs/scripts-inventory.md"
     ],
     "spec": {
-     "path": "docs/plans/2026-09-14-backlog-entry-migration.md",
+     "path": "docs/plans/_archive/2026-09-14-backlog-entry-migration.md",
      "section": "2. `scripts/migrate-backlog-entries.js` contract (Node ≥ 20.10, built-ins only)"
     }
    },

@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.36.78 — lifecycle 硬閘門：BACKLOG 是佇列、plan 出貨即歸檔、🔵 不進 BACKLOG（dogfood 失敗的修正）
+
+- 盤點（2026-09-20）：文件寫 backlog → plan → project → archive，但執行者全是 LLM 指令；`skills/l5` 零次提到 project-lifecycle，
+  `hetero-impl-loop.md` 把 `docs/plans/<date>-<slug>.md` 當永久位置，`backlog-entry.md` 的 30 天保留跟 dev-flow「撿起來就刪」矛盾，
+  `admit-backlog-follow-ups.js` 只進不出。結果：BACKLOG 216 條（154 open／62 shipped 留著／13 條已有 plan）、docs/plans 178 個
+  plan（59 已出貨未歸檔、38 孤兒）、docs/projects 13 天零歸檔。
+- 新規則三句：(1) BACKLOG 是佇列——Pointer 指到既存 plan（本檔／sidecar／evidence dir）或 Status shipped/dropped 的列**刪除**，
+  沒有保留期，歷史在 git；(2) campaign 工作以 plan 當 project——slug 出現在已釋出 CHANGELOG 段就整組（plan＋sidecar＋evidence）
+  `git mv` 到 `docs/plans/_archive/`，`docs/projects/` 只留 dev-flow L 的參與式工作；(3) 🔵 與無 Trigger 的 finding 永不進 BACKLOG。
+- **`scripts/check-plan-graduation.js`**（＋鏡像）：違規碼 `backlog_row_has_plan`／`backlog_row_done`／`backlog_title_closed_status_open`／
+  `plan_released_not_archived`／`archive_destination_exists`（blocking）、`plan_orphan`／`plan_active_lineage`／`plan_reference_dangling`
+  （report-only）；`--fix` 刪列、all-or-nothing 歸檔（目的地已存在則拒）、改寫其他 tracked 檔的 `docs/plans/<stem>` 與 `docs/plans/evidence/<stem>` 引用
+  （CHANGELOG／BACKLOG 除外）、修後重算 exit；active mission-routing 的 sources 自動豁免；`--allowlist`。接進 `preflight-release.sh` [9]、finish-flow
+  L-5.5、l5 recipe step 11。`check-backlog-entries.js` `done_retention_days` 預設 0（含 `.claude/backlog-config.md`、template、scaffold）；
+  `admit-backlog-follow-ups.js` 拒 🔵／無 Trigger；`migrate-backlog-entries.js` 不再把 done 列當遷移對象。
+- 本版一次清理：BACKLOG 216 → 139（刪 77）；59 個 plan 連 sidecar／evidence 歸檔；14 組 dangling 引用改寫；39 個孤兒 plan 只列不動
+  （待 owner 裁決）。測試 `hooks/tests/check-plan-graduation.test.sh` 69 案；二家審 claude-fable-5-1 FIX-THEN-SHIP→修後 delta 複審。
+
+prose-justification: finish-flow L-5.5、l5 recipe step 11、backlog-entry.md 各 +1–2 行（閘門接線，mechanism）；dev-flow SKILL.md:65 只改 plan 路徑（歸檔位移，profiles 鏈重釘、815 rules 不變）。
+
 ## v2.36.77 — 2-D D2 shipped：qc panel snapshot 成為契約（claim 後才寫、digest 漂移拒收、claim-held-no-file 規則、live flip 入帳）
 
 - `src/engine/campaign-intake.js`（＋鏡像）：`qc_panel_snapshot.json` 的 O_EXCL 寫入移到 `missionClaimAdapter` 成功之後，被拒的 claim 不留檔；

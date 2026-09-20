@@ -259,7 +259,7 @@ function resolvedTuple(role, runner, model, effort, rawEndpoint, family, label) 
   }, label);
 }
 
-// Per-level roster profile (v2.36.8, docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md
+// Per-level roster profile (v2.36.8, docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.md
 // P1). l5/l6 keep the frozen D4 shape: the verification-author seat and a complete QC panel are
 // REQUIRED (`strict_l5_provider_roster_incomplete` otherwise). l4 is implementer + reviewer (plus
 // the configured fallback ladder); the VA seat and the QC panel are OPTIONAL — included only when
@@ -422,7 +422,7 @@ function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
   const byTuple = new Map(policy.map((entry) => [canonicalDigest(entry.tuple), entry]));
 
   // Canonical-policy coverage is ADVISORY, not a gate (Board decision 2026-08-16,
-  // docs/plans/2026-08-16-owner-kernel-retirement.md P4).
+  // docs/plans/_archive/2026-08-16-owner-kernel-retirement.md P4).
   //
   // History: coverage started as a hard pre-spend block (the compiled policy was
   // the single legal roster), then grew an explicit opt-out

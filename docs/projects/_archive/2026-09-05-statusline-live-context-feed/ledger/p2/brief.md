@@ -4,7 +4,7 @@ Repo: `/home/cookys/projects/autopilot`, branch `feat/v2.36.1-statusline-live-co
 main tree). Work in a git worktree: `git worktree add /home/cookys/projects/autopilot-wt-p2 -b feat/v2.36.1-p2 feat/v2.36.1-statusline-live-context-feed`
 and do everything there. Commit there; do not merge. Node ≥ 20.10, built-ins only, no new dependency.
 
-Plan (read §2.5 and P2 only): `docs/plans/2026-09-05-statusline-live-context-feed.md`. P0 ruling: `tasks[].id === payload.agent_id`
+Plan (read §2.5 and P2 only): `docs/plans/_archive/2026-09-05-statusline-live-context-feed.md`. P0 ruling: `tasks[].id === payload.agent_id`
 (`docs/projects/2026-09-05-statusline-live-context-feed/ledger/p0/README.md`). Real payloads for fixtures: `ledger/p0/{statusline,subagent}.json`.
 Read first: `hooks/context-budget.js`, `hooks/context-budget-lib.js`, `hooks/context-budget.test.js`, `hooks/foreman-guard.js` + its test, `hooks/tests/run.sh` header.
 

@@ -1,4 +1,4 @@
-Implement docs/plans/2026-09-15-final-panel-per-seat-pins.md (read it first: §1 ruling/shape, §2 changes by file, §2.6 tests, §3 out of scope). You edit files only; the harness commits. No version bump, no CHANGELOG edit, no `git stash`, no push.
+Implement docs/plans/_archive/2026-09-15-final-panel-per-seat-pins.md (read it first: §1 ruling/shape, §2 changes by file, §2.6 tests, §3 out of scope). You edit files only; the harness commits. No version bump, no CHANGELOG edit, no `git stash`, no push.
 
 Every path you create or modify MUST be one of these (the contract's output_paths; anything else rejects the round):
 scripts/engine-capability-state.js

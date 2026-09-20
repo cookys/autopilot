@@ -1,6 +1,6 @@
 <!--
 FROZEN PACK FIXTURE — placebo (arm C) for the skill-transport payoff A/B.
-Frozen: 2026-07-15 (docs/plans/2026-07-15-skill-transport-payoff-ab.md, §4 Phase 1 step 4).
+Frozen: 2026-07-15 (docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md, §4 Phase 1 step 4).
 Purpose: equal-length irrelevant text. It carries NO review methodology and NO defect hint —
 its only job is to match the reviewer pack's length so the pack-vs-no-pack comparison can
 separate "relevant methodology changed behaviour" from "a longer prompt changed behaviour".

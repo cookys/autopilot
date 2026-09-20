@@ -234,7 +234,7 @@ Build stage-3 usage policy from a live host-observed qualification, not from sco
    isolates each panel process, parses every result, and creates a random run nonce.
 3. The live in-process run is the strongest evidence tier; record its outcome to the scorecard
    and reflect it in the review-loop roster. (The Owner Kernel grant machinery this stage once
-   routed through was retired 2026-08-16 — `docs/plans/2026-08-16-owner-kernel-retirement.md`;
+   routed through was retired 2026-08-16 — `docs/plans/_archive/2026-08-16-owner-kernel-retirement.md`;
    routing authority is now the roster + capability state, with the epistemic rule below.)
 4. Re-resolve and re-run for every fallback identity.
 5. A JSON roundtrip, process restart, scorecard row, or `current-evidence` output is weaker

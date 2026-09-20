@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * probe-unknown.js — the unknown-escalation ladder probe
- * (plan: docs/plans/2026-09-07-unknown-escalation-ladder.md, P1).
+ * (plan: docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md, P1).
  *
  * Turns "I'm stuck" into a measured signal and a bounded recommendation. It
  * never dispatches anything, never blocks anything (exit 0 on every

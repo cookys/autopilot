@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Planted negative controls for the 2026-08-22 no-confidence-decay cut
-# (docs/plans/2026-08-22-no-confidence-decay.md §4 P1/P2/P3).
+# (docs/plans/_archive/2026-08-22-no-confidence-decay.md §4 P1/P2/P3).
 #
 # Three calendar teeth were pulled from the admission path:
 #   (a) engine-scorecard.js deriveStatus no longer emits `expired` for a

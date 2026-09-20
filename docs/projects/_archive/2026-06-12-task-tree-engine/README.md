@@ -2,7 +2,7 @@
 
 > **Status**: Complete (2026-06-12) — execution state lives in [`tree/events.jsonl`](tree/events.jsonl); read via `scripts/tree.sh report 2026-06-12-task-tree-engine <node>`. Shadow calibration ongoing; graduation = Board decision (see BACKLOG checkpoint)
 > **Branch**: `feat/task-tree-engine`
-> **Plan**: [`docs/plans/2026-06-12-task-tree-engine.md`](../../../plans/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
+> **Plan**: [`docs/plans/_archive/2026-06-12-task-tree-engine.md`](../../../plans/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
 > **Spec**: [`docs/plans/2026-06-12-task-tree-engine-design-spec.md`](../../../plans/2026-06-12-task-tree-engine-design-spec.md) (Board-approved)
 > **Mode**: CEO (involvement 3); graduation of verification authority is explicitly a Board decision, NOT within CEO DOA.
 

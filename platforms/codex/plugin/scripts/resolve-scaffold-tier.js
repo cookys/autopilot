@@ -3,7 +3,7 @@
 
 /**
  * resolve-scaffold-tier.js — capability-indexed scaffold tier resolution (four-layer P1,
- * docs/plans/2026-08-16-four-layer-redesign.md D4; tier definitions and prompt skeletons:
+ * docs/plans/_archive/2026-08-16-four-layer-redesign.md D4; tier definitions and prompt skeletons:
  * references/scaffold-tiers.md — the single canonical home).
  *
  * Maps {runner, model, role[, effort]} to a scaffold tier from recorded qualification

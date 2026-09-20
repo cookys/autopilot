@@ -1,6 +1,6 @@
 # Build task: scripts/engine-qualify.sh (reviewer qualification, Stage 1)
 
-Read the full contract in docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md § "Stage 1 — Qualify" (Reviewer) and § "Stage 2 — Score".
+Read the full contract in docs/plans/_archive/2026-06-30-hetero-engine-lifecycle-methodology.md § "Stage 1 — Qualify" (Reviewer) and § "Stage 2 — Score".
 Implement ONLY scripts/engine-qualify.sh + hooks/tests/engine-qualify.test.sh. Touch nothing else.
 
 ## GOAL

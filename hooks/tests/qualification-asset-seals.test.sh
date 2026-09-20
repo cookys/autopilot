@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hooks/tests/qualification-asset-seals.test.sh
 #
-# D4 acceptance (plan: docs/plans/2026-08-28-consult-discuss-qualification.md,
+# D4 acceptance (plan: docs/plans/_archive/2026-08-28-consult-discuss-qualification.md,
 # D4 "rubric freeze + pinned assets + anti-gaming") for
 # scripts/lib/qualification-asset-seals.js — the load-bearing seal/pin check
 # consult and discuss qualification MUST refuse to run without.

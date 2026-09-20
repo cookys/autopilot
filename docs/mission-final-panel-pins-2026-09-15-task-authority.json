@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/2026-09-15-final-panel-per-seat-pins.md: qc_panel standing pins keyed by engine+runner+endpoint, the roster resolver records qc_panel[N] admissions, finalPanelSeatQualified admits recorded seats from one shared module, and campaign intake refuses an unadmitted panel seat before the Mission claim. (graph refrozen 2026-09-15: new module removed from required_paths after attempt 1 burned pre-spend)",
+    "objective": "Ship docs/plans/_archive/2026-09-15-final-panel-per-seat-pins.md: qc_panel standing pins keyed by engine+runner+endpoint, the roster resolver records qc_panel[N] admissions, finalPanelSeatQualified admits recorded seats from one shared module, and campaign intake refuses an unadmitted panel seat before the Mission claim. (graph refrozen 2026-09-15: new module removed from required_paths after attempt 1 burned pre-spend)",
     "requirements_hash": "9af01f030b25766d9930016b6828c27d47bcaf417b67f43f08b8197efac3a8aa",
     "scope": {
       "allowed_tools": [

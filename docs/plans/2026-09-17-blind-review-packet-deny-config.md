@@ -1,6 +1,6 @@
 # Blind review redesign — cut 1c: a configurable packet deny-list (additive, hash-bound)
 
-> Status: SHIPPED v2.36.64 (merge `f6cb9a1a`, 2026-09-18) · Size: M · Base: `6a414c3c` (v2.36.63 shipped; 1b-B merge `bc4ea99e`) · Parent: `docs/plans/2026-09-16-blind-review-packet.md`
+> Status: SHIPPED v2.36.64 (merge `f6cb9a1a`, 2026-09-18) · Size: M · Base: `6a414c3c` (v2.36.63 shipped; 1b-B merge `bc4ea99e`) · Parent: `docs/plans/_archive/2026-09-16-blind-review-packet.md`
 > §3 (line 259: "revisit when the deny-list becomes configurable (1b)") and §7 item 3 (line 312:
 > "configurable deny-list"). Siblings: 1b-A launcher (v2.36.62), 1b-B intake probe (v2.36.63).
 > Evidence dir: `docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/`.

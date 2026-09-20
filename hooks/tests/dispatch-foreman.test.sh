@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dispatch-foreman.test.sh — the non-Claude foreman rail (Shape B), every rail-owned
-# enforcement from docs/plans/2026-09-13-foreman-rail-b-build.md pinned against a PATH-stubbed
+# enforcement from docs/plans/_archive/2026-09-13-foreman-rail-b-build.md pinned against a PATH-stubbed
 # `kimi` (no network, no live LLM). The stub is driven ONLY through KIMI_* variables, which
 # doubles as the proof that the allowlisted env reaches the foreman and nothing else does.
 #

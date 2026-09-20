@@ -2,7 +2,7 @@
 
 **Status**: Complete — all three slimmed contracts shipped in v2.32.16 and v2.32.18.
 
-> Plan: [`docs/plans/2026-07-05-terse-reviewer-contracts.md`](../../../plans/2026-07-05-terse-reviewer-contracts.md)
+> Plan: [`docs/plans/_archive/2026-07-05-terse-reviewer-contracts.md`](../../../plans/2026-07-05-terse-reviewer-contracts.md)
 > Branch: `worktree-agent-a4dc64ce28e8dd57a` (off `feat/terse-reviewer-contracts` @ bb2518c)
 > Run: /l6 — depth-1 foreman executes M2 + verification-harness authoring (Phase A); depth-0 holds the phase checkpoint.
 

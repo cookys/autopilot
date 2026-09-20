@@ -256,7 +256,7 @@ makes them collide on one path, and Step 5's **proactive `compare`** detects a `
 variant *before* committing the push, so the human-gated LLM merge runs in the clean working tree —
 **never inside a held rebase/merge transaction**. The earlier per-host-staging design was rejected (it
 regressed Claude Code skill loading and used a self-defeating content-hash key); see
-[plan 2026-06-04-distill-consolidate](../../docs/plans/2026-06-04-distill-consolidate.md) §v3 for the
+[plan 2026-06-04-distill-consolidate](../../docs/plans/_archive/2026-06-04-distill-consolidate.md) §v3 for the
 design and the two dialectic rounds behind it.
 
 ## Available scripts

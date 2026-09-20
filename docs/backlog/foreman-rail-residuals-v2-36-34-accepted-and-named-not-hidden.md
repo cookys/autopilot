@@ -10,5 +10,5 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Tool cap counts `Bash` only** — the same scope as `foreman-guard`. Native `Write`/`Edit` calls are uncounted in both implementations; whether that is a gap belongs to the guard, not this rail.
 - **`-p` + `--auto` unmeasured** (peer says the CLI refuses the pair; bare `-p` already runs tools, so nothing depends on it).
 - **ACP transport not used.** `-p`/`-c` is proven and file-based; ACP would give session fork/list. Revisit only if a resume path needs it.
-- **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
+- **Source**: `docs/plans/_archive/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
 

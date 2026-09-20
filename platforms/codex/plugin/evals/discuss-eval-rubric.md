@@ -1,6 +1,6 @@
 # discuss qualification rubric
 
-Normative source: `docs/plans/2026-08-28-consult-discuss-qualification.md` §"D2 — discuss exam:
+Normative source: `docs/plans/_archive/2026-08-28-consult-discuss-qualification.md` §"D2 — discuss exam:
 corpus, generator, grader, admission gates". This file's bytes are sealed by
 `scripts/rubric-freeze.js` (`evals/discuss-eval-rubric.seal.json`); a byte change here without a
 re-seal is DRIFT and the qualifier refuses to run.

@@ -240,7 +240,7 @@ D-1 的核心是驗證 `!cat .claude/dispatch-config.md` chain delegation 確實
 | `README.md` + `README.zh-TW.md` `## Superpowers Coexistence` 段 | 三情境（A/B/C）的範例 config |
 | `docs/projects/_archive/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` | scenario B 9 case 結果，append D-1/D-2 用 |
 | `docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md` | v2.7.0 ship 紀錄 |
-| `docs/plans/2026-05-14-superpowers-coexistence.md` | 原 plan + r1/r2 review history |
+| `docs/plans/_archive/2026-05-14-superpowers-coexistence.md` | 原 plan + r1/r2 review history |
 | `project-config-template/dispatch-config.md` | chain schema 模板，Step 4 用 |
 | `skills/{debug,test-strategy,team,profiling}/SKILL.md` | 4 個 v2.7.0 fallback skill 本體 |
 | `scripts/run-eval-batch.sh` | 16-skill eval batch runner（用了 `superpowers:skill-creator`）|

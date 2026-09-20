@@ -276,4 +276,4 @@ tool schemas + goal docs, 2026-06-02 — see the harness-integration direction m
 
 - [`AGENTS.md`](../AGENTS.md) — agents.md-spec readme for any agent
 - [`CLAUDE.md`](../CLAUDE.md) — Claude Code-specific conventions
-- [`docs/plans/2026-05-22-multi-agent-portability-correction.md`](../docs/plans/2026-05-22-multi-agent-portability-correction.md) — the plan that produced this fact version
+- [`docs/plans/_archive/2026-05-22-multi-agent-portability-correction.md`](../docs/plans/_archive/2026-05-22-multi-agent-portability-correction.md) — the plan that produced this fact version

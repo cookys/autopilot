@@ -5,7 +5,7 @@ clone = /home/cookys/projects/autopilot-par4-leasegc · base_sha = 964aaa4a63e61
 
 BACKLOG row: "Managed rail: stale campaign leases are never released — 109 runs leased since July keep the ~2 MB carry alive" (S;
 trigger fired: every append to `.git/autopilot/implementation-campaign.jsonl` rotates, carry ≈ whole ledger). Read the row
-(`grep -n "stale campaign leases" docs/BACKLOG.md`) and plan `docs/plans/2026-09-16-ledger-rotation-order.md` §6.
+(`grep -n "stale campaign leases" docs/BACKLOG.md`) and plan `docs/plans/_archive/2026-09-16-ledger-rotation-order.md` §6.
 
 Facts at base (depth-0 verified 2026-09-19; re-verify before coding — all in `scripts/run-ledger.sh`):
 - Stage row: `kind:"stage"`, fields `run_id, stage, state, generation, nonce, pid, start_time, pgid, heartbeat_ts, git_ref, git_sha,

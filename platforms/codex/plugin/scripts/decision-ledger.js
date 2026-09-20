@@ -3,7 +3,7 @@
 
 /**
  * decision-ledger.js — the brain's proxy-decision ledger + round-end report
- * (autonomous-brain-integration P3; plan: docs/plans/2026-08-17-autonomous-brain-integration.md).
+ * (autonomous-brain-integration P3; plan: docs/plans/_archive/2026-08-17-autonomous-brain-integration.md).
  *
  * Kills sol failure shape F12 (polling death-spiral): every autonomous decision
  * lands here with a rationale BEFORE the round ends, and the round-end report
@@ -30,7 +30,7 @@
  *   unknown    {type: how|why|whether, rationale, round?, work_unit?}   (agent self-report — a claim, S6)
  *   ladder     {rung: U0..U4, unknown_type, terms[], signal_ids[], heterogeneous, reason?, dispatch_run_id?, round?, work_unit?}
  * The last three are unknown-escalation-ladder telemetry (plan
- * docs/plans/2026-09-07-unknown-escalation-ladder.md): exempt from decision_id /
+ * docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md): exempt from decision_id /
  * rationale like `note`, each validated against its own required-field set. A
  * `ladder` row is written once per rung dispatch by probe-unknown.js receipt or
  * dispatch-consult.sh --ladder-receipt; a `reason` of knob-off | budget-exhausted |

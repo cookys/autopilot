@@ -11,7 +11,7 @@ P1a (the **L0 static** test-integrity gate) is **done, verified, merged, pushed*
 
 - **`scripts/check-test-integrity.sh`** — L0 static, git-artifact-only gate. Checks: test-path **additions-only** (`deleted_line`), skip/solo-marker denylist, `rename_escape`, `surface_touch` (independent of test-path), non-waivable `protected_path_touch`/`malformed_config`/`git_error`. **Config read from the trusted base ref** (candidate in-diff `mode:off` ignored). Default `warn`; `block` opt-in.
 - Tests: `hooks/tests/check-test-integrity.test.sh` (70 assertions). Config template: `project-config-template/test-integrity-config.md`. Reference: `skills/quality-pipeline/references/test-integrity-gate.md`. Wired into CLAUDE.md inventory + quality-pipeline SKILL.
-- Full design + 5-round review history + implementation record: **`docs/plans/2026-06-25-test-integrity-gate.md`** (read §2, §3, §9). The L1 scope lives in that plan's §2.1 (L1) + §3 (Phase P1b) + §4 (residuals).
+- Full design + 5-round review history + implementation record: **`docs/plans/_archive/2026-06-25-test-integrity-gate.md`** (read §2, §3, §9). The L1 scope lives in that plan's §2.1 (L1) + §3 (Phase P1b) + §4 (residuals).
 
 ## L1 scope (what to build)
 
@@ -33,7 +33,7 @@ Write a **per-runner design spec** (the thing that was missing last time): for p
 - Semver: L1 is a hardening of an existing script → **PATCH** (new behavior in a shipped script). Default stays `warn`.
 
 ## Pointers
-- Plan: `docs/plans/2026-06-25-test-integrity-gate.md` (§2.1 L1, §3 P1b, §4 residuals, §9 impl record)
+- Plan: `docs/plans/_archive/2026-06-25-test-integrity-gate.md` (§2.1 L1, §3 P1b, §4 residuals, §9 impl record)
 - Shipped script: `scripts/check-test-integrity.sh` · tests: `hooks/tests/check-test-integrity.test.sh`
 - Memory: [[project_agy-writes-install-dir]], [[feedback_delegate-selftest-false-green]], [[feedback_verify-reviewer-claims]]
 - CHANGELOG v2.25.6, INDEX completed row (merge `0709fc3`)

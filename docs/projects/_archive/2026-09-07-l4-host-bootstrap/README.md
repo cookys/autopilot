@@ -1,6 +1,6 @@
 # l4 host provider-readiness bootstrap
 
-> Plan: [`docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md`](../../plans/2026-09-07-l4-host-provider-readiness-bootstrap.md) (frozen at g2, `ledger/plan-review/`)
+> Plan: [`docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.md`](../../plans/2026-09-07-l4-host-provider-readiness-bootstrap.md) (frozen at g2, `ledger/plan-review/`)
 > Branch: `feat/v2.36.8-l4-host-bootstrap` · Target: v2.36.8 (PATCH, Board 2026-09-07) · Size: L
 > Owner ruling 2026-09-06「先 fix 然後完整修好」: Fix half = v2.36.7; this project is the complete half.
 

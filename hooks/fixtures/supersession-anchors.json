@@ -2,7 +2,7 @@
   "schema_version": 1,
   "marker": "superseded by owner ruling 2026-09-11",
   "window_lines": 6,
-  "note": "Each entry names a code site that states one of the two Board rulings superseded on 2026-09-11 (plan docs/plans/2026-09-11-operator-pin-supersedes-qualification.md). A raw grep cannot tell an applicable anchor from a passing mention, so the applicable set is frozen here. Generated mirrors are listed explicitly, never globbed.",
+  "note": "Each entry names a code site that states one of the two Board rulings superseded on 2026-09-11 (plan docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md). A raw grep cannot tell an applicable anchor from a passing mention, so the applicable set is frozen here. Generated mirrors are listed explicitly, never globbed.",
   "anchors": [
     {
       "id": "contract-strike-precedence",

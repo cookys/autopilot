@@ -1,6 +1,6 @@
 # engine-capability-state — /l5 hetero-loop dogfood
 
-> Implements `docs/plans/2026-07-02-engine-capability-state.md` (Codex R0 proposal): an
+> Implements `docs/plans/_archive/2026-07-02-engine-capability-state.md` (Codex R0 proposal): an
 > evidence-backed runtime capability-state layer — quota/reset awareness + skill-transport
 > awareness + a low-cost bench — so `/l5`/`/l6` can dispatch quota-aware and skill-aware.
 

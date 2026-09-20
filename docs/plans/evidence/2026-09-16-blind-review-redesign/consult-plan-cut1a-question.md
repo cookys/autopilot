@@ -276,7 +276,7 @@ The next managed campaign's final-panel seat receipts (three packet-tier seats) 
 === RUBRIC ===
 # Rubric — 2026-09-16-blind-review-packet.md
 
-> Source plan: docs/plans/2026-09-16-blind-review-packet.md
+> Source plan: docs/plans/_archive/2026-09-16-blind-review-packet.md
 
 R1: `src/runners/review-packet.js` exports `buildReviewPacket`, `packetPathDenied` and `DEFAULT_PACKET_DENY_LIST` (exactly `.autopilot/**`, `docs/plans/evidence/**`, `**/*.receipt.json`, `**/*.raw.log`); the packet holds `tree/` (git archive of the candidate, denied paths pruned), `diff.patch` (input diff with denied per-file sections removed, other sections byte-for-byte), `spec.md` (byte-for-byte) and `MANIFEST.json` with sorted `entries[{path, sha256, bytes}]` and `packet_hash = sha256(JSON.stringify(entries))`; no timestamp, absolute path, hostname or PID appears in the manifest.
 R2: Packet canary — a fixture candidate whose commit message, an untracked worktree file and three deny-listed tracked files (`.autopilot/…`, `docs/plans/evidence/…`, `*.receipt.json`) each carry a unique token yields zero grep hits over the built packet, while the product file is present in `tree/` with the candidate's content and its diff section is byte-equal to the input's (RED at base: module absent).

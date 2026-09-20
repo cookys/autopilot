@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dispatch-consult.sh — the consult consumer (plan
-# docs/plans/2026-08-28-consult-discuss-qualification.md D8). Resolver-driven
+# docs/plans/_archive/2026-08-28-consult-discuss-qualification.md D8). Resolver-driven
 # consult dispatch: switch resolution AND dispatch invocation live in this
 # script, so there is a real entry point a shell test can drive (round-2
 # finding [6]). Replaces the hand-copied `references/hetero-dispatch.md:551-560`
@@ -24,7 +24,7 @@
 #        [--ladder-signals S1,S4] [--ladder-work-unit <id>] [--ladder-round <n>]]
 #
 #   --ladder-receipt    unknown-escalation ladder (plan
-#                       docs/plans/2026-09-07-unknown-escalation-ladder.md P2):
+#                       docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md P2):
 #                       after a SUCCESSFUL dispatch only, append one `ladder` row
 #                       (rung U1, heterogeneous = consult_resolved_from !=
 #                       native-fallback) to that decision ledger through

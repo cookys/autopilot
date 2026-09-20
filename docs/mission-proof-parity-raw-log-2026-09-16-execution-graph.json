@@ -58,7 +58,7 @@
      "src/engine/autopilot-engine.js"
     ],
     "spec": {
-     "path": "docs/plans/2026-09-16-proof-parity-raw-log.md",
+     "path": "docs/plans/_archive/2026-09-16-proof-parity-raw-log.md",
      "section": "1. Ruling and shape"
     }
    },

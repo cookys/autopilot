@@ -481,6 +481,37 @@ assert_contains "$(cat "$d/docs/BACKLOG.md")" \
   "docs/BACKLOG.md is NOT rewritten (history)"
 assert_contains "$out" '"references_rewritten"' "the fix payload reports which files were rewritten"
 
+# --- 🟡 fix (delta review): --fix must ALSO rewrite docs/plans/evidence/<stem> references,
+#     not just docs/plans/<stem> ones — planPathPrefixRegExp alone never matches the
+#     evidence shape, so a link INTO a moved evidence dir used to go stale. ---
+d="$(fixture_repo rewrite-evidence-references)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+mkdir -p "$d/docs/plans/evidence/2026-01-01-widget" "$d/skills/some-skill"
+printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-widget/README.md"
+cat > "$d/skills/some-skill/SKILL.md" <<'MD'
+# Some Skill
+
+Evidence: [the widget evidence](../../docs/plans/evidence/2026-01-01-widget/README.md).
+MD
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3 — ships widget
+
+- landed the thing.
+MD
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
+  "docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
+  "RED: a doc linking docs/plans/evidence/<stem>/... is rewritten to the _archive/evidence/ path"
+assert_not_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
+  "](../../docs/plans/evidence/2026-01-01-widget/README.md)" \
+  "the stale (pre-move) evidence link no longer appears"
+assert_file_exists "$d/docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
+  "the evidence dir itself moved to _archive/evidence/"
+
 # --- Hardening B: plan_reference_dangling (report-only) — a tracked file references a
 #     bare docs/plans/<stem> path that exists in neither active nor archived location ---
 d="$(fixture_repo dangling-reference)"
@@ -507,6 +538,36 @@ git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 out="$(node "$GATE" --repo-root "$d" --json)"
 assert_eq "$(json_count "$out" plan_reference_dangling)" "0" \
   "a reference to an EXISTING plan is not dangling"
+
+# --- 🟡 fix (delta review): plan_reference_dangling must ALSO scan
+#     docs/plans/evidence/<stem> references — the original digit-after-docs/plans/ pattern
+#     never matched "evidence/<stem>" (the char right after docs/plans/ is not a digit). ---
+d="$(fixture_repo dangling-evidence-reference)"
+mkdir -p "$d/skills/some-skill"
+cat > "$d/skills/some-skill/SKILL.md" <<'MD'
+# Some Skill
+
+See docs/plans/evidence/2026-01-01-vanished/README.md — no such evidence dir exists here.
+MD
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_reference_dangling)" "1" \
+  "RED: a reference to a nonexistent docs/plans/evidence/<stem> dir is plan_reference_dangling"
+assert_contains "$out" '"path_prefix":"docs/plans/evidence/"' \
+  "the violation names the evidence path prefix"
+assert_eq "$(json_exit "$out")" "0" "plan_reference_dangling alone does not block, evidence shape included"
+
+# ...but a reference to an evidence dir that DOES exist (active or archived) is not dangling.
+d="$(fixture_repo not-dangling-evidence-reference)"
+mkdir -p "$d/docs/plans/evidence/2026-01-01-widget" "$d/skills/some-skill"
+printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-widget/README.md"
+printf 'See docs/plans/evidence/2026-01-01-widget/README.md.\n' > "$d/skills/some-skill/SKILL.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_reference_dangling)" "0" \
+  "a reference to an EXISTING evidence dir is not dangling"
 
 # --- usage / exit codes ---
 set +e

@@ -2,7 +2,7 @@
 
 The post-owner-kernel governance architecture, bound by the dual-agent survey
 (`docs/plans/2026-08-16-four-layer-redesign-survey.md`) and shipped by
-`docs/plans/2026-08-16-four-layer-redesign.md`. Contract-card style: every rule row names its
+`docs/plans/_archive/2026-08-16-four-layer-redesign.md`. Contract-card style: every rule row names its
 enforcing mechanism or carries an explicit `documented-only` tag — a rule without a named
 enforcer is prose, and prose is not governance (the owner-kernel lesson,
 `references/evidence-discipline.md` §8).
@@ -37,7 +37,7 @@ nothing is prose. These are named here rather than left implied.
 
 | # | Rule | Enforcer | Measured |
 |---|---|---|---|
-| S1 | Quality gate before commit/merge — `skills/dev-flow` (S/Fix: project-config gate, default lint + test; L/H: `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2) | `documented-only` — no commit-time gate exists; an outcome-shaped opt-in enforcer is BACKLOG-tracked, and an invocation-shaped one would govern process, which [ADR-0001](../docs/adr/0001-verification-over-attestation.md) forbids | FULL-arm compliance **0/9** at depth 0, 2026-08-18 ([P7 adjudication](../docs/plans/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md)) |
+| S1 | Quality gate before commit/merge — `skills/dev-flow` (S/Fix: project-config gate, default lint + test; L/H: `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2) | `documented-only` — no commit-time gate exists; an outcome-shaped opt-in enforcer is BACKLOG-tracked, and an invocation-shaped one would govern process, which [ADR-0001](../docs/adr/0001-verification-over-attestation.md) forbids | FULL-arm compliance **0/9** at depth 0, 2026-08-18 ([P7 adjudication](../docs/plans/_archive/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md)) |
 | S2 | Fix workflow appends an ongoing-maintenance ledger row — `skills/dev-flow` Fix step 6 | `documented-only` | FULL-arm **0/3**, same block — n=3 and the fixture repo had no `docs/` tree to append to; re-measure before acting on it |
 
 ## Execution-boundary map

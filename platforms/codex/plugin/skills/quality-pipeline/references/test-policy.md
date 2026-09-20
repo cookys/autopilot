@@ -60,7 +60,7 @@ scripts/verify-red-green.sh --range <base>..<head> --verify-cmd <script-path>
 # JSON: {"verdict":"VALIDATED","red_green_validated":true,"red_tests":[...], ...}
 # exit 0 VALIDATED · 1 NOT_RED/NOT_GREEN · 2 usage · 3 INCONCLUSIVE (fail-closed)
 ```
-It reuses `git worktree add --detach` isolation (never mutates the live tree); every verdict is read from the real verify-cmd exit code, never self-report. It is the minimal precursor to a `verify_strength` review-density axis (see `docs/plans/2026-07-09-verify-strength-precursors.md`).
+It reuses `git worktree add --detach` isolation (never mutates the live tree); every verdict is read from the real verify-cmd exit code, never self-report. It is the minimal precursor to a `verify_strength` review-density axis (see `docs/plans/_archive/2026-07-09-verify-strength-precursors.md`).
 
 **Step 3: Re-run until clean.**
 ```bash

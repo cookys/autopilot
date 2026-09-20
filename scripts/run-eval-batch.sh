@@ -30,7 +30,7 @@
 #
 # For real routing fidelity check, augment with manual scenario walks
 # (e.g. dogfood-routing-log.md D-1/D-2 9-query pattern). For a future
-# automated alternative, see docs/plans/2026-05-14-eval-router-judge.md.
+# automated alternative, see docs/plans/_archive/2026-05-14-eval-router-judge.md.
 #
 # Configurable via env vars:
 #   RUNS_PER_QUERY  (default: 1)   — runs per case; 5+ stabilises stochasticity

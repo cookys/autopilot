@@ -60,7 +60,7 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 ### Project governance (`owner-kernel-governance.json`)
 
 The decision/acceptance state machine that once consumed this file was retired on 2026-08-16
-(`docs/plans/2026-08-16-owner-kernel-retirement.md`); the file itself stays **live** — its
+(`docs/plans/_archive/2026-08-16-owner-kernel-retirement.md`); the file itself stays **live** — its
 consumers, field semantics, and a worked example are documented in
 [the governance-config template](../project-config-template/governance-config.md). The
 operationally decisive section is `mission_convergence` (enforcement mode + budgets, read by

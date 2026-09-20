@@ -110,7 +110,7 @@ node evals/orchestration/score.js
 ```
 
 Use one model for the whole experiment and record which. Effort levels are not comparable across
-vendors (see `docs/plans/2026-09-08-family-aware-ladder-ordering.md`), so a cross-model comparison
+vendors (see `docs/plans/_archive/2026-09-08-family-aware-ladder-ordering.md`), so a cross-model comparison
 here would confound the arm with the model.
 
 ## Threats to validity

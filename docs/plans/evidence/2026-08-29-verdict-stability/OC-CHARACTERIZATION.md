@@ -1,6 +1,6 @@
 # OC characterization — qualification verdict stability (D6)
 
-Evidence for plan `docs/plans/2026-08-29-qualification-verdict-stability.md` §4 D6.
+Evidence for plan `docs/plans/_archive/2026-08-29-qualification-verdict-stability.md` §4 D6.
 All numbers below are asserted or printed by
 `hooks/tests/engine-qualify-verdict-stability.test.sh` (D6 section). Do not treat
 any value here as independently invented.
@@ -303,7 +303,7 @@ to `origin/develop` on the same inputs — asserted in D6). The reason is not im
 engine is already shaped to take another role's tier map — it is that **switching a role's bar without
 that role's own eval evidence would be exactly the mistake this plan corrects for consult/discuss**:
 this project only earned the right to change the bar because
-`docs/plans/2026-08-28-consult-discuss-qualification.md` had already produced a frozen, sealed,
+`docs/plans/_archive/2026-08-28-consult-discuss-qualification.md` had already produced a frozen, sealed,
 scorecard-first exam corpus for consult/discuss, and this plan's D6 produced the OC characterization
 against *that* corpus. No other role currently has an equivalent frozen corpus + OC characterization,
 so applying `foldPooledVerdict`/`(VERDICT_Z, VERDICT_TAU)` to any of them now would be an unevidenced

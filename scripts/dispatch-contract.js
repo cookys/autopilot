@@ -1470,7 +1470,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
 
       if (strikeRow) {
         // SUPERSEDED IN PART — superseded by owner ruling 2026-09-11 (plan
-        // docs/plans/2026-09-11-operator-pin-supersedes-qualification.md): the rule
+        // docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md): the rule
         // below still governs an AUTONOMOUSLY chosen seat, but an operator-pinned seat
         // with ordinary strikes is admitted with pending_revocation, and one with a
         // critical strike is SUBSTITUTED rather than refused. The ruling's target was a

@@ -33,7 +33,7 @@ User-stated requirements ledger:CEO 授權下無逐字需求;來源為 BACKLOG e
 | Date | Item | Status |
 |---|---|---|
 | 2026-08-21 | Mission admission READY(l3 inline,1 deliverable)| done |
-| 2026-08-21 | Plan drafted(docs/plans/2026-08-21-verdict-bytes-preservation.md)| done |
+| 2026-08-21 | Plan drafted(docs/plans/_archive/2026-08-21-verdict-bytes-preservation.md)| done |
 | 2026-08-21 | G1 plan review(sol+grok 雙 STOP,15 findings 全裁決,2 子修法拒絕附理由)| done |
 | 2026-08-21 | G2 plan review(terminal,9 findings 全 accept;plan R3 FROZEN)| done(`5fa224da`)|
 | 2026-08-21 | Fixture 前置:notice bytes live 重現凍結(CC 2.1.238,stderr 流向誠實揭露)+ C-complete-timeout 走真 author 路徑凍結(exit_failure 真相)| done |
@@ -47,7 +47,7 @@ User-stated requirements ledger:CEO 授權下無逐字需求;來源為 BACKLOG e
 
 ## Links
 
-- Plan: [docs/plans/2026-08-21-verdict-bytes-preservation.md](../../plans/2026-08-21-verdict-bytes-preservation.md)
+- Plan: [docs/plans/_archive/2026-08-21-verdict-bytes-preservation.md](../../plans/2026-08-21-verdict-bytes-preservation.md)
 - BACKLOG source row:「Reviewer transport exits can erase an otherwise valid fail-closed verdict」
 - Incidents: 2026-08-08(cc-shim/MiniMax,BACKLOG row 附記)、2026-08-20(minimax plan-review seat,v2.34.28 exit-first 註解 + multiturn-event-harness G1)
 

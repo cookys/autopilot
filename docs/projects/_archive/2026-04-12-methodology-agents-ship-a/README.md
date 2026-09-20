@@ -1,7 +1,7 @@
 # Methodology Agents — Ship A (v2.4.0)
 
 **Status**: ✅ Shipped — merged to `develop` as `14276bb` on 2026-04-12
-**Plan doc**: [`docs/plans/2026-04-12-methodology-agents-and-hooks.md`](../../../plans/2026-04-12-methodology-agents-and-hooks.md)
+**Plan doc**: [`docs/plans/_archive/2026-04-12-methodology-agents-and-hooks.md`](../../../plans/2026-04-12-methodology-agents-and-hooks.md)
 **CHANGELOG**: [v2.4.0 entry](../../../../CHANGELOG.md)
 
 ---

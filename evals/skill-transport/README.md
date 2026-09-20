@@ -2,7 +2,7 @@
 
 This directory contains the frozen fixtures, deterministic drivers, and bounded evidence for
 the role-specific prompt-pack A/B experiments registered in
-`docs/plans/2026-07-15-skill-transport-payoff-ab.md`.
+`docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md`.
 
 ## Reviewer arm (complete)
 

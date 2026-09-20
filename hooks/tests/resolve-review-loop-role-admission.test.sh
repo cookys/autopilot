@@ -504,7 +504,7 @@ for r in $DECLARED; do
 done
 
 # ── 8. Scoped exception: a role-qualified row does not delist globally ─────
-# Plan docs/plans/2026-08-28-consult-discuss-qualification.md §6 R9, §8
+# Plan docs/plans/_archive/2026-08-28-consult-discuss-qualification.md §6 R9, §8
 # ruling 7 (the BACKLOG entry this fixture was tracked under —
 # `UNQUALIFIED_RUNNERS reconciliation tension once a listed runner earns a
 # consult/discuss qualification` — was RETIRED by commit 136439ae once this

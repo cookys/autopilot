@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/2026-09-16-ledger-rotation-order.md: the run-ledger rotation carry keeps journal rows in append order (keep-first dedupe by _rotation_root, no sorting primitive), so a campaign whose original segment was GC'd still projects; writer-only, reader untouched.",
+    "objective": "Ship docs/plans/_archive/2026-09-16-ledger-rotation-order.md: the run-ledger rotation carry keeps journal rows in append order (keep-first dedupe by _rotation_root, no sorting primitive), so a campaign whose original segment was GC'd still projects; writer-only, reader untouched.",
     "requirements_hash": "67379749c97d66d92174d4f51f7d580441e1b30ccf824df8d33bcf4a43b9c9c4",
     "scope": {
       "allowed_tools": [

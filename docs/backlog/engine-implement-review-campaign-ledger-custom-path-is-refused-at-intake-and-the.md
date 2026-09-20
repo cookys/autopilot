@@ -8,7 +8,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: Fix.
 - **Source**: this dogfood.
 
-**Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
+**Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/_archive/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 
 ## Audit snapshot（2026-08-28，post lifecycle-hygiene sweep）
 

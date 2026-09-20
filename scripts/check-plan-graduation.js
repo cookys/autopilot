@@ -82,11 +82,11 @@
  *   - `--plans-dir` only relocates plan/sidecar/evidence discovery; plan_active_lineage's
  *     `.claude/mission-routing-config.json` resolution is always repoRoot-relative and does
  *     not follow a custom --plans-dir
- *   - DANGLING_REFERENCE_RE (plan_reference_dangling) matches within a single line; a
- *     `docs/plans/<stem>` mention word-wrapped across a line break in a long comment (the
- *     stem hyphenated at the line boundary) is truncated at the break and reported
- *     dangling even when the real, unbroken stem exists (observed: evals/consult-eval-
- *     generator.js, evals/discuss-eval-grader.js)
+ *   - DANGLING_REFERENCE_PATTERNS (plan_reference_dangling) match within a single line; a
+ *     `docs/plans/<stem>` or `docs/plans/evidence/<stem>` mention word-wrapped across a
+ *     line break in a long comment (the stem hyphenated at the line boundary) is truncated
+ *     at the break and reported dangling even when the real, unbroken stem exists
+ *     (observed: evals/consult-eval-generator.js, evals/discuss-eval-grader.js)
  *   - plan_reference_dangling also fires on synthetic example paths inside OTHER suites'
  *     test fixtures (e.g. a `docs/plans/2026-07-15-example.md` string in a JSON fixture) —
  *     report-only, so this is accepted noise rather than a false block
@@ -182,11 +182,21 @@ function slugBoundaryRegExp(s) {
 }
 
 // A stem-scoped rewrite/replace pattern for `docs/plans/<stem>`: matches the plan file
-// itself, any of its sidecars, and its evidence dir, but never a DIFFERENT stem that
-// happens to start with this one (e.g. stem "2026-01-01-widget" must not match inside
-// "2026-01-01-widget-v2").
+// itself and any of its sidecars, but never a DIFFERENT stem that happens to start with
+// this one (e.g. stem "2026-01-01-widget" must not match inside "2026-01-01-widget-v2").
+// Does NOT match `docs/plans/evidence/<stem>` — "evidence" sits between `docs/plans/` and
+// the stem there, so this pattern never reaches it; evidencePathPrefixRegExp is the
+// separate pattern for that shape (🟡 fix: the two were conflated before, so `--fix` moved
+// evidence/<stem>/ but never rewrote a reference INTO it).
 function planPathPrefixRegExp(stem) {
   return new RegExp(`docs/plans/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+}
+
+// The evidence-dir counterpart of planPathPrefixRegExp: matches `docs/plans/evidence/<stem>`
+// (the evidence dir itself, or any path beneath it), never a different stem with this one
+// as a prefix.
+function evidencePathPrefixRegExp(stem) {
+  return new RegExp(`docs/plans/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
 }
 
 // Is `relPath` (repo-relative, POSIX) tracked by git in `repoRoot`? Used to decide whether
@@ -264,41 +274,61 @@ function loadActiveLineageStems(repoRoot) {
   return stems;
 }
 
-// Report-only: a tracked file names a bare docs/plans/<stem> path (NOT under evidence/ or
-// _archive/ — this is specifically about the direct plan-file/sidecar shape) whose stem
-// resolves to neither an active nor an archived plan file. Distinct from plan_orphan
-// (an EXISTING plan nobody references) — this is a reference to a plan that does not
-// exist at all, active or archived.
-const DANGLING_REFERENCE_RE = /docs\/plans\/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+)/g;
+// Report-only: a tracked file names a bare docs/plans/<stem> path OR a
+// docs/plans/evidence/<stem> path whose stem resolves to neither an active nor an
+// archived location of that same shape. Two DISTINCT shapes, each checked against its
+// own existence rule — a plan reference is dangling only if the .md is missing from both
+// docs/plans/ and docs/plans/_archive/; an evidence reference is dangling only if the DIR
+// is missing from both docs/plans/evidence/ and docs/plans/_archive/evidence/ (🟡 fix: a
+// single "digit right after docs/plans/" pattern used to miss the evidence shape entirely
+// — "evidence" is not a digit — so a stale evidence link never got reported or rewritten).
+// Distinct from plan_orphan (an EXISTING plan nobody references) — this is a reference to
+// something that does not exist at all, active or archived.
+const DANGLING_REFERENCE_PATTERNS = [
+  {
+    prefix: 'docs/plans/',
+    re: /docs\/plans\/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+)/g,
+    exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, `${stem}.md`))
+      || fs.existsSync(path.join(plansDir, '_archive', `${stem}.md`)),
+  },
+  {
+    prefix: 'docs/plans/evidence/',
+    re: /docs\/plans\/evidence\/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+)/g,
+    exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, 'evidence', stem))
+      || fs.existsSync(path.join(plansDir, '_archive', 'evidence', stem)),
+  },
+];
 
 function planReferenceDangling(repoRoot, plansDir) {
-  const byStem = new Map();
+  const byKey = new Map();
   for (const rel of trackedReferenceFiles(repoRoot)) {
     const text = readFileSafe(path.join(repoRoot, rel));
     if (!text) continue;
-    const seenInFile = new Set();
-    DANGLING_REFERENCE_RE.lastIndex = 0;
-    let m;
-    while ((m = DANGLING_REFERENCE_RE.exec(text))) {
-      const stem = m[1];
-      if (seenInFile.has(stem)) continue;
-      seenInFile.add(stem);
-      if (!byStem.has(stem)) byStem.set(stem, new Set());
-      byStem.get(stem).add(rel);
+    for (const pattern of DANGLING_REFERENCE_PATTERNS) {
+      const seenInFile = new Set();
+      pattern.re.lastIndex = 0;
+      let m;
+      while ((m = pattern.re.exec(text))) {
+        const stem = m[1];
+        const key = pattern.prefix + stem;
+        if (seenInFile.has(key)) continue;
+        seenInFile.add(key);
+        if (!byKey.has(key)) byKey.set(key, { prefix: pattern.prefix, stem, exists: pattern.exists, files: new Set() });
+        byKey.get(key).files.add(rel);
+      }
     }
   }
   const out = [];
-  for (const [stem, files] of byStem) {
-    const exists = fs.existsSync(path.join(plansDir, `${stem}.md`))
-      || fs.existsSync(path.join(plansDir, '_archive', `${stem}.md`));
-    if (exists) continue;
+  for (const { prefix, stem, exists, files } of byKey.values()) {
+    if (exists(plansDir, stem)) continue;
     const sortedFiles = [...files].sort();
     out.push({
       code: 'plan_reference_dangling',
       kind: 'reference',
       stem,
+      path_prefix: prefix,
       files: sortedFiles,
-      detail: `${sortedFiles.length} tracked file(s) reference docs/plans/${stem}, which exists in neither docs/plans/ nor docs/plans/_archive/`,
+      detail: `${sortedFiles.length} tracked file(s) reference ${prefix}${stem}, which exists in neither the active nor the archived location`,
     });
   }
   return out;
@@ -668,19 +698,33 @@ function planFileMoveSet(repoRoot, plansDir, archiveDir, stem) {
 // dangling references) — rewritten to docs/plans/_archive/<stem> so a skill doc, a
 // reference, or a config that links the plan keeps resolving after the move.
 function rewritePlanReferences(repoRoot, stem) {
-  const re = planPathPrefixRegExp(stem);
-  const replacement = `docs/plans/_archive/${stem}`;
+  // Evidence pass FIRST: `docs/plans/evidence/<stem>` also contains `docs/plans/` but
+  // never `docs/plans/<stem>` immediately (planPathPrefixRegExp requires the stem right
+  // after `docs/plans/`, and "evidence" sits there instead) — so the two passes never
+  // double-touch the same substring, and order between them does not matter for
+  // correctness. Both run over every file regardless.
+  const passes = [
+    { re: evidencePathPrefixRegExp(stem), replacement: `docs/plans/_archive/evidence/${stem}` },
+    { re: planPathPrefixRegExp(stem), replacement: `docs/plans/_archive/${stem}` },
+  ];
   const rewritten = [];
   for (const rel of trackedReferenceFiles(repoRoot)) {
     const abs = path.join(repoRoot, rel);
-    const text = readFileSafe(abs);
+    let text = readFileSafe(abs);
     if (text == null) continue;
-    re.lastIndex = 0;
-    if (!re.test(text)) continue;
-    re.lastIndex = 0;
-    const out = text.replace(re, replacement);
-    if (out !== text) {
-      fs.writeFileSync(abs, out);
+    let changed = false;
+    for (const { re, replacement } of passes) {
+      re.lastIndex = 0;
+      if (!re.test(text)) continue;
+      re.lastIndex = 0;
+      const out = text.replace(re, replacement);
+      if (out !== text) {
+        text = out;
+        changed = true;
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(abs, text);
       rewritten.push(rel);
     }
   }
@@ -829,4 +873,6 @@ module.exports = {
   rewritePlanReferences,
   isGitTracked,
   trackedReferenceFiles,
+  planPathPrefixRegExp,
+  evidencePathPrefixRegExp,
 };

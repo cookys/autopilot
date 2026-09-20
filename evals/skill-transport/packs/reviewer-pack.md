@@ -2,7 +2,7 @@
 FROZEN PACK FIXTURE — do NOT edit mid-experiment (an edit = restart the arm).
 Source: skills/quality-pipeline/references/code-review.md
 Source-SHA: cb161699a0b6ef05a2d00e0211c4251a00a1783a
-Frozen: 2026-07-15 (skill-transport payoff A/B, docs/plans/2026-07-15-skill-transport-payoff-ab.md)
+Frozen: 2026-07-15 (skill-transport payoff A/B, docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md)
 Content: methodology-only (review-execution). Per Global Constraint #1 every output-format
 directive has been stripped — no output contract, no handoff enum, no severity-emoji /
 report-structure section, no verdict-token vocabulary — so the pack cannot compete with

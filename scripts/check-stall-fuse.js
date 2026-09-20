@@ -3,7 +3,7 @@
 
 /**
  * check-stall-fuse.js — the verification-spin circuit breaker
- * (autonomous-brain-integration P4; plan: docs/plans/2026-08-17-autonomous-brain-integration.md).
+ * (autonomous-brain-integration P4; plan: docs/plans/_archive/2026-08-17-autonomous-brain-integration.md).
  *
  * Kills sol shapes F5/F10 (verification consumed the run: 5 rounds of whole
  * regeneration, 99.9% of wall time spent re-testing, zero product movement).

@@ -1,7 +1,7 @@
 # Context-Handoff Hardening — v2.7.2
 
 **Status**: Complete — shipped in v2.7.2 and archived.
-**Plan doc**: [`docs/plans/2026-05-14-context-handoff-hardening.md`](../../../plans/2026-05-14-context-handoff-hardening.md)
+**Plan doc**: [`docs/plans/_archive/2026-05-14-context-handoff-hardening.md`](../../../plans/2026-05-14-context-handoff-hardening.md)
 **Branch**: `feat/v2.7.2-context-handoff-hardening`
 **CHANGELOG**: pending v2.7.2 entry
 
@@ -56,7 +56,7 @@
 ## Files touched (estimate)
 
 **新增（3）**：
-- `docs/plans/2026-05-14-context-handoff-hardening.md` — plan doc
+- `docs/plans/_archive/2026-05-14-context-handoff-hardening.md` — plan doc
 - `docs/projects/2026-05-14-context-handoff-hardening/README.md` — 本檔
 - `hooks/intent-capture.sh`（或 .js）— PostToolUse hook
 

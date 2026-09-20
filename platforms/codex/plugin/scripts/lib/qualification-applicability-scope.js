@@ -3,7 +3,7 @@
 
 // qualification-applicability-scope.js
 //
-// D7 (plan docs/plans/2026-08-28-consult-discuss-qualification.md, "the
+// D7 (plan docs/plans/_archive/2026-08-28-consult-discuss-qualification.md, "the
 // applicability-scope contract"): ONE frozen production {task_classes,
 // domains, languages, tool_surface} scope tuple per consult/discuss role,
 // declared in the corpus manifest (evals/<role>-capability-evidence-

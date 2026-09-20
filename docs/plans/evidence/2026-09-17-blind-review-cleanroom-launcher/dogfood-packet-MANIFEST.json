@@ -1917,13 +1917,13 @@
       "bytes": 4530
     },
     {
-      "path": "tree/docs/plans/2026-04-11-think-tank-dialectic.md",
+      "path": "tree/docs/plans/_archive/2026-04-11-think-tank-dialectic.md",
       "type": "file",
       "sha256": "16e4d1ee416808656d13e4ff73de3e012e4109eb13309fa29bf522cd327fe44e",
       "bytes": 31339
     },
     {
-      "path": "tree/docs/plans/2026-04-12-methodology-agents-and-hooks.md",
+      "path": "tree/docs/plans/_archive/2026-04-12-methodology-agents-and-hooks.md",
       "type": "file",
       "sha256": "7461577d6d6e69305cb12d04bd5e9db81fc283018df92fc16600475844e24186",
       "bytes": 52234
@@ -1935,13 +1935,13 @@
       "bytes": 24309
     },
     {
-      "path": "tree/docs/plans/2026-05-14-context-handoff-hardening.md",
+      "path": "tree/docs/plans/_archive/2026-05-14-context-handoff-hardening.md",
       "type": "file",
       "sha256": "7466dd1560a3fe9a9ecd5182baf9d47f1f034fd0abdbc07d032a1b79891fbdee",
       "bytes": 25425
     },
     {
-      "path": "tree/docs/plans/2026-05-14-eval-router-judge.md",
+      "path": "tree/docs/plans/_archive/2026-05-14-eval-router-judge.md",
       "type": "file",
       "sha256": "262255a786fee8babb248cc5199887b758bd997a7cfd42f83710f657b9f6b8da",
       "bytes": 8102
@@ -1959,43 +1959,43 @@
       "bytes": 16608
     },
     {
-      "path": "tree/docs/plans/2026-05-14-reload-plugins-agent-invokable.md",
+      "path": "tree/docs/plans/_archive/2026-05-14-reload-plugins-agent-invokable.md",
       "type": "file",
       "sha256": "b59257bca6afa894eadc46e8afd5c408b6e0eda946e4695b5a3c6c8a57560678",
       "bytes": 8538
     },
     {
-      "path": "tree/docs/plans/2026-05-14-retro-roundup.md",
+      "path": "tree/docs/plans/_archive/2026-05-14-retro-roundup.md",
       "type": "file",
       "sha256": "9fe9cebf939d728559e081da400dbabd38a49b49b87e2012b80fc52c4ece4398",
       "bytes": 14110
     },
     {
-      "path": "tree/docs/plans/2026-05-14-superpowers-coexistence.md",
+      "path": "tree/docs/plans/_archive/2026-05-14-superpowers-coexistence.md",
       "type": "file",
       "sha256": "aa645a4d133c64d06c76f3dc328edfe573e7c2e74f2292b8135eb9c56ef47cb5",
       "bytes": 33962
     },
     {
-      "path": "tree/docs/plans/2026-05-14-test-suite.md",
+      "path": "tree/docs/plans/_archive/2026-05-14-test-suite.md",
       "type": "file",
       "sha256": "da7104a8e7308d9b01a8c49c34f32d28f7d9ca98f6662646df78551ae838c076",
       "bytes": 14456
     },
     {
-      "path": "tree/docs/plans/2026-05-22-multi-agent-portability-correction.md",
+      "path": "tree/docs/plans/_archive/2026-05-22-multi-agent-portability-correction.md",
       "type": "file",
       "sha256": "8551cb8d837a47efa2efa39f7e6d00b12982c5045fdcb2ea538ce471a040a53b",
       "bytes": 45976
     },
     {
-      "path": "tree/docs/plans/2026-06-02-hook-transcript-pivot.md",
+      "path": "tree/docs/plans/_archive/2026-06-02-hook-transcript-pivot.md",
       "type": "file",
       "sha256": "8c1f40c67c73781045dcc516b85af2735dbbfd5d96e92a3ea3d021aa3cd806ad",
       "bytes": 3804
     },
     {
-      "path": "tree/docs/plans/2026-06-02-skill-leverage-extraction.md",
+      "path": "tree/docs/plans/_archive/2026-06-02-skill-leverage-extraction.md",
       "type": "file",
       "sha256": "c2280e7ea6bcaed6b97d471d98ae1d9abd54074b6ee6a38c33631e586fae6fd0",
       "bytes": 11454
@@ -2013,7 +2013,7 @@
       "bytes": 26543
     },
     {
-      "path": "tree/docs/plans/2026-06-04-distill-consolidate.md",
+      "path": "tree/docs/plans/_archive/2026-06-04-distill-consolidate.md",
       "type": "file",
       "sha256": "5f43bf1ecf22f95c42c6cdbfe97e698e3206848fe5652130bd5c99273fcae094",
       "bytes": 39233
@@ -2025,13 +2025,13 @@
       "bytes": 9573
     },
     {
-      "path": "tree/docs/plans/2026-06-04-parallel-read-fanout.md",
+      "path": "tree/docs/plans/_archive/2026-06-04-parallel-read-fanout.md",
       "type": "file",
       "sha256": "c5bc60e299785fa8f5bf7950a576cd36405c038cf70e6dd69e5ea10d7c8f5735",
       "bytes": 9922
     },
     {
-      "path": "tree/docs/plans/2026-06-04-review-verify-barrier.md",
+      "path": "tree/docs/plans/_archive/2026-06-04-review-verify-barrier.md",
       "type": "file",
       "sha256": "f1ddcf3de9f45bc0cde386518f2793b125e99edc6cb4e57994337d8f0b7cf6ad",
       "bytes": 16897
@@ -2043,7 +2043,7 @@
       "bytes": 6942
     },
     {
-      "path": "tree/docs/plans/2026-06-12-task-tree-engine.md",
+      "path": "tree/docs/plans/_archive/2026-06-12-task-tree-engine.md",
       "type": "file",
       "sha256": "81a6be32c0decf83fecfc4a8264f9ba3604bb0e3f7b2f32e5d60930615110d1b",
       "bytes": 18600
@@ -2061,7 +2061,7 @@
       "bytes": 12444
     },
     {
-      "path": "tree/docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md",
+      "path": "tree/docs/plans/_archive/2026-06-23-l4-l5-dep-graph-fanout.md",
       "type": "file",
       "sha256": "5f9de6b97257eda7b806c959e9abc93f0c95d71545f5a0c07361edb3e01dc2d0",
       "bytes": 12708
@@ -2091,7 +2091,7 @@
       "bytes": 8348
     },
     {
-      "path": "tree/docs/plans/2026-06-25-test-integrity-gate.md",
+      "path": "tree/docs/plans/_archive/2026-06-25-test-integrity-gate.md",
       "type": "file",
       "sha256": "cf4c8ccc40b835d41ad75f7b03c7912fea8fa60ac00bb7ce0d61db8a365a02ba",
       "bytes": 18448
@@ -2127,7 +2127,7 @@
       "bytes": 9596
     },
     {
-      "path": "tree/docs/plans/2026-06-26-trust-tiered-review-policy.md",
+      "path": "tree/docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md",
       "type": "file",
       "sha256": "0fe55f49be62cafa6649c9e64da11a86eef7a100591c74bab95794824f9bb677",
       "bytes": 17955
@@ -2145,13 +2145,13 @@
       "bytes": 5043
     },
     {
-      "path": "tree/docs/plans/2026-06-27-update-checker.md",
+      "path": "tree/docs/plans/_archive/2026-06-27-update-checker.md",
       "type": "file",
       "sha256": "e8c114cc42ccb6b3db02da9c2f84333497b64e502a29f6a29f6cfcabe58fe4ec",
       "bytes": 8744
     },
     {
-      "path": "tree/docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md",
+      "path": "tree/docs/plans/_archive/2026-06-30-hetero-engine-lifecycle-methodology.md",
       "type": "file",
       "sha256": "fcc3379d975173fdfa5e45a70055aa5e57f2aad7ac51fb7091debb7f29eb95ab",
       "bytes": 45857
@@ -2163,7 +2163,7 @@
       "bytes": 34720
     },
     {
-      "path": "tree/docs/plans/2026-07-02-engine-capability-state.md",
+      "path": "tree/docs/plans/_archive/2026-07-02-engine-capability-state.md",
       "type": "file",
       "sha256": "34743a9b91ed16e8c11adbfed3e8e0481d292d3da3ea96273b35c7d0ef32e3b9",
       "bytes": 19206
@@ -2175,7 +2175,7 @@
       "bytes": 8283
     },
     {
-      "path": "tree/docs/plans/2026-07-03-endpoints-cli.md",
+      "path": "tree/docs/plans/_archive/2026-07-03-endpoints-cli.md",
       "type": "file",
       "sha256": "7c2d69dee4ab821b39979b83f7cc0e2f348cd31bc7b02d1e84ae8f639cc53798",
       "bytes": 5626
@@ -2187,7 +2187,7 @@
       "bytes": 4972
     },
     {
-      "path": "tree/docs/plans/2026-07-04-quality-floor-engine.md",
+      "path": "tree/docs/plans/_archive/2026-07-04-quality-floor-engine.md",
       "type": "file",
       "sha256": "e0747f9295f37cf2b5fabc78cf1cfcd2fff26ad92078fd7834485a901c39d6c1",
       "bytes": 22739
@@ -2199,7 +2199,7 @@
       "bytes": 10837
     },
     {
-      "path": "tree/docs/plans/2026-07-05-terse-reviewer-contracts.md",
+      "path": "tree/docs/plans/_archive/2026-07-05-terse-reviewer-contracts.md",
       "type": "file",
       "sha256": "6281477f5b7d0ec1e50e1a140c3cd514189866f97734c95df9afc75782496fb2",
       "bytes": 27821
@@ -2217,19 +2217,19 @@
       "bytes": 10808
     },
     {
-      "path": "tree/docs/plans/2026-07-08-observation-first-skills.md",
+      "path": "tree/docs/plans/_archive/2026-07-08-observation-first-skills.md",
       "type": "file",
       "sha256": "6ba2e4bd4626fdafbe2a1e0a447ef56ca04816f061f1ecd7a6928a99d7551391",
       "bytes": 6998
     },
     {
-      "path": "tree/docs/plans/2026-07-09-dispatch-model-guard.md",
+      "path": "tree/docs/plans/_archive/2026-07-09-dispatch-model-guard.md",
       "type": "file",
       "sha256": "cf45a8650ed5a570b0e24b0213c15a96cf182488b3c58278a1073baf80f57dff",
       "bytes": 9489
     },
     {
-      "path": "tree/docs/plans/2026-07-09-verify-strength-precursors.md",
+      "path": "tree/docs/plans/_archive/2026-07-09-verify-strength-precursors.md",
       "type": "file",
       "sha256": "73987e21c20ecf09da3dc7a45373bca5c953b8b00c068cfcdc4b10451f2e9aeb",
       "bytes": 6311
@@ -2253,7 +2253,7 @@
       "bytes": 26960
     },
     {
-      "path": "tree/docs/plans/2026-07-14-dispatch-lineage.md",
+      "path": "tree/docs/plans/_archive/2026-07-14-dispatch-lineage.md",
       "type": "file",
       "sha256": "33a26cbb8f08c1c598d46d750e445486effd65657dcba58d7a3bf03a8e23a20c",
       "bytes": 3269
@@ -2277,7 +2277,7 @@
       "bytes": 21593
     },
     {
-      "path": "tree/docs/plans/2026-07-15-skill-transport-payoff-ab.md",
+      "path": "tree/docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md",
       "type": "file",
       "sha256": "c28f880d01ca001141c5e9f18a5b5a973afe3d5a6152239cfcce1730bbb12109",
       "bytes": 21495
@@ -2523,13 +2523,13 @@
       "bytes": 1419
     },
     {
-      "path": "tree/docs/plans/2026-07-29-qc-panel-honesty.md",
+      "path": "tree/docs/plans/_archive/2026-07-29-qc-panel-honesty.md",
       "type": "file",
       "sha256": "754a875ca9ffc8a55cf05b164008b4a42abd24824d3f693915c1ff89e8cd1b64",
       "bytes": 826
     },
     {
-      "path": "tree/docs/plans/2026-07-29-qc-panel-honesty.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-07-29-qc-panel-honesty.rubric.md",
       "type": "file",
       "sha256": "753bf24bb7e02a001098651955fe3c6970ca6118e116f87dbb18ed992f03cbcd",
       "bytes": 530
@@ -2853,55 +2853,55 @@
       "bytes": 12879
     },
     {
-      "path": "tree/docs/plans/2026-08-16-four-layer-redesign.md",
+      "path": "tree/docs/plans/_archive/2026-08-16-four-layer-redesign.md",
       "type": "file",
       "sha256": "da61f238d8709e5b743701b69d94579c545ea47202706bca218ab61717f798af",
       "bytes": 24176
     },
     {
-      "path": "tree/docs/plans/2026-08-16-four-layer-redesign.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-08-16-four-layer-redesign.plan-review-manifest.json",
       "type": "file",
       "sha256": "294990a69f33db9e0b6a193d1f20949ef7c4989e207297a4d139223b83a320ec",
       "bytes": 1745
     },
     {
-      "path": "tree/docs/plans/2026-08-16-four-layer-redesign.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-08-16-four-layer-redesign.rubric.md",
       "type": "file",
       "sha256": "965490db905dda107bbe056c06ecb7e71e00b3f2dda547a1827565f596077e28",
       "bytes": 2750
     },
     {
-      "path": "tree/docs/plans/2026-08-16-owner-kernel-retirement.md",
+      "path": "tree/docs/plans/_archive/2026-08-16-owner-kernel-retirement.md",
       "type": "file",
       "sha256": "2709c319b2ef59ee0b9760c0bcf111e74fa2ab34eb0cf6a0c5ca7fb4f2fba8e1",
       "bytes": 25575
     },
     {
-      "path": "tree/docs/plans/2026-08-16-owner-kernel-retirement.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-08-16-owner-kernel-retirement.plan-review-manifest.json",
       "type": "file",
       "sha256": "b78f1eff641565cc9beffa62cb584897a439ebc2145d35264677fe9911472dff",
       "bytes": 1749
     },
     {
-      "path": "tree/docs/plans/2026-08-16-owner-kernel-retirement.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-08-16-owner-kernel-retirement.rubric.md",
       "type": "file",
       "sha256": "bc2abba02e8950ee959598b6c767fcc44209e2345df1382e6d0b638a4da9c14f",
       "bytes": 2536
     },
     {
-      "path": "tree/docs/plans/2026-08-17-autonomous-brain-integration.md",
+      "path": "tree/docs/plans/_archive/2026-08-17-autonomous-brain-integration.md",
       "type": "file",
       "sha256": "0bfac82a5076f53780ccad8d7e1f1cfc6f76ec1fa8c18a316b767cc4c54d5386",
       "bytes": 19181
     },
     {
-      "path": "tree/docs/plans/2026-08-17-autonomous-brain-integration.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-08-17-autonomous-brain-integration.plan-review-manifest.json",
       "type": "file",
       "sha256": "ae282573a5961a5d537d43adc6289af4a314bbd75fd880fecad004b3a10360fe",
       "bytes": 1754
     },
     {
-      "path": "tree/docs/plans/2026-08-17-autonomous-brain-integration.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-08-17-autonomous-brain-integration.rubric.md",
       "type": "file",
       "sha256": "cb20fdf20088950a47c660c920533fe0cd15dd95162cc75dddd7b5934a243013",
       "bytes": 3038
@@ -2931,13 +2931,13 @@
       "bytes": 11826
     },
     {
-      "path": "tree/docs/plans/2026-08-18-dev-flow-contract-card.md",
+      "path": "tree/docs/plans/_archive/2026-08-18-dev-flow-contract-card.md",
       "type": "file",
       "sha256": "d4f4b9a93a856f496002a5d0c36a9d581789717f121b9e38078107cc86612462",
       "bytes": 27953
     },
     {
-      "path": "tree/docs/plans/2026-08-18-dev-flow-contract-card.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-08-18-dev-flow-contract-card.rubric.md",
       "type": "file",
       "sha256": "5ce45779d4c227164e40b82c75fc3d4edca9150341c0a55d958c59dedb06e62c",
       "bytes": 3689
@@ -2979,7 +2979,7 @@
       "bytes": 3147
     },
     {
-      "path": "tree/docs/plans/2026-08-21-verdict-bytes-preservation.md",
+      "path": "tree/docs/plans/_archive/2026-08-21-verdict-bytes-preservation.md",
       "type": "file",
       "sha256": "b59e386f3043ae42cd675c0c2c719cd86fffab92522e4703b38fa0d6bee2b4d0",
       "bytes": 15503
@@ -2991,13 +2991,13 @@
       "bytes": 21749
     },
     {
-      "path": "tree/docs/plans/2026-08-22-no-confidence-decay.md",
+      "path": "tree/docs/plans/_archive/2026-08-22-no-confidence-decay.md",
       "type": "file",
       "sha256": "d02eba1f5245b3ec292f9e164392e62ffe3d3925e2aa71ca67d721cbdf479a74",
       "bytes": 18294
     },
     {
-      "path": "tree/docs/plans/2026-08-23-official-qualification-defaults.md",
+      "path": "tree/docs/plans/_archive/2026-08-23-official-qualification-defaults.md",
       "type": "file",
       "sha256": "09a904f79bb422beac669fa5f67e616ac1635b2a748004142bf2fc8eddabd5fa",
       "bytes": 24895
@@ -3033,7 +3033,7 @@
       "bytes": 2173
     },
     {
-      "path": "tree/docs/plans/2026-08-28-consult-discuss-qualification.md",
+      "path": "tree/docs/plans/_archive/2026-08-28-consult-discuss-qualification.md",
       "type": "file",
       "sha256": "e5ce4f98467cd1df38b882ae2d98524a4fd61b7536b26fb08a306b5317f93c3a",
       "bytes": 108915
@@ -3045,19 +3045,19 @@
       "bytes": 2123
     },
     {
-      "path": "tree/docs/plans/2026-08-28-implementer-ladder.md",
+      "path": "tree/docs/plans/_archive/2026-08-28-implementer-ladder.md",
       "type": "file",
       "sha256": "5535221c5b1636a9e980a63100d679ba6b3b060c0cc3b38bfc0afef829a99034",
       "bytes": 1719
     },
     {
-      "path": "tree/docs/plans/2026-08-29-qualification-verdict-stability.md",
+      "path": "tree/docs/plans/_archive/2026-08-29-qualification-verdict-stability.md",
       "type": "file",
       "sha256": "63de0af71b9285d7c5674abd9d7bbbf567674a21327715222a023ba80fcba4b8",
       "bytes": 75920
     },
     {
-      "path": "tree/docs/plans/2026-08-29-qualification-verdict-stability.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-08-29-qualification-verdict-stability.rubric.md",
       "type": "file",
       "sha256": "f8b6c32ff5ff07cc79a1d7aedfc45af52d55ed75f03900d597353807f86a6fd2",
       "bytes": 4470
@@ -3087,25 +3087,25 @@
       "bytes": 3505
     },
     {
-      "path": "tree/docs/plans/2026-09-04-default-dispatch-topology.md",
+      "path": "tree/docs/plans/_archive/2026-09-04-default-dispatch-topology.md",
       "type": "file",
       "sha256": "374190323191369e8d09ac6637d7ea844c35b7dac5121dadd003572ebcfa4a32",
       "bytes": 10246
     },
     {
-      "path": "tree/docs/plans/2026-09-04-dev-flow-hetero-loops-default.md",
+      "path": "tree/docs/plans/_archive/2026-09-04-dev-flow-hetero-loops-default.md",
       "type": "file",
       "sha256": "3f4a227504411fd9a1084a11f2555c14d3d72ae775cee14e393d86a5b9861e36",
       "bytes": 19788
     },
     {
-      "path": "tree/docs/plans/2026-09-04-dev-flow-hetero-loops-default.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-04-dev-flow-hetero-loops-default.plan-review-manifest.json",
       "type": "file",
       "sha256": "3bce8c5c6da9ba22121563422f5d5c9ff5df608d84871e8c24dc33922b83f11c",
       "bytes": 1337
     },
     {
-      "path": "tree/docs/plans/2026-09-04-dev-flow-hetero-loops-default.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-04-dev-flow-hetero-loops-default.rubric.md",
       "type": "file",
       "sha256": "79f951de2cc7d5d66020a4d88c07efcf047c18c5cf633b49f12636367d7a0dfc",
       "bytes": 3489
@@ -3117,61 +3117,61 @@
       "bytes": 6026
     },
     {
-      "path": "tree/docs/plans/2026-09-05-statusline-live-context-feed.md",
+      "path": "tree/docs/plans/_archive/2026-09-05-statusline-live-context-feed.md",
       "type": "file",
       "sha256": "8578dd454455da4eb72355b454074ff057ff9a4114b7e14255842d934ef297f3",
       "bytes": 24219
     },
     {
-      "path": "tree/docs/plans/2026-09-05-statusline-live-context-feed.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-05-statusline-live-context-feed.plan-review-manifest.json",
       "type": "file",
       "sha256": "e72ec4b433522b67ba4950d2c63d62361072e1939ba0aef34a83a53310def77c",
       "bytes": 967
     },
     {
-      "path": "tree/docs/plans/2026-09-05-statusline-live-context-feed.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-05-statusline-live-context-feed.rubric.md",
       "type": "file",
       "sha256": "2e117cc0fb2047d7a5177ccf04b308380517c84dda3fa827918954a5d25aa01a",
       "bytes": 3115
     },
     {
-      "path": "tree/docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md",
+      "path": "tree/docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.md",
       "type": "file",
       "sha256": "84c1ee48917fac6bf0bc439f9b7b459736194c67081730ba8555db4d9262350e",
       "bytes": 20980
     },
     {
-      "path": "tree/docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.plan-review-manifest.json",
       "type": "file",
       "sha256": "3769ab1053b0d9d12348171f0e67072594190bad5d3d3fc376165cc6208a2722",
       "bytes": 975
     },
     {
-      "path": "tree/docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md",
       "type": "file",
       "sha256": "d91206bf6ec791ea5de0b05ec11997e56d4835b79f7d208b6980c30df707ce53",
       "bytes": 3320
     },
     {
-      "path": "tree/docs/plans/2026-09-07-unknown-escalation-ladder.md",
+      "path": "tree/docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md",
       "type": "file",
       "sha256": "dcf064fb4755151cb27f721f28c3a4f1f7ea33d2a71375cac00b9d764953dd88",
       "bytes": 44118
     },
     {
-      "path": "tree/docs/plans/2026-09-07-unknown-escalation-ladder.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-07-unknown-escalation-ladder.plan-review-manifest.json",
       "type": "file",
       "sha256": "0ce421ba62bef3a709300db231f524ac18422a3d2222bd6f04881e995fd6bb8d",
       "bytes": 1327
     },
     {
-      "path": "tree/docs/plans/2026-09-07-unknown-escalation-ladder.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-07-unknown-escalation-ladder.rubric.md",
       "type": "file",
       "sha256": "22ba6997d6babf2c1187c3f5c0650d26170294535d885c0bd41da24cfb6c6ce0",
       "bytes": 2876
     },
     {
-      "path": "tree/docs/plans/2026-09-08-family-aware-ladder-ordering.md",
+      "path": "tree/docs/plans/_archive/2026-09-08-family-aware-ladder-ordering.md",
       "type": "file",
       "sha256": "c20b82169c2a2221eca5cc84b3d53e83f33930ee2556e300ca0e5c2b5f53c820",
       "bytes": 14389
@@ -3195,25 +3195,25 @@
       "bytes": 1527
     },
     {
-      "path": "tree/docs/plans/2026-09-11-operator-pin-supersedes-qualification.md",
+      "path": "tree/docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md",
       "type": "file",
       "sha256": "7574c5c3d096e1a87fd0894787f07654c9a334559064625e39f8b4b5934cd134",
       "bytes": 39720
     },
     {
-      "path": "tree/docs/plans/2026-09-11-operator-pin-supersedes-qualification.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.plan-review-manifest.json",
       "type": "file",
       "sha256": "231686799a5468d5580a9df904febc83c26b89f3dee1c81c4dedc50ab14c5e0d",
       "bytes": 1346
     },
     {
-      "path": "tree/docs/plans/2026-09-11-operator-pin-supersedes-qualification.r2.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.r2.plan-review-manifest.json",
       "type": "file",
       "sha256": "3838ef162f671fc052ae13e5c1853cb768ea872a08719ff952440ed06b7e138e",
       "bytes": 1338
     },
     {
-      "path": "tree/docs/plans/2026-09-11-operator-pin-supersedes-qualification.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.rubric.md",
       "type": "file",
       "sha256": "fe1db3dc0020cf12c780adf54e7e7af15475862b962a4e00e009773a0bbe4c12",
       "bytes": 4292
@@ -3261,7 +3261,7 @@
       "bytes": 2527
     },
     {
-      "path": "tree/docs/plans/2026-09-12-portable-knowledge-routing.md",
+      "path": "tree/docs/plans/_archive/2026-09-12-portable-knowledge-routing.md",
       "type": "file",
       "sha256": "932c5e8db810076412bf9853959a3985db1ada27c083e6f5ba33a061bcf2997d",
       "bytes": 4118
@@ -3279,85 +3279,85 @@
       "bytes": 1712
     },
     {
-      "path": "tree/docs/plans/2026-09-13-foreman-rail-b-build.md",
+      "path": "tree/docs/plans/_archive/2026-09-13-foreman-rail-b-build.md",
       "type": "file",
       "sha256": "26ab29725dc4f97769699681ef70d736262f9288ed7c47f9300395ff65594ce2",
       "bytes": 5044
     },
     {
-      "path": "tree/docs/plans/2026-09-13-non-claude-foreman-rail-design.md",
+      "path": "tree/docs/plans/_archive/2026-09-13-non-claude-foreman-rail-design.md",
       "type": "file",
       "sha256": "5cc4d3e11ebeeeaa67f092806ba540ae1ec3b4f89b03d97dc21b9b9da80b7ff5",
       "bytes": 13300
     },
     {
-      "path": "tree/docs/plans/2026-09-13-repo-residue-sweep.md",
+      "path": "tree/docs/plans/_archive/2026-09-13-repo-residue-sweep.md",
       "type": "file",
       "sha256": "4a33b95bf03d9a0a0cd7f6b6eefdc79ba4be3b54c75a52e99faf9f492a03918a",
       "bytes": 2870
     },
     {
-      "path": "tree/docs/plans/2026-09-14-backlog-entry-migration.md",
+      "path": "tree/docs/plans/_archive/2026-09-14-backlog-entry-migration.md",
       "type": "file",
       "sha256": "3eb58da96292bad97d915a5f41bcfbc73eac21736577eef30b6de354ebfa67c1",
       "bytes": 5431
     },
     {
-      "path": "tree/docs/plans/2026-09-14-backlog-entry-migration.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-14-backlog-entry-migration.rubric.md",
       "type": "file",
       "sha256": "18b6b6c691407c508fadb21e14c0588db1cd230c7bb1a1db15c2de5db8688d0d",
       "bytes": 1028
     },
     {
-      "path": "tree/docs/plans/2026-09-14-backlog-entry-schema.md",
+      "path": "tree/docs/plans/_archive/2026-09-14-backlog-entry-schema.md",
       "type": "file",
       "sha256": "a22ab76b1fb7f36b25b86dd0c88e8f351a91af5dbd9d26c4925c59e4610d6f53",
       "bytes": 22801
     },
     {
-      "path": "tree/docs/plans/2026-09-14-backlog-entry-schema.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-14-backlog-entry-schema.plan-review-manifest.json",
       "type": "file",
       "sha256": "efc93eeb59010ab0fa13e42a51089903a32334cee0347ff4acefb13733da75ec",
       "bytes": 980
     },
     {
-      "path": "tree/docs/plans/2026-09-14-backlog-entry-schema.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-14-backlog-entry-schema.rubric.md",
       "type": "file",
       "sha256": "9037f7b61cfc3db5bee7c1bf90089f90b3957eb1ac38fa9634ca0c1360474d41",
       "bytes": 2811
     },
     {
-      "path": "tree/docs/plans/2026-09-15-final-panel-per-seat-pins.md",
+      "path": "tree/docs/plans/_archive/2026-09-15-final-panel-per-seat-pins.md",
       "type": "file",
       "sha256": "e500c0ad2076ea9ed3a31f6e98b9f9a5e059bebac5a4a4d0f84ab206623b29d4",
       "bytes": 18530
     },
     {
-      "path": "tree/docs/plans/2026-09-15-final-panel-per-seat-pins.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-15-final-panel-per-seat-pins.plan-review-manifest.json",
       "type": "file",
       "sha256": "521d79d9037d7f02325caa339d635e13238762e6952238a48cf6ac7e2fc50607",
       "bytes": 957
     },
     {
-      "path": "tree/docs/plans/2026-09-15-final-panel-per-seat-pins.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-15-final-panel-per-seat-pins.rubric.md",
       "type": "file",
       "sha256": "d3a11b8d43f7e03c0dc5df11fa3047cda8ed19664c6a8d5aba351f7634de75d6",
       "bytes": 2958
     },
     {
-      "path": "tree/docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md",
+      "path": "tree/docs/plans/_archive/2026-09-15-peer-residue-config-ladder-qc-namespace.md",
       "type": "file",
       "sha256": "a3bf1ac8215ea9534a25aa795277f9b9d47fa9a5fccf0cfae240a15964cfc51f",
       "bytes": 12668
     },
     {
-      "path": "tree/docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-15-peer-residue-config-ladder-qc-namespace.plan-review-manifest.json",
       "type": "file",
       "sha256": "83e820a4c3db4381b138ef6cae8b0216c8297b35e741a66d91634effa94f0100",
       "bytes": 953
     },
     {
-      "path": "tree/docs/plans/2026-09-15-peer-residue-config-ladder-qc-namespace.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-15-peer-residue-config-ladder-qc-namespace.rubric.md",
       "type": "file",
       "sha256": "6788b3d559f508fb019f06a75d7dc19970d5730bbbbf1cd5b565c01a7e49470c",
       "bytes": 2266
@@ -3381,19 +3381,19 @@
       "bytes": 2585
     },
     {
-      "path": "tree/docs/plans/2026-09-16-blind-review-packet.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-blind-review-packet.md",
       "type": "file",
       "sha256": "6030a0afc81cc1e262d9b6e26eeeabd1ec7b7f3e5548355d8c0ae148722ad924",
       "bytes": 31574
     },
     {
-      "path": "tree/docs/plans/2026-09-16-blind-review-packet.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-16-blind-review-packet.plan-review-manifest.json",
       "type": "file",
       "sha256": "d18fac26042e1bbe5c8bf5ef12109348aa6d5ada90dddb05e21bf6f46e288634",
       "bytes": 963
     },
     {
-      "path": "tree/docs/plans/2026-09-16-blind-review-packet.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-blind-review-packet.rubric.md",
       "type": "file",
       "sha256": "305915f01e74e80e28bde7c4f00c85d535f9f62ac5b709c41958905c282b2c09",
       "bytes": 5126
@@ -3411,55 +3411,55 @@
       "bytes": 3188
     },
     {
-      "path": "tree/docs/plans/2026-09-16-final-panel-blind-admission.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-final-panel-blind-admission.md",
       "type": "file",
       "sha256": "25492fdafb827436002fad7b58baa93de574a7560c2a8a5cf11b710490d127c3",
       "bytes": 15145
     },
     {
-      "path": "tree/docs/plans/2026-09-16-final-panel-blind-admission.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-16-final-panel-blind-admission.plan-review-manifest.json",
       "type": "file",
       "sha256": "19b0611d383dfe1aa1fd31a22b3143ed5edb06f737c071eed58f8ab3ed4ab49d",
       "bytes": 968
     },
     {
-      "path": "tree/docs/plans/2026-09-16-final-panel-blind-admission.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-final-panel-blind-admission.rubric.md",
       "type": "file",
       "sha256": "ff743b8e67f66551dd5fdc5d2ad3b1961793da757c6c49c6ab7e24be326b7e32",
       "bytes": 3905
     },
     {
-      "path": "tree/docs/plans/2026-09-16-ledger-rotation-order.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-ledger-rotation-order.md",
       "type": "file",
       "sha256": "67379749c97d66d92174d4f51f7d580441e1b30ccf824df8d33bcf4a43b9c9c4",
       "bytes": 14075
     },
     {
-      "path": "tree/docs/plans/2026-09-16-ledger-rotation-order.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-16-ledger-rotation-order.plan-review-manifest.json",
       "type": "file",
       "sha256": "8e1c6cd28b542fb68f5d07f5fe9c01750bdb694b29a30695a68b47cf2fe3cfc2",
       "bytes": 962
     },
     {
-      "path": "tree/docs/plans/2026-09-16-ledger-rotation-order.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-ledger-rotation-order.rubric.md",
       "type": "file",
       "sha256": "78910525f2a6d2e623eb44c856b7a4daec1c04d6241e2ead9ec5e143e758fae5",
       "bytes": 2752
     },
     {
-      "path": "tree/docs/plans/2026-09-16-proof-parity-raw-log.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-proof-parity-raw-log.md",
       "type": "file",
       "sha256": "0a37231a1dd10ac8fd7b78206bd17c492d33017d42061946ccd3453307571ec3",
       "bytes": 16270
     },
     {
-      "path": "tree/docs/plans/2026-09-16-proof-parity-raw-log.plan-review-manifest.json",
+      "path": "tree/docs/plans/_archive/2026-09-16-proof-parity-raw-log.plan-review-manifest.json",
       "type": "file",
       "sha256": "82af6943c187827b0e3ee54f11005fcddd94c884328fa6bff7ec70f69b9f3158",
       "bytes": 961
     },
     {
-      "path": "tree/docs/plans/2026-09-16-proof-parity-raw-log.rubric.md",
+      "path": "tree/docs/plans/_archive/2026-09-16-proof-parity-raw-log.rubric.md",
       "type": "file",
       "sha256": "602008830843f3d8b37254522cbebd0ea6d88aeffb04287ba3efa6b4caf44c2c",
       "bytes": 3462
@@ -12507,7 +12507,7 @@
       "bytes": 19763
     },
     {
-      "path": "tree/platforms/codex/plugin/docs/plans/2026-06-04-distill-consolidate.md",
+      "path": "tree/platforms/codex/plugin/docs/plans/_archive/2026-06-04-distill-consolidate.md",
       "type": "file",
       "sha256": "5f43bf1ecf22f95c42c6cdbfe97e698e3206848fe5652130bd5c99273fcae094",
       "bytes": 39233
@@ -12519,7 +12519,7 @@
       "bytes": 12444
     },
     {
-      "path": "tree/platforms/codex/plugin/docs/plans/2026-06-26-trust-tiered-review-policy.md",
+      "path": "tree/platforms/codex/plugin/docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md",
       "type": "file",
       "sha256": "0fe55f49be62cafa6649c9e64da11a86eef7a100591c74bab95794824f9bb677",
       "bytes": 17955

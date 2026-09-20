@@ -289,7 +289,7 @@ source contract cannot be satisfied by an existing one.
 
 - The Owner Kernel P4 item is attached to the active Owner Kernel project, not copied into a new
   project.
-- Skill-transport uses `docs/plans/2026-07-15-skill-transport-payoff-ab.md`; this portfolio only
+- Skill-transport uses `docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md`; this portfolio only
   records the missing implementer arm disposition.
 - Fable uses `docs/plans/2026-07-08-fable-skills-absorption.md`; no implementation is authorized
   without its Board decision.

@@ -2,7 +2,7 @@ Engine: sonnet@claude-native effort=high
 
 # Foreman contract (common to every deliverable of feat/dev-flow-hetero-loops)
 
-You are ONE foreman for ONE deliverable of the plan `docs/plans/2026-09-04-dev-flow-hetero-loops-default.md`
+You are ONE foreman for ONE deliverable of the plan `docs/plans/_archive/2026-09-04-dev-flow-hetero-loops-default.md`
 (read only §2.5, §3 and your own D-row in §4; do not read the whole ledger, kernel sources or history).
 Repo: `/home/cookys/projects/autopilot`. Feature branch: `feat/dev-flow-hetero-loops`. Your worktree
 starts at that branch's head (`worktree.baseRef: head`). Project README:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fixtures for scripts/probe-unknown.js + the ladder telemetry kinds in
 # scripts/decision-ledger.js + the rehydration-bundle tail priority
-# (plan docs/plans/2026-09-07-unknown-escalation-ladder.md P1, rubric R2/R3/R10/R11/R12/R13/R16).
+# (plan docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md P1, rubric R2/R3/R10/R11/R12/R13/R16).
 # Every classification exits 0 (KR5); only usage and --strict exit 2.
 . "$(dirname "$0")/lib.sh"
 

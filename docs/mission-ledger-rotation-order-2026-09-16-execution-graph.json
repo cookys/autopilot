@@ -41,7 +41,7 @@
      "scripts/run-ledger.sh"
     ],
     "spec": {
-     "path": "docs/plans/2026-09-16-ledger-rotation-order.md",
+     "path": "docs/plans/_archive/2026-09-16-ledger-rotation-order.md",
      "section": "1. Ruling and shape"
     }
    },

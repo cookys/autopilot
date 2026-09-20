@@ -3,7 +3,7 @@
 > Status: COMPLETE — H1 confirmed; independent final QC passed
 > Owner: depth-0 CEO; initial L4 foreman was interrupted after bounded no-progress and depth-0 retained the same worktree/lineage
 > Plan: [`docs/plans/2026-08-02-skill-transport-implementer-arm.md`](../../plans/2026-08-02-skill-transport-implementer-arm.md)
-> Historical source: [`docs/plans/2026-07-15-skill-transport-payoff-ab.md`](../../plans/2026-07-15-skill-transport-payoff-ab.md)
+> Historical source: [`docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md`](../../plans/2026-07-15-skill-transport-payoff-ab.md)
 
 ## Goal
 

@@ -363,7 +363,7 @@ assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e
 assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' \
   "strict L6 executable fixture records canonical claim provenance"
 
-# L4 twin (v2.36.8, docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.md KR1/KR4):
+# L4 twin (v2.36.8, docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.md KR1/KR4):
 # the SAME live-probed, host-owned bootstrap compiles under an l4 marker with the l4 roster
 # profile (implementer + reviewer required; verification-author seat and QC panel optional).
 # The fixture roster has NO verification-author seat; the managed engine's level-independent

@@ -252,7 +252,7 @@ What would guarantee failure:
 
 - R0 author: depth-0 (Fable), 2026-09-05. Context brief extracted by an Explore subagent (sonnet).
 - logical_plan_id: `statusline-live-context-feed-2026-09-05`
-- manifest: `docs/plans/2026-09-05-statusline-live-context-feed.plan-review-manifest.json`; rubric: `….rubric.md` (frozen g1).
+- manifest: `docs/plans/_archive/2026-09-05-statusline-live-context-feed.plan-review-manifest.json`; rubric: `….rubric.md` (frozen g1).
 - G1 (2026-09-05): sol chair STOP with 9 blockers (R2 R3 R4 R5 R6 R7 R8 R10 R12), MiniMax READY. All nine
   accepted-and-folded: override probed (R2); normative sanitiser + shared vectors (R3); two files, one writer each,
   per-file freshness (R4, R5); honest compat deltas + fixture diff test (R6); tier formula + v2.32.56 lineage (R7);

@@ -245,7 +245,7 @@ Decision Brief 與 perspectives，**不執行 project code 工作**。SKILLS rul
 
 對 B/A 的判讀：
 - 沒動 SKILL.md description → eval 結果 ±1-2 case 是 LLM stochasticity，不是 regression
-- 想真正測 routing fidelity，需要 manual scenario walks（D-1/D-2 9-query 已是現有做法）OR 寫獨立 router-judge harness（見 `docs/plans/2026-05-14-eval-router-judge.md`）
+- 想真正測 routing fidelity，需要 manual scenario walks（D-1/D-2 9-query 已是現有做法）OR 寫獨立 router-judge harness（見 `docs/plans/_archive/2026-05-14-eval-router-judge.md`）
 
 文件化動作：
 - `scripts/run-eval-batch.sh` 加 header comment 講清楚這個機制 + parametrize `RUNS_PER_QUERY` / `MODEL` 兩個 env var，方便 high-fidelity 跑（5 runs × opus 4.7）vs 日常 quick check

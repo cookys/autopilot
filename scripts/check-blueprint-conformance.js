@@ -3,7 +3,7 @@
 
 /**
  * check-blueprint-conformance.js — the frozen-four-tuple round gate
- * (autonomous-brain-integration P1; plan: docs/plans/2026-08-17-autonomous-brain-integration.md).
+ * (autonomous-brain-integration P1; plan: docs/plans/_archive/2026-08-17-autonomous-brain-integration.md).
  *
  * Kills sol failure shapes F1/F3/F4 (mid-run reinvention of granularity, gate set,
  * rubric, or control plane) and F2 (mega-batch: churn-budget breach) BEFORE spend.

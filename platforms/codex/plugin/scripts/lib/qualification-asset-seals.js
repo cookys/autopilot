@@ -2,7 +2,7 @@
 /**
  * qualification-asset-seals.js
  *
- * D4 (plan: docs/plans/2026-08-28-consult-discuss-qualification.md) — load-bearing
+ * D4 (plan: docs/plans/_archive/2026-08-28-consult-discuss-qualification.md) — load-bearing
  * seal/pin verification for the consult and discuss qualification exams.
  *
  * Extends the existing `verifyPinnedImplEvaluationAssets()` pattern in

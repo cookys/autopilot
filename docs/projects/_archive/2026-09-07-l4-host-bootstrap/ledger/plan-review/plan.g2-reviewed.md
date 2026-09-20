@@ -271,4 +271,4 @@ No open questions remain; the three answers are binding on P1–P4.
 
 ## Review log
 
-- R0: this document (sha at g1 dispatch recorded in the ledger). Manifest: `docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.plan-review-manifest.json` (sol chair codex/max + MiniMax-M3 evidence skeptic cc-shim/high, 2 families, 2 attempts/seat). Frozen rubric: `docs/plans/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md` (R1–R13). Ledger: `docs/projects/2026-09-07-l4-host-bootstrap/ledger/plan-review/`.
+- R0: this document (sha at g1 dispatch recorded in the ledger). Manifest: `docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.plan-review-manifest.json` (sol chair codex/max + MiniMax-M3 evidence skeptic cc-shim/high, 2 families, 2 attempts/seat). Frozen rubric: `docs/plans/_archive/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md` (R1–R13). Ledger: `docs/projects/2026-09-07-l4-host-bootstrap/ledger/plan-review/`.

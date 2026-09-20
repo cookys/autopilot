@@ -16,7 +16,7 @@
  * is the identity ranking. That is deliberate, and it is NOT an oversight to be filled in with
  * plausible numbers later by hand.
  *
- * The plan this file was built from (docs/plans/2026-09-08-family-aware-ladder-ordering.md, P1)
+ * The plan this file was built from (docs/plans/_archive/2026-09-08-family-aware-ladder-ordering.md, P1)
  * proposed seeding anthropic with "low as a bigger step down". Writing that number would have
  * violated the same plan's §2.5 constraint that every entry names how it was established: the
  * published evidence says the labels are incomparable and that low suppresses search, neither of

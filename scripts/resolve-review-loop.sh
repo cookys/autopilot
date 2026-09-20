@@ -118,7 +118,7 @@ DEF_DISCUSS_ENDPOINT=""
 DEF_CONSULT_DISPATCH="auto"
 DEF_DISCUSS_DISPATCH="off"
 # unknown_escalation (unknown-escalation ladder, plan
-# docs/plans/2026-09-07-unknown-escalation-ladder.md P2): whether
+# docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md P2): whether
 # scripts/probe-unknown.js may recommend and receipt climbs. Same tri-state
 # shape as consult_dispatch. DEFAULT auto = ON (owner ruling 2026-09-07: a
 # switch, default on in every mode) with budgets 2/1/1; `on` requires the three
@@ -2393,7 +2393,7 @@ process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}\u001foper
 ' "$_eng" "$_run" "$_role" 2>/dev/null)" || _ovr=""
   # A STANDING operator pin is the same class of evidence as the per-invocation
   # override file and admits identically. Rationale: the operator-pin plan
-  # (docs/plans/2026-09-11-operator-pin-supersedes-qualification.md §1 item 2)
+  # (docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md §1 item 2)
   # names "the only evidence-free path is per-invocation and file-shaped" as a
   # defect — an operator who has ALREADY named a seat should not hand-author a
   # JSON artifact per dispatch to be obeyed. D1-D4 closed that on the admission

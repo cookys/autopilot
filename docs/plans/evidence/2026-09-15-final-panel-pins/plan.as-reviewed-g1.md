@@ -26,7 +26,7 @@ it is (a) the incumbent reviewer tuple with `reviewer_qualified: true`, or (b) a
 3. The pin store keeps ONE row per role (`engine-capability-state.js pinSeat`: `existing.filter(entry
    => entry.role !== row.role)`), and the resolver strips `qc_panel[N]` to `qc_panel` for the lookup.
    A three-seat panel cannot be pinned; only the per-invocation `AUTOPILOT_QUALIFICATION_OVERRIDE` file
-   (an array) can cover it, and the operator-pin plan (`docs/plans/2026-09-11-operator-pin-supersedes-qualification.md`
+   (an array) can cover it, and the operator-pin plan (`docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md`
    §1 item 2) already names "per-invocation, file-shaped" as the defect.
 
 Consequences: every `/l5` run stops at `final_panel_seat_precondition_failed` and degrades to l3; the

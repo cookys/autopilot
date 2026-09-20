@@ -1,6 +1,6 @@
 # Unknown-escalation ladder
 
-> Plan: [`docs/plans/2026-09-07-unknown-escalation-ladder.md`](../../plans/2026-09-07-unknown-escalation-ladder.md) (frozen at g2 2026-09-07, `ledger/plan-review/`, checker exit 0)
+> Plan: [`docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md`](../../plans/2026-09-07-unknown-escalation-ladder.md) (frozen at g2 2026-09-07, `ledger/plan-review/`, checker exit 0)
 > Branch: `feat/v2.36.15-unknown-escalation-ladder` · Target: v2.36.15 (PATCH: new script + knob + reference, no new skill/agent) · Size: L
 > Owner rulings 2026-09-07: ladder is a switch, default on in every mode; budgets are climb counts per work unit (U1=2, U2=1, U3=1); knob name `unknown_escalation`; self-reported unknowns cap at U1 (recommended default, not yet ruled).
 

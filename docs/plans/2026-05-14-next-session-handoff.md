@@ -89,13 +89,13 @@ v2.7.2 端到端只有 auto-compact 能完整 trigger：PreCompact → state-che
 
 | File | 內容 | Trigger |
 |---|---|---|
-| `docs/plans/2026-05-14-eval-router-judge.md` | API-direct router-judge 取代 skill-creator proxy isolation-test | 下次 routing tightening 痛點 |
-| `docs/plans/2026-05-14-test-suite.md` | autopilot 自動化 test 框架（3-layer pyramid） | 下次出現 v2.7.3-class「reviewer-跑了-才抓到」bug，OR v2.7.4 release 前 |
-| `docs/plans/2026-05-14-reload-plugins-agent-invokable.md` | Option D shipped (`reload-watch.js`); Option A 等 upstream Claude Code | upstream 動作 |
+| `docs/plans/_archive/2026-05-14-eval-router-judge.md` | API-direct router-judge 取代 skill-creator proxy isolation-test | 下次 routing tightening 痛點 |
+| `docs/plans/_archive/2026-05-14-test-suite.md` | autopilot 自動化 test 框架（3-layer pyramid） | 下次出現 v2.7.3-class「reviewer-跑了-才抓到」bug，OR v2.7.4 release 前 |
+| `docs/plans/_archive/2026-05-14-reload-plugins-agent-invokable.md` | Option D shipped (`reload-watch.js`); Option A 等 upstream Claude Code | upstream 動作 |
 | `docs/plans/2026-05-14-powerloop-learnings.md` | B/A adopted in v2.7.2, C/D explicit skip | (closed) |
-| `docs/plans/2026-05-14-superpowers-coexistence.md` | v2.7.0 ship | (closed) |
-| `docs/plans/2026-05-14-context-handoff-hardening.md` | v2.7.2 ship | (closed) |
-| `docs/plans/2026-05-14-retro-roundup.md` | v2.7.3 ship | (closed) |
+| `docs/plans/_archive/2026-05-14-superpowers-coexistence.md` | v2.7.0 ship | (closed) |
+| `docs/plans/_archive/2026-05-14-context-handoff-hardening.md` | v2.7.2 ship | (closed) |
+| `docs/plans/_archive/2026-05-14-retro-roundup.md` | v2.7.3 ship | (closed) |
 
 ---
 
@@ -156,7 +156,7 @@ git branch -a                    # 預期 develop + feat/v2.7.0-superpowers-coex
 
 ### Step 3（若選 1B）— test-suite Phase 1
 
-照 `docs/plans/2026-05-14-test-suite.md` §4 Phase P1：
+照 `docs/plans/_archive/2026-05-14-test-suite.md` §4 Phase P1：
 - 建 `hooks/tests/run.sh` umbrella
 - 建 `hooks/tests/fixtures/` dir
 - 寫 state-checkpoint R10-A 為 PoC test case

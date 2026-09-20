@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // score-onoff.js — mechanical scorer for the skill ON/OFF campaign.
 // Implements the PRE-REGISTERED rules frozen in
-// docs/plans/2026-08-18-dev-flow-contract-card.md §4 (V1 manipulation check /
+// docs/plans/_archive/2026-08-18-dev-flow-contract-card.md §4 (V1 manipulation check /
 // V2 sensitivity gate / V3 non-inferiority / verdict map). The final ship decision is a
 // Board read of the printed table — these rules are clamps against motivated reasoning.
 //

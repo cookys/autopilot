@@ -1,7 +1,7 @@
 # Administration proposal — consult / discuss role qualification
 
 > **This is a document only. No paid administration is executed as part of producing it or the
-> D10 deliverable that authored it.** `docs/plans/2026-08-28-consult-discuss-qualification.md` §2.5
+> D10 deliverable that authored it.** `docs/plans/_archive/2026-08-28-consult-discuss-qualification.md` §2.5
 > forbids real-money exam administration in this project; §8 ruling 4 defers seat selection to this
 > proposal rather than deciding it in the plan. The Board authorizes any actual spend separately.
 
@@ -271,7 +271,7 @@ Total up to **152 cases**.
 ## Board decision — 2026-08-30 (D7 re-administration authorization)
 
 **Decision**: pooled re-administration under the two-tier + pooled bar
-(`docs/plans/2026-08-29-qualification-verdict-stability.md` §4 D7; protocol recorded in
+(`docs/plans/_archive/2026-08-29-qualification-verdict-stability.md` §4 D7; protocol recorded in
 `docs/plans/evidence/2026-08-29-verdict-stability/OC-CHARACTERIZATION.md` "Re-administration protocol")
 **AUTHORIZED** by the user on 2026-08-30 ("D7 授權,跑"), for the nine live seats whose single-run
 verdicts (events 157–165) were superseded on 2026-08-30 (D1 markers). `cursor` stays out (not

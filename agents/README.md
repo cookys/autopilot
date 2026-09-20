@@ -104,6 +104,6 @@ Claude Code enforces this allowlist. The agents **cannot patch source files via 
 
 ## Further reading
 
-- Plan doc: `docs/plans/2026-04-12-methodology-agents-and-hooks.md` — full design, review loop history, rationale
+- Plan doc: `docs/plans/_archive/2026-04-12-methodology-agents-and-hooks.md` — full design, review loop history, rationale
 - Individual agent spec: `reviewer.md` / `debugger.md` / `planner.md`
 - Companion plugins: see `../README.md` § Recommended Companions

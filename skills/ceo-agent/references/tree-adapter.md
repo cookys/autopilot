@@ -6,7 +6,7 @@ carries all operational detail.
 
 > **Sources**: `references/tree-contracts.md` (event schemas, invariants),
 > `references/model-routing.md` §"Tree roles" (Amendment 11 routing),
-> `docs/plans/2026-06-12-task-tree-engine.md` §P6 + Amendments 6, 8, 9.
+> `docs/plans/_archive/2026-06-12-task-tree-engine.md` §P6 + Amendments 6, 8, 9.
 
 ---
 

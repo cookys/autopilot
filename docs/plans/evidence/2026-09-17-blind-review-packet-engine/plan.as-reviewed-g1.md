@@ -1,7 +1,7 @@
 # Blind review redesign — cut 1a-B: the engine hands every managed review its packet, and the receipt says which one
 
 > Status: draft for plan hetero loop · Size: L · Base: `bee8da3d` (v2.36.60) · Parent plan:
-> `docs/plans/2026-09-16-blind-review-packet.md` (cut 1a-A, shipped v2.36.59) — its §1 defines the
+> `docs/plans/_archive/2026-09-16-blind-review-packet.md` (cut 1a-A, shipped v2.36.59) — its §1 defines the
 > packet; this plan does not restate it. Evidence dir: `docs/plans/evidence/2026-09-17-blind-review-packet-engine/`.
 
 ## 0. What is actually true today (verified 2026-09-17, base `bee8da3d`)

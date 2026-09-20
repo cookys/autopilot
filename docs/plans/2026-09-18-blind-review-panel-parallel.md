@@ -1,7 +1,7 @@
 # Blind review redesign — cut 2-A: verify once per tree, panel seats in parallel, a sealed panel pocket
 
 > Status: SHIPPED v2.36.65 (merge `67e3a560`, 2026-09-18) · Size: L · Base: `aab9523d` (v2.36.64) · Parent:
-> `docs/plans/2026-09-16-blind-review-packet.md` §7 item 4 (`:311-312`: "verify once per tree, in-rail single
+> `docs/plans/_archive/2026-09-16-blind-review-packet.md` §7 item 4 (`:311-312`: "verify once per tree, in-rail single
 > review off when a panel exists, seats in separate processes concurrently, one standby seat, panel snapshot
 > at intake") and the design consult `evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md`
 > "3. Speed cuts" (`:31-35`, migration `:44`). This cut ships the first three mechanisms that the 1c campaign

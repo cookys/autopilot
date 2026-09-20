@@ -1,7 +1,7 @@
 # Blind review redesign — cut 2-C: the panel is the review station, and one packet per candidate
 
 > Status: draft for plan hetero loop · Size: L (two independent deliverables) · Base: `9a0dac5b` (v2.36.67) · Parent:
-> `docs/plans/2026-09-16-blind-review-packet.md` §7 item 4 (`:311-312`) and the design consult
+> `docs/plans/_archive/2026-09-16-blind-review-packet.md` §7 item 4 (`:311-312`) and the design consult
 > `evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md` §3 "Speed cuts" (`:31-35`: "delete the
 > in-rail single-seat review when a final panel is configured", "overlap", "run each verification suite once") and
 > §4 migration (`:44-48`). 2-B (v2.36.66) shipped the quorum panel and the intake snapshot; 2-B's plan §1.3 named

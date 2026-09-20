@@ -1,6 +1,6 @@
 # Build task: extend scripts/resolve-review-loop.sh (scorecard validation + fallback ladder)
 
-Read docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md § "Stage 3 — Roster + routing" for the exact fail-closed semantics. Modify ONLY
+Read docs/plans/_archive/2026-06-30-hetero-engine-lifecycle-methodology.md § "Stage 3 — Roster + routing" for the exact fail-closed semantics. Modify ONLY
 scripts/resolve-review-loop.sh + its existing test (add cases). Preserve ALL current behavior/fields (byte-compatible default output).
 
 ## GOAL

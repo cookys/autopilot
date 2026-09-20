@@ -5,7 +5,7 @@ Repo: `/home/cookys/projects/codeforge` (Rust, bin `codeforge`, currently on `ma
 and do everything inside `/home/cookys/projects/codeforge-wt-live`. Commit there; do NOT merge, do NOT touch `main`,
 do NOT run `cargo install`, do NOT edit `~/.claude/settings.json`.
 
-Plan (read §2.5 and P1 only): `/home/cookys/projects/autopilot/docs/plans/2026-09-05-statusline-live-context-feed.md`.
+Plan (read §2.5 and P1 only): `/home/cookys/projects/autopilot/docs/plans/_archive/2026-09-05-statusline-live-context-feed.md`.
 Real payloads to build fixtures from: `/home/cookys/projects/autopilot/docs/projects/2026-09-05-statusline-live-context-feed/ledger/p0/{statusline,subagent}.json`.
 
 ## Global Constraints (verbatim from plan §2.5 — do not paraphrase)

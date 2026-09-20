@@ -1,7 +1,7 @@
 # Heterogeneous Review Loops
 
 > Reference for the dev-flow heterogeneous review loops and gating scripts.
-> Origin: `docs/plans/2026-09-04-dev-flow-hetero-loops-default.md` D2 deliverable.
+> Origin: `docs/plans/_archive/2026-09-04-dev-flow-hetero-loops-default.md` D2 deliverable.
 
 This reference indexes the three deterministic scripts supporting dev-flow's plan-review scaffolding, heterogeneous code-review loop execution, and phase review receipt gating.
 

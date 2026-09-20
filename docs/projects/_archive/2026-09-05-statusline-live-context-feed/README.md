@@ -1,6 +1,6 @@
 # statusline → hook live context feed (v2.36.1)
 
-> Plan: [`docs/plans/2026-09-05-statusline-live-context-feed.md`](../../plans/2026-09-05-statusline-live-context-feed.md) · Branch: `feat/v2.36.1-statusline-live-context-feed` · Plan loop: frozen 2026-09-05 (g2 terminal, checker exit 0 — [`ledger/plan-review/README.md`](ledger/plan-review/README.md))
+> Plan: [`docs/plans/_archive/2026-09-05-statusline-live-context-feed.md`](../../plans/2026-09-05-statusline-live-context-feed.md) · Branch: `feat/v2.36.1-statusline-live-context-feed` · Plan loop: frozen 2026-09-05 (g2 terminal, checker exit 0 — [`ledger/plan-review/README.md`](ledger/plan-review/README.md))
 
 ## Project Goal
 

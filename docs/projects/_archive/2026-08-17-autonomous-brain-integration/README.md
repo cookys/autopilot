@@ -1,8 +1,8 @@
 # autonomous-brain-integration — execution ledger
 
-> Plan (FROZEN): [`docs/plans/2026-08-17-autonomous-brain-integration.md`](../../plans/2026-08-17-autonomous-brain-integration.md)
+> Plan (FROZEN): [`docs/plans/_archive/2026-08-17-autonomous-brain-integration.md`](../../plans/2026-08-17-autonomous-brain-integration.md)
 > · Rubric + 2-generation hetero review log therein · Evidence:
-> [`sol-pathology.md`](../../plans/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md)
+> [`sol-pathology.md`](../../plans/_archive/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md)
 > · Mode: CEO (just-results, Hold) · Branch: `feat/autonomous-brain-integration`
 > · Mission admission: READY/enforce, l3 inline, ONE bounded deliverable (P1–P8 are
 > internal gates, per Mission Routing Override — no one-for-one phase expansion)

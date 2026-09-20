@@ -1,6 +1,6 @@
 # Plan loop ledger — statusline-live-context-feed (2026-09-05)
 
-logical_plan_id: `statusline-live-context-feed-2026-09-05` · manifest: `docs/plans/2026-09-05-statusline-live-context-feed.plan-review-manifest.json` · rubric frozen at g1.
+logical_plan_id: `statusline-live-context-feed-2026-09-05` · manifest: `docs/plans/_archive/2026-09-05-statusline-live-context-feed.plan-review-manifest.json` · rubric frozen at g1.
 
 | Gen | Seats | Verdicts | Findings | Depth-0 dispositions | Artifact |
 |---|---|---|---|---|---|

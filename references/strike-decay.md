@@ -9,7 +9,7 @@ work, never because a date passed.**
 Owner ruling 2026-08-18: *"同一個模型不需要日期授權;降級授權應該用不信任投票累積而不是時間。"*
 A model does not get worse because the calendar turned over. Design frozen 2026-08-22 by a
 seven-seat heterogeneous panel (all seven verdicts `sound-with-changes`; no seat proposed keeping
-any calendar tooth). Plan: [`../docs/plans/2026-08-22-no-confidence-decay.md`](../docs/plans/2026-08-22-no-confidence-decay.md).
+any calendar tooth). Plan: [`../docs/plans/_archive/2026-08-22-no-confidence-decay.md`](../docs/plans/_archive/2026-08-22-no-confidence-decay.md).
 
 ## The calendar is advisory, everywhere
 

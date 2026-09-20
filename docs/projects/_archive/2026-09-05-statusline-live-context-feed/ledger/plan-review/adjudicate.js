@@ -7,7 +7,7 @@ const repo = process.argv[2];
 const { loadDispositionFile, applyDispositions } = require(path.join(repo, 'scripts/lib/plan-review-findings.js'));
 const L = path.join(repo, 'docs/projects/2026-09-05-statusline-live-context-feed/ledger/plan-review');
 const artifact = JSON.parse(fs.readFileSync(path.join(L, 'g2.stdout.json'), 'utf8'));
-const dispPath = path.join(repo, 'docs/plans/2026-09-05-statusline-live-context-feed.g2-disposition.json');
+const dispPath = path.join(repo, 'docs/plans/_archive/2026-09-05-statusline-live-context-feed.g2-disposition.json');
 const decisions = loadDispositionFile(dispPath, { logicalPlanId: artifact.logical_plan_id, generation: 2 });
 applyDispositions(artifact.findings, decisions);
 artifact.depth0_adjudication = {

@@ -479,7 +479,7 @@
       "sidecar": "docs/backlog/scorecard-runner-token-drift-sol-s-reviewer-row-is-recorded-under-codex-cli-not.md"
     },
     {
-      "title": "~~Foreman context is not measurable by hook — `context-budget` only sees the parent transcript~~ (CLOSED 2026-09-05, v2.36.1: `subagentStatusLine` `tasks[].tokenCount` is the per-agent usage field; `foreman-guard.js` denies at T2 from the tmpfs live file — `docs/plans/2026-09-05-statusline-live-context-feed.md`)",
+      "title": "~~Foreman context is not measurable by hook — `context-budget` only sees the parent transcript~~ (CLOSED 2026-09-05, v2.36.1: `subagentStatusLine` `tasks[].tokenCount` is the per-agent usage field; `foreman-guard.js` denies at T2 from the tmpfs live file — `docs/plans/_archive/2026-09-05-statusline-live-context-feed.md`)",
       "slug": "foreman-context-is-not-measurable-by-hook-context-budget-only-sees-the-parent-tr",
       "bytes_before": 1369,
       "bytes_after": 823,

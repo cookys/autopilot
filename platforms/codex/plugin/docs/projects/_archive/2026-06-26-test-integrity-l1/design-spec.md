@@ -1,7 +1,7 @@
 # L1 Per-Runner Design Spec — Executed-Set Invariance + Real Override
 
 > Status: **v4 (post round-3 review) — CONVERGED pending re-confirm. Design spec, MANDATORY gate before implementer dispatch.** Operationalizes
-> `docs/plans/2026-06-25-test-integrity-gate.md` §2.1 (L1) / §2.3 (override) per runner.
+> `docs/plans/_archive/2026-06-25-test-integrity-gate.md` §2.1 (L1) / §2.3 (override) per runner.
 > This spec does NOT re-decide the plan; it nails down the HOW precisely enough that a
 > mechanical implementer (`gpt-5.3-codex-spark`) cannot guess.
 > Date: 2026-06-26 · Owner: cookys · Branch: `feat/test-integrity-l1`

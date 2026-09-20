@@ -67,16 +67,42 @@ backlog_row "$d/docs/BACKLOG.md" "Widget row" "open" "docs/plans/_archive/2026-0
 out="$(node "$GATE" --repo-root "$d" --json)"
 assert_eq "$(json_count "$out" backlog_row_has_plan)" "1" "backlog_row_has_plan counts an archived plan too"
 
-# --- word-boundary: a Pointer into an evidence subpath (not the plan file itself)
-#     must NOT trigger backlog_row_has_plan ---
+# --- backlog_row_has_plan is broadened: ANY path whose stem belongs to an existing plan —
+#     the plan file, a sidecar, or anything under its evidence dir — counts, not just a
+#     direct docs/plans/<stem>.md pointer. ---
+
+# ...a pointer into the plan's evidence dir counts.
 d="$(fixture_repo evidence-pointer)"
 mkdir -p "$d/docs/plans/evidence/2026-01-01-widget"
 printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
 printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-widget/notes.md"
 backlog_row "$d/docs/BACKLOG.md" "Widget evidence row" "open" "docs/plans/evidence/2026-01-01-widget/notes.md"
 out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" backlog_row_has_plan)" "1" \
+  "a pointer into the plan's evidence dir counts as backlog_row_has_plan"
+assert_contains "$out" '"stem":"2026-01-01-widget"' \
+  "the violation reports the matched plan stem (evidence-dir pointer)"
+
+# ...a pointer at one of the plan's sidecars counts.
+d="$(fixture_repo sidecar-pointer)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+printf '# Rubric\n' > "$d/docs/plans/2026-01-01-widget.rubric.md"
+backlog_row "$d/docs/BACKLOG.md" "Widget sidecar row" "open" "docs/plans/2026-01-01-widget.rubric.md"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" backlog_row_has_plan)" "1" \
+  "a pointer at the plan's sidecar counts as backlog_row_has_plan"
+assert_contains "$out" '"stem":"2026-01-01-widget"' \
+  "the violation reports the matched plan stem (sidecar pointer)"
+
+# ...but a pointer into an evidence dir whose OWN stem has no plan file does NOT count —
+# stem extraction is not enough; the plan itself must exist.
+d="$(fixture_repo evidence-pointer-no-plan)"
+mkdir -p "$d/docs/plans/evidence/2026-01-01-orphan-evidence"
+printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-orphan-evidence/notes.md"
+backlog_row "$d/docs/BACKLOG.md" "Orphan evidence row" "open" "docs/plans/evidence/2026-01-01-orphan-evidence/notes.md"
+out="$(node "$GATE" --repo-root "$d" --json)"
 assert_eq "$(json_count "$out" backlog_row_has_plan)" "0" \
-  "a pointer into an evidence subpath is not itself docs/plans/*.md"
+  "an evidence-dir pointer with no matching plan file is not backlog_row_has_plan"
 
 # --- backlog_row_done: Status starts with shipped/dropped ---
 d="$(fixture_repo done-shipped)"
@@ -153,6 +179,50 @@ MD
 out="$(node "$GATE" --repo-root "$d" --json)"
 assert_eq "$(json_count "$out" plan_released_not_archived)" "0" \
   "RED: slug 'review' must not match inside 'reviewed' (word boundary)"
+
+# RED: `\b` treats `-` as a boundary, so a naive `\bslug\b` regex WOULD match
+# "foreman-rail" inside "foreman-rail-gaps" (the "-" right after "rail" satisfies `\b`).
+# The match must be bounded by a character outside [A-Za-z0-9-] on both sides.
+d="$(fixture_repo hyphen-boundary)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-foreman-rail.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.0.0 — closes foreman-rail-gaps entirely
+
+- unrelated feature.
+MD
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_released_not_archived)" "0" \
+  "RED: slug 'foreman-rail' must not match inside 'foreman-rail-gaps' (hyphen boundary)"
+
+# ...but a real, cleanly-bounded mention of the slug DOES still fire.
+d="$(fixture_repo hyphen-boundary-real-hit)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-foreman-rail.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.0.0 — ships foreman-rail (the whole thing, no more)
+
+- landed it.
+MD
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_released_not_archived)" "1" \
+  "a cleanly-bounded mention of the slug still fires"
+
+# The full <date>-<slug> stem is also accepted, boundary-matched, not just the bare slug.
+d="$(fixture_repo full-stem-match)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-foreman-rail.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.0.0 — see 2026-01-01-foreman-rail for detail
+
+- landed it.
+MD
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_released_not_archived)" "1" \
+  "the full <date>-<slug> stem, boundary-matched, also fires"
 
 # --- allowlist excludes a plan stem from plan_released_not_archived and plan_orphan ---
 d="$(fixture_repo allowlisted)"
@@ -242,10 +312,10 @@ printf '# Plan\n' > "$d/docs/plans/2026-01-01-forgotten.md"
 node "$GATE" --repo-root "$d" --fix --json >/dev/null
 assert_file_exists "$d/docs/plans/2026-01-01-forgotten.md" "--fix never moves an orphaned plan"
 
-# RED at first cut of --fix: a SURVIVING row (its Pointer is an evidence subpath, not the plan
-# file itself, so it is not itself deleted) pointing INTO a released plan's evidence dir went
-# pointer_unresolved the moment --fix moved that dir to _archive/. --fix must rewrite it.
-d="$(fixture_repo fix-rewrites-surviving-pointer)"
+# A row pointing INTO a released plan's evidence dir is caught by the broadened
+# backlog_row_has_plan and deleted by --fix BEFORE the evidence dir itself moves to
+# _archive/ — so nothing survives to dangle as pointer_unresolved.
+d="$(fixture_repo fix-deletes-evidence-pointer-row)"
 printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
 mkdir -p "$d/docs/plans/evidence/2026-01-01-widget"
 printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-widget/README.md"
@@ -260,15 +330,13 @@ MD
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 node "$GATE" --repo-root "$d" --fix --json >/dev/null
-assert_contains "$(cat "$d/docs/BACKLOG.md")" \
-  "docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
-  "RED: --fix rewrites a surviving row's Pointer into the moved evidence dir"
-assert_not_contains "$(cat "$d/docs/BACKLOG.md")" \
-  "**Pointer**: docs/plans/evidence/2026-01-01-widget/README.md" \
-  "the stale (pre-move) Pointer no longer appears"
+assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Widget evidence row" \
+  "the evidence-pointing row is deleted, not left to dangle"
+assert_file_exists "$d/docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
+  "the evidence dir still moves to _archive/"
 bgate_out="$(node "$REPO_ROOT/scripts/check-backlog-entries.js" --backlog "$d/docs/BACKLOG.md" --json)"
 assert_not_contains "$bgate_out" '"pointer_unresolved"' \
-  "the rewritten Pointer resolves — check-backlog-entries.js reports no pointer_unresolved"
+  "no row survives to report pointer_unresolved"
 
 # --- usage / exit codes ---
 set +e

@@ -7,15 +7,21 @@
  * BACKLOG is a queue → a plan is the project for campaign work → a 🔵 review finding
  * never becomes a BACKLOG row. This gate enforces the first two mechanically:
  *
- *   backlog_row_has_plan          row Pointer resolves to an existing docs/plans/*.md
- *                                 (docs/plans/_archive/*.md counts too — "archived or not")
+ *   backlog_row_has_plan          row Pointer resolves to ANY path whose stem belongs to a
+ *                                 plan that exists — the plan file itself, a sidecar
+ *                                 (`docs/plans/<stem>.<tag>.md`), or anything under its
+ *                                 `docs/plans/evidence/<stem>/` dir — checked against both
+ *                                 docs/plans/<stem>.md and docs/plans/_archive/<stem>.md
+ *                                 ("archived or not"). The violation reports the matched stem.
  *   backlog_row_done              row Status starts with shipped/dropped
  *   backlog_title_closed_status_open
  *                                 title contains ~~, CLOSED, SHIPPED, FIXED v, or LANDED
  *                                 but Status is still open
- *   plan_released_not_archived    a docs/plans/*.md whose slug (stem minus leading date)
- *                                 is mentioned, word-boundary, in a released
- *                                 (non-"Unreleased") `## v…` CHANGELOG.md section
+ *   plan_released_not_archived    a docs/plans/*.md whose full stem or slug (stem minus
+ *                                 leading date) is mentioned in a released (non-"Unreleased")
+ *                                 `## v…` CHANGELOG.md section, bounded on both sides by a
+ *                                 character outside [A-Za-z0-9-] (so `foreman-rail` does not
+ *                                 match inside `foreman-rail-gaps`)
  *   plan_orphan                   report-only, non-blocking: no reference to the plan in
  *                                 CHANGELOG.md, docs/projects/INDEX.md, any
  *                                 docs/plans/evidence/ dir name, or docs/BACKLOG.md
@@ -24,10 +30,10 @@
  * backlog_title_closed_status_open) and git mv's released plans — plus their
  * `<same stem>.*.md` sidecars and `docs/plans/evidence/<stem>/` dir, if present —
  * into docs/plans/_archive/, preserving names. It never touches plan_orphan findings
- * (report-only). A surviving row whose Pointer reached INTO a moved evidence dir or
- * sidecar (not the plan file itself — that shape is backlog_row_has_plan and the row
- * is deleted, not rewritten) has its Pointer rewritten to the new _archive/ location
- * so --fix never leaves a dangling pointer_unresolved behind it.
+ * (report-only). Because backlog_row_has_plan's scope covers the plan file, its
+ * sidecars, AND anything under its evidence dir, every row that could otherwise dangle
+ * against a path --fix is about to move is deleted before the move happens — nothing
+ * survives to need its Pointer rewritten.
  *
  * Usage:
  *   node scripts/check-plan-graduation.js
@@ -114,6 +120,15 @@ function readFileSafe(p) {
 
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// A slug/stem is a run of [A-Za-z0-9-]; `\b` treats `-` itself as a boundary, so
+// `\bforeman-rail\b` matches inside `foreman-rail-gaps` (the character after "rail" is
+// "-", not a word char, so `\b` is satisfied there too). Bound explicitly on the actual
+// slug alphabet instead: the character on each side (if any) must be OUTSIDE
+// [A-Za-z0-9-], so `foreman-rail` does not match inside `foreman-rail-gaps`.
+function slugBoundaryRegExp(s) {
+  return new RegExp(`(?<![A-Za-z0-9-])${escapeRegExp(s)}(?![A-Za-z0-9-])`);
 }
 
 function loadAllowlist(p) {
@@ -211,6 +226,26 @@ function findSidecars(plansDir, stem) {
     .map((ent) => ent.name);
 }
 
+// A row's Pointer may name the plan itself, one of its sidecars, or anything under its
+// evidence dir. Extract the candidate plan STEM (the primary `<date>-<slug>` filename,
+// with no `.md` and no sidecar tag) from the pointer's shape — the caller still has to
+// confirm `docs/plans/<stem>.md` (or `_archive/<stem>.md`) actually exists.
+function planStemForPointer(pointer) {
+  if (!pointer || pointer === 'none') return null;
+  // docs/plans/<X>.md or docs/plans/_archive/<X>.md — X is either a primary plan's own
+  // basename (no further dot: stem === X) or a sidecar's (`<stem>.<tag>`: strip the tag).
+  let m = pointer.match(/^docs\/plans\/(?:_archive\/)?([^/]+)\.md$/);
+  if (m) {
+    const x = m[1];
+    const lastDot = x.lastIndexOf('.');
+    return lastDot === -1 ? x : x.slice(0, lastDot);
+  }
+  // docs/plans/evidence/<stem>/... (any depth beneath the evidence dir).
+  m = pointer.match(/^docs\/plans\/evidence\/([^/]+)\//);
+  if (m) return m[1];
+  return null;
+}
+
 // --- CHANGELOG released-section text ---
 
 function releasedChangelogText(changelogPath) {
@@ -235,8 +270,8 @@ function planMentioned(released, stem, slug, pointerPathVariants) {
   for (const variant of pointerPathVariants) {
     if (released.includes(variant)) return true;
   }
-  const re = new RegExp(`\\b${escapeRegExp(slug)}\\b`);
-  return re.test(released);
+  // Accept either the bare slug or the full <date>-<slug> stem, boundary-matched.
+  return slugBoundaryRegExp(stem).test(released) || slugBoundaryRegExp(slug).test(released);
 }
 
 // --- orphan reference scan ---
@@ -244,8 +279,8 @@ function planMentioned(released, stem, slug, pointerPathVariants) {
 function planReferenced(repoRoot, plansDir, backlogText, changelogText, stem, slug) {
   const needleStem = stem;
   const needleSlug = slug;
-  const reStem = new RegExp(`\\b${escapeRegExp(needleStem)}\\b`);
-  const reSlug = new RegExp(`\\b${escapeRegExp(needleSlug)}\\b`);
+  const reStem = slugBoundaryRegExp(needleStem);
+  const reSlug = slugBoundaryRegExp(needleSlug);
   if (changelogText && (reStem.test(changelogText) || reSlug.test(changelogText))) return true;
   if (backlogText && (reStem.test(backlogText) || reSlug.test(backlogText))) return true;
   const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
@@ -295,15 +330,17 @@ function run(opts) {
         detail: `Status: ${row.status}`,
       });
     } else if (row.pointer && row.pointer !== 'none') {
-      const m = row.pointer.match(/^docs\/plans\/(?:_archive\/)?([^/]+\.md)$/);
-      if (m) {
-        const abs = path.join(repoRoot, row.pointer);
-        if (fs.existsSync(abs)) {
+      const stem = planStemForPointer(row.pointer);
+      if (stem) {
+        const planExists = fs.existsSync(path.join(repoRoot, 'docs', 'plans', `${stem}.md`))
+          || fs.existsSync(path.join(repoRoot, 'docs', 'plans', '_archive', `${stem}.md`));
+        if (planExists) {
           violations.push({
             code: 'backlog_row_has_plan',
             kind: 'backlog_row',
             title: row.title,
-            detail: `Pointer: ${row.pointer}`,
+            stem,
+            detail: `Pointer: ${row.pointer} -> plan docs/plans/${stem}.md`,
           });
         }
       }
@@ -427,47 +464,22 @@ function fixPlans(repoRoot, plansDir, archiveDir, violations) {
   return moved;
 }
 
-// A surviving BACKLOG row may point INTO an evidence dir (or sidecar) that fixPlans just
-// moved under one of the plans it archived (the row itself was not doomed — its Pointer is
-// an evidence subpath, not the plan file itself — see backlog_row_has_plan's literal
-// docs/plans/*.md scope). Left alone, that Pointer would go pointer_unresolved the moment
-// the file lands in _archive/. Rewrite every surviving Pointer whose value is prefixed by a
-// moved path's old location to the new one.
-function rewriteSurvivingPointers(backlogPath, moved) {
-  if (!moved.length) return { changed: false, count: 0 };
-  const text = readFileSafe(backlogPath);
-  if (text == null) return { changed: false, count: 0 };
-  // Longest-`from`-first so a nested rewrite (evidence dir) is not shadowed by a shorter one.
-  const pairs = moved
-    .map((m) => ({ from: m.from.split(path.sep).join('/'), to: m.to.split(path.sep).join('/') }))
-    .sort((a, b) => b.from.length - a.from.length);
-  let count = 0;
-  const out = text.replace(/(\*\*Pointer\*\*:\s*)(\S+)/g, (whole, prefix, value) => {
-    for (const { from, to } of pairs) {
-      if (value === from || value.startsWith(`${from}/`)) {
-        count += 1;
-        return prefix + to + value.slice(from.length);
-      }
-    }
-    return whole;
-  });
-  if (out !== text) {
-    fs.writeFileSync(backlogPath, out);
-    return { changed: true, count };
-  }
-  return { changed: false, count: 0 };
-}
+// NOTE: a BACKLOG row pointing into a plan's evidence dir or at one of its sidecars is now
+// caught directly by the broadened backlog_row_has_plan (planStemForPointer, above) and
+// deleted by fixBacklog — so it never survives to dangle as pointer_unresolved once fixPlans
+// moves that evidence dir / sidecar to _archive/. An earlier version of --fix instead left
+// such rows in place and rewrote their Pointer; that rewrite pass is gone because
+// backlog_row_has_plan's broadened scope makes it unreachable — every row it could have
+// rewritten is now deleted before fixPlans runs, by the same stem match.
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const result = run(opts);
   let backlogFix = { changed: false, removed: [] };
   let plansMoved = [];
-  let pointerRewrite = { changed: false, count: 0 };
   if (opts.fix) {
     backlogFix = fixBacklog(result.backlogPath, result.violations);
     plansMoved = fixPlans(result.repoRoot, result.plansDir, result.archiveDir, result.violations);
-    pointerRewrite = rewriteSurvivingPointers(result.backlogPath, plansMoved);
   }
 
   const blocking = result.violations.filter((v) => BLOCKING_CODES.has(v.code));
@@ -484,7 +496,6 @@ function main() {
     fix: opts.fix ? {
       backlog_rows_removed: backlogFix.removed,
       plans_moved: plansMoved,
-      surviving_pointers_rewritten: pointerRewrite.count,
     } : undefined,
   };
 
@@ -508,9 +519,6 @@ function main() {
       if (plansMoved.length) {
         process.stdout.write(`--fix: moved ${plansMoved.length} plan file(s) into _archive:\n`);
         for (const m of plansMoved) process.stdout.write(`  - ${m.from} -> ${m.to}\n`);
-      }
-      if (pointerRewrite.count) {
-        process.stdout.write(`--fix: rewrote ${pointerRewrite.count} surviving BACKLOG Pointer(s) into _archive/\n`);
       }
     }
   }
@@ -537,5 +545,6 @@ module.exports = {
   planMentioned,
   planReferenced,
   collectBacklogRows,
-  rewriteSurvivingPointers,
+  planStemForPointer,
+  slugBoundaryRegExp,
 };

@@ -104,4 +104,107 @@ EOF
 
 assert_r34_check_phase_review_r
 
+# confirmation row: expected GREEN at base per BACKLOG sidecar
+# Regression guard: finalize open_findings always carries non-empty Major|Minor severity.
+assert_r35_hetero_review_loop_c() {
+  local HETERO="$REPO_ROOT/scripts/hetero-review-loop.js"
+  local SCRATCH_REPO="$TEST_TMP/r35-repo"
+  local LEDGER="$TEST_TMP/r35-ledger"
+  mkdir -p "$SCRATCH_REPO/scripts" "$LEDGER"
+  (
+    cd "$SCRATCH_REPO"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    echo "initial" > file.txt
+    git add file.txt
+    git commit -q -m "c1"
+    echo "second" > file.txt
+    git add file.txt
+    git commit -q -m "c2"
+  )
+  local PHASE_BASE
+  PHASE_BASE=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
+  (
+    cd "$SCRATCH_REPO"
+    git checkout -q -b work
+    echo "work changes" >> file.txt
+    git add file.txt
+    git commit -q -m "c3"
+  )
+  cat << 'STUB_EOF' > "$SCRATCH_REPO/scripts/dispatch-review.sh"
+#!/usr/bin/env bash
+if [ -n "$STUB_SEAT_ID" ]; then
+  VAR="STUB_RESPONSE_${STUB_SEAT_ID}"
+  if [ -n "${!VAR}" ]; then
+    echo "${!VAR}"
+    exit 0
+  fi
+fi
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+STUB_EOF
+  chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
+  cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+  chmod +x "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+
+  export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/r35-no-such-topology.json"
+  export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh"
+  export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Critical: parser boundary bug\nNeeds a repair.\n\nMajor: unchecked write return\nFollow up.\n\nMinor: noisy log in helper\nCleanup."}'
+  export STUB_RESPONSE_s1='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+  export STUB_RESPONSE_s2='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+  unset STUB_SEAT_RESPONSE || true
+
+  local COLLECT_OUT COLLECT_RC
+  COLLECT_OUT=$(node "$HETERO" collect \
+    --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r35 --generation 1 \
+    --branch work --phase-base "$PHASE_BASE" \
+    --seats "m1/low@codex,m2/med@agy,m3/high@grok" 2>&1); COLLECT_RC=$?
+  assert_exit_code "$COLLECT_RC" "0" "r35: collect with Critical+Major+Minor findings exits 0"
+
+  node -e '
+    const fs = require("fs");
+    const findings = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).findings;
+    const body = {
+      schema_version: 1,
+      phase: "p_r35",
+      generation: 1,
+      findings: findings.map((f) => ({ id: f.id, disposition: "verified", rationale: "confirmed" })),
+    };
+    fs.writeFileSync(process.argv[2], JSON.stringify(body, null, 2) + "\n");
+  ' "$LEDGER/review-p_r35/g1/findings.json" "$TEST_TMP/r35-disp.json"
+
+  local FIN_OUT FIN_RC
+  FIN_OUT=$(node "$HETERO" finalize \
+    --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r35 --generation 1 \
+    --branch work --dispositions "$TEST_TMP/r35-disp.json" 2>&1); FIN_RC=$?
+  assert_exit_code "$FIN_RC" "0" "r35: finalize of verified Critical+Major+Minor exits 0"
+
+  local RECEIPT="$LEDGER/receipt-p_r35.json"
+  assert_file_exists "$RECEIPT" "r35: receipt exists"
+  assert_contains "$(cat "$RECEIPT")" '"verdict": "FIX-THEN-SHIP"' "r35: receipt verdict is FIX-THEN-SHIP"
+
+  local SEV_CHECK="missing"
+  if [ -f "$RECEIPT" ]; then
+    SEV_CHECK=$(node -e '
+      const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      const open = r.open_findings;
+      if (!Array.isArray(open) || open.length !== 2) {
+        console.log("bad_count:" + (Array.isArray(open) ? open.length : typeof open));
+        process.exit(0);
+      }
+      const sevs = open.map((f) => f && f.severity).sort();
+      const ok = open.every((f) => typeof f.severity === "string" && f.severity.length > 0 && /^(Major|Minor)$/.test(f.severity));
+      if (!ok || sevs.join(",") !== "Major,Minor") {
+        console.log("bad_sev:" + JSON.stringify(open));
+        process.exit(0);
+      }
+      console.log("ok");
+    ' "$RECEIPT")
+  fi
+  assert_eq "$SEV_CHECK" "ok" "r35: every open_findings entry has non-empty severity Major|Minor"
+  unset AUTOPILOT_TOPOLOGY_FILE AUTOPILOT_DISPATCH_REVIEW_SCRIPT STUB_RESPONSE_s0 STUB_RESPONSE_s1 STUB_RESPONSE_s2 || true
+}
+
+assert_r35_hetero_review_loop_c
+
 finalize_test

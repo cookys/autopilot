@@ -311,8 +311,8 @@ assert_neq "$HAND_HEAD" "$BASE" "12: hand branch carries the commit"
 # ======================================================================= 13 308 BACKLOG #46
 # gap 1: protocol.md tells the foreman about parallel-hands sibling-ref-prefix, and the rail
 # wires a default via env so a nested dispatch-hetero.sh gets it without the foreman naming it.
-assert_contains "$(cat "$RD/protocol.md")" 'sibling-ref-prefix refs/heads/hands/r2/' "13: protocol names the parallel-hands sibling flag for this run"
-assert_contains "$(cat "$RD/protocol.md")" 'AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/r2/' "13: protocol names the env default it already carries"
+assert_contains "$(cat "$RUNS/r2/protocol.md")" 'sibling-ref-prefix refs/heads/hands/r2/' "13: protocol names the parallel-hands sibling flag for this run"
+assert_contains "$(cat "$RUNS/r2/protocol.md")" 'AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/r2/' "13: protocol names the env default it already carries"
 assert_contains "$ENV0" "AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/r2/" "13: foreman env carries the sibling-ref-prefix default for its own run"
 
 # gap 3: the boundary error names the 308 SOP rule (does not change behaviour — same status).

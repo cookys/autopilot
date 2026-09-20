@@ -224,7 +224,22 @@ else
   __TEST_LIVE_LOCK_FD=""
 fi
 
+# bash's EXIT trap is inherited into every subshell forked after it is set —
+# including command-substitution subshells like `OUT="$(... bash "$SCRIPT" ...)"`,
+# which every test case here uses to invoke the script under test. Each such
+# subshell keeps the SAME $$ as the top-level test process (only $BASHPID
+# changes per fork), so when the subshell finishes, bash reruns the inherited
+# EXIT trap THERE too — and an unguarded `rm -rf "$TEST_TMP"` wipes the whole
+# sandbox out from under the still-running top-level test the moment its first
+# command substitution returns, well before the test script itself exits. That
+# is the root cause of the "TEST_TMP disappears partway through the suite"
+# cascade (repo dir gone → MODULE_NOT_FOUND on the node preload, starting at
+# whichever test first backgrounds/kills a process inside a subshell). Record
+# the top-level BASHPID before any subshell can fork and only clean up when
+# the trap fires in that exact process.
+__TEST_TOP_BASHPID="$BASHPID"
 cleanup_test_tmp() {
+  [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] || return 0
   if [ -n "$__TEST_LIVE_LOCK_FD" ]; then
     { exec {__TEST_LIVE_LOCK_FD}>&-; } 2>/dev/null || true
   fi
@@ -471,7 +486,7 @@ poll_until() {
 
 # Hermetic D4 strict-roster fixture (provider-readiness-consumer + autopilot-cli).
 # Roster names ONLY the six STRICT_L5_PROVIDER_POLICY tuples. Scorecard rows are
-# written via the real engine-scorecard.js record CLI into TEST_TMP � never the
+# written via the real engine-scorecard.js record CLI into TEST_TMP � never the
 # host capability dir. Caller exports REVIEW_LOOP_CONFIG_OVERRIDE /
 # ENGINE_SCORECARD_DIR; the helper only sets HERMETIC_REVIEW_LOOP_CFG and
 # HERMETIC_SCORECARD_DIR.

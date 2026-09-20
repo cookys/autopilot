@@ -347,7 +347,14 @@ function formatDisclosure(entry) {
   } else if (entry.capability_score !== null) {
     lines.push(`  result          capability_score=${entry.capability_score}`);
   }
-  lines.push(`  evidence        event ${entry.evidence_pointers.official_event_id} — ${entry.evidence_pointers.evidence_bundle}`);
+  const ptr = entry.evidence_pointers;
+  const eventId = ptr && ptr.official_event_id;
+  const bundle = ptr && ptr.evidence_bundle;
+  if (eventId == null && bundle == null) {
+    lines.push('  evidence        (pre-effort feed row — no event id / bundle recorded)');
+  } else {
+    lines.push(`  evidence        event ${ptr.official_event_id} — ${ptr.evidence_bundle}`);
+  }
   lines.push(`  self-qualify    ${selfQualifyCommand(entry)}`);
   return lines.join('\n');
 }

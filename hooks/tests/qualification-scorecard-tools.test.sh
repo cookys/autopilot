@@ -44,4 +44,58 @@ assert_r49_scorecard_runner_tok() {
 
 assert_r49_scorecard_runner_tok
 
+assert_r51_adopt_qualification() {
+  # Legacy feed rows omit official_event_id / evidence_bundle (and may omit
+  # evidence_pointers entirely). list --from must not interpolate those as
+  # "event undefined — null".
+  local cache fixture list_out
+  cache="$TEST_TMP/r51-feed-cache"
+  mkdir -p "$cache"
+  fixture="$TEST_TMP/r51-legacy-feed.json"
+  node -e '
+const fs = require("fs");
+const doc = {
+  schema: "model-dyno.qualification-feed.v1",
+  artifact_type: "official-qualification-defaults",
+  digest: "deadbeef",
+  defaults: [{
+    default_id: "feed:legacy:implementer:glm:cc-shim",
+    role: "implementer",
+    status: "qualified",
+    capability_score: 1,
+    seat: { engine: "GLM-5.3", runner: "cc-shim", role: "implementer", effort: "high" },
+    administration: {
+      engine: "GLM-5.3",
+      runner: "cc-shim",
+      family: "zhipu",
+      date: "2026-08-21",
+      effort: "high",
+      version_source: "operator-asserted",
+      runner_version: "2.1.239-Claude-Code",
+      harness_version: "dispatch-hetero:003d7975",
+      corpus_version: "impl-live-rail-v1",
+      prompt_config_hash: "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+      model_version: "GLM-5.3",
+      expires: "2026-11-19",
+    },
+    evidence_pointers: { evidence_bundle: null },
+  }],
+  strikes: [],
+  priors: [],
+};
+fs.writeFileSync(process.argv[1], JSON.stringify(doc) + "\n");
+' "$fixture" || fail "r51: fixture write failed"
+
+  list_out="$(node "$REPO_ROOT/scripts/adopt-qualification-defaults.js" list --from "$fixture" --feed-cache-dir "$cache" 2>&1)" \
+    || fail "r51: list --from failed"
+
+  # RED at d1cad5c7e090e3f64593b6f4e0ef85074e2bc270: evidence        event undefined — null
+  assert_not_contains "$list_out" "event undefined" \
+    "r51: list --from must not print literal event undefined for a legacy feed row"
+  assert_contains "$list_out" "  evidence        (pre-effort feed row — no event id / bundle recorded)" \
+    "r51: list --from uses the pre-effort fallback when event id and bundle are absent"
+}
+
+assert_r51_adopt_qualification
+
 finalize_test

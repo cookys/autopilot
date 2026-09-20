@@ -103,6 +103,42 @@ assert_r16_dispatch_foreman_tes() {
     "r16: Summary shows 0 failed"
 }
 
+assert_r19_pin_store_hardening() {
+  local STORE_SRC="$REPO_ROOT/scripts/lib/jsonl-store.js"
+  # (1) writeSnapshot fsyncs the temp file and the directory (RED at base: no fsync).
+  assert_contains "$(cat "$STORE_SRC")" "fsyncSync" \
+    "r19: jsonl-store.js fsyncs (temp fd and directory)"
+  local fsync_n
+  fsync_n="$(grep -c 'fsyncSync' "$STORE_SRC")"
+  assert_eq "$(test "$fsync_n" -ge 2 && echo yes || echo no)" "yes" \
+    "r19: at least two fsyncSync sites (temp fd + directory fd)"
+
+  local SCRATCH="$TEST_TMP/r19-pin-store"
+  mkdir -p "$SCRATCH"
+  local STORE="$SCRATCH/pins.jsonl"
+  local ORPHAN="$SCRATCH/.pins.jsonl.tmp.12345.999"
+  local FRESH="$SCRATCH/.pins.jsonl.tmp.99999.1"
+  printf 'orphan-body\n' > "$ORPHAN"
+  printf 'fresh-body\n' > "$FRESH"
+  node -e '
+    const fs = require("fs");
+    const orphan = process.argv[1];
+    const st = fs.statSync(orphan);
+    const aged = new Date(Date.now() - 30_000);
+    fs.utimesSync(orphan, aged, aged);
+  ' "$ORPHAN"
+
+  node -e '
+    const s = require(process.argv[1]);
+    s.writeSnapshot(process.argv[2], [{ k: 1 }]);
+  ' "$STORE_SRC" "$STORE"
+
+  assert_file_absent "$ORPHAN" "r19: aged orphan tmp must be swept"
+  assert_file_exists "$FRESH" "r19: recent same-shaped tmp must be kept"
+  assert_file_exists "$STORE" "r19: writeSnapshot must publish the store file"
+}
+
 assert_r3_run_ledger_sh_lease
 assert_r16_dispatch_foreman_tes
+assert_r19_pin_store_hardening
 finalize_test

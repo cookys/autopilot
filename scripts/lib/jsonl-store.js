@@ -147,7 +147,13 @@ function withWriteLock(opts, callback) {
 
 function appendRow(storeFile, row) {
   const line = `${JSON.stringify(row)}\n`;
-  fs.appendFileSync(storeFile, line, { mode: 0o600 });
+  const fd = fs.openSync(storeFile, 'a', 0o600);
+  try {
+    fs.writeSync(fd, line);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 // Replace the whole store file with `rows` as one JSONL document (one canonical
@@ -155,12 +161,39 @@ function appendRow(storeFile, row) {
 // then renameSync onto storeFile so a crash between those steps leaves the
 // previous contents intact. Does NOT take the lock — callers wrap with
 // withWriteLock, same as appendRow.
+const SNAPSHOT_TMP_ORPHAN_AGE_MS = 5000;
+
+function sweepOrphanedSnapshotTmp(storeFile) {
+  const dir = path.dirname(storeFile);
+  const prefix = `.${path.basename(storeFile)}.tmp.`;
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue;
+    const full = path.join(dir, name);
+    try {
+      const st = fs.statSync(full);
+      if (!st.isFile()) continue;
+      if (now - st.mtimeMs < SNAPSHOT_TMP_ORPHAN_AGE_MS) continue;
+      fs.unlinkSync(full);
+    } catch {
+      // Best-effort: skip entries that vanish or cannot be unlinked.
+    }
+  }
+}
+
 function writeSnapshot(storeFile, rows) {
   if (!Array.isArray(rows)) {
     throw new Error('writeSnapshot rows must be an array');
   }
   const dir = path.dirname(storeFile);
   ensureDir(dir);
+  sweepOrphanedSnapshotTmp(storeFile);
   const tmp = path.join(
     dir,
     `.${path.basename(storeFile)}.tmp.${process.pid}.${process.hrtime.bigint()}`,
@@ -169,8 +202,20 @@ function writeSnapshot(storeFile, rows) {
     ? ''
     : `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`;
   try {
-    fs.writeFileSync(tmp, body, { mode: 0o600 });
+    const fd = fs.openSync(tmp, 'wx', 0o600);
+    try {
+      fs.writeFileSync(fd, body);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(tmp, storeFile);
+    const dirFd = fs.openSync(dir, 'r');
+    try {
+      fs.fsyncSync(dirFd);
+    } finally {
+      fs.closeSync(dirFd);
+    }
   } catch (err) {
     try { fs.unlinkSync(tmp); } catch { /* best-effort temp cleanup */ }
     throw err;

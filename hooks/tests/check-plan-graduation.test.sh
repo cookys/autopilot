@@ -761,6 +761,14 @@ s = s.replace(
   "## 已完成 (Completed)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
   "| 2026-08-09 | [legacy-proj](_archive/2026-08-09-legacy-proj/README.md) | v1.0.0 | abc | [plan](../plans/_archive/2026-08-09-legacy.md) |\n"
 )
+# 🟡 index-rewrite-single-row (migrate case): a SECOND row also links the same
+# already-archived (legacy-flat) plan — e.g. a follow-up fix row citing it. Both rows'
+# stale legacy-flat path must be rewritten by --migrate-archive-layout, not just one.
+s = s.replace(
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-08-10 | a follow-up also citing the plan | active | — | [plan](../plans/_archive/2026-08-09-legacy.md) |\n"
+)
 open(p, "w").write(s)
 PY
 printf 'See docs/plans/_archive/2026-08-09-legacy.md and docs/plans/_archive/evidence/2026-08-09-legacy/notes.md.\n' \
@@ -787,6 +795,12 @@ assert_contains "$(cat "$d/docs/projects/INDEX.md")" \
 assert_contains "$(cat "$d/docs/projects/INDEX.md")" \
   "../plans/_archive/2026/08/2026-08-09-legacy.md" \
   "INDEX.md's own plan link is rewritten too"
+# 🟡 index-rewrite-single-row: the SECOND INDEX row that also links this plan (the
+# 進行中 follow-up row) must have its path rewritten too, not just the first-matched row.
+assert_eq "$(grep -c '\.\./plans/_archive/2026-08-09-legacy\.md' "$d/docs/projects/INDEX.md")" "0" \
+  "no INDEX row still links the stale legacy-flat path — every matched row was rewritten"
+assert_eq "$(grep -c '\.\./plans/_archive/2026/08/2026-08-09-legacy\.md' "$d/docs/projects/INDEX.md")" "2" \
+  "both the 已完成 row and the 進行中 follow-up row now point at the dated path"
 assert_contains "$(cat "$d/CHANGELOG.md")" "docs/plans/_archive/2026-08-09-legacy.md" \
   "CHANGELOG.md is NOT rewritten (history, same exclusion as --fix)"
 assert_contains "$out" '"plansMoved"' "the migrate payload reports what moved"
@@ -800,5 +814,107 @@ out="$(node "$GATE" --repo-root "$d" --migrate-archive-layout --json)"
 assert_contains "$out" '"archive_destination_exists"' "migrate reports the clash by name"
 assert_file_exists "$d/docs/plans/_archive/2026-09-10-clash.md" \
   "the legacy flat file is left in place (all-or-nothing, nothing partially moved)"
+
+# --- 🟠 index-row-match-any-cell: planIndexRegistration must match the stem against the
+#     Plan-column cell only, not the whole raw row — otherwise plan Y merely MENTIONED in
+#     plan X's Project-cell prose counts Y as registered via X's row, and archiving Y would
+#     then rewrite/flip X's row instead of leaving it alone. ---
+d="$(fixture_repo_with_index index-row-match-any-cell)"
+printf '# Plan — X\n' > "$d/docs/plans/2026-01-01-planx.md"
+printf '# Plan — Y\n' > "$d/docs/plans/2026-02-02-plany.md"
+python3 - "$d/docs/projects/INDEX.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace(
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-01-01 | X — see also ../plans/2026-02-02-plany.md for context | active | — | [plan](../plans/2026-01-01-planx.md) |\n"
+)
+open(p, "w").write(s)
+PY
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_unregistered)" "1" \
+  "Y is plan_unregistered despite being MENTIONED in X's Project-cell prose"
+assert_contains "$out" '"stem":"2026-02-02-plany"' "the violation names Y, not X"
+# Archiving Y must leave X's row completely untouched.
+before_x_row="$(grep 'planx' "$d/docs/projects/INDEX.md")"
+node "$GATE" --repo-root "$d" --archive 2026-02-02-plany --shipped-in v1.0.0 >/dev/null
+after_x_row="$(grep 'planx' "$d/docs/projects/INDEX.md")"
+assert_eq "$after_x_row" "$before_x_row" \
+  "archiving Y does not rewrite or flip X's row (X's row never matched Y's stem)"
+
+# --- 🟠 malformed-date-stem-misfiled ---
+
+# A stem with an out-of-range month/day (month 13, day 99) is plan_stem_malformed, blocking.
+d="$(fixture_repo_with_index malformed-month-day)"
+printf '# Plan\n' > "$d/docs/plans/2026-13-99-bogus.md"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_stem_malformed)" "1" "month 13 / day 99 is plan_stem_malformed"
+assert_eq "$(json_exit "$out")" "1" "plan_stem_malformed blocks"
+
+# An undated stem is ALSO plan_stem_malformed (same code, same refusal).
+d="$(fixture_repo_with_index undated-stem)"
+printf '# Plan\n' > "$d/docs/plans/not-a-date-slug.md"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_stem_malformed)" "1" "an undated stem is also plan_stem_malformed"
+
+# --archive on a malformed/undated stem refuses with stem_date_malformed, exit 2 — it must
+# NOT silently misfile into the legacy flat archive.
+d="$(fixture_repo_with_index archive-malformed-stem)"
+printf '# Plan\n' > "$d/docs/plans/2026-13-99-bogus.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --archive 2026-13-99-bogus --json >/tmp/archive-malformed-out.$$ 2>/dev/null
+rc=$?
+assert_eq "$rc" "2" "--archive on a malformed stem refuses (exit 2)"
+assert_contains "$(cat /tmp/archive-malformed-out.$$)" "stem_date_malformed" \
+  "the refusal names stem_date_malformed"
+rm -f "/tmp/archive-malformed-out.$$"
+assert_file_exists "$d/docs/plans/2026-13-99-bogus.md" "the malformed-stem plan was NOT moved at all"
+assert_file_absent "$d/docs/plans/_archive/2026-13-99-bogus.md" \
+  "…and specifically did NOT get misfiled into the legacy flat archive"
+
+# planFileMoveSet itself (the move-set builder --fix and --archive both share) refuses to
+# invent a legacy-flat destination for a malformed/undated stem — direct unit check.
+move_set_check="$(node -e "
+const gate = require('$GATE');
+const moves = gate.planFileMoveSet('/nonexistent', '/nonexistent/docs/plans', '/nonexistent/docs/plans/_archive', '2026-13-99-bogus');
+process.stdout.write(String(moves.length));
+")"
+assert_eq "$move_set_check" "0" "planFileMoveSet returns no moves for a malformed stem (no flat fallback)"
+
+# --- 🟡 index-rewrite-single-row: two INDEX rows link the same plan; archiving must rewrite
+#     the path in BOTH rows, flipping Version only on the active one. ---
+d="$(fixture_repo_with_index index-rewrite-single-row)"
+printf '# Plan — Two Rows\n' > "$d/docs/plans/2026-03-04-tworows.md"
+python3 - "$d/docs/projects/INDEX.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace(
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-03-04 | tworows | active | — | [plan](../plans/2026-03-04-tworows.md) |\n"
+)
+s = s.replace(
+  "## 已完成 (Completed)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 已完成 (Completed)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-03-05 | a follow-up fix that also references [plan](../plans/2026-03-04-tworows.md) | v0.0.1 | abc | [plan](../plans/2026-03-04-tworows.md) |\n"
+)
+open(p, "w").write(s)
+PY
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --archive 2026-03-04-tworows --shipped-in v2.0.0 >/dev/null
+index_after="$(cat "$d/docs/projects/INDEX.md")"
+assert_contains "$index_after" "../plans/_archive/2026/03/2026-03-04-tworows.md" \
+  "the active row's path is rewritten"
+assert_eq "$(printf '%s' "$index_after" | grep -c '\.\./plans/2026-03-04-tworows\.md')" "0" \
+  "no row still links the stale pre-archive path — both matched rows were rewritten"
+assert_contains "$index_after" "| v2.0.0 |" "the ACTIVE row's Version flips to --shipped-in"
+assert_contains "$index_after" "| v0.0.1 |" "the OTHER (already-versioned) row's Version is untouched"
 
 finalize_test

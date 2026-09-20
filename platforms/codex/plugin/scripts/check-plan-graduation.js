@@ -105,6 +105,7 @@ const BLOCKING_CODES = new Set([
   'plan_released_not_archived',
   'archive_destination_exists',
   'plan_unregistered',
+  'plan_stem_malformed',
 ]);
 const REPORT_ONLY_CODES = new Set(['plan_orphan', 'plan_active_lineage', 'plan_reference_dangling']);
 const CODES = [...BLOCKING_CODES, ...REPORT_ONLY_CODES];
@@ -223,9 +224,22 @@ function evidencePathPrefixRegExp(stem) {
 // or repos that never ran --migrate-archive-layout) — dated is preferred for NEW writes,
 // legacy is still honored for reads so existing archives are not silently orphaned.
 
+// 🟠 fix: this used to accept ANY two digits for month/day (`2026-13-99-slug` parsed as
+// year=2026 month=13 day=99), which — combined with planFileMoveSet's old archiveDir
+// fallback — silently misfiled a malformed-date stem into the LEGACY flat archive, where
+// --migrate-archive-layout's own date-prefix filter then skips it forever (it only
+// recognizes `\d{4}-\d{2}-\d{2}-` stems as migration candidates). Validate month 01-12 and
+// day 01-31 (calendar-day existence per month is NOT checked — Feb 30 still passes; that is
+// accepted imprecision, not silent misfiling). Returns null for undated OR malformed-date
+// stems alike — callers must not fall back to a flat/legacy destination for either case
+// (see plan_stem_malformed below and planFileMoveSet's removed fallback).
 function stemDateParts(stem) {
-  const m = stem.match(/^(\d{4})-(\d{2})-\d{2}-/);
-  return m ? { year: m[1], month: m[2] } : null;
+  const m = stem.match(/^(\d{4})-(\d{2})-(\d{2})-/);
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year: m[1], month: m[2], day: m[3] };
 }
 
 function datedArchiveBase(archiveDir, stem) {
@@ -299,10 +313,17 @@ function planIndexRegistration(repoRoot, stem) {
       continue;
     }
     const versionCol = headerCells.findIndex((c) => /version/i.test(c));
+    // 🟠 fix: match the stem against the Plan-column cell ONLY when that column exists —
+    // matching the whole raw row let another row's PROSE mentioning "../plans/<stem>.md"
+    // (e.g. one project's Project-cell narrative referencing a different plan) register
+    // that stem too, and archiveIndexRow would then rewrite/flip the WRONG row. Fall back
+    // to the whole-row text only when no header cell names a Plan column at all.
+    const planCol = headerCells.findIndex((c) => /plan/i.test(c));
     let j = i + 2;
     while (j < lines.length && lines[j].trim().startsWith('|')) {
-      if (stemRe.test(lines[j])) {
-        const rowCells = splitTableRow(lines[j]);
+      const rowCells = splitTableRow(lines[j]);
+      const matchTarget = planCol >= 0 && planCol < rowCells.length ? rowCells[planCol] : lines[j];
+      if (stemRe.test(matchTarget)) {
         const versionCell = versionCol >= 0 && versionCol < rowCells.length
           ? normalizeIndexCell(rowCells[versionCol]) : null;
         const row = { lineIndex: j, text: lines[j], versionCell, versionCol };
@@ -659,43 +680,50 @@ function findReleasedVersionForStem(changelogPath, stem, slug) {
   return found;
 }
 
-// Rewrites the ONE matched INDEX.md row for `stem` (preferring its `active` row, else the
-// last row that references it) in place: rewrites `plans/<stem>` / `plans/evidence/<stem>`
-// occurrences in that row to the dated archive path, and — when `newVersion` is given and
-// the row's Version column is currently `active` — flips it to `newVersion`. Never invents
-// a row (design); returns `{changed:false}` when there is nothing to rewrite.
+// Rewrites EVERY matched INDEX.md row for `stem` in place — 🟡 fix: rewriting only the
+// (single) "target" row left a SECOND row that also links the same plan pointing at the
+// stale pre-archive path; a plan can legitimately have more than one row referencing it
+// (e.g. a Fix-size follow-up row alongside the plan's own registry row). Every matched
+// row's `plans/<stem>` / `plans/evidence/<stem>` occurrences are rewritten to the dated
+// archive path; Version is flipped to `newVersion` on the ACTIVE row only (never invents a
+// row — design). Returns `{changed:false}` when there is nothing to rewrite.
 function archiveIndexRow(repoRoot, stem, { newVersion } = {}) {
   const registration = planIndexRegistration(repoRoot, stem);
-  if (!registration.indexExists) return { changed: false };
-  const target = registration.activeRow
-    || registration.matchedRows[registration.matchedRows.length - 1] || null;
-  if (!target) return { changed: false };
+  if (!registration.indexExists || !registration.matchedRows.length) return { changed: false };
   const text = fs.readFileSync(registration.indexPath, 'utf8');
   const lines = text.split(/\r?\n/);
   const parts = stemDateParts(stem);
   const datedSeg = parts ? `${parts.year}/${parts.month}/` : '';
-  let line = lines[target.lineIndex];
-  // Matches BOTH transitions: active `plans/<stem>` -> dated archive (archiveStem's own
-  // move), and legacy-flat `plans/_archive/<stem>` -> dated archive (migrateArchiveLayout,
-  // which never had an active-form link to begin with) — the optional `_archive/` makes
-  // this one regex serve both call sites.
-  line = line.replace(
-    new RegExp(`plans/(?:_archive/)?evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
-    `plans/_archive/${datedSeg}evidence/${stem}`
-  );
-  line = line.replace(
-    new RegExp(`plans/(?:_archive/)?${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
-    `plans/_archive/${datedSeg}${stem}`
-  );
-  if (newVersion && target.versionCell === 'active' && target.versionCol >= 0) {
-    const cells = splitTableRow(line);
-    cells[target.versionCol] = newVersion;
-    line = `| ${cells.join(' | ')} |`;
+  let changed = false;
+  const rewrittenRows = [];
+  for (const row of registration.matchedRows) {
+    let line = lines[row.lineIndex];
+    // Matches BOTH transitions: active `plans/<stem>` -> dated archive (archiveStem's own
+    // move), and legacy-flat `plans/_archive/<stem>` -> dated archive (migrateArchiveLayout,
+    // which never had an active-form link to begin with) — the optional `_archive/` makes
+    // this one regex serve both call sites.
+    line = line.replace(
+      new RegExp(`plans/(?:_archive/)?evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+      `plans/_archive/${datedSeg}evidence/${stem}`
+    );
+    line = line.replace(
+      new RegExp(`plans/(?:_archive/)?${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+      `plans/_archive/${datedSeg}${stem}`
+    );
+    if (newVersion && row === registration.activeRow && row.versionCell === 'active' && row.versionCol >= 0) {
+      const cells = splitTableRow(line);
+      cells[row.versionCol] = newVersion;
+      line = `| ${cells.join(' | ')} |`;
+    }
+    if (line !== lines[row.lineIndex]) {
+      lines[row.lineIndex] = line;
+      changed = true;
+      rewrittenRows.push(line);
+    }
   }
-  if (line === lines[target.lineIndex]) return { changed: false };
-  lines[target.lineIndex] = line;
+  if (!changed) return { changed: false };
   fs.writeFileSync(registration.indexPath, lines.join('\n'));
-  return { changed: true, row: line };
+  return { changed: true, rows: rewrittenRows };
 }
 
 // --- orphan reference scan ---
@@ -786,6 +814,21 @@ function run(opts) {
     const stem = planStem(basename);
     const slug = planSlug(stem);
     if (allowlist.has(stem)) continue;
+    // plan_stem_malformed runs first and `continue`s — an undated or invalid-date stem
+    // (month outside 01-12 / day outside 01-31) has no dated archive destination, so every
+    // downstream check that assumes one (registration linking, archiving, the
+    // released/lineage checks) is undefined for it. The fix is renaming the file.
+    if (!stemDateParts(stem)) {
+      violations.push({
+        code: 'plan_stem_malformed',
+        kind: 'plan',
+        stem,
+        path: path.join('docs', 'plans', basename),
+        detail: 'stem is not a valid <YYYY-MM-DD>-<slug> (month must be 01-12, day 01-31) — '
+          + 'rename the file before it can be registered or archived',
+      });
+      continue;
+    }
     // plan_unregistered runs BEFORE the active-lineage/released `continue`s below — a live
     // campaign lineage plan is the design's most-active case and still needs a registry
     // row, and a released-but-not-yet-archived plan is still physically under docs/plans/.
@@ -911,10 +954,15 @@ function gitMv(repoRoot, from, to) {
 // anything (all-or-nothing: 🟠 fix, a partial move used to leave the stem half-archived
 // when a later file in the set clashed).
 function planFileMoveSet(repoRoot, plansDir, archiveDir, stem) {
+  const destDir = datedArchiveBase(archiveDir, stem);
+  // 🟠 fix: no flat-archiveDir fallback for an undated/malformed stem — that used to
+  // misfile it into the legacy archive where --migrate-archive-layout can never find it
+  // again (its date-prefix filter never matches such a stem). Callers must reject a
+  // malformed stem BEFORE calling this (run()'s plan_stem_malformed / archiveStems'
+  // stem_date_malformed refusal) — this is the last line of defense: no destination, no
+  // moves, nothing to do.
+  if (!destDir) return [];
   const moves = [];
-  const destDir = datedArchiveBase(archiveDir, stem) || archiveDir; // dated when the stem
-  // carries a date prefix (always true for a real docs/plans/<date>-<slug>.md); falls
-  // back to the legacy flat archiveDir only for a stem the date regex can't parse.
   const basename = `${stem}.md`;
   const srcRel = path.relative(repoRoot, path.join(plansDir, basename));
   const dstRel = path.relative(repoRoot, path.join(destDir, basename));
@@ -1098,6 +1146,10 @@ function archiveStems(repoRoot, plansDir, archiveDir, stems, shippedIn, activeLi
     const planPath = path.join(plansDir, `${stem}.md`);
     if (!fs.existsSync(planPath)) {
       results.push({ stem, ok: false, reason: `not a live plan: docs/plans/${stem}.md does not exist` });
+      continue;
+    }
+    if (!stemDateParts(stem)) {
+      results.push({ stem, ok: false, reason: 'stem_date_malformed' });
       continue;
     }
     if (activeLineageStems && activeLineageStems.has(stem)) {

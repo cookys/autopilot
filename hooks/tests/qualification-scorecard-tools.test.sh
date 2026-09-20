@@ -98,4 +98,65 @@ fs.writeFileSync(process.argv[1], JSON.stringify(doc) + "\n");
 
 assert_r51_adopt_qualification
 
+assert_r52_feed_listing_prints() {
+  # Three pre-effort (three-key) seat_hash rows: the list loop used to print a
+  # ⚠ block once per row. After the change, one consolidated summary after the loop.
+  local cache fixture list_out advert_n summary_n
+  cache="$TEST_TMP/r52-feed-cache"
+  mkdir -p "$cache"
+  fixture="$TEST_TMP/r52-preeffort-feed.json"
+  node -e '
+const fs = require("fs");
+const crypto = require("crypto");
+function threeFieldHash(engine, runner, role) {
+  const obj = { engine: String(engine), runner: String(runner), role: String(role) };
+  return crypto.createHash("sha256").update(JSON.stringify(obj, Object.keys(obj).sort()), "utf8").digest("hex");
+}
+function row(engine, runner, role) {
+  return {
+    default_id: "feed:r52:" + engine + ":" + runner + ":" + role,
+    role,
+    status: "qualified",
+    capability_score: 1,
+    seat: { engine, runner, role, effort: "high" },
+    seat_hash: threeFieldHash(engine, runner, role),
+    administration: {
+      engine, runner, family: "zhipu", date: "2026-08-21", effort: "high",
+      version_source: "operator-asserted",
+      runner_version: "2.1.239-Claude-Code",
+      harness_version: "dispatch-hetero:003d7975",
+      corpus_version: "impl-live-rail-v1",
+      prompt_config_hash: "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+      model_version: engine,
+      expires: "2026-11-19",
+    },
+  };
+}
+const doc = {
+  schema: "model-dyno.qualification-feed.v1",
+  artifact_type: "official-qualification-defaults",
+  digest: "deadbeef",
+  defaults: [
+    row("GLM-5.3", "cc-shim", "implementer"),
+    row("GLM-5.3", "cc-shim", "reviewer"),
+    row("GLM-5.3", "cc-shim", "consult"),
+  ],
+  strikes: [],
+  priors: [],
+};
+fs.writeFileSync(process.argv[1], JSON.stringify(doc) + "\n");
+' "$fixture" || fail "r52: fixture write failed"
+
+  list_out="$(node "$REPO_ROOT/scripts/adopt-qualification-defaults.js" list --from "$fixture" --feed-cache-dir "$cache" 2>&1)" \
+    || fail "r52: list --from failed"
+
+  advert_n="$(printf '%s\n' "$list_out" | grep -c '⚠ feed advertises' || true)"
+  summary_n="$(printf '%s\n' "$list_out" | grep -c 'of 3 rows advertise a pre-effort seat_hash; all re-derived locally' || true)"
+  # RED at c0ff15d7e485106b55a3de6f068a63f953d69da8: ⚠ feed advertises appears 3 times (once per row); consolidated summary absent
+  assert_eq "$advert_n" "0" "r52: per-row ⚠ feed advertises must not print once per row"
+  assert_eq "$summary_n" "1" "r52: list prints exactly one consolidated pre-effort seat_hash summary"
+}
+
+assert_r52_feed_listing_prints
+
 finalize_test

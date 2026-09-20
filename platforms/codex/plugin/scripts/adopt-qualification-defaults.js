@@ -449,18 +449,13 @@ async function cmdListFeed(opts) {
   if (rows.length === 0) {
     process.stdout.write('No feed defaults match that filter.\n');
   }
+  let preEffortSeatHashRows = 0;
   for (const { entry, applicability } of rows) {
     process.stdout.write(`${formatDisclosure(entry)}\n`);
     const ap = applicability;
     process.stdout.write(`  effort          ${ap.effort === null ? '(legacy partition — no effort recorded)' : ap.effort}\n`);
     process.stdout.write(`  seat_hash       ${ap.seat_hash_derived}  (RE-DERIVED here)\n`);
-    if (ap.seat_hash_matches === false) {
-      const why = ap.seat_hash_basis === 'legacy_three_field'
-        ? 'that is the pre-effort THREE-FIELD hash — this feed predates effort partitioning, so regenerate it'
-        : 'basis unknown — the producer computed it from something we cannot reproduce';
-      process.stdout.write(`                  ⚠ feed advertises ${ap.seat_hash_advertised}\n`);
-      process.stdout.write(`                    ${why}. Adoption uses OUR derivation either way.\n`);
-    }
+    if (ap.seat_hash_matches === false) preEffortSeatHashRows += 1;
     const env = ap.environment;
     const localRv = env.local_runner_version === null
       ? `(${env.local_runner_version_source})`
@@ -474,6 +469,11 @@ async function cmdListFeed(opts) {
       process.stdout.write(`  evidence url    ${safeLine(entry.feed.evidence_url, 512)}\n`);
     }
     process.stdout.write('\n');
+  }
+  if (preEffortSeatHashRows > 0) {
+    process.stdout.write(
+      `⚠ ${preEffortSeatHashRows} of ${rows.length} rows advertise a pre-effort seat_hash; all re-derived locally.\n`,
+    );
   }
 
   process.stdout.write(`${rows.length} default(s), ${feed.strikes.length} strike(s), ${feed.priors.length} prior(s).\n`);

@@ -172,7 +172,11 @@ function parseBacklog(opts) {
       source: sourceMatch ? sourceMatch[1].trim() : '',
     });
   }
-  process.stdout.write(`${JSON.stringify(rows, null, 1)}\n`);
+  process.stdout.write(`${JSON.stringify({
+    schema_version: 1,
+    artifact_type: 'next_pick_parse_result',
+    rows,
+  }, null, 1)}\n`);
 }
 
 function askFirstReason(row) {

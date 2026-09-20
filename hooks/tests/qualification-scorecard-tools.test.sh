@@ -304,4 +304,34 @@ assert_r75_vacuous_red_case_in() {
 
 assert_r75_vacuous_red_case_in
 
+assert_r82_governance_cli_ux_po() {
+  local backlog parse_out schema_version artifact_type rows_ok err
+  backlog="$TEST_TMP/r82-backlog.md"
+  cat > "$backlog" <<'EOF'
+## Active entries
+
+### Small cleanup thing
+- **Trigger**: whenever.
+- **Context**: c.
+- **Effort**: S.
+- **Source**: here.
+EOF
+  parse_out="$(node "$REPO_ROOT/scripts/next-pick.js" parse --backlog "$backlog")"
+  schema_version="$(printf '%s' "$parse_out" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(String(j.schema_version))})')"
+  artifact_type="$(printf '%s' "$parse_out" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(String(j.artifact_type))})')"
+  rows_ok="$(printf '%s' "$parse_out" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(Array.isArray(j.rows)?"yes":"no")})')"
+  # RED at 323e09d89af7949f5b5239eb52d64c85c2c54669: parse stdout is a bare array; schema_version=undefined artifact_type=undefined rows=undefined
+  assert_eq "1" "$schema_version" "r82: parse envelope schema_version is 1"
+  assert_eq "next_pick_parse_result" "$artifact_type" "r82: parse artifact_type is next_pick_parse_result"
+  assert_eq "yes" "$rows_ok" "r82: parse envelope rows is an array"
+
+  err="$(node "$REPO_ROOT/scripts/decision-ledger.js" veto --ledger "$TEST_TMP/r82-empty.jsonl" --id nonexistent-id 2>&1 >/dev/null || true)"
+  # RED at 323e09d89af7949f5b5239eb52d64c85c2c54669: stderr has only the one line (decision-ledger: no decision 'nonexistent-id' in the ledger — nothing to veto)
+  assert_contains "$err" "no decision 'nonexistent-id' in the ledger" "r82: veto still names the missing id"
+  assert_contains "$err" "query --ledger" "r82: veto rejection names query as the list surface"
+  assert_contains "$err" "report --ledger" "r82: veto rejection names report as the list surface"
+}
+
+assert_r82_governance_cli_ux_po
+
 finalize_test

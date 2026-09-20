@@ -174,6 +174,7 @@ function veto(opts) {
   const target = rows.find((r) => r && r.decision_id === opts.id && r.kind !== 'veto');
   if (!target) {
     process.stderr.write(`decision-ledger: no decision '${opts.id}' in the ledger — nothing to veto\n`);
+    process.stderr.write('decision-ledger: list vetoable ids with query --ledger <ledger> [--kind decision|dispatch|refreeze] [--json] or report --ledger <ledger>\n');
     process.exit(1);
   }
   const full = {

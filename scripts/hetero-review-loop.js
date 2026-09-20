@@ -376,9 +376,13 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
       args.push('--spec-file', specFile);
     }
 
+    const childEnv = { ...process.env };
+    if (process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT) {
+      childEnv.STUB_SEAT_ID = seat.id;
+    }
     const child = spawn(dispatchScript, args, {
       cwd: repoRoot || process.cwd(),
-      env: { ...process.env, STUB_SEAT_ID: seat.id },
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

@@ -431,4 +431,67 @@ assert_r46_hetero_review_loop_j() {
 
 assert_r46_hetero_review_loop_j
 
+# RED at base: runSeatDispatch always injects STUB_SEAT_ID into the child env,
+# including when AUTOPILOT_DISPATCH_REVIEW_SCRIPT is unset and the real
+# path.join(__dirname, 'dispatch-review.sh') is spawned.
+assert_r47_hetero_review_loop_j() {
+  local SRC="$REPO_ROOT/scripts/hetero-review-loop.js"
+  local DRIVER_DIR="$TEST_TMP/r47-driver"
+  local SCRATCH_REPO="$TEST_TMP/r47-repo"
+  local LEDGER="$TEST_TMP/r47-ledger"
+  local ENV_CAPTURE="$TEST_TMP/r47-dispatch.env"
+  mkdir -p "$DRIVER_DIR/lib" "$SCRATCH_REPO" "$LEDGER"
+
+  cp "$SRC" "$DRIVER_DIR/hetero-review-loop.js"
+  cp "$REPO_ROOT/scripts/lib/review-chain-derive.js" "$DRIVER_DIR/lib/"
+  cp "$REPO_ROOT/scripts/lib/seat-id-guard.js" "$DRIVER_DIR/lib/"
+  cp "$REPO_ROOT/scripts/lib/exclude-allowlist.js" "$DRIVER_DIR/lib/"
+  cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$DRIVER_DIR/check-redispatch-prompt.sh"
+  chmod +x "$DRIVER_DIR/check-redispatch-prompt.sh"
+
+  cat << STUB_EOF > "$DRIVER_DIR/dispatch-review.sh"
+#!/usr/bin/env bash
+env > "$ENV_CAPTURE"
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+STUB_EOF
+  chmod +x "$DRIVER_DIR/dispatch-review.sh"
+
+  (
+    cd "$SCRATCH_REPO"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    echo "initial" > file.txt
+    git add file.txt
+    git commit -q -m "c1"
+    echo "second" > file.txt
+    git add file.txt
+    git commit -q -m "c2"
+  )
+  local PHASE_BASE
+  PHASE_BASE=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
+  (
+    cd "$SCRATCH_REPO"
+    git checkout -q -b work
+    echo "work changes" >> file.txt
+    git add file.txt
+    git commit -q -m "c3"
+  )
+
+  unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT STUB_SEAT_ID || true
+
+  local COLLECT_OUT COLLECT_RC
+  COLLECT_OUT=$(node "$DRIVER_DIR/hetero-review-loop.js" collect \
+    --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r47 --generation 1 \
+    --branch work --phase-base "$PHASE_BASE" \
+    --seats "m1/low@codex" \
+    --min-reviewed-seats 1 2>&1); COLLECT_RC=$?
+  assert_exit_code "$COLLECT_RC" "0" "r47: collect via default __dirname dispatcher exits 0"
+  assert_file_exists "$ENV_CAPTURE" "r47: stub captured child env"
+  assert_not_contains "$(cat "$ENV_CAPTURE")" "STUB_SEAT_ID" \
+    "r47: default dispatch-review.sh child env does not contain STUB_SEAT_ID"
+}
+
+assert_r47_hetero_review_loop_j
+
 finalize_test

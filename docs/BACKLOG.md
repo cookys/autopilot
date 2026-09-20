@@ -314,14 +314,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: unknown
 - **Pointer**: docs/backlog/suite-oracle-lock-a-killed-full-suite-run-leaves-the-next-one-refused-observed-2.md
 
-### <Topic title>
-- **Status**: open
-- **Trigger**: <external or evidence condition; e.g. "after sample N of behavior Y" / "performance degrades below threshold Z">
-- **Effort**: S
-- **Source**: <commit SHA / review-round / retro / plan ref>
-- **Pointer**: docs/backlog/topic-title.md
-- **Context**: <one-line problem>
-
 ### Promote the depth-0 hetero-run watcher to a shipped dispatch-watch script
 - **Status**: open
 - **Trigger**: the next `/l4`–`/l6` session that has to wake parked foremen — depth-0 re-armed a scratch script ~40 times in v2.36.0 (report the first run whose `dispatch-status.js` phase flips from running to terminal)

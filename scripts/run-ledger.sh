@@ -2117,13 +2117,13 @@ command_lease_gc() {
   done
 
   [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
-  local scanned=0 dead=0 appended=0
+  local scanned=0 dead=0 appended=0 failed=0
   local skipped_json="[]"
 
   if [ ! -f "$ledger" ]; then
     if [ "$json_out" -eq 1 ]; then
-      jq -nc --argjson scanned 0 --argjson dead 0 --argjson appended 0 --argjson skipped '[]' \
-        '{scanned:$scanned,dead:$dead,skipped:$skipped,appended:$appended}'
+      jq -nc --argjson scanned 0 --argjson dead 0 --argjson appended 0 --argjson failed 0 --argjson skipped '[]' \
+        '{scanned:$scanned,dead:$dead,skipped:$skipped,appended:$appended,failed:$failed}'
     fi
     return 0
   fi
@@ -2210,21 +2210,25 @@ command_lease_gc() {
       [ "$json_out" -eq 1 ] || printf 'dead %s %s %s\n' "$run_id" "$stage" "$gc_reason"
       continue
     fi
-    command_stage_transition \
+    if ( command_stage_transition \
       --ledger "$ledger" \
       --run-id "$run_id" \
       --stage "$stage" \
       --generation "$generation" \
       --nonce "$nonce" \
       --to-state dead \
-      --reason "$gc_reason" >/dev/null
-    appended=$((appended + 1))
-    [ "$json_out" -eq 1 ] || printf 'appended %s %s %s\n' "$run_id" "$stage" "$gc_reason"
+      --reason "$gc_reason" >/dev/null ); then
+      appended=$((appended + 1))
+      [ "$json_out" -eq 1 ] || printf 'appended %s %s %s\n' "$run_id" "$stage" "$gc_reason"
+    else
+      failed=$((failed + 1))
+      [ "$json_out" -eq 1 ] || printf 'failed %s %s %s\n' "$run_id" "$stage" "$gc_reason"
+    fi
   done <<<"$leases"
 
   if [ "$json_out" -eq 1 ]; then
-    jq -nc --argjson scanned "$scanned" --argjson dead "$dead" --argjson appended "$appended" --argjson skipped "$skipped_json" \
-      '{scanned:$scanned,dead:$dead,skipped:$skipped,appended:$appended}'
+    jq -nc --argjson scanned "$scanned" --argjson dead "$dead" --argjson appended "$appended" --argjson failed "$failed" --argjson skipped "$skipped_json" \
+      '{scanned:$scanned,dead:$dead,skipped:$skipped,appended:$appended,failed:$failed}'
   fi
 }
 

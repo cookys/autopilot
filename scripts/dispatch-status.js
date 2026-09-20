@@ -33,7 +33,7 @@
 //   --days (default 7) and, ONLY on a definitive dead lock verdict + .autopilot-worktree
 //   marker + free worktree lock, the failure-kept worktree (then `git worktree prune`s
 //   the owner repo). A live run is never touched. See the reapRuns() header for policy.
-//   --format codex-chrome|jsonl|pi-rpc|agy-json|plain|auto — the DISPATCHER-declared stream format
+//   --format codex-chrome|jsonl|jsonl-opencode|pi-rpc|agy-json|plain|auto — the DISPATCHER-declared stream format
 //   (manifest `log_format` when reading via --run). Telemetry parsing trusts the
 //   declaration, never content sniffing: a worker's own output can contain JSON
 //   lines, and sniffing would promote that self-report into telemetry. 'auto'
@@ -204,6 +204,63 @@ function parseJsonl(text) {
   }
   const hasTokens = Object.values(tokens).some((v) => v !== null);
   return { events: events || null, tool_calls: toolCalls || (events ? 0 : null), last_action: lastAction, tokens: hasTokens ? tokens : null, usage_source: hasTokens ? 'jsonl' : 'none' };
+}
+
+function parseJsonlOpencode(text) {
+  // OpenCode `--format json` event stream: per-step usage lives on
+  // {"type":"step_finish","part":{"tokens":{total,input,output,reasoning,cache:{read,write}}}}.
+  // Sum across every step_finish; other event types are ignored for tokens.
+  const lines = text.split(/\r?\n/);
+  let events = 0;
+  let toolCalls = 0;
+  let lastAction = null;
+  let total = 0;
+  let input = 0;
+  let output = 0;
+  let reasoning = 0;
+  let cacheRead = 0;
+  let cacheWrite = 0;
+  let hadTokens = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t.startsWith('{') || !t.endsWith('}')) continue;
+    let obj;
+    try { obj = JSON.parse(t); } catch (_e) { continue; }
+    if (!obj || typeof obj !== 'object') continue;
+    events += 1;
+    const type = typeof obj.type === 'string' ? obj.type : (typeof obj.event === 'string' ? obj.event : null);
+    if (type) lastAction = type;
+    if ((type && /tool/i.test(type)) || obj.tool_name || obj.toolName) toolCalls += 1;
+    if (type !== 'step_finish') continue;
+    const part = obj.part && typeof obj.part === 'object' ? obj.part : null;
+    const tok = part && part.tokens && typeof part.tokens === 'object' ? part.tokens : null;
+    if (!tok) continue;
+    const cache = tok.cache && typeof tok.cache === 'object' ? tok.cache : {};
+    const add = (v) => (Number.isFinite(v) && v >= 0 ? v : 0);
+    total += add(tok.total);
+    input += add(tok.input);
+    output += add(tok.output);
+    reasoning += add(tok.reasoning);
+    cacheRead += add(cache.read);
+    cacheWrite += add(cache.write);
+    hadTokens = true;
+  }
+  const tokens = emptyTokens();
+  if (hadTokens) {
+    tokens.total_tokens = total;
+    tokens.input_tokens = input;
+    tokens.output_tokens = output;
+    tokens.cache_read_tokens = cacheRead;
+    tokens.reasoning_tokens = reasoning;
+    tokens.cache_write_tokens = cacheWrite;
+  }
+  return {
+    events: events || null,
+    tool_calls: toolCalls || (events ? 0 : null),
+    last_action: lastAction,
+    tokens: hadTokens ? tokens : null,
+    usage_source: hadTokens ? 'jsonl-opencode' : 'none',
+  };
 }
 
 function parsePiRpc(text) {
@@ -413,6 +470,7 @@ function parseLog(logPath, declaredFormat) {
   base.format = format;
   if (format === 'codex-chrome') return { ...base, ...parseCodexChrome(text) };
   if (format === 'jsonl') return { ...base, ...parseJsonl(text) };
+  if (format === 'jsonl-opencode') return { ...base, ...parseJsonlOpencode(text) };
   if (format === 'pi-rpc') return { ...base, ...parsePiRpc(text) };
   if (format === 'agy-json') {
     const derived = parseAgyEnvelopeText(text);
@@ -718,10 +776,10 @@ function main(argv) {
     process.stderr.write('--stall-secs must be a positive number\n');
     return 2;
   }
-  if (args.format && !['codex-chrome', 'jsonl', 'pi-rpc', 'agy-json', 'plain', 'auto'].includes(args.format)) {
+  if (args.format && !['codex-chrome', 'jsonl', 'jsonl-opencode', 'pi-rpc', 'agy-json', 'plain', 'auto'].includes(args.format)) {
     // usage-only must still honor its never-fail discipline
     if (args.usageOnly) { process.stdout.write('null\n'); return 0; }
-    process.stderr.write('--format must be codex-chrome|jsonl|pi-rpc|agy-json|plain|auto\n');
+    process.stderr.write('--format must be codex-chrome|jsonl|jsonl-opencode|pi-rpc|agy-json|plain|auto\n');
     return 2;
   }
 

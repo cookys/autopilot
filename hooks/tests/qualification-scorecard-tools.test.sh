@@ -159,4 +159,30 @@ fs.writeFileSync(process.argv[1], JSON.stringify(doc) + "\n");
 
 assert_r52_feed_listing_prints
 
+assert_r53_runner_opencode_usag() {
+  # OpenCode --format json event stream: sum step_finish.part.tokens fields.
+  local fixture out
+  fixture="$TEST_TMP/r53-opencode.jsonl"
+  printf '%s\n' \
+    '{"type":"step_start","timestamp":1}' \
+    '{"type":"step_finish","part":{"reason":"stop","tokens":{"total":100,"input":50,"output":20,"reasoning":10,"cache":{"write":0,"read":20}}}}' \
+    '{"type":"text","part":{"text":"ignore me"}}' \
+    '{"type":"step_finish","part":{"reason":"stop","tokens":{"total":80,"input":40,"output":30,"reasoning":5,"cache":{"write":2,"read":10}}}}' \
+    '{"type":"step_finish","part":{"reason":"stop","tokens":{"total":20,"input":10,"output":5,"reasoning":1,"cache":{"write":1,"read":4}}}}' \
+    > "$fixture"
+
+  out="$(node "$REPO_ROOT/scripts/dispatch-status.js" --log "$fixture" --format jsonl-opencode --usage-only)"
+
+  # RED at a82805d3df8e28daebc91015643198d54fb19502: --format jsonl-opencode is unrecognized; --usage-only prints null (never-fail) / --summary exits 2 with "--format must be codex-chrome|jsonl|pi-rpc|agy-json|plain|auto"
+  assert_contains "$out" '"total_tokens":200' "r53: summed step_finish tokens.total"
+  assert_contains "$out" '"input_tokens":100' "r53: summed step_finish tokens.input"
+  assert_contains "$out" '"output_tokens":55' "r53: summed step_finish tokens.output"
+  assert_contains "$out" '"reasoning_tokens":16' "r53: summed step_finish tokens.reasoning"
+  assert_contains "$out" '"cache_read_tokens":34' "r53: summed step_finish tokens.cache.read"
+  assert_contains "$out" '"cache_write_tokens":3' "r53: summed step_finish tokens.cache.write"
+  assert_contains "$out" '"source":"jsonl-opencode"' "r53: usage source labeled jsonl-opencode"
+}
+
+assert_r53_runner_opencode_usag
+
 finalize_test

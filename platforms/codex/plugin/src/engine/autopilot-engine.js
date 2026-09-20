@@ -801,9 +801,10 @@ function appendDispatchIdentity(args, identity) {
   );
 }
 
-// Same floor managed review `--timeout` uses (buildReviewArgs / remaining >= 1).
-// Remaining wall below this refuses implement dispatch and terminalizes instead
-// of handing the rail a 0s/sub-floor timeout. Null remaining is unbounded, not expired.
+// Nonadaptive seal: callers provide positive integer seconds and the managed rail renders
+// them as `--timeout <N>s`, so 1 is the lowest representable usable timeout. This is a
+// validity boundary, not an observed dispatch-latency estimate. Remaining wall below it
+// refuses implement dispatch before spend; null remaining is unbounded, not expired.
 const MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS = 1;
 
 function buildReviewArgs({

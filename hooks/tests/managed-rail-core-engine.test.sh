@@ -1074,4 +1074,64 @@ NODE
 }
 
 assert_r125_campaign_bridge_reso
+
+# R2: the managed implementation timeout floor is a static CLI validity seal. A
+# one-second boundary and an ordinary 100-second Mission reservation are both valid;
+# zero is refused before dispatch argv can be constructed. This catches the rejected
+# 270-second latency-derived floor without weakening the named-constant callsites.
+assert_r2_managed_implementation_timeout_floor() {
+  local R2_OUT
+  R2_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const [root] = process.argv.slice(2);
+const enginePath = path.join(root, 'src', 'engine', 'autopilot-engine.js');
+const source = fs.readFileSync(enginePath, 'utf8');
+const { buildImplementationArgs } = require(enginePath);
+const roster = {
+  implementer_runner: 'fixture',
+  implementer_engine: 'fixture-implementer',
+  implementer_effort: 'high',
+};
+const common = {
+  roster,
+  promptFile: 'prompt.txt',
+  branch: 'impl/r2-timeout',
+  base: 'a'.repeat(40),
+  cwd: root,
+};
+const timeoutArg = (seconds) => {
+  const args = buildImplementationArgs({ ...common, timeoutSeconds: seconds });
+  const index = args.indexOf('--timeout');
+  assert.notStrictEqual(index, -1, JSON.stringify(args));
+  return args[index + 1];
+};
+
+assert.throws(
+  () => buildImplementationArgs({ ...common, timeoutSeconds: 0 }),
+  /positive safe integer/,
+);
+assert.strictEqual(timeoutArg(1), '1s');
+assert.strictEqual(timeoutArg(100), '100s');
+assert.match(source, /const MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS = 1;/);
+assert.match(source, /timeoutSeconds < MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS/);
+assert.match(source, /remain\.seconds < MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS/);
+assert.match(source.replace(/\n\/\/\s*/g, ' '), /validity boundary, not an observed dispatch-latency estimate/);
+console.log('r2_zero_refused=true');
+console.log('r2_boundary_timeout=1');
+console.log('r2_ordinary_timeout=100');
+NODE
+)"
+  assert_exit_code "$?" "0" "r2 timeout floor contract: $R2_OUT"
+  assert_contains "$R2_OUT" "r2_zero_refused=true" \
+    "sub-floor timeout is refused before dispatch"
+  assert_contains "$R2_OUT" "r2_boundary_timeout=1" \
+    "one-second CLI validity boundary remains accepted"
+  assert_contains "$R2_OUT" "r2_ordinary_timeout=100" \
+    "ordinary 100-second Mission reservation remains accepted"
+}
+
+assert_r2_managed_implementation_timeout_floor
 finalize_test

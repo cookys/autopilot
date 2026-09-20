@@ -12,10 +12,12 @@
 //     fall back to a longest-prefix match against /proc/mounts; if neither settles it the
 //     candidate is rejected. findmnt is given 2000 ms (`timeout: 2000`) — a hung probe must not
 //     hold a PreToolUse hook; on timeout the candidate is rejected like any other failure and only
-//     ENOENT (findmnt not on PATH) opens the /proc/mounts fallback. A rejected override is skipped, not fatal — later candidates are
-//     still tried. If every candidate is rejected, the base is ~/.autopilot (SSD) and exactly one
-//     warning line is printed. resolveLiveDir() returns a BASE only — every consumer appends its
-//     own purpose segment (`context/`, `context-budget/`, …).
+//     ENOENT (findmnt not on PATH) opens the /proc/mounts fallback. A ram-backed candidate is
+//     created with mkdirSync(dir, {mode:0o700}) when absent; a pre-existing candidate is rejected
+//     (fall through) if lstat shows a symlink, foreign uid, or mode & 0o077. A rejected override
+//     is skipped, not fatal — later candidates are still tried. If every candidate is rejected, the
+//     base is ~/.autopilot (SSD) and exactly one warning line is printed. resolveLiveDir() returns
+//     a BASE only — every consumer appends its own purpose segment (`context/`, `context-budget/`, …).
 //   - sanitizeSessionId(s): replace every Unicode scalar not in [A-Za-z0-9_-] with one `_` (per
 //     scalar — a multi-byte character yields exactly one `_`), keep the first 64 scalars, empty
 //     input ⇒ 'unknown'. This is the writer/reader contract for the live-file name.
@@ -112,6 +114,49 @@ function isRamBacked(dir, ctx) {
   return !!fstype && RAM_FSTYPES.has(fstype);
 }
 
+// Reader-side ownership/mode check: a hostile local user can pre-create the
+// world-writable tmpfs candidate. Reject rather than consume it.
+function isOwnedMode700Dir(dir) {
+  let st;
+  try {
+    st = fs.lstatSync(dir);
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') return false;
+    try {
+      fs.mkdirSync(dir, { mode: 0o700 });
+    } catch (mkdirErr) {
+      if (!mkdirErr || mkdirErr.code !== 'EEXIST') return false;
+    }
+    try {
+      st = fs.lstatSync(dir);
+    } catch {
+      return false;
+    }
+  }
+  if (st.isSymbolicLink() || !st.isDirectory()) return false;
+  try {
+    if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return false;
+  } catch { /* platform without getuid */ }
+  // World-writable (mode & 0o002): reject — a pre-created 0o777 plant.
+  // Group/other r-x or group-write from umask 0002 (typical mkdir -p 0775):
+  // tighten to 0700 when we own it, then re-check. Do not chmod 0777.
+  if ((st.mode & 0o002) !== 0) return false;
+  if ((st.mode & 0o077) !== 0) {
+    try {
+      fs.chmodSync(dir, 0o700);
+      st = fs.lstatSync(dir);
+    } catch {
+      return false;
+    }
+    if (st.isSymbolicLink() || !st.isDirectory()) return false;
+    try {
+      if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return false;
+    } catch { /* platform without getuid */ }
+    if ((st.mode & 0o077) !== 0) return false;
+  }
+  return true;
+}
+
 /**
  * Resolve the live-state base directory. Returns {base, source} where source is one of
  * 'override' | 'xdg' | 'shm' | 'tmp' | 'ssd-fallback'.
@@ -140,7 +185,9 @@ function resolveLiveDir(opts = {}) {
   candidates.push({ dir: `/tmp/autopilot-${uid()}`, source: 'tmp' });
 
   for (const c of candidates) {
-    if (isRamBacked(c.dir, ctx)) return { base: c.dir, source: c.source };
+    if (isRamBacked(c.dir, ctx) && isOwnedMode700Dir(c.dir)) {
+      return { base: c.dir, source: c.source };
+    }
   }
 
   // Every candidate rejected (a rejected override is skipped, not fatal — we simply fall

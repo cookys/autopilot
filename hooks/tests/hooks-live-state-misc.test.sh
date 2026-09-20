@@ -154,5 +154,76 @@ EOF
 
 assert_r79_cc_shim_framing_chro
 
+# assert_r132_live_state_base_on_w
+# Row 132: resolveLiveDir() must not accept a pre-existing ram-backed base that
+# is a symlink or has mode & 0o077. Absent dirs are mkdirSync(mode 0o700).
+#
+# # RED before fix: world-writable and symlink AUTOPILOT_LIVE_DIR overrides were
+# accepted as source=override (recorded 2026-09-21 on this worktree).
+assert_r132_live_state_base_on_w() {
+  local LIB="$REPO_ROOT/scripts/lib/live-state-dir.js"
+  local TMP WORLD LINK GOOD MISSING
+  TMP="$(mktemp -d "/dev/shm/r132-live-state-base-XXXXXX")"
+  WORLD="$TMP/world"
+  LINK="$TMP/link"
+  GOOD="$TMP/good"
+  MISSING="$TMP/created"
+  mkdir "$WORLD"
+  chmod 0777 "$WORLD"
+  ln -s "$WORLD" "$LINK"
+  mkdir -m 0700 "$GOOD"
+
+  local probe
+  probe="$(cat <<'EOF'
+const { resolveLiveDir } = require(process.argv[1]);
+const dir = process.argv[2];
+const r = resolveLiveDir({
+  env: { AUTOPILOT_LIVE_DIR: dir },
+  warn: () => {},
+});
+process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
+EOF
+)"
+
+  run_probe() {
+    node -e "$probe" "$LIB" "$1"
+  }
+
+  local OUT
+  OUT="$(run_probe "$WORLD")"
+  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+    bad "0o777 candidate must be rejected, got $OUT"
+  else
+    ok "0o777 candidate rejected (got $OUT)"
+  fi
+
+  OUT="$(run_probe "$LINK")"
+  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+    bad "symlink candidate must be rejected, got $OUT"
+  else
+    ok "symlink candidate rejected (got $OUT)"
+  fi
+
+  OUT="$(run_probe "$GOOD")"
+  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$GOOD"; then
+    ok "mode 0700 candidate accepted as override"
+  else
+    bad "mode 0700 candidate expected override, got $OUT"
+  fi
+
+  OUT="$(run_probe "$MISSING")"
+  local MODE
+  MODE="$(stat -c '%a' "$MISSING" 2>/dev/null || echo missing)"
+  if [ -d "$MISSING" ] && [ "$MODE" = "700" ] && printf '%s' "$OUT" | grep -q '"source":"override"'; then
+    ok "absent candidate created mode 0700 and accepted"
+  else
+    bad "absent candidate expected mkdir 0700 override, mode=$MODE out=$OUT"
+  fi
+
+  rm -rf "$TMP"
+}
+
+assert_r132_live_state_base_on_w
+
 printf '\n%s\n' "hooks-live-state-misc: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

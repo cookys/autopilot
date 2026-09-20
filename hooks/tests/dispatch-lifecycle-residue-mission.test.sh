@@ -79,5 +79,30 @@ PY
     "wrapper keeps scanned instead of zeros"
 }
 
+assert_r16_dispatch_foreman_tes() {
+  # Regression guard, not a RED→GREEN pin. BACKLOG row 16 appears already
+  # resolved by 8de50578; this row adds a regression guard only, no product
+  # fix; the BACKLOG row itself is stale and needs closure (out of this
+  # bundle's scope — no BACKLOG.md edits).
+  # Actual base Summary (parent GIT overlay + sibling-prefix stripped):
+  #   PASS [dispatch-foreman] 115 assertions
+  local out ec
+  out="$(
+    unset GIT_ALLOW_PROTOCOL GIT_CONFIG_COUNT GIT_TERMINAL_PROMPT
+    unset AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX AUTOPILOT_DISPATCH_DEPTH
+    unset AUTOPILOT_PARENT_RUN_ID AUTOPILOT_ROOT_RUN_ID AUTOPILOT_WORKTREE_ROOT_RUN_ID
+    for i in $(seq 0 40); do
+      unset "GIT_CONFIG_KEY_$i" "GIT_CONFIG_VALUE_$i"
+    done
+    env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+      bash "$REPO_ROOT/hooks/tests/dispatch-foreman.test.sh" < /dev/null 2>&1
+  )"
+  ec=$?
+  assert_eq "$ec" "0" "r16: dispatch-foreman.test.sh subprocess exits 0"
+  assert_contains "$out" "PASS [dispatch-foreman] 115 assertions" \
+    "r16: Summary shows 0 failed"
+}
+
 assert_r3_run_ledger_sh_lease
+assert_r16_dispatch_foreman_tes
 finalize_test

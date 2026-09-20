@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### Managed rail: repair scope is derived from the reviewer's claim text — a path-less finding terminalizes the campaign
+- **Status**: open
+- **Trigger**: the next `--resume --campaign-disposition-authority` whose must-fix-now finding names no `src/`/`hooks/` path, OR any edit to `findingBoundRepairPaths`
+- **Effort**: S
+- **Source**: 2-D D2 attempt 3 (2026-09-20), `impl-run5-repair-scope-terminal.json`
+- **Pointer**: docs/backlog/managed-rail-repair-scope-pathless-finding.md
+- **Context**: findingBoundRepairPaths reads paths only from finding.claim/source; none → throw → terminal_stop. Fall back to disposition.task_surface, then park instead of stopping.
+
 ### Managed implementation dispatch timeout floor is 1 s — a 2 s hand dies as a runner timeout, not a wall expiry
 - **Status**: open
 - **Trigger**: the next managed campaign that logs an implementation dispatch with `--timeout` under 60 s, OR any work on `buildImplementationArgs`

@@ -33,6 +33,9 @@
  * REAL context window and total_input_tokens, so when it is present and fresh the window
  * is READ, not inferred — inferWindowTokens/scaleTiers-by-ratchet stay as the fallback for
  * when no usable live file exists (absent, stale >120s, wrong schema_version, malformed).
+ * Transcript `message.model` carries no `[1m]` suffix (same string for 200K and 1M
+ * variants); `[1m]` exists only on the live file's `model.id`. With no live file there
+ * is no window signal in the transcript — do not invent a CLAUDE_* window env var.
  * State dir also moves under the resolved live base (`<base>/context-budget/`) unless
  * AUTOPILOT_CONTEXT_BUDGET_DIR is set; with no RAM-backed base, resolveLiveDir()'s own SSD
  * fallback IS ~/.autopilot, so the no-live-file path is byte-for-byte v2.36.0.
@@ -194,6 +197,8 @@ function saveState(file, st) {
     } else {
       // Unchanged inference path: no usable live file (absent, stale, wrong
       // schema_version, or malformed) ⇒ v2.36.0 behaviour, byte-for-byte.
+      // Transcript `message.model` is not a window source: it has no `[1m]`
+      // suffix on real JSONL, so this branch stays on the observed-token ratchet.
       //
       // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
       // window implied by the largest context this session has actually reached.

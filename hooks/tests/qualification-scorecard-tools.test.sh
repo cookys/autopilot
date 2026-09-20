@@ -244,4 +244,64 @@ EOF
 
 assert_r55_autopilot_endpoints
 
+assert_r75_vacuous_red_case_in() {
+  # Alien-hash disposition must emit PROFILE_GUIDED_DISPOSITION_NOT_IN_BASELINE,
+  # not the still-present DEAD code (vacuous if both branches share DEAD).
+  local sandbox base_dispositions fake_rule hash alien out rc
+  sandbox="$TEST_TMP/r75-repo"
+  mkdir -p "$sandbox/skills" "$sandbox/docs/projects/_archive/2026/07"
+  cp -r "$REPO_ROOT/profiles" "$sandbox/profiles"
+  cp -r "$REPO_ROOT/skills/ceo-agent" "$sandbox/skills/ceo-agent"
+  cp -r "$REPO_ROOT/skills/dev-flow" "$sandbox/skills/dev-flow"
+  cp -r "$REPO_ROOT/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles" \
+        "$sandbox/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles"
+  base_dispositions="$(node -e '
+    const fs=require("fs"),path=require("path");
+    const f=path.join(process.argv[1],"profiles/guided-baseline-dispositions.json");
+    console.log(JSON.stringify(JSON.parse(fs.readFileSync(f,"utf8")).dispositions));
+  ' "$sandbox")"
+  fake_rule="- synthetic baseline rule planted by assert_r75_vacuous_red_case_in"
+  hash="$(node -e '
+    const fs=require("fs"),path=require("path");
+    const { sha256 }=require(process.argv[2]+"/scripts/measure-profile-context.js");
+    const sandbox=process.argv[1];
+    const rule=process.argv[3];
+    const basePath=path.join(sandbox,"docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json");
+    const base=JSON.parse(fs.readFileSync(basePath,"utf8"));
+    const entry=base.source_surface.files.find(f=>f.path==="skills/dev-flow/SKILL.md");
+    const snapPath=path.join(sandbox,"profiles/p0-sources",sha256("skills/dev-flow/SKILL.md")+".txt");
+    const snap=fs.readFileSync(snapPath,"utf8")+rule+"\n";
+    fs.writeFileSync(snapPath,snap);
+    entry.sha256=sha256(snap);
+    fs.writeFileSync(basePath,JSON.stringify(base,null,2)+"\n");
+    console.log(sha256(rule.trim().replace(/\s+/g," ")));
+  ' "$sandbox" "$REPO_ROOT" "$fake_rule")"
+  alien="$(printf 'b%.0s' $(seq 64))"
+  node -e '
+    const fs=require("fs"),path=require("path"),crypto=require("crypto");
+    const sandbox=process.argv[1];
+    const f=path.join(sandbox,"profiles/guided-baseline-dispositions.json");
+    const doc=JSON.parse(fs.readFileSync(f,"utf8"));
+    doc.dispositions=JSON.parse(process.argv[3]).concat(JSON.parse(process.argv[2]));
+    fs.writeFileSync(f,JSON.stringify(doc,null,2)+"\n");
+    const sha=x=>crypto.createHash("sha256").update(fs.readFileSync(x)).digest("hex");
+    const catPath=path.join(sandbox,"profiles/profile-catalog.json");
+    const cat=JSON.parse(fs.readFileSync(catPath,"utf8"));
+    cat.guided_dispositions_sha256=sha(f);
+    fs.writeFileSync(catPath,JSON.stringify(cat,null,2)+"\n");
+  ' "$sandbox" "[{\"content_hash\":\"$alien\",\"disposition\":\"removed\",\"rationale\":\"test: alien hash\"},{\"content_hash\":\"$hash\",\"disposition\":\"removed\",\"rationale\":\"test: keeps the planted shortfall discharged\"}]" "$base_dispositions"
+  set +e
+  out="$(node "$REPO_ROOT/scripts/build-profile-payload.js" catalog --check --repo "$sandbox" 2>&1)"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "r75: alien-hash disposition passed catalog --check"
+  # RED at 13146c7b7f371194b5a2263d93ec5515f0cc81e4: PROFILE_GUIDED_DISPOSITION_DEAD: guided baseline disposition targets a hash not in the baseline: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  assert_contains "$out" "PROFILE_GUIDED_DISPOSITION_NOT_IN_BASELINE" \
+    "r75: alien-hash emits NOT_IN_BASELINE (not DEAD)"
+  assert_not_contains "$out" "PROFILE_GUIDED_DISPOSITION_DEAD" \
+    "r75: alien-hash must not also emit the still-present DEAD code"
+}
+
+assert_r75_vacuous_red_case_in
+
 finalize_test

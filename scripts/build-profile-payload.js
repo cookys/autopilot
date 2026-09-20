@@ -480,7 +480,7 @@ function validateGuidedCompatibility(repoRoot, inventory) {
     if (required === 0) {
       fail(
         `guided baseline disposition targets a hash not in the baseline: ${entry.content_hash}`,
-        'PROFILE_GUIDED_DISPOSITION_DEAD',
+        'PROFILE_GUIDED_DISPOSITION_NOT_IN_BASELINE',
       );
     }
     const shortfall = required - (currentCounts.get(entry.content_hash) || 0);

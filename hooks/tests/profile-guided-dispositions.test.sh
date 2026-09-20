@@ -114,7 +114,7 @@ expect_code "PROFILE_GUIDED_DISPOSITION_DEAD" "dead-disposition case"
 echo "=== red: disposition for a hash not in the baseline at all ==="
 set_dispositions "[{\"content_hash\":\"$(printf 'b%.0s' $(seq 64))\",\"disposition\":\"removed\",\"rationale\":\"test: alien hash\"},{\"content_hash\":\"$HASH\",\"disposition\":\"removed\",\"rationale\":\"test: keeps the planted shortfall discharged\"}]"
 rc=$(check); [ "$rc" -ne 0 ] || fail "alien-hash disposition passed"
-expect_code "PROFILE_GUIDED_DISPOSITION_DEAD" "alien-hash case"
+expect_code "PROFILE_GUIDED_DISPOSITION_NOT_IN_BASELINE" "alien-hash case"
 
 echo "=== red: catalog does not bind the dispositions file (tamper without catalog update) ==="
 set_dispositions "[{\"content_hash\":\"$HASH\",\"disposition\":\"removed\",\"rationale\":\"test: valid state\"}]"

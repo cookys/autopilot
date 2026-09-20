@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.36.79 — foreman rail 多軌 sibling 缺口（308 BACKLOG #46，peer 308-0c 作者）＋ hooks/tests/lib.sh EXIT trap 只在頂層 shell 清理
+
+- **Gap 1（平行 hands 互斥）**：`dispatch-foreman.sh` 把整個排除陣列（操作者 `--sibling-ref-prefix` ＋本 run 的 hands 命名空間，
+  `:` join）寫進每個 hand 繼承的 `FOREMAN_ENV` 的 `AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX`；`dispatch-hetero.sh`（＋鏡像）讀它當
+  `--sibling-ref-prefix` 預設（`main_checkout_seed_sibling_env_defaults`，`scripts/lib/main-checkout-boundary.sh`），CLI 旗標仍優先且疊加。
+- **Gap 2（兩個 foreman 互咬）**：`dispatch-foreman.sh` 新增 `--sibling-ref-prefix` / `--sibling-path-prefix`（驗證抽到共用 lib），
+  操作者平行起兩個 foreman 時互相宣告命名空間；未宣告維持互斥。新驗證迴圈有 `[*]+set` 空陣列保護（bash <4.4、set -u）。
+- **Gap 3（SOP 訊息）**：`main_checkout_mutated` 訊息與 `protocol.md` 指名 308 SOP 規則（hand/foreman 跑時 depth-0 不改主樹）。
+- **`hooks/tests/lib.sh`**：EXIT cleanup trap 會被 `$(...)` command-substitution 子 shell 繼承並在子 shell 結束時執行（`$$` 相同、
+  只有 `$BASHPID` 不同）→ `rm -rf "$TEST_TMP"` 從第一個子 shell 回來就把沙箱砍了，這就是 `dispatch-foreman.test.sh` 自 test 3 起
+  64/51 連鎖紅的根因（乾淨 develop 63/40 同樣）。現在記錄頂層 `BASHPID`，只在該行程清理。修後 dispatch-foreman 115 綠、
+  dispatch-hetero 345 綠；test 13 改讀 r2 自己的 run dir。
+- 落地紀律：peer 分支經 fable 二家審 FIX-THEN-SHIP（2🟠3🟡）→ 全修 → SHIP-AS-IS；因 lib.sh 是 330 套共用，在 clone 上跑完整套：
+  15 紅全部在 develop 基準同紅（主機環境紅名單）或 detached-HEAD 施測誤差，無分支造成的紅。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.78 — lifecycle 硬閘門：BACKLOG 是佇列、plan 出貨即歸檔、🔵 不進 BACKLOG（dogfood 失敗的修正）
 
 - 盤點（2026-09-20）：文件寫 backlog → plan → project → archive，但執行者全是 LLM 指令；`skills/l5` 零次提到 project-lifecycle，

@@ -234,4 +234,115 @@ assert_r37_hetero_review_loop_c() {
 
 assert_r37_hetero_review_loop_c
 
+# RED at base: Mode A fails when head moved by CHANGELOG.md-only closeout.
+# GREEN: same receipt accepts H2 via allowlisted-only delta; H3 source change keeps the original failure.
+assert_r38_check_phase_review_r() {
+  local HETERO="$REPO_ROOT/scripts/hetero-review-loop.js"
+  local CHECKER="$REPO_ROOT/scripts/check-phase-review-receipt.js"
+  local SCRATCH_REPO="$TEST_TMP/r38-repo"
+  local LEDGER="$TEST_TMP/r38-ledger"
+  mkdir -p "$SCRATCH_REPO/scripts" "$LEDGER"
+  (
+    cd "$SCRATCH_REPO"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    echo "initial" > file.txt
+    git add file.txt
+    git commit -q -m "c1"
+    echo "second" > file.txt
+    git add file.txt
+    git commit -q -m "c2"
+  )
+  local PHASE_BASE
+  PHASE_BASE=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
+  (
+    cd "$SCRATCH_REPO"
+    git checkout -q -b work
+    echo "work changes" >> file.txt
+    git add file.txt
+    git commit -q -m "c3"
+  )
+  cat << 'STUB_EOF' > "$SCRATCH_REPO/scripts/dispatch-review.sh"
+#!/usr/bin/env bash
+if [ -n "$STUB_SEAT_ID" ]; then
+  VAR="STUB_RESPONSE_${STUB_SEAT_ID}"
+  if [ -n "${!VAR}" ]; then
+    echo "${!VAR}"
+    exit 0
+  fi
+fi
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+STUB_EOF
+  chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
+  cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+  chmod +x "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+
+  export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh"
+  unset STUB_SEAT_RESPONSE || true
+
+  local COLLECT_OUT COLLECT_RC
+  COLLECT_OUT=$(node "$HETERO" collect \
+    --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r38 --generation 1 \
+    --branch work --phase-base "$PHASE_BASE" \
+    --seats "m1/low@codex" \
+    --min-reviewed-seats 1 2>&1); COLLECT_RC=$?
+  assert_exit_code "$COLLECT_RC" "0" "r38: collect at H1 exits 0"
+
+  cat > "$TEST_TMP/r38-disp.json" <<EOF
+{"schema_version":1,"phase":"p_r38","generation":1,"findings":[]}
+EOF
+  local FIN_OUT FIN_RC
+  FIN_OUT=$(node "$HETERO" finalize \
+    --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r38 --generation 1 \
+    --branch work --dispositions "$TEST_TMP/r38-disp.json" 2>&1); FIN_RC=$?
+  assert_exit_code "$FIN_RC" "0" "r38: finalize at H1 exits 0"
+
+  local H1
+  H1=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
+
+  local CHECK_H1_OUT CHECK_H1_RC
+  CHECK_H1_OUT=$(node "$CHECKER" \
+    --ledger "$LEDGER" --phase p_r38 --branch work --phase-base "$PHASE_BASE" \
+    --repo-root "$SCRATCH_REPO" --min-reviewed-seats 1 2>&1); CHECK_H1_RC=$?
+  assert_exit_code "$CHECK_H1_RC" "0" "r38: Mode A at reviewed head H1 exits 0"
+
+  (
+    cd "$SCRATCH_REPO"
+    echo "# closeout" > CHANGELOG.md
+    git add CHANGELOG.md
+    git commit -q -m "closeout changelog"
+  )
+  local H2
+  H2=$(git -C "$SCRATCH_REPO" rev-parse HEAD)
+
+  local CHECK_H2_OUT CHECK_H2_RC
+  CHECK_H2_OUT=$(node "$CHECKER" \
+    --ledger "$LEDGER" --phase p_r38 --branch work --phase-base "$PHASE_BASE" \
+    --repo-root "$SCRATCH_REPO" --min-reviewed-seats 1 2>&1); CHECK_H2_RC=$?
+  assert_exit_code "$CHECK_H2_RC" "0" "r38: Mode A at H2 (CHANGELOG.md-only) exits 0"
+  assert_contains "$CHECK_H2_OUT" "Head moved by" "r38: H2 logs allowlisted-move note"
+  assert_contains "$CHECK_H2_OUT" "allowlisted-only" "r38: H2 note names allowlisted-only"
+  assert_contains "$CHECK_H2_OUT" "CHANGELOG.md" "r38: H2 note includes CHANGELOG.md"
+
+  (
+    cd "$SCRATCH_REPO"
+    echo "source" >> file.txt
+    git add file.txt
+    git commit -q -m "real source change"
+  )
+
+  local CHECK_H3_OUT CHECK_H3_RC
+  CHECK_H3_OUT=$(node "$CHECKER" \
+    --ledger "$LEDGER" --phase p_r38 --branch work --phase-base "$PHASE_BASE" \
+    --repo-root "$SCRATCH_REPO" --min-reviewed-seats 1 2>&1); CHECK_H3_RC=$?
+  assert_exit_code "$CHECK_H3_RC" "1" "r38: Mode A at H3 (source file) exits 1"
+  assert_contains "$CHECK_H3_OUT" "head has moved: expected '${H1}', got" \
+    "r38: H3 keeps original head-has-moved failure"
+
+  unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT || true
+}
+
+assert_r38_check_phase_review_r
+
 finalize_test

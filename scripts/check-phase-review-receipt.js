@@ -1045,8 +1045,30 @@ function validateModeA(flags) {
     }
     const currentBranchHead = revParseRes.stdout.trim();
     if (currentBranchHead !== lastEntry.head) {
-      console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
-      process.exit(1);
+      const range = `${lastEntry.head}..${currentBranchHead}`;
+      const diffRes = spawnSync('git', ['diff', '--name-only', range], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      });
+      const changedPaths = (diffRes.stdout || '')
+        .split('\n')
+        .map((p) => p.trim())
+        .filter(Boolean);
+      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === 'docs/projects/INDEX.md';
+      const allAllowed = diffRes.status === 0
+        && changedPaths.every((p) => isPathspecAllowed(p) || sidecarAllowed(p));
+      if (!allAllowed) {
+        console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
+        process.exit(1);
+      }
+      const countRes = spawnSync('git', ['rev-list', '--count', range], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      });
+      const n = (countRes.status === 0 && countRes.stdout.trim())
+        ? countRes.stdout.trim()
+        : String(changedPaths.length);
+      console.log(`Head moved by ${n} allowlisted-only commit(s): ${changedPaths.join(' ')}`);
     }
 
     process.exit(0);

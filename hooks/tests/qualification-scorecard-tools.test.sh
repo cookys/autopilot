@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Qualification scorecard tool assertions (row-owned cases).
+# Later rows APPEND a new assert_rNN_* function and one call below the last one.
+. "$(dirname "$0")/lib.sh"
+
+CLI="$REPO_ROOT/scripts/engine-scorecard.js"
+FIXTURE_JS="$REPO_ROOT/hooks/tests/lib/consult-discuss-genuine-row-fixture.js"
+SCOPE_HELPER="$REPO_ROOT/scripts/lib/qualification-applicability-scope.js"
+
+assert_r49_scorecard_runner_tok() {
+  # Plant one qualifying consult row recorded as runner "codex-cli", then query
+  # current --role consult and seat-status --runner codex (incl. --require-evidence).
+  rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$ENGINE_SCORECARD_DIR/.lock"
+  rm -f "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+  touch "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+
+  local qual_row scope current_out seat_out seat_strict
+  qual_row="$(node "$FIXTURE_JS" consult --engine gpt-5.6-sol --runner codex-cli)" \
+    || fail "r49: genuine-row fixture failed"
+  printf '%s\n' "$qual_row" | node "$CLI" record >/dev/null \
+    || fail "r49: scorecard record failed"
+
+  scope="$(mktemp "$TEST_TMP/r49-scope.XXXXXX.json")"
+  node "$SCOPE_HELPER" write-scope --role consult --out "$scope" >/dev/null \
+    || fail "r49: write-scope failed"
+
+  current_out="$(node "$CLI" current --role consult --now 2026-09-21)"
+  assert_contains "$current_out" '"runner":"codex-cli"' \
+    "r49: current --role consult still surfaces the stored runner token (no rewrite)"
+
+  seat_out="$(node "$CLI" seat-status --engine gpt-5.6-sol --runner codex --role consult --effort high --now 2026-09-21)"
+  seat_strict="$(node "$CLI" seat-status --engine gpt-5.6-sol --runner codex --role consult --effort high --now 2026-09-21 --require-evidence --scope-file "$scope")"
+
+  # RED at a0107ead5b90e9dd56b946c453f9e78ed2cce849: {"admission_status":"no_record","expiry_warning":false,"strikes_since_pass":0,"critical_trigger":false,"would_requalify":false,"strike_threshold":3,"strike_policy_version":2,"rejected_strikes":0,"effort":"high","seat_hash":"8e04712d63f6b90597da4a2e0c93e9c33f3ae60aa39655e7456d93f2de796b2a","baseline_event_id":null,"baseline_qualified_at":null}
+  assert_contains "$seat_out" '"admission_status":"qualified"' \
+    "r49: seat-status --runner codex resolves a stored codex-cli baseline"
+  assert_contains "$seat_strict" '"admission_status":"qualified"' \
+    "r49: seat-status --require-evidence --runner codex resolves a stored codex-cli baseline"
+  assert_neq "null" "$(printf '%s' "$seat_out" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write(String(d.baseline_event_id))')" \
+    "r49: non-strict seat-status found a baseline_event_id"
+  assert_neq "null" "$(printf '%s' "$seat_strict" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write(String(d.baseline_event_id))')" \
+    "r49: strict seat-status found a baseline_event_id"
+}
+
+assert_r49_scorecard_runner_tok
+
+finalize_test

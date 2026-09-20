@@ -1706,6 +1706,10 @@ function seatEffortOf(row) {
   return row && row.effort !== undefined ? String(row.effort) : undefined;
 }
 
+function normRunnerToken(r) {
+  return r === 'codex-cli' ? 'codex' : r;
+}
+
 function findSeatBaseline(
   engine, runner, role, nowMs, allRows, supersededEventIds = new Set(), effort = undefined,
 ) {
@@ -1713,7 +1717,7 @@ function findSeatBaseline(
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
     if (isSupersededEvent(row.event_id, supersededEventIds)) continue;
-    if (row.engine !== engine || row.runner !== runner) continue;
+    if (row.engine !== engine || normRunnerToken(row.runner) !== normRunnerToken(runner)) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     // Effort partitions the seat. An UNDEFINED requested effort selects rows that also have no
@@ -2305,7 +2309,7 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
     if (isSupersededEvent(row.event_id, supersededEventIds)) continue;
-    if (row.engine !== engine || row.runner !== runner) continue;
+    if (row.engine !== engine || normRunnerToken(row.runner) !== normRunnerToken(runner)) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     if (seatEffortOf(row) !== effort) continue;   // same effort partitioning as the read path

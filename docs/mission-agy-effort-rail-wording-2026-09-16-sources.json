@@ -2,8 +2,8 @@
   "schema_version": 1,
   "sources": [
     {
-      "plan_path": "plans/2026-09-16-agy-effort-and-rail-wording.md",
-      "rubric_path": "plans/2026-09-16-agy-effort-and-rail-wording.rubric.md",
+      "plan_path": "plans/_archive/2026/09/2026-09-16-agy-effort-and-rail-wording.md",
+      "rubric_path": "plans/_archive/2026/09/2026-09-16-agy-effort-and-rail-wording.rubric.md",
       "plan_sha256": "a3225385b89c74d2bca6237bfe5c882baf5ed84893d5b7350ae1b66945910b35",
       "rubric_sha256": "3c46213913377ac71c431b146e4ebbb94ea075aa76a58937ed03f909ddede678"
     }

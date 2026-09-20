@@ -4,7 +4,7 @@ Measures whether a skill's body, loaded as a REAL plugin skill at depth 0 (`--pl
 routing + loading — NOT prompt injection), changes orchestrator behavior on micro-tasks with
 deterministic markers. Built for the dev-flow contract-card rewrite (成績單前置 evidence);
 pre-registered rules and claim scoping live in
-`docs/plans/_archive/2026-08-18-dev-flow-contract-card.md` §3-§4 (FROZEN R2).
+`docs/plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md` §3-§4 (FROZEN R2).
 
 ## Arms
 

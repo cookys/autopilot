@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-foreman.sh — a NON-Claude engine in the foreman seat (Shape B, design round 2:
-# docs/plans/_archive/2026-09-13-non-claude-foreman-rail-design.md; build plan
-# docs/plans/_archive/2026-09-13-foreman-rail-b-build.md). Owner ruling 2026-09-13: quota is the motive,
+# docs/plans/_archive/2026/09/2026-09-13-non-claude-foreman-rail-design.md; build plan
+# docs/plans/_archive/2026/09/2026-09-13-foreman-rail-b-build.md). Owner ruling 2026-09-13: quota is the motive,
 # so the foreman must actually hold the loop — this rail lets kimi orchestrate hands through
 # the existing rails (dispatch-hetero.sh / dispatch-review.sh / wait-dispatch-results.js) and
 # enforces, in the rail and not in the prompt, what hooks/foreman-guard.js enforces for a Claude

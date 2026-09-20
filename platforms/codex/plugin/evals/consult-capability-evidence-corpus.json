@@ -2,7 +2,7 @@
   "schema_version": 1,
   "corpus_version": "consult-v6",
   "methodology_version": "consult-blind-second-opinion",
-  "plan_ref": "docs/plans/_archive/2026-08-28-consult-discuss-qualification.md#D1",
+  "plan_ref": "docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md#D1",
   "budget": {
     "trials_per_administration": 2,
     "families": 5,

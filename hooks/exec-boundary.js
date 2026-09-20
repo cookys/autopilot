@@ -3,7 +3,7 @@
  * exec-boundary — PreToolUse/Bash (opt-in)
  *
  * Non-LLM execution-boundary deny gate (four-layer Kernel rule K2,
- * docs/plans/_archive/2026-08-16-four-layer-redesign.md D3). The survey lesson it encodes: a
+ * docs/plans/_archive/2026/08/2026-08-16-four-layer-redesign.md D3). The survey lesson it encodes: a
  * natural-language constraint the model agrees with is not an enforcement mechanism
  * (Replit incident — "the freeze lived only in the instructions"), and LLM verifiers are
  * narrative-steerable; this gate makes no LLM calls and cannot be argued with.

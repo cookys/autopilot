@@ -5,7 +5,7 @@
 // same way the writer does, reads a live file with schema/freshness checks, and classifies a
 // model id into a "family" for guarded-model comparisons.
 //
-// Contract (plan §2.5, docs/plans/_archive/2026-09-05-statusline-live-context-feed.md):
+// Contract (plan §2.5, docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md):
 //   - resolveLiveDir() tries, in order: $AUTOPILOT_LIVE_DIR (override) → $XDG_RUNTIME_DIR/autopilot
 //     (xdg) → /dev/shm/autopilot-<uid> (shm) → /tmp/autopilot-<uid> (tmp). A candidate is accepted
 //     ONLY if `findmnt -T <dir> -o FSTYPE -n` prints tmpfs or ramfs; if findmnt is not on PATH,

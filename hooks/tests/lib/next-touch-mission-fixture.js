@@ -29,7 +29,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ARCHIVE_AUTHORIZATION = path.join(
-  'docs', 'projects', '_archive', '2026-08-03-next-touch-debt-retirement',
+  'docs', 'projects', '_archive', '2026', '08', '2026-08-03-next-touch-debt-retirement',
   'evidence', 'authorization.json',
 );
 const PREPARED_RELATIVE = path.join(

@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship scripts/migrate-backlog-entries.js (Phase 4a of docs/plans/_archive/2026-09-14-backlog-entry-migration.md): byte-preserving migration of over-cap backlog entries into docs/backlog/<slug>.md sidecars, dry-run by default, --apply opt-in, manifest with per-entry sha256, parser shared with the gate (gate exports it), red-first test suite, inventory wiring. The real docs/BACKLOG.md is migrated by depth-0 after merge (4b), never by this campaign.",
+    "objective": "Ship scripts/migrate-backlog-entries.js (Phase 4a of docs/plans/_archive/2026/09/2026-09-14-backlog-entry-migration.md): byte-preserving migration of over-cap backlog entries into docs/backlog/<slug>.md sidecars, dry-run by default, --apply opt-in, manifest with per-entry sha256, parser shared with the gate (gate exports it), red-first test suite, inventory wiring. The real docs/BACKLOG.md is migrated by depth-0 after merge (4b), never by this campaign.",
     "requirements_hash": "c70d5325509626c4c4d4371653c01bfe7637979dfd07333f6cb81a5febff75e9",
     "scope": {
       "allowed_tools": [

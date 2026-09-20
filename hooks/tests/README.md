@@ -1,6 +1,6 @@
 # autopilot hook test suite
 
-Three-layer test pyramid (see `docs/plans/_archive/2026-05-14-test-suite.md` for design rationale).
+Three-layer test pyramid (see `docs/plans/_archive/2026/05/2026-05-14-test-suite.md` for design rationale).
 
 ```
                        ┌──────────────────────────┐

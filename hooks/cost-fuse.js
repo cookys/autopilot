@@ -2,7 +2,7 @@
 /**
  * cost-fuse — PreToolUse Bash|Edit|Write|MultiEdit|NotebookEdit (default-on; v2.35.16)
  *
- * Deliverable P3 of docs/plans/_archive/2026-09-04-default-dispatch-topology.md:
+ * Deliverable P3 of docs/plans/_archive/2026/09/2026-09-04-default-dispatch-topology.md:
  * A PreToolUse hook that fuses brain-tier (fable/opus) implementation-shaped tool calls
  * once today's brain spend crosses a threshold, so a brain-tier session is nudged to
  * brief and dispatch to hands instead of implementing itself.

@@ -4,7 +4,7 @@
 **Target version**: v2.32.58
 **Size**: L
 **狀態**: ✅ Shipped in v2.32.58 — merged as `945edac`
-**Project**: [`docs/projects/_archive/2026-07-25-context-budget-gate/`](../projects/_archive/2026-07-25-context-budget-gate/README.md)
+**Project**: [`docs/projects/_archive/2026/07/2026-07-25-context-budget-gate/`](../projects/_archive/2026-07-25-context-budget-gate/README.md)
 
 ## Motivation — measured, not assumed
 

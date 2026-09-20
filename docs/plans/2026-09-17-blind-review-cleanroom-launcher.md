@@ -1,7 +1,7 @@
 # Blind review redesign — cut 1b-A: a cleanroom launcher, and `dispatch-review.sh` learns seat tiers
 
 > Status: SHIPPED v2.36.62 (merge `94d44940`, 2026-09-17) · Size: L · Base: `ceb7c81d` (v2.36.61) · Parent plan:
-> `docs/plans/_archive/2026-09-16-blind-review-packet.md` §7 item 3 (this is the first half of "1b"; the
+> `docs/plans/_archive/2026/09/2026-09-16-blind-review-packet.md` §7 item 3 (this is the first half of "1b"; the
 > intake/resolver half is 1b-B, §7 below). Evidence dir:
 > `docs/plans/evidence/2026-09-17-blind-review-cleanroom-launcher/` (`bwrap-probe-2026-09-17.md` = the
 > no-model probe run before this plan; `base-suites-<base>.txt` = §4.1 at base, detached checkout).

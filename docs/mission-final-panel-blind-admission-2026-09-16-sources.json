@@ -2,8 +2,8 @@
   "schema_version": 1,
   "sources": [
     {
-      "plan_path": "plans/2026-09-16-final-panel-blind-admission.md",
-      "rubric_path": "plans/2026-09-16-final-panel-blind-admission.rubric.md",
+      "plan_path": "plans/_archive/2026/09/2026-09-16-final-panel-blind-admission.md",
+      "rubric_path": "plans/_archive/2026/09/2026-09-16-final-panel-blind-admission.rubric.md",
       "plan_sha256": "25492fdafb827436002fad7b58baa93de574a7560c2a8a5cf11b710490d127c3",
       "rubric_sha256": "ff743b8e67f66551dd5fdc5d2ad3b1961793da757c6c49c6ab7e24be326b7e32"
     }

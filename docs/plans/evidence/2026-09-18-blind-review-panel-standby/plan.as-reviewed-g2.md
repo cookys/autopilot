@@ -1,7 +1,7 @@
 # Blind review redesign — cut 2-B: a quorum panel with standby seats, and the panel snapshot at intake
 
 > Status: draft for plan hetero loop · Size: M · Base: `aeea2ca7` (v2.36.65) · Parent:
-> `docs/plans/_archive/2026-09-16-blind-review-packet.md` §7 item 4 (`:311-312`) and the design consult
+> `docs/plans/_archive/2026/09/2026-09-16-blind-review-packet.md` §7 item 4 (`:311-312`) and the design consult
 > `evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md` (`:32` snapshot, `:46` standby seat,
 > `:54-55` knobs). Sibling 2-A (v2.36.65) shipped the fan-out, the pocket and verify-once. This cut ships the two
 > mechanisms that need no repair-loop change; "in-rail review off when a panel exists" is **2-C** together with a

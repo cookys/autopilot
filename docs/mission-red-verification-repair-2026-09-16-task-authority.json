@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/2026-09-16-red-verification-repair-path.md: a red verification takes the repair path — performReview journals no review_completed under vertical_failed and the vertical repair is path-bound to the initial candidate changed paths.",
+    "objective": "Ship docs/plans/_archive/2026/09/2026-09-16-red-verification-repair-path.md: a red verification takes the repair path — performReview journals no review_completed under vertical_failed and the vertical repair is path-bound to the initial candidate changed paths.",
     "requirements_hash": "ccff249f74aab18df86b3284c46cff0300b9041e871a9ba9f898c42bad2ef2b1",
     "scope": {
       "allowed_tools": [

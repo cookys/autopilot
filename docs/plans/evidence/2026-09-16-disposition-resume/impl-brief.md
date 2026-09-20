@@ -5,8 +5,8 @@ never `git stash`, never touch files outside `output_paths`, never read or write
 (`.git/autopilot/implementation-campaign.jsonl` of this repo or any other).
 
 ## Read first (in this order, nothing else)
-1. `docs/plans/2026-09-16-disposition-resume-scope-sha.md` — §0 mechanism, §1 ruling, §2 changes, §2.4 tests.
-2. `docs/plans/2026-09-16-disposition-resume-scope-sha.rubric.md` — R1–R10 are the acceptance.
+1. `docs/plans/_archive/2026/09/2026-09-16-disposition-resume-scope-sha.md` — §0 mechanism, §1 ruling, §2 changes, §2.4 tests.
+2. `docs/plans/_archive/2026/09/2026-09-16-disposition-resume-scope-sha.rubric.md` — R1–R10 are the acceptance.
 3. `src/engine/campaign-intake.js` lines 518-635 (`verifyResumeCandidate`) and 760-860 (`defaultGenerationClaim` resume branches).
 4. `hooks/tests/implementation-campaign-routing.test.sh` lines 944-1330 (the P3 resume block you extend).
 

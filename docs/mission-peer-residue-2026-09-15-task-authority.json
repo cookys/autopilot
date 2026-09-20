@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship the three peer-reported residue fixes in docs/plans/_archive/2026-09-15-peer-residue-config-ladder-qc-namespace.md: gate resolve-config.sh tier 3 to the plugin repo itself (and resolve-doa.sh parity), namespace qc-panel.js default output by node/run-id and instruct dispatch-foreman.sh briefs accordingly, freeze the dispatch-hetero wrapper commit-subject contract in references/hetero-dispatch.md with an opt-in check in check-hands-commit.js; tests red-then-green; codex mirrors in parity.",
+    "objective": "Ship the three peer-reported residue fixes in docs/plans/_archive/2026/09/2026-09-15-peer-residue-config-ladder-qc-namespace.md: gate resolve-config.sh tier 3 to the plugin repo itself (and resolve-doa.sh parity), namespace qc-panel.js default output by node/run-id and instruct dispatch-foreman.sh briefs accordingly, freeze the dispatch-hetero wrapper commit-subject contract in references/hetero-dispatch.md with an opt-in check in check-hands-commit.js; tests red-then-green; codex mirrors in parity.",
     "requirements_hash": "842aff3743e9064f1ebf3771a779ed4e797ccd9bdcdbbe7aad2fff3dad99c218",
     "scope": {
       "allowed_tools": [

@@ -62,8 +62,8 @@
           ".claude-plugin/plugin.json",
           "CHANGELOG.md",
           "docs/BACKLOG.md",
-          "docs/plans/_archive/2026-08-29-qualification-verdict-stability.md",
-          "docs/plans/_archive/2026-08-29-qualification-verdict-stability.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-29-qualification-verdict-stability.md",
+          "docs/plans/_archive/2026/08/2026-08-29-qualification-verdict-stability.rubric.md",
           "docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md",
           "hooks/tests/capability-evidence.test.sh",
           "platforms/codex/plugin/schemas/capability-evidence.schema.json",
@@ -78,7 +78,7 @@
           "src/engine/verification-strength.js"
         ],
         "spec": {
-          "path": "docs/plans/_archive/2026-08-29-qualification-verdict-stability.md",
+          "path": "docs/plans/_archive/2026/08/2026-08-29-qualification-verdict-stability.md",
           "section": "4. Deliverables — a frozen bounded DAG"
         }
       },

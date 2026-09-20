@@ -99,9 +99,9 @@ const FROZEN_EVIDENCE_SHA256 = Object.freeze({
 });
 const PLAN_PATH = 'docs/plans/2026-08-03-next-touch-debt-retirement.md';
 const RUBRIC_PATH = 'docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md';
-const ARCHIVE_DIR = 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement';
+const ARCHIVE_DIR = 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement';
 const AUTHORIZATION_PATH = 'docs/projects/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
-const ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
+const ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
 const SOURCE_MANIFEST_PATH = 'docs/mission-next-touch-debt-retirement-sources.json';
 const EXPECTED_AUTH_KEYS = [
   'schema_version', 'ticket', 'project', 'base_sha', 'branch', 'mission_lineage_id',

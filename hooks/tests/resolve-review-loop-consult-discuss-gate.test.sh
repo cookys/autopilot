@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # resolve-review-loop-consult-discuss-gate.test.sh — D7 acceptance surface
-# (docs/plans/_archive/2026-08-28-consult-discuss-qualification.md, D7 "the keystone").
+# (docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md, D7 "the keystone").
 #
 # Covers the plan's case matrix: (i)-(iii), (iv)/(iv-b), (v)-(vii), (vii-a/b/c),
 # (viii) positive coupling, (ix)-(xiv) strict-path negatives, (xv)/(xvi)

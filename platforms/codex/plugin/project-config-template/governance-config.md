@@ -2,7 +2,7 @@
 
 Place the resolved project policy in `.claude/owner-kernel-governance.json`. The filename is
 historical (it predates the 2026-08-16 owner-kernel retirement — see
-`docs/plans/_archive/2026-08-16-owner-kernel-retirement.md`); the file itself is a **live** input to
+`docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`); the file itself is a **live** input to
 mission and campaign machinery and must not be removed while those consumers exist.
 
 ## Who reads it

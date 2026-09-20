@@ -84,7 +84,7 @@ echo "create ok.txt" > "$PROMPT"
 # lib/*.sh siblings still resolve) — pin the receipt to the real repo's file
 # explicitly so that copy doesn't fail this unrelated precondition before ever
 # reaching classify_outcome.
-export AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$ROOT/docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
+export AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$ROOT/docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
 
 make_agy_stub_versioned() {
   local stub="$1"

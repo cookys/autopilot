@@ -44,14 +44,14 @@
     ],
     "profile": "high",
     "required_paths": [
-     "docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md",
-     "docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.rubric.md",
+     "docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md",
+     "docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.rubric.md",
      "scripts/engine-scorecard.js",
      "scripts/resolve-dispatch-topology.js",
      "scripts/dispatch-contract.js"
     ],
     "spec": {
-     "path": "docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md",
+     "path": "docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md",
      "section": "4. Phases"
     }
    },

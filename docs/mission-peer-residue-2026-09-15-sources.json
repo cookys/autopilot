@@ -2,8 +2,8 @@
   "schema_version": 1,
   "sources": [
     {
-      "plan_path": "plans/2026-09-15-peer-residue-config-ladder-qc-namespace.md",
-      "rubric_path": "plans/2026-09-15-peer-residue-config-ladder-qc-namespace.rubric.md",
+      "plan_path": "plans/_archive/2026/09/2026-09-15-peer-residue-config-ladder-qc-namespace.md",
+      "rubric_path": "plans/_archive/2026/09/2026-09-15-peer-residue-config-ladder-qc-namespace.rubric.md",
       "plan_sha256": "842aff3743e9064f1ebf3771a779ed4e797ccd9bdcdbbe7aad2fff3dad99c218",
       "rubric_sha256": "6788b3d559f508fb019f06a75d7dc19970d5730bbbbf1cd5b565c01a7e49470c"
     }

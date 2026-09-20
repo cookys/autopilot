@@ -15,12 +15,12 @@ trap 'rm -rf "$TEST_TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 SANDBOX="$TEST_TMP/repo"
-mkdir -p "$SANDBOX/skills" "$SANDBOX/docs/projects/_archive"
+mkdir -p "$SANDBOX/skills" "$SANDBOX/docs/projects/_archive/2026/07"
 cp -r "$REPO_ROOT/profiles" "$SANDBOX/profiles"
 cp -r "$REPO_ROOT/skills/ceo-agent" "$SANDBOX/skills/ceo-agent"
 cp -r "$REPO_ROOT/skills/dev-flow" "$SANDBOX/skills/dev-flow"
-cp -r "$REPO_ROOT/docs/projects/_archive/2026-07-26-capability-adaptive-profiles" \
-      "$SANDBOX/docs/projects/_archive/2026-07-26-capability-adaptive-profiles"
+cp -r "$REPO_ROOT/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles" \
+      "$SANDBOX/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles"
 
 # The sandbox inherits the real tree's dispositions, and the real tree's sources are short
 # exactly those baseline rules. Synthetic cases must be ADDED to that list, never replace it —
@@ -54,7 +54,7 @@ plant() {
     const { sha256 }=require(process.argv[2]+"/scripts/measure-profile-context.js");
     const sandbox=process.argv[1];
     const rule=process.argv[3];
-    const basePath=path.join(sandbox,"docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json");
+    const basePath=path.join(sandbox,"docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json");
     const base=JSON.parse(fs.readFileSync(basePath,"utf8"));
     const entry=base.source_surface.files.find(f=>f.path==="skills/dev-flow/SKILL.md");
     const snapPath=path.join(sandbox,"profiles/p0-sources",sha256("skills/dev-flow/SKILL.md")+".txt");

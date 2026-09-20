@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dispatch-consult.test.sh — D8 acceptance surface (plan
-# docs/plans/_archive/2026-08-28-consult-discuss-qualification.md D8). Covers:
+# docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md D8). Covers:
 # switch-off refusal (exit 2, zero transport spawns, real entry point),
 # blind-evidence preflight refusal, verdict-token rejection, and the
 # end-to-end configured-tuple test through the real dispatch-author.sh seam

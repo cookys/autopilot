@@ -54,7 +54,7 @@ fi
 # Grammar: one optional slash-separated namespace, nothing more — lets a project
 # override name a namespaced model alias (e.g. kimi-code/k3) in the model column
 # without opening the door to multi-segment or leading/trailing-slash values
-# (docs/plans/2026-09-11-kimi-implementer-rail.md §2.5 / KR2).
+# (docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md §2.5 / KR2).
 valid_token() { [[ "$1" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?$ ]]; }
 
 # ── Tree path ────────────────────────────────────────────────────────────────

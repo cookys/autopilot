@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/_archive/2026-09-16-proof-parity-raw-log.md: one no_finding_proof grammar in bash and Node with distinct shape/tautology failures, and a rejected reviewer envelope keeps its raw_log through the engine and the final-panel seat receipt.",
+    "objective": "Ship docs/plans/_archive/2026/09/2026-09-16-proof-parity-raw-log.md: one no_finding_proof grammar in bash and Node with distinct shape/tautology failures, and a rejected reviewer envelope keeps its raw_log through the engine and the final-panel seat receipt.",
     "requirements_hash": "0a37231a1dd10ac8fd7b78206bd17c492d33017d42061946ccd3453307571ec3",
     "scope": {
       "allowed_tools": [

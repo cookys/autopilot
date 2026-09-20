@@ -1122,7 +1122,7 @@ printf -- '- implementer_runner: not-a-runner\n' > "$RUN_CFG"
 assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid implementer_runner exits 3"
 printf -- '- verification_author_present: maybe\n' > "$RUN_CFG"
 assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid verification_author_present exits 3"
-# plan_review widened to auto|on|off per docs/plans/_archive/2026-09-04-dev-flow-hetero-loops-default.md; invalid value still exits 3
+# plan_review widened to auto|on|off per docs/plans/_archive/2026/09/2026-09-04-dev-flow-hetero-loops-default.md; invalid value still exits 3
 printf -- '- plan_review: maybe\n' > "$RUN_CFG"
 assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid plan_review exits 3"
 assert_eq "$(bash "$SCRIPT" --domain invent >/dev/null 2>&1; echo $?)" "2" "invalid --domain exits 2"

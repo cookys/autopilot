@@ -2,8 +2,8 @@
   "schema_version": 1,
   "sources": [
     {
-      "plan_path": "plans/2026-09-16-disposition-resume-scope-sha.md",
-      "rubric_path": "plans/2026-09-16-disposition-resume-scope-sha.rubric.md",
+      "plan_path": "plans/_archive/2026/09/2026-09-16-disposition-resume-scope-sha.md",
+      "rubric_path": "plans/_archive/2026/09/2026-09-16-disposition-resume-scope-sha.rubric.md",
       "plan_sha256": "efbf7dc8c5618b1eb7fff9623809b52635af470ff8772c3880bfa12f99188d53",
       "rubric_sha256": "80effdaac38a3a7e60059c40759495e5a2a1a0adb59946f8376d5d1dc7ef9ab5"
     }

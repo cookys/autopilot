@@ -3,7 +3,7 @@
 
 /**
  * build-rehydration-bundle.js — the stateless brain's boot bundle
- * (autonomous-brain-integration P2; plan: docs/plans/_archive/2026-08-17-autonomous-brain-integration.md).
+ * (autonomous-brain-integration P2; plan: docs/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md).
  *
  * Kills sol shapes F8/F9 (post-compaction state amnesia → progress misreporting,
  * ownership split-brain). The brain holds NO load-bearing state in context: at
@@ -107,7 +107,7 @@ function ledgerTail(ledgerFile) {
 // most recent ladder round is kept even when it is older than the window —
 // oldest non-ladder rows are dropped first to make room. Still at most
 // LEDGER_TAIL_ROWS rows, still one section, original order preserved
-// (plan docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md P1, Fable-guide
+// (plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md P1, Fable-guide
 // compaction rule: what was tried and set aside must survive the summary).
 const LADDER_KINDS = new Set(['hypothesis', 'unknown', 'ladder']);
 function ledgerTailSelect(rows) {

@@ -421,7 +421,7 @@ node scripts/decision-ledger.js report --ledger <ledger> --round R \
 
 Right after the report, run the probe over the same ledger and act **only on `recommend`** — the
 DOA table lists which rungs the foreman may climb, it is not a climb-if-budget-left rule
-(plan `docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md` P4; budgets from
+(plan `docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md` P4; budgets from
 `review-loop-config.md`, work unit = the whole run):
 
 ```bash
@@ -521,7 +521,7 @@ surfaced as an anomaly — correctness gates alone block.
 
 ### Quality-floor conventions (v2.31.11)
 
-The five structural ledger-emission points — playbook no-match; adjudication unvalidatable-REFUTED / unconfirmed-PROOF_BY_TRACE; panel irreversible-disagreement; plan-revision checkpoint trips (risk-counter thresholds); depth-0 override of a dispatched artifact — each emits an `escalation_opened` tree event. See the quality-floor plan (`docs/plans/_archive/2026-07-04-quality-floor-engine.md`).
+The five structural ledger-emission points — playbook no-match; adjudication unvalidatable-REFUTED / unconfirmed-PROOF_BY_TRACE; panel irreversible-disagreement; plan-revision checkpoint trips (risk-counter thresholds); depth-0 override of a dispatched artifact — each emits an `escalation_opened` tree event. See the quality-floor plan (`docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md`).
 
 ## Phase L: width fan-out control loop (the depth-0 loop driving `dispatch-batch.sh`)
 

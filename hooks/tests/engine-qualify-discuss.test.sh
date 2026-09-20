@@ -2,7 +2,7 @@
 # hooks/tests/engine-qualify-discuss.test.sh
 #
 # Suite tests for the discuss qualification exam (D2,
-# docs/plans/_archive/2026-08-28-consult-discuss-qualification.md). Exercises the
+# docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md). Exercises the
 # generator, grader and corpus directly, which is where all of D2's scored
 # logic lives. The final section is the D3 companion: `scripts/engine-
 # qualify.sh discuss --plan` exits 0 and prints the five frozen identities

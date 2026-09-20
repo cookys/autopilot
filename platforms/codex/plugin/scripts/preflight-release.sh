@@ -332,7 +332,7 @@ run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plan
 # NOT a check and NOT counted in $FAILS — it prints the roster's
 # no-detected-modeled-match bucket so the owner sees it at release prep. Its exit
 # code is deliberately ignored: this is the presentation step the plan requires
-# (docs/plans/2026-07-25-roster-field-report.md §4.1 step 4). If it cannot run it
+# (docs/plans/_archive/2026/07/2026-07-25-roster-field-report.md §4.1 step 4). If it cannot run it
 # says REPORT-HEALTH on stderr; that is a broken tool, not a release blocker.
 echo ""
 echo "── advisory: roster fields with no detected modeled match ──"

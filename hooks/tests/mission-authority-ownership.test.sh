@@ -2,7 +2,7 @@
 . "$(dirname "$0")/lib.sh"
 
 CHECKER="$REPO_ROOT/scripts/check-plan-authority-ownership.js"
-MANIFEST="$REPO_ROOT/docs/projects/_archive/2026-07-26-mission-convergence-portfolio/authority-ownership.json"
+MANIFEST="$REPO_ROOT/docs/projects/_archive/2026/07/2026-07-26-mission-convergence-portfolio/authority-ownership.json"
 
 OUT="$(node "$CHECKER" "$MANIFEST" 2>&1)"
 EXIT=$?
@@ -19,7 +19,7 @@ const manifest = JSON.parse(fs.readFileSync(source, 'utf8'));
 manifest.claims.push({
   authority: 'campaign_generation',
   owner: 'mission_convergence_supervisor',
-  plan: 'docs/plans/2026-07-26-task-convergence-contract.md',
+  plan: 'docs/plans/_archive/2026/07/2026-07-26-task-convergence-contract.md',
 });
 fs.writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE

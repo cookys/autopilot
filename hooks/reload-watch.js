@@ -16,7 +16,7 @@
  * First run silently initializes the cache (no spam on a fresh machine).
  *
  * Implements Option D from
- * docs/plans/_archive/2026-05-14-reload-plugins-agent-invokable.md.
+ * docs/plans/_archive/2026/05/2026-05-14-reload-plugins-agent-invokable.md.
  */
 
 'use strict';

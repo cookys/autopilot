@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/_archive/2026-09-16-blind-review-packet.md: a content-addressed, deny-listed review packet (tree + diff + spec + MANIFEST) built by dispatchReview in blind mode when options.packet is given, with adversarial packet tests (lineage 2: wall budget re-sealed at the 7200 s contract cap).",
+    "objective": "Ship docs/plans/_archive/2026/09/2026-09-16-blind-review-packet.md: a content-addressed, deny-listed review packet (tree + diff + spec + MANIFEST) built by dispatchReview in blind mode when options.packet is given, with adversarial packet tests (lineage 2: wall budget re-sealed at the 7200 s contract cap).",
     "requirements_hash": "6030a0afc81cc1e262d9b6e26eeeabd1ec7b7f3e5548355d8c0ae148722ad924",
     "scope": {
       "allowed_tools": [

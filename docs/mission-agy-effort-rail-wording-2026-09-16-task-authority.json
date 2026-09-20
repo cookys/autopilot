@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/2026-09-16-agy-effort-and-rail-wording.md: agy effort follows the resolved model tier on all three rails with a visible fold note; the VA refusal, the readiness bootstrap fallback and the dirty-tree refusal each name their remedy.",
+    "objective": "Ship docs/plans/_archive/2026/09/2026-09-16-agy-effort-and-rail-wording.md: agy effort follows the resolved model tier on all three rails with a visible fold note; the VA refusal, the readiness bootstrap fallback and the dirty-tree refusal each name their remedy.",
     "requirements_hash": "a3225385b89c74d2bca6237bfe5c882baf5ed84893d5b7350ae1b66945910b35",
     "scope": {
       "allowed_tools": [

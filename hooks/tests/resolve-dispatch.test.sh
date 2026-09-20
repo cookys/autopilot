@@ -319,7 +319,7 @@ for r in implementer fast-worker test-runner researcher hands; do
 done
 
 # ── 15. valid_token grammar: one optional slash-separated namespace ──────
-# (docs/plans/2026-09-11-kimi-implementer-rail.md §2.5/KR2 — a namespaced model
+# (docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md §2.5/KR2 — a namespaced model
 # alias like kimi-code/k3 must be accepted in the model column; anything with
 # more than one slash, or a leading/trailing slash, must still be rejected.)
 

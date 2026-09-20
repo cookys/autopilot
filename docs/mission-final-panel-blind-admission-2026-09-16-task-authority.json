@@ -41,7 +41,7 @@
     "schema_id": "mission-finish-v1"
   },
   "intent": {
-    "objective": "Ship docs/plans/_archive/2026-09-16-final-panel-blind-admission.md: a qc_panel seat whose runner cannot run a managed blind-discovery review is refused at campaign intake (final_panel_seat_blind_incompatible) before any claim, with a resolver warning and one canonical predicate.",
+    "objective": "Ship docs/plans/_archive/2026/09/2026-09-16-final-panel-blind-admission.md: a qc_panel seat whose runner cannot run a managed blind-discovery review is refused at campaign intake (final_panel_seat_blind_incompatible) before any claim, with a resolver warning and one canonical predicate.",
     "requirements_hash": "25492fdafb827436002fad7b58baa93de574a7560c2a8a5cf11b710490d127c3",
     "scope": {
       "allowed_tools": [

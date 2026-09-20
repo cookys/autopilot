@@ -67,8 +67,8 @@
           "scripts/watch-foreman.js"
         ],
         "required_paths": [
-          "docs/plans/2026-08-02-foreman-depth0-coordination-r6.md",
-          "docs/plans/2026-08-02-foreman-depth0-coordination-r6.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-02-foreman-depth0-coordination-r6.md",
+          "docs/plans/_archive/2026/08/2026-08-02-foreman-depth0-coordination-r6.rubric.md",
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
           "hooks/tests/autopilot-engine-resilience.test.sh",
           "hooks/tests/dispatch-detach.test.sh",
@@ -93,7 +93,7 @@
           "skills/l6/references/full-dispatch-pipeline.md"
         ],
         "spec": {
-          "path": "docs/plans/2026-08-02-foreman-depth0-coordination-r6.md",
+          "path": "docs/plans/_archive/2026/08/2026-08-02-foreman-depth0-coordination-r6.md",
           "section": "Deliverable contract"
         }
       },
@@ -164,11 +164,11 @@
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/README.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/dev-info.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json"
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/README.md",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/dev-info.md",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json"
         ],
         "baseline_churn": 2200,
         "max_changed_files": 40,
@@ -185,11 +185,11 @@
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
           "docs/projects/INDEX.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/README.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/dev-info.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/README.md",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/dev-info.md",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
           "hooks/tests/autopilot-engine.test.sh",
           "hooks/tests/dispatch-author.test.sh",
           "hooks/tests/dispatch-review-prompt-skeleton.test.sh",
@@ -239,11 +239,11 @@
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
           "docs/projects/INDEX.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/README.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/dev-info.md",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
-          "docs/projects/_archive/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/README.md",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/dev-info.md",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/foreman-coordination-r6.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/review-path-efficiency.json",
+          "docs/projects/_archive/2026/08/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
           "hooks/tests/autopilot-engine.test.sh",
           "hooks/tests/dispatch-author.test.sh",
           "hooks/tests/dispatch-review-prompt-skeleton.test.sh",
@@ -428,8 +428,8 @@
         "required_paths": [
           "CLAUDE.md",
           "docs/BACKLOG.md",
-          "docs/plans/2026-08-02-skill-metadata-portability-hygiene.md",
-          "docs/plans/2026-08-02-skill-metadata-portability-hygiene.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-02-skill-metadata-portability-hygiene.md",
+          "docs/plans/_archive/2026/08/2026-08-02-skill-metadata-portability-hygiene.rubric.md",
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
           "docs/skills.md",
           "hooks/tests/preflight-adapter-invariant.test.sh",
@@ -498,7 +498,7 @@
           "skills/think-tank/SKILL.md"
         ],
         "spec": {
-          "path": "docs/plans/2026-08-02-skill-metadata-portability-hygiene.md",
+          "path": "docs/plans/_archive/2026/08/2026-08-02-skill-metadata-portability-hygiene.md",
           "section": "Deliverable contract"
         }
       },

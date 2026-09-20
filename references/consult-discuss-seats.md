@@ -4,7 +4,7 @@ Both `consult_*` and `discuss_*` are roster seats in `review-loop-config.md` for
 heterogeneous engine participation — a mid-run second opinion and a debate-round contribution,
 respectively. Neither is a verdict surface. This doc covers what each rail does, its trust
 boundary, its switch, its exam construct, and its named residuals. Plan:
-`docs/plans/_archive/2026-08-28-consult-discuss-qualification.md` (D1-D2 exams, D3 qualifier wiring, D4
+`docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md` (D1-D2 exams, D3 qualifier wiring, D4
 seals, D5 evidence schema, D6 the switch, D7 the switch-on gate, D8/D9 the executable consumers,
 D10 this doc + closeout).
 

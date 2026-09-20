@@ -7,7 +7,7 @@
  * ITSELF and write verbatim turns to compaction-state.md — no Claude
  * compliance dependency.
  *
- * Architecture (per docs/plans/_archive/2026-05-14-context-handoff-hardening.md):
+ * Architecture (per docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md):
  * - Filter-first / tail-after / newest-first iteration with byte cap
  * - Per-block thinking truncation (preserves reasoning shape, prevents bloat)
  * - Visible failure diagnostic INTO checkpoint file + stderr emit

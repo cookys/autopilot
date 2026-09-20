@@ -20,8 +20,8 @@
       "campaign": {
         "allowed_path_prefixes": [
           "docs/BACKLOG.md",
-          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
-          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
+          "docs/plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.rubric.md",
           "docs/plans/2026-08-02-codex-payload-residual-spike.md",
           "docs/plans/2026-08-02-codex-payload-residual-spike.rubric.md",
           "docs/projects/2026-08-02-codex-payload-residual-spike",
@@ -64,8 +64,8 @@
         ],
         "required_paths": [
           "docs/BACKLOG.md",
-          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
-          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
+          "docs/plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.rubric.md",
           "docs/plans/2026-08-02-codex-payload-residual-spike.md",
           "docs/plans/2026-08-02-codex-payload-residual-spike.rubric.md",
           "docs/projects/2026-08-02-codex-payload-residual-spike/README.md",
@@ -80,7 +80,7 @@
           "scripts/sync-codex-plugin-skills.sh"
         ],
         "spec": {
-          "path": "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
+          "path": "docs/plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
           "section": "Deliverable contract"
         }
       },

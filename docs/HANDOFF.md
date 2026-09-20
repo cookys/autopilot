@@ -1,6 +1,6 @@
 ## 目標
 
-實作 `docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0 起全部階段。
+實作 `docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0 起全部階段。
 **P0/P1/P2/P2b 已出貨**（v2.36.23–26，在 `origin/develop`）。**D4（plan P3）實作完成、未出貨**，
 分支 `feat/d4-strike-fold-pending-revocation`，HEAD `3faffd27`，工作樹乾淨。
 
@@ -13,7 +13,7 @@
 已出貨的 **v2.36.26 可以被繞過**。未 pin、且（a）完全沒有 scorecard row 或（b）ordinary strike
 超過門檻的席位，只要餵一份 `--resolved-live` 文件，契約就回 `GO` + `assurance: operator-pin`，
 並**憑空生出一筆 `operator_pin`**。兩份執行證據都在
-`docs/plans/_archive/evidence/2026-09-11-operator-pin-supersedes-qualification/d4-qc-panel.md`。
+`docs/plans/_archive/2026/09/evidence/2026-09-11-operator-pin-supersedes-qualification/d4-qc-panel.md`。
 
 **根因（一句話）**：`pinAdmitsPreferred = resolvedLive && preferredTupleMatchesResolved(...)`
 把「preferred tuple 等於解析出的引擎」當成「有 pin 的證據」。但**未 pin 時 resolver 一樣會給
@@ -140,7 +140,7 @@ bash scripts/sync-codex-plugin-skills.sh --check; echo $?       # 0
 ## Read-order
 
 1. 本檔「接手第一件事」整段。
-2. `docs/plans/_archive/evidence/2026-09-11-operator-pin-supersedes-qualification/d4-qc-panel.md`（PROBE B/C 的實跑輸出）。
-3. `docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md` §2（KR1/KR3/KR4/KR11）與 §2.5（硬約束）。
+2. `docs/plans/_archive/2026/09/evidence/2026-09-11-operator-pin-supersedes-qualification/d4-qc-panel.md`（PROBE B/C 的實跑輸出）。
+3. `docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md` §2（KR1/KR3/KR4/KR11）與 §2.5（硬約束）。
 4. `docs/BACKLOG.md` 的 managed-campaign 那列與 L5-24h 那列。
 5. `references/evidence-discipline.md` §32。

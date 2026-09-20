@@ -28,7 +28,7 @@ Two independent agents (researcher + skeptic) search in parallel, bringing diffe
 
 - **Produce recommendation, marked as suggestion** -- attach reasoning and preconditions so user can judge applicability
 - **No code** -- research only
-- **No judgment-only auto-trigger** -- a survey runs without a Proceed prompt only when the unknown-escalation ladder probe (plan `docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md`, ships with the ladder) recommends U2 with budget left, in every mode; the caller records the climb in the decision ledger. Judgment-only suggestions, knob-off and budget-exhausted cases keep the suggest-then-confirm template above
+- **No judgment-only auto-trigger** -- a survey runs without a Proceed prompt only when the unknown-escalation ladder probe (plan `docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md`, ships with the ladder) recommends U2 with budget left, in every mode; the caller records the climb in the decision ledger. Judgment-only suggestions, knob-off and budget-exhausted cases keep the suggest-then-confirm template above
 
 ## Flow
 

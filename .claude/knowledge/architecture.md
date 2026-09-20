@@ -23,7 +23,7 @@ the old graph as successful or hand-author a mirror.
 
 **Related**: `scripts/sync-codex-plugin-skills.sh`,
 `scripts/mission-execution-graph-check.js`,
-`docs/plans/2026-08-02-reviewer-output-token-budget-mirror-correction.md`.
+`docs/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.md`.
 
 ## Persistent transcript continuity is not canonical ICC evidence
 

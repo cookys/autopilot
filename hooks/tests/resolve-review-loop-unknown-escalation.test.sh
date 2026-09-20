@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # resolve-review-loop-unknown-escalation.test.sh — the unknown_escalation knob
-# (plan docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md P2, rubric R8/R13).
+# (plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md P2, rubric R8/R13).
 # Modelled on the consult/discuss switch test: default parity (only the new
 # keys are added, defaults auto/2/1/1), --field arms, on ⇒ budgets required
 # (exit 3), off ⇒ capability_warnings + unknown_resolved_from off, bad values

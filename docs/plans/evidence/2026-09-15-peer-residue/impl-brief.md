@@ -1,4 +1,4 @@
-Implement docs/plans/_archive/2026-09-15-peer-residue-config-ladder-qc-namespace.md (read it first: §1 config ladder, §2 qc-panel namespace, §3 wrapper commit subject, §4 out of scope, §5 acceptance). You edit files only; the harness commits. No version bump, no CHANGELOG edit, no `git stash`, no push.
+Implement docs/plans/_archive/2026/09/2026-09-15-peer-residue-config-ladder-qc-namespace.md (read it first: §1 config ladder, §2 qc-panel namespace, §3 wrapper commit subject, §4 out of scope, §5 acceptance). You edit files only; the harness commits. No version bump, no CHANGELOG edit, no `git stash`, no push.
 
 Every path you create or modify MUST be one of these (the contract's output_paths; anything else rejects the round; nothing is created):
 scripts/lib/resolve-config.sh

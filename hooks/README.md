@@ -14,7 +14,7 @@ payload **is** delivered on **file descriptor 0**. Reading fd 0 directly
 **v2.8.0 pivot** (PostToolUse): hooks recover tool data from the **session
 transcript JSONL** via [`transcript-reader-lib.js`](transcript-reader-lib.js)
 (`getToolEvent()` — fd-0/stdin-first, transcript-fallback; path discovery via
-`CLAUDE_CODE_SESSION_ID`). See spike + design: `docs/projects/_archive/2026-06-02-hook-transcript-pivot/`.
+`CLAUDE_CODE_SESSION_ID`). See spike + design: `docs/projects/_archive/2026/06/2026-06-02-hook-transcript-pivot/`.
 
 **Re-enabled via transcript-reader (v2.8.0):**
 
@@ -283,7 +283,7 @@ window size that is not > 0 as no window signal.
 (`feat(live)` merge): `codeforge statusline` writes the main file whenever it is your `statusLine`; run
 `codeforge install --subagent-statusline` once to add the `subagentStatusLine` entry (opt-in; it renders nothing,
 keeps Claude Code's default rows). Any other status-line program can write the same two files — the schema is in
-`docs/plans/_archive/2026-09-05-statusline-live-context-feed.md` §2.5. Check: `ls "$XDG_RUNTIME_DIR/autopilot/context/"`
+`docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md` §2.5. Check: `ls "$XDG_RUNTIME_DIR/autopilot/context/"`
 shows `<session_id>.json` after one tick.
 
 **Without it** (no writer, older codeforge, another host): `context-budget` and `foreman-guard` behave exactly as

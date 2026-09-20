@@ -1,6 +1,6 @@
 # Blind review redesign — cut 1c: a configurable packet deny-list (additive, hash-bound)
 
-> Status: draft for plan hetero loop · Size: M · Base: `6a414c3c` (v2.36.63 shipped; 1b-B merge `bc4ea99e`) · Parent: `docs/plans/_archive/2026-09-16-blind-review-packet.md`
+> Status: draft for plan hetero loop · Size: M · Base: `6a414c3c` (v2.36.63 shipped; 1b-B merge `bc4ea99e`) · Parent: `docs/plans/_archive/2026/09/2026-09-16-blind-review-packet.md`
 > §3 (line 259: "revisit when the deny-list becomes configurable (1b)") and §7 item 3 (line 312:
 > "configurable deny-list"). Siblings: 1b-A launcher (v2.36.62), 1b-B intake probe (v2.36.63).
 > Evidence dir: `docs/plans/evidence/2026-09-17-blind-review-packet-deny-config/`.

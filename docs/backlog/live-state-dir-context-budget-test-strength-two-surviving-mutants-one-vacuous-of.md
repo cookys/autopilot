@@ -26,7 +26,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Trigger**: next plan-review loop, or next edit to either script.
 - **Guardrails**: fix the docs or the tooling, not the caller — a caller that hand-writes dispositions into the artifact to make the receipt pass has forged the record the receipt exists to attest. If the intent is that Mode B applies only to code-loop receipts, say so in `plan-loop.md` and drop the receipt from the plan loop's freeze predicate.
 
-## ~~`resolve-dispatch.sh` cannot express a namespaced model alias~~ (CLOSED 2026-09-11: `valid_token` widened to `^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?$` — one optional slash-separated namespace, e.g. `kimi-code/k3` — `docs/plans/2026-09-11-kimi-implementer-rail.md`)
+## ~~`resolve-dispatch.sh` cannot express a namespaced model alias~~ (CLOSED 2026-09-11: `valid_token` widened to `^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?$` — one optional slash-separated namespace, e.g. `kimi-code/k3` — `docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md`)
 
 ## `consult_dispatch` has no seat left once the qc panel excludes everything
 

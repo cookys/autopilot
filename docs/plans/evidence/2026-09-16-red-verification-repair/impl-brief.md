@@ -7,9 +7,9 @@ Grant base: `1d822ee3`. The rubric pins RED evidence and byte-identity against `
 product file is byte-identical between the two (docs-only commits in between) — cite `d14bfb68`.
 
 ## Read first (in this order)
-1. `docs/plans/2026-09-16-red-verification-repair-path.md` — §0 mechanism, §1 ruling (two changes),
+1. `docs/plans/_archive/2026/09/2026-09-16-red-verification-repair-path.md` — §0 mechanism, §1 ruling (two changes),
    §2.1 code sites, §2.3 tests T1–T7, §2.5 exact output_paths, §4 acceptance incl. `scope-integrity`.
-2. `docs/plans/2026-09-16-red-verification-repair-path.rubric.md` — R1–R10 are the acceptance.
+2. `docs/plans/_archive/2026/09/2026-09-16-red-verification-repair-path.rubric.md` — R1–R10 are the acceptance.
 3. `src/engine/autopilot-engine.js`: `performReview` ~4728-4980 (the `REVIEW_COMPLETED` append at
    ~4946 and the `campaign_resume_review` replay branch just above it); the mutate adapter
    ~6695-6730 (`findingBoundRepairPaths` call, `createRepairScopeSeal`); `findingBoundRepairPaths`

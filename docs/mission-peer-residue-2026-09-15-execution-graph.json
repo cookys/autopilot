@@ -56,7 +56,7 @@
      "scripts/check-hands-commit.js"
     ],
     "spec": {
-     "path": "docs/plans/_archive/2026-09-15-peer-residue-config-ladder-qc-namespace.md",
+     "path": "docs/plans/_archive/2026/09/2026-09-15-peer-residue-config-ladder-qc-namespace.md",
      "section": "1. Config ladder tier 3 — `scripts/lib/resolve-config.sh`"
     }
    },

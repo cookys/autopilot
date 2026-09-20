@@ -13,8 +13,8 @@ roots was chartered on a gpt-5.6-sol panel dissent ("a system that decides nothi
 nothing"). Attribution matters and is recorded honestly: **the vocabulary was in the
 owner-approved founding plan from day one; sol drove the shadow→production promotion; a human
 signed every gate.** The failure mode was Goodhart drift of process machinery, not a rogue engine.
-History: [`../plans/2026-07-20-owner-kernel-evolution.md`](../plans/2026-07-20-owner-kernel-evolution.md),
-[`../plans/2026-08-10-owner-kernel-promotion.md`](../plans/2026-08-10-owner-kernel-promotion.md).
+History: [`../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md`](../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md),
+[`../plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md`](../plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md).
 
 Architecture review (2026-08-16) found the decisive defect: every acceptance check was
 format/hash/policy evaluation **over submitted claims**; independent re-derivation existed
@@ -22,7 +22,7 @@ nowhere (the kernel could not even run a test), and truth entered only through c
 verifier adapters that were never implemented. The machinery guaranteed *record integrity* and
 *emitter authentication* — while the only real threat in a single-user deployment is *claim
 veracity*. Its answer to "did the agent lie?" was "the lie is now immutably recorded, with
-correct provenance." Full chain: [`../plans/2026-08-16-owner-kernel-retirement.md`](../plans/2026-08-16-owner-kernel-retirement.md).
+correct provenance." Full chain: [`../plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`](../plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md).
 
 An industry survey (dual-agent, adversarial) then bounded the replacement:
 [`../plans/2026-08-16-four-layer-redesign-survey.md`](../plans/2026-08-16-four-layer-redesign-survey.md).

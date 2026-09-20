@@ -2,8 +2,8 @@
   "schema_version": 1,
   "sources": [
     {
-      "plan_path": "plans/2026-09-15-final-panel-per-seat-pins.md",
-      "rubric_path": "plans/2026-09-15-final-panel-per-seat-pins.rubric.md",
+      "plan_path": "plans/_archive/2026/09/2026-09-15-final-panel-per-seat-pins.md",
+      "rubric_path": "plans/_archive/2026/09/2026-09-15-final-panel-per-seat-pins.rubric.md",
       "plan_sha256": "9af01f030b25766d9930016b6828c27d47bcaf417b67f43f08b8197efac3a8aa",
       "rubric_sha256": "d3a11b8d43f7e03c0dc5df11fa3047cda8ed19664c6a8d5aba351f7634de75d6"
     }

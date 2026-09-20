@@ -113,7 +113,7 @@ Layering rule: the engine wraps the artifact-verified shell dispatchers; it does
 
 The Owner Kernel decision/acceptance state machine and its supervised isolation substrate were
 retired on 2026-08-16 — rationale, two-generation review chain, and quarry anchors in
-`docs/plans/_archive/2026-08-16-owner-kernel-retirement.md`. What remains under `src/engine/owner-kernel/`
+`docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`. What remains under `src/engine/owner-kernel/`
 is a keeper-only barrel of five shared primitives with live consumers: `canonical` (canonical JSON
 + sha256), `errors`, `actions` (action-catalog normalization), `policy`
 (`resolveGovernancePolicy` over the project governance config), and `task-authority`

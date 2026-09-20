@@ -20,7 +20,7 @@
 //       not a verdict about fields: without this, a schema or git failure would produce no
 //       table while CI stayed green, defeating the report's only purpose.
 //
-// Plan: docs/plans/2026-07-25-roster-field-report.md
+// Plan: docs/plans/_archive/2026/07/2026-07-25-roster-field-report.md
 // Node built-ins only.
 
 const fs = require('fs');

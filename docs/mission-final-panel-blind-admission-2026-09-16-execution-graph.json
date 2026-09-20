@@ -55,7 +55,7 @@
      "scripts/resolve-review-loop.sh"
     ],
     "spec": {
-     "path": "docs/plans/_archive/2026-09-16-final-panel-blind-admission.md",
+     "path": "docs/plans/_archive/2026/09/2026-09-16-final-panel-blind-admission.md",
      "section": "1. Ruling and shape (option A1 of the design consult, see Review log)"
     }
    },

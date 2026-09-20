@@ -5,7 +5,7 @@
 # (routing + loading channel, not prompt injection), changes orchestrator behavior on
 # micro-tasks with deterministic markers. Three arms: full | card | off — the ONLY
 # variable is the dev-flow pack content; companion roster, prompt bytes, and repo
-# fixtures are identical across arms (plan: docs/plans/_archive/2026-08-18-dev-flow-contract-card.md §3).
+# fixtures are identical across arms (plan: docs/plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md §3).
 #
 # Usage:
 #   run-skill-onoff-eval.sh --task d1-s-tiny-feature --arm full|card|off \

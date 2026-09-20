@@ -9,7 +9,7 @@
       "successor_hashes": [
         "c4e18fe140c578b0d7aaf5c4bb5bbc75fb086d86e08907f6c3a616e12e584fdc"
       ],
-      "rationale": "P0 skills/dev-flow/SKILL.md:133 ('Before committing or merging, invoke autopilot:quality-pipeline'). The obligation to run a quality gate before committing/merging survives; the two successor lines (current :133-:134) are the size→gate INDEX, and the surviving imperative itself lives at the pre-existing step lines :241 (S step 2) and :275 (Fix step 4) for S/Fix and in finish-flow L-5.2 / H-9.2 for L/H. What changed is scope, not existence. v2.34.19, evidence docs/plans/_archive/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md. UPDATED D3 cut 4 (2026-09-04): the two-line successor (old :137-:138, hashes 7d0337f1.../df8380fc...) was merged into one line at current :137 and extended with the L-2.5/L-4 hetero-review-receipt dependency clause; successor_hashes repointed to the merged line, no separate disposition needed for the intermediate two-line form (never itself a P0 baseline hash)."
+      "rationale": "P0 skills/dev-flow/SKILL.md:133 ('Before committing or merging, invoke autopilot:quality-pipeline'). The obligation to run a quality gate before committing/merging survives; the two successor lines (current :133-:134) are the size→gate INDEX, and the surviving imperative itself lives at the pre-existing step lines :241 (S step 2) and :275 (Fix step 4) for S/Fix and in finish-flow L-5.2 / H-9.2 for L/H. What changed is scope, not existence. v2.34.19, evidence docs/plans/_archive/2026/08/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md. UPDATED D3 cut 4 (2026-09-04): the two-line successor (old :137-:138, hashes 7d0337f1.../df8380fc...) was merged into one line at current :137 and extended with the L-2.5/L-4 hetero-review-receipt dependency clause; successor_hashes repointed to the merged line, no separate disposition needed for the intermediate two-line form (never itself a P0 baseline hash)."
     },
     {
       "content_hash": "a5db6d6a76a989ce29934a93e902860ab1f3eed26a155eda28544d17911a6e41",
@@ -247,7 +247,7 @@
         "7587701a19aff7009a5900a8f051e70a9ae0212c39913fb930dfeb84f44e75c8",
         "52b1c23f248208a87f6ab4269e43b480b021e6fdc307c8d977b90fc3bf75e36a"
       ],
-      "rationale": "P0 skills/ceo-agent/SKILL.md:256 (CEO Autonomous DOA row: Research | Whether to run survey, what topic). Unknown-escalation ladder P4 (plan docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md, v2.36.15): the research decision is no longer a free judgment call — survey is invoked only when scripts/probe-unknown.js classify recommends U2 with budget left, and a judgment-only wish is recorded as a ledger note. Successors at current :256 (rewritten Research row) and :257 (new Unknown-escalation DOA row listing the rungs the CEO may climb). What changed is the trigger, not the CEO ownership of the research decision."
+      "rationale": "P0 skills/ceo-agent/SKILL.md:256 (CEO Autonomous DOA row: Research | Whether to run survey, what topic). Unknown-escalation ladder P4 (plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md, v2.36.15): the research decision is no longer a free judgment call — survey is invoked only when scripts/probe-unknown.js classify recommends U2 with budget left, and a judgment-only wish is recorded as a ledger note. Successors at current :256 (rewritten Research row) and :257 (new Unknown-escalation DOA row listing the rungs the CEO may climb). What changed is the trigger, not the CEO ownership of the research decision."
     },
     {
       "content_hash": "08b32721cd3ba4ede27f672ab43d49f04abddd15319ad1ada918b7e43cf38fab",
@@ -255,7 +255,7 @@
       "successor_hashes": [
         "8f5123be591f3e163ed530b56a3212af99a2316ff550373c09c033281f52b3bb"
       ],
-      "rationale": "P0 skills/ceo-agent/SKILL.md:335 (Execution step 7: Need research? -> Autonomously invoke autopilot:survey). Unknown-escalation ladder P4 (plan docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md, v2.36.15; G2 R8): the autonomous survey is now gated on scripts/probe-unknown.js classify recommending U2 with budget left and receipted afterwards; a judgment-only research wish is recorded as a ledger note, not dispatched. Successor at current :336 (re-hashed after the pre-merge review spelled the full receipt argv). The step still exists and is still CEO-autonomous; only its trigger changed from judgment to the probe."
+      "rationale": "P0 skills/ceo-agent/SKILL.md:335 (Execution step 7: Need research? -> Autonomously invoke autopilot:survey). Unknown-escalation ladder P4 (plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md, v2.36.15; G2 R8): the autonomous survey is now gated on scripts/probe-unknown.js classify recommending U2 with budget left and receipted afterwards; a judgment-only research wish is recorded as a ledger note, not dispatched. Successor at current :336 (re-hashed after the pre-merge review spelled the full receipt argv). The step still exists and is still CEO-autonomous; only its trigger changed from judgment to the probe."
     },
     {
       "content_hash": "ec9dbd0aec8c3e7c4144a64566e2915c5440b093fcf1781ffe87ca1a6243ca6f",

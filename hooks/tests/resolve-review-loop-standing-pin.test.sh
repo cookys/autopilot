@@ -3,7 +3,7 @@
 # per-invocation override file does, and the notice says WHICH of the two it was.
 #
 # Why this exists: the operator-pin plan
-# (docs/plans/_archive/2026-09-11-operator-pin-supersedes-qualification.md §1 item 2) names
+# (docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md §1 item 2) names
 # "the only evidence-free path is per-invocation and file-shaped" as a defect.
 # D1-D4 closed it on the admission side (dispatch-contract.js reads operator_pin);
 # this covers the roster side. The red case matters more than the green one: with

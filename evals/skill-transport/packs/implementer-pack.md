@@ -2,7 +2,7 @@
 FROZEN PACK FIXTURE — do NOT edit mid-experiment (an edit = restart the arm).
 Source: skills/dev-flow/SKILL.md (six-element task discipline + red-green verification contract)
 Source-SHA: dd98aa24ef00c0058f922a43547fddc28362e4e7
-Frozen: 2026-07-15 (skill-transport payoff A/B, docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md)
+Frozen: 2026-07-15 (skill-transport payoff A/B, docs/plans/_archive/2026/07/2026-07-15-skill-transport-payoff-ab.md)
 Content: methodology-only (implementation discipline). Per Global Constraint #1 every
 output-format directive has been stripped — no task-prompt output template, no mandatory
 report shape — so the pack cannot compete with the dispatch protocol. This fixture is

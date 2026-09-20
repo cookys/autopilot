@@ -6,7 +6,7 @@
 > `cc-shim` consult went `19/20` → `20/20`. These verdicts are therefore **superseded
 > pending re-administration** under the two-tier (zero-tolerance trust) + pooled
 > (Wilson lower bound) bar introduced by
-> [`docs/plans/_archive/2026-08-29-qualification-verdict-stability.md`](../../2026-08-29-qualification-verdict-stability.md).
+> [`docs/plans/_archive/2026/08/2026-08-29-qualification-verdict-stability.md`](../../2026-08-29-qualification-verdict-stability.md).
 > The result rows below are **unchanged** (append-only history). Machine suppression of
 > these baselines lands with that plan's D5 projection change.
 

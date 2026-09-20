@@ -3,7 +3,7 @@
 // Keeper-only barrel. The owner-kernel trust machinery (kernel, event ledger,
 // witness chain, acceptance predicate, shadow translation) was retired on
 // 2026-08-16 — rationale, review chain, and quarry anchors in
-// docs/plans/_archive/2026-08-16-owner-kernel-retirement.md. These five primitives and
+// docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md. These five primitives and
 // the mission re-exports remain because live engine/mission/profile code and
 // their tests resolve them through this barrel.
 

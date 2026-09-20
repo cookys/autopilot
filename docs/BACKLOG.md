@@ -12,6 +12,30 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### Foreman ↔ depth-0 coordination: typed `worker_condition` was planned (r6) and never built
+- **Status**: open
+- **Trigger**: a foreman wait loop that must tell "hand parked on a question" from "hand still working" without reading the transcript
+- **Effort**: M
+- **Source**: 2026-09-20 orphan-plan triage (plan frozen into a mission graph, zero identifiers in history)
+- **Pointer**: docs/backlog/foreman-depth0-typed-worker-condition.md
+- **Context**: plan archived as dropped-never-built; the mission graph that sealed it is terminal.
+
+### Skill frontmatter `tier:` migration never landed — the portability probe checks a key no SKILL.md carries
+- **Status**: open
+- **Trigger**: any edit to `scripts/probe-skill-frontmatter-portability.sh`, OR the next cross-harness skill-portability report
+- **Effort**: S
+- **Source**: 2026-09-20 orphan-plan triage (`grep -rln '^tier:' skills/*/SKILL.md` empty)
+- **Pointer**: docs/backlog/skill-frontmatter-tier-migration.md
+- **Context**: decide keep-or-drop `tier:`; the probe and the plan's §0 note must agree either way.
+
+### Host Conformance tool — authorized by the 2026-08-23 consolidation decision, never built
+- **Status**: open
+- **Trigger**: before any coding-harness architecture migration is proposed again, OR when a host capability claim is disputed by a peer
+- **Effort**: L
+- **Source**: 2026-09-20 remote-branch triage (decision branch merged at 47b52eac; deliverable absent)
+- **Pointer**: docs/backlog/host-conformance-tool.md
+- **Context**: needs its own registered plan; the decision doc lists the six report sections.
+
 ### Managed rail: repair scope is derived from the reviewer's claim text — a path-less finding terminalizes the campaign
 - **Status**: open
 - **Trigger**: the next `--resume --campaign-disposition-authority` whose must-fix-now finding names no `src/`/`hooks/` path, OR any edit to `findingBoundRepairPaths`

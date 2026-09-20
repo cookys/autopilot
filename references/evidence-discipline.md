@@ -256,7 +256,7 @@ Evidence: `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/`.
 
 **2026-08-16 → fired 2026-08-17.** A retirement sweep asked "does anything enforce capability-claim
 expiry at runtime?", answered **no**, and shipped that as evidence
-(`docs/plans/_archive/evidence/2026-08-16-owner-kernel-retirement/p4-claim-expiry-non-enforcement.md`). It
+(`docs/plans/_archive/2026/08/evidence/2026-08-16-owner-kernel-retirement/p4-claim-expiry-non-enforcement.md`). It
 even named the `2026-08-17` date and classified it harmless. At `2026-08-17T22:23:16Z` that expiry
 hard-blocked every agy dispatch, every agy review, and every Codex PostCompact, and turned twelve
 test files red.
@@ -327,7 +327,7 @@ Rule: when a test feeds a hand-built object into a unit that production feeds fr
 (b) pin BIDIRECTIONALLY — the production shape must trigger, and the plausible-wrong shape
 must NOT ("reverse pin"). Forward mutation (neuter the gate → red) catches dead logic;
 only the reverse pin catches dead WIRING. Evidence:
-`docs/projects/_archive/2026-08-21-p6d-corrective-gates/` (R2/R3 reviewer reports).
+`docs/projects/_archive/2026/08/2026-08-21-p6d-corrective-gates/` (R2/R3 reviewer reports).
 
 ---
 

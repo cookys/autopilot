@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-holdout-coverage.sh — holdout-verification gate for high-risk diffs (four-layer
-# Kernel rule K3, docs/plans/_archive/2026-08-16-four-layer-redesign.md D5; survey basis: SpecBench —
+# Kernel rule K3, docs/plans/_archive/2026/08/2026-08-16-four-layer-redesign.md D5; survey basis: SpecBench —
 # gaming of VISIBLE evidence gates grows ~27pp per 10x LOC, so high-risk work needs checks
 # the implementer could not see at authoring time).
 #

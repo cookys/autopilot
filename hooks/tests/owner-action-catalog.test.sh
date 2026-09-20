@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Keeper coverage for src/engine/owner-kernel/actions.js + policy.js catalog surface,
 # extracted from owner-action-reconciliation.test.sh when the kernel trust machinery
-# was retired (docs/plans/_archive/2026-08-16-owner-kernel-retirement.md P2). The kernel-driven
+# was retired (docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md P2). The kernel-driven
 # sections of the original are recoverable via the plan's quarry anchor.
 . "$(dirname "$0")/lib.sh"
 

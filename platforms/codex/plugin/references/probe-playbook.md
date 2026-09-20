@@ -1,6 +1,6 @@
 # Probe Playbook — diagnostic probes indexed by symptom (L1)
 
-Part of the quality-floor engine ([design](../docs/plans/_archive/2026-07-04-quality-floor-engine.md) §4.1).
+Part of the quality-floor engine ([design](../docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md) §4.1).
 When a run hits a symptom below, the orchestrator MATCHES an entry and runs its probe —
 it does not invent a diagnosis. Every entry has four mandatory fields; the last two are the
 **discriminating check**: if the probe's output matches *expected-if-NOT-match*, this entry

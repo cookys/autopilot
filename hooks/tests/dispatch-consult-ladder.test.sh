@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dispatch-consult-ladder.test.sh — G1 R5 guard fix + --ladder-receipt
-# (plan docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md P2).
+# (plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md P2).
 # Hermetic like dispatch-consult-hermetic.test.sh: scratch topology via
 # AUTOPILOT_TOPOLOGY_FILE, scratch config via REVIEW_LOOP_CONFIG_OVERRIDE, and the
 # --dispatch-author-bin seam so no transport is ever spawned.

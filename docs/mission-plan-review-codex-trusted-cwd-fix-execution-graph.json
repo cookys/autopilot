@@ -40,20 +40,20 @@
       "campaign": {
         "profile": "standard",
         "allowed_path_prefixes": [
-          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
-          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
+          "docs/plans/_archive/2026/08/2026-08-04-plan-review-codex-trusted-cwd-fix.rubric.md",
           "hooks/tests/dispatch-plan-review.test.sh",
           "platforms/codex/plugin/scripts/dispatch-plan-review.js",
           "scripts/dispatch-plan-review.js",
           "scripts/sync-codex-plugin-skills.sh"
         ],
         "spec": {
-          "path": "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
+          "path": "docs/plans/_archive/2026/08/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
           "section": "Deliverable contract"
         },
         "required_paths": [
-          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
-          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
+          "docs/plans/_archive/2026/08/2026-08-04-plan-review-codex-trusted-cwd-fix.rubric.md",
           "hooks/tests/dispatch-plan-review.test.sh",
           "platforms/codex/plugin/scripts/dispatch-plan-review.js",
           "scripts/dispatch-plan-review.js",

@@ -2,7 +2,7 @@
 'use strict';
 
 // dispatch-discuss.js — the discuss consumer (plan
-// docs/plans/_archive/2026-08-28-consult-discuss-qualification.md, D9). The minimal
+// docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md, D9). The minimal
 // executable consumer of the "discuss" qualification seat: the smallest
 // thing that is genuinely a discussion voice, not a second consult.
 //

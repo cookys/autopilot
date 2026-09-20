@@ -268,6 +268,8 @@ function baselineRecord(repoRoot) {
     'docs',
     'projects',
     '_archive',
+    '2026',
+    '07',
     '2026-07-26-capability-adaptive-profiles',
     'p0-context-baseline.json',
   );

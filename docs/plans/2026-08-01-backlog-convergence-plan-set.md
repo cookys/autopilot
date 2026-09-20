@@ -142,8 +142,8 @@ bank or Track 3.
 
 **Backlog entry:** `Readiness gate 的 session-local qualification provider`.
 
-**Owner:** `docs/projects/_archive/2026-07-20-owner-kernel-governance/` P4, with the readiness contract in
-`docs/plans/2026-07-26-provider-readiness-orchestrator.md`.
+**Owner:** `docs/projects/_archive/2026/07/2026-07-20-owner-kernel-governance/` P4, with the readiness contract in
+`docs/plans/_archive/2026/07/2026-07-26-provider-readiness-orchestrator.md`.
 
 **Goal:** provide exact-tuple, host-injected qualification authority for implementer,
 verification-author, and QC roles. Transport/live probes and disk-backed scorecards remain
@@ -289,7 +289,7 @@ source contract cannot be satisfied by an existing one.
 
 - The Owner Kernel P4 item is attached to the active Owner Kernel project, not copied into a new
   project.
-- Skill-transport uses `docs/plans/_archive/2026-07-15-skill-transport-payoff-ab.md`; this portfolio only
+- Skill-transport uses `docs/plans/_archive/2026/07/2026-07-15-skill-transport-payoff-ab.md`; this portfolio only
   records the missing implementer arm disposition.
 - Fable uses `docs/plans/2026-07-08-fable-skills-absorption.md`; no implementation is authorized
   without its Board decision.

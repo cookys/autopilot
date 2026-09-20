@@ -1,6 +1,6 @@
 # Acceptance Patterns — mechanical acceptance menu (L1)
 
-Part of the quality-floor engine ([design](../docs/plans/_archive/2026-07-04-quality-floor-engine.md) §4.2).
+Part of the quality-floor engine ([design](../docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md) §4.2).
 A planner writing a unit's acceptance criteria ATTACHES patterns from this menu instead of
 inventing prose criteria. Every pattern embeds its own **negative control** — an instance
 must demonstrate it can fail. An acceptance section with no demonstrated failure mode is

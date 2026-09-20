@@ -69,7 +69,7 @@ export NTV_DEVELOP_SHA
 MISSION_COMMON="$(git -C "$NTV_FIXTURE_REPO" rev-parse --git-common-dir)"
 case "$MISSION_COMMON" in /*) ;; *) MISSION_COMMON="$NTV_FIXTURE_REPO/$MISSION_COMMON" ;; esac
 MISSION_LEDGER="$MISSION_COMMON/autopilot/implementation-campaign.jsonl"
-ARCHIVE_AUTH="$NTV_FIXTURE_REPO/docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json"
+ARCHIVE_AUTH="$NTV_FIXTURE_REPO/docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json"
 expect_failure "reservation authorization path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth.json" --ledger "$MISSION_LEDGER" --pre-spend
 ln -s "$ARCHIVE_AUTH" "$TEST_TMP/auth-link.json"
 expect_failure "reservation authorization symlink escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth-link.json" --ledger "$MISSION_LEDGER" --pre-spend
@@ -85,7 +85,7 @@ const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'next-touch-auth-path-'));
 const repo = path.join(parent, 'repo');
 execFileSync('git', ['init', '-q', repo]);
-const auth = path.join(repo, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json');
+const auth = path.join(repo, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json');
 fs.mkdirSync(path.dirname(auth), { recursive: true });
 const external = path.join(parent, 'external-auth.json');
 fs.writeFileSync(external, '{}\n');
@@ -211,7 +211,7 @@ const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const source = validation.sourceDigests(root);
 const historical = validation.loadRepoAndAuthority({
   repo: root,
-  authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
 }).authorization;
 const common = repoInfo.common;
 const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'g8b-validation-'));
@@ -219,7 +219,7 @@ const bundlePath = path.join(directory, 'terminal.json');
 const g8bPath = path.join(directory, 'g8b.json');
 const develop = process.env.NTV_DEVELOP_SHA;
 const archiveAuth = JSON.parse(fs.readFileSync(
-  path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
   'utf8',
 ));
 const roster = {
@@ -261,9 +261,9 @@ const makeBody = (overrides = {}) => ({
   d8_publication_sha: validation.D8_PUBLICATION_SHA,
   d8_report_path: '.autopilot/evidence/grok-implementer-ab.json',
   d8_report_sha256: '804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b',
-  archive_plan_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
-  archive_rubric_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
-  historical_archive_authorization_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
+  archive_plan_path: 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
+  archive_rubric_path: 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
+  historical_archive_authorization_path: 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
   historical_archive_authorization_sha256: '3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba',
   historical_archive_authorization_digest: validation.canonicalDigest(archiveAuth),
   task_authority_ref: { path: 'task-authority.json', task_authority_id: '2'.repeat(64) },
@@ -369,7 +369,7 @@ const plan = run(makeBody({ source_plan_sha256: 'f'.repeat(64) }));
 if (!plan || plan.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-plan G8b receipt was accepted');
 const d8 = run(makeBody({ d8_report_sha256: 'f'.repeat(64) }));
 if (!d8 || d8.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-D8 G8b receipt was accepted');
-const cliBypass = run(makeBody(), { authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') });
+const cliBypass = run(makeBody(), { authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') });
 if (!cliBypass || cliBypass.code !== 'G8B_CLI_BYPASS_REJECTED') throw new Error('CLI authority bypass was accepted');
 fs.rmSync(directory, { recursive: true, force: true });
 console.log('G8b authority missing/tamper/lineage/cross-binding/CLI negatives passed');
@@ -392,7 +392,7 @@ const composition = require(path.join(root, 'src/engine/campaign-composition'));
 const source = validation.sourceDigests(root);
 const historical = validation.loadRepoAndAuthority({
   repo: root,
-  authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
 }).authorization;
 const rootInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const authorityEnvelopePath = path.join(
@@ -670,9 +670,9 @@ try {
     d8_publication_sha: validation.D8_PUBLICATION_SHA,
     d8_report_path: '.autopilot/evidence/grok-implementer-ab.json',
     d8_report_sha256: '804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b',
-    archive_plan_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
-    archive_rubric_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
-    historical_archive_authorization_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
+    archive_plan_path: 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
+    archive_rubric_path: 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
+    historical_archive_authorization_path: 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
     historical_archive_authorization_sha256: '3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba',
     historical_archive_authorization_digest: validation.canonicalDigest(historical),
     task_authority_ref: { path: path.basename(paths.taskAuthority), task_authority_id: taskAuthority.task_authority_id },
@@ -1291,7 +1291,7 @@ const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
-const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
+const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
 const source = validation.sourceDigests(root);
 const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 validation.validateArchiveState(root, head, source, auth);
@@ -1365,7 +1365,7 @@ const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
-const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
+const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
 const missionRoot = path.join(repoInfo.common, 'autopilot/mission');
 const bundle = {
   prepared_receipt: path.join(missionRoot, 'next-touch-debt-retirement/successor-prepared.json'),
@@ -1752,7 +1752,7 @@ const runtime = require(path.join(root, 'src/mission/runtime'));
 const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const auth = validation.loadRepoAndAuthority({
   repo: root,
-  authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
 }).authorization;
 const prepared = JSON.parse(fs.readFileSync(
   path.join(repoInfo.common, 'autopilot/mission/next-touch-debt-retirement/successor-prepared.json'), 'utf8',

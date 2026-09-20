@@ -5,7 +5,7 @@ Found while repairing a red test suite; the red tests were a symptom, not the pr
 ## What was broken
 
 At **`2026-08-17T22:23:16.577Z`** the capability receipt
-(`docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json`)
+(`docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json`)
 passed its 14-day TTL. That expiry is a hard precondition on three production paths:
 
 | Path | Effect |

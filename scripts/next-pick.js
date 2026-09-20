@@ -3,7 +3,7 @@
 
 /**
  * next-pick.js — deterministic auto-pick over written queues
- * (autonomous-brain-integration P5; plan: docs/plans/_archive/2026-08-17-autonomous-brain-integration.md).
+ * (autonomous-brain-integration P5; plan: docs/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md).
  *
  * Governance: picking is a PROXY DECISION — it lands in the decision ledger with
  * a materialized pick-record, and replay recomputes from that record, never from

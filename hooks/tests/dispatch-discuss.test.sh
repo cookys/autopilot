@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dispatch-discuss.test.sh — D9 acceptance surface (plan
-# docs/plans/_archive/2026-08-28-consult-discuss-qualification.md, D9).
+# docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md, D9).
 #
 # scripts/dispatch-discuss.js is the executable decision point: switch
 # resolution (discuss_dispatch, via the REAL resolve-review-loop.sh) and

@@ -6,7 +6,7 @@
 # rather than a third hand-rolled calendar check — never a comparison of `now` against
 # the row's own `expires`. A past-expires qualified row stays T0/T1-eligible and an
 # expiry-less row is no longer punished for lacking a date (references/strike-decay.md,
-# docs/plans/_archive/2026-08-22-no-confidence-decay.md). The T2 fail-closure cases covered here:
+# docs/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md). The T2 fail-closure cases covered here:
 # missing store, unknown engine, no admissible baseline (no qualified row at all),
 # requalify_required (mechanical no-confidence — a critical strike after the pass),
 # conflicting (latest fresh row is itself a failure), and malformed-line tolerance —

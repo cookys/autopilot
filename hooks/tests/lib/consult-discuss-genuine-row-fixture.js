@@ -3,7 +3,7 @@
 
 // consult-discuss-genuine-row-fixture.js
 //
-// D7 test fixture (plan docs/plans/_archive/2026-08-28-consult-discuss-qualification.md
+// D7 test fixture (plan docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md
 // D7 case viii): produces a role-qualification row for consult/discuss that is
 // GENUINELY GRADED by the shipped D1/D2 grader over the shipped D1/D2
 // generator's own cases — never a hand-typed pass count. This is the same

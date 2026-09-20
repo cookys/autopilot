@@ -1964,7 +1964,7 @@ D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f103717
 D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
 validate_d2_agy_claims() {
   local receipt validator observed rc=0
-  receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$SELF_DIR/../docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
+  receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$SELF_DIR/../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
   validator="$SELF_DIR/platform-capability-claims.js"
   [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
     || die_precondition "D2 capability claim validation failed"
@@ -2915,7 +2915,7 @@ fi
 # kimi argv-payload ceiling — refuse BEFORE anything is created, so the `precondition_failed`
 # contract ("nothing was created") holds. Copied in shape from dispatch-review.sh's kimi gate
 # (~line 1136-1146): kimi 0.41.0 takes the prompt ONLY as the -p argv string — no --prompt-file,
-# no STDIN (Stage-0 spike 2026-09-11, docs/plans/2026-09-11-kimi-implementer-rail.md §0: `-p ''`
+# no STDIN (Stage-0 spike 2026-09-11, docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md §0: `-p ''`
 # is rejected, `-p -` is taken literally) — so the EDIT-ONLY directive plus the task prompt
 # travel as ONE argv string and execve rejects it over Linux's MAX_ARG_STRLEN (131072 bytes),
 # before kimi starts and with no vendor error to report. KIMI_EDIT_ONLY is set here (not inside
@@ -3381,7 +3381,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   rm -f "$OPENCODE_PROMPT_FILE"
 elif [ "$IS_KIMI" -eq 1 ]; then
   # Kimi Code CLI (Moonshot). Stage-0 spike 2026-09-11 (kimi 0.41.0), see
-  # docs/plans/2026-09-11-kimi-implementer-rail.md §0:
+  # docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md §0:
   #   plain `-p` already edits files in the PROCESS CWD, exit 0, NOT committed by kimi itself
   #   → wrapper-commit rail, same as grok/qoderclicn/opencode; `-p` CANNOT combine with
   #   --auto/-y ("Cannot combine --prompt with --auto") and neither is needed since -p already

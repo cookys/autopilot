@@ -1,7 +1,7 @@
 # Blind review redesign — cut 1b-B: intake probes the cleanroom boundary, the JS/resolver learn seat tiers, codex returns to the panel
 
 > Status: SHIPPED v2.36.63 (merge `bc4ea99e`, 2026-09-17) · Size: L · Base: `d7912c7e` (v2.36.62 shipped, 1b-A merge `94d44940`) · Parent:
-> `docs/plans/_archive/2026-09-16-blind-review-packet.md` §7 item 3; sibling `docs/plans/2026-09-17-blind-review-cleanroom-launcher.md`
+> `docs/plans/_archive/2026/09/2026-09-16-blind-review-packet.md` §7 item 3; sibling `docs/plans/2026-09-17-blind-review-cleanroom-launcher.md`
 > (1b-A: launcher + `dispatch-review.sh` tiers, shipped). Evidence dir:
 > `docs/plans/evidence/2026-09-17-blind-review-cleanroom-intake/`.
 

@@ -5,9 +5,9 @@ never `git stash`, never touch files outside `output_paths`, never run a real ag
 binary or hit any endpoint — every suite drives PATH stubs only. Base commit: `fe225ff5`.
 
 ## Read first (in this order)
-1. `docs/plans/2026-09-16-agy-effort-and-rail-wording.md` — §0 measured facts, §1 ruling (four items),
+1. `docs/plans/_archive/2026/09/2026-09-16-agy-effort-and-rail-wording.md` — §0 measured facts, §1 ruling (four items),
    §2 changes + the test list, §4 acceptance.
-2. `docs/plans/2026-09-16-agy-effort-and-rail-wording.rubric.md` — R1–Rn are the acceptance.
+2. `docs/plans/_archive/2026/09/2026-09-16-agy-effort-and-rail-wording.rubric.md` — R1–Rn are the acceptance.
 3. `scripts/lib/agy-model-alias.sh` (all of it; `agy_resolve_model_alias` :35, `agy_effort_clamp` :64).
 4. The three agy exec sites: `scripts/dispatch-hetero.sh:3441`, `scripts/dispatch-review.sh:1412`,
    `scripts/dispatch-author.sh:1140`.

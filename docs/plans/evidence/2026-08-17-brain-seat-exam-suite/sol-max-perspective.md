@@ -8,7 +8,7 @@ READ-PROBE: READPROBE-2644111-9df4f9c0fe9f0431ad97200e80c83440
 
 ### Diligence — partial catch
 
-The proposed trajectory replay would catch the narrow regression form of **F5**: if finding `X` is closed and the same defect later resurfaces, stable-ID exact matching would mark a missing `X` as a critical miss and record its round. It would also catch the “6 FAILs omitted” form of **F10** if those failures appear as planted critical defects and an accepting verdict counts as a false pass. That directly targets the failures described in [sol-pathology.md](/home/cookys/projects/autopilot/docs/plans/_archive/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md:24) using the survey’s injected-regression rule in [survey.md](/home/cookys/projects/autopilot/docs/plans/evidence/2026-08-17-brain-seat-exam-suite/survey.md:27).
+The proposed trajectory replay would catch the narrow regression form of **F5**: if finding `X` is closed and the same defect later resurfaces, stable-ID exact matching would mark a missing `X` as a critical miss and record its round. It would also catch the “6 FAILs omitted” form of **F10** if those failures appear as planted critical defects and an accepting verdict counts as a false pass. That directly targets the failures described in [sol-pathology.md](/home/cookys/projects/autopilot/docs/plans/_archive/2026/08/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md:24) using the survey’s injected-regression rule in [survey.md](/home/cookys/projects/autopilot/docs/plans/evidence/2026-08-17-brain-seat-exam-suite/survey.md:27).
 
 It would still pass the engine in several pathological cases:
 
@@ -26,7 +26,7 @@ Therefore diligence probably would have caught one manifestation of F5 and one m
 
 The counterfactual design catches genuine family-label preference: if the identical work product is accepted with a self-family label and rejected after a label swap, the maximum verdict delta fires. That mechanism is clean.
 
-But the observed **F7** was role-boundary collapse—implementer self-test counted as acceptance and a native writer was presented as heterogeneous—not demonstrated label preference ([sol-pathology.md](/home/cookys/projects/autopilot/docs/plans/_archive/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md:30)). An engine can apply the same wrong rule to every family and obtain a zero delta. The survey explicitly warns about the “consistently wrong” paradox but then proposes delta-only acceptance ([survey.md](/home/cookys/projects/autopilot/docs/plans/evidence/2026-08-17-brain-seat-exam-suite/survey.md:28)).
+But the observed **F7** was role-boundary collapse—implementer self-test counted as acceptance and a native writer was presented as heterogeneous—not demonstrated label preference ([sol-pathology.md](/home/cookys/projects/autopilot/docs/plans/_archive/2026/08/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md:30)). An engine can apply the same wrong rule to every family and obtain a zero delta. The survey explicitly warns about the “consistently wrong” paradox but then proposes delta-only acceptance ([survey.md](/home/cookys/projects/autopilot/docs/plans/evidence/2026-08-17-brain-seat-exam-suite/survey.md:28)).
 
 Additional false passes:
 
@@ -35,7 +35,7 @@ Additional false passes:
 - Selectively sampled directional pairs leave unsampled family pairs unqualified in fact but implicitly covered in the evidence.
 - Label stripping removes explicit family cues, but the engine can infer family from coding style, formatting, transport metadata, or characteristic artifacts.
 
-The shipped architecture correctly assigns F7 to role qualification and contract admission rather than this exam ([architectural plan](/home/cookys/projects/autopilot/docs/plans/_archive/2026-08-17-autonomous-brain-integration.md:41)). Fairness remains useful, but the proposed form should not claim F7 coverage.
+The shipped architecture correctly assigns F7 to role qualification and contract admission rather than this exam ([architectural plan](/home/cookys/projects/autopilot/docs/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md:41)). Fairness remains useful, but the proposed form should not claim F7 coverage.
 
 ### Convergence — catches obvious stalls, passes several central shapes
 
@@ -43,7 +43,7 @@ The clear catch is a simple **F5/F10 verification spin**: three externally recor
 
 The important false passes are:
 
-- **F2 passes by design.** A 53-file candidate has product delta, so the fuse cannot see its quadratic downstream cost. Both the script and architecture say F2 belongs to the pre-spawn churn budget, not the fuse ([check-stall-fuse.js](/home/cookys/projects/autopilot/scripts/check-stall-fuse.js:8), [architectural plan](/home/cookys/projects/autopilot/docs/plans/_archive/2026-08-17-autonomous-brain-integration.md:41)). The exam needs an explicit mega-batch refusal case; “scope-diff check” is not equivalent.
+- **F2 passes by design.** A 53-file candidate has product delta, so the fuse cannot see its quadratic downstream cost. Both the script and architecture say F2 belongs to the pre-spawn churn budget, not the fuse ([check-stall-fuse.js](/home/cookys/projects/autopilot/scripts/check-stall-fuse.js:8), [architectural plan](/home/cookys/projects/autopilot/docs/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md:41)). The exam needs an explicit mega-batch refusal case; “scope-diff check” is not equivalent.
 
 - **F1/F3/F4 can look like product.** The shipped classifier counts every non-test/eval file as product. Handwritten control-plane files, gate scripts, graph records, and tracker rewrites reset the stall counter even when hidden objective acceptance has not moved.
 

@@ -22,8 +22,8 @@
         "allowed_path_prefixes": [
           "CHANGELOG.md",
           "docs/BACKLOG.md",
-          "docs/plans/2026-08-02-reviewer-output-token-budget-mirror-correction.md",
-          "docs/plans/2026-08-02-reviewer-output-token-budget-mirror-correction.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.md",
+          "docs/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.rubric.md",
           "docs/plans/2026-08-02-reviewer-output-token-budget.md",
           "docs/plans/2026-08-02-reviewer-output-token-budget.rubric.md",
           "docs/projects/2026-08-02-reviewer-output-token-budget",
@@ -70,8 +70,8 @@
         "required_paths": [
           "CHANGELOG.md",
           "docs/BACKLOG.md",
-          "docs/plans/2026-08-02-reviewer-output-token-budget-mirror-correction.md",
-          "docs/plans/2026-08-02-reviewer-output-token-budget-mirror-correction.rubric.md",
+          "docs/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.md",
+          "docs/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.rubric.md",
           "docs/plans/2026-08-02-reviewer-output-token-budget.md",
           "docs/plans/2026-08-02-reviewer-output-token-budget.rubric.md",
           "docs/projects/2026-08-02-reviewer-output-token-budget/README.md",
@@ -89,7 +89,7 @@
           "scripts/sync-codex-plugin-skills.sh"
         ],
         "spec": {
-          "path": "docs/plans/2026-08-02-reviewer-output-token-budget-mirror-correction.md",
+          "path": "docs/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.md",
           "section": "Deliverable contract"
         }
       },

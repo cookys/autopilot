@@ -1,7 +1,7 @@
 {
   "corpus_version": "discuss-v3",
   "role": "discuss",
-  "plan": "docs/plans/_archive/2026-08-28-consult-discuss-qualification.md",
+  "plan": "docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md",
   "budget": {
     "trials_per_administration": 2,
     "families": 4,

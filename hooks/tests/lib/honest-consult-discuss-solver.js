@@ -2,7 +2,7 @@
 
 // hooks/tests/lib/honest-consult-discuss-solver.js — an ENVELOPE-ONLY "honest
 // candidate" for the consult/discuss qualification exams
-// (docs/plans/_archive/2026-08-28-consult-discuss-qualification.md D1/D2/D3).
+// (docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md D1/D2/D3).
 //
 // WHY THIS EXISTS: the existing stub tests (scripts/engine-qualify-
 // consult.test.js / -discuss.test.js) regenerate the SAME sealed

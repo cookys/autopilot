@@ -2,7 +2,7 @@
 
 The policy content quarried from the retired owner-kernel acceptance machinery
 (retired 2026-08-16; plan, review chain, and quarry anchor:
-[`docs/plans/_archive/2026-08-16-owner-kernel-retirement.md`](../docs/plans/_archive/2026-08-16-owner-kernel-retirement.md)).
+[`docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`](../docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md)).
 The ~27k-line trust chain around these rules produced no signal and was removed;
 the rules themselves are the part worth keeping. They are stated here as a
 **contract** — what a closure claim must prove — deliberately free of any

@@ -264,7 +264,7 @@ Usage is derived from declared `pi-rpc` parsing only: `message_end` messages are
 `pi-rpc` is intentionally separated from the generic JSONL scanner so nested `cost` fields cannot
 pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` steer injection
 (`no_event_timeout`) and remains report-only by default unless `PI_RPC_MAX_SECS` is set.
-Evidence + residuals: [`docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](https://github.com/cookys/autopilot/blob/develop/docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
+Evidence + residuals: [`docs/projects/_archive/2026/07/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](https://github.com/cookys/autopilot/blob/develop/docs/projects/_archive/2026/07/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
 (`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
 
 ### Directive reachability (Phase 2 — advisory nudge channel)
@@ -684,7 +684,7 @@ A mid-run heterogeneous second opinion used to be hand-typed `dispatch-review.sh
 the operator picked a runner, a model and an effort at the keyboard, so the choice was
 invisible to the roster and unreproducible between runs. It is now a **seat** in
 `review-loop-config.md`, resolved AND dispatched by one script (plan
-`docs/plans/_archive/2026-08-28-consult-discuss-qualification.md` D8):
+`docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md` D8):
 
 ```bash
 scripts/dispatch-consult.sh --question-file <what to decide> --artifact <diff/file/test-output> [--artifact <more>...]
@@ -725,7 +725,7 @@ resolution, `dispatch-author.sh`'s raw-prompt rail, a closed production schema, 
 ### Hook points — the four canonical unknown-escalation ladder call sites
 
 The consult seat is rung U1 of the unknown-escalation ladder (plan
-`docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md`). It is never called unconditionally: every
+`docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md`). It is never called unconditionally: every
 site runs `scripts/probe-unknown.js classify` first and acts only on `recommend`; every U1/U2/U3
 dispatch appends one `ladder` row (`dispatch-consult.sh --ladder-receipt` for U1,
 `probe-unknown.js receipt` for U2/U3). This list is canonical; the SKILLs spell the same argv.
@@ -795,7 +795,7 @@ scripts/dispatch-explore.sh --runner codex|agy --model <name> --prompt-file <fil
 
 ## A non-Claude foreman — [`scripts/dispatch-foreman.sh`](../scripts/dispatch-foreman.sh)
 
-Shape B of [`docs/plans/_archive/2026-09-13-non-claude-foreman-rail-design.md`](../docs/plans/_archive/2026-09-13-non-claude-foreman-rail-design.md)
+Shape B of [`docs/plans/_archive/2026/09/2026-09-13-non-claude-foreman-rail-design.md`](../docs/plans/_archive/2026/09/2026-09-13-non-claude-foreman-rail-design.md)
 (owner ruling: quota is the motive). kimi holds the orchestration loop in a dispatcher-created
 worktree and drives hands through the rails above; **the rail, not the prompt, enforces what
 `hooks/foreman-guard.js` enforces for a Claude foreman**, and the verdict stays at depth 0.

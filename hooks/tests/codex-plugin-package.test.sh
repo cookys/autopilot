@@ -184,12 +184,12 @@ for (const rel of [
   'evals/va-eval-generator.js',
   'evals/va-eval-grader.js',
   'evals/va-capability-evidence-corpus.json',
-  'docs/plans/_archive/2026-06-04-distill-consolidate.md',
+  'docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
-  'docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md',
-  'docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json',
-  'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
-  'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
+  'docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json',
+  'docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
+  'docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
   compareFile(rel);
 }
@@ -325,11 +325,11 @@ const triggers = row.trigger || [];
 const covers = (f) => triggers.some((e) =>
   e.endsWith('/') ? f.startsWith(e) : e.startsWith('*') ? f.endsWith(e.slice(1)) : f === e);
 const docFiles = [
-  'docs/plans/_archive/2026-06-04-distill-consolidate.md',
+  'docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
-  'docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md',
-  'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
-  'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
+  'docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
+  'docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md',
 ];
 const misses = docFiles.filter((rel) => !covers(rel));
 if (misses.length > 0) { console.log(misses.join('\n')); process.exit(1); }
@@ -408,12 +408,12 @@ for skill in dev-flow ceo-agent l3 l4 l5 l6 finish-flow; do
 done
 cp "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/platforms/codex/plugin/scripts/sync-codex-plugin-skills.sh"
 for rel in \
-  docs/plans/_archive/2026-06-04-distill-consolidate.md \
+  docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md \
   docs/plans/2026-06-22-ceo-fleet-autonomy.md \
-  docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md \
-  docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json \
-  docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
-  docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md
+  docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md \
+  docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json \
+  docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
+  docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md
 do
   mkdir -p "$SYNC_SANDBOX/$(dirname "$rel")" "$SYNC_SANDBOX/platforms/codex/plugin/$(dirname "$rel")"
   printf 'doc %s\n' "$rel" > "$SYNC_SANDBOX/$rel"
@@ -688,7 +688,7 @@ print('skill_harness_maintenance_exists', fs.existsSync(path.join(pluginDir, 'sk
 print('support_reference_exists', fs.existsSync(path.join(pluginDir, 'references', 'model-routing.md')));
 print('support_script_exists', fs.existsSync(path.join(pluginDir, 'scripts', 'dispatch-review.sh')));
 print('support_template_exists', fs.existsSync(path.join(pluginDir, 'project-config-template', 'review-loop-config.md')));
-print('support_doc_exists', fs.existsSync(path.join(pluginDir, 'docs', 'plans', '_archive', '2026-06-26-trust-tiered-review-policy.md')));
+print('support_doc_exists', fs.existsSync(path.join(pluginDir, 'docs', 'plans', '_archive', '2026', '06', '2026-06-26-trust-tiered-review-policy.md')));
 
 const pluginReal = fs.realpathSync(pluginDir);
 
@@ -775,7 +775,7 @@ console.log(`installed_harness_maintenance=${Boolean(installedPath) && fs.exists
 console.log(`installed_reference=${Boolean(installedPath) && fs.existsSync(`${installedPath}/references/model-routing.md`)}`);
 console.log(`installed_script=${Boolean(installedPath) && fs.existsSync(`${installedPath}/scripts/dispatch-review.sh`)}`);
 console.log(`installed_template=${Boolean(installedPath) && fs.existsSync(`${installedPath}/project-config-template/review-loop-config.md`)}`);
-console.log(`installed_doc=${Boolean(installedPath) && fs.existsSync(`${installedPath}/docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md`)}`);
+console.log(`installed_doc=${Boolean(installedPath) && fs.existsSync(`${installedPath}/docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md`)}`);
 NODE
 )"
   assert_contains "$INSTALLED_CACHE_OUT" "installed_dev_flow=true" "Installed Codex plugin cache contains dev-flow skill"

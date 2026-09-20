@@ -178,7 +178,7 @@ depth-0 adjudication.
 
 Acceptance section with no demonstrated failure mode (no negative control per `references/acceptance-patterns.md`) → 🟠 Major.
 
-**Findings feed the adjudication table** (design: `docs/plans/_archive/2026-07-04-quality-floor-engine.md` §4.3): each finding is a CLAIM entering `scripts/adjudicate-findings.js` as `UNPROBED`; only `REPRODUCED` or second-family-confirmed `PROOF_BY_TRACE` are actionable for fix dispatch. `REFUTED` needs a mutation-validated probe — green under injected defect = vacuous, refutes nothing. Write probeable findings: name the failure signature an executed probe should observe.
+**Findings feed the adjudication table** (design: `docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md` §4.3): each finding is a CLAIM entering `scripts/adjudicate-findings.js` as `UNPROBED`; only `REPRODUCED` or second-family-confirmed `PROOF_BY_TRACE` are actionable for fix dispatch. `REFUTED` needs a mutation-validated probe — green under injected defect = vacuous, refutes nothing. Write probeable findings: name the failure signature an executed probe should observe.
 
 ## Output Contract (MANDATORY format)
 

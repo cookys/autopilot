@@ -1,7 +1,7 @@
 # Experience audit — the user-persona critic methodology
 
 **Canonical home** for the post-acceptance experience-critic methodology
-(autonomous-brain-integration P6; plan `docs/plans/_archive/2026-08-17-autonomous-brain-integration.md`).
+(autonomous-brain-integration P6; plan `docs/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md`).
 Consumed by `scripts/dispatch-experience-critic.sh` (which pins this file's digest into
 every critic dispatch). Other docs link here; they never restate the protocol.
 

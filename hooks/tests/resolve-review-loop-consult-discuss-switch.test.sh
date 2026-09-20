@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # resolve-review-loop-consult-discuss-switch.test.sh — D6 acceptance surface
-# (docs/plans/_archive/2026-08-28-consult-discuss-qualification.md § D6). Covers the
+# (docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md § D6). Covers the
 # eight D6 assertions (1-4b, 5-7) plus concrete mirror parity. Assertion 6
 # ("behavioral parity through the real wrapper entry points") drives
 # scripts/dispatch-consult.sh (D8) and scripts/dispatch-discuss.js (D9)
@@ -380,7 +380,7 @@ assert_not_contains "$MIGRATION_OUT" "SILENTLY-PASSED" "migration negative never
 
 # ── 6. Behavioral parity through the real wrapper entry points ─────────────
 # scripts/dispatch-consult.sh (D8) and scripts/dispatch-discuss.js (D9) have
-# now landed (Wave 2 of docs/plans/_archive/2026-08-28-consult-discuss-qualification.md).
+# now landed (Wave 2 of docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md).
 # Both wrappers own switch resolution themselves (round-2 finding [6]), so
 # there is a real entry point to drive here: invoke each directly, with the
 # shipped template, against a fail-hard shadow dispatch-author.sh that records

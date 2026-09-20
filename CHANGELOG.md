@@ -1,9 +1,32 @@
 # Changelog
 
-## Unreleased
+## v2.36.80 — plan 登記簿與日期化歸檔（孤兒 plan 的根因修正）；一次性遷移與清點；doc-drift script-refs 修正
 
+- **洩漏根因**：plan 出生只寫檔不登記（plan-template／research-to-ship／l5 recipe），第一個機器接觸點 `dispatch-plan-review.js`、
+  `mission-execution-graph-check.js` 照收未登記的 plan → 39 個孤兒、119 個 active 沒人知道狀態。修法（機制，非指引）：
+  **`docs/projects/INDEX.md` 是 active plan 的登記簿**——每個 `docs/plans/<stem>.md` 要有 Version=`active` 的列（只比對 Plan 欄，
+  不比對散文）；`check-plan-graduation.js` 新 blocking `plan_unregistered`／`plan_stem_malformed`，`dispatch-plan-review.js` 與
+  `mission-execution-graph-check.js` 對未登記 plan 直接拒（exit 2；無 INDEX 的 consumer repo 自動放行、`--allow-unregistered`）；
+  `--register-template <stem>` 印出要貼的列；歸檔時自動把該列 Version 從 `active` 改成釋出版本（所有指到同 plan 的列都改路徑）。
+- **歸檔日期化**：`docs/plans/_archive/<YYYY>/<MM>/<stem>.md`（sidecar 同目錄、evidence 在 `…/evidence/<stem>/`），active 保持 flat；
+  `--migrate-archive-layout` 一次搬 legacy flat 的 plan／evidence 與 `docs/projects/_archive/<date>-<name>/`（本版執行：91 個 plan 檔、
+  104 個 project dir、420 處引用改寫）；`--archive <stem> [--shipped-in v]` 給「已出貨但 CHANGELOG 沒提」的 plan 走同一條搬家路徑
+  （all-or-nothing、目的地存在即拒、月／日範圍檢查）。
+- **一次性清點**（2026-09-20，每條有 sha／grep 證據）：39 個孤兒 plan → 24 shipped 歸檔（含 v2.34.0 portfolio 七件）、2 living-doc
+  歸檔、1 partial 歸檔＋缺口登 BACKLOG（`tier:` 遷移）、12 superseded（owner-kernel trust chain，`b2d7eede` 退役）刪除或以
+  superseded 歸檔（ADR-0001 引用的兩個保留）、1 never（foreman r6 typed worker_condition）以 dropped 歸檔＋登 BACKLOG；
+  `docs/2026-08-23-coding-harness-consolidation-decision` 分支合入並歸檔，其授權的 Host Conformance 工具登 BACKLOG（L）。
+  其餘 86 個 active plan 全部登記進 INDEX；六個 backlog bundle plan（B1–B6，49 條 S/Fix）登記為 active。閘門在整理後 exit 0。
+  四條本機舊分支與兩條 remote 分支查證全數已落地或遷出，刪除。
+- 引用改寫補到 `../plans/<stem>`／`plans/<stem>`（ADR、mission sources manifest）兩種相對形態（本版以一次性腳本處理；閘門的
+  rewriter 尚只認 `docs/plans/` 前綴——列入 B-bundle 追蹤）。
 - Fix：`doc-drift-gate.js`（＋鏡像）script-refs 檢查改為先對「引用文件自己的目錄」解析 `scripts/...` 參照，落空才 fallback 到
   `--repo-root`——修 308 `viewer/README.md` 引用 `scripts/test-*.mjs`（實際是 `viewer/scripts/test-*.mjs`）被誤判成缺檔的假陽性。
+- 測試：`check-plan-graduation` 130 案、`dispatch-plan-review` 287、`mission-policy-graph` 9；二家審 claude-fable-5-1 FIX-THEN-SHIP
+  2🟠2🟡 全修（INDEX 只比對 Plan 欄、月日驗證、多列同 plan 全改、branch 自洽）；`codex-plugin-package` 路徑跟進日期化。
+
+prose-justification: plan-template step 0、research-to-ship Phase 2、l5 recipe step 1、brainstorm handoff、next（掃 INDEX active 列）、
+CLAUDE.md Plans 列各 +1–2 行（登記簿接線，mechanism）；dev-flow SKILL.md:65 只改 plan 路徑（歸檔位移，profiles 鏈重釘）。
 
 ## v2.36.79 — foreman rail 多軌 sibling 缺口（308 BACKLOG #46，peer 308-0c 作者）＋ hooks/tests/lib.sh EXIT trap 只在頂層 shell 清理
 

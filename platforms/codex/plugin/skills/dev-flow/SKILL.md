@@ -100,7 +100,7 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
 4. Knowledge and digest review:
    Check .claude/knowledge/ for relevant prior learnings.
    Check for unprocessed session digests.
-   Ladder probe (unknown-escalation ladder, plan `docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md`): run
+   Ladder probe (unknown-escalation ladder, plan `docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md`): run
    `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <phase> --terms <key nouns from the task brief>` and act only on `recommend` — U0: read the local hits it lists; U1: `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <unknown_type from classify> --ladder-signals <ids from classify> --ladder-work-unit <phase>`; U2: survey (`issue-search` mode for a `why` unknown), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <unknown_type> --terms <terms> --signals <ids> --work-unit <phase>`; U3 (reachable when earlier refuted `hypothesis` rows make the unknown `why`): `autopilot:debugger` PUA for `why`, `autopilot:think-tank` for `whether`, then the same `receipt` with `--rung U3`; none: continue. At L-1 no phase exists yet: use the task id as `<phase>` here; from L-2 on use the phase id (budgets count per phase for L/H).
    Ledger: `<project>/ledger/decisions.jsonl` (the probe's default when the flag is omitted is `~/.autopilot/ladder/<repo-hash>.jsonl`).
 

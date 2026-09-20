@@ -822,7 +822,7 @@
       ],
       "x-shell-validated": true,
       "x-shell-var": "UNKNOWN_ESCALATION",
-      "description": "Whether the unknown-escalation ladder (scripts/probe-unknown.js) may recommend and receipt climbs. off = probe recommends none with reason knob-off (one knob-off ladder row per work unit) and the resolver emits a capability_warnings line; on = the three unknown_budget_u* fields must be present non-negative integers (else exit 3); auto (default, owner ruling 2026-09-07: a switch, default on) = budgets default to 2/1/1. The knob's own value is never rewritten. Plan docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md."
+      "description": "Whether the unknown-escalation ladder (scripts/probe-unknown.js) may recommend and receipt climbs. off = probe recommends none with reason knob-off (one knob-off ladder row per work unit) and the resolver emits a capability_warnings line; on = the three unknown_budget_u* fields must be present non-negative integers (else exit 3); auto (default, owner ruling 2026-09-07: a switch, default on) = budgets default to 2/1/1. The knob's own value is never rewritten. Plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md."
     },
     "unknown_budget_u1": {
       "type": "integer",

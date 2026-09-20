@@ -144,7 +144,7 @@ Use the fixed format (see [references/brief-template.md](references/brief-templa
 - Top 2-3 collision insights
 - CEO recommendation (if in CEO mode)
 
-When the brief's consensus is **LOW**, record it and let the ladder decide the next rung (unknown-escalation ladder, plan `docs/plans/_archive/2026-09-07-unknown-escalation-ladder.md`):
+When the brief's consensus is **LOW**, record it and let the ladder decide the next rung (unknown-escalation ladder, plan `docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md`):
 
 ```bash
 node scripts/decision-ledger.js append --ledger <ledger> --kind unknown --json '{"type":"whether","rationale":"think-tank consensus LOW on <topic>","work_unit":"<decision>"}'

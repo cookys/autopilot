@@ -15,7 +15,7 @@ colliding.
 | Toward the other | Implements findings from Fable 5 review reports | Reviews Codex's changes; re-runs claims before believing them |
 
 The doer and the verifier are different families — the repo's own review-loop philosophy, applied
-to the sessions themselves. Precedent: `docs/projects/_archive/2026-07-02-l5-l6-engine-integration/review-findings-2026-07-02.md`
+to the sessions themselves. Precedent: `docs/projects/_archive/2026/07/2026-07-02-l5-l6-engine-integration/review-findings-2026-07-02.md`
 (Fable 5 report) → Codex's engine-hardening ship. Zero conflicts.
 
 ## File-space rules

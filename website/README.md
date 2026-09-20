@@ -9,7 +9,7 @@ Public **VitePress** site for [cookys/autopilot](https://github.com/cookys/autop
 | **Location** | Same monorepo: `website/` |
 | **Plugin payload** | **Not included** — never add this tree to `.claude-plugin`, Codex `sync-codex-plugin-skills.sh` DIRS, or skill packages |
 | **Content SSOT** | Root `docs/`, `README*`, `hooks/README.md`, `references/`. Site **curates**; repository wins on conflict |
-| **Plan** | [`docs/plans/2026-07-16-product-website.md`](../docs/plans/2026-07-16-product-website.md) |
+| **Plan** | [`docs/plans/_archive/2026/07/2026-07-16-product-website.md`](../docs/plans/_archive/2026/07/2026-07-16-product-website.md) |
 | **Narrative freeze** | [`NARRATIVE.md`](NARRATIVE.md) · [`TA.md`](TA.md) · [`WEEKLY.md`](WEEKLY.md) |
 | **Growth / IA panel** | [`GROWTH-PANEL.md`](GROWTH-PANEL.md) — codex-sol / agy / MiniMax / glm; not auto-shipped |
 | **Engineer panel R2** | [`PANEL-ENG.md`](PANEL-ENG.md) — state-machine accuracy vs /l5 SSOT |

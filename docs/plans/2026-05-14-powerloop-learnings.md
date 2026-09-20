@@ -108,7 +108,7 @@ Decision Brief 與 perspectives，**不執行 project code 工作**。SKILLS rul
 - `agents/README.md` 已有 **enum'd terminal handoff**：`Next consumer / Routing rationale / Remaining risks`，calling skill pattern-match 用 — 機械化、deterministic
 - `skills/finish-flow/SKILL.md` L-5/H-9 sub-tasks 每個都有 `Output:` clause（具體驗證輸出）— 等同 powerloop log table 的 Summary 欄
 - `skills/dev-flow/SKILL.md` L-1.6 / L-5 forcing function 透過 TaskCreate description 傳上下文
-- 對外（人類讀的）handoff doc：本月剛寫的 `docs/projects/_archive/2026-05-14-superpowers-coexistence/handoff-d1-d2-dogfood.md` 是**freeform** — 沒 schema
+- 對外（人類讀的）handoff doc：本月剛寫的 `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/handoff-d1-d2-dogfood.md` 是**freeform** — 沒 schema
 
 **對比 powerloop**：5 欄 Log Table（Cycle | Phase | Summary | Decision | Handoff）是 **cron 多 session 接力**用的 — 每次 cron fire 是 fresh conversation，這張表是它**唯一**上下文。autopilot 是 session-driven，不存在 cron 多 cycle 場景。
 
@@ -245,7 +245,7 @@ Decision Brief 與 perspectives，**不執行 project code 工作**。SKILLS rul
 
 對 B/A 的判讀：
 - 沒動 SKILL.md description → eval 結果 ±1-2 case 是 LLM stochasticity，不是 regression
-- 想真正測 routing fidelity，需要 manual scenario walks（D-1/D-2 9-query 已是現有做法）OR 寫獨立 router-judge harness（見 `docs/plans/_archive/2026-05-14-eval-router-judge.md`）
+- 想真正測 routing fidelity，需要 manual scenario walks（D-1/D-2 9-query 已是現有做法）OR 寫獨立 router-judge harness（見 `docs/plans/_archive/2026/05/2026-05-14-eval-router-judge.md`）
 
 文件化動作：
 - `scripts/run-eval-batch.sh` 加 header comment 講清楚這個機制 + parametrize `RUNS_PER_QUERY` / `MODEL` 兩個 env var，方便 high-fidelity 跑（5 runs × opus 4.7）vs 日常 quick check

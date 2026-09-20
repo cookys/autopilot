@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-blind-evidence.sh — anti-laundering linter for the ASSEMBLED reviewer payload.
 #
-# Threat model (docs/plans/_archive/2026-08-16-four-layer-redesign.md D2; survey: a "secure"
+# Threat model (docs/plans/_archive/2026/08/2026-08-16-four-layer-redesign.md D2; survey: a "secure"
 # narrative dropped a reviewer's detection rate 97.2%→3.6% on identical code): no direct
 # implementer→reviewer channel exists on the dispatch-review rail — but an orchestrator
 # composing --spec-file can PASTE implementer output, so completion claims enter wearing

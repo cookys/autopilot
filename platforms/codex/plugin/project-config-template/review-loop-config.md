@@ -264,7 +264,7 @@ it — fail-closed). The cross-family overlap message escalates **WARNING** (low
 (high risk). **`--enforce`** turns the resolver into an opt-in hard gate: exit 3 (JSON still emitted)
 when a high-risk change's required cross-family decorrelation is unsatisfied (incl. an empty panel at
 high risk). Default stays exit-0 data mode — the resolver REPORTS, the depth-0 loop / pre-push gate
-ENFORCES (same pattern as `resolve-doa`/`resolve-qc-gate`). Full design: [`docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md`](../docs/plans/_archive/2026-06-26-trust-tiered-review-policy.md).
+ENFORCES (same pattern as `resolve-doa`/`resolve-qc-gate`). Full design: [`docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md`](../docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md).
 
 `density_scaling` is bidirectional because the exchange-rate bench showed the pipeline rescues
 under-capacity implementers, but taxes or regresses at/above-capacity implementers.

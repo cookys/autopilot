@@ -292,7 +292,11 @@ MD
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 out="$(node "$GATE" --repo-root "$d" --fix --json)"
-assert_eq "$(json_exit "$out")" "1" "--fix still reports the exit code of what it found (unfixed report_only items aside, run pre-fix state)"
+# 🟡 fix: --fix re-runs the check against the POST-fix state and derives exit/ok from
+# that, not the pre-fix snapshot — everything this fixture set up is fixable, so exit 0.
+assert_eq "$(json_exit "$out")" "0" "--fix derives exit/ok from the post-fix state"
+assert_contains "$out" '"fixed":[' "the pre-fix violations are kept under the fixed key"
+assert_contains "$out" '"backlog_row_has_plan"' "the fixed key's content is the pre-fix violation set"
 assert_contains "$(cat "$d/docs/BACKLOG.md")" "Keep me" "surviving row is kept"
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Widget has-plan row" "backlog_row_has_plan row is deleted"
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Old shipped row" "backlog_row_done row is deleted"
@@ -337,6 +341,172 @@ assert_file_exists "$d/docs/plans/_archive/evidence/2026-01-01-widget/README.md"
 bgate_out="$(node "$REPO_ROOT/scripts/check-backlog-entries.js" --backlog "$d/docs/BACKLOG.md" --json)"
 assert_not_contains "$bgate_out" '"pointer_unresolved"' \
   "no row survives to report pointer_unresolved"
+
+# --- 🟠 fix: gitMv fallback must never clobber an existing destination; a stem's move is
+#     all-or-nothing (a pre-existing _archive/<stem>.md stops the WHOLE stem's move, not
+#     just that one file) ---
+d="$(fixture_repo archive-destination-exists)"
+printf '# Plan (current)\n' > "$d/docs/plans/2026-01-01-widget.md"
+printf '# Rubric\n' > "$d/docs/plans/2026-01-01-widget.rubric.md"
+mkdir -p "$d/docs/plans/_archive"
+printf '# Plan (STALE, pre-existing)\n' > "$d/docs/plans/_archive/2026-01-01-widget.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3 — ships widget
+
+- landed the thing.
+MD
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --fix --json)"
+assert_eq "$(json_exit "$out")" "1" "archive_destination_exists blocks (post-fix exit stays 1)"
+assert_eq "$(json_count "$out" archive_destination_exists)" "1" "the clash is reported by name"
+assert_contains "$(cat "$d/docs/plans/_archive/2026-01-01-widget.md")" "STALE, pre-existing" \
+  "the pre-existing archive destination is untouched (not clobbered)"
+assert_file_exists "$d/docs/plans/2026-01-01-widget.md" \
+  "the plan itself was NOT moved (all-or-nothing: the clash blocks the whole stem)"
+assert_file_exists "$d/docs/plans/2026-01-01-widget.rubric.md" \
+  "the sidecar was NOT moved either (all-or-nothing, not just the clashing file)"
+assert_file_absent "$d/docs/plans/_archive/2026-01-01-widget.rubric.md" \
+  "the sidecar did not land in _archive (nothing partially moved)"
+
+# --- 🟡 fix: Unreleased-section fixtures — a slug only under ## Unreleased never fires;
+#     the SAME slug also mentioned under a real ## v… section fires once ---
+d="$(fixture_repo unreleased-only)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## Unreleased
+
+- ships widget (still cooking)
+MD
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_released_not_archived)" "0" \
+  "a slug mentioned only under ## Unreleased is not released"
+
+d="$(fixture_repo unreleased-then-released)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## Unreleased
+
+- next up: widget follow-on work
+
+## v1.0.0 — ships widget
+
+- landed it.
+MD
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_released_not_archived)" "1" \
+  "the same slug under Unreleased AND a real ## v… section fires once (the real section counts)"
+
+# --- Hardening A: a plan named by .claude/mission-routing-config.json's sources manifest
+#     is an active lineage — excluded from plan_released_not_archived, reported as
+#     plan_active_lineage (non-blocking), and never a --fix move candidate ---
+d="$(fixture_repo active-lineage)"
+printf '# Plan\n' > "$d/docs/plans/2026-09-19-blind-review-2d-overlap.md"
+printf '# Rubric\n' > "$d/docs/plans/2026-09-19-blind-review-2d-overlap.rubric.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3 — ships blind-review-2d-overlap
+
+- landed the thing.
+MD
+mkdir -p "$d/.claude"
+cat > "$d/.claude/mission-routing-config.json" <<'JSON'
+{
+  "schema_version": 1,
+  "graph_path": "docs/mission-x-execution-graph.json",
+  "sources_path": "docs/mission-x-sources.json"
+}
+JSON
+cat > "$d/docs/mission-x-sources.json" <<'JSON'
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-19-blind-review-2d-overlap.md",
+      "rubric_path": "plans/2026-09-19-blind-review-2d-overlap.rubric.md"
+    }
+  ]
+}
+JSON
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_released_not_archived)" "0" \
+  "an active-lineage plan is excluded from plan_released_not_archived despite being released"
+assert_eq "$(json_count "$out" plan_active_lineage)" "1" "it is reported as plan_active_lineage instead"
+assert_eq "$(json_exit "$out")" "0" "plan_active_lineage alone does not block (report-only)"
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_file_exists "$d/docs/plans/2026-09-19-blind-review-2d-overlap.md" \
+  "--fix never moves an active-lineage plan (defense in depth even if somehow doomed)"
+
+# --- Hardening B: --fix rewrites docs/plans/<stem> references in OTHER tracked text
+#     files (a skill doc linking the plan), except CHANGELOG.md and docs/BACKLOG.md ---
+d="$(fixture_repo rewrite-references)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+mkdir -p "$d/skills/some-skill" "$d/references"
+cat > "$d/skills/some-skill/SKILL.md" <<'MD'
+# Some Skill
+
+See [the widget plan](../../docs/plans/2026-01-01-widget.md) for context.
+MD
+printf 'Contract: docs/plans/2026-01-01-widget.md\n' > "$d/references/contract.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3 — ships widget
+
+- landed the thing. See docs/plans/2026-01-01-widget.md.
+MD
+backlog_row "$d/docs/BACKLOG.md" "Historical widget mention" "open" "none"
+printf '\nsee docs/plans/2026-01-01-widget.md for history\n' >> "$d/docs/BACKLOG.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --fix --json)"
+assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
+  "docs/plans/_archive/2026-01-01-widget.md" \
+  "a skill doc's link to the plan is rewritten to the _archive/ path"
+assert_contains "$(cat "$d/references/contract.md")" \
+  "docs/plans/_archive/2026-01-01-widget.md" \
+  "a reference doc's mention is also rewritten"
+assert_contains "$(cat "$d/CHANGELOG.md")" \
+  "docs/plans/2026-01-01-widget.md" \
+  "CHANGELOG.md is NOT rewritten (history)"
+assert_contains "$(cat "$d/docs/BACKLOG.md")" \
+  "docs/plans/2026-01-01-widget.md for history" \
+  "docs/BACKLOG.md is NOT rewritten (history)"
+assert_contains "$out" '"references_rewritten"' "the fix payload reports which files were rewritten"
+
+# --- Hardening B: plan_reference_dangling (report-only) — a tracked file references a
+#     bare docs/plans/<stem> path that exists in neither active nor archived location ---
+d="$(fixture_repo dangling-reference)"
+mkdir -p "$d/skills/some-skill"
+cat > "$d/skills/some-skill/SKILL.md" <<'MD'
+# Some Skill
+
+See docs/plans/2026-01-01-vanished.md — it never landed on disk here.
+MD
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_reference_dangling)" "1" \
+  "a reference to a nonexistent plan stem is plan_reference_dangling"
+assert_eq "$(json_exit "$out")" "0" "plan_reference_dangling alone does not block (report-only)"
+
+# ...but a reference to a plan that DOES exist (active or archived) is not dangling.
+d="$(fixture_repo not-dangling-reference)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+mkdir -p "$d/skills/some-skill"
+printf 'See docs/plans/2026-01-01-widget.md.\n' > "$d/skills/some-skill/SKILL.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_reference_dangling)" "0" \
+  "a reference to an EXISTING plan is not dangling"
 
 # --- usage / exit codes ---
 set +e

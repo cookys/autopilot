@@ -281,8 +281,8 @@ check_per_skill_ratchet() {
 # ─── 9. plan graduation clean ───
 # BACKLOG is a queue: a row with an existing plan Pointer or a shipped/dropped
 # Status, or a released plan still sitting outside docs/plans/_archive/, blocks a
-# release the same way a stale CHANGELOG/INDEX mirror does. plan_orphan
-# (report-only) never fails this check.
+# release the same way a stale CHANGELOG/INDEX mirror does. Report-only codes
+# (plan_orphan, plan_active_lineage, plan_reference_dangling) never fail this check.
 check_plan_graduation() {
   local out
   out="$(mktemp)"
@@ -291,14 +291,17 @@ check_plan_graduation() {
   if [ "$rc" -ne 0 ]; then
     node -e '
       const fs = require("fs");
+      const { REPORT_ONLY_CODES } = require(process.argv[2]);
       let j; try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
       for (const v of j.violations || []) {
-        if (v.code === "plan_orphan") continue;
-        const where = v.kind === "backlog_row" ? `BACKLOG row "${v.title}"` : v.path;
+        if (REPORT_ONLY_CODES.has(v.code)) continue;
+        const where = v.kind === "backlog_row" ? `BACKLOG row "${v.title}"`
+          : v.kind === "reference" ? `docs/plans/${v.stem}`
+            : v.path;
         console.error(`    ${v.code}: ${where} — ${v.detail}`);
       }
       console.error("    fix: node scripts/check-plan-graduation.js --fix");
-    ' "$out" >&2
+    ' "$out" "$REPO/scripts/check-plan-graduation.js" >&2
   fi
   rm -f "$out"
   return "$rc"

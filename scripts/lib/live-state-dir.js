@@ -137,23 +137,9 @@ function isOwnedMode700Dir(dir) {
   try {
     if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return false;
   } catch { /* platform without getuid */ }
-  // World-writable (mode & 0o002): reject — a pre-created 0o777 plant.
-  // Group/other r-x or group-write from umask 0002 (typical mkdir -p 0775):
-  // tighten to 0700 when we own it, then re-check. Do not chmod 0777.
-  if ((st.mode & 0o002) !== 0) return false;
-  if ((st.mode & 0o077) !== 0) {
-    try {
-      fs.chmodSync(dir, 0o700);
-      st = fs.lstatSync(dir);
-    } catch {
-      return false;
-    }
-    if (st.isSymbolicLink() || !st.isDirectory()) return false;
-    try {
-      if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return false;
-    } catch { /* platform without getuid */ }
-    if ((st.mode & 0o077) !== 0) return false;
-  }
+  // Pre-existing candidate: reject if group/other bits are set (mode & 0o077).
+  // Do not chmod-and-accept — a same-group plant under 0o750/0o770 survives chmod.
+  if ((st.mode & 0o077) !== 0) return false;
   return true;
 }
 

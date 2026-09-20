@@ -188,7 +188,8 @@ test('resolveLiveDir: candidate dir name with shell metacharacters is probed lit
   try {
   const marker = path.join(tmpRoot, 'INJECTED_MARKER');
   const overrideDir = path.join(tmpRoot, 'weird-$(touch ' + marker + ')-dir');
-  fs.mkdirSync(overrideDir, { recursive: true }); // a literal directory name, no shell involved
+  fs.mkdirSync(overrideDir, { recursive: true, mode: 0o700 }); // a literal directory name, no shell involved
+  fs.chmodSync(overrideDir, 0o700); // umask may leave 0o075; this case is argv-injection, not mode
 
   const bin = path.join(bindir, 'findmnt');
   const receipt = path.join(tmpRoot, 'receipt.txt');

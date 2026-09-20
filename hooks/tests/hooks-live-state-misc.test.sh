@@ -162,16 +162,18 @@ assert_r79_cc_shim_framing_chro
 # accepted as source=override (recorded 2026-09-21 on this worktree).
 assert_r132_live_state_base_on_w() {
   local LIB="$REPO_ROOT/scripts/lib/live-state-dir.js"
-  local TMP WORLD LINK GOOD MISSING
+  local TMP WORLD LINK GOOD GROUP MISSING
   TMP="$(mktemp -d "/dev/shm/r132-live-state-base-XXXXXX")"
   WORLD="$TMP/world"
   LINK="$TMP/link"
   GOOD="$TMP/good"
+  GROUP="$TMP/group"
   MISSING="$TMP/created"
   mkdir "$WORLD"
   chmod 0777 "$WORLD"
   ln -s "$WORLD" "$LINK"
   mkdir -m 0700 "$GOOD"
+  mkdir -m 0750 "$GROUP"
 
   local probe
   probe="$(cat <<'EOF'
@@ -202,6 +204,13 @@ EOF
     bad "symlink candidate must be rejected, got $OUT"
   else
     ok "symlink candidate rejected (got $OUT)"
+  fi
+
+  OUT="$(run_probe "$GROUP")"
+  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+    bad "0o750 candidate must be rejected (not chmod-accepted), got $OUT"
+  else
+    ok "0o750 candidate rejected (got $OUT)"
   fi
 
   OUT="$(run_probe "$GOOD")"

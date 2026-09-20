@@ -19,6 +19,7 @@ trap 'rm -rf "$TMP"' EXIT
 SID="11111111-2222-3333-4444-555555555555"
 LIVE="$TMP/live"
 mkdir -p "$LIVE/context"
+chmod 0700 "$LIVE"
 export AUTOPILOT_LIVE_DIR="$LIVE"
 export AUTOPILOT_CONTEXT_BUDGET_DIR="$TMP/state"
 export CLAUDE_CODE_SESSION_ID="$SID"

@@ -24,7 +24,10 @@
  * backlog_title_closed_status_open) and git mv's released plans — plus their
  * `<same stem>.*.md` sidecars and `docs/plans/evidence/<stem>/` dir, if present —
  * into docs/plans/_archive/, preserving names. It never touches plan_orphan findings
- * (report-only).
+ * (report-only). A surviving row whose Pointer reached INTO a moved evidence dir or
+ * sidecar (not the plan file itself — that shape is backlog_row_has_plan and the row
+ * is deleted, not rewritten) has its Pointer rewritten to the new _archive/ location
+ * so --fix never leaves a dangling pointer_unresolved behind it.
  *
  * Usage:
  *   node scripts/check-plan-graduation.js
@@ -424,14 +427,47 @@ function fixPlans(repoRoot, plansDir, archiveDir, violations) {
   return moved;
 }
 
+// A surviving BACKLOG row may point INTO an evidence dir (or sidecar) that fixPlans just
+// moved under one of the plans it archived (the row itself was not doomed — its Pointer is
+// an evidence subpath, not the plan file itself — see backlog_row_has_plan's literal
+// docs/plans/*.md scope). Left alone, that Pointer would go pointer_unresolved the moment
+// the file lands in _archive/. Rewrite every surviving Pointer whose value is prefixed by a
+// moved path's old location to the new one.
+function rewriteSurvivingPointers(backlogPath, moved) {
+  if (!moved.length) return { changed: false, count: 0 };
+  const text = readFileSafe(backlogPath);
+  if (text == null) return { changed: false, count: 0 };
+  // Longest-`from`-first so a nested rewrite (evidence dir) is not shadowed by a shorter one.
+  const pairs = moved
+    .map((m) => ({ from: m.from.split(path.sep).join('/'), to: m.to.split(path.sep).join('/') }))
+    .sort((a, b) => b.from.length - a.from.length);
+  let count = 0;
+  const out = text.replace(/(\*\*Pointer\*\*:\s*)(\S+)/g, (whole, prefix, value) => {
+    for (const { from, to } of pairs) {
+      if (value === from || value.startsWith(`${from}/`)) {
+        count += 1;
+        return prefix + to + value.slice(from.length);
+      }
+    }
+    return whole;
+  });
+  if (out !== text) {
+    fs.writeFileSync(backlogPath, out);
+    return { changed: true, count };
+  }
+  return { changed: false, count: 0 };
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const result = run(opts);
   let backlogFix = { changed: false, removed: [] };
   let plansMoved = [];
+  let pointerRewrite = { changed: false, count: 0 };
   if (opts.fix) {
     backlogFix = fixBacklog(result.backlogPath, result.violations);
     plansMoved = fixPlans(result.repoRoot, result.plansDir, result.archiveDir, result.violations);
+    pointerRewrite = rewriteSurvivingPointers(result.backlogPath, plansMoved);
   }
 
   const blocking = result.violations.filter((v) => BLOCKING_CODES.has(v.code));
@@ -445,7 +481,11 @@ function main() {
     exit: exitCode,
     violations: result.violations,
     counts: byCode,
-    fix: opts.fix ? { backlog_rows_removed: backlogFix.removed, plans_moved: plansMoved } : undefined,
+    fix: opts.fix ? {
+      backlog_rows_removed: backlogFix.removed,
+      plans_moved: plansMoved,
+      surviving_pointers_rewritten: pointerRewrite.count,
+    } : undefined,
   };
 
   if (opts.json) {
@@ -468,6 +508,9 @@ function main() {
       if (plansMoved.length) {
         process.stdout.write(`--fix: moved ${plansMoved.length} plan file(s) into _archive:\n`);
         for (const m of plansMoved) process.stdout.write(`  - ${m.from} -> ${m.to}\n`);
+      }
+      if (pointerRewrite.count) {
+        process.stdout.write(`--fix: rewrote ${pointerRewrite.count} surviving BACKLOG Pointer(s) into _archive/\n`);
       }
     }
   }
@@ -494,4 +537,5 @@ module.exports = {
   planMentioned,
   planReferenced,
   collectBacklogRows,
+  rewriteSurvivingPointers,
 };

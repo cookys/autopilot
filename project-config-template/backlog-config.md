@@ -25,7 +25,9 @@
 - allowlist_path: .claude/backlog-debt.json
 
 ## Done Retention Days
-- done_retention_days: 30
+# BACKLOG is a queue: default 0 (shipped/dropped rows are done_not_moved on sight).
+# Raise this only for a deliberate grace window.
+- done_retention_days: 0
 
 ## Caps
 # Optional per-field lowers only, e.g. `- caps.Title: 80`

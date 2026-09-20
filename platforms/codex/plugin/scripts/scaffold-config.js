@@ -194,7 +194,7 @@ function generateBacklogConfig(style) {
 - allowlist_path: .claude/backlog-debt.json
 
 ## Done Retention Days
-- done_retention_days: 30
+- done_retention_days: 0
 
 ## Caps
 `;

@@ -242,6 +242,34 @@ printf '# Plan\n' > "$d/docs/plans/2026-01-01-forgotten.md"
 node "$GATE" --repo-root "$d" --fix --json >/dev/null
 assert_file_exists "$d/docs/plans/2026-01-01-forgotten.md" "--fix never moves an orphaned plan"
 
+# RED at first cut of --fix: a SURVIVING row (its Pointer is an evidence subpath, not the plan
+# file itself, so it is not itself deleted) pointing INTO a released plan's evidence dir went
+# pointer_unresolved the moment --fix moved that dir to _archive/. --fix must rewrite it.
+d="$(fixture_repo fix-rewrites-surviving-pointer)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+mkdir -p "$d/docs/plans/evidence/2026-01-01-widget"
+printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-widget/README.md"
+backlog_row "$d/docs/BACKLOG.md" "Widget evidence row" "open" "docs/plans/evidence/2026-01-01-widget/README.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3 — ships widget
+
+- landed the thing.
+MD
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_contains "$(cat "$d/docs/BACKLOG.md")" \
+  "docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
+  "RED: --fix rewrites a surviving row's Pointer into the moved evidence dir"
+assert_not_contains "$(cat "$d/docs/BACKLOG.md")" \
+  "**Pointer**: docs/plans/evidence/2026-01-01-widget/README.md" \
+  "the stale (pre-move) Pointer no longer appears"
+bgate_out="$(node "$REPO_ROOT/scripts/check-backlog-entries.js" --backlog "$d/docs/BACKLOG.md" --json)"
+assert_not_contains "$bgate_out" '"pointer_unresolved"' \
+  "the rewritten Pointer resolves — check-backlog-entries.js reports no pointer_unresolved"
+
 # --- usage / exit codes ---
 set +e
 node "$GATE" --nonsense-flag >/dev/null 2>&1

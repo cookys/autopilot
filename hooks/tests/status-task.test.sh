@@ -14,6 +14,8 @@ const mission = require(path.join(root, 'src/engine/mission-convergence'));
 const icc = require(path.join(root, 'src/engine/implementation-campaign'));
 const campaignVerification = require(path.join(root, 'src/engine/campaign-verification'));
 const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+const campaignIdentity = require(path.join(root, 'src/engine/mission-campaign-identity'));
+const { resolveCampaignBinding } = require(path.join(root, 'src/status/task-runtime'));
 const { buildTaskStatus } = require(path.join(root, 'src/status/task-status'));
 
 const results = [];
@@ -33,6 +35,9 @@ function clone(value) {
 function redigest(body) {
   const { receipt_digest: ignored, ...material } = body;
   return { ...material, receipt_digest: icc.canonicalDigest(material) };
+}
+function publishedContractDigest(contract) {
+  return mission.sha256(`${JSON.stringify(contract, null, 2)}\n`);
 }
 function finalPanelReceipt(review = {}) {
   const seat = {
@@ -129,7 +134,7 @@ function reservation(state, toolCalls) {
   };
 }
 
-function buildMissionBundle({ campaignCount = 1 } = {}) {
+function buildMissionBundle({ campaignCount = 1, campaignContractDigests = [] } = {}) {
   let state = mission.createMissionState(missionContract());
   const claims = [];
   for (let index = 0; index < campaignCount; index += 1) {
@@ -142,7 +147,8 @@ function buildMissionBundle({ campaignCount = 1 } = {}) {
         mission_lineage_id: state.mission_lineage_id,
         task_authority_id: state.task_authority_id,
         campaign_id: `mission-campaign-v2-${index}`,
-        campaign_contract_digest: icc.canonicalDigest(campaignContract()),
+        campaign_contract_digest: campaignContractDigests[index]
+          || icc.canonicalDigest(campaignContract()),
         base_sha: '0'.repeat(40),
         acceptance_ids: [`acceptance-${index}`],
         reservation: reservation(state, 5),
@@ -250,9 +256,12 @@ function buildCampaignBundle({
   followUp = [],
   unresolved = [],
   ticket = 'lsm-p1',
+  publishedContract = false,
 } = {}) {
   const contract = campaignContract(ticket);
-  const contractDigest = icc.canonicalDigest(contract);
+  const contractDigest = publishedContract
+    ? publishedContractDigest(contract)
+    : icc.canonicalDigest(contract);
   let state = icc.createCampaignState({
     contract,
     contractDigest,
@@ -260,6 +269,7 @@ function buildCampaignBundle({
     startedAt: '2026-07-27T00:00:00.000Z',
   });
   const events = [];
+  const unitContractDigest = mission.sha256('published-unit-contract');
   const writerFence = campaignVerification.createWriterFence({
     campaignId: state.campaign_id,
     stageIdentity: 'lsm-implementer',
@@ -267,7 +277,16 @@ function buildCampaignBundle({
     candidateTreeSha: CANDIDATE_TREE,
     implementationResult: {
       status: 'committed',
-      implementation: { commit: CANDIDATE_COMMIT },
+      implementation: {
+        commit: CANDIDATE_COMMIT,
+        ...(publishedContract ? {
+          campaign_contract_sha256: contractDigest,
+          unit_contract_sha256: unitContractDigest,
+          contract_sha256: unitContractDigest,
+          boundary: 'ok',
+          acceptance: 'ok',
+        } : {}),
+      },
       implementationResult: { status: 0, signal: null, error: null },
     },
   });
@@ -278,6 +297,10 @@ function buildCampaignBundle({
     branch: 'feat/lsm-p1',
     base: '0'.repeat(40),
     writer_fence: writerFence,
+    ...(publishedContract ? {
+      campaign_contract_sha256: contractDigest,
+      unit_contract_sha256: unitContractDigest,
+    } : {}),
     repair_lineage: {
       lineage_id: state.campaign_id,
       branch: 'feat/lsm-p1',
@@ -423,7 +446,12 @@ function buildCampaignBundle({
   );
   applyEvent(
     icc.CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
-    verification.receipt_digest,
+    publishedContract
+      ? icc.boundCampaignArtifactDigest({
+        kind: 'verification_receipt',
+        digest: verification.receipt_digest,
+      })
+      : verification.receipt_digest,
     { passed: true, evidence_digest: verification.receipt_digest },
     3,
   );
@@ -446,7 +474,9 @@ function buildCampaignBundle({
     : {
       registry_complete: true,
       registry_digest: mission.sha256('registry'),
-      convergence_digest: mission.sha256('convergence'),
+      convergence_digest: publishedContract
+        ? terminal.receipt_digest
+        : mission.sha256('convergence'),
       lifecycle_receipt_ref: terminal.lifecycle_receipt_ref,
       reason: 'canonical terminal',
   };
@@ -458,7 +488,13 @@ function buildCampaignBundle({
   }
   applyEvent(
     terminalEvent,
-    terminal.receipt_digest,
+    publishedContract
+      ? icc.boundCampaignArtifactDigest({
+        kind: 'campaign_terminal',
+        digest: terminal.receipt_digest,
+        repair_lineage: candidate.repair_lineage,
+      })
+      : terminal.receipt_digest,
     terminalPayload,
     5,
   );
@@ -667,6 +703,163 @@ group('canonical-green', () => {
   check('coverage-evidence-uses-one-namespace',
     JSON.stringify(receipt.evidence.campaigns.provided_campaign_ids)
       === JSON.stringify(receipt.evidence.campaigns.required_campaign_ids));
+});
+
+group('published-contract-byte-digest', () => {
+  const publishedCampaign = buildCampaignBundle({
+    ticket: 'lsm-published-pretty-json',
+    publishedContract: true,
+  });
+  const publishedMission = buildMissionBundle({
+    campaignContractDigests: [publishedCampaign.state.contract_digest],
+  });
+  const input = makeInput({
+    mission: {
+      state: publishedMission.state,
+      terminal_receipt: publishedMission.terminal_receipt,
+    },
+    campaigns: [publishedCampaign],
+  });
+  const receipt = buildTaskStatus(input, makeAdapters());
+  check('icc-published-pretty-contract-digest-accepted',
+    receipt.acceptance_verdict === 'accepted'
+      && receipt.evidence.campaigns.campaigns[0].status === 'valid');
+
+  const tampered = clone(publishedCampaign);
+  tampered.contract.max_wall_seconds += 1;
+  const rejected = buildTaskStatus({ ...input, campaigns: [tampered] }, makeAdapters());
+  check('icc-published-pretty-contract-mutation-rejected',
+    rejected.acceptance_verdict === 'unknown'
+      && rejected.evidence.campaigns.campaigns[0].reason
+        === 'campaign_contract_digest_mismatch');
+});
+
+group('mission-subject-v2-campaign-binding', () => {
+  const base = '0'.repeat(40);
+  const grantRef = mission.sha256('mission-subject-v2-grant');
+  const contract = {
+    ...campaignContract('lsm-mission-subject-v2'),
+    mission_grant_ref: grantRef,
+    repo_identity: REPO_IDENTITY,
+    base_sha: base,
+  };
+  const subjectDigest = campaignIdentity.missionSubjectDigest(contract);
+  const missionCampaignId = campaignIdentity.missionCampaignIdFor(
+    REPO_IDENTITY,
+    contract.ticket,
+    subjectDigest,
+  );
+  const claim = {
+    claim_id: `claim-v1-${mission.sha256('mission-subject-v2-claim')}`,
+    identity_scheme: campaignIdentity.IDENTITY_SCHEME_V2,
+    campaign_id: missionCampaignId,
+    campaign_contract_digest: subjectDigest,
+    mission_subject_digest: subjectDigest,
+    binding_digest: grantRef,
+    base_sha: base,
+    released: false,
+  };
+  const args = {
+    missionState: { claims: { [claim.claim_id]: claim } },
+    campaignState: {
+      campaign_id: `campaign-v1-${mission.sha256('icc-campaign')}`,
+      contract_digest: publishedContractDigest(contract),
+      repo_identity: REPO_IDENTITY,
+      ticket: contract.ticket,
+    },
+    candidate: { base },
+    contract,
+  };
+  const resolved = resolveCampaignBinding(args);
+  check('mission-subject-v2-authentic-binding-accepted',
+    resolved.status === 'valid'
+      && resolved.mission_campaign_id === missionCampaignId
+      && resolved.icc_campaign_id === args.campaignState.campaign_id
+      && resolved.binding_digest === grantRef
+      && resolved.mission_subject_digest === subjectDigest);
+
+  const legacyClaim = {
+    ...claim,
+    identity_scheme: null,
+    campaign_id: 'legacy-mission-campaign',
+    campaign_contract_digest: args.campaignState.contract_digest,
+  };
+  delete legacyClaim.mission_subject_digest;
+  const legacy = resolveCampaignBinding({
+    ...args,
+    missionState: { claims: { [legacyClaim.claim_id]: legacyClaim } },
+  });
+  check('legacy-raw-contract-binding-preserved', legacy.status === 'valid');
+
+  const reject = (overrides) => resolveCampaignBinding({
+    ...args,
+    ...overrides,
+  }).status === 'unknown';
+  check('mission-subject-v2-grant-tamper-rejected', reject({
+    contract: { ...contract, mission_grant_ref: mission.sha256('wrong-grant') },
+  }));
+  check('mission-subject-v2-subject-tamper-rejected', reject({
+    missionState: {
+      claims: {
+        [claim.claim_id]: {
+          ...claim,
+          mission_subject_digest: mission.sha256('wrong-subject'),
+          campaign_contract_digest: mission.sha256('wrong-subject'),
+        },
+      },
+    },
+  }));
+  check('mission-subject-v2-base-tamper-rejected', reject({
+    candidate: { base: '9'.repeat(40) },
+  }));
+  check('mission-subject-v2-campaign-id-tamper-rejected', reject({
+    missionState: {
+      claims: {
+        [claim.claim_id]: {
+          ...claim,
+          campaign_id: `campaign-v2-${mission.sha256('wrong-campaign')}`,
+        },
+      },
+    },
+  }));
+});
+
+group('producer-terminal-quorum-contract', () => {
+  const quorumCampaign = clone(campaignBundle);
+  quorumCampaign.terminal_receipt.final_panel_seat_receipts = quorumCampaign
+    .terminal_receipt.final_panel_seat_receipts.map((seat) => redigest({
+      ...seat,
+      load_bearing: true,
+    }));
+  quorumCampaign.terminal_receipt = redigest({
+    ...quorumCampaign.terminal_receipt,
+    final_panel_quorum_met: true,
+    sealed_required_review_families: 1,
+    implementer_family: 'implementer-fixture',
+  });
+  rebindTerminalLedger(quorumCampaign);
+  const accepted = buildTaskStatus(
+    makeInput({ campaigns: [quorumCampaign] }),
+    makeAdapters(),
+  );
+  check('icc-producer-terminal-quorum-fields-accepted',
+    accepted.acceptance_verdict === 'accepted'
+      && accepted.evidence.campaigns.campaigns[0].status === 'valid');
+
+  const tampered = clone(quorumCampaign);
+  tampered.terminal_receipt = redigest({
+    ...tampered.terminal_receipt,
+    final_panel_quorum_met: false,
+  });
+  rebindTerminalLedger(tampered);
+  const rejected = buildTaskStatus(
+    makeInput({ campaigns: [tampered] }),
+    makeAdapters(),
+  );
+  check('icc-producer-terminal-quorum-tamper-rejected',
+    rejected.acceptance_verdict === 'unknown'
+      && rejected.evidence.campaigns.campaigns[0].reason
+        === 'campaign_final_panel_quorum_flag_mismatch');
 });
 
 group('p2-merge-preflight', () => {

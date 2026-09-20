@@ -18,6 +18,7 @@ const {
   CAMPAIGN_STATES,
   campaignIdFor,
   canonicalDigest,
+  boundCampaignArtifactDigest,
   createCampaignState,
   normalizeCampaignArtifactReference,
   replayCampaignEvents,
@@ -26,6 +27,13 @@ const {
 const {
   validateFinalPanelReceipt,
 } = require('../engine/campaign-composition');
+const {
+  IDENTITY_SCHEME_V2,
+  claimMissionSubjectDigest,
+  isMissionSubjectV2Claim,
+  missionCampaignIdFor,
+  missionSubjectDigest,
+} = require('../engine/mission-campaign-identity');
 
 const SCHEMA_VERSION = 1;
 const ARTIFACT_TYPE = 'task_status_receipt';
@@ -171,6 +179,12 @@ const TERMINAL_RECEIPT_KEYS = Object.freeze([
   'trace',
   'receipt_digest',
 ]);
+const TERMINAL_RECEIPT_QUORUM_KEYS = Object.freeze([
+  ...TERMINAL_RECEIPT_KEYS,
+  'final_panel_quorum_met',
+  'sealed_required_review_families',
+  'implementer_family',
+]);
 
 const VERIFICATION_RECEIPT_KEYS = Object.freeze([
   'schema_version',
@@ -266,6 +280,13 @@ function campaignReceiptBodyDigest(receipt) {
   if (!isPlainObject(receipt) || typeof receipt.receipt_digest !== 'string') return null;
   const { receipt_digest: _ignored, ...body } = receipt;
   return canonicalDigest(body);
+}
+
+function publishedCampaignContractDigest(contract) {
+  // implementation-campaign-check publishes the sealed contract with this exact
+  // byte encoding. ICC therefore carries the SHA-256 of these bytes, while
+  // in-memory and legacy fixtures carry canonicalDigest(contract).
+  return sha256(`${JSON.stringify(contract, null, 2)}\n`);
 }
 
 function safeCall(fn, args, label) {
@@ -516,7 +537,9 @@ function validateVerificationReceipt(verificationReceipt, campaignId) {
 }
 
 function validateTerminalReceipt(terminalReceipt) {
-  if (!hasExactKeySet(terminalReceipt, TERMINAL_RECEIPT_KEYS)) {
+  const hasLegacyShape = hasExactKeySet(terminalReceipt, TERMINAL_RECEIPT_KEYS);
+  const hasQuorumShape = hasExactKeySet(terminalReceipt, TERMINAL_RECEIPT_QUORUM_KEYS);
+  if (!hasLegacyShape && !hasQuorumShape) {
     return { ok: false, reason: 'campaign_terminal_receipt_invalid' };
   }
   if (terminalReceipt.schema_version !== 1
@@ -557,6 +580,11 @@ function validateTerminalReceipt(terminalReceipt) {
     sealed_min_panel_size: terminalReceipt.sealed_min_panel_size,
     final_panel_count: terminalReceipt.final_panel_count,
     final_panel_seat_receipts: terminalReceipt.final_panel_seat_receipts,
+    ...(hasQuorumShape ? {
+      final_panel_quorum_met: terminalReceipt.final_panel_quorum_met,
+      sealed_required_review_families: terminalReceipt.sealed_required_review_families,
+      implementer_family: terminalReceipt.implementer_family,
+    } : {}),
   }, terminalReceipt.sealed_min_panel_size);
   if (finalPanel.passed !== true) {
     return { ok: false, reason: `campaign_${finalPanel.reason}` };
@@ -660,9 +688,17 @@ function validateTerminalEvent(events, terminalReceipt) {
       'registry_complete', 'registry_digest', 'convergence_digest',
       'lifecycle_receipt_ref', 'reason',
     ];
+  const receiptBoundByLegacyOutput = isPlainObject(terminalEvent)
+    && terminalEvent.output_artifact_digest === terminalReceipt.receipt_digest;
+  // The publisher wraps terminal artifacts (including repair lineage) before
+  // hashing event output. Its payload keeps the raw receipt digest so consumers
+  // can verify the receipt without reconstructing omitted lineage metadata.
+  const receiptBoundByProducerPayload = isPlainObject(terminalEvent)
+    && isPlainObject(terminalEvent.payload)
+    && terminalEvent.payload.convergence_digest === terminalReceipt.receipt_digest;
   if (!isPlainObject(terminalEvent)
       || terminalEvent.event_type !== expectedType
-      || terminalEvent.output_artifact_digest !== terminalReceipt.receipt_digest
+      || (!receiptBoundByLegacyOutput && !receiptBoundByProducerPayload)
       || !hasExactKeySet(terminalEvent.payload, payloadKeys)
       || terminalEvent.payload.registry_complete !== true
       || canonicalDigest(terminalEvent.payload.lifecycle_receipt_ref)
@@ -773,10 +809,13 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   }
   const campaignId = state.campaign_id;
 
-  const contractDigest = canonicalDigest(contract);
-  if (contractDigest !== state.contract_digest) {
+  const canonicalContractDigest = canonicalDigest(contract);
+  const publishedContractDigest = publishedCampaignContractDigest(contract);
+  if (state.contract_digest !== canonicalContractDigest
+      && state.contract_digest !== publishedContractDigest) {
     return campaignInvalid(campaignId, 'campaign_contract_digest_mismatch');
   }
+  const contractDigest = state.contract_digest;
   try {
     const initial = createCampaignState({
       contract,
@@ -819,9 +858,18 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
     (event) => event && event.event_type === CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
   );
   const terminalVerificationEvent = verticalEvents[verticalEvents.length - 1];
+  // Production ICC events bind the artifact reference; older in-memory builders
+  // placed the receipt digest directly in output_artifact_digest.
+  const producerVerificationDigest = boundCampaignArtifactDigest({
+    kind: 'verification_receipt',
+    digest: verificationReceipt.receipt_digest,
+  });
   if (!terminalVerificationEvent
-      || terminalVerificationEvent.output_artifact_digest
-        !== verificationReceipt.receipt_digest
+      || (
+        terminalVerificationEvent.output_artifact_digest
+          !== verificationReceipt.receipt_digest
+        && terminalVerificationEvent.output_artifact_digest !== producerVerificationDigest
+      )
       || !isPlainObject(terminalVerificationEvent.payload)
       || terminalVerificationEvent.payload.evidence_digest
         !== verificationReceipt.receipt_digest) {
@@ -831,7 +879,7 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   if (terminalReceipt.verification_receipt_digest !== verificationReceipt.receipt_digest) {
     return campaignInvalid(campaignId, 'campaign_verification_binding_mismatch');
   }
-  if (state.last_output_artifact_digest !== terminalReceipt.receipt_digest) {
+  if (state.last_output_artifact_digest !== events[events.length - 1].output_artifact_digest) {
     return campaignInvalid(campaignId, 'campaign_terminal_state_binding_mismatch');
   }
   if (terminalReceipt.repair_generations !== state.generation) {
@@ -899,6 +947,7 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
     campaign_id: campaignId,
     candidate: normalizedCandidate,
     state,
+    contract,
     binding: null,
     blockers,
     deferred_count: followUp.length,
@@ -963,6 +1012,7 @@ function bindCampaignEntry(item, missionResult, adapters) {
       missionState: missionResult.state,
       campaignState: item.state,
       candidate: item.candidate,
+      contract: item.contract,
     }],
     'resolveCampaignBinding',
   );
@@ -1066,8 +1116,33 @@ function bindCampaignEntry(item, missionResult, adapters) {
       },
     };
   }
-  if (matched.campaign_contract_digest !== item.state.contract_digest
-      || matched.base_sha !== item.candidate.base) {
+  let authorityMatches = matched.base_sha === item.candidate.base;
+  if (authorityMatches && isMissionSubjectV2Claim(matched)) {
+    try {
+      const subjectDigest = missionSubjectDigest(item.contract);
+      authorityMatches = binding.identity_scheme === IDENTITY_SCHEME_V2
+        && binding.mission_subject_digest === subjectDigest
+        && claimMissionSubjectDigest(matched) === subjectDigest
+        && (matched.mission_subject_digest === undefined
+          || matched.mission_subject_digest === subjectDigest)
+        && (matched.campaign_contract_digest === undefined
+          || matched.campaign_contract_digest === subjectDigest)
+        && item.contract.mission_grant_ref === matched.binding_digest
+        && item.contract.repo_identity === item.state.repo_identity
+        && item.contract.ticket === item.state.ticket
+        && item.contract.base_sha === item.candidate.base
+        && matched.campaign_id === missionCampaignIdFor(
+          item.state.repo_identity,
+          item.state.ticket,
+          subjectDigest,
+        );
+    } catch (_error) {
+      authorityMatches = false;
+    }
+  } else if (authorityMatches) {
+    authorityMatches = matched.campaign_contract_digest === item.state.contract_digest;
+  }
+  if (!authorityMatches) {
     return {
       ...item,
       valid: false,

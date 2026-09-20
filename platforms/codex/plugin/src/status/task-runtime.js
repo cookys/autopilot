@@ -6,6 +6,13 @@ const { spawnSync } = require('child_process');
 const { buildTaskStatus } = require('./task-status');
 const { validateDispatchMergeProvenance } = require('../engine/controller-execution');
 const {
+  IDENTITY_SCHEME_V2,
+  claimMissionSubjectDigest,
+  isMissionSubjectV2Claim,
+  missionCampaignIdFor,
+  missionSubjectDigest,
+} = require('../engine/mission-campaign-identity');
+const {
   inspectLifecycleReceipt,
 } = require('../../scripts/lifecycle-residue-receipt');
 
@@ -38,22 +45,65 @@ function repoIdentity(repo) {
   return `git-common-dir:${canonical}`;
 }
 
-function resolveCampaignBinding({ missionState, campaignState, candidate }) {
+function matchesMissionSubjectV2Claim(claim, campaignState, candidate, contract) {
+  if (!isMissionSubjectV2Claim(claim)
+      || !contract
+      || typeof contract !== 'object'
+      || Array.isArray(contract)) {
+    return false;
+  }
+
+  let subjectDigest;
+  let campaignId;
+  try {
+    subjectDigest = missionSubjectDigest(contract);
+    campaignId = missionCampaignIdFor(
+      campaignState.repo_identity,
+      campaignState.ticket,
+      subjectDigest,
+    );
+  } catch (_error) {
+    return false;
+  }
+
+  const claimSubjectDigest = claimMissionSubjectDigest(claim);
+  return typeof claim.binding_digest === 'string'
+    && contract.mission_grant_ref === claim.binding_digest
+    && contract.repo_identity === campaignState.repo_identity
+    && contract.ticket === campaignState.ticket
+    && contract.base_sha === candidate.base
+    && claim.base_sha === candidate.base
+    && claimSubjectDigest === subjectDigest
+    && (claim.mission_subject_digest === undefined
+      || claim.mission_subject_digest === subjectDigest)
+    && (claim.campaign_contract_digest === undefined
+      || claim.campaign_contract_digest === subjectDigest)
+    && claim.campaign_id === campaignId;
+}
+
+function resolveCampaignBinding({ missionState, campaignState, candidate, contract }) {
   const matches = Object.values(missionState.claims || {}).filter((claim) => (
     claim
     && claim.released !== true
-    && claim.campaign_contract_digest === campaignState.contract_digest
-    && claim.base_sha === candidate.base
+    && (isMissionSubjectV2Claim(claim)
+      ? matchesMissionSubjectV2Claim(claim, campaignState, candidate, contract)
+      : claim.campaign_contract_digest === campaignState.contract_digest
+        && claim.base_sha === candidate.base)
   ));
   if (matches.length !== 1) return { status: 'unknown' };
   const claim = matches[0];
-  return {
+  const binding = {
     status: 'valid',
     claim_id: claim.claim_id,
     mission_campaign_id: claim.campaign_id,
     icc_campaign_id: campaignState.campaign_id,
     binding_digest: claim.binding_digest,
   };
+  if (isMissionSubjectV2Claim(claim)) {
+    binding.identity_scheme = IDENTITY_SCHEME_V2;
+    binding.mission_subject_digest = claimMissionSubjectDigest(claim);
+  }
+  return binding;
 }
 
 function runtimeAdapters() {

@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.36.81 — wave-1：31 個維護列整合
+
+- **Qualification / scorecard（8 列）**：runner token 正規化、legacy feed 訊息合併、OpenCode usage parser、endpoints model 旗標、guided-disposition regression 名稱、governance CLI 提示、role-default scope 接線。
+- **Managed rail（6 列）**：repair scope fallback 與 PARK、以 CLI 正整數秒契約封住靜態 1 秒 timeout floor（不是從 dispatch latency 推導）、verify stdout/stderr ledger、malformed findings 拒絕、既有修正的 regression guard，以及 durable campaign bridge 每次從 journal 重放狀態。1 秒邊界與 Mission 的一般 100 秒預算皆有 regression，0 秒仍在 spend 前拒絕。
+- **Dispatch lifecycle（4 列）**：lease-gc 逐筆錯誤隔離、既有 claim 修正的 regression guard、pin store fsync 與孤兒 temp 清理、未歸屬 branch 的唯讀清單。
+- **Hooks / live state（5 列）**：context window 無訊號分支、foreman model 文案更正、title chrome 過濾、live-state 目錄權限與 symlink 檢查、findmnt 多列與 proc-mounts 跳脫處理。
+- **Review loop（8 列）**：共用 exclude allowlist、minimum seats、side-effect 說明、seat-id charset guard、允許排除的 head 移動驗證、opt-out parser 修正與 stub-only 環境變數注入。
+- **落地驗證**：28 個已審列，加上 quota 中斷後補審的 rlr/47、mrce/125、hlsm/r133（三者 fable `SHIP-AS-IS`）。保留 repair chain、排除所有 `PARALLEL-RUN LOCAL ONLY` config commit。兩個新 test suite 補 executable mode。BACKLOG 刪 32 列（31 個整合列，含 mrce/121 regression-only，另加已出貨 qst/64）。B4 完成歸檔，其餘 bundle 保持 active。
+- **後續範圍**：10 個未派列保留於各 bundle plan（rlr 131/136/137、hlsm 139/140、dlrm 93/109/122/123、mrce 15）；mrce/15 的 campaign-intake 範圍擴大已獲交接授權。
+
+prose-justification: `skills/ceo-agent/references/level-front-door.md` 的 foreman model 文字對齊同文件既有更正；其餘為 release truth 與 timeout 契約說明。
+
 ## v2.36.80 — plan 登記簿與日期化歸檔（孤兒 plan 的根因修正）；一次性遷移與清點；doc-drift script-refs 修正
 
 - **洩漏根因**：plan 出生只寫檔不登記（plan-template／research-to-ship／l5 recipe），第一個機器接觸點 `dispatch-plan-review.js`、

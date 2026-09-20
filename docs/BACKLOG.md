@@ -44,14 +44,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/host-conformance-tool.md
 - **Context**: needs its own registered plan; the decision doc lists the six report sections.
 
-### Managed implementation dispatch timeout floor is 1 s — a 2 s hand dies as a runner timeout, not a wall expiry
-- **Status**: open
-- **Trigger**: the next managed campaign that logs an implementation dispatch with `--timeout` under 60 s, OR any work on `buildImplementationArgs`
-- **Effort**: S
-- **Source**: v2.36.71 unit A review (🟠 wall-min-timeout-floor accepted with `MANAGED_DISPATCH_MIN_TIMEOUT_SECONDS = 1`)
-- **Pointer**: docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/a/REPORT.md
-- **Context**: the brief asked for the rail's minimum useful timeout; a 1 s floor only avoids a 0 s argv. Derive the floor from the rail's timing data (shortest committed `wall_secs`) or seal a knob; below it, terminalize `wall_expired` before spend.
-
 ### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
 - **Status**: open
 - **Trigger**: **NOT FIRED — recorded at ship time, 2026-09-13.** Fires when a real foreman run trips one of them.

@@ -138,7 +138,58 @@ assert_r19_pin_store_hardening() {
   assert_file_exists "$STORE" "r19: writeSnapshot must publish the store file"
 }
 
+assert_r92_reap_dispatch_branch() {
+  local SCRIPT="$REPO_ROOT/scripts/reap-dispatch-branches.sh"
+  local repo="$TEST_TMP/r92-reap-branches"
+  git init -q -b develop "$repo"
+  git -C "$repo" -c user.email=wlb@test -c user.name=wlb \
+    commit -q --allow-empty -m "r92 scan --all fixture"
+  local base common key
+  base="$(git -C "$repo" rev-parse HEAD)"
+  git -C "$repo" branch agent/attributed-r1-20260921 develop
+  git -C "$repo" branch agent/orphan-r1-20260921 develop
+  common="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)"
+  mkdir -p "$common/autopilot-worktree-branch-inventory"
+  chmod 700 "$common/autopilot-worktree-branch-inventory"
+  key="$(
+    printf '%s\0%s\0%s\0%s\0' "r92-root" "$TEST_TMP/r92-origin" \
+      "agent/attributed-r1-20260921" "$base" | sha256sum | awk '{print $1}'
+  )"
+  printf \
+    '{"schema":1,"root_run_id":"%s","path":"%s","branch":"%s","tip":"%s","marker_sha256":"%s","captured_at":1}\n' \
+    "r92-root" "$TEST_TMP/r92-origin" "agent/attributed-r1-20260921" "$base" \
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" \
+    > "$common/autopilot-worktree-branch-inventory/$key.json"
+  chmod 600 "$common/autopilot-worktree-branch-inventory/$key.json"
+
+  # RED at base: --all refused by usage() with exact text:
+  # usage: reap-dispatch-branches.sh scan|check|reap [options]
+  #   shared: --repo <dir> --into <ref> --pattern <bash-ere> --inventory-file <json>
+  local out rc names
+  set +e
+  out="$(bash "$SCRIPT" scan --repo "$repo" --into develop --all 2>/dev/null)"
+  rc=$?
+  set -e
+  assert_eq "$rc" "0" "scan --all exits 0"
+  names="$(jq -r '.unattributed[].name' <<<"$out" | sort | tr '\n' ' ')"
+  assert_contains "$names" "agent/orphan-r1-20260921" \
+    "unattributed lists the branch with no root_run_id record"
+  assert_not_contains "$names" "agent/attributed-r1-20260921" \
+    "journal-attributed branch is not listed as unattributed"
+  if git -C "$repo" show-ref --verify --quiet refs/heads/agent/orphan-r1-20260921; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "scan --all must not delete the unattributed branch"
+  fi
+  if git -C "$repo" show-ref --verify --quiet refs/heads/agent/attributed-r1-20260921; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "scan --all must not delete the attributed branch"
+  fi
+}
+
 assert_r3_run_ledger_sh_lease
 assert_r16_dispatch_foreman_tes
 assert_r19_pin_store_hardening
+assert_r92_reap_dispatch_branch
 finalize_test

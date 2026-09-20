@@ -8,6 +8,7 @@ usage() {
   printf '%s\n' \
     'usage: reap-dispatch-branches.sh scan|check|reap [options]' \
     '  shared: --repo <dir> --into <ref> --pattern <bash-ere> --inventory-file <json>' \
+    '  scan:   --all  (report-only: list dispatch-pattern branches with no parseable root_run_id as unattributed; never deletes)' \
     '  check:  --ack <integration-candidate-branch>' \
     '  reap:   --dry-run --yes --reap-superseded --bundle-dir <dir> --ack-preserved <branch@tip>' \
     '  exact lifecycle: use the unmodified worktree-controller JSON as --inventory-file;' \
@@ -38,8 +39,12 @@ dry_run=0
 reap_superseded=0
 bundle_dir=""
 inventory_file=""
+scan_all=0
 declare -a extra_patterns=()
 declare -a preserve_ack_specs=()
+declare -a unattributed=()
+declare -A unattributed_seen=()
+declare -A journal_attributed=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -47,6 +52,7 @@ while [ "$#" -gt 0 ]; do
     --into) [ "$#" -ge 2 ] || usage; into="$2"; shift 2 ;;
     --pattern) [ "$#" -ge 2 ] || usage; extra_patterns+=("$2"); shift 2 ;;
     --inventory-file) [ "$#" -ge 2 ] || usage; inventory_file="$2"; shift 2 ;;
+    --all) [ "$command_name" = scan ] || usage; scan_all=1; shift ;;
     --ack) [ "$command_name" = check ] && [ "$#" -ge 2 ] || usage; ack_branch="$2"; shift 2 ;;
     --dry-run) [ "$command_name" = reap ] || usage; dry_run=1; shift ;;
     --yes) [ "$command_name" = reap ] || usage; yes=1; shift ;;
@@ -75,6 +81,44 @@ esac
 git check-ref-format "refs/heads/$into_name" >/dev/null 2>&1 || die_env "invalid integration target branch: $into"
 into_ref="refs/heads/$into_name"
 into="$into_name"
+
+load_journal_attributed_branches() {
+  local directory="$common_dir/autopilot-worktree-branch-inventory"
+  local listing branch
+  [ -d "$directory" ] && [ ! -L "$directory" ] || return 0
+  listing="$(
+    node - "$directory" <<'NODE'
+const fs = require("fs");
+const path = require("path");
+const dir = process.argv[2];
+for (const name of fs.readdirSync(dir).sort()) {
+  if (!name.endsWith(".json")) continue;
+  const file = path.join(dir, name);
+  let value;
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink()) continue;
+    value = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    continue;
+  }
+  if (!value || typeof value.root_run_id !== "string"
+      || typeof value.branch !== "string"
+      || !/^[A-Za-z0-9._-]+$/.test(value.root_run_id)
+      || /[\u0000-\u001f\u007f]/.test(value.branch)) continue;
+  process.stdout.write(`${value.branch}\n`);
+}
+NODE
+  )" || return 0
+  while IFS= read -r branch || [ -n "$branch" ]; do
+    [ -n "$branch" ] || continue
+    journal_attributed["$branch"]=1
+  done <<< "$listing"
+}
+
+if [ "$scan_all" -eq 1 ]; then
+  load_journal_attributed_branches
+fi
 
 for pattern in "${extra_patterns[@]}"; do
   [ -n "$pattern" ] || die_env "--pattern ERE must not be empty"
@@ -539,9 +583,10 @@ for name in "${local_branch_names[@]}"; do
   [ "$name" = "$into_name" ] && continue
   matched=0
   if [ -n "$inventory_file" ]; then
-    [ -n "${inventory_expected[$name]:-}" ] || continue
-    family["$name"]="inventory"
-    matched=1
+    if [ -n "${inventory_expected[$name]:-}" ]; then
+      family["$name"]="inventory"
+      matched=1
+    fi
   elif [[ "$name" =~ $candidate_re ]]; then
     family["$name"]="candidate"
     round["$name"]=$((10#${BASH_REMATCH[1]}))
@@ -558,7 +603,36 @@ for name in "${local_branch_names[@]}"; do
       if [[ "$name" =~ $pattern ]]; then matched=1; family["$name"]="custom"; break; fi
     done
   fi
-  [ "$matched" -eq 1 ] || continue
+  if [ "$matched" -eq 0 ]; then
+    if [ "$scan_all" -eq 1 ]; then
+      pattern_hit=0
+      if [[ "$name" =~ $candidate_re ]] \
+         || [[ "$name" =~ $unit_re ]] \
+         || [[ "$name" =~ $intermediate_re ]]; then
+        pattern_hit=1
+      else
+        for pattern in "${extra_patterns[@]}"; do
+          if [[ "$name" =~ $pattern ]]; then pattern_hit=1; break; fi
+        done
+      fi
+      if [ "$pattern_hit" -eq 1 ] \
+         && [ -z "${inventory_expected[$name]:-}" ] \
+         && [ -z "${journal_attributed[$name]:-}" ] \
+         && [ -z "${unattributed_seen[$name]:-}" ]; then
+        unattributed+=("$name")
+        unattributed_seen["$name"]=1
+      fi
+    fi
+    continue
+  fi
+
+  if [ "$scan_all" -eq 1 ] \
+     && [ -z "${inventory_expected[$name]:-}" ] \
+     && [ -z "${journal_attributed[$name]:-}" ] \
+     && [ -z "${unattributed_seen[$name]:-}" ]; then
+    unattributed+=("$name")
+    unattributed_seen["$name"]=1
+  fi
 
   branches+=("$name")
   tip["$name"]="${snapshot_tip[$name]}"
@@ -700,6 +774,17 @@ emit_scan_json() {
   else
     printf 'null'
   fi
+  if [ "$scan_all" -eq 1 ]; then
+    printf ',"unattributed":['
+    local first_unattr=1 unattr_name
+    for unattr_name in "${unattributed[@]}"; do
+      [ "$first_unattr" -eq 1 ] || printf ','
+      first_unattr=0
+      printf '{"name":"%s","tip":"%s"}' \
+        "$(json_escape "$unattr_name")" "$(json_escape "${snapshot_tip[$unattr_name]}")"
+    done
+    printf ']'
+  fi
   printf '}\n'
 }
 
@@ -782,6 +867,7 @@ if [ "$command_name" = check ]; then
 fi
 
 # reap
+# TODO(row-92): before reaping a branch found only via scan --all, the operator must run pin-evidence-anchors.js apply --exclude-ref <ref> first; do not add a --all delete path.
 [ "$yes" -eq 1 ] || dry_run=1
 declare -a eligible=()
 eligible+=("${reapable[@]}")

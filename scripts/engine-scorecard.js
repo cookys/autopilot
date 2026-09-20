@@ -127,12 +127,12 @@ const SUPERSESSION_STATE_VALUES = new Set(['superseded']);
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
   node scripts/engine-scorecard.js record --supersede-provisional --supersedes-event-id <N> --reason <string> [--file <path>]\n\
-  node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--identity-file <path>]\n\
+  node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--role-default-scope] [--identity-file <path>]\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
   node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--effort <effort>] [--now <ISO-date>]\n\
-    [--require-evidence --scope-file <path> [--identity-file <path>]]\n\
+    [--require-evidence --scope-file <path> [--identity-file <path>]] [--role-default-scope]\n\
 \n  --file <path>  Read one JSON row from this file (optional with --supersede-provisional).\n\
   --supersede-provisional  Append a record_kind=supersession marker for a prior event.\n\
   --supersedes-event-id <N>  Target event_id that must exist and match engine/runner/role.\n\
@@ -146,6 +146,9 @@ const HELP_TEXT = `Usage:\n\
     as provisional and report/ladder cannot produce a routing candidate.\n\
   --require-evidence additionally excludes legacy rows and requires --scope-file.\n\
   --scope-file and --identity-file constrain lifecycle evidence to an exact applicability query.\n\
+  --role-default-scope (current/seat-status only) uses the frozen consult/discuss corpus\n\
+    applicability_scope in place of --scope-file and arms --require-evidence. Coverage is\n\
+    those two roles only — other roles fail closed; no invented default scope.\n\
   --implementer-family is optional; if provided, ladder demotes matching family entries.\n\
   verification_author/explorer rows are evidence-only in v1; use current/report, not ladder.\n\
   import-transcripts requires explicit roots and emits aggregate-only, untrusted telemetry;\n\
@@ -599,6 +602,7 @@ function parseCurrentArgs(args) {
   let requireEvidence = false;
   let scope = null;
   let identity = null;
+  let roleDefaultScope = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -619,6 +623,10 @@ function parseCurrentArgs(args) {
       requireEvidence = true;
       continue;
     }
+    if (arg === '--role-default-scope') {
+      roleDefaultScope = true;
+      continue;
+    }
     if (arg === '--scope-file' || arg === '--identity-file') {
       if (i + 1 >= args.length) failUsage(`${arg} requires a value`);
       const parsed = readEvidenceQueryFile(args[++i], arg.slice(2));
@@ -635,6 +643,14 @@ function parseCurrentArgs(args) {
   const requestedRole = role;
   role = normalizeCapabilityRole(role, { allowLegacy: true });
   if (!role) failUsage(`invalid role '${requestedRole}'`);
+  if (roleDefaultScope) {
+    try {
+      scope = require('./lib/qualification-applicability-scope.js').frozenScopeForRole(role);
+    } catch (err) {
+      failUsage(`--role-default-scope covers only consult/discuss; no frozen scope for role '${role}'`);
+    }
+    requireEvidence = true;
+  }
   if (requireEvidence && !scope) {
     failUsage('--require-evidence or --identity-file requires --scope-file');
   }
@@ -2165,6 +2181,7 @@ function parseSeatStatusArgs(args) {
   let requireEvidence = false;
   let scope = null;
   let identity = null;
+  let roleDefaultScope = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -2201,6 +2218,10 @@ function parseSeatStatusArgs(args) {
     // rather than inventing a second vocabulary.
     if (arg === '--require-evidence') {
       requireEvidence = true;
+      continue;
+    }
+    if (arg === '--role-default-scope') {
+      roleDefaultScope = true;
       continue;
     }
     if (arg === '--scope-file' || arg === '--identity-file') {
@@ -2240,6 +2261,14 @@ function parseSeatStatusArgs(args) {
   const roleToken = seatToken(canonicalRole);
   if (!roleToken) failUsage(`invalid --role token '${canonicalRole}'`);
 
+  if (roleDefaultScope) {
+    try {
+      scope = require('./lib/qualification-applicability-scope.js').frozenScopeForRole(canonicalRole);
+    } catch (err) {
+      failUsage(`--role-default-scope covers only consult/discuss; no frozen scope for role '${canonicalRole}'`);
+    }
+    requireEvidence = true;
+  }
   if (requireEvidence && !scope) {
     failUsage('--require-evidence or --identity-file requires --scope-file');
   }

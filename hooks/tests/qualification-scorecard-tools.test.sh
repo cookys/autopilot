@@ -334,4 +334,40 @@ EOF
 
 assert_r82_governance_cli_ux_po
 
+assert_r127_engine_scorecard_js() {
+  # Standalone strict current/seat-status for consult/discuss: --role-default-scope
+  # loads frozenScopeForRole instead of a hand-authored --scope-file.
+  rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$ENGINE_SCORECARD_DIR/.lock"
+  rm -f "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+  touch "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+
+  local qual_row current_out impl_err seat_err
+  qual_row="$(node "$FIXTURE_JS" consult --engine gpt-5.6-sol --runner codex-cli)" \
+    || fail "r127: genuine-row fixture failed"
+  printf '%s\n' "$qual_row" | node "$CLI" record >/dev/null \
+    || fail "r127: scorecard record failed"
+
+  # RED at beff1c84c5bff395d4e0f9a3a8f899b3a42e55cd: ERROR: unknown option: --role-default-scope
+  current_out="$(node "$CLI" current --role consult --now 2026-09-21 --require-evidence --role-default-scope)" \
+    || fail "r127: current --role-default-scope should succeed without --scope-file"
+  assert_contains "$current_out" '"role":"consult"' \
+    "r127: current --role consult --require-evidence --role-default-scope resolves the planted row"
+
+  impl_err="$(node "$CLI" current --role implementer --role-default-scope 2>&1 >/dev/null || true)"
+  assert_contains "$impl_err" "consult" \
+    "r127: implementer --role-default-scope names consult in the coverage limit"
+  assert_contains "$impl_err" "discuss" \
+    "r127: implementer --role-default-scope names discuss in the coverage limit"
+  assert_not_contains "$impl_err" "unknown option" \
+    "r127: implementer --role-default-scope is recognized, then refused for coverage"
+
+  seat_err="$(node "$CLI" seat-status --engine gpt-5.6-sol --runner codex --role implementer --effort high --role-default-scope 2>&1 >/dev/null || true)"
+  assert_contains "$seat_err" "consult" \
+    "r127: seat-status implementer --role-default-scope names consult"
+  assert_contains "$seat_err" "discuss" \
+    "r127: seat-status implementer --role-default-scope names discuss"
+}
+
+assert_r127_engine_scorecard_js
+
 finalize_test

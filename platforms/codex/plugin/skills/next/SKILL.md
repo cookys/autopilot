@@ -48,7 +48,7 @@ Details: [references/phase0-hygiene.md](references/phase0-hygiene.md)
 | Category | Source | Method |
 |----------|--------|--------|
 | **Dev** | `docs/projects/INDEX.md` | Find in-progress projects' next Phase |
-| | `docs/plans/INDEX.md` | Find plans in design stage |
+| | `docs/projects/INDEX.md` rows with Version `active` | The plan registry (`check-plan-graduation.js`'s `plan_unregistered` gate) — plans in design/implementation stage |
 | | `docs/BACKLOG.md` | Check if trigger conditions are met |
 | | `docs/proposals/` | List pending proposals |
 | **Maintenance** | `improvement-queue.json` | Pending items (from Phase 0) |

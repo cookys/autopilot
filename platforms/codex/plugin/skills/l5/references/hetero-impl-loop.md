@@ -124,7 +124,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
 
 1. **Plan + rubric** (content-bound): `docs/plans/<date>-<slug>.md` and `.rubric.md`; one plan id
    maps to exactly ONE graph node, so a plan whose phases must ship separately needs one plan
-   file per campaign.
+   file per campaign. Register it before Step 3: paste `check-plan-graduation.js
+   --register-template <stem>`'s row into `docs/projects/INDEX.md` (Version `active`) —
+   `mission-execution-graph-check.js` refuses an unregistered plan's `spec.path`
+   (`spec_plan_unregistered`) at admission.
 2. **Sources manifest** `docs/mission-<slug>-sources.json` with both sha256s; derive ids with
    `loadSourceCoverageManifest` from `scripts/mission-execution-graph-check.js`.
 3. **Graph** `docs/mission-<slug>-execution-graph.json`: one node, `campaign.output_paths` naming
@@ -239,7 +242,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     line drifts the frozen source sha and every `session-mode set` is refused until routing is
     rolled back to a completed graph whose sources still match plus `mission-terminal-reconcile.js
     legacy` (2026-09-15). Then run `node scripts/check-plan-graduation.js --fix` — the plan
-    graduates to `docs/plans/_archive/` once its slug lands in a released CHANGELOG section, and
+    graduates to `docs/plans/_archive/<YYYY>/<MM>/` (dated, from the stem's own date) once its slug
+    lands in a released CHANGELOG section, its INDEX row flips `active` → the released version, and
     any BACKLOG row this campaign's plan now supersedes is deleted in the same pass.
     When the rail stops, degrade per the documented fallback
     (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed`), repair on

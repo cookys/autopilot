@@ -104,6 +104,7 @@ const BLOCKING_CODES = new Set([
   'backlog_title_closed_status_open',
   'plan_released_not_archived',
   'archive_destination_exists',
+  'plan_unregistered',
 ]);
 const REPORT_ONLY_CODES = new Set(['plan_orphan', 'plan_active_lineage', 'plan_reference_dangling']);
 const CODES = [...BLOCKING_CODES, ...REPORT_ONLY_CODES];
@@ -116,7 +117,12 @@ function usage(code) {
   process.stderr.write(
     'Usage: node scripts/check-plan-graduation.js [--repo-root <dir>] ' +
     '[--backlog <file>] [--changelog <file>] [--plans-dir <dir>] ' +
-    '[--allowlist <file>] [--fix] [--json]\n'
+    '[--allowlist <file>] [--fix] [--json]\n' +
+    '   or: node scripts/check-plan-graduation.js --register-template <stem> [--repo-root <dir>]\n' +
+    '   or: node scripts/check-plan-graduation.js --archive <stem> [--archive <stem>...] ' +
+    '[--shipped-in <version-or-sha>] [--repo-root <dir>] [--json]\n' +
+    '   or: node scripts/check-plan-graduation.js --migrate-archive-layout ' +
+    '[--repo-root <dir>] [--json]\n'
   );
   process.exit(code);
 }
@@ -130,6 +136,10 @@ function parseArgs(argv) {
     allowlist: null,
     fix: false,
     json: false,
+    registerTemplate: null,
+    archive: [],
+    shippedIn: null,
+    migrateArchiveLayout: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -145,6 +155,10 @@ function parseArgs(argv) {
     else if (a === '--allowlist') out.allowlist = need();
     else if (a === '--fix') out.fix = true;
     else if (a === '--json') out.json = true;
+    else if (a === '--register-template') out.registerTemplate = need();
+    else if (a === '--archive') out.archive.push(need());
+    else if (a === '--shipped-in') out.shippedIn = need();
+    else if (a === '--migrate-archive-layout') out.migrateArchiveLayout = true;
     else usage(2);
   }
   return out;
@@ -197,6 +211,139 @@ function planPathPrefixRegExp(stem) {
 // as a prefix.
 function evidencePathPrefixRegExp(stem) {
   return new RegExp(`docs/plans/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+}
+
+// --- dated archive layout ---
+//
+// The archive is dated: docs/plans/_archive/<YYYY>/<MM>/<stem>.md (year/month from the
+// stem's own date prefix), sidecars beside it, evidence at
+// docs/plans/_archive/<YYYY>/<MM>/evidence/<stem>/. Active plans stay flat. Every
+// existence/no-clobber check below looks in BOTH the dated location and the legacy flat
+// `_archive/<stem>.md` / `_archive/evidence/<stem>/` location (pre-dated-layout archives,
+// or repos that never ran --migrate-archive-layout) — dated is preferred for NEW writes,
+// legacy is still honored for reads so existing archives are not silently orphaned.
+
+function stemDateParts(stem) {
+  const m = stem.match(/^(\d{4})-(\d{2})-\d{2}-/);
+  return m ? { year: m[1], month: m[2] } : null;
+}
+
+function datedArchiveBase(archiveDir, stem) {
+  const parts = stemDateParts(stem);
+  return parts ? path.join(archiveDir, parts.year, parts.month) : null;
+}
+
+function archivedPlanCandidates(archiveDir, stem) {
+  const dated = datedArchiveBase(archiveDir, stem);
+  const out = [];
+  if (dated) out.push(path.join(dated, `${stem}.md`));
+  out.push(path.join(archiveDir, `${stem}.md`)); // legacy flat
+  return out;
+}
+
+function findExistingArchivedPlan(archiveDir, stem) {
+  return archivedPlanCandidates(archiveDir, stem).find((p) => fs.existsSync(p)) || null;
+}
+
+function archivedEvidenceCandidates(archiveDir, stem) {
+  const dated = datedArchiveBase(archiveDir, stem);
+  const out = [];
+  if (dated) out.push(path.join(dated, 'evidence', stem));
+  out.push(path.join(archiveDir, 'evidence', stem)); // legacy flat
+  return out;
+}
+
+function findExistingArchivedEvidence(archiveDir, stem) {
+  return archivedEvidenceCandidates(archiveDir, stem).find((p) => fs.existsSync(p)) || null;
+}
+
+// --- docs/projects/INDEX.md plan registry ---
+//
+// A plan under docs/plans/ (not _archive) must have exactly one INDEX row whose Version
+// column is literally `active`. Table-agnostic: scans EVERY markdown table in INDEX.md (a
+// table is a `|`-line immediately followed by a `|`-separator line), finds the column
+// whose header cell contains "version" case-insensitively (catches both `Version` and
+// `Target version`), and treats a data row as "about" a stem only if the raw row text
+// contains a `plans/<stem>.md` path (optionally through `_archive/`, dated or legacy) —
+// path-scoped, not a bare-slug match, so 337 rows of Chinese prose can't false-positive.
+function normalizeIndexCell(s) {
+  return String(s).replace(/\*\*/g, '').trim();
+}
+
+function splitTableRow(line) {
+  let t = line.trim();
+  if (t.startsWith('|')) t = t.slice(1);
+  if (t.endsWith('|')) t = t.slice(0, -1);
+  return t.split('|').map((c) => c.trim());
+}
+
+function isTableSeparatorRow(cells) {
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c.trim()));
+}
+
+function planIndexRegistration(repoRoot, stem) {
+  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  const text = readFileSafe(indexPath);
+  if (text == null) return { indexExists: false, indexPath, matchedRows: [], activeRow: null };
+  const lines = text.split(/\r?\n/);
+  const stemRe = new RegExp(`plans/(?:_archive/(?:\\d{4}/\\d{2}/)?)?${escapeRegExp(stem)}\\.md`);
+  const matchedRows = [];
+  let activeRow = null;
+  let i = 0;
+  while (i < lines.length) {
+    if (!lines[i].trim().startsWith('|')) { i += 1; continue; }
+    const headerCells = splitTableRow(lines[i]);
+    const sepLine = lines[i + 1];
+    if (!sepLine || !sepLine.trim().startsWith('|') || !isTableSeparatorRow(splitTableRow(sepLine))) {
+      i += 1;
+      continue;
+    }
+    const versionCol = headerCells.findIndex((c) => /version/i.test(c));
+    let j = i + 2;
+    while (j < lines.length && lines[j].trim().startsWith('|')) {
+      if (stemRe.test(lines[j])) {
+        const rowCells = splitTableRow(lines[j]);
+        const versionCell = versionCol >= 0 && versionCol < rowCells.length
+          ? normalizeIndexCell(rowCells[versionCol]) : null;
+        const row = { lineIndex: j, text: lines[j], versionCell, versionCol };
+        matchedRows.push(row);
+        if (versionCell === 'active' && !activeRow) activeRow = row;
+      }
+      j += 1;
+    }
+    i = j;
+  }
+  return { indexExists: true, indexPath, matchedRows, activeRow };
+}
+
+// The row to paste for a plan that has no `active` INDEX registration yet. Date from the
+// stem's own prefix (never "today" — the plan may be old); title from the plan file's own
+// `# Plan — <title>` (or first `# ` heading) H1 when the file is readable, falling back to
+// the slug with dashes turned to spaces. `--fix`/the gate never write this row themselves
+// (design: --fix does not invent rows) — only `--register-template` prints it, and a human
+// or `next-touch` pastes it.
+function planTitleFromFile(plansDir, archiveDir, stem) {
+  const candidates = [
+    path.join(plansDir, `${stem}.md`),
+    ...archivedPlanCandidates(archiveDir, stem),
+  ];
+  for (const p of candidates) {
+    const text = readFileSafe(p);
+    if (!text) continue;
+    const m = text.match(/^#\s*Plan\s*[—:-]\s*(.+?)\s*$/m) || text.match(/^#\s+(.+?)\s*$/m);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+function registerTemplateRow(repoRoot, plansDir, archiveDir, stem, overrides = {}) {
+  const dm = stem.match(DATE_PREFIX_RE);
+  const date = dm ? dm[0].replace(/-$/, '') : '(unknown-date)';
+  const title = planTitleFromFile(plansDir, archiveDir, stem) || planSlug(stem).replace(/-/g, ' ');
+  const version = overrides.version || 'active';
+  const commit = overrides.commit || '—';
+  const linkPath = overrides.linkPath || `../plans/${stem}.md`;
+  return `| ${date} | [${title}](${linkPath}) | ${version} | ${commit} | [plan](${linkPath}) |`;
 }
 
 // Is `relPath` (repo-relative, POSIX) tracked by git in `repoRoot`? Used to decide whether
@@ -289,13 +436,13 @@ const DANGLING_REFERENCE_PATTERNS = [
     prefix: 'docs/plans/',
     re: /docs\/plans\/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+)/g,
     exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, `${stem}.md`))
-      || fs.existsSync(path.join(plansDir, '_archive', `${stem}.md`)),
+      || Boolean(findExistingArchivedPlan(path.join(plansDir, '_archive'), stem)),
   },
   {
     prefix: 'docs/plans/evidence/',
     re: /docs\/plans\/evidence\/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+)/g,
     exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, 'evidence', stem))
-      || fs.existsSync(path.join(plansDir, '_archive', 'evidence', stem)),
+      || Boolean(findExistingArchivedEvidence(path.join(plansDir, '_archive'), stem)),
   },
 ];
 
@@ -437,7 +584,7 @@ function planStemForPointer(pointer) {
   if (!pointer || pointer === 'none') return null;
   // docs/plans/<X>.md or docs/plans/_archive/<X>.md — X is either a primary plan's own
   // basename (no further dot: stem === X) or a sidecar's (`<stem>.<tag>`: strip the tag).
-  let m = pointer.match(/^docs\/plans\/(?:_archive\/)?([^/]+)\.md$/);
+  let m = pointer.match(/^docs\/plans\/(?:_archive\/(?:\d{4}\/\d{2}\/)?)?([^/]+)\.md$/);
   if (m) {
     const x = m[1];
     const lastDot = x.lastIndexOf('.');
@@ -475,6 +622,80 @@ function planMentioned(released, stem, slug, pointerPathVariants) {
   }
   // Accept either the bare slug or the full <date>-<slug> stem, boundary-matched.
   return slugBoundaryRegExp(stem).test(released) || slugBoundaryRegExp(slug).test(released);
+}
+
+// The first (topmost = newest, CHANGELOG.md is newest-first) RELEASED `## v…` section
+// whose text names the stem or its slug — used to flip an archived plan's INDEX row
+// Version from `active` to a real version at archive time.
+function findReleasedVersionForStem(changelogPath, stem, slug) {
+  const text = readFileSafe(changelogPath);
+  if (!text) return null;
+  const reStem = slugBoundaryRegExp(stem);
+  const reSlug = slugBoundaryRegExp(slug);
+  const lines = text.split(/\r?\n/);
+  let currentVersion = null;
+  let currentReleased = false;
+  let buffer = [];
+  let found = null;
+  const flush = () => {
+    if (!found && currentReleased && currentVersion && buffer.length) {
+      const chunk = buffer.join('\n');
+      if (reStem.test(chunk) || reSlug.test(chunk)) found = currentVersion;
+    }
+    buffer = [];
+  };
+  for (const line of lines) {
+    const m = line.match(/^##\s+(.*)$/);
+    if (m) {
+      flush();
+      currentReleased = !/unreleased/i.test(m[1]);
+      const vm = m[1].match(/v[\d.]+[\w-]*/);
+      currentVersion = vm ? vm[0] : m[1].trim();
+      continue;
+    }
+    buffer.push(line);
+  }
+  flush();
+  return found;
+}
+
+// Rewrites the ONE matched INDEX.md row for `stem` (preferring its `active` row, else the
+// last row that references it) in place: rewrites `plans/<stem>` / `plans/evidence/<stem>`
+// occurrences in that row to the dated archive path, and — when `newVersion` is given and
+// the row's Version column is currently `active` — flips it to `newVersion`. Never invents
+// a row (design); returns `{changed:false}` when there is nothing to rewrite.
+function archiveIndexRow(repoRoot, stem, { newVersion } = {}) {
+  const registration = planIndexRegistration(repoRoot, stem);
+  if (!registration.indexExists) return { changed: false };
+  const target = registration.activeRow
+    || registration.matchedRows[registration.matchedRows.length - 1] || null;
+  if (!target) return { changed: false };
+  const text = fs.readFileSync(registration.indexPath, 'utf8');
+  const lines = text.split(/\r?\n/);
+  const parts = stemDateParts(stem);
+  const datedSeg = parts ? `${parts.year}/${parts.month}/` : '';
+  let line = lines[target.lineIndex];
+  // Matches BOTH transitions: active `plans/<stem>` -> dated archive (archiveStem's own
+  // move), and legacy-flat `plans/_archive/<stem>` -> dated archive (migrateArchiveLayout,
+  // which never had an active-form link to begin with) — the optional `_archive/` makes
+  // this one regex serve both call sites.
+  line = line.replace(
+    new RegExp(`plans/(?:_archive/)?evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+    `plans/_archive/${datedSeg}evidence/${stem}`
+  );
+  line = line.replace(
+    new RegExp(`plans/(?:_archive/)?${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+    `plans/_archive/${datedSeg}${stem}`
+  );
+  if (newVersion && target.versionCell === 'active' && target.versionCol >= 0) {
+    const cells = splitTableRow(line);
+    cells[target.versionCol] = newVersion;
+    line = `| ${cells.join(' | ')} |`;
+  }
+  if (line === lines[target.lineIndex]) return { changed: false };
+  lines[target.lineIndex] = line;
+  fs.writeFileSync(registration.indexPath, lines.join('\n'));
+  return { changed: true, row: line };
 }
 
 // --- orphan reference scan ---
@@ -537,7 +758,7 @@ function run(opts) {
       const stem = planStemForPointer(row.pointer);
       if (stem) {
         const planExists = fs.existsSync(path.join(repoRoot, 'docs', 'plans', `${stem}.md`))
-          || fs.existsSync(path.join(repoRoot, 'docs', 'plans', '_archive', `${stem}.md`));
+          || Boolean(findExistingArchivedPlan(path.join(repoRoot, 'docs', 'plans', '_archive'), stem));
         if (planExists) {
           violations.push({
             code: 'backlog_row_has_plan',
@@ -565,6 +786,21 @@ function run(opts) {
     const stem = planStem(basename);
     const slug = planSlug(stem);
     if (allowlist.has(stem)) continue;
+    // plan_unregistered runs BEFORE the active-lineage/released `continue`s below — a live
+    // campaign lineage plan is the design's most-active case and still needs a registry
+    // row, and a released-but-not-yet-archived plan is still physically under docs/plans/.
+    // auto-allowed (no INDEX.md at all) never fires, matching the two consumer scripts.
+    const registration = planIndexRegistration(repoRoot, stem);
+    if (registration.indexExists && !registration.activeRow) {
+      violations.push({
+        code: 'plan_unregistered',
+        kind: 'plan',
+        stem,
+        path: path.join('docs', 'plans', basename),
+        detail: `no docs/projects/INDEX.md row for this plan has Version "active" — paste: `
+          + registerTemplateRow(repoRoot, plansDir, archiveDir, stem),
+      });
+    }
     if (activeLineageStems.has(stem)) {
       violations.push({
         code: 'plan_active_lineage',
@@ -676,19 +912,22 @@ function gitMv(repoRoot, from, to) {
 // when a later file in the set clashed).
 function planFileMoveSet(repoRoot, plansDir, archiveDir, stem) {
   const moves = [];
+  const destDir = datedArchiveBase(archiveDir, stem) || archiveDir; // dated when the stem
+  // carries a date prefix (always true for a real docs/plans/<date>-<slug>.md); falls
+  // back to the legacy flat archiveDir only for a stem the date regex can't parse.
   const basename = `${stem}.md`;
   const srcRel = path.relative(repoRoot, path.join(plansDir, basename));
-  const dstRel = path.relative(repoRoot, path.join(archiveDir, basename));
+  const dstRel = path.relative(repoRoot, path.join(destDir, basename));
   if (fs.existsSync(path.join(repoRoot, srcRel))) moves.push({ from: srcRel, to: dstRel });
   for (const sidecar of findSidecars(plansDir, stem)) {
     const sSrcRel = path.relative(repoRoot, path.join(plansDir, sidecar));
-    const sDstRel = path.relative(repoRoot, path.join(archiveDir, sidecar));
+    const sDstRel = path.relative(repoRoot, path.join(destDir, sidecar));
     if (fs.existsSync(path.join(repoRoot, sSrcRel))) moves.push({ from: sSrcRel, to: sDstRel });
   }
   const evidenceDir = path.join(plansDir, 'evidence', stem);
   if (fs.existsSync(evidenceDir)) {
     const eSrcRel = path.relative(repoRoot, evidenceDir);
-    const eDstRel = path.relative(repoRoot, path.join(archiveDir, 'evidence', stem));
+    const eDstRel = path.relative(repoRoot, path.join(destDir, 'evidence', stem));
     moves.push({ from: eSrcRel, to: eDstRel });
   }
   return moves;
@@ -703,9 +942,14 @@ function rewritePlanReferences(repoRoot, stem) {
   // after `docs/plans/`, and "evidence" sits there instead) — so the two passes never
   // double-touch the same substring, and order between them does not matter for
   // correctness. Both run over every file regardless.
+  // Dated archive: the replacement target includes <YYYY>/<MM> parsed from the stem's own
+  // date prefix (see stemDateParts) — falls back to the legacy flat _archive/<stem> shape
+  // only when the stem itself has no parseable date.
+  const parts = stemDateParts(stem);
+  const datedSeg = parts ? `${parts.year}/${parts.month}/` : '';
   const passes = [
-    { re: evidencePathPrefixRegExp(stem), replacement: `docs/plans/_archive/evidence/${stem}` },
-    { re: planPathPrefixRegExp(stem), replacement: `docs/plans/_archive/${stem}` },
+    { re: evidencePathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}evidence/${stem}` },
+    { re: planPathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}${stem}` },
   ];
   const rewritten = [];
   for (const rel of trackedReferenceFiles(repoRoot)) {
@@ -736,41 +980,331 @@ function rewritePlanReferences(repoRoot, stem) {
 // every destination in that stem's move set is checked for a pre-existing file BEFORE any
 // move for that stem starts. A clash skips the WHOLE stem (nothing moves, nothing is
 // rewritten) and records archive_destination_exists instead of moved/reference entries.
-function fixPlans(repoRoot, plansDir, archiveDir, violations, activeLineageStems) {
+// The shared per-stem archive body: all-or-nothing move (plan + sidecars + evidence,
+// dated destination), reference rewrite (incl. evidence paths), then — best-effort, never
+// inventing a row — flip the stem's INDEX registry row. Used by both `--fix` (released
+// plans; version comes from the CHANGELOG section that names it) and `--archive` (explicit
+// stems; version comes from `--shipped-in` or defaults to `shipped`).
+function archiveStem(repoRoot, plansDir, archiveDir, stem, { newVersion } = {}) {
+  const moves = planFileMoveSet(repoRoot, plansDir, archiveDir, stem);
+  if (!moves.length) return { moved: [], blocked: [], referencesRewritten: null, indexRowChanged: false };
+  const clobbered = moves.filter((m) => fs.existsSync(path.join(repoRoot, m.to)));
+  if (clobbered.length) {
+    return {
+      moved: [],
+      referencesRewritten: null,
+      indexRowChanged: false,
+      blocked: clobbered.map((m) => ({
+        code: 'archive_destination_exists',
+        kind: 'plan',
+        stem,
+        path: m.to,
+        detail: `skipped this stem's move: ${m.to} already exists`,
+      })),
+    };
+  }
+  for (const m of moves) gitMv(repoRoot, m.from, m.to);
+  const rewritten = rewritePlanReferences(repoRoot, stem);
+  const indexResult = archiveIndexRow(repoRoot, stem, { newVersion });
+  return {
+    moved: moves,
+    blocked: [],
+    referencesRewritten: rewritten.length ? { stem, files: rewritten } : null,
+    indexRowChanged: indexResult.changed,
+  };
+}
+
+function fixPlans(repoRoot, plansDir, archiveDir, violations, activeLineageStems, changelogPath) {
   const doomed = violations.filter((v) => v.kind === 'plan' && v.code === 'plan_released_not_archived');
   const moved = [];
   const referencesRewritten = [];
   const blocked = [];
+  const indexRowsFlipped = [];
   for (const v of doomed) {
     const stem = v.stem;
     if (activeLineageStems && activeLineageStems.has(stem)) continue; // defense in depth
-    const moves = planFileMoveSet(repoRoot, plansDir, archiveDir, stem);
-    if (!moves.length) continue;
-    const clobbered = moves.filter((m) => fs.existsSync(path.join(repoRoot, m.to)));
-    if (clobbered.length) {
-      for (const m of clobbered) {
-        blocked.push({
-          code: 'archive_destination_exists',
-          kind: 'plan',
-          stem,
-          path: m.to,
-          detail: `--fix skipped this stem's move: ${m.to} already exists`,
-        });
+    const slug = planSlug(stem);
+    const newVersion = changelogPath ? findReleasedVersionForStem(changelogPath, stem, slug) : null;
+    const result = archiveStem(repoRoot, plansDir, archiveDir, stem, { newVersion });
+    if (result.blocked.length) {
+      blocked.push(...result.blocked);
+      continue;
+    }
+    if (!result.moved.length) continue;
+    moved.push(...result.moved);
+    if (result.referencesRewritten) referencesRewritten.push(result.referencesRewritten);
+    if (result.indexRowChanged) indexRowsFlipped.push(stem);
+  }
+  return { moved, blocked, referencesRewritten, indexRowsFlipped };
+}
+
+// The --migrate-archive-layout counterpart of rewritePlanReferences: rewrites an already
+// LEGACY-FLAT archived reference (`docs/plans/_archive/<stem>` /
+// `docs/plans/_archive/evidence/<stem>`) to its dated form. Distinct from
+// rewritePlanReferences, which only ever matches the ACTIVE form (`docs/plans/<stem>`,
+// no `_archive/`) — a legacy archived plan never had an active-form link to begin with,
+// so that function's regex (by design) does not touch it.
+function rewriteLegacyArchiveReferences(repoRoot, stem) {
+  const parts = stemDateParts(stem);
+  if (!parts) return [];
+  const datedSeg = `${parts.year}/${parts.month}/`;
+  const passes = [
+    {
+      re: new RegExp(`docs/plans/_archive/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+      replacement: `docs/plans/_archive/${datedSeg}evidence/${stem}`,
+    },
+    {
+      re: new RegExp(`docs/plans/_archive/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+      replacement: `docs/plans/_archive/${datedSeg}${stem}`,
+    },
+  ];
+  const rewritten = [];
+  for (const rel of trackedReferenceFiles(repoRoot)) {
+    const abs = path.join(repoRoot, rel);
+    let text = readFileSafe(abs);
+    if (text == null) continue;
+    let changed = false;
+    for (const { re, replacement } of passes) {
+      re.lastIndex = 0;
+      if (!re.test(text)) continue;
+      re.lastIndex = 0;
+      const out = text.replace(re, replacement);
+      if (out !== text) {
+        text = out;
+        changed = true;
       }
-      continue; // all-or-nothing: do not move ANY file for this stem
+    }
+    if (changed) {
+      fs.writeFileSync(abs, text);
+      rewritten.push(rel);
+    }
+  }
+  return rewritten;
+}
+
+// --archive <stem> [--archive <stem>...] [--shipped-in <v>]: an explicit archive action
+// for a plan that is verified shipped but whose slug never made it into a CHANGELOG
+// section (the orphan case `plan_released_not_archived` cannot catch — that check only
+// fires on a CHANGELOG mention). Reuses archiveStem exactly: same all-or-nothing move
+// (dated destination), no-clobber, reference rewrite (incl. evidence paths). If the plan
+// has an `active` INDEX row, its Version flips to `--shipped-in` (or literal `shipped`
+// when omitted) same as --fix's released-archive path; if it has NO row at all,
+// --archive (unlike --fix) appends one with that Version so the archive is still
+// recorded — the whole point of this action is "this WAS shipped, record it as such."
+function archiveStems(repoRoot, plansDir, archiveDir, stems, shippedIn, activeLineageStems) {
+  const version = shippedIn || 'shipped';
+  const results = [];
+  for (const stem of stems) {
+    const planPath = path.join(plansDir, `${stem}.md`);
+    if (!fs.existsSync(planPath)) {
+      results.push({ stem, ok: false, reason: `not a live plan: docs/plans/${stem}.md does not exist` });
+      continue;
+    }
+    if (activeLineageStems && activeLineageStems.has(stem)) {
+      results.push({ stem, ok: false, reason: 'active campaign lineage (frozen source sha) — refused' });
+      continue;
+    }
+    const before = planIndexRegistration(repoRoot, stem);
+    const result = archiveStem(repoRoot, plansDir, archiveDir, stem, { newVersion: version });
+    if (result.blocked.length) {
+      results.push({ stem, ok: false, reason: 'archive_destination_exists', blocked: result.blocked });
+      continue;
+    }
+    let indexAction = 'unchanged';
+    if (result.indexRowChanged) {
+      indexAction = 'flipped';
+    } else if (!before.activeRow) {
+      const parts = stemDateParts(stem);
+      const datedSeg = parts ? `${parts.year}/${parts.month}/` : '';
+      const row = registerTemplateRow(repoRoot, plansDir, archiveDir, stem, {
+        version,
+        linkPath: `../plans/_archive/${datedSeg}${stem}.md`,
+      });
+      if (appendRegistryRow(repoRoot, row)) indexAction = 'appended';
+    }
+    results.push({
+      stem, ok: true, moved: result.moved, referencesRewritten: result.referencesRewritten, indexAction,
+    });
+  }
+  return results;
+}
+
+// Appends `rowText` as the newest row of the "## 進行中 (In Progress)" table — the plan
+// registry's append target (same table `--register-template`'s row is meant to be pasted
+// into). Never invented by --fix; only --archive appends, and only when no row exists at
+// all to flip.
+function appendRegistryRow(repoRoot, rowText) {
+  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  const text = readFileSafe(indexPath);
+  if (text == null) return false;
+  const lines = text.split(/\r?\n/);
+  const headingIdx = lines.findIndex((l) => /^##\s+進行中/.test(l));
+  if (headingIdx === -1) return false;
+  let i = headingIdx + 1;
+  while (i < lines.length && !lines[i].trim().startsWith('|')) i += 1;
+  if (i >= lines.length) return false;
+  lines.splice(i + 2, 0, rowText);
+  fs.writeFileSync(indexPath, lines.join('\n'));
+  return true;
+}
+
+// --migrate-archive-layout: one-time move of every legacy FLAT archived plan (+sidecars,
+// +evidence dir) into the dated layout, and every docs/projects/_archive/<date>-<name>/
+// project dir into docs/projects/_archive/<YYYY>/<MM>/<name-with-date>/, rewriting
+// references in tracked files (excluding CHANGELOG.md/docs/BACKLOG.md, same exclusion as
+// everywhere else — those are history) as it goes. All-or-nothing per stem/dir; no-clobber.
+function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
+  const plansMoved = [];
+  const plansBlocked = [];
+  const projectsMoved = [];
+  const projectsBlocked = [];
+  const referencesRewritten = new Set();
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(archiveDir, { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+  const stems = entries
+    .filter((e) => e.isFile() && e.name.endsWith('.md') && !isSidecar(e.name))
+    .map((e) => planStem(e.name))
+    .filter((s) => stemDateParts(s));
+  for (const stem of stems) {
+    const dated = datedArchiveBase(archiveDir, stem);
+    const basename = `${stem}.md`;
+    const moves = [{ from: path.join(archiveDir, basename), to: path.join(dated, basename) }];
+    for (const sidecar of findSidecars(archiveDir, stem)) {
+      moves.push({ from: path.join(archiveDir, sidecar), to: path.join(dated, sidecar) });
+    }
+    const evDir = path.join(archiveDir, 'evidence', stem);
+    if (fs.existsSync(evDir)) moves.push({ from: evDir, to: path.join(dated, 'evidence', stem) });
+    const clobbered = moves.filter((m) => fs.existsSync(m.to));
+    if (clobbered.length) {
+      plansBlocked.push({
+        stem,
+        code: 'archive_destination_exists',
+        detail: `migrate skipped: ${path.relative(repoRoot, clobbered[0].to)} already exists`,
+      });
+      continue;
     }
     for (const m of moves) {
-      gitMv(repoRoot, m.from, m.to);
-      moved.push(m);
+      gitMv(repoRoot, path.relative(repoRoot, m.from), path.relative(repoRoot, m.to));
+      plansMoved.push({ from: path.relative(repoRoot, m.from), to: path.relative(repoRoot, m.to) });
     }
-    const rewritten = rewritePlanReferences(repoRoot, stem);
-    if (rewritten.length) referencesRewritten.push({ stem, files: rewritten });
+    for (const f of rewriteLegacyArchiveReferences(repoRoot, stem)) referencesRewritten.add(f);
+    if (archiveIndexRow(repoRoot, stem, {}).changed) referencesRewritten.add('docs/projects/INDEX.md');
   }
-  return { moved, blocked, referencesRewritten };
+
+  const projectsArchiveDir = path.join(repoRoot, 'docs', 'projects', '_archive');
+  let projEntries = [];
+  try {
+    projEntries = fs.readdirSync(projectsArchiveDir, { withFileTypes: true });
+  } catch {
+    projEntries = [];
+  }
+  for (const ent of projEntries) {
+    if (!ent.isDirectory()) continue;
+    const m = ent.name.match(/^(\d{4})-(\d{2})-\d{2}-/);
+    if (!m) continue;
+    const from = path.join(projectsArchiveDir, ent.name);
+    const to = path.join(projectsArchiveDir, m[1], m[2], ent.name);
+    if (fs.existsSync(to)) {
+      projectsBlocked.push({
+        dir: ent.name,
+        code: 'archive_destination_exists',
+        detail: `migrate skipped: ${path.relative(repoRoot, to)} already exists`,
+      });
+      continue;
+    }
+    gitMv(repoRoot, path.relative(repoRoot, from), path.relative(repoRoot, to));
+    projectsMoved.push({ from: path.relative(repoRoot, from), to: path.relative(repoRoot, to) });
+    // Two link shapes to rewrite: the full repo-relative `docs/projects/_archive/<name>`
+    // (skills, references, other docs reaching in from elsewhere), and the BARE
+    // `_archive/<name>` shape INDEX.md itself uses (INDEX.md lives inside docs/projects/,
+    // so its own links to `_archive/` never carry the `docs/projects/` prefix).
+    const fromRel = `docs/projects/_archive/${ent.name}`;
+    const toRel = `docs/projects/_archive/${m[1]}/${m[2]}/${ent.name}`;
+    const bareFrom = `_archive/${ent.name}`;
+    const bareTo = `_archive/${m[1]}/${m[2]}/${ent.name}`;
+    const boundaryRe = new RegExp(`${escapeRegExp(fromRel)}(?![A-Za-z0-9-])`, 'g');
+    const bareRe = new RegExp(`(?<![A-Za-z0-9-/])${escapeRegExp(bareFrom)}(?![A-Za-z0-9-])`, 'g');
+    for (const rel of trackedReferenceFiles(repoRoot)) {
+      const abs = path.join(repoRoot, rel);
+      let t = readFileSafe(abs);
+      if (t == null) continue;
+      let changed = false;
+      boundaryRe.lastIndex = 0;
+      if (boundaryRe.test(t)) {
+        boundaryRe.lastIndex = 0;
+        t = t.replace(boundaryRe, toRel);
+        changed = true;
+      }
+      bareRe.lastIndex = 0;
+      if (bareRe.test(t)) {
+        bareRe.lastIndex = 0;
+        t = t.replace(bareRe, bareTo);
+        changed = true;
+      }
+      if (changed) {
+        fs.writeFileSync(abs, t);
+        referencesRewritten.add(rel);
+      }
+    }
+  }
+
+  return {
+    plansMoved,
+    plansBlocked,
+    projectsMoved,
+    projectsBlocked,
+    referencesRewritten: [...referencesRewritten].sort(),
+  };
 }
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
+
+  if (opts.registerTemplate) {
+    const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
+    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, 'docs', 'plans');
+    const archiveDir = path.join(plansDir, '_archive');
+    process.stdout.write(`${registerTemplateRow(repoRoot, plansDir, archiveDir, opts.registerTemplate)}\n`);
+    process.exit(0);
+  }
+
+  if (opts.migrateArchiveLayout) {
+    const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
+    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, 'docs', 'plans');
+    const archiveDir = path.join(plansDir, '_archive');
+    const result = migrateArchiveLayout(repoRoot, plansDir, archiveDir);
+    if (opts.json) {
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+    } else {
+      process.stdout.write(`--migrate-archive-layout: moved ${result.plansMoved.length} plan file(s), `
+        + `${result.projectsMoved.length} project dir(s); rewrote ${result.referencesRewritten.length} file(s); `
+        + `${result.plansBlocked.length + result.projectsBlocked.length} blocked\n`);
+    }
+    process.exit((result.plansBlocked.length || result.projectsBlocked.length) ? 1 : 0);
+  }
+
+  if (opts.archive.length) {
+    const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
+    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, 'docs', 'plans');
+    const archiveDir = path.join(plansDir, '_archive');
+    const activeLineageStems = loadActiveLineageStems(repoRoot);
+    const results = archiveStems(repoRoot, plansDir, archiveDir, opts.archive, opts.shippedIn, activeLineageStems);
+    if (opts.json) {
+      process.stdout.write(`${JSON.stringify({ results })}\n`);
+    } else {
+      for (const r of results) {
+        if (r.ok) process.stdout.write(`archived ${r.stem}: index ${r.indexAction}\n`);
+        else process.stdout.write(`refused ${r.stem}: ${r.reason}\n`);
+      }
+    }
+    process.exit(results.every((r) => r.ok) ? 0 : (results.some((r) => r.reason === 'archive_destination_exists') ? 1 : 2));
+  }
+
   const preFix = run(opts);
   let backlogFix = { changed: false, removed: [] };
   let plansFix = { moved: [], blocked: [], referencesRewritten: [] };
@@ -778,7 +1312,8 @@ function main() {
   if (opts.fix) {
     backlogFix = fixBacklog(preFix.backlogPath, preFix.violations);
     plansFix = fixPlans(
-      preFix.repoRoot, preFix.plansDir, preFix.archiveDir, preFix.violations, preFix.activeLineageStems
+      preFix.repoRoot, preFix.plansDir, preFix.archiveDir, preFix.violations, preFix.activeLineageStems,
+      preFix.changelogPath
     );
     // Re-run the full check against the now-fixed repo: exit/ok are derived from what
     // --fix actually left behind, not from the pre-fix snapshot (🟡 fix).
@@ -875,4 +1410,19 @@ module.exports = {
   trackedReferenceFiles,
   planPathPrefixRegExp,
   evidencePathPrefixRegExp,
+  stemDateParts,
+  datedArchiveBase,
+  findExistingArchivedPlan,
+  findExistingArchivedEvidence,
+  planIndexRegistration,
+  registerTemplateRow,
+  findReleasedVersionForStem,
+  archiveIndexRow,
+  archiveStem,
+  archiveStems,
+  appendRegistryRow,
+  migrateArchiveLayout,
+  rewriteLegacyArchiveReferences,
+  planFileMoveSet,
+  gitMv,
 };

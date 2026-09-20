@@ -41,7 +41,8 @@ thing the plan will be built from, not the plan itself.
 ### 4. The approval gate
 Present the design spec and ask for explicit approval. **Nothing downstream runs without it.** On approval,
 hand off:
-- to `references/plan-template.md` to **author the plan** (then `dev-flow` to execute), or
+- to `references/plan-template.md` to **author the plan** (its Step 0: register the plan in
+  `docs/projects/INDEX.md`, Version `active`, before any review) (then `dev-flow` to execute), or
 - directly to `dev-flow` if the work is small enough to skip a formal plan.
 On "not yet" → keep exploring (back to step 1/2) — do not force forward.
 

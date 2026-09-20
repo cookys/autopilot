@@ -5,6 +5,11 @@ The home for **plan authoring** discipline. Internalized from superpowers' `writ
 `dev-flow` L-2). Output a plan to `docs/plans/<YYYY-MM-DD>-<slug>.md` (real date from the environment —
 never invent one).
 
+**Step 0 — register it**: before any review, paste `node scripts/check-plan-graduation.js
+--register-template <stem>`'s output row into `docs/projects/INDEX.md` (Version `active`). A plan file
+with no `active` INDEX row is `plan_unregistered` — `scripts/dispatch-plan-review.js` and
+`scripts/mission-execution-graph-check.js` both refuse an unregistered plan at the start of review.
+
 ## The discipline (what separates a usable plan from a wish-list)
 
 1. **File-structure map** — which files will be touched, and each one's responsibility. A reviewer should

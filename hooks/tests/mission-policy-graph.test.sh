@@ -573,6 +573,53 @@ assert.throws(() => graphChecker.inspect({ governance: governancePath, graph: gr
 fs.writeFileSync(mirrorRootsPath, JSON.stringify({ root: 'platforms/codex/plugin', dirs: ['platforms/codex/plugin/src'] }));
 assert.throws(() => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }), /must not nest/);
 fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
+
+// --- spec_plan_unregistered: a node's campaign.spec.path under docs/plans/ must have a
+//     docs/projects/INDEX.md row with Version "active" (shares the lookup with
+//     scripts/check-plan-graduation.js's own plan_unregistered gate). ---
+const specRepo = path.join(tmp, 'spec-repo');
+fs.mkdirSync(path.join(specRepo, 'docs', 'plans'), { recursive: true });
+fs.mkdirSync(path.join(specRepo, 'docs', 'projects'), { recursive: true });
+fs.writeFileSync(path.join(specRepo, 'docs', 'plans', '2026-01-01-widget.md'), '# Plan\n');
+const specGraph = clone(checkerGraph);
+specGraph.nodes[0].campaign.spec.path = 'docs/plans/2026-01-01-widget.md';
+specGraph.nodes[0].campaign.allowed_path_prefixes = ['src/', 'docs/plans'];
+fs.writeFileSync(graphPath, JSON.stringify(specGraph));
+
+// No docs/projects/INDEX.md at all -> auto-allowed, READY.
+const specNoIndex = graphChecker.inspect({
+  governance: governancePath, graph: graphPath, sources: sourcesPath, repoRoot: specRepo,
+});
+assert.equal(specNoIndex.status, 'READY');
+
+// INDEX.md exists, no row for the plan -> spec_plan_unregistered.
+fs.writeFileSync(path.join(specRepo, 'docs', 'projects', 'INDEX.md'), [
+  '# Index', '',
+  '## 進行中 (In Progress)', '',
+  '| Date | Project | Version | Merge | Plan |',
+  '|------|---------|---------|-------|------|',
+  '',
+].join('\n'));
+assert.throws(
+  () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, repoRoot: specRepo }),
+  /spec_plan_unregistered/,
+);
+
+// A row with Version "active" registers the plan -> READY again.
+fs.writeFileSync(path.join(specRepo, 'docs', 'projects', 'INDEX.md'), [
+  '# Index', '',
+  '## 進行中 (In Progress)', '',
+  '| Date | Project | Version | Merge | Plan |',
+  '|------|---------|---------|-------|------|',
+  '| 2026-01-01 | [widget](../plans/2026-01-01-widget.md) | active | — | [plan](../plans/2026-01-01-widget.md) |',
+  '',
+].join('\n'));
+const specRegistered = graphChecker.inspect({
+  governance: governancePath, graph: graphPath, sources: sourcesPath, repoRoot: specRepo,
+});
+assert.equal(specRegistered.status, 'READY');
+fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
+
 const omittedSourceGraph = clone(checkerGraph);
 omittedSourceGraph.nodes.pop();
 fs.writeFileSync(graphPath, JSON.stringify(omittedSourceGraph));

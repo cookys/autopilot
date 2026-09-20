@@ -104,7 +104,11 @@ function usage() {
     --repo-root <repo> --plan-file <plan> --rubric-file <rubric> \\
     --ticket <id> --session-id <id> --generation <1|2> \\
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
-    [--state-dir <dir>] [--now <ISO-8601>]
+    [--state-dir <dir>] [--now <ISO-8601>] [--allow-unregistered]
+
+--allow-unregistered: skip the plan_unregistered refusal (the plan must have a
+  docs/projects/INDEX.md row with Version "active") — for a scratch/consumer repo. Auto-
+  allowed with no flag needed when the repo has no docs/projects/INDEX.md at all.
 
 Legacy compatibility:
   replace --manifest-file with --runner/--model/--effort/--endpoint and optional
@@ -155,6 +159,10 @@ function parseArgs(argv) {
     if (arg === '-h' || arg === '--help') {
       process.stdout.write(`${usage()}\n`);
       process.exit(0);
+    }
+    if (arg === '--allow-unregistered') {
+      opts.allowUnregistered = true;
+      continue;
     }
     const key = flags.get(arg);
     if (!key) throw new CliError(`unknown argument: ${arg}`);
@@ -1519,10 +1527,39 @@ function exitControlledError(error) {
   process.exit(error instanceof CliError ? error.exitCode : 2);
 }
 
+// plan_unregistered refusal (shares the exact registry lookup with
+// scripts/check-plan-graduation.js's own plan_unregistered gate — see that script's
+// planIndexRegistration/registerTemplateRow, required lazily here the same way that
+// script itself lazily requires check-backlog-entries.js). A plan under docs/plans/
+// (not _archive) must have an INDEX row whose Version is literally `active`; auto-allowed
+// (no refusal at all) when the target repo has no docs/projects/INDEX.md — a scratch or
+// consumer repo that never adopted the registry — or when --allow-unregistered is passed.
+function checkPlanRegistration(opts) {
+  if (opts.allowUnregistered) return;
+  const repoRoot = opts.repoRoot;
+  const plansDir = path.join(repoRoot, 'docs', 'plans');
+  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  if (!fs.existsSync(indexPath)) return;
+  const rel = path.relative(plansDir, opts.planFile);
+  if (rel.startsWith('..') || path.isAbsolute(rel) || rel.includes(path.sep) || !rel.endsWith('.md')) {
+    return; // not directly under docs/plans/ (e.g. a sidecar dir, or outside plansDir) — out of scope
+  }
+  const stem = rel.slice(0, -3);
+  const gate = require(path.join(__dirname, 'check-plan-graduation.js'));
+  const registration = gate.planIndexRegistration(repoRoot, stem);
+  if (!registration.indexExists || registration.activeRow) return;
+  const row = gate.registerTemplateRow(repoRoot, plansDir, path.join(plansDir, '_archive'), stem);
+  throw new CliError(
+    `plan_unregistered: docs/plans/${stem}.md has no docs/projects/INDEX.md row with Version `
+    + `"active" — paste: ${row}  (or pass --allow-unregistered for a scratch/consumer repo)`
+  );
+}
+
 function main() {
   let opts;
   try {
     opts = parseArgs(process.argv.slice(2));
+    checkPlanRegistration(opts);
   } catch (error) {
     if (error instanceof CliError) {
       process.stderr.write(`dispatch-plan-review: ${error.message}\n${usage()}\n`);

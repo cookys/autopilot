@@ -12,7 +12,12 @@ function usage() {
   return [
     'Usage:',
     '  mission-execution-graph-check.js --graph <json> --governance <json>',
-    '    --sources <frozen-source-manifest.json> [--mirror-roots <json>]',
+    '    --sources <frozen-source-manifest.json> [--mirror-roots <json>] [--repo-root <dir>]',
+    '',
+    '  --repo-root: defaults to `git rev-parse --show-toplevel`. Any node whose',
+    '    campaign.spec.path is docs/plans/<stem>.md (active, not _archive) must have a',
+    '    docs/projects/INDEX.md row with Version "active" (spec_plan_unregistered if not) —',
+    '    auto-allowed when the repo has no docs/projects/INDEX.md at all.',
     '',
     '  --mirror-roots {"root": "<mirror root>", "dirs": [...]} (scripts/sync-codex-plugin-skills.sh',
     '    --mirror-roots-json): every node output_path under a mirrored dir must be accompanied by',
@@ -29,6 +34,7 @@ function parse(argv) {
     ['--governance', 'governance'],
     ['--sources', 'sources'],
     ['--mirror-roots', 'mirrorRoots'],
+    ['--repo-root', 'repoRoot'],
   ]);
   for (let index = 0; index < argv.length; index += 2) {
     const key = allowed.get(argv[index]);
@@ -39,6 +45,46 @@ function parse(argv) {
     throw new Error('--graph, --governance, and --sources are required');
   }
   return options;
+}
+
+function gitToplevel(dir) {
+  try {
+    return require('child_process').execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+// A node's campaign.spec.path under docs/plans/ (not _archive) is a plan the campaign is
+// authored against; it must carry the same docs/projects/INDEX.md `active` registration as
+// any other live plan (shares the lookup with scripts/check-plan-graduation.js's own
+// plan_unregistered gate — see that script's planIndexRegistration/registerTemplateRow).
+// Auto-allowed (no refusal) when the target repo has no docs/projects/INDEX.md at all.
+function checkSpecPlanRegistration(graph, repoRoot) {
+  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  if (!fs.existsSync(indexPath)) return;
+  const gate = require('./check-plan-graduation.js');
+  const plansDir = path.join(repoRoot, 'docs', 'plans');
+  const missing = [];
+  for (const [index, node] of (graph.nodes || []).entries()) {
+    const specPath = node && node.campaign && node.campaign.spec && node.campaign.spec.path;
+    if (typeof specPath !== 'string') continue;
+    const m = specPath.match(/^docs\/plans\/([^/]+)\.md(?:#.*)?$/);
+    if (!m) continue;
+    const stem = m[1];
+    if (stem.startsWith('_archive')) continue; // archived — out of the registry's scope
+    const registration = gate.planIndexRegistration(repoRoot, stem);
+    if (!registration.indexExists || registration.activeRow) continue;
+    const row = gate.registerTemplateRow(repoRoot, plansDir, path.join(plansDir, '_archive'), stem);
+    const label = `graph.nodes[${index}]${node && node.id ? `(${node.id})` : ''}`;
+    missing.push(`${label}.campaign.spec.path (${specPath}) has no docs/projects/INDEX.md row `
+      + `with Version "active" — paste: ${row}`);
+  }
+  if (missing.length > 0) {
+    throw new Error(`spec_plan_unregistered: ${missing.join('; ')}`);
+  }
 }
 
 function readJson(file, label) {
@@ -215,6 +261,8 @@ function inspect(options) {
   const coverage = loadSourceCoverageManifest(options.sources);
   const mirrorRoots = options.mirrorRoots ? loadMirrorRoots(options.mirrorRoots) : null;
   if (mirrorRoots) checkOutputPathMirrors(graph, mirrorRoots);
+  const repoRoot = options.repoRoot ? path.resolve(options.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
+  checkSpecPlanRegistration(graph, repoRoot);
   const result = checkMissionGraphCoverage(graph, coverage, missionPolicy);
   const reservationTotals = Object.fromEntries([
     'campaigns',
@@ -260,4 +308,11 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { contentBoundRubricId, inspect, loadSourceCoverageManifest, loadMirrorRoots, checkOutputPathMirrors };
+module.exports = {
+  contentBoundRubricId,
+  inspect,
+  loadSourceCoverageManifest,
+  loadMirrorRoots,
+  checkOutputPathMirrors,
+  checkSpecPlanRegistration,
+};

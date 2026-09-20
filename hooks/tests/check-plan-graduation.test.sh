@@ -302,9 +302,9 @@ assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Widget has-plan row" "backlog
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Old shipped row" "backlog_row_done row is deleted"
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "MAIN CLAIM CLOSED but still open" "backlog_title_closed_status_open row is deleted"
 assert_file_absent "$d/docs/plans/2026-01-01-widget.md" "released plan is moved out of docs/plans/"
-assert_file_exists "$d/docs/plans/_archive/2026-01-01-widget.md" "released plan lands in _archive"
-assert_file_exists "$d/docs/plans/_archive/2026-01-01-widget.rubric.md" "sidecar moves with its primary plan"
-assert_file_exists "$d/docs/plans/_archive/evidence/2026-01-01-widget/README.md" "evidence dir moves with its primary plan"
+assert_file_exists "$d/docs/plans/_archive/2026/01/2026-01-01-widget.md" "released plan lands in the dated _archive/YYYY/MM"
+assert_file_exists "$d/docs/plans/_archive/2026/01/2026-01-01-widget.rubric.md" "sidecar moves with its primary plan"
+assert_file_exists "$d/docs/plans/_archive/2026/01/evidence/2026-01-01-widget/README.md" "evidence dir moves with its primary plan"
 
 # A second run against the now-fixed repo is clean.
 out2="$(node "$GATE" --repo-root "$d" --json)"
@@ -336,8 +336,8 @@ git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 node "$GATE" --repo-root "$d" --fix --json >/dev/null
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Widget evidence row" \
   "the evidence-pointing row is deleted, not left to dangle"
-assert_file_exists "$d/docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
-  "the evidence dir still moves to _archive/"
+assert_file_exists "$d/docs/plans/_archive/2026/01/evidence/2026-01-01-widget/README.md" \
+  "the evidence dir still moves to the dated _archive/YYYY/MM/evidence/"
 bgate_out="$(node "$REPO_ROOT/scripts/check-backlog-entries.js" --backlog "$d/docs/BACKLOG.md" --json)"
 assert_not_contains "$bgate_out" '"pointer_unresolved"' \
   "no row survives to report pointer_unresolved"
@@ -348,8 +348,8 @@ assert_not_contains "$bgate_out" '"pointer_unresolved"' \
 d="$(fixture_repo archive-destination-exists)"
 printf '# Plan (current)\n' > "$d/docs/plans/2026-01-01-widget.md"
 printf '# Rubric\n' > "$d/docs/plans/2026-01-01-widget.rubric.md"
-mkdir -p "$d/docs/plans/_archive"
-printf '# Plan (STALE, pre-existing)\n' > "$d/docs/plans/_archive/2026-01-01-widget.md"
+mkdir -p "$d/docs/plans/_archive/2026/01"
+printf '# Plan (STALE, pre-existing)\n' > "$d/docs/plans/_archive/2026/01/2026-01-01-widget.md"
 cat > "$d/CHANGELOG.md" <<'MD'
 # Changelog
 
@@ -362,13 +362,13 @@ git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 out="$(node "$GATE" --repo-root "$d" --fix --json)"
 assert_eq "$(json_exit "$out")" "1" "archive_destination_exists blocks (post-fix exit stays 1)"
 assert_eq "$(json_count "$out" archive_destination_exists)" "1" "the clash is reported by name"
-assert_contains "$(cat "$d/docs/plans/_archive/2026-01-01-widget.md")" "STALE, pre-existing" \
+assert_contains "$(cat "$d/docs/plans/_archive/2026/01/2026-01-01-widget.md")" "STALE, pre-existing" \
   "the pre-existing archive destination is untouched (not clobbered)"
 assert_file_exists "$d/docs/plans/2026-01-01-widget.md" \
   "the plan itself was NOT moved (all-or-nothing: the clash blocks the whole stem)"
 assert_file_exists "$d/docs/plans/2026-01-01-widget.rubric.md" \
   "the sidecar was NOT moved either (all-or-nothing, not just the clashing file)"
-assert_file_absent "$d/docs/plans/_archive/2026-01-01-widget.rubric.md" \
+assert_file_absent "$d/docs/plans/_archive/2026/01/2026-01-01-widget.rubric.md" \
   "the sidecar did not land in _archive (nothing partially moved)"
 
 # --- 🟡 fix: Unreleased-section fixtures — a slug only under ## Unreleased never fires;
@@ -468,10 +468,10 @@ git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 out="$(node "$GATE" --repo-root "$d" --fix --json)"
 assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
-  "docs/plans/_archive/2026-01-01-widget.md" \
-  "a skill doc's link to the plan is rewritten to the _archive/ path"
+  "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
+  "a skill doc's link to the plan is rewritten to the dated _archive/ path"
 assert_contains "$(cat "$d/references/contract.md")" \
-  "docs/plans/_archive/2026-01-01-widget.md" \
+  "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
   "a reference doc's mention is also rewritten"
 assert_contains "$(cat "$d/CHANGELOG.md")" \
   "docs/plans/2026-01-01-widget.md" \
@@ -504,13 +504,13 @@ git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 node "$GATE" --repo-root "$d" --fix --json >/dev/null
 assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
-  "docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
-  "RED: a doc linking docs/plans/evidence/<stem>/... is rewritten to the _archive/evidence/ path"
+  "docs/plans/_archive/2026/01/evidence/2026-01-01-widget/README.md" \
+  "RED: a doc linking docs/plans/evidence/<stem>/... is rewritten to the dated _archive/evidence/ path"
 assert_not_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
   "](../../docs/plans/evidence/2026-01-01-widget/README.md)" \
   "the stale (pre-move) evidence link no longer appears"
-assert_file_exists "$d/docs/plans/_archive/evidence/2026-01-01-widget/README.md" \
-  "the evidence dir itself moved to _archive/evidence/"
+assert_file_exists "$d/docs/plans/_archive/2026/01/evidence/2026-01-01-widget/README.md" \
+  "the evidence dir itself moved to the dated _archive/evidence/"
 
 # --- Hardening B: plan_reference_dangling (report-only) — a tracked file references a
 #     bare docs/plans/<stem> path that exists in neither active nor archived location ---
@@ -575,5 +575,230 @@ node "$GATE" --nonsense-flag >/dev/null 2>&1
 rc=$?
 set -e
 assert_eq "$rc" "2" "an unknown flag exits 2 (usage)"
+# set -e stays on from the toggle above for the rest of the file (matching every other gate
+# suite's convention) — turn it back off here since the rest of THIS file (like the 76
+# assertions above it) relies on `out="$(node ... --json)"` capturing a non-zero (blocking)
+# exit without aborting the script.
+set +e
+
+# fixture_repo_with_index <name> — same as fixture_repo but also seeds a minimal
+# docs/projects/INDEX.md with the registry table shape (In Progress: Date | Project |
+# Version | Merge | Plan) so plan_unregistered has something to check against.
+fixture_repo_with_index() {
+  local d
+  d="$(fixture_repo "$1")"
+  cat > "$d/docs/projects/INDEX.md" <<'MD'
+# Index
+
+## 進行中 (In Progress)
+
+| Date | Project | Version | Merge | Plan |
+|------|---------|---------|-------|------|
+
+## 已完成 (Completed)
+
+| Date | Project | Version | Merge | Plan |
+|------|---------|---------|-------|------|
+MD
+  echo "$d"
+}
+
+# --- plan_unregistered: blocking, requires an INDEX row with Version "active" ---
+
+# No docs/projects/INDEX.md at all -> auto-allowed, never fires (consumer-repo case).
+d="$(fixture_repo unregistered-no-index)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_unregistered)" "0" "no INDEX.md at all auto-allows plan_unregistered"
+assert_eq "$(json_exit "$out")" "0" "…and does not block"
+
+# INDEX.md exists but has no row for the plan at all -> blocks.
+d="$(fixture_repo_with_index unregistered-no-row)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_unregistered)" "1" "a plan with no INDEX row at all is plan_unregistered"
+assert_eq "$(json_exit "$out")" "1" "plan_unregistered blocks"
+assert_contains "$out" 'paste: | 2026-01-01 |' "the violation detail carries the exact row to paste"
+
+# A row references the plan but its Version column is a real version, not "active" ->
+# still unregistered (the design requires the literal active row).
+d="$(fixture_repo_with_index unregistered-wrong-version)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+python3 - "$d/docs/projects/INDEX.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace(
+  "## 已完成 (Completed)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 已完成 (Completed)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-01-01 | [widget](../plans/2026-01-01-widget.md) | v1.0.0 | abc | [plan](../plans/2026-01-01-widget.md) |\n"
+)
+open(p, "w").write(s)
+PY
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_unregistered)" "1" \
+  "a row whose Version isn't literally active does not count as registered"
+
+# A row with Version "active" referencing the plan by its ../plans/<stem>.md link ->
+# registered, clean.
+d="$(fixture_repo_with_index registered-active)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+python3 - "$d/docs/projects/INDEX.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace(
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-01-01 | [widget](../plans/2026-01-01-widget.md) | active | — | [plan](../plans/2026-01-01-widget.md) |\n"
+)
+open(p, "w").write(s)
+PY
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_unregistered)" "0" "a row with Version active registers the plan"
+assert_eq "$(json_exit "$out")" "0" "a registered repo is clean"
+
+# --register-template prints the exact row to paste and writes nothing.
+d="$(fixture_repo_with_index register-template)"
+printf '# Plan — My Great Plan\n' > "$d/docs/plans/2026-03-04-my-plan.md"
+before_hash="$(sha256sum "$d/docs/projects/INDEX.md" | awk '{print $1}')"
+tmpl_out="$(node "$GATE" --repo-root "$d" --register-template 2026-03-04-my-plan)"
+assert_contains "$tmpl_out" "| 2026-03-04 |" "the printed row carries the stem's own date"
+assert_contains "$tmpl_out" "[My Great Plan](../plans/2026-03-04-my-plan.md)" \
+  "the printed row's title comes from the plan's H1"
+assert_contains "$tmpl_out" "| active |" "the printed row defaults Version to active"
+after_hash="$(sha256sum "$d/docs/projects/INDEX.md" | awk '{print $1}')"
+assert_eq "$after_hash" "$before_hash" "--register-template never writes INDEX.md (does not invent a row)"
+
+# --- --archive <stem> [--shipped-in <v>]: explicit archive for a verified-shipped plan
+#     whose slug never made it into CHANGELOG (plan_released_not_archived can't catch it) ---
+
+# A REGISTERED (active) plan: archiving flips its INDEX row's Version and moves it dated.
+d="$(fixture_repo_with_index archive-registered)"
+printf '# Plan — Archive Me\n' > "$d/docs/plans/2026-04-05-archive-me.md"
+python3 - "$d/docs/projects/INDEX.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace(
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-04-05 | [archive-me](../plans/2026-04-05-archive-me.md) | active | — | [plan](../plans/2026-04-05-archive-me.md) |\n"
+)
+open(p, "w").write(s)
+PY
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --archive 2026-04-05-archive-me --shipped-in v9.9.9 >/dev/null
+assert_file_absent "$d/docs/plans/2026-04-05-archive-me.md" "archived plan leaves docs/plans/"
+assert_file_exists "$d/docs/plans/_archive/2026/04/2026-04-05-archive-me.md" \
+  "--archive uses the dated destination"
+assert_contains "$(cat "$d/docs/projects/INDEX.md")" "| v9.9.9 |" \
+  "--archive flips the registered row's Version to --shipped-in"
+assert_contains "$(cat "$d/docs/projects/INDEX.md")" \
+  "../plans/_archive/2026/04/2026-04-05-archive-me.md" \
+  "--archive rewrites the row's own plan link to the dated path"
+
+# An UNREGISTERED plan (no INDEX row at all): --archive appends one instead of inventing
+# nothing — the whole point is "this WAS shipped, record it."
+d="$(fixture_repo_with_index archive-unregistered)"
+printf '# Plan — Never Registered\n' > "$d/docs/plans/2026-05-06-never-registered.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --archive 2026-05-06-never-registered >/dev/null
+assert_file_exists "$d/docs/plans/_archive/2026/05/2026-05-06-never-registered.md" \
+  "an unregistered plan is still archived"
+assert_contains "$(cat "$d/docs/projects/INDEX.md")" "2026-05-06-never-registered" \
+  "--archive appends a row when none existed"
+assert_contains "$(cat "$d/docs/projects/INDEX.md")" "| shipped |" \
+  "--archive defaults Version to literal shipped when --shipped-in is omitted"
+
+# --archive refuses when the (dated) destination already exists — same no-clobber rule
+# as --fix, all-or-nothing.
+d="$(fixture_repo_with_index archive-destination-exists-explicit)"
+printf '# Plan\n' > "$d/docs/plans/2026-06-07-clashing.md"
+mkdir -p "$d/docs/plans/_archive/2026/06"
+printf '# Plan (STALE)\n' > "$d/docs/plans/_archive/2026/06/2026-06-07-clashing.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --archive 2026-06-07-clashing --json >/tmp/archive-clash-out.$$ 2>/dev/null
+rc=$?
+assert_eq "$rc" "1" "--archive refuses (exit 1) when the destination already exists"
+assert_contains "$(cat /tmp/archive-clash-out.$$)" "archive_destination_exists" \
+  "the refusal names archive_destination_exists"
+rm -f "/tmp/archive-clash-out.$$"
+assert_file_exists "$d/docs/plans/2026-06-07-clashing.md" \
+  "the clashing plan was NOT moved (refused before any move)"
+assert_contains "$(cat "$d/docs/plans/_archive/2026/06/2026-06-07-clashing.md")" "STALE" \
+  "the pre-existing dated destination is untouched"
+
+# --- dated archive layout: --fix also reads/writes it, and legacy-flat archives still
+#     satisfy existence checks (no false archive_destination_exists against a legacy path
+#     that isn't the actual move target) ---
+d="$(fixture_repo_with_index legacy-archive-satisfies-backlog-check)"
+mkdir -p "$d/docs/plans/_archive"
+printf '# Plan\n' > "$d/docs/plans/_archive/2026-07-08-legacy.md"
+backlog_row "$d/docs/BACKLOG.md" "Legacy row" "open" "docs/plans/_archive/2026-07-08-legacy.md"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" backlog_row_has_plan)" "1" \
+  "a legacy FLAT archived plan (pre-dated-layout) still satisfies backlog_row_has_plan"
+
+# --- --migrate-archive-layout: moves every legacy-flat archived plan (+sidecar+evidence)
+#     into the dated layout, and every dated docs/projects/_archive/<date>-<name>/ project
+#     dir, rewriting references (both the docs/projects/_archive/<name> and INDEX.md's own
+#     bare _archive/<name> link shapes) as it goes — never touches CHANGELOG/BACKLOG. ---
+d="$(fixture_repo_with_index migrate-layout)"
+mkdir -p "$d/docs/plans/_archive/evidence/2026-08-09-legacy" "$d/docs/projects/_archive/2026-08-09-legacy-proj" "$d/skills/some-skill"
+printf '# Plan\n' > "$d/docs/plans/_archive/2026-08-09-legacy.md"
+printf 'notes\n' > "$d/docs/plans/_archive/evidence/2026-08-09-legacy/notes.md"
+printf '# README\n' > "$d/docs/projects/_archive/2026-08-09-legacy-proj/README.md"
+python3 - "$d/docs/projects/INDEX.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace(
+  "## 已完成 (Completed)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 已完成 (Completed)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-08-09 | [legacy-proj](_archive/2026-08-09-legacy-proj/README.md) | v1.0.0 | abc | [plan](../plans/_archive/2026-08-09-legacy.md) |\n"
+)
+open(p, "w").write(s)
+PY
+printf 'See docs/plans/_archive/2026-08-09-legacy.md and docs/plans/_archive/evidence/2026-08-09-legacy/notes.md.\n' \
+  > "$d/skills/some-skill/SKILL.md"
+printf '## v1.0.0\n\n- mentions docs/plans/_archive/2026-08-09-legacy.md (history, must NOT be rewritten)\n' >> "$d/CHANGELOG.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --migrate-archive-layout --json)"
+assert_file_absent "$d/docs/plans/_archive/2026-08-09-legacy.md" "legacy flat plan file is moved"
+assert_file_exists "$d/docs/plans/_archive/2026/08/2026-08-09-legacy.md" "…into the dated layout"
+assert_file_exists "$d/docs/plans/_archive/2026/08/evidence/2026-08-09-legacy/notes.md" \
+  "…and its evidence dir too"
+assert_file_absent "$d/docs/projects/_archive/2026-08-09-legacy-proj" "legacy flat project dir is moved"
+assert_file_exists "$d/docs/projects/_archive/2026/08/2026-08-09-legacy-proj/README.md" \
+  "…into the dated layout"
+assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
+  "docs/plans/_archive/2026/08/2026-08-09-legacy.md" "a skill doc's legacy link is rewritten to dated"
+assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
+  "docs/plans/_archive/2026/08/evidence/2026-08-09-legacy/notes.md" \
+  "…and its evidence-path legacy link too"
+assert_contains "$(cat "$d/docs/projects/INDEX.md")" \
+  "_archive/2026/08/2026-08-09-legacy-proj/README.md" \
+  "INDEX.md's own bare _archive/<name> project link is rewritten"
+assert_contains "$(cat "$d/docs/projects/INDEX.md")" \
+  "../plans/_archive/2026/08/2026-08-09-legacy.md" \
+  "INDEX.md's own plan link is rewritten too"
+assert_contains "$(cat "$d/CHANGELOG.md")" "docs/plans/_archive/2026-08-09-legacy.md" \
+  "CHANGELOG.md is NOT rewritten (history, same exclusion as --fix)"
+assert_contains "$out" '"plansMoved"' "the migrate payload reports what moved"
+
+# --migrate-archive-layout refuses (all-or-nothing) when a dated destination already exists.
+d="$(fixture_repo_with_index migrate-layout-clash)"
+mkdir -p "$d/docs/plans/_archive/2026/09" "$d/docs/plans/_archive"
+printf '# Plan (dated, pre-existing)\n' > "$d/docs/plans/_archive/2026/09/2026-09-10-clash.md"
+printf '# Plan (legacy flat)\n' > "$d/docs/plans/_archive/2026-09-10-clash.md"
+out="$(node "$GATE" --repo-root "$d" --migrate-archive-layout --json)"
+assert_contains "$out" '"archive_destination_exists"' "migrate reports the clash by name"
+assert_file_exists "$d/docs/plans/_archive/2026-09-10-clash.md" \
+  "the legacy flat file is left in place (all-or-nothing, nothing partially moved)"
 
 finalize_test

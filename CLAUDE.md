@@ -126,7 +126,7 @@ Autopilot is standalone-capable. When `superpowers` is installed, orchestrators 
 | Cross-skill references | `references/{blind-dispatch,model-routing}.md` |
 | Project tracking | `docs/projects/` (active + `_archive/`) |
 | Backlog | `docs/BACKLOG.md` |
-| Plans | `docs/plans/` |
+| Plans | `docs/plans/` — registered in `docs/projects/INDEX.md` (Version `active`; `scripts/check-plan-graduation.js`'s `plan_unregistered` gate) |
 | Architecture decisions | `docs/adr/` (ADR-0001: verification over attestation — binding on governance work) |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |

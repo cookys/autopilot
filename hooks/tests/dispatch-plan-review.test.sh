@@ -1593,4 +1593,65 @@ DUAL_OUT3="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DUAL_CFG" AUTOPILOT_TEST_ALLOW_PLAN_R
 assert_not_contains "$DUAL_OUT3" "implementer's own runner 'codex':" "legacy CLI: allow_same_runner_dual_seat: on lifts the refusal"
 assert_contains "$DUAL_OUT3" "allow_same_runner_dual_seat is ON" "legacy CLI: …but says so"
 
+# --- plan_unregistered refusal (shares docs/projects/INDEX.md registry with
+#     scripts/check-plan-graduation.js's own plan_unregistered gate) ---
+REG_REPO="$TEST_TMP/reg-repo"
+mkdir -p "$REG_REPO/docs/plans" "$REG_REPO/docs/projects"
+git -C "$REG_REPO" init -q
+REG_PLAN="$REG_REPO/docs/plans/2026-01-01-widget.md"
+printf '%s\n' '# Plan' 'Build the next vertical slice.' >"$REG_PLAN"
+
+# No docs/projects/INDEX.md at all -> auto-allowed, no refusal.
+NOIDX_OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 node "$SCRIPT" --repo-root "$REG_REPO" \
+  --plan-file "$REG_PLAN" --rubric-file "$RUBRIC_FILE" --ticket reg-noidx --session-id s-reg-noidx \
+  --generation 1 --state-dir "$STATE_DIR" --runner cc-shim --model MiniMax-M3 --effort high 2>&1)"
+assert_not_contains "$NOIDX_OUT" "plan_unregistered" \
+  "no docs/projects/INDEX.md at all auto-allows (no plan_unregistered refusal)"
+
+cat >"$REG_REPO/docs/projects/INDEX.md" <<'MD'
+# Index
+
+## 進行中 (In Progress)
+
+| Date | Project | Version | Merge | Plan |
+|------|---------|---------|-------|------|
+
+## 已完成 (Completed)
+
+| Date | Project | Version | Merge | Plan |
+|------|---------|---------|-------|------|
+MD
+
+# INDEX.md exists, plan has no row at all -> refused, exit 2, row-to-paste in the message.
+UNREG_OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 node "$SCRIPT" --repo-root "$REG_REPO" \
+  --plan-file "$REG_PLAN" --rubric-file "$RUBRIC_FILE" --ticket reg-unreg --session-id s-reg-unreg \
+  --generation 1 --state-dir "$STATE_DIR" --runner cc-shim --model MiniMax-M3 --effort high 2>&1)"; UNREG_RC=$?
+assert_eq "$UNREG_RC" "2" "an unregistered plan under docs/plans/ is refused (exit 2)"
+assert_contains "$UNREG_OUT" "plan_unregistered" "the refusal names plan_unregistered"
+assert_contains "$UNREG_OUT" "| 2026-01-01 |" "the refusal shows the exact row to paste"
+
+# --allow-unregistered lifts the refusal even with INDEX.md present and no row.
+ALLOW_OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 node "$SCRIPT" --repo-root "$REG_REPO" \
+  --plan-file "$REG_PLAN" --rubric-file "$RUBRIC_FILE" --ticket reg-allow --session-id s-reg-allow \
+  --generation 1 --state-dir "$STATE_DIR" --runner cc-shim --model MiniMax-M3 --effort high \
+  --allow-unregistered 2>&1)"
+assert_not_contains "$ALLOW_OUT" "plan_unregistered" "--allow-unregistered lifts the refusal"
+
+# An active-registered plan passes without the flag.
+python3 - "$REG_REPO/docs/projects/INDEX.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace(
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n",
+  "## 進行中 (In Progress)\n\n| Date | Project | Version | Merge | Plan |\n|------|---------|---------|-------|------|\n"
+  "| 2026-01-01 | [widget](../plans/2026-01-01-widget.md) | active | — | [plan](../plans/2026-01-01-widget.md) |\n"
+)
+open(p, "w").write(s)
+PY
+REG_OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 node "$SCRIPT" --repo-root "$REG_REPO" \
+  --plan-file "$REG_PLAN" --rubric-file "$RUBRIC_FILE" --ticket reg-ok --session-id s-reg-ok \
+  --generation 1 --state-dir "$STATE_DIR" --runner cc-shim --model MiniMax-M3 --effort high 2>&1)"
+assert_not_contains "$REG_OUT" "plan_unregistered" "a plan with an active INDEX row is never refused"
+
 finalize_test

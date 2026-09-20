@@ -2242,6 +2242,20 @@ assert_contains "$OUT" 'must look like refs/heads/<namespace>/' "22s: …with th
 OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads// 2>&1)"; EXIT=$?
 assert_neq "0" "$EXIT" "22s: an empty namespace segment (refs/heads//) is refused"
 assert_contains "$OUT" 'empty path segment' "22s: …with the reason"
+# 22z. Env-driven default (308 BACKLOG #46): AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX seeds the
+#      SAME exclusion as --sibling-ref-prefix, for a caller (dispatch-foreman.sh) that pre-sets
+#      it in a hand's environment instead of the hand's own argv. Positive case mirrors 22q;
+#      negative case mirrors 22s's validation, but via the env var and naming it in the error.
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/kr1/ "$SCRIPT" --branch hands/kr1/c1z --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22z): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "22z: AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX env default exempts the same namespace as the CLI flag — round exit 0"
+assert_contains "$OUT" '"status": "committed"' "22z: …and the round is committed"
+git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/ "$SCRIPT" --branch t22z --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
+assert_neq "0" "$EXIT" "22z: an invalid AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX value is refused pre-spawn"
+assert_contains "$OUT" 'AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX' "22z: …the error names the env var"
+assert_contains "$OUT" 'would exempt every branch' "22z: …with the same reason as the CLI flag's own refs/heads/ case"
+
 # 22t. Same exemption on the DETACHED rail (--ledger/--run-id/--stage): the after-fingerprint
 #      is computed in the setsid child, which only knows the declared namespaces if the
 #      parent serialized MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES across the detach boundary.

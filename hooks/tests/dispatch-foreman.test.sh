@@ -335,6 +335,12 @@ git -C "$SBX" branch -D foreman/other-run >/dev/null 2>&1 || true
 run_foreman script r13b --sibling-ref-prefix refs/heads/foreman/
 assert_eq "$(field "$OUT" status)" "completed" "13: with --sibling-ref-prefix refs/heads/foreman/ the sibling foreman's branch is exempt"
 git -C "$SBX" branch -D foreman/other-run >/dev/null 2>&1 || true
+# review 2026-09-20 MUST-FIX: FOREMAN_ENV must forward the FULL exclude array (operator
+# --sibling-ref-prefix values joined with THIS run's own hands namespace), not just
+# refs/heads/hands/<run>/ alone — otherwise a hand this foreman spawns never learns about a
+# sibling foreman's namespace the operator declared, and rejects on its own boundary check.
+ENV13B="$(cat "$SD/env.0")"
+assert_contains "$ENV13B" "AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/foreman/:refs/heads/hands/r13b/" "13: FOREMAN_ENV joins the operator's --sibling-ref-prefix WITH this run's own hands namespace (':' join)"
 
 # argument validation mirrors dispatch-hetero.sh's own (shared validators in the lib).
 OUT="$(cd "$SBX" && PATH="$STUBDIR:$PATH" bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" --run-id r13d --run-dir "$RUNS/r13d" --sibling-ref-prefix refs/heads/ 2>/dev/null)"; RC=$?

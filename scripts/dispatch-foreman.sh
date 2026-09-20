@@ -228,25 +228,31 @@ source "$SELF_DIR/lib/main-checkout-boundary.sh"
 # Validate any --sibling-ref-prefix / --sibling-path-prefix the operator declared (gap 2: two
 # foremen dispatched concurrently on one repo should name each other's namespaces here) with the
 # SAME rules dispatch-hetero.sh applies to its own flags of the same name.
-for _sib in "${MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES[@]}"; do
+for _sib in "${MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES[@]+"${MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES[@]}"}"; do
   _err="$(main_checkout_validate_sibling_ref_prefix "$_sib")" || die_precondition "$_err"
 done
-for _sib in "${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[@]}"; do
+for _sib in "${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[@]+"${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[@]}"}"; do
   _err="$(main_checkout_validate_sibling_path_prefix "$_sib")" || die_precondition "$_err"
 done
 # This run's own hands are ALWAYS exempt from ITS OWN fingerprint — unconditional, not an
 # operator-declared sibling (a foreman's hands committing under its own namespace is the
 # expected shape of every run, not a peer to be named).
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES+=("refs/heads/hands/$RUN_ID/")
-# Env-var default for any dispatch-hetero.sh this foreman's kimi process spawns as a hand (gap
-# 1: parallel hands on the same repo otherwise reject each other's sibling branch as a
-# main_checkout_mutated / boundary_rejected). Belt: this env var. Suspenders: protocol.md below
-# also tells the foreman to pass --sibling-ref-prefix explicitly, in case a hand is spawned
-# through a path that does not inherit FOREMAN_ENV.
-FOREMAN_SIBLING_REF_PREFIX="refs/heads/hands/$RUN_ID/"
 # An operator dispatching several foremen concurrently may set these instead of repeating
 # --sibling-ref-prefix per foreman invocation (same env vars dispatch-hetero.sh reads).
 main_checkout_seed_sibling_env_defaults
+# Env-var default for any dispatch-hetero.sh this foreman's kimi process spawns as a hand (gap
+# 1: parallel hands on the same repo otherwise reject each other's sibling branch as a
+# main_checkout_mutated / boundary_rejected). MUST be the FULL exclude array, not just this
+# run's own hands namespace — a sibling foreman's namespace the operator declared via
+# --sibling-ref-prefix (gap 2) needs to reach THIS foreman's hands too, or a hand still sees
+# refs/heads/foreman/<other-run> / refs/heads/hands/<other-run>/* move and rejects on its own
+# (review 2026-09-20: hard-setting only refs/heads/hands/$RUN_ID/ here discarded every operator
+# --sibling-ref-prefix and any operator-set env value, since FOREMAN_ENV is a scrubbed
+# allowlist). ':' joins because a ref name cannot contain ':'. Belt: this env var. Suspenders:
+# protocol.md below also tells the foreman to pass --sibling-ref-prefix explicitly, in case a
+# hand is spawned through a path that does not inherit FOREMAN_ENV.
+FOREMAN_SIBLING_REF_PREFIX="$(IFS=:; printf '%s' "${MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES[*]}")"
 MAIN_CHECKOUT_BEFORE="$(main_checkout_fingerprint)"
 build_hands_git_env
 
@@ -294,9 +300,11 @@ depth 0 (the dispatcher that started you), and it is reached from git, not from 
   from this worktree): give EVERY one of them
   \`--sibling-ref-prefix refs/heads/hands/$RUN_ID/\`, and its own
   \`--sibling-path-prefix <dir>/\` if it writes rail I/O inside this worktree. Your environment
-  already carries \`AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/$RUN_ID/\` as a
-  default for this, but pass the flag yourself too — omit both and a sibling hand's branch
-  moving mid-round becomes YOUR hand's own \`boundary_rejected\` / \`main_checkout_mutated\`.
+  already carries \`AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=$FOREMAN_SIBLING_REF_PREFIX\` as a
+  default for this (this run's own hands namespace, colon-joined with any sibling namespace
+  depth 0 declared for THIS foreman), but pass the flag yourself too — omit both and a sibling
+  hand's branch moving mid-round becomes YOUR hand's own \`boundary_rejected\` /
+  \`main_checkout_mutated\`.
 - Budget: at most $TOOL_CAP Bash tool calls in this turn. At the cap you are stopped; a
   handoff turn follows. Write \`$RUN_DIR/HANDOFF.md\` yourself BEFORE the cap when you can see it
   coming.
@@ -327,12 +335,16 @@ if [ "${ENV_PASSTHROUGH[*]+set}" = set ]; then
   for _n in "${ENV_PASSTHROUGH[@]}"; do [ -n "${!_n:-}" ] && FOREMAN_ENV+=("$_n=${!_n}"); done
 fi
 FOREMAN_ENV+=("AUTOPILOT_DISPATCH_DEPTH=1" "AUTOPILOT_PARENT_RUN_ID=$RUN_ID")
-# 308 BACKLOG #46 gap 1: every hand this foreman spawns (a nested dispatch-hetero.sh, which
-# reads this env var via main_checkout_seed_sibling_env_defaults) exempts EVERY sibling hand
-# under this run's own namespace from its own boundary check by default — so parallel hands
-# dispatched from the same worktree do not reject each other when one hand's branch moves
-# during another hand's round. The foreman is still told to pass --sibling-ref-prefix itself
-# in protocol.md, since this only reaches a CHILD process that inherits FOREMAN_ENV.
+# 308 BACKLOG #46 gap 1 + gap 2: every hand this foreman spawns (a nested dispatch-hetero.sh,
+# which reads this env var via main_checkout_seed_sibling_env_defaults) inherits the FULL
+# exclude-prefixes array — this run's own hands namespace AND every --sibling-ref-prefix the
+# operator declared for THIS foreman (a sibling foreman's namespace, gap 2) — colon-joined, not
+# just refs/heads/hands/$RUN_ID/ alone. A sibling foreman's refs are shared across worktrees, so
+# without forwarding the operator's own declarations a hand would still see refs/heads/foreman/
+# <other-run> / refs/heads/hands/<other-run>/* move and reject on its own boundary check even
+# though this foreman's was already cleared. The foreman is still told to pass
+# --sibling-ref-prefix itself in protocol.md, since this only reaches a CHILD process that
+# inherits FOREMAN_ENV.
 FOREMAN_ENV+=("AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=$FOREMAN_SIBLING_REF_PREFIX")
 FOREMAN_ENV+=("${HANDS_GIT_ENV[@]}")
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix：`doc-drift-gate.js`（＋鏡像）script-refs 檢查改為先對「引用文件自己的目錄」解析 `scripts/...` 參照，落空才 fallback 到
+  `--repo-root`——修 308 `viewer/README.md` 引用 `scripts/test-*.mjs`（實際是 `viewer/scripts/test-*.mjs`）被誤判成缺檔的假陽性。
+
 ## v2.36.79 — foreman rail 多軌 sibling 缺口（308 BACKLOG #46，peer 308-0c 作者）＋ hooks/tests/lib.sh EXIT trap 只在頂層 shell 清理
 
 - **Gap 1（平行 hands 互斥）**：`dispatch-foreman.sh` 把整個排除陣列（操作者 `--sibling-ref-prefix` ＋本 run 的 hands 命名空間，

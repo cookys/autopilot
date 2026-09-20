@@ -273,6 +273,17 @@ function existsNearDoc(dir, base, depth = 3) {
   return false;
 }
 
+// A `scripts/...` reference resolves against the referencing doc's OWN directory
+// first (a subproject README describing its own scripts/ subtree, e.g. viewer/
+// README.md's `scripts/test-*.mjs` meaning viewer/scripts/test-*.mjs), falling
+// back to AUDIT_ROOT (the repo-root convention used by autopilot's own docs).
+// A reference counts as present if either resolution exists.
+function scriptRefExists(md, ref) {
+  if (fs.existsSync(path.join(AUDIT_ROOT, ref))) return true;
+  if (fs.existsSync(path.join(path.dirname(md), ref))) return true;
+  return false;
+}
+
 function checkScriptRefs(files) {
   const bad = [];
   // Inventory of scripts/ stems → filenames, to catch BARE backticked renamed refs
@@ -308,7 +319,7 @@ function checkScriptRefs(files) {
         continue;
       }
       seen.add(ref);
-      if (fs.existsSync(path.join(AUDIT_ROOT, ref))) {
+      if (scriptRefExists(md, ref)) {
         continue;
       }
       // Missing — does a sibling with a different known extension exist?
@@ -362,8 +373,11 @@ Usage:
 Checks:
   links        intra-repo markdown links resolve
   fences       code-fence balance
-  script-refs  scripts/<name>.<ext> and ./scripts/... refs exist, plus backticked
-               BARE renamed refs (\`tree.sh\` when only scripts/tree.js exists).
+  script-refs  scripts/<name>.<ext> and ./scripts/... refs exist, resolved against
+               either --repo-root or the referencing doc's own directory (a
+               subproject README's scripts/... is read relative to itself first),
+               plus backticked BARE renamed refs (\`tree.sh\` when only
+               scripts/tree.js exists).
                Active docs only (docs/plans, docs/projects, CHANGELOG.md,
                project-config-template/ are period-accurate / consumer-scoped, skipped).
                Non-backticked prose mentions are not gated (false-positive risk).

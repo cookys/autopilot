@@ -77,4 +77,26 @@ if node "$script_dir/doc-drift-gate.js" "$fixture/hooks" --repo-root "$fixture" 
 fi
 rm -rf "$fixture/hooks"
 
+# --- doc-relative script-ref resolution: a subproject doc (e.g. viewer/README.md)
+# that references `scripts/x` meaning ITS OWN scripts/ subdir (not the repo root's)
+# must resolve against the doc's own directory, not just --repo-root.
+mkdir -p "$fixture/viewer/scripts"
+printf '%s\n' '#!/usr/bin/env node' >"$fixture/viewer/scripts/test-thing.mjs"
+printf '%s\n' '# Viewer' '' 'Run `scripts/test-thing.mjs`.' >"$fixture/viewer/README.md"
+
+if ! node "$script_dir/doc-drift-gate.js" "$fixture/viewer" --repo-root "$fixture" >/dev/null; then
+  echo "test-doc-drift-gate: FAIL — doc-relative scripts/ ref under the doc's own subdir should resolve" >&2
+  exit 1
+fi
+
+# Control: the same doc referencing a script that exists NEITHER under its own
+# directory NOR under --repo-root must still fail the gate.
+printf '%s\n' '# Viewer' '' 'Run `scripts/does-not-exist-anywhere.mjs`.' >"$fixture/viewer/README.md"
+
+if node "$script_dir/doc-drift-gate.js" "$fixture/viewer" --repo-root "$fixture" >/dev/null; then
+  echo "test-doc-drift-gate: FAIL — a script missing from both doc-relative and repo-root should still fail" >&2
+  exit 1
+fi
+rm -rf "$fixture/viewer"
+
 printf '%s\n' 'test-doc-drift-gate: PASS'

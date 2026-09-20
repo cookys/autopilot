@@ -2068,7 +2068,7 @@ function validateArchiveState(repo, candidate, source, authorization, historical
     fail('ARCHIVE_STATE_INVALID', 'archive README does not declare completed archival');
   }
   const index = readGitFile(repo, candidate, 'docs/projects/INDEX.md');
-  if (!/_archive\/2026-08-03-next-touch-debt-retirement\/README\.md/u.test(index)
+  if (!/_archive\/(?:2026\/08\/)?2026-08-03-next-touch-debt-retirement\/README\.md/u.test(index)
       || !/\|\s*archived\s*\|/u.test(index)) {
     fail('ARCHIVE_INDEX_INVALID', 'projects INDEX does not record the archived project');
   }

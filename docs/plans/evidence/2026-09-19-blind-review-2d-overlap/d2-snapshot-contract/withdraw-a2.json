@@ -1,0 +1,132 @@
+{
+  "status": "withdrawn",
+  "claim_id": "claim-v1-1f1804e45b69b0adea3acfd7dda63cdbd9ee913239014b5f70f525a5a2c6bba6",
+  "campaign_id": "campaign-v2-4c67fc8e97e9278278f901412e9f3291ff98acddd5f12e2b95b8a0bd5fa3c923",
+  "ledger_campaign_id": null,
+  "resolved_via": "never_started",
+  "campaign_phase": null,
+  "campaign_ledger": ".git/autopilot/implementation-campaign.jsonl",
+  "ledger_intake_roots": 1,
+  "graph_node_id": "snapshot-contract",
+  "state_hash": "d7aa353616987a01cdeff8b77770c08d7da074690de22881510bd21f9f339302",
+  "receipt": {
+    "artifact_type": "mission_no_effect_release",
+    "event_type": "no_effect_release",
+    "claim_id": "claim-v1-1f1804e45b69b0adea3acfd7dda63cdbd9ee913239014b5f70f525a5a2c6bba6",
+    "actual_usage": {
+      "campaigns": {
+        "axis": "campaigns",
+        "authorized_ceiling": 10,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "wall_seconds": {
+        "axis": "wall_seconds",
+        "authorized_ceiling": 36000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "tool_calls": {
+        "axis": "tool_calls",
+        "authorized_ceiling": 1500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "engine_attempts": {
+        "axis": "engine_attempts",
+        "authorized_ceiling": 50,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "external_wait_seconds": {
+        "axis": "external_wait_seconds",
+        "authorized_ceiling": 14400,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "canonical_changed_files": {
+        "axis": "canonical_changed_files",
+        "authorized_ceiling": 500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "output_bytes": {
+        "axis": "output_bytes",
+        "authorized_ceiling": 50000000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true
+      }
+    },
+    "reservation": {
+      "campaigns": {
+        "axis": "campaigns",
+        "authorized_ceiling": 10,
+        "reserved_active": 1,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "wall_seconds": {
+        "axis": "wall_seconds",
+        "authorized_ceiling": 36000,
+        "reserved_active": 7200,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "tool_calls": {
+        "axis": "tool_calls",
+        "authorized_ceiling": 1500,
+        "reserved_active": 300,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "engine_attempts": {
+        "axis": "engine_attempts",
+        "authorized_ceiling": 50,
+        "reserved_active": 3,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "external_wait_seconds": {
+        "axis": "external_wait_seconds",
+        "authorized_ceiling": 14400,
+        "reserved_active": 1800,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "canonical_changed_files": {
+        "axis": "canonical_changed_files",
+        "authorized_ceiling": 500,
+        "reserved_active": 10,
+        "durable_consumed": 0,
+        "known": true
+      },
+      "output_bytes": {
+        "axis": "output_bytes",
+        "authorized_ceiling": 50000000,
+        "reserved_active": 3000000,
+        "durable_consumed": 0,
+        "known": true
+      }
+    },
+    "released_at": null,
+    "mission_lineage_id": "lineage-v1-1ef8bec1f146c5e80dd059c5d2789bd504a9d566d5c6fe4ac6f61f1c62f73f51",
+    "source_event": {
+      "event_type": "no_effect_release",
+      "sequence": 4,
+      "mission_lineage_id": "lineage-v1-1ef8bec1f146c5e80dd059c5d2789bd504a9d566d5c6fe4ac6f61f1c62f73f51",
+      "payload": {
+        "claim_id": "claim-v1-1f1804e45b69b0adea3acfd7dda63cdbd9ee913239014b5f70f525a5a2c6bba6"
+      },
+      "event_digest": "60e147435c1628b6c4e189feb0fbde8c63437f902f66a2fc88e5fbc1d8ec467d"
+    },
+    "next_state": "ACTIVE",
+    "receipt_digest": "40bf52d4479edb7b5a8932e6ef19af384bf6fb9b25072512e9d61b04a7ff90c5"
+  }
+}

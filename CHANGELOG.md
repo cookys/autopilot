@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.36.77 — 2-D D2 shipped：qc panel snapshot 成為契約（claim 後才寫、digest 漂移拒收、claim-held-no-file 規則、live flip 入帳）
+
+- `src/engine/campaign-intake.js`（＋鏡像）：`qc_panel_snapshot.json` 的 O_EXCL 寫入移到 `missionClaimAdapter` 成功之後，被拒的 claim 不留檔；
+  EEXIST 時除身分外重算 carried fields 的 digest，不符 → `rejected(qc_panel_snapshot_drift {fields, stored_digest, recomputed_digest})`，
+  campaign 停車（不 terminalize、lease 不動），Mission claim 走標準 no-effect release；身分不符仍是 `qc_panel_snapshot_identity_invalid`。
+  claim 持有但無檔：journal 無 post-claim 事件 → 重封＋`qc_panel_snapshot_sealed_on_resume`，否則停車 `qc_panel_snapshot_missing_after_claim`。
+- `src/engine/autopilot-engine.js`（＋鏡像）：`snapshotStation` 以 live roster 推導 station（seats complete AND in_rail_review=panel），
+  與 sealed `review_station` 不同時記 `qc_panel_snapshot_live_flip {sealed_station, live_station, live_seats_complete}` 並跑 sealed station；
+  single-station campaign 無 flip 列（byte-identity R3）。
+- 新套件 `hooks/tests/implementation-campaign-state-snapshot-contract.test.sh`（RED-first；(a) 順序 mission→snapshot、(b) drift、(c) flip、
+  (d) held-claim 兩分支、(e) 無 snapshot 對照 byte-compare、single-station 對照）；`implementation-campaign-state.test.sh:3047` fixture 與
+  `panel-snap-write` 是唯二改動的既有斷言。`references/blind-dispatch.md`（＋鏡像）補一段。
+- 過程：attempt 3 進 rail（cursor/grok 實作、10 套驗證、四席 panel 2 FIX-THEN-SHIP）→ depth-0 disposition → resume 死在 rail 缺陷 #4
+  （repair scope 從審查 claim 文字抓路徑，抓不到就 terminalize）→ 依文件降 l3，sonnet 工頭在 clone 修 5 項，fable 二家審全 diff SHIP-AS-IS。
+  證據 `docs/plans/evidence/2026-09-19-blind-review-2d-overlap/d2-snapshot-contract/`。D1（station overlap）為下一個 lineage。
+
+prose-justification: reference `references/blind-dispatch.md` +1 段（D2 規範文字，plan §4 指定）。
+
 ## v2.36.76 — Fix：strict /l5 readiness live probe 對「答了但不是 OK」重試一次（Qwen 席位拒答 flake）
 
 - 2-D D2 attempt 2 連三次在 intake 前 `provider_readiness … strict_l5_provider_not_ready`：每次都是兩個 qoderclicn／Qwen3.8-Max-Preview

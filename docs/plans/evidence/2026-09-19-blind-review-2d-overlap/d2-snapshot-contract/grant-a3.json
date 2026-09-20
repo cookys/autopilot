@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-1ef8bec1f146c5e80dd059c5d2789bd504a9d566d5c6fe4ac6f61f1c62f73f51",
+  "claim_id": "claim-v1-d082ab23c3164b0d922fc77e7e03a539042917c5da378ec522a222fcf05b9741",
+  "mission_grant_ref": "6479daec1da64cc8cb1eb8826f7a92a9307eff41be806b658126dad0cfc87995",
+  "mission_subject_digest": "8120901e818bcb3b6deb5363e370010f1a27d54483d9add6eeeffe1614811638",
+  "mission_campaign_id": "campaign-v2-873220f2e6df7aee624908b43491b7a6ad8c28a751382fafe09f0116e500b35b",
+  "graph_node_id": "snapshot-contract",
+  "graph_attempt": 3,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/1ef8bec1f146c5e80dd059c5d2789bd504a9d566d5c6fe4ac6f61f1c62f73f51/snapshot-contract/attempt-3/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/1ef8bec1f146c5e80dd059c5d2789bd504a9d566d5c6fe4ac6f61f1c62f73f51/snapshot-contract/attempt-3/campaign.seal.json",
+  "branch": "mission/1ef8bec1f146/snapshot-contract-a3",
+  "base_sha": "df26dbe810db3a7e2a705bcba399d8ffb8229134",
+  "state_hash": "b1b15d142ff933f990ba79e9e78d6a1d36931e7e6f621c6f4071d4bbd8a720b8"
+}

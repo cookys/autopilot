@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_disposition_authority",
+  "authority": "depth-0",
+  "actor_id": "depth-0:autopilot-3d:session_489c5f8c-612b-4f23-8faa-364d0b5aa78f",
+  "campaign_id": "campaign-v1-6c2313d7d324868905c8716014b6d3166f0637661f09cf9af35a35250ee42818",
+  "contract_digest": "594164a6b317a6947233a5e98432660989627d9e30d855d73d58c16d94d480ab",
+  "reviews": [
+    {
+      "review_digest": "10739afdef621ed9bb61ff854a1dc3c47f6eb5aa1998a3e42a7578b5d524ae5b",
+      "decisions": [
+        {
+          "finding_id": "mission-claim-leak-on-snapshot-reject",
+          "evidence": {"kind": "trace", "trace_chain": [
+            "git show 6490815c -- src/engine/campaign-intake.js: the `if (pendingQcPanelSnapshot)` block (hunk @@ -2301) returns `{ status: 'blocked', ..., pre_spend_no_effect_receipt: null }` for qc_panel_snapshot_missing_after_claim / write EEXIST identity / qc_panel_snapshot_drift",
+            "same file at base df26dbe8: every other post-claim rejection returns `releaseAfterRejection(rejected(...))` (lines 2341, 2356, 2363, 2371, 2392), which calls adapters.releaseMission and emits pre_spend_no_effect_receipt",
+            "`const releaseAfterRejection` is declared AFTER the new block in the hand's file, so it is not reachable from it; the held claim is never released and a re-grant is refused by the open active_claim_id"
+          ], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "must-fix-now", "acceptance_id": "digest-drift-refused", "rubric_id": "R4", "task_surface": "src/engine/campaign-intake.js post-claim snapshot block", "deferral_harm": "a drift or missing-after-claim park leaves the Mission claim held with no release receipt; the campaign cannot be re-granted and the 'parked, resumable' guarantee of plan §4 D2 step 2 is false"}
+        },
+        {
+          "finding_id": "spurious-live-flip-single-station",
+          "evidence": {"kind": "trace", "trace_chain": [
+            "git show 6490815c -- src/engine/autopilot-engine.js hunk @@ -7096: flip fires when `(roster.qc_panel_seats_complete === true) !== (snapshotStation === 'panel')`",
+            "validateReviewRoster (same file :704-708) requires qc_panel_seats_complete === true for every managed roster unless allowIncompleteQcSeats",
+            "resolveReviewStation (campaign-intake.js) seals 'single' when in_rail_review !== 'panel' even with complete seats, so every single-station campaign with a 2-C snapshot journals qc_panel_snapshot_live_flip on every run — plan §4 D2 step 5 / R3 byte-identity broken"
+          ], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "must-fix-now", "acceptance_id": "no-regression", "rubric_id": "R3", "task_surface": "src/engine/autopilot-engine.js snapshotStation live-flip check", "deferral_harm": "single-station campaigns gain a spurious ledger row per run, violating the byte-identity criterion the deliverable is measured against"}
+        },
+        {
+          "finding_id": "snap-doc-identity-code",
+          "evidence": {"kind": "trace", "trace_chain": [
+            "git show 6490815c -- references/blind-dispatch.md: sentence 'identity or digest mismatch parks with qc_panel_snapshot_drift'",
+            "git show 6490815c -- src/engine/campaign-intake.js: identity mismatch still returns qc_panel_snapshot_identity_invalid (pre-claim), only digest mismatch returns qc_panel_snapshot_drift"
+          ], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "must-fix-now", "acceptance_id": "scope-integrity", "rubric_id": "R4", "task_surface": "references/blind-dispatch.md + platforms/codex/plugin mirror", "deferral_harm": "the normative reference misnames the park code operators will see; one-sentence fix, mirror must stay identical"}
+        },
+        {
+          "finding_id": "weak-test-assertions",
+          "evidence": {"kind": "trace", "trace_chain": [
+            "git show 6490815c -- hooks/tests/implementation-campaign-state-snapshot-contract.test.sh: case (e) control asserts typeof projection === 'string' instead of comparing projection bytes against base; case (c) accepts `stationRow || reviewModels.length >= 3`"
+          ], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "must-fix-now", "acceptance_id": "no-regression", "rubric_id": "R6", "task_surface": "hooks/tests/implementation-campaign-state-snapshot-contract.test.sh cases (c) and (e)", "deferral_harm": "the byte-identity control would pass on a regressed projection; R6 demands assertions that would go red"}
+        },
+        {
+          "finding_id": "nosnap-control-weak",
+          "evidence": {"kind": "trace", "trace_chain": ["duplicate of weak-test-assertions (second seat); same lines of the new suite"], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "must-fix-now", "acceptance_id": "no-regression", "rubric_id": "R6", "task_surface": "hooks/tests/implementation-campaign-state-snapshot-contract.test.sh case (e)", "deferral_harm": "same as weak-test-assertions"}
+        },
+        {
+          "finding_id": "docs-identity-code-mismatch",
+          "evidence": {"kind": "trace", "trace_chain": ["duplicate of snap-doc-identity-code (second seat)"], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "must-fix-now", "acceptance_id": "scope-integrity", "rubric_id": "R4", "task_surface": "references/blind-dispatch.md + mirror", "deferral_harm": "same as snap-doc-identity-code"}
+        },
+        {
+          "finding_id": "validate-roster-bypass-on-file-presence",
+          "evidence": {"kind": "trace", "trace_chain": ["git show 6490815c -- src/engine/autopilot-engine.js :704-712 and :9483-9490: allowIncompleteQcSeats is set on the mere existence of qc_panel_snapshot.json and returns before the remaining seat checks"], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "reject-out-of-scope", "rationale": "only reachable for rosters base already rejected (incomplete seats); the sealed snapshot is identity-checked at intake before the engine reaches this point; plan §7 excludes roster-validation redesign. Recorded in the evidence README, not as a backlog row."}
+        },
+        {
+          "finding_id": "allowincomplete-breadth",
+          "evidence": {"kind": "trace", "trace_chain": ["duplicate of validate-roster-bypass-on-file-presence (second seat)"], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "reject-out-of-scope", "rationale": "same as validate-roster-bypass-on-file-presence"}
+        },
+        {
+          "finding_id": "journal-any-event-heuristic",
+          "evidence": {"kind": "trace", "trace_chain": ["git show 6490815c -- src/engine/campaign-intake.js campaignJournalHasEvents: any journal row for the campaign counts as post-claim"], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "reject-out-of-scope", "rationale": "a pre-2-D campaign that ran generations without a snapshot and later presents a complete roster is not a transition the plan supports (§4 D2 step 3 defines the rule on the journal as-is); parking with a named reason is the safe side. Recorded in the evidence README."}
+        },
+        {
+          "finding_id": "backlog-row-rewrite",
+          "evidence": {"kind": "trace", "trace_chain": ["git show 6490815c -- docs/BACKLOG.md: the Context line was rewritten to fit the 240 B cap rather than appended"], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "reject-out-of-scope", "rationale": "the brief asked for ≤240 B; a pure append could not fit; the BACKLOG row is being retired in the backlog cleanup that follows this campaign"}
+        },
+        {
+          "finding_id": "backlog-trim-not-pure-append",
+          "evidence": {"kind": "trace", "trace_chain": ["duplicate of backlog-row-rewrite (second seat)"], "confirmed_by": "depth-0:autopilot-3d"},
+          "disposition": {"disposition": "reject-out-of-scope", "rationale": "same as backlog-row-rewrite"}
+        }
+      ]
+    }
+  ]
+}

@@ -385,4 +385,50 @@ assert_r40_review_chain_derive() {
 
 assert_r40_review_chain_derive
 
+# RED at base (verbatim stdout from opt-out on fixture line `9plan_review: off`):
+# {
+#   "phase": "p_r46",
+#   "knob": "plan_review",
+#   "configured_value": "off"
+# }
+# Digit 9 sat inside the accidental `*->` range in `[\\s#*->]`. After the
+# class is `[-\s#*>]`, that line must stay `absent`; markdown prefixes still match.
+assert_r46_hetero_review_loop_j() {
+  local HETERO="$REPO_ROOT/scripts/hetero-review-loop.js"
+  local SCRATCH="$TEST_TMP/r46-repo"
+  local LEDGER="$TEST_TMP/r46-ledger"
+  mkdir -p "$SCRATCH/.claude" "$LEDGER"
+
+  printf '#!/bin/sh\necho unknown\n' > "$TEST_TMP/r46-resolver.sh"
+  chmod +x "$TEST_TMP/r46-resolver.sh"
+
+  run_opt_out_cv() {
+    local line="$1"
+    local phase="$2"
+    printf '%s\n' "$line" > "$SCRATCH/.claude/review-loop-config.md"
+    local out
+    out=$(
+      AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/r46-resolver.sh" \
+      node "$HETERO" opt-out \
+        --repo-root "$SCRATCH" --ledger "$LEDGER" --phase "$phase" --knob plan_review 2>&1
+    )
+    node -e 'const s=process.argv[1]; const j=JSON.parse(s.match(/\{[\s\S]*\}/)[0]); process.stdout.write(j.configured_value);' "$out"
+  }
+
+  local cv_digit cv_dash cv_hash cv_star
+  cv_digit=$(run_opt_out_cv '9plan_review: off' p_r46_digit)
+  assert_eq "$cv_digit" "absent" "r46: 9plan_review: off has no valid prefix → configured_value absent"
+
+  cv_dash=$(run_opt_out_cv '- plan_review: off' p_r46_dash)
+  assert_eq "$cv_dash" "off" "r46: list dash prefix still resolves off"
+
+  cv_hash=$(run_opt_out_cv '# plan_review: off' p_r46_hash)
+  assert_eq "$cv_hash" "off" "r46: heading hash prefix still resolves off"
+
+  cv_star=$(run_opt_out_cv '* plan_review: off' p_r46_star)
+  assert_eq "$cv_star" "off" "r46: list star prefix still resolves off"
+}
+
+assert_r46_hetero_review_loop_j
+
 finalize_test

@@ -1266,7 +1266,7 @@ async function handleOptOut(flags) {
     configBytes = fs.readFileSync(configPath);
     const text = configBytes.toString('utf8');
     const lines = text.split(/\r?\n/);
-    const regex = new RegExp(`(?:^|[\\s#*->])${knob}(?:[\\s:=]+)(off|on|auto)\\b`, 'i');
+    const regex = new RegExp(`(?:^|[-\\s#*>])${knob}(?:[\\s:=]+)(off|on|auto)\\b`, 'i');
     for (const line of lines) {
       const m = line.match(regex);
       if (m) {

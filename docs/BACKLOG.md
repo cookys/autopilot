@@ -44,14 +44,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/host-conformance-tool.md
 - **Context**: needs its own registered plan; the decision doc lists the six report sections.
 
-### Managed rail: repair scope is derived from the reviewer's claim text — a path-less finding terminalizes the campaign
-- **Status**: open
-- **Trigger**: the next `--resume --campaign-disposition-authority` whose must-fix-now finding names no `src/`/`hooks/` path, OR any edit to `findingBoundRepairPaths`
-- **Effort**: S
-- **Source**: 2-D D2 attempt 3 (2026-09-20), `impl-run5-repair-scope-terminal.json`
-- **Pointer**: docs/backlog/managed-rail-repair-scope-pathless-finding.md
-- **Context**: findingBoundRepairPaths reads paths only from finding.claim/source; none → throw → terminal_stop. Fall back to disposition.task_surface, then park instead of stopping.
-
 ### Managed implementation dispatch timeout floor is 1 s — a 2 s hand dies as a runner timeout, not a wall expiry
 - **Status**: open
 - **Trigger**: the next managed campaign that logs an implementation dispatch with `--timeout` under 60 s, OR any work on `buildImplementationArgs`
@@ -60,31 +52,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/a/REPORT.md
 - **Context**: the brief asked for the rail's minimum useful timeout; a 1 s floor only avoids a 0 s argv. Derive the floor from the rail's timing data (shortest committed `wall_secs`) or seal a knob; below it, terminalize `wall_expired` before spend.
 
-### `run-ledger.sh lease-gc` aborts mid-loop on a failed transition and the reap wrapper masks it as zeros
-- **Status**: open
-- **Trigger**: a `lease-gc --json` run whose `appended` is lower than `dead` without a `skipped` reason, OR the reap receipt's `lease_gc` block reads all zeros on a host whose ledger still rotates
-- **Effort**: S
-- **Source**: v2.36.73 unit L review (🟡 gc-abort-midloop, claude-fable-5-1)
-- **Pointer**: docs/plans/evidence/2026-09-19-parallel-sonnet-foremen-r2/l-leasegc/REPORT.md
-- **Context**: a failing `command_stage_transition` exits the loop with no JSON and the reap wrapper's `|| true` shows zeros. Catch per lease, count `failed`, keep going; the wrapper surfaces a non-zero `failed`.
-
-
-
-
-
-
-
-
-
-
-
 ### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
 - **Status**: open
 - **Trigger**: **NOT FIRED — recorded at ship time, 2026-09-13.** Fires when a real foreman run trips one of them.
 - **Effort**: M
 - **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
 - **Pointer**: docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md
-
 
 ### Dev mode layer ③ (marketplace clone) as a symlink — spike before changing dev-setup
 - **Status**: open
@@ -93,15 +66,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: unknown
 - **Pointer**: docs/backlog/dev-mode-layer-marketplace-clone-as-a-symlink-spike-before-changing-dev-setup.md
 
-
-
-
-
-
-
-
-
-
 ### Blind review redesign: blind the packet and the process boundary, not the runner
 - **Status**: open
 - **Trigger**: owner asked 2026-09-16 how to keep review independence while tool-capable reviewers sit on the panel and the loop gets faster; gpt-6-astra and claude-fable-5-1 converged
@@ -109,7 +73,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
 - **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats; quorum + snapshot; panel station; shared packet. Shipped: 1a-A..2-C v2.36.59-69. Open: 2-D overlap/pre-pass.
-
 
 ### CI: hooks-suite step is `skipped` whenever the detached-dispatch smoke fails — a red smoke hides every other suite
 - **Status**: open
@@ -127,21 +90,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: ruling relayed by openclaw 2026-09-17 (`msg_01M2PWEZ8WAVJ8S4F032MFTVGQ`): (a)=B no seat exemption — ship mask-line print + brief linter; (b) same refusal twice → ladder stop. Peer relay only; operator confirms in-session first.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ### Managed rail: codex containment (bwrap) qualification spike so a codex seat can serve the blind final panel
 - **Status**: open
 - **Trigger**: operator wants a pinned codex qc seat to survive managed blind discovery without replacing the seat
@@ -149,15 +97,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: /l5 dogfood 2026-09-16 (cuda P1 consult, A2)
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/bwrap-probe.md
 - **Context**: absorbed by redesign cut 1b (plan 2026-09-16-blind-review-packet §7). Probe 2026-09-16: codex with tools ran inside bwrap on a planted packet; left: timeout/exit/raw_log parity via dispatch-review.sh, other CLIs.
-
-
-### Managed rail: verify_cmd runs in a fresh detached worktree with no deps; its stdout/stderr never reach the ledger
-- **Status**: open
-- **Trigger**: a verify that needs node_modules/dist fails in 1.4 s; the ledger holds only `status:failed` + tree_sha
-- **Effort**: S
-- **Source**: `openclaw` via hangar-bridge 2026-09-16, msg `msg_01M2KR1TFPY8F2SEX8D6ABCH2G`
-- **Pointer**: none
-- **Context**: `autopilot-engine.js` ~1863 `autopilot-verify-wt-*` is a detached worktree; journal bounded verify output and document that verify_cmd must self-bootstrap.
 
 ### PEER-REPORTED (openclaw): PreToolUse(Bash) guard — detach without wake-up, `pkill -f` self-match, zsh `=`/glob abort
 - **Status**: open
@@ -167,16 +106,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: (1) `nohup`/`setsid`/`&` + rail entrypoint → deny (use `run_in_background`); (2) `pkill -f` without `[x]` → warn; (3) bare `=` token or unquoted glob → deny (zsh aborts the line).
 
-### context-budget: no model-id window source — a 1M session without the autopilot statusline gets 200k tiers
-- **Status**: open
-- **Trigger**: a host without autopilot's statusLine (no live `context_window_size`) on an `[1m]` model: T2 at 155k, nagging at 16 % use
-- **Effort**: S
-- **Source**: `gentoo` msg `msg_01M2KSM2SZRDN31GY8K943K18V`; replied `msg_01M2KSSQHTS6WMCBXGSQFHD4P5` (set explicit t1/t2 meanwhile)
-- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: `hooks/context-budget.js` reads the live file, else `inferWindowTokens(observedMax)`; add the transcript model id (`[1m]` → 1M) as a source before the ratchet.
-
-
-
 ### CI `tests` workflow red before v2.36.54: `dispatch-detached-campaign-authority.test.sh` fails on the runner
 - **Status**: open
 - **Trigger**: every run since at least 2026-09-14 (the workflow runs only the changed test files, so the red is masked locally)
@@ -184,8 +113,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `gh run list` 2026-09-16 while fixing the v2.36.54 executable-bit red
 - **Pointer**: none
 - **Context**: `detached campaign strict dispatch changes only the narrow subset: expected 'src/out.txt', got ''` on the GitHub runner; passes locally — environment coupling to reproduce in a clean clone.
-
-
 
 ### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
 - **Status**: open
@@ -195,10 +122,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: agy `-p` self-aborts at 5 min, a >~40-line brief at low ends in silent no_op, `run_command` 10 s cap backgrounds test loops; add scorecard dimensions or auto-degrade the seat with a warning.
 
-
-
-
-
 ### Managed rail: a non-git `--repo` still consumes a Mission claim before intake rejects it
 - **Status**: open
 - **Trigger**: any intake rejection between the Mission claim and `inspectSealedCampaignContract` is measured burning an attempt again
@@ -206,29 +129,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.42 pre-merge review (sonnet), 2026-09-14
 - **Pointer**: none
 - **Context**: `projectMissionMode` does not touch git, so the claim runs before repo identity is known. Reject on `canonicalRepoIdentity` throw pre-claim + a non-git fixture.
-
-### `dispatch-foreman.test.sh` loses its TEST_TMP after case 3 — 40 assertions red on develop
-- **Status**: open
-- **Trigger**: reproduced 2026-09-15 on origin/develop in a clean worktree (62 pass / 40 fail); first symptom `wait_for: No record of process`, then `TEST_TMP/repo: No such file`
-- **Effort**: S
-- **Source**: observed while shipping v2.36.44; not caused by it (identical on HEAD~1)
-- **Pointer**: none
-- **Context**: the EXIT trap (`rm -rf "$TEST_TMP"`) fires from a killed child/process group in case 3; cases 6/9/12 (main-checkout boundary) are unobservable until fixed.
-
-
-
-
-
-
-
-### Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `[]` snapshot
-- **Status**: open
-- **Trigger**: a review whose findings fail `normalizeFindings` (UNSTRUCTURED/INVALID/DUPLICATE codes) reaches the durable wait on a real run
-- **Effort**: S
-- **Source**: v2.36.41 pre-merge review (sonnet), 2026-09-14
-- **Pointer**: none
-- **Context**: identityInvalid gate in `campaign-composition.js` covers only FINDING_IDENTITY_INVALID; pre-existing. Widen the gate or block non-resumable.
-
 
 ### agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT
 - **Status**: open
@@ -238,19 +138,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md
 - **Context**: a peer host (twgs-revival, 2026-09-11) reported that agy 1.2.0's `--input-format stream-json` reads NDJSON from stdin and so bypasses the 131072-byte `MAX_ARG_STRLEN` argv wall, measured at 208951 bytes with `status: SUCCESS`, and…
 
-### Pin store hardening: fsync, orphaned temp files, and re-validation of stored rows
-- **Status**: open
-- **Trigger**: a report of a `pins.jsonl` lost or corrupted by power loss (not a process kill), a store directory accumulating `.pins.jsonl.tmp.*` litter, or the first consumer that reads the pin store without going through `readPinRows`.
-- **Effort**: S
-- **Source**: depth-0 QC panel on the operator pin store, 2026-09-11.
-- **Pointer**: docs/backlog/pin-store-hardening-fsync-orphaned-temp-files-and-re-validation-of-stored-rows.md
-- **Context**: the QC panel (GLM-5.2, 2026-09-11) raised four Suggestion-level items against the v1 pin store, all reproduced at depth 0 and all hardening rather than regressions.
-
-
-
-
-
-
 ### Reconnaissance and implementation share one leaf bash budget, so a leaf can exhaust it before touching code
 - **Status**: open
 - **Trigger**: **NOT FIRED — peer observation, 2026-09-13.** Fires when a leaf under this rail is measured hitting its command cap with zero diff.
@@ -259,8 +146,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/reconnaissance-and-implementation-share-one-leaf-bash-budget-so-a-leaf-can-exhau.md
 - **Context**: `308-db` ran six Agent-worktree leaves on 2026-09-13; three hit the 40-command bash ceiling **after reconnaissance was complete and before a single line changed**.
 
-
-
 ### Main-checkout boundary: accepted residuals of an accident guard that is not a sandbox
 - **Status**: open
 - **Trigger**: fires only if the boundary is ever asked to be a sandbox — i.e. an adversarial worker becomes a threat model this repo adopts. Today it is not (`references/blind-dispatch.md`; v2.36.32's own contract says "accident guard, not a sandbox").
@@ -268,12 +153,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.32 review round 6, 2026-09-13, adjudicated at depth 0 by re-derivation.
 - **Pointer**: docs/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md
 - **Context**: v2.36.32's detection layer fingerprints every ref, HEAD, symbolic-ref target, staged/unstaged diff content, and a size+mtime+type+link-target walk of every entry outside `.git`.
-
-
-
-
-
-
 
 ### The implementer ladder's cost ordering is nearly degenerate — 11 of 17 rungs share one effort tier
 - **Status**: open
@@ -362,22 +241,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/lint-hands-diffs-for-fixture-literals-leaking-into-production-code.md
 - **Context**: `references/evidence-discipline.md` §23 — three reviewers caught a `phase === 'p7'` carve-out the suite could not
 
-### check-phase-review-receipt: min-reviewed-seats enforcement test on a multi-seat fixture
-- **Status**: open
-- **Trigger**: next touch of the seat-coverage rule
-- **Effort**: S
-- **Source**: same g4 dir
-- **Pointer**: docs/backlog/check-phase-review-receipt-min-reviewed-seats-enforcement-test-on-a-multi-seat-f.md
-- **Context**: case 14 proves the parse guard, not that a higher minimum is enforced on a 3-seat chain (MiniMax FOLLOW-UP, core review g4)
-
-### hetero-review-loop: confirm finalize always emits severity in open_findings (checker now requires deep equality on id/severity/disposition)
-- **Status**: open
-- **Trigger**: the next FIX-THEN-SHIP receipt with verified Major/Minor findings — depth-0 saw severity present on the v2.36.0 receipts, so this is a confirmation row (GLM FOLLOW-UP, core review g3)
-- **Effort**: S
-- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g3/`
-- **Pointer**: docs/backlog/hetero-review-loop-confirm-finalize-always-emits-severity-in-open-findings-check.md
-- **Context**: shared-format drift surface between finalize and the checker
-
 ### resolve-review-loop.sh: audit every remaining runner comparison for codex-cli/codex canonicalisation
 - **Status**: open
 - **Trigger**: next touch of the reviewer_ladder / hetero_review extraction or any `entry.runner === implRunner` site
@@ -385,39 +248,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: same g3 dir
 - **Pointer**: docs/backlog/resolve-review-loop-sh-audit-every-remaining-runner-comparison-for-codex-cli-cod.md
 - **Context**: normRunner was added at the plan-panel and consult sites; other comparisons may re-admit a dual seat (GLM FOLLOW-UP, core review g3)
-
-### hetero-review-loop: charset guard on seat ids before path.join
-- **Status**: open
-- **Trigger**: any change that lets a seat id come from outside the driver
-- **Effort**: S
-- **Source**: same g3 dir
-- **Pointer**: docs/backlog/hetero-review-loop-charset-guard-on-seat-ids-before-path-join.md
-- **Context**: `../` in an id could escape the generation directory; no capability gained today because the ledger is writer-controlled (GLM FOLLOW-UP, core review g3)
-
-### check-phase-review-receipt: a head moved only by commits touching allowlisted excluded paths should still validate
-- **Status**: open
-- **Trigger**: every release closeout — CHANGELOG/ledger/archive commits land after the last review generation, so the receipt's head never equals the merge head
-- **Effort**: S
-- **Source**: v2.36.0 closeout, `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/`
-- **Pointer**: docs/backlog/check-phase-review-receipt-a-head-moved-only-by-commits-touching-allowlisted-exc.md
-- **Context**: the checker binds `review_head_sha` to the branch head; today the honest sequence is "checker exit 0 at the reviewed head, recorded in the ledger, then docs-only commits".
-
-### hetero-review-loop / check-phase-review-receipt: hoist EXCLUDE_ALLOWLIST and isPathspecAllowed into scripts/lib
-- **Status**: open
-- **Trigger**: the next edit to either copy (they are byte-identical today)
-- **Effort**: S
-- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g2/`
-- **Pointer**: docs/backlog/hetero-review-loop-check-phase-review-receipt-hoist-exclude-allowlist-and-ispath.md
-- **Context**: duplicated verbatim in both scripts; a one-sided edit would silently desynchronise the gate (GLM + MiniMax FOLLOW-UP, core review g2, 2026-09-04)
-
-### review-chain-derive.js documents "no side effects" but mutates the chain entries it receives
-- **Status**: open
-- **Trigger**: any caller that keeps a reference to the chain after derivation
-- **Effort**: S
-- **Source**: same g2 dir
-- **Pointer**: docs/backlog/review-chain-derive-js-documents-no-side-effects-but-mutates-the-chain-entries-i.md
-- **Context**: either copy on entry or drop the purity claim (GLM FOLLOW-UP, core review g2)
-
 
 ### resolve-review-loop.test.sh capability-warning assertion messages still say "no warning" while expecting the topology fallback lines
 - **Status**: open
@@ -459,22 +289,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/hetero-review-loop-js-collect-appends-to-chain-json-without-a-lock-or-atomic-ren.md
 - **Context**: a lost chain entry would self-recover on retry, never forge a gate pass; MiniMax CUT/FOLLOW-UP on the D2 review 2026-09-04
 
-### `hetero-review-loop.js` opt-out knob parser character class parses `*->` as a range
-- **Status**: open
-- **Trigger**: the next touch of the knob parser in handleOptOut
-- **Effort**: S
-- **Source**: same ledger dir as above
-- **Pointer**: docs/backlog/hetero-review-loop-js-opt-out-knob-parser-character-class-parses-as-a-range.md
-- **Context**: a line such as "9plan_review: off" can set configured_value; harmless while the checker re-derives the value from the resolver (GLM CUT/FOLLOW-UP)
-
-### `hetero-review-loop.js` exports the STUB_SEAT_ID test seam into the real dispatch-review.sh environment
-- **Status**: open
-- **Trigger**: reworking the seat-stub mechanism for any other reason
-- **Effort**: S
-- **Source**: same ledger dir as above
-- **Pointer**: docs/backlog/hetero-review-loop-js-exports-the-stub-seat-id-test-seam-into-the-real-dispatch.md
-- **Context**: cosmetic hardening; the real script ignores the variable (GLM CUT/FOLLOW-UP)
-
 ### `finalize` closes an earlier verified finding by absence in a later generation
 - **Status**: open
 - **Trigger**: a future review-policy deliverable, or evidence that a reviewer missed a still-open finding
@@ -482,16 +296,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: same ledger dir as above
 - **Pointer**: docs/backlog/finalize-closes-an-earlier-verified-finding-by-absence-in-a-later-generation.md
 - **Context**: the plan defines closure as absence-in-later-findings; tightening to "explicitly re-verified" needs a policy decision (MiniMax CUT/FOLLOW-UP)
-
-
-### scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`
-- **Status**: open
-- **Trigger**: any seat resolver that matches runner tokens exactly (topology `--role plan_reviewer` normalises it today)
-- **Effort**: S
-- **Source**: `docs/plans/evidence/2026-09-04-dev-flow-hetero-loops-default/context.md`
-- **Pointer**: docs/backlog/scorecard-runner-token-drift-sol-s-reviewer-row-is-recorded-under-codex-cli-not.md
-- **Context**: a qualified seat silently drops out of auto-derived panels when the recorded runner spelling differs from the dispatch runner enum
-
 
 ### autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting
 - **Status**: open
@@ -501,30 +305,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md
 - **Context**: `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
 
-### `adopt-qualification-defaults.js list` prints `event undefined — null` for legacy feed rows
-- **Status**: open
-- **Trigger**: the next time the feed listing is shown to a consumer (any `list --from` run reproduces it: 12 such lines on 2026-09-03 against the live feed), or when a second display defect lands in the same command.
-- **Effort**: S
-- **Source**: 7840hs peer report 2026-09-03 (plan 065 P5); reproduced on aimax395 (exit 0, defaults 29 / strikes 1 / priors 57)
-- **Pointer**: docs/backlog/adopt-qualification-defaults-js-list-prints-event-undefined-null-for-legacy-feed.md
-- **Context**: legacy (pre-effort, no event id / bundle path) scorecard rows reach the `evidence` line without a fallback, so the consumer prints `event undefined — null`.
-
-### Feed listing prints the pre-effort `seat_hash` ⚠ once per row — consider one consolidated notice
-- **Status**: open
-- **Trigger**: a consumer complains the listing is unreadable, or the producer moves to effort-bearing seat hashes (then the per-row ⚠ disappears on its own).
-- **Effort**: S
-- **Source**: 7840hs peer report 2026-09-03 (plan 065 P5 closeout)
-- **Pointer**: docs/backlog/feed-listing-prints-the-pre-effort-seat-hash-once-per-row-consider-one-consolida.md
-- **Context**: by decision (A) the feed's advertised `seat_hash` is a diff key only and the consumer re-derives every hash; every current row is pre-effort three-key, so every row prints the ⚠.
-
-### `--runner opencode` usage stays `null` — parse `step_finish.tokens` from the `--format json` event stream
-- **Status**: open
-- **Trigger**: the first time an opencode seat's cost/efficiency is compared against another rail (scorecard `cost`/`usage` telemetry), or `dispatch-status.js` gains a second event-stream format anyway.
-- **Effort**: S
-- **Source**: v2.35.12 (`docs/plans/2026-09-03-opencode-implementer-rail.md` § Out of scope)
-- **Pointer**: docs/backlog/runner-opencode-usage-stays-null-parse-step-finish-tokens-from-the-format-json-e.md
-- **Context**: the opencode rail declares `log_format: plain`, so `dispatch-status.js --usage-only` returns `null`.
-
 ### `resolve-review-loop-consult-discuss-gate` case (xix) mutates the canonical evals corpus — move it to a scratch copy and un-serialize
 - **Status**: open
 - **Trigger**: the next time a pooled test dies with `EACCES` on `evals/consult-capability-evidence-corpus.json`, or when `hooks/tests/run.sh --parallel` wall time is being trimmed and the serial tail is on the table.
@@ -532,14 +312,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.35.11 pre-merge suite run (`d48b5235`); `hooks/tests/resolve-review-loop-consult-discuss-gate.test.sh:487-493`
 - **Pointer**: docs/backlog/resolve-review-loop-consult-discuss-gate-case-xix-mutates-the-canonical-evals-co.md
 - **Context**: case (xix) `chmod 000`s the REAL `evals/consult-capability-evidence-corpus.json` for two script runs; any pooled test that requires the consult grader in that window (verdict-stability D7, 2026-09-03: 12 EACCES failures, green…
-
-### `autopilot endpoints test` hardcodes `claude-3-haiku-20240307` — a local server that validates model ids returns 404 and the probe reads as broken auth
-- **Status**: open
-- **Trigger**: the first time someone runs `autopilot endpoints test <name>` against a named local-model endpoint (SGLang/vLLM validate the model id) and gets a non-200 that is not an auth failure.
-- **Effort**: S
-- **Source**: v2.35.11 (`docs/plans/2026-09-03-endpoint-transport-optin.md` § Out of scope)
-- **Pointer**: docs/backlog/autopilot-endpoints-test-hardcodes-claude-3-haiku-20240307-a-local-server-that-v.md
-- **Context**: the probe's model id is a compatibility choice for GLM/MiniMax gateways (they map claude-* ids).
 
 ### `src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller
 - **Status**: open
@@ -564,14 +336,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026-08-21-p6d-orchestration-incident/README.md), including the quoted Fable 5 independent judgment.
 - **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
 - **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
-
-### Foreman model is hardcoded as `opus` in /l4–/l6 prose; routing config already overrides it
-- **Status**: open
-- **Trigger**: any consuming project sets `tree:sub-orchestrator` in `.claude/model-routing-config.md`
-- **Effort**: S
-- **Source**: revival.3d `15edf5e7` (routing override), `NOTE-FOR-FABLE-QUOTA.md` (grok cost split),
-- **Pointer**: docs/backlog/foreman-model-is-hardcoded-as-opus-in-l4-l6-prose-routing-config-already-overrid.md
-- **Context**: `skills/l6/SKILL.md`, `skills/ceo-agent/references/level-front-door.md` (§"Dispatching
 
 ### `probe-runner-coverage` parallel-only flake — fork-pressure suspected, residue ruled out
 - **Status**: open
@@ -605,14 +369,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md
 - **Context**: 2026-08-22 implementer 施測(agy 1.1.17):flash-high 6 案、pro(event 147)2 案、flash-medium(event 152)6 案 envelope FAIL + 2 案 stall——envelope 失敗案**全部**是建新檔任務且同簽名(family-wide、發生率隨 tier…
 
-### `validate-json-schema.js` 拒絕所有非整數數字 —— 任何帶小數的 JSON 文件都驗不了
-- **Status**: open
-- **Trigger**: 下一個要 schema 驗證的 artifact 帶浮點數;或下一次動 `scripts/validate-json-schema.js` 的 `parseNumber`/`assertJsonValue`。
-- **Effort**: S
-- **Source**: 2026-08-23 official-qualification-defaults 施工實測(run `official-defaults-l4`)。
-- **Pointer**: docs/backlog/validate-json-schema-js-json.md
-- **Context**: `parseNumber`(`validate-json-schema.js:161`)在 **schema 求值之前**的 document preflight 就把任何含 `.`/`e`/`E` 的數字字面量判為 `UNSUPPORTED_JSON_NUMBER`(exit 2),與 schema 內容無關;`assertJsonValue:71`…
-
 ### v2.34.37 first-pass review 的 cut list —— 六個「不是錯,但名字比保證大」的小項
 - **Status**: open
 - **Trigger**: 下一次動這六處任一 —— `hooks/tests/external-lifecycle-witness.test.sh` 的 `stop_bounded` 斷言、`hooks/tests/calendar-teeth-negative.test.sh` 的 `instant3`/`instant4`、`scripts/engine-qualify.js` 的 `wall_truncated`…
@@ -644,7 +400,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-08-21 pre-merge review(autopilot:reviewer);`docs/projects/_archive/2026-08-21-p6d-corrective-gates/`(歸檔後)。
 - **Pointer**: docs/backlog/durable-repair-lock-p6d-kr3.md
 - **Context**: v2.34.32 原出貨 durable claim-bound repair lock + 四 Mission 後盾,pre-merge review 兩枚 🔴 殺掉:解鎖路僅存於 mission-v2 ready/follow_up 排水(legacy receipt 永無解)、bypass enum…
-
 
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
 - **Status**: open
@@ -694,14 +449,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/capability-claim-identity-is-coupled-to-its-observation-timestamp.md
 - **Context**: `claim_id = sha256(claim body)` and the body includes `live_evidence.observed_at` + `freshness.expires_at`, while the required IDs are hardcoded constants in `dispatch-hetero.sh:1653-1654`, `dispatch-review.sh:169-170`,…
 
-### Vacuous red case in the guided-disposition suite (alien-hash branch)
-- **Status**: open
-- **Trigger**: Next touch of `scripts/build-profile-payload.js` guided-compatibility validation, or when adding any new disposition error code.
-- **Effort**: Fix
-- **Source**: v2.34.19 pre-merge review mutation pass (autopilot:reviewer, 2026-08-18).
-- **Pointer**: docs/backlog/vacuous-red-case-in-the-guided-disposition-suite-alien-hash-branch.md
-- **Context**: Mutation-tested 2026-08-18: deleting the `required === 0` branch at `scripts/build-profile-payload.js:478-483` leaves `hooks/tests/profile-guided-dispositions.test.sh:114-117` **GREEN** — the mutant survives.
-
 ### dev-flow F4 ledger rule — re-measure before deciding (F6 leg RESOLVED 2026-08-18)
 - **Status**: open
 - **Trigger**: The skill-onoff instrument-repair campaign, at the point where its task fixtures are redesigned — F4 must be re-measured there, not decided from the existing data.
@@ -726,14 +473,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08.md
 - **Context**: v2.34.11 shipped capability-tiered scaffolding with fail-closed T2, but `references/scaffold-tiers.md` Non-goals explicitly disclaims any tier→outcome effect claim — the A/B was deferred.
 
-### cc-shim framing chrome leaks via `generate_session_title` (v2.34.7 fix incomplete)
-- **Status**: open
-- **Trigger**: Next touch of `dispatch-review.sh`'s cc-shim launcher, or the next `no_verdict` whose raw log shows an intact nonce block behind CC chrome.
-- **Effort**: Fix
-- **Source**: 2026-08-18 dev-flow-contract-card P1 review round.
-- **Pointer**: docs/backlog/cc-shim-framing-chrome-leaks-via-generate-session-title-v2-34-7-fix-incomplete.md
-- **Context**: 2026-08-18 P1 review (MiniMax-M3, cc-shim): parser returned `no_verdict` / "response did not start with the expected wrapped block" because Claude Code prepended `[claude-code:unrecognized_model]…
-
 ### Qualification CLI transport — runtime identity capture
 - **Status**: open
 - **Trigger**: When any CLI harness (codex / claude) grows a verifiable runtime model-identity signal in headless mode, or before promoting a CLI-transport qualification to a decision where alias drift would be material.
@@ -749,15 +488,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: VA suite plan v3 §6 (G1-F11 deferral); v2.34.17 pre-merge review.
 - **Pointer**: docs/backlog/broker-payload-format-token-rename-unified-diff-misnomer.md
 - **Context**: `qualification-case-broker.js` hardcodes `payload.format: unified_diff` in its sandbox client; brain round bundles (v2.34.14) and VA spec envelopes (v2.34.17) ship JSON content under that diff-named token (VA plan G1-F11; the reviewer…
-
-
-### Governance CLI UX polish（experience-critic findings, v2.34.13 dogfood）
-- **Status**: open
-- **Trigger**: 下一次動五支治理腳本任一時捎帶;或 critic 再報同類。
-- **Effort**: S
-- **Source**: v2.34.13 KR5 dogfood(2026-08-17);critic run bvxubvq39。
-- **Pointer**: docs/backlog/governance-cli-ux-polish-experience-critic-findings-v2-34-13-dogfood.md
-- **Context**: KR5 dogfood(GLM-5.2 critic,post-merge)對五支治理 CLI 的三條產品缺口:(1) `next-pick parse` 輸出是裸 JSON array,沒有 `schema_version`/`artifact_type` envelope(R4 尺,其餘四支都有);(2)…
 
 ### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
 - **Status**: open
@@ -830,14 +560,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-08-07 v2.34.6 rollover ship；`docs/projects/_archive/2026-08-06-dispatch-residue-cleanup/README.md`。
 - **Pointer**: docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md
 - **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE…
-
-### `reap-dispatch-branches.sh scan` cannot see branches that carry no `root_run_id`
-- **Status**: open
-- **Trigger**: 下一次要盤點 dispatch 殘留分支時；或再出現「分支堆積但 scan 回報乾淨」。
-- **Effort**: S
-- **Source**: 2026-08-06 dispatch residue cleanup（20 → 1 branches, 6.3 GB reclaimed）。
-- **Pointer**: docs/backlog/reap-dispatch-branches-sh-scan-cannot-see-branches-that-carry-no-root-run-id.md
-- **Context**: `scan` 以 `root_run_id` 為 key，沒帶 id 的殘留分支完全隱形——2026-08-06 清出的 20 個就是這樣躲過的。缺的是一個**報告-only 的 `--all` 模式**列出 `unattributed`，不自動刪（preserve-first…
 
 ### `prune_tmp_residue` covers 7 prefixes; 25 scripts create `/tmp` dirs
 - **Status**: open
@@ -1062,15 +784,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
-### Managed-campaign controller cannot record `BOUNDARY_REJECTED` — lease-fenced by its own synthesized stage identity
-- **Status**: open
-- **Trigger**: any `engine implement-review` campaign whose implementer commit is boundary-rejected (unauthorized output path / diff cap) — reproduced 2026-08-29 (`campaign-v1-3b6a9770…`, replayed through the real reducer).
-- **Effort**: Fix
-- **Source**: l6-verdict-stability-p1-20260829T1804Z campaign attempt 2; debugger replay 2026-08-29.
-- **Pointer**: docs/backlog/managed-campaign-controller-cannot-record-boundary-rejected-lease-fenced-by-its.md
-- **Context**: `src/engine/autopilot-engine.js:6477` writes composition events with `controller-<event>:<gen>` stage identities; `src/engine/implementation-campaign.js:886/738` lease-fences `BOUNDARY_REJECTED` (and `AWAITING_CONVERGENCE`, `:971`)…
-
-
 ### Verification-author seats on agy / cc-shim / anthropic-compatible are structurally NO-GO under the exact-tuple quota gate
 - **Status**: open
 - **Trigger**: next time a VA seat other than codex/grok/qoderclicn is configured (GLM-5.3@anthropic-compatible is VA-qualified, event 142, yet unroutable on 2026-08-29).
@@ -1095,14 +808,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
 - **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so every campaign fails acceptance. Host-red set at v2.36.71 (16/358, all pre-existing): `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/full-run-summary.txt`.
 
-### Campaign bridge resolves lease identity from `campaignControl.initial_state` — correct today only because every append refreshes it
-- **Status**: open
-- **Trigger**: any change to `recordCampaignEvent` / the campaign event appender that stops assigning `campaignControl.initial_state = appended.state` (`src/engine/autopilot-engine.js:~4557`), or a second appender path that bypasses it.
-- **Effort**: S
-- **Source**: rail-fix qc panel 2026-08-30 (gpt-5.6-sol 🟠 downgraded after verification; GLM-5.2 🔵).
-- **Pointer**: docs/backlog/campaign-bridge-resolves-lease-identity-from-campaigncontrol-initial-state-corre.md
-- **Context**: `onCampaignEvent` (`autopilot-engine.js:~6487`) calls `resolveCampaignEventLeaseIdentity(campaignControl.initial_state, …)`; the field name says "initial" but it is the live journal-replayed state because the closure refreshes it on…
-
 ### `hooks/tests/run.sh` TIMEOUT marker collides with a suite that self-exits 124/137
 - **Status**: open
 - **Trigger**: a suite observed to exit 124/137 on its own (e.g. propagating a child's SIGKILL) shows as `[TIMEOUT]` in the summary.
@@ -1110,20 +815,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: rail-fix qc panel 2026-08-30 (GLM-5.2 🔵).
 - **Pointer**: docs/backlog/hooks-tests-run-sh-timeout-marker-collides-with-a-suite-that-self-exits-124-137.md
 - **Context**: `is_suite_timeout_ec` treats any 124/137 as the wrapper's timeout.
-
-
-
-
-
-
-
-### `engine-scorecard.js current/seat-status --require-evidence` cannot be run standalone
-- **Status**: open
-- **Trigger**: next time an operator wants the strict admission projection for a live seat (it exits 2: `--require-evidence or --identity-file requires --scope-file`).
-- **Effort**: S
-- **Source**: D7 foreman 2026-08-30.
-- **Pointer**: docs/backlog/engine-scorecard-js-current-seat-status-require-evidence-cannot-be-run-standalon.md
-- **Context**: the strict path needs a caller-supplied applicability scope file; there is no helper that derives the canonical scope for a role, so foremen fall back to the non-strict `seat-status`.
 
 ### `mission withdraw` cannot bind a `mission-subject-v2` claim to its ICC campaign — the intake journals no mission binding
 - **Status**: open
@@ -1156,22 +847,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `docs/projects/2026-09-05-statusline-live-context-feed/ledger/plan-review/README.md`
 - **Pointer**: docs/backlog/plan-loop-freeze-dispatcher-and-checker-disagree-on-disposition-shape-terminal-a.md
 - **Context**: `check-phase-review-receipt.js --plan-artifact` requires `disposition` on every artifact finding and `candidate_blocker` on every disposition entry; `dispatch-plan-review.js` writes neither into the terminal artifact and its disposition…
-
-### Live-state base on world-writable tmpfs — ownership/mode check on the reader side
-- **Status**: open
-- **Trigger**: autopilot runs on a multi-user host, or a second local user is observed on any fleet host; or the first report of a foreign `/dev/shm/autopilot-<uid>` directory.
-- **Effort**: S
-- **Source**: `docs/projects/_archive/2026-09-05-statusline-live-context-feed/` pre-merge review (opus), 2026-09-05
-- **Pointer**: docs/backlog/live-state-base-on-world-writable-tmpfs-ownership-mode-check-on-the-reader-side.md
-- **Context**: v2.36.1 moved `context-budget`/`depth0-gate` state and the codeforge live files under `$XDG_RUNTIME_DIR/autopilot` (0700, safe) or `/dev/shm/autopilot-<uid>` / `/tmp/autopilot-<uid>` (parent `drwxrwxrwt`, name predictable, no…
-
-### live-state-dir 🔵 leftovers — multi-row findmnt, `\040`-only unescape, per-process SSD warning, sub-200k window scaling untested
-- **Status**: open
-- **Trigger**: a candidate that `findmnt -T` reports as more than one row; a mountpoint with an escaped character other than space; a host with neither findmnt nor /proc/mounts (macOS, unverified) where the SSD warning is observed once per hook fire;…
-- **Effort**: S
-- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05; carried out of the v2.36.2 row
-- **Pointer**: docs/backlog/live-state-dir-leftovers-multi-row-findmnt-040-only-unescape-per-process-ssd-war.md
-- **Context**: the 🟡 items of the v2.36.1 pre-merge review shipped in v2.36.2; these 🔵 items did not.
 
 ### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
 - **Status**: open
@@ -1227,5 +902,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.1 pre-merge review round 2 (opus), 2026-09-05
 - **Pointer**: docs/backlog/live-state-dir-context-budget-test-strength-two-surviving-mutants-one-vacuous-of.md
 - **Context**: On `cookys-openclaw`, `resolve-review-loop.sh` emits
-
-

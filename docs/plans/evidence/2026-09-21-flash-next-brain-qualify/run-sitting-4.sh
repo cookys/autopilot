@@ -46,7 +46,7 @@ exec bash scripts/engine-qualify.sh brain \
   --prompt-config-hash 5feb7076fc7ee775e8adfde08e56cc54bc5d715ea0d36c665a127ac7a7e41a84 \
   --semantic-fingerprint a5df1ecb7d113ea9b040c0e33a877437227056899c17ca02da861038db249075 \
   --containment-fingerprint cd222ee9ac6d9a9d97dd0e1fd98d4bcf052cd228cab6974248d9d5ffdf8ffa98 \
-  --remote-provider-cmd "node $PWD/scripts/qualification-review-provider.js" \
+  --remote-provider-cmd "$PWD/docs/plans/evidence/2026-09-21-flash-next-brain-qualify/qrp-stderr-tee.sh" \
   --remote-provider sglang-flash-next \
   --provider-env QRP_BASE_URL \
   --provider-env QRP_AUTH_TOKEN \
@@ -59,4 +59,4 @@ exec bash scripts/engine-qualify.sh brain \
   --language en \
   --tool read_only \
   --version-source runtime \
-  --raw-dir "$B/raw-sitting-1"
+  --raw-dir "$B/raw-sitting-4"

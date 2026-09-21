@@ -5,10 +5,10 @@
   "family": "alibaba",
   "runner": "anthropic-compatible",
   "runner_version": "0.0.0.dev17270-gfb1216c6c",
-  "harness_version": "engine-qualify-e9ecc652",
+  "harness_version": "engine-qualify-d9ab5cfe",
   "effort": "default",
   "prompt_config_hash": "5feb7076fc7ee775e8adfde08e56cc54bc5d715ea0d36c665a127ac7a7e41a84",
-  "semantic_fingerprint": "ce16a20ec9d79132886e6c8283f0e880f5782a2530c48d92c168f1e5cd3098f4",
+  "semantic_fingerprint": "a5df1ecb7d113ea9b040c0e33a877437227056899c17ca02da861038db249075",
   "containment_fingerprint": "cd222ee9ac6d9a9d97dd0e1fd98d4bcf052cd228cab6974248d9d5ffdf8ffa98",
   "identity_resolved": true
 }

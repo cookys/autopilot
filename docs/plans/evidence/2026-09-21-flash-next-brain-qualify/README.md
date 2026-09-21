@@ -1,6 +1,8 @@
-# qwen3.8-flash-next brain-seat (depth-0) sitting 1 — FAILED, **framing artifact, NOT a capability signal** (2026-09-21)
+# qwen3.8-flash-next brain-seat (depth-0) — administration log (2026-09-21, cuda)
 
-First HTTP-transport administration of the brain standing exam
+Four sittings. Sitting 1 appended a FAIL row that is an instrument artifact; sittings 2 and 3
+aborted cleanly with no row; sitting 4 is the real administration. First HTTP-transport
+administration of the brain standing exam
 (`engine-qualify.sh brain`). The 2026-08-17 dogfood incumbent ran the same exam over
 the CLI transport; this is the same prompt generation on a different transport.
 
@@ -143,9 +145,60 @@ scope-identical and a future comparison must say so.
 
 `run-sitting-1.sh` (this bundle) — the exact command, env and flags.
 
-## Next
+## Sittings 2 and 3 — `transport_fail`, no row appended (2026-09-21)
 
-Sitting 2 via the corrected `run-sitting-1.sh` — a **fresh administration** (new run
-nonce, new seed), not a rerun of this one. Identity is unchanged (`prompt_config_hash`
-`5feb7076…` still matches the incumbent's pinned prompt v4), so it remains directly
-comparable to dogfood sitting 3.
+Both ran the corrected recipe (absolute `--remote-provider-cmd`, `QRP_PROMPT_MODE`
+allowlisted) and both died the same way partway through trial 1:
+
+| sitting | last good round | died at | recorded spend | rows appended |
+|---|---|---|---|---|
+| 2 | 5 (`in=2442B out=136B`) | round 6, `in=3241B` | 2,328 | **0** |
+| 3 | 4 (`in=2664B out=262B`) | round 5, `in=2939B` | 1,896 | **0** |
+
+**The v2.36.82 abort worked exactly as designed both times** — `outcome:
+transport_fail`, `evidence: null`, nothing appended, and `raw-sitting-{2,3}/` carry
+`transport_ok` per round so the failure point is readable without a bisect. Compare
+sitting 1, where the same class of failure produced a graded four-subject FAIL row.
+
+### Cause: the completion budget was spent on thinking
+
+The broker keeps only a hash of the adapter's stderr (by design — a receipt must not
+carry prompt bodies), so the message was recovered by wrapping the adapter in a tee
+(`qrp-stderr-tee.sh`, kept in this bundle):
+
+```
+model call failed: endpoint response carried no text content
+```
+
+Causal test against the recorded round-6 bundle, same endpoint, same body shape:
+
+| `max_tokens` | `stop_reason` | `output_tokens` | blocks | adapter |
+|---|---|---|---|---|
+| 200 | `max_tokens` | 200 | `[thinking]` | **throws** |
+| 8192 | `end_turn` | **7132** | `[thinking+text]` | succeeds |
+
+`--reasoning-parser qwen3` means the thinking block is billed against the same
+completion budget as the answer. The round bundle grows monotonically across the 12
+rounds, the thinking grows with it, and at 8192 the budget was already 87% consumed
+by round 6 — so rounds 5 and 6 tipped over and returned a lone thinking block with no
+answer. Nothing was wrong with the model, the adapter or the transport.
+
+Fixed in **v2.36.83** (`0953ebc6`): that case is now named
+(`completion budget exhausted before any text block … raise QRP_MAX_TOKENS`) instead
+of reported as a generic missing-content error. The adapter default was deliberately
+left at 8192 — `max_tokens` is not part of the exam identity, so raising the default
+would silently change the exam condition for every HTTP seat ever administered.
+
+## Sitting 4 — the administration this bundle is for
+
+`run-sitting-4.sh`, with `QRP_MAX_TOKENS=32768` set **and** allowlisted. 32768 is
+chosen from the measurement above (7132 output tokens at a 3.2 KB bundle; round-12
+bundles are larger and thinking scales worse than linearly) and is **disclosed in the
+identity**: `max_tokens` joined the semantic surface, so
+`semantic_fingerprint` is now `a5df1ecb…`. The incumbent CLI transport had no
+equivalent knob (`claude -p` sets its own), which makes this the first brain identity
+carrying an explicit completion budget — worth stating when comparing.
+
+`prompt_config_hash` is still `5feb7076…`, byte-identical to the incumbent's pinned
+prompt v4, so the comparison to dogfood sitting 3 (勤勞 4/5, 公平 1/4+2/4, 收斂 trial-2
+declare_done) holds.

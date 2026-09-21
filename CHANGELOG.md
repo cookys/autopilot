@@ -7,6 +7,7 @@
 - **Dispatch lifecycle（4 列）**：lease-gc 逐筆錯誤隔離、既有 claim 修正的 regression guard、pin store fsync 與孤兒 temp 清理、未歸屬 branch 的唯讀清單。
 - **Hooks / live state（5 列）**：context window 無訊號分支、foreman model 文案更正、title chrome 過濾、live-state 目錄權限與 symlink 檢查、findmnt 多列與 proc-mounts 跳脫處理。
 - **Review loop（8 列）**：共用 exclude allowlist、minimum seats、side-effect 說明、seat-id charset guard、允許排除的 head 移動驗證、opt-out parser 修正與 stub-only 環境變數注入。
+- **Status checker compatibility / provenance**：status consumer 接受 ICC producer 已封存的 campaign receipt 與 Mission subject-v2 claim binding；對 dispatch-time manifest 沒有 commit 的既有記錄，僅在 Work Order 的 raw-byte-sealed durable state、唯一 implementation dispatch、唯一 sealed worktree tip 與 accepted commit 全部一致時回復嚴格 merge provenance binding。
 - **落地驗證**：28 個已審列，加上 quota 中斷後補審的 rlr/47、mrce/125、hlsm/r133（三者 fable `SHIP-AS-IS`）。保留 repair chain、排除所有 `PARALLEL-RUN LOCAL ONLY` config commit。兩個新 test suite 補 executable mode。BACKLOG 刪 32 列（31 個整合列，含 mrce/121 regression-only，另加已出貨 qst/64）。B4 完成歸檔，其餘 bundle 保持 active。
 - **後續範圍**：10 個未派列保留於各 bundle plan（rlr 131/136/137、hlsm 139/140、dlrm 93/109/122/123、mrce 15）；mrce/15 的 campaign-intake 範圍擴大已獲交接授權。
 

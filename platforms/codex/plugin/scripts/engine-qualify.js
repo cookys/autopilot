@@ -1790,6 +1790,10 @@ function runPanelCase(panelConfig, testCase) {
     behavioral_witness_hash: witnessResult ? witnessResult.resultHash : null,
     oracle_passed: oraclePassed,
     parse_error: parseError || witnessError,
+    // `parse_error` from here on means the MODEL's output was malformed, which is a
+    // genuine seat failure and keeps grading as one. A dead transport no longer
+    // reaches it: runTrial aborts on transport_ok === false before grading.
+    transport_ok: result.ok,
     mutation_target: testCase.mutationTarget,
     transport_receipt_hash: result.receiptHash,
   };
@@ -1830,6 +1834,7 @@ function runOwnerPanelCase(panelConfig, testCase) {
     behavioral_witness_hash: null,
     oracle_passed: oraclePassed,
     parse_error: parseError,
+    transport_ok: result.ok,
     mutation_target: testCase.mutationTarget,
     transport_receipt_hash: result.receiptHash,
   };
@@ -1837,7 +1842,23 @@ function runOwnerPanelCase(panelConfig, testCase) {
 
 function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
   const ordered = deterministicShuffle(cases, `${seed}:${trialId}`);
-  const results = ordered.map((testCase) => runPanelCase(panelConfig, testCase));
+  // Sequential, not .map(): a dead transport must stop the trial at the first case
+  // instead of driving the broker through all remaining ones. Without the abort a
+  // transport failure was scored as the panel's answer — `{verdict:'fail',
+  // findings:[]}` reads as a clean-case false positive against a zero-tolerance bar,
+  // i.e. a host-side failure recorded as a specific accusation against the engine
+  // (2026-09-21, the brain-seat sibling of this bug).
+  const results = [];
+  for (const testCase of ordered) {
+    const result = runPanelCase(panelConfig, testCase);
+    results.push(result);
+    if (!result.transport_ok) {
+      return {
+        transportAbort: `transport failure on ${trialId} case ${result.artifact_id}`,
+        cases_attempted: results.length,
+      };
+    }
+  }
   const knownBad = results.filter((result) => result.kind === 'known_bad');
   const clean = results.filter((result) => result.kind === 'clean');
   const critical = knownBad.filter((result) => result.expected_class === 'critical');
@@ -1903,7 +1924,18 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
 
 function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
   const ordered = deterministicShuffle(cases, `${seed}:owner:${trialId}`);
-  const results = ordered.map((testCase) => runOwnerPanelCase(panelConfig, testCase));
+  // See runTrial: sequential so a dead transport aborts at the first case.
+  const results = [];
+  for (const testCase of ordered) {
+    const result = runOwnerPanelCase(panelConfig, testCase);
+    results.push(result);
+    if (!result.transport_ok) {
+      return {
+        transportAbort: `transport failure on ${trialId} case ${result.artifact_id}`,
+        cases_attempted: results.length,
+      };
+    }
+  }
   const knownBad = results.filter((result) => result.kind === 'known_bad');
   const clean = results.filter((result) => result.kind === 'clean');
   const critical = knownBad.filter((result) => result.expected_class === 'critical');
@@ -4806,6 +4838,35 @@ function runQualification(options) {
           observedAt,
           masterSeed,
         );
+      if (outcome.transportAbort) {
+        // NO verdict, never PASS or FAIL: nothing is appended and no row admits the
+        // role. Same disposition as the brain and VA suites — a host-side failure is
+        // not evidence about the seat.
+        return deepFreeze({
+          schema_version: 1,
+          run_nonce: runNonce,
+          oracle: {
+            corpus_version: oracle.corpus_version,
+            corpus_manifest_hash: oracle.corpus_manifest_hash,
+            generator_hash: generatorHash,
+            sandbox_policy_hash: panelConfig.policyHash,
+            transport: panelConfig.transport,
+          },
+          qualified: false,
+          evidence: null,
+          row: { status: 'transport_fail', evidence: null },
+          verdict: {
+            engine: options.engine,
+            model: options.model,
+            runner: options.runner,
+            role,
+            qualified: false,
+            outcome: 'transport_fail',
+            cases_attempted: outcome.cases_attempted,
+            reason: `${outcome.transportAbort} — administration aborted, no verdict recorded`,
+          },
+        });
+      }
       const trial = outcome.trial;
       failures.push(...outcome.failures);
       if (trial.known_bad_total !== oracle.known_bad_count

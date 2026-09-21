@@ -1,0 +1,22 @@
+{
+  "semantic_surface": {
+    "kind": "reviewer-semantic-surface-v1",
+    "model": "qwen3.8-flash-next",
+    "transport": "anthropic-compatible-http",
+    "endpoint": "flash_next",
+    "max_tokens": 32768
+  },
+  "containment_surface": {
+    "kind": "reviewer-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  },
+  "prompt_source": "SYSTEM_PROMPT in scripts/qualification-review-provider.js",
+  "prompt_bytes": 5517,
+  "canonicalJson": "src/engine/owner-kernel/canonical.js",
+  "recipe_verified_against_glm53": {
+    "semantic": "b4d2079f… MATCH",
+    "containment": "8b46dca1… MATCH"
+  },
+  "note_max_tokens": "max_tokens is in the surface because this is a reasoning deployment: the completion budget is spent on thinking, so it changes what the seat can answer. The glm-5.2/5.3 reviewer surfaces have no such field."
+}

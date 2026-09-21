@@ -487,6 +487,25 @@ assert_exit_code "$FAIL_RC" "1" "all-true panel-cmd exits 1 (qualification faile
 assert_contains "$FAIL_OUT" '"status":"failed"' "emit-row status failed on false positive critical"
 assert_not_contains "$FAIL_OUT" '"false_pass_critical":0' "critical false-pass present"
 
+# 7b) A dead transport aborts with NO verdict — it is not the panel's answer.
+# Regression for 2026-09-21: runPanelCase used to substitute {verdict:'fail',
+# findings:[]} when the transport died, which scores every clean case as a false
+# positive against a zero-tolerance bar — a host-side outage recorded as a specific
+# accusation against the engine. Sibling of the brain-seat bug fixed in v2.36.82.
+DEAD_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "/panel/node /panel/does-not-exist.js" --emit-row 2>&1)"
+DEAD_RC=$?
+assert_exit_code "$DEAD_RC" "1" "a dead panel-cmd exits 1"
+assert_contains "$DEAD_OUT" '"outcome":"transport_fail"' \
+  "a dead transport is reported as transport_fail, not as a graded verdict"
+assert_contains "$DEAD_OUT" '"cases_attempted":1' \
+  "the trial stops at the FIRST dead case instead of driving the whole corpus"
+assert_contains "$DEAD_OUT" 'administration aborted, no verdict recorded' \
+  "the abort reason states that no verdict was recorded"
+assert_not_contains "$DEAD_OUT" '"clean_false_positives"' \
+  "a dead transport is never reported as a clean false positive"
+assert_not_contains "$DEAD_OUT" '"status":"failed"' \
+  "transport_fail emits no failed row for the seat"
+
 # 8) Fixed-order or cross-case-state guessing cannot pass.
 SENS_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PARTIAL_PASS_PANEL" 2>&1)"
 SENS_RC=$?

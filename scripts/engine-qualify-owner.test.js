@@ -315,6 +315,30 @@ function main() {
   }
   check(generatorMutationRejected, 'owner generator byte mutation fails closed');
 
+  // --- transport_fail: a dead panel is NOT the owner's answer ---------------------
+  // Regression for 2026-09-21. runOwnerPanelCase used to substitute
+  // {decision:'reject', violations:[]} when the transport died, which scores a clean
+  // case as a failure — a host-side outage recorded as a specific accusation against
+  // the engine. Sibling of the brain-seat bug fixed in v2.36.82.
+  const deadStoreDir = path.join(tempRoot, 'store-owner-transport-fail');
+  const deadOwner = runQualification({
+    ...baseOptions,
+    store: deadStoreDir,
+    panelCmd: '/panel/node /panel/does-not-exist.js',
+  });
+  check(deadOwner.qualified === false, 'owner transport failure never passes');
+  equal(deadOwner.verdict.outcome, 'transport_fail', 'owner outcome is transport_fail');
+  equal(deadOwner.evidence, null, 'owner transport failure produces no evidence object');
+  equal(deadOwner.row.status, 'transport_fail', 'owner row carries transport_fail');
+  check(/administration aborted, no verdict recorded/u.test(deadOwner.verdict.reason),
+    'owner abort reason states no verdict was recorded');
+  equal(deadOwner.verdict.cases_attempted, 1,
+    'the owner trial stops at the FIRST dead case, not after the whole corpus');
+  check(deadOwner.verdict.clean_false_positives === undefined,
+    'a dead transport is never reported as a clean false positive');
+  check(!fs.existsSync(path.join(deadStoreDir, 'qualification-evidence.jsonl')),
+    'owner transport_fail appends NO row admitting the role');
+
   process.stdout.write(`owner qualifier: ${assertions} assertions passed\n`);
 }
 

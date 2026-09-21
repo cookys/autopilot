@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.36.84 — reviewer／owner 考場：transport 死掉不再被記成「這個模型誤報了 clean-04」
+
+v2.36.82 修的是 brain。同一個病在 reviewer 與 owner 路徑上還在，而且更隱蔽。
+
+`runPanelCase`（`:1745`）與 `runOwnerPanelCase`（`:1806`）在 `!result.ok` 時，把 transport 失敗
+代換成一個 panel 的答案 —— reviewer 是 `{verdict:'fail',findings:[]}`、owner 是
+`{decision:'reject',violations:[]}`。對 **clean** case，`oracle_passed` 要求 `verdict==='pass'`
+且沒有 findings，所以 transport 一死就被計成 **clean false positive**，而 reviewer 的門檻是
+`max_clean_false_positives=0` —— **一次 transport 失敗就讓整場 FAIL**，並且留下「這個模型誤報了
+某個乾淨案例」這種看起來很具體的指控。known_bad 則變成 sensitivity miss。
+brain 那個產生的是四個空洞的 ✗；這個產生的是具名的冤案。
+
+- `runTrial` / `runOwnerTrial` 改為循序執行（原本是 `.map()`），第一個 `transport_ok === false`
+  的 case 就 abort，主迴圈在 grading 與 store append **之前** 回 `transport_fail`：
+  `evidence: null`、不 append 任何 row、`cases_attempted` 揭露它停在第幾個。
+  原本 `.map()` 會在 transport 已知死掉之後，繼續把剩下整個 corpus 打完（每 trial 42 次 broker
+  呼叫，約 15 分鐘換不到任何東西）。
+- `parse_error` 加註解並保持原行為：修完之後它只會來自「模型輸出格式壞掉」，那**是**真的座位
+  失敗，該繼續照 grade。不要再有人把它也改成 abort。
+- 測試：reviewer 套件 64 → 70 assertions、owner 套件 23 → 31。兩邊都釘住「不出現在
+  `clean_false_positives` 欄位」「不留 failed row」「停在第一個死掉的 case」。
+
+**揭露（不翻案）**：既有的 reviewer／owner FAIL row —— glm-5.2（scorecard event 139）與
+glm-5.3（event 140）—— 在舊行為下**無法區分** transport 失敗與真正的誤報。這不是說它們錯了：
+`clean-04` 跨兩個身份、兩個 trial 重複出現，同樣符合真實的模型弱點，而且沒有任何證據指向
+transport。兩列照記錄留著，這裡只揭露該限制。有機制可能造成，不等於就是它造成的。
+
 ## v2.36.83 — reasoning endpoint 的 completion budget 耗盡，不再報成「沒有內容」
 
 `callModel` 對「回應沒有 text block」只有一句籠統的 `endpoint response carried no text

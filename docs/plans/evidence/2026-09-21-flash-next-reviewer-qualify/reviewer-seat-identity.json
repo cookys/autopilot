@@ -1,0 +1,14 @@
+{
+  "identity": "qwen3.8-flash-next",
+  "model_alias": "qwen3.8-flash-next",
+  "model_version": "qwen3.8-flash-next",
+  "family": "alibaba",
+  "runner": "anthropic-compatible",
+  "runner_version": "0.0.0.dev17270-gfb1216c6c",
+  "harness_version": "engine-qualify-5c498e99",
+  "effort": "default",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "semantic_fingerprint": "fe4a102a684751cd962edbf76ce2e9aa9b3b2d64bf59d0bf2eba305019a98b11",
+  "containment_fingerprint": "8b46dca183416dba76098551ea81c0db5766df3fb97c93718671cb8d0686343c",
+  "identity_resolved": true
+}

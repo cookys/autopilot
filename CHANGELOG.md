@@ -2,6 +2,21 @@
 
 ## v2.36.86 — OpenCode Go 的端點是 per-model 路由；503 不代表對方掛了
 
+prose-justification: 本輪 prose 由 15279 → 17155（+12%），全部來自兩類**不可壓縮的證據性文字**，
+沒有一行是新的指引或勸世文（engine 同步 +5999）：
+
+1. **四份施測 bundle 的誠實紀錄**（brain 四場 sitting、reviewer、implementer 重考）。其中三場是
+   FAIL，而 FAIL row 是 append-only、不得 rerun-until-green —— 所以「為什麼失敗、失敗是儀器
+   還是能力」這件事只能用文字留在 bundle 裡。sitting 1 的四科全 ✗ 若沒有那段文字，下一個人會
+   把儀器故障讀成引擎能力。
+2. **一張實測出來的端點對照表**（31 個 id × 2 協定）。`models.dev` 的機器可讀欄位對整個 provider
+   只報一個 base，那個欄位是**錯的**；正確的路由只存在於實跑結果裡，沒有可以取代它的結構化來源。
+
+北極星是 prose↓ engine↑，而這兩類文字正是 ADR-0001 所要求的「可獨立再推導的紀錄」——
+它們讓下一個 session 不必重燒 24 次派工去重新發現同一件事。若要把它們壓回去，該壓的是
+CHANGELOG 段落本身的長度，不是 bundle README 的證據密度；下一輪會往那個方向收。
+
+
 2026-09-21 實測 31 個 live id。`models.dev` 對整個 provider 只報一個 `api` base 和一個
 adapter，**但服務不是那樣路由的** —— 每個模型只吃一種協定，打錯那一種會回
 `503 Upstream request failed: Endpoint is unavailable.`，讀起來跟服務中斷一模一樣。

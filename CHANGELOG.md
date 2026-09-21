@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.36.87 — adapter 學會第二種 HTTP 協定：OpenAI Responses
+
+`qualification-review-provider.js` 過去只會說 Anthropic Messages。對 OpenCode Go 那是
+**只覆蓋 31 個 id 中的一半**：5 個（兩版 muse-spark contributor、grok-4.6／4.7、
+gpt-5.6-luna）只在 OpenAI Responses 上，而打錯協定回的 503 讀起來像對方掛了。
+`muse-spark-1.3-contributor` 是已合格的 implementer（24/24 ×3 tier），它的
+reviewer／brain／VA 三席因此**一次都考不成**。
+
+- `callResponses`：`POST {base}/v1/responses`、`Authorization: Bearer`、body
+  `{model, input, max_output_tokens, instructions}`，回應從
+  `output[].content[].output_text` 取文字。**不是** Messages 的變體 —— 路徑、auth、
+  request、reply、截斷訊號五樣全都不同。
+- `QRP_HTTP_PROTOCOL=messages|responses`（預設 messages，既有座位零影響）。
+  **要按 endpoint 選，不是按 provider 名字選** —— 同一個 provider 兩種協定都有。
+  配 `QRP_TRANSPORT=cli` 在 argv 就拒（那組合沒有意義）。
+- `QRP_OPENCODE_SESSION`：兩種 http 協定都會送 `x-opencode-session`。OpenCode Go
+  沒有它就 `400 MissingSessionID`，在模型被問到之前就退。
+- **截斷診斷是分開寫的**：Responses 報 `status:"incomplete"`，Messages 報
+  `stop_reason:"max_tokens"`。照抄 Messages 的檢查會退回成 v2.36.83 花一次 bisect
+  才消滅的那句籠統「沒有內容」。
+- `scripts/qualification-review-provider.test.js` +14 assertions（210 → 224）：
+  stub endpoint 釘住送出的 path／auth header／session header／body 形狀、
+  Messages 欄位不得出現在 Responses request、truncation 措辭與 `stop_reason` 不得外洩、
+  未知協定與 cli 組合的拒絕。
+- Live 驗證：`muse-spark-1.3-contributor` 經這條新路回出合法的 brain 契約物件。
+
 ## v2.36.86 — OpenCode Go 的端點是 per-model 路由；503 不代表對方掛了
 
 prose-justification: 本輪 prose 由 15279 → 17155（+12%），全部來自兩類**不可壓縮的證據性文字**，

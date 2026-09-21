@@ -1337,5 +1337,125 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     'even the generic message now carries the observed stop_reason');
 }
 
+// --- the OpenAI Responses protocol is a SECOND http shape, not a variant ----------
+// OpenCode Go serves 5 of its 31 ids only here (both muse-spark contributors,
+// grok-4.6/4.7, gpt-5.6-luna); hitting /v1/messages for them returns a 503 that reads
+// like an outage. Its truncation signal is status:"incomplete", never
+// stop_reason:"max_tokens", so the Messages diagnosis does not transfer.
+{
+  const { spawn, execFileSync } = require('child_process');
+  const serverFile = path.join(tempRoot, 'stub-responses.js');
+  const portFile = path.join(tempRoot, 'stub-resp-port');
+  const reqFile = path.join(tempRoot, 'stub-resp-request.json');
+  fs.writeFileSync(serverFile, `
+const http = require('http');
+const fs = require('fs');
+const reply = JSON.parse(process.env.STUB_REPLY);
+const server = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    fs.writeFileSync(process.env.STUB_REQ_FILE, JSON.stringify({
+      url: req.url, headers: req.headers, body: JSON.parse(body || '{}'),
+    }));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(reply));
+  });
+});
+server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE, String(server.address().port)));
+`);
+  const startRespStub = (reply) => {
+    if (fs.existsSync(portFile)) fs.rmSync(portFile);
+    const proc = spawn(process.execPath, [serverFile], {
+      env: {
+        ...process.env,
+        STUB_REPLY: JSON.stringify(reply),
+        STUB_PORT_FILE: portFile,
+        STUB_REQ_FILE: reqFile,
+      },
+      stdio: 'ignore',
+    });
+    for (let i = 0; i < 100 && !fs.existsSync(portFile); i += 1) {
+      try { execFileSync('sleep', ['0.05']); } catch { /* keep polling */ }
+    }
+    return { proc, port: fs.readFileSync(portFile, 'utf8').trim() };
+  };
+
+  const good = startRespStub({
+    model: 'fake-model-exact',
+    status: 'completed',
+    usage: { output_tokens: 182, output_tokens_details: { reasoning_tokens: 167 } },
+    output: [
+      { type: 'reasoning', content: [] },
+      { type: 'message', content: [{ type: 'output_text', text: REVIEWER_MODEL_OUTPUT }] },
+    ],
+  });
+  const { child: okChild } = runProvider({
+    request: reviewerRequest(),
+    env: {
+      QRP_HTTP_PROTOCOL: 'responses',
+      QRP_BASE_URL: `http://127.0.0.1:${good.port}`,
+      QRP_AUTH_TOKEN: 'stub-token',
+      QRP_OPENCODE_SESSION: 'ses_stub',
+    },
+  });
+  good.proc.kill();
+  equal(okChild.status, 0, 'a completed Responses reply succeeds');
+  const sent = JSON.parse(fs.readFileSync(reqFile, 'utf8'));
+  equal(sent.url, '/v1/responses', 'the Responses protocol posts to /v1/responses');
+  check(sent.headers.authorization === 'Bearer stub-token',
+    'Responses authenticates with Bearer, not x-api-key');
+  equal(sent.headers['x-opencode-session'], 'ses_stub',
+    'QRP_OPENCODE_SESSION is sent as x-opencode-session');
+  check(typeof sent.body.input === 'string' && sent.body.max_output_tokens !== undefined,
+    'the Responses body uses input + max_output_tokens, not messages + max_tokens');
+  check(sent.body.messages === undefined && sent.body.max_tokens === undefined,
+    'the Messages-shaped fields are absent from a Responses request');
+
+  const trunc = startRespStub({
+    model: 'fake-model-exact',
+    status: 'incomplete',
+    usage: { output_tokens: 64, output_tokens_details: { reasoning_tokens: 61 } },
+    output: [{ type: 'reasoning', content: [] }],
+  });
+  const { child: truncChild } = runProvider({
+    request: reviewerRequest(),
+    env: {
+      QRP_HTTP_PROTOCOL: 'responses',
+      QRP_BASE_URL: `http://127.0.0.1:${trunc.port}`,
+      QRP_AUTH_TOKEN: 'stub-token',
+      QRP_MAX_TOKENS: '64',
+    },
+  });
+  trunc.proc.kill();
+  equal(truncChild.status, 1, 'a truncated Responses reply fails closed');
+  check(/completion budget exhausted before any output_text part/.test(truncChild.stderr),
+    'Responses truncation is named with its own wording');
+  check(/status=incomplete/.test(truncChild.stderr)
+    && /reasoning_tokens=61/.test(truncChild.stderr),
+    'the Responses diagnosis carries status and the reasoning-token count');
+  check(!/stop_reason/.test(truncChild.stderr),
+    'the Messages-only signal never appears in a Responses diagnosis');
+
+  const { child: badProto } = runProvider({
+    request: reviewerRequest(),
+    env: {
+      QRP_HTTP_PROTOCOL: 'grpc',
+      QRP_BASE_URL: 'http://127.0.0.1:1',
+      QRP_AUTH_TOKEN: 'stub-token',
+    },
+  });
+  equal(badProto.status, 1, 'an unknown QRP_HTTP_PROTOCOL exits 1');
+  check(/QRP_HTTP_PROTOCOL must be messages or responses/.test(badProto.stderr),
+    'the protocol knob names its accepted values');
+  const { child: protoOnCli } = runProvider({
+    request: reviewerRequest(),
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_PROTOCOL: 'responses' },
+  });
+  equal(protoOnCli.status, 1, 'QRP_HTTP_PROTOCOL on the cli transport exits 1');
+  check(/QRP_HTTP_PROTOCOL applies to QRP_TRANSPORT=http only/.test(protoOnCli.stderr),
+    'the protocol knob refuses the cli transport instead of being silently ignored');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
 process.stdout.write(`${assertions} assertions passed\n`);

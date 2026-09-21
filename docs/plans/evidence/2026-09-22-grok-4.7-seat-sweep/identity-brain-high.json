@@ -1,0 +1,14 @@
+{
+  "identity": "grok-4.7",
+  "model_alias": "grok-4.7",
+  "model_version": "grok-4.7",
+  "family": "xai",
+  "runner": "grok",
+  "runner_version": "1.0.40",
+  "harness_version": "engine-qualify-5c498e99",
+  "effort": "high",
+  "identity_resolved": true,
+  "prompt_config_hash": "5feb7076fc7ee775e8adfde08e56cc54bc5d715ea0d36c665a127ac7a7e41a84",
+  "semantic_fingerprint": "221eaa151f84ec6415c468754e998399b0380168dd9b10c2632e23127ba32734",
+  "containment_fingerprint": "4e71b48f5ea67423571b7fb348ae40340f70a558e5f7bcb3ad2d604dd5ade7ee"
+}

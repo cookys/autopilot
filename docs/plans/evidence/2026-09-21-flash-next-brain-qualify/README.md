@@ -40,30 +40,59 @@ until green (`references/evidence-discipline.md`).
    `content: [{type:"thinking",…},{type:"text", text:"\n\n{\"ok\":true}"}]`.
 3. **Tokens were really spent** (19,330) — the rounds reached the model.
 
-So the round content is lost somewhere between the request and the recorded `output`.
-**Three live hypotheses, none yet confirmed** — do not read the first one as the answer:
+**Root cause — CONFIRMED (2026-09-21, after the three hypotheses below were tested).**
+All three were wrong. It was not the re-serialization, not the broker-request guard,
+and the swallowed stderr was a symptom rather than the cause. It was **two recipe
+errors in `run-sitting-1.sh`**, each independently sufficient to fail:
 
-- **(a) after `callModel`.** Its text-block filter
-  (`scripts/qualification-review-provider.js:588-592`) is correct and throws on empty
-  text, so if it returned, the loss is downstream — e.g. the brain single-line
-  re-serialization (`a0c2a22f`, added for `claude -p`'s pretty-printed JSON) meeting a
-  text block that opens with `\n\n` beside a separate `thinking` block.
-- **(b) before `callModel` — the adapter never got that far.** The broker-request guard
-  at `:1165-1169` requires `request.payload.format === 'unified_diff'`; a `fail()` there
-  (or any other adapter throw) would be recorded by the broker as a round with empty
-  output.
-- **(c) the broker swallows adapter stderr.** `qualify-err.sitting-1.log` is **0 bytes**
-  — no diagnostic surfaced at all, which is itself evidence that adapter-side failures
-  are not reaching the administration's stderr.
+1. **`--remote-provider-cmd` was a relative path.** The broker runs the provider
+   command with `cwd` set to its own temp `providerRoot`
+   (`qualification-case-broker.js:447-451`), so
+   `node scripts/qualification-review-provider.js` could not resolve there.
+2. **`QRP_PROMPT_MODE` was missing from the `--provider-env` allowlist.** The broker
+   scrubs the child environment down to that list (`:438-440`), so the adapter fell
+   back to its default `reviewer` mode and refused the owner-role brain case at
+   `:1165-1169`.
 
-`spend_tokens: 19,330` argues the model was reached at least sometimes, but that figure
-has not been cross-checked against the endpoint's own accounting, so it does not settle
-(a) vs (b).
+Verified by 2×2 isolation against a recorded round bundle:
 
-**Discriminator for the next session (2 minutes, no exam spend)**: invoke the adapter
-standalone the way the broker does — one round's `input` from the raw log, wrapped as a
-broker request, `QRP_PROMPT_MODE=brain QRP_TRANSPORT=http` plus the four env vars — and
-see whether it returns text, throws, or returns nothing.
+| provider-cmd | `QRP_PROMPT_MODE` in allowlist | broker status |
+|---|---|---|
+| relative | no | `failed` / `provider_process_failed` |
+| relative | yes | `failed` / `provider_process_failed` |
+| absolute | no | `failed` / `provider_process_failed` |
+| **absolute** | **yes** | **`ok`** — valid single-line contract object |
+
+`QRP_TRANSPORT` did not need listing; its default is already `http`. The adapter
+itself was never broken: invoked standalone with the same round bundle it returned
+`{"round_id":1,"verdict":"affirm",…}` correctly.
+
+**The model was never reached.** `spend_tokens: 19,330` is not endpoint accounting —
+`engine-qualify.js` computes it as `tokensOf(input) + tokensOf(stdout)` locally, and
+with `stdout` empty on every round the figure is the *input* side alone. The earlier
+claim in this README that the spend proved the model was reached was wrong.
+
+**Both the recipes in circulation carry error 1** — the 2026-08-17 dogfood README and
+the aimax395 dispatch note both write `--remote-provider-cmd` relative. The dogfood
+CLI administration must have resolved it some other way (different cwd or an absolute
+expansion at launch); anyone reusing that line verbatim over the broker will hit this.
+
+**What the product got wrong, and what was fixed (v2.36.82, commit `27483f8e`)**: none
+of the above should have produced a graded FAIL. The brain round loop was missing the
+transport abort that VA has always had, so a dead transport was scored as the
+candidate's answer. Brain now aborts on the first failed round with
+`outcome: transport_fail` and appends no row, and `rawExchanges` records
+`transport_ok` — the field whose absence made 24 transport failures look identical to
+24 empty model answers.
+
+### The three hypotheses that were tested and rejected
+
+- (a) after `callModel` — rejected: the adapter returns correct text standalone.
+- (b) the broker-request guard at `:1165-1169` — *partially* right about the mechanism
+  (the adapter did refuse) but wrong about why: the request was a well-formed
+  owner-role case; it was the adapter's own mode that had degraded to `reviewer`.
+- (c) the broker swallows adapter stderr — true, and it is why this took a bisect
+  instead of one log line, but it is not what broke the run.
 
 ## Deployment examined
 
@@ -114,11 +143,9 @@ scope-identical and a future comparison must say so.
 
 `run-sitting-1.sh` (this bundle) — the exact command, env and flags.
 
-## Next session
+## Next
 
-1. Confirm where the round output is lost (start: the brain re-serialization path
-   between `callModel`'s return and the recorded `output`).
-2. Fix it — mechanism PATCH, its own commit, with a test that pins a `thinking`+`text`
-   response shape.
-3. **Fresh sitting** (new seed, new identity if the prompt hash moves). Not a rerun of
-   this one.
+Sitting 2 via the corrected `run-sitting-1.sh` — a **fresh administration** (new run
+nonce, new seed), not a rerun of this one. Identity is unchanged (`prompt_config_hash`
+`5feb7076…` still matches the incumbent's pinned prompt v4), so it remains directly
+comparable to dogfood sitting 3.

@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
-# flash-next brain-seat administration, sitting 1 (2026-09-21, cuda).
+# flash-next brain-seat administration (2026-09-21, cuda).
+#
+# TWO RECIPE ERRORS were corrected here after sitting 1 died on transport. Both are
+# independently sufficient to fail, and both are present in the recipes that were
+# circulating (the 2026-08-17 dogfood README and the aimax395 dispatch note):
+#   1. --remote-provider-cmd MUST be an ABSOLUTE path. The broker runs the provider
+#      command with cwd set to its own temp providerRoot, so a relative
+#      'node scripts/qualification-review-provider.js' cannot resolve.
+#   2. QRP_PROMPT_MODE MUST be in the --provider-env allowlist. The broker scrubs the
+#      environment down to that list, so without it the adapter falls back to its
+#      default 'reviewer' mode and refuses the owner-role brain case.
+# QRP_TRANSPORT does not need to be listed (its default is already http).
 # HTTP transport variant of the 2026-08-17 dogfood recipe (that one was CLI transport).
 set -uo pipefail
 cd "$(dirname "$0")/../../../.."
@@ -27,12 +38,13 @@ exec bash scripts/engine-qualify.sh brain \
   --prompt-config-hash 5feb7076fc7ee775e8adfde08e56cc54bc5d715ea0d36c665a127ac7a7e41a84 \
   --semantic-fingerprint ce16a20ec9d79132886e6c8283f0e880f5782a2530c48d92c168f1e5cd3098f4 \
   --containment-fingerprint cd222ee9ac6d9a9d97dd0e1fd98d4bcf052cd228cab6974248d9d5ffdf8ffa98 \
-  --remote-provider-cmd 'node scripts/qualification-review-provider.js' \
+  --remote-provider-cmd "node $PWD/scripts/qualification-review-provider.js" \
   --remote-provider sglang-flash-next \
   --provider-env QRP_BASE_URL \
   --provider-env QRP_AUTH_TOKEN \
   --provider-env QRP_MODEL \
   --provider-env QRP_PROVIDER \
+  --provider-env QRP_PROMPT_MODE \
   --task-class brain-seat \
   --domain cross-cutting \
   --language en \

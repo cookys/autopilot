@@ -3221,6 +3221,8 @@ function validateDispatchMergeProvenance({
       if (prefixes.length === 0) problems.push({ code: 'PROVENANCE_PRODUCT_SCOPE_EMPTY' });
       const isProductPath = (p) => prefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
       const manifestsByCommit = new Map();
+      // Object identity is local authority; manifest fields cannot opt into recovery.
+      const recoveredManifests = new Set();
       for (const record of durable) {
         const commit = record.accepted_commit || record.commit_sha || record.commit;
         if (isCanonicalGitObjectId(commit)
@@ -3245,7 +3247,10 @@ function validateDispatchMergeProvenance({
         const candidates = durable.filter((record) => (
           record.kind === 'implementation'
           && record.dispatcher_called === true
-          && record.dispatch_depth !== 0
+          && Number.isInteger(record.dispatch_depth) && record.dispatch_depth > 0
+          && !['accepted_commit', 'commit_sha', 'commit', 'changed_paths'].some((key) => (
+            Object.prototype.hasOwnProperty.call(record, key)
+          ))
           && record.root_run_id === rootRunId
           && record.work_order_id === workOrderId
           && isStr(record.resource_id)
@@ -3268,13 +3273,15 @@ function validateDispatchMergeProvenance({
               && resource.work_order_id === workOrderId
               && resource.tip === workOrder.accepted_commit
             )).length === 1) {
-          manifestsByCommit.set(workOrder.accepted_commit, {
+          const recoveredManifest = {
             ...candidates[0],
             accepted_commit: workOrder.accepted_commit,
             // The accepted commit is the sealed scope for this legacy record;
             // its product paths are still measured mechanically below.
             changed_paths: null,
-          });
+          };
+          recoveredManifests.add(recoveredManifest);
+          manifestsByCommit.set(workOrder.accepted_commit, recoveredManifest);
         }
       }
       for (const commit of commits) {
@@ -3289,10 +3296,15 @@ function validateDispatchMergeProvenance({
           problems.push({ code: 'PROVENANCE_DEPTH0_PRODUCT_EDIT', commit: commit.commit_sha, paths });
           continue;
         }
-        // A recovered pre-dispatch record is sealed to the complete accepted
-        // commit above.  Modern records retain their explicit path scope.
-        const declared = Array.isArray(manifest.changed_paths)
-          ? new Set(manifest.changed_paths) : new Set(paths);
+        if (!Number.isInteger(manifest.dispatch_depth) || manifest.dispatch_depth < 1) {
+          problems.push({ code: 'PROVENANCE_DISPATCH_DEPTH_INVALID', commit: commit.commit_sha, paths });
+          continue;
+        }
+        // Only the internally recovered record is sealed to the complete commit.
+        // Missing or malformed modern scopes authorize no product paths.
+        const declared = recoveredManifests.has(manifest)
+          ? new Set(paths)
+          : new Set(Array.isArray(manifest.changed_paths) ? manifest.changed_paths : []);
         const uncovered = paths.filter((p) => !declared.has(p));
         if (uncovered.length > 0) problems.push({ code: 'PROVENANCE_PATH_UNBOUND', commit: commit.commit_sha, paths: uncovered });
       }

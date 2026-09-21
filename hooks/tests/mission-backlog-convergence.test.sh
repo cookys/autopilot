@@ -40,13 +40,16 @@ const record = {
 };
 const common = wo.resolveGitCommonDir(repo);
 const manifestPath = path.join(common, 'e1-manifest.json');
-const persist = (nextRecord) => {
+const durablePath = path.join(common, 'e1-durable.json');
+const persist = (nextRecord, { recovered = false, resourceTip = commit } = {}) => {
   const controller = ctrl.emptyControllerState({
     frozen_denominator: ctrl.buildFrozenDenominator({ projectId: rootId, graphDigest: 'b'.repeat(64), deliverableIds: ['node'], nodeId: 'node' }),
     dispatch_records: [nextRecord],
+    resource_inventory: recovered ? [{ resource_id: nextRecord.resource_id, root_run_id: rootId, work_order_id: workOrderId, tip: resourceTip }] : [],
   });
   fs.writeFileSync(manifestPath, JSON.stringify({ root_run_id: rootId, work_order_id: workOrderId, controller_digest: controller.controller_digest, entries: [nextRecord] }));
-  const workOrder = wo.buildWorkOrder({ root_run_id: rootId, work_order_id: workOrderId, graph_node: 'node', role: 'controller', next_action: 'merge', branch: 'feat/e1', base_sha: baseSha, controller, paths: { manifest: manifestPath } }, { bindArtifacts: true });
+  if (recovered) fs.writeFileSync(durablePath, JSON.stringify({ artifact_type: 'controller_durable_state', root_run_id: rootId, work_order_id: workOrderId, controller_digest: controller.controller_digest, accepted_commit: commit }));
+  const workOrder = wo.buildWorkOrder({ accepted_commit: recovered ? commit : null, root_run_id: rootId, work_order_id: workOrderId, graph_node: 'node', role: 'controller', next_action: 'merge', branch: 'feat/e1', base_sha: baseSha, controller, paths: { manifest: manifestPath, durable: recovered ? durablePath : null } }, { bindArtifacts: true });
   const workOrderFile = wo.workOrderPath(common, rootId, 'node', 1);
   fs.mkdirSync(path.dirname(workOrderFile), { recursive: true });
   wo.writeAtomicJson(workOrderFile, workOrder);
@@ -59,7 +62,43 @@ persist({ ...record, dispatch_depth: 0 });
 assert.ok(ctrl.validateDispatchMergeProvenance(request).problems.some((item) => item.code === 'PROVENANCE_DEPTH0_PRODUCT_EDIT'));
 persist({ ...record, changed_paths: [] });
 assert.ok(ctrl.validateDispatchMergeProvenance(request).problems.some((item) => item.code === 'PROVENANCE_PATH_UNBOUND'));
-console.log('PASS [backlog-convergence-e1] 5 assertions');
+// Malformed modern scope/depth cannot inherit the complete accepted commit.
+for (const changedPaths of [undefined, null, 'src/product.js', {}]) {
+  persist({ ...record, changed_paths: changedPaths, recovered: true });
+  assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+    `modern changed_paths ${JSON.stringify(changedPaths)} must fail closed`);
+}
+for (const depth of [undefined, null, -1, 0.5, '2']) {
+  persist({ ...record, dispatch_depth: depth });
+  assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+    `modern dispatch_depth ${JSON.stringify(depth)} must fail closed`);
+}
+const recoveredRecord = {
+  schema_version: 1, kind: 'implementation', dispatcher_called: true,
+  root_run_id: rootId, work_order_id: workOrderId,
+  dispatch_depth: 2, resource_id: 'sealed-hand',
+};
+persist(recoveredRecord, { recovered: true });
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, true,
+  'sealed pre-dispatch record binds the accepted commit');
+for (const depth of [undefined, null, 0, -1, 0.5, '2']) {
+  persist({ ...recoveredRecord, dispatch_depth: depth }, { recovered: true });
+  assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+    `recovered dispatch_depth ${JSON.stringify(depth)} must fail closed`);
+}
+persist(recoveredRecord, { recovered: true, resourceTip: baseSha });
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+  'foreign resource tip cannot bind the accepted commit');
+persist(recoveredRecord, { recovered: true });
+fs.appendFileSync(durablePath, ' ');
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+  'tampered durable bytes cannot recover provenance');
+for (const fields of [{ accepted_commit: baseSha }, { changed_paths: null }]) {
+  persist({ ...recoveredRecord, ...fields }, { recovered: true });
+  assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+    'explicit modern commit/scope fields cannot masquerade as legacy');
+}
+console.log('PASS [backlog-convergence-e1] 25 assertions');
 
 const qp = require(path.join(root, 'src/readiness/qualification-provider'));
 const now = '2026-08-02T00:00:00.000Z';
@@ -76,6 +115,7 @@ const wrongTuple = { role: 'reviewer', runner: 'codex', model: 'gpt-5.6-sol', ef
 assert.strictEqual(qp.issueExactRoleQualification(provider, { tuple: wrongTuple, now }), null);
 console.log('PASS [backlog-convergence-qualification] 10 assertions');
 NODE
+assert_exit_code "$?" "0" "provenance and qualification assertions"
 
 # Build the exact historical B/C authority inside an isolated Git common-dir.
 # The production selector remains repo-bound: no caller-selected authority path

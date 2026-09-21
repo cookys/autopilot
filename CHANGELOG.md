@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.36.85 — roster 指名的 endpoint 現在真的會被揭露進 row
+
+`qualification-sweep.sh` 的 roster seat 有 `endpoint` 欄位，但那個欄位只被拿去
+`resolve-endpoint.sh` 解析出 `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` 設進環境，
+**然後就丟了** —— administration 指令從來沒有帶 `--engine-qualify --endpoint`。
+
+結果：roster 可以明確指名一個具名 endpoint，跑出來的 row 卻永遠不會說它考的是哪一個，
+跟一次裸環境變數的 administration 完全分不出來。`engine-qualify.js` 的 `--endpoint`
+（會在 row 揭露 `{name, base_url, transport_security}`）等於對 sweep 這條路是死的。
+
+2026-09-21 發現：當時正要為 flash-next 重考 implementer，目的**就是**拿到那個 endpoint 揭露
+（9/03 那格走裸 `ANTHROPIC_BASE_URL`，row 沒有 `endpoint{}`）。`--plan` 一跑就發現照原樣重考
+會是一次完全白跑的施測。
+
+- seat 的 endpoint 既不是 `-` 也不是 `anthropic-native`、且 runner 是 `cc-shim` 時，
+  sweep 現在轉發 `--endpoint <name>`。`--endpoint` 在 argv 層就限定 cc-shim
+  （其他 rail 不會撥 Anthropic 相容端點，轉發過去只會變成假揭露），所以條件與它一致。
+- `--plan` 也照實印出那一行 —— dry run 說的話必須跟 `--execute` 真正送出去的一致。
+- `hooks/tests/qualification-sweep.test.sh` +4 assertions（48 → 52）：fixture roster 多一個
+  具名 endpoint 的 cc-shim seat，釘住「它會轉發」以及「另外三個 seat 不會」，
+  並且整份 plan 裡 `--endpoint` 只出現一次。
+
+這是同一家族的第四個實例（建好了、有欄位、沒接上）。前三個是 v2.36.82 的 brain transport
+abort、v2.36.83 的 reasoning budget 診斷、v2.36.84 的 reviewer／owner transport abort。
+
 ## v2.36.84 — reviewer／owner 考場：transport 死掉不再被記成「這個模型誤報了 clean-04」
 
 v2.36.82 修的是 brain。同一個病在 reviewer 與 owner 路徑上還在，而且更隱蔽。

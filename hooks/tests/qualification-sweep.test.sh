@@ -32,7 +32,10 @@ cat > "$ROSTER" <<'EOF'
       "endpoint": "-", "effort": "medium" },
     { "slug": "seat-gamma", "runner": "opencode", "model": "opencode-go/x-1.0",
       "family": "meta", "version_source": "operator-asserted",
-      "endpoint": "-", "effort": "high" }
+      "endpoint": "-", "effort": "high" },
+    { "slug": "seat-delta", "runner": "cc-shim", "model": "local-model-1",
+      "family": "alibaba", "version_source": "operator-asserted",
+      "endpoint": "named_endpoint", "effort": "high" }
   ]
 }
 EOF
@@ -220,5 +223,26 @@ assert_not_contains "$(cat "$SCRIPT")" 'verbin="$runner"' \
 # that no EXECUTABLE line folds stderr into a version read any more.
 assert_not_contains "$(grep -v '^[[:space:]]*#' "$SCRIPT")" '--version 2>&1' \
   "no stderr-folding --version read remains in the sweep's executable lines"
+
+# =====================================================================
+# A roster seat that NAMES an endpoint must have that binding DISCLOSED in the row.
+# Before 2026-09-21 the endpoint field was resolved into ANTHROPIC_BASE_URL/AUTH_TOKEN
+# and then dropped: --endpoint was never forwarded, so a sweep row could not say which
+# endpoint it examined and looked identical to a raw-env administration. The roster
+# could ask for the disclosure and silently not get it.
+ENDPOINT_PLAN="$("$SCRIPT" --roster "$ROSTER" --plan 2>&1)"
+assert_contains "$ENDPOINT_PLAN" "--endpoint named_endpoint" \
+  "a cc-shim seat naming an endpoint forwards --endpoint to engine-qualify"
+# The three seats that do NOT name a resolvable endpoint must not grow the flag:
+# "-" means the runner uses its own credentials, "anthropic-native" is the operator's
+# own OAuth token, and a non-cc-shim rail does not dial an Anthropic endpoint at all
+# (engine-qualify refuses --endpoint for those at argv).
+assert_not_contains "$ENDPOINT_PLAN" "--endpoint -" \
+  "a seat with endpoint '-' does not forward the flag"
+assert_not_contains "$ENDPOINT_PLAN" "--endpoint anthropic-native" \
+  "an anthropic-native seat does not forward the flag"
+ENDPOINT_FLAG_COUNT="$(printf '%s\n' "$ENDPOINT_PLAN" | grep -c -- "--endpoint " || true)"
+assert_eq "$ENDPOINT_FLAG_COUNT" "1" \
+  "exactly one of the four fixture seats forwards --endpoint"
 
 finalize_test

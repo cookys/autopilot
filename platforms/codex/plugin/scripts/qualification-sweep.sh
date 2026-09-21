@@ -300,6 +300,9 @@ plan_sweep() {
     echo "    --containment-fingerprint $CONTAIN_HASH \\"
     echo "    --task-class bounded_implementation --domain repository --language en --tool git_commit \\"
     echo "    --version-source $vsrc --expires-days $EXPIRES_DAYS \\"
+    if [ "$endpoint" != "-" ] && [ "$endpoint" != "anthropic-native" ] && [ "$runner" = "cc-shim" ]; then
+      echo "    --endpoint $endpoint \\"
+    fi
     echo "    --raw-dir $bundle/raw --emit-row \\"
     echo "    > $bundle/qualify-out.json 2> $bundle/qualify-err.log"
     echo
@@ -462,6 +465,17 @@ run_seat() { # slug runner model family vsrc endpoint effort
   # Administration. The version token was resolved and validated at the TOP of this seat
   # (resolve_runner_version); an unusable one already aborted uncharged. Nothing is
   # derived from the runner name here.
+  # A roster seat that NAMES an endpoint must have that binding DISCLOSED in the row,
+  # not merely consumed as env. Before this, the endpoint field was resolved into
+  # ANTHROPIC_BASE_URL/AUTH_TOKEN above and then dropped: every sweep-produced row
+  # looked exactly like a raw-env administration, so a roster could ask for a named
+  # endpoint and silently get a row that never said which one it examined
+  # (found 2026-09-21 while re-administering flash-next for precisely that disclosure).
+  # --endpoint is cc-shim-only at argv, so only that rail forwards it.
+  local endpoint_args=()
+  if [ "$endpoint" != "-" ] && [ "$endpoint" != "anthropic-native" ] && [ "$runner" = "cc-shim" ]; then
+    endpoint_args=(--endpoint "$endpoint")
+  fi
   node "$REPO_ROOT/scripts/engine-qualify.js" "$ROLE" \
     --engine "$model" --model "$model" --model-version "$model_version" \
     --runner "$runner" --runner-version "$RESOLVED_VERSION_TOKEN" --family "$family" \
@@ -470,6 +484,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
     --containment-fingerprint "$CONTAIN_HASH" \
     --task-class bounded_implementation --domain repository --language en --tool git_commit \
     --version-source "$vsrc" --expires-days "$EXPIRES_DAYS" \
+    "${endpoint_args[@]}" \
     --raw-dir "$bundle/raw" --emit-row \
     > "$bundle/qualify-out.json" 2> "$bundle/qualify-err.log"
   local qexit=$?

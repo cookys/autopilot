@@ -431,6 +431,37 @@ function main() {
   check(!fs.existsSync(verboseStore.evidenceFile),
     'insufficient_budget appends NO row admitting the role');
 
+  // --- transport_fail: a dead transport is NOT a seat answer -----------------------
+  // Regression for 2026-09-21 (flash-next sitting 1, store event 51): the broker
+  // returned empty output on all 24 rounds, every round parsed as malformed, and the
+  // administration appended a four-subject FAIL row about an engine that was never
+  // reached. The first round that fails transport must now abort with no verdict.
+  const rawDir = path.join(tempRoot, 'raw-transport-fail');
+  const dead = runQualification({
+    ...baseOptions,
+    store: path.join(tempRoot, 'store-transport-fail'),
+    rawDir,
+    panelCmd: '/panel/node /panel/does-not-exist.js',
+  });
+  check(dead.qualified === false, 'transport failure never passes');
+  equal(dead.verdict.outcome, 'transport_fail', 'outcome is transport_fail');
+  equal(dead.evidence, null, 'no evidence object is produced');
+  equal(dead.row.status, 'transport_fail', 'row carries the transport_fail status');
+  check(/administration aborted, no verdict recorded/u.test(dead.verdict.reason),
+    'reason states the administration was aborted');
+  check(dead.verdict.subjects === undefined,
+    'no subject grades are reported for rounds that never reached the model');
+  const deadStore = resolveStoreConfig({ store: path.join(tempRoot, 'store-transport-fail') });
+  check(!fs.existsSync(deadStore.evidenceFile),
+    'transport_fail appends NO row admitting the role');
+  const deadRaw = fs.readFileSync(path.join(rawDir, 'brain-trial-1.exchanges.jsonl'), 'utf8')
+    .split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  equal(deadRaw.length, 1, 'the administration stops at the FIRST dead round, not after 24');
+  equal(deadRaw[0].transport_ok, false,
+    'the raw exchange records transport_ok:false — the diagnostic that was missing');
+  check(!fs.existsSync(path.join(rawDir, 'brain-trial-2.exchanges.jsonl')),
+    'the second trial never runs once transport is known dead');
+
   fs.rmSync(tempRoot, { recursive: true, force: true });
   process.stdout.write(`brain qualifier: ${assertions} assertions passed\n`);
 }

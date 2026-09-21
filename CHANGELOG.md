@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.36.82 — brain 考場：transport 失敗不再被當成受考者的答案
+
+`engine-qualify.sh brain` 的 round 迴圈少了 VA 早就有的 transport abort。broker 失敗時回空
+output，每個 round 都被 `parseBrainRoundOutput` 判成 malformed，24 個死掉的 round 就這樣graded
+成四科全 FAIL，並且 append 了一列關於「從頭到尾沒被打到的引擎」的 FAIL row
+（2026-09-21，qwen3.8-flash-next sitting 1，capability store event 51，bundle
+`docs/plans/evidence/2026-09-21-flash-next-brain-qualify/`）。
+
+- 第一個 transport 失敗的 round 現在直接 abort：`outcome: transport_fail`、`evidence: null`、
+  **不 append 任何 row**，與既有的 `insufficient_budget` 以及 VA 自己的 `transport_fail` 同一處置。
+  host 端的失敗不是關於座位的證據。
+- `rawExchanges` 現在記 `transport_ok`（VA 一直有記，brain 沒有）。少了這個欄位，
+  24 次 transport 失敗在 raw log 裡長得跟「模型回了 24 次空字串」一模一樣。
+- 失敗的 round 不再計入 `spend_tokens`；abort 之後第二個 trial 不再起跑。
+- `scripts/engine-qualify-brain.test.js` +10 assertions（43 → 53）：transport_fail 不出 row、
+  只停在第一個死掉的 round、raw 帶 `transport_ok:false`、第二個 trial 不執行。
+
+這列**不會**移除 event 51 —— FAIL row 是 append-only，照 `references/evidence-discipline.md`
+留著，由該 bundle 的 README 記錄它是儀器產物而非能力訊號。
+
 ## v2.36.81 — wave-1：31 個維護列整合
 
 - **Qualification / scorecard（8 列）**：runner token 正規化、legacy feed 訊息合併、OpenCode usage parser、endpoints model 旗標、guided-disposition regression 名稱、governance CLI 提示、role-default scope 接線。

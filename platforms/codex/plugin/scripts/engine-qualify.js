@@ -2590,6 +2590,12 @@ function runBrainQualification(options) {
   const envelopes = [];
   const trialMeta = [];
   let spentTokens = 0;
+  // A transport failure is NOT a seat answer. Without this the broker's empty
+  // output was parsed as a malformed round, so 24 dead rounds graded as four
+  // failed subjects and appended a FAIL row about an engine that was never
+  // reached (2026-09-21, flash-next sitting 1, store event 51). VA has carried
+  // this abort since its own suite landed; brain now matches it.
+  let transportAbort = null;
   for (let trialIndex = 0; trialIndex < admin.trials.length; trialIndex += 1) {
     const trial = admin.trials[trialIndex];
     const trace = [];
@@ -2613,6 +2619,13 @@ function runBrainQualification(options) {
       });
       const execution = executePanelCase(panelConfig, input);
       const stdout = typeof execution.stdout === 'string' ? execution.stdout : '';
+      if (!execution.ok) {
+        transportAbort = `transport failure on trial ${trialIndex + 1} round ${round.round_id}: ${execution.error}`;
+        rawExchanges.push({
+          round_id: round.round_id, input, transport_ok: false, output: stdout,
+        });
+        break;
+      }
       const roundTokens = tokensOf(input) + tokensOf(stdout);
       spentTokens += roundTokens;
       trialSpend += roundTokens;
@@ -2625,7 +2638,9 @@ function runBrainQualification(options) {
         target: row && row.next_action && typeof row.next_action.target === 'string'
           ? row.next_action.target : null,
       });
-      rawExchanges.push({ round_id: round.round_id, input, output: stdout });
+      rawExchanges.push({
+        round_id: round.round_id, input, transport_ok: true, output: stdout,
+      });
       // declare_done is a candidate TERMINAL action: the administration stops here,
       // so a premature declaration reaches the grader as a genuinely shorter trace
       // (early_end FAIL) instead of being padded to full length (QC 2026-08-17,
@@ -2635,6 +2650,7 @@ function runBrainQualification(options) {
     traces.push(trace);
     envelopes.push(envelope);
     trialMeta.push({ observedAt: trialObservedAt, spend: trialSpend, rawExchanges });
+    if (transportAbort) break;
   }
   if (options.rawDir) {
     fs.mkdirSync(options.rawDir, { recursive: true });
@@ -2645,6 +2661,37 @@ function runBrainQualification(options) {
         { mode: 0o600 },
       );
     }
+  }
+
+  if (transportAbort) {
+    // NO verdict, never PASS or FAIL: nothing is appended and no row admits the
+    // role. Same disposition as insufficient_budget below and as VA's own
+    // transport_fail — a host-side failure is not evidence about the seat.
+    return deepFreeze({
+      schema_version: 1,
+      run_nonce: runNonce,
+      oracle: {
+        methodology_version: `${BRAIN_CORPUS.methodology_version}.${BRAIN_GENERATOR_VERSION}`,
+        corpus_manifest_hash: staticAssets.corpus_hash,
+        generator_hash: staticAssets.generator_hash,
+        sandbox_policy_hash: panelConfig.policyHash,
+        transport: panelConfig.transport,
+      },
+      qualified: false,
+      evidence: null,
+      row: { status: 'transport_fail', evidence: null },
+      verdict: {
+        engine: options.engine,
+        model: options.model,
+        runner: options.runner,
+        role: 'brain',
+        qualified: false,
+        outcome: 'transport_fail',
+        spend_tokens: spentTokens,
+        token_cap: tokenCap,
+        reason: `${transportAbort} — administration aborted, no verdict recorded`,
+      },
+    });
   }
 
   const graded = gradeAdministration(admin, traces, envelopes);

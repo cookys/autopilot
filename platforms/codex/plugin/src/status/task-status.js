@@ -1764,13 +1764,19 @@ function validateMergeExecution(value, rootRunId, preflight) {
     && value.edges.length === preflightEdgeCount
     && value.edges.every((edge, index) => {
       const declared = preflight.raw_edges[index];
+      const legacyKeys = [
+        'sequence', 'source_ref', 'target_ref', 'mode', 'status',
+        'source_validation', 'target_validation', 'before_sha', 'after_sha',
+        'merge_commit', 'conflicts', 'error', 'preservation', 'edge_receipt_digest',
+      ];
+      // The canonical executor adds this complete integration-ledger projection.
+      // Accept legacy receipts unchanged; partial or unknown extensions fail closed.
+      const ledgerKeys = ['source_sha', 'accepted_sha', 'integration_method', 'unit_id'];
+      const hasLedger = isPlainObject(edge)
+        && hasExactKeySet(edge, [...legacyKeys, ...ledgerKeys]);
       if (!isPlainObject(edge)
           || !isPlainObject(declared)
-          || !hasExactKeySet(edge, [
-            'sequence', 'source_ref', 'target_ref', 'mode', 'status',
-            'source_validation', 'target_validation', 'before_sha', 'after_sha',
-            'merge_commit', 'conflicts', 'error', 'preservation', 'edge_receipt_digest',
-          ])
+          || (!hasExactKeySet(edge, legacyKeys) && !hasLedger)
           || edge.sequence !== index + 1
           || edge.source_ref !== declared.source_ref
           || edge.target_ref !== declared.target_ref
@@ -1810,6 +1816,12 @@ function validateMergeExecution(value, rootRunId, preflight) {
           || !isSha256(edge.edge_receipt_digest)) {
         return false;
       }
+      if (hasLedger && (
+        edge.source_sha !== edge.source_validation.actual_sha
+        || edge.accepted_sha !== edge.after_sha
+        || edge.integration_method !== (edge.mode === 'no-ff' ? 'merge' : 'ff')
+        || edge.unit_id !== `${rootRunId}:edge-${edge.sequence}`
+      )) return false;
       const { edge_receipt_digest: edgeDigest, ...edgeBody } = edge;
       return canonicalDigest(edgeBody) === edgeDigest;
     });

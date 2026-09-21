@@ -980,6 +980,66 @@ group('p3-merge-execution', () => {
   check('p3-restored-approved-overlap-can-close', overlapClosed.can_close === true);
 });
 
+group('p3-canonical-producer-ledger', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const { execFileSync } = require('child_process');
+  const { buildMergeIntent, preflightMergeIntent } = require(path.join(root, 'src/status/merge-intent'));
+  const { executeMergeIntent } = require(path.join(root, 'src/merge/cli'));
+  for (const mode of ['ff-only', 'no-ff']) {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'status-merge-producer-'));
+    const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    try {
+      git('init', '-q', '-b', 'develop');
+      git('config', 'user.name', 'Status Producer Fixture');
+      git('config', 'user.email', 'status@example.invalid');
+      git('config', 'commit.gpgsign', 'false');
+      git('config', 'core.hooksPath', '/dev/null');
+      fs.writeFileSync(path.join(repo, 'file'), 'base');
+      git('add', '.'); git('commit', '-qm', 'base');
+      git('checkout', '-qb', 'feature');
+      fs.writeFileSync(path.join(repo, 'file'), 'candidate');
+      git('commit', '-qam', 'candidate');
+      git('checkout', '-q', 'develop');
+      const sourceWorktree = `${repo}-source`;
+      git('worktree', 'add', '-q', sourceWorktree, 'feature');
+      const sealed = buildMergeIntent({
+        repo, root_run_id: ROOT_RUN_ID,
+        edges: [{ source_ref: 'refs/heads/feature', source_worktree: sourceWorktree,
+          target_ref: TARGET_REF, target_worktree: repo, mode,
+          required_result: 'source-contained' }],
+        forbidden_reverse_edges: [], preservation_policy: { allowed_path_prefixes: [] },
+      });
+      const preflight = preflightMergeIntent(sealed);
+      const execution = executeMergeIntent({ sealed_manifest: sealed,
+        manifest_seal: sealed.seal, preflight, approved_preservation: [] });
+      const status = (value) => buildTaskStatus(makeInput({
+        merge_preflight: preflight, merge_execution: value,
+      }), makeAdapters());
+      check(`p3-real-producer-${mode}-closes`, execution.status === 'complete'
+        && status(execution).can_close === true);
+      const fields = ['source_sha', 'accepted_sha', 'integration_method', 'unit_id'];
+      const mutations = fields.flatMap((field) => [
+        [`missing-${field}`, (edge) => { delete edge[field]; }],
+        [`tampered-${field}`, (edge) => { edge[field] = field.endsWith('_sha') ? '9'.repeat(40) : 'other'; }],
+      ]);
+      mutations.push(['extra-key', (edge) => { edge.unapproved = true; }]);
+      for (const [label, mutate] of mutations) {
+        const changed = clone(execution);
+        mutate(changed.edges[0]);
+        const { edge_receipt_digest: ignored, ...body } = changed.edges[0];
+        changed.edges[0].edge_receipt_digest = icc.canonicalDigest(body);
+        const rejected = status(redigest(changed));
+        check(`p3-real-producer-${mode}-${label}-rejected`, rejected.can_close === false
+          && rejected.failed_predicates.includes('merge_edges_incomplete'));
+      }
+    } finally {
+      fs.rmSync(`${repo}-source`, { recursive: true, force: true });
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  }
+});
+
 group('durable-state-authority', () => {
   const contractDrift = clone(campaignBundle);
   contractDrift.contract.max_wall_seconds += 1;

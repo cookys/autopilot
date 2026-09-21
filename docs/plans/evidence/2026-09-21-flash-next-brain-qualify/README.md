@@ -40,13 +40,30 @@ until green (`references/evidence-discipline.md`).
    `content: [{type:"thinking",…},{type:"text", text:"\n\n{\"ok\":true}"}]`.
 3. **Tokens were really spent** (19,330) — the rounds reached the model.
 
-So the round content is being lost between the endpoint's reply and the recorded
-`output`. `callModel` (`scripts/qualification-review-provider.js:588-592`) does filter
-`type === 'text'` blocks correctly and throws on empty text, so the loss is **after**
-that — most likely the brain single-line re-serialization step
-(the `a0c2a22f` framing fix, added for `claude -p`'s pretty-printed JSON) meeting a
-text block that opens with `\n\n` and carries a separate `thinking` block. **Not yet
-confirmed — this is the next session's first job.**
+So the round content is lost somewhere between the request and the recorded `output`.
+**Three live hypotheses, none yet confirmed** — do not read the first one as the answer:
+
+- **(a) after `callModel`.** Its text-block filter
+  (`scripts/qualification-review-provider.js:588-592`) is correct and throws on empty
+  text, so if it returned, the loss is downstream — e.g. the brain single-line
+  re-serialization (`a0c2a22f`, added for `claude -p`'s pretty-printed JSON) meeting a
+  text block that opens with `\n\n` beside a separate `thinking` block.
+- **(b) before `callModel` — the adapter never got that far.** The broker-request guard
+  at `:1165-1169` requires `request.payload.format === 'unified_diff'`; a `fail()` there
+  (or any other adapter throw) would be recorded by the broker as a round with empty
+  output.
+- **(c) the broker swallows adapter stderr.** `qualify-err.sitting-1.log` is **0 bytes**
+  — no diagnostic surfaced at all, which is itself evidence that adapter-side failures
+  are not reaching the administration's stderr.
+
+`spend_tokens: 19,330` argues the model was reached at least sometimes, but that figure
+has not been cross-checked against the endpoint's own accounting, so it does not settle
+(a) vs (b).
+
+**Discriminator for the next session (2 minutes, no exam spend)**: invoke the adapter
+standalone the way the broker does — one round's `input` from the raw log, wrapped as a
+broker request, `QRP_PROMPT_MODE=brain QRP_TRANSPORT=http` plus the four env vars — and
+see whether it returns text, throws, or returns nothing.
 
 ## Deployment examined
 

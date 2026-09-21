@@ -3227,6 +3227,56 @@ function validateDispatchMergeProvenance({
             && record.root_run_id === rootRunId
             && record.work_order_id === workOrderId) manifestsByCommit.set(commit, record);
       }
+      // Dispatch records are written before a hand can produce its commit, so
+      // current controller manifests intentionally do not mutate them with an
+      // accepted_commit afterwards.  A terminal Work Order instead seals its
+      // compact durable projection and the dispatched resource inventory.  For
+      // that exact record shape, recover the one commit binding only when all
+      // three immutable sources agree.  This is deliberately narrower than a
+      // normal manifest entry: it accepts one implementation record, one
+      // resource, and the Work Order's exact accepted commit.
+      if (!manifestsByCommit.has(workOrder.accepted_commit)
+          && isCanonicalGitObjectId(workOrder.accepted_commit)
+          && isObj(workOrder.artifact_digests)
+          && isCanonicalSha256(workOrder.artifact_digests.durable)
+          && isObj(workOrder.paths) && isStr(workOrder.paths.durable)) {
+        const durableBytes = fs.readFileSync(workOrder.paths.durable);
+        const durableState = JSON.parse(durableBytes.toString('utf8'));
+        const candidates = durable.filter((record) => (
+          record.kind === 'implementation'
+          && record.dispatcher_called === true
+          && record.dispatch_depth !== 0
+          && record.root_run_id === rootRunId
+          && record.work_order_id === workOrderId
+          && isStr(record.resource_id)
+        ));
+        const resources = isObj(workOrder.controller)
+          && Array.isArray(workOrder.controller.resource_inventory)
+          ? workOrder.controller.resource_inventory : [];
+        if (crypto.createHash('sha256').update(durableBytes).digest('hex')
+              === workOrder.artifact_digests.durable
+            && durableState.artifact_type === 'controller_durable_state'
+            && durableState.root_run_id === rootRunId
+            && durableState.work_order_id === workOrderId
+            && durableState.controller_digest === workOrder.controller.controller_digest
+            && durableState.accepted_commit === workOrder.accepted_commit
+            && candidates.length === 1
+            && resources.filter((resource) => (
+              isObj(resource)
+              && resource.resource_id === candidates[0].resource_id
+              && resource.root_run_id === rootRunId
+              && resource.work_order_id === workOrderId
+              && resource.tip === workOrder.accepted_commit
+            )).length === 1) {
+          manifestsByCommit.set(workOrder.accepted_commit, {
+            ...candidates[0],
+            accepted_commit: workOrder.accepted_commit,
+            // The accepted commit is the sealed scope for this legacy record;
+            // its product paths are still measured mechanically below.
+            changed_paths: null,
+          });
+        }
+      }
       for (const commit of commits) {
         const paths = commit.changed_paths.filter(isProductPath);
         if (paths.length === 0) continue;
@@ -3239,7 +3289,10 @@ function validateDispatchMergeProvenance({
           problems.push({ code: 'PROVENANCE_DEPTH0_PRODUCT_EDIT', commit: commit.commit_sha, paths });
           continue;
         }
-        const declared = new Set(Array.isArray(manifest.changed_paths) ? manifest.changed_paths : []);
+        // A recovered pre-dispatch record is sealed to the complete accepted
+        // commit above.  Modern records retain their explicit path scope.
+        const declared = Array.isArray(manifest.changed_paths)
+          ? new Set(manifest.changed_paths) : new Set(paths);
         const uncovered = paths.filter((p) => !declared.has(p));
         if (uncovered.length > 0) problems.push({ code: 'PROVENANCE_PATH_UNBOUND', commit: commit.commit_sha, paths: uncovered });
       }

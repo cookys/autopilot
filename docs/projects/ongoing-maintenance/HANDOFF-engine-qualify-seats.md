@@ -34,6 +34,36 @@ verifier→reviewer。depth-0 / foreman / qcer **都不在內**。
 
 ## 已完成
 
+- ✅ **格 A（brain）已施測一次 — FAILED，但那是 framing artifact，不是能力訊號。**
+  bundle `docs/plans/evidence/2026-09-21-flash-next-brain-qualify/`，store event **51**（cuda）。
+  24/24 rounds 的 raw output 全是空字串；直接 curl 同 endpoint 證明模型會回內容
+  （`stop_reason: end_turn`、`output_tokens: 52`、`content` 含 `thinking` + `text` 兩個 block）。
+  **下一個 session 的第一件事**：找出 round output 在哪裡掉的。
+  `callModel`（`qualification-review-provider.js:588-592`）的 text-block filter 是對的且空就 throw，
+  所以損失在它之後 —— 最可能是 brain 的單行 re-serialization（commit `a0c2a22f`，當初為
+  `claude -p` 的 pretty-print JSON 而加）碰上開頭是 `\n\n` 又帶獨立 `thinking` block 的回應。
+  **尚未證實**。修好後跑 fresh sitting（新種子），不是 rerun。
+  FAIL row 照 append-only 留著，不 rerun-until-green。
+
+- ✅ **fingerprint 推導配方已驗證**：用 `src/engine/owner-kernel/canonical.js` 的 canonicalJson
+  重現了 incumbent 兩個 pinned 值（`ec8ee7fa…`、`24e9f324…`）才套用到 flash-next。
+  `prompt_config_hash` = sha256(BRAIN_SYSTEM_PROMPT) = **`5feb7076…`，與 incumbent prompt v4 位元相同**
+  —— 未來乾淨的 sitting 與 dogfood sitting 3 直接可比。
+  `harness_version` = `engine-qualify-<first8 sha256(scripts/engine-qualify.js)>` = `engine-qualify-e9ecc652`。
+
+- ✅ **runner 欄位定案 `anthropic-compatible`**（不是 cc-shim —— 這條路沒有 Claude Code CLI）。
+  `runner_version` = sglang 版本 `0.0.0.dev17270-gfb1216c6c`（`+`→`-` 才過 TOKEN 文法）。
+  `runner-binary.js` 只被 `qualification-sweep.sh`（implementer live-rail）用，brain 路徑不查它。
+
+- ✅ **endpoint smoke 通過**：`node bin/autopilot.js endpoints test flash_next --model qwen3.8-flash-next` → `ok (228ms)`。
+
+- ⚠️ **scope 未對齊 incumbent**：用了 `--domain cross-cutting --language en --tool read_only`，
+  是我方選的。sitting 3 只記 `scope_hash 9e34d4ac…`，210 組暴力沒反解出來（它的 store row 在別台）。
+  brain admission 靠 `brain-status --identity-file` 不靠 scope 查詢，所以不影響紀錄，但比較時要講明。
+
+- ⚠️ **env 變數名陷阱**：`endpoints.env` 裡是 `AUTOPILOT_ENDPOINT_FLASH_NEXT_URL` / `_TOKEN`，
+  不是 `FLASH_NEXT_URL`。
+
 - ✅ `git pull` → `36fefa52`（develop，clean）
 - ✅ **endpoint 已定義**：`FLASH_NEXT_URL` / `FLASH_NEXT_TOKEN` 寫進
   `~/.autopilot/endpoints.env`（mode 600）。

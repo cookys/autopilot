@@ -1,0 +1,21 @@
+{
+  "semantic_surface": {
+    "kind": "brain-seat-semantic-surface-v1",
+    "model": "qwen3.8-flash-next",
+    "transport": "anthropic-compatible-http-direct-no-tools",
+    "setting_sources": "none"
+  },
+  "containment_surface": {
+    "kind": "brain-seat-containment-surface-v2",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "no-cli-child: host-side HTTP POST /v1/messages, tools absent from request body",
+    "credential_isolation": "host-held-endpoint-token-never-enters-evaluator-sandbox"
+  },
+  "prompt_source": "BRAIN_SYSTEM_PROMPT in scripts/qualification-review-provider.js",
+  "prompt_bytes": 5613,
+  "canonicalJson": "src/engine/owner-kernel/canonical.js",
+  "recipe_verified_against_incumbent": {
+    "semantic": "ec8ee7fa… MATCH",
+    "containment": "24e9f324… MATCH"
+  }
+}

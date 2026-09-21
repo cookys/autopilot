@@ -98,7 +98,19 @@ for (const fields of [{ accepted_commit: baseSha }, { changed_paths: null }]) {
   assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
     'explicit modern commit/scope fields cannot masquerade as legacy');
 }
-console.log('PASS [backlog-convergence-e1] 25 assertions');
+// IO/parse failures remain structured rejections through the outer boundary.
+for (const corruptDurable of [
+  () => fs.unlinkSync(durablePath),
+  () => fs.writeFileSync(durablePath, '{not-json'),
+]) {
+  persist(recoveredRecord, { recovered: true });
+  corruptDurable();
+  const result = ctrl.validateDispatchMergeProvenance(request);
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.admitted, false);
+  assert.ok(result.problems.some((item) => item.code === 'PROVENANCE_WORK_ORDER_INVALID'));
+}
+console.log('PASS [backlog-convergence-e1] 31 assertions');
 
 const qp = require(path.join(root, 'src/readiness/qualification-provider'));
 const now = '2026-08-02T00:00:00.000Z';

@@ -98,6 +98,57 @@ for (const fields of [{ accepted_commit: baseSha }, { changed_paths: null }]) {
   assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
     'explicit modern commit/scope fields cannot masquerade as legacy');
 }
+// Exercise the real campaign-composition producer: its persisted implementation
+// record has no dispatch_depth (the actual Wave 1 sealed authority format).
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+const { canonicalDigest } = require(path.join(root, 'src/engine/campaign-verification'));
+let producedRecord;
+runCampaignComposition({ rootRunId: rootId, workOrderId, promptBytes: 7,
+  maxRepairGenerations: 0, minPanelSize: 1 }, {
+  preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }),
+  implement: () => ({
+    committed: false, dispatcher_called: true, model_calls: 1,
+    writer_fence: { receipt_digest: 'a'.repeat(64) },
+    raw: { implementation: {
+      run_id: rootId, runner: 'codex', provider: 'codex', model: 'fixture-model',
+      resource_id: 'sealed-hand',
+    } },
+  }),
+  scopeCheck: () => ({ passed: false }), verify: () => ({ passed: false }),
+  review: () => ({ reviewed: false }), adjudicate: () => ({ passed: false }),
+  convergence: () => ({ passed: false }), finalPanel: () => ({ reviewed: false }),
+  onControllerUpdate: (state) => {
+    if (state.dispatch_records.length) producedRecord = state.dispatch_records[0];
+  },
+});
+assert.ok(producedRecord, 'real composition produced the dispatch record');
+assert.strictEqual(Object.hasOwn(producedRecord, 'dispatch_depth'), false);
+persist(producedRecord, { recovered: true });
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, true,
+  'authentic producer record recovers only through sealed commit/resource binding');
+for (const fields of [
+  { dispatch_depth: null }, { dispatch_depth: 0 }, { dispatch_depth: -1 },
+  { dispatch_depth: '2' }, { dispatch_depth: 0.5 }, { changed_paths: null },
+  { accepted_commit: baseSha }, { extra_authority: true }, { dispatcher_called: false },
+  { model_calls: 0 }, { generation: 1 }, { run_id: 'foreign-run' },
+]) {
+  const altered = { ...producedRecord, ...fields };
+  const { at, digest, ...body } = altered;
+  altered.digest = canonicalDigest(body); // even a re-sealed malformed producer fails
+  persist(altered, { recovered: true });
+  assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+    `legacy producer rejects ${JSON.stringify(fields)}`);
+}
+persist({ ...producedRecord, model: 'tampered-model' }, { recovered: true });
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+  'producer digest mismatch is rejected even with re-sealed Work Order');
+persist(producedRecord, { recovered: true, resourceTip: baseSha });
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false,
+  'authentic producer still requires exact resource tip');
+persist(producedRecord); // missing sealed durable and accepted commit
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, false);
+
 // IO/parse failures remain structured rejections through the outer boundary.
 for (const corruptDurable of [
   () => fs.unlinkSync(durablePath),
@@ -110,7 +161,7 @@ for (const corruptDurable of [
   assert.strictEqual(result.admitted, false);
   assert.ok(result.problems.some((item) => item.code === 'PROVENANCE_WORK_ORDER_INVALID'));
 }
-console.log('PASS [backlog-convergence-e1] 31 assertions');
+console.log('PASS [backlog-convergence-e1] 49 assertions');
 
 const qp = require(path.join(root, 'src/readiness/qualification-provider'));
 const now = '2026-08-02T00:00:00.000Z';

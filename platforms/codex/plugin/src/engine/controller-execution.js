@@ -3166,6 +3166,34 @@ function admitExecutableMissionDelta({
   };
 }
 
+// campaign-composition's original dispatchRecordBody has no depth field. Its
+// exact schema and producer digest identify that version; the surrounding Work
+// Order/durable/resource seals, not an invented numeric depth, attest delegation.
+function isLegacyImplementationDispatch(record) {
+  if (!isObj(record)) return false;
+  const keys = [
+    'kind', 'root_run_id', 'work_order_id', 'generation', 'dispatcher_called',
+    'model_calls', 'prompt_bytes', 'run_id', 'dispatch_id', 'provider', 'runner',
+    'model', 'provider_session_id', 'resource_id', 'result_receipt_digest', 'at', 'digest',
+  ];
+  if (Object.keys(record).length !== keys.length
+      || !keys.every((key) => Object.prototype.hasOwnProperty.call(record, key))) return false;
+  const { at, digest, ...body } = record;
+  return record.kind === 'implementation' && record.generation === 0
+    && record.dispatcher_called === true
+    && Number.isSafeInteger(record.model_calls) && record.model_calls > 0
+    && Number.isSafeInteger(record.prompt_bytes) && record.prompt_bytes >= 0
+    && record.run_id === record.root_run_id
+    && ['provider', 'runner', 'model', 'resource_id'].every((key) => isStr(record[key]))
+    && ['dispatch_id', 'provider_session_id'].every((key) => (
+      record[key] === null || isStr(record[key])
+    ))
+    && isCanonicalSha256(record.result_receipt_digest)
+    && isStr(at) && Number.isFinite(Date.parse(at))
+    && isCanonicalSha256(digest)
+    && require('./campaign-verification').canonicalDigest(body) === digest;
+}
+
 /**
  * E1 merge provenance backstop.
  *
@@ -3247,7 +3275,8 @@ function validateDispatchMergeProvenance({
         const candidates = durable.filter((record) => (
           record.kind === 'implementation'
           && record.dispatcher_called === true
-          && Number.isInteger(record.dispatch_depth) && record.dispatch_depth > 0
+          && ((Number.isInteger(record.dispatch_depth) && record.dispatch_depth > 0)
+            || isLegacyImplementationDispatch(record))
           && !['accepted_commit', 'commit_sha', 'commit', 'changed_paths'].some((key) => (
             Object.prototype.hasOwnProperty.call(record, key)
           ))
@@ -3296,7 +3325,8 @@ function validateDispatchMergeProvenance({
           problems.push({ code: 'PROVENANCE_DEPTH0_PRODUCT_EDIT', commit: commit.commit_sha, paths });
           continue;
         }
-        if (!Number.isInteger(manifest.dispatch_depth) || manifest.dispatch_depth < 1) {
+        if (!recoveredManifests.has(manifest)
+            && (!Number.isInteger(manifest.dispatch_depth) || manifest.dispatch_depth < 1)) {
           problems.push({ code: 'PROVENANCE_DISPATCH_DEPTH_INVALID', commit: commit.commit_sha, paths });
           continue;
         }

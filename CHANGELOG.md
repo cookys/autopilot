@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.36.86 — OpenCode Go 的端點是 per-model 路由；503 不代表對方掛了
+
+2026-09-21 實測 31 個 live id。`models.dev` 對整個 provider 只報一個 `api` base 和一個
+adapter，**但服務不是那樣路由的** —— 每個模型只吃一種協定，打錯那一種會回
+`503 Upstream request failed: Endpoint is unavailable.`，讀起來跟服務中斷一模一樣。
+這句話這個 session 已經害人下錯一次結論（「provider 掛了」）：實際上是
+`muse-spark-1.3-contributor` 只在 Responses 上，而同一把 key、同一個 session header、
+同一刻的 `qwen3.7-max` 在 Messages 上回 200。
+
+- `references/multi-agent-portability.md` 新增一節：兩種協定的 path／auth／body 形狀、
+  **`x-opencode-session` 在兩邊都是必需**（不帶 → `400 MissingSessionID`，任何 `ses_` 開頭
+  的字串都收）、以及 31 個 id 的完整分類：Messages 專屬 9、Responses 專屬 5、兩者皆可 5、
+  **兩者皆 503 的 12**。被 `/v1/models` 列出來不等於打得到。
+- `scripts/qualification-review-provider.js` header 註明它只會說 Anthropic Messages、
+  沒送 session header，並指向上面那張表。
+- BACKLOG + sidecar `docs/backlog/opencode-go-responses-transport.md`：9 個 id 只差那個
+  header，5 個（含兩版 muse-spark contributor）需要一個還不存在的 Responses transport。
+  **它的截斷訊號是 `status:"incomplete"`**，不是 v2.36.83 那個診斷在看的
+  `stop_reason:"max_tokens"` —— 照抄會退回成那個修正正要消滅的籠統錯誤訊息。
+
+文件與 BACKLOG 變更；`qualification-review-provider.js` 只動 header 註解，無行為改變。
+
 ## v2.36.85 — roster 指名的 endpoint 現在真的會被揭露進 row
 
 `qualification-sweep.sh` 的 roster seat 有 `endpoint` 欄位，但那個欄位只被拿去

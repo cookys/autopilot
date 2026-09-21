@@ -34,6 +34,59 @@ Empirical `agy` 1.0.1 testing (2026-05-29) overturned earlier claims in this doc
 - **Root `plugin.json` is required by `agy plugin validate`** — removing it yields `Error: missing plugin.json`. So root `plugin.json` is NOT merely npm/GitHub metadata (as a later edit claimed) — it has a real consumer.
 - `agy plugin` full subcommand set (verified): `validate, install, uninstall, list, enable, disable, import, link`.
 
+### OpenCode Go (`opencode-go`) — endpoint routing is PER MODEL (verified 2026-09-21, cuda)
+
+Official table: <https://opencode.ai/docs/go/>. Authoritative live model list:
+`GET https://opencode.ai/zen/go/v1/models` with `Authorization: Bearer <key>` (31 ids).
+Everything below was **re-derived by running it**, not read off the docs alone.
+
+**There is no single base path.** `models.dev` reports one `api` field
+(`https://opencode.ai/zen/go/v1`) and one adapter (`@ai-sdk/openai-compatible`) for the
+whole provider; that is NOT how the service routes. Each model is served on ONE
+protocol, and hitting the wrong one returns `503 Upstream request failed: Endpoint is
+unavailable.` — which reads exactly like an outage and is not one. This cost a wrong
+conclusion once already ("the provider is down"): it was down for *that model on that
+path only*.
+
+| Protocol | Path | Auth header | Body |
+|---|---|---|---|
+| Anthropic Messages | `/zen/go/v1/messages` | `x-api-key` (Bearer → 401) | `{model, max_tokens, messages}` |
+| OpenAI Responses | `/zen/go/v1/responses` | `Authorization: Bearer` (x-api-key → 401) | `{model, input, max_output_tokens}` |
+
+**`x-opencode-session` is REQUIRED on both.** Omit it and the request fails
+`400 MissingSessionID` before the model is ever consulted. Any `ses_`-prefixed string is
+accepted — it does not have to be a session the CLI created.
+
+Probed all 31 ids against both paths (`max_tokens`/`max_output_tokens` 16, status only):
+
+- **Messages only (9)**: `kimi-k3`, `minimax-m2.5`, `minimax-m2.7`, `minimax-m3`,
+  `qwen3.6-plus`, `qwen3.7-plus`, `qwen3.7-max`, `qwen3.8-max`, `qwen3.8-flash`
+- **Responses only (5)**: `muse-spark-1.2-contributor`, `muse-spark-1.3-contributor`,
+  `grok-4.6`, `grok-4.7`, `gpt-5.6-luna`
+- **Both (5)**: `deepseek-flash`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`,
+  `deepseek-v4.1-flash`, `deepseek-v4-pro`
+- **Neither — 503 on both (12)**: `glm-5.1`, `glm-5.2`, `glm-5.3`, `glm-5.3-flash`,
+  `kimi-k2.6`, `kimi-k2.7-code`, `mimo-v2.5`, `mimo-v2.5-pro`, `hy3`, `hy4-preview`,
+  `omen-alpha`, `longcat-2.0`
+
+A model listed by `/v1/models` is therefore **not** evidence it is reachable; 12 of 31
+are listed and serve nothing. Re-probe before planning an administration around one.
+
+**Reasoning budget applies here too.** `muse-spark-1.3-contributor` at
+`max_output_tokens: 64` returns `status: "incomplete"`, `output_tokens: 64` of which
+`reasoning_tokens: 61`, and an output array with **no** `output_text` part. At 4096 it
+returns `status: "completed"` with 167 reasoning tokens and the answer. Same failure as
+qwen3.8-flash-next on the Anthropic path (v2.36.83), but the signal differs: Responses
+says `status: "incomplete"`, Messages says `stop_reason: "max_tokens"`. A transport
+added for Responses must diagnose its own signal — the v2.36.83 check does not fire here.
+
+**Consequence for autopilot**: `scripts/qualification-review-provider.js` speaks only
+Anthropic Messages (`callModel`, and it does not send `x-opencode-session`). So of the
+31 ids, **9 need a session header added**, **5 need a Responses transport that does not
+exist yet**, 5 work either way, and 12 are unreachable. `QRP_CLI_KIND=opencode` remains
+ALWAYS-REFUSED for a separate reason (2026-09-07 adversarial probe: `--agent plan` does
+not block bash), so the CLI is not a fallback for the Responses-only models.
+
 ### Headless auto-approve flags — corrections (2026-06-17 survey)
 
 The capability tier above hinges on whether a platform can run a worker non-interactively; that requires a real auto-approve flag. Two corrections from the survey, each tagged with its verification state per `[[feedback_spike-before-assert]]` — assert only what's cited or run:

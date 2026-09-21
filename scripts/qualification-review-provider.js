@@ -91,6 +91,19 @@
  *   QRP_AUTH_TOKEN  http: bearer token for that endpoint
  *   QRP_MODEL       exact model id to request (CLI: passed as --model)
  *   QRP_PROVIDER    provider id echoed back to the broker (must match --remote-provider)
+ *   NOTE — this adapter speaks ONLY the Anthropic Messages protocol
+ *   (POST {base}/v1/messages). That is not universal among Anthropic-compatible
+ *   gateways: OpenCode Go routes PER MODEL, serving some ids on /v1/messages and
+ *   others only on the OpenAI Responses protocol (/v1/responses, Bearer auth,
+ *   {model,input,max_output_tokens}), and it requires an `x-opencode-session`
+ *   header this adapter never sends. Hitting the wrong protocol returns
+ *   `503 Upstream request failed: Endpoint is unavailable.`, which reads like an
+ *   outage and is not one. The verified per-model routing table and the missing
+ *   header are recorded in references/multi-agent-portability.md ("OpenCode Go —
+ *   endpoint routing is PER MODEL", 2026-09-21). A Responses transport is a
+ *   BACKLOG item; its truncation signal is `status:"incomplete"`, NOT the
+ *   `stop_reason:"max_tokens"` the budget check below keys on.
+ *
  *   QRP_MAX_TOKENS  http ONLY (the cli transport has no equivalent): optional
  *                   completion budget (default 8192). A REASONING endpoint spends
  *                   this budget on its thinking block too, so 8192 is NOT enough for

@@ -20,6 +20,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/plan-rewriter-must-skip-sha-bound-sources.md
 - **Context**: exclude every `plan_path`/`rubric_path` named by a `docs/mission-*-sources.json` from text rewrites; report as `plan_reference_frozen`.
 
+### OpenCode Go needs a Responses-protocol transport and an `x-opencode-session` header
+- **Status**: open
+- **Trigger**: the next attempt to administer ANY non-implementer seat on an `opencode-go` model
+- **Effort**: M
+- **Source**: 2026-09-21 muse-spark seat probe (503 on both protocols looked like an outage; a per-model probe of all 31 ids showed per-model routing)
+- **Pointer**: docs/backlog/opencode-go-responses-transport.md
+- **Context**: 9 ids need only the session header; 5 (incl. both muse-spark contributors) are Responses-only; its truncation signal is `status:"incomplete"`, which the v2.36.83 budget diagnosis does not match.
+
 ### Foreman ↔ depth-0 coordination: typed `worker_condition` was planned (r6) and never built
 - **Status**: open
 - **Trigger**: a foreman wait loop that must tell "hand parked on a question" from "hand still working" without reading the transcript

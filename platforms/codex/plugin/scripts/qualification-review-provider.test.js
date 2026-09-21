@@ -1242,5 +1242,100 @@ function roleOnlyRequest(role, content = 'x') {
     'an oversized QRP_CLI_HOME template is refused with an actionable message');
 }
 
+// ── reasoning truncation is named, not reported as "no text content" ──────────
+// Regression for 2026-09-21 (qwen3.8-flash-next brain sittings 2-3): a reasoning
+// endpoint spends the SAME completion budget on its thinking block, so once the
+// round bundle grew the reply arrived as a lone thinking block. The old generic
+// message travelled to the broker as an opaque provider_process_failed and the
+// cause took a bisect to find.
+{
+  const { spawn, execFileSync } = require('child_process');
+  const serverFile = path.join(tempRoot, 'stub-endpoint.js');
+  const portFile = path.join(tempRoot, 'stub-port');
+  fs.writeFileSync(serverFile, `
+const http = require('http');
+const fs = require('fs');
+const reply = JSON.parse(process.env.STUB_REPLY);
+const server = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(reply));
+  });
+});
+server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE, String(server.address().port)));
+`);
+
+  const startStub = (reply) => {
+    if (fs.existsSync(portFile)) fs.rmSync(portFile);
+    const proc = spawn(process.execPath, [serverFile], {
+      env: {
+        ...process.env,
+        STUB_REPLY: JSON.stringify(reply),
+        STUB_PORT_FILE: portFile,
+      },
+      stdio: 'ignore',
+      detached: false,
+    });
+    for (let i = 0; i < 100 && !fs.existsSync(portFile); i += 1) {
+      try { execFileSync('sleep', ['0.05']); } catch { /* keep polling */ }
+    }
+    return { proc, port: fs.readFileSync(portFile, 'utf8').trim() };
+  };
+
+  // (a) budget exhausted inside the thinking block
+  const truncated = startStub({
+    content: [{ type: 'thinking', thinking: 'still reasoning when the budget ran out' }],
+    stop_reason: 'max_tokens',
+    usage: { output_tokens: 8192 },
+    model: 'fake-model-exact',
+  });
+  const { child: truncChild } = runProvider({
+    request: brainRequest(),
+    env: {
+      QRP_PROMPT_MODE: 'brain',
+      QRP_BASE_URL: `http://127.0.0.1:${truncated.port}`,
+      QRP_AUTH_TOKEN: 'stub-token',
+      QRP_MAX_TOKENS: '8192',
+    },
+  });
+  truncated.proc.kill();
+  equal(truncChild.status, 1, 'a truncated reasoning reply still fails closed');
+  check(/completion budget exhausted before any text block/.test(truncChild.stderr),
+    'truncation is named as a budget exhaustion, not as a missing-content mystery');
+  check(/stop_reason=max_tokens/.test(truncChild.stderr)
+    && /output_tokens=8192/.test(truncChild.stderr)
+    && /max_tokens=8192/.test(truncChild.stderr)
+    && /blocks=\[thinking\]/.test(truncChild.stderr),
+    'the diagnosis carries stop_reason, both token figures and the block shape');
+  check(/raise QRP_MAX_TOKENS/.test(truncChild.stderr),
+    'the message names the knob that fixes it');
+
+  // (b) a genuinely empty reply that did NOT hit the budget keeps the generic message
+  const empty = startStub({
+    content: [],
+    stop_reason: 'end_turn',
+    usage: { output_tokens: 0 },
+    model: 'fake-model-exact',
+  });
+  const { child: emptyChild } = runProvider({
+    request: brainRequest(),
+    env: {
+      QRP_PROMPT_MODE: 'brain',
+      QRP_BASE_URL: `http://127.0.0.1:${empty.port}`,
+      QRP_AUTH_TOKEN: 'stub-token',
+    },
+  });
+  empty.proc.kill();
+  equal(emptyChild.status, 1, 'an empty end_turn reply still fails closed');
+  check(/carried no text content/.test(emptyChild.stderr),
+    'a non-truncated empty reply keeps the generic message — that one IS an endpoint bug');
+  check(!/completion budget exhausted/.test(emptyChild.stderr),
+    'the truncation wording is not applied to a reply that never hit the budget');
+  check(/stop_reason=end_turn/.test(emptyChild.stderr),
+    'even the generic message now carries the observed stop_reason');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
 process.stdout.write(`${assertions} assertions passed\n`);

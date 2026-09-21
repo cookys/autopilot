@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.36.83 — reasoning endpoint 的 completion budget 耗盡，不再報成「沒有內容」
+
+`callModel` 對「回應沒有 text block」只有一句籠統的 `endpoint response carried no text
+content`。那句話傳到 broker 之後只剩一個不透明的 `provider_process_failed`，診斷一次要靠
+bisect（2026-09-21，qwen3.8-flash-next brain sitting 2/3：round 5–6 掛掉，因為 round bundle
+單調變大，思考跟著變長，8192 的 completion budget 在 thinking 階段就用光，回來的是一個
+只有 `[thinking]` 沒有答案的合法回應）。
+
+- `stop_reason === 'max_tokens'` 且沒有 text block 時，改丟
+  `completion budget exhausted before any text block (stop_reason=… output_tokens=…
+  max_tokens=… blocks=[…]); raise QRP_MAX_TOKENS`。模型沒有沉默、transport 也沒壞，
+  是答案根本沒機會寫出來 —— 這件事值得有自己的名字。
+- 沒撞到 budget 卻還是空的回應保留原本的措辭（那一種**才是** endpoint 的 bug），
+  但同樣帶上觀察到的 `stop_reason` 與 block 形狀。
+- adapter header 補一行：`QRP_MAX_TOKENS` 只作用於 http transport（cli 沒有對應物），
+  而且 reasoning 部署會拿這個 budget 去思考，所以 brain 考試必須明確設定它**並且**
+  列進 `--provider-env`（broker 會把子程序環境刷成只剩白名單）。
+- `scripts/qualification-review-provider.test.js` +8 assertions（202 → 210）：
+  用 stub HTTP endpoint 釘住兩種回應形狀 —— truncated 的要被指名，
+  非 truncated 的空回應不可以被套上 truncation 措辭。
+
+預設值 **沒有** 調高：`max_tokens` 不在考試身份裡，靜默調高會讓既有 HTTP seat 的
+row（GLM／MiniMax 那些 reviewer 列）與新 row 在沒有任何 fingerprint 變化的情況下失去可比性。
+要用大 budget 的考試自己設，並記進該次施測的身份揭露。
+
 ## v2.36.82 — brain 考場：transport 失敗不再被當成受考者的答案
 
 `engine-qualify.sh brain` 的 round 迴圈少了 VA 早就有的 transport abort。broker 失敗時回空

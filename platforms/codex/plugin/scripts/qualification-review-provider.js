@@ -91,7 +91,15 @@
  *   QRP_AUTH_TOKEN  http: bearer token for that endpoint
  *   QRP_MODEL       exact model id to request (CLI: passed as --model)
  *   QRP_PROVIDER    provider id echoed back to the broker (must match --remote-provider)
- *   QRP_MAX_TOKENS  http: optional completion budget (default 8192)
+ *   QRP_MAX_TOKENS  http ONLY (the cli transport has no equivalent): optional
+ *                   completion budget (default 8192). A REASONING endpoint spends
+ *                   this budget on its thinking block too, so 8192 is NOT enough for
+ *                   brain rounds much past the fifth — the bundle grows monotonically,
+ *                   the thinking grows with it, and the reply arrives as a lone
+ *                   thinking block with no answer. Brain administrations against a
+ *                   reasoning deployment must set this explicitly AND list it in
+ *                   --provider-env (the broker scrubs the child environment down to
+ *                   that allowlist).
  *   QRP_TRANSPORT   http | cli (default http)
  *   QRP_CLI_KIND    cli: codex | claude | agy | kimi
  *   QRP_CLI_HOME    cli: HOME for the harness child. Needed by CLIs that keep
@@ -592,7 +600,28 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
       .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
       .map((block) => block.text)
       .join('\n');
-    if (!text) throw new Error('endpoint response carried no text content');
+    if (!text) {
+      // A reasoning endpoint spends this same completion budget on its thinking
+      // block. When the budget runs out mid-thought the reply is a well-formed
+      // `[{type:'thinking'}]` with NO text block — the model was not silent and the
+      // transport was not broken, the answer was simply never reached. Saying so by
+      // name matters: the generic message below travels to the broker as an opaque
+      // `provider_process_failed`, and diagnosing one of these from that code alone
+      // cost a bisect (2026-09-21, qwen3.8-flash-next brain sittings 2-3, where
+      // rounds 5-6 exhausted 8192 on thinking as the round bundle grew).
+      const observed = [
+        `stop_reason=${payload.stop_reason ?? 'unknown'}`,
+        `output_tokens=${payload.usage && payload.usage.output_tokens != null ? payload.usage.output_tokens : 'unknown'}`,
+        `max_tokens=${maxTokens}`,
+        `blocks=[${blocks.map((block) => (block && block.type) || '?').join('+') || 'none'}]`,
+      ].join(' ');
+      if (payload.stop_reason === 'max_tokens') {
+        throw new Error(
+          `completion budget exhausted before any text block (${observed}); raise QRP_MAX_TOKENS`,
+        );
+      }
+      throw new Error(`endpoint response carried no text content (${observed})`);
+    }
     return { text, resolvedModel: typeof payload.model === 'string' ? payload.model : model };
   } finally {
     clearTimeout(timer);

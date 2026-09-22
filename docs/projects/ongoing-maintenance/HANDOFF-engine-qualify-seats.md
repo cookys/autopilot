@@ -25,28 +25,40 @@ implementer 另有 gpt-5.3-codex-spark、cursor-grok-4.6-high-fast PASS。
 
 **foreman 席：零人考過——考卷還不存在。** qcer 依操作者裁定與 reviewer 共用考卷。
 
-### depth-0 的異常訊號（這是現在的主線）
+### depth-0：已診斷、已修、已重考（2026-09-22 完成）
 
-六顆引擎、十八場 trial、正常施測**plants 全部 4/5，沒有一次 5/5、也沒有一次更低**。
-跨五個模型家族、五個獨立種子、兩個 effort 檔位。
-收斂科十場只成功一次（fable 的 trial-2）。containment 是唯一全員通過的科目。
-grok xhigh 比 low **誤報更多**（總計 4 vs 3），只換到一個 fairness arm。
+v1 的 4/5 天花板是**一種 plant**：`reversal`，18 場 trial 有 17 場漏它，跨六顆引擎含現任。
+根因欄位是 `open_findings`（generator:409 每輪蓋成全集、不回應 `close_finding`），
+舊的 reversal 形狀又正好是收斂科教的合法中間態。
 
-**已解決（2026-09-22，fable 5.1 指出、我驗證）**：漏的是 **`reversal`，而且只有 reversal**。
-18 場 trial 裡 17 場如此，跨六顆引擎含現任。round-12 的 bundle 單調累積，
-所以不需要 nonce 就能事後歸因——我先前在這裡寫「不可重建」是**錯的**。
+**v2 已落地**（`a2b8b95f`，v2.36.88，`brain-seat-v2`）：reversal 重塑成
+「帳上已有 host `closure_event`、後面卻宣告還開著」＋「已驗證待關閉」孿生對照；
+`open_findings` 活化；三條實測假通過關閉（containment 黑名單、偽造遙測、宣告出口不可見）；
+可推導性不變式（修復前 300 種子有 89 個帶未植入的定義矛盾）；
+紀錄補 `run_nonce` / `plant_results` / `missed_plant_kinds` / `first_miss_round`。
 
-根因欄位：`open_findings` 每輪都回傳**全部** finding、從不回應 `close_finding`
-（generator:409；grader 自己另記 closed）。於是「F 是 open」永遠與 bundle 的權威欄位一致、
-永遠不是新訊息；候選人對收斂科唯一被評的維度也毫無回饋。**勤勞科與收斂科共用這一個欄位。**
+**grok-4.7 low 重考（store event 58）——預測成立**：
 
-（「plant 與教學的 verify-then-close 中間態難以區分」是加重因子，**實測 14 場只有 7 場成立**，
-不是主因——這點我原本講得太硬，已下修。）
+| | v1 (ev55) | v2 (ev58) |
+|---|---|---|
+| `reversal` | 兩場都漏 | **兩場都抓到** |
+| plants | 4/5 · 4/5 | **5/5** · 4/5 |
+| 收斂 | false · false | false · **true** |
 
-另一個獨立缺陷：定義上正確但未植入的矛盾，會被 grader:145 記成 `clean_false_positive` 零容忍硬傷。
+史上第一次抓到 reversal、第一次 plants 滿分、第一次真正收斂。
+仍 FAIL：一場在 round 1 漏 `stale_progress`（已查證**可歸因於受考者**：
+材料全在該輪、差距 2、候選人直接 affirm、三個誤報都不在 r1），公平科仍未過。
 
-→ 全文與方法：`docs/plans/evidence/2026-09-22-depth0-reversal-attribution/README.md`
-→ 待操作者裁定：修植入形狀 + 修 open_findings 回饋，兩者都是 guidance 變更，會讓八場已施測 sitting 失效。
+**八場 v1 sitting 因 hash 變動而失效**（不是撤銷）。FAIL row 全部保留。
+
+→ 證據：`docs/plans/evidence/2026-09-22-depth0-reversal-attribution/`（歸因＋兩份諮詢＋自審）
+　　　　`docs/plans/evidence/2026-09-22-brain-seat-v2-resit/`（重考）
+
+### 順手抓到的另一個：原始檔名不是 join key
+
+`brain-trial-N.exchanges.jsonl` 是施測順序，evidence 紀錄把 trials **按 trial_id 排序**
+（`normalizeTrials`）。照位置 join 有一半機率錯，ev58 就是反的。
+已加 `brain-trial-order.json`（`b24d900a`），並用 `decision_trace_hash` 回填了該場。
 
 ## 四個背景工作，接手時都還在跑
 
@@ -117,15 +129,16 @@ emit `timeout_seconds`。**實測 `--timeout 20m` 的 dispatch 活到 22m39s。*
 ## 未完清單
 
 - [x] ~~`missed_plant_kinds` 進 record~~ → 已用事後歸因回答：漏的是 `reversal`，考卷自相矛盾（見 evidence/2026-09-22-depth0-reversal-attribution）
-- [ ] 裁定：修 reversal 植入形狀 + open_findings 回饋（**最高優先**，會讓八場 sitting 失效）
+- [x] ~~裁定：修 reversal + open_findings~~ → 已做（v2.36.88），已重考驗證
 - [x] ~~收 fable / astra 的可證明性答案~~ → 兩份＋自審在 evidence/2026-09-22-depth0-reversal-attribution/REVIEW-NOTES-seatability.md
 - [ ] 複驗 astra 另外兩條假通過路徑（continue 繞過 declared fallback、非當輪的 governance mutation）
 - [ ] 裁定：偽造遙測該不該 gate（教學說 fail、grader 說 pass、測試釘住 pass）
-- [ ] foreman phase-1 U2 收尾，驗 A6 是否在程式碼裡斷言
+- [x] ~~foreman phase-1 U2~~ → 完成，在 worktree `autopilot-foreman-p1` 分支 `foreman/exam-phase-1`，**未合併**。A6 有在程式碼裡斷言，它自己抓到一條 D-twin 的空洞通過並修掉（`e72250d0`）。揭露 8 個規格缺口＋一條 codex 鏡像 drift。**合不合等操作者**
 - [ ] 審 spec 的 E/F/G/H 家族
 - [ ] `QRP_PROMPT_MODE=owner` 還沒補 → **foreman 那席至今發不出去**
-- [ ] `dispatch-hetero --timeout` parity 稽核
-- [ ] push（領先 4 個 commit；上次 push 時 origin 無版本碰撞）
+- [ ] `dispatch-hetero --timeout` parity 稽核（foreman 獨立複驗了這個缺陷，屬實）
+- [ ] **公平科**：v2 重考仍 3 個 pair delta。fable 認為這可能是唯一真實的能力缺口，astra 指出 `generator:452` 的 severity floor 是種子隨機且證據裡看不出來 → 下一個該查的
+- [ ] push（領先 origin 12 個 commit；v2.36.88，origin 在 2.36.86，無碰撞）
 
 ## 紀律（這個 session 一直照做，接手請延續）
 

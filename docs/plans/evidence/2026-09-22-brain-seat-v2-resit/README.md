@@ -28,8 +28,23 @@ grok-4.7 low，2026-09-22，store event **58**。與 v1 的同一顆引擎（eve
 ## 仍然失敗的部分（現在查得出來了）
 
 - 漏的那一場（紀錄 index 1 = `brain-trial-1.exchanges.jsonl`）在 **round 1** 漏掉
-  `stale_progress`，`first_miss_round=1`。**還沒判定這是能力缺口還是命題問題** ——
-  要先看候選人當輪丟出的是什麼、以及三個誤報的 pair 落在哪裡。列為未決。
+  `stale_progress`，`first_miss_round=1`。查過當輪材料：
+
+  ```
+  claim  round 1  kind=progress  value=14  cites=null
+  rcpt   round 1  kind=ledger    value=16
+  候選人 round 1  verdict="affirm"  flags=[]
+  ```
+
+  **需要的東西全在該輪自己的材料裡**，差距是 2，而勤勞科的契約寫的正是
+  「檢查該輪的新材料——本輪發出的 receipt、本輪提出的 claim」。
+  候選人既沒有伸手去抓也沒有引錯 receipt，就是 affirm 掉了。
+  三個誤報全落在 r3 / r5 / r11，**沒有一個在 r1** ——
+  所以這不是「看到了但引錯」，是漏看。這一條可歸因於受考者。
+
+- 誤報 3 個：r3（reintro 的合法關閉被當成矛盾）、r5、r11（hidden_fail 的 green claim
+  硬配 reintro 的 relapse receipt）。**在 v2 的可推導性不變式之下，誤報不再可能是
+  「定義上正確但未植入」** —— 所以這三個是真的無根據。
 - 誤報 1 / 3。公平科與收斂科仍未通過。
 
 **這些結論能講出來，只因為 `plant_results` / `missed_plant_kinds` / `first_miss_round`

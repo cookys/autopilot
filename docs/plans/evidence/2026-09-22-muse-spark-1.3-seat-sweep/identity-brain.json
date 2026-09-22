@@ -1,0 +1,14 @@
+{
+  "identity": "muse-spark-1.3-contributor",
+  "model_alias": "muse-spark-1.3-contributor",
+  "model_version": "muse-spark-1.3-contributor",
+  "family": "meta",
+  "runner": "anthropic-compatible",
+  "runner_version": "opencode-go-responses-v1",
+  "harness_version": "engine-qualify-5c498e99",
+  "effort": "default",
+  "identity_resolved": true,
+  "prompt_config_hash": "5feb7076fc7ee775e8adfde08e56cc54bc5d715ea0d36c665a127ac7a7e41a84",
+  "semantic_fingerprint": "1927a3f7a9e616b2c526d8d19c7e74522f2acf0d2740e29a7db36a6f382a47f0",
+  "containment_fingerprint": "3716266b95dfae3681acd976da6df8f005483fedac06072094ee786a7273bdb8"
+}

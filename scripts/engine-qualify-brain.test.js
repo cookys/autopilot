@@ -216,6 +216,17 @@ function main() {
   equal(record.scope.task_classes, ['brain-seat'],
     'scope is FORCED to brain-seat (lineage never interleaves with intent-control)');
   equal(record.trials.length, 2, 'atomic record carries both trials');
+  // The nonce must survive INTO the record, not merely be accepted by validation.
+  // It was allowlisted in the schema and then dropped when the body was compiled,
+  // so the first brain-seat-v2 sitting (store event 58) still has none.
+  check(/^[a-f0-9]{64}$/u.test(record.run_nonce || ''),
+    `administration nonce is persisted in the record (got ${record.run_nonce})`);
+  for (const trial of record.trials) {
+    check(Array.isArray(trial.plant_results) && trial.plant_results.length === trial.plants_total,
+      'each trial records one attribution entry per plant');
+    check(trial.plant_results.every((p) => p.plant_kind && ['caught', 'missed'].includes(p.verdict)),
+      'every plant result names its kind and its verdict');
+  }
   for (const trial of record.trials) {
     equal(trial.stop_reason, 'completed', 'trial stream completed');
     equal(trial.construct_scope, 'per-round-exam.long-horizon-production-audit',

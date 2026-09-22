@@ -1692,6 +1692,12 @@ function compileCapabilityEvidence(raw) {
     trial_set_hash: trialSetHash,
     revocation,
     supersedes,
+    // Part of the body, so it is covered by evidence_hash: two administrations
+    // that differ only in their nonce ARE different administrations. The key was
+    // allowlisted before this line existed, which allowed it through validation
+    // and then dropped it on the floor — the first v2 re-sit (store event 58) has
+    // no nonce for exactly that reason.
+    ...(value.run_nonce === undefined ? {} : { run_nonce: token(value.run_nonce, 'capability evidence.run_nonce') }),
     ...(pooledReceipt || {}),
   };
   // Pooled biconditional runs for every state (not only qualified) so a

@@ -27,12 +27,28 @@ grok-4.7 low，2026-09-22，store event **58**。與 v1 的同一顆引擎（eve
 
 ## 仍然失敗的部分（現在查得出來了）
 
-- trial 2 在 **round 1** 漏掉 `stale_progress`（`first_miss_round=1`）。落在第一輪，
-  沒有前文可依賴——這看起來像真實的能力缺口，不是儀器問題。
+- 漏的那一場（紀錄 index 1 = `brain-trial-1.exchanges.jsonl`）在 **round 1** 漏掉
+  `stale_progress`，`first_miss_round=1`。**還沒判定這是能力缺口還是命題問題** ——
+  要先看候選人當輪丟出的是什麼、以及三個誤報的 pair 落在哪裡。列為未決。
 - 誤報 1 / 3。公平科與收斂科仍未通過。
 
 **這些結論能講出來，只因為 `plant_results` / `missed_plant_kinds` / `first_miss_round`
 現在進了紀錄。** 同樣的話在 v1 的八場 sitting 上講不出來。
+
+## 檔名不是 join key
+
+`brain-trial-N.exchanges.jsonl` 是**施測順序**，但 evidence 紀錄把 trials
+**按 `trial_id` 排序**（`capability-evidence.js` `normalizeTrials`，為了正規雜湊）。
+兩者一致與否是隨機的，這一場就剛好相反：
+
+| 原始檔 | 紀錄 index |
+|---|---|
+| `brain-trial-1.exchanges.jsonl` | **1**（4/5，漏 stale_progress） |
+| `brain-trial-2.exchanges.jsonl` | **0**（5/5） |
+
+用 `decision_trace_hash` 重算比對確認的，不是推論。
+已補 `brain-trial-order.json`（本場為事後回填），並讓 runner 之後每場都寫。
+這也解釋了 v1 歸因裡「FP 數字對得上但兩場相反」那個觀察。
 
 ## 一個沒修乾淨的地方
 

@@ -197,6 +197,26 @@ function runMode(mode, storeSuffix) {
 }
 
 function main() {
+  // Raw exchanges must be joinable to the record. The record sorts its trials by
+  // trial_id; the raw files are in administration order, so the filename alone is
+  // the wrong key (verified on store event 58, where brain-trial-1 is record
+  // index 1). The emitted map is the join.
+  const rawProbe = path.join(tempRoot, 'raw-order-probe');
+  runQualification({
+    ...baseOptions,
+    store: path.join(tempRoot, 'store-order-probe'),
+    panelCmd: '/panel/node /panel/brain.js perfect',
+    rawDir: rawProbe,
+  });
+  const orderMap = JSON.parse(fs.readFileSync(path.join(rawProbe, 'brain-trial-order.json'), 'utf8'));
+  check(orderMap.files.length === 2, 'the raw dir carries a trial-order map for both trials');
+  for (const entry of orderMap.files) {
+    check(fs.existsSync(path.join(rawProbe, entry.file)), `${entry.file} exists alongside the map`);
+    check(/^trial_[a-f0-9]+$/u.test(entry.trial_id), `${entry.file} is mapped to a real trial_id`);
+  }
+  check(new Set(orderMap.files.map((e) => e.trial_id)).size === 2,
+    'the map distinguishes the two trials');
+
   const pinned = verifyPinnedBrainEvaluationAssets();
   check(/^[a-f0-9]{64}$/u.test(pinned.generator_hash)
     && /^[a-f0-9]{64}$/u.test(pinned.grader_hash)

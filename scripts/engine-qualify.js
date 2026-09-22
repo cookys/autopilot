@@ -2717,6 +2717,24 @@ function runBrainQualification(options) {
   }
   if (options.rawDir) {
     fs.mkdirSync(options.rawDir, { recursive: true });
+    // The raw files are written in ADMINISTRATION order; the evidence record sorts
+    // its trials by trial_id (capability-evidence.js normalizeTrials, for a canonical
+    // hash). Joining raw bundle N to record trial N is therefore wrong whenever the
+    // two orders disagree — about half the time, and silently. Verified on store
+    // event 58: brain-trial-1's decision_trace_hash is record index 1's.
+    // This map is the join key; do not infer it from the filename.
+    fs.writeFileSync(
+      path.join(options.rawDir, 'brain-trial-order.json'),
+      `${JSON.stringify({
+        note: 'raw files are in administration order; the evidence record sorts trials by trial_id',
+        files: admin.trials.map((trial, index) => ({
+          file: `brain-trial-${index + 1}.exchanges.jsonl`,
+          administration_index: index,
+          trial_id: trial.trial_id,
+        })),
+      }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
     for (let index = 0; index < trialMeta.length; index += 1) {
       fs.writeFileSync(
         path.join(options.rawDir, `brain-trial-${index + 1}.exchanges.jsonl`),

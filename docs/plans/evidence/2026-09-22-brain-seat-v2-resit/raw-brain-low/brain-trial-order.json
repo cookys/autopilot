@@ -1,0 +1,19 @@
+{
+  "note": "BACKFILLED after the fact. This sitting predates the map; the join was recovered by recomputing decision_trace_hash from each raw file and matching it against the record (store event 58). The record sorts trials by trial_id; the raw files are in administration order.",
+  "files": [
+    {
+      "file": "brain-trial-1.exchanges.jsonl",
+      "administration_index": 0,
+      "trial_id": "trial_b854e0c18cd9",
+      "record_index": 1,
+      "decision_trace_hash": "21faf96bef03262763e368cf25743820ad51d504c799d26e4d1bd4f294b41373"
+    },
+    {
+      "file": "brain-trial-2.exchanges.jsonl",
+      "administration_index": 1,
+      "trial_id": "trial_48ae7a69ec5c",
+      "record_index": 0,
+      "decision_trace_hash": "c433daa89969773842844ebe8e4974f2376631a664e49879473f2f973b833037"
+    }
+  ]
+}

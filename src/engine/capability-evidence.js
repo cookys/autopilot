@@ -912,7 +912,12 @@ function normalizeBrainTrial(raw, index, methodology) {
     'round_stream_hash',
     'corpus_manifest_hash',
   ];
-  onlyKeys(value, new Set(fields), label);
+  // Diligence attribution (2026-09-22). OPTIONAL, because rows written before the
+  // fields existed are history, not drift — the first 18 administered trials have
+  // none and must still validate. When present they say WHICH plant was missed,
+  // which is the question a bare "4 of 5" could not answer.
+  const optionalFields = ['first_miss_round', 'plant_results', 'missed_plant_kinds'];
+  onlyKeys(value, new Set([...fields, ...optionalFields]), label);
   requiredKeys(value, fields, label);
   const trial = {
     trial_id: token(value.trial_id, `${label}.trial_id`),
@@ -939,6 +944,34 @@ function normalizeBrainTrial(raw, index, methodology) {
     round_stream_hash: digest(value.round_stream_hash, `${label}.round_stream_hash`),
     corpus_manifest_hash: digest(value.corpus_manifest_hash, `${label}.corpus_manifest_hash`),
   };
+  if (value.first_miss_round !== undefined && value.first_miss_round !== null) {
+    trial.first_miss_round = integer(value.first_miss_round, `${label}.first_miss_round`);
+  }
+  if (value.plant_results !== undefined) {
+    if (!Array.isArray(value.plant_results)) {
+      evidenceError(`${label}.plant_results must be an array`);
+    }
+    trial.plant_results = value.plant_results.map((entry, i) => {
+      const entryLabel = `${label}.plant_results[${i}]`;
+      onlyKeys(entry, new Set(['plant_id', 'plant_kind', 'round_id', 'claim_id', 'receipt_id', 'verdict']), entryLabel);
+      requiredKeys(entry, ['plant_kind', 'round_id', 'verdict'], entryLabel);
+      return {
+        plant_id: entry.plant_id === undefined ? null : token(entry.plant_id, `${entryLabel}.plant_id`),
+        plant_kind: token(entry.plant_kind, `${entryLabel}.plant_kind`),
+        round_id: integer(entry.round_id, `${entryLabel}.round_id`),
+        claim_id: entry.claim_id === undefined ? null : token(entry.claim_id, `${entryLabel}.claim_id`),
+        receipt_id: entry.receipt_id === undefined ? null : token(entry.receipt_id, `${entryLabel}.receipt_id`),
+        verdict: enumValue(entry.verdict, new Set(['caught', 'missed']), `${entryLabel}.verdict`),
+      };
+    });
+  }
+  if (value.missed_plant_kinds !== undefined) {
+    if (!Array.isArray(value.missed_plant_kinds)) {
+      evidenceError(`${label}.missed_plant_kinds must be an array`);
+    }
+    trial.missed_plant_kinds = value.missed_plant_kinds
+      .map((kind, i) => token(kind, `${label}.missed_plant_kinds[${i}]`));
+  }
   if (trial.construct_scope !== BRAIN_CONSTRUCT_SCOPE) {
     evidenceError(`${label}.construct_scope must be the pinned honesty clause ${BRAIN_CONSTRUCT_SCOPE}`);
   }
@@ -1559,6 +1592,11 @@ function compileCapabilityEvidence(raw) {
     'trial_set_hash',
     'revocation',
     'supersedes',
+    // The administration nonce, when the suite derives its cases from one. Optional.
+    // Without it a completed sitting cannot be regenerated and its oracle dies with
+    // the process — which is how five brain sittings became unattributable
+    // (2026-09-22, docs/plans/evidence/2026-09-22-depth0-reversal-attribution/).
+    'run_nonce',
     // Additive pooled-receipt fields (plan 2026-08-29 D5); optional, all-or-nothing.
     'administrations',
     'pooled',

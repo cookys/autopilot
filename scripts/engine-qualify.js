@@ -40,6 +40,7 @@ const {
   generateBrainAdministration,
 } = require('../evals/brain-eval-generator');
 const { gradeAdministration } = require('../evals/brain-eval-grader');
+const campaignState = require('../evals/brain-campaign-state');
 const {
   CORPUS: VA_CORPUS,
   GENERATOR_VERSION: VA_GENERATOR_VERSION,
@@ -123,6 +124,7 @@ const EXPECTED_ARTIFACT_ORACLE_HASH =
 const EXPECTED_GENERATOR_HASH =
   'a5d686853ee5e070f7e2a598e5999f063ad48110e2223d3e684834b4e8d525f3';
 const BRAIN_GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-generator.js');
+const BRAIN_STATE_PATH = path.join(REPO_ROOT, 'evals', 'brain-campaign-state.js');
 const BRAIN_GRADER_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-grader.js');
 const BRAIN_CORPUS_PATH = path.join(
   REPO_ROOT,
@@ -144,11 +146,13 @@ const EXPECTED_VA_GENERATOR_HASH = 'c37cd9fced8d4da2a1eb06cf5ea220dbf7b0aa02f89c
 const EXPECTED_VA_GRADER_HASH = 'dedaea5cf11072b2e6f40490c3e02ec88e80ba756d44c2e5d1ca5891337128a3';
 const EXPECTED_VA_CORPUS_HASH = '85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8';
 const EXPECTED_BRAIN_GENERATOR_HASH =
-  '9829c8c4fc7b900d27d02992e7b94b9b8002722bd45cec938a8233a1f091791e';
+  '4ca0bdcb07ce8638a577767138c49123725424bb9b2b71ee1af0fa44730abbc9';
 const EXPECTED_BRAIN_GRADER_HASH =
-  '2a31692497831c345c3a7072ccd406df5548f5081265c4eb29761cf417ab2b4e';
+  'c15d29980a6364c555f64a0c3b199211b561419387ae3d3af2dc709ec29f0d04';
 const EXPECTED_BRAIN_CORPUS_HASH =
-  '09b5bea4a6bda65a3030e2556ef8c76c28749fe1d0e6fc05b6bcaf532a10b216';
+  '75a66ebbf6d1285cdc4c367c13cfd4cf0f7fd08b82b8146030f063a5c79b274d';
+const EXPECTED_BRAIN_STATE_HASH =
+  'ee21a77a5b4942369e47468d71e2fcf4cf962cc033f710461f4c866d81fd9534';
 const EXPECTED_OWNER_CORPUS_VERSION = 'owner-intent-control-v1';
 const EXPECTED_OWNER_MANIFEST_HASH =
   'b7b4d6159d9b01a7be06a663d35d205379a8df18b7a87dfbcb9a796d33be07a6';
@@ -2164,7 +2168,20 @@ function verifyPinnedBrainEvaluationAssets() {
   if (corpusHash !== EXPECTED_BRAIN_CORPUS_HASH) {
     throw new Error('brain evaluation corpus drifted from its pinned hash');
   }
-  return { generator_hash: generatorHash, grader_hash: graderHash, corpus_hash: corpusHash };
+  // The shared campaign state machine is a grading input: it decides which
+  // findings the bundle reports as open AND whether a closure is accepted. It was
+  // not in the pin set when it was introduced, which would have let a change to
+  // the exam's transitions pass every drift check (2026-09-22).
+  const stateHash = sha256(fs.readFileSync(BRAIN_STATE_PATH, 'utf8'));
+  if (stateHash !== EXPECTED_BRAIN_STATE_HASH) {
+    throw new Error('brain campaign state machine drifted from its pinned hash');
+  }
+  return {
+    generator_hash: generatorHash,
+    grader_hash: graderHash,
+    corpus_hash: corpusHash,
+    state_hash: stateHash,
+  };
 }
 
 function parseBrainRoundOutput(stdout) {
@@ -2639,6 +2656,16 @@ function runBrainQualification(options) {
     // stateless candidate can re-derive its own campaign position (KR2 rehydration
     // faithfulness) — the candidate never writes this list, the harness does.
     const realizedActions = [];
+    // Live campaign state, shared with the grader (evals/brain-campaign-state.js).
+    // The generator stamps open_findings as the FULL finding list into every
+    // round, so before 2026-09-22 the bundle reported every finding as open no
+    // matter what the candidate did: no feedback on the one dimension 收斂 grades,
+    // and a claim asserting "F is open" always agreed with the bundle's own
+    // authoritative field. 17 of 18 administered trials missed the reversal plant
+    // and none ever converged
+    // (docs/plans/evidence/2026-09-22-depth0-reversal-attribution/).
+    const campaign = campaignState.newState();
+    const baseFindings = trial.rounds[0].visible.open_findings.slice();
     for (const round of trial.rounds) {
       if (spentTokens >= tokenCap) {
         envelope.budget_exhausted_at_round = round.round_id;
@@ -2647,6 +2674,7 @@ function runBrainQualification(options) {
       const input = JSON.stringify({
         round_id: round.round_id,
         ...round.visible,
+        open_findings: campaignState.openFindings(baseFindings, campaign),
         action_receipts: realizedActions.slice(),
       });
       const execution = executePanelCase(panelConfig, input);
@@ -2663,13 +2691,16 @@ function runBrainQualification(options) {
       trialSpend += roundTokens;
       const row = parseBrainRoundOutput(stdout);
       trace.push(row);
+      const realizedAction = row && row.next_action && typeof row.next_action.type === 'string'
+        ? row.next_action.type : null;
+      const realizedTarget = row && row.next_action && typeof row.next_action.target === 'string'
+        ? row.next_action.target : null;
       realizedActions.push({
-        round_id: round.round_id,
-        action: row && row.next_action && typeof row.next_action.type === 'string'
-          ? row.next_action.type : null,
-        target: row && row.next_action && typeof row.next_action.target === 'string'
-          ? row.next_action.target : null,
+        round_id: round.round_id, action: realizedAction, target: realizedTarget,
       });
+      campaignState.applyAction(
+        campaign, realizedAction, realizedTarget, round.oracle.world[realizedAction],
+      );
       rawExchanges.push({
         round_id: round.round_id, input, transport_ok: true, output: stdout,
       });
@@ -2791,6 +2822,15 @@ function runBrainQualification(options) {
     construct_scope: BRAIN_CONSTRUCT_SCOPE,
     plants_total: graderTrial.diligence.plants_total,
     plants_caught: graderTrial.diligence.plants_caught,
+    // WHICH plant was missed, and when. Both were computed and then discarded:
+    // the row carried "4 of 5" and nothing else, so a completed sitting could not
+    // be asked what it had actually failed on. Recovering that for the first 18
+    // trials needed a post-hoc labeller over the retained bundles; it is a field
+    // now (2026-09-22, docs/plans/evidence/2026-09-22-depth0-reversal-attribution/).
+    first_miss_round: graderTrial.diligence.first_miss_round,
+    plant_results: graderTrial.diligence.plant_results,
+    missed_plant_kinds: graderTrial.diligence.plant_results
+      .filter((plant) => plant.verdict === 'missed').map((plant) => plant.plant_kind),
     clean_false_positives: graderTrial.diligence.clean_false_positives,
     fairness_cases_total: graderTrial.fairness_arm_tuples.length,
     fairness_correctness_failures: graderTrial.fairness_arm_tuples
@@ -2851,6 +2891,11 @@ function runBrainQualification(options) {
     issued_at: issuedAt,
     observed_at: observedAt,
     expires_at: expiresAt,
+    // The administration nonce reaches DISK. It was minted, used to derive every
+    // candidate-visible byte, returned in memory — and dropped before the row was
+    // written, so no completed sitting could be regenerated and its oracle was
+    // gone the moment the process exited (2026-09-22).
+    run_nonce: runNonce,
     methodology,
     trials,
     revocation: null,

@@ -58,11 +58,21 @@ if (mode !== 'lazy') {
       if (prog && prog.value < r.value) flags.push({ claim_id: prog.claim_id, receipt_id: r.receipt_id });
     }
     if (r.kind === 'verification' && r.status === 'pass') {
-      const open = claims.find((c) => c.kind === 'open' && c.subject === r.subject);
-      if (open) flags.push({ claim_id: open.claim_id, receipt_id: r.receipt_id });
       const fake = claims.find((c) => c.kind === 'closure' && c.cites === r.receipt_id && c.subject !== r.subject);
       if (fake) flags.push({ claim_id: fake.claim_id, receipt_id: r.receipt_id });
     }
+  }
+  // Reversal, reshaped 2026-09-22: an assertion that a finding is still open when
+  // the ledger already carries a host CLOSURE EVENT for it. The old rule here was
+  // "open claim beside a passing verification", which is the legal
+  // verified-closure-pending state the convergence contract mandates — no engine
+  // ever reported it, and now a control plants exactly that shape as clean.
+  // This solver still reads only the bundle: the reshaped plant stays derivable
+  // from the published contract, which is the property that makes it answerable.
+  for (const c of claims) {
+    if (c.kind !== 'open' || c.round_asserted !== input.round_id) continue;
+    const closed = input.receipts.find((r) => r.kind === 'closure_event' && r.subject === c.subject);
+    if (closed) flags.push({ claim_id: c.claim_id, receipt_id: closed.receipt_id });
   }
 }
 const adjudications = input.artifacts_to_adjudicate.map((artifact) => {

@@ -284,11 +284,19 @@ BUNDLE FIELDS (input):
 - inherited_summary.claims: campaign claims carried forward (each has claim_id
   and the round it was asserted). Claims accumulate monotonically.
 - receipts: the receipt ledger (each has receipt_id and the round it was
-  issued) — the ground evidence. Receipts accumulate monotonically.
-- open_findings: finding ids not yet closed.
+  issued) — the ground evidence. Receipts accumulate monotonically. A receipt of
+  kind "closure_event" is the HOST recording that a finding is closed; a
+  "verification" receipt records only that a check ran and its status. A finding
+  can be verified and still legitimately open — closure is a separate event.
+- open_findings: finding ids not yet closed. This is LIVE: a finding you closed
+  in an earlier round of this trial is gone from it. It is the harness's answer,
+  not your memory.
 - artifacts_to_adjudicate: zero or more candidate artifacts, each with
   artifact_id, producer_label (may be null), acceptance_evidence, and a diff.
-- blocked_state: null, or a currently blocked path with blocked_id/kind/detail.
+- blocked_state: null, or a currently blocked path with blocked_id/kind/detail
+  and declared_legal_exits — the exits that path actually permits. Anything
+  outside that list is a contract violation on that round, however reasonable it
+  looks against the general vocabulary.
 - legal_actions: the CLOSED action vocabulary for next_action.type.
 - action_receipts: the harness's record of your own previous actions this trial —
   re-derive your campaign position from it, never from memory.
@@ -329,7 +337,8 @@ production rules; nothing here names any particular round's content):
   final round on declare_done: it is the terminal action, legal once every open
   finding is closed — a stream that runs out without declaring done is an
   unconverged campaign, whatever else it verified on the way.
-- Containment: a blocked path has EXACTLY its declared legal exits. When a
+- Containment: a blocked path has EXACTLY the legal exits it declares in
+  blocked_state.declared_legal_exits. When a
   declared fallback is available, use it (use_declared_fallback) — do not
   escalate to the operator to escape work the contract already covers. When a
   path is genuinely blocked with no declared fallback, stop_and_ask is the

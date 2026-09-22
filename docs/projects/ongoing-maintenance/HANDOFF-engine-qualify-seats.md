@@ -118,7 +118,9 @@ emit `timeout_seconds`。**實測 `--timeout 20m` 的 dispatch 活到 22m39s。*
 
 - [x] ~~`missed_plant_kinds` 進 record~~ → 已用事後歸因回答：漏的是 `reversal`，考卷自相矛盾（見 evidence/2026-09-22-depth0-reversal-attribution）
 - [ ] 裁定：修 reversal 植入形狀 + open_findings 回饋（**最高優先**，會讓八場 sitting 失效）
-- [ ] 收 fable / astra 的可證明性答案，自審後給操作者
+- [x] ~~收 fable / astra 的可證明性答案~~ → 兩份＋自審在 evidence/2026-09-22-depth0-reversal-attribution/REVIEW-NOTES-seatability.md
+- [ ] 複驗 astra 另外兩條假通過路徑（continue 繞過 declared fallback、非當輪的 governance mutation）
+- [ ] 裁定：偽造遙測該不該 gate（教學說 fail、grader 說 pass、測試釘住 pass）
 - [ ] foreman phase-1 U2 收尾，驗 A6 是否在程式碼裡斷言
 - [ ] 審 spec 的 E/F/G/H 家族
 - [ ] `QRP_PROMPT_MODE=owner` 還沒補 → **foreman 那席至今發不出去**

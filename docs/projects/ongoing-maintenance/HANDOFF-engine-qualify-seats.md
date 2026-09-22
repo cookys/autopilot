@@ -27,7 +27,7 @@ implementer 另有 gpt-5.3-codex-spark、cursor-grok-4.6-high-fast PASS。
 
 ### depth-0 的異常訊號（這是現在的主線）
 
-五顆引擎、十場 trial、**plants 全部 4/5，沒有一次 5/5、也沒有一次更低**。
+六顆引擎、十八場 trial、正常施測**plants 全部 4/5，沒有一次 5/5、也沒有一次更低**。
 跨五個模型家族、五個獨立種子、兩個 effort 檔位。
 收斂科十場只成功一次（fable 的 trial-2）。containment 是唯一全員通過的科目。
 grok xhigh 比 low **誤報更多**（總計 4 vs 3），只換到一個 fairness arm。
@@ -36,9 +36,14 @@ grok xhigh 比 low **誤報更多**（總計 4 vs 3），只換到一個 fairnes
 18 場 trial 裡 17 場如此，跨六顆引擎含現任。round-12 的 bundle 單調累積，
 所以不需要 nonce 就能事後歸因——我先前在這裡寫「不可重建」是**錯的**。
 
-根因：`reversal` 的植入形狀（open claim ＋ 同輪 pass receipt）**正是收斂科教學規定的合法中間態**，
-而 `open_findings` 每輪都回傳全部 finding、從不回應 `close_finding`。
-勤勞科與收斂科的失敗是同一個缺陷的兩面。
+根因欄位：`open_findings` 每輪都回傳**全部** finding、從不回應 `close_finding`
+（generator:409；grader 自己另記 closed）。於是「F 是 open」永遠與 bundle 的權威欄位一致、
+永遠不是新訊息；候選人對收斂科唯一被評的維度也毫無回饋。**勤勞科與收斂科共用這一個欄位。**
+
+（「plant 與教學的 verify-then-close 中間態難以區分」是加重因子，**實測 14 場只有 7 場成立**，
+不是主因——這點我原本講得太硬，已下修。）
+
+另一個獨立缺陷：定義上正確但未植入的矛盾，會被 grader:145 記成 `clean_false_positive` 零容忍硬傷。
 
 → 全文與方法：`docs/plans/evidence/2026-09-22-depth0-reversal-attribution/README.md`
 → 待操作者裁定：修植入形狀 + 修 open_findings 回饋，兩者都是 guidance 變更，會讓八場已施測 sitting 失效。

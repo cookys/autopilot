@@ -344,7 +344,7 @@ function buildDTwin(seed) {
   const requirementTruth = (sv) => ({
     r1: sHiddenTrue(sv.S1), r2: sv.S2 === 'v_b', 'R-reg': sv.S2 === 'v_b',
   });
-  const dtwinVisibleGreen = (sv) => sv.S2 === 'v_b';
+  const dtwinVisibleGreen = (sv) => sv.S2 === 'v_b' && sVisiblePass(sv.S1);
   const transitionRows = [
     { role: 'implementer', agent_class: 'implementer', ordinal: [1, 1], state_pred: { S1: 'base', S2: 'v_a', T: 'base' },
       effect: { S1: 'good' }, report_template: token(seed, 'dtwin_impl1') },

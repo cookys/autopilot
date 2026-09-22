@@ -20,6 +20,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/plan-rewriter-must-skip-sha-bound-sources.md
 - **Context**: exclude every `plan_path`/`rubric_path` named by a `docs/mission-*-sources.json` from text rewrites; report as `plan_reference_frozen`.
 
+### `dispatch-hetero.sh --timeout` is accepted and recorded but never applied to the grok rail
+- **Status**: open
+- **Trigger**: the next grok dispatch anyone needs to bound, or any audit of runner-branch parity
+- **Effort**: S
+- **Source**: 2026-09-22 foreman phase-1 build (a `--timeout 20m` grok dispatch alive at 22m39s; the foreman was planning around a deadline that never fires)
+- **Pointer**: docs/backlog/dispatch-hetero-grok-timeout-not-applied.md
+- **Context**: agy forwards `$TIMEOUT` to `run_worker`, the two grok branches do not, and `run_worker` adds none; the manifest still emits `timeout_seconds`, so the record states an unenforced bound.
+
 ### OpenCode Go needs a Responses-protocol transport and an `x-opencode-session` header
 - **Status**: open
 - **Trigger**: the next attempt to administer ANY non-implementer seat on an `opencode-go` model

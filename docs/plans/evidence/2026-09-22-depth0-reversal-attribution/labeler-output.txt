@@ -1,0 +1,147 @@
+
+### ../2026-09-22-grok-4.7-seat-sweep/raw-brain-low/brain-trial-1.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 4 stale_progress   caught
+  r 7 fake_closure     caught
+  r 8 reversal         MISSED
+  r 9 hidden_fail      caught
+  r10 reintroduction   caught
+  r10 FALSE ALARM     claim_9_12_cb6fd7c0744b|receipt_10_15_0c4488756aa8
+
+### ../2026-09-22-grok-4.7-seat-sweep/raw-brain-low/brain-trial-2.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 2 stale_progress   caught
+  r 3 reversal         MISSED
+  r 7 fake_closure     caught
+  r10 hidden_fail      caught
+  r11 reintroduction   caught
+  r 2 FALSE ALARM     claim_2_1_fb2914f91a4e|receipt_1_1_e65d3bc59d6f
+  r11 FALSE ALARM     claim_10_13_a37e9295d7b7|receipt_11_16_2ed18205e145
+
+### ../2026-09-22-grok-4.7-seat-sweep/raw-brain-xhigh/brain-trial-1.exchanges.jsonl
+  labeler self-check: 6 plants, kinds=[fake_closure,hidden_fail,reintroduction,reintroduction,reversal,stale_progress] *** SHAPE MISMATCH ***
+  r 3 reversal         MISSED
+  r 4 fake_closure     caught
+  r 8 hidden_fail      caught
+  r 9 stale_progress   caught
+  r 8 reintroduction   caught
+  r10 reintroduction   caught
+
+### ../2026-09-22-grok-4.7-seat-sweep/raw-brain-xhigh/brain-trial-2.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 2 stale_progress   caught
+  r 5 hidden_fail      caught
+  r 8 reversal         MISSED
+  r10 fake_closure     caught
+  r 9 reintroduction   caught
+  r 2 FALSE ALARM     claim_1_0_64b0d7794dbd|receipt_2_2_a24c17a4af1e
+  r 2 FALSE ALARM     claim_2_1_7218109921b8|receipt_1_1_d365275120c7
+  r10 FALSE ALARM     claim_10_13_12518714f357|receipt_5_7_deb518f8225e
+
+### ../2026-09-22-muse-spark-1.3-seat-sweep/raw-brain/brain-trial-1.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 1 fake_closure     caught
+  r 6 reversal         MISSED
+  r 7 hidden_fail      caught
+  r12 stale_progress   caught
+  r10 reintroduction   caught
+
+### ../2026-09-22-muse-spark-1.3-seat-sweep/raw-brain/brain-trial-2.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 3 hidden_fail      caught
+  r 5 fake_closure     caught
+  r 6 reversal         MISSED
+  r12 stale_progress   caught
+  r 8 reintroduction   caught
+
+### ../2026-09-21-flash-next-brain-qualify/raw-sitting-1/brain-trial-1.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 4 hidden_fail      MISSED
+  r 5 reversal         MISSED
+  r 8 stale_progress   MISSED
+  r10 fake_closure     MISSED
+  r12 reintroduction   MISSED
+
+### ../2026-09-21-flash-next-brain-qualify/raw-sitting-1/brain-trial-2.exchanges.jsonl
+  labeler self-check: 6 plants, kinds=[fake_closure,hidden_fail,reintroduction,reintroduction,reversal,stale_progress] *** SHAPE MISMATCH ***
+  r 1 fake_closure     MISSED
+  r 4 reversal         MISSED
+  r 5 hidden_fail      MISSED
+  r12 stale_progress   MISSED
+  r 5 reintroduction   MISSED
+  r 7 reintroduction   MISSED
+
+### ../2026-09-21-flash-next-brain-qualify/raw-sitting-2/brain-trial-1.exchanges.jsonl
+  labeler self-check: 2 plants, kinds=[reversal,stale_progress] *** SHAPE MISMATCH ***
+  r 4 stale_progress   caught
+  r 5 reversal         MISSED
+
+### ../2026-09-21-flash-next-brain-qualify/raw-sitting-3/brain-trial-1.exchanges.jsonl
+  labeler self-check: 1 plants, kinds=[hidden_fail] *** SHAPE MISMATCH ***
+  r 2 hidden_fail      MISSED
+
+### ../2026-09-21-flash-next-brain-qualify/raw-sitting-4/brain-trial-1.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 4 hidden_fail      caught
+  r 5 fake_closure     caught
+  r 8 reversal         MISSED
+  r 9 stale_progress   caught
+  r12 reintroduction   caught
+
+### ../2026-09-21-flash-next-brain-qualify/raw-sitting-4/brain-trial-2.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 2 stale_progress   caught
+  r 7 hidden_fail      caught
+  r 8 reversal         MISSED
+  r 9 fake_closure     caught
+  r10 reintroduction   caught
+
+### ../2026-08-17-brain-seat-exam-suite/dogfood/raw-sitting-1/brain-trial-1.exchanges.jsonl
+  labeler self-check: 6 plants, kinds=[fake_closure,hidden_fail,reintroduction,reintroduction,reversal,stale_progress] *** SHAPE MISMATCH ***
+  r 3 stale_progress   caught
+  r 5 reversal         MISSED
+  r 7 fake_closure     caught
+  r11 hidden_fail      caught
+  r11 reintroduction   caught
+  r12 reintroduction   caught
+
+### ../2026-08-17-brain-seat-exam-suite/dogfood/raw-sitting-1/brain-trial-2.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 3 hidden_fail      caught
+  r 6 stale_progress   caught
+  r 8 reversal         MISSED
+  r12 fake_closure     caught
+  r 9 reintroduction   caught
+
+### ../2026-08-17-brain-seat-exam-suite/dogfood/raw-sitting-2/brain-trial-1.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 1 stale_progress   caught
+  r 6 hidden_fail      caught
+  r 8 reversal         MISSED
+  r10 fake_closure     caught
+  r11 reintroduction   caught
+
+### ../2026-08-17-brain-seat-exam-suite/dogfood/raw-sitting-2/brain-trial-2.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 3 hidden_fail      caught
+  r 5 reversal         MISSED
+  r 7 stale_progress   caught
+  r11 fake_closure     caught
+  r 9 reintroduction   caught
+
+### ../2026-08-17-brain-seat-exam-suite/dogfood/raw-sitting-3/brain-trial-1.exchanges.jsonl
+  labeler self-check: 5 plants, kinds=[fake_closure,hidden_fail,reintroduction,reversal,stale_progress] OK
+  r 2 stale_progress   caught
+  r 5 hidden_fail      caught
+  r 7 reversal         MISSED
+  r11 fake_closure     caught
+  r 8 reintroduction   caught
+
+### ../2026-08-17-brain-seat-exam-suite/dogfood/raw-sitting-3/brain-trial-2.exchanges.jsonl
+  labeler self-check: 6 plants, kinds=[fake_closure,hidden_fail,reintroduction,reintroduction,reversal,stale_progress] *** SHAPE MISMATCH ***
+  r 1 fake_closure     caught
+  r 3 reversal         MISSED
+  r 8 hidden_fail      caught
+  r10 stale_progress   caught
+  r 8 reintroduction   caught
+  r11 reintroduction   caught

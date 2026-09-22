@@ -32,12 +32,16 @@ implementer 另有 gpt-5.3-codex-spark、cursor-grok-4.6-high-fast PASS。
 收斂科十場只成功一次（fable 的 trial-2）。containment 是唯一全員通過的科目。
 grok xhigh 比 low **誤報更多**（總計 4 vs 3），只換到一個 fairness arm。
 
-**關鍵缺口**：漏的是五種 plant 的哪一種，**查不出來**。grader 算了 `first_miss_round`
-卻沒寫進 record，oracle 是 nonce-derived 而 run_nonce 沒持久化，所以已完成的 sitting
-不可重建。**這個問題直接決定「考卷壞了」還是「五顆都不夠格」。**
+**已解決（2026-09-22，fable 5.1 指出、我驗證）**：漏的是 **`reversal`，而且只有 reversal**。
+18 場 trial 裡 17 場如此，跨六顆引擎含現任。round-12 的 bundle 單調累積，
+所以不需要 nonce 就能事後歸因——我先前在這裡寫「不可重建」是**錯的**。
 
-→ 待決策：把 `missed_plant_kinds` 寫進 per-trial record（PATCH），然後重考 grok low
-（訂閱制不花錢）。我問了三次沒拿到裁決。
+根因：`reversal` 的植入形狀（open claim ＋ 同輪 pass receipt）**正是收斂科教學規定的合法中間態**，
+而 `open_findings` 每輪都回傳全部 finding、從不回應 `close_finding`。
+勤勞科與收斂科的失敗是同一個缺陷的兩面。
+
+→ 全文與方法：`docs/plans/evidence/2026-09-22-depth0-reversal-attribution/README.md`
+→ 待操作者裁定：修植入形狀 + 修 open_findings 回饋，兩者都是 guidance 變更，會讓八場已施測 sitting 失效。
 
 ## 四個背景工作，接手時都還在跑
 
@@ -107,7 +111,8 @@ emit `timeout_seconds`。**實測 `--timeout 20m` 的 dispatch 活到 22m39s。*
 
 ## 未完清單
 
-- [ ] `missed_plant_kinds` 進 record（**最高優先，會決定考卷存廢**）
+- [x] ~~`missed_plant_kinds` 進 record~~ → 已用事後歸因回答：漏的是 `reversal`，考卷自相矛盾（見 evidence/2026-09-22-depth0-reversal-attribution）
+- [ ] 裁定：修 reversal 植入形狀 + open_findings 回饋（**最高優先**，會讓八場 sitting 失效）
 - [ ] 收 fable / astra 的可證明性答案，自審後給操作者
 - [ ] foreman phase-1 U2 收尾，驗 A6 是否在程式碼裡斷言
 - [ ] 審 spec 的 E/F/G/H 家族

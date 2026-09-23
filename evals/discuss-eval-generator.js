@@ -3,7 +3,7 @@
 
 // discuss-eval-generator — deterministic generator for the discuss
 // (positional-contribution) qualification suite (plan
-// docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md, D2).
+// docs/plans/2026-08-28-consult-discuss-qualification.md, D2).
 //
 // One administration = 2 trials x (4 families x 2 cases) = 16 cases. Each
 // case is a stateless 3-round transcript bundle; the candidate answers round

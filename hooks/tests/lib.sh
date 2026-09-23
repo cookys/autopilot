@@ -130,6 +130,13 @@ mkdir -p "$HOOK_ENGINE_CAPABILITY_DIR" "$HOOK_ENGINE_SCORECARD_DIR"
 export ENGINE_CAPABILITY_DIR="$HOOK_ENGINE_CAPABILITY_DIR"
 export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
 
+# The session-mode gate in dispatch-hetero.sh reads ${HOME}/.autopilot/session-mode when this
+# is unset — i.e. the OPERATOR's markers. A live l5/l6 marker there turned every dispatch test
+# red, and each stale marker cost the suite a node start per dispatch (2026-09-24: 20 expired
+# markers, ~1,800 node calls in dispatch-hetero.test.sh alone). Point it at an empty
+# per-suite directory; suites that exercise the gate pass their own directory per command.
+export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
+
 write_mission_governance() {
   local target="$1"
   local mode="$2"

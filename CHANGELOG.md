@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.36.91 — reviewer 席位解析不再是空的；過期的不及格考試不再算合格
+
+兩個缺陷疊在一起，讓 `resolve-dispatch-topology.js --resolve-live --role reviewer` 從 2026-08-21 起一直解出全 null：
+
+- **requalified 列讓 `engine-scorecard.js current --role reviewer` 崩潰**。`buildCapabilityEvidenceReceipt`
+  只驗證單筆紀錄（scorecard 列內嵌的 evidence），而重新考過的紀錄 `supersedes` 的前一筆不可能在這一筆的集合裡
+  ⇒ `supersedes an unknown record` 例外。topology 把 scorecard 非零結束讀成「沒有席位」，所以一直靜默是空的。
+  修法：單筆路徑傳 `isolated: true`，找不到的 lifecycle 參照＝無法驗證而非不合法、跳過；完整 ledger 維持嚴格。
+- **過期的不及格考試被判成合格**。capability-evidence 把所有過期且未撤銷的紀錄標 `stale`（含不及格，既有核心測試定為設計），
+  `deriveStatus` 卻把所有 `stale` 當 `qualified` ⇒ 08-20 考 40/42（放過 1 個 Critical）的 GLM-5.3 與 26/42 的 MiniMax-M3
+  在 09-19 過期後變成 `provisional qualified`。修在消費端：只有原本是 `qualified` 的紀錄過期才保留資格，其餘 `failed`；
+  ledger 模式記住 receipt 選中那筆的 state，不明 ⇒ 不錄取。
+- 驗證：新增 `hooks/tests/engine-scorecard-evidence-status.test.sh`（真實 store 第 35–37 列當 fixture）4/4 綠；
+  只還原 scorecard 修正時恰好 GLM-5.3 那條紅。`capability-evidence.test.sh` 補 3 條。真實 store 上 `current --role reviewer` rc=0、
+  GLM-5.3 → `failed no_record`，topology 解出 `gpt-5.6-sol/codex/max`。完整 `run.sh --parallel` 374/374 綠。
+- 未處理（另案）：MiniMax-M3 anthropic-compatible 新制失敗列 `effort:"none"` 與舊制無 effort 欄的合格列被當成兩個席位，舊合格列仍被錄取。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.90 — pipefail 下的 `| grep -q` 不再把「有匹配」讀成「沒有」
 
 在 `set -o pipefail` 底下，`grep -q` 一找到匹配就結束；前面的寫入端如果還在寫，會收到 SIGPIPE，

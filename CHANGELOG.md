@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.36.90 — pipefail 下的 `| grep -q` 不再把「有匹配」讀成「沒有」
+
+在 `set -o pipefail` 底下，`grep -q` 一找到匹配就結束；前面的寫入端如果還在寫，會收到 SIGPIPE，
+整條 pipeline 就被判成失敗 ——「有匹配」被讀成「沒匹配」。平常輸入小、寫得快，只有在負載高、
+排程不巧時才出現，所以是 flake 形狀：v2.36.89 量測時 `probe-runner-coverage` 就這樣誤報過一次。
+機制重現：pipefail + `printf 300KB | grep -q` ⇒ 200/200 誤判。
+
+- **97 處（32 檔）** `printf`/`echo` 一個雙引號參數 `| grep -q` —— 機械改寫成 `grep -q … < <(同一個 writer)`。
+  process substitution 餵給 grep 的位元組完全相同（結尾換行、空輸入、echo 的選項解析都不變），
+  所以不必逐處判斷 pattern／`-v`／空輸入語義；它的結束碼也不列入 pipeline。
+  範圍含所有 pipefail 檔 —— 包括 source `hooks/tests/lib.sh` 而繼承 pipefail 的測試。
+- **22 處**寫入端是真命令（`git`、`find`、`awk`、`sed`、`head`、各 CLI 的 `plugin list`、`codex exec --help`、
+  `setsid --help`）—— 逐處手改。派工路徑上的 `codex exec --help | grep -q --dangerously-bypass-hook-trust`
+  原本會把 SIGPIPE 讀成「旗標不支援」。語義改為只看 grep 的判定；逐處檢查過寫入端失敗的影響
+  （見 commit message）—— 唯一變寬鬆的是 endpoints-cli 的 round-trip 斷言在「CLI 印出後才失敗」的情況。
+- 改完掃描：pipefail 檔中「pipe 進 `grep -q`」0 處。`hooks/fixtures/agy-payload-probe/run.sh` 補 bash shebang。
+- 驗證：改動檔 `bash -n` 全過；兩批各跑一次完整 `run.sh --parallel`，373/373 綠。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.89 — 不是 codeforge 的 status line 也能告訴 hook 真實 window
 
 `context-budget` 要知道 context window 的真實大小，唯一來源是 status line 寫的 live file

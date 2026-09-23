@@ -2590,7 +2590,9 @@ console.log(`grok_lineage_recurring=${
 }`);
 
 const boundedLineageCalls = [];
-let boundedPredispatchRejected = false;
+let boundedPathlessFallbackCommitted = false;
+let boundedPathlessFallbackScope = null;
+let boundedLastRepairScopeSeal = null;
 const boundedLineageInput = {
   promptFile,
   branch: 'impl/icc-p1-bounded-lineage',
@@ -2678,8 +2680,16 @@ const boundedLineageEngine = new AutopilotEngine({
             claim: 'finding without an explicit repair path',
           }],
         });
-        boundedPredispatchRejected = rejectedBeforeDispatch.committed === false
-          && rejectedBeforeDispatch.phase === 'campaign_repair_scope_seal';
+        // 620ef6ed (BACKLOG "repair scope is derived from the reviewer's claim
+        // text", docs/backlog/managed-rail-repair-scope-pathless-finding.md): a
+        // path-less finding no longer terminalizes pre-dispatch; it falls back to
+        // disposition.task_surface, then to the round's changed files, and only
+        // PARKS when neither yields a path. Here the initial round changed
+        // src/fixture.js, so the repair dispatches sealed to exactly that file.
+        boundedPathlessFallbackCommitted = rejectedBeforeDispatch.committed === true;
+        boundedPathlessFallbackScope = boundedLastRepairScopeSeal
+          ? boundedLastRepairScopeSeal.allowed_paths.join(',')
+          : null;
       }
     }
     return {
@@ -2720,7 +2730,8 @@ const boundedLineageEngine = new AutopilotEngine({
       },
     };
   },
-  repairPromptWriter() {
+  repairPromptWriter(args) {
+    boundedLastRepairScopeSeal = args && args.repairScopeSeal ? args.repairScopeSeal : null;
     return promptFile;
   },
   campaignTreeResolver() {
@@ -2746,7 +2757,8 @@ console.log(`bounded_lineage_reuse_count=${boundedLineageCalls.filter(
 console.log(`bounded_lineage_non_reuse_reason=${
   boundedLineageEngine.repair_lineage.provider_session_non_reuse_reason
 }`);
-console.log(`bounded_predispatch_rejected=${boundedPredispatchRejected}`);
+console.log(`bounded_pathless_fallback_committed=${boundedPathlessFallbackCommitted}`);
+console.log(`bounded_pathless_fallback_scope=${boundedPathlessFallbackScope}`);
 console.log(`bounded_finding_a_occurrences=${
   boundedLineageEngine.repair_lineage.finding_occurrences
     .find((item) => item.finding_id === 'finding-a').occurrences
@@ -3254,10 +3266,12 @@ assert_contains "$INTAKE_OUT" "bounded_lineage_reuse_count=2" \
 assert_contains "$INTAKE_OUT" \
   "bounded_lineage_non_reuse_reason=runner_resume_not_verified:fixture" \
   "runner without verified resume records an explicit non-reuse reason"
-assert_contains "$INTAKE_OUT" "bounded_predispatch_rejected=true" \
-  "finding repair without an explicit path fails before dispatch"
-assert_contains "$INTAKE_OUT" "bounded_finding_a_occurrences=1" \
-  "pre-dispatch seal failure does not consume finding recurrence budget"
+assert_contains "$INTAKE_OUT" "bounded_pathless_fallback_committed=true" \
+  "finding repair without an explicit path falls back to the round's changed files (620ef6ed)"
+assert_contains "$INTAKE_OUT" "bounded_pathless_fallback_scope=src/fixture.js" \
+  "path-less fallback repair is sealed to exactly the round's changed files"
+assert_contains "$INTAKE_OUT" "bounded_finding_a_occurrences=2" \
+  "the dispatched path-less fallback repair consumes one finding recurrence occurrence"
 assert_contains "$INTAKE_OUT" "sealed_scope_dispatches=2" \
   "finding-bound repair scope is checked after the repair dispatch"
 assert_contains "$INTAKE_OUT" \

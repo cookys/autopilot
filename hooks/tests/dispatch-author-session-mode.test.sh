@@ -105,7 +105,7 @@ assert_status_precondition_failed() {
 # -> exit 2, active non-strict session-mode diagnostic, full null precondition provenance, runner/log absent;
 reset_run_count
 node "$REPO_ROOT/scripts/session-mode.js" set --level l6 --repo-root "$REPO_ROOT" >/dev/null 2>&1
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "2" "$EXIT" "Case 1: exit code 2"
 assert_file_absent "$SENTINEL" "Case 1: fake runner not executed"
@@ -166,7 +166,7 @@ EOF
 
 reset_run_count
 node "$REPO_ROOT/scripts/session-mode.js" set --level l6 --repo-root "$REPO_ROOT" >/dev/null 2>&1
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE2_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE2_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "0" "$EXIT" "Case 2: exit code 0"
 assert_file_exists "$SENTINEL" "Case 2: fake runner executed once"
@@ -177,7 +177,7 @@ assert_status_authored "$OUT" "Case 2"
 # Case 3: active l5 + strict-roster -> precondition gate; only --strict-contract can pass
 reset_run_count
 node "$REPO_ROOT/scripts/session-mode.js" set --level l5 --repo-root "$REPO_ROOT" >/dev/null 2>&1
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$REPO_ROOT" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$REPO_ROOT" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "2" "$EXIT" "Case 3: exit code 2"
 assert_file_absent "$SENTINEL" "Case 3: fake runner not executed"
@@ -221,7 +221,7 @@ assert_eq "0" "$PY_EXIT_3" "Case 3 schema: $PY_OUT_3"
 # L5/L6 clear is closeout-gated; for a pure "no marker" fixture remove the file.
 reset_run_count
 rm -f "$AUTOPILOT_SESSION_MODE_DIR/${CLAUDE_CODE_SESSION_ID}.json"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "0" "$EXIT" "Case 4: exit code 0"
 assert_file_exists "$SENTINEL" "Case 4: fake runner executed"
@@ -233,7 +233,7 @@ assert_status_authored "$OUT" "Case 4"
 reset_run_count
 node "$REPO_ROOT/scripts/session-mode.js" set --level l6 --repo-root "$REPO_ROOT" --ttl-hours 0 >/dev/null 2>&1
 sleep 1
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "0" "$EXIT" "Case 5: exit code 0"
 assert_file_exists "$SENTINEL" "Case 5: fake runner executed"
@@ -244,7 +244,7 @@ assert_status_authored "$OUT" "Case 5"
 # Case 6: corrupt marker + legacy explicit -> authored success;
 reset_run_count
 echo 'not json{{{' > "$AUTOPILOT_SESSION_MODE_DIR/test-session-l6-spec.json"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "0" "$EXIT" "Case 6: exit code 0"
 assert_file_exists "$SENTINEL" "Case 6: fake runner executed"
@@ -259,7 +259,7 @@ echo 'not json{{{' > "$AUTOPILOT_SESSION_MODE_DIR/test-session-l6-spec.json"
 CASE7_DIR="$TEST_TMP/case7"
 mkdir -p "$CASE7_DIR"
 
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE7_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE7_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "2" "$EXIT" "Case 7: exit code 2"
 assert_file_absent "$SENTINEL" "Case 7: fake runner not executed"

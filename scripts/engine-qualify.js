@@ -425,6 +425,11 @@ function parseArgs(argv) {
     if (scalarName) options[scalarName] = value;
     else options[repeatedName].push(value);
   }
+  // Foreman --plan is a precondition dry-run: asset pins, conformance hash,
+  // and the case list. It does not open a panel and does not sit the model.
+  if (options.role === 'foreman' && options.plan) {
+    return options;
+  }
   // A salted foreman sitting is the inadmissible puppet administration from
   // spec §9.6. It does not open a panel and does not require an engine identity.
   if (options.role === 'foreman' && process.env.AUTOPILOT_QUALIFY_SEED) {
@@ -517,8 +522,8 @@ function parseArgs(argv) {
   // --dispatch-timeout) still exits 2 regardless of this check's order,
   // because those flags are unconditionally rejected below for every
   // non-implementer role, --plan or not.
-  if (options.plan && !['consult', 'discuss'].includes(options.role)) {
-    usage(2, '--plan is only supported for the consult and discuss roles');
+  if (options.plan && !['consult', 'discuss', 'foreman'].includes(options.role)) {
+    usage(2, '--plan is only supported for the consult, discuss, and foreman roles');
   }
   if (options.role === 'implementer') {
     // Live-rail transport: no broker XOR. Reject broker-only flags outright so
@@ -4775,6 +4780,11 @@ function runPlanDryRun(options) {
 
 function runQualification(options) {
   const role = options.role || 'reviewer';
+  if (role === 'foreman' && options.plan) {
+    const plan = runForemanQualification({ plan: true });
+    process.stdout.write(`${JSON.stringify(plan, null, 1)}\n`);
+    process.exit(0);
+  }
   if (options.plan) return runPlanDryRun(options);
   if (role === 'consult' || role === 'discuss') {
     // Live administration wiring (Board authorization 2026-08-28, see

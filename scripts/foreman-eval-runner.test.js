@@ -8,6 +8,7 @@ const {
   transportAbortRecord,
   classifyRunnerStop,
   evaluateForemanPreconditions,
+  diskForemanPreconditionContext,
   runForemanQualification,
   SCHEMA_MISMATCH,
 } = require('../evals/foreman-eval-runner');
@@ -131,17 +132,22 @@ check(classifyRunnerStop('transport_error') === 'aborted_transport', 'transport 
 check(classifyRunnerStop('budget_overrun') === 'graded', 'a candidate budget overrun stays graded');
 check(classifyRunnerStop('max_tokens_per_sitting') === 'failed', 'the sitting token cap ends as failed');
 
-assert.throws(() => runForemanQualification(), /qualification precondition failed/, 'disk sitting writes nothing and refuses');
-assertions += 1;
-const thrown = (() => {
-  try {
-    runForemanQualification();
-    return null;
-  } catch (error) {
-    return error;
-  }
-})();
-check(thrown && thrown.message.includes('pinned asset'), `disk refusal names the missing pin (${thrown && thrown.message})`);
-check(!thrown.message.includes(SCHEMA_MISMATCH), 'schema mismatch is not reached while §9 pins are absent');
+const disk = diskForemanPreconditionContext();
+const diskDecision = evaluateForemanPreconditions(disk);
+check(diskDecision.start === true, `disk pins and conformance allow a sitting to start (${diskDecision.reason})`);
+check(
+  disk.test_mode === Boolean(process.env.AUTOPILOT_QUALIFY_SEED),
+  'test_mode follows AUTOPILOT_QUALIFY_SEED',
+);
+const driftedDisk = {
+  ...disk,
+  asset_hashes: { ...disk.asset_hashes, generator: 'b'.repeat(64) },
+};
+check(evaluateForemanPreconditions(driftedDisk).code === 'asset_pin', 'a changed asset fails the pin check');
+const plan = runForemanQualification({ plan: true });
+check(plan.mode === 'plan' && plan.harness_hash === disk.current_harness_hash, 'plan path gets past asset pins and conformance');
+check(!JSON.stringify(plan).includes('missing a hash'), 'plan path does not report a missing hash');
+check(!JSON.stringify(plan).includes('foreman sitting was not started'), 'plan path starts past the sitting stub');
+check(!JSON.stringify(plan).includes(SCHEMA_MISMATCH), 'schema mismatch is not reached once §9 pins match');
 
 console.log(`${assertions} assertions passed`);

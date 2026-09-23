@@ -673,6 +673,10 @@ module.exports = {
   runTestModeForemanSitting,
   goldenHost,
   badHost,
+  assetHashes,
+  harnessHash,
+  sandboxRuntime,
+  trialFromGrades,
 };
 
 if (require.main === module) {

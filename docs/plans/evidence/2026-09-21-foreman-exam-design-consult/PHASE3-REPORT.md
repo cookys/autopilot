@@ -27,3 +27,24 @@ The installed `FOREMAN_SYSTEM_PROMPT` is still the §7 text. The scan hits were 
 - `node scripts/foreman-seat-prompt-scan.test.js` — green.
 - `node scripts/foreman-harness-conformance.test.js` — green.
 - `node scripts/foreman-eval-grader-b1-gap.test.js` — red on purpose.
+
+## phase 4
+
+A sitting starts with:
+
+`node scripts/engine-qualify.js foreman --plan`
+
+That command checks the four asset pins in `evals/foreman-asset-pins.json` and the conformance record in `evals/foreman-conformance-record.json` against the hash `evals/foreman-harness-conformance.js` computes (four asset hashes, the runner source hash, and the sandbox digest). It does not call a model. A graded sitting, with no network, is `runForemanQualification({ foreman })` in `evals/foreman-eval-runner.js`: `crypto.randomBytes` draws `run_nonce`, `generateForemanExam` builds the campaigns, the §3 stub interpreter answers `dispatch`, and `gradeCampaign` / `compileForemanTrial` write the sitting record. `test_mode` stays false unless `AUTOPILOT_QUALIFY_SEED` is set. Child agents are the in-process stub. The foreman is the only remote party, and only when a caller supplies a transport; the scripted sitting does not.
+
+Preconditions that still refuse, and write no evidence record:
+
+- An asset sha256 that differs from `evals/foreman-asset-pins.json`.
+- A missing conformance record, or a `harness_hash` that differs from the runner's recomputation.
+- `seat_prompt_sha256` of the installed `FOREMAN_SYSTEM_PROMPT` differing from `vocabulary_scan_sha256` in the pin file.
+- A caller-supplied `run_nonce` when `test_mode` is not set (`run_nonce_source: 'caller'`).
+- Anti-rerun: a prior `failed` disposition, `resit_locked: true`, or two `aborted_transport` records for the same engine id and seat config hash.
+- Section 8 schema keys missing (`section8FitsCapabilityEvidence()` false).
+- Sandbox canary manifests that cannot be created.
+- `AUTOPILOT_QUALIFY_SEED` still selects the inadmissible puppet sitting instead of this loop.
+
+Section 11 stays unbuilt. `scripts/foreman-eval-grader-b1-gap.test.js` still exits 1 with `B1_GAP`.

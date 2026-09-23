@@ -1383,6 +1383,7 @@ async function main() {
       fail('discuss prompt mode requires a case envelope JSON object with transcript and bundle');
     }
   }
+  let foremanCaseIntro = 'This is the campaign brief. Call dispatch, request_capability, or return_verdict. A tool result continues this same campaign. A restart starts a new session that sees only the brief, the worktree and .autopilot/.';
   if (promptMode === 'foreman') {
     let brief;
     try {
@@ -1393,6 +1394,11 @@ async function main() {
     if (!brief || typeof brief !== 'object' || Array.isArray(brief)
         || typeof brief.campaign_id !== 'string') {
       fail('foreman prompt mode requires a brief JSON object with campaign_id');
+    }
+    if (brief.tool_result) {
+      foremanCaseIntro = 'Tool result for the same campaign. Continue with dispatch, request_capability, or return_verdict.';
+    } else if (Number(brief.session) > 1) {
+      foremanCaseIntro = 'This is a new session for the same campaign. You can see only the brief, the worktree and .autopilot/.';
     }
   }
   const SYSTEM_PROMPT_BY_MODE = {
@@ -1411,7 +1417,7 @@ async function main() {
     consult: 'This is the consult case (question + artifact bundle). Answer with the contract JSON only.',
     discuss: 'This is the debate bundle (transcript + artifacts). Contribute round k+1 with the contract JSON only.',
     reviewer: 'Review this diff and answer with the contract JSON only.',
-    foreman: 'This is the campaign brief. Answer with the contract JSON only.',
+    foreman: foremanCaseIntro,
   };
   const caseIntro = CASE_INTRO_BY_MODE[promptMode];
   const userMessage = `${caseIntro}\n\n${request.payload.content}`;

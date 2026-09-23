@@ -383,6 +383,47 @@ function isGitTracked(repoRoot, relPath) {
   }
 }
 
+// Files whose BYTES are frozen — the target (`spec_path`) of every tracked `*.seal.json`, the seal
+// files themselves, and every asset pinned by scripts/lib/qualification-asset-seals.js (PATHS). The
+// three WRITING passes below (rewritePlanReferences, rewriteLegacyArchiveReferences,
+// migrateArchiveLayout) must never touch them: a seal/pin exists precisely so those bytes cannot move
+// silently, and a path rewrite is a silent byte change. v2.36.78 (5f3aa3b1) and v2.36.80 (6559da33)
+// did exactly that to six sealed eval assets and one frozen audit, reddening every qualification
+// seal check (restored 2026-09-23). A stale plan path inside a frozen asset is the correct outcome —
+// the asset records what was true when it was frozen. The READ pass (planReferenceDangling) still
+// scans them. Derived from the seals/pins, never a hand list.
+function frozenAssetFiles(repoRoot) {
+  const frozen = new Set();
+  let sealFiles = [];
+  try {
+    sealFiles = execFileSync('git', ['-C', repoRoot, 'ls-files', '-z', '--', '*.seal.json'], { encoding: 'utf8' })
+      .split('\0').filter(Boolean);
+  } catch { /* not a git checkout: nothing tracked, nothing frozen */ }
+  for (const rel of sealFiles) {
+    frozen.add(rel);
+    try {
+      const seal = JSON.parse(fs.readFileSync(path.join(repoRoot, rel), 'utf8'));
+      if (seal && typeof seal.spec_path === 'string') frozen.add(seal.spec_path.split(path.sep).join('/'));
+    } catch { /* unreadable seal: the seal checks themselves will fail loudly */ }
+  }
+  try {
+    const { PATHS } = require('./lib/qualification-asset-seals.js');
+    const libRepoRoot = path.resolve(__dirname, '..');
+    for (const role of Object.values(PATHS || {})) {
+      for (const abs of Object.values(role || {})) {
+        if (typeof abs === 'string') frozen.add(path.relative(libRepoRoot, abs).split(path.sep).join('/'));
+      }
+    }
+  } catch { /* lib absent (e.g. a vendored copy): seal-file discovery above still applies */ }
+  return frozen;
+}
+
+// Reference files a WRITING pass may rewrite: trackedReferenceFiles minus frozenAssetFiles.
+function rewritableReferenceFiles(repoRoot) {
+  const frozen = frozenAssetFiles(repoRoot);
+  return trackedReferenceFiles(repoRoot).filter((f) => !frozen.has(f));
+}
+
 // Tracked files under repoRoot matching the reference-scan file-type set, excluding
 // REFERENCE_SCAN_EXCLUDE. Returns repo-relative POSIX paths.
 function trackedReferenceFiles(repoRoot) {
@@ -1000,7 +1041,7 @@ function rewritePlanReferences(repoRoot, stem) {
     { re: planPathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}${stem}` },
   ];
   const rewritten = [];
-  for (const rel of trackedReferenceFiles(repoRoot)) {
+  for (const rel of rewritableReferenceFiles(repoRoot)) {
     const abs = path.join(repoRoot, rel);
     let text = readFileSafe(abs);
     if (text == null) continue;
@@ -1107,7 +1148,7 @@ function rewriteLegacyArchiveReferences(repoRoot, stem) {
     },
   ];
   const rewritten = [];
-  for (const rel of trackedReferenceFiles(repoRoot)) {
+  for (const rel of rewritableReferenceFiles(repoRoot)) {
     const abs = path.join(repoRoot, rel);
     let text = readFileSafe(abs);
     if (text == null) continue;
@@ -1281,7 +1322,7 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
     const bareTo = `_archive/${m[1]}/${m[2]}/${ent.name}`;
     const boundaryRe = new RegExp(`${escapeRegExp(fromRel)}(?![A-Za-z0-9-])`, 'g');
     const bareRe = new RegExp(`(?<![A-Za-z0-9-/])${escapeRegExp(bareFrom)}(?![A-Za-z0-9-])`, 'g');
-    for (const rel of trackedReferenceFiles(repoRoot)) {
+    for (const rel of rewritableReferenceFiles(repoRoot)) {
       const abs = path.join(repoRoot, rel);
       let t = readFileSafe(abs);
       if (t == null) continue;
@@ -1460,6 +1501,8 @@ module.exports = {
   rewritePlanReferences,
   isGitTracked,
   trackedReferenceFiles,
+  frozenAssetFiles,
+  rewritableReferenceFiles,
   planPathPrefixRegExp,
   evidencePathPrefixRegExp,
   stemDateParts,

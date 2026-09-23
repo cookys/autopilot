@@ -481,6 +481,32 @@ assert_contains "$(cat "$d/docs/BACKLOG.md")" \
   "docs/BACKLOG.md is NOT rewritten (history)"
 assert_contains "$out" '"references_rewritten"' "the fix payload reports which files were rewritten"
 
+# --- Frozen assets: a sealed file (a *.seal.json's spec_path) and the seal itself are NEVER
+#     rewritten, even when they mention the moved plan. v2.36.78/v2.36.80 rewrote six sealed eval
+#     assets and reddened every qualification seal check (restored 2026-09-23). A normal doc in the
+#     same repo must still be rewritten, so this cannot pass by the rewrite being off entirely. ---
+d="$(fixture_repo rewrite-skips-frozen)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+mkdir -p "$d/evals" "$d/references"
+printf 'Frozen rubric. Source plan: docs/plans/2026-01-01-widget.md\n' > "$d/evals/x-rubric.md"
+sha="$(sha256sum "$d/evals/x-rubric.md" | cut -d' ' -f1)"
+printf '{\n  "spec_path": "evals/x-rubric.md",\n  "spec_sha256": "%s",\n  "note": "see docs/plans/2026-01-01-widget.md"\n}\n' "$sha" > "$d/evals/x-rubric.seal.json"
+printf 'Contract: docs/plans/2026-01-01-widget.md\n' > "$d/references/contract.md"
+# graduation trigger (same as the Hardening B case): a released CHANGELOG section names the plan
+printf '# Changelog\n\n## v1.2.3 — ships widget\n\n- landed. See docs/plans/2026-01-01-widget.md.\n' > "$d/CHANGELOG.md"
+cp "$d/evals/x-rubric.md" "$TEST_TMP/frozen-rubric.before"
+cp "$d/evals/x-rubric.seal.json" "$TEST_TMP/frozen-seal.before"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_contains "$(cat "$d/references/contract.md")" \
+  "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
+  "control: an ordinary doc in the same repo IS rewritten"
+if cmp -s "$d/evals/x-rubric.md" "$TEST_TMP/frozen-rubric.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "a sealed spec_path file is byte-identical after --fix"
+if cmp -s "$d/evals/x-rubric.seal.json" "$TEST_TMP/frozen-seal.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "the *.seal.json itself is byte-identical after --fix"
+
 # --- 🟡 fix (delta review): --fix must ALSO rewrite docs/plans/evidence/<stem> references,
 #     not just docs/plans/<stem> ones — planPathPrefixRegExp alone never matches the
 #     evidence shape, so a link INTO a moved evidence dir used to go stale. ---

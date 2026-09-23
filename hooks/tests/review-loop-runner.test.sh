@@ -32,15 +32,22 @@ assert_contains "$OUT" "reviewer=gpt-5.5" "review-loop runner captures reviewer 
 assert_contains "$OUT" "qualified=false" "review-loop runner captures fail-closed scorecard state"
 assert_contains "$OUT" "fallback=[]" "review-loop runner captures empty scorecard ladder"
 
-OUT="$(node - "$REPO_ROOT" "$TEST_TMP/empty-scorecard" <<'NODE'
+# Same hermetic empty config as above. Without it this case resolved the LIVE dogfood
+# config, whose cursor implementer (2026-09-12) is admitted only by the host's standing
+# pin; under lib.sh's isolated store the resolve exits 3 at the implementer gate BEFORE
+# any JSON is printed, so status=3 passed for the wrong reason and parse/qualified failed.
+# With the built-in roster the exit 3 is the --enforce scorecard block this case is about.
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/empty-scorecard" "$EMPTY_CFG" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
 const scorecard = process.argv[3];
+const emptyCfg = process.argv[4];
 const { resolveReviewLoopJson } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
 const run = resolveReviewLoopJson(['--check-scorecard', '--enforce'], {
   env: {
     ...process.env,
     ENGINE_SCORECARD_DIR: scorecard,
+    REVIEW_LOOP_CONFIG_OVERRIDE: emptyCfg,
   },
 });
 console.log(`status=${run.status}`);

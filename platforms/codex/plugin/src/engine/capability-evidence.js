@@ -1829,7 +1829,11 @@ function sameEvidenceGroup(left, right) {
     && left.identity_hash === right.identity_hash;
 }
 
-function validateEvidenceLifecycle(records) {
+// `isolated`: the records are one record lifted out of a ledger (a scorecard row's embedded
+// evidence), not a ledger. Its `supersedes` / revocation target cannot be in that set, so an
+// unresolved reference there is unverifiable rather than invalid and is skipped; every check whose
+// target IS present still runs. A real ledger (isolated=false) keeps rejecting unresolved references.
+function validateEvidenceLifecycle(records, { isolated = false } = {}) {
   const byId = new Map();
   for (const record of records) {
     if (byId.has(record.evidence_id)) {
@@ -1843,6 +1847,7 @@ function validateEvidenceLifecycle(records) {
   for (const record of records) {
     if (record.supersedes !== null) {
       const target = byId.get(record.supersedes);
+      if (!target && isolated) continue;
       if (!target) {
         evidenceError(
           `capability evidence ${record.evidence_id} supersedes an unknown record`,
@@ -1887,10 +1892,10 @@ function descendsFrom(record, ancestorId, byId) {
   return false;
 }
 
-function evaluateCapabilityEvidence(rawRecords, rawQuery) {
+function evaluateCapabilityEvidence(rawRecords, rawQuery, { isolated = false } = {}) {
   if (!Array.isArray(rawRecords)) evidenceError('capability evidence records must be an array');
   const records = rawRecords.map((record) => compileCapabilityEvidence(record));
-  const byId = validateEvidenceLifecycle(records);
+  const byId = validateEvidenceLifecycle(records, { isolated });
   const query = normalizeQuery(rawQuery);
   const roleRecords = records.filter((record) => record.role === query.role);
   if (roleRecords.length === 0) {
@@ -2010,7 +2015,7 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery) {
 }
 
 function buildCapabilityEvidenceReceipt(record, query) {
-  return evaluateCapabilityEvidence([record], query);
+  return evaluateCapabilityEvidence([record], query, { isolated: true });
 }
 
 function normalizeCapabilityEvidenceReceipt(raw, options = {}) {

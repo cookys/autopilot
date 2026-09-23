@@ -53,8 +53,8 @@ for f in "${PAYLOADS[@]}"; do
     n=$((n + 1))
     cls=""
     if [[ "$line" =~ $C1 ]]; then cls="C1"
-    elif echo "$line" | grep -qiE "$C2"; then cls="C2"
-    elif echo "$line" | grep -qiE "$C3" && ! echo "$line" | grep -qE "$RECEIPT"; then cls="C3"
+    elif grep -qiE "$C2" < <(echo "$line"); then cls="C2"
+    elif grep -qiE "$C3" < <(echo "$line") && ! grep -qE "$RECEIPT" < <(echo "$line"); then cls="C3"
     fi
     if [ -n "$cls" ]; then
       count=$((count + 1))

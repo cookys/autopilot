@@ -559,7 +559,7 @@ classify_diff() {
 
     if [[ "$scope" == path || "$scope" == either ]]; then
       for path_item in "${touched_paths[@]}"; do
-        if printf '%s' "$path_item" | grep -Eq -- "$pattern"; then
+        if grep -Eq -- "$pattern" < <(printf '%s' "$path_item"); then
           matched=1
           protected_path=1
           break

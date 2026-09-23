@@ -328,14 +328,14 @@ check_codex_cli_state() {
   fi
 
   marketplace_out="$(codex plugin marketplace list 2>/dev/null || true)"
-  if printf '%s\n' "$marketplace_out" | grep -q '^autopilot-local[[:space:]]'; then
+  if grep -q '^autopilot-local[[:space:]]' < <(printf '%s\n' "$marketplace_out"); then
     status OK "codex" "autopilot-local marketplace is configured"
   else
     status WARN "codex" "autopilot-local marketplace is not configured"
   fi
 
   list_out="$(codex plugin list 2>/dev/null || true)"
-  if printf '%s\n' "$list_out" | grep -q 'autopilot@autopilot-local'; then
+  if grep -q 'autopilot@autopilot-local' < <(printf '%s\n' "$list_out"); then
     status OK "codex" "autopilot@autopilot-local is installed"
   else
     status WARN "codex" "autopilot@autopilot-local is not installed"

@@ -103,7 +103,7 @@ $extra_id"; fi
       [ -n "$line" ] || continue
       cid=$(printf '%s' "$line" | jq -r '.change_id' 2>/dev/null || echo "")
       [ -n "$cid" ] || continue
-      if printf '%s\n' "$ids" | grep -qxF "$cid"; then printf '%s\n' "$line" >> "$tmp"; fi
+      if grep -qxF "$cid" < <(printf '%s\n' "$ids"); then printf '%s\n' "$line" >> "$tmp"; fi
     done < "$src_store"
   fi
   set +e

@@ -236,7 +236,7 @@ assert_eq "$?" "2" "bad --version exits 2"
 OUT=$(node "$SCRIPT" 2>&1)
 EC=$?
 assert_exit_in_0_or_1 "$EC" "real-repo smoke exits 0 or 1 (not usage/crash)"
-if printf '%s' "$OUT" | grep -qiE 'gate inert|opt-in set unchanged|CHANGELOG names the opt-in change|not named alongside|not yet committed to first-parent|no CHANGELOG section'; then
+if grep -qiE 'gate inert|opt-in set unchanged|CHANGELOG names the opt-in change|not named alongside|not yet committed to first-parent|no CHANGELOG section' < <(printf '%s' "$OUT"); then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 else
   fail "real-repo smoke produced a recognizable gate message (got: $OUT)"

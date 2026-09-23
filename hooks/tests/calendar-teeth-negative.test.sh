@@ -267,7 +267,7 @@ REPO_B="${FIXTURE_B%%|*}"
 CONTRACT_B="${FIXTURE_B##*|}"
 DC_OUT_B=$(AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$DC" check --contract "$CONTRACT_B" --repo "$REPO_B" --json 2>&1); DC_RC_B=$?
 REASONS_B=$(printf '%s' "$DC_OUT_B" | jq_get reasons.0 2>/dev/null || true)
-if [ "$DC_RC_B" != "0" ] && printf '%s' "$REASONS_B" | grep -q "requalification"; then
+if [ "$DC_RC_B" != "0" ] && grep -q "requalification" < <(printf '%s' "$REASONS_B"); then
   ok "strike4: requalify_required seat NO-GOes from dispatch-contract.js naming the strike cause ($REASONS_B)"
 else
   bad "strike4: rc=$DC_RC_B reasons=$REASONS_B out=$DC_OUT_B"

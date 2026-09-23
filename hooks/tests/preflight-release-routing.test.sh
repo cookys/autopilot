@@ -99,7 +99,7 @@ assert_eq_zero() {
 
 assert_ne_zero "P2 exhausted refusal" "$RC_EXH"
 assert_contains "$OUT_EXH" "probe-model-x" "P2 output names model"
-if ! echo "$OUT_EXH" | grep -qiE "unavailable|exhausted"; then
+if ! grep -qiE "unavailable|exhausted" < <(echo "$OUT_EXH"); then
   fail "P2 output missing unavailable/exhausted: $OUT_EXH"
 fi
 assert_file_absent "$MARKER_EXH" "P2 no spawn marker"
@@ -108,7 +108,7 @@ assert_not_contains "$OUT_EXH" "fallback" "P4 no fallback keyword"
 
 assert_file_exists "$MARKER_AVAIL" "P3 spawn marker exists"
 
-if ! echo "$OUT_SKIP" | grep -qiE "SKIPPED|SKIP"; then
+if ! grep -qiE "SKIPPED|SKIP" < <(echo "$OUT_SKIP"); then
   fail "P1 output missing SKIP/SKIPPED: $OUT_SKIP"
 fi
 assert_file_absent "$MARKER_SKIP" "P1 no spawn marker"

@@ -84,7 +84,7 @@ err=$(node "$CLI" record --supersede-provisional --supersedes-event-id 999 \
 after=$(wc -c < "$STORE" | tr -d ' ')
 after_snap=$(cat "$STORE")
 [ "$ec" = "1" ] && [ "$before" = "$after" ] && [ "$snap" = "$after_snap" ] \
-  && printf '%s' "$err" | grep -q 'does not exist' \
+  && grep -q 'does not exist' < <(printf '%s' "$err") \
   && assert_eq "0" "0" "D1.2 dangling supersedes-event-id rejected, store unchanged" \
   || fail "D1.2: ec=$ec before=$before after=$after err=$err"
 
@@ -105,9 +105,9 @@ after=$(wc -c < "$STORE" | tr -d ' ')
 after_snap=$(cat "$STORE")
 [ "$ec_eng" = "1" ] && [ "$ec_run" = "1" ] && [ "$ec_role" = "1" ] \
   && [ "$before" = "$after" ] && [ "$snap" = "$after_snap" ] \
-  && printf '%s' "$err_eng" | grep -qi 'engine' \
-  && printf '%s' "$err_run" | grep -qi 'runner' \
-  && printf '%s' "$err_role" | grep -qi 'role' \
+  && grep -qi 'engine' < <(printf '%s' "$err_eng") \
+  && grep -qi 'runner' < <(printf '%s' "$err_run") \
+  && grep -qi 'role' < <(printf '%s' "$err_role") \
   && assert_eq "0" "0" "D1.3 mismatched engine/runner/role each rejected, store unchanged" \
   || fail "D1.3: ec=$ec_eng/$ec_run/$ec_role before=$before after=$after"
 
@@ -130,7 +130,7 @@ for field in quality capability_score evidence status; do
   ')
   err=$(printf '%s\n' "$body" | node "$CLI" record --supersede-provisional \
     --supersedes-event-id "$target_id" --reason 'forbid' 2>&1 >/dev/null); ec=$?
-  if [ "$ec" != "1" ] || ! printf '%s' "$err" | grep -q "$field"; then
+  if [ "$ec" != "1" ] || ! grep -q "$field" < <(printf '%s' "$err"); then
     forbid_ok=0
     printf 'FAIL detail field=%s ec=%s err=%s\n' "$field" "$ec" "$err" >&2
   fi
@@ -2273,7 +2273,7 @@ reset_store
 echo "$(row forb r1 openai consult c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null
 ERR_H="$(printf '{"quality":{"corpus_pass":"1/1"}}' | node "$CLI" record --supersede-provisional \
   --supersedes-event-id 1 --reason 'forbid' 2>&1 >/dev/null)"; EC_H=$?
-[ "$EC_H" = "1" ] && printf '%s' "$ERR_H" | grep -q quality \
+[ "$EC_H" = "1" ] && grep -q quality < <(printf '%s' "$ERR_H") \
   && assert_eq "0" "0" "D5 (h) supersession marker with forbidden quality rejected" \
   || fail "D5 (h) forbidden field not rejected: ec=$EC_H err=$ERR_H"
 

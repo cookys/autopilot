@@ -401,7 +401,7 @@ EOF
     --branch probe-1 --prompt-file "$pd/.prompt.txt" --runner "$runner" --model "$model" \
     --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off 2>/dev/null | tail -1)
   rm -rf "$pd"
-  echo "$out" | grep -q '"status": *"committed"' && return 0
+  grep -q '"status": *"committed"' < <(echo "$out") && return 0
   echo "PROBE_OUT:$out" >&2
   return 1
 }

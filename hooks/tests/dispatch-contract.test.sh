@@ -33,7 +33,7 @@ json_keys() {
 
 assert_no_secret() {
   local out="$1"
-  if printf '%s' "$out" | grep -q 'SECRET_FIXTURE'; then
+  if grep -q 'SECRET_FIXTURE' < <(printf '%s' "$out"); then
     fail "Fixture secret leaked into checker output"
   fi
 }

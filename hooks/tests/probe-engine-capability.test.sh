@@ -44,7 +44,7 @@ EXIT_CODE=$?
 
 # Verify no "live spend attempted!" was printed (meaning it didn't call 'codex exec')
 assert_no_spend=1
-if echo "$OUT" | grep -q "live spend attempted"; then
+if grep -q "live spend attempted" < <(echo "$OUT"); then
   assert_no_spend=0
 fi
 
@@ -127,7 +127,7 @@ chmod +x "$DUMMY_BIN_DIR/codex"
 PROBE_STDERR="$TESTDIR/probe-stderr.txt"
 bash "$PROBE_CLI" quota --runner codex --model gpt-5.5 --live-spend --store "$TESTDIR" >/dev/null 2>"$PROBE_STDERR"
 evidence=$(node "$STATE_CLI" current --runner codex --model gpt-5.5 --role reviewer --store "$TESTDIR" | jq_get capability.quota.evidence)
-if printf '%s' "$evidence" | grep -q "$SECRET"; then
+if grep -q "$SECRET" < <(printf '%s' "$evidence"); then
   bad "3: evidence leaked the raw runner stderr secret: $evidence"
 else
   ok "3: live-spend failure evidence does not persist raw runner stderr (no secret leak)"

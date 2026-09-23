@@ -101,14 +101,14 @@ check_intent_capture_symlinked() {
 check_session_start_claude_envelope() {
   local out
   out=$(CLAUDE_PLUGIN_ROOT="$REPO" node "$REPO/hooks/session-start.js" 2>/dev/null) || return 1
-  echo "$out" | grep -q "hookSpecificOutput"
+  grep -q "hookSpecificOutput" < <(echo "$out")
 }
 
 # ─── 5. session-start.js: plain envelope when no env var ───
 check_session_start_plain_envelope() {
   local out
   out=$(env -u CLAUDE_PLUGIN_ROOT node "$REPO/hooks/session-start.js" 2>/dev/null) || return 1
-  echo "$out" | grep -q "additional_context"
+  grep -q "additional_context" < <(echo "$out")
 }
 
 # ─── 6. sync-version --check: canonical/mirror parity ───
@@ -220,7 +220,7 @@ check_opencode_plugin_version() {
   fi
   local out
   out=$(cd "$REPO" && opencode debug config --print-logs 2>&1 || true)
-  echo "$out" | grep -q 'plugin loaded, version: [0-9]\+\.[0-9]\+\.[0-9]\+'
+  grep -q 'plugin loaded, version: [0-9]\+\.[0-9]\+\.[0-9]\+' < <(echo "$out")
 }
 
 # ─── 11. OpenCode discovers autopilot skills via .agents/skills/ ───
@@ -250,7 +250,7 @@ check_opencode_agent_body_clean() {
   local out
   out=$(cd "$REPO" && opencode debug agent autopilot-reviewer 2>/dev/null || true)
   # The body should start with the markdown header, not the YAML frontmatter
-  echo "$out" | grep -q '# Reviewer' && ! echo "$out" | grep -q '"prompt": "---\\n'
+  grep -q '# Reviewer' < <(echo "$out") && ! grep -q '"prompt": "---\\n' < <(echo "$out")
 }
 
 # ─── Run them all ───

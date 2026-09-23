@@ -817,7 +817,7 @@ cat > "$STUB_ANCHOR" <<'EOF'
 #!/usr/bin/env bash
 prompt=""
 while [ $# -gt 0 ]; do case "$1" in -p) prompt="$2"; shift 2 ;; *) shift ;; esac; done
-if printf '%s' "$prompt" | grep -qF "ABSOLUTE working directory is: $PWD"; then
+if grep -qF "ABSOLUTE working directory is: $PWD" < <(printf '%s' "$prompt"); then
   echo ANCHOR_OK > __ANCHOR_OUT__
 else
   echo "ANCHOR_MISSING(pwd=$PWD)" > __ANCHOR_OUT__

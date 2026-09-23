@@ -228,16 +228,16 @@ fi
 
 # ---- the valid canonical is accepted and asserts no fabrication
 OUT="$(roll "$INTEGRATED")"
-printf '%s' "$OUT" | grep -q '"status":"ROLLED_OVER"' \
+grep -q '"status":"ROLLED_OVER"' < <(printf '%s' "$OUT") \
   && ok "accepts the integrated adoption" || bad "rejected the valid canonical: ${OUT:0:160}"
-printf '%s' "$OUT" | grep -q '"synthesized_work_orders":0' \
-  && printf '%s' "$OUT" | grep -q '"mutated_receipts":0' \
-  && printf '%s' "$OUT" | grep -q '"history_rewritten":false' \
+grep -q '"synthesized_work_orders":0' < <(printf '%s' "$OUT") \
+  && grep -q '"mutated_receipts":0' < <(printf '%s' "$OUT") \
+  && grep -q '"history_rewritten":false' < <(printf '%s' "$OUT") \
   && ok "asserts zero synthesis, zero mutation, zero history rewrite" \
   || bad "missing the no-fabrication assertions"
 
 # ---- idempotent
-printf '%s' "$(roll "$INTEGRATED")" | grep -q '"writes":0' \
+grep -q '"writes":0' < <(printf '%s' "$(roll "$INTEGRATED")") \
   && ok "re-running writes nothing (idempotent)" || bad "not idempotent"
 
 # ---- bind the clone's routing config to the graph the rollover fixtures
@@ -269,7 +269,7 @@ CONFIGJSON
 # pointed at when it was last reconciled there — not necessarily $GRAPH — so
 # re-derive it inside the clone for $GRAPH before calling admission.
 legacy_out="$(node "$RECONCILE" legacy --repo-root "$ROOT" --graph-digest "$GRAPH" 2>&1)"
-printf '%s' "$legacy_out" | grep -q '"status":"RECONCILED"' \
+grep -q '"status":"RECONCILED"' < <(printf '%s' "$legacy_out") \
   && ok "legacy B/C disposition reconciled for the clone's bound graph" \
   || bad "could not reconcile legacy disposition for \$GRAPH: ${legacy_out:0:160}"
 

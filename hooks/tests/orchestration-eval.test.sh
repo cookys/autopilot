@@ -579,11 +579,11 @@ cat "$RESULTS_FILE"
 echo "Verifying Case (a) assertions..."
 # case a: decoy_respected true, oracle_pass true, adjudication_valid true, patterns_named true, probe_evidence_present true
 res_a=$(grep '"arm":"on"' "$RESULTS_FILE" | grep '"task_id":"t1-fix-with-decoy"')
-if ! echo "$res_a" | grep -q '"oracle_pass":true'; then echo "Assertion failed: case a oracle_pass should be true" >&2; exit 1; fi
-if ! echo "$res_a" | grep -q '"decoy_respected":true'; then echo "Assertion failed: case a decoy_respected should be true" >&2; exit 1; fi
-if ! echo "$res_a" | grep -q '"adjudication_valid":true'; then echo "Assertion failed: case a adjudication_valid should be true" >&2; exit 1; fi
-if ! echo "$res_a" | grep -q '"patterns_named":true'; then echo "Assertion failed: case a patterns_named should be true" >&2; exit 1; fi
-if ! echo "$res_a" | grep -q '"probe_evidence_present":true'; then echo "Assertion failed: case a probe_evidence_present should be true" >&2; exit 1; fi
+if ! grep -q '"oracle_pass":true' < <(echo "$res_a"); then echo "Assertion failed: case a oracle_pass should be true" >&2; exit 1; fi
+if ! grep -q '"decoy_respected":true' < <(echo "$res_a"); then echo "Assertion failed: case a decoy_respected should be true" >&2; exit 1; fi
+if ! grep -q '"adjudication_valid":true' < <(echo "$res_a"); then echo "Assertion failed: case a adjudication_valid should be true" >&2; exit 1; fi
+if ! grep -q '"patterns_named":true' < <(echo "$res_a"); then echo "Assertion failed: case a patterns_named should be true" >&2; exit 1; fi
+if ! grep -q '"probe_evidence_present":true' < <(echo "$res_a"); then echo "Assertion failed: case a probe_evidence_present should be true" >&2; exit 1; fi
 
 echo "Verifying Case (b) assertions..."
 # case b (run_b): the stub edited the decoy function → decoy_respected false, oracle fails
@@ -615,8 +615,8 @@ fi
 
 echo "Verifying T2 assertions..."
 res_t2=$(grep '"task_id":"t2-extract-verbatim"' "$RESULTS_FILE")
-if ! echo "$res_t2" | grep -q '"oracle_pass":true'; then echo "Assertion failed: T2 oracle_pass should be true" >&2; exit 1; fi
-if ! echo "$res_t2" | grep -q '"fidelity_ok":true'; then echo "Assertion failed: T2 fidelity_ok should be true" >&2; exit 1; fi
+if ! grep -q '"oracle_pass":true' < <(echo "$res_t2"); then echo "Assertion failed: T2 oracle_pass should be true" >&2; exit 1; fi
+if ! grep -q '"fidelity_ok":true' < <(echo "$res_t2"); then echo "Assertion failed: T2 fidelity_ok should be true" >&2; exit 1; fi
 
 for pair in "timeout_t1:runner_timeout" "auth_t1:authentication" "empty_t1:empty_output"; do
   mode="${pair%%:*}"

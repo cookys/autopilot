@@ -46,9 +46,9 @@ PROMPT="$(cat)"
 touch "${INVOKE_DIR}/claude.$(date +%s%N 2>/dev/null || date +%s).$$"
 
 # Emit structured output matching question shape
-if printf '%s' "$PROMPT" | grep -q "NOT achieved"; then
+if grep -q "NOT achieved" < <(printf '%s' "$PROMPT"); then
   printf 'MISSED: goal-3 not completed\n'
-elif printf '%s' "$PROMPT" | grep -q "BEYOND"; then
+elif grep -q "BEYOND" < <(printf '%s' "$PROMPT"); then
   printf 'EXTRA: added extra logging\n'
 else
   printf 'ACHIEVED: goal-1 done\nACHIEVED: goal-2 done\n'
@@ -83,9 +83,9 @@ PROMPT="${2:-}"
 # S3: file-per-invocation (race-safe)
 touch "${INVOKE_DIR}/agy.$(date +%s%N 2>/dev/null || date +%s).$$"
 
-if printf '%s' "$PROMPT" | grep -q "NOT achieved"; then
+if grep -q "NOT achieved" < <(printf '%s' "$PROMPT"); then
   printf 'MISSED: goal-3 not completed (agy)\n' > ./verdict.txt
-elif printf '%s' "$PROMPT" | grep -q "BEYOND"; then
+elif grep -q "BEYOND" < <(printf '%s' "$PROMPT"); then
   printf 'EXTRA: extra logging (agy)\n' > ./verdict.txt
 else
   printf 'ACHIEVED: goal-1 done (agy)\nACHIEVED: goal-2 done (agy)\n' > ./verdict.txt
@@ -291,7 +291,7 @@ if [ "${1:-}" = "models" ]; then
   exit 0
 fi
 # For Q3 (NOT achieved) — says nothing missed
-if printf '%s' "${2:-}" | grep -q "NOT achieved"; then
+if grep -q "NOT achieved" < <(printf '%s' "${2:-}"); then
   printf '' > ./verdict.txt
 else
   printf 'ACHIEVED: everything done (agy)\n' > ./verdict.txt
@@ -484,13 +484,13 @@ REFUTE_CLAUDE="$TEST_TMP/claude-refute"
 cat > "$REFUTE_CLAUDE" <<'STUB'
 #!/usr/bin/env bash
 PROMPT="$(cat)"
-if printf '%s' "$PROMPT" | grep -q "REFUTE this claim"; then
+if grep -q "REFUTE this claim" < <(printf '%s' "$PROMPT"); then
   printf 'REFUTED: the claimed miss is out of scope\n'
-elif printf '%s' "$PROMPT" | grep -q "synthesis judge"; then
+elif grep -q "synthesis judge" < <(printf '%s' "$PROMPT"); then
   printf '{"verdict":"fail","dissents":[],"extras":[]}\n'
-elif printf '%s' "$PROMPT" | grep -q "NOT achieved"; then
+elif grep -q "NOT achieved" < <(printf '%s' "$PROMPT"); then
   printf 'MISSED: goal-3 not completed\n'
-elif printf '%s' "$PROMPT" | grep -q "BEYOND"; then
+elif grep -q "BEYOND" < <(printf '%s' "$PROMPT"); then
   printf 'EXTRA: extra logging\n'
 else
   printf 'ACHIEVED: goal-1 done\n'
@@ -509,11 +509,11 @@ if [ "${1:-}" = "models" ]; then
   exit 0
 fi
 PROMPT="${2:-}"
-if printf '%s' "$PROMPT" | grep -q "REFUTE this claim"; then
+if grep -q "REFUTE this claim" < <(printf '%s' "$PROMPT"); then
   printf 'REFUTED: the claimed miss is out of scope (agy)\n' > ./verdict.txt
-elif printf '%s' "$PROMPT" | grep -q "NOT achieved"; then
+elif grep -q "NOT achieved" < <(printf '%s' "$PROMPT"); then
   printf 'MISSED: goal-3 not completed (agy)\n' > ./verdict.txt
-elif printf '%s' "$PROMPT" | grep -q "BEYOND"; then
+elif grep -q "BEYOND" < <(printf '%s' "$PROMPT"); then
   printf 'EXTRA: extra logging (agy)\n' > ./verdict.txt
 else
   printf 'ACHIEVED: goal-1 done (agy)\n' > ./verdict.txt

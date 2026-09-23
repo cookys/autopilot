@@ -3310,18 +3310,20 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # resolves --prompt-file relative to --cwd (Spike-verified 2026-06-29). mktemp is absolute.
   GROK_PROMPT_FILE="$(mktemp -t dispatch-hetero-grok-prompt-XXXXXX)"
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
-  grok_effort_note "$EFFORT" "dispatch-hetero"
+  # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
+  GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
+  grok_effort_note "$EFFORT" "dispatch-hetero" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
   if [ -n "$RESUME_SESSION_ID" ]; then
     PROVIDER_SESSION_ID="$RESUME_SESSION_ID"
     PROVIDER_SESSION_REUSED=1
     run_worker bash -c 'cd "$1" && exec "$2" --resume "$6" --prompt-file "$3" --cwd "$1" --model "$4" \
         --reasoning-effort "$5" --always-approve --no-alt-screen --output-format json' \
-        _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$(grok_effort_clamp "$EFFORT")" "$RESUME_SESSION_ID"
+        _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$GROK_EFFORT" "$RESUME_SESSION_ID"
   else
     PROVIDER_SESSION_ID="$(node -e 'process.stdout.write(require("crypto").randomUUID())')"
     run_worker bash -c 'cd "$1" && exec "$2" --session-id "$6" --prompt-file "$3" --cwd "$1" --model "$4" \
         --reasoning-effort "$5" --always-approve --no-alt-screen --output-format json' \
-        _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$(grok_effort_clamp "$EFFORT")" "$PROVIDER_SESSION_ID"
+        _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$GROK_EFFORT" "$PROVIDER_SESSION_ID"
   fi
   rm -f "$GROK_PROMPT_FILE"
 elif [ "$IS_QODER" -eq 1 ]; then
@@ -4474,7 +4476,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

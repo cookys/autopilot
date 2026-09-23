@@ -44,28 +44,68 @@
 [ -n "${_AUTOPILOT_GROK_EFFORT_SH:-}" ] && return 0
 _AUTOPILOT_GROK_EFFORT_SH=1
 
-# grok_effort_clamp <effort> → grok-accepted level on stdout.
-# Unknown/empty input degrades to `xhigh` (the grok ceiling) rather than failing: this lib's
-# job is to keep a dispatch runnable, and the caller's own --effort validation already
-# rejected out-of-scale values before reaching here.
-grok_effort_clamp() {
-  case "${1:-}" in
-    low)    printf 'low' ;;
-    medium) printf 'medium' ;;
-    high)   printf 'high' ;;
-    xhigh)  printf 'xhigh' ;;
-    max)    printf 'xhigh' ;;     # grok ceiling; see probe table above
-    *)      printf 'xhigh' ;;
-  esac
+# ⚠ THE ENUM IS PER-MODEL, not per-CLI (probe 2026-09-23, grok 1.0.41):
+#   grok-4.5 → high|medium|low      (xhigh REJECTED: "use one of: high, medium, low")
+#   grok-4.6 / grok-4.7 → xhigh|high|medium|low
+# A single global table can therefore be right for the default model and wrong for an explicit
+# `--model grok-4.5` in the same CLI build — which is exactly how a dispatch failed rc=1 while
+# this file's own live probe (default model only) stayed green. So: when the caller knows the
+# model, ask THAT model for its live enum; the static table is only the fallback.
+
+# grok_effort_live_enum <model> [bin] → comma-separated live enum for that model, or empty.
+# One bogus value makes grok print its whole enum and exit before any inference. Empty result
+# (no model, no binary, probe disabled with AUTOPILOT_GROK_EFFORT_PROBE=0, timeout, unparseable
+# output) means "unknown" — callers then use the static table, never a guess.
+grok_effort_live_enum() {
+  local model="${1:-}" bin="${2:-${GROK_BIN:-grok}}" raw
+  [ -n "$model" ] || return 0
+  [ "${AUTOPILOT_GROK_EFFORT_PROBE:-1}" = 0 ] && return 0
+  command -v "$bin" >/dev/null 2>&1 || return 0
+  # Run from a neutral cwd: the probe must never touch the caller's worktree/repo (a CLI or wrapper
+  # that writes files on invocation would otherwise dirty the tree the dispatch is about to use).
+  raw="$(cd "${TMPDIR:-/tmp}" && timeout "${AUTOPILOT_GROK_EFFORT_PROBE_TIMEOUT:-20}" "$bin" --model "$model" \
+          --reasoning-effort __autopilot_probe__ -p hi </dev/null 2>&1 | head -3 || true)"
+  printf '%s' "$raw" | grep -q 'unknown effort level' || return 0
+  printf '%s' "$raw" | sed -n 's/.*use one of: //p' | head -1 | tr -d ' \r'
 }
 
-# grok_effort_note <requested> [context] — stderr heads-up only when a clamp actually happened.
+# grok_effort_clamp <effort> [model] [bin] → grok-accepted level on stdout.
+# With a model and a readable live enum: the requested level if that model accepts it, else the
+# highest accepted level BELOW it, else the lowest accepted level. Without one: the static table.
+# Unknown/empty input degrades to `xhigh` (then to that model's ceiling) rather than failing: this
+# lib's job is to keep a dispatch runnable, and the caller's own --effort validation already
+# rejected out-of-scale values before reaching here.
+grok_effort_clamp() {
+  local want enum lvl best="" first=""
+  case "${1:-}" in
+    low|medium|high|xhigh) want="$1" ;;
+    *) want=xhigh ;;   # max / empty / unknown → grok's top level
+  esac
+  enum="$(grok_effort_live_enum "${2:-}" "${3:-}")"
+  if [ -n "$enum" ]; then
+    for lvl in low medium high xhigh; do
+      case ",$enum," in *",$lvl,"*) ;; *) continue ;; esac
+      [ -n "$first" ] || first="$lvl"
+      best="$lvl"
+      [ "$lvl" = "$want" ] && break
+    done
+    # `best` = highest accepted level <= want. It can overshoot only when want is below every
+    # accepted level; then take the lowest accepted one.
+    case "$want:$best" in
+      low:medium|low:high|low:xhigh|medium:high|medium:xhigh|high:xhigh) best="$first" ;;
+    esac
+    [ -n "$best" ] && { printf '%s' "$best"; return 0; }
+  fi
+  printf '%s' "$want"
+}
+
+# grok_effort_note <requested> [context] [model] [bin] [clamped] — stderr heads-up only when a clamp
+# actually happened. Pass the already-computed [clamped] value to avoid a second live-enum probe.
 grok_effort_note() {
-  local requested="${1:-}" context="${2:-grok}"
+  local requested="${1:-}" context="${2:-grok}" model="${3:-}" clamped="${5:-}"
   [ -n "${DISPATCH_QUIET:-}" ] && return 0
-  local clamped
-  clamped="$(grok_effort_clamp "$requested")"
+  [ -n "$clamped" ] || clamped="$(grok_effort_clamp "$requested" "$model" "${4:-}")"
   [ "$requested" = "$clamped" ] && return 0
-  printf '%s: effort %s is not a grok level (accepts low|medium|high|xhigh) — running at %s.\n' \
-    "$context" "$requested" "$clamped" >&2
+  printf '%s: effort %s is not accepted by grok%s — running at %s.\n' \
+    "$context" "$requested" "${model:+ model $model}" "$clamped" >&2
 }

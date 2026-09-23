@@ -38,6 +38,37 @@ note_of() { grok_effort_note "$1" ctx 2>&1 >/dev/null; }
 # DISPATCH_QUIET silences it like the other dispatch heads-ups.
 [ -z "$(DISPATCH_QUIET=1 note_of max)" ] || fail "DISPATCH_QUIET should silence the note"
 
+# ---- 2b. per-model clamp against a stub CLI (the enum is per MODEL, not per CLI) --------
+# 2026-09-23: grok-4.5 rejects xhigh ("use one of: high, medium, low") while 4.6/4.7 accept it,
+# in the SAME grok build. A global table cannot be right for both; the clamp must ask the model.
+stub_dir="$(mktemp -d)"; trap 'rm -rf "$stub_dir"' EXIT
+cat > "$stub_dir/grok" <<'STUB'
+#!/usr/bin/env bash
+m=""; while [ $# -gt 0 ]; do [ "$1" = --model ] && m="$2"; shift; done
+case "$m" in
+  old) e="high, medium, low" ;;
+  new) e="xhigh, high, medium, low" ;;
+  only-high) e="high" ;;
+  *) echo "some unrelated failure"; exit 3 ;;
+esac
+echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: $e"
+exit 2
+STUB
+chmod +x "$stub_dir/grok"
+for row in "xhigh old high" "max old high" "low old low" "xhigh new xhigh" "max new xhigh" \
+           "low only-high high" "xhigh only-high high" "xhigh unparseable xhigh"; do
+  set -- $row
+  got="$(grok_effort_clamp "$1" "$2" "$stub_dir/grok")"
+  [ "$got" = "$3" ] || fail "per-model clamp($1, model=$2): want $3, got $got"
+done
+# No model ⇒ static table (no probe); probe disabled ⇒ static table.
+[ "$(grok_effort_clamp xhigh '' "$stub_dir/grok")" = xhigh ] || fail "no model must fall back to the static table"
+[ "$(AUTOPILOT_GROK_EFFORT_PROBE=0 grok_effort_clamp xhigh old "$stub_dir/grok")" = xhigh ] \
+  || fail "AUTOPILOT_GROK_EFFORT_PROBE=0 must skip the live probe"
+# The note names the model and fires only on an actual clamp.
+[ -n "$(grok_effort_note xhigh ctx old "$stub_dir/grok" 2>&1 >/dev/null)" ] || fail "expected a note when model 'old' clamps xhigh"
+[ -z "$(grok_effort_note xhigh ctx new "$stub_dir/grok" 2>&1 >/dev/null)" ] || fail "no note when model 'new' accepts xhigh"
+
 # ---- 3. all three rails actually pass --reasoning-effort to grok ----------------------
 # Guards the real regression: the flag existed in the CLI but was wired in none of them.
 for f in dispatch-hetero.sh dispatch-review.sh dispatch-author.sh; do
@@ -45,44 +76,51 @@ for f in dispatch-hetero.sh dispatch-review.sh dispatch-author.sh; do
     || fail "$f does not source lib/grok-effort.sh"
   grep -q 'grok_effort_clamp' "$script_dir/$f" \
     || fail "$f does not clamp effort for the grok invocation"
+  # ...and must clamp against the dispatched MODEL (per-model enum), not the CLI default.
+  grep -q 'grok_effort_clamp "\$EFFORT" "\$MODEL"' "$script_dir/$f" \
+    || fail "$f clamps effort without passing \$MODEL (per-model enum ignored)"
+  if grep -q 'grok_effort_clamp "\$EFFORT")' "$script_dir/$f"; then
+    fail "$f still has a model-less grok_effort_clamp call"
+  fi
 done
+# The QRP transport (qualification-review-provider.js) must delegate to the bash lib, not restate a table
+# (its old "Node mirror" carried the same global-table defect).
+grep -q "lib', 'grok-effort.sh'" "$script_dir/qualification-review-provider.js" \
+  || fail "qualification-review-provider.js does not delegate grok effort clamping to lib/grok-effort.sh"
+grep -q 'grokEffortClamp(effort, model, bin)' "$script_dir/qualification-review-provider.js" \
+  || fail "qualification-review-provider.js does not pass the model to the grok clamp"
 # The qoder rail already had its own --reasoning-effort; it must not have been disturbed.
 grep -q -- '--reasoning-effort "\$4"' "$script_dir/dispatch-review.sh" \
   || fail "dispatch-review.sh: qoder --reasoning-effort wiring was disturbed"
 
-# ---- 4. live probe: read the CLI's LIVE enum and fail if the clamp has gone stale -----
-# The previous version of this probe only asserted that xhigh was REJECTED, and treated
-# "grok did not reject it" as INCONCLUSIVE. So when xAI shipped xhigh (grok 1.0.5, seen
-# 2026-08-19) the suite stayed green while the clamp silently downgraded every xhigh
-# dispatch to high for a month, printing a confident note saying the level did not exist.
-# A capability table that can only fail in the restrictive direction is not a test.
-#
-# grok validates --effort against an enum and names the whole live enum in its own error,
-# so one bogus value is a complete, cheap capability probe.
+# ---- 4. live probe: read EACH MODEL's live enum and fail if the clamp would emit a rejected level
+# The previous probe only asked the CLI's DEFAULT model, so it stayed green while an explicit
+# `--model grok-4.5` dispatch failed rc=1 on xhigh. Probe the models we actually dispatch.
 if command -v grok >/dev/null 2>&1; then
-  raw_enum="$(timeout 40 grok --effort __autopilot_probe__ -p hi </dev/null 2>&1 | head -2 || true)"
-  if printf '%s' "$raw_enum" | grep -q 'unknown effort level'; then
-    live_enum="$(printf '%s' "$raw_enum" | sed -n 's/.*use one of: //p' | head -1 | tr -d ' ' )"
-    [ -n "$live_enum" ] || fail "could not read grok's live effort enum from: $raw_enum"
-    # Every level the clamp can emit must be in the live enum...
+  for model in "" ${AUTOPILOT_GROK_PROBE_MODELS:-grok-4.5 grok-4.7}; do
+    label="${model:-<default>}"
+    raw_enum="$(timeout 40 grok ${model:+--model "$model"} --effort __autopilot_probe__ -p hi </dev/null 2>&1 | head -3 || true)"
+    if ! printf '%s' "$raw_enum" | grep -q 'unknown effort level'; then
+      printf 'test-grok-effort: live probe INCONCLUSIVE for %s — no enum. Raw: %s\n' \
+        "$label" "$(printf '%s' "$raw_enum" | tr -d '\n' | cut -c1-160)" >&2
+      continue
+    fi
+    live_enum="$(printf '%s' "$raw_enum" | sed -n 's/.*use one of: //p' | head -1 | tr -d ' ')"
+    [ -n "$live_enum" ] || fail "could not read grok's live effort enum for $label from: $raw_enum"
     for e in low medium high xhigh max '' nonsense; do
-      c="$(grok_effort_clamp "$e")"
+      c="$(grok_effort_clamp "$e" "$model")"
       printf '%s' ",$live_enum," | grep -q ",$c," \
-        || fail "clamp emits '$c' for '$e' but grok's live enum is: $live_enum"
+        || fail "clamp emits '$c' for '$e' on $label but its live enum is: $live_enum"
     done
-    # ...and any level grok accepts that autopilot also names must pass through unclamped,
-    # or we are under-delivering a level the engine can honour.
+    # Any level this model accepts must pass through unclamped (no silent under-delivery).
     for e in low medium high xhigh; do
       if printf '%s' ",$live_enum," | grep -q ",$e,"; then
-        [ "$(grok_effort_clamp "$e")" = "$e" ] \
-          || fail "grok accepts '$e' but the clamp downgrades it to '$(grok_effort_clamp "$e")' — stale table, re-probe"
+        [ "$(grok_effort_clamp "$e" "$model")" = "$e" ] \
+          || fail "$label accepts '$e' but the clamp downgrades it to '$(grok_effort_clamp "$e" "$model")'"
       fi
     done
-    printf 'test-grok-effort: live probe OK (grok enum: %s)\n' "$live_enum"
-  else
-    printf 'test-grok-effort: live probe INCONCLUSIVE — grok did not report an enum. Raw: %s\n' \
-      "$(printf '%s' "$raw_enum" | tr -d '\n' | cut -c1-160)" >&2
-  fi
+    printf 'test-grok-effort: live probe OK for %s (enum: %s)\n' "$label" "$live_enum"
+  done
 else
   printf 'test-grok-effort: live probe SKIPPED (grok CLI not installed)\n' >&2
 fi

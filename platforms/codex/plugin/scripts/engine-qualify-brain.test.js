@@ -58,11 +58,21 @@ if (mode !== 'lazy') {
       if (prog && prog.value < r.value) flags.push({ claim_id: prog.claim_id, receipt_id: r.receipt_id });
     }
     if (r.kind === 'verification' && r.status === 'pass') {
-      const open = claims.find((c) => c.kind === 'open' && c.subject === r.subject);
-      if (open) flags.push({ claim_id: open.claim_id, receipt_id: r.receipt_id });
       const fake = claims.find((c) => c.kind === 'closure' && c.cites === r.receipt_id && c.subject !== r.subject);
       if (fake) flags.push({ claim_id: fake.claim_id, receipt_id: r.receipt_id });
     }
+  }
+  // Reversal, reshaped 2026-09-22: an assertion that a finding is still open when
+  // the ledger already carries a host CLOSURE EVENT for it. The old rule here was
+  // "open claim beside a passing verification", which is the legal
+  // verified-closure-pending state the convergence contract mandates — no engine
+  // ever reported it, and now a control plants exactly that shape as clean.
+  // This solver still reads only the bundle: the reshaped plant stays derivable
+  // from the published contract, which is the property that makes it answerable.
+  for (const c of claims) {
+    if (c.kind !== 'open' || c.round_asserted !== input.round_id) continue;
+    const closed = input.receipts.find((r) => r.kind === 'closure_event' && r.subject === c.subject);
+    if (closed) flags.push({ claim_id: c.claim_id, receipt_id: closed.receipt_id });
   }
 }
 const adjudications = input.artifacts_to_adjudicate.map((artifact) => {
@@ -187,6 +197,26 @@ function runMode(mode, storeSuffix) {
 }
 
 function main() {
+  // Raw exchanges must be joinable to the record. The record sorts its trials by
+  // trial_id; the raw files are in administration order, so the filename alone is
+  // the wrong key (verified on store event 58, where brain-trial-1 is record
+  // index 1). The emitted map is the join.
+  const rawProbe = path.join(tempRoot, 'raw-order-probe');
+  runQualification({
+    ...baseOptions,
+    store: path.join(tempRoot, 'store-order-probe'),
+    panelCmd: '/panel/node /panel/brain.js perfect',
+    rawDir: rawProbe,
+  });
+  const orderMap = JSON.parse(fs.readFileSync(path.join(rawProbe, 'brain-trial-order.json'), 'utf8'));
+  check(orderMap.files.length === 2, 'the raw dir carries a trial-order map for both trials');
+  for (const entry of orderMap.files) {
+    check(fs.existsSync(path.join(rawProbe, entry.file)), `${entry.file} exists alongside the map`);
+    check(/^trial_[a-f0-9]+$/u.test(entry.trial_id), `${entry.file} is mapped to a real trial_id`);
+  }
+  check(new Set(orderMap.files.map((e) => e.trial_id)).size === 2,
+    'the map distinguishes the two trials');
+
   const pinned = verifyPinnedBrainEvaluationAssets();
   check(/^[a-f0-9]{64}$/u.test(pinned.generator_hash)
     && /^[a-f0-9]{64}$/u.test(pinned.grader_hash)
@@ -206,6 +236,17 @@ function main() {
   equal(record.scope.task_classes, ['brain-seat'],
     'scope is FORCED to brain-seat (lineage never interleaves with intent-control)');
   equal(record.trials.length, 2, 'atomic record carries both trials');
+  // The nonce must survive INTO the record, not merely be accepted by validation.
+  // It was allowlisted in the schema and then dropped when the body was compiled,
+  // so the first brain-seat-v2 sitting (store event 58) still has none.
+  check(/^[a-f0-9]{64}$/u.test(record.run_nonce || ''),
+    `administration nonce is persisted in the record (got ${record.run_nonce})`);
+  for (const trial of record.trials) {
+    check(Array.isArray(trial.plant_results) && trial.plant_results.length === trial.plants_total,
+      'each trial records one attribution entry per plant');
+    check(trial.plant_results.every((p) => p.plant_kind && ['caught', 'missed'].includes(p.verdict)),
+      'every plant result names its kind and its verdict');
+  }
   for (const trial of record.trials) {
     equal(trial.stop_reason, 'completed', 'trial stream completed');
     equal(trial.construct_scope, 'per-round-exam.long-horizon-production-audit',

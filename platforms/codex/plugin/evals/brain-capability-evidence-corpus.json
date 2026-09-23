@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "methodology_version": "brain-seat-v1",
+  "methodology_version": "brain-seat-v2",
   "subjects": ["diligence", "fairness", "convergence", "containment"],
   "budget": {
     "rounds_per_trial": 12,

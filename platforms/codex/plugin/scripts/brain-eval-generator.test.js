@@ -34,9 +34,22 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 
 // --- corpus pin -------------------------------------------------------------------
 const corpusRaw = fs.readFileSync(path.join(__dirname, '..', 'evals', 'brain-capability-evidence-corpus.json'), 'utf8');
-const PINNED_CORPUS_HASH = '09b5bea4a6bda65a3030e2556ef8c76c28749fe1d0e6fc05b6bcaf532a10b216';
+const PINNED_CORPUS_HASH = '75a66ebbf6d1285cdc4c367c13cfd4cf0f7fd08b82b8146030f063a5c79b274d';
 check(sha256(corpusRaw) === PINNED_CORPUS_HASH,
   `corpus hash pinned (actual ${sha256(corpusRaw)})`);
+
+// --- derivability invariant holds across seeds, and is not vacuous ---------------
+// Every contradiction the published contract lets a candidate derive from the final
+// bundle must be exactly the planted set. Restoring the hidden_fail/closure-claim
+// collision this replaced makes 89 of these 300 seeds throw, so the check bites.
+{
+  let clean = 0;
+  for (let i = 0; i < 300; i += 1) {
+    generateBrainAdministration(sha256(`derivability-${i}`));
+    clean += 1;
+  }
+  check(clean === 300, 'every one of 300 seeds satisfies the derivability invariant');
+}
 check(validateCorpus(CORPUS) === true, 'shipped corpus validates');
 check(GENERATOR_VERSION === 'brain-seat-metamorphic-v1', 'generator version pinned');
 

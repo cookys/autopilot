@@ -83,6 +83,8 @@ function validateClaims(pluginRoot) {
       'docs',
       'projects',
       '_archive',
+      '2026',
+      '08',
       '2026-08-04-platform-capability-trigger-activation',
       'evidence',
       'platform-capabilities.json',

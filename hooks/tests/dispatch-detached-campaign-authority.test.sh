@@ -215,13 +215,19 @@ OUT="$(cd "$REPO" && AUTOPILOT_SESSION_MODE_DIR="$SESSION_DIR" \
   --ledger "$LEDGER" --run-id "$CAMPAIGN_ID" --stage campaign-implementation \
   --strict-contract --contract-file "$UNIT" \
   --campaign-contract "$CAMPAIGN" --campaign-contract-sha256 "$CAMPAIGN_SHA" \
-  --campaign-seal "$SEAL" 2>&1)"
+  --campaign-seal "$SEAL" 2>"$TEST_TMP/dispatch.stderr")"
 EXIT_CODE=$?
+# stdout is the JSON contract; stderr carries operational notes that are NOT
+# gated on DISPATCH_QUIET (e.g. the 86c168c5 "resolved-live: no standing pin"
+# disclosure), so merging them would make the JSON unparseable.
+ERR="$(cat "$TEST_TMP/dispatch.stderr" 2>/dev/null)"
+assert_contains "$ERR" 'resolved-live: no standing pin for implementer' \
+  "detached campaign strict dispatch discloses the resolved-live outcome on stderr"
 
 # On the unpatched base, detached_main loses CAMPAIGN_STRICT_AUTHORITY and
 # rejects src/optional.txt as if this were a legacy unit contract.  After the
 # canonical serialization fix, the same run commits the narrow subset.
-assert_eq "0" "$EXIT_CODE" "detached campaign strict dispatch commits authorized subset"
+assert_eq "0" "$EXIT_CODE" "detached campaign strict dispatch commits authorized subset (stderr: $(printf '%s' "$ERR" | tail -c 400))"
 assert_eq "committed" "$(printf '%s' "$OUT" | jq -r '.status' 2>/dev/null)" \
   "detached campaign strict dispatch returns committed"
 COMMIT_SHA="$(printf '%s' "$OUT" | jq -r '.commit' 2>/dev/null)"

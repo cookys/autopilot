@@ -28,13 +28,44 @@ function loadManifest(file) {
   }
 }
 
+// Marker discovery follows the plan files wherever the archive layout put them:
+// docs/plans/ (live), docs/plans/_archive/ (legacy flat) and
+// docs/plans/_archive/YYYY/MM/ (dated layout, v2.36.80). Scanning only the live
+// directory made every archived portfolio plan invisible, so each manifest claim
+// reported a marker mismatch. A marker found in two locations is still a duplicate.
+function listPortfolioPlans(repoRoot) {
+  const plansRel = 'docs/plans';
+  const dirs = [plansRel, `${plansRel}/_archive`];
+  const archiveAbs = path.join(repoRoot, plansRel, '_archive');
+  const isDir = (abs) => fs.existsSync(abs) && fs.statSync(abs).isDirectory();
+  if (isDir(archiveAbs)) {
+    for (const year of fs.readdirSync(archiveAbs).sort()) {
+      if (!/^\d{4}$/.test(year) || !isDir(path.join(archiveAbs, year))) continue;
+      for (const month of fs.readdirSync(path.join(archiveAbs, year)).sort()) {
+        if (!/^\d{2}$/.test(month) || !isDir(path.join(archiveAbs, year, month))) continue;
+        dirs.push(`${plansRel}/_archive/${year}/${month}`);
+      }
+    }
+  }
+  const plans = [];
+  for (const dir of dirs) {
+    const abs = path.join(repoRoot, dir);
+    if (!isDir(abs)) continue;
+    for (const basename of fs.readdirSync(abs).sort()) {
+      if (!basename.startsWith('2026-07-26-') || !basename.endsWith('.md')) continue;
+      plans.push(path.posix.join(dir, basename));
+    }
+  }
+  return plans;
+}
+
 function main() {
   const repoRoot = path.resolve(__dirname, '..');
   const manifestPath = path.resolve(
     process.argv[2]
       || path.join(
         repoRoot,
-        'docs/projects/2026-07-26-mission-convergence-portfolio/authority-ownership.json',
+        'docs/projects/_archive/2026/07/2026-07-26-mission-convergence-portfolio/authority-ownership.json',
       ),
   );
   const manifest = loadManifest(manifestPath);
@@ -87,11 +118,8 @@ function main() {
   }
 
   const markerOwners = new Map();
-  const plansDir = path.join(repoRoot, 'docs', 'plans');
-  for (const basename of fs.readdirSync(plansDir)) {
-    if (!basename.startsWith('2026-07-26-') || !basename.endsWith('.md')) continue;
-    const plan = path.posix.join('docs/plans', basename);
-    const body = fs.readFileSync(path.join(plansDir, basename), 'utf8');
+  for (const plan of listPortfolioPlans(repoRoot)) {
+    const body = fs.readFileSync(path.join(repoRoot, plan), 'utf8');
     const matches = [...body.matchAll(/<!-- autopilot-authority-claims: (\[[^\n]*\]) -->/g)];
     for (const match of matches) {
       let declared;

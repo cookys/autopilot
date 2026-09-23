@@ -7,6 +7,13 @@ CLI="$REPO_ROOT/scripts/engine-scorecard.js"
 FIXTURE_JS="$REPO_ROOT/hooks/tests/lib/consult-discuss-genuine-row-fixture.js"
 SCOPE_HELPER="$REPO_ROOT/scripts/lib/qualification-applicability-scope.js"
 
+# The genuine-row fixture stamps issued_at = (wall clock - 2d) and
+# expires_at = (wall clock + 27d) by design (see its header). A literal
+# --now pinned to the authoring date therefore rots: two days later issued_at
+# is AFTER that literal midnight and the row reads evidence_not_yet_valid.
+# Evaluate at the same wall clock the fixture used, read AFTER it ran.
+fixture_now() { node -e 'process.stdout.write(new Date().toISOString())'; }
+
 assert_r49_scorecard_runner_tok() {
   # Plant one qualifying consult row recorded as runner "codex-cli", then query
   # current --role consult and seat-status --runner codex (incl. --require-evidence).
@@ -24,12 +31,13 @@ assert_r49_scorecard_runner_tok() {
   node "$SCOPE_HELPER" write-scope --role consult --out "$scope" >/dev/null \
     || fail "r49: write-scope failed"
 
-  current_out="$(node "$CLI" current --role consult --now 2026-09-21)"
+  local now; now="$(fixture_now)"
+  current_out="$(node "$CLI" current --role consult --now "$now")"
   assert_contains "$current_out" '"runner":"codex-cli"' \
     "r49: current --role consult still surfaces the stored runner token (no rewrite)"
 
-  seat_out="$(node "$CLI" seat-status --engine gpt-5.6-sol --runner codex --role consult --effort high --now 2026-09-21)"
-  seat_strict="$(node "$CLI" seat-status --engine gpt-5.6-sol --runner codex --role consult --effort high --now 2026-09-21 --require-evidence --scope-file "$scope")"
+  seat_out="$(node "$CLI" seat-status --engine gpt-5.6-sol --runner codex --role consult --effort high --now "$now")"
+  seat_strict="$(node "$CLI" seat-status --engine gpt-5.6-sol --runner codex --role consult --effort high --now "$now" --require-evidence --scope-file "$scope")"
 
   # RED at a0107ead5b90e9dd56b946c453f9e78ed2cce849: {"admission_status":"no_record","expiry_warning":false,"strikes_since_pass":0,"critical_trigger":false,"would_requalify":false,"strike_threshold":3,"strike_policy_version":2,"rejected_strikes":0,"effort":"high","seat_hash":"8e04712d63f6b90597da4a2e0c93e9c33f3ae60aa39655e7456d93f2de796b2a","baseline_event_id":null,"baseline_qualified_at":null}
   assert_contains "$seat_out" '"admission_status":"qualified"' \
@@ -348,7 +356,8 @@ assert_r127_engine_scorecard_js() {
     || fail "r127: scorecard record failed"
 
   # RED at beff1c84c5bff395d4e0f9a3a8f899b3a42e55cd: ERROR: unknown option: --role-default-scope
-  current_out="$(node "$CLI" current --role consult --now 2026-09-21 --require-evidence --role-default-scope)" \
+  local now; now="$(fixture_now)"
+  current_out="$(node "$CLI" current --role consult --now "$now" --require-evidence --role-default-scope)" \
     || fail "r127: current --role-default-scope should succeed without --scope-file"
   assert_contains "$current_out" '"role":"consult"' \
     "r127: current --role consult --require-evidence --role-default-scope resolves the planted row"

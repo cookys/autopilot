@@ -109,6 +109,10 @@ SUPPORT_FILES=(
   "evals/owner-eval-generator.js"
   "evals/brain-eval-generator.js"
   "evals/brain-eval-grader.js"
+  # a2b8b95f: shared verify/close/reopen state, require()d by both
+  # brain-eval-grader.js and scripts/engine-qualify.js — without it the
+  # packaged engine-qualify.js cannot even load.
+  "evals/brain-campaign-state.js"
   "evals/brain-capability-evidence-corpus.json"
   "evals/va-eval-generator.js"
   "evals/va-eval-grader.js"

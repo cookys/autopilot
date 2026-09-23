@@ -418,13 +418,20 @@ unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 # ─── finalize & opt-out ───
 
 # Section setup: helper to write topology for hands-brief test
+# The rung's runner must be a real implementer runner. finalize resolves
+# hetero_review_resolved_from through resolve-review-loop.sh, and the scratch repo has no
+# config, so the shipped template (`implementer_ladder: auto`) expands THIS topology; the
+# resolver refuses an auto-expanded rung with an unknown runner by design (43d91832: "a
+# stale topology file must not smuggle a bad runner past the resolver"). The former
+# "custom-runner" made every finalize below exit 2 before writing a receipt. The engine
+# name stays custom so the brief line still proves it came from the topology.
 TOPOLOGY_FILE="$TEST_TMP/topology.json"
 cat << 'TOPO_EOF' > "$TOPOLOGY_FILE"
 {
   "implementer_ladder": [
     {
       "engine": "custom-engine",
-      "runner": "custom-runner",
+      "runner": "opencode",
       "effort": "max"
     }
   ]
@@ -521,7 +528,7 @@ assert_contains "$(cat "$LEDGER/receipt-p_fin2.json")" '"verdict": "FIX-THEN-SHI
 assert_file_exists "$LEDGER/review-p_fin2/g1/hands-brief.md" "case 2 (fin): hands-brief.md exists"
 BRIEF_LINE1=$(head -n 1 "$LEDGER/review-p_fin2/g1/hands-brief.md")
 assert_contains "$BRIEF_LINE1" "Engine: " "case 2 (fin): line 1 starts with Engine: "
-assert_contains "$BRIEF_LINE1" "custom-engine@custom-runner effort=max" "case 2 (fin): line 1 uses custom topology"
+assert_contains "$BRIEF_LINE1" "custom-engine@opencode effort=max" "case 2 (fin): line 1 uses custom topology"
 # Run check-redispatch-prompt.sh on the hands-brief.md
 CHECK_BRIEF_OUT=$(bash "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$LEDGER/review-p_fin2/g1/hands-brief.md" 2>&1); CHECK_BRIEF_RC=$?
 assert_exit_code "$CHECK_BRIEF_RC" "0" "case 2 (fin): check-redispatch-prompt.sh exits 0 on hands-brief.md"

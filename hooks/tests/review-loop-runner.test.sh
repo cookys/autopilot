@@ -32,15 +32,22 @@ assert_contains "$OUT" "reviewer=gpt-5.5" "review-loop runner captures reviewer 
 assert_contains "$OUT" "qualified=false" "review-loop runner captures fail-closed scorecard state"
 assert_contains "$OUT" "fallback=[]" "review-loop runner captures empty scorecard ladder"
 
-OUT="$(node - "$REPO_ROOT" "$TEST_TMP/empty-scorecard" <<'NODE'
+# Same hermetic empty config as above. Without it this case resolved the LIVE dogfood
+# config, whose cursor implementer (2026-09-12) is admitted only by the host's standing
+# pin; under lib.sh's isolated store the resolve exits 3 at the implementer gate BEFORE
+# any JSON is printed, so status=3 passed for the wrong reason and parse/qualified failed.
+# With the built-in roster the exit 3 is the --enforce scorecard block this case is about.
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/empty-scorecard" "$EMPTY_CFG" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
 const scorecard = process.argv[3];
+const emptyCfg = process.argv[4];
 const { resolveReviewLoopJson } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
 const run = resolveReviewLoopJson(['--check-scorecard', '--enforce'], {
   env: {
     ...process.env,
     ENGINE_SCORECARD_DIR: scorecard,
+    REVIEW_LOOP_CONFIG_OVERRIDE: emptyCfg,
   },
 });
 console.log(`status=${run.status}`);
@@ -102,6 +109,7 @@ const valid = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',
@@ -119,6 +127,7 @@ const valid = {
   independent_harness: 'on',
   qc_panel: ['gpt-5.5'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -131,6 +140,7 @@ const valid = {
   cross_family_required: true,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
@@ -209,6 +219,7 @@ const valid = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',
@@ -226,6 +237,7 @@ const valid = {
   independent_harness: 'on',
   qc_panel: ['gpt-5.5'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -238,6 +250,7 @@ const valid = {
   cross_family_required: true,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
@@ -334,6 +347,7 @@ const partial = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',
@@ -351,6 +365,7 @@ const partial = {
   independent_harness: 'on',
   qc_panel: ['gpt-5.5'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -363,6 +378,7 @@ const partial = {
   cross_family_required: true,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
@@ -440,6 +456,7 @@ const invalid = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',
@@ -457,6 +474,7 @@ const invalid = {
   independent_harness: 'on',
   qc_panel: [''],
   qc_panel_aggregation: 'majority',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -469,6 +487,7 @@ const invalid = {
   cross_family_required: true,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
@@ -545,6 +564,7 @@ const valid = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',
@@ -562,6 +582,7 @@ const valid = {
   independent_harness: 'on',
   qc_panel: ['gpt-5.5'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -574,6 +595,7 @@ const valid = {
   cross_family_required: true,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
@@ -646,6 +668,7 @@ const valid = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',
@@ -663,6 +686,7 @@ const valid = {
   independent_harness: 'on',
   qc_panel: ['gpt-5.5'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -675,6 +699,7 @@ const valid = {
   cross_family_required: true,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
@@ -751,6 +776,7 @@ const valid = {
   spec_review: 'on',
   plan_review: 'off',
   plan_review_resolved_from: 'off',
+  plan_review_same_family_as_depth0: false,
   hetero_review: 'auto',
   hetero_review_resolved_from: 'topology',
   plan_reviewer_engine: '',
@@ -768,6 +794,7 @@ const valid = {
   independent_harness: 'on',
   qc_panel: ['gpt-5.5'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  in_rail_review: 'single',
   qc_panel_seats: [],
   qc_panel_seats_complete: false,
   provider_readiness_receipt_ttl_seconds: 300,
@@ -780,6 +807,7 @@ const valid = {
   cross_family_required: true,
   cross_family_satisfied: true,
   review_diff_scope: 'full',
+  review_packet_deny_extra: [],
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',

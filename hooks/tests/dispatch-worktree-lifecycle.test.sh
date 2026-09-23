@@ -270,6 +270,11 @@ PIDS=()
 for index in 1 2 3 4 5 6 7 8; do
   (
     export WLB_RELEASE_FILE="$RELEASE_FILE"
+    # The eight creators are siblings committing hetero/wlb-concurrent-* refs in
+    # ONE checkout. Since 3f5c8588 (main-checkout boundary) any ref delta other
+    # than a leaf's own branch is main_checkout_mutated unless the caller declares
+    # the sibling namespace it owns — the documented env default for that.
+    export AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX="refs/heads/hetero/"
     dispatch_leaf \
       "$CONCURRENT_REPO" \
       "hetero/wlb-concurrent-$index" \

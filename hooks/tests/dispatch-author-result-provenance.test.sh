@@ -62,7 +62,7 @@ chmod +x "$FAKE_RUNNER"
 # Assert exit/status/runner/model remain correct.
 # Assert selection_source=explicit_cli, selection_path=null, verification_author=null.
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "0" "$EXIT" "Case 1: exit code 0"
 assert_file_exists "$SENTINEL" "Case 1: fake runner executed"
@@ -105,7 +105,7 @@ assert_eq "0" "$PY_EXIT_1" "Case 1 schema: $PY_OUT_1"
 # Assert selection_source=strict_roster, selection_path=null, verification_author=null.
 # Assert fake runner absent.
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --model "GPT-OSS 120B (Medium)" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --model "GPT-OSS 120B (Medium)" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 assert_eq "2" "$EXIT" "Case 2: exit code 2"
 assert_file_absent "$SENTINEL" "Case 2: fake runner not executed"
@@ -172,7 +172,7 @@ export AUTOPILOT_ENDPOINT_MY_UNIQUE_EP_TOKEN="$ENDPOINT_TOKEN_FIXTURE"
 unset ANTHROPIC_BASE_URL
 unset ANTHROPIC_AUTH_TOKEN
 
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE3_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE3_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 
 # Cleanup env immediately
 unset AUTOPILOT_ENDPOINT_MY_UNIQUE_EP_URL

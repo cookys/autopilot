@@ -26,7 +26,10 @@ assert_precondition_failed() {
   assert_eq "2" "$exit_code" "$desc: exit code 2"
   assert_contains "$out" '"status": "precondition_failed"' "$desc: status precondition_failed"
   assert_contains "$out" '"raw_log": null' "$desc: raw_log null"
-  assert_contains "$out" "$error_needle" "$desc: semantic diagnostic contains '$error_needle'"
+  # The diagnostic may come from the JSON error (stdout) or from the resolver's
+  # own stderr; OUT is stdout only (the JSON contract), ERR holds stderr.
+  assert_contains "$out
+${ERR:-}" "$error_needle" "$desc: semantic diagnostic contains '$error_needle'"
 
   assert_file_absent "$SENTINEL" "$desc: fake-runner sentinel was never created"
   rm -f "$SENTINEL"
@@ -47,19 +50,19 @@ cat <<EOF > "$CASE1_DIR/.claude/review-loop-config.md"
 EOF
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --model "GPT-OSS 120B (Medium)" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --model "GPT-OSS 120B (Medium)" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "manual" "Case 1: manual model rejects"
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --runner cc-shim --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --runner cc-shim --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "manual" "Case 1: manual runner rejects"
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --effort high --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --effort high --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "manual" "Case 1: manual effort rejects"
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --endpoint TESTEP --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE1_DIR" --endpoint TESTEP --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "manual" "Case 1: manual endpoint rejects"
 
 # Case 2: strict mode with a consuming repo lacking .claude/review-loop-config.md fails closed.
@@ -67,7 +70,7 @@ CASE2_DIR="$TEST_TMP/case2"
 mkdir -p "$CASE2_DIR"
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 REVIEW_LOOP_CONFIG_OVERRIDE="$CASE1_DIR/.claude/review-loop-config.md" "$SCRIPT" --strict-roster --repo-root "$CASE2_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 REVIEW_LOOP_CONFIG_OVERRIDE="$CASE1_DIR/.claude/review-loop-config.md" "$SCRIPT" --strict-roster --repo-root "$CASE2_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "config" "Case 2: lacking config fails closed"
 
 # Case 3: project roster with verification_author_present:false and an empty tuple fails closed.
@@ -83,7 +86,7 @@ cat <<EOF > "$CASE3_DIR/.claude/review-loop-config.md"
 EOF
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE3_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE3_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "present" "Case 3: present=false empty tuple fails closed"
 
 # Case 4: present tuple whose author is the same OpenAI family as the Spark implementer fails closed.
@@ -99,7 +102,7 @@ cat <<EOF > "$CASE4_DIR/.claude/review-loop-config.md"
 EOF
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE4_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE4_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "family" "Case 4: same family fails closed"
 
 # Case 5: present tuple with an unknown author family fails closed.
@@ -115,7 +118,7 @@ cat <<EOF > "$CASE5_DIR/.claude/review-loop-config.md"
 EOF
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE5_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE5_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "unknown" "Case 5: unknown family fails closed"
 
 # Case 6: present=true but incomplete tuple (missing/empty runner) fails closed.
@@ -131,7 +134,7 @@ cat <<EOF > "$CASE6_DIR/.claude/review-loop-config.md"
 EOF
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE6_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE6_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_precondition_failed "$OUT" "$EXIT" "incomplete" "Case 6: incomplete tuple fails closed"
 
 # Case 7: an isolated tracked roster selects the Grok 4.5 verification author
@@ -167,7 +170,7 @@ EOF
 chmod +x "$FAKE_GROK_RUNNER"
 
 rm -f "$SENTINEL" "$GROK_ARGS"
-OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE7_DIR" --prompt-file "$PROMPT" --bin "$FAKE_GROK_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE7_DIR" --prompt-file "$PROMPT" --bin "$FAKE_GROK_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_eq "0" "$EXIT" "Case 7: tracked Grok roster succeeds"
 assert_contains "$OUT" '"status": "authored"' "Case 7: status authored"
 assert_contains "$OUT" '"selection_source": "strict_roster"' "Case 7: strict_roster selection"
@@ -202,7 +205,18 @@ cat <<EOF > "$FAKE_AGY_RUNNER"
 #!/usr/bin/env bash
 $(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
 touch "\$SENTINEL" 2>/dev/null || true
-BODY="AGY-AUTHORED"
+# Echo argv into raw_log for the composition checks below (the isolated AGY
+# runner cannot write host files). The ARG= lines go INSIDE the AUTHOR frame:
+# only the frame body survives into raw_log. Each arg is flattened to one line
+# and has < > neutralised, because the prompt arg carries the frame marker
+# lines and a literal <tool_call> instruction, which the frame parser would
+# otherwise read as a second frame / tool narration.
+ARG_LINES=""
+for _arg in "\$@"; do
+  ARG_LINES="\$ARG_LINES
+ARG=\$(printf '%s' "\$_arg" | tr '\\n<>' ' __')"
+done
+BODY="AGY-AUTHORED\$ARG_LINES"
 MARKERS=""
 for _arg in "\$@"; do
   if MARKERS="\$(extract_autopilot_frame_markers AUTOPILOT-AUTHOR "\$_arg")"; then
@@ -223,7 +237,7 @@ EOF
 chmod +x "$FAKE_AGY_RUNNER"
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE8_DIR" --prompt-file "$PROMPT" --bin "$FAKE_AGY_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE8_DIR" --prompt-file "$PROMPT" --bin "$FAKE_AGY_RUNNER" 2>"$TEST_TMP/dispatch.stderr")"; EXIT=$?; ERR="$(cat "$TEST_TMP/dispatch.stderr")"
 assert_eq "0" "$EXIT" "Case 8: isolated Gemini roster succeeds"
 assert_contains "$OUT" '"status": "authored"' "Case 8: status authored"
 assert_contains "$OUT" '"selection_source": "strict_roster"' "Case 8: strict_roster selection"

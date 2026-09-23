@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.36.89 — 不是 codeforge 的 status line 也能告訴 hook 真實 window
+
+`context-budget` 要知道 context window 的真實大小，唯一來源是 status line 寫的 live file
+（`<live-base>/context/<sid>.json`），而只有 codeforge 的 status line 會寫。其他主機上
+hook 只能從觀察到的用量推算：用量還沒超過 200K 就推定 window 是 200K，所以 **1M 的 session
+在 ~150K 就收到 T2「立刻寫 handoff」**。2026-09-23 在一台用 `statusline-go` 的主機上實測：
+159k（16%）與 194k 各誤發一次 T2，要到 243,941 才改判 1M
+（證據＝該 session 的 `<live-base>/context-budget/<sid>.json`：`lastLive.present:false`、`ageMs:null`、`observedMax:243941`）。
+
+Claude Code 其實每次都把 `context_window.context_window_size` 餵給 status line，只是沒人轉寫。
+
+- **`scripts/statusline-live-tee.js`（新）**：放在既有 status line 前面，
+  `node …/statusline-live-tee.js -- <原本的 status line> [args]`。先寫 schema 1 的 main live file
+  （同一個 `resolveLiveDir` base、同一個 session-id sanitiser、0600、temp＋rename），
+  再把**原封不動的 stdin** 交給原程式，輸出與 exit status 直接透傳。
+  寫檔失敗一律吞掉，status line 永遠不會因此壞掉；沒有正數 window 的 payload 不寫檔。
+  不寫 subagent tasks 檔。這是 2026-09-05 live-feed 計畫 §7 登記的 BACKLOG 候選。
+- **測試** `scripts/statusline-live-tee.test.js`（7 條）：端到端先重現誤發（沒有 tee ⇒ ~159k 時 exit 2），
+  經過一次 tee 後同一份 transcript 不再觸發；真的 200K window 仍然觸發且標 `(statusline)`。
+  植入「tee 什麼都不寫」的變異 ⇒ 7 條中 5 條轉紅（剩下 2 條是負向案例，本來就該綠）。
+- `hooks/README.md` 補「保留非 codeforge status line」的接法。
+prose-justification: none（無 SKILL/reference 文字變動；prose 數字是 v2.35.2 基準以來既有的累積）。
+
 ## v2.36.88 — depth-0 考卷有一題答不出來：reversal
 
 五顆引擎、十八場 trial、`plants` 全部 4/5 —— 沒有一次 5/5，也沒有一次更低。

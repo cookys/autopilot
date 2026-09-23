@@ -344,11 +344,16 @@ assert_eq "40" "$POP_B_COUNT" "Population B file bound is pinned at 40 (git grep
 #   pin (d2bdccba), lib.sh (write_d4_strict_roster_fixture, 607bbf9f), and the frozen
 #   fixture fixtures/review-loop-config.frozen-2026-09-13.md (86c168c5, frozen-fixture
 #   false-positive class). 30 -> 40; 5 unchanged.
+# RECOUNTED (2026-09-23, same CI repair, second count only): hooks/tests/context-window.test.sh's
+# hermetic resolver roster (5eb415e4) pins `- consult_dispatch: off` so the auto-knob
+# native-fallback warning cannot mask its window-warning assertions. It has no
+# `reviewer_engine:` line (not a Population B file) but the explicit-switch grep below is
+# file-wide, so it counts. 5 -> 6.
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
 POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "5" "$POP_B_EXPLICIT_SWITCH" "five of Population B's 40 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
+assert_eq "6" "$POP_B_EXPLICIT_SWITCH" "six hooks/ roster configs (five of Population B's 40, plus context-window's hermetic roster) set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'

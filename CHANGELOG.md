@@ -35,6 +35,20 @@ prose-justification: none（無 SKILL/reference 文字變動；prose 數字是 v
   4,824 次 node 呼叫、累計 292s；`resolve-review-loop.sh` 每次執行 17 次 node 約佔其 wall 的四分之三。
   serial tail（8 檔，實測合計約 410s）在並行池之後依序跑，是並行 wall 的最大單一區塊，其中 `dispatch-hetero` 佔 243s。
 
+**派工路徑少起 node**（`dispatch-hetero.sh`、`resolve-review-loop.sh`、`resolve-dispatch-topology.js`）。
+每次 node 啟動約 20ms，原本按 marker／欄位／座位各起一次；以 node shim 逐呼叫點歸屬後處理最大的幾處：
+- session-mode marker 檢查：每個 marker 一次 ⇒ 全部一次（仍依 glob 順序、第一個有問題的 marker 決定結果）。
+  這台主機有 20 個過期 marker，`dispatch-hetero.test.sh` 單檔因此多 1,842 次 node。
+- `getJudge`：跑三次完整 `resolve-review-loop.sh`（每次約 0.7s）⇒ 一次；`getInstalledRunners` 改在行程內查表。
+- `resolve-review-loop.sh`：plan-review／consult 座位欄位改用新的 `scripts/lib/json-fields.sh`（18 次 ⇒ 2 次）；
+  沒有 override 檔時不起 matcher；`pins --role R` 每個 role 讀一次（連同 exit status，保留 pipefail 語義）。
+- `hooks/tests/lib.sh` 把 session-mode 目錄隔離到每個 suite（原本讀 operator 真實的 `~/.autopilot/session-mode`）。
+- 修 `probe-runner-coverage` 的 pipefail flake（`printf | grep -q` 在負載下誤判「沒有分支」）。
+- 新測試補了兩個原本沒人守的點：topology `judge` 欄位（runner/effort 對調原本全綠）、同一次執行兩個 role 各自的 pin。
+  每項改動都在舊碼、新碼、變異三方驗過（細節見 commit message）。
+- 量測：`dispatch-hetero.test.sh` 217s ⇒ 131s（同時同負載並跑）；完整 `--parallel` 套件 828s/833s（字母序）⇒ 675s
+  （最慢優先 + 本項；load 7.4，對照組 load 6.9–8.2，單次量測）。
+
 ## v2.36.88 — depth-0 考卷有一題答不出來：reversal
 
 五顆引擎、十八場 trial、`plants` 全部 4/5 —— 沒有一次 5/5，也沒有一次更低。

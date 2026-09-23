@@ -48,3 +48,29 @@ Preconditions that still refuse, and write no evidence record:
 - `AUTOPILOT_QUALIFY_SEED` still selects the inadmissible puppet sitting instead of this loop.
 
 Section 11 stays unbuilt. `scripts/foreman-eval-grader-b1-gap.test.js` still exits 1 with `B1_GAP`.
+
+## phase 5
+
+`runForemanQualification` builds the foreman from `--remote-provider-cmd` when no scripted `options.foreman` is passed. Each campaign sends the §3 visible bundle (`brief`, `worktree`, `.autopilot/` ledger, and prior turns while the session is still the first one) through `scripts/qualification-review-provider.js` with `QRP_PROMPT_MODE=foreman`. The model answer is applied to the in-process stub as `dispatch`, `request_capability`, or `return_verdict`, then `gradeCampaign` grades it. A model turn that is not a tool call counts as one turn. The campaign budget is 5 dispatches, 40 tool calls, and 200000 tokens. A verdict or a spent budget grades that campaign and the sitting continues. A timeout, a non-zero adapter, or no parseable tool aborts with `pass` and `fail` both null and does not grade that campaign. A restarted session is sent only the brief, the worktree, and `.autopilot/`.
+
+The command that calls a model:
+
+```
+QRP_TRANSPORT=http QRP_PROMPT_MODE=foreman \
+QRP_BASE_URL=$QRP_BASE_URL QRP_AUTH_TOKEN=$QRP_AUTH_TOKEN \
+QRP_MODEL=$QRP_MODEL QRP_PROVIDER=$QRP_PROVIDER \
+node scripts/engine-qualify.js foreman \
+  --engine <engine> --model "$QRP_MODEL" --model-version <version> \
+  --runner qrp --runner-version <version> --family <family> \
+  --harness-version <harness> --effort <effort> \
+  --prompt-config-hash <sha256> --semantic-fingerprint <sha256> \
+  --containment-fingerprint <sha256> \
+  --task-class foreman --domain repository --language en --tool dispatch \
+  --remote-provider "$QRP_PROVIDER" \
+  --remote-provider-cmd "node scripts/qualification-review-provider.js" \
+  --provider-env QRP_TRANSPORT --provider-env QRP_PROMPT_MODE \
+  --provider-env QRP_BASE_URL --provider-env QRP_AUTH_TOKEN \
+  --provider-env QRP_MODEL --provider-env QRP_PROVIDER
+```
+
+Do not set `AUTOPILOT_QUALIFY_SEED`. That variable still selects the inadmissible puppet sitting. Section 11 stays unbuilt. `scripts/foreman-eval-grader-b1-gap.test.js` still exits 1 with `B1_GAP`.

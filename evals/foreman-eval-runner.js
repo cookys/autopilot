@@ -10,6 +10,7 @@
 // inadmissible. Section 11 is unbuilt.
 
 const crypto = require('crypto');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -37,6 +38,18 @@ const SCHEMA_MISMATCH = 'section 8 foreman record does not fit the capability-ev
   + ' (closed key sets per methodology kind; no disposition, campaigns, or critical_events fields)';
 
 const SUBJECT_FIELDS = ['evaluated', 'passed', 'failed_noncritical', 'failed_critical'];
+
+// Live-transport campaign budget from the phase-5 sitting rule. One prose
+// turn counts as one turn toward the same tool-call ceiling so a model that
+// never calls a tool still ends and is graded. A dead adapter does not.
+const REMOTE_CAMPAIGN_BUDGET = Object.freeze({
+  dispatches: 5,
+  toolCalls: 40,
+  proseTurns: 40,
+  tokens: 200000,
+});
+
+const FOREMAN_TOOL_NAMES = new Set(['dispatch', 'request_capability', 'return_verdict']);
 
 function section8FitsCapabilityEvidence() {
   let schema;
@@ -328,7 +341,10 @@ function runForemanQualification(options) {
     error.code = 'schema_mismatch';
     throw error;
   }
-  return runForemanSitting(input, decision);
+  const sittingOptions = typeof input.foreman !== 'function' && input.remoteProviderCmd
+    ? { ...input, foreman: createRemoteForeman(input) }
+    : input;
+  return runForemanSitting(sittingOptions, decision);
 }
 
 function hmac16(seed, label) {
@@ -640,7 +656,7 @@ function createCampaignSession(campaign) {
       returned_tree: session.tip,
       verification_witness: true,
       tool_calls_used: session.toolCalls,
-      tokens_used: 0,
+      tokens_used: session.tokens || 0,
       restarts: session.restarts,
       truth: head && typeof campaign.requirementTruth === 'function'
         ? campaign.requirementTruth(head.sv)
@@ -648,6 +664,162 @@ function createCampaignSession(campaign) {
     };
   };
   return session;
+}
+
+function foremanTurnPayload(session, campaign, toolResult) {
+  const visible = session.visible();
+  const payload = {
+    campaign_id: campaign.brief.campaign_id,
+    session: session.sessionIndex,
+    brief: visible.brief,
+    worktree: visible.worktree,
+    autopilot: visible.autopilot,
+  };
+  // A restarted session is shown only the brief, the worktree, and .autopilot/.
+  if (session.sessionIndex > 1) return payload;
+  payload.turns = visible.turns;
+  if (toolResult !== undefined) payload.tool_result = toolResult;
+  return payload;
+}
+
+function interpretForemanModelObject(message) {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return { dead: true, reason: 'no parseable tool' };
+  }
+  if (message.schema === 'foreman-verdict/1') {
+    return { tool: 'return_verdict', input: message };
+  }
+  const nested = message.function && typeof message.function === 'object' ? message.function : null;
+  const name = typeof message.tool === 'string' ? message.tool
+    : typeof message.name === 'string' ? message.name
+      : nested && typeof nested.name === 'string' ? nested.name
+        : null;
+  if (!name || !FOREMAN_TOOL_NAMES.has(name)) return { tool: null, raw: message };
+  let input = message.input !== undefined ? message.input
+    : message.arguments !== undefined ? message.arguments
+      : message.args !== undefined ? message.args
+        : nested && nested.arguments !== undefined ? nested.arguments
+          : {};
+  if (typeof input === 'string') {
+    try {
+      input = JSON.parse(input);
+    } catch {
+      return { dead: true, reason: 'no parseable tool' };
+    }
+  }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) input = {};
+  return { tool: name, input };
+}
+
+function callForemanProvider(options, payload) {
+  if (typeof options.callProvider === 'function') return options.callProvider(payload);
+  const request = {
+    schema_version: 1,
+    request_id: crypto.randomBytes(8).toString('hex'),
+    role: 'foreman',
+    payload: { format: 'unified_diff', content: JSON.stringify(payload) },
+  };
+  const env = {
+    PATH: process.env.PATH || '/usr/bin:/bin',
+    HOME: process.env.HOME || os.homedir(),
+    LANG: 'C.UTF-8',
+    LC_ALL: 'C.UTF-8',
+    TMPDIR: os.tmpdir(),
+    QRP_PROMPT_MODE: 'foreman',
+  };
+  for (const name of options.providerEnvironment || []) {
+    if (process.env[name] !== undefined) env[name] = process.env[name];
+  }
+  env.QRP_PROMPT_MODE = 'foreman';
+  const timeout = options.remoteTimeoutMs || 180000;
+  const result = spawnSync('/usr/bin/bash', ['-c', options.remoteProviderCmd], {
+    cwd: REPO_ROOT,
+    env,
+    input: `${JSON.stringify(request)}\n`,
+    encoding: 'utf8',
+    timeout,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (result.error && (result.error.code === 'ETIMEDOUT' || /timed out/iu.test(result.error.message || ''))) {
+    throw new Error('model_turn_timeout');
+  }
+  if (result.signal === 'SIGTERM' || result.signal === 'SIGKILL') throw new Error('model_turn_timeout');
+  if (result.error) throw new Error(`transport_error: ${result.error.message}`);
+  if (result.status !== 0) {
+    throw new Error(`transport_error: adapter exited ${result.status}`);
+  }
+  let envelope;
+  try {
+    envelope = JSON.parse(result.stdout);
+  } catch {
+    throw new Error('no parseable tool');
+  }
+  const output = envelope && envelope.output;
+  if (typeof output !== 'string') throw new Error('no parseable tool');
+  try {
+    return JSON.parse(output);
+  } catch {
+    throw new Error('no parseable tool');
+  }
+}
+
+function budgetSpent(session) {
+  return session.remoteDispatches >= REMOTE_CAMPAIGN_BUDGET.dispatches
+    || session.toolCalls >= REMOTE_CAMPAIGN_BUDGET.toolCalls
+    || session.proseTurns >= REMOTE_CAMPAIGN_BUDGET.proseTurns
+    || session.tokens >= REMOTE_CAMPAIGN_BUDGET.tokens;
+}
+
+function createRemoteForeman(options) {
+  return function remoteForeman(session, campaign) {
+    const started = session.sessionIndex;
+    let toolResult;
+    if (session.tokens == null) session.tokens = 0;
+    if (session.proseTurns == null) session.proseTurns = 0;
+    if (session.remoteDispatches == null) session.remoteDispatches = 0;
+    while (!session.closed && session.sessionIndex === started) {
+      if (budgetSpent(session)) break;
+      const payload = foremanTurnPayload(session, campaign, toolResult);
+      toolResult = undefined;
+      let message;
+      try {
+        message = callForemanProvider(options, payload);
+      } catch (error) {
+        const wrapped = new Error(error.message || 'foreman transport failed');
+        wrapped.code = 'transport_error';
+        throw wrapped;
+      }
+      session.tokens += Math.ceil(Buffer.byteLength(JSON.stringify(payload)) / 4);
+      session.tokens += Math.ceil(Buffer.byteLength(JSON.stringify(message === undefined ? null : message)) / 4);
+      const interpreted = interpretForemanModelObject(message);
+      if (interpreted.dead) {
+        const error = new Error(interpreted.reason);
+        error.code = 'transport_error';
+        throw error;
+      }
+      if (!interpreted.tool) {
+        session.proseTurns += 1;
+        session.turns.push({ role: 'assistant', text: interpreted.raw });
+        continue;
+      }
+      if (interpreted.tool === 'dispatch') {
+        session.remoteDispatches += 1;
+        const before = session.sessionIndex;
+        const result = session.dispatch(interpreted.input || {});
+        if (session.sessionIndex !== before) return;
+        toolResult = result;
+      } else if (interpreted.tool === 'request_capability') {
+        const name = typeof interpreted.input === 'string' ? interpreted.input : interpreted.input.name;
+        const result = session.requestCapability(name);
+        session.turns.push({ tool: 'request_capability', result });
+        toolResult = result;
+      } else {
+        const result = session.returnVerdict(interpreted.input);
+        session.turns.push({ tool: 'return_verdict', result });
+        toolResult = result;
+      }
+    }
+  };
 }
 
 function driveCampaign(campaign, foreman, index, priorCritical) {
@@ -809,4 +981,7 @@ module.exports = {
   evaluateForemanPreconditions,
   diskForemanPreconditionContext,
   runForemanQualification,
+  createRemoteForeman,
+  foremanTurnPayload,
+  REMOTE_CAMPAIGN_BUDGET,
 };

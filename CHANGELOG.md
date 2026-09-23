@@ -23,6 +23,18 @@ Claude Code 其實每次都把 `context_window.context_window_size` 餵給 statu
 - `hooks/README.md` 補「保留非 codeforge status line」的接法。
 prose-justification: none（無 SKILL/reference 文字變動；prose 數字是 v2.35.2 基準以來既有的累積）。
 
+**測試套件：並行池改為最慢的先跑**（`hooks/tests/run.sh`，測試工具，不另升版）。
+量測（2026-09-24，逐檔計時 `--parallel 8`）：L2 共 336 檔、逐檔加總約 3,659s；最慢 10 檔佔 44%；
+8 worker 實測 wall 606s，理論下限 max(最慢單檔 278s, 3659/8=457s)。差距來自字母序派工讓 ~240s 的檔在中途才開始。
+- 並行池依上一次**未過濾**並行執行記下的逐檔秒數由長到短派工；沒有紀錄的檔排最前面；
+  沒有紀錄檔 ⇒ 照舊字母序。紀錄檔：`${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv}`。
+- 帶 filter 的執行只讀不寫（套件內嵌的 run.sh 呼叫全都帶 filter，不會改寫 operator 的紀錄）。
+- 測試 `hooks/tests/run-longest-first.test.sh`：以 `--parallel 1` 讓輸出順序等於派工順序。
+  兩個變異各自轉紅：停用排序 ⇒ case2 紅；拿掉 filter 守衛 ⇒ case1/case3 紅。
+- 根因說明（未在本版修）：單檔慢是 bash 在迴圈裡反覆起 node —— `dispatch-hetero.test.sh` 一檔
+  4,824 次 node 呼叫、累計 292s；`resolve-review-loop.sh` 每次執行 17 次 node 約佔其 wall 的四分之三。
+  serial tail（8 檔，實測合計約 410s）在並行池之後依序跑，是並行 wall 的最大單一區塊，其中 `dispatch-hetero` 佔 243s。
+
 ## v2.36.88 — depth-0 考卷有一題答不出來：reversal
 
 五顆引擎、十八場 trial、`plants` 全部 4/5 —— 沒有一次 5/5，也沒有一次更低。

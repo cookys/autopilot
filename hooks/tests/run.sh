@@ -13,6 +13,12 @@
 #   bash hooks/tests/run.sh --parallel [N]     # parallel L2 (N workers; default nproc)
 #   bash hooks/tests/run.sh --parallel 8 filter
 #
+# Serial runs every L2 file one after another (~60 min of CPU on the full tree); use
+# --parallel for a whole-suite run. The parallel pool starts the slowest files first, using
+# the per-file seconds the previous UNFILTERED parallel run recorded in
+# ${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv}.
+# Filtered runs read that file but never write it.
+#
 # Residue reaper: immediately after arg parsing, this runner registers itself
 # as a live suite run and reaps stale ${TMPDIR} residue this suite itself
 # leaks (hetero-* worktrees, autopilot-test-* dirs, hooks-run-parallel.*
@@ -237,6 +243,32 @@ if ! [[ "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 readonly AUTOPILOT_TEST_SUITE_TIMEOUT_SECS
 
+# Per-file durations from the last unfiltered --parallel run, used to start the slowest
+# files first. Machine-local timing history, not repo state.
+TEST_DURATIONS_FILE="${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-$HOME/.cache}/autopilot/test-durations.tsv}"
+
+# record_test_durations — merge this run's <rel>\t<seconds> rows (from $PARALLEL_TMP/<i>.secs)
+# over the existing file; files not run this time keep their old row. Atomic replace.
+record_test_durations() {
+  local i rel secs tmp
+  declare -A merged=()
+  if [ -r "$TEST_DURATIONS_FILE" ]; then
+    while IFS=$'\t' read -r rel secs; do
+      [[ "$secs" =~ ^[0-9]+$ ]] && merged["$rel"]="$secs"
+    done < "$TEST_DURATIONS_FILE"
+  fi
+  for i in "${!L2_FILES[@]}"; do
+    [ -r "$PARALLEL_TMP/$i.secs" ] || continue
+    secs="$(<"$PARALLEL_TMP/$i.secs")"
+    [[ "$secs" =~ ^[0-9]+$ ]] || continue
+    merged["${L2_FILES[$i]#"$REPO_ROOT"/}"]="$secs"
+  done
+  mkdir -p "$(dirname "$TEST_DURATIONS_FILE")" || return 1
+  tmp="$TEST_DURATIONS_FILE.tmp.$$"
+  for rel in "${!merged[@]}"; do printf '%s\t%s\n' "$rel" "${merged[$rel]}"; done | sort >"$tmp" \
+    && mv -f "$tmp" "$TEST_DURATIONS_FILE"
+}
+
 # timeout(1) exit codes (GNU coreutils / uutils): 124 = the command was still
 # running at the deadline and was sent TERM; 137 = it ignored TERM and was
 # escalated to KILL 10s later (128+9). Both mean TIMEOUT, not "the suite
@@ -422,6 +454,24 @@ else
   done
   shopt -u nullglob
 
+  # Longest first. The pool's wall time is bounded below by its slowest file, and a slow
+  # file that starts late extends the run by its whole duration (glob order started the
+  # ~240s files mid-run: 606s measured at N=8 against a 457s ideal, 2026-09-24). Order by
+  # the per-file seconds the last unfiltered parallel run recorded; files with no record
+  # go first (unknown may be slow). No record file ⇒ plain glob order, as before.
+  if [ -r "$TEST_DURATIONS_FILE" ] && [ "${#L2_FILES[@]}" -gt 1 ]; then
+    declare -A _test_secs=()
+    while IFS=$'\t' read -r _rel _secs; do
+      [[ "$_secs" =~ ^[0-9]+$ ]] && _test_secs["$_rel"]="$_secs"
+    done < "$TEST_DURATIONS_FILE"
+    mapfile -t L2_FILES < <(
+      for _f in "${L2_FILES[@]}"; do
+        printf '%s\t%s\n' "${_test_secs[${_f#"$REPO_ROOT"/}]:-999999}" "$_f"
+      done | sort -t $'\t' -k1,1nr -s | cut -f2-
+    )
+    unset _test_secs _rel _secs _f
+  fi
+
   TOTAL=$((TOTAL + ${#L2_FILES[@]} + ${#SERIAL_L2_FILES[@]}))
 
   n_files="${#L2_FILES[@]}"
@@ -462,8 +512,10 @@ else
         if [ -n "${SUITE_ORACLE_LOCK_FD:-}" ]; then
           { exec {SUITE_ORACLE_LOCK_FD}>&-; } 2>/dev/null || true
         fi
+        _t0=$SECONDS
         timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$out" 2>&1
         echo $? >"$ecf"
+        echo $((SECONDS - _t0)) >"$PARALLEL_TMP/$i.secs"
         # Done marker last so readers only see complete buffers.
         touch "$donef"
       ) &
@@ -554,6 +606,12 @@ else
 
     # Reap any remaining children (should already be done).
     wait 2>/dev/null || true
+
+    # Only an unfiltered run records: a filtered run (every nested run.sh call inside the
+    # suite's own tests is one) must not rewrite the operator's timing history.
+    if [ -z "$FILTER" ]; then
+      record_test_durations || true
+    fi
 
     rm -rf "$PARALLEL_TMP"
     PARALLEL_TMP=""

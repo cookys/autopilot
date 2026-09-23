@@ -302,8 +302,15 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # roster literal carries a genuine `reviewer_engine: 'fixture-reviewer',` line
 # — a real Population B member (not a frozen-fixture false positive). Bound
 # moves 27 -> 28.
+# RECOUNTED 2026-09-24 (node-call consolidation): resolve-dispatch-topology.test.sh
+# Case 17 now pins the topology `judge` against a partial roster config carrying
+# `- reviewer_engine: judge-engine-17` (no consult/discuss key) — a genuine
+# Population B member. Bound moves 40 -> 41. Same change adds
+# resolve-review-loop-pins-per-role.test.sh, whose two-role pin fixture config
+# carries `- reviewer_engine: cur-rev` (no consult/discuss key) — also a genuine
+# member. Bound moves 41 -> 42.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "40" "$POP_B_COUNT" "Population B file bound is pinned at 40 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, and the ten paths enumerated in the 2026-09-23 recount)"
+assert_eq "42" "$POP_B_COUNT" "Population B file bound is pinned at 42 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the

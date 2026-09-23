@@ -344,18 +344,28 @@ function getInstalledRunners(repoRoot) {
   const runnerBinaryScript = path.join(repoRoot, 'scripts', 'lib', 'runner-binary.js');
   const installed = {};
 
+  // `runner-binary.js binary --runner <r>` is a pure map lookup (versionBinaryFor); call it
+  // in-process instead of one node start per runner token. The CLI stays the fallback if the
+  // module cannot be loaded here.
+  let versionBinaryFor = null;
+  try {
+    ({ versionBinaryFor } = require(runnerBinaryScript));
+  } catch {
+    versionBinaryFor = null;
+  }
   for (const r of RUNNER_TOKENS) {
-    const res = spawnSync(process.execPath, [runnerBinaryScript, 'binary', '--runner', r], {
-      env: process.env,
-      encoding: 'utf8',
-    });
-    if (res.status === 0) {
-      const binaryName = (res.stdout || '').trim();
-      const resolved = resolveBinaryPath(binaryName, r);
-      installed[r] = resolved;
+    let binaryName = null;
+    if (typeof versionBinaryFor === 'function') {
+      const binary = versionBinaryFor(r);
+      binaryName = binary === null ? null : String(binary).trim();
     } else {
-      installed[r] = null;
+      const res = spawnSync(process.execPath, [runnerBinaryScript, 'binary', '--runner', r], {
+        env: process.env,
+        encoding: 'utf8',
+      });
+      binaryName = res.status === 0 ? (res.stdout || '').trim() : null;
     }
+    installed[r] = binaryName === null ? null : resolveBinaryPath(binaryName, r);
   }
 
   return installed;
@@ -452,11 +462,34 @@ function resolveJudgeField(repoRoot, field) {
   }
 }
 
+// One resolve-review-loop.sh run for all three judge fields (was one full run — ~0.7s — per
+// field). Up to its `--field` block the script takes the same path with or without --field
+// and exits with the same code, so a failing status means every field would have been null.
+// If the JSON is unreadable or lacks a field, fall back to the per-field calls.
+function resolveJudgeFields(repoRoot) {
+  const scriptPath = path.join(repoRoot, 'scripts', 'resolve-review-loop.sh');
+  const res = spawnSync('bash', [scriptPath], { env: process.env, encoding: 'utf8' });
+  if (res.error) return null;
+  if (res.status !== 0) {
+    return { reviewer_engine: null, reviewer_runner: null, reviewer_effort: null };
+  }
+  let doc;
+  try { doc = JSON.parse(res.stdout); } catch { return null; }
+  const out = {};
+  for (const key of ['reviewer_engine', 'reviewer_runner', 'reviewer_effort']) {
+    if (!doc || typeof doc[key] !== 'string') return null;
+    const val = doc[key].trim();
+    out[key] = val.length > 0 ? val : null;
+  }
+  return out;
+}
+
 function getJudge(repoRoot) {
   try {
-    const engine = resolveJudgeField(repoRoot, 'reviewer_engine');
-    const runner = resolveJudgeField(repoRoot, 'reviewer_runner');
-    const effort = resolveJudgeField(repoRoot, 'reviewer_effort');
+    const all = resolveJudgeFields(repoRoot);
+    const engine = all ? all.reviewer_engine : resolveJudgeField(repoRoot, 'reviewer_engine');
+    const runner = all ? all.reviewer_runner : resolveJudgeField(repoRoot, 'reviewer_runner');
+    const effort = all ? all.reviewer_effort : resolveJudgeField(repoRoot, 'reviewer_effort');
     if (engine === null || runner === null || effort === null) {
       return { reviewer_engine: null, reviewer_runner: null, reviewer_effort: null };
     }

@@ -23,6 +23,10 @@ mkdir -p "$CAP_DIR" "$SCORECARD_DIR"
 export ENGINE_CAPABILITY_DIR="$CAP_DIR"
 export ENGINE_SCORECARD_DIR="$SCORECARD_DIR"
 unset ENGINE_CAPABILITY_FILE
+# The resolver's `auto` knobs read ~/.autopilot/topology.json by default — host state.
+# Pin it to a path that never exists so every resolve below sees the same (absent)
+# topology on every machine; cases that need a topology pass their own.
+export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
 
 json_get() { # json key -> raw json value
   local json="$1" key="$2"
@@ -123,7 +127,15 @@ PARITY_TEMPLATE="$OLD_ROOT/parity-template.md"
 # would make the byte-parity below host-dependent. "auto is live" is asserted on the
 # shipped-template output (NEW_JSON) further down and by the dispatch-consult
 # transport checks, so nothing is lost by turning it off for the parity file.
-sed -e 's/^- plan_review: auto$/- plan_review: off/' -e 's/^- implementer_ladder: auto$/- implementer_ladder:/' -e 's/^- consult_dispatch: auto$/- consult_dispatch: off/' "$SHIPPED_TEMPLATE" > "$PARITY_TEMPLATE"
+# hetero_review is pinned `off` for the same reason: under `auto` with no qualified
+# reviewer_ladder (absent topology — now pinned above, formerly whatever the host had)
+# the NEW resolver appends a "hetero_review auto: … stays native" capability_warnings
+# line the pre-D6 resolver never emits, so capability_warnings drifted on any host
+# without a topology file. `off` only sets hetero_review_resolved_from (an added key)
+# and emits no warning; nothing about hetero auto is lost (resolve-review-loop.test.sh
+# covers its four topology states).
+sed -e 's/^- plan_review: auto$/- plan_review: off/' -e 's/^- implementer_ladder: auto$/- implementer_ladder:/' -e 's/^- consult_dispatch: auto$/- consult_dispatch: off/' -e 's/^- hetero_review: auto$/- hetero_review: off/' "$SHIPPED_TEMPLATE" > "$PARITY_TEMPLATE"
+assert_contains "$(cat "$PARITY_TEMPLATE")" "- hetero_review: off" "parity template pins hetero_review: off (no host-dependent native-fallback warning)"
 assert_contains "$(cat "$PARITY_TEMPLATE")" "- plan_review: off" "parity template carries plan_review: off (a value the frozen resolver can parse)"
 assert_not_contains "$(cat "$PARITY_TEMPLATE")" "- implementer_ladder: auto" "parity template drops implementer_ladder: auto (the frozen resolver has no auto expansion)"
 OLD_JSON_PARITY="$(REVIEW_LOOP_CONFIG_OVERRIDE="$PARITY_TEMPLATE" bash "$OLD_SCRIPT" 2>/dev/null)"; OLD_PARITY_EXIT=$?
@@ -161,6 +173,12 @@ const expectedAdded = [
   'plan_review_resolved_from',
   // unknown-escalation ladder knob (v2.36.15, plan 2026-09-07-unknown-escalation-ladder P2)
   'unknown_escalation', 'unknown_budget_u1', 'unknown_budget_u2', 'unknown_budget_u3', 'unknown_resolved_from',
+  // plan-chair same-family mark (33987513, 2026-09-13, v2.36.33)
+  'plan_review_same_family_as_depth0',
+  // blind-review packet deny extension (3d6b4c02, 2026-09-18)
+  'review_packet_deny_extra',
+  // in-loop review station selector (316c1d4b, 2026-09-18)
+  'in_rail_review',
 ].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);
@@ -285,7 +303,7 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # — a real Population B member (not a frozen-fixture false positive). Bound
 # moves 27 -> 28.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "30" "$POP_B_COUNT" "Population B file bound is pinned at 30 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, and pending-revocation-fold.test.sh added 2026-09-12)"
+assert_eq "40" "$POP_B_COUNT" "Population B file bound is pinned at 40 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, and the ten paths enumerated in the 2026-09-23 recount)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the
@@ -316,11 +334,21 @@ assert_eq "30" "$POP_B_COUNT" "Population B file bound is pinned at 30 (git grep
 # joins both counts for the same reason. Delta enumerated against origin/develop
 # rather than inferred from the failure: the file-level diff of the Population B
 # grep is exactly this one new path. 29 -> 30 and 4 -> 5.
+# RECOUNTED (2026-09-23, CI repair): delta enumerated as a set difference against
+# 304fc40a (the last recount) — exactly these ten paths, none of which sets
+# consult_dispatch/discuss_dispatch (the explicit-switch count below stays 5):
+#   autopilot-engine-boundary-resume (72d4d1be), autopilot-engine-park-reserve (8c622ee5),
+#   autopilot-engine-repair-branch (6241e12e), autopilot-engine-wall-expiry (6fbf1084),
+#   campaign-intake-rejection-release (9fb2178b), implementation-campaign-state-snapshot-
+#   contract (6490815c), managed-rail-core-engine (620ef6ed), resolve-review-loop-standing-
+#   pin (d2bdccba), lib.sh (write_d4_strict_roster_fixture, 607bbf9f), and the frozen
+#   fixture fixtures/review-loop-config.frozen-2026-09-13.md (86c168c5, frozen-fixture
+#   false-positive class). 30 -> 40; 5 unchanged.
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
 POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "5" "$POP_B_EXPLICIT_SWITCH" "five of Population B's 30 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
+assert_eq "5" "$POP_B_EXPLICIT_SWITCH" "five of Population B's 40 partial roster configs set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'

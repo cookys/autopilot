@@ -61,7 +61,7 @@
       },
       "observed_paths": [
         "bin/autopilot.js",
-        "docs/plans/_archive/2026/07/2026-07-26-provider-readiness-orchestrator.md",
+        "docs/plans/2026-07-26-provider-readiness-orchestrator.md",
         "docs/projects/2026-07-26-mission-convergence-portfolio/README.md",
         "hooks/tests/campaign-dispatch-projection.test.sh",
         "hooks/tests/dispatch-author-kimi.test.sh",

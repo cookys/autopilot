@@ -1402,6 +1402,7 @@ function currentRowsForRole(role, nowMs, options = {}) {
   const supersededEventIds = partition.supersededEventIds;
   const capabilityRows = options.requireEvidence ? readCapabilityEvidenceRows() : null;
   const evidenceReceipts = new WeakMap();
+  const evidenceRecordStates = new WeakMap();
   const latest = new Map();
 
   for (const row of rows) {
@@ -1443,6 +1444,9 @@ function currentRowsForRole(role, nowMs, options = {}) {
       }
       if (!receipt.applicability.applicable) continue;
       evidenceReceipts.set(row, receipt);
+      const chosen = capabilityRows.find((wrapper) => wrapper.evidence
+        && wrapper.evidence.evidence_id === receipt.evidence_id);
+      evidenceRecordStates.set(row, chosen ? chosen.evidence.state : null);
     } else if (row.evidence && options.scope) {
       const receipt = buildCapabilityEvidenceReceipt(row.evidence, {
         role,
@@ -1517,7 +1521,10 @@ function currentRowsForRole(role, nowMs, options = {}) {
 
   for (const row of byInvocation.values()) {
     const resolvedEvidenceReceipt = evidenceReceipts.get(row) || null;
-    const effectiveStatus = deriveStatus(row, nowMs, resolvedEvidenceReceipt);
+    const effectiveStatus = deriveStatus(
+      row, nowMs, resolvedEvidenceReceipt,
+      evidenceRecordStates.has(row) ? evidenceRecordStates.get(row) : undefined,
+    );
     const evidenceBackedStatus = typeof effectiveStatus === 'string'
       ? effectiveStatus : row.status;
     const rowStatus = evidenceBackedStatus === 'qualified'
@@ -1590,7 +1597,9 @@ function currentRowsForRole(role, nowMs, options = {}) {
   });
 }
 
-function deriveStatus(row, nowMs, resolvedEvidenceReceipt = null) {
+// `resolvedRecordState`: the stored state of the record a ledger-resolved receipt chose, when that
+// record may differ from row.evidence. Omitted ⇒ the receipt is about row.evidence itself.
+function deriveStatus(row, nowMs, resolvedEvidenceReceipt = null, resolvedRecordState = undefined) {
   if (row.evidence) {
     const receipt = resolvedEvidenceReceipt || buildCapabilityEvidenceReceipt(row.evidence, {
       role: row.evidence.role,
@@ -1602,7 +1611,16 @@ function deriveStatus(row, nowMs, resolvedEvidenceReceipt = null) {
     // Calendar tooth (a) pulled 2026-08-22 (no-confidence-decay P1): a stale
     // evidence receipt is advisory-only — surfaced as `expiry_warning` in the
     // projection, never a downgrade to `expired`. See references/strike-decay.md.
-    if (receipt.state === 'stale') return 'qualified';
+    // But capability-evidence marks EVERY expired non-revoked record `stale`, failed exams
+    // included; only an expired QUALIFICATION keeps its standing. Reading every stale receipt as
+    // qualified admitted exams that did not pass once they expired (2026-09-24: GLM-5.3 40/42 and
+    // MiniMax-M3 26/42, degraded 2026-08-20). Unknown underlying state ⇒ not admitted.
+    if (receipt.state === 'stale') {
+      const underlying = resolvedRecordState !== undefined
+        ? resolvedRecordState
+        : (receipt.evidence_id === row.evidence.evidence_id ? row.evidence.state : undefined);
+      return underlying === 'qualified' ? 'qualified' : 'failed';
+    }
     return 'failed';
   }
   if (row.status !== 'qualified') return row.status;

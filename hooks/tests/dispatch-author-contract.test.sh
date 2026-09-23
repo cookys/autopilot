@@ -5,11 +5,18 @@ enable_legacy_scorecard_test_projection
 json_get() { echo "$1" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);const p=process.argv[1].split('.');let v=o;for(const k of p){v=v?.[k];}console.log(v===undefined?'':typeof v==='object'?JSON.stringify(v):String(v))}catch(e){console.log('')}})" "$2"; }
 
 run_dispatch() {
-  local out
+  # stdout is dispatch-author's JSON contract; stderr carries advisory notes
+  # (e.g. resolve-review-loop's per-seat qc_panel admission warnings, fa2a0c50)
+  # that are not gated on DISPATCH_QUIET. JSON fields are read from stdout only;
+  # LAST_OUT keeps both streams for text assertions.
+  local out err_file
   local rc
-  out=$("$@" 2>&1)
+  err_file="$(mktemp "$TEST_TMP/run-dispatch-stderr.XXXXXX")"
+  out=$("$@" 2>"$err_file")
   rc=$?
-  LAST_OUT="$out"
+  LAST_STDOUT="$out"
+  LAST_OUT="$out
+$(cat "$err_file")"
   LAST_RC="$rc"
 }
 
@@ -216,14 +223,14 @@ A4_RUN_MARKER="$TEST_TMP/a4_run_marker"
 run_dispatch env DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/A4" RUN_MARKER_PATH="$A4_RUN_MARKER" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" "$REPO_ROOT/scripts/dispatch-author.sh" --strict-contract --contract-file "$CONTRACT" --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
 assert_eq "$LAST_RC" 0 "A4 valid GO should rc=0"
 assert_file_exists "$A4_RUN_MARKER" "A4 runner must execute"
-A4_STATUS=$(json_get "$LAST_OUT" status)
-A4_UNIT=$(json_get "$LAST_OUT" unit_id)
-A4_GO=$(json_get "$LAST_OUT" go)
-A4_CONT=$(json_get "$LAST_OUT" containment)
-A4_CSHA=$(json_get "$LAST_OUT" contract_sha256)
-A4_SSHA=$(json_get "$LAST_OUT" spec_sha256)
-A4_RUNNER=$(json_get "$LAST_OUT" runner)
-A4_MODEL=$(json_get "$LAST_OUT" model)
+A4_STATUS=$(json_get "$LAST_STDOUT" status)
+A4_UNIT=$(json_get "$LAST_STDOUT" unit_id)
+A4_GO=$(json_get "$LAST_STDOUT" go)
+A4_CONT=$(json_get "$LAST_STDOUT" containment)
+A4_CSHA=$(json_get "$LAST_STDOUT" contract_sha256)
+A4_SSHA=$(json_get "$LAST_STDOUT" spec_sha256)
+A4_RUNNER=$(json_get "$LAST_STDOUT" runner)
+A4_MODEL=$(json_get "$LAST_STDOUT" model)
 assert_eq "$A4_STATUS" "authored" "A4 status authored"
 assert_eq "$A4_UNIT" "c4b-fixture-unit" "A4 unit_id matches"
 assert_eq "$A4_GO" "GO" "A4 go matches"
@@ -253,7 +260,7 @@ mkdir -p "$CASE_DIR/A6"
 rm -f "$RUN_MARKER"
 run_dispatch env DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/A6" RUN_MARKER_PATH="$RUN_MARKER" BREACH_TARGET="$BREACH_TARGET" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" "$REPO_ROOT/scripts/dispatch-author.sh" --strict-contract --contract-file "$CONTRACT" --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
 if [ "$LAST_RC" -eq 0 ]; then fail "A6 breach should have nonzero exit"; fi
-A6_STATUS=$(json_get "$LAST_OUT" status)
+A6_STATUS=$(json_get "$LAST_STDOUT" status)
 assert_eq "$A6_STATUS" "containment_breach" "A6 status breach"
 assert_not_contains "$LAST_OUT" "authored" "A6 must not be authored"
 cd "$MINI_REPO" && git checkout -- . >/dev/null 2>&1 && cd "$TEST_TMP"
@@ -262,7 +269,7 @@ mkdir -p "$CASE_DIR/A7"
 rm -f "$RUN_MARKER"
 run_dispatch env DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/A7" ANTHROPIC_COMPATIBLE_BASE_URL=http://127.0.0.1:9 RUN_MARKER_PATH="$RUN_MARKER" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" "$REPO_ROOT/scripts/dispatch-author.sh" --runner anthropic-compatible --model glm-5.2 --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS" --repo-root "$MINI_REPO"
 assert_eq "$LAST_RC" 0 "A7 legacy should rc=0"
-A7_STATUS=$(json_get "$LAST_OUT" status)
+A7_STATUS=$(json_get "$LAST_STDOUT" status)
 assert_eq "$A7_STATUS" "authored" "A7 legacy status authored"
 assert_not_contains "$LAST_OUT" "unit_id" "A7 no unit_id"
 assert_not_contains "$LAST_OUT" "go" "A7 no go"
@@ -280,10 +287,10 @@ run_dispatch env NODE_OPTIONS="" DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$C
   --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
 assert_eq "$LAST_RC" 0 "A8 provisional VA strict GO should rc=0"
 assert_file_exists "$A8_RUN_MARKER" "A8 provisional VA runner must execute"
-A8_STATUS=$(json_get "$LAST_OUT" status)
-A8_GO=$(json_get "$LAST_OUT" go)
-A8_RUNNER=$(json_get "$LAST_OUT" runner)
-A8_MODEL=$(json_get "$LAST_OUT" model)
+A8_STATUS=$(json_get "$LAST_STDOUT" status)
+A8_GO=$(json_get "$LAST_STDOUT" go)
+A8_RUNNER=$(json_get "$LAST_STDOUT" runner)
+A8_MODEL=$(json_get "$LAST_STDOUT" model)
 assert_eq "$A8_STATUS" "authored" "A8 status authored"
 assert_eq "$A8_GO" "GO" "A8 go matches"
 assert_eq "$A8_RUNNER" "anthropic-compatible" "A8 runner matches"

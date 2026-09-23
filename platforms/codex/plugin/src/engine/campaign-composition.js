@@ -3055,9 +3055,17 @@ function runCampaignComposition(input = {}, adapters = {}) {
             && panelAdjudicationStateComplete,
           sealed_min_panel_size: panelValidationEarly.sealed_min_panel_size,
           final_panel_count: panelValidationEarly.final_panel_count,
-          final_panel_quorum_met: terminalReview.final_panel_quorum_met,
-          sealed_required_review_families: terminalReview.sealed_required_review_families,
-          implementer_family: terminalReview.implementer_family,
+          // Record the quorum fields only when the panel receipt carries them. An
+          // own-property holding `undefined` would be copied verbatim by the
+          // final_panel_gate_reused branch (hasOwnProperty guard) and turn a
+          // unanimity-rule receipt into final_panel_metadata_incomplete on an
+          // in-memory resume; JSON persistence drops it, so the two disagreed.
+          ...(terminalReview.final_panel_quorum_met !== undefined
+            ? { final_panel_quorum_met: terminalReview.final_panel_quorum_met } : {}),
+          ...(terminalReview.sealed_required_review_families !== undefined
+            ? { sealed_required_review_families: terminalReview.sealed_required_review_families } : {}),
+          ...(terminalReview.implementer_family !== undefined
+            ? { implementer_family: terminalReview.implementer_family } : {}),
           seat_receipts: panelValidationEarly.final_panel_seat_receipts || [],
           review_digest: terminalReview.review_digest || terminalReview.receipt_digest || null,
           verdict: terminalReview.verdict || null,

@@ -1,7 +1,7 @@
 # consult qualification rubric — normative bytes
 
 Frozen construct spec for the consult qualification suite (plan:
-`docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md`, D1). Every byte in
+`docs/plans/2026-08-28-consult-discuss-qualification.md`, D1). Every byte in
 this file is normative and sealed with `scripts/rubric-freeze.js`
 (`evals/consult-eval-rubric.seal.json`). A mismatch between this file's bytes
 and its seal is DRIFT and aborts qualification before any case generates.

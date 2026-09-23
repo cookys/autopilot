@@ -12,14 +12,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
-### `check-plan-graduation.js` reference rewrite rewrote sha-bound plan bytes (26 sealed sources drifted)
-- **Status**: open
-- **Trigger**: the next `--fix`/`--archive`/`--migrate-archive-layout` run, OR any edit to `rewritePlanReferences`
-- **Effort**: S
-- **Source**: v2.36.80 landing (next-touch-validation red after the migration; 26 files restored from history)
-- **Pointer**: docs/backlog/plan-rewriter-must-skip-sha-bound-sources.md
-- **Context**: exclude every `plan_path`/`rubric_path` named by a `docs/mission-*-sources.json` from text rewrites; report as `plan_reference_frozen`.
-
 ### `dispatch-hetero.sh --timeout` is accepted and recorded but never applied to the grok rail
 - **Status**: open
 - **Trigger**: the next grok dispatch anyone needs to bound, or any audit of runner-branch parity
@@ -81,14 +73,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
 - **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats; quorum + snapshot; panel station; shared packet. Shipped: 1a-A..2-C v2.36.59-69. Open: 2-D overlap/pre-pass.
-
-### CI: hooks-suite step is `skipped` whenever the detached-dispatch smoke fails — a red smoke hides every other suite
-- **Status**: open
-- **Trigger**: run 35132044435 (v2.36.59): `Detached dispatch ledger smoke` failure → `Run hooks test suite` skipped; dogfood kill/resume case red since v2.36.58 unseen
-- **Effort**: S
-- **Source**: depth-0 while shipping v2.36.60 (fixture fix in the same release)
-- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: `.github/workflows/test.yml`: make the suite step `if: always()` (or run smoke after), so a smoke failure cannot mask suite regressions; "release-gated CI green" must mean the suites ran.
 
 ### PEER-REPORTED (openclaw): briefs pairing `session-mode set --level l5` with non-strict dispatch burn foreman budgets
 - **Status**: open
@@ -910,3 +894,43 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.1 pre-merge review round 2 (opus), 2026-09-05
 - **Pointer**: docs/backlog/live-state-dir-context-budget-test-strength-two-surviving-mutants-one-vacuous-of.md
 - **Context**: On `cookys-openclaw`, `resolve-review-loop.sh` emits
+
+### CI runs only on version bumps — ordinary develop pushes never execute the suite, so regressions pile up unseen
+- **Status**: open
+- **Trigger**: owner decision on CI cost vs coverage, or the next time a release lands red for reasons older than that release
+- **Effort**: S
+- **Source**: 2026-09-23 PEACE-side CI repair (34 tests had rotted between releases; `.github/workflows/test.yml` path filter = `.claude-plugin/plugin.json` only)
+- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
+- **Context**: release-gating is deliberate (header comment). A cheap develop-triggered `dispatch-detach` smoke + `sync-all --check` would catch drift weeks earlier; the full suite can stay release-gated.
+
+### `auto` consult seat silently overrides a DECLARED consult seat (same class as the fixed plan-chair "declared wins")
+- **Status**: open
+- **Trigger**: owner ruling on whether a declared `consult_engine` should win over topology/sonnet fallback under `consult_dispatch: auto`
+- **Effort**: S
+- **Source**: 2026-09-23 CI repair, review-loop cluster (5679a392 made consult default `auto`; resolve-review-loop-role-admission)
+- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
+- **Context**: plan chair was changed to declared-wins on 09-13; consult still follows the plan's Knob transition table. Tests were updated to current design, resolver untouched.
+
+### Archive rewriter still rewrites UNSEALED frozen evidence (e.g. historical `observed_paths` in audits)
+- **Status**: open
+- **Trigger**: the next archive/migrate run of check-plan-graduation, or any new frozen-evidence file without a seal
+- **Effort**: S
+- **Source**: 2026-09-23 CI repair, mission cluster (6559da33 rewrote `candidate-path-audit.json` observed_paths; restored byte-identical)
+- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
+- **Context**: `frozenAssetFiles()` now covers `*.seal.json` targets, qualification-asset-seals PATHS and mission-sources plan/rubric; evidence frozen by convention only has no marker. Needs an explicit marker rather than a path heuristic.
+
+### dispatch-author forwards three final-panel qc_panel admission warnings on every run (noise for the author role)
+- **Status**: open
+- **Trigger**: next edit to dispatch-author's resolver call or to resolve-review-loop's qc_panel notes
+- **Effort**: S
+- **Source**: 2026-09-23 CI repair, dispatch cluster (fa2a0c50 notes surface through dispatch-author stderr)
+- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
+- **Context**: product call whether author rails should suppress panel-intake notes; tests now read JSON from stdout only, so this is noise, not breakage.
+
+### "park does not consume the finding-recurrence budget" is guaranteed only by code order — no test pins it
+- **Status**: open
+- **Trigger**: next edit to the pathless-finding repair path in autopilot-engine
+- **Effort**: S
+- **Source**: 2026-09-23 CI repair, dispatch cluster (620ef6ed fallback order: task_surface → round changed files → park)
+- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
+- **Context**: add a probe where both fallbacks are empty and assert the occurrence count is unchanged after park.

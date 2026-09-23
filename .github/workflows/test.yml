@@ -56,6 +56,11 @@ jobs:
         run: bash hooks/tests/run.sh dispatch-detach
 
       - name: Run hooks test suite (L1 unit + L2 integration)
+        # `!cancelled()`: run even when the smoke above failed. Without it a red smoke
+        # SKIPPED this step, so "CI red" meant one known failure while every other suite
+        # rotted unseen — 34 tests broke that way before 2026-09-23 (run 35695062453).
+        # The job still fails; this only stops one failure from hiding the rest.
+        if: ${{ !cancelled() }}
         # Explicit `shell: bash` is LOAD-BEARING: it makes GH run `bash -eo
         # pipefail {0}`. The implicit default is `bash -e {0}` WITHOUT pipefail,
         # which let `| tee` swallow the suite's exit 1 — CI showed green over
@@ -75,6 +80,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Sync/check rituals (manifest-driven)
+        if: ${{ !cancelled() }}
         # Single entry point for every sync/check ritual (version mirrors,
         # agent-bodies, model-routing, codex + opencode payloads, README parity,
         # hook inventory, canonical invariants, CLAUDE.md inventory). Registered
@@ -94,6 +100,7 @@ jobs:
         run: node scripts/report-roster-field-consumers.js
 
       - name: Release-hygiene gate
+        if: ${{ !cancelled() }}
         # Check 7 (slash-entry probe) needs a `claude` binary + auth — neither
         # exists on a CI runner. The skip is loud by design; giving CI an API
         # key instead would leak probe transcripts into the log. Never do that.
@@ -102,6 +109,7 @@ jobs:
         run: bash scripts/preflight-release.sh
 
       - name: Cross-agent portability gate
+        if: ${{ !cancelled() }}
         # preflight-portability self-skips OpenCode checks when the binary
         # isn't on PATH, which it won't be in CI. The remaining checks still
         # exercise hooks, symlinks, validate.sh, and sync-version --check.

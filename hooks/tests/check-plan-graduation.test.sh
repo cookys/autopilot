@@ -507,6 +507,29 @@ assert_eq "$r" "same" "a sealed spec_path file is byte-identical after --fix"
 if cmp -s "$d/evals/x-rubric.seal.json" "$TEST_TMP/frozen-seal.before"; then r=same; else r=changed; fi
 assert_eq "$r" "same" "the *.seal.json itself is byte-identical after --fix"
 
+# --- Frozen assets (mission sources): a plan sealed by docs/mission-*-sources.json (plan_sha256,
+#     path relative to docs/) keeps its bytes even when it mentions the graduating plan, and the
+#     skip is REPORTED as plan_reference_frozen (report-only). v2.36.80 drifted 26 such files. ---
+d="$(fixture_repo rewrite-skips-mission-sealed)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+printf '# Sealed plan\nDepends on docs/plans/2026-01-01-widget.md\n' > "$d/docs/plans/2026-02-02-sealed.md"
+psha="$(sha256sum "$d/docs/plans/2026-02-02-sealed.md" | cut -d' ' -f1)"
+printf '{"sources":[{"plan_path":"plans/2026-02-02-sealed.md","plan_sha256":"%s"}]}\n' "$psha" > "$d/docs/mission-x-sources.json"
+mkdir -p "$d/references"
+printf 'Contract: docs/plans/2026-01-01-widget.md\n' > "$d/references/contract.md"
+printf '# Changelog\n\n## v1.2.3 — ships widget\n\n- landed. See docs/plans/2026-01-01-widget.md.\n' > "$d/CHANGELOG.md"
+cp "$d/docs/plans/2026-02-02-sealed.md" "$TEST_TMP/mission-sealed.before"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --fix --json)"
+assert_contains "$(cat "$d/references/contract.md")" \
+  "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
+  "control (mission case): an ordinary doc IS rewritten"
+if cmp -s "$d/docs/plans/2026-02-02-sealed.md" "$TEST_TMP/mission-sealed.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "a mission-sources-sealed plan is byte-identical after --fix"
+assert_contains "$out" '"plan_reference_frozen"' "the frozen skip is reported (report-only)"
+assert_contains "$out" 'docs/plans/2026-02-02-sealed.md' "the report names the frozen file"
+
 # --- 🟡 fix (delta review): --fix must ALSO rewrite docs/plans/evidence/<stem> references,
 #     not just docs/plans/<stem> ones — planPathPrefixRegExp alone never matches the
 #     evidence shape, so a link INTO a moved evidence dir used to go stale. ---

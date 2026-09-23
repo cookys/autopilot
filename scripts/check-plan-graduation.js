@@ -384,7 +384,8 @@ function isGitTracked(repoRoot, relPath) {
 }
 
 // Files whose BYTES are frozen — the target (`spec_path`) of every tracked `*.seal.json`, the seal
-// files themselves, and every asset pinned by scripts/lib/qualification-asset-seals.js (PATHS). The
+// files themselves, every asset pinned by scripts/lib/qualification-asset-seals.js (PATHS), and every
+// plan_path/rubric_path sealed by a docs/mission-*-sources.json. The
 // three WRITING passes below (rewritePlanReferences, rewriteLegacyArchiveReferences,
 // migrateArchiveLayout) must never touch them: a seal/pin exists precisely so those bytes cannot move
 // silently, and a path rewrite is a silent byte change. v2.36.78 (5f3aa3b1) and v2.36.80 (6559da33)
@@ -415,6 +416,27 @@ function frozenAssetFiles(repoRoot) {
       }
     }
   } catch { /* lib absent (e.g. a vendored copy): seal-file discovery above still applies */ }
+  // Mission sources manifests seal plan/rubric bytes (plan_sha256/rubric_sha256; paths are relative
+  // to docs/). The mission runtime re-derives those digests, so a rewrite inside one reds
+  // next-touch-validation ("active plan/rubric digest does not match source manifest") — the
+  // v2.36.80 incident that drifted 26 of them (restored in the v2.36.80 follow-up).
+  let sourceManifests = [];
+  try {
+    sourceManifests = execFileSync('git', ['-C', repoRoot, 'ls-files', '-z', '--', 'docs/mission-*-sources.json'],
+      { encoding: 'utf8' }).split('\0').filter(Boolean);
+  } catch { /* not a git checkout */ }
+  for (const rel of sourceManifests) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, rel), 'utf8'));
+      for (const src of (manifest && Array.isArray(manifest.sources) ? manifest.sources : [])) {
+        for (const key of ['plan_path', 'rubric_path']) {
+          if (src && typeof src[key] === 'string' && src[key]) {
+            frozen.add(path.posix.join('docs', src[key].split(path.sep).join('/')));
+          }
+        }
+      }
+    } catch { /* unreadable manifest: next-touch-validation reports it on its own */ }
+  }
   return frozen;
 }
 
@@ -1041,6 +1063,18 @@ function rewritePlanReferences(repoRoot, stem) {
     { re: planPathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}${stem}` },
   ];
   const rewritten = [];
+  // Report-only: frozen files that mention the stem keep their bytes; name them so the stale
+  // mention is visible rather than silently skipped (code: plan_reference_frozen).
+  const frozen = frozenAssetFiles(repoRoot);
+  rewritten.frozen = [];
+  for (const rel of trackedReferenceFiles(repoRoot)) {
+    if (!frozen.has(rel)) continue;
+    const text = readFileSafe(path.join(repoRoot, rel));
+    if (text == null) continue;
+    if (passes.some(({ re }) => { re.lastIndex = 0; return re.test(text); })) {
+      rewritten.frozen.push({ code: 'plan_reference_frozen', path: rel });
+    }
+  }
   for (const rel of rewritableReferenceFiles(repoRoot)) {
     const abs = path.join(repoRoot, rel);
     let text = readFileSafe(abs);
@@ -1098,7 +1132,8 @@ function archiveStem(repoRoot, plansDir, archiveDir, stem, { newVersion } = {}) 
   return {
     moved: moves,
     blocked: [],
-    referencesRewritten: rewritten.length ? { stem, files: rewritten } : null,
+    referencesRewritten: (rewritten.length || rewritten.frozen.length)
+      ? { stem, files: [...rewritten], frozen: rewritten.frozen } : null,
     indexRowChanged: indexResult.changed,
   };
 }

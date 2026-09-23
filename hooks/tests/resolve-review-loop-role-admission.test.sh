@@ -100,11 +100,19 @@ assert_eq "3" "$rc" "invalid consult_runner is rejected"
 assert_contains "$out" "invalid consult_runner" "invalid consult_runner names the field"
 
 # A QUALIFIED runner in the consult seat needs no override at all.
+# consult_dispatch is pinned OFF (seat = data, list-gated admission): this case was
+# written 2026-08-27 when off was the default. Since 5679a392 (2026-09-04, plan
+# 2026-09-04-dev-flow-hetero-loops-default §"Knob transition table") the default is
+# `auto`, which by design REPLACES the consult tuple from topology / native fallback —
+# a declared tuple is only honoured verbatim under `off` (data) or `on` (explicit, D7
+# row-gated). Without the pin this assertion measured the host's topology, not the
+# list-gate it is about.
 CFG_OKCONSULT="$TEST_TMP/cfg-ok-consult.md"
 cat > "$CFG_OKCONSULT" <<'EOF'
 - consult_engine: gpt-5.6-sol
 - consult_effort: high
 - consult_runner: codex
+- consult_dispatch: off
 EOF
 val="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_OKCONSULT" bash "$SCRIPT" --field consult_engine 2>/dev/null)"
 assert_eq "gpt-5.6-sol" "$val" "--field consult_engine reads the configured seat"

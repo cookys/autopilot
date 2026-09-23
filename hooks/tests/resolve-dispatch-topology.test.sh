@@ -19,6 +19,11 @@ chmod +x "$FAKE_BIN_DIR/agy"
 
 # Ensure PATH has fake agy and NO codex
 export PATH="$FAKE_BIN_DIR:/usr/bin:/bin"
+# Scrubbing PATH is not enough: runner detection also probes $HOME-relative install
+# locations (resolve-dispatch-topology.js fallbackPaths, e.g. ~/.kimi-code/bin/kimi), so
+# on a host with kimi installed the "installed runners" set gained kimi and Cases 1-2
+# red. Point HOME at lib.sh's empty per-test home so installed == exactly the fake bin.
+export HOME="$HOOK_HOME"
 
 # Test scratch dirs for store redirection
 FIXTURE_STORE_DIR="$TEST_TMP/fixture-store"

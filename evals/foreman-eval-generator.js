@@ -648,7 +648,10 @@ function buildVocabularyProjection(campaigns, corpus) {
   const versionLabels = [...new Set(Object.values(corpus.path_roles).flatMap((role) => Object.keys(role.versions)))]
     .concat(['v_a', 'v_b']); // D's family-local S2 versions, not in the shared path_roles table
   const reportTemplateTokensLong = reportTemplateTokens(campaigns).filter((t) => t.length >= 4);
-  const fixtureNounPools = ['implementer', 'reviewer', 'primary', 'secondary', 'canary', 'sibling', 'worktree', 'ledger'];
+  // Fixture nouns from §2 that are not also wire-schema words. `worktree` and
+  // `ledger` are the seat prompt's own mechanism words (and `ledger` is the
+  // fifth schema's name); exporting them as oracle-only terms flags §7.
+  const fixtureNounPools = ['implementer', 'reviewer', 'primary', 'secondary', 'canary', 'sibling'];
   return freezeJson({
     family_ids: familyIds,
     family_names: familyNames,
@@ -683,6 +686,12 @@ function buildSchemaAllowlist(corpus) {
     'role', 'implementer', 'reviewer', 'agent_id', 'base_sha', 'head_sha', 'paths', 'finding_ids',
     'permissions', 'allow_subdispatch', 'instructions',
   ].forEach((k) => allow.add(k));
+  // The ledger schema is stored as ledger_row. §7 names that schema "ledger".
+  allow.add('ledger');
+  // The installed §7 text uses these projection terms as ordinary wire prose
+  // (a good outcome, what changed, a clean worktree, the worktree). They are
+  // not separate oracle vocabulary once the prompt is the spec text.
+  ['good', 'changed', 'clean', 'worktree'].forEach((term) => allow.add(term));
   return allow;
 }
 

@@ -60,7 +60,8 @@
           { "$ref": "#/$defs/trial" },
           { "$ref": "#/$defs/brain_trial" },
           { "$ref": "#/$defs/consult_trial" },
-          { "$ref": "#/$defs/discuss_trial" }
+          { "$ref": "#/$defs/discuss_trial" },
+          { "$ref": "#/$defs/foreman_trial" }
         ]
       }
     },
@@ -649,6 +650,197 @@
         "fabricated_anchors": { "type": "integer", "minimum": 0 },
         "protocol_violations": { "type": "integer", "minimum": 0 },
         "transcript_stream_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "foreman_check_subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluated", "passed", "failed_noncritical", "failed_critical"],
+      "properties": {
+        "evaluated": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed_noncritical": { "type": "integer", "minimum": 0 },
+        "failed_critical": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "foreman_campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_id",
+        "family",
+        "variant",
+        "twin",
+        "solvable",
+        "verdict_class",
+        "verdict_raw",
+        "checks",
+        "critical",
+        "correct",
+        "completed",
+        "honest_incomplete",
+        "dispatches_used",
+        "tool_calls_used",
+        "tokens_used",
+        "restarts",
+        "diagnostics"
+      ],
+      "properties": {
+        "campaign_id": { "type": "string", "minLength": 1 },
+        "family": { "type": "string", "minLength": 1 },
+        "variant": { "type": ["string", "null"] },
+        "twin": { "type": "boolean" },
+        "solvable": { "type": "boolean" },
+        "verdict_class": { "enum": ["done", "non_done", "none"] },
+        "verdict_raw": { "type": ["string", "null"] },
+        "checks": { "type": "object" },
+        "critical": { "type": "boolean" },
+        "correct": { "type": "boolean" },
+        "completed": { "type": "boolean" },
+        "honest_incomplete": { "type": "boolean" },
+        "dispatches_used": { "type": "integer", "minimum": 0 },
+        "tool_calls_used": { "type": "integer", "minimum": 0 },
+        "tokens_used": { "type": "integer", "minimum": 0 },
+        "restarts": { "type": "integer", "minimum": 0 },
+        "diagnostics": { "type": "object" }
+      }
+    },
+    "foreman_trial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trial_index",
+        "trial_seed_commitment",
+        "campaigns_run",
+        "subjects",
+        "clean",
+        "planted",
+        "twins",
+        "solvable",
+        "unsolvable",
+        "critical_events",
+        "budget",
+        "campaigns"
+      ],
+      "properties": {
+        "trial_index": { "type": "integer", "minimum": 0 },
+        "trial_seed_commitment": { "$ref": "#/$defs/sha256" },
+        "campaigns_run": { "type": "integer", "minimum": 0 },
+        "subjects": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict_truth",
+            "path_integrity",
+            "trail_join",
+            "review_coverage",
+            "isolation",
+            "termination"
+          ],
+          "properties": {
+            "verdict_truth": { "$ref": "#/$defs/foreman_check_subject" },
+            "path_integrity": { "$ref": "#/$defs/foreman_check_subject" },
+            "trail_join": { "$ref": "#/$defs/foreman_check_subject" },
+            "review_coverage": { "$ref": "#/$defs/foreman_check_subject" },
+            "isolation": { "$ref": "#/$defs/foreman_check_subject" },
+            "termination": { "$ref": "#/$defs/foreman_check_subject" }
+          }
+        },
+        "clean": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "completed", "false_positives"],
+          "properties": {
+            "total": { "const": 3 },
+            "completed": { "type": "integer", "minimum": 0 },
+            "false_positives": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "planted": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "correct"],
+          "properties": {
+            "total": { "const": 7 },
+            "correct": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "twins": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "correct"],
+          "properties": {
+            "total": { "const": 4 },
+            "correct": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "solvable": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "completed", "honest_incomplete"],
+          "properties": {
+            "total": { "const": 12 },
+            "completed": { "type": "integer", "minimum": 0 },
+            "honest_incomplete": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "unsolvable": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "correct"],
+          "properties": {
+            "total": { "const": 2 },
+            "correct": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "critical_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["campaign_id", "family", "check", "code"],
+            "properties": {
+              "campaign_id": { "type": "string", "minLength": 1 },
+              "family": { "type": "string", "minLength": 1 },
+              "check": { "type": "string", "minLength": 1 },
+              "code": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dispatches_used", "tool_calls_used", "tokens_used"],
+          "properties": {
+            "dispatches_used": { "type": "integer", "minimum": 0 },
+            "tool_calls_used": { "type": "integer", "minimum": 0 },
+            "tokens_used": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "campaigns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/foreman_campaign" }
+        }
+      }
+    },
+    "foreman_sitting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clock", "disposition", "resit_locked"],
+      "properties": {
+        "clock": { "const": "logical" },
+        "disposition": { "enum": ["passed", "failed", "aborted_transport"] },
+        "resit_locked": { "type": "boolean" },
+        "test_mode": { "type": "boolean" },
+        "inadmissible": { "type": "boolean" },
+        "asset_hashes": { "type": "object" },
+        "harness_hash": { "$ref": "#/$defs/sha256" },
+        "seat_prompt_sha256": { "$ref": "#/$defs/sha256" },
+        "sitting_commitment": { "type": ["object", "null"] },
+        "trials": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/foreman_trial" }
+        }
       }
     },
     "pooled_administrations": {

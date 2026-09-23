@@ -1,16 +1,22 @@
 #!/usr/bin/env node
 'use strict';
 
-// Foreman exam runner rules from spec §9. Section 8's per-trial record
-// (campaign arrays, critical_events, disposition, resit_locked, clock) is not
-// a field set on any existing capability-evidence trial normalizer. This
-// module refuses to start a record-writing sitting rather than widening that
-// schema. Section 10 conformance puppets are not built here.
+// Foreman exam runner rules from spec §9. Section 8's trial shape lives on
+// schemas/capability-evidence.schema.json ($defs.foreman_trial and
+// $defs.foreman_sitting) and is compiled by compileForemanTrial. A disk
+// sitting still refuses until §9 pins match. Test-mode sittings of the
+// puppet campaigns are inadmissible. Section 11 is unbuilt.
 
 const fs = require('fs');
 const path = require('path');
+const {
+  FOREMAN_CHECK_NAMES,
+  FOREMAN_TRIAL_FIELDS,
+  FOREMAN_SITTING_FIELDS,
+} = require('../src/engine/capability-evidence');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
+const CAPABILITY_EVIDENCE_SCHEMA = path.join(REPO_ROOT, 'schemas/capability-evidence.schema.json');
 
 const ASSET_PATHS = Object.freeze({
   generator: 'evals/foreman-eval-generator.js',
@@ -22,8 +28,35 @@ const ASSET_PATHS = Object.freeze({
 const SCHEMA_MISMATCH = 'section 8 foreman record does not fit the capability-evidence trial schema'
   + ' (closed key sets per methodology kind; no disposition, campaigns, or critical_events fields)';
 
+const SUBJECT_FIELDS = ['evaluated', 'passed', 'failed_noncritical', 'failed_critical'];
+
 function section8FitsCapabilityEvidence() {
-  return false;
+  let schema;
+  try {
+    schema = JSON.parse(fs.readFileSync(CAPABILITY_EVIDENCE_SCHEMA, 'utf8'));
+  } catch {
+    return false;
+  }
+  const trial = schema.$defs && schema.$defs.foreman_trial;
+  const sitting = schema.$defs && schema.$defs.foreman_sitting;
+  const trialItems = schema.properties
+    && schema.properties.trials
+    && schema.properties.trials.items
+    && schema.properties.trials.items.oneOf;
+  if (!trial || !sitting || !Array.isArray(trial.required) || !Array.isArray(sitting.required)) {
+    return false;
+  }
+  if (!FOREMAN_TRIAL_FIELDS.every((key) => trial.required.includes(key))) return false;
+  if (!FOREMAN_SITTING_FIELDS.every((key) => sitting.required.includes(key))) return false;
+  const subjects = trial.properties && trial.properties.subjects;
+  if (!subjects || !Array.isArray(subjects.required)) return false;
+  if (!FOREMAN_CHECK_NAMES.every((name) => subjects.required.includes(name))) return false;
+  const subjectDef = schema.$defs.foreman_check_subject;
+  if (!subjectDef || !Array.isArray(subjectDef.required)) return false;
+  if (!SUBJECT_FIELDS.every((field) => subjectDef.required.includes(field))) return false;
+  const linked = Array.isArray(trialItems)
+    && trialItems.some((entry) => entry.$ref === '#/$defs/foreman_trial');
+  return linked;
 }
 
 function antiRerunDecision(priorRecords, engineId, seatConfigHash) {
@@ -145,7 +178,33 @@ function diskForemanPreconditionContext() {
   };
 }
 
-function runForemanQualification() {
+function runForemanQualification(options) {
+  const input = options || {};
+  if (input.transport_abort || input.stop === 'transport_error' || input.stop === 'model_turn_timeout') {
+    const abort = transportAbortRecord(input.transport_abort || {
+      aborted_at_campaign_index: input.aborted_at_campaign_index,
+      critical_events_before_abort: input.critical_events_before_abort || [],
+    });
+    return {
+      qualified: false,
+      verdict: {
+        role: 'foreman',
+        test_mode: input.test_mode === true,
+        inadmissible: true,
+        disposition: abort.disposition,
+        pass: abort.pass,
+        fail: abort.fail,
+        graded: false,
+        evidence: null,
+        resit_locked: abort.resit_locked,
+        aborted_at_campaign_index: abort.aborted_at_campaign_index,
+      },
+    };
+  }
+  if (input.test_mode === true) {
+    const { runTestModeForemanSitting } = require('./foreman-harness-conformance');
+    return runTestModeForemanSitting(input);
+  }
   const decision = evaluateForemanPreconditions(diskForemanPreconditionContext());
   if (!decision.start) {
     const error = new Error(`qualification precondition failed: ${decision.reason}`);

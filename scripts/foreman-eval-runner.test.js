@@ -18,9 +18,39 @@ function check(value, message) {
   assert.ok(value, message);
 }
 
-check(section8FitsCapabilityEvidence() === false, 'section 8 does not fit capability-evidence');
+check(section8FitsCapabilityEvidence() === true, 'section 8 foreman trial keys are on the capability-evidence schema');
 
 const hash = 'a'.repeat(64);
+const { compileForemanTrial } = require('../src/engine/capability-evidence');
+const subject = { evaluated: 1, passed: 1, failed_noncritical: 0, failed_critical: 0 };
+const fixtureTrial = {
+  trial_index: 0,
+  trial_seed_commitment: hash,
+  campaigns_run: 0,
+  subjects: {
+    verdict_truth: subject,
+    path_integrity: subject,
+    trail_join: subject,
+    review_coverage: subject,
+    isolation: subject,
+    termination: subject,
+  },
+  clean: { total: 3, completed: 0, false_positives: 0 },
+  planted: { total: 7, correct: 0 },
+  twins: { total: 4, correct: 0 },
+  solvable: { total: 12, completed: 0, honest_incomplete: 0 },
+  unsolvable: { total: 2, correct: 0 },
+  critical_events: [],
+  budget: { dispatches_used: 0, tool_calls_used: 0, tokens_used: 0 },
+  campaigns: [],
+};
+const compiled = compileForemanTrial(fixtureTrial);
+check(compiled.campaigns_run === 0 && compiled.clock === undefined, 'a fixture foreman trial compiles');
+const omitted = { ...fixtureTrial };
+delete omitted.budget;
+assert.throws(() => compileForemanTrial(omitted), /missing budget/, 'a trial that omits a required key is rejected');
+assertions += 1;
+
 const base = {
   pins: { generator: hash, grader: hash, corpus: hash, conformance: hash },
   asset_hashes: { generator: hash, grader: hash, corpus: hash, conformance: hash },

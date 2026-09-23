@@ -425,6 +425,12 @@ function parseArgs(argv) {
     if (scalarName) options[scalarName] = value;
     else options[repeatedName].push(value);
   }
+  // A salted foreman sitting is the inadmissible puppet administration from
+  // spec §9.6. It does not open a panel and does not require an engine identity.
+  if (options.role === 'foreman' && process.env.AUTOPILOT_QUALIFY_SEED) {
+    options.test_mode = true;
+    return options;
+  }
   for (const name of [
     'engine',
     'model',
@@ -4778,7 +4784,12 @@ function runQualification(options) {
     // identity-bound transport requirement — see runConsultDiscussQualification.
     return runConsultDiscussQualification(options);
   }
-  if (role === 'foreman') return runForemanQualification(options);
+  if (role === 'foreman') {
+    return runForemanQualification({
+      ...options,
+      test_mode: options.test_mode === true || Boolean(process.env.AUTOPILOT_QUALIFY_SEED),
+    });
+  }
   if (role === 'brain') return runBrainQualification(options);
   if (role === 'verification_author') return runVaQualification(options);
   if (role === 'implementer') return runImplQualification(options);

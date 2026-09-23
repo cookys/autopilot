@@ -2422,8 +2422,192 @@ function verifyEvaluationCorpus(raw) {
   });
 }
 
+const FOREMAN_CHECK_NAMES = Object.freeze([
+  'verdict_truth',
+  'path_integrity',
+  'trail_join',
+  'review_coverage',
+  'isolation',
+  'termination',
+]);
+
+const FOREMAN_TRIAL_FIELDS = Object.freeze([
+  'trial_index',
+  'trial_seed_commitment',
+  'campaigns_run',
+  'subjects',
+  'clean',
+  'planted',
+  'twins',
+  'solvable',
+  'unsolvable',
+  'critical_events',
+  'budget',
+  'campaigns',
+]);
+
+const FOREMAN_SITTING_FIELDS = Object.freeze(['clock', 'disposition', 'resit_locked']);
+
+function normalizeForemanSubject(raw, label) {
+  const value = plainObject(raw, label);
+  const fields = ['evaluated', 'passed', 'failed_noncritical', 'failed_critical'];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  return {
+    evaluated: integer(value.evaluated, `${label}.evaluated`),
+    passed: integer(value.passed, `${label}.passed`),
+    failed_noncritical: integer(value.failed_noncritical, `${label}.failed_noncritical`),
+    failed_critical: integer(value.failed_critical, `${label}.failed_critical`),
+  };
+}
+
+function normalizeForemanCampaign(raw, index) {
+  const label = `foreman trial campaigns[${index}]`;
+  const value = plainObject(raw, label);
+  const fields = [
+    'campaign_id', 'family', 'variant', 'twin', 'solvable',
+    'verdict_class', 'verdict_raw', 'checks', 'critical', 'correct',
+    'completed', 'honest_incomplete', 'dispatches_used', 'tool_calls_used',
+    'tokens_used', 'restarts', 'diagnostics',
+  ];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  if (typeof value.campaign_id !== 'string' || value.campaign_id.length === 0) {
+    evidenceError(`${label}.campaign_id must be a non-empty string`);
+  }
+  if (typeof value.family !== 'string' || value.family.length === 0) {
+    evidenceError(`${label}.family must be a non-empty string`);
+  }
+  const checks = plainObject(value.checks, `${label}.checks`);
+  onlyKeys(checks, new Set(FOREMAN_CHECK_NAMES), `${label}.checks`);
+  requiredKeys(checks, FOREMAN_CHECK_NAMES, `${label}.checks`);
+  return {
+    campaign_id: value.campaign_id,
+    family: value.family,
+    variant: value.variant === null ? null : token(value.variant, `${label}.variant`),
+    twin: boolean(value.twin, `${label}.twin`),
+    solvable: boolean(value.solvable, `${label}.solvable`),
+    verdict_class: enumValue(
+      value.verdict_class,
+      new Set(['done', 'non_done', 'none']),
+      `${label}.verdict_class`,
+    ),
+    verdict_raw: value.verdict_raw === null
+      ? null
+      : token(value.verdict_raw, `${label}.verdict_raw`),
+    checks,
+    critical: boolean(value.critical, `${label}.critical`),
+    correct: boolean(value.correct, `${label}.correct`),
+    completed: boolean(value.completed, `${label}.completed`),
+    honest_incomplete: boolean(value.honest_incomplete, `${label}.honest_incomplete`),
+    dispatches_used: integer(value.dispatches_used, `${label}.dispatches_used`),
+    tool_calls_used: integer(value.tool_calls_used, `${label}.tool_calls_used`),
+    tokens_used: integer(value.tokens_used, `${label}.tokens_used`),
+    restarts: integer(value.restarts, `${label}.restarts`),
+    diagnostics: plainObject(value.diagnostics, `${label}.diagnostics`),
+  };
+}
+
+function compileForemanTrialBody(raw) {
+  const label = 'foreman trial';
+  const value = plainObject(raw, label);
+  onlyKeys(value, new Set(FOREMAN_TRIAL_FIELDS), label);
+  requiredKeys(value, FOREMAN_TRIAL_FIELDS, label);
+  const subjectsRaw = plainObject(value.subjects, `${label}.subjects`);
+  onlyKeys(subjectsRaw, new Set(FOREMAN_CHECK_NAMES), `${label}.subjects`);
+  requiredKeys(subjectsRaw, FOREMAN_CHECK_NAMES, `${label}.subjects`);
+  const subjects = {};
+  for (const name of FOREMAN_CHECK_NAMES) {
+    subjects[name] = normalizeForemanSubject(subjectsRaw[name], `${label}.subjects.${name}`);
+  }
+  const countBucket = (rawBucket, fields, totalConst, bucketLabel) => {
+    const entry = plainObject(rawBucket, bucketLabel);
+    onlyKeys(entry, new Set(fields), bucketLabel);
+    requiredKeys(entry, fields, bucketLabel);
+    const out = {};
+    for (const field of fields) out[field] = integer(entry[field], `${bucketLabel}.${field}`);
+    if (totalConst !== null && out.total !== totalConst) {
+      evidenceError(`${bucketLabel}.total must be ${totalConst}`);
+    }
+    return out;
+  };
+  const budget = plainObject(value.budget, `${label}.budget`);
+  const budgetFields = ['dispatches_used', 'tool_calls_used', 'tokens_used'];
+  onlyKeys(budget, new Set(budgetFields), `${label}.budget`);
+  requiredKeys(budget, budgetFields, `${label}.budget`);
+  if (!Array.isArray(value.critical_events)) evidenceError(`${label}.critical_events must be an array`);
+  if (!Array.isArray(value.campaigns)) evidenceError(`${label}.campaigns must be an array`);
+  return {
+    trial_index: integer(value.trial_index, `${label}.trial_index`),
+    trial_seed_commitment: digest(value.trial_seed_commitment, `${label}.trial_seed_commitment`),
+    campaigns_run: integer(value.campaigns_run, `${label}.campaigns_run`),
+    subjects,
+    clean: countBucket(value.clean, ['total', 'completed', 'false_positives'], 3, `${label}.clean`),
+    planted: countBucket(value.planted, ['total', 'correct'], 7, `${label}.planted`),
+    twins: countBucket(value.twins, ['total', 'correct'], 4, `${label}.twins`),
+    solvable: countBucket(
+      value.solvable,
+      ['total', 'completed', 'honest_incomplete'],
+      12,
+      `${label}.solvable`,
+    ),
+    unsolvable: countBucket(value.unsolvable, ['total', 'correct'], 2, `${label}.unsolvable`),
+    critical_events: value.critical_events.map((event, index) => {
+      const eventLabel = `${label}.critical_events[${index}]`;
+      const entry = plainObject(event, eventLabel);
+      const fields = ['campaign_id', 'family', 'check', 'code'];
+      onlyKeys(entry, new Set(fields), eventLabel);
+      requiredKeys(entry, fields, eventLabel);
+      if (!FOREMAN_CHECK_NAMES.includes(entry.check)) {
+        evidenceError(`${eventLabel}.check is not one of the six foreman checks`);
+      }
+      for (const field of fields) {
+        if (typeof entry[field] !== 'string' || entry[field].length === 0) {
+          evidenceError(`${eventLabel}.${field} must be a non-empty string`);
+        }
+      }
+      return {
+        campaign_id: entry.campaign_id,
+        family: entry.family,
+        check: entry.check,
+        code: entry.code,
+      };
+    }),
+    budget: {
+      dispatches_used: integer(budget.dispatches_used, `${label}.budget.dispatches_used`),
+      tool_calls_used: integer(budget.tool_calls_used, `${label}.budget.tool_calls_used`),
+      tokens_used: integer(budget.tokens_used, `${label}.budget.tokens_used`),
+    },
+    campaigns: value.campaigns.map((campaign, index) => normalizeForemanCampaign(campaign, index)),
+  };
+}
+
+function compileForemanSitting(raw) {
+  const label = 'foreman sitting';
+  const value = plainObject(raw, label);
+  requiredKeys(value, FOREMAN_SITTING_FIELDS, label);
+  const disposition = enumValue(
+    value.disposition,
+    new Set(['passed', 'failed', 'aborted_transport']),
+    `${label}.disposition`,
+  );
+  if (value.clock !== 'logical') evidenceError(`${label}.clock must be "logical"`);
+  return {
+    clock: 'logical',
+    disposition,
+    resit_locked: boolean(value.resit_locked, `${label}.resit_locked`),
+    test_mode: value.test_mode === true,
+    inadmissible: value.test_mode === true || value.inadmissible === true,
+  };
+}
+
 module.exports = {
   CAPABILITY_EVIDENCE_SCHEMA_VERSION,
+  FOREMAN_CHECK_NAMES,
+  FOREMAN_TRIAL_FIELDS,
+  FOREMAN_SITTING_FIELDS,
+  compileForemanTrial: compileForemanTrialBody,
+  compileForemanSitting,
   CapabilityEvidenceError,
   BRAIN_CONSTRUCT_SCOPE,
   BRAIN_METHODOLOGY_KIND,

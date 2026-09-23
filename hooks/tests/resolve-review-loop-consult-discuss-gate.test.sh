@@ -163,7 +163,13 @@ CFG_V="$(mk_cfg consult eng-v cc-shim high on)"
 OUT_V="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_V" bash "$SCRIPT" 2>"$TEST_TMP/v.err")"; RC_V=$?
 assert_eq "0" "$RC_V" "(v) matching in-date row admits"
 assert_eq "on" "$(json_get "$OUT_V" consult_dispatch)" "(v) consult_dispatch on in output"
-assert_not_contains "$(cat "$TEST_TMP/v.err")" "⚠" "(v) admitted SILENTLY — no warning glyph on stderr"
+# Since fa2a0c50 (2026-09-15) every qc_panel[N] seat without a recorded admission gets a
+# deliberate, non-refusing stderr note — the built-in default panel always does here. Those
+# notes are about the panel, not the consult seat; drop exactly that line shape and require
+# the rest of stderr to carry no warning glyph, so a consult-seat warning still reds.
+V_ERR_NON_QC="$(grep -vE '^resolve-review-loop: ⚠ qc_panel\[[0-9]+\] seat \([^)]*\) has no recorded operator admission — the managed rail.s final panel will refuse it at intake$' "$TEST_TMP/v.err")"
+assert_not_contains "$V_ERR_NON_QC" "⚠" "(v) admitted SILENTLY — no warning glyph on stderr (qc_panel intake notes excluded)"
+assert_not_contains "$(cat "$TEST_TMP/v.err")" "consult seat" "(v) stderr says nothing about the consult seat"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # (vi) switch on + calendar-expired row, standing not demoted => admitted

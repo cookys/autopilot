@@ -231,7 +231,29 @@ assert_eq "$(git -C "$REPO_ROOT" branch --list 'test/context-window-selftest' | 
   "dispatch-hetero: over-budget leaks no branch"
 
 # --- resolver: reports over-budget seats without inventing fields -------------
-RESOLVED="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 2000000 2> /dev/null)"
+# HERMETIC roster (2026-09-23). These cases used to resolve the repo's LIVE dogfood
+# config, which made them measure whatever the roster was that week: they went red when
+# the implementer moved from grok-4.5 (known 500000 window) to cursor-grok-4.6-low
+# (2026-09-12; no window observation, so nothing is ever OVER_BUDGET, and without the
+# host's standing pin the resolve exits 3 and prints nothing), and the "no warnings"
+# cases also depended on ~/.autopilot/topology.json via the plan_review / hetero_review
+# / consult_dispatch `auto` knobs. The fixture keeps what the cases are about: built-in
+# reviewer gpt-5.5 (258400) and implementer gpt-5.3-codex-spark (121600) — both with
+# recorded windows — plus a verification-author whose model id contains spaces (the
+# phantom-seat regression); the three auto knobs off and no brain seat, so the only
+# warnings possible are the window gate's own.
+CW_CFG="$TEST_TMP/context-window-roster.md"
+cat > "$CW_CFG" <<'CFG'
+- plan_review: off
+- hetero_review: off
+- consult_dispatch: off
+- verification_author_present: true
+- verification_author_engine: Gemini 3.5 Flash (High)
+- verification_author_runner: agy
+- verification_author_effort: high
+CFG
+export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
+RESOLVED="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 2000000 2> /dev/null)"
 FIELD_COUNT="$(printf '%s' "$RESOLVED" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(Object.keys(JSON.parse(s)).length))}catch{process.stdout.write("ERR")}})')"
 # The no-invented-fields pin derives from the schema's own top-level key order —
 # a literal count here rotted twice as fields landed (62 vs 64, pre-existing red
@@ -240,22 +262,20 @@ FIELD_COUNT="$(printf '%s' "$RESOLVED" | node -e 'let s="";process.stdin.on("dat
 SCHEMA_FIELD_COUNT="$(node -e 'process.stdout.write(String((require(process.argv[1])["x-field-order"]||[]).length))' "$REPO_ROOT/schemas/review-loop-contract.schema.json")"
 assert_eq "$FIELD_COUNT" "$SCHEMA_FIELD_COUNT" "resolver emits exactly the schema x-field-order surface while window checks reuse capability_warnings"
 assert_contains "$RESOLVED" "cannot hold the intended input" "resolver reports an over-budget seat"
+assert_contains "$RESOLVED" "implementer seat (gpt-5.3-codex-spark) context window 121600 cannot hold" "resolver names the over-budget implementer seat and its window"
 
 # A model id containing spaces must not be split into phantom seats.
 assert_not_contains "$RESOLVED" '"3.5 seat' "space-containing model id is not word-split into phantom seats"
 assert_not_contains "$RESOLVED" '"Flash seat' "space-containing model id is not word-split into phantom seats (2)"
 
-# Small input produces no window warnings at all (UNKNOWN_WINDOW must stay silent,
-# else the default roster emits constant noise). The repo's own config pins a
-# brain seat (2026-08-17) whose advisory is out of scope here — measure the
-# window-warning surface against an ambient-minus-brain fixture.
-CW_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
-grep -v 'brain_seat_identity_file' "$REPO_ROOT/.claude/review-loop-config.md" > "$CW_NO_BRAIN" 2>/dev/null || : > "$CW_NO_BRAIN"
-RESOLVED_SMALL="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_NO_BRAIN" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 10000 2> /dev/null)"
+# Small input produces no window warnings at all (UNKNOWN_WINDOW must stay silent —
+# the verification-author seat above has no recorded window — else the default roster
+# emits constant noise). Same hermetic roster, so no brain/auto-knob advisory can mask it.
+RESOLVED_SMALL="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 10000 2> /dev/null)"
 assert_contains "$RESOLVED_SMALL" '"capability_warnings": []' "in-budget resolve emits no warnings"
 
 # Absent --input-bytes must leave the resolver byte-identical to before.
-RESOLVED_NONE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_NO_BRAIN" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" 2> /dev/null)"
+RESOLVED_NONE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" 2> /dev/null)"
 assert_contains "$RESOLVED_NONE" '"capability_warnings": []' "no --input-bytes ⇒ no window checks"
 
 finalize_test

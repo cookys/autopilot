@@ -546,3 +546,22 @@ finalize_test() {
     exit 1
   fi
 }
+
+# Hermetic stand-in for the operator's standing pin on the dogfood implementer seat.
+# .claude/review-loop-config.md (and hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md)
+# name implementer cursor-grok-4.6-low @ cursor (2026-09-12 operator ruling, paywall), a runner
+# with no earned qualification, so the resolver admits it ONLY through a standing pin in the
+# capability store. Tests that resolve either config must not depend on the host holding that
+# pin: this exports ENGINE_CAPABILITY_DIR to an isolated store (default: lib.sh's per-test
+# store) and writes the pin there. The tuple is literal — it must equal the config's
+# implementer_* fields, so an unreviewed seat edit still reds the suites that resolve it.
+seed_dogfood_implementer_pin() {
+  local store="${1:-$HOOK_ENGINE_CAPABILITY_DIR}"
+  mkdir -p "$store"
+  export ENGINE_CAPABILITY_DIR="$store"
+  node "$REPO_ROOT/scripts/engine-capability-state.js" pin-seat \
+    --engine cursor-grok-4.6-low --runner cursor --role implementer --effort low \
+    --endpoint @none --reason "hermetic stand-in for the 2026-09-12 operator pin (lib.sh)" \
+    --operator lib.sh --store "$store" >/dev/null \
+    || { echo "seed_dogfood_implementer_pin: pin-seat failed for $store" >&2; return 1; }
+}

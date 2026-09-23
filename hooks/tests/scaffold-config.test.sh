@@ -81,7 +81,10 @@ if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
 OUT1="$(node "$SCRIPT" "$TARGET" --detect "$DETECT_JSON")"
 SUMMARY1="$(printf '%s\n' "$OUT1" | tail -n 1)"
 assert_eq "0" "$?" "scaffold-config first run exit code"
-assert_eq "11" "$(query_json "$SUMMARY1" "written.length")" "first run writes 11 files (10 configs + settings env pin)"
+# 12 = 11 configs + settings env pin. backlog-config.md joined the scaffold set in
+# 37630d5e (2026-09-14, backlog-entry schema P1-3: "scaffold-config.js 產範本").
+assert_eq "12" "$(query_json "$SUMMARY1" "written.length")" "first run writes 12 files (11 configs + settings env pin)"
+assert_contains "$(query_json "$SUMMARY1" "written")" ".claude/backlog-config.md" "first run scaffolds backlog-config.md"
 assert_eq "0" "$(query_json "$SUMMARY1" "skipped.length")" "first run has no skipped files"
 
 for file in next-config.md project-lifecycle-config.md dispatch-config.md quality-gate-config.md dev-flow-config.md test-strategy-config.md qc-gate-config.md skill-routing.md doc-drift-config.md; do
@@ -193,7 +196,7 @@ DRY_TARGET="$TEST_TMP/dry-run-target"
 mkdir -p "$DRY_TARGET"
 OUT5="$(node "$SCRIPT" "$DRY_TARGET" --detect "$DETECT_JSON" --dry-run)"
 SUMMARY5="$(printf '%s\n' "$OUT5" | tail -n 1)"
-assert_eq "11" "$(query_json "$SUMMARY5" "written.length")" "dry-run reports prospective writes"
+assert_eq "12" "$(query_json "$SUMMARY5" "written.length")" "dry-run reports prospective writes"
 assert_file_absent "$DRY_TARGET/.claude"
 assert_file_absent "$DRY_TARGET/.gitignore"
 

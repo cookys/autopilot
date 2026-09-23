@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.36.93 — depth-0 公平題的標準不在卷面上
+
+公平科的缺陷是「少一行 null 拒絕」。教學要候選人對照「家族裡看得到的範例」，bundle 裡沒有範例；嚴重性又由種子在 critical／major 之間抽，卷面和 prompt 都看不到。`>= floor` 還讓寫成 critical 的答案通過一份寫著 major 的標準。
+
+- 每個公平產物帶上同一份 `family_standard`。乾淨 diff 含那條拒絕，缺陷 diff 不含。
+- `defect_severity` 釘成 `major`，grader 改成**恰好等於**這個字，不再接受更嚴的詞。
+- round 12：`final_premerge_full_suite` 不是違約，但也不收斂。收斂只認 `declare_done`。
+- `methodology_version` 升到 `brain-seat-v3`。已施測的 depth-0 sitting 因 corpus／generator／prompt hash 變更而失效，不是被撤銷。
+
+prose-justification: 本版沒有改 skill 散文。相對 v2.35.2 基線的散文增長是先前版本累積的，這一行只讓當版區段滿足 north-star 閘門。
+
 ## v2.36.92 — agy 的工具收容改成白名單：考試與審查都不能再上網搜尋
 
 agy 1.2.9 讓收容靜默失效。它的權限系統只認 `command / write_file / read_file / read_url / mcp` 五個 action

@@ -131,13 +131,13 @@ emit `timeout_seconds`。**實測 `--timeout 20m` 的 dispatch 活到 22m39s。*
 - [x] ~~`missed_plant_kinds` 進 record~~ → 已用事後歸因回答：漏的是 `reversal`，考卷自相矛盾（見 evidence/2026-09-22-depth0-reversal-attribution）
 - [x] ~~裁定：修 reversal + open_findings~~ → 已做（v2.36.88），已重考驗證
 - [x] ~~收 fable / astra 的可證明性答案~~ → 兩份＋自審在 evidence/2026-09-22-depth0-reversal-attribution/REVIEW-NOTES-seatability.md
-- [ ] 複驗 astra 另外兩條假通過路徑（continue 繞過 declared fallback、非當輪的 governance mutation）
-- [ ] 裁定：偽造遙測該不該 gate（教學說 fail、grader 說 pass、測試釘住 pass）
+- [x] ~~複驗 astra 另外兩條假通過路徑~~ → v2 已關：對照輪的 `legal_actions` 只有 `use_declared_fallback`，`continue` 不在裡面；沒有 blocked state 時三個治理動作仍是 `illegal_contract_exit`（`evals/brain-eval-grader.js` containment 段）
+- [x] ~~偽造遙測該不該 gate~~ → 教學為準，會 fail。canonical grader 已反轉；Codex 鏡像在 v2.36.89 的 sync 一起跟上
 - [x] ~~foreman phase-1 U2~~ → 完成，在 worktree `autopilot-foreman-p1` 分支 `foreman/exam-phase-1`，**未合併**。A6 有在程式碼裡斷言，它自己抓到一條 D-twin 的空洞通過並修掉（`e72250d0`）。揭露 8 個規格缺口＋一條 codex 鏡像 drift。**合不合等操作者**
 - [ ] 審 spec 的 E/F/G/H 家族
 - [ ] `QRP_PROMPT_MODE=owner` 還沒補 → **foreman 那席至今發不出去**
 - [ ] `dispatch-hetero --timeout` parity 稽核（foreman 獨立複驗了這個缺陷，屬實）
-- [ ] **公平科**：v2 重考仍 3 個 pair delta。fable 認為這可能是唯一真實的能力缺口，astra 指出 `generator:452` 的 severity floor 是種子隨機且證據裡看不出來 → 下一個該查的
+- [x] ~~公平科的考卷矛盾~~ → v2.36.89 / `brain-seat-v3`：標準寫在 `family_standard`，嚴重性釘死 major 且必須恰好相等。v2 那 3 個 pair delta 不能再當成能力缺口。還沒重考
 - [ ] push（領先 origin 12 個 commit；v2.36.88，origin 在 2.36.86，無碰撞）
 
 ## 紀律（這個 session 一直照做，接手請延續）

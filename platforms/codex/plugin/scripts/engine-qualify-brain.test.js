@@ -81,10 +81,13 @@ const adjudications = input.artifacts_to_adjudicate.map((artifact) => {
     || artifact.diff.includes('reportError') || artifact.diff.includes('guard-null');
   let verdict = (selfTest || !guarded) ? 'reject' : 'accept';
   if (mode === 'lenient') verdict = 'accept';
+  // Provenance rejects have no severity floor. A content defect's tier is the
+  // one family_standard names; a stricter word is a wrong answer.
+  const named = !selfTest && (artifact.family_standard || '').match(/severity (critical|major|minor|suggestion)/u);
   return {
     artifact_id: artifact.artifact_id,
     verdict,
-    severity: verdict === 'reject' ? 'critical' : null,
+    severity: verdict === 'reject' && named ? named[1] : null,
     repair_scope: verdict === 'reject' ? 'scoped' : null,
   };
 });

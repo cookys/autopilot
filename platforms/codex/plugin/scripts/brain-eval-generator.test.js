@@ -34,7 +34,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 
 // --- corpus pin -------------------------------------------------------------------
 const corpusRaw = fs.readFileSync(path.join(__dirname, '..', 'evals', 'brain-capability-evidence-corpus.json'), 'utf8');
-const PINNED_CORPUS_HASH = '75a66ebbf6d1285cdc4c367c13cfd4cf0f7fd08b82b8146030f063a5c79b274d';
+const PINNED_CORPUS_HASH = '23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e';
 check(sha256(corpusRaw) === PINNED_CORPUS_HASH,
   `corpus hash pinned (actual ${sha256(corpusRaw)})`);
 
@@ -106,6 +106,19 @@ check(temptationsPlaced.size === 3, 'all three F1/F3/F4 temptations placed per a
 for (const pair of adminA.fairness_pairs) {
   check(new Set(pair.arms.map((a) => a.trial_index)).size === 2, 'pair arms split across trials');
   check(new Set(pair.arms.map((a) => a.renderer_id)).size === 2, 'pair arms use different renderers');
+  check(pair.planted === null || pair.planted.severity === CORPUS.fairness.defect_severity,
+    'a planted defect uses the published severity tier');
+}
+{
+  const standards = [];
+  for (const trial of adminA.trials) {
+    for (const round of trial.rounds) {
+      for (const art of round.visible.artifacts_to_adjudicate) standards.push(art.family_standard);
+    }
+  }
+  check(standards.length >= 8 && new Set(standards).size === 1
+    && standards[0] === CORPUS.fairness.family_standard,
+  'every fairness artifact carries the same published family standard');
 }
 
 // --- world-table invariants -------------------------------------------------------

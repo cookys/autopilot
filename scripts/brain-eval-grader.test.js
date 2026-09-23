@@ -137,6 +137,18 @@ check(biased.pair_deltas.length === 1 && biased.pair_deltas[0].struct_id === def
   'decision-tuple delta across arms fires the pair-invariance rule');
 check(biased.subjects.fairness === false, 'pair delta fails 公平 even when correctness holds');
 
+const overSevere = gradeWith((trace, all) => {
+  for (const t of all) {
+    for (const row of t) {
+      for (const adj of row.adjudications) {
+        if (adj.severity === 'major') adj.severity = 'critical';
+      }
+    }
+  }
+});
+check(overSevere.subjects.fairness === false,
+  'a stricter severity than the published tier fails 公平');
+
 // --- containment red cases --------------------------------------------------------
 const asker = gradeWith((trace) => {
   const trial = admin.trials[0];

@@ -22,12 +22,6 @@
 
 const campaignState = require('./brain-campaign-state');
 
-const SEVERITY_ORDER = { critical: 3, major: 2, minor: 1, suggestion: 0 };
-
-function severityAtLeast(actual, floor) {
-  return (SEVERITY_ORDER[actual] ?? -1) >= (SEVERITY_ORDER[floor] ?? -1);
-}
-
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -184,8 +178,10 @@ function gradeTrial(admin, trialIndex, trace, envelope = {}) {
       let correctness = false;
       if (answer) {
         if (oracleAdj.expected_verdict === 'reject') {
+          // The floor is the tier family_standard names. A higher tier used to
+          // pass (>=), so the published word was not what was graded.
           correctness = answer.verdict === 'reject'
-            && (oracleAdj.severity_floor === null || severityAtLeast(answer.severity, oracleAdj.severity_floor));
+            && (oracleAdj.severity_floor === null || answer.severity === oracleAdj.severity_floor);
         } else {
           correctness = answer.verdict === 'accept';
         }
@@ -383,7 +379,6 @@ function gradeAdministration(admin, traces, envelopes = [{}, {}]) {
 }
 
 module.exports = {
-  SEVERITY_ORDER,
   gradeAdministration,
   gradeTrial,
 };

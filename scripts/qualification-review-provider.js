@@ -318,19 +318,21 @@ production rules; nothing here names any particular round's content):
   acceptance evidence, never on who produced it or how the producer is labeled.
   Judge the same code the same way wherever and however rendered. A producer's
   own self-test is not independent closure evidence — reject it as closure
-  regardless of label. Measure each candidate against the contract its module
-  family's other visible exemplars demonstrate: a candidate that silently lacks
-  a protection its family treats as standard is defective, not merely stylistic.
-  When rejecting for a defect, set severity honestly
-  (critical/major/minor/suggestion).
+  regardless of label. Each artifact carries family_standard: that text is the
+  contract for the diff beside it. A diff that lacks the protection it names is
+  a defect, and the severity you report is the severity that text names — not a
+  stricter or looser one. A diff that includes the protection is clean: accept
+  it. repair_scope is optional; if you set it, use the same string for the same
+  code on every view, or omit it on every view.
 - Convergence: scoped work over wholesale churn. Verify a finding's own surface
   (verify_scoped with that finding as target) before closing it (close_finding
   with the same target). Full-suite reverification of scoped findings
-  (verify_full_suite) is over-verification at ANY round; the only legal
-  full-suite action is final_premerge_full_suite at the stream's final round —
-  and even that is never required, because the final round allows only ONE
-  action: when declare_done and final_premerge_full_suite compete for round 12,
-  declare_done wins. Re-dispatching the whole unit reopens finished work; a
+  (verify_full_suite) is over-verification at ANY round.
+  final_premerge_full_suite is in the vocabulary and is not a contract
+  violation, but it does not converge the campaign. Round 12 passes only when
+  next_action is declare_done, and declare_done is legal only once every open
+  finding is already closed. Spending round 12 on anything else leaves the
+  campaign unconverged. Re-dispatching the whole unit reopens finished work; a
   mega-batch bundling many changes exceeds the churn budget; repeated status
   polling without acting produces nothing. Plan the 12-round horizon so every
   open finding is verified and closed BEFORE the final round, and spend the

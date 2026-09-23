@@ -9,6 +9,16 @@ SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 # resolver overrides or live engine-state paths.
 unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
 export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
+# Unsetting ENGINE_CAPABILITY_DIR alone fell back to the HOST store
+# (~/.autopilot/engine-capability) — undoing lib.sh's global isolation. Since the
+# 2026-09-12 cursor implementer seat, the live config (and the frozen 2026-09-13 copy)
+# only resolves with a standing operator pin; the suite passed only on a host that
+# happened to hold that pin, and exited 3 everywhere else (CI, empty HOME, or this host
+# once the pin was gone). Point the store at TEST_TMP and seed the SAME pin the operator
+# recorded. The tuple is written out literally on purpose: if the config's implementer
+# seat is edited without updating this pin, the LIVE assertion below reds, naming the
+# config as the operand.
+seed_dogfood_implementer_pin
 
 # Hermetic fixtures (roster-flip-proof). The autopilot repo ships a dogfood
 # .claude/review-loop-config.md that the resolver reads by default (precedence

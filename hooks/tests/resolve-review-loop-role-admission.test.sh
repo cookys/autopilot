@@ -11,6 +11,10 @@
 . "$(dirname "$0")/lib.sh"
 
 unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
+# The default path resolves the LIVE dogfood config, whose cursor implementer seat is
+# admitted only by a standing pin. Unsetting ENGINE_CAPABILITY_DIR fell back to the host
+# store; isolate it and seed the pin instead (see lib.sh seed_dogfood_implementer_pin).
+seed_dogfood_implementer_pin
 unset AUTOPILOT_QUALIFICATION_OVERRIDE
 
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"

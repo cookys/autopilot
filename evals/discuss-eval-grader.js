@@ -3,7 +3,7 @@
 
 // discuss-eval-grader — deterministic offline grader for the discuss
 // (positional-contribution) qualification suite (plan
-// docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md, D2). Grading is a
+// docs/plans/2026-08-28-consult-discuss-qualification.md, D2). Grading is a
 // pure function of (case, response, gates); no LLM judgment, no shadow
 // oracle derived from the candidate's own answer (evidence-discipline §3).
 //

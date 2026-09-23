@@ -630,6 +630,41 @@ check(receipt.applicability.applicable === true, 'receipt exposes applicability'
 check(receipt.expires_at === qualified.expires_at, 'receipt exposes expiry');
 check(receipt.methodology_version === '2.0.0', 'receipt exposes methodology version');
 check(receipt.trial_set_hash === qualified.trial_set_hash, 'receipt binds the trial set');
+
+// A requalification (its `supersedes` names the earlier qualification) is evaluated ALONE when
+// it is embedded in a scorecard row: engine-scorecard.js deriveStatus → buildCapabilityEvidenceReceipt
+// wraps the one record in a one-element ledger, where its predecessor cannot be present. That threw
+// UNRESOLVED_EVIDENCE_REFERENCE and crashed `engine-scorecard.js current --role reviewer` on every
+// host holding a requalified row (2026-09-24; the agy row recorded 2026-08-20 was the first).
+const requalified = compileCapabilityEvidence(qualifiedInput({
+  source_ref: 'engine-qualify:reviewer:requalify',
+  issued_at: '2026-07-27T02:00:00.000Z',
+  observed_at: '2026-07-27T01:30:00.000Z',
+  expires_at: '2026-08-26T02:00:00.000Z',
+  trials: [
+    trial('trial-3', '2026-07-27T01:00:00.000Z'),
+    trial('trial-4', '2026-07-27T01:30:00.000Z'),
+  ],
+  supersedes: qualified.evidence_id,
+}));
+const requalifyQuery = { role: 'reviewer', scope, identity, evaluation_time: '2026-07-28T00:00:00.000Z' };
+let isolatedRequalified = null;
+try {
+  isolatedRequalified = buildCapabilityEvidenceReceipt(requalified, requalifyQuery);
+} catch (error) {
+  check(false, `a requalification evaluated alone must not throw (${error.message})`);
+}
+check(isolatedRequalified !== null && isolatedRequalified.state === 'qualified',
+  'a requalification evaluated alone keeps its own qualified state');
+// The ledger path still requires the lineage to resolve — only the one-record receipt relaxes it.
+rejects(
+  () => evaluateCapabilityEvidence([requalified], requalifyQuery),
+  /supersedes an unknown record/,
+  'in a ledger, a supersedes that does not resolve is still rejected',
+);
+check(evaluateCapabilityEvidence([qualified, requalified], requalifyQuery).state === 'qualified',
+  'with its predecessor in the ledger the requalification evaluates cleanly');
+
 rejects(
   () => normalizeCapabilityEvidenceReceipt({
     ...receipt,

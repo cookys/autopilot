@@ -134,9 +134,18 @@ CAL_DIR4="$TEST_TMP/calibration4"
 RESULT2="$(CALIBRATION_DATA_DIR="$CAL_DIR4" "$SCRIPT" run-known-bad --panel-cmd "$ALWAYS_FAIL_CMD" 2>/dev/null)"
 FALSE_PASSES2="$(printf '%s' "$RESULT2" | grep -o '"false_passes":[0-9]*' | cut -d: -f2)"
 assert_eq "0" "$FALSE_PASSES2" "zero false passes with always-fail panel"
-RR_NO_SCORECARD_EXIT="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field reviewer_qualified >/dev/null 2>&1; echo "$?")"
+# Hermetic: pin the resolver to the shipped template. Without the override it
+# resolves this repo's LIVE .claude/review-loop-config.md, whose seat admission
+# depends on the operator's qualification store — an unqualified live seat exits
+# 3 (invalid config) before the field switch is reached, masking the usage gate
+# this block is about. The positive control proves exit 2 comes from the missing
+# --check-scorecard flag alone, not from the config.
+RR_CFG="$REPO_ROOT/project-config-template/review-loop-config.md"
+RR_WITH_SCORECARD_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$RR_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --check-scorecard --field reviewer_qualified >/dev/null 2>&1; echo "$?")"
+assert_eq "$RR_WITH_SCORECARD_EXIT" "0" "control: same config with --check-scorecard --field reviewer_qualified exits 0"
+RR_NO_SCORECARD_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$RR_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field reviewer_qualified >/dev/null 2>&1; echo "$?")"
 assert_eq "2" "$RR_NO_SCORECARD_EXIT" "--field reviewer_qualified without --check-scorecard exits 2"
-RR_NO_SCORECARD_LADDER_EXIT="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field fallback_ladder >/dev/null 2>&1; echo "$?")"
+RR_NO_SCORECARD_LADDER_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$RR_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field fallback_ladder >/dev/null 2>&1; echo "$?")"
 assert_eq "2" "$RR_NO_SCORECARD_LADDER_EXIT" "--field fallback_ladder without --check-scorecard exits 2"
 
 # ── 12. corpus integrity: every .diff has a parseable .expected.json sidecar ──

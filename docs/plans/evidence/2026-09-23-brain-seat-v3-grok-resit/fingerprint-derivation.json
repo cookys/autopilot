@@ -1,0 +1,34 @@
+{
+  "containment": {
+    "kind": "brain-seat-containment-surface-v2",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "grok --prompt-file --permission-mode dontAsk --no-subagents --deny *",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  },
+  "containment_fingerprint": "ed1f55757b3e9d05e66afc82ccc60223fb68c032d0bdbdf732a277c278aa4c18",
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "harness_version": "engine-qualify-44950ccd",
+  "runner_version": "1.0.41",
+  "efforts": {
+    "low": {
+      "semantic": {
+        "kind": "brain-seat-semantic-surface-v1",
+        "model": "grok-4.7",
+        "transport": "grok-cli-prompt-file",
+        "reasoning_effort": "low",
+        "setting_sources": "none"
+      },
+      "semantic_fingerprint": "f8f153a9dea25ebd46ca79311c2a5c99f23a77075880bc15c6b348d763126695"
+    },
+    "xhigh": {
+      "semantic": {
+        "kind": "brain-seat-semantic-surface-v1",
+        "model": "grok-4.7",
+        "transport": "grok-cli-prompt-file",
+        "reasoning_effort": "xhigh",
+        "setting_sources": "none"
+      },
+      "semantic_fingerprint": "c7f2c4951e80917a89e1468cafcf0c173039465aa03d2e73c4ba0116a2dde44c"
+    }
+  }
+}

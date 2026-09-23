@@ -152,7 +152,7 @@ if [ -f "$STRIKES1" ]; then
   [ "$(strike_field "$STRIKES1" role)" = "implementer" ] && ok "1: role field" || bad "1: role field wrong: $(strike_field "$STRIKES1" role)"
   [ "$(strike_field "$STRIKES1" class)" = "ordinary_strike" ] && ok "1: class=ordinary_strike" || bad "1: class field wrong: $(strike_field "$STRIKES1" class)"
   SHA1="$(strike_field "$STRIKES1" artifact_sha256)"
-  printf '%s' "$SHA1" | grep -qE '^[0-9a-f]{64}$' && ok "1: artifact_sha256 is a real 64-hex digest" || bad "1: artifact_sha256 malformed: $SHA1"
+  grep -qE '^[0-9a-f]{64}$' < <(printf '%s' "$SHA1") && ok "1: artifact_sha256 is a real 64-hex digest" || bad "1: artifact_sha256 malformed: $SHA1"
   RECEIPT1="$(strike_field "$STRIKES1" receipt_ref)"
   [ -n "$RECEIPT1" ] && [ "$RECEIPT1" != "undefined" ] && ok "1: receipt_ref non-empty" || bad "1: receipt_ref empty/missing"
 else

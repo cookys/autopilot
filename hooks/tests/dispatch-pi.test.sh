@@ -36,7 +36,7 @@ STUB_OK="$TEST_TMP/pi-ok"
 cat > "$STUB_OK" <<'__EOF1'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     printf '%s\n' '{"type":"agent_start"}'
     printf '%s\n' '{"type":"tool_execution_start","toolName":"bash","args":{"command":"edit"}}'
@@ -46,7 +46,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     printf '%s\n' '{"type":"message_end","message":{"role":"assistant","usage":{"input":100,"output":20,"cacheRead":50,"cacheWrite":0,"totalTokens":170,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}}'
     printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
   fi
-  if printf '%s' "$line" | grep -q '"type":"steer"'; then
+  if grep -q '"type":"steer"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"type":"queue_update","queued":true}'
     printf '%s\n' '{"id":"pi-steer-response","type":"response","command":"steer","success":true}'
   fi
@@ -59,7 +59,7 @@ STUB_NOOP="$TEST_TMP/pi-noop"
 cat > "$STUB_NOOP" <<'__EOF2'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
   fi
@@ -72,7 +72,7 @@ STUB_FAIL="$TEST_TMP/pi-fail"
 cat > "$STUB_FAIL" <<'__EOF3'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     printf '%s\n' '{"type":"agent_start"}'
     exit 1
@@ -87,11 +87,11 @@ cat > "$STUB_STALL" <<'__EOF4'
 #!/usr/bin/env bash
 SLEEP_SECS="${PI_STALL_SLEEP:-2}"
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     sleep "$SLEEP_SECS"
   fi
-  if printf '%s' "$line" | grep -q '"type":"steer"'; then
+  if grep -q '"type":"steer"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"type":"queue_update","queued":true}'
     printf '%s\n' '{"id":"pi-stall-steer-response","type":"response","command":"steer","success":true}'
     printf '%s\n' '{"type":"tool_execution_start","toolName":"bash","args":{"command":"after-stall"}}'
@@ -180,7 +180,7 @@ STUB_PROMPTFAIL="$TEST_TMP/pi-promptfail"
 cat > "$STUB_PROMPTFAIL" <<'__EOF5'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":false}'
     printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
   fi
@@ -216,7 +216,7 @@ STUB_UTF8="$TEST_TMP/pi-utf8"
 cat > "$STUB_UTF8" <<'__EOF6'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     printf '{"type":"agent_end","messages":[{"role":"user","text":"go \xf0\x9f'
     sleep 0.3
@@ -234,7 +234,7 @@ STUB_FLOW="$TEST_TMP/pi-flow"
 cat > "$STUB_FLOW" <<'__EOF7'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     for i in 1 2 3 4 5 6; do printf '%s\n' '{"type":"turn_update","n":'"$i"'}'; sleep 0.3; done
     printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
@@ -252,7 +252,7 @@ STUB_HANG="$TEST_TMP/pi-hang"
 cat > "$STUB_HANG" <<'__EOF8'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     sleep 60
   fi
@@ -376,10 +376,10 @@ STUB_DELIVER="$TEST_TMP/pi-deliver"
 cat > "$STUB_DELIVER" <<'__EOFD'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
   fi
-  if printf '%s' "$line" | grep -q '"type":"steer"'; then
+  if grep -q '"type":"steer"' < <(printf '%s' "$line"); then
     printf '%s\n' "$line" >> "${PI_STEER_CAPTURE:?}"
     printf '%s\n' '{"id":"steer-resp","type":"response","command":"steer","success":true}'
     printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
@@ -428,12 +428,12 @@ STUB_SLOW="$TEST_TMP/pi-slow"
 cat > "$STUB_SLOW" <<'__EOFS'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
     sleep 3
     printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
   fi
-  if printf '%s' "$line" | grep -q 'depth-0 directive'; then
+  if grep -q 'depth-0 directive' < <(printf '%s' "$line"); then
     printf '%s\n' "$line" >> "${PI_STALE_STEER_CAPTURE:?}"
   fi
 done
@@ -471,10 +471,10 @@ STUB_E2E="$TEST_TMP/pi-e2e"
 cat > "$STUB_E2E" <<'__EOFE'
 #!/usr/bin/env bash
 while IFS= read -r line || [ -n "$line" ]; do
-  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+  if grep -q '"type":"prompt"' < <(printf '%s' "$line"); then
     printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
   fi
-  if printf '%s' "$line" | grep -q 'depth-0 directive'; then
+  if grep -q 'depth-0 directive' < <(printf '%s' "$line"); then
     printf '%s\n' "$line" > steer_capture.txt
     printf '%s\n' '{"id":"steer-resp","type":"response","command":"steer","success":true}'
     printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'

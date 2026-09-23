@@ -85,7 +85,7 @@ probe() {
   # read-hint tokens/phrases, but cannot prove a goal is hint-free (e.g. subtle
   # priming like "consult"/"查閱" variants beyond this list). A PASS means "no
   # known hint token", not a guarantee of naturalness — review new goals by eye.
-  if printf '%s\n' "$goal" | grep -Eiq '\bread(s|ing)?\b|MUST-READ|\breferences?\b|\bconsult\b|look at|檔案|讀|查看|查閱'; then
+  if grep -Eiq '\bread(s|ing)?\b|MUST-READ|\breferences?\b|\bconsult\b|look at|檔案|讀|查看|查閱' < <(printf '%s\n' "$goal"); then
     fail "$key: goal contains a read-hint — natural probe invalidated"
     return
   fi

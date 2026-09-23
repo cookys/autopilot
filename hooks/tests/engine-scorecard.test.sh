@@ -311,7 +311,7 @@ alias_existing_after="$(cat "$ALIAS_OUTPUT")"
   && [ "$alias_missing_created" = "false" ] \
   && [ "$alias_existing_after" = "$alias_existing_before" ] \
   && [ "$alias_missing_err" = "$alias_existing_err" ] \
-  && printf '%s' "$alias_missing_err" | grep -q -- '--output must be outside transcript roots' \
+  && grep -q -- '--output must be outside transcript roots' < <(printf '%s' "$alias_missing_err") \
   && ok "18: realpath containment rejects ancestor-alias output deterministically" \
   || bad "18: missing=$alias_missing_ec/$alias_missing_created existing=$alias_existing_ec preserved=$([ "$alias_existing_after" = "$alias_existing_before" ] && echo true || echo false) err-stable=$([ "$alias_missing_err" = "$alias_existing_err" ] && echo true || echo false)"
 

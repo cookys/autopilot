@@ -527,7 +527,7 @@ AFTER_RC=$?
 AFTER_EVENT_ID="$(echo "$AFTER_OUT" | jq_get event_id)"
 LINES_16="$(wc -l < "$TESTDIR/strikes.jsonl")"
 if [ "$AFTER_RC" = "0" ] && [ "$AFTER_EVENT_ID" = "100" ] && [ "$LINES_16" = "3" ] \
-  && echo "$WARN_OUT" | grep -q 'malformed strike line 2'; then
+  && grep -q 'malformed strike line 2' < <(echo "$WARN_OUT"); then
   ok "16: a malformed line is skipped-and-warned (not thrown), writer keeps working, and event_id stays monotonic (salvaged from the corrupt line's own event_id, 99+1=100)"
 else
   bad "16: rc=$AFTER_RC event_id=$AFTER_EVENT_ID lines=$LINES_16 warn=$WARN_OUT"

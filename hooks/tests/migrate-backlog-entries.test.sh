@@ -333,7 +333,7 @@ assert_eq "$?" "0" "(n) table apply exits 0"
 assert_eq "$(json_field "$(first_json "$out")" preserved)" "true" "(n) apply preserved"
 assert_file_exists "$N/docs/backlog/gc-a.md" "(n) sidecar named from the Id"
 side="$(cat "$N/docs/backlog/gc-a.md")"
-printf '%s' "$side" | grep -qF -- "$ORIG_ROW" && ok=0 || ok=1
+grep -qF -- "$ORIG_ROW" < <(printf '%s' "$side") && ok=0 || ok=1
 assert_eq "$ok" "0" "(n) sidecar holds the original row line verbatim"
 assert_contains "$side" "Section: 換裝線" "(n) sidecar names the ## section"
 rew="$(cat "$N/docs/projects/BACKLOG.md")"
@@ -391,7 +391,7 @@ assert_eq "$?" "0" "(o) apply exits 0"
 after="$(cat "$O/docs/projects/BACKLOG.md")"
 allside="$(cat "$O"/docs/backlog/*.md 2>/dev/null)"
 for needle in "巨大且複雜需要三週" "重要來源說明" "這是重要備註內容不該不見"; do
-  printf '%s\n%s' "$after" "$allside" | grep -qF -- "$needle" && ok=0 || ok=1
+  grep -qF -- "$needle" < <(printf '%s\n%s' "$after" "$allside") && ok=0 || ok=1
   assert_eq "$ok" "0" "(o) '$needle' survives in the backlog or a sidecar"
 done
 assert_contains "$after" '| not | a | real | table | just | ascii | art |' "(o) a fenced | line is preserved verbatim"
@@ -497,12 +497,12 @@ out="$(node "$MIG" --backlog "$P2/docs/projects/BACKLOG.md" --config "$P2/.claud
 assert_eq "$?" "0" "(p) --allow-unmapped-to-sidecar apply exits 0" # RED at 488dc6dc: flag unknown (usage 2)
 assert_file_exists "$P2/docs/backlog/gc-p.md" "(p) sidecar named from the Id"
 side="$(cat "$P2/docs/backlog/gc-p.md")"
-printf '%s' "$side" | grep -qF -- "$ORIG_MYSTERY2" && ok=0 || ok=1
+grep -qF -- "$ORIG_MYSTERY2" < <(printf '%s' "$side") && ok=0 || ok=1
 assert_eq "$ok" "0" "(p) sidecar holds the unmapped-status row verbatim" # RED at 488dc6dc: Status: open in the table
 rew="$(cat "$P2/docs/projects/BACKLOG.md")"
-printf '%s' "$rew" | grep -q 'Status: open' && ok=1 || ok=0
+grep -q 'Status: open' < <(printf '%s' "$rew") && ok=1 || ok=0
 assert_eq "$ok" "0" "(p) open is never synthesised for the unmapped word" # RED at 488dc6dc: | GC-p | … | open |
-printf '%s' "$rew" | grep -q '| GC-p |' && ok=1 || ok=0
+grep -q '| GC-p |' < <(printf '%s' "$rew") && ok=1 || ok=0
 assert_eq "$ok" "0" "(p) unmapped-status row is not rewritten into the table"
 assert_contains "$rew" "| OK-p | mapped extra-col row | open |" "(p) mapped row still migrates" # negative control inside (p)
 assert_contains "$(first_json "$out")" '"unmapped_status"' "(p) apply manifest records unmapped_status" # RED at 488dc6dc: preserved:true with no errors

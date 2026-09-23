@@ -160,7 +160,7 @@ if [ ! -d "$SRC" ]; then
   exit 1
 fi
 
-if ! find "$SRC" -mindepth 1 -maxdepth 1 -type d | grep -q .; then
+if ! grep -q . < <(find "$SRC" -mindepth 1 -maxdepth 1 -type d); then
   echo "error: source skills directory is empty: $SRC" >&2
   exit 1
 fi

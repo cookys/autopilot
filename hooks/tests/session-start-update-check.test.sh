@@ -174,7 +174,7 @@ printf 'no parseable changelog headlines' > "$PLUGIN_ROOT/CHANGELOG.md"
 run_session_start "$PLUGIN_ROOT" "$PAYLOAD"
 CTX9=$(extract_context "$__RUN_STDOUT")
 assert_eq "$__RUN_EXIT" "0" "malformed changelog: exit 0"
-if printf '%s' "$CTX9" | grep -Fq "Autopilot updated v2.0.9 → v3.0.0"; then
+if grep -Fq "Autopilot updated v2.0.9 → v3.0.0" < <(printf '%s' "$CTX9"); then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 else
   assert_not_contains "$CTX9" "[Autopilot updated:" "malformed changelog: generic or skip"
@@ -229,10 +229,10 @@ EXIT_B=$(cat "$code_b")
 assert_eq "$EXIT_A" "0" "concurrent-start-a: exit 0"
 assert_eq "$EXIT_B" "0" "concurrent-start-b: exit 0"
 NOTICES=0
-if printf '%s' "$CTX_A" | grep -Fq "[Autopilot updated:"; then
+if grep -Fq "[Autopilot updated:" < <(printf '%s' "$CTX_A"); then
   NOTICES=$((NOTICES + 1))
 fi
-if printf '%s' "$CTX_B" | grep -Fq "[Autopilot updated:"; then
+if grep -Fq "[Autopilot updated:" < <(printf '%s' "$CTX_B"); then
   NOTICES=$((NOTICES + 1))
 fi
 assert_eq "$NOTICES" "1" "concurrent starts: at most one notice"

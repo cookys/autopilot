@@ -190,9 +190,9 @@ test_skip_unmarked() {
     cd - > /dev/null
     
     # Should not be in reaped
-    if echo "$output" | grep -q "\"reaped\":" && echo "$output" | grep -v "\"reaped\": \[\]"; then
+    if grep -q "\"reaped\":" < <(echo "$output") && echo "$output" | grep -v "\"reaped\": \[\]"; then
         # Non-empty reaped array - check if this worktree is in it
-        if echo "$output" | grep -q "$wt_path"; then
+        if grep -q "$wt_path" < <(echo "$output"); then
             fail "unmarked worktree should not be reaped"
         fi
     fi

@@ -530,10 +530,10 @@ assert_r10_managed_rail_verifyc() {
   if ! grep -q 'verify_stderr_tail' "$engine"; then
     fail "ledger call site must set verify_stderr_tail"
   fi
-  if ! grep -n "autopilot-verify-wt-" "$engine" | grep -q .; then
+  if ! grep -q . < <(grep -n "autopilot-verify-wt-" "$engine"); then
     fail "defaultGitWorktreeAdd still uses detached verify worktree prefix"
   fi
-  awk '
+  grep -q 'self-bootstrap' < <(awk '
     /autopilot-verify-wt-/ {
       for (i = 1; i <= n; i++) print buf[i]
       print
@@ -544,7 +544,7 @@ assert_r10_managed_rail_verifyc() {
       for (i = 1; i < 4; i++) buf[i] = buf[i + 1]
       buf[4] = $0
     }
-  ' "$engine" | grep -q 'self-bootstrap' \
+  ' "$engine") \
     || fail "detached verify worktree comment must say verify_cmd self-bootstraps deps"
 }
 

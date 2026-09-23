@@ -2193,7 +2193,7 @@ if [ "$IS_CODEX" -eq 1 ]; then
   # --dangerously-bypass-hook-trust; without this check it would exit 2 mid-run with a
   # cryptic "unexpected argument" and get MISCLASSIFIED as question_suspected. Fail loud
   # here instead, naming the resolved path + version so the caller fixes PATH / --codex-bin.
-  if ! "$CODEX_BIN" exec --help 2>&1 | grep -q -- '--dangerously-bypass-hook-trust'; then
+  if ! grep -q -- '--dangerously-bypass-hook-trust' < <("$CODEX_BIN" exec --help 2>&1); then
     _cx_path="$(command -v "$CODEX_BIN")"; _cx_ver="$("$CODEX_BIN" --version 2>&1 | head -1)"
     die_precondition "resolved codex ($_cx_path, $_cx_ver) does not support --dangerously-bypass-hook-trust — it is too old / the wrong binary. Update it, fix PATH so the newer codex wins, or pass --codex-bin <path>."
   fi
@@ -3143,7 +3143,7 @@ if command -v systemd-run >/dev/null 2>&1 \
    && systemd-run --user --scope --quiet -- true >/dev/null 2>&1; then
   HAVE_CGROUP=1
 fi
-HAVE_SETSID=0; command -v setsid >/dev/null 2>&1 && setsid --help 2>&1 | grep -q -- --wait && HAVE_SETSID=1
+HAVE_SETSID=0; command -v setsid >/dev/null 2>&1 && grep -q -- --wait < <(setsid --help 2>&1) && HAVE_SETSID=1
 
 reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
   if [ -n "$SCOPE_UNIT" ]; then

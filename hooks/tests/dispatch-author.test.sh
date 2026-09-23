@@ -317,7 +317,7 @@ for a in "$@"; do
   if [ -z "$end" ]; then
     end=$(printf '%s\n' "$a" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
   fi
-  printf '%s' "$a" | grep -q "Write a verification plan for the change" && contains=1
+  grep -q "Write a verification plan for the change" < <(printf '%s' "$a") && contains=1
 done
 body=""
 skip_next=0

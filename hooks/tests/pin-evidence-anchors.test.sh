@@ -57,9 +57,9 @@ OUT="$(node "$SCRIPT" scan --repo-root "$REPO" --json)"
 [ "$(printf '%s' "$OUT" | jfield unreachable)" = "1" ] \
   && ok "scan finds exactly the unreachable receipt-referenced commit" \
   || bad "scan unreachable count wrong: $OUT"
-printf '%s' "$OUT" | grep -q "$ORPHAN" \
+grep -q "$ORPHAN" < <(printf '%s' "$OUT") \
   && ok "scan names the orphan" || bad "scan did not name the orphan"
-printf '%s' "$OUT" | grep -q "$BASE" \
+grep -q "$BASE" < <(printf '%s' "$OUT") \
   && bad "scan wrongly listed the reachable commit" || ok "reachable commit is not listed"
 [ "$(printf '%s' "$OUT" | jfield candidates)" = "2" ] \
   && ok "the fake 40-hex digest is not counted as a commit" \
@@ -75,7 +75,7 @@ REFS_AFTER="$(git -C "$REPO" for-each-ref refs/autopilot | wc -l)"
 
 # ---- apply pins it, and the orphan becomes reachable
 node "$SCRIPT" apply --repo-root "$REPO" >/dev/null
-git -C "$REPO" for-each-ref --contains "$ORPHAN" --format='%(refname)' | grep -q evidence-anchors \
+grep -q evidence-anchors < <(git -C "$REPO" for-each-ref --contains "$ORPHAN" --format='%(refname)') \
   && ok "apply makes the orphan reachable" || bad "orphan still unreachable after apply"
 
 # ---- ref name must equal the object it points at (self-verifying namespace)
@@ -135,7 +135,7 @@ OUT4="$(node "$SCRIPT" scan --repo-root "$REPO2" --exclude-ref refs/heads/doomed
 
 node "$SCRIPT" apply --repo-root "$REPO2" --exclude-ref refs/heads/doomed >/dev/null
 git -C "$REPO2" branch -qD doomed
-git -C "$REPO2" for-each-ref --contains "$HELD" --format='%(refname)' | grep -q evidence-anchors \
+grep -q evidence-anchors < <(git -C "$REPO2" for-each-ref --contains "$HELD" --format='%(refname)') \
   && ok "commit survives the deletion it was anchored against" \
   || bad "commit orphaned despite anchoring — the exact regression under test"
 
@@ -157,7 +157,7 @@ printf '{"tip":"%s"}\n' "$ORPH3" > "$COMMON3/autopilot/r.json"
 git -C "$REPO3" update-ref "refs/autopilot/evidence-anchors/$ORPH3" "$BASE3"
 
 OUT5="$(node "$SCRIPT" scan --repo-root "$REPO3" --json)"
-printf '%s' "$OUT5" | grep -q "$ORPH3" \
+grep -q "$ORPH3" < <(printf '%s' "$OUT5") \
   && ok "mismatched anchor does not mask the unprotected commit" \
   || bad "mismatched anchor wrongly counted as protection: $OUT5"
 
@@ -204,7 +204,7 @@ mkdir -p "$COMMON6/autopilot" "$TESTDIR/elsewhere"
 printf '{"tip":"%s"}\n' "$HID" > "$TESTDIR/elsewhere/r.json"
 if ln -s "$TESTDIR/elsewhere" "$COMMON6/autopilot/linked" 2>/dev/null; then
   OUT7="$(node "$SCRIPT" scan --repo-root "$REPO6" --json)"
-  printf '%s' "$OUT7" | grep -q "$HID" \
+  grep -q "$HID" < <(printf '%s' "$OUT7") \
     && ok "receipts behind a symlinked subtree are read" \
     || bad "symlinked receipt subtree silently skipped: $OUT7"
 else
@@ -234,12 +234,12 @@ printf '{"candidate_sha":"%s"}\n' "$SHA_A" > "$COMMON5/autopilot/r.json"
 git -C "$REPO5" update-ref "refs/autopilot/evidence-anchors/$SHA_A" "$SHA_B"
 
 OUT6="$(node "$SCRIPT" scan --repo-root "$REPO5" --json)"
-printf '%s' "$OUT6" | grep -q "$SHA_A" \
+grep -q "$SHA_A" < <(printf '%s' "$OUT6") \
   && ok "SHA kept alive only by a doomed mismatched anchor is reported" \
   || bad "mismatched-anchor reachability masked the SHA: $OUT6"
 
 node "$SCRIPT" apply --repo-root "$REPO5" >/dev/null
-git -C "$REPO5" for-each-ref --contains "$SHA_A" --format='%(refname)' | grep -q evidence-anchors \
+grep -q evidence-anchors < <(git -C "$REPO5" for-each-ref --contains "$SHA_A" --format='%(refname)') \
   && ok "it survives apply removing the mismatched ref" \
   || bad "orphaned by the repair that was supposed to protect it"
 MM5="$(git -C "$REPO5" for-each-ref refs/autopilot/evidence-anchors \

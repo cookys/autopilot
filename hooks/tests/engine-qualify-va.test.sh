@@ -6,7 +6,7 @@
 OUT="$(node "$REPO_ROOT/scripts/engine-qualify-va.test.js" 2>&1)"
 RC=$?
 assert_exit_code "$RC" "0" "verification_author end-to-end suite passes"
-if printf '%s' "$OUT" | grep -q '^SKIP:'; then
+if grep -q '^SKIP:' < <(printf '%s' "$OUT"); then
   assert_contains "$OUT" "SKIP:" "sandbox unavailable — suite self-skipped honestly"
 else
   assert_contains "$OUT" "29 assertions passed" \

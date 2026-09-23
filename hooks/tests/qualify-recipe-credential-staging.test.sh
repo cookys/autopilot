@@ -97,7 +97,7 @@ fi
 echo '{"token":"v3-rotated-again"}' >"$REAL"
 PLAN_OUT="$(qualify_stage_credential "$STAGED" "$REAL" plan 2>&1)"
 PLAN_RC=$?
-if [ "$PLAN_RC" -ne 0 ] && printf '%s' "$PLAN_OUT" | grep -q "staged credential drift: $STAGED"; then
+if [ "$PLAN_RC" -ne 0 ] && grep -q "staged credential drift: $STAGED" < <(printf '%s' "$PLAN_OUT"); then
   ok "plan mode: refuses on drift (rc=$PLAN_RC, named message present)"
 else
   bad "plan mode: did not refuse on drift (rc=$PLAN_RC, output: $PLAN_OUT)"
@@ -124,7 +124,7 @@ fi
 rm -f "$STAGED.source.sha256"
 PLAN_OUT="$(qualify_stage_credential "$STAGED" "$REAL" plan 2>&1)"
 PLAN_RC=$?
-if [ "$PLAN_RC" -ne 0 ] && printf '%s' "$PLAN_OUT" | grep -q "staged credential drift: $STAGED"; then
+if [ "$PLAN_RC" -ne 0 ] && grep -q "staged credential drift: $STAGED" < <(printf '%s' "$PLAN_OUT"); then
   ok "plan mode: unstamped legacy staged copy => refused as drift"
 else
   bad "plan mode: unstamped legacy staged copy passed (rc=$PLAN_RC, output: $PLAN_OUT)"

@@ -32,12 +32,12 @@ for skill_dir in "$SKILLS_DIR"/*/; do
       frontmatter="$(awk 'NR==1{next} /^---$/{exit} {print}' "$skill_file")"
 
       # Check name: field
-      if ! echo "$frontmatter" | grep -q '^name:'; then
+      if ! grep -q '^name:' < <(echo "$frontmatter"); then
         errors+=("missing 'name:' field in frontmatter")
       fi
 
       # Check description: field
-      if ! echo "$frontmatter" | grep -q '^description:'; then
+      if ! grep -q '^description:' < <(echo "$frontmatter"); then
         errors+=("missing 'description:' field in frontmatter")
       fi
     fi

@@ -1263,7 +1263,7 @@ cat > "$CR_LAUNCHER" <<'EOF'
 set -euo pipefail
 : "${CR_LAUNCH_LOG:?}"
 printf '%s\n' "$*" >> "$CR_LAUNCH_LOG"
-if [ "${1:-}" = "--preflight" ] || printf '%s\n' "$@" | grep -q -- '--preflight'; then
+if [ "${1:-}" = "--preflight" ] || grep -q -- '--preflight' < <(printf '%s\n' "$@"); then
   printf 'preflight\n' >> "$CR_LAUNCH_LOG"
   if [ "${CR_PREFLIGHT_RC:-0}" != "0" ]; then
     echo "${CR_PREFLIGHT_ERR:-preflight failed}" >&2

@@ -100,7 +100,7 @@ if command -v grok >/dev/null 2>&1; then
   for model in "" ${AUTOPILOT_GROK_PROBE_MODELS:-grok-4.5 grok-4.7}; do
     label="${model:-<default>}"
     raw_enum="$(timeout 40 grok ${model:+--model "$model"} --effort __autopilot_probe__ -p hi </dev/null 2>&1 | head -3 || true)"
-    if ! printf '%s' "$raw_enum" | grep -q 'unknown effort level'; then
+    if ! grep -q 'unknown effort level' < <(printf '%s' "$raw_enum"); then
       printf 'test-grok-effort: live probe INCONCLUSIVE for %s — no enum. Raw: %s\n' \
         "$label" "$(printf '%s' "$raw_enum" | tr -d '\n' | cut -c1-160)" >&2
       continue
@@ -109,12 +109,12 @@ if command -v grok >/dev/null 2>&1; then
     [ -n "$live_enum" ] || fail "could not read grok's live effort enum for $label from: $raw_enum"
     for e in low medium high xhigh max '' nonsense; do
       c="$(grok_effort_clamp "$e" "$model")"
-      printf '%s' ",$live_enum," | grep -q ",$c," \
+      grep -q ",$c," < <(printf '%s' ",$live_enum,") \
         || fail "clamp emits '$c' for '$e' on $label but its live enum is: $live_enum"
     done
     # Any level this model accepts must pass through unclamped (no silent under-delivery).
     for e in low medium high xhigh; do
-      if printf '%s' ",$live_enum," | grep -q ",$e,"; then
+      if grep -q ",$e," < <(printf '%s' ",$live_enum,"); then
         [ "$(grok_effort_clamp "$e" "$model")" = "$e" ] \
           || fail "$label accepts '$e' but the clamp downgrades it to '$(grok_effort_clamp "$e" "$model")'"
       fi

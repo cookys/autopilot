@@ -43,12 +43,15 @@ LIVE_CASE="$(sed -n '/No live spend method defined for runner/q;/case "\$RUNNER"
 for r in $ROSTER; do
   # A branch label may be alternated (`cc-shim|anthropic-compatible)`) — match the token
   # anywhere in a label line, not just at its start.
-  if printf '%s\n' "$BINARY_CASE" | grep -qE "^[[:space:]]*([a-z0-9-]+\|)*${r}(\|[a-z0-9-]+)*\)"; then
+  # Here-string, not `printf | grep -q`: under `set -o pipefail`, grep -q exiting on the first
+  # match SIGPIPEs a printf still writing, and the pipeline reads as "no match" — observed as a
+  # false "no live-spend branch for cursor" in a loaded parallel run (2026-09-24).
+  if grep -qE "^[[:space:]]*([a-z0-9-]+\|)*${r}(\|[a-z0-9-]+)*\)" <<<"$BINARY_CASE"; then
     ok "binary-presence branch exists for runner '$r'"
   else
     bad "runner '$r' is dispatchable but has NO binary-presence branch — probe will fall through to \`command -v $r\` and report a permanent false 'not found'"
   fi
-  if printf '%s\n' "$LIVE_CASE" | grep -qE "^[[:space:]]*([a-z0-9-]+\|)*${r}(\|[a-z0-9-]+)*\)"; then
+  if grep -qE "^[[:space:]]*([a-z0-9-]+\|)*${r}(\|[a-z0-9-]+)*\)" <<<"$LIVE_CASE"; then
     ok "live-spend branch exists for runner '$r'"
   else
     bad "runner '$r' is dispatchable but has NO live-spend branch — --live-spend can never observe it"

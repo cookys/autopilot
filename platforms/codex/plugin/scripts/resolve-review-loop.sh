@@ -248,6 +248,8 @@ done
 . "$(dirname "$0")/lib/json-emit.sh"
 # shellcheck source=lib/resolve-config.sh
 . "$(dirname "$0")/lib/resolve-config.sh"
+# shellcheck source=lib/json-fields.sh
+. "$(dirname "$0")/lib/json-fields.sh"
 
 # --- locate the config file (4-tier -r ladder) ---
 resolve_config_ladder "review-loop-config.md" "REVIEW_LOOP_CONFIG_OVERRIDE" "builtin-default"
@@ -1109,22 +1111,25 @@ try {
 process.exit(1);
 ' "$_topo_json" "$IMPL_RUNNER" 2>/dev/null)"
       if [[ $? -eq 0 && -n "$_seats_extracted" ]]; then
-        _seat0_json="$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).s0))' "$_seats_extracted" 2>/dev/null)"
-        _seat1_json="$(node -e 'const s1 = JSON.parse(process.argv[1]).s1; process.stdout.write(s1 ? JSON.stringify(s1) : "");' "$_seats_extracted" 2>/dev/null)"
+        # One node for both seats' presence and all eight fields (was ten).
+        json_fields _seat_fields "$_seats_extracted" s0:json s1:json \
+          s0.engine s0.effort s0.runner s0.endpoint s1.engine s1.effort s1.runner s1.endpoint
+        _seat0_json="${_seat_fields[0]}"
+        _seat1_json="${_seat_fields[1]}"
       fi
     fi
 
     if [[ -n "$_seat0_json" ]]; then
-      PLAN_REV_ENGINE="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).engine || ""))' "$_seat0_json" 2>/dev/null)"
-      PLAN_REV_EFFORT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).effort || ""))' "$_seat0_json" 2>/dev/null)"
-      PLAN_REV_RUNNER="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).runner || ""))' "$_seat0_json" 2>/dev/null)"
-      PLAN_REV_ENDPOINT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).endpoint || ""))' "$_seat0_json" 2>/dev/null)"
+      PLAN_REV_ENGINE="${_seat_fields[2]}"
+      PLAN_REV_EFFORT="${_seat_fields[3]}"
+      PLAN_REV_RUNNER="${_seat_fields[4]}"
+      PLAN_REV_ENDPOINT="${_seat_fields[5]}"
 
       if [[ -n "$_seat1_json" ]]; then
-        PLAN_DEEP_ENGINE="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).engine || ""))' "$_seat1_json" 2>/dev/null)"
-        PLAN_DEEP_EFFORT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).effort || ""))' "$_seat1_json" 2>/dev/null)"
-        PLAN_DEEP_RUNNER="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).runner || ""))' "$_seat1_json" 2>/dev/null)"
-        PLAN_DEEP_ENDPOINT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).endpoint || ""))' "$_seat1_json" 2>/dev/null)"
+        PLAN_DEEP_ENGINE="${_seat_fields[6]}"
+        PLAN_DEEP_EFFORT="${_seat_fields[7]}"
+        PLAN_DEEP_RUNNER="${_seat_fields[8]}"
+        PLAN_DEEP_ENDPOINT="${_seat_fields[9]}"
       fi
       PLAN_REVIEW_RESOLVED_FROM="topology"
     else
@@ -1224,10 +1229,11 @@ process.exit(1);
     fi
 
     if [[ -n "$_consult_picked" ]]; then
-      CONSULT_ENGINE="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).engine || ""))' "$_consult_picked" 2>/dev/null)"
-      CONSULT_EFFORT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).effort || ""))' "$_consult_picked" 2>/dev/null)"
-      CONSULT_RUNNER="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).runner || ""))' "$_consult_picked" 2>/dev/null)"
-      CONSULT_ENDPOINT="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).endpoint || ""))' "$_consult_picked" 2>/dev/null)"
+      json_fields _consult_fields "$_consult_picked" engine effort runner endpoint
+      CONSULT_ENGINE="${_consult_fields[0]}"
+      CONSULT_EFFORT="${_consult_fields[1]}"
+      CONSULT_RUNNER="${_consult_fields[2]}"
+      CONSULT_ENDPOINT="${_consult_fields[3]}"
       CONSULT_RESOLVED_FROM="topology"
     else
       CONSULT_ENGINE="sonnet"
@@ -2334,6 +2340,7 @@ process.stdin.on("end", () => {
 
 QUALROW_ADMITTED_JSON="[]"
 
+declare -A _PINS_BY_ROLE=() _PINS_RC_BY_ROLE=()
 for _i in "${!_seat_roles[@]}"; do
   _role="${_seat_roles[$_i]}"; _eng="${_seat_engines[$_i]}"; _run="${_seat_runners[$_i]}"
   _eff="${_seat_efforts[$_i]:-}"
@@ -2364,7 +2371,11 @@ process.stdout.write(JSON.stringify(a));' "$QUALROW_ADMITTED_JSON" "$_role" 2>/d
   else
     _is_unqualified_runner "$_run" || [[ "$_role" == qc_panel\[*\] ]] || continue
   fi
-  _ovr="$(AUTOPILOT_QUALIFICATION_OVERRIDE="${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" node -e '
+  # The override matcher's first act is "no file ⇒ exit 1"; skip its node start in that
+  # (usual) case. `-e` follows symlinks like fs.existsSync, so a dangling link is still absent.
+  _ovr=""
+  [[ -n "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" && -e "${AUTOPILOT_QUALIFICATION_OVERRIDE}" ]] \
+  && _ovr="$(AUTOPILOT_QUALIFICATION_OVERRIDE="${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" node -e '
 const fs = require("fs");
 const [engine, runner, role] = process.argv.slice(1);
 const file = process.env.AUTOPILOT_QUALIFICATION_OVERRIDE || "";
@@ -2408,7 +2419,17 @@ process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}\u001foper
   if [[ -z "$_ovr" && "$CAPABILITY_STATE" == "on" ]]; then
     _pin_args=(pins --role "${_role%%[*}")
     [[ -n "$STORE_PATH" ]] && _pin_args+=(--store "$STORE_PATH")
-    _ovr="$(node "$SCRIPT_DIR/engine-capability-state.js" "${_pin_args[@]}" 2>/dev/null | node -e '
+    # `pins --role R` depends only on R and the store, and the store does not change during
+    # this run: read it once per role (every qc_panel[N] seat shares role qc_panel).
+    _pin_role="${_role%%[*}"
+    # The exit status is kept too: under pipefail a failing `pins` failed the old
+    # `pins | matcher` pipeline no matter what the matcher printed.
+    if [[ -z "${_PINS_BY_ROLE[$_pin_role]+x}" ]]; then
+      _PINS_BY_ROLE[$_pin_role]="$(node "$SCRIPT_DIR/engine-capability-state.js" "${_pin_args[@]}" 2>/dev/null)"
+      _PINS_RC_BY_ROLE[$_pin_role]=$?
+    fi
+    [[ "${_PINS_RC_BY_ROLE[$_pin_role]}" == 0 ]] \
+    && _ovr="$(printf '%s' "${_PINS_BY_ROLE[$_pin_role]}" | node -e '
 let rows = [];
 try { rows = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
 if (!Array.isArray(rows)) process.exit(1);

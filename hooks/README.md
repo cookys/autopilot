@@ -286,6 +286,12 @@ keeps Claude Code's default rows). Any other status-line program can write the s
 `docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md` §2.5. Check: `ls "$XDG_RUNTIME_DIR/autopilot/context/"`
 shows `<session_id>.json` after one tick.
 
+**Keeping a status line that is not codeforge.** Put `scripts/statusline-live-tee.js` in front of it: it writes the
+main live file from the JSON Claude Code pipes in, then runs your program with the same stdin and passes its output
+and exit status through. Set `statusLine.command` to
+`node <autopilot>/scripts/statusline-live-tee.js -- <your status line> [args…]`
+(nothing after `--` ⇒ it writes the file and prints nothing). It does not write the subagent tasks file.
+
 **Without it** (no writer, older codeforge, another host): `context-budget` and `foreman-guard` behave exactly as
 v2.36.0 (inference ratchet, Bash cap only), and `depth0-delegate-gate` warns but never blocks. Silence is never a
 gate pass. Knobs: `AUTOPILOT_LIVE_DIR` (override base, still probed), `AUTOPILOT_CONTEXT_BUDGET_DIR`,

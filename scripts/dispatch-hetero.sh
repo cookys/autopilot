@@ -933,8 +933,8 @@ emit() { # status commit files ins del worktree error
 
 check_session_mode_gate() {
   local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
-  local marker marker_state marker_rc consumed_repo normalized_repo
-  local markers
+  local marker marker_state consumed_repo normalized_repo
+  local -a markers
   consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ "$marker_dir" != "/.autopilot/session-mode" ] || return 0
   [ -d "$marker_dir" ] || return 0
@@ -942,51 +942,70 @@ check_session_mode_gate() {
   [ -r "$marker_dir" ] && [ -x "$marker_dir" ] \
     || die_precondition "authoritative session-mode marker directory is unreadable"
   normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
-  markers=("$marker_dir"/*.json)
-  for marker in "${markers[@]}"; do
+  markers=()
+  for marker in "$marker_dir"/*.json; do
     if [ "$marker" = "$marker_dir/*.json" ] && [ ! -e "$marker" ]; then
       continue
     fi
-    [ -f "$marker" ] \
-      || die_precondition "authoritative session-mode marker is not a regular file: $marker"
-    marker_state="$(
-      node - "$marker" "$normalized_repo" <<'NODE' 2>&1
+    markers+=("$marker")
+  done
+  [ "${#markers[@]}" -gt 0 ] || return 0
+  # Classify every marker in ONE node process (was one per marker: expired markers accumulate,
+  # and each cost a node start on every dispatch). Output is two NUL-terminated fields per
+  # marker, in argv order: "OK" + INACTIVE|ACTIVE:<level>, or "ERR" + message. The loop below
+  # still walks the markers in glob order and stops at the first one that is not a regular
+  # file, invalid, or active — the same first-offender-wins order as the per-marker loop.
+  local -a marker_results=()
+  mapfile -d '' -t marker_results < <(
+    node - "$normalized_repo" "${markers[@]}" <<'NODE' 2>/dev/null
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const [file, repo] = process.argv.slice(2);
-try {
-  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new TypeError('marker must be an object');
+const [repo, ...files] = process.argv.slice(2);
+for (const file of files) {
+  let status = 'OK';
+  let text;
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new TypeError('marker must be an object');
+    }
+    if (!new Set(['l3', 'l4', 'l5', 'l6']).has(data.level)) {
+      throw new TypeError('marker level is invalid');
+    }
+    if (typeof data.repo_root !== 'string' || !path.isAbsolute(data.repo_root)) {
+      throw new TypeError('marker repo_root is invalid');
+    }
+    const startedAt = Date.parse(data.started_at);
+    const expiresAt = Date.parse(data.expires_at);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(expiresAt)) {
+      throw new TypeError('marker timestamps are invalid');
+    }
+    if (expiresAt <= Date.now()
+        || path.resolve(data.repo_root) !== path.resolve(repo)
+        || (data.level !== 'l5' && data.level !== 'l6')) {
+      text = 'INACTIVE';
+    } else {
+      text = `ACTIVE:${data.level}`;
+    }
+  } catch (error) {
+    status = 'ERR';
+    text = (error && error.message) || String(error);
   }
-  if (!new Set(['l3', 'l4', 'l5', 'l6']).has(data.level)) {
-    throw new TypeError('marker level is invalid');
-  }
-  if (typeof data.repo_root !== 'string' || !path.isAbsolute(data.repo_root)) {
-    throw new TypeError('marker repo_root is invalid');
-  }
-  const startedAt = Date.parse(data.started_at);
-  const expiresAt = Date.parse(data.expires_at);
-  if (!Number.isFinite(startedAt) || !Number.isFinite(expiresAt)) {
-    throw new TypeError('marker timestamps are invalid');
-  }
-  if (expiresAt <= Date.now()
-      || path.resolve(data.repo_root) !== path.resolve(repo)
-      || (data.level !== 'l5' && data.level !== 'l6')) {
-    process.stdout.write('INACTIVE');
-  } else {
-    process.stdout.write(`ACTIVE:${data.level}`);
-  }
-} catch (error) {
-  process.stdout.write(error.message || String(error));
-  process.exit(3);
+  process.stdout.write(`${status}\0${String(text).replace(/\0/g, '')}\0`);
 }
 NODE
-    )"
-    marker_rc=$?
-    if [ "$marker_rc" -ne 0 ]; then
-      die_precondition "authoritative session-mode marker is invalid: $marker_state"
+  )
+  local idx=0 marker_status
+  for marker in "${markers[@]}"; do
+    [ -f "$marker" ] \
+      || die_precondition "authoritative session-mode marker is not a regular file: $marker"
+    marker_status="${marker_results[$((idx * 2))]-}"
+    marker_state="${marker_results[$((idx * 2 + 1))]-}"
+    idx=$((idx + 1))
+    if [ "$marker_status" != "OK" ]; then
+      # A node that failed outright leaves no record for this marker: still fail closed.
+      die_precondition "authoritative session-mode marker is invalid: ${marker_state:-marker could not be classified}"
     fi
     if [[ "$marker_state" == ACTIVE:* ]]; then
       die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo)"

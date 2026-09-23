@@ -1077,6 +1077,51 @@ assert_contains "$OUT" "authoritative session-mode marker is invalid" \
 assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
   "malformed marker rejection spawns no runner"
 
+# 12g2-12g4. Several markers: the gate classifies them in one node process and maps the
+# results back by position, so each case puts the deciding marker SECOND — an index slip
+# would read the first marker's verdict instead. First offender in glob order wins.
+multi_marker_dir() {
+  local dir="$TEST_TMP/session-mode-multi-$1"
+  rm -rf "$dir"; mkdir -p "$dir"
+  printf '%s' "$dir"
+}
+# 12g2. expired marker first, live L6 marker second ⇒ still blocked by the second.
+MM_DIR="$(multi_marker_dir active-second)"
+node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); m.expires_at=new Date(Date.now()-3600e3).toISOString(); fs.writeFileSync(process.argv[2], JSON.stringify(m));' \
+  "$CAMPAIGN_SESSION_MODE_DIR/l6.json" "$MM_DIR/a-expired.json"
+cp "$CAMPAIGN_SESSION_MODE_DIR/l6.json" "$MM_DIR/b-live.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MM_DIR" \
+  "$SCRIPT" --branch feat/multi-marker-active --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "a live marker after an expired one still blocks"
+assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
+  "the second marker's ACTIVE verdict is the one reported"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "live second marker spawns no runner"
+# 12g3. corrupt marker first, live marker second ⇒ the FIRST offender (invalid) is reported.
+MM_DIR="$(multi_marker_dir invalid-first)"
+printf '%s\n' 'not-json' > "$MM_DIR/a-corrupt.json"
+cp "$CAMPAIGN_SESSION_MODE_DIR/l6.json" "$MM_DIR/b-live.json"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MM_DIR" \
+  "$SCRIPT" --branch feat/multi-marker-invalid --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "corrupt first marker fails closed"
+assert_contains "$OUT" "authoritative session-mode marker is invalid" \
+  "first offender in glob order (the corrupt marker) decides"
+assert_not_contains "$OUT" "active session-mode=l6" \
+  "the later live marker is not reached"
+# 12g4. a non-regular '*.json' entry first ⇒ rejected before any marker is trusted.
+MM_DIR="$(multi_marker_dir dir-first)"
+mkdir -p "$MM_DIR/a-dir.json"
+cp "$CAMPAIGN_SESSION_MODE_DIR/l6.json" "$MM_DIR/b-live.json"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MM_DIR" \
+  "$SCRIPT" --branch feat/multi-marker-dir --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "non-regular marker entry fails closed"
+assert_contains "$OUT" "authoritative session-mode marker is not a regular file" \
+  "non-regular entry is named before the live marker is read"
+
 # 12h. Invalid authoritative Mission governance cannot become an implicit off mode.
 mkdir -p "$SBX/.claude" "$TEST_TMP/empty-session-mode"
 printf '%s\n' '{"mission_convergence":' > "$SBX/.claude/owner-kernel-governance.json"

@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.36.89 — 不是 codeforge 的 status line 也能告訴 hook 真實 window
+
+`context-budget` 要知道 context window 的真實大小，唯一來源是 status line 寫的 live file
+（`<live-base>/context/<sid>.json`），而只有 codeforge 的 status line 會寫。其他主機上
+hook 只能從觀察到的用量推算：用量還沒超過 200K 就推定 window 是 200K，所以 **1M 的 session
+在 ~150K 就收到 T2「立刻寫 handoff」**。2026-09-23 在一台用 `statusline-go` 的主機上實測：
+159k（16%）與 194k 各誤發一次 T2，要到 243,941 才改判 1M
+（證據＝該 session 的 `<live-base>/context-budget/<sid>.json`：`lastLive.present:false`、`ageMs:null`、`observedMax:243941`）。
+
+Claude Code 其實每次都把 `context_window.context_window_size` 餵給 status line，只是沒人轉寫。
+
+- **`scripts/statusline-live-tee.js`（新）**：放在既有 status line 前面，
+  `node …/statusline-live-tee.js -- <原本的 status line> [args]`。先寫 schema 1 的 main live file
+  （同一個 `resolveLiveDir` base、同一個 session-id sanitiser、0600、temp＋rename），
+  再把**原封不動的 stdin** 交給原程式，輸出與 exit status 直接透傳。
+  寫檔失敗一律吞掉，status line 永遠不會因此壞掉；沒有正數 window 的 payload 不寫檔。
+  不寫 subagent tasks 檔。這是 2026-09-05 live-feed 計畫 §7 登記的 BACKLOG 候選。
+- **測試** `scripts/statusline-live-tee.test.js`（7 條）：端到端先重現誤發（沒有 tee ⇒ ~159k 時 exit 2），
+  經過一次 tee 後同一份 transcript 不再觸發；真的 200K window 仍然觸發且標 `(statusline)`。
+  植入「tee 什麼都不寫」的變異 ⇒ 7 條中 5 條轉紅（剩下 2 條是負向案例，本來就該綠）。
+- `hooks/README.md` 補「保留非 codeforge status line」的接法。
+prose-justification: none（無 SKILL/reference 文字變動；prose 數字是 v2.35.2 基準以來既有的累積）。
+
+**測試套件：並行池改為最慢的先跑**（`hooks/tests/run.sh`，測試工具，不另升版）。
+量測（2026-09-24，逐檔計時 `--parallel 8`）：L2 共 336 檔、逐檔加總約 3,659s；最慢 10 檔佔 44%；
+8 worker 實測 wall 606s，理論下限 max(最慢單檔 278s, 3659/8=457s)。差距來自字母序派工讓 ~240s 的檔在中途才開始。
+- 並行池依上一次**未過濾**並行執行記下的逐檔秒數由長到短派工；沒有紀錄的檔排最前面；
+  沒有紀錄檔 ⇒ 照舊字母序。紀錄檔：`${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv}`。
+- 帶 filter 的執行只讀不寫（套件內嵌的 run.sh 呼叫全都帶 filter，不會改寫 operator 的紀錄）。
+- 測試 `hooks/tests/run-longest-first.test.sh`：以 `--parallel 1` 讓輸出順序等於派工順序。
+  兩個變異各自轉紅：停用排序 ⇒ case2 紅；拿掉 filter 守衛 ⇒ case1/case3 紅。
+- 根因說明（未在本版修）：單檔慢是 bash 在迴圈裡反覆起 node —— `dispatch-hetero.test.sh` 一檔
+  4,824 次 node 呼叫、累計 292s；`resolve-review-loop.sh` 每次執行 17 次 node 約佔其 wall 的四分之三。
+  serial tail（8 檔，實測合計約 410s）在並行池之後依序跑，是並行 wall 的最大單一區塊，其中 `dispatch-hetero` 佔 243s。
+
+**派工路徑少起 node**（`dispatch-hetero.sh`、`resolve-review-loop.sh`、`resolve-dispatch-topology.js`）。
+每次 node 啟動約 20ms，原本按 marker／欄位／座位各起一次；以 node shim 逐呼叫點歸屬後處理最大的幾處：
+- session-mode marker 檢查：每個 marker 一次 ⇒ 全部一次（仍依 glob 順序、第一個有問題的 marker 決定結果）。
+  這台主機有 20 個過期 marker，`dispatch-hetero.test.sh` 單檔因此多 1,842 次 node。
+- `getJudge`：跑三次完整 `resolve-review-loop.sh`（每次約 0.7s）⇒ 一次；`getInstalledRunners` 改在行程內查表。
+- `resolve-review-loop.sh`：plan-review／consult 座位欄位改用新的 `scripts/lib/json-fields.sh`（18 次 ⇒ 2 次）；
+  沒有 override 檔時不起 matcher；`pins --role R` 每個 role 讀一次（連同 exit status，保留 pipefail 語義）。
+- `hooks/tests/lib.sh` 把 session-mode 目錄隔離到每個 suite（原本讀 operator 真實的 `~/.autopilot/session-mode`）。
+- 修 `probe-runner-coverage` 的 pipefail flake（`printf | grep -q` 在負載下誤判「沒有分支」）。
+- 新測試補了兩個原本沒人守的點：topology `judge` 欄位（runner/effort 對調原本全綠）、同一次執行兩個 role 各自的 pin。
+  每項改動都在舊碼、新碼、變異三方驗過（細節見 commit message）。
+- 量測：`dispatch-hetero.test.sh` 217s ⇒ 131s（同時同負載並跑）；完整 `--parallel` 套件 828s/833s（字母序）⇒ 675s
+  （最慢優先 + 本項；load 7.4，對照組 load 6.9–8.2，單次量測）。
+
 ## v2.36.88 — depth-0 考卷有一題答不出來：reversal
 
 五顆引擎、十八場 trial、`plants` 全部 4/5 —— 沒有一次 5/5，也沒有一次更低。

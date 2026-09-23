@@ -1056,9 +1056,11 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # Read-only by construction: scratch cwd, no --always-approve, no web, no editor.
   GROK_CWD="$(mktemp -d -t dispatch-author-grokcwd-XXXXXX)"
   set +e
-  grok_effort_note "$EFFORT" "dispatch-author"
+  # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
+  GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
+  grok_effort_note "$EFFORT" "dispatch-author" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
-    --reasoning-effort "$(grok_effort_clamp "$EFFORT")" \
+    --reasoning-effort "$GROK_EFFORT" \
     --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
   RUNNER_EXIT=$?
   set -e

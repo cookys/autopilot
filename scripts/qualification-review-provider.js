@@ -767,17 +767,29 @@ function resolveCliBin(kind) {
   return 'kimi';
 }
 
-// grok_effort_clamp — Node mirror of scripts/lib/grok-effort.sh's grok_effort_clamp
-// (bash is the canonical owner for the dispatch-hetero.sh rail; this file cannot
-// `source` a bash lib, so the SAME table is restated here for the QRP transport).
-// Re-probed 2026-08-29 against grok 1.0.13: `grok --effort bogus -p hi` still lists
-// exactly `xhigh, high, medium, low` — the enum grok-effort.sh's header warns can
-// move. Re-probe both copies together on any grok CLI upgrade.
-function grokEffortClamp(effort) {
-  switch (effort) {
-    case 'low': case 'medium': case 'high': case 'xhigh': return effort;
-    default: return 'xhigh'; // 'max' and anything unrecognized clamp to the ceiling
-  }
+// grok effort clamp — DELEGATES to scripts/lib/grok-effort.sh's grok_effort_clamp (the canonical owner).
+// This used to restate the table in JS ("re-probe both copies together"), and both copies carried the
+// same 2026-09-23 defect: the enum is per-MODEL (grok-4.5 rejects xhigh; 4.6/4.7 accept it) but the table
+// was global, so an explicit `--model grok-4.5` run died rc=1 on the default xhigh. Calling the bash lib
+// gives this rail the same per-model live-enum probe with one implementation. If bash/the lib is
+// unavailable, fall back to the static table (the old behavior), never to an unvalidated value.
+function grokEffortClamp(effort, model, bin) {
+  const staticClamp = () => {
+    switch (effort) {
+      case 'low': case 'medium': case 'high': case 'xhigh': return effort;
+      default: return 'xhigh'; // 'max' and anything unrecognized clamp to the ceiling
+    }
+  };
+  try {
+    const { execFileSync } = require('child_process');
+    const path = require('path');
+    const lib = path.join(__dirname, 'lib', 'grok-effort.sh');
+    const out = execFileSync('bash', ['-c', '. "$1"; grok_effort_clamp "$2" "$3" "$4"', '_',
+      lib, String(effort || ''), String(model || ''), String(bin || 'grok')],
+      { encoding: 'utf8', timeout: 45000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (['low', 'medium', 'high', 'xhigh'].includes(out)) return out;
+  } catch { /* fall through to the static table */ }
+  return staticClamp();
 }
 
 function callCli(kind, bin, model, effort, timeoutMs, prompt) {
@@ -905,7 +917,7 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
       '--prompt-file', promptFile, '--model', model, '--no-alt-screen',
       '--permission-mode', 'dontAsk', '--no-subagents', '--deny', '*',
     ];
-    if (effort) args.push('--reasoning-effort', grokEffortClamp(effort));
+    if (effort) args.push('--reasoning-effort', grokEffortClamp(effort, model, bin));
   } else if (kind === 'qoderclicn') {
     // CONTAINMENT (probed live, qoderclicn 1.1.35, 2026-08-29 + 2026-08-29 security-
     // review follow-up): `--tools ""` is qoderclicn's own documented "disable all

@@ -414,7 +414,7 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       # scratch --cwd (never the repo), NO --always-approve (cannot auto-run/edit), no web search.
       # Apply verified --reasoning-effort when exact effort is requested.
       if [ -n "$EFFORT" ] && type grok_effort_clamp >/dev/null 2>&1; then
-        _ge="$(grok_effort_clamp "$EFFORT")"
+        _ge="$(grok_effort_clamp "$EFFORT" "$MODEL" grok)"
         grok -p "Respond only with OK" --model "$MODEL" --cwd "$PROBE_CWD" \
           --reasoning-effort "$_ge" --no-alt-screen --disable-web-search \
           >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?

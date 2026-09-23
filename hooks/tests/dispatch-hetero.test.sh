@@ -539,6 +539,12 @@ STUB_GROK_REUSE="$TEST_TMP/grok-reuse"
 GROK_REUSE_CAPTURE="$TEST_TMP/grok-reuse-capture.txt"
 cat > "$STUB_GROK_REUSE" <<'EOF'
 #!/usr/bin/env bash
+# Real grok answers the per-model effort probe (lib/grok-effort.sh) by printing its enum and exiting
+# before any session/model request — mirror that, and never record it as a dispatch.
+case " $* " in *" __autopilot_probe__ "*)
+  echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: high, medium, low" >&2
+  exit 1 ;;
+esac
 mode=initial
 session=""
 while [ "$#" -gt 0 ]; do
@@ -1180,6 +1186,12 @@ STUB_GROK_EFFORT="$TEST_TMP/grok-effort"
 GROK_EFFORT_CAPTURE="$TEST_TMP/grok-effort.txt"
 cat > "$STUB_GROK_EFFORT" <<'EOF'
 #!/usr/bin/env bash
+# Real grok answers the per-model effort probe (lib/grok-effort.sh) by printing its enum and exiting
+# before any session/model request — mirror that, and never record it as a dispatch.
+case " $* " in *" __autopilot_probe__ "*)
+  echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: high, medium, low" >&2
+  exit 1 ;;
+esac
 effort=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -2549,6 +2561,11 @@ STUB_GROK_ARGV="$TEST_TMP/grok-argv"
 HETERO_GROK_ARGV="$TEST_TMP/hetero-grok.argv"
 cat > "$STUB_GROK_ARGV" <<EOF
 #!/usr/bin/env bash
+# Mirror real grok on the per-model effort probe (lib/grok-effort.sh): print the enum, exit, record nothing.
+case " \$* " in *" __autopilot_probe__ "*)
+  echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: high, medium, low" >&2
+  exit 1 ;;
+esac
 printf '%s\n' "\$@" > "$HETERO_GROK_ARGV"
 printf 'grok argv\n' > grok-argv.txt
 EOF

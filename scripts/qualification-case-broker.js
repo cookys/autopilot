@@ -101,7 +101,7 @@ const CLIENT_SOURCE = [
 
 const HELP = `Usage:
   node scripts/qualification-case-broker.js run
-    --role <reviewer|owner|verification_author|consult|discuss> --provider <provider-id> --model <exact-model-id>
+    --role <reviewer|owner|verification_author|consult|discuss|foreman> --provider <provider-id> --model <exact-model-id>
     --provider-cmd '<trusted host adapter command>'
     [--provider-env <name>] [--timeout-ms <n>]
 
@@ -212,9 +212,9 @@ function normalizeOptions(raw) {
   // owner/verification_author. No change to the socket protocol, the
   // sandbox, or the case-request shape below — only this role whitelist
   // widens.
-  if (!['reviewer', 'owner', 'verification_author', 'consult', 'discuss'].includes(role)) {
+  if (!['reviewer', 'owner', 'verification_author', 'consult', 'discuss', 'foreman'].includes(role)) {
     throw new BrokerError(
-      'role must be reviewer, owner, verification_author, consult, or discuss',
+      'role must be reviewer, owner, verification_author, consult, discuss, or foreman',
       'invalid_argument',
     );
   }

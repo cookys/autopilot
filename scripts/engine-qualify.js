@@ -40,6 +40,7 @@ const {
   generateBrainAdministration,
 } = require('../evals/brain-eval-generator');
 const { gradeAdministration } = require('../evals/brain-eval-grader');
+const { runForemanQualification } = require('../evals/foreman-eval-runner');
 const {
   CORPUS: VA_CORPUS,
   GENERATOR_VERSION: VA_GENERATOR_VERSION,
@@ -234,7 +235,7 @@ const ACTIVE_SESSION_RUNS = new Map();
 // same-role bundle's README (docs/plans/evidence/<date>-*-qualification-*/*/README.md)
 // and edit only the seat identity, rather than reconstructing flags from memory.
 const HELP = `Usage:
-  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer|consult|discuss>
+  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer|consult|discuss|foreman>
     --engine <display-id> --model <exact-model-id> --model-version <version>
     --runner <name> --runner-version <version> --family <family>
     --harness-version <version> --effort <effort>
@@ -341,7 +342,7 @@ function positiveInteger(value, label, minimum = 1) {
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer', 'consult', 'discuss']
+  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer', 'consult', 'discuss', 'foreman']
     .includes(argv[0])) {
     usage(2, `unknown subcommand: ${argv[0]}`);
   }
@@ -4777,6 +4778,7 @@ function runQualification(options) {
     // identity-bound transport requirement — see runConsultDiscussQualification.
     return runConsultDiscussQualification(options);
   }
+  if (role === 'foreman') return runForemanQualification(options);
   if (role === 'brain') return runBrainQualification(options);
   if (role === 'verification_author') return runVaQualification(options);
   if (role === 'implementer') return runImplQualification(options);
@@ -5598,6 +5600,7 @@ module.exports = {
   qualificationLabelTiers,
   qualificationReasonPrefixTiers,
   runBrainQualification,
+  runForemanQualification,
   runConsultDiscussQualification,
   recoverConsultProtocolReason,
   runConsultQualification,

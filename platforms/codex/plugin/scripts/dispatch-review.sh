@@ -1269,7 +1269,7 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   # pre-normalization bytes made the kimi rail's salvage inert for exactly the
   # bullet-prefixed shape this comment documents as common. RAW_LOG keeps the raw
   # pre-normalization bytes (written above) for humans.
-  if ! awk 'NR==1 && $0 ~ /^<<<AUTOPILOT-REVIEW-/' "$KIMI_OUT" | grep -q .; then
+  if ! grep -q . < <(awk 'NR==1 && $0 ~ /^<<<AUTOPILOT-REVIEW-/' "$KIMI_OUT"); then
     KIMI_CLEAN="$(mktemp -t dispatch-review-kimi-clean-XXXXXX)"
     awk '
       /<<<AUTOPILOT-REVIEW-/ {

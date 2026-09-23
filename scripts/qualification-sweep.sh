@@ -496,7 +496,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
   # row, is an OPERATIONAL failure: nothing landed in the store, and a sweep
   # that prints COMPLETE and exits 0 over it tells the operator a lie they will
   # act on. Those two cases set SEAT_FAILURES; honest FAILED verdicts do not.
-  if [ -s "$bundle/qualify-out.json" ] && head -c1 "$bundle/qualify-out.json" | grep -q '{'; then
+  if [ -s "$bundle/qualify-out.json" ] && grep -q '{' < <(head -c1 "$bundle/qualify-out.json"); then
     node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$bundle/qualify-out.json" \
       > "$bundle/record-out.json" 2> "$bundle/record-err.log"
     local rexit=$?

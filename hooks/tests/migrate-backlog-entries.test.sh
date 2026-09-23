@@ -391,7 +391,7 @@ assert_eq "$?" "0" "(o) apply exits 0"
 after="$(cat "$O/docs/projects/BACKLOG.md")"
 allside="$(cat "$O"/docs/backlog/*.md 2>/dev/null)"
 for needle in "巨大且複雜需要三週" "重要來源說明" "這是重要備註內容不該不見"; do
-  printf '%s\n%s' "$after" "$allside" | grep -qF -- "$needle" && ok=0 || ok=1
+  grep -qF -- "$needle" < <(printf '%s\n%s' "$after" "$allside") && ok=0 || ok=1
   assert_eq "$ok" "0" "(o) '$needle' survives in the backlog or a sidecar"
 done
 assert_contains "$after" '| not | a | real | table | just | ascii | art |' "(o) a fenced | line is preserved verbatim"

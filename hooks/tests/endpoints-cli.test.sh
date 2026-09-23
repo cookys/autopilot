@@ -110,7 +110,7 @@ assert_eq "700" "$d7mode" "set chmods a pre-existing credential dir to 700"
 
 # ── 6g. atomic write leaves no .tmp turd + content round-trips ──
 if ls "$D755"/*.tmp-* >/dev/null 2>&1; then fail "leftover .tmp file after set (non-atomic)"; else assert_eq ok ok "no leftover .tmp after set"; fi
-env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$D755/endpoints.env" node "$CLI" endpoints list 2>/dev/null | grep -q 'glm' && assert_eq ok ok "set content round-trips (list sees glm)" || fail "set content not readable"
+grep -q 'glm' < <(env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$D755/endpoints.env" node "$CLI" endpoints list 2>/dev/null) && assert_eq ok ok "set content round-trips (list sees glm)" || fail "set content not readable"
 
 # ── 6h. list surfaces a perms-rejection warning (non-json) instead of a silent empty list (panel) ──
 RJ="$WORK/rej.env"; printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=x\n' > "$RJ"; chmod 0666 "$RJ"

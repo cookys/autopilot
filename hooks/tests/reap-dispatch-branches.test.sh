@@ -249,7 +249,7 @@ test_sha256_recorded_tip_is_reaped_with_bundle() {
   else
     __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
   fi
-  if find "$TEST_TMP/sha256-bundles" -name '*.bundle' -type f | grep -q .; then
+  if grep -q . < <(find "$TEST_TMP/sha256-bundles" -name '*.bundle' -type f); then
     __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
   else
     fail "SHA-256 branch is preserved in a verified bundle"
@@ -893,7 +893,7 @@ test_relative_bundle_dir_is_repo_relative() {
   git -C "$repo" branch agent/contained-r1-20260715 develop
   mkdir -p "$caller"
   (cd "$caller" && bash "$SCRIPT" reap --repo "$repo" --into develop --yes --bundle-dir relative-bundles >/dev/null)
-  if find "$repo/relative-bundles" -name '*.bundle' -type f | grep -q .; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "relative bundle dir resolves against repo root"; fi
+  if grep -q . < <(find "$repo/relative-bundles" -name '*.bundle' -type f); then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "relative bundle dir resolves against repo root"; fi
   if [ -e "$caller/relative-bundles" ]; then fail "relative bundle dir must not depend on caller cwd"; else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); fi
 }
 

@@ -176,8 +176,7 @@ NODE
   git -C "$repo" bundle verify "$recovered_bundle" >/dev/null 2>&1 || return 1
   heads="$(git -C "$repo" bundle list-heads "$recovered_bundle" 2>/dev/null)" \
     || return 1
-  printf '%s\n' "$heads" \
-    | grep -Fqx "$expected refs/heads/$branch" || return 1
+  grep -Fqx "$expected refs/heads/$branch" < <(printf '%s\n' "$heads") || return 1
   object_format="$(git -C "$repo" rev-parse --show-object-format 2>/dev/null)" \
     || return 1
   verifier="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-bundle-recovery.XXXXXX")" \

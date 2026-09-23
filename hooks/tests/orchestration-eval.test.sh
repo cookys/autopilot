@@ -653,8 +653,8 @@ if ! grep -Eq '^ON[[:space:]]*\|[[:space:]]*1[[:space:]]*\|[[:space:]]*100\.0% \
   echo "$INFRA_ADHERENCE_SECTION" >&2
   exit 1
 fi
-if ! sed -n '/EXCLUDED INFRASTRUCTURE FAILURES/,/ADHERENCE REPORT/p' <<< "$INFRA_ADHERENCE_OUT" \
-    | grep -Eq '^ON[[:space:]]*\|[[:space:]]*runner_timeout[[:space:]]*\|[[:space:]]*1'; then
+if ! grep -Eq '^ON[[:space:]]*\|[[:space:]]*runner_timeout[[:space:]]*\|[[:space:]]*1' \
+    < <(sed -n '/EXCLUDED INFRASTRUCTURE FAILURES/,/ADHERENCE REPORT/p' <<< "$INFRA_ADHERENCE_OUT"); then
   echo "Assertion failed: excluded infra failure disappeared from cause tally" >&2
   exit 1
 fi

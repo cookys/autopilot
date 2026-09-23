@@ -415,7 +415,7 @@ assert_contains "$(cat "$RECOVERY_OUT")" '"status": "committed"' \
   "replacement leaf commits after reconciliation"
 assert_file_exists "$CRASH_RECORD" \
   "reconciled pending record preserves exact branch evidence"
-if git -C "$RECOVERY_REPO" worktree list --porcelain | grep -qxF "worktree $CRASH_WT"; then
+if grep -qxF "worktree $CRASH_WT" < <(git -C "$RECOVERY_REPO" worktree list --porcelain); then
   fail "reconciled crash-window worktree remains registered"
 else
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
@@ -479,8 +479,7 @@ process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).planne
     "$checkpoint residue permits a reconciled replacement"
   assert_contains "$(cat "$TEST_TMP/recover-$checkpoint.out")" '"status": "committed"' \
     "$checkpoint replacement commits"
-  if git -C "$CRASH_REPO" worktree list --porcelain \
-      | grep -qxF "worktree $CRASH_PLANNED_PATH"; then
+  if grep -qxF "worktree $CRASH_PLANNED_PATH" < <(git -C "$CRASH_REPO" worktree list --porcelain); then
     fail "$checkpoint leaves the crashed worktree registered after reconciliation"
   else
     __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))

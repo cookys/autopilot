@@ -385,7 +385,7 @@ setup_codex() {
   "$REPO_DIR/scripts/setup-symlinks.sh"
   "$REPO_DIR/scripts/sync-codex-plugin-skills.sh"
 
-  if ! codex plugin marketplace list 2>/dev/null | grep -q '^autopilot-local[[:space:]]'; then
+  if ! grep -q '^autopilot-local[[:space:]]' < <(codex plugin marketplace list 2>/dev/null); then
     codex plugin marketplace add "$REPO_DIR/platforms/codex"
   fi
   # `plugin add` upgrades an installed plugin in place (official plugin-creator reference:
@@ -451,7 +451,7 @@ check_agy() {
     return 0
   fi
 
-  if agy plugin list 2>/dev/null | grep -qi 'autopilot'; then
+  if grep -qi 'autopilot' < <(agy plugin list 2>/dev/null); then
     status OK "agy" "autopilot appears in agy plugin list"
   else
     status WARN "agy" "autopilot not found in agy plugin list"
@@ -493,7 +493,7 @@ check_grok() {
     return 0
   fi
 
-  if grok plugin list 2>/dev/null | grep -qi 'autopilot'; then
+  if grep -qi 'autopilot' < <(grok plugin list 2>/dev/null); then
     status OK "grok" "autopilot appears in grok plugin list"
   else
     status WARN "grok" "autopilot not found in grok plugin list"

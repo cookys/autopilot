@@ -160,7 +160,7 @@ verify_expected() {
     elif [[ "$line" =~ ^TOP_LINES_MATCH:([0-9]+):(.*) ]]; then
       local n="${BASH_REMATCH[1]}"
       local pattern="${BASH_REMATCH[2]}"
-      if ! head -n "$n" "$log_file" | grep -qiE "$pattern"; then
+      if ! grep -qiE "$pattern" < <(head -n "$n" "$log_file"); then
         pass=0
       fi
     fi

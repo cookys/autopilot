@@ -75,7 +75,7 @@ REFS_AFTER="$(git -C "$REPO" for-each-ref refs/autopilot | wc -l)"
 
 # ---- apply pins it, and the orphan becomes reachable
 node "$SCRIPT" apply --repo-root "$REPO" >/dev/null
-git -C "$REPO" for-each-ref --contains "$ORPHAN" --format='%(refname)' | grep -q evidence-anchors \
+grep -q evidence-anchors < <(git -C "$REPO" for-each-ref --contains "$ORPHAN" --format='%(refname)') \
   && ok "apply makes the orphan reachable" || bad "orphan still unreachable after apply"
 
 # ---- ref name must equal the object it points at (self-verifying namespace)
@@ -135,7 +135,7 @@ OUT4="$(node "$SCRIPT" scan --repo-root "$REPO2" --exclude-ref refs/heads/doomed
 
 node "$SCRIPT" apply --repo-root "$REPO2" --exclude-ref refs/heads/doomed >/dev/null
 git -C "$REPO2" branch -qD doomed
-git -C "$REPO2" for-each-ref --contains "$HELD" --format='%(refname)' | grep -q evidence-anchors \
+grep -q evidence-anchors < <(git -C "$REPO2" for-each-ref --contains "$HELD" --format='%(refname)') \
   && ok "commit survives the deletion it was anchored against" \
   || bad "commit orphaned despite anchoring — the exact regression under test"
 
@@ -239,7 +239,7 @@ grep -q "$SHA_A" < <(printf '%s' "$OUT6") \
   || bad "mismatched-anchor reachability masked the SHA: $OUT6"
 
 node "$SCRIPT" apply --repo-root "$REPO5" >/dev/null
-git -C "$REPO5" for-each-ref --contains "$SHA_A" --format='%(refname)' | grep -q evidence-anchors \
+grep -q evidence-anchors < <(git -C "$REPO5" for-each-ref --contains "$SHA_A" --format='%(refname)') \
   && ok "it survives apply removing the mismatched ref" \
   || bad "orphaned by the repair that was supposed to protect it"
 MM5="$(git -C "$REPO5" for-each-ref refs/autopilot/evidence-anchors \

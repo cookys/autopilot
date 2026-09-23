@@ -205,7 +205,18 @@ cat <<EOF > "$FAKE_AGY_RUNNER"
 #!/usr/bin/env bash
 $(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
 touch "\$SENTINEL" 2>/dev/null || true
-BODY="AGY-AUTHORED"
+# Echo argv into raw_log for the composition checks below (the isolated AGY
+# runner cannot write host files). The ARG= lines go INSIDE the AUTHOR frame:
+# only the frame body survives into raw_log. Each arg is flattened to one line
+# and has < > neutralised, because the prompt arg carries the frame marker
+# lines and a literal <tool_call> instruction, which the frame parser would
+# otherwise read as a second frame / tool narration.
+ARG_LINES=""
+for _arg in "\$@"; do
+  ARG_LINES="\$ARG_LINES
+ARG=\$(printf '%s' "\$_arg" | tr '\\n<>' ' __')"
+done
+BODY="AGY-AUTHORED\$ARG_LINES"
 MARKERS=""
 for _arg in "\$@"; do
   if MARKERS="\$(extract_autopilot_frame_markers AUTOPILOT-AUTHOR "\$_arg")"; then

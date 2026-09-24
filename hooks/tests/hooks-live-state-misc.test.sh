@@ -332,5 +332,95 @@ assert_r139_depth0_delegate_gate() {
 
 assert_r139_depth0_delegate_gate
 
+# assert_r140_live_state_dir_conte
+# Row 140: (a) findmnt notFound with NO '*' default must take /proc/mounts;
+# (b) liveUsable lag guard Math.max(older transcript, live total);
+# (c) live-path stderr carries (statusline).
+#
+# # RED (b) locally: collapsing Math.max(usage.tokens, liveTotal) → usage.tokens
+# made the 160k / T2 assertion fail (transcript 130k only).
+assert_r140_live_state_dir_conte() {
+  local LIB="$REPO_ROOT/scripts/lib/live-state-dir.js"
+  local TMP CAND PROC OUT
+  TMP="$(mktemp -d "/dev/shm/r140-live-state-dir-XXXXXX")"
+  CAND="$TMP/cand"
+  mkdir -m 0700 "$CAND"
+  PROC="$TMP/mounts"
+  printf 'rootfs / ext4 rw 0 0\ntmpfs %s tmpfs rw 0 0\n' "$CAND" > "$PROC"
+
+  OUT="$(node -e '
+const { resolveLiveDir } = require(process.argv[1]);
+const dir = process.argv[2];
+const proc = process.argv[3];
+const r = resolveLiveDir({
+  env: { AUTOPILOT_LIVE_DIR: dir },
+  execFile: () => {
+    const err = new Error("ENOENT");
+    err.code = "ENOENT";
+    throw err;
+  },
+  procMountsPath: proc,
+  warn: () => {},
+});
+process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
+' "$LIB" "$CAND" "$PROC")"
+  if printf '%s' "$OUT" | grep -q '"source":"ssd-fallback"'; then
+    bad "notFound+tmpfs /proc/mounts must not be ssd-fallback, got $OUT"
+  elif printf '%s' "$OUT" | grep -q '"source":"override"'; then
+    ok "notFound without wildcard uses /proc/mounts tmpfs (got $OUT)"
+  else
+    bad "notFound+tmpfs /proc/mounts expected override, got $OUT"
+  fi
+
+  local SID LIVE TRANSCRIPT PAYLOAD RC ERR WRITTEN ROWTS
+  SID="bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+  LIVE="$TMP/live"
+  mkdir -p "$LIVE/context" "$TMP/state"
+  chmod 0700 "$LIVE"
+  WRITTEN="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+  ROWTS="$(date -u -d '5 seconds ago' +%Y-%m-%dT%H:%M:%S.000Z)"
+  cat > "$LIVE/context/$SID.json" <<JSON
+{"cc_version":"2.1.263","schema_version":1,"session_id":"$SID",
+ "model":{"display_name":"Opus 5","id":"claude-opus-5"},
+ "context_window":{"context_window_size":200000,"total_input_tokens":160000,
+   "current_usage":{"input_tokens":10000,"cache_read_input_tokens":149000,"cache_creation_input_tokens":1000,"output_tokens":10},
+   "used_percentage":80},
+ "written_at":"$WRITTEN"}
+JSON
+  TRANSCRIPT="$TMP/transcript.jsonl"
+  printf '%s\n' \
+    "{\"timestamp\":\"$ROWTS\",\"message\":{\"usage\":{\"input_tokens\":10000,\"cache_read_input_tokens\":119000,\"cache_creation_input_tokens\":1000,\"output_tokens\":10}}}" \
+    > "$TRANSCRIPT"
+  PAYLOAD="{\"transcript_path\":\"$TRANSCRIPT\",\"session_id\":\"$SID\"}"
+  export AUTOPILOT_LIVE_DIR="$LIVE"
+  export AUTOPILOT_CONTEXT_BUDGET_DIR="$TMP/state"
+  export CLAUDE_CODE_SESSION_ID="$SID"
+  printf '%s' "$PAYLOAD" | node "$HOOK" 2>"$TMP/err.txt"
+  RC=$?
+  ERR="$(cat "$TMP/err.txt")"
+  rm -rf "$TMP"
+  unset AUTOPILOT_LIVE_DIR AUTOPILOT_CONTEXT_BUDGET_DIR CLAUDE_CODE_SESSION_ID
+
+  case "$ERR" in
+    *"is 160k tokens"*)
+      ok "lag guard uses max(130k older transcript, 160k live)" ;;
+    *)
+      bad "expected decision on 160k not 130k, rc=$RC stderr=[$ERR]" ;;
+  esac
+  if [ "$RC" -eq 2 ]; then
+    ok "lag guard 160k fires T2 (130k would be T1-only)"
+  else
+    bad "expected exit 2 from 160k T2, got rc=$RC stderr=[$ERR]"
+  fi
+  case "$ERR" in
+    *"(statusline)"*)
+      ok "live-path windowSource annotated (statusline)" ;;
+    *)
+      bad "live-path must include (statusline), got [$ERR]" ;;
+  esac
+}
+
+assert_r140_live_state_dir_conte
+
 printf '\n%s\n' "hooks-live-state-misc: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

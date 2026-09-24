@@ -435,15 +435,17 @@ function capabilityEndpointSelector(resolvedEndpoint) {
   return resolvedEndpoint === '' ? '@none' : resolvedEndpoint;
 }
 
-// Mirror probe-engine-capability.sh `_EFFORT_CONSUMER` (do not re-derive).
-// Effort-bearing tuples on non-consuming runners stay unobserved there
-// (quota: unknown); query the effort-less partition instead.
+// Mirror probe-engine-capability.sh `_EFFORT_CONSUMER` PLUS the agy exemption
+// (`[ "$RUNNER" != "agy" ]` on the non-consumer rejection). agy CLI never
+// takes --effort, but folds effort into the model id, so exact-effort
+// capability rows ARE authorizing observations. Do not re-derive.
 function runnerConsumesEffort(runner) {
   switch (String(runner || '')) {
     case 'codex':
     case 'grok':
     case 'qoderclicn':
     case 'opencode':
+    case 'agy':
       return true;
     default:
       return false;
@@ -452,7 +454,7 @@ function runnerConsumesEffort(runner) {
 
 // Build fail-closed exact capability `current` argv from the resolver tuple.
 // Always includes --endpoint. Include --effort only when the runner consumes it
-// (codex/grok/qoderclicn/opencode); otherwise omit so admission hits the
+// (codex/grok/qoderclicn/opencode/agy); otherwise omit so admission hits the
 // effort-less partition the probe actually stamps.
 function capabilityCurrentArgs(resolvedEngine, storeRole) {
   const args = [

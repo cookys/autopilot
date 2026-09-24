@@ -12,6 +12,13 @@
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
+# Harness GIT_CONFIG_COUNT protocol.*=never overrides repo-level protocol.file.allow
+# and makes 22b/22m control pushes fail closed (exit 128 / helper never invoked).
+unset GIT_CONFIG_COUNT GIT_ALLOW_PROTOCOL
+for _git_cfg_i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  unset "GIT_CONFIG_KEY_${_git_cfg_i}" "GIT_CONFIG_VALUE_${_git_cfg_i}"
+done
+unset _git_cfg_i
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 
@@ -42,6 +49,9 @@ PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
 EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
 mkdir -p "$EMPTY_SESSION_MODE_DIR"
+# Host/agent ~/.autopilot/session-mode L4–L6 markers must not gate hermetic
+# dispatch-hetero invocations (the node required-change matrix inherits process.env).
+export AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR"
 RETAIN_UNTIL="$(( $(date +%s) + 3600 ))"
 
 # Canonical agy native-envelope fixture. The response deliberately contains
@@ -1385,6 +1395,16 @@ fs.writeFileSync(
     sources_path: missionSourcesRelative,
   }, null, 2)}\n`,
 );
+// Host dogfood governance is often enforcement_mode=shadow (SHADOW markers).
+// Managed postcheck requires verifyMissionRoutingProjection READY.
+const fixtureGovPath = path.join(repo, '.claude', 'owner-kernel-governance.json');
+if (fs.existsSync(fixtureGovPath)) {
+  const gov = JSON.parse(fs.readFileSync(fixtureGovPath, 'utf8'));
+  if (gov.mission_convergence && typeof gov.mission_convergence === 'object') {
+    gov.mission_convergence.enforcement_mode = 'enforce';
+    fs.writeFileSync(fixtureGovPath, `${JSON.stringify(gov, null, 2)}\n`);
+  }
+}
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
   '- implementer_engine: gpt-5.5',
   '- implementer_effort: high',

@@ -314,7 +314,7 @@ EOF
 
   local va_cap_event="$store_dir/va_cap.json"
   cat > "$va_cap_event" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"$quota_status","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"$quota_status","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
 EOF
   env ENGINE_CAPABILITY_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$va_cap_event" > /dev/null 2>&1
   if [ $? -ne 0 ]; then
@@ -1223,7 +1223,7 @@ EOF
   assert_eq "$rc" "3"
   assert_nogo_json "$out" "quota"
 
-  echo "--- Case 11.4: exact high/@none available admits despite legacy unknown (verification-author) ---"
+  echo "--- Case 11.4: effort-less/@none available admits verification-author (anthropic-compatible has no exact-effort partition) ---"
   rm -rf "$STORE_BASE/exact_va_quota"
   mkdir -p "$STORE_BASE/exact_va_quota"
   # Scorecard: implementer row not required for VA path; seed VA only.
@@ -1233,14 +1233,8 @@ EOF
   env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_va_quota" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_va_quota/va_score.json" > /dev/null 2>&1 || {
     echo "FATAL: engine-scorecard.js failed setup (exact_va_quota)"; exit 1
   }
-  cat > "$STORE_BASE/exact_va_quota/cap_legacy.json" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0,"reset_at":null,"evidence":"legacy-ambiguous"}}}
-EOF
-  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_va_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_va_quota/cap_legacy.json" > /dev/null 2>&1 || {
-    echo "FATAL: engine-capability-state.js failed setup (exact_va_quota legacy)"; exit 1
-  }
   cat > "$STORE_BASE/exact_va_quota/cap_exact.json" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"exact-high-null"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"exact-high-null"}}}
 EOF
   env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_va_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_va_quota/cap_exact.json" > /dev/null 2>&1 || {
     echo "FATAL: engine-capability-state.js failed setup (exact_va_quota exact)"; exit 1

@@ -114,14 +114,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: agy `-p` self-aborts at 5 min, a >~40-line brief at low ends in silent no_op, `run_command` 10 s cap backgrounds test loops; add scorecard dimensions or auto-degrade the seat with a warning.
 
-### Managed rail: a non-git `--repo` still consumes a Mission claim before intake rejects it
-- **Status**: open
-- **Trigger**: any intake rejection between the Mission claim and `inspectSealedCampaignContract` is measured burning an attempt again
-- **Effort**: Fix
-- **Source**: v2.36.42 pre-merge review (sonnet), 2026-09-14
-- **Pointer**: none
-- **Context**: `projectMissionMode` does not touch git, so the claim runs before repo identity is known. Reject on `canonicalRepoIdentity` throw pre-claim + a non-git fixture.
-
 ### agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT
 - **Status**: open
 - **Trigger**: the next agy-rail dispatch refused by `agy_argv_ceiling_assert`, or any work that proposes routing `dispatch-review.sh` / `dispatch-hetero.sh` / `dispatch-author.sh` through stream-json.
@@ -553,14 +545,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md
 - **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE…
 
-### `prune_tmp_residue` covers 7 prefixes; 25 scripts create `/tmp` dirs
-- **Status**: open
-- **Trigger**: `/tmp` 再次被 autopilot 殘留撐大，或有人要為 CI runner 加磁碟配額時。
-- **Effort**: S
-- **Source**: 2026-08-06 dispatch residue cleanup（782 項 `/tmp`、1.9 GB）；2026-08-08 複驗仍成立；2026-08-16 全掃擴大範圍——原標題「test-fixture…
-- **Pointer**: docs/backlog/prune-tmp-residue-covers-7-prefixes-25-scripts-create-tmp-dirs.md
-- **Context**: `prune_tmp_residue` 只被四個 dispatch 腳本呼叫，共 7 個…
-
 ### `next-touch-validation.test.sh` asserts against un-versioned local Mission state
 - **Status**: open
 - **Trigger**: 立刻——它在 CI 上**永遠**紅；或下次有人相信「本機全套綠」等於「CI 綠」時。
@@ -680,14 +664,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Recover stale backlog admission locks safely
-- **Status**: open
-- **Trigger**: When a backlog admission is interrupted or the lock directory exists without a live owning admission process.
-- **Effort**: S
-- **Source**: depth-0; qwen-p4
-- **Pointer**: docs/backlog/recover-stale-backlog-admission-locks-safely.md
-- **Context**: Backlog admission correctly fails closed on a held lock, but an uncatchable process crash can leave the lock directory behind and block all later admissions until manual recovery.
-
 ### Controller helper API fail-closed hardening
 - **Status**: open
 - **Trigger**: Before these helpers are reused outside the current production Engine call sites or exposed to caller-supplied state/evidence.
@@ -776,22 +752,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
-### Verification-author seats on agy / cc-shim / anthropic-compatible are structurally NO-GO under the exact-tuple quota gate
-- **Status**: open
-- **Trigger**: next time a VA seat other than codex/grok/qoderclicn is configured (GLM-5.3@anthropic-compatible is VA-qualified, event 142, yet unroutable on 2026-08-29).
-- **Effort**: Fix
-- **Source**: l6-verdict-stability-p1 roster rotation 2026-08-29 (commits 8d6f8786, 83d993a5).
-- **Pointer**: docs/backlog/verification-author-seats-on-agy-cc-shim-anthropic-compatible-are-structurally-n.md
-- **Context**: `dispatch-contract.js` always queries capability state with `--effort <resolver effort>` (and `withResolverConfig` injects `verification_author_effort: high` when absent), but `probe-engine-capability.sh` refuses to observe an…
-
-### No supported withdraw for a never-granted DRAFT Mission adoption; graph revisions mint unbounded lineages
-- **Status**: open
-- **Trigger**: next time a frozen execution graph must be revised before or between grants (three adoptions now exist for `qualification-verdict-stability`: 2e784929 DRAFT, 83828e5e ACTIVE with an unreleasable live claim, 420ac261 current).
-- **Effort**: S
-- **Source**: mission-lineage authoring 2026-08-29 (commits 0279dccc, 5402cbd5, 500703b1).
-- **Pointer**: docs/backlog/no-supported-withdraw-for-a-never-granted-draft-mission-adoption-graph-revisions.md
-- **Context**: `mission prepare` binds the adoption key to {repo_identity, intent, acceptance hashes} (`src/engine/mission-policy.js:195-233`) and pins the graph digest; revising the graph re-derives the same key and fails `MISSION_BINDING_MISMATCH`…
-
 ### `hooks/tests/run.sh` is red on `develop` — sealed campaign `verify_cmd` is unsatisfiable
 - **Status**: open
 - **Trigger**: already fired (salvage campaign `campaign-v1-e9bcae52…` `acceptance_failed` on `bash hooks/tests/run.sh` with a byte-identical cherry-pick; seven suites red on base 500703b1: codex-plugin-package, execution-profile,…
@@ -832,14 +792,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
-### Plan-loop freeze: dispatcher and checker disagree on disposition shape; terminal artifact carries no dispositions
-- **Status**: open
-- **Trigger**: the next plan loop that reaches the generation cap, or any change to `loadDispositionFile` / plan-artifact mode.
-- **Effort**: Fix
-- **Source**: `docs/projects/2026-09-05-statusline-live-context-feed/ledger/plan-review/README.md`
-- **Pointer**: docs/backlog/plan-loop-freeze-dispatcher-and-checker-disagree-on-disposition-shape-terminal-a.md
-- **Context**: `check-phase-review-receipt.js --plan-artifact` requires `disposition` on every artifact finding and `candidate_blocker` on every disposition entry; `dispatch-plan-review.js` writes neither into the terminal artifact and its disposition…
-
 ### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
 - **Status**: open
 - **Trigger**: the next observed T2/T1 message without "(statusline)" on a host that has the live writer; or before shortening/lengthening `DEFAULT_MAX_AGE_MS`.
@@ -856,44 +808,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/stale-closed-findings-stamps-on-chain-entries-written-by-pre-v2-36-3-finalize-ha.md
 - **Context**: v2.36.3 made `review-chain-derive` evidence-only (chain-entry `closed_findings` stamps are output, ignored as input) and the checker refuses a receipt whose `closed_findings` names an aborted generation.
 
-### `hetero-review-loop --exclude` allowlist is autopilot's own tree — consumer repos cannot shrink a review payload
-- **Status**: open
-- **Trigger**: the next consumer-repo report of `Exclude pathspec '…' is not permitted by allowlist` for a data/generated directory, or the next agy-seat payload overflow where `--exclude` was the only lever.
-- **Effort**: S
-- **Source**: 7840hs / llm-playground plan 066, 2026-09-06
-- **Pointer**: docs/backlog/hetero-review-loop-exclude-allowlist-is-autopilot-s-own-tree-consumer-repos-cann.md
-- **Context**: `EXCLUDE_ALLOWLIST` (hetero-review-loop.js:29-47) hardcodes `platforms/**`, `docs/projects/**`, lockfiles… llm-playground plan 066 needed to exclude `benchmarks/matrix` (139 regenerated shard JSONs, most of the diff) to get the agy…
-
-### agy seat payload overflow is discovered per seat at dispatch time — the loop could pre-compute it and fail before spending the other seats
-- **Status**: open
-- **Trigger**: the next generation where an agy seat returns no_verdict with `agy_argv_ceiling` in raw_log while the other seats completed.
-- **Effort**: S
-- **Source**: 7840hs / llm-playground plan 066, 2026-09-06
-- **Pointer**: docs/backlog/agy-seat-payload-overflow-is-discovered-per-seat-at-dispatch-time-the-loop-could.md
-- **Context**: `dispatch-review.sh` refuses an agy payload above `MAX_ARG_STRLEN` by design (named reason, no execve failure).
-
 ### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
 - **Status**: open
 - **Trigger**: owner decides to open this; AND eval ON/OFF evidence exists for the affected skills (scorecard-first rule — an unevidenced rewrite of ceo-agent/dev-flow prose is an unevidenced trust change).
 - **Effort**: M
 - **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 - **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
-
-### depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher
-- **Status**: open
-- **Trigger**: a measured depth-0 Bash latency complaint, or the next revision of `depth0-delegate-gate`.
-- **Effort**: S
-- **Source**: v2.36.1 pre-merge review (opus), 2026-09-05; `docs/plans/2026-09-05-statusline-live-context-feed.md` §4 P3.1
-- **Pointer**: docs/backlog/depth0-delegate-gate-bash-matcher-is-an-expansion-over-the-frozen-plan-matcher.md
-- **Context**: plan §4 P3.1 lists `WebFetch|WebSearch|Read|Grep|Glob|Agent|Skill|Task`; the shipped hook also matches `Bash` and classifies read-shaped commands (`grep|rg|find|cat|sed -n|head|tail`) with a duplicated 35-line shell lexer, adding ~17…
-
-### live-state-dir / context-budget test strength — two surviving mutants, one vacuous-off-Linux assertion, injection-test residue
-- **Status**: open
-- **Trigger**: next time a consult is dispatched on a host whose qc panel
-- **Effort**: S
-- **Source**: v2.36.1 pre-merge review round 2 (opus), 2026-09-05
-- **Pointer**: docs/backlog/live-state-dir-context-budget-test-strength-two-surviving-mutants-one-vacuous-of.md
-- **Context**: On `cookys-openclaw`, `resolve-review-loop.sh` emits
 
 ### CI runs only on version bumps — ordinary develop pushes never execute the suite, so regressions pile up unseen
 - **Status**: open

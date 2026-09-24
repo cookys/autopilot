@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.36.95 — wave-1b：10 個維護列整合（bundle 續集）
+
+- **Managed rail（row 15）**：非 git `--repo` 的 intake 在確認身分前就先拿走 Mission claim；改成在 `canonicalRepoIdentity` 檢查前就先擋，並補一個非 git fixture。
+- **depth0-delegate-gate（row 139）**：header 文件補齊 `Bash` 對照 P3.1 delta 的引用，並新增對應測試案例。
+- **live-state-dir（row 140）**：context-budget 測試補強兩個存活 mutant 與一個 vacuous 斷言。
+- **prune-tmp-residue（row 93）**：`/tmp` 清理改用共用 registry 涵蓋更多前綴，不再只認呼叫端傳入的 7 個。
+- **admit-backlog-follow-ups（row 109）**：backlog 承接鎖改用帶 PID 的鎖檔，可安全復原遺留鎖，不用手動介入。
+- **dispatch-contract（row 122）**：cc-shim／anthropic-compatible 的 verification-author 席位現在能解析 quota，不再一律結構性 NO-GO。
+- **mission runtime（row 123）**：從未授與的 DRAFT adoption 現在可以 withdraw，graph 修訂不再堆出無限 lineage。
+- **check-phase-review-receipt（row 131）**：plan-loop dispatcher 與 checker 的 disposition 形狀凍結一致，`dispositions` 來源不再強制要求 `candidate_blocker`。
+- **hetero-review-loop（row 136）**：`--exclude` 改成消費端可宣告的 allowlist，不再只認 autopilot 自己的樹（`src/**` 仍照原樣拒收）。
+- **hetero-review-loop（row 137）**：agy 席位在派工前就先檢查 payload 是否超過 argv ceiling，不必等耗掉其他席位才發現。
+- **落地驗證**：10 列全數落地（rlr 131/136/137、hlsm 139/140、dlrm 93/109/122/123、mrce 15）；41 個 gate suite 加上
+  `check-js-syntax`／`sync-codex-plugin-skills --check`／`validate.sh` 全綠；`claude-fable-5-1` 高強度複審 `SHIP-AS-IS`（僅
+  3 個 🔵 CUT/FOLLOW-UP：`isAcceptedConsumerRow` 的兩段式 prefix 啟發式仍可能被審過的 config 列放寬、`runnerConsumesEffort`
+  的硬編碼 consumer 清單與 `probe-engine-capability.sh` 需共用單一來源、`admit-backlog-follow-ups` 的 `releaseLock` 現在無
+  try/catch 包裹）。row 122 首輪整合觸發 5 個 gate suite 只在本分支紅（VA quota／population-count pin／git-init fixture），
+  追加 3 個修補 commit 後全綠：re-pin Population B 42→43／explicit-switch 6→7、`implementation-campaign-routing` 的
+  shadow-admit 測試 fixture 補 `git init`、`dispatch-contract` 把 `agy` 放回 effort-consuming 集合並移除 fixture 裡虛構的
+  `--effort`。BACKLOG 刪 10 列，含 9 個孤兒 sidecar。
+
+prose-justification: 本版沒有改 skill 散文，只動 scripts/hooks/src/tests；相對 v2.35.2 基線的散文增長是先前版本累積的，這一行只讓當版區段滿足 north-star 閘門。
+
 ## v2.36.94 — 考試傳輸補上 chat completions，no_op 裡的工具文字會警告
 
 - **OpenCode Go 第三條路。** `QRP_HTTP_PROTOCOL=chat_completions` 打 `POST /v1/chat/completions`，Bearer，`stream:true`。非串流會悶到思考結束，2026-09-23 一輪 mimo 約 300 秒 `fetch failed`；同一條改串流 3 秒回 SSE。`reasoning_content` 不是答案。`User-Agent: autopilot-qualify/1.0`。Claude CLI 的 `QRP_CLI_EFFORT` 會轉成 `--effort`（2.1.281：`low|medium|high|xhigh|max`）；先前這個值被丟掉，low 席位跑的是 CLI 預設。

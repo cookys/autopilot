@@ -215,9 +215,164 @@ assert_r93_prunetmpresidue_cove() {
     "r93: non-registered aged pattern kept"
 }
 
+assert_r109_recover_stale_backlo() {
+  # RED at base (mkdirSync dir lock): existing lock dir throws unconditionally:
+  #   admit-backlog-follow-ups: backlog admission lock unavailable: EEXIST: file already exists, mkdir '<backlog>.admission.lock'
+  # A crashed admission left an empty dir (or a PID file) and every later admit failed forever.
+  local SCRIPT="$REPO_ROOT/scripts/admit-backlog-follow-ups.js"
+  local SCRATCH="$TEST_TMP/r109-admit"
+  mkdir -p "$SCRATCH"
+
+  write_r109_portfolio() {
+    node - "$1" "$2" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const suffix = process.argv[3];
+const material = {
+  context: `r109 context ${suffix}`,
+  item_id: `r109-${suffix}`,
+  proposed_backlog_title: `r109 title ${suffix}`,
+  trigger: `When r109 ${suffix}.`,
+};
+const fingerprint = crypto.createHash('sha256').update(JSON.stringify(material)).digest('hex');
+const scoreBreakdown = {
+  aggregate_score: 7,
+  acceptance: 0,
+  risk: 3,
+  value: 4,
+  conservative_cost: 8,
+  reviewer_count: 2,
+  per_reviewer: [
+    { reviewer_id: 'review-a', acceptance: 0, risk: 1, value: 2, cost: 4 },
+    { reviewer_id: 'review-b', acceptance: 0, risk: 2, value: 2, cost: 8 },
+  ],
+};
+fs.writeFileSync(process.argv[2], JSON.stringify({
+  schema_version: 1,
+  aggregation_policy: 'union-on-verified-must-fix+fixed-budget-score',
+  roster: ['review-a', 'review-b'],
+  selected_mvp: [],
+  cut_list: [{
+    item_id: material.item_id,
+    title: material.proposed_backlog_title,
+    reason: 'outside-optimal-fixed-budget-portfolio',
+    score_breakdown: scoreBreakdown,
+  }],
+  backlog_candidates: [{
+    fingerprint,
+    item_id: material.item_id,
+    proposed_backlog_title: material.proposed_backlog_title,
+    context: material.context,
+    trigger: material.trigger,
+    sources: ['review-a', 'review-b'],
+    aggregate_score: 7,
+    score_breakdown: scoreBreakdown,
+    evidence: [
+      { reviewer_id: 'review-a', evidence_kind: 'verified-observation', observation: 'No WAL path exists.' },
+      { reviewer_id: 'review-b', evidence_kind: 'spec', observation: 'P3 omits storage authority.' },
+    ],
+  }],
+  score_breakdown: {
+    budget: 0,
+    budget_used: 0,
+    budget_remaining: 0,
+    selected_aggregate_score: 0,
+    optimization_tiebreakers: [
+      'maximum-aggregate-score',
+      'fewest-items',
+      'lowest-cost',
+      'lexical-item-id',
+    ],
+  },
+  terminal_condition: {
+    state: 'NO_MVP_ITEMS_REQUIRED',
+    bounded: true,
+    acceptance_prerequisites_satisfied: true,
+    verified_must_fix_satisfied: true,
+    current_scope_expanded: false,
+    reason: 'Frozen prerequisites and verified MUST-FIX union selected; optional score optimum computed.',
+  },
+}));
+NODE
+  }
+
+  run_admit() {
+    local input="$1" backlog="$2" ticket="$3"
+    local out rc
+    set +e
+    out="$(timeout 20 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+      node "$SCRIPT" --input "$input" --backlog "$backlog" --current-ticket "$ticket" 2>&1)"
+    rc=$?
+    set -e
+    printf '%s\n' "$out"
+    return "$rc"
+  }
+
+  # --- dead PID file lock is stolen ---
+  local DEAD_DIR="$SCRATCH/dead"
+  mkdir -p "$DEAD_DIR"
+  printf '# backlog\n' > "$DEAD_DIR/BACKLOG.md"
+  write_r109_portfolio "$DEAD_DIR/candidates.json" dead
+  sleep 30 &
+  local DEAD_PID=$!
+  kill "$DEAD_PID" >/dev/null 2>&1 || true
+  wait "$DEAD_PID" 2>/dev/null || true
+  printf '%s\n' "$DEAD_PID" > "$DEAD_DIR/BACKLOG.md.admission.lock"
+  local DEAD_OUT DEAD_RC
+  set +e
+  DEAD_OUT="$(run_admit "$DEAD_DIR/candidates.json" "$DEAD_DIR/BACKLOG.md" r109-dead)"
+  DEAD_RC=$?
+  set -e
+  assert_eq "$DEAD_RC" "0" "r109: stale dead-pid lock is stolen and admission completes"
+  assert_contains "$DEAD_OUT" '"artifact_type": "backlog_admission_receipt"' \
+    "r109: dead-pid steal emits admission receipt"
+  assert_file_absent "$DEAD_DIR/BACKLOG.md.admission.lock" \
+    "r109: lock file released after stale steal"
+
+  # --- live PID file lock is not stolen ---
+  local LIVE_DIR="$SCRATCH/live"
+  mkdir -p "$LIVE_DIR"
+  printf '# backlog\n' > "$LIVE_DIR/BACKLOG.md"
+  write_r109_portfolio "$LIVE_DIR/candidates.json" live
+  sleep 30 &
+  local LIVE_PID=$!
+  printf '%s\n' "$LIVE_PID" > "$LIVE_DIR/BACKLOG.md.admission.lock"
+  local LIVE_OUT LIVE_RC
+  set +e
+  LIVE_OUT="$(run_admit "$LIVE_DIR/candidates.json" "$LIVE_DIR/BACKLOG.md" r109-live)"
+  LIVE_RC=$?
+  set -e
+  kill "$LIVE_PID" >/dev/null 2>&1 || true
+  wait "$LIVE_PID" 2>/dev/null || true
+  assert_neq "$LIVE_RC" "0" "r109: live holder lock is refused (never stolen)"
+  assert_contains "$LIVE_OUT" "held by a live process" \
+    "r109: live hold reports timeout rather than stealing"
+  assert_eq "$(tr -d '\n' < "$LIVE_DIR/BACKLOG.md.admission.lock")" "$LIVE_PID" \
+    "r109: live holder lock file still records the live pid"
+
+  # --- legacy empty directory lock is cleared, not busy-spun ---
+  local LEGACY_DIR="$SCRATCH/legacy"
+  mkdir -p "$LEGACY_DIR"
+  printf '# backlog\n' > "$LEGACY_DIR/BACKLOG.md"
+  write_r109_portfolio "$LEGACY_DIR/candidates.json" legacy
+  mkdir "$LEGACY_DIR/BACKLOG.md.admission.lock"
+  local LEGACY_OUT LEGACY_RC
+  set +e
+  LEGACY_OUT="$(run_admit "$LEGACY_DIR/candidates.json" "$LEGACY_DIR/BACKLOG.md" r109-legacy)"
+  LEGACY_RC=$?
+  set -e
+  assert_eq "$LEGACY_RC" "0" "r109: empty legacy directory lock is migrated/cleared"
+  assert_contains "$LEGACY_OUT" '"artifact_type": "backlog_admission_receipt"' \
+    "r109: legacy dir lock does not hang; admission completes"
+  if [ -d "$LEGACY_DIR/BACKLOG.md.admission.lock" ]; then
+    fail "r109: leftover directory-shaped lock after admission"
+  fi
+}
+
 assert_r3_run_ledger_sh_lease
 assert_r16_dispatch_foreman_tes
 assert_r19_pin_store_hardening
 assert_r92_reap_dispatch_branch
 assert_r93_prunetmpresidue_cove
+assert_r109_recover_stale_backlo
 finalize_test

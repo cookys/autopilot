@@ -13,6 +13,7 @@ const path = require('path');
 const { readJson, validateJsonSchema } = require('./validate-json-schema');
 const { validateCanonicalPortfolioOutput } = require('./review-mvp-portfolio');
 const { validateFinalPanelReceipt } = require('../src/engine/campaign-composition');
+const { acquireLock, releaseLock } = require('./lib/jsonl-store');
 
 const CAMPAIGN_RECEIPT_SCHEMA = readJson(
   path.join(__dirname, '..', 'schemas', 'implementation-campaign-receipt.schema.json'),
@@ -240,8 +241,26 @@ function entry(candidate) {
   ].join('\n');
 }
 
+function clearLegacyDirectoryLock(lockFile) {
+  let st;
+  try {
+    st = fs.lstatSync(lockFile);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  if (!st.isDirectory()) return;
+  try {
+    fs.rmdirSync(lockFile);
+  } catch (error) {
+    throw new Error(
+      `backlog admission lock unavailable: legacy directory lock is not empty at ${lockFile}: ${error.message}`,
+    );
+  }
+}
+
 function main() {
-  let lockDirectory = null;
+  let lockFile = null;
   try {
     const options = parseArgs(process.argv.slice(2));
     const candidates = [];
@@ -261,9 +280,15 @@ function main() {
       byFingerprint.set(candidate.fingerprint, candidate);
     }
 
-    lockDirectory = `${options.backlog}.admission.lock`;
+    const candidateLockPath = `${options.backlog}.admission.lock`;
+    clearLegacyDirectoryLock(candidateLockPath);
     try {
-      fs.mkdirSync(lockDirectory);
+      acquireLock({
+        storeDir: path.dirname(options.backlog),
+        lockFile: candidateLockPath,
+        name: 'backlog admission',
+      });
+      lockFile = candidateLockPath;
     } catch (error) {
       throw new Error(`backlog admission lock unavailable: ${error.message}`);
     }
@@ -319,8 +344,8 @@ function main() {
     process.stderr.write(`admit-backlog-follow-ups: ${error.message}\n`);
     process.exitCode = 2;
   } finally {
-    if (lockDirectory !== null) {
-      try { fs.rmdirSync(lockDirectory); } catch (_error) { /* fail closed already occurred */ }
+    if (lockFile !== null) {
+      releaseLock(lockFile);
     }
   }
 }

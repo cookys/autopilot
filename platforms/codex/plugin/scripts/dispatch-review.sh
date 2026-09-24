@@ -1512,13 +1512,34 @@ else
     emit_no_verdict "$AGY_CEILING_REASON"
   fi
   AGY_BWRAP_ARGS=(--ro-bind / / --dev /dev --proc /proc)
-  for AGY_APP_SUBDIR in log crashes; do
+  for AGY_APP_SUBDIR in crashes; do
     AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"
     if [ -d "$AGY_APP_TARGET" ]; then
       mkdir -p "$AGY_CWD/$AGY_APP_SUBDIR"
       AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")
     fi
   done
+  # TOOL CONTAINMENT (2026-09-24, agy 1.2.9): bwrap confines the filesystem, but
+  # --dangerously-skip-permissions left every network tool live — `search_web`
+  # (not a permission action, no deny entry can block it) and `read_url` — so a
+  # private diff could leave as search queries. The review now runs under the
+  # tool-less agent owned by lib/agy-containment.js, bound over agents/, and
+  # brain/ + log/ are bound to scratch so the post-run audit reads THIS run's
+  # transcript and log alone. The audit, not the exit code, decides: agy exits 0
+  # even when it silently falls back to its fully tooled default agent.
+  AGY_CONTAIN_JS="$_REVIEW_SELF_DIR/lib/agy-containment.js"
+  AGY_AGENT_NAME="$(node "$AGY_CONTAIN_JS" name)" \
+    || die_precondition "agy containment lib unusable: $AGY_CONTAIN_JS"
+  for AGY_APP_SUBDIR in agents brain log; do
+    AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"
+    # Mount point only: an empty dir in agy's own app dir (the root bind is read-only,
+    # so bwrap cannot create it). Every write inside it lands in scratch.
+    mkdir -p "$AGY_APP_TARGET" "$AGY_CWD/$AGY_APP_SUBDIR" \
+      || die_precondition "cannot prepare agy containment mount point: $AGY_APP_TARGET"
+    AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")
+  done
+  node "$AGY_CONTAIN_JS" write "$AGY_CWD/agents" \
+    || die_precondition "could not write the tool-less agy agent"
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
@@ -1528,10 +1549,20 @@ else
   bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
     --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
     "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$AGY_EFFORT" \
-    --dangerously-skip-permissions --output-format json --print-timeout "$TIMEOUT" \
+    --dangerously-skip-permissions --agent "$AGY_AGENT_NAME" \
+    --output-format json --print-timeout "$TIMEOUT" \
     > "$AGY_OUT" 2> "$AGY_ERR"
   AGY_RC=$?
+  AGY_BREACH=""
+  if [ "$AGY_RC" -eq 0 ]; then
+    AGY_BREACH="$(node "$AGY_CONTAIN_JS" audit "$AGY_CWD/log" "$AGY_CWD/brain" 2>&1)" || true
+  fi
   rm -rf "$AGY_CWD"; AGY_CWD=""
+  if [ -n "$AGY_BREACH" ]; then
+    printf '\n[dispatch-review: %s — agy response NOT parsed]\n' "$AGY_BREACH" >> "$RAW_LOG"
+    REVIEW_USAGE_JSON="null"
+    emit_no_verdict "$AGY_BREACH — fail-closed"
+  fi
   if [ "$AGY_RC" -ne 0 ]; then
     cat "$AGY_ERR" >> "$RAW_LOG"
     printf '\n[dispatch-review: agy exited non-zero (rc=%s) — native envelope and partial response NOT parsed]\n' \

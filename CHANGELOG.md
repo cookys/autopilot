@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.36.92 — agy 的工具收容改成白名單：考試與審查都不能再上網搜尋
+
+agy 1.2.9 讓收容靜默失效。它的權限系統只認 `command / write_file / read_file / read_url / mcp` 五個 action
+（實測：27 個候選名稱寫進 deny，其餘全被記成 `ignoring invalid deny entry ... unknown action` 後丟掉），
+所以 provider 強制的 `edit_file / web_search / web_fetch` 從沒生效；網頁搜尋工具 `search_web` 根本不是權限 action，任何 deny 都擋不到。
+一題考試探測裡，模型上網搜了 8 次考卷自己的規則詞彙（本 repo 是公開的），單題 203 秒、超過 180 秒預算。
+
+- **收容改成白名單**：每次 agy 呼叫都加 `--agent`，跑在一個自訂 agent 底下（`excludeDefaultComponents: true`、`tools: []`）。
+  以 `--dangerously-skip-permissions` 對五種逃逸提示（shell hostname、讀 canary 檔、抓網址、列目錄、開 subagent）實測：
+  預設 agent 洩漏了真實主機名與 canary，這個 agent 五題都沒有任何工具呼叫。`description` 是必填 —— 少了它 agy 會記
+  「Agent not found, falling back to default」然後以 exit 0 跑完整工具的預設 agent。
+- **結束碼不算數，事後稽核才算**：agy 在每種違規情境都 exit 0，所以改讀 agy 自己的 log 與 transcript —— 退回預設 agent、任何工具呼叫、
+  未知步驟類型、deny 項被判無效、缺 log 或 transcript ⇒ 失敗、答案丟棄。deny 清單保留為第二層，改成 1.2.9 真正的詞彙。
+- **兩條路徑共用一個擁有者**：新增 `scripts/lib/agy-containment.js`（agent 定義、deny 規則、稽核）。
+  `qualification-review-provider.js` 的考試 clone 與 `dispatch-review.sh` 的 agy 審查都用它 —— 後者原本只有 bwrap 限制檔案系統，
+  私有 diff 可能被當成搜尋字串送出。
+- 驗證：provider 測試 252 條（原 224，六種違規各自失敗、乾淨的通過）；dispatch-review 568 條。變異矩陣 6 項全紅（拿掉稽核／`--agent`／`description`／工具呼叫檢查）。
+  真實 agy 1.2.9：provider 正常題 45 秒、注入題 9 秒，transcript 都沒有工具呼叫；dispatch-review 刪除防呆的 diff 判 FIX-THEN-SHIP，注入題沒有洩漏。
+  完整 `run.sh --parallel` 374/374 綠。
+
+prose-justification: none（無 SKILL/reference 文字變動）。
+
 ## v2.36.91 — reviewer 席位解析不再是空的；過期的不及格考試不再算合格
 
 兩個缺陷疊在一起，讓 `resolve-dispatch-topology.js --resolve-live --role reviewer` 從 2026-08-21 起一直解出全 null：

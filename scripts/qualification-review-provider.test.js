@@ -144,9 +144,41 @@ const configDirFlag = process.argv.indexOf('--config-dir');
 if (configDirFlag !== -1) {
   try { configDirEntries = fs.readdirSync(process.argv[configDirFlag + 1]).sort(); } catch { /* n/a */ }
 }
+// agy emulation (an invocation carrying --agent): capture the clone's exam agent
+// markdown, then write the log + transcript a real agy leaves in HOME so the
+// provider's post-run containment audit has something to read. STUB_AGY_MODE
+// picks what agy "did": clean (default) | fallback | toolcall | invalid-deny |
+// unknown-step | no-log | no-transcript.
+let agentMd = null;
+const agentFlag = process.argv.indexOf('--agent');
+if (agentFlag !== -1) {
+  const agyRoot = path.join(process.env.HOME || '', '.gemini', 'antigravity-cli');
+  const agentName = process.argv[agentFlag + 1];
+  try { agentMd = fs.readFileSync(path.join(agyRoot, 'agents', agentName, 'agent.md'), 'utf8'); } catch { /* n/a */ }
+  const mode = process.env.STUB_AGY_MODE || 'clean';
+  const logLines = ['I0924 cli_setting_manager.go:92] CLI settings initialized'];
+  if (mode === 'fallback') logLines.push(\`W0924 session.go:91] Agent "\${agentName}" not found, falling back to default\`);
+  if (mode === 'invalid-deny') logLines.push('W0924 permission_grant_store.go:409] ignoring invalid deny entry "read_url(*)": unknown action "read_url"');
+  if (mode !== 'no-log') {
+    fs.mkdirSync(path.join(agyRoot, 'log'), { recursive: true });
+    fs.writeFileSync(path.join(agyRoot, 'log', 'cli-stub.log'), logLines.join('\\n') + '\\n');
+  }
+  if (mode !== 'no-transcript') {
+    const steps = [{ step_index: 0, type: 'USER_INPUT', content: 'prompt' }];
+    if (mode === 'toolcall') {
+      steps.push({ step_index: 1, type: 'PLANNER_RESPONSE', tool_calls: [{ name: 'search_web', args: {} }] });
+    }
+    if (mode === 'unknown-step') steps.push({ step_index: 1, type: 'GENERIC', content: 'tool result' });
+    steps.push({ step_index: steps.length, type: 'PLANNER_RESPONSE', content: 'answer' });
+    const logsDir = path.join(agyRoot, 'brain', 'conv-1', '.system_generated', 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.writeFileSync(path.join(logsDir, 'transcript.jsonl'),
+      steps.map((step) => JSON.stringify(step)).join('\\n') + '\\n');
+  }
+}
 fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({
   argv: process.argv.slice(2), env: process.env, stdin, settingsJson,
-  promptFileContent, configDirEntries,
+  promptFileContent, configDirEntries, agentMd,
 }));
 if (process.env.STUB_SPAWN_ORPHAN) {
   // A detached descendant in its OWN process group that INHERITS stdout: it
@@ -857,6 +889,45 @@ function roleOnlyRequest(role, content = 'x') {
   const modelIdx = captured.argv.indexOf('--model');
   check(modelIdx !== -1 && captured.argv[modelIdx + 1] === 'fake-model-exact',
     'agy argv still carries --model');
+  const agentIdx = captured.argv.indexOf('--agent');
+  check(agentIdx !== -1 && captured.argv[agentIdx + 1] === 'autopilot-toolless-reviewer',
+    'agy argv selects the tool-less exam agent');
+  check(typeof captured.agentMd === 'string', 'the clone carries the exam agent markdown at the path agy resolves');
+  for (const line of ['description: ', 'excludeDefaultComponents: true', 'tools: []', 'inheritMcp: false']) {
+    check(captured.agentMd.includes(line), `exam agent markdown declares ${JSON.stringify(line.trim())}`);
+  }
+}
+
+// ── 11b. agy post-run containment audit ────────────────────────────────────────
+// Why: agy exits 0 with a real-looking answer in every breach shape — an unknown
+// agent silently falls back to the fully-tooled default, an unknown deny entry is
+// silently dropped, and search_web ran 8 times in a live exam probe (2026-09-24,
+// agy 1.2.9). Only agy's own log + transcript show it, so each shape must fail
+// the case (no answer emitted), and a clean run must still pass.
+{
+  const template = path.join(tempRoot, 'agy-audit-clihome-template');
+  fs.mkdirSync(template, { recursive: true });
+  const agyEnv = (mode) => ({
+    QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude,
+    QRP_CLI_HOME: template, STUB_AGY_MODE: mode,
+  });
+  const clean = runProvider({ env: agyEnv('clean'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(clean.child.status, 0, 'clean agy run (no tool steps) passes the audit');
+  equal(parseResponse(clean.child).output.verdict, 'fail', 'clean agy run still delivers the model answer');
+  for (const [mode, pattern] of [
+    ['fallback', /fell back to its default/],
+    ['toolcall', /called tool\(s\) \[search_web\]/],
+    ['invalid-deny', /rejected a forced deny rule/],
+    ['unknown-step', /unexpected agy transcript step type "GENERIC"/],
+    ['no-log', /no agy log/],
+    ['no-transcript', /no agy transcript/],
+  ]) {
+    const { child } = runProvider({ env: agyEnv(mode), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+    equal(child.status, 1, `agy ${mode}: the case fails`);
+    check(/agy containment breach/.test(child.stderr) && pattern.test(child.stderr),
+      `agy ${mode}: stderr names the breach (${pattern})`);
+    check(!child.stdout.includes('"verdict'), `agy ${mode}: no answer is emitted`);
+  }
 }
 {
   // (a) negative: the OTHER kinds must NOT gain the flag (and, unlike agy,
@@ -911,11 +982,13 @@ function roleOnlyRequest(role, content = 'x') {
   const settings = JSON.parse(captured.settingsJson);
   const deny = settings.permissions && settings.permissions.deny;
   check(Array.isArray(deny), 'clone settings.json declares permissions.deny');
-  for (const rule of [
-    'command(*)', 'write_file(*)', 'edit_file(*)',
-    'read_file(*)', 'web_search(*)', 'web_fetch(*)',
-  ]) {
+  // agy 1.2.9's full permission-action vocabulary (probed 2026-09-24); names
+  // outside it are logged as invalid and dropped, so none may be forced.
+  for (const rule of ['command(*)', 'write_file(*)', 'read_file(*)', 'read_url(*)', 'mcp(*)']) {
     check(deny.includes(rule), `forced deny union includes ${rule}`);
+  }
+  for (const stale of ['edit_file(*)', 'web_search(*)', 'web_fetch(*)']) {
+    check(!deny.includes(stale), `forced deny union no longer forces ${stale} (not an agy 1.2.9 action)`);
   }
   check(deny.includes('custom(pre-existing)'),
     'the pre-existing operator-seeded deny entry survives the force-merge');

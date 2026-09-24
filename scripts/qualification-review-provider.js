@@ -792,6 +792,9 @@ function grokEffortClamp(effort, model, bin) {
   return staticClamp();
 }
 
+// Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
+const agyContainment = require('./lib/agy-containment');
+
 function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   const { spawn } = require('child_process');
   const fs = require('fs');
@@ -857,7 +860,8 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
         + '-- refusing to spawn agy flag-armed and uncontained',
       );
     }
-    args = ['-p', prompt, '--model', model, '--dangerously-skip-permissions'];
+    args = ['-p', prompt, '--model', model, '--dangerously-skip-permissions',
+      '--agent', agyContainment.AGENT_NAME];
   } else if (kind === 'kimi') {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
     // No effort flag exists for kimi (thinking is a boolean in config.toml).
@@ -1079,15 +1083,18 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
       // template is operator-seeded and reused across cases; forcing it here
       // means every clone gets the deny list even if the seed forgot it.
       //
-      // CAVEAT: this list is the tool vocabulary agy 1.1.22 exposes. A future
-      // agy version that adds a tool name outside this list regresses silently
-      // to soft-deny-shaped-as-allow for that tool — re-probe the tool
-      // vocabulary on every agy version bump, don't assume this list is still
-      // exhaustive.
-      const REQUIRED_DENY = [
-        'command(*)', 'write_file(*)', 'edit_file(*)',
-        'read_file(*)', 'web_search(*)', 'web_fetch(*)',
-      ];
+      // SECOND LAYER ONLY (2026-09-24, agy 1.2.9). This deny list is no longer
+      // the containment: agy 1.2.9 accepts exactly five permission actions —
+      // command / write_file / read_file / read_url / mcp (probed: 27 candidate
+      // names written as deny entries, the rest logged `ignoring invalid deny
+      // entry ... unknown action`). The old list's edit_file / web_search /
+      // web_fetch were silently dropped, and `search_web` is not a permission
+      // action at all, so NO deny entry can block it: an exam probe searched the
+      // web 8 times for the exam's own rule vocabulary. The real containment is
+      // the tool-less agent below (allowlist, not blocklist); this list stays as
+      // defense in depth, and agyContainment.auditAgyRun() fails the case if agy
+      // reports any entry here as invalid.
+      const REQUIRED_DENY = agyContainment.DENY_RULES;
       const settingsDir = path.join(cloneHome, '.gemini', 'antigravity-cli');
       const settingsPath = path.join(settingsDir, 'settings.json');
       let settings = {};
@@ -1133,6 +1140,19 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
           + 'to spawn agy flag-armed with unverified containment',
         );
       }
+
+      // PRIMARY CONTAINMENT (2026-09-24, agy 1.2.9): run the case under a custom
+      // agent with NO tools. `excludeDefaultComponents: true` drops the built-in
+      // toolset and `tools: []` grants nothing back — an allowlist, so a tool
+      // agy adds next version is excluded without anyone naming it. Probed with
+      // --dangerously-skip-permissions against five escape prompts (shell
+      // hostname, read a canary file, fetch a URL, list the dir, spawn a
+      // subagent): the default agent leaked the real hostname and the canary;
+      // this agent ran zero tools on all five.
+      // `description` is REQUIRED: without it agy logs `Agent "<name>" not
+      // found, falling back to default` and runs the fully-tooled default agent
+      // with exit 0 — agyContainment.auditAgyRun() treats that log line as a breach.
+      agyContainment.writeToollessAgent(path.join(settingsDir, 'agents'));
     } else if (kind === 'qoderclicn') {
       // qoderclicn exposes a real --config-dir flag (verified live: pointing it at
       // an empty dir made the CLI report "Not logged in", i.e. it stopped reading
@@ -1176,6 +1196,19 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
       }
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
       if (promptFile) fs.rmSync(path.dirname(promptFile), { recursive: true, force: true });
+      // A clean exit proves nothing about containment (the fallback-to-default
+      // agent also exits 0) — audit agy's own log and transcript BEFORE the clone,
+      // the only copy of them, is removed.
+      if (!error && kind === 'agy' && cloneHome) {
+        const agyRoot = path.join(cloneHome, '.gemini', 'antigravity-cli');
+        const breach = agyContainment.auditAgyRun({
+          logDir: path.join(agyRoot, 'log'), brainDir: path.join(agyRoot, 'brain'),
+        });
+        if (breach) {
+          error = new Error(`agy containment breach: ${breach} — answer discarded`);
+          value = undefined;
+        }
+      }
       if (cloneHome) fs.rmSync(cloneHome, { recursive: true, force: true });
       if (error) reject(error);
       else resolve(value);

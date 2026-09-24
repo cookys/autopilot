@@ -1,0 +1,1 @@
+{"engine":"opus","model":"opus","runner":"claude","role":"brain","outcome":"transport_fail","spend_tokens":0,"token_cap":400000,"reason":"transport failure on trial 1 round 1: case broker failed: provider_process_failed — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

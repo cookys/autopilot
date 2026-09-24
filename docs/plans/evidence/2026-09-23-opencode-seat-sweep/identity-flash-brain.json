@@ -1,0 +1,14 @@
+{
+  "identity": "mimo-v2.6-flash",
+  "model_alias": "mimo-v2.6-flash",
+  "model_version": "mimo-v2.6-flash",
+  "family": "xiaomi",
+  "runner": "anthropic-compatible",
+  "runner_version": "opencode-go-chat-completions-v1",
+  "harness_version": "engine-qualify-44950ccd",
+  "effort": "default",
+  "identity_resolved": true,
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "semantic_fingerprint": "686b9e2cf0545c98bab9004278af91961e94a84d90b160bba60453fd3139ff00",
+  "containment_fingerprint": "3a59d8e9cf6b320476718ab0d1d2878c8519edef558db1a896a6736d055f1185"
+}

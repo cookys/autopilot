@@ -1,0 +1,15 @@
+{
+  "note": "raw files are in administration order; the evidence record sorts trials by trial_id",
+  "files": [
+    {
+      "file": "brain-trial-1.exchanges.jsonl",
+      "administration_index": 0,
+      "trial_id": "trial_89708071338e"
+    },
+    {
+      "file": "brain-trial-2.exchanges.jsonl",
+      "administration_index": 1,
+      "trial_id": "trial_26f9d90283da"
+    }
+  ]
+}

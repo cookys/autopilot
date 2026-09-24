@@ -1,0 +1,14 @@
+{
+  "identity": "mimo-nvfp4",
+  "model_alias": "mimo-nvfp4",
+  "model_version": "mimo-nvfp4",
+  "family": "xiaomi",
+  "runner": "anthropic-compatible",
+  "runner_version": "sglang-chat-completions-v1",
+  "harness_version": "engine-qualify-a89579de",
+  "effort": "default",
+  "identity_resolved": true,
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "semantic_fingerprint": "df479d7c98df6314b5800fd96440cc6447c422b588270cda67de3f7019a8411f",
+  "containment_fingerprint": "7861bd6e344f45b58a4894532164e56ff1119c83ac3e13f1f3ddba28b9f4b1bb"
+}

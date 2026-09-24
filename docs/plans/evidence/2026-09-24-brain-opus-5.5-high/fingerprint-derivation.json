@@ -1,0 +1,19 @@
+{
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "harness_version": "engine-qualify-a89579de",
+  "semantic": {
+    "kind": "brain-seat-semantic-surface-v1",
+    "model": "opus",
+    "transport": "claude-p-tools-empty",
+    "reasoning_effort": "high",
+    "setting_sources": "none"
+  },
+  "semantic_fingerprint": "8d9c1be842315d6af58e7134940184d1940c298f581b0cda7dbe7f1e85eab76a",
+  "containment": {
+    "kind": "brain-seat-containment-surface-v2",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "claude -p --tools \"\" --setting-sources \"\" --effort high",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  },
+  "containment_fingerprint": "d0e6bb2b10d23c7886ea5996fd1edc53e5244c8dfaeb58d923f136a2fe292e6f"
+}

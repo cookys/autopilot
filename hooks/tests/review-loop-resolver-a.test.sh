@@ -85,4 +85,55 @@ assert_r41_resolve_review_loop() {
 
 assert_r41_resolve_review_loop
 
+assert_r42_normalizeagyalias_re() {
+  unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
+  export ENGINE_CAPABILITY_DIR="$TEST_TMP/r42-cap"
+  export ENGINE_SCORECARD_DIR="$TEST_TMP/r42-sc"
+  mkdir -p "$ENGINE_CAPABILITY_DIR" "$ENGINE_SCORECARD_DIR"
+  local TOPO="$TEST_TMP/r42-topology.json"
+  local CFG="$TEST_TMP/r42-review-loop.md"
+  cat > "$TOPO" <<'JSON'
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-25T00:00:00.000Z",
+  "host": "test-host",
+  "consult_ladder": [
+    {
+      "rung": "gemini-flash/high@agy",
+      "engine": "gemini-flash",
+      "effort": "high",
+      "runner": "agy",
+      "family": "google",
+      "endpoint": "",
+      "role_source": "consult"
+    },
+    {
+      "rung": "minimax-m3/high@agy",
+      "engine": "minimax-m3",
+      "effort": "high",
+      "runner": "agy",
+      "family": "minimax",
+      "endpoint": "",
+      "role_source": "consult"
+    }
+  ]
+}
+JSON
+  cat > "$CFG" <<'EOF'
+consult_dispatch: auto
+implementer_runner: grok
+qc_panel: gemini-flash
+qc_panel_runners: agy
+qc_panel_efforts: high
+qc_panel_endpoints: @none
+EOF
+  local ENGINE
+  ENGINE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field consult_engine 2>/dev/null)" || true
+  # RED at 2678cf10addf008cd9e1186f63ce59a8d5153ba2: consult_engine=gemini-flash (qc_panel alias not excluded)
+  assert_neq "$ENGINE" "gemini-flash" "r42: consult auto does not pick qc_panel gemini-flash alias after normalize_agy_alias"
+  assert_eq "$ENGINE" "minimax-m3" "r42: consult auto picks the next ladder seat after excluding the aliased qc_panel engine"
+}
+
+assert_r42_normalizeagyalias_re
+
 finalize_test

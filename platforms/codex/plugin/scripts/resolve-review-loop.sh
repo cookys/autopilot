@@ -1187,6 +1187,7 @@ process.stdout.write(JSON.stringify(a));
 // Canonicalize runner aliases before every collision/exclusion/tuple-key comparison — codex-cli
 // and codex are the same rail and must never be treated as distinct.
 function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
+function normEngine(e) { return e === "gemini-flash" ? "gemini-3.6-flash-high" : e; }
 try {
   const d = JSON.parse(process.argv[1]);
   const ladder = d.consult_ladder;
@@ -1201,7 +1202,7 @@ try {
   const excluded = new Set();
   const maxIdx = Math.min(qcPanels.length, qcRunners.length, qcEfforts.length);
   for (let i = 0; i < maxIdx; i++) {
-    const eng = qcPanels[i];
+    const eng = normEngine(qcPanels[i]);
     const run = normRunner(qcRunners[i]);
     const eff = qcEfforts[i];
     if (run && eff) {
@@ -1217,7 +1218,7 @@ try {
     // review seat like any other for that guard. "auto" is not a rail
     // identity and never collides.
     if (implRunner && implRunner !== "auto" && entryRunner === normImplRunner) continue;
-    const key = `${entry.engine}|${entryRunner}|${entry.effort}`;
+    const key = `${normEngine(entry.engine)}|${entryRunner}|${entry.effort}`;
     if (!excluded.has(key)) {
       process.stdout.write(JSON.stringify(entry));
       process.exit(0);

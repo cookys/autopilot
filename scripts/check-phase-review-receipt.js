@@ -371,7 +371,7 @@ function validateModeB(flags) {
       console.error(`Finding in ${sourceName} missing valid string id/fingerprint`);
       process.exit(1);
     }
-    if (typeof f.candidate_blocker !== 'boolean') {
+    if (sourceName === 'plan artifact' && typeof f.candidate_blocker !== 'boolean') {
       console.error(`Finding '${idVal}' in ${sourceName} candidate_blocker is mandatory and must be a boolean`);
       process.exit(1);
     }

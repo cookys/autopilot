@@ -494,4 +494,64 @@ STUB_EOF
 
 assert_r47_hetero_review_loop_j
 
+assert_r131_plan_loop_freeze_dis() {
+  local CHECKER="$REPO_ROOT/scripts/check-phase-review-receipt.js"
+  local PLAN="$TEST_TMP/r131-plan.md"
+  local RUBRIC="$TEST_TMP/r131-rubric.md"
+  : > "$PLAN"
+  : > "$RUBRIC"
+  local PLAN_SHA RUBRIC_SHA FP
+  PLAN_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$PLAN")
+  RUBRIC_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$RUBRIC")
+  FP="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+  local ART="$TEST_TMP/r131-artifact.json"
+  local DISP="$TEST_TMP/r131-disp.json"
+  cat << EOF > "$ART"
+{
+  "artifact_type": "plan_review_artifact",
+  "logical_plan_id": "r131-plan",
+  "generation": 1,
+  "plan_sha256": "$PLAN_SHA",
+  "rubric_sha256": "$RUBRIC_SHA",
+  "findings": [
+    { "fingerprint": "$FP", "candidate_blocker": true, "disposition": null }
+  ]
+}
+EOF
+  cat << EOF > "$DISP"
+{
+  "logical_plan_id": "r131-plan",
+  "generation": 1,
+  "findings": [
+    { "fingerprint": "$FP", "disposition": "accepted_blocker", "rationale": "driver-native disposition has no candidate_blocker" }
+  ]
+}
+EOF
+
+  local OUT RC
+  OUT=$(node "$CHECKER" --plan-artifact "$ART" --dispositions "$DISP" --plan-file "$PLAN" --rubric-file "$RUBRIC" 2>&1); RC=$?
+  assert_exit_code "$RC" "0" "r131: driver-native dispositions without candidate_blocker exit 0"
+  assert_not_contains "$OUT" "candidate_blocker is mandatory" "r131: green path does not mention mandatory candidate_blocker"
+
+  local ART_BAD="$TEST_TMP/r131-artifact-no-cb.json"
+  cat << EOF > "$ART_BAD"
+{
+  "artifact_type": "plan_review_artifact",
+  "logical_plan_id": "r131-plan",
+  "generation": 1,
+  "plan_sha256": "$PLAN_SHA",
+  "rubric_sha256": "$RUBRIC_SHA",
+  "findings": [
+    { "fingerprint": "$FP", "disposition": null }
+  ]
+}
+EOF
+  OUT=$(node "$CHECKER" --plan-artifact "$ART_BAD" --dispositions "$DISP" --plan-file "$PLAN" --rubric-file "$RUBRIC" 2>&1); RC=$?
+  assert_exit_code "$RC" "1" "r131: plan artifact omitting candidate_blocker exits 1"
+  assert_contains "$OUT" "candidate_blocker is mandatory" "r131: artifact-side omission still names mandatory candidate_blocker"
+}
+
+assert_r131_plan_loop_freeze_dis
+
 finalize_test

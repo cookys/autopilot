@@ -554,4 +554,89 @@ EOF
 
 assert_r131_plan_loop_freeze_dis
 
+assert_r136_hetero_review_loop_e() {
+  local HETERO="$REPO_ROOT/scripts/hetero-review-loop.js"
+  local SCRATCH_OK="$TEST_TMP/r136-ok"
+  local SCRATCH_BAD="$TEST_TMP/r136-bad"
+  local LEDGER_OK="$TEST_TMP/r136-ok-ledger"
+  local LEDGER_BAD="$TEST_TMP/r136-bad-ledger"
+  mkdir -p "$SCRATCH_OK/scripts" "$SCRATCH_OK/.claude" "$SCRATCH_OK/benchmarks/matrix" "$LEDGER_OK"
+  mkdir -p "$SCRATCH_BAD/scripts" "$SCRATCH_BAD/.claude" "$SCRATCH_BAD/src" "$LEDGER_BAD"
+
+  printf -- '- exclude_allowlist: benchmarks/matrix/**\n' > "$SCRATCH_OK/.claude/review-loop-config.md"
+  printf -- '- exclude_allowlist: src/**\n' > "$SCRATCH_BAD/.claude/review-loop-config.md"
+
+  cat << 'STUB_EOF' > "$SCRATCH_OK/scripts/dispatch-review.sh"
+#!/usr/bin/env bash
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+STUB_EOF
+  cp "$SCRATCH_OK/scripts/dispatch-review.sh" "$SCRATCH_BAD/scripts/dispatch-review.sh"
+  chmod +x "$SCRATCH_OK/scripts/dispatch-review.sh" "$SCRATCH_BAD/scripts/dispatch-review.sh"
+  cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_OK/scripts/check-redispatch-prompt.sh"
+  cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_BAD/scripts/check-redispatch-prompt.sh"
+  chmod +x "$SCRATCH_OK/scripts/check-redispatch-prompt.sh" "$SCRATCH_BAD/scripts/check-redispatch-prompt.sh"
+
+  (
+    cd "$SCRATCH_OK"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    echo "base" > keep.txt
+    echo "shard" > benchmarks/matrix/a.json
+    git add keep.txt benchmarks/matrix/a.json
+    git commit -q -m "c1"
+    git checkout -q -b work
+    echo "work" >> keep.txt
+    echo "shard2" >> benchmarks/matrix/a.json
+    git add keep.txt benchmarks/matrix/a.json
+    git commit -q -m "c2"
+  )
+  local PHASE_BASE_OK
+  PHASE_BASE_OK=$(git -C "$SCRATCH_OK" rev-parse HEAD~1)
+
+  (
+    cd "$SCRATCH_BAD"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    echo "base" > keep.txt
+    echo "code" > src/app.js
+    git add keep.txt src/app.js
+    git commit -q -m "c1"
+    git checkout -q -b work
+    echo "work" >> keep.txt
+    echo "code2" >> src/app.js
+    git add keep.txt src/app.js
+    git commit -q -m "c2"
+  )
+  local PHASE_BASE_BAD
+  PHASE_BASE_BAD=$(git -C "$SCRATCH_BAD" rev-parse HEAD~1)
+
+  export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_OK/scripts/dispatch-review.sh"
+  unset STUB_SEAT_RESPONSE || true
+
+  local OK_OUT OK_RC
+  OK_OUT=$(node "$HETERO" collect \
+    --repo-root "$SCRATCH_OK" --ledger "$LEDGER_OK" --phase p_r136_ok --generation 1 \
+    --branch work --phase-base "$PHASE_BASE_OK" \
+    --seats "m1/low@codex" --min-reviewed-seats 1 \
+    --exclude "benchmarks/matrix/**" 2>&1); OK_RC=$?
+  assert_exit_code "$OK_RC" "0" "r136: collect --exclude benchmarks/matrix/** accepted"
+  assert_contains "$(cat "$LEDGER_OK/review-p_r136_ok/g1/range.json")" '"benchmarks/matrix/**"' \
+    "r136: accepted exclude recorded in range.json.excluded"
+
+  export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_BAD/scripts/dispatch-review.sh"
+  local BAD_OUT BAD_RC
+  BAD_OUT=$(node "$HETERO" collect \
+    --repo-root "$SCRATCH_BAD" --ledger "$LEDGER_BAD" --phase p_r136_bad --generation 1 \
+    --branch work --phase-base "$PHASE_BASE_BAD" \
+    --seats "m1/low@codex" --min-reviewed-seats 1 \
+    --exclude "src/**" 2>&1); BAD_RC=$?
+  assert_exit_code "$BAD_RC" "1" "r136: collect --exclude src/** refused"
+  assert_contains "$BAD_OUT" "ERROR: Exclude pathspec 'src/**' is not permitted by allowlist" \
+    "r136: refuse message shape unchanged"
+}
+
+assert_r136_hetero_review_loop_e
+
 finalize_test

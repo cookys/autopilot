@@ -19,7 +19,7 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const deriveReceiptState = require('./lib/review-chain-derive');
 
-const { EXCLUDE_ALLOWLIST, isPathspecAllowed } = require('./lib/exclude-allowlist');
+const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 
 function deepEqual(a, b) {
   if (a === b) return true;
@@ -530,6 +530,7 @@ function validateModeA(flags) {
   const phase = flags.phase;
   const branch = flags.branch;
   const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : process.cwd();
+  const consumerAllowlist = loadConsumerExcludeAllowlist(repoRoot);
 
   if (!ledgerDir || !phase || !branch) {
     console.error('Mode A requires --ledger, --phase, and --branch');
@@ -694,7 +695,7 @@ function validateModeA(flags) {
       const hasExclusions = Array.isArray(rangeObj.excluded) && rangeObj.excluded.length > 0;
       if (hasExclusions) {
         for (const pattern of rangeObj.excluded) {
-          if (!isPathspecAllowed(pattern)) {
+          if (!isPathspecAllowed(pattern, consumerAllowlist)) {
             console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
             process.exit(1);
           }
@@ -1056,7 +1057,7 @@ function validateModeA(flags) {
         .filter(Boolean);
       const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === 'docs/projects/INDEX.md';
       const allAllowed = diffRes.status === 0
-        && changedPaths.every((p) => isPathspecAllowed(p) || sidecarAllowed(p));
+        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist) || sidecarAllowed(p));
       if (!allAllowed) {
         console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
         process.exit(1);

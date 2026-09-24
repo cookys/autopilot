@@ -52,7 +52,7 @@ function resolveMinReviewedSeats(flags, totalSeats) {
   return { value: parseInt(str, 10), source };
 }
 
-const { EXCLUDE_ALLOWLIST, isPathspecAllowed } = require('./lib/exclude-allowlist');
+const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 
 function showHelp() {
   console.log(`Usage: node scripts/hetero-review-loop.js <subcommand> [flags]
@@ -580,8 +580,9 @@ async function handleCollect(flags) {
     ? flags.exclude.split(',').map((p) => p.trim()).filter(Boolean)
     : [];
 
+  const consumerAllowlist = loadConsumerExcludeAllowlist(repoRoot);
   for (const pattern of excludedList) {
-    if (!isPathspecAllowed(pattern)) {
+    if (!isPathspecAllowed(pattern, consumerAllowlist)) {
       console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
       process.exit(1);
     }

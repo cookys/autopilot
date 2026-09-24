@@ -23,6 +23,32 @@
 # pattern (e.g. hetero-<branch>-XXXXXX). Worktrees have a lock/marker-aware
 # reaper (lib/worktree-reap.sh gc_stale_worktrees, dispatch-status.js --reap);
 # blind mtime pruning them would race a live run.
+#
+# Registered prefixes (owned here, not by callers). Unioned with any
+# caller-passed patterns on every days>0 call. The autopilot-* family is
+# excluded: dispatch-foreman.sh --help defaults to
+# ${TMPDIR}/autopilot-foreman-runs/, a LIVE run dir; the marker guard
+# protects worktrees only.
+PRUNE_TMP_RESIDUE_PATTERNS=(
+  'dispatch-author-*'
+  'dispatch-explore-*'
+  'dispatch-review-*'
+  'dispatch-hetero-*'
+  'hetero-*-log-*'
+  'pi-rpc-session-*'
+  'hetero-detach-state-*'
+  'dispatch-anthropic-review-*'
+  'dispatch-contract-*'
+  'dispatch-plan-review-*'
+  'qc-panel-*'
+  'qc-refute-b-*'
+  'qc-emit-*'
+  'next-touch-evidence-*'
+  'hook-multiplexer-benchmark-*'
+  'verify-red-green-*'
+  'eval-selftest-*'
+  'run-ledger-*-test-*'
+)
 
 prune_tmp_residue() {
   local days="${1:-}"
@@ -33,7 +59,7 @@ prune_tmp_residue() {
   [ -d "$tmp" ] || return 0
   local me pat
   me="$(id -un 2>/dev/null)" || return 0
-  for pat in "$@"; do
+  for pat in "$@" "${PRUNE_TMP_RESIDUE_PATTERNS[@]}"; do
     case "$pat" in
       ''|*/*|.*) continue ;;
     esac

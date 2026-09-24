@@ -188,8 +188,36 @@ assert_r92_reap_dispatch_branch() {
   fi
 }
 
+assert_r93_prunetmpresidue_cove() {
+  local LIB="$REPO_ROOT/scripts/lib/prune-tmp-residue.sh"
+  # shellcheck disable=SC1090
+  . "$LIB" 2>/dev/null || fail "prune-tmp-residue.sh not sourceable"
+
+  local PRUNE_TMP="$TEST_TMP/r93-prune"
+  mkdir -p "$PRUNE_TMP"
+
+  : > "$PRUNE_TMP/qc-emit-aged"
+  touch -d "10 days ago" "$PRUNE_TMP/qc-emit-aged"
+  : > "$PRUNE_TMP/qc-emit-fresh"
+  mkdir -p "$PRUNE_TMP/autopilot-foreman-runs"
+  touch -d "10 days ago" "$PRUNE_TMP/autopilot-foreman-runs"
+  : > "$PRUNE_TMP/unregistered-scratch-aged"
+  touch -d "10 days ago" "$PRUNE_TMP/unregistered-scratch-aged"
+
+  TMPDIR="$PRUNE_TMP" prune_tmp_residue 3 'some-caller-pattern'
+  assert_exit_code $? 0 "r93: prune returns 0"
+  assert_file_absent "$PRUNE_TMP/qc-emit-aged" \
+    "r93: aged qc-emit-* pruned via registered list even when caller omits it"
+  assert_file_exists "$PRUNE_TMP/qc-emit-fresh" "r93: fresh qc-emit-* kept"
+  assert_file_exists "$PRUNE_TMP/autopilot-foreman-runs" \
+    "r93: autopilot-* live-run family is not registered and must be kept"
+  assert_file_exists "$PRUNE_TMP/unregistered-scratch-aged" \
+    "r93: non-registered aged pattern kept"
+}
+
 assert_r3_run_ledger_sh_lease
 assert_r16_dispatch_foreman_tes
 assert_r19_pin_store_hardening
 assert_r92_reap_dispatch_branch
+assert_r93_prunetmpresidue_cove
 finalize_test

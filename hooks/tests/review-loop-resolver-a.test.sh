@@ -75,4 +75,14 @@ process.stdout.write(JSON.stringify(p.capability_warnings || []));
 
 assert_r36_resolve_review_loop
 
+assert_r41_resolve_review_loop() {
+  local SRC="$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh"
+  local STALE
+  STALE="$(grep -E '=> no (operational capability warning|warning|demotion warning)|no demotion or native skill warning is ever emitted' "$SRC" || true)"
+  # RED at 09a47301e0a811df669129ec836d663d134d868a: FAIL r41 expected '' got 7 assert_eq lines whose descriptions still said "no operational capability warning" / "no warning" / "no demotion warning" / "no demotion or native skill warning is ever emitted" while comparing capability_warnings to the three topology-fallback strings
+  assert_eq "$STALE" "" "r41: resolve-review-loop.test.sh has no stale 'no warning' descriptions on topology-fallback capability_warnings asserts"
+}
+
+assert_r41_resolve_review_loop
+
 finalize_test

@@ -7,9 +7,12 @@
 - BACKLOG 是佇列：有 plan 或已出貨就刪列。plan 要登記在 INDEX（`active`）。🔵 不進 BACKLOG。
 - rail 有缺陷時，一律先出 Fix 版再重派，或依文件降級。
 
-## 現況（HEAD `41f1bff6` = v2.36.95 已 push）
-1. **09-21 的 backlog bundle 只剩 B1 `review-loop-resolver-a`（wave 2）**，plan 在 `docs/plans/_archive/2026/09/2026-09-21-backlog-review-loop-resolver-a.md`，INDEX 標 `active`。
-   其餘 5 個 bundle 的 plan 都已歸檔到 `docs/plans/_archive/2026/09/`。
+## 現況（HEAD `9fc56347` = v2.36.96 已 push）
+1. **09-21 的六個 backlog bundle 全數出貨**：B1 `review-loop-resolver-a`（wave 2，7 列）在這個 session 落地為 v2.36.96，plan 已歸檔到
+   `docs/plans/_archive/2026/09/`，evidence 見 `docs/plans/evidence/2026-09-25-backlog-b1/README.md`。
+   其餘 5 個 bundle 的 plan 也都已歸檔到 `docs/plans/_archive/2026/09/`。
+1b. **新候選（peer 回報，觸發條件已滿足）**：`docs/backlog/foreman-guard-role-aware-caps.md`（foreman-guard 角色感知上限 + close-out reserve）。
+   其觸發條件寫的是「B1 落地後」，B1 已在 v2.36.96 出貨，故現在可以排入下一輪。
 2. **平行派工配方**：證據與教訓在 `docs/plans/evidence/2026-09-24-backlog-wave-1b/README.md`。重點有兩條：
    - clone-local 的 shadow commit 要一開始就寫進 brief，不能事後用訊息補，工頭會（也應該）拒收。
    - 每列的 Verify 要涵蓋它所改契約的使用端套件，不能只跑 bundle 套件。

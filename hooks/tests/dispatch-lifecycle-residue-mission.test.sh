@@ -369,10 +369,211 @@ NODE
   fi
 }
 
+assert_r122_verification_author() {
+  # VA on cc-shim: capability recorded ONLY in the effort-less partition.
+  # RED at base: capabilityCurrentArgs always passes --effort → quota unknown → NO-GO.
+  # GREEN: omit --effort for the probe's non-consuming runner set → GO.
+  # Control: codex still queries WITH --effort.
+  local utc_now
+  utc_now="$(node -e 'process.stdout.write(new Date().toISOString().replace(/\.\d+Z$/,"Z"))')"
+
+  local mini="$TEST_TMP/r122-mini"
+  mkdir -p "$mini/specs/feat" "$mini/.claude" "$mini/tools"
+  cat > "$mini/specs/feat/core.md" <<'EOF'
+# API
+ok
+EOF
+  cat > "$mini/tools/red.sh" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+  cat > "$mini/tools/runner.sh" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+  chmod +x "$mini/tools/red.sh" "$mini/tools/runner.sh"
+  cat > "$mini/.claude/review-loop-config.md" <<'EOF'
+# Review Loop Config
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
+- reviewer_engine: claude-opus
+- reviewer_runner: claude-native
+- verification_author_present: true
+- verification_author_engine: glm-5.2
+- verification_author_runner: cc-shim
+- verification_author_effort: high
+- plan_review: off
+- hetero_review: off
+- consult_dispatch: off
+- discuss_dispatch: off
+EOF
+  git -C "$mini" init -q -b develop
+  git -C "$mini" -c user.email=wlb@test -c user.name=wlb add .
+  git -C "$mini" -c user.email=wlb@test -c user.name=wlb commit -q -m "r122 fixture"
+  local base_sha
+  base_sha="$(git -C "$mini" rev-parse HEAD)"
+
+  local store="$TEST_TMP/r122-store"
+  mkdir -p "$store"
+  cat > "$store/va_score.json" <<'EOF'
+{"engine":"glm-5.2","runner":"cc-shim","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$store" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$store/va_score.json" >/dev/null
+  # Effort-less partition only (no effort key).
+  cat > "$store/va_cap.json" <<EOF
+{"schema_version":1,"observed_at":"$utc_now","runner":"cc-shim","model":"glm-5.2","role":"verification_author","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"effortless-only"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$store" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$store/va_cap.json" >/dev/null
+
+  cat > "$store/impl_score.json" <<'EOF'
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$store" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$store/impl_score.json" >/dev/null
+  cat > "$store/impl_cap.json" <<EOF
+{"schema_version":1,"observed_at":"$utc_now","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"codex-effort"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$store" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$store/impl_cap.json" >/dev/null
+
+  local contracts="$TEST_TMP/r122-contracts"
+  mkdir -p "$contracts"
+  cat > "$contracts/va.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "r122-va",
+  "role": "verification-author",
+  "goal": "Verify r122",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$base_sha",
+  "depends_on": [],
+  "scope": {
+    "allow_paths": ["oracle.test.sh"],
+    "deny_paths": ["vendor/"],
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["specs/feat/core.md"],
+    "required_engine_role": "verification-author",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "raw-artifact", "paths": ["oracle.test.sh"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+  cat > "$contracts/impl.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "r122-impl",
+  "role": "implementer",
+  "goal": "Implement r122 control",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$base_sha",
+  "depends_on": [],
+  "scope": {
+    "allow_paths": ["specs/"],
+    "deny_paths": ["vendor/"],
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["specs/feat/core.md"],
+    "required_engine_role": "implementer",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "diff", "paths": ["specs/"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+
+  local arglog="$TEST_TMP/r122-cap-argv.jsonl"
+  : > "$arglog"
+  local preload="$TEST_TMP/r122-cap-argv.cjs"
+  cat > "$preload" <<PRELOAD
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+const logPath = process.env.R122_CAP_ARGV_LOG;
+childProcess.spawnSync = function(command, args, options) {
+  if (Array.isArray(args)
+      && path.basename(String(args[0])) === 'engine-capability-state.js'
+      && args[1] === 'current') {
+    fs.appendFileSync(logPath, JSON.stringify(args) + '\\n');
+  }
+  return originalSpawnSync.call(this, command, args, options);
+};
+PRELOAD
+
+  local va_out va_rc
+  set +e
+  va_out="$(
+    env NODE_OPTIONS="--require=$preload" \
+      R122_CAP_ARGV_LOG="$arglog" \
+      ENGINE_SCORECARD_DIR="$store" ENGINE_CAPABILITY_DIR="$store" \
+      node "$REPO_ROOT/scripts/dispatch-contract.js" check \
+      --contract "$contracts/va.json" --repo "$mini" --json 2>&1
+  )"
+  va_rc=$?
+  set -e
+  assert_eq "$va_rc" "0" "r122: cc-shim VA resolves GO from effort-less partition"
+  assert_contains "$va_out" '"verdict":"GO"' "r122: VA verdict GO"
+  local va_line
+  va_line="$(grep 'cc-shim' "$arglog" | tail -n 1 || true)"
+  assert_contains "$va_line" '"--runner","cc-shim"' "r122: VA capability query uses cc-shim"
+  assert_not_contains "$va_line" '"--effort"' "r122: non-consuming runner omits --effort"
+
+  : > "$arglog"
+  local impl_out impl_rc
+  set +e
+  impl_out="$(
+    env NODE_OPTIONS="--require=$preload" \
+      R122_CAP_ARGV_LOG="$arglog" \
+      ENGINE_SCORECARD_DIR="$store" ENGINE_CAPABILITY_DIR="$store" \
+      node "$REPO_ROOT/scripts/dispatch-contract.js" check \
+      --contract "$contracts/impl.json" --repo "$mini" --json 2>&1
+  )"
+  impl_rc=$?
+  set -e
+  assert_eq "$impl_rc" "0" "r122: codex implementer control still GO"
+  local impl_line
+  impl_line="$(grep 'codex' "$arglog" | tail -n 1 || true)"
+  assert_contains "$impl_line" '"--effort"' "r122: effort-consuming codex still queries WITH --effort"
+  assert_contains "$impl_line" '"high"' "r122: codex effort value preserved"
+}
+
 assert_r3_run_ledger_sh_lease
 assert_r16_dispatch_foreman_tes
 assert_r19_pin_store_hardening
 assert_r92_reap_dispatch_branch
 assert_r93_prunetmpresidue_cove
 assert_r109_recover_stale_backlo
+assert_r122_verification_author
 finalize_test

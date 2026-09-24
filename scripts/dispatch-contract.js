@@ -435,22 +435,41 @@ function capabilityEndpointSelector(resolvedEndpoint) {
   return resolvedEndpoint === '' ? '@none' : resolvedEndpoint;
 }
 
-// Build fail-closed exact capability `current` argv from the resolver tuple.
-// Always includes --effort and --endpoint so admission never silently falls
-// back to the legacy ambiguous (runner, model, role)-only partition.
-function capabilityCurrentArgs(resolvedEngine, storeRole) {
-  const effort = String(resolvedEngine.effort || '').trim();
-  if (!effort) {
-    throw new Error('resolver tuple missing exact effort partition');
+// Mirror probe-engine-capability.sh `_EFFORT_CONSUMER` (do not re-derive).
+// Effort-bearing tuples on non-consuming runners stay unobserved there
+// (quota: unknown); query the effort-less partition instead.
+function runnerConsumesEffort(runner) {
+  switch (String(runner || '')) {
+    case 'codex':
+    case 'grok':
+    case 'qoderclicn':
+    case 'opencode':
+      return true;
+    default:
+      return false;
   }
-  return [
+}
+
+// Build fail-closed exact capability `current` argv from the resolver tuple.
+// Always includes --endpoint. Include --effort only when the runner consumes it
+// (codex/grok/qoderclicn/opencode); otherwise omit so admission hits the
+// effort-less partition the probe actually stamps.
+function capabilityCurrentArgs(resolvedEngine, storeRole) {
+  const args = [
     'current',
     '--runner', resolvedEngine.runner,
     '--model', resolvedEngine.model,
     '--role', storeRole,
-    '--effort', effort,
-    '--endpoint', capabilityEndpointSelector(resolvedEngine.endpoint),
   ];
+  if (runnerConsumesEffort(resolvedEngine.runner)) {
+    const effort = String(resolvedEngine.effort || '').trim();
+    if (!effort) {
+      throw new Error('resolver tuple missing exact effort partition');
+    }
+    args.push('--effort', effort);
+  }
+  args.push('--endpoint', capabilityEndpointSelector(resolvedEngine.endpoint));
+  return args;
 }
 
 function hasKey(obj, key) {
@@ -1554,7 +1573,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
       const capScript = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
       let cap;
       try {
-        // Exact tuple only — never omit effort/endpoint (legacy ambiguous partition).
+        // Exact tuple: always bind endpoint; bind effort only for consuming runners.
         cap = runNodeJson(
           repo,
           capScript,

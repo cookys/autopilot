@@ -1361,6 +1361,7 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
   if [[ -n "$SCORECARD_IMPL" ]]; then
     IMPL_TIER="$(printf '%s' "$SCORECARD_IMPL" | node -e '
 const fs = require("fs");
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
 const engine = process.argv[1];
 const runner = process.argv[2];
 const raw = fs.readFileSync(0, "utf8").trim();
@@ -1370,7 +1371,7 @@ try { rows = JSON.parse(raw); } catch { process.exit(0); }
 if (!Array.isArray(rows)) process.exit(0);
 let found = false;
 for (const row of rows) {
-  if (row && String(row.engine) === String(engine) && (String(runner) === "auto" || String(row.runner) === String(runner)) && typeof row.status === "string") {
+  if (row && String(row.engine) === String(engine) && (String(runner) === "auto" || normRunner(String(row.runner)) === normRunner(String(runner))) && typeof row.status === "string") {
     // Calendar tooth (b) pulled 2026-08-22 (no-confidence-decay P2): the tier
     // decision keys on the strike-decay projection admission_status, never
     // on a calendar date or the legacy TTL-derived status literal. expiry
@@ -1588,6 +1589,7 @@ if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
   REVIEWER_STATUS=""
   if [[ -n "$SCORECARD_CURRENT" ]]; then
     REVIEWER_STATUS="$(printf '%s' "$SCORECARD_CURRENT" | node -e 'const fs = require("fs");
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
 const engine = process.argv[1];
 const runner = process.argv[2];
 const raw = fs.readFileSync(0, "utf8").trim();
@@ -1606,7 +1608,7 @@ for (const row of rows) {
   if (
     row &&
     String(row.engine) === String(engine) &&
-    (String(runner) === "auto" || String(row.runner) === String(runner)) &&
+    (String(runner) === "auto" || normRunner(String(row.runner)) === normRunner(String(runner))) &&
     row.authority_status === "session_local" &&
     row.admissible === true &&
     typeof row.status === "string"
@@ -1942,6 +1944,7 @@ fi
 if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
   _impl_rows="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role implementer 2>/dev/null || true)"
   _impl_warn="$(printf '%s' "$_impl_rows" | node -e '
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
 const engine = process.argv[1];
 const runner = process.argv[2];
 const overrideFile = process.argv[3] || "";
@@ -1957,7 +1960,7 @@ process.stdin.on("data", (d) => (s += d)).on("end", () => {
     return;
   }
   const row = rows.find((r) => r && String(r.engine) === engine
-    && (runner === "auto" || String(r.runner) === runner));
+    && (runner === "auto" || normRunner(String(r.runner)) === normRunner(runner)));
   const admissible = row && (row.status === "qualified"
     || (row.status === "provisional" && row.observed_status === "qualified"));
   if (admissible) return;
@@ -1974,7 +1977,7 @@ process.stdin.on("data", (d) => (s += d)).on("end", () => {
         && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
       const match = doc && doc.schema === 1 && Array.isArray(doc.overrides)
         ? doc.overrides.find((o) => o && o.engine === engine
-          && (runner === "auto" || o.runner === runner)
+          && (runner === "auto" || normRunner(o.runner) === normRunner(runner))
           && o.role === "implementer"
           && typeof o.reason === "string" && o.reason.trim()
           && typeof o.operator === "string" && o.operator.trim()
@@ -2393,8 +2396,9 @@ const isCalendarDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.tes
 // "reviewer" (it IS the reviewer role, just the low-risk engine of it) — the
 // ENGINE still has to match exactly, which is what stops one override from
 // covering both tiers.
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
 const wantRole = role.replace(/\[[0-9]+\]$/, "").replace(/_low_risk$/, "");
-const m = doc.overrides.find((o) => o && o.engine === engine && o.runner === runner
+const m = doc.overrides.find((o) => o && o.engine === engine && normRunner(o.runner) === normRunner(runner)
   && o.role === wantRole
   && typeof o.reason === "string" && o.reason.trim()
   && typeof o.operator === "string" && o.operator.trim()
@@ -2434,10 +2438,11 @@ let rows = [];
 try { rows = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(1); }
 if (!Array.isArray(rows)) process.exit(1);
 const [engine, runner, role, seatEndpoint] = process.argv.slice(1);
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
 const wantRole = role.replace(/\[[0-9]+\]$/, "").replace(/_low_risk$/, "");
 const normEndpoint = (v) => (!v || v === "@none") ? null : v;
 const isQc = /^qc_panel\[[0-9]+\]$/.test(role);
-const m = rows.find((o) => o && o.engine === engine && o.runner === runner
+const m = rows.find((o) => o && o.engine === engine && normRunner(o.runner) === normRunner(runner)
   && o.role === wantRole
   && (!isQc || normEndpoint(o.endpoint) === normEndpoint(seatEndpoint))
   && typeof o.reason === "string" && o.reason.trim()

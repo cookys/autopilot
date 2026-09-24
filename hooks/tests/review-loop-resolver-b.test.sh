@@ -639,4 +639,63 @@ STUB_EOF
 
 assert_r136_hetero_review_loop_e
 
+assert_r137_agy_seat_payload_ove() {
+  local HETERO="$REPO_ROOT/scripts/hetero-review-loop.js"
+  local SCRATCH="$TEST_TMP/r137-repo"
+  local LEDGER="$TEST_TMP/r137-ledger"
+  local CODEX_LOG="$TEST_TMP/r137-codex-dispatch.log"
+  mkdir -p "$SCRATCH/scripts" "$LEDGER"
+  rm -f "$CODEX_LOG"
+
+  cat << 'STUB_EOF' > "$SCRATCH/scripts/dispatch-review.sh"
+#!/usr/bin/env bash
+runner=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --runner) runner="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+if [ "$runner" = "codex" ]; then
+  echo dispatched >> "${R137_CODEX_LOG:?}"
+fi
+echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+STUB_EOF
+  chmod +x "$SCRATCH/scripts/dispatch-review.sh"
+  cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH/scripts/check-redispatch-prompt.sh"
+  chmod +x "$SCRATCH/scripts/check-redispatch-prompt.sh"
+
+  (
+    cd "$SCRATCH"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    echo "base" > keep.txt
+    git add keep.txt
+    git commit -q -m "c1"
+    git checkout -q -b work
+    python3 -c "open('big.txt','w').write('x'*130000)"
+    git add keep.txt big.txt
+    git commit -q -m "c2-oversized-diff"
+  )
+  local PHASE_BASE
+  PHASE_BASE=$(git -C "$SCRATCH" rev-parse HEAD~1)
+
+  export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH/scripts/dispatch-review.sh"
+  export R137_CODEX_LOG="$CODEX_LOG"
+  unset STUB_SEAT_RESPONSE || true
+
+  local OUT RC
+  OUT=$(node "$HETERO" collect \
+    --repo-root "$SCRATCH" --ledger "$LEDGER" --phase p_r137 --generation 1 \
+    --branch work --phase-base "$PHASE_BASE" \
+    --seats "m1/low@agy,m2/low@codex" --min-reviewed-seats 1 2>&1); RC=$?
+  assert_exit_code "$RC" "1" "r137: oversized agy estimate refuses collect before any seat dispatch"
+  assert_contains "$OUT" "single-argv ceiling" "r137: refusal names single-argv ceiling"
+  assert_contains "$OUT" "--exclude" "r137: refusal hints --exclude"
+  assert_file_absent "$CODEX_LOG" "r137: codex stub dispatch log does not exist (no seat dispatched)"
+}
+
+assert_r137_agy_seat_payload_ove
+
 finalize_test

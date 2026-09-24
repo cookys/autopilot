@@ -630,6 +630,35 @@ async function handleCollect(flags) {
   const timeout = flags.timeout || '20m';
   const specFile = flags['spec-file'] ? path.resolve(flags['spec-file']) : '';
 
+  if (seats.some((seat) => seat.runner === 'agy')) {
+    const ceilRes = spawnSync('bash', ['-c', `. "${__dirname}/lib/agy-argv-ceiling.sh"; agy_argv_ceiling_bytes`], {
+      encoding: 'utf8',
+    });
+    const ceiling = Number.parseInt(String(ceilRes.stdout || '').trim(), 10);
+    let specBytes = 0;
+    if (specFile) {
+      try {
+        specBytes = fs.statSync(specFile).size;
+      } catch (e) {
+        console.error(`ERROR: Failed to stat spec-file: ${e.message}`);
+        process.exit(1);
+      }
+    }
+    // Conservative 4096-byte template margin — the real prompt is assembled
+    // inside dispatch-review.sh, out of reach here.
+    const estimate = diffBytes + specBytes + 4096;
+    if (ceilRes.status !== 0 || !Number.isFinite(ceiling)) {
+      console.error('ERROR: Failed to resolve agy argv ceiling from scripts/lib/agy-argv-ceiling.sh');
+      process.exit(1);
+    }
+    if (estimate > ceiling) {
+      console.error(
+        `ERROR: estimated review prompt is ${estimate} bytes, over the ${ceiling}-byte single-argv ceiling agy can be exec'd with (Linux MAX_ARG_STRLEN); agy has no --prompt-file, so this cannot be streamed — narrow --exclude or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)`
+      );
+      process.exit(1);
+    }
+  }
+
   const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout));
   const seatResults = await Promise.all(seatPromises);
 

@@ -17,6 +17,12 @@
  *   - delegation: Agent, Task, Skill — resets `reads` to 0 (the read burst was handed off).
  *   - anything else (e.g. Bash `npm test`, Edit, Write): no-op, counter untouched.
  *
+ * Accepted for v2.36.1 as an expansion over the frozen plan matcher in
+ * docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md §4 P3.1 (which listed
+ * WebFetch|WebSearch|Read|Grep|Glob|Agent|Skill|Task only) — Bash was added so read-shaped Bash calls
+ * (grep/cat/find/etc.) are not a silent bypass of the read-burst counter; recorded here so the delta
+ * from the frozen plan is explicit.
+ *
  * WARN (default mode): at `reads >= threshold` and every `threshold` calls after, one
  * stderr line naming the count; exit 0 always (a nudge, never enforcement without a live
  * model in `block` mode).

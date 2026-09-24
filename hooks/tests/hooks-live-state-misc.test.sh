@@ -311,5 +311,26 @@ process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
 
 assert_r133_live_state_dir_lefto
 
+# assert_r139_depth0_delegate_gate
+# Row 139: header must cite the P3.1 frozen-plan matcher delta (+Bash vs
+# WebFetch|WebSearch|Read|Grep|Glob|Agent|Skill|Task only).
+#
+# # RED at base: FAIL — P3.1 / 2026-09-05-statusline-live-context-feed absent
+assert_r139_depth0_delegate_gate() {
+  local GATE="$REPO_ROOT/hooks/depth0-delegate-gate.js"
+  if grep -q 'P3.1' "$GATE"; then
+    ok "depth0-delegate-gate header cites P3.1"
+  else
+    bad "depth0-delegate-gate header must cite P3.1"
+  fi
+  if grep -q '2026-09-05-statusline-live-context-feed' "$GATE"; then
+    ok "depth0-delegate-gate header cites 2026-09-05-statusline-live-context-feed"
+  else
+    bad "depth0-delegate-gate header must cite 2026-09-05-statusline-live-context-feed"
+  fi
+}
+
+assert_r139_depth0_delegate_gate
+
 printf '\n%s\n' "hooks-live-state-misc: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -285,12 +285,6 @@ Small batches that bump the version but don't warrant a project README. Source o
 | 2026-09-21 | wave-1：31 個維護列整合，B4 完成；其餘 bundle 待續 | v2.36.81 | `aa236aca` | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-20 | plan 登記簿＋日期化歸檔（無 project dir — mechanism）— INDEX 成為 active plan 登記簿、三處硬擋未登記 plan、`_archive/YYYY/MM/` 遷移 91 plan／104 project、39 孤兒清點、6 個 backlog bundle plan 登記 | v2.36.80 | — | — |
 | 2026-09-20 | strict /l5 readiness probe 被 claude-native 拒答（無 project dir — Fix）— v2.36.71 author frame 的身分覆寫語氣＋「Respond only with OK.」讓 fable 當成操弄拒答，qc:1 席永遠 probe-needed、strict campaign 起不來；probe 句改誠實自述、框前言改 dispatcher 契約口吻；fable／Qwen live 皆 `authored` | v2.36.74 | 9c1028c6 | [evidence](../plans/evidence/2026-09-19-blind-review-2d-overlap/rail-fix-readiness-probe/) |
-| 2026-09-21 | backlog bundle review-loop-resolver-a (L, wave 2) | active | — | — |
-| 2026-09-21 | backlog bundle review-loop-resolver-b (L, wave 1) | active | — | — |
-| 2026-09-21 | backlog bundle managed-rail-core-engine (L, wave 1) | active | — | — |
-| 2026-09-21 | backlog bundle qualification-scorecard-tools (L, wave 1) | active | — | — |
-| 2026-09-21 | backlog bundle hooks-live-state-misc (L, wave 1) | active | — | — |
-| 2026-09-21 | backlog bundle dispatch-lifecycle-residue-mission (L, wave 1) | active | — | — |
 | 2026-03-26 | [Autopilot v2 Skill 設計改善計畫](../plans/2026-03-26-skill-description-optimization.md) | active | — | [plan](../plans/2026-03-26-skill-description-optimization.md) |
 | 2026-04-12 | [Universal Hooks Ship B (v2.5.0) — 8 Default-On + 6 Opt-In Hooks](../plans/2026-04-12-universal-hooks.md) | active | — | [plan](../plans/2026-04-12-universal-hooks.md) |
 | 2026-05-14 | [Handoff — 2026-05-14 End-of-Day (post v2.7.3 + observations)](../plans/2026-05-14-next-session-handoff.md) | active | — | [plan](../plans/2026-05-14-next-session-handoff.md) |

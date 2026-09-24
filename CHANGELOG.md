@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.36.96 — backlog-review-loop-resolver-a：7 個 backlog 列整合（B1）
+
+Plan: `docs/plans/2026-09-21-backlog-review-loop-resolver-a.md` — shipped entirely, all 7 rows landed.
+
+- **probe-unknown（row 23）**：`classify` 每次呼叫最多把 `resolve-review-loop.sh` spawn 七次；改成先取一份不帶 `--field` 的快照,只在快照缺鍵或讀取失敗時才退回單欄位 spawn。
+- **resolve-review-loop（row 36）**：一筆記成 `codex-cli` 的 scorecard 列,對照傳入 `codex` 的查詢時比對不到（反之亦然）,影響 engine-scorecard 分級查詢、`--check-scorecard` 可派性檢查、override/pin 比對；三處都補上正規化。
+- **resolve-review-loop 測試（row 41）**：`resolve-review-loop.test.sh` 幾個斷言描述還寫著「no warning」,但實際斷言的值是三行 topology-fallback 警告陣列；改成描述與斷言相符,斷言本身不變。
+- **resolve-review-loop（row 42）**：`consult_dispatch: auto` 下,`normalize_agy_alias()` 只改寫了 config 端的席位名再做 qc-exclusion 比對,ladder 端的引擎名沒有同步正規化,導致用別名（如 `gemini-flash`）寫入的 qc_panel 席位會被誤判可再當 consult 席位；兩側都補正規化。
+- **resolve-review-loop（row 43）**：快取的 `~/.autopilot/topology.json` 若整個缺某角色的 ladder 鍵,跟「該角色 ladder 真的是空陣列」會顯示同一句「no qualified seat」警告;現在對 plan_review／hetero_review／consult_dispatch 三個角色分別加上「缺鍵」專屬診斷訊息,並指向 `resolve-dispatch-topology.js`。
+- **contract-parity 測試（row 44）**：`contract-parity.test.sh` 沒有釘死 `AUTOPILOT_TOPOLOGY_FILE`,自動解析欄位因而依賴本機真實快取；比照 consult-discuss-switch 測試的做法,在檔案最前面釘一個保證不存在的路徑。
+- **qualification-applicability-scope（row 54）**：`resolve-review-loop-consult-discuss-gate` 的 case (xix) 會把真正受版控的 `evals/consult-capability-evidence-corpus.json` chmod 000 兩段 script 執行期間,對同時跑的其他 pooled 測試是個 flaky 陷阱；新增 `AUTOPILOT_CONSULT_CORPUS_FILE` / `AUTOPILOT_DISCUSS_CORPUS_FILE` 環境變數覆寫,讓 applicability-scope 的語料庫路徑可重新導向,case (xix) 改指向 `$TEST_TMP` 底下的暫存副本。
+- **落地驗證**：7 列全數落地；`hooks/tests/run.sh --parallel 8`（375 個測試檔,1 個 pre-existing 紅 `engine-qualify-verdict-stability` D6 honest/parity——`origin/develop` 基準同樣紅,非本輪引入）；`check-js-syntax`／`sync-codex-plugin-skills --check`／`validate.sh` 全綠；`claude-fable-5-1` 高強度複審 `SHIP-AS-IS`。
+- **已知後續（review 🔵 CUT/FOLLOW-UP）**：`scripts/lib/qualification-applicability-scope.js`（含 codex 鏡像）不在 B1 §3 檔案清單內,屬範圍記錄補正,非程式問題；row 42 的 `normEngine` 目前只硬編碼 `gemini-flash → gemini-3.6-flash-high` 一組別名,之後應改成共用 `normalize_agy_alias()` 的同一張別名表；row 23 的 `resolverField` 在完整快照缺任一 `classify` 鍵時仍會退回逐欄位 spawn,行為正確但未對生產環境形狀驗證過。
+
+prose-justification: 本版新增 7 條測試斷言與對應說明,散文成長是 RED→GREEN 證據行（各 assertion 記錄 base 觀察值）本身的必要內容,不是散文膨脹；相對 v2.35.2 基線的既有落差是先前版本累積的,這一行只讓當版區段滿足 north-star 閘門。
+
 ## v2.36.95 — wave-1b：10 個維護列整合（bundle 續集）
 
 - **Managed rail（row 15）**：非 git `--repo` 的 intake 在確認身分前就先拿走 Mission claim；改成在 `canonicalRepoIdentity` 檢查前就先擋，並補一個非 git fixture。

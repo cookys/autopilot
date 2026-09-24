@@ -8,7 +8,7 @@
 - rail 有缺陷時，一律先出 Fix 版再重派，或依文件降級。
 
 ## 現況（HEAD `41f1bff6` = v2.36.95 已 push）
-1. **09-21 的 backlog bundle 只剩 B1 `review-loop-resolver-a`（wave 2）**，plan 在 `docs/plans/2026-09-21-backlog-review-loop-resolver-a.md`，INDEX 標 `active`。
+1. **09-21 的 backlog bundle 只剩 B1 `review-loop-resolver-a`（wave 2）**，plan 在 `docs/plans/_archive/2026/09/2026-09-21-backlog-review-loop-resolver-a.md`，INDEX 標 `active`。
    其餘 5 個 bundle 的 plan 都已歸檔到 `docs/plans/_archive/2026/09/`。
 2. **平行派工配方**：證據與教訓在 `docs/plans/evidence/2026-09-24-backlog-wave-1b/README.md`。重點有兩條：
    - clone-local 的 shadow commit 要一開始就寫進 brief，不能事後用訊息補，工頭會（也應該）拒收。

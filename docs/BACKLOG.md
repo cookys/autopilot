@@ -154,14 +154,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
 - **Context**: measured on this host 2026-09-08 (`~/.autopilot/topology.json`, 17 rungs): indices 5–16 are ALL `high`, so within that region the ordering falls through to `latency.sample_wall_time_s` then engine name.
 
-### `probe-unknown.js classify` spawns `resolve-review-loop.sh` up to seven times per call — memoize one resolver invocation
-- **Status**: open
-- **Trigger**: a foreman round-end ledger or `cost-tracker` sample showing `probe-unknown.js classify` taking ≥ 10 s wall time, or a round that runs classify ≥ 3 times (each resolver spawn is a full config + topology resolution with a 15 s timeout).
-- **Effort**: S
-- **Source**: pre-merge review of `feat/v2.36.15-unknown-escalation-ladder`, 2026-09-07.
-- **Pointer**: docs/backlog/probe-unknown-js-classify-spawns-resolve-review-loop-sh-up-to-seven-times-per-ca.md
-- **Context**: v2.36.15 P1/P2 read `unknown_escalation`, the three budgets, `consult_dispatch`, `consult_resolved_from` and `unknown_resolved_from` through separate `resolve-review-loop.sh --field` calls (`scripts/probe-unknown.js` resolverField).
-
 ### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
 - **Status**: open
 - **Trigger**: a host with a working `kimi login` (this host's managed:kimi-code OAuth has no credential as of 2026-09-07, so the probe could not run), or Kimi Code CLI shipping `--prompt-file` / stdin prompt input (0.39.1 has neither: `-p ''` is…
@@ -233,46 +225,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/lint-hands-diffs-for-fixture-literals-leaking-into-production-code.md
 - **Context**: `references/evidence-discipline.md` §23 — three reviewers caught a `phase === 'p7'` carve-out the suite could not
 
-### resolve-review-loop.sh: audit every remaining runner comparison for codex-cli/codex canonicalisation
-- **Status**: open
-- **Trigger**: next touch of the reviewer_ladder / hetero_review extraction or any `entry.runner === implRunner` site
-- **Effort**: S
-- **Source**: same g3 dir
-- **Pointer**: docs/backlog/resolve-review-loop-sh-audit-every-remaining-runner-comparison-for-codex-cli-cod.md
-- **Context**: normRunner was added at the plan-panel and consult sites; other comparisons may re-admit a dual seat (GLM FOLLOW-UP, core review g3)
-
-### resolve-review-loop.test.sh capability-warning assertion messages still say "no warning" while expecting the topology fallback lines
-- **Status**: open
-- **Trigger**: next touch of that test file
-- **Effort**: S
-- **Source**: same g2 dir
-- **Pointer**: docs/backlog/resolve-review-loop-test-sh-capability-warning-assertion-messages-still-say-no-w.md
-- **Context**: wording only; the expectations are correct (GLM CUT, core review g2)
-
-### `normalize_agy_alias()` rewrites config-side seat names before the qc-exclusion match in `consult_dispatch: auto`
-- **Status**: open
-- **Trigger**: a `qc_panel` entry written as an agy alias (e.g. `gemini-flash`) while the topology ladder carries the resolved name — the exclusion set never matches and a qc seat can be picked as the consult seat
-- **Effort**: S
-- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D4.md`
-- **Pointer**: docs/backlog/normalize-agy-alias-rewrites-config-side-seat-names-before-the-qc-exclusion-matc.md
-- **Context**: found by the D4 hermetic test's first fixture (2026-09-04); the fixture was changed to a non-aliased name, the resolver was not.
-
-### `resolve-review-loop.sh` `auto` knobs read a stale `~/.autopilot/topology.json` and fall back natively
-- **Status**: open
-- **Trigger**: a host whose cached topology predates a plugin version that added roles (observed 2026-09-04: cache without `consult_ladder` ⇒ `consult_resolved_from: native-fallback` until `resolve-dispatch-topology.js` was re-run)
-- **Effort**: S
-- **Source**: `docs/projects/_archive/2026-09-04-dev-flow-hetero-loops/ledger/D1.md`
-- **Pointer**: docs/backlog/resolve-review-loop-sh-auto-knobs-read-a-stale-autopilot-topology-json-and-fall.md
-- **Context**: the resolver never regenerates the cache; `sync-all.sh` runs `--check` only.
-
-### `contract-parity` / `resolve-review-loop-consult-discuss-switch` tests read the real `~/.autopilot/topology.json`
-- **Status**: open
-- **Trigger**: the next time either test goes red on one host and green on another with the same tree (2026-09-07: red on this host for three days because the host cache carried two legacy `effort: ""` rungs; the fix landed in v2.36.16 but the *test*…
-- **Effort**: S
-- **Source**: v2.36.16 (2026-09-07), CHANGELOG「未做」
-- **Pointer**: docs/backlog/contract-parity-resolve-review-loop-consult-discuss-switch-tests-read-the-real-a.md
-- **Context**: both tests resolve the shipped template with `implementer_ladder: auto` / `consult_dispatch: auto`, so the resolver reads whatever topology cache the host has.
-
 ### `hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename
 - **Status**: open
 - **Trigger**: two collects for the same phase ever run concurrently (today callers serialise by generation)
@@ -296,14 +248,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.35.14 probe (`CHANGELOG.md`); opencode models.dev `reasoning_options` for the model
 - **Pointer**: docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md
 - **Context**: `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
-
-### `resolve-review-loop-consult-discuss-gate` case (xix) mutates the canonical evals corpus — move it to a scratch copy and un-serialize
-- **Status**: open
-- **Trigger**: the next time a pooled test dies with `EACCES` on `evals/consult-capability-evidence-corpus.json`, or when `hooks/tests/run.sh --parallel` wall time is being trimmed and the serial tail is on the table.
-- **Effort**: S
-- **Source**: v2.35.11 pre-merge suite run (`d48b5235`); `hooks/tests/resolve-review-loop-consult-discuss-gate.test.sh:487-493`
-- **Pointer**: docs/backlog/resolve-review-loop-consult-discuss-gate-case-xix-mutates-the-canonical-evals-co.md
-- **Context**: case (xix) `chmod 000`s the REAL `evals/consult-capability-evidence-corpus.json` for two script runs; any pooled test that requires the consult grader in that window (verdict-stability D7, 2026-09-03: 12 EACCES failures, green…
 
 ### `src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller
 - **Status**: open

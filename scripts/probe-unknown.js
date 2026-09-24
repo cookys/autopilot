@@ -174,7 +174,37 @@ function readOptionalJson(file) {
 }
 
 // ── resolver access (soft: absent field ⇒ default) ───────────────────────────
+// One full-JSON spawn per process; --field remains the fallback when the snapshot
+// cannot be produced or does not carry the requested key.
+let resolverSnapshotAttempted = false;
+let resolverSnapshotCache = null;
+
+function resolveAllFields(opts) {
+  if (resolverSnapshotAttempted) return resolverSnapshotCache;
+  resolverSnapshotAttempted = true;
+  resolverSnapshotCache = null;
+  const script = path.join(SCRIPT_DIR, 'resolve-review-loop.sh');
+  if (!fs.existsSync(script)) return null;
+  const r = spawnSync('bash', [script], { cwd: repoRootOf(opts), encoding: 'utf8', timeout: 15000 });
+  if (r.status !== 0) return null;
+  try {
+    const obj = JSON.parse(r.stdout || '');
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      resolverSnapshotCache = obj;
+      return obj;
+    }
+  } catch (err) { /* unparseable JSON — fall back per field */ }
+  return null;
+}
+
 function resolverField(field, opts) {
+  const snap = resolveAllFields(opts);
+  if (snap && Object.prototype.hasOwnProperty.call(snap, field)) {
+    const raw = snap[field];
+    if (raw === null || raw === undefined) return null;
+    const s = String(raw).trim();
+    return s === '' ? null : s;
+  }
   const script = path.join(SCRIPT_DIR, 'resolve-review-loop.sh');
   if (!fs.existsSync(script)) return null;
   const r = spawnSync('bash', [script, '--field', field], { cwd: repoRootOf(opts), encoding: 'utf8', timeout: 15000 });

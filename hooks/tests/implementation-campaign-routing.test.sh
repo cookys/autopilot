@@ -4018,6 +4018,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const root = process.argv[2];
 const tmp = process.argv[3];
 const { defaultCleanroomProbe, runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign-intake.js'));
@@ -4098,6 +4099,7 @@ assert.ok(!noGit.deny_paths.includes('/'), JSON.stringify(noGit.deny_paths));
 
 const shadowRepo = path.join(tmp, 'shadow-admit-repo');
 fs.mkdirSync(path.join(shadowRepo, '.claude'), { recursive: true });
+execFileSync('git', ['init', '-q', shadowRepo]);
 const govSrc = JSON.parse(fs.readFileSync(path.join(root, '.claude', 'owner-kernel-governance.json'), 'utf8'));
 govSrc.mission_convergence = {
   schema_version: 1,

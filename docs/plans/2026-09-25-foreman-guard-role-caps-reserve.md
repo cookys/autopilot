@@ -53,7 +53,15 @@ Subagents that do legitimate multi-step work are killed at an arbitrary call cou
 - `hooks/dispatch-model-guard.js`: read only. Confirm that a `Role:` line on line 2 (after `Engine:`) passes. Edit it only if P0 shows it does not.
 
 ## 4. Phases
-**P0 (S) spike: confirm route (a′), the child's own transcript.** Pre-check (depth-0, 2026-09-25, this session): a completed
+**P0 (S) spike: confirm route (a′), the child's own transcript. — DONE 2026-09-25: `ROUTE-A-PRIME: HOLDS`** (evidence `docs/plans/evidence/2026-09-25-foreman-guard-roles/p0/RULING.md`):
+- the payload's `agent_id` equals the transcript's `agentId` for foreground, background, and nested children;
+- `transcript_path` is always the ROOT session file, even for a nested child;
+- `<dirname(transcript_path)>/<session_id>/subagents/agent-<agent_id>.jsonl` is flat and exists at the child's first Bash call;
+- the first line's content starts verbatim with `Engine: sonnet\nRole: …`;
+- `agent_type` is `general-purpose` for all three, and the payload has no parent id;
+- depth-0's payload has no `agent_id`.
+
+P2 and P4 therefore stay in scope. Original spike design, kept for the record: Pre-check (depth-0, 2026-09-25, this session): a completed
 subagent's transcript lives at `~/.claude/projects/<project-slug>/<session_id>/subagents/agent-<agentId>.jsonl`. Its FIRST line is
 `type:"user"` whose `message.content` is the dispatcher's prompt (it began `Engine: sonnet`), and it carries `agentId` and `sessionId`.
 Route (a′) is therefore: derive `<dirname(transcript_path)>/<session_id>/subagents/agent-<agent_id>.jsonl` from the hook payload, read only its first line

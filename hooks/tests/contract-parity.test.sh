@@ -3,6 +3,10 @@
 
 # Pin config path so resolver evaluates the template config deterministically.
 export REVIEW_LOOP_CONFIG_OVERRIDE="$REPO_ROOT/project-config-template/review-loop-config.md"
+# The resolver's `auto` knobs read ~/.autopilot/topology.json by default — host state.
+# Pin it to a path that never exists so every resolve below sees the same (absent)
+# topology on every machine; cases that need a topology pass their own.
+export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
 
 # Create the validator script
 cat <<'JS' > "$TEST_TMP/validate-parity.js"

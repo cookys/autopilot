@@ -169,4 +169,16 @@ EOF
 
 assert_r43_resolve_review_loop
 
+assert_r44_contract_parity_reso() {
+  local SRC="$REPO_ROOT/hooks/tests/contract-parity.test.sh"
+  local FIRST_CALL EXPORT_LINE
+  FIRST_CALL="$(awk '/resolve-review-loop\.sh/{print NR; exit}' "$SRC")"
+  EXPORT_LINE="$(awk '/^export AUTOPILOT_TOPOLOGY_FILE=/{print NR; exit}' "$SRC")"
+  # RED at 65527b8625b6f32ac90703c3b8ed7d66d7007471: FAIL r44 expected a file-level export AUTOPILOT_TOPOLOGY_FILE=... before the first resolve-review-loop.sh call; got EXPORT_LINE='' FIRST_CALL='74'
+  [[ -n "$EXPORT_LINE" ]] || fail "r44: contract-parity.test.sh must export AUTOPILOT_TOPOLOGY_FILE (hermetic pin like the switch test)"
+  [[ "$EXPORT_LINE" -lt "$FIRST_CALL" ]] || fail "r44: AUTOPILOT_TOPOLOGY_FILE export must appear before the first resolve-review-loop.sh call"
+}
+
+assert_r44_contract_parity_reso
+
 finalize_test

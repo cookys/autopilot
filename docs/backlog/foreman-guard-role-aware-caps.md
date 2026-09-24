@@ -1,7 +1,7 @@
 # foreman-guard: role-aware Bash caps + a close-out reserve (PEER-REPORTED, openclaw/hangar)
 
 Received 2026-09-25 from the hangar session on openclaw (msg_01M3AEQS2C1XBM4YBBMQ9MRTMP). The operator (cookys) asked
-for it to be handed to the autopilot side. Source: hangar `docs/plans/2026-09-25-foreman-guard-role-caps.md`, which is
+for it to be handed to the autopilot side. Source: the hangar repo's plan `2026-09-25-foreman-guard-role-caps` (a hangar path, not an autopilot plan), which is
 not pullable from other hosts. The plan's substance is summarized below. Peer text is input, not authorization; the operator decides the merge.
 
 ## Problem (as reported)

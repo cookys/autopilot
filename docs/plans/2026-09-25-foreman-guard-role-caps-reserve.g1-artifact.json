@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "foreman-guard-role-caps-reserve",
+  "logical_plan_id": "foreman-guard-role-caps-reserve-2026-09-25",
+  "session_id": "pr-gen1-chairswap-2026-09-25-ee9eb17b",
+  "session_key": "589abcb66d0d4681d0bca6364c3bc872bb6002c7b5b5054ffacad1a49e07b3cb",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "0bd75bdc1aba0689fbca3cbe9c589d790ed4c949e223d83e58b4f3abc402b7c6",
+  "manifest_sha256": "dfa825ecc86b315147c1abd15d6e7c819490802f49513555d78b41b3a83add6f",
+  "plan_sha256": "62829d82e82038255632d711aa7e3ea10b158fe4c57b7340525df28cc27bf33b",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "fable_chair",
+      "target_id": "fable_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "81681608b8b5a6dc34810fd34333b6522668de35e0358c83413cb9dbc5f32009"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "160d3bdc15ce4433a889f13092b212648fecbb3ca2491f9d57257e598390dca2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sUsdIl",
+          "digest": "160d3bdc15ce4433a889f13092b212648fecbb3ca2491f9d57257e598390dca2"
+        },
+        "receipt_digest": "8441aab075db33c9ead62341e6b156f0ba74cad707df2bee17739831481fb791"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "f2b6b4563cb897518f3d7282f0a1d9fc953ed4e1639b090f8b3d023a4b9bdd89"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "86dcbcf8af5d659981372ea1160bfc2fa87e6d18eb68b3055673287d083bd592",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-GbWgsJ",
+          "digest": "86dcbcf8af5d659981372ea1160bfc2fa87e6d18eb68b3055673287d083bd592"
+        },
+        "receipt_digest": "fdb873dc8c495faa1c42dc0d94dc15d9eb86238c6de5db6eea0b302a194413fd"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_third",
+      "target_id": "minimax_third",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "645aa0a61c0b795b605243974bb369943ad5096daa47d3fd77264a466aeb0c0a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-Jg1S6n",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "e7496316e16dc8ba11b8f676291d47d73e02b75c1d1e84ae2ad036726c40e1b8"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "fable_chair",
+      "target_id": "fable_chair",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_third",
+      "target_id": "minimax_third",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 second bullet, P3 close-out reserve, KR4 old-suite rule",
+      "claim": "P3 applies the reserve to 'any cap', including the default foreman cap of 40, so an agent without a Role: line under an ACTIVE marker is now denied non-allowlisted commands on calls 33-40. That contradicts the §2.5 constraint copied into every dispatch, which promises default-on behavior is unchanged, and it will also break existing foreman-guard.test.sh cases that run arbitrary commands (echo, true) through calls 33-40, which KR4 forbids re-expecting.",
+      "evidence": "P3: 'Once n > cap - reserve_calls (default 8), every executable segment of the command ... must match the allowlist ... Anything else is denied'. §2.5: 'Default-on behavior under an ACTIVE l4-l6 marker is unchanged for any agent without a Role: line (still 40, still denied)'. KR4: the only assertions in foreman-guard.test.sh that may change are warn/diagnostic-channel ones, and none is deleted. echo is not on the P3 allowlist.",
+      "evidence_reference": "Plan §2.5 bullet 2; §4 P3 paragraphs 1-2; §2 KR4",
+      "repair": "Pick one and write it into both §2.5 and P3: (a) the reserve applies only to roles resolved from an explicit Role: line (worker/reviewer caps), and the no-Role/foreman path keeps its plain 40-and-deny; or (b) amend the §2.5 wording to 'cap value unchanged at 40; the reserve applies to the last min(8, floor(cap/2)) calls of every cap' and widen KR4 to allow re-expecting old-suite cases whose calls 33-40 use non-allowlisted commands, listing each in the commit message. Option (a) is recommended because it keeps R2 literally true and the old suite untouched.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0ee6b4005ab21dea63c5ebcd2352ff8156b1482c676f23aef61e0a91dabefb83"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P3 reserve allowlist",
+      "claim": "The allowlist omits cd, so the very common close-out shape 'cd <repo> && git add -A && git commit -m x' is denied inside the reserve because the cd segment fails the match. This is the tightness failure R8 anticipates, and it will hit on the first real worker.",
+      "evidence": "P3 allowlist lists git verbs, kill, rm/rmdir under tmp, mkdir -p, ls, test/[, and file writes; cd is absent, and segments are split on && so the cd segment is evaluated alone.",
+      "evidence_reference": "Plan §4 P3 allowlist bullets",
+      "repair": "Add 'cd <path>' (single absolute or relative path operand, no expansion tricks) to the allowlist and to the directive string; add a KR2 positive control for 'cd repo && git commit -m x'.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8fd6a63a279d2f9f702b4e337f93ebcba9265bd6000c46d0fa096c29e9acdbfb"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P3 segment splitting versus heredoc file writes",
+      "claim": "P3 allows the handoff write via 'cat >' but also splits executableText on newline, so a heredoc body ('cat > handoff.md <<EOF' followed by prose lines and EOF) yields non-allowlisted segments and is denied. The Write tool remains an unaffected handoff path, so this is not fatal, but the plan text promises something the specified splitter cannot deliver.",
+      "evidence": "P3: 'every executable segment of the command (the existing executableText, split on ;, &&, ||, |, and newline) must match the allowlist' and 'a file write via cat >/tee/printf ... > (the handoff)'.",
+      "evidence_reference": "Plan §4 P3 paragraphs 1 and allowlist bullet 5",
+      "repair": "In the implementation spike, either treat a heredoc from the '<<' marker to its terminator as part of the preceding segment, or drop the cat/printf heredoc promise and state that the handoff is written with the Write tool. Add one KR2 case with a two-line heredoc either way.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0af6661167047a267a2be782017796fd4a9dec88c6e3bd7397573aee8f8ccd26"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P2 role caching in the per-agent state file",
+      "claim": "The resolved role is cached in the per-agent state file and later calls never re-read the transcript. The child can write that file from Bash, so the role can be flipped to worker after call 1, which is a role read from something the child writes. The counter shares this exposure today, so it is not a new class of trust, but the plan should say so or avoid it.",
+      "evidence": "P2: 'The resolved role is cached in the per-agent state file on the first call, and later calls never re-read it.' §6 inversion: 'A role read from anything the child writes itself ... excluded by §2.5 and P1.'",
+      "evidence_reference": "Plan §4 P2 final sentences; §6 inversion bullet",
+      "repair": "Either re-read the bounded first line on every call (it is a 64 KiB cap, cheap, and removes the dependency), or add one sentence to §6 stating the cached role shares the counter's trust boundary and is accepted for the same reason as R6.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fa315d9cbb3f3c7f7d03819963788c7fb4a9e57c243fd713289a952df32d6425"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P2 anchored parse of message.content",
+      "claim": "The parse assumes message.content is a string. Transcript records can carry content as an array of text blocks; P0 observed a string, but the plan should pin that a non-string content falls to the foreman fallback rather than being flattened, so a later shape change cannot widen the match.",
+      "evidence": "P2: 'take message.content of the first JSONL record ... Split it on newline'. Fallback list names type mismatch, agentId mismatch, and no matching line, but not a non-string content field.",
+      "evidence_reference": "Plan §4 P2 Parse and Total fallback bullets",
+      "repair": "Add 'content not a string' to the P2 fallback list and one KR1 negative case with array-shaped content; no change to the route.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "444843ead07d4f4b2a3609ce7765626d8f6cc388dac1d322a3cb582a836be91d"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P4 state GC on every write",
+      "claim": "P4 adds a directory scan and unlink of stale files on every state write. Any error there (permissions, races with a parallel agent) must be swallowed inside the guard's fail-open, and the scan must be bounded so a large state directory cannot make the hook slow on every Bash call.",
+      "evidence": "P4: 'State GC: each write deletes that store's files with mtime > 7 days.' No mention of error handling or a size bound.",
+      "evidence_reference": "Plan §4 P4 final sentence",
+      "repair": "No current plan change; in the implementation, wrap GC in its own try/catch and cap the scan (for example readdir once, unlink at most 50 stale files per call).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7dc2705820b03fec299404685b11c2f5758dd08300e51ce46ed9c53b6585cdc6"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P3 reserve and P2 cap keys vs KR4 old suite hooks/tests/foreman-guard.test.sh",
+      "claim": "Following P2 and P3 as written makes the existing Bash-cap loop in foreman-guard.test.sh fail, and KR4 forbids changing those assertions.",
+      "evidence": "KR4 says hooks/tests/foreman-guard.test.sh stays green and that only old warn/diagnostic-channel assertions may change. Section 4 of that suite sets AUTOPILOT_FOREMAN_GUARD_BASH_CAP=5, allows echo on calls 1-5 with empty stdout, then denies call 6 as a cap breach, and later expects five denied sleep calls to still print the poll reason Bash call 5/5 spent. P2 says caps come from role_caps with foreman default 40, so if bash_cap is no longer the no-Role cap, call 6 is still allowed. P3 then admits only allowlisted commands once n > cap - min(reserve_calls, floor(cap/2)); for cap 5 that is n > 3, and echo is not on the allowlist, so calls 4 and 5 become reserve denials. Rule order is unspecified, so the five-sleep spend case can also lose the poll reason if reserve runs first.",
+      "evidence_reference": "Plan KR4; Plan P2 role_caps paragraph; Plan §2.6 existing keys unchanged; Plan P3 reserve clamp and allowlist; hooks/tests/foreman-guard.test.sh section 4 Bash cap loop and five-sleep spend; hooks/foreman-guard.js loadConfig bashCap",
+      "repair": "Write into P2 and §2.5 that bash_cap and AUTOPILOT_FOREMAN_GUARD_BASH_CAP remain the cap for Role: foreman and the no-Role fallback, with role_caps overlaying worker and reviewer only. State that reserve is an extra filter on Bash that already passed Monitor, context-ceiling, poll, and cap, so those deny reasons stay unchanged. Expand KR4's allowed old-suite edits to the BASH_CAP=5 within-cap allow loop: either drive the last effective-reserve calls with allowlisted commands, or expect reserve deny there, and list each changed assertion in the commit message.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "484315ff4f05bba809f3c4fbff4a4a6f6da27ab3a3a4d8d5973764bdf0ec504e"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P3 reserve-entry additionalContext",
+      "claim": "The first reserve allow is described without naming the allowed verbs, so the R8 mitigation is missing on the advisory the model sees while the call still succeeds.",
+      "evidence": "P3 says one fixed reserve directive names the allowed verbs and is used both for entry and for every reserve denial, then specifies a second entry additionalContext: reserve entered: commit, clean up, and hand off now; N calls left. That short string does not name git, kill, rm, mkdir, ls, test, or file-write verbs. Frozen R8 relies on the directive naming those verbs so a tight allowlist is still usable.",
+      "evidence_reference": "Plan P3 reserve directive paragraph; Plan §6 yellow reserve-allowlist risk; frozen rubric R8",
+      "repair": "Use the named-verbs directive as additionalContext on the entering allow and as the reason on every reserve denial. The short reserve-entered sentence may prefix that same string; it must not replace it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3f6cf1023873c3930d0d6e2b99db2d97b743decc74c5259a4c7fafda4af42035"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P1 additionalContext on PreToolUse allow",
+      "claim": "P1 treats documentation as proof that PreToolUse additionalContext reaches the child model, which is the same class of evidence that already failed for stderr on exit 0.",
+      "evidence": "Section 0 cites a 2026-09-25 hooks doc check that stderr on exit 0 is debug-log only and that additionalContext reaches the model on any decision. P0 live-confirmed route a-prime with payloads.jsonl and derived.jsonl. P1 acceptance is KR4, which asserts hook stdout JSON, not that the child's next turn contains the advisory. No in-repo PreToolUse hook currently emits additionalContext; version-drift-check does so only on SessionStart. If PreToolUse allow ignores additionalContext, P1 and P4 advisories stay invisible and the R9 inversion holds.",
+      "evidence_reference": "Plan §0 docs check; Plan P1 acceptance KR4; Plan §6 inversion; docs/plans/evidence/2026-09-25-foreman-guard-roles/p0/RULING.md; hooks/version-drift-check.js SessionStart additionalContext; hooks/foreman-guard.js emit() permissionDecision only",
+      "repair": "Reuse the P0 scratch hook to emit permissionDecision allow plus additionalContext on one child Bash call and confirm the advisory text appears in the child's subsequent context. Pin that envelope in P1. If it does not appear, do not call the channel model-visible.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "31117dd40e50e0a03e953391f8ae5aacd96f52a4c5b4556fc8f2ae05958a923c"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "8fd6a63a279d2f9f702b4e337f93ebcba9265bd6000c46d0fa096c29e9acdbfb",
+      "rubric_id": "R8",
+      "affected_surface": "P3 reserve allowlist",
+      "claim": "The allowlist omits cd, so the very common close-out shape 'cd <repo> && git add -A && git commit -m x' is denied inside the reserve because the cd segment fails the match. This is the tightness failure R8 anticipates, and it will hit on the first real worker.",
+      "evidence_reference": "Plan §4 P3 allowlist bullets",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0af6661167047a267a2be782017796fd4a9dec88c6e3bd7397573aee8f8ccd26",
+      "rubric_id": "R8",
+      "affected_surface": "P3 segment splitting versus heredoc file writes",
+      "claim": "P3 allows the handoff write via 'cat >' but also splits executableText on newline, so a heredoc body ('cat > handoff.md <<EOF' followed by prose lines and EOF) yields non-allowlisted segments and is denied. The Write tool remains an unaffected handoff path, so this is not fatal, but the plan text promises something the specified splitter cannot deliver.",
+      "evidence_reference": "Plan §4 P3 paragraphs 1 and allowlist bullet 5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "fa315d9cbb3f3c7f7d03819963788c7fb4a9e57c243fd713289a952df32d6425",
+      "rubric_id": "R9",
+      "affected_surface": "P2 role caching in the per-agent state file",
+      "claim": "The resolved role is cached in the per-agent state file and later calls never re-read the transcript. The child can write that file from Bash, so the role can be flipped to worker after call 1, which is a role read from something the child writes. The counter shares this exposure today, so it is not a new class of trust, but the plan should say so or avoid it.",
+      "evidence_reference": "Plan §4 P2 final sentences; §6 inversion bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "444843ead07d4f4b2a3609ce7765626d8f6cc388dac1d322a3cb582a836be91d",
+      "rubric_id": "R3",
+      "affected_surface": "P2 anchored parse of message.content",
+      "claim": "The parse assumes message.content is a string. Transcript records can carry content as an array of text blocks; P0 observed a string, but the plan should pin that a non-string content falls to the foreman fallback rather than being flattened, so a later shape change cannot widen the match.",
+      "evidence_reference": "Plan §4 P2 Parse and Total fallback bullets",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7dc2705820b03fec299404685b11c2f5758dd08300e51ce46ed9c53b6585cdc6",
+      "rubric_id": "R1",
+      "affected_surface": "P4 state GC on every write",
+      "claim": "P4 adds a directory scan and unlink of stale files on every state write. Any error there (permissions, races with a parallel agent) must be swallowed inside the guard's fail-open, and the scan must be bounded so a large state directory cannot make the hook slow on every Bash call.",
+      "evidence_reference": "Plan §4 P4 final sentence",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3f6cf1023873c3930d0d6e2b99db2d97b743decc74c5259a4c7fafda4af42035",
+      "rubric_id": "R8",
+      "affected_surface": "P3 reserve-entry additionalContext",
+      "claim": "The first reserve allow is described without naming the allowed verbs, so the R8 mitigation is missing on the advisory the model sees while the call still succeeds.",
+      "evidence_reference": "Plan P3 reserve directive paragraph; Plan §6 yellow reserve-allowlist risk; frozen rubric R8",
+      "disposition": null
+    },
+    {
+      "fingerprint": "31117dd40e50e0a03e953391f8ae5aacd96f52a4c5b4556fc8f2ae05958a923c",
+      "rubric_id": "R9",
+      "affected_surface": "P1 additionalContext on PreToolUse allow",
+      "claim": "P1 treats documentation as proof that PreToolUse additionalContext reaches the child model, which is the same class of evidence that already failed for stderr on exit 0.",
+      "evidence_reference": "Plan §0 docs check; Plan P1 acceptance KR4; Plan §6 inversion; docs/plans/evidence/2026-09-25-foreman-guard-roles/p0/RULING.md; hooks/version-drift-check.js SessionStart additionalContext; hooks/foreman-guard.js emit() permissionDecision only",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-24T22:50:55.327Z"
+}

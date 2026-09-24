@@ -136,4 +136,37 @@ EOF
 
 assert_r42_normalizeagyalias_re
 
+assert_r43_resolve_review_loop() {
+  unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
+  local TOPO="$TEST_TMP/r43-topology.json"
+  local CFG="$TEST_TMP/r43-review-loop.md"
+  cat > "$TOPO" <<'JSON'
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-25T00:00:00.000Z",
+  "host": "test-host",
+  "implementer_ladder": [
+    {
+      "engine": "gpt-5.6-sol",
+      "effort": "high",
+      "runner": "codex",
+      "family": "openai"
+    }
+  ]
+}
+JSON
+  cat > "$CFG" <<'EOF'
+consult_dispatch: auto
+EOF
+  local WARN
+  WARN="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field capability_warnings 2>/dev/null)" || true
+  # RED at e4c3e1dc1fafab6c282bd879f201a269f35c70be: WARN='["consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"]'
+  assert_contains "$WARN" "consult_ladder" "r43: stale-cache warning names the missing consult_ladder key"
+  assert_contains "$WARN" "scripts/resolve-dispatch-topology.js" "r43: stale-cache warning names resolve-dispatch-topology.js"
+  assert_not_contains "$WARN" "no qualified consult seat on this host after qc_panel exclusion" \
+    "r43: missing consult_ladder key does not use the generic empty-ladder warning"
+}
+
+assert_r43_resolve_review_loop
+
 finalize_test

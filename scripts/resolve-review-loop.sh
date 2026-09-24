@@ -1040,7 +1040,10 @@ try {
 const res = {
   plan_review_panel: Array.isArray(doc.plan_review_panel) ? doc.plan_review_panel : [],
   reviewer_ladder: Array.isArray(doc.reviewer_ladder) ? doc.reviewer_ladder : [],
-  consult_ladder: Array.isArray(doc.consult_ladder) ? doc.consult_ladder : []
+  consult_ladder: Array.isArray(doc.consult_ladder) ? doc.consult_ladder : [],
+  missing_plan_review_panel: !Object.prototype.hasOwnProperty.call(doc, "plan_review_panel"),
+  missing_reviewer_ladder: !Object.prototype.hasOwnProperty.call(doc, "reviewer_ladder"),
+  missing_consult_ladder: !Object.prototype.hasOwnProperty.call(doc, "consult_ladder")
 };
 process.stdout.write(JSON.stringify(res));
 process.exit(0);
@@ -1139,13 +1142,22 @@ process.exit(1);
       PLAN_REV_ENDPOINT=""
       PLAN_REVIEW_RESOLVED_FROM="native-fallback"
       PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0=1
+      _plan_missing_key=0
+      if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
+        node -e 'try { const d = JSON.parse(process.argv[1]); process.exit(d.missing_plan_review_panel ? 0 : 1); } catch { process.exit(1); }' "$_topo_json" 2>/dev/null && _plan_missing_key=1
+      fi
+      if [[ "$_plan_missing_key" -eq 1 ]]; then
+        _plan_warn="plan_review auto: stale topology cache is missing plan_review_panel — regenerate via scripts/resolve-dispatch-topology.js"
+      else
+        _plan_warn="plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true"
+      fi
       CAP_WARNINGS_JSON="$(node -e '
 let a = [];
 try { a = JSON.parse(process.argv[1]); } catch { a = []; }
 if (!Array.isArray(a)) a = [];
 a.push(process.argv[2]);
 process.stdout.write(JSON.stringify(a));
-' "$CAP_WARNINGS_JSON" "plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+' "$CAP_WARNINGS_JSON" "$_plan_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
     fi
   fi
 
@@ -1167,13 +1179,22 @@ process.exit(1);
       HETERO_REVIEW_RESOLVED_FROM="topology"
     else
       HETERO_REVIEW_RESOLVED_FROM="native-fallback"
+      _hetero_missing_key=0
+      if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
+        node -e 'try { const d = JSON.parse(process.argv[1]); process.exit(d.missing_reviewer_ladder ? 0 : 1); } catch { process.exit(1); }' "$_topo_json" 2>/dev/null && _hetero_missing_key=1
+      fi
+      if [[ "$_hetero_missing_key" -eq 1 ]]; then
+        _hetero_warn="hetero_review auto: stale topology cache is missing reviewer_ladder — regenerate via scripts/resolve-dispatch-topology.js"
+      else
+        _hetero_warn="hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native"
+      fi
       CAP_WARNINGS_JSON="$(node -e '
 let a = [];
 try { a = JSON.parse(process.argv[1]); } catch { a = []; }
 if (!Array.isArray(a)) a = [];
 a.push(process.argv[2]);
 process.stdout.write(JSON.stringify(a));
-' "$CAP_WARNINGS_JSON" "hetero_review auto: no qualified hetero reviewer on this host — reviewer_* stays native" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+' "$CAP_WARNINGS_JSON" "$_hetero_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
     fi
   fi
 
@@ -1242,13 +1263,22 @@ process.exit(1);
       CONSULT_RUNNER="claude-native"
       CONSULT_ENDPOINT=""
       CONSULT_RESOLVED_FROM="native-fallback"
+      _consult_missing_key=0
+      if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
+        node -e 'try { const d = JSON.parse(process.argv[1]); process.exit(d.missing_consult_ladder ? 0 : 1); } catch { process.exit(1); }' "$_topo_json" 2>/dev/null && _consult_missing_key=1
+      fi
+      if [[ "$_consult_missing_key" -eq 1 ]]; then
+        _consult_warn="consult_dispatch auto: stale topology cache is missing consult_ladder — regenerate via scripts/resolve-dispatch-topology.js"
+      else
+        _consult_warn="consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"
+      fi
       CAP_WARNINGS_JSON="$(node -e '
 let a = [];
 try { a = JSON.parse(process.argv[1]); } catch { a = []; }
 if (!Array.isArray(a)) a = [];
 a.push(process.argv[2]);
 process.stdout.write(JSON.stringify(a));
-' "$CAP_WARNINGS_JSON" "consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+' "$CAP_WARNINGS_JSON" "$_consult_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
     fi
   fi
 fi

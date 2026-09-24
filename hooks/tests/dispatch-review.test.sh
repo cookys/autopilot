@@ -497,6 +497,30 @@ case "${AGY_ENVELOPE_MODE:-valid}" in
   *) usage_input=101 ;;
 esac
 [ -n "${AGY_ARGV_FILE:-}" ] && printf '%s\n' "$@" > "$AGY_ARGV_FILE"
+# Emulate what real agy leaves in its app dir (bound to scratch by the reviewer),
+# so the post-run containment audit has a log + transcript to read.
+# AGY_AUDIT_MODE: clean (default) | fallback | toolcall | no-transcript.
+agy_app="$HOME/.gemini/antigravity-cli"
+agent=""; prev=""; for a in "$@"; do [ "$prev" = --agent ] && agent="$a"; prev="$a"; done
+# The sandbox is read-only outside scratch, so the stub cannot hand its argv back:
+# it enforces the contract itself. Missing --agent or an agent file without
+# `tools: []` exits 3, which turns every positive agy assertion red.
+if [ -z "$agent" ] || ! grep -qx 'tools: \[\]' "$agy_app/agents/$agent/agent.md" 2>/dev/null; then
+  echo "agy stub: review not run under a tool-less agent (--agent '$agent')" >&2
+  exit 3
+fi
+mkdir -p "$agy_app/log" "$agy_app/brain/conv-1/.system_generated/logs"
+{
+  echo 'I0924 cli_setting_manager.go:92] CLI settings initialized'
+  [ "${AGY_AUDIT_MODE:-clean}" = fallback ] && echo "W0924 session.go:91] Agent \"$agent\" not found, falling back to default"
+} > "$agy_app/log/cli-stub.log"
+if [ "${AGY_AUDIT_MODE:-clean}" != no-transcript ]; then
+  {
+    echo '{"step_index":0,"type":"USER_INPUT","content":"prompt"}'
+    [ "${AGY_AUDIT_MODE:-clean}" = toolcall ] && echo '{"step_index":1,"type":"PLANNER_RESPONSE","tool_calls":[{"name":"search_web"}]}'
+    echo '{"step_index":2,"type":"PLANNER_RESPONSE","content":"answer"}'
+  } > "$agy_app/brain/conv-1/.system_generated/logs/transcript.jsonl"
+fi
 RESPONSE="$response" USAGE_INPUT="${usage_input:-101}" node -e '
   process.stdout.write(JSON.stringify({
     conversation_id: "fixture",
@@ -1003,6 +1027,20 @@ if command -v bwrap >/dev/null 2>&1; then
   assert_eq "0" "$EXIT" "agy reviewer generic alias exits 0"
   assert_contains "$OUT" '"model": "gemini-3.6-flash-high"' "agy reviewer generic alias resolves before spend"
   assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy reviewer alias path preserves the verdict"
+
+  # Tool containment (2026-09-24, agy 1.2.9): the review runs under the tool-less
+  # agent, and agy's own log + transcript — not its exit code — decide. Every breach
+  # shape below exits 0 in real agy with a plausible answer.
+  # (Positive side: the stub exits 3 unless it runs under the tool-less agent, so every
+  # green agy assertion above already proves --agent + the sandboxed agent file.)
+  for AGY_MODE_CASE in fallback:'fell back to its default' toolcall:'called tool(s) [search_web]' no-transcript:'no agy transcript'; do
+    AGY_MODE="${AGY_MODE_CASE%%:*}"; AGY_WANT="${AGY_MODE_CASE#*:}"
+    OUT="$(AGY_AUDIT_MODE="$AGY_MODE" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+    assert_eq "1" "$EXIT" "agy $AGY_MODE: review fails closed"
+    assert_contains "$OUT" '"status": "no_verdict"' "agy $AGY_MODE: no_verdict"
+    assert_contains "$OUT" "$AGY_WANT" "agy $AGY_MODE: reason names the breach"
+    assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy $AGY_MODE: the answer is not accepted"
+  done
 
   # agy argv-payload ceiling (v2.35.7): agy has no --prompt-file, so an oversized review prompt
   # is rejected by execve BEFORE agy runs — a bare 126/127 with no vendor text, indistinguishable

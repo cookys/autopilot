@@ -569,6 +569,296 @@ PRELOAD
   assert_contains "$impl_line" '"high"' "r122: codex effort value preserved"
 }
 
+assert_r123_no_supported_withdra() {
+  # RED at base: src/mission/runtime.js has no withdrawPreparedMission export,
+  # so a DRAFT with zero grants cannot recover from MISSION_BINDING_MISMATCH
+  # after a graph revision under the same adoption key.
+  local runtime="$REPO_ROOT/src/mission/runtime.js"
+  assert_contains "$(cat "$runtime")" "function withdrawPreparedMission" \
+    "r123: withdrawPreparedMission is defined"
+  assert_contains "$(cat "$runtime")" "withdrawPreparedMission," \
+    "r123: withdrawPreparedMission is exported"
+
+  local OUT
+  OUT="$(
+    env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+      AUTOPILOT_TEST_ALLOW_MISSION_RUNTIME_SEAMS=1 \
+      node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const [root, temp] = process.argv.slice(2);
+process.env.AUTOPILOT_TEST_ALLOW_MISSION_RUNTIME_SEAMS = '1';
+const runtime = require(path.join(root, 'src', 'mission', 'runtime'));
+const mission = require(path.join(root, 'src', 'engine', 'mission-convergence'));
+
+const lines = [];
+const check = (id, value) => lines.push(`${id}\t${value ? 'PASS' : 'FAIL'}`);
+let flushed = false;
+function flush() {
+  if (flushed) return;
+  flushed = true;
+  for (const line of lines) console.log(line);
+}
+process.on('uncaughtException', (error) => {
+  lines.push('oracle-ran-to-completion\tFAIL');
+  flush();
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exit(1);
+});
+
+const sha = (value) => crypto.createHash('sha256').update(
+  typeof value === 'string' ? value : mission.canonicalJson(value),
+).digest('hex');
+
+function makeRepo(name) {
+  const repo = path.join(temp, name);
+  fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  execFileSync('git', ['init', '-q', repo]);
+  execFileSync('git', ['-C', repo, 'config', 'user.email', 'r123@example.invalid']);
+  execFileSync('git', ['-C', repo, 'config', 'user.name', 'r123']);
+  fs.writeFileSync(path.join(repo, 'src', 'value.txt'), ['## Solo node', 'base', ''].join('\n'));
+  const policy = {
+    schema_version: 1,
+    enforcement_mode: 'enforce',
+    max_campaigns: 4,
+    max_wall_seconds: 1000,
+    max_tool_calls: 20,
+    max_engine_attempts: 8,
+    max_external_wait_seconds: 100,
+    max_canonical_changed_files: 10,
+    max_output_bytes: 4096,
+    max_stagnant_campaigns: 4,
+    max_deliverables: 1,
+    max_parallel: 1,
+    max_batches: 1,
+    max_graph_depth: 1,
+    max_gate_attempts: 4,
+    closure_ratio: 0.75,
+  };
+  const projectGovernance = JSON.parse(fs.readFileSync(
+    path.join(root, '.claude', 'owner-kernel-governance.json'), 'utf8',
+  ));
+  projectGovernance.mission_convergence = policy;
+  fs.writeFileSync(
+    path.join(repo, '.claude', 'owner-kernel-governance.json'),
+    `${JSON.stringify(projectGovernance)}\n`,
+  );
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-qm', 'base']);
+  return { repo, policy, projectGovernance, policyDigest: sha(policy) };
+}
+
+function graphWithBudget(budget) {
+  return {
+    schema_version: 1,
+    artifact_type: 'mission_execution_graph',
+    nodes: [{
+      id: 'solo-node',
+      source_plan_ids: ['MISSION'],
+      source_rubric_ids: ['MISSIONR1'],
+      dependencies: [],
+      acceptance_ids: ['solo-ready'],
+      verification_commands: ['node fixture.js'],
+      gate_attempt_budget: budget,
+      reservation: {
+        campaigns: 1, wall_seconds: 100, tool_calls: 3, engine_attempts: 2,
+        external_wait_seconds: 0, canonical_changed_files: 2, output_bytes: 1024,
+      },
+      campaign: {
+        profile: 'poc',
+        allowed_path_prefixes: ['src/'],
+        spec: { path: 'src/value.txt', section: 'Solo node' },
+        required_paths: ['src/value.txt'],
+        output_paths: ['src/value.txt'],
+        max_changed_files: 2,
+        baseline_churn: 10,
+        max_growth_ratio: 1.5,
+        max_extra_churn: 5,
+        max_repair_generations: 1,
+        max_wall_seconds: 100,
+      },
+    }],
+  };
+}
+
+function depsFor(policy, policyDigest, graph, graphDigest) {
+  return {
+    resolveMissionPolicy: () => ({ policy, policy_digest: policyDigest }),
+    freezeMissionExecutionGraph: () => ({
+      graph, graph_digest: graphDigest, calculated_depth: 1, calculated_batches: 1,
+    }),
+    deriveMissionAdoptionKey: (binding) => sha(binding),
+    deriveMissionLineageId: (binding) => `lineage-v1-${sha(binding)}`,
+  };
+}
+
+function authorityFor(repo, intent, acceptance, policyDigest, graphDigest) {
+  const commonRaw = execFileSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], { encoding: 'utf8' }).trim();
+  const common = fs.realpathSync(path.isAbsolute(commonRaw) ? commonRaw : path.join(repo, commonRaw));
+  const repoIdentity = `git-common-dir:${common}`;
+  const adoptionBinding = {
+    repo_identity: repoIdentity,
+    intent,
+    initial_required_acceptance_hashes: [acceptance.contract_hash, acceptance.criteria_hash].sort(),
+  };
+  const adoptionKey = sha(adoptionBinding);
+  return {
+    adoptionKey,
+    authority: {
+      schema_version: 1,
+      task_id: 'solo-task',
+      task_authority_id: sha('task-authority'),
+      policy_hash: sha('owner-policy'),
+      authority_status: 'shadow',
+      intent,
+      acceptance,
+      mission_lineage_id: `lineage-v1-${adoptionKey}`,
+      mission_policy_digest: policyDigest,
+      mission_graph_digest: graphDigest,
+    },
+  };
+}
+
+const intent = {
+  objective: 'ship the frozen withdraw fixture',
+  requirements_hash: sha('requirements'),
+  scope: {
+    task_classes: ['implementation'],
+    domains: ['autopilot'],
+    languages: ['javascript'],
+    allowed_tools: ['git'],
+    artifact_roots: ['src'],
+  },
+};
+const acceptance = {
+  contract_hash: sha('acceptance-contract'),
+  criteria_hash: sha('acceptance-criteria'),
+  required_evidence: ['tests'],
+};
+
+check('export-present', typeof runtime.withdrawPreparedMission === 'function');
+
+const a = makeRepo('r123-empty');
+const graph1 = graphWithBudget(2);
+const digest1 = sha(graph1);
+const graph2 = graphWithBudget(3);
+const digest2 = sha(graph2);
+const bind1 = authorityFor(a.repo, intent, acceptance, a.policyDigest, digest1);
+const deps1 = depsFor(a.policy, a.policyDigest, graph1, digest1);
+const prepared = runtime.prepareMissionRuntimeForTest({
+  repo: a.repo,
+  taskAuthority: bind1.authority,
+  executionGraph: graph1,
+  authoritativeGovernance: a.projectGovernance,
+  preparedAt: '2026-09-24T00:00:00.000Z',
+}, deps1);
+check('prepared-fresh-draft', prepared && prepared.adopted === false && prepared.state.state === 'DRAFT');
+check('prepared-zero-claims', Object.keys(prepared.state.claims || {}).length === 0);
+check('prepared-zero-events', (prepared.state.events || []).length === 0);
+
+const bind2 = authorityFor(a.repo, intent, acceptance, a.policyDigest, digest2);
+check('same-adoption-key', bind1.adoptionKey === bind2.adoptionKey);
+const deps2 = depsFor(a.policy, a.policyDigest, graph2, digest2);
+let mismatch = null;
+try {
+  runtime.prepareMissionRuntimeForTest({
+    repo: a.repo,
+    taskAuthority: bind2.authority,
+    executionGraph: graph2,
+    authoritativeGovernance: a.projectGovernance,
+    preparedAt: '2026-09-24T00:00:01.000Z',
+  }, deps2);
+} catch (error) {
+  mismatch = error;
+}
+check('revised-graph-mismatch', mismatch && mismatch.code === 'MISSION_BINDING_MISMATCH');
+
+const withdrawn = runtime.withdrawPreparedMission({
+  repo: a.repo,
+  adoptionKey: bind1.adoptionKey,
+});
+check('withdraw-empty-draft', withdrawn && withdrawn.withdrawn === true);
+
+const registryPath = prepared.registry_path;
+const statePath = prepared.state_path;
+const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+check('registry-entry-removed', !registry.missions[bind1.adoptionKey]);
+check('state-file-removed', !fs.existsSync(statePath));
+
+const reprepared = runtime.prepareMissionRuntimeForTest({
+  repo: a.repo,
+  taskAuthority: bind2.authority,
+  executionGraph: graph2,
+  authoritativeGovernance: a.projectGovernance,
+  preparedAt: '2026-09-24T00:00:02.000Z',
+}, deps2);
+check('reprepare-revised-fresh', reprepared && reprepared.adopted === false
+  && reprepared.receipt.mission_graph_digest === digest2);
+
+const b = makeRepo('r123-claimed');
+const graphB = graphWithBudget(2);
+const digestB = sha(graphB);
+const bindB = authorityFor(b.repo, intent, acceptance, b.policyDigest, digestB);
+const depsB = depsFor(b.policy, b.policyDigest, graphB, digestB);
+const preparedB = runtime.prepareMissionRuntimeForTest({
+  repo: b.repo,
+  taskAuthority: bindB.authority,
+  executionGraph: graphB,
+  authoritativeGovernance: b.projectGovernance,
+  preparedAt: '2026-09-24T00:00:03.000Z',
+}, depsB);
+const granted = runtime.grantMissionCampaign({
+  repo: b.repo,
+  preparedReceipt: preparedB.receipt,
+  nodeId: 'solo-node',
+  now: '2026-09-24T00:00:04.000Z',
+});
+check('live-claim-granted', granted && granted.status === 'claimed');
+let refused = null;
+try {
+  runtime.withdrawPreparedMission({
+    repo: b.repo,
+    adoptionKey: bindB.adoptionKey,
+  });
+} catch (error) {
+  refused = error;
+}
+check('live-claim-refused', refused && refused.code === 'MISSION_WITHDRAW_NOT_DRAFT_OR_NOT_EMPTY');
+const stillThere = JSON.parse(fs.readFileSync(preparedB.registry_path, 'utf8'));
+check('live-claim-not-silently-withdrawn', Boolean(stillThere.missions[bindB.adoptionKey]));
+
+lines.push('oracle-ran-to-completion\tPASS');
+flush();
+if (lines.some((line) => line.endsWith('\tFAIL'))) process.exitCode = 1;
+NODE
+  )"
+  local ec=$?
+  assert_eq "$ec" "0" "r123: withdraw oracle exits 0"
+  for id in \
+    export-present \
+    prepared-fresh-draft \
+    prepared-zero-claims \
+    prepared-zero-events \
+    same-adoption-key \
+    revised-graph-mismatch \
+    withdraw-empty-draft \
+    registry-entry-removed \
+    state-file-removed \
+    reprepare-revised-fresh \
+    live-claim-granted \
+    live-claim-refused \
+    live-claim-not-silently-withdrawn \
+    oracle-ran-to-completion
+  do
+    assert_contains "$OUT" "$id	PASS" "r123: $id"
+  done
+}
+
 assert_r3_run_ledger_sh_lease
 assert_r16_dispatch_foreman_tes
 assert_r19_pin_store_hardening
@@ -576,4 +866,5 @@ assert_r92_reap_dispatch_branch
 assert_r93_prunetmpresidue_cove
 assert_r109_recover_stale_backlo
 assert_r122_verification_author
+assert_r123_no_supported_withdra
 finalize_test

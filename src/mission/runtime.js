@@ -867,6 +867,54 @@ function prepareMissionRuntimeForTest(input = {}, dependencies) {
   });
 }
 
+function missionNeverGranted(state) {
+  const claims = state && isPlainObject(state.claims) ? Object.keys(state.claims) : [];
+  const events = state && Array.isArray(state.events) ? state.events : [];
+  return claims.length === 0 && events.length === 0;
+}
+
+// Empty DRAFT only: drop the registry row and prepared state so the same
+// adoption key can be prepared again. Granted/consumed CLAIM release is a
+// different CLI path and is out of scope here.
+function withdrawPreparedMission(input = {}) {
+  const repoInfo = canonicalRepository(input.repo || process.cwd());
+  const adoptionKey = requireString(input.adoptionKey, 'adoption key', SHA256);
+  const paths = runtimePaths(repoInfo, adoptionKey);
+  return withExclusiveLock(paths.registry_lock, () => {
+    const registry = loadRegistry(repoInfo);
+    const existing = registry.missions[adoptionKey] || null;
+    if (!existing) {
+      fail(
+        'MISSION_WITHDRAW_NOT_DRAFT_OR_NOT_EMPTY',
+        'no prepared Mission exists for this adoption key',
+      );
+    }
+    const state = readJson(paths.state, 'registered Mission state');
+    mission.validateMissionState(state);
+    if (state.state !== 'DRAFT' || !missionNeverGranted(state)) {
+      fail(
+        'MISSION_WITHDRAW_NOT_DRAFT_OR_NOT_EMPTY',
+        'prepared Mission is not an empty DRAFT and cannot be withdrawn',
+      );
+    }
+    delete registry.missions[adoptionKey];
+    atomicWriteJson(paths.registry, registry);
+    try {
+      fs.unlinkSync(paths.state);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        fail('MISSION_RUNTIME_IO', `prepared Mission state cannot be deleted: ${error.message}`);
+      }
+    }
+    return {
+      withdrawn: true,
+      adoption_key: adoptionKey,
+      registry_path: paths.registry,
+      state_path: paths.state,
+    };
+  });
+}
+
 // A terminal Mission cannot be granted again in place.  A successor is the
 // only legal continuation: it gets a distinct registry identity while
 // retaining the predecessor's lineage, authority, policy, graph, and durable
@@ -1695,4 +1743,5 @@ module.exports = {
   successorAdoptionKey,
   validateGraphSpecsAtBase,
   validatePreparedReceipt,
+  withdrawPreparedMission,
 };

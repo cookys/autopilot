@@ -1,0 +1,550 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "foreman-guard-role-caps-reserve",
+  "logical_plan_id": "foreman-guard-role-caps-reserve-2026-09-25",
+  "session_id": "pr-gen2-2026-09-25-ee9eb17b",
+  "session_key": "589abcb66d0d4681d0bca6364c3bc872bb6002c7b5b5054ffacad1a49e07b3cb",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "0bd75bdc1aba0689fbca3cbe9c589d790ed4c949e223d83e58b4f3abc402b7c6",
+  "manifest_sha256": "dfa825ecc86b315147c1abd15d6e7c819490802f49513555d78b41b3a83add6f",
+  "plan_sha256": "faca20528847b26236f5e692ce8d7b3d603b611b72e7f31b56a96fc9ae945139",
+  "growth_ratio": {
+    "numerator": 15557,
+    "denominator": 13738
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "fable_chair",
+      "target_id": "fable_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "8eea67bc0e5392409bd00d89ca3d9c01b7270e91b68d9c547a99bc3f477907fd"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "dbf4062e38f1e272bc24c3aa1991e3cf4b0e8da31b543dde7f0a40bc7ffebfd6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-YEWBhN",
+          "digest": "dbf4062e38f1e272bc24c3aa1991e3cf4b0e8da31b543dde7f0a40bc7ffebfd6"
+        },
+        "receipt_digest": "f48e0e376d2fef426656d8f1aba5ac16b9634edeb69fd19dd0c35f9f7ba452be"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "b7d38bfeed626d79b560d5e49bc96a0f0e3344514036aee24e59b535629ddacc"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "20df8a31db7a8d4304439d8a7ea18b47e3f6af9528e5895b94f7c2c3c5412ab5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-lmPiOV",
+          "digest": "20df8a31db7a8d4304439d8a7ea18b47e3f6af9528e5895b94f7c2c3c5412ab5"
+        },
+        "receipt_digest": "23adea9cdbd1533946879e67ed47ddc1d07effd6d489654980e74790be54a437"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_third",
+      "target_id": "minimax_third",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "9c3646f8ffb7308d64f5ca6774b32af6eb6f8b6b082b873be3fd5868795fc018"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5a3a811e3ac23a739432693daf8d1cd80c22c3940ef5946d3daa4e925aae8d84",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-yKcM8W",
+          "digest": "5a3a811e3ac23a739432693daf8d1cd80c22c3940ef5946d3daa4e925aae8d84"
+        },
+        "receipt_digest": "269ae382080abd2de79ea15a6ffb0dc0d26bcd5c67506ba9e632a34836835732"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "fable_chair",
+      "target_id": "fable_chair",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_third",
+      "target_id": "minimax_third",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P2 role-aware caps, per-agent state file, hooks/foreman-guard.js role resolution",
+      "claim": "P2 contradicts itself on role caching: it first mandates no cache with re-derivation on every call and a state file that never holds a role, then says the resolved role is cached in the per-agent state file on the first call and never re-read. The cached variant lets the role be read from a file the child can rewrite with its own Bash calls, which R3 and R9 exclude, and an implementer copying P2 into a dispatch cannot tell which sentence governs.",
+      "evidence": "P2 text: 'No cache: the role is re-derived on EVERY call. The per-agent state file holds only counters, never a role.' followed later in the same phase by 'The resolved role is cached in the per-agent state file on the first call, and later calls never re-read it.' The Review log lists 'no role cache' as an accepted-and-folded G1 item, so the second sentence is a stale remnant.",
+      "evidence_reference": "§4 P2 (both sentences); §2.5 bullet 3; §6 Inversion; Review log G1 re-run dispositions",
+      "repair": "Delete the sentence 'The resolved role is cached in the per-agent state file on the first call, and later calls never re-read it.' from P2, and add to KR1 acceptance a case where the state file contains a spurious role key and the guard still derives the role from the transcript first line (state-file role is ignored).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "03034fdf31257f17a12954ee548708a9f074247d12bea7a1136306541d81cbb2"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P3 reserve allowlist rm/rmdir rule, reserve directive text",
+      "claim": "The rm/rmdir rule requires every path operand to be absolute under /tmp/ or $TMPDIR, but the directive tells the agent to use '$TMPDIR', so the agent will type a literal $TMPDIR prefix. The plan does not say whether the hook accepts that literal prefix, expands process.env.TMPDIR of the hook process, or treats it as non-absolute and denies it, which would make the directive misleading exactly when a reviewer needs to clean a sandbox.",
+      "evidence": "P3 allowlist: 'rm/rm -r/rm -rf/rmdir where every path operand is absolute under /tmp/ or $TMPDIR'; directive string: 'rm/rmdir under /tmp or $TMPDIR'. No expansion rule is stated and the KR2 negative control only covers a path outside both prefixes.",
+      "evidence_reference": "§4 P3 allowlist bullet 3 and the reserve directive string; §4 P3 Acceptance negative controls",
+      "repair": "State the rule in P3: a path operand is accepted if it starts with /tmp/ or with the literal text $TMPDIR/ or ${TMPDIR}/, or with the hook process value of TMPDIR when set; add one KR2 case with a literal $TMPDIR/ operand allowed and one with a relative operand denied.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4fb504105f2f0f5c07b40317827352aa7fc1dc9f97ec10915f1ba401fc4d2c69"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "P2 route (a-prime) transcript read; trust boundary documentation in hooks/README.md",
+      "claim": "The plan asserts the child cannot rewrite its own first message, but the child holds Bash and the subagent transcript is an ordinary file under the user home, so a child could edit line 1 in place before its next Bash call. This is the same trust level as the existing counter state file and is acceptable for a soft cap, but the plan should say so rather than claim immutability.",
+      "evidence": "P0 pre-check: 'The child cannot rewrite its own first message, so the role stays dispatcher-owned.' P0 evidence: the file lives at <dirname(transcript_path)>/<session_id>/subagents/agent-<agent_id>.jsonl on the same filesystem the child's Bash runs on.",
+      "evidence_reference": "§4 P0 'Original spike design' paragraph; §6 Inversion bullet",
+      "repair": "No current change to code; in P5 add one sentence to the hooks/README.md row and §6 stating that role and counters are advisory soft-cap inputs readable and writable by any process with the user's filesystem access, and that a signed role header remains out of scope per §7.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "80fa60c76392aa6f5226c35531e77045591da0b9dd67579bb04808c55142a674"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "Frozen rubric R2 wording versus plan §2.5 and KR4",
+      "claim": "Frozen R2 says default-on behavior under an active marker is unchanged for a no-Role agent, while the plan deliberately narrows calls 33 to 40 of such an agent to the close-out allowlist and expects the old cap-loop assertions to change. Depth-0 already made this decision in the G1 dispositions, so it is not re-litigated here, but the rubric text no longer matches the plan and should be regenerated at the next freeze so later reviewers do not raise it as a violation.",
+      "evidence": "§2.5 bullet 2: 'keeps the SAME cap value (40, still denied at 41). The one intended change is that its last effective-reserve calls (P3) admit only the close-out allowlist.' KR4 group (ii): the Bash-cap loop assertions may change to use allowlisted commands or expect the reserve deny. Review log: 'accepted blockers: R2 reserve-vs-default ... The reserve applies to foremen by intent'.",
+      "evidence_reference": "§2.5 bullet 2; §2 KR4; Review log G1 re-run accepted blockers",
+      "repair": "No current change to the plan; regenerate the frozen rubric R2 line from the reworded §2.5 at the next freeze, and make sure the implementation commit message lists each changed cap-loop assertion as KR4 requires.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6f4bd8e015e1d8a49f74334adbef23002441d80c4614569c21da2a16d21f9774"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/foreman-guard.js P2 role resolution and the per-agent state file",
+      "claim": "P2 both forbids storing a role and requires caching it on the first call, so a failed first read can permanently replace the dispatcher-owned first user message with a sticky foreman fallback.",
+      "evidence": "P2 opens with No cache: the role is re-derived on EVERY call and the per-agent state file holds only counters, never a role. Later in the same phase it says the resolved role is cached in the per-agent state file on the first call, and later calls never re-read it. The review log says G1 accepted and folded no role cache, so the cache sentence is an unremoved opposite policy. If call 1 misses the child jsonl and caches foreman, later calls never consult the first user message and a Role: worker child stays at 40.",
+      "evidence_reference": "Plan §4 P2 (No cache paragraph vs the sentence The resolved role is cached...); Review log G1 dispositions (accepted and folded: no role cache); Plan §2.5 role source rule",
+      "repair": "Delete the cache sentence. Keep re-derive-on-every-call from the first type=user record only (bounded first line, agentId must match payload agent_id). The state file stores counters only. A read miss must yield a one-call foreman fallback and must retry the first user message on the next call.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f1a2fe57d2d5645ba2e971df27caf1969dae29335bb83cf57a0353cecd37e608"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/foreman-guard.js P3 reserve additionalContext; KR2 acceptance",
+      "claim": "P3 specifies two different reserve-entry texts, and the short one does not name the allowed verbs that R8 requires as the tightness mitigation.",
+      "evidence": "P3 says the reserve directive is one fixed string used both for entry and for every reserve denial, and that string names cd, git status/diff/add/commit/log/show/rev-parse/restore --staged, kill, rm/rmdir, mkdir -p, ls, test, and file writes. The next paragraph then says the call that first enters the reserve carries additionalContext reserve entered: commit, clean up, and hand off now; N calls left, which does not name those verbs. G1 rejected a dual-string design on the rationale that entry and denials already share one fixed string. KR2 only says the entering call carries a model-visible additionalContext directive, so an implementer can ship the short string and still claim KR2 while missing R8.",
+      "evidence_reference": "Plan §4 P3 (one fixed string vs reserve entered: ...); Plan §2 KR2; Review log G1 rejected dual reserve strings; frozen R8",
+      "repair": "Delete the short reserve entered sentence. Use only the long fixed directive that names the allowed verbs for both reserve entry (on an allow) and every reserve denial. KR2 must assert that named-verb string.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e38969052a3bccc1f6464df52c2e77851bdffcfb74e04560f87785953bce5bea"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "foreman_guard.role_caps and AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS",
+      "claim": "The env form is shown as worker=120,reviewer=120 with no overlay rule, so a replace parse can drop the default-on foreman/no-Role cap of 40.",
+      "evidence": "P2 says caps come from foreman_guard.role_caps with defaults foreman 40, worker 120, reviewer 120, and gives AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS as worker=120,reviewer=120. §2.6 says existing keys and their defaults are unchanged, but it never says whether the env string is a partial overlay or a full map replace. A replace that omits foreman leaves the no-Role path without the required 40/deny-at-41 default.",
+      "evidence_reference": "Plan §4 P2 cap/env sentence; Plan §2.6 Compatibility; Plan §2.5 unmarked Role keeps 40",
+      "repair": "State that JSON defaults are the full map and the env string is a partial overlay: omitted roles keep foreman=40, worker=120, reviewer=120. Empty or unparsable env does not uncap.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6c2f95110add99fa149748f6ac916a3b1ccaef4f792e8b49f8f44af86b342c08"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/foreman-guard.js P2 total fallback vs depth-0 payloads",
+      "claim": "P2 maps every resolution failure, including a missing agent_id, to role foreman and cap 40, which can newly cap depth-0 calls that today's marker path does not treat as a subagent.",
+      "evidence": "P0 records that depth-0's payload has no agent_id. P4 applies the no-marker advisory only when agent_id is present. P2 instead says every failure yields role foreman and never a pass, covering a missing transcript_path and related misses, without carving out a missing agent_id. Under an active l4-l6 marker that would change default-on for the parent session if the current guard uses agent_id (or equivalent) to skip depth-0.",
+      "evidence_reference": "Plan §4 P0 (depth-0 payload has no agent_id); Plan §4 P2 Total fallback; Plan §4 P4 agent_id present gate; Plan §2.5 default-on 40",
+      "repair": "Pin missing agent_id to today's control flow (do not newly assign role=foreman or a bash cap). Apply P2 role caps only where the existing guard already enforces bash_cap on a subagent payload.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e57eb610db0a4e9794f4bcdfffdd26d1db5ab62356da22a0cac3a14fb871a692"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/foreman-guard.js P3 allowlist matcher",
+      "claim": "P3 lists allowlist families but does not define argv matching, so KR2's git commit -m x and the rm path constraint can be coded as exact-match (too tight) or as an unbounded prefix (too loose).",
+      "evidence": "KR2 requires cargo build denied and git commit -m x allowed inside the reserve. The allowlist writes git status|diff|add|commit|log|show|rev-parse|restore --staged with no rule that extra git args are permitted, whether restore without --staged is denied, or whether rm path operands are canonicalized before the /tmp or TMPDIR check. Without that rule, git commit -m x can fail an exact match, and rm /tmp/../etc/passwd can pass a string-prefix under /tmp/ check.",
+      "evidence_reference": "Plan §2 KR2; Plan §4 P3 allowlist bullets and negative controls",
+      "repair": "Specify argv matching using existing executableText splits: git is allowed when the verb is one of the listed subcommands and restore requires --staged; extra args are allowed for those git verbs; kill allows a pid token; rm/rmdir allow only operands that resolve to a path still under /tmp/ or TMPDIR; cat/tee/printf redirects stay as already listed. Put those cases in the new suite.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f1c866775b4a5b8aeb5edf610bf22e3dfd0f6b5a3ab6e762630739a508421da6"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1 additionalContext-fail fallback vs mode=warn escape hatch",
+      "claim": "If the P1 nonce probe fails, reserve-entry and advisories become deny reasons, which can spend the reserve on the announcement itself and leave mode=warn with no allow-and-tell hatch.",
+      "evidence": "P1 says that if the nonce does not reach the subagent, advisories and the reserve-entry directive are delivered as the reason of a DENY, and P4 is dropped. R8's tightness mitigation is that warn mode still exists as an escape hatch. Denied calls still spend the cap/reserve (P3). The probe-fail branch does not say that mode=warn stays allow, so warn and the first reserve call can both become denies.",
+      "evidence_reference": "Plan §4 P1 probe-fail paragraph; Plan §4 P3 denied calls still spend one; Plan §6 R8 warn hatch; frozen R8",
+      "repair": "If the probe fails: keep mode=warn as allow (best-effort reason text); do not deny an allowlisted reserve call solely to deliver the named-verb directive; drop P4 as already written. Record that branch in §6 if the probe actually fails.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0a6df53dc25ce928b391ebf20b7a419b9f9f8b87b516ce17dd130016761e6d1b"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/foreman-guard-roles.test.sh KR2 negative control",
+      "claim": "The P3 negative control of 8 denied cargo build attempts then a git commit that hits the cap is false unless those 8 attempts run after the reserve window opens.",
+      "evidence": "P3 accepts 8 denied cargo build attempts exhaust the reserve, so the next git commit hits the cap. Reserve starts once n > cap - reserve_calls (default 8 of 40). Cargo build before that window is allowed and does not exhaust the reserve, so a naive 8-then-commit sequence never hits the cap and the new suite would be red for the wrong reason. R4 puts this case in the new suite.",
+      "evidence_reference": "Plan §4 P3 Acceptance/negative controls; Plan §2 KR2; Plan §4 P2/P5 new suite path",
+      "repair": "In hooks/tests/foreman-guard-roles.test.sh, spend cap-reserve_calls allowlisted or pre-reserve calls first, then 8 denied cargo build attempts, then assert git commit is a cap deny. State that ordering in P3 acceptance.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9e69cbce127f2da19745fa4c1661a8ef3bcd6605dbc395919dadab8134bd71d2"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/foreman-guard-roles.test.sh first-record role negative control",
+      "claim": "The inversion that a role taken from anything the child writes later must fail is specified in P2 but is not an explicit new-suite case, so a later-record parse can land green.",
+      "evidence": "§6 inversion says a role read from anything the child writes itself is excluded by §2.5 and P1. P2 reads only the first jsonl record, type=user, agentId match, lines 1-5, regex Role: (foreman|worker|reviewer). KR1 only proves the happy fixture. Without a fixture whose first record has no Role and a later record or command output contains Role: worker, the new suite can pass while the hook scans the whole file.",
+      "evidence_reference": "Plan §6 Inversion; Plan §2.5 first user message only; Plan §4 P2 parse rules; Plan §2 KR1",
+      "repair": "Add a case in hooks/tests/foreman-guard-roles.test.sh: first user record has no Role line; a later jsonl line contains Role: worker; under an active marker the cap stays 40 and call 41 is denied.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bff2eec447f4fa0ddfe99ad205bd96f2a09f4a834d236dd250b9c8a80a64ea8e"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P2 role-aware caps (role caching policy text)",
+      "claim": "P2 contains a direct internal contradiction about role caching. The first bullet 'No cache' states the role is re-derived on every call and the per-agent state file holds only counters and never a role, but the trailing sentence of the third bullet states the resolved role is cached in the per-agent state file on the first call and later calls never re-read it.",
+      "evidence": "P2 opens with 'No cache: the role is re-derived on EVERY call. The per-agent state file holds only counters, never a role' and closes with 'The resolved role is cached in the per-agent state file on the first call, and later calls never re-read it.' These are mutually exclusive statements about the same state file. The G1 review log records 'no role cache' as accepted and folded, so the resolved intent matches the first bullet, not the trailing sentence.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 4 P2 (role-aware caps), first bullet 'No cache' versus the third bullet trailing sentence 'The resolved role is cached...'; Review log G1 disposition 'accepted and folded: cd, no role cache, non-string content, GC bounds, and a live additionalContext probe with a deny-reason fallback'",
+      "repair": "Delete the trailing sentence 'The resolved role is cached in the per-agent state file on the first call, and later calls never re-read it.' from P2 so the section uniformly implements the 'No cache' policy the G1 disposition accepted. No new code change is implied; this is a plan-text fix that can ride along with the P2 implementation commits.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_third",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c0e287e707e4fbfbeff9481cae9fd3105064611e73ad9b05c5884f2940683fe2"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "4fb504105f2f0f5c07b40317827352aa7fc1dc9f97ec10915f1ba401fc4d2c69",
+      "rubric_id": "R8",
+      "affected_surface": "P3 reserve allowlist rm/rmdir rule, reserve directive text",
+      "claim": "The rm/rmdir rule requires every path operand to be absolute under /tmp/ or $TMPDIR, but the directive tells the agent to use '$TMPDIR', so the agent will type a literal $TMPDIR prefix. The plan does not say whether the hook accepts that literal prefix, expands process.env.TMPDIR of the hook process, or treats it as non-absolute and denies it, which would make the directive misleading exactly when a reviewer needs to clean a sandbox.",
+      "evidence_reference": "§4 P3 allowlist bullet 3 and the reserve directive string; §4 P3 Acceptance negative controls",
+      "disposition": null
+    },
+    {
+      "fingerprint": "80fa60c76392aa6f5226c35531e77045591da0b9dd67579bb04808c55142a674",
+      "rubric_id": "R9",
+      "affected_surface": "P2 route (a-prime) transcript read; trust boundary documentation in hooks/README.md",
+      "claim": "The plan asserts the child cannot rewrite its own first message, but the child holds Bash and the subagent transcript is an ordinary file under the user home, so a child could edit line 1 in place before its next Bash call. This is the same trust level as the existing counter state file and is acceptable for a soft cap, but the plan should say so rather than claim immutability.",
+      "evidence_reference": "§4 P0 'Original spike design' paragraph; §6 Inversion bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6f4bd8e015e1d8a49f74334adbef23002441d80c4614569c21da2a16d21f9774",
+      "rubric_id": "R2",
+      "affected_surface": "Frozen rubric R2 wording versus plan §2.5 and KR4",
+      "claim": "Frozen R2 says default-on behavior under an active marker is unchanged for a no-Role agent, while the plan deliberately narrows calls 33 to 40 of such an agent to the close-out allowlist and expects the old cap-loop assertions to change. Depth-0 already made this decision in the G1 dispositions, so it is not re-litigated here, but the rubric text no longer matches the plan and should be regenerated at the next freeze so later reviewers do not raise it as a violation.",
+      "evidence_reference": "§2.5 bullet 2; §2 KR4; Review log G1 re-run accepted blockers",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6c2f95110add99fa149748f6ac916a3b1ccaef4f792e8b49f8f44af86b342c08",
+      "rubric_id": "R2",
+      "affected_surface": "foreman_guard.role_caps and AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS",
+      "claim": "The env form is shown as worker=120,reviewer=120 with no overlay rule, so a replace parse can drop the default-on foreman/no-Role cap of 40.",
+      "evidence_reference": "Plan §4 P2 cap/env sentence; Plan §2.6 Compatibility; Plan §2.5 unmarked Role keeps 40",
+      "disposition": null
+    },
+    {
+      "fingerprint": "e57eb610db0a4e9794f4bcdfffdd26d1db5ab62356da22a0cac3a14fb871a692",
+      "rubric_id": "R2",
+      "affected_surface": "hooks/foreman-guard.js P2 total fallback vs depth-0 payloads",
+      "claim": "P2 maps every resolution failure, including a missing agent_id, to role foreman and cap 40, which can newly cap depth-0 calls that today's marker path does not treat as a subagent.",
+      "evidence_reference": "Plan §4 P0 (depth-0 payload has no agent_id); Plan §4 P2 Total fallback; Plan §4 P4 agent_id present gate; Plan §2.5 default-on 40",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f1c866775b4a5b8aeb5edf610bf22e3dfd0f6b5a3ab6e762630739a508421da6",
+      "rubric_id": "R8",
+      "affected_surface": "hooks/foreman-guard.js P3 allowlist matcher",
+      "claim": "P3 lists allowlist families but does not define argv matching, so KR2's git commit -m x and the rm path constraint can be coded as exact-match (too tight) or as an unbounded prefix (too loose).",
+      "evidence_reference": "Plan §2 KR2; Plan §4 P3 allowlist bullets and negative controls",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0a6df53dc25ce928b391ebf20b7a419b9f9f8b87b516ce17dd130016761e6d1b",
+      "rubric_id": "R8",
+      "affected_surface": "P1 additionalContext-fail fallback vs mode=warn escape hatch",
+      "claim": "If the P1 nonce probe fails, reserve-entry and advisories become deny reasons, which can spend the reserve on the announcement itself and leave mode=warn with no allow-and-tell hatch.",
+      "evidence_reference": "Plan §4 P1 probe-fail paragraph; Plan §4 P3 denied calls still spend one; Plan §6 R8 warn hatch; frozen R8",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9e69cbce127f2da19745fa4c1661a8ef3bcd6605dbc395919dadab8134bd71d2",
+      "rubric_id": "R4",
+      "affected_surface": "hooks/tests/foreman-guard-roles.test.sh KR2 negative control",
+      "claim": "The P3 negative control of 8 denied cargo build attempts then a git commit that hits the cap is false unless those 8 attempts run after the reserve window opens.",
+      "evidence_reference": "Plan §4 P3 Acceptance/negative controls; Plan §2 KR2; Plan §4 P2/P5 new suite path",
+      "disposition": null
+    },
+    {
+      "fingerprint": "bff2eec447f4fa0ddfe99ad205bd96f2a09f4a834d236dd250b9c8a80a64ea8e",
+      "rubric_id": "R9",
+      "affected_surface": "hooks/tests/foreman-guard-roles.test.sh first-record role negative control",
+      "claim": "The inversion that a role taken from anything the child writes later must fail is specified in P2 but is not an explicit new-suite case, so a later-record parse can land green.",
+      "evidence_reference": "Plan §6 Inversion; Plan §2.5 first user message only; Plan §4 P2 parse rules; Plan §2 KR1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c0e287e707e4fbfbeff9481cae9fd3105064611e73ad9b05c5884f2940683fe2",
+      "rubric_id": "R3",
+      "affected_surface": "P2 role-aware caps (role caching policy text)",
+      "claim": "P2 contains a direct internal contradiction about role caching. The first bullet 'No cache' states the role is re-derived on every call and the per-agent state file holds only counters and never a role, but the trailing sentence of the third bullet states the resolved role is cached in the per-agent state file on the first call and later calls never re-read it.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 4 P2 (role-aware caps), first bullet 'No cache' versus the third bullet trailing sentence 'The resolved role is cached...'; Review log G1 disposition 'accepted and folded: cd, no role cache, non-string content, GC bounds, and a live additionalContext probe with a deny-reason fallback'",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-24T23:01:42.946Z"
+}

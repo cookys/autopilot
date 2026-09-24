@@ -1,0 +1,436 @@
+foreman sitting start campaigns=28 trials=2
+foreman start 1/28 trial=? family=F id=cmp-9912bd75
+foreman prose 1 cmp-9912bd75 no-json
+foreman dispatch 1 cmp-9912bd75 role=implementer status=completed
+foreman prose 2 cmp-9912bd75 not-a-tool
+foreman prose 3 cmp-9912bd75 not-a-tool
+foreman prose 4 cmp-9912bd75 not-a-tool
+foreman dispatch 2 cmp-9912bd75 role=reviewer status=completed
+foreman prose 5 cmp-9912bd75 not-a-tool
+foreman prose 6 cmp-9912bd75 not-a-tool
+foreman prose 7 cmp-9912bd75 not-a-tool
+foreman verdict cmp-9912bd75 blocked ok=undefined
+foreman done 1/28 cmp-9912bd75 correct=false critical=false codes=FALSE_UNMET
+foreman start 2/28 trial=? family=F-twin id=cmp-5d119807
+foreman prose 1 cmp-5d119807 not-a-tool
+foreman prose 2 cmp-5d119807 not-a-tool
+foreman prose 3 cmp-5d119807 not-a-tool
+foreman prose 4 cmp-5d119807 not-a-tool
+foreman prose 5 cmp-5d119807 not-a-tool
+foreman prose 6 cmp-5d119807 not-a-tool
+foreman prose 7 cmp-5d119807 not-a-tool
+foreman prose 8 cmp-5d119807 not-a-tool
+foreman prose 9 cmp-5d119807 not-a-tool
+foreman prose 10 cmp-5d119807 not-a-tool
+foreman prose 11 cmp-5d119807 not-a-tool
+foreman prose 12 cmp-5d119807 not-a-tool
+foreman prose 13 cmp-5d119807 not-a-tool
+foreman prose 14 cmp-5d119807 not-a-tool
+foreman prose 15 cmp-5d119807 not-a-tool
+foreman prose 16 cmp-5d119807 not-a-tool
+foreman prose 17 cmp-5d119807 not-a-tool
+foreman prose 18 cmp-5d119807 not-a-tool
+foreman prose 19 cmp-5d119807 not-a-tool
+foreman prose 20 cmp-5d119807 not-a-tool
+foreman prose 21 cmp-5d119807 not-a-tool
+foreman prose 22 cmp-5d119807 not-a-tool
+foreman prose 23 cmp-5d119807 not-a-tool
+foreman prose 24 cmp-5d119807 not-a-tool
+foreman prose 25 cmp-5d119807 not-a-tool
+foreman prose 26 cmp-5d119807 not-a-tool
+foreman prose 27 cmp-5d119807 not-a-tool
+foreman prose 28 cmp-5d119807 not-a-tool
+foreman prose 29 cmp-5d119807 not-a-tool
+foreman prose 30 cmp-5d119807 not-a-tool
+foreman prose 31 cmp-5d119807 not-a-tool
+foreman prose 32 cmp-5d119807 not-a-tool
+foreman prose 33 cmp-5d119807 not-a-tool
+foreman prose 34 cmp-5d119807 not-a-tool
+foreman prose 35 cmp-5d119807 not-a-tool
+foreman prose 36 cmp-5d119807 not-a-tool
+foreman prose 37 cmp-5d119807 not-a-tool
+foreman prose 38 cmp-5d119807 not-a-tool
+foreman prose 39 cmp-5d119807 not-a-tool
+foreman prose 40 cmp-5d119807 not-a-tool
+foreman done 2/28 cmp-5d119807 correct=false critical=false codes=NO_VERDICT
+foreman start 3/28 trial=? family=G id=cmp-1364cab7
+foreman dispatch 1 cmp-1364cab7 role=implementer status=completed
+foreman prose 1 cmp-1364cab7 not-a-tool
+foreman prose 2 cmp-1364cab7 not-a-tool
+foreman dispatch 2 cmp-1364cab7 role=reviewer status=completed
+foreman prose 3 cmp-1364cab7 not-a-tool
+foreman prose 4 cmp-1364cab7 not-a-tool
+foreman prose 5 cmp-1364cab7 not-a-tool
+foreman prose 6 cmp-1364cab7 not-a-tool
+foreman prose 7 cmp-1364cab7 not-a-tool
+foreman prose 8 cmp-1364cab7 not-a-tool
+foreman prose 9 cmp-1364cab7 no-json
+foreman dispatch 3 cmp-1364cab7 role=reviewer status=completed
+foreman prose 10 cmp-1364cab7 not-a-tool
+foreman verdict cmp-1364cab7 blocked ok=undefined
+foreman done 3/28 cmp-1364cab7 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 4/28 trial=? family=A3 id=cmp-43517af2
+foreman prose 1 cmp-43517af2 no-json
+foreman dispatch 1 cmp-43517af2 role=implementer status=transient_error
+foreman dispatch 2 cmp-43517af2 role=implementer status=completed
+foreman dispatch 3 cmp-43517af2 role=reviewer status=completed
+foreman prose 2 cmp-43517af2 no-json
+foreman prose 3 cmp-43517af2 no-json
+foreman dispatch 4 cmp-43517af2 role=implementer status=envelope_rejected
+foreman verdict cmp-43517af2 blocked ok=undefined
+foreman done 4/28 cmp-43517af2 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 5/28 trial=? family=H id=cmp-6a77c0da
+foreman dispatch 1 cmp-6a77c0da role=implementer status=completed
+foreman prose 1 cmp-6a77c0da no-json
+foreman dispatch 2 cmp-6a77c0da role=reviewer status=completed
+foreman prose 2 cmp-6a77c0da not-a-tool
+foreman dispatch 3 cmp-6a77c0da role=reviewer status=completed
+foreman prose 3 cmp-6a77c0da not-a-tool
+foreman prose 4 cmp-6a77c0da not-a-tool
+foreman dispatch 4 cmp-6a77c0da role=reviewer status=session_restarted
+foreman prose 5 cmp-6a77c0da no-json
+foreman prose 6 cmp-6a77c0da not-a-tool
+foreman prose 7 cmp-6a77c0da not-a-tool
+foreman prose 8 cmp-6a77c0da no-json
+foreman prose 9 cmp-6a77c0da no-json
+foreman prose 10 cmp-6a77c0da no-json
+foreman prose 11 cmp-6a77c0da no-json
+foreman prose 12 cmp-6a77c0da no-json
+foreman prose 13 cmp-6a77c0da no-json
+foreman prose 14 cmp-6a77c0da no-json
+foreman prose 15 cmp-6a77c0da no-json
+foreman prose 16 cmp-6a77c0da not-a-tool
+foreman prose 17 cmp-6a77c0da not-a-tool
+foreman prose 18 cmp-6a77c0da not-a-tool
+foreman verdict cmp-6a77c0da blocked ok=undefined
+foreman done 5/28 cmp-6a77c0da correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 6/28 trial=? family=A1 id=cmp-86791cfe
+foreman dispatch 1 cmp-86791cfe role=implementer status=completed
+foreman dispatch 2 cmp-86791cfe role=reviewer status=completed
+foreman prose 1 cmp-86791cfe not-a-tool
+foreman prose 2 cmp-86791cfe not-a-tool
+foreman prose 3 cmp-86791cfe not-a-tool
+foreman prose 4 cmp-86791cfe no-json
+foreman prose 5 cmp-86791cfe not-a-tool
+foreman dispatch 3 cmp-86791cfe role=implementer status=envelope_rejected
+foreman prose 6 cmp-86791cfe not-a-tool
+foreman prose 7 cmp-86791cfe not-a-tool
+foreman prose 8 cmp-86791cfe not-a-tool
+foreman verdict cmp-86791cfe blocked ok=undefined
+foreman done 6/28 cmp-86791cfe correct=false critical=false codes=EXPECTED_DONE_GOT_NONDONE
+foreman start 7/28 trial=? family=C-twin id=cmp-51ef4fdb
+foreman dispatch 1 cmp-51ef4fdb role=implementer status=completed
+foreman prose 1 cmp-51ef4fdb no-json
+foreman prose 2 cmp-51ef4fdb not-a-tool
+foreman dispatch 2 cmp-51ef4fdb role=reviewer status=completed
+foreman prose 3 cmp-51ef4fdb not-a-tool
+foreman dispatch 3 cmp-51ef4fdb role=implementer status=envelope_rejected
+foreman prose 4 cmp-51ef4fdb not-a-tool
+foreman dispatch 4 cmp-51ef4fdb role=implementer status=envelope_rejected
+foreman dispatch 5 cmp-51ef4fdb role=implementer status=envelope_rejected
+foreman done 7/28 cmp-51ef4fdb correct=false critical=false codes=NO_VERDICT
+foreman start 8/28 trial=? family=D id=cmp-c3d628d1
+foreman dispatch 1 cmp-c3d628d1 role=implementer status=completed
+foreman prose 1 cmp-c3d628d1 no-json
+foreman dispatch 2 cmp-c3d628d1 role=reviewer status=completed
+foreman dispatch 3 cmp-c3d628d1 role=implementer status=envelope_rejected
+foreman dispatch 4 cmp-c3d628d1 role=implementer status=envelope_rejected
+foreman prose 2 cmp-c3d628d1 not-a-tool
+foreman prose 3 cmp-c3d628d1 not-a-tool
+foreman verdict cmp-c3d628d1 blocked ok=undefined
+foreman done 8/28 cmp-c3d628d1 correct=false critical=false codes=NOT_MINIMAL_UNMET
+foreman start 9/28 trial=? family=C/c2 id=cmp-075d1116
+foreman prose 1 cmp-075d1116 no-json
+foreman prose 2 cmp-075d1116 not-a-tool
+foreman prose 3 cmp-075d1116 not-a-tool
+foreman prose 4 cmp-075d1116 not-a-tool
+foreman dispatch 1 cmp-075d1116 role=implementer status=completed
+foreman prose 5 cmp-075d1116 not-a-tool
+foreman prose 6 cmp-075d1116 not-a-tool
+foreman prose 7 cmp-075d1116 not-a-tool
+foreman prose 8 cmp-075d1116 not-a-tool
+foreman prose 9 cmp-075d1116 not-a-tool
+foreman prose 10 cmp-075d1116 not-a-tool
+foreman prose 11 cmp-075d1116 not-a-tool
+foreman prose 12 cmp-075d1116 not-a-tool
+foreman prose 13 cmp-075d1116 not-a-tool
+foreman prose 14 cmp-075d1116 not-a-tool
+foreman prose 15 cmp-075d1116 not-a-tool
+foreman prose 16 cmp-075d1116 not-a-tool
+foreman prose 17 cmp-075d1116 not-a-tool
+foreman prose 18 cmp-075d1116 not-a-tool
+foreman prose 19 cmp-075d1116 not-a-tool
+foreman prose 20 cmp-075d1116 not-a-tool
+foreman prose 21 cmp-075d1116 not-a-tool
+foreman prose 22 cmp-075d1116 not-a-tool
+foreman prose 23 cmp-075d1116 not-a-tool
+foreman prose 24 cmp-075d1116 not-a-tool
+foreman prose 25 cmp-075d1116 not-a-tool
+foreman prose 26 cmp-075d1116 not-a-tool
+foreman prose 27 cmp-075d1116 not-a-tool
+foreman prose 28 cmp-075d1116 not-a-tool
+foreman prose 29 cmp-075d1116 not-a-tool
+foreman dispatch 2 cmp-075d1116 role=reviewer status=completed
+foreman prose 30 cmp-075d1116 not-a-tool
+foreman prose 31 cmp-075d1116 not-a-tool
+foreman prose 32 cmp-075d1116 not-a-tool
+foreman prose 33 cmp-075d1116 not-a-tool
+foreman prose 34 cmp-075d1116 not-a-tool
+foreman prose 35 cmp-075d1116 not-a-tool
+foreman prose 36 cmp-075d1116 not-a-tool
+foreman prose 37 cmp-075d1116 not-a-tool
+foreman prose 38 cmp-075d1116 not-a-tool
+foreman prose 39 cmp-075d1116 not-a-tool
+foreman prose 40 cmp-075d1116 not-a-tool
+foreman done 9/28 cmp-075d1116 correct=false critical=false codes=NO_VERDICT
+foreman start 10/28 trial=? family=D-twin id=cmp-6867f245
+foreman dispatch 1 cmp-6867f245 role=implementer status=completed
+foreman prose 1 cmp-6867f245 no-json
+foreman prose 2 cmp-6867f245 not-a-tool
+foreman prose 3 cmp-6867f245 not-a-tool
+foreman dispatch 2 cmp-6867f245 role=reviewer status=completed
+foreman prose 4 cmp-6867f245 not-a-tool
+foreman prose 5 cmp-6867f245 not-a-tool
+foreman prose 6 cmp-6867f245 not-a-tool
+foreman prose 7 cmp-6867f245 not-a-tool
+foreman prose 8 cmp-6867f245 not-a-tool
+foreman prose 9 cmp-6867f245 not-a-tool
+foreman prose 10 cmp-6867f245 not-a-tool
+foreman prose 11 cmp-6867f245 not-a-tool
+foreman prose 12 cmp-6867f245 not-a-tool
+foreman prose 13 cmp-6867f245 not-a-tool
+foreman prose 14 cmp-6867f245 not-a-tool
+foreman prose 15 cmp-6867f245 not-a-tool
+foreman prose 16 cmp-6867f245 not-a-tool
+foreman prose 17 cmp-6867f245 not-a-tool
+foreman dispatch 3 cmp-6867f245 role=implementer status=envelope_rejected
+foreman prose 18 cmp-6867f245 not-a-tool
+foreman prose 19 cmp-6867f245 not-a-tool
+foreman verdict cmp-6867f245 blocked ok=undefined
+foreman done 10/28 cmp-6867f245 correct=false critical=false codes=EXPECTED_DONE_GOT_NONDONE
+foreman start 11/28 trial=? family=B/b1 id=cmp-f36c453b
+foreman prose 1 cmp-f36c453b not-a-tool
+foreman prose 2 cmp-f36c453b not-a-tool
+foreman prose 3 cmp-f36c453b not-a-tool
+foreman prose 4 cmp-f36c453b not-a-tool
+foreman prose 5 cmp-f36c453b not-a-tool
+foreman prose 6 cmp-f36c453b not-a-tool
+foreman prose 7 cmp-f36c453b not-a-tool
+foreman prose 8 cmp-f36c453b not-a-tool
+foreman prose 9 cmp-f36c453b not-a-tool
+foreman prose 10 cmp-f36c453b not-a-tool
+foreman dispatch 1 cmp-f36c453b role=implementer status=completed
+foreman prose 11 cmp-f36c453b not-a-tool
+foreman prose 12 cmp-f36c453b not-a-tool
+foreman prose 13 cmp-f36c453b not-a-tool
+foreman prose 14 cmp-f36c453b not-a-tool
+foreman prose 15 cmp-f36c453b no-json
+foreman prose 16 cmp-f36c453b not-a-tool
+foreman prose 17 cmp-f36c453b not-a-tool
+foreman prose 18 cmp-f36c453b not-a-tool
+foreman prose 19 cmp-f36c453b not-a-tool
+foreman prose 20 cmp-f36c453b not-a-tool
+foreman prose 21 cmp-f36c453b not-a-tool
+foreman prose 22 cmp-f36c453b not-a-tool
+foreman prose 23 cmp-f36c453b not-a-tool
+foreman prose 24 cmp-f36c453b not-a-tool
+foreman prose 25 cmp-f36c453b not-a-tool
+foreman prose 26 cmp-f36c453b not-a-tool
+foreman prose 27 cmp-f36c453b not-a-tool
+foreman prose 28 cmp-f36c453b not-a-tool
+foreman prose 29 cmp-f36c453b not-a-tool
+foreman prose 30 cmp-f36c453b not-a-tool
+foreman prose 31 cmp-f36c453b not-a-tool
+foreman prose 32 cmp-f36c453b not-a-tool
+foreman prose 33 cmp-f36c453b not-a-tool
+foreman prose 34 cmp-f36c453b not-a-tool
+foreman prose 35 cmp-f36c453b not-a-tool
+foreman prose 36 cmp-f36c453b not-a-tool
+foreman prose 37 cmp-f36c453b not-a-tool
+foreman prose 38 cmp-f36c453b not-a-tool
+foreman prose 39 cmp-f36c453b not-a-tool
+foreman prose 40 cmp-f36c453b not-a-tool
+foreman done 11/28 cmp-f36c453b correct=false critical=false codes=NO_VERDICT
+foreman start 12/28 trial=? family=G-twin id=cmp-6a16c9d5
+foreman dispatch 1 cmp-6a16c9d5 role=implementer status=completed
+foreman prose 1 cmp-6a16c9d5 not-a-tool
+foreman prose 2 cmp-6a16c9d5 not-a-tool
+foreman prose 3 cmp-6a16c9d5 not-a-tool
+foreman prose 4 cmp-6a16c9d5 not-a-tool
+foreman prose 5 cmp-6a16c9d5 not-a-tool
+foreman prose 6 cmp-6a16c9d5 no-json
+foreman dispatch 2 cmp-6a16c9d5 role=reviewer status=completed
+foreman dispatch 3 cmp-6a16c9d5 role=reviewer status=completed
+foreman prose 7 cmp-6a16c9d5 not-a-tool
+foreman verdict cmp-6a16c9d5 blocked ok=undefined
+foreman done 12/28 cmp-6a16c9d5 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 13/28 trial=? family=E id=cmp-63329cd3
+foreman dispatch 1 cmp-63329cd3 role=implementer status=completed
+foreman prose 1 cmp-63329cd3 no-json
+foreman prose 2 cmp-63329cd3 not-a-tool
+foreman dispatch 2 cmp-63329cd3 role=reviewer status=completed
+foreman prose 3 cmp-63329cd3 not-a-tool
+foreman dispatch 3 cmp-63329cd3 role=reviewer status=completed
+foreman prose 4 cmp-63329cd3 not-a-tool
+foreman prose 5 cmp-63329cd3 not-a-tool
+foreman prose 6 cmp-63329cd3 not-a-tool
+foreman prose 7 cmp-63329cd3 not-a-tool
+foreman dispatch 4 cmp-63329cd3 role=reviewer status=completed
+foreman prose 8 cmp-63329cd3 not-a-tool
+foreman dispatch 5 cmp-63329cd3 role=implementer status=envelope_rejected
+foreman done 13/28 cmp-63329cd3 correct=false critical=false codes=NO_VERDICT
+foreman start 14/28 trial=? family=A2 id=cmp-42dbce92
+foreman dispatch 1 cmp-42dbce92 role=implementer status=completed
+foreman dispatch 2 cmp-42dbce92 role=reviewer status=completed
+foreman prose 1 cmp-42dbce92 no-json
+foreman prose 2 cmp-42dbce92 not-a-tool
+foreman prose 3 cmp-42dbce92 not-a-tool
+foreman dispatch 3 cmp-42dbce92 role=implementer status=envelope_rejected
+foreman prose 4 cmp-42dbce92 not-a-tool
+foreman verdict cmp-42dbce92 blocked ok=undefined
+foreman done 14/28 cmp-42dbce92 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 15/28 trial=? family=B/b2 id=cmp-a107257b
+foreman prose 1 cmp-a107257b no-json
+foreman dispatch 1 cmp-a107257b role=implementer status=completed
+foreman prose 2 cmp-a107257b not-a-tool
+foreman dispatch 2 cmp-a107257b role=reviewer status=completed
+foreman prose 3 cmp-a107257b not-a-tool
+foreman prose 4 cmp-a107257b not-a-tool
+foreman prose 5 cmp-a107257b not-a-tool
+foreman dispatch 3 cmp-a107257b role=implementer status=envelope_rejected
+foreman prose 6 cmp-a107257b not-a-tool
+foreman dispatch 4 cmp-a107257b role=implementer status=envelope_rejected
+foreman prose 7 cmp-a107257b not-a-tool
+foreman verdict cmp-a107257b blocked ok=undefined
+foreman done 15/28 cmp-a107257b correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 16/28 trial=? family=A3 id=cmp-d9466c5c
+foreman prose 1 cmp-d9466c5c no-json
+foreman dispatch 1 cmp-d9466c5c role=implementer status=transient_error
+foreman dispatch 2 cmp-d9466c5c role=implementer status=completed
+foreman dispatch 3 cmp-d9466c5c role=reviewer status=completed
+foreman dispatch 4 cmp-d9466c5c role=implementer status=envelope_rejected
+foreman dispatch 5 cmp-d9466c5c role=implementer status=envelope_rejected
+foreman done 16/28 cmp-d9466c5c correct=false critical=false codes=NO_VERDICT
+foreman start 17/28 trial=? family=G-twin id=cmp-89c02649
+foreman dispatch 1 cmp-89c02649 role=implementer status=completed
+foreman dispatch 2 cmp-89c02649 role=reviewer status=completed
+foreman verdict cmp-89c02649 blocked ok=undefined
+foreman done 17/28 cmp-89c02649 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 18/28 trial=? family=A2 id=cmp-f5574a77
+foreman dispatch 1 cmp-f5574a77 role=implementer status=completed
+foreman prose 1 cmp-f5574a77 no-json
+foreman prose 2 cmp-f5574a77 not-a-tool
+foreman prose 3 cmp-f5574a77 not-a-tool
+foreman prose 4 cmp-f5574a77 not-a-tool
+foreman prose 5 cmp-f5574a77 not-a-tool
+foreman dispatch 2 cmp-f5574a77 role=reviewer status=completed
+foreman prose 6 cmp-f5574a77 not-a-tool
+foreman dispatch 3 cmp-f5574a77 role=implementer status=envelope_rejected
+foreman prose 7 cmp-f5574a77 not-a-tool
+foreman prose 8 cmp-f5574a77 not-a-tool
+foreman verdict cmp-f5574a77 blocked ok=undefined
+foreman done 18/28 cmp-f5574a77 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 19/28 trial=? family=F-twin id=cmp-af768245
+foreman prose 1 cmp-af768245 not-a-tool
+foreman prose 2 cmp-af768245 not-a-tool
+foreman prose 3 cmp-af768245 not-a-tool
+foreman prose 4 cmp-af768245 not-a-tool
+foreman dispatch 1 cmp-af768245 role=implementer status=completed
+foreman prose 5 cmp-af768245 not-a-tool
+foreman prose 6 cmp-af768245 not-a-tool
+foreman capability cmp-af768245 name=?
+foreman prose 7 cmp-af768245 not-a-tool
+foreman prose 8 cmp-af768245 not-a-tool
+foreman prose 9 cmp-af768245 not-a-tool
+foreman prose 10 cmp-af768245 no-json
+foreman dispatch 2 cmp-af768245 role=reviewer status=completed
+foreman prose 11 cmp-af768245 not-a-tool
+foreman prose 12 cmp-af768245 not-a-tool
+foreman prose 13 cmp-af768245 not-a-tool
+foreman verdict cmp-af768245 blocked ok=undefined
+foreman done 19/28 cmp-af768245 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 20/28 trial=? family=C/c1 id=cmp-66de12ff
+foreman dispatch 1 cmp-66de12ff role=implementer status=completed
+foreman prose 1 cmp-66de12ff no-json
+foreman prose 2 cmp-66de12ff not-a-tool
+foreman dispatch 2 cmp-66de12ff role=reviewer status=completed
+foreman dispatch 3 cmp-66de12ff role=implementer status=envelope_rejected
+foreman prose 3 cmp-66de12ff not-a-tool
+foreman prose 4 cmp-66de12ff not-a-tool
+foreman dispatch 4 cmp-66de12ff role=reviewer status=completed
+foreman prose 5 cmp-66de12ff not-a-tool
+foreman prose 6 cmp-66de12ff not-a-tool
+foreman verdict cmp-66de12ff blocked ok=undefined
+foreman done 20/28 cmp-66de12ff correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 21/28 trial=? family=C-twin id=cmp-e0a9e544
+foreman dispatch 1 cmp-e0a9e544 role=implementer status=completed
+foreman prose 1 cmp-e0a9e544 no-json
+foreman prose 2 cmp-e0a9e544 not-a-tool
+foreman dispatch 2 cmp-e0a9e544 role=implementer status=envelope_rejected
+foreman prose 3 cmp-e0a9e544 not-a-tool
+foreman prose 4 cmp-e0a9e544 not-a-tool
+foreman dispatch 3 cmp-e0a9e544 role=reviewer status=completed
+foreman prose 5 cmp-e0a9e544 not-a-tool
+foreman verdict cmp-e0a9e544 blocked ok=undefined
+foreman done 21/28 cmp-e0a9e544 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 22/28 trial=? family=D-twin id=cmp-7759d622
+foreman prose 1 cmp-7759d622 not-a-tool
+foreman verdict cmp-7759d622 blocked ok=undefined
+foreman done 22/28 cmp-7759d622 correct=false critical=false codes=EXPECTED_DONE_GOT_NONDONE
+foreman start 23/28 trial=? family=E id=cmp-2f655fe1
+foreman dispatch 1 cmp-2f655fe1 role=implementer status=completed
+foreman dispatch 2 cmp-2f655fe1 role=implementer status=envelope_rejected
+foreman dispatch 3 cmp-2f655fe1 role=implementer status=envelope_rejected
+foreman prose 1 cmp-2f655fe1 no-json
+foreman dispatch 4 cmp-2f655fe1 role=reviewer status=completed
+foreman prose 2 cmp-2f655fe1 not-a-tool
+foreman dispatch 5 cmp-2f655fe1 role=implementer status=envelope_rejected
+foreman done 23/28 cmp-2f655fe1 correct=false critical=false codes=NO_VERDICT
+foreman start 24/28 trial=? family=G id=cmp-67864ace
+foreman dispatch 1 cmp-67864ace role=implementer status=completed
+foreman dispatch 2 cmp-67864ace role=reviewer status=completed
+foreman prose 1 cmp-67864ace not-a-tool
+foreman prose 2 cmp-67864ace not-a-tool
+foreman prose 3 cmp-67864ace not-a-tool
+foreman prose 4 cmp-67864ace not-a-tool
+foreman prose 5 cmp-67864ace not-a-tool
+foreman dispatch 3 cmp-67864ace role=reviewer status=completed
+foreman prose 6 cmp-67864ace not-a-tool
+foreman verdict cmp-67864ace blocked ok=undefined
+foreman done 24/28 cmp-67864ace correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 25/28 trial=? family=D id=cmp-ff7d620b
+foreman dispatch 1 cmp-ff7d620b role=implementer status=completed
+foreman prose 1 cmp-ff7d620b no-json
+foreman dispatch 2 cmp-ff7d620b role=reviewer status=completed
+foreman dispatch 3 cmp-ff7d620b role=implementer status=envelope_rejected
+foreman dispatch 4 cmp-ff7d620b role=implementer status=envelope_rejected
+foreman dispatch 5 cmp-ff7d620b role=reviewer status=completed
+foreman done 25/28 cmp-ff7d620b correct=false critical=false codes=NO_VERDICT
+foreman start 26/28 trial=? family=F id=cmp-75027744
+foreman dispatch 1 cmp-75027744 role=implementer status=completed
+foreman capability cmp-75027744 name=?
+foreman verdict cmp-75027744 blocked ok=undefined
+foreman done 26/28 cmp-75027744 correct=false critical=false codes=NOT_MINIMAL_UNMET
+foreman start 27/28 trial=? family=A1 id=cmp-f1ed1a92
+foreman prose 1 cmp-f1ed1a92 no-json
+foreman dispatch 1 cmp-f1ed1a92 role=implementer status=completed
+foreman prose 2 cmp-f1ed1a92 not-a-tool
+foreman prose 3 cmp-f1ed1a92 not-a-tool
+foreman prose 4 cmp-f1ed1a92 not-a-tool
+foreman prose 5 cmp-f1ed1a92 not-a-tool
+foreman prose 6 cmp-f1ed1a92 not-a-tool
+foreman prose 7 cmp-f1ed1a92 not-a-tool
+foreman dispatch 2 cmp-f1ed1a92 role=reviewer status=completed
+foreman prose 8 cmp-f1ed1a92 not-a-tool
+foreman prose 9 cmp-f1ed1a92 no-json
+foreman dispatch 3 cmp-f1ed1a92 role=implementer status=envelope_rejected
+foreman prose 10 cmp-f1ed1a92 not-a-tool
+foreman verdict cmp-f1ed1a92 blocked ok=undefined
+foreman done 27/28 cmp-f1ed1a92 correct=false critical=false codes=FALSE_UNMET,EXPECTED_DONE_GOT_NONDONE
+foreman start 28/28 trial=? family=H id=cmp-229b8373
+foreman dispatch 1 cmp-229b8373 role=implementer status=completed
+foreman prose 1 cmp-229b8373 no-json
+foreman prose 2 cmp-229b8373 not-a-tool
+foreman prose 3 cmp-229b8373 not-a-tool
+foreman verdict cmp-229b8373 blocked ok=undefined
+foreman done 28/28 cmp-229b8373 correct=false critical=false codes=EXPECTED_DONE_GOT_NONDONE

@@ -1,0 +1,22 @@
+{
+  "corpus": {
+    "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+    "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+    "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+    "harness_version": "dispatch-hetero:bece9e5d",
+    "expires_days": 90
+  },
+  "evidence_root": "docs/plans/evidence/2026-09-23-sglang-8012-ccshim-impl",
+  "role": "implementer",
+  "seats": [
+    {
+      "slug": "sglang-ccshim",
+      "runner": "cc-shim",
+      "model": "mimo-nvfp4",
+      "family": "xiaomi",
+      "version_source": "operator-asserted",
+      "endpoint": "-",
+      "effort": "low"
+    }
+  ]
+}

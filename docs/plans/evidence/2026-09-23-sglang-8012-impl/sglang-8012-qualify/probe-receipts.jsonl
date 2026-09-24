@@ -1,0 +1,2 @@
+{"attempt":1,"runner":"opencode","model":"sglang/mimo-nvfp4","bin":"/home/cookys/.opencode/bin/opencode","bin_version":"1.18.32","version_source":"operator-asserted","probe_rc":3,"note":"endpoint_http://127.0.0.1:8012/v1 unresolved","instrument_charged":false,"probed_at":"2026-09-23T07:40:47Z"}
+{"attempt":1,"runner":"opencode","model":"sglang/mimo-nvfp4","bin":"/home/cookys/.opencode/bin/opencode","bin_version":"1.18.32","version_source":"operator-asserted","probe_rc":0,"note":"probe committed","instrument_charged":false,"probed_at":"2026-09-23T07:41:16Z"}

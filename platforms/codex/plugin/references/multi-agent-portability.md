@@ -52,6 +52,7 @@ path only*.
 |---|---|---|---|
 | Anthropic Messages | `/zen/go/v1/messages` | `x-api-key` (Bearer → 401) | `{model, max_tokens, messages}` |
 | OpenAI Responses | `/zen/go/v1/responses` | `Authorization: Bearer` (x-api-key → 401) | `{model, input, max_output_tokens}` |
+| OpenAI Chat Completions | `/zen/go/v1/chat/completions` | `Authorization: Bearer` | `{model, max_tokens, messages}` |
 
 **`x-opencode-session` is REQUIRED on both.** Omit it and the request fails
 `400 MissingSessionID` before the model is ever consulted. Any `ses_`-prefixed string is
@@ -80,12 +81,22 @@ qwen3.8-flash-next on the Anthropic path (v2.36.83), but the signal differs: Res
 says `status: "incomplete"`, Messages says `stop_reason: "max_tokens"`. A transport
 added for Responses must diagnose its own signal — the v2.36.83 check does not fire here.
 
-**Consequence for autopilot**: `scripts/qualification-review-provider.js` speaks only
-Anthropic Messages (`callModel`, and it does not send `x-opencode-session`). So of the
-31 ids, **9 need a session header added**, **5 need a Responses transport that does not
-exist yet**, 5 work either way, and 12 are unreachable. `QRP_CLI_KIND=opencode` remains
-ALWAYS-REFUSED for a separate reason (2026-09-07 adversarial probe: `--agent plan` does
-not block bash), so the CLI is not a fallback for the Responses-only models.
+**Third path, 2026-09-23.** The official Go table at <https://opencode.ai/docs/go>
+now lists Chat Completions as its own route. The 2026-09-21 "neither" list above
+only probed Messages and Responses, so it is not a reachability verdict for
+`/v1/chat/completions`. Live probe the same day: `mimo-v2.6-pro` is 503 on both of
+those and **200** on `POST /v1/chat/completions` (`choices[0].message.content` was
+`PONG`; `reasoning_content` came back beside it and is not the answer). The Go
+table puts MiMo, GLM, Kimi, DeepSeek, Hy, and LongCat on that path, and
+muse-spark on Responses. The client rules on that page also want a stable
+`x-opencode-session` and a user agent that is not a generic HTTP-library name.
+
+`scripts/qualification-review-provider.js` speaks all three
+(`QRP_HTTP_PROTOCOL=messages|responses|chat_completions`) and sends
+`x-opencode-session` when `QRP_OPENCODE_SESSION` is set. The chat path also sends
+`User-Agent: autopilot-qualify/1.0`. `QRP_CLI_KIND=opencode` remains
+ALWAYS-REFUSED (2026-09-07 adversarial probe: `--agent plan` does not block
+bash), so the CLI is not a fallback for an HTTP seat.
 
 ### Headless auto-approve flags — corrections (2026-06-17 survey)
 

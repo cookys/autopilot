@@ -139,7 +139,7 @@ const VA_CORPUS_PATH = path.join(
   'va-capability-evidence-corpus.json',
 );
 const EXPECTED_IMPL_GENERATOR_HASH = '16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a';
-const EXPECTED_IMPL_GRADER_HASH = '83b2843c21801a301a415c2348eb44e1d8aad85f3ef6c9beb5d2fa8abf1b80ab';
+const EXPECTED_IMPL_GRADER_HASH = '1ee264b10c4a2c8fa51e1be5b2e5b961ab26c68fc00ad7fbc4ff2dd7cb182be1';
 const EXPECTED_IMPL_CORPUS_HASH = 'd8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a';
 const EXPECTED_IMPL_DRIVER_HASH = 'f9ac479113ca73021276518c417529c8290bad2c85f6ca5278d22256572b7316';
 const EXPECTED_VA_GENERATOR_HASH = 'c37cd9fced8d4da2a1eb06cf5ea220dbf7b0aa02f89c8c5ff1de86c0f39c6a35';
@@ -3179,7 +3179,12 @@ function runImplQualification(options) {
           cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome: observation.outcome });
           break;
         }
-        cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome: observation.outcome });
+        cases.push({
+          family: caseSpec.family,
+          case_id: caseSpec.case_id,
+          outcome: observation.outcome,
+          warning: observation.warning || null,
+        });
       }
       trialResults.push({ trial_id: `trial-${trial.trial_id}`, cases });
       if (administrationOutcome !== 'completed') break;
@@ -3418,7 +3423,10 @@ function runImplQualification(options) {
   const failures = [];
   for (const trial of trialResults) {
     for (const c of trial.cases) {
-      if (c.outcome !== 'pass') failures.push(`${trial.trial_id}: ${c.case_id} ${c.outcome}`);
+      if (c.outcome !== 'pass') {
+        const note = c.warning ? ` warning:${c.warning}` : '';
+        failures.push(`${trial.trial_id}: ${c.case_id} ${c.outcome}${note}`);
+      }
     }
   }
   const verdict = {
@@ -3449,6 +3457,31 @@ function runImplQualification(options) {
     row,
     verdict,
   });
+}
+
+// The dispatch log is the client's own stdout. Read it only to notice a tool
+// call that stayed text. A missing or huge log yields no warning, never a pass.
+function readAgentLog(dispatchJson) {
+  const file = dispatchJson && dispatchJson.agent_log;
+  if (typeof file !== 'string' || file.length === 0 || file.includes('\0')) return '';
+  let stat;
+  try { stat = fs.statSync(file); } catch { return ''; }
+  if (!stat.isFile()) return '';
+  const cap = 2 * 1024 * 1024;
+  try {
+    if (stat.size <= cap) return fs.readFileSync(file, 'utf8');
+    const fd = fs.openSync(file, 'r');
+    try {
+      const length = Math.min(cap, stat.size);
+      const buf = Buffer.alloc(length);
+      fs.readSync(fd, buf, 0, length, stat.size - length);
+      return buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
 }
 
 // runImplCase — one live-rail case: materialize the exam repo, dispatch, then
@@ -3545,6 +3578,7 @@ function runImplCase(context) {
       // but never usage; runner logs are runner-specific and pruned).
       wall_secs: dispatchJson && Number.isFinite(dispatchJson.wall_secs) ? dispatchJson.wall_secs : null,
       usage: dispatchJson && dispatchJson.usage ? dispatchJson.usage : null,
+      warning: null,
     });
     // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
     // administration (no verdict) rather than scoring a FAIL against the seat.
@@ -3565,14 +3599,19 @@ function runImplCase(context) {
       oracle: collectionResult.oracle,
     });
     ledgerRow.outcome = outcome;
+    if (outcome === 'contract_violation' && ledgerRow.dispatch_status === 'no_op' && !ledgerRow.scored_sha) {
+      const warning = implGrader.unparsedToolCallWarning(readAgentLog(dispatchJson));
+      if (warning) ledgerRow.warning = warning;
+    }
     ledger.push(ledgerRow);
+    if (ledgerRow.warning) rawExchanges[rawExchanges.length - 1].warning = ledgerRow.warning;
     if (outcome === 'engine_unavailable') {
       budget.engine_unavailable_seen += 1;
       if (budget.engine_unavailable_seen >= implGrader.CORPUS.budget.engine_unavailable_cap) {
         return { outcome, administration_abort: 'infra_abort' };
       }
     }
-    return { outcome };
+    return { outcome, warning: ledgerRow.warning || null };
   } catch (error) {
     ledgerRow.outcome = 'infra_fail';
     ledgerRow.error = String(error && error.message);

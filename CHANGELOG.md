@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.36.94 — 考試傳輸補上 chat completions，no_op 裡的工具文字會警告
+
+- **OpenCode Go 第三條路。** `QRP_HTTP_PROTOCOL=chat_completions` 打 `POST /v1/chat/completions`，Bearer，`stream:true`。非串流會悶到思考結束，2026-09-23 一輪 mimo 約 300 秒 `fetch failed`；同一條改串流 3 秒回 SSE。`reasoning_content` 不是答案。`User-Agent: autopilot-qualify/1.0`。Claude CLI 的 `QRP_CLI_EFFORT` 會轉成 `--effort`（2.1.281：`low|medium|high|xhigh|max`）；先前這個值被丟掉，low 席位跑的是 CLI 預設。
+- **implementer 的 no_op 警告。** 結束碼 0 且沒有 commit 仍是失敗。若 agent log 裡還看得到 `<tool_call>`／`<function=`／`<invoke` 這類工具形狀，ledger 與失敗原因加上 `warning:unparsed_tool_call`。不改判通過。
+- 驗證：`qualification-review-provider.test.js` 264 條；`engine-qualify-impl.test.js` 75 條。
+
+prose-justification: 本版沒有改 skill 散文。相對 v2.35.2 基線的散文增長是先前版本累積的，這一行只讓當版區段滿足 north-star 閘門。
+
 ## v2.36.93 — depth-0 公平題的標準不在卷面上
 
 公平科的缺陷是「少一行 null 拒絕」。教學要候選人對照「家族裡看得到的範例」，bundle 裡沒有範例；嚴重性又由種子在 critical／major 之間抽，卷面和 prompt 都看不到。`>= floor` 還讓寫成 critical 的答案通過一份寫著 major 的標準。

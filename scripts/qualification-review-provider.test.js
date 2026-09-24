@@ -1519,8 +1519,111 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     },
   });
   equal(badProto.status, 1, 'an unknown QRP_HTTP_PROTOCOL exits 1');
-  check(/QRP_HTTP_PROTOCOL must be messages or responses/.test(badProto.stderr),
+  check(/QRP_HTTP_PROTOCOL must be messages, responses, or chat_completions/.test(badProto.stderr),
     'the protocol knob names its accepted values');
+
+  const chat = startRespStub({
+    model: 'fake-model-exact',
+    choices: [{
+      finish_reason: 'stop',
+      message: {
+        role: 'assistant',
+        content: REVIEWER_MODEL_OUTPUT,
+        reasoning_content: 'this thinking trace is not the answer',
+      },
+    }],
+  });
+  const { child: chatChild } = runProvider({
+    request: reviewerRequest(),
+    env: {
+      QRP_HTTP_PROTOCOL: 'chat_completions',
+      QRP_BASE_URL: `http://127.0.0.1:${chat.port}`,
+      QRP_AUTH_TOKEN: 'stub-token',
+      QRP_OPENCODE_SESSION: 'ses_chat',
+      QRP_MAX_TOKENS: '32',
+    },
+  });
+  chat.proc.kill();
+  equal(chatChild.status, 0, 'a chat-completions reply with content succeeds');
+  const chatSent = JSON.parse(fs.readFileSync(reqFile, 'utf8'));
+  equal(chatSent.url, '/v1/chat/completions', 'chat_completions posts to /v1/chat/completions');
+  check(chatSent.headers.authorization === 'Bearer stub-token',
+    'chat completions authenticates with Bearer');
+  equal(chatSent.headers['x-opencode-session'], 'ses_chat',
+    'chat completions sends x-opencode-session');
+  equal(chatSent.headers['user-agent'], 'autopilot-qualify/1.0',
+    'chat completions identifies itself instead of the HTTP library');
+  check(Array.isArray(chatSent.body.messages)
+    && chatSent.body.messages[0].role === 'system'
+    && chatSent.body.messages[1].role === 'user'
+    && chatSent.body.max_tokens === 32,
+  'the chat body is system+user messages and max_tokens');
+  check(chatSent.body.input === undefined && chatSent.body.max_output_tokens === undefined,
+    'Responses-shaped fields are absent from a chat request');
+  equal(chatSent.body.stream, true,
+    'chat completions streams so a long think is not a silent socket');
+
+  const sseServerFile = path.join(tempRoot, 'stub-chat-sse.js');
+  const ssePortFile = path.join(tempRoot, 'stub-chat-sse-port');
+  fs.writeFileSync(sseServerFile, `
+const http = require('http');
+const fs = require('fs');
+const server = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    const payload = JSON.stringify(${JSON.stringify(REVIEWER_MODEL_OUTPUT)});
+    res.end(
+      'data: ' + JSON.stringify({ choices: [{ delta: { content: payload }, finish_reason: null }] }) + '\\n\\n'
+      + 'data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }) + '\\n\\n'
+      + 'data: [DONE]\\n',
+    );
+  });
+});
+server.listen(0, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(ssePortFile)}, String(server.address().port)));
+`);
+  if (fs.existsSync(ssePortFile)) fs.rmSync(ssePortFile);
+  const sseProc = spawn(process.execPath, [sseServerFile], { stdio: 'ignore' });
+  for (let i = 0; i < 100 && !fs.existsSync(ssePortFile); i += 1) {
+    try { execFileSync('sleep', ['0.05']); } catch { /* keep polling */ }
+  }
+  const ssePort = fs.readFileSync(ssePortFile, 'utf8').trim();
+  const { child: sseChild } = runProvider({
+    request: reviewerRequest(),
+    env: {
+      QRP_HTTP_PROTOCOL: 'chat_completions',
+      QRP_BASE_URL: `http://127.0.0.1:${ssePort}`,
+      QRP_AUTH_TOKEN: 'stub-token',
+    },
+  });
+  sseProc.kill();
+  equal(sseChild.status, 0, 'an event-stream chat reply is assembled from content deltas');
+
+  const chatTrunc = startRespStub({
+    model: 'fake-model-exact',
+    choices: [{
+      finish_reason: 'length',
+      message: { role: 'assistant', content: null, reasoning_content: 'thinking only' },
+    }],
+    usage: { completion_tokens: 32 },
+  });
+  const { child: chatTruncChild } = runProvider({
+    request: reviewerRequest(),
+    env: {
+      QRP_HTTP_PROTOCOL: 'chat_completions',
+      QRP_BASE_URL: `http://127.0.0.1:${chatTrunc.port}`,
+      QRP_AUTH_TOKEN: 'stub-token',
+      QRP_MAX_TOKENS: '32',
+    },
+  });
+  chatTrunc.proc.kill();
+  equal(chatTruncChild.status, 1, 'a length-truncated chat reply fails closed');
+  check(/completion budget exhausted before any message content/.test(chatTruncChild.stderr),
+    'chat truncation is named with its own wording');
+  check(/finish_reason=length/.test(chatTruncChild.stderr)
+    && /reasoning_content=present/.test(chatTruncChild.stderr),
+    'thinking text is recorded as present and is not accepted as the answer');
   const { child: protoOnCli } = runProvider({
     request: reviewerRequest(),
     env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_PROTOCOL: 'responses' },

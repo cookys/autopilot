@@ -91,26 +91,18 @@
  *   QRP_AUTH_TOKEN  http: bearer token for that endpoint
  *   QRP_MODEL       exact model id to request (CLI: passed as --model)
  *   QRP_PROVIDER    provider id echoed back to the broker (must match --remote-provider)
- *   NOTE — this adapter speaks ONLY the Anthropic Messages protocol
- *   (POST {base}/v1/messages). That is not universal among Anthropic-compatible
- *   gateways: OpenCode Go routes PER MODEL, serving some ids on /v1/messages and
- *   others only on the OpenAI Responses protocol (/v1/responses, Bearer auth,
- *   {model,input,max_output_tokens}), and it requires an `x-opencode-session`
- *   header this adapter never sends. Hitting the wrong protocol returns
- *   `503 Upstream request failed: Endpoint is unavailable.`, which reads like an
- *   outage and is not one. The verified per-model routing table and the missing
- *   header are recorded in references/multi-agent-portability.md ("OpenCode Go —
- *   endpoint routing is PER MODEL", 2026-09-21). A Responses transport is a
- *   BACKLOG item; its truncation signal is `status:"incomplete"`, NOT the
- *   `stop_reason:"max_tokens"` the budget check below keys on.
+ *   NOTE — OpenCode Go routes PER MODEL across three protocols. The wrong
+ *   path returns `503 Upstream request failed: Endpoint is unavailable.`,
+ *   which reads like an outage and is not one. Table:
+ *   references/multi-agent-portability.md and https://opencode.ai/docs/go .
  *
- *   QRP_HTTP_PROTOCOL  http ONLY: `messages` (default, Anthropic) or `responses`
- *                   (OpenAI Responses). Not a variant of one another — different
- *                   path, auth header, body shape, reply shape AND truncation
- *                   signal. Pick it PER ENDPOINT, never per provider name:
- *                   OpenCode Go serves some ids on one and some on the other, and
- *                   the wrong one answers 503 like an outage. Table:
- *                   references/multi-agent-portability.md.
+ *   QRP_HTTP_PROTOCOL  http ONLY: `messages` (default, Anthropic), `responses`
+ *                   (OpenAI Responses), or `chat_completions` (OpenAI Chat
+ *                   Completions, POST {base}/v1/chat/completions). Not variants
+ *                   of one another — different path, auth, body, reply, and
+ *                   truncation signal. Pick it PER MODEL. OpenCode Go's Go-plan
+ *                   table puts MiMo (including mimo-v2.6-pro) on chat
+ *                   completions and muse-spark on responses.
  *   QRP_OPENCODE_SESSION  optional; sent as `x-opencode-session` on BOTH http
  *                   protocols. OpenCode Go rejects a request without it
  *                   (`400 MissingSessionID`) before the model is consulted; any
@@ -611,6 +603,13 @@ function sessionHeader() {
   return id ? { 'x-opencode-session': id } : {};
 }
 
+// OpenCode Go's client rules (docs/go, "Where can I use it") reject a generic
+// HTTP-library user agent. Node's fetch default is exactly that. This name is
+// sent only on the chat-completions path, which is the one that rule was
+// written for; messages and responses keep the headers their existing seats
+// already passed with.
+const CHAT_USER_AGENT = 'autopilot-qualify/1.0';
+
 // The OpenAI Responses protocol. A SECOND HTTP shape, not a variant of the first:
 // different path, different auth header, different request body, different reply
 // shape, and — the part that bites — a different truncation signal. OpenCode Go
@@ -735,6 +734,125 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
       throw new Error(`endpoint response carried no text content (${observed})`);
     }
     return { text, resolvedModel: typeof payload.model === 'string' ? payload.model : model };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// A non-streaming chat completion stays silent until the model finishes
+// thinking. On 2026-09-23 a mimo-v2.6-pro brain round died at ~300s with
+// `fetch failed`, and replaying that round the same way died the same way.
+// `stream:true` on the same path returned `text/event-stream` in 3s. The
+// stream is how a long think keeps the socket alive.
+function assembleChatStream(raw) {
+  let content = '';
+  let reasoning = false;
+  let finish = null;
+  let resolvedModel = null;
+  let completionTokens = null;
+  for (const line of String(raw).split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) continue;
+    const data = trimmed.slice(5).trim();
+    if (!data || data === '[DONE]') continue;
+    let chunk;
+    try {
+      chunk = JSON.parse(data);
+    } catch {
+      continue;
+    }
+    if (typeof chunk.model === 'string') resolvedModel = chunk.model;
+    if (chunk.usage && chunk.usage.completion_tokens != null) {
+      completionTokens = chunk.usage.completion_tokens;
+    }
+    const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
+    if (!choice) continue;
+    if (choice.finish_reason) finish = choice.finish_reason;
+    const delta = choice.delta || choice.message || {};
+    if (typeof delta.content === 'string') content += delta.content;
+    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) reasoning = true;
+  }
+  return { content, reasoning, finish, resolvedModel, completionTokens };
+}
+
+function chatContentOrThrow(text, observed, finish) {
+  if (text) return text;
+  if (finish === 'length' || finish === 'max_tokens') {
+    throw new Error(
+      `completion budget exhausted before any message content (${observed}); raise QRP_MAX_TOKENS`,
+    );
+  }
+  throw new Error(`endpoint response carried no message content (${observed})`);
+}
+
+// OpenAI Chat Completions. Third HTTP shape. OpenCode Go's Go-plan table
+// (https://opencode.ai/docs/go , fetched 2026-09-23) puts mimo-v2.6-pro here.
+// Live probe the same day: POST /v1/chat/completions returned 200 with
+// choices[0].message.content "PONG"; /v1/messages and /v1/responses stayed 503.
+// reasoning_content is the thinking trace and is never the answer.
+async function callChatCompletions(baseUrl, token, model, maxTokens, systemPrompt, userMessage) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/u, '')}/v1/chat/completions`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+        'user-agent': CHAT_USER_AGENT,
+        ...sessionHeader(),
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature: 0,
+        stream: true,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`endpoint returned ${response.status}: ${body.slice(0, 300)}`);
+    }
+    const raw = await response.text();
+    const streamed = (response.headers.get('content-type') || '').includes('text/event-stream')
+      || raw.trimStart().startsWith('data:');
+    if (streamed) {
+      const assembled = assembleChatStream(raw);
+      const observed = [
+        'stream=true',
+        `finish_reason=${assembled.finish ?? 'unknown'}`,
+        `completion_tokens=${assembled.completionTokens ?? 'unknown'}`,
+        `max_tokens=${maxTokens}`,
+        `content_len=${assembled.content.length}`,
+        `reasoning_content=${assembled.reasoning ? 'present' : 'absent'}`,
+      ].join(' ');
+      return {
+        text: chatContentOrThrow(assembled.content, observed, assembled.finish),
+        resolvedModel: assembled.resolvedModel || model,
+      };
+    }
+    const payload = JSON.parse(raw);
+    const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
+    const message = choice && choice.message && typeof choice.message === 'object' ? choice.message : {};
+    const text = typeof message.content === 'string' ? message.content : '';
+    const usage = payload.usage || {};
+    const observed = [
+      'stream=false',
+      `finish_reason=${choice && choice.finish_reason != null ? choice.finish_reason : 'unknown'}`,
+      `completion_tokens=${usage.completion_tokens ?? usage.output_tokens ?? 'unknown'}`,
+      `max_tokens=${maxTokens}`,
+      `content=${message.content == null ? 'null' : typeof message.content}`,
+      `reasoning_content=${typeof message.reasoning_content === 'string' ? 'present' : 'absent'}`,
+    ].join(' ');
+    return {
+      text: chatContentOrThrow(text, observed, choice && choice.finish_reason),
+      resolvedModel: typeof payload.model === 'string' ? payload.model : model,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -1036,6 +1154,10 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     // the credentials, nothing ambient.
     args = ['-p', '--model', model,
       '--setting-sources', '', '--strict-mcp-config', '--tools', ''];
+    // claude 2.1.281: --effort low|medium|high|xhigh|max. Probed
+    // `claude -p --model opus --effort low` returns PONG. Without this flag
+    // QRP_CLI_EFFORT was ignored and a "low" seat ran at the CLI default.
+    if (effort) args.push('--effort', effort);
   }
   // QRP_CLI_HOME redirects only the harness child's HOME; this process keeps the
   // broker-assigned one. Never fall back to the ambient HOME if unset — an exam
@@ -1314,8 +1436,8 @@ async function main() {
     fail(`QRP_TRANSPORT must be http or cli (got: ${transport})`);
   }
   const httpProtocol = process.env.QRP_HTTP_PROTOCOL || 'messages';
-  if (!['messages', 'responses'].includes(httpProtocol)) {
-    fail(`QRP_HTTP_PROTOCOL must be messages or responses (got: ${httpProtocol})`);
+  if (!['messages', 'responses', 'chat_completions'].includes(httpProtocol)) {
+    fail(`QRP_HTTP_PROTOCOL must be messages, responses, or chat_completions (got: ${httpProtocol})`);
   }
   if (transport === 'cli' && process.env.QRP_HTTP_PROTOCOL) {
     fail('QRP_HTTP_PROTOCOL applies to QRP_TRANSPORT=http only');
@@ -1449,7 +1571,11 @@ async function main() {
       );
     } else {
       const httpProtocol = process.env.QRP_HTTP_PROTOCOL || 'messages';
-      const call = httpProtocol === 'responses' ? callResponses : callModel;
+      const call = httpProtocol === 'responses'
+        ? callResponses
+        : httpProtocol === 'chat_completions'
+          ? callChatCompletions
+          : callModel;
       result = await call(baseUrl, token, model, maxTokens, systemPrompt, userMessage);
     }
   } catch (error) {

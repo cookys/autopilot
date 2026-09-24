@@ -323,6 +323,17 @@ function runOracleSandboxed({ treeDir, oracle }) {
   }
 }
 
+// A no_op whose log still contains a tool-call shape did not fail because the
+// model had no edit. The client stopped on plain text, so another parser (or a
+// person saying "use the tool") might have landed the same bytes. This does
+// not change the outcome: the tree was clean, and the case still fails.
+const UNPARSED_TOOL_MARK = /<tool_call\b|<function=|<\/function>|<\/tool_call>|<invoke\b|<\/parameter>/iu;
+
+function unparsedToolCallWarning(text) {
+  if (typeof text !== 'string' || !UNPARSED_TOOL_MARK.test(text)) return null;
+  return 'unparsed_tool_call';
+}
+
 // ------------------------------------------------------------- classification
 
 // classifyCase — the total map (plan §5). observation:
@@ -420,6 +431,7 @@ module.exports = {
   canaryHits,
   canaryVariants,
   classifyCase,
+  unparsedToolCallWarning,
   exportTree,
   foldAdministration,
   oraclePreflight,

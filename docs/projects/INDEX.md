@@ -272,6 +272,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | 2026-09-20 | 2-D D2 snapshot-contract（plan `docs/plans/2026-09-19-blind-review-2d-overlap.md` §4 D2）— snapshot 在 claim 後寫、digest 漂移拒收停車、claim-held-no-file 規則、live flip 入帳；rail 缺陷 #4 後降 l3 收尾 | v2.36.77 | ece2db2c | [evidence](../plans/evidence/2026-09-19-blind-review-2d-overlap/d2-snapshot-contract/) |
 | 2026-09-20 | lifecycle 硬閘門 `check-plan-graduation.js`（無 project dir — mechanism）— BACKLOG 是佇列、plan 出貨即歸檔、🔵 不進 BACKLOG；一次清理 BACKLOG 216→139、歸檔 59 個 plan | v2.36.78 | 2b715c0c | — |
 | 2026-09-20 | foreman rail 多軌 sibling 缺口（308 #46，peer 308-0c；無 project dir — Fix）— sibling prefix 轉發進 hands、兩 foreman 互宣告、SOP 訊息；lib.sh EXIT trap 只在頂層清理修掉 dispatch-foreman 測試連鎖紅 | v2.36.79 | 8de50578 | — |
+| 2026-09-24 | 考試傳輸補 chat completions 串流，Claude `--effort` 會送出；implementer no_op 若 log 裡是未解析的工具呼叫，失敗原因加 `warning:unparsed_tool_call`，不改判通過 | v2.36.94 | — | — |
 | 2026-09-24 | depth-0 公平題的標準不在卷面上（無 project dir — guidance）— `family_standard` 寫進產物、嚴重性釘成 major 且必須恰好相等、round 12 只認 `declare_done`；`brain-seat-v3`，既有 depth-0 sitting 失效 | v2.36.93 | — | — |
 | 2026-09-24 | pipefail 下 `| grep -q` 的 SIGPIPE 假陰性全面清除（無 project dir — shell fix）— 119 處改為 `grep -q … < <(writer)`；掃描剩 0 處 | v2.36.90 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-24 | engine-scorecard：requalified 列崩潰 `current --role reviewer`（reviewer topology 自 08-21 全空）＋過期不及格考試被判合格（GLM-5.3／MiniMax-M3）（無 project dir — scorecard fix） | v2.36.91 | — | [CHANGELOG](../../CHANGELOG.md) |

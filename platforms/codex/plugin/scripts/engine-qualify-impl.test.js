@@ -504,5 +504,13 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   check(/implementer-only/.test(rev.stderr), 'non-implementer refusal names implementer-only');
 }
 
+const grader = require(path.join(__dirname, '..', 'evals', 'impl-eval-grader.js'));
+equal(grader.unparsedToolCallWarning(
+  '<tool_call><function= role="Write" file_path>/tmp/src/rate.js</parameter>',
+), 'unparsed_tool_call', 'a tool-shaped no_op log is a warning, not a pass');
+equal(grader.unparsedToolCallWarning('I updated src/rate.js and left the tree clean.'), null,
+  'plain prose is not an unparsed tool call');
+equal(grader.unparsedToolCallWarning(''), null, 'an empty log is not a warning');
+
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

@@ -181,4 +181,45 @@ assert_r44_contract_parity_reso() {
 
 assert_r44_contract_parity_reso
 
+assert_r54_resolve_review_loop() {
+  local SCRATCH="$TEST_TMP/r54-consult-corpus.json"
+  local OUT="$TEST_TMP/r54-scope.json"
+  cat > "$SCRATCH" <<'JSON'
+{
+  "applicability_scope": {
+    "task_classes": ["r54-consult-scratch-marker"],
+    "domains": ["r54-domain"],
+    "languages": ["r54-lang"],
+    "tool_surface": ["r54-tools"]
+  }
+}
+JSON
+  unset AUTOPILOT_CONSULT_CORPUS_FILE AUTOPILOT_DISCUSS_CORPUS_FILE
+  AUTOPILOT_CONSULT_CORPUS_FILE="$SCRATCH" \
+    node "$REPO_ROOT/scripts/lib/qualification-applicability-scope.js" \
+    write-scope --role consult --out "$OUT" >/dev/null 2>&1 || true
+  local GOT=""
+  [ -f "$OUT" ] && GOT="$(cat "$OUT")"
+  # RED at 28b25cb8819ef011eeb2ee47e07c3cb691223ea9: FAIL r54: consult write-scope honors AUTOPILOT_CONSULT_CORPUS_FILE: 'r54-consult-scratch-marker' not found in output; FAIL r54: case (xix) does not chmod 000 the tracked evals/consult-capability-evidence-corpus.json: expected '', got 'yes'; FAIL r54: case (xix) still chmod 000s a $TEST_TMP-scoped path: expected != '', got ''
+  assert_contains "$GOT" "r54-consult-scratch-marker" \
+    "r54: consult write-scope honors AUTOPILOT_CONSULT_CORPUS_FILE"
+
+  local GATE="$REPO_ROOT/hooks/tests/resolve-review-loop-consult-discuss-gate.test.sh"
+  local XIX_REGION
+  XIX_REGION="$(awk '/^# \(xix\)/,/^# \(xx\)/' "$GATE")"
+  local TRACKED_AND_CHMOD=""
+  if printf '%s\n' "$XIX_REGION" | grep -q 'evals/consult-capability-evidence-corpus.json' \
+    && printf '%s\n' "$XIX_REGION" | grep -Eq 'chmod 000 "\$CONSULT_CORPUS"|chmod 000 .*evals/consult-capability-evidence-corpus'; then
+    TRACKED_AND_CHMOD="yes"
+  fi
+  assert_eq "$TRACKED_AND_CHMOD" "" \
+    "r54: case (xix) does not chmod 000 the tracked evals/consult-capability-evidence-corpus.json"
+  local TMP_CHMOD
+  TMP_CHMOD="$(printf '%s\n' "$XIX_REGION" | grep 'chmod 000' | grep 'TEST_TMP' || true)"
+  assert_neq "$TMP_CHMOD" "" \
+    "r54: case (xix) still chmod 000s a \$TEST_TMP-scoped path"
+}
+
+assert_r54_resolve_review_loop
+
 finalize_test

@@ -30,10 +30,24 @@ const CORPUS_PATHS = {
   discuss: path.join(REPO_ROOT, 'evals', 'discuss-capability-evidence-corpus.json'),
 };
 
+const CORPUS_ENV = {
+  consult: 'AUTOPILOT_CONSULT_CORPUS_FILE',
+  discuss: 'AUTOPILOT_DISCUSS_CORPUS_FILE',
+};
+
 const SCOPE_FIELDS = ['task_classes', 'domains', 'languages', 'tool_surface'];
 
+function corpusPathForRole(role) {
+  const envName = CORPUS_ENV[role];
+  const override = envName ? process.env[envName] : undefined;
+  if (typeof override === 'string' && override.length > 0) {
+    return override;
+  }
+  return CORPUS_PATHS[role];
+}
+
 function frozenScopeForRole(role) {
-  const corpusPath = CORPUS_PATHS[role];
+  const corpusPath = corpusPathForRole(role);
   if (!corpusPath) {
     throw new Error(`qualification-applicability-scope: no frozen applicability scope for role '${role}'`);
   }

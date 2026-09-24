@@ -16,8 +16,8 @@
   `check-js-syntax`／`sync-codex-plugin-skills --check`／`validate.sh` 全綠；`claude-fable-5-1` 高強度複審 `SHIP-AS-IS`（僅
   3 個 🔵 CUT/FOLLOW-UP：`isAcceptedConsumerRow` 的兩段式 prefix 啟發式仍可能被審過的 config 列放寬、`runnerConsumesEffort`
   的硬編碼 consumer 清單與 `probe-engine-capability.sh` 需共用單一來源、`admit-backlog-follow-ups` 的 `releaseLock` 現在無
-  try/catch 包裹）。row 122 首輪整合觸發 5 個 gate suite 只在本分支紅（VA quota／population-count pin／git-init fixture），
-  追加 3 個修補 commit 後全綠：re-pin Population B 42→43／explicit-switch 6→7、`implementation-campaign-routing` 的
+  try/catch 包裹）。首輪整合觸發 5 個 gate suite 只在本分支紅，bisect 歸因到 row 122（VA quota、population-count pin）與
+  row 15（git-init fixture），追加 3 個修補 commit 後全綠：re-pin Population B 42→43／explicit-switch 6→7、`implementation-campaign-routing` 的
   shadow-admit 測試 fixture 補 `git init`、`dispatch-contract` 把 `agy` 放回 effort-consuming 集合並移除 fixture 裡虛構的
   `--effort`。BACKLOG 刪 10 列，含 9 個孤兒 sidecar。
 

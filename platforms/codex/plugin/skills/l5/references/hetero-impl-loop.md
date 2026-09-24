@@ -162,8 +162,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     `transport_exhausted` with ZERO ratified findings; swap the second family (codex/GLM) with a
     fresh `--state-dir`. Folding a finding changes the plan sha, so re-run the freeze chain
     (sources sha → graph ids → graph check → legacy reconcile → authority) after every fold; take
-    the receipt (`check-phase-review-receipt.js --plan-artifact --dispositions`, every disposition
-    needs `candidate_blocker: true|false`) on the REVIEWED bytes, then fold and re-freeze.
+    the receipt (`check-phase-review-receipt.js --plan-artifact --dispositions`; `candidate_blocker:
+    true|false` is mandatory only on the plan-artifact side, not on dispositions) on the REVIEWED
+    bytes, then fold and re-freeze.
     The rubric is frozen at G1: write it as PROPERTIES (what must hold), never as the mechanism
     (which git command); when a G1 blocker falsifies the rubric's own wording, the fold cannot be
     reviewed under it (`frozen rubric/manifest drifted`) and the only path is a new

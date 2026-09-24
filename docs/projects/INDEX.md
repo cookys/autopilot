@@ -259,7 +259,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
-| 2026-09-24 | wave-1b：10 個維護列整合（rlr 131/136/137、hlsm 139/140、dlrm 93/109/122/123、mrce 15）；row 122 追加 3 個修補 commit | v2.36.95 | (this ship) | [CHANGELOG](../../CHANGELOG.md) |
+| 2026-09-24 | wave-1b：10 個維護列整合（rlr 131/136/137、hlsm 139/140、dlrm 93/109/122/123、mrce 15）；整合後追加 3 個修補 commit（row 122 ×2、row 15 ×1） | v2.36.95 | 41f1bff6 | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |
 | 2026-09-17 | blind review redesign 1a-B — engine 每次 managed review 都給 packet、`reviewDiff`／`performReview` 帶回 `packet_hash`、seat receipt optional 鍵＋engine／validator 兩層一致性；/l5 campaign implement 綠→in-rail review 首次實測 `--timeout`→verification 紅只留 digest→repair 被 changed_files cap 擋→l3 降級、depth-0 13 綠＋live probe 合併 | v2.36.61 | e43cc44d |
 | 2026-09-17 | blind review redesign 1b-A — `scripts/lib/cleanroom-launch.sh`（bwrap `--args 9`、fd 3..1023 關、seat root 在 packet 旁、單一計時器、`--preflight`）＋`dispatch-review.sh` seat tier（packet／cleanroom／none，cleanroom 前置依序 fail-closed）；/l5 campaign 走完整條 rail 到 final panel 三席全回（同一 packet_hash）→ `final_adjudication` 無 provider → l3 降級 depth-0 修 panel findings、GLM 二審 SHIP-AS-IS、§5 dogfood 真 codex 額度錯誤在邊界內 | v2.36.62 | 94d44940 |

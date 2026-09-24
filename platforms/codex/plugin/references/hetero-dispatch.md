@@ -119,9 +119,11 @@ rails refuse over it with a named reason instead of letting the exec fail:
 - `dispatch-author.sh` → `precondition_failed` (its generated `run.sh` embeds `-p "$(cat …)"`, the
   same single-argv shape).
 
-`scripts/qc-panel.js` carries the same check in JS for its judge-B agy seats. Measure **bytes**,
-never `${#var}`: that counts characters, and one multibyte character in the prompt makes the guard
-under-report — the unsafe direction.
+`scripts/qc-panel.js` carries the same check in JS for its judge-B agy seats, and
+`scripts/hetero-review-loop.js` carries it too — it prechecks the estimated diff+spec bytes before
+dispatching any `agy`-runner seat and exits before spend when the estimate exceeds the ceiling.
+Measure **bytes**, never `${#var}`: that counts characters, and one multibyte character in the
+prompt makes the guard under-report — the unsafe direction.
 
 Remedy when you hit it: narrow `--diff` (fewer files, smaller range), split the unit, or send that
 seat to a runner that reads a prompt file or STDIN. Splitting is the caller's decision — neither rail
@@ -625,8 +627,10 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
 
 - **Startup log prune** (`scripts/lib/prune-tmp-residue.sh`): each dispatch script
   (`dispatch-hetero.sh` / `dispatch-review.sh` / `dispatch-author.sh` / `dispatch-explore.sh`)
-  best-effort prunes ITS OWN aged `${TMPDIR}` residue (raw logs, prompt temps, scratch cwds,
-  pi sessions) at startup — items older than `${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}` days,
+  best-effort prunes aged `${TMPDIR}` residue (raw logs, prompt temps, scratch cwds, pi sessions)
+  at startup — its own caller-passed patterns UNIONED with the shared `PRUNE_TMP_RESIDUE_PATTERNS`
+  registry (owned by the script, not by callers), so every call also prunes that shared set, not
+  merely its own family. Items older than `${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}` days,
   own-user only, `-maxdepth 1`, fixed name prefixes. `0` disables. LOGS AND SCRATCH ONLY —
   worktrees are never blind-mtime-pruned (they carry a liveness lock; see next bullet).
 - **Manifest reaper** (`dispatch-status.js --reap [--days N] [--dry-run]`, default 7 days):

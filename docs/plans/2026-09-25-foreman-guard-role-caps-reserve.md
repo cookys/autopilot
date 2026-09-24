@@ -30,14 +30,17 @@ Subagents that do legitimate multi-step work are killed at an arbitrary call cou
 - **KR2**: in the last 8 calls before any cap, only the reserve allowlist is admitted. The test shows `cargo build` denied and `git commit -m x` allowed,
   and the call that enters the reserve carries a model-visible `additionalContext` directive.
 - **KR3**: with no l4–l6 marker, an autopilot-dispatched subagent (first line `Engine:`) is never denied by the count, and it receives one `additionalContext` advisory at calls 40, 80, and 120.
-- **KR4**: `mode=warn` and every advisory are delivered through `additionalContext` (tested). The existing `hooks/tests/foreman-guard.test.sh` stays green, and the polling, Monitor, and context-ceiling rules keep their behavior.
+- **KR4**: `mode=warn` and every advisory are delivered through `additionalContext` (tested). The polling, Monitor, and context-ceiling rules keep their deny behavior.
+  `hooks/tests/foreman-guard.test.sh` stays green. Its assertions that pin the OLD warn/diagnostic channel (an allow with empty stdout plus a stderr line) are
+  the only ones that may change, and only to expect the new `additionalContext` JSON on stdout. Each changed assertion is listed in the commit message, and none is deleted.
 
 ## 2.5 Global Constraints (copied verbatim into every implementer + reviewer dispatch)
 - Node ≥ 20.10, built-ins only; foreman-guard stays fail-open (an internal error ⇒ exit 0, no output).
 - Default-on behavior under an ACTIVE l4–l6 marker is unchanged for any agent without a `Role:` line (still 40, still denied).
 - A hook never trusts the child's own later output for its role. The role comes only from the child's FIRST user message
   (the dispatcher-written prompt) or from P0's chosen equivalent.
-- New cases go in a NEW suite `hooks/tests/foreman-guard-roles.test.sh` (`chmod +x`). Do not append to `foreman-guard.test.sh`.
+- New cases go in a NEW suite `hooks/tests/foreman-guard-roles.test.sh` (`chmod +x`). Do not append cases to `foreman-guard.test.sh`.
+  The only allowed edit there is KR4's re-expectation of warn/diagnostic-channel assertions.
 - Do not edit CHANGELOG, the version, or `.claude-plugin/plugin.json` in the implementation commits; depth-0 lands the release.
 
 ## 2.6 Change-policy decisions
@@ -79,8 +82,13 @@ Any other route (a PostToolUse registry adds a hook file, hooks.json wiring, a h
 **P1 (S) advisories reach the model.** Replace the stderr-only `mode=warn` line and the ambiguous-rows diagnostic with
 `hookSpecificOutput.additionalContext` on an allow (keep the stderr copy for the debug log). **Acceptance**: KR4 test.
 
-**P2 (S) role-aware caps.** Resolve the role through the P0 route: `Role: foreman|worker|reviewer` within the first 5 lines of the prompt,
-case-sensitive, where anything else counts as foreman. Caps come from `foreman_guard.role_caps` (default foreman 40, worker 120, reviewer 120), with `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS`
+**P2 (S) role-aware caps.** Resolve the role through the P0 route (a′).
+- **Parse, anchored**: take `message.content` of the first JSONL record, only when that record has `type:"user"` and its `agentId` equals the payload's `agent_id`.
+  Split it on `\n`, look at lines 1–5 only, and match each line against `^Role: (foreman|worker|reviewer)$` (whole line, case-sensitive). The first match wins.
+  A bare word `worker` elsewhere never counts.
+- **Total fallback**: every failure yields role `foreman` and never an exception or a pass. That covers a missing or non-string `transcript_path`, a missing file, an unreadable file, a first
+  line over 64 KiB or not JSON, a record-type or `agentId` mismatch, and no matching line. The resolution runs inside its own try/catch, so the guard's top-level fail-open can never turn
+  a role-read failure into "uncapped". Caps come from `foreman_guard.role_caps` (default foreman 40, worker 120, reviewer 120), with `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS`
 as `worker=120,reviewer=120`. The resolved role is cached in the per-agent state file on the first call, and later calls never re-read it.
 The deny text names the role and its cap. **Acceptance**: KR1.
 
@@ -92,7 +100,9 @@ split on `;`, `&&`, `||`, `|`, and newline) must match the allowlist:
 - `mkdir -p`, `ls`, `test`/`[`;
 - a file write via `cat >`/`tee`/`printf … >` (the handoff).
 
-Anything else is denied with the reserve directive. The reserve counts ATTEMPTS, the same accounting as the cap (a denied call still spends one):
+Anything else is denied with the reserve directive. The effective reserve is `min(reserve_calls, floor(cap/2))`, so a small `bash_cap` never becomes all-reserve.
+The reserve directive, used both for entry and for every reserve denial, is one fixed string that NAMES the allowed verbs:
+"Close-out reserve: N call(s) left before the cap. Allowed now: git status/diff/add/commit/log/show/rev-parse/restore --staged; kill <pid>; rm/rmdir under /tmp or $TMPDIR; mkdir -p; ls; test; writing a file (cat >, tee, printf >). Commit, clean up, write your handoff, and end the turn." The reserve counts ATTEMPTS, the same accounting as the cap (a denied call still spends one):
 8 denied non-allowlist attempts exhaust it. The call that first enters the reserve carries an `additionalContext`
 "reserve entered: commit, clean up, and hand off now; N calls left". **Acceptance**: KR2, plus negative controls: a recursive rm of a path outside `/tmp/` or `$TMPDIR` is denied in the reserve, and 8 denied `cargo build` attempts exhaust the reserve, so the next `git commit` hits the cap.
 
@@ -116,7 +126,7 @@ dispatchers put `Role: worker|reviewer` on line 2 of a worker or reviewer prompt
 ## 6. Risks + inversion
 - 🟠 **Role laundering**: a foreman spawns a `Role: worker` child to run its polling loop. That is accepted for now, because polling and Monitor rules still apply to every
   role under the marker. The per-subtree budget becomes a follow-up BACKLOG row.
-- 🟠 **P0 route (a) fails**, e.g. `transcript_path` is the parent's transcript. Then foreground workers stay at 40, the gain is smaller, and this is stated honestly in the CHANGELOG.
+- (P0 resolved: route a′ holds; the earlier fallback risk is retired.)
 - 🟡 **The reserve allowlist is too tight** and a legitimate close-out command is denied. `warn` mode still exists as an escape hatch, and the directive names the allowed verbs.
 - Inversion: what guarantees failure? A role read from anything the child writes itself, or an advisory that goes to stderr. Both are excluded by §2.5 and P1.
 
@@ -130,3 +140,6 @@ None for the Board. P0 may create one (see its stop condition).
 
 ## Review log
 R0 author: depth-0 (opus), 2026-09-25.
+G1 (2026-09-25): policy stop `required_seat_transport_exhausted`. The chair seat (gpt-5.6-sol/codex) hit codex usage-limit exhaustion until 2026-09-26 16:35;
+grok-4.6 (deep) and MiniMax-M3 (third) returned unratified observations. Depth-0 accepted and folded all of them: R2 (a total no-Role fallback), R3 (an anchored first-record parse),
+R4 (the old-suite re-expectation rule and the reserve clamp), R8 (the reserve directive names the verbs), R7 (removed the stale P0-failure CHANGELOG line).

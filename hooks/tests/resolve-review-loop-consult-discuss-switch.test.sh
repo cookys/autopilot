@@ -309,8 +309,13 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # resolve-review-loop-pins-per-role.test.sh, whose two-role pin fixture config
 # carries `- reviewer_engine: cur-rev` (no consult/discuss key) — also a genuine
 # member. Bound moves 41 -> 42.
+# RECOUNTED 2026-09-24 (w1b row 122 residue-mission fixture): commit 1b2e2485
+# added hooks/tests/dispatch-lifecycle-residue-mission.test.sh, whose roster
+# fixture carries a genuine `- reviewer_engine: claude-opus` line — a real
+# Population B member (cleanroom/rail behavior, not a frozen-fixture false
+# positive and not this suite). Bound moves 42 -> 43.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "42" "$POP_B_COUNT" "Population B file bound is pinned at 42 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24)"
+assert_eq "43" "$POP_B_COUNT" "Population B file bound is pinned at 43 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24, dispatch-lifecycle-residue-mission.test.sh added 2026-09-24)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the
@@ -356,11 +361,14 @@ assert_eq "42" "$POP_B_COUNT" "Population B file bound is pinned at 42 (git grep
 # native-fallback warning cannot mask its window-warning assertions. It has no
 # `reviewer_engine:` line (not a Population B file) but the explicit-switch grep below is
 # file-wide, so it counts. 5 -> 6.
+# RECOUNTED (2026-09-24, w1b row 122): the same dispatch-lifecycle-residue-
+# mission.test.sh fixture also sets `- consult_dispatch: off` and
+# `- discuss_dispatch: off` (counts once as a file). 6 -> 7.
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
 POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "6" "$POP_B_EXPLICIT_SWITCH" "six hooks/ roster configs (five of Population B's 40, plus context-window's hermetic roster) set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
+assert_eq "7" "$POP_B_EXPLICIT_SWITCH" "seven hooks/ roster configs (six of Population B's 43, plus context-window's hermetic roster) set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'

@@ -69,7 +69,7 @@ P2 and P4 therefore stay in scope. Original spike design, kept for the record: P
 subagent's transcript lives at `~/.claude/projects/<project-slug>/<session_id>/subagents/agent-<agentId>.jsonl`. Its FIRST line is
 `type:"user"` whose `message.content` is the dispatcher's prompt (it began `Engine: sonnet`), and it carries `agentId` and `sessionId`.
 Route (a′) is therefore: derive `<dirname(transcript_path)>/<session_id>/subagents/agent-<agent_id>.jsonl` from the hook payload, read only its first line
-(bounded, ≤ 64 KiB), and take the role from `message.content`. The child cannot rewrite its own first message, so the role stays dispatcher-owned.
+(bounded, ≤ 64 KiB), and take the role from `message.content`. The child does not rewrite its own first message in normal operation, so the role stays dispatcher-owned (deliberate tampering is a named residual risk in §6).
 The spike confirms this with a real hook in a scratch project (`claude -p` spawning one foreground child, one background child, and one depth-2 child; a PreToolUse dump hook):
 - (1) the payload's `agent_id` equals the transcript's `agentId`;
 - (2) `transcript_path` in the child's payload lets the path be derived: whichever file it names, the `<session>/subagents/` layout must hold;
@@ -94,7 +94,8 @@ Then: Replace the stderr-only `mode=warn` line and the ambiguous-rows diagnostic
 - **Total fallback**: every failure yields role `foreman` and never an exception or a pass. That covers a missing or non-string `transcript_path`, a missing file, an unreadable file, a first
   line over 64 KiB or not JSON, a record-type or `agentId` mismatch, and no matching line. The resolution runs inside its own try/catch, so the guard's top-level fail-open can never turn
   a role-read failure into "uncapped". Caps come from `foreman_guard.role_caps` (default foreman 40, worker 120, reviewer 120), with `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS`
-as `worker=120,reviewer=120`. The resolved role is cached in the per-agent state file on the first call, and later calls never re-read it.
+as `worker=120,reviewer=120`, which overlays the defaults per key (omitted keys keep their defaults, foreman stays 40 unless named, malformed pairs are ignored).
+Role code runs only after the existing inert gate, so a payload without `agent_id` (depth-0) never reaches it; a test pins this.
 The deny text names the role and its cap. **Acceptance**: KR1.
 
 **P3 (S) close-out reserve.** Once `n > cap − reserve_calls` (default 8), every executable segment of the command (the existing `executableText`,
@@ -108,8 +109,11 @@ split on `;`, `&&`, `||`, `|`, and newline) must match the allowlist:
 Anything else is denied with the reserve directive. The effective reserve is `min(reserve_calls, floor(cap/2))`, so a small `bash_cap` never becomes all-reserve.
 The reserve directive, used both for entry and for every reserve denial, is one fixed string that NAMES the allowed verbs:
 "Close-out reserve: N call(s) left before the cap. Allowed now: cd; git status/diff/add/commit/log/show/rev-parse/restore --staged; kill <pid>; rm/rmdir under /tmp or $TMPDIR; mkdir -p; ls; test; writing a file (cat >, tee, printf >). Commit, clean up, write your handoff, and end the turn." The reserve counts ATTEMPTS, the same accounting as the cap (a denied call still spends one):
-8 denied non-allowlist attempts exhaust it. The call that first enters the reserve carries an `additionalContext`
-"reserve entered: commit, clean up, and hand off now; N calls left". **Acceptance**: KR2, plus negative controls: a recursive rm of a path outside `/tmp/` or `$TMPDIR` is denied in the reserve, and 8 denied `cargo build` attempts exhaust the reserve, so the next `git commit` hits the cap.
+8 denied non-allowlist attempts exhaust it. The first call inside the reserve carries that same directive as `additionalContext`. In P1's deny-reason fallback, the directive is instead delivered on the first
+non-allowlisted reserve call (which is denied anyway), so the announcement never spends an extra call.
+Matching: a segment matches an entry by its leading argv words (`git` + a listed subcommand; `kill` + digit-only arguments), and further arguments are free.
+The rm/rmdir paths must be absolute under `/tmp/` or the hook's own `process.env.TMPDIR`; the literal `$TMPDIR/` and `${TMPDIR}/` are expanded with the same value. **Acceptance**: KR2, plus negative controls: a recursive rm of a path outside `/tmp/` or `$TMPDIR` is denied in the reserve, and 8 denied `cargo build` attempts made AFTER the reserve opens exhaust it, so the next `git commit` hits the cap. An inversion case: a later transcript record containing
+`Role: worker` with none in the first record resolves to foreman at 40.
 
 **P4 (S) no-marker advisory (depends on P0).** It applies ONLY to autopilot-dispatched subagents, meaning the first message (read via route a′)
 starts with an `Engine:` line. Explore, Plan, claude-code-guide, `/code-review` subagents and every other agent stay fully inert, as they are today.
@@ -133,6 +137,8 @@ dispatchers put `Role: worker|reviewer` on line 2 of a worker or reviewer prompt
   role under the marker. The per-subtree budget becomes a follow-up BACKLOG row.
 - (P0 resolved: route a′ holds; the earlier fallback risk is retired.)
 - 🟡 **The reserve allowlist is too tight** and a legitimate close-out command is denied. `warn` mode still exists as an escape hatch, and the directive names the allowed verbs.
+- 🟡 **Transcript tampering**: a child could deliberately edit its own transcript file to claim `Role: worker`. That is accepted. The guard is cost discipline, not a security boundary,
+  and a child with Bash could equally flip the mode env or the config.
 - Inversion: what guarantees failure? A role read from anything the child writes itself, or an advisory that goes to stderr. Both are excluded by §2.5 and P1.
 
 ## 7. Out of scope
@@ -153,3 +159,12 @@ Dispositions are in `2026-09-25-foreman-guard-role-caps-reserve.g1-dispositions.
 - accepted blockers: R2 reserve-vs-default and R4 cap-loop re-expectation, the same root. The reserve applies to foremen by intent, and §2.5 and KR4 are reworded.
 - accepted and folded: cd, no role cache, non-string content, GC bounds, and a live additionalContext probe with a deny-reason fallback.
 - rejected with rationale: heredoc splitting (executableText drops bodies) and the reserve verbs (already one fixed string for entry and denials).
+G2 (terminal at the generation cap): CONDITIONAL with 13 findings and 3 blockers, which are really two leftovers from the G1 fold (a stale role-cache sentence and a stale short reserve text).
+Depth-0 adjudicated them in `…g2-dispositions.json`, and the freeze check exited 0 against the G2 artifact. This commit is the bounded repair:
+- deleted both stale texts;
+- env per-key overlay;
+- the TMPDIR matching rule and argv-prefix matching;
+- the fallback announcement costs no call;
+- the KR2 timing and an inversion test case;
+- a tampering residual risk.
+Refuted: the R2 wording (decided in G1) and depth-0 capping (the inert gate precedes role code). No G3.

@@ -2240,6 +2240,22 @@ function runCampaignIntake(input = {}, adapters = {}) {
       };
     }
   }
+  try {
+    canonicalRepoIdentity(repo);
+  } catch (error) {
+    const rejection = rejected(
+      'mission',
+      (error && error.code) || 'mission_repo_identity_invalid',
+      (error && error.message) || String(error),
+    );
+    return {
+      status: 'blocked',
+      reason: rejection.reason,
+      rejection,
+      steps: [rejection],
+      pre_spend_no_effect_receipt: null,
+    };
+  }
   const missionClaimAdapter = adapters.missionClaim || defaultMissionClaim;
   let missionClaim;
   try {

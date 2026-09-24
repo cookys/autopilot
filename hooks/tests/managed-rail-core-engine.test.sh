@@ -1134,4 +1134,76 @@ NODE
 }
 
 assert_r2_managed_implementation_timeout_floor
+
+# RED at d3ff6b678f057513c1c5a306cbf284f3d9ced592:
+# AssertionError [ERR_ASSERTION]: non-git missionClaim calls=1
+# 1 !== 0
+# FAIL [managed-rail-core-engine] non-git --repo must not call missionClaim: : expected exit 0, got 1
+# FAIL [managed-rail-core-engine] missionClaim adapter is not invoked for a non-git --repo: '"non_git_claim_calls":0' not found in output
+# FAIL [managed-rail-core-engine] non-git --repo intake is blocked: '"non_git_status":"blocked"' not found in output
+# FAIL [managed-rail-core-engine] 30 passed, 3 failed
+assert_mission_claim_skips_non_git_repo() {
+  local OUT
+  OUT="$(node - "$REPO_ROOT" "$REPO" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const [root, gitRepo, tmpRoot] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
+
+const nonGit = fs.mkdtempSync(path.join(tmpRoot, 'non-git-repo-'));
+let nonGitClaimCalls = 0;
+const nonGitResult = runCampaignIntake({
+  repo: nonGit,
+}, {
+  missionClaim() {
+    nonGitClaimCalls += 1;
+    return { owner: 'mission', status: 'claimed', claim_id: 'must-not-run' };
+  },
+  releaseMission() {
+    return { owner: 'mission_release', status: 'released' };
+  },
+});
+
+let gitClaimCalls = 0;
+const gitResult = runCampaignIntake({
+  repo: gitRepo,
+}, {
+  missionClaim() {
+    gitClaimCalls += 1;
+    return { owner: 'mission', status: 'unknown' };
+  },
+  releaseMission() {
+    return { owner: 'mission_release', status: 'released' };
+  },
+});
+
+try {
+  fs.rmSync(nonGit, { recursive: true, force: true });
+} catch (_error) {
+  /* ignore */
+}
+
+assert.strictEqual(nonGitResult.status, 'blocked');
+assert.ok(nonGitResult.rejection);
+assert.strictEqual(nonGitClaimCalls, 0, `non-git missionClaim calls=${nonGitClaimCalls}`);
+assert.ok(gitClaimCalls >= 1, `git missionClaim calls=${gitClaimCalls}`);
+console.log(JSON.stringify({
+  non_git_status: nonGitResult.status,
+  non_git_code: nonGitResult.rejection && nonGitResult.rejection.code,
+  non_git_claim_calls: nonGitClaimCalls,
+  git_claim_calls: gitClaimCalls,
+  git_claim_status: gitResult.status,
+}));
+NODE
+)"
+  assert_exit_code "$?" "0" "non-git --repo must not call missionClaim: $OUT"
+  assert_contains "$OUT" '"non_git_claim_calls":0' \
+    "missionClaim adapter is not invoked for a non-git --repo"
+  assert_contains "$OUT" '"non_git_status":"blocked"' \
+    "non-git --repo intake is blocked"
+}
+
+assert_mission_claim_skips_non_git_repo
 finalize_test

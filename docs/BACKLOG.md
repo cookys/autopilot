@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### PEER-REPORTED (openclaw): foreman-guard needs role-aware Bash caps and a close-out reserve
+- **Status**: open
+- **Trigger**: after B1 review-loop-resolver-a lands (v2.36.96), or the next worker/reviewer subagent that is denied by the 40-call cap mid-commit
+- **Effort**: M
+- **Source**: hangar session on openclaw, 2026-09-25 (msg_01M3AEQS2C1XBM4YBBMQ9MRTMP); operator-requested handoff
+- **Pointer**: docs/backlog/foreman-guard-role-aware-caps.md
+- **Context**: the 40-call cap is role-blind and hits depth-2 workers/reviewers. Proposal: role registry via a PostToolUse `Agent` hook (unregistered ⇒ foreman), worker/reviewer 120, and an 8-call close-out allowlist reserve.
+
 ### `dispatch-hetero.sh --timeout` is accepted and recorded but never applied to the grok rail
 - **Status**: open
 - **Trigger**: the next grok dispatch anyone needs to bound, or any audit of runner-branch parity

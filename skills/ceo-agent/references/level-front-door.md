@@ -480,10 +480,23 @@ source (≈300K to start). The prose rules existed; nothing was in the loop.
   it writes its handoff (`autopilot:handoff`) and **ends its turn**. Depth-0 spawns the next foreman
   for the next deliverable. A "resident" foreman waiting for its next assignment is forbidden.
 - **In-loop enforcement.** `hooks/foreman-guard.js` (PreToolUse `Bash|Monitor`, scope = session-mode
-  marker l4|l5|l6 AND payload `agent_id`): Bash cap per agent (default 40, `foreman_guard.bash_cap`),
-  foreground polling denied (`true`/`:` spin, `sleep N`, `while … sleep|grep|test`, `pgrep`/`ps -p`/
-  `kill -0`, reading `/tasks/*.output`), `Monitor` denied. `run_in_background` waits stay allowed.
-  Modes block|warn|off (`foreman_guard.mode` / `AUTOPILOT_FOREMAN_GUARD_MODE`). Depth-0 is untouched.
+  marker l4|l5|l6 AND payload `agent_id`): role from a line matching exactly `Role: foreman` /
+  `Role: worker` / `Role: reviewer` among the first five lines of the dispatcher-written first
+  message, re-derived every call, never cached. Caps default foreman 40 / worker 120 / reviewer 120
+  (`foreman_guard.role_caps`; env `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS` comma list e.g.
+  `worker=120,reviewer=120`; env overlays config overlays defaults, per key). Last effective-reserve
+  calls (min of `foreman_guard.reserve_calls` default 8 / `AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS` and
+  floor(cap/2)) admit only close-out: `cd`; git status/diff/add/commit/log/show/rev-parse/restore
+  --staged; `kill <pid>`; rm/rmdir under `/tmp` or `$TMPDIR`; `mkdir -p`; `ls`; `test`; writing a
+  file (`cat >`, `tee`, `printf >`). Advisories (mode=warn, context-ceiling ambiguous-rows
+  diagnostic, reserve-entry directive) reach the model via PreToolUse `additionalContext` on ALLOW.
+  No l4/l5/l6 marker: an `Engine:`-prefixed first message is never denied by call count; one
+  `additionalContext` advisory every `foreman_guard.advisory_every` calls (default 40,
+  `AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY`) to consider committing and handing off. Other subagents
+  (no `Engine:` prefix) stay inert. Foreground polling denied (`true`/`:` spin, `sleep N`,
+  `while … sleep|grep|test`, `pgrep`/`ps -p`/`kill -0`, reading `/tasks/*.output`), `Monitor`
+  denied. `run_in_background` waits stay allowed. Modes block|warn|off (`foreman_guard.mode` /
+  `AUTOPILOT_FOREMAN_GUARD_MODE`). Depth-0 is untouched.
 - **Takeover read-list cap.** The next foreman reads the brief for THIS cut only (≤ 300 lines) and
   the ledger split for its lane. "Read the whole file first" chains (full ledger, kernel sources,
   historical rulings) are forbidden in a foreman brief; depth-0 owns the whole picture.

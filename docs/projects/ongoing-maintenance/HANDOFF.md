@@ -1,18 +1,21 @@
 ## 目標
-接續 autopilot 維護。2026-09-24 這個 session（opus）把 09-21 backlog bundle 剩下的 wave-1b 共 10 列做完，出貨 **v2.36.95**（`41f1bff6`）。
-09-21 那份 handoff 裡的事項都已結案：wave-1 在 v2.36.81 落地，depth-0 委派閘門在 v2.36.82 出貨，wave-1b 就是這次。
+接續 autopilot 維護。2026-09-25 這個 session 把 peer 回報的 `foreman-guard-role-aware-caps` backlog 候選做完，出貨 **v2.36.97**（`edc0e9cc` 之後的 closeout commit）。
+09-21 那份 handoff 裡的事項都已結案：wave-1 在 v2.36.81 落地，depth-0 委派閘門在 v2.36.82 出貨，wave-1b 在 v2.36.95 出貨，B1 在 v2.36.96 出貨。
 
 ## 鐵律（沿用 owner 09-21 的規定）
 - depth-0 只做三件事：讀報告、下裁決、派工。產品碼、落地、release 都交給工頭（sonnet Agent，在 clone 裡做）。
 - BACKLOG 是佇列：有 plan 或已出貨就刪列。plan 要登記在 INDEX（`active`）。🔵 不進 BACKLOG。
 - rail 有缺陷時，一律先出 Fix 版再重派，或依文件降級。
 
-## 現況（HEAD `9fc56347` = v2.36.96 已 push）
-1. **09-21 的六個 backlog bundle 全數出貨**：B1 `review-loop-resolver-a`（wave 2，7 列）在這個 session 落地為 v2.36.96，plan 已歸檔到
+## 現況（HEAD = v2.36.97 + closeout commit，已 push）
+1. **foreman-guard 角色感知上限 + close-out reserve 已出貨（v2.36.97，`edc0e9cc`）**：`docs/backlog/foreman-guard-role-aware-caps.md` 那個候選（B1 落地後即可排入的觸發條件已滿足）做完了——角色感知 Bash 上限（`Role: worker`/`Role: reviewer` 120、工頭與未宣告角色 40）、收尾前保留額度（close-out reserve）、無 marker 的 `Engine:` 派工子代理改一律不擋＋每 40 次建議。落地前複審抓到一個 🟠 allow-bypass（`emitAllowContext()` 誤帶 `permissionDecision:"allow"`，等於幫每則建議自動放行底下的指令）並已修正——**這是本輪的關鍵教訓：advisory hook 絕不能帶 `permissionDecision:"allow"`**，只有真拒絕才設這個欄位。收尾 pass（本 session）修了三個已知後續：CHANGELOG v2.36.97 段落的簡體字 `没`→`沒`、`hooks/README.md` foreman-guard 行的過時措辭（「depth-0 and plain sessions are untouched」與新的無 marker 建議路徑矛盾）、`foreman-guard-roles.test.sh` 的 TMPDIR-unset 案例在沒有 `/dev/shm` 的主機上改成印 SKIP 而不是 fail。全套 evidence 在
+   `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/README.md`。
+1a. **09-21 的六個 backlog bundle 全數出貨**：B1 `review-loop-resolver-a`（wave 2，7 列）落地為 v2.36.96，plan 已歸檔到
    `docs/plans/_archive/2026/09/`，evidence 見 `docs/plans/evidence/2026-09-25-backlog-b1/README.md`。
    其餘 5 個 bundle 的 plan 也都已歸檔到 `docs/plans/_archive/2026/09/`。
-1b. **新候選（peer 回報，觸發條件已滿足）**：`docs/backlog/foreman-guard-role-aware-caps.md`（foreman-guard 角色感知上限 + close-out reserve）。
-   其觸發條件寫的是「B1 落地後」，B1 已在 v2.36.96 出貨，故現在可以排入下一輪。
+1b. **下一輪候選**：
+   - `docs/backlog/foreman-guard-cost-shaped-gate.md`（cost-shaped gate 尚未觸發，仍是 shadow-only）；
+   - `docs/backlog/dispatch-hetero-grok-timeout-not-applied.md`（grok 的兩個分支沒把 `$TIMEOUT` 轉給 `run_worker`，manifest 卻照樣記 `timeout_seconds`；S size）。
 2. **平行派工配方**：證據與教訓在 `docs/plans/evidence/2026-09-24-backlog-wave-1b/README.md`。重點有兩條：
    - clone-local 的 shadow commit 要一開始就寫進 brief，不能事後用訊息補，工頭會（也應該）拒收。
    - 每列的 Verify 要涵蓋它所改契約的使用端套件，不能只跑 bundle 套件。

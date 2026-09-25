@@ -414,44 +414,50 @@ for i in $(seq 1 32); do
 done
 # Pin TMPDIR to a real non-/tmp prefix so isTmpSafePath cannot take the /tmp/
 # short-circuit. Restore afterward so later cases keep lib.sh's HOOK_TMPDIR.
+# Needs /dev/shm to hand out a real non-/tmp dir; a host without it (e.g. some
+# containers) skips this case instead of failing the suite.
 _p3_saved_tmpdir="${TMPDIR-}"
 _p3_tmpdir_was_set=0
 [ -n "${TMPDIR+x}" ] && _p3_tmpdir_was_set=1
-P3_TMPDIR_CASE="$(mktemp -d /dev/shm/fg-p3-tmpdir-XXXXXX 2>/dev/null || true)"
-if [ -z "$P3_TMPDIR_CASE" ] || [ "${P3_TMPDIR_CASE#/tmp/}" != "$P3_TMPDIR_CASE" ]; then
-  fail "P3 TMPDIR case: need a temp dir not under /tmp to exercise the TMPDIR branch"
-fi
-export TMPDIR="$P3_TMPDIR_CASE"
-_p3_stdout="$TEST_TMP/.stdout.p3tmpdir"
-_p3_stderr="$TEST_TMP/.stderr.p3tmpdir"
-HOME="$HOOK_HOME" TMPDIR="$P3_TMPDIR_CASE" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
-  node "$HOOKS_DIR/foreman-guard.js" >"$_p3_stdout" 2>"$_p3_stderr" \
-  <<< "$(bash_payload agent-p3rmd "rm -rf ${TMPDIR}/autopilot-p3-safe")"
-__RUN_EXIT=$?
-__RUN_STDOUT=$(cat "$_p3_stdout")
-__RUN_STDERR=$(cat "$_p3_stderr")
-rm -f "$_p3_stdout" "$_p3_stderr"
-assert_contains "$__RUN_STDOUT" 'additionalContext' "P3 rm under \$TMPDIR allowed in reserve: additionalContext"
-assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "P3 rm under \$TMPDIR allowed in reserve: no permissionDecision"
-
-P3_TMPDIR_UNRELATED="$(mktemp -d /dev/shm/fg-p3-tmpdir-unrel-XXXXXX 2>/dev/null || true)"
-if [ -z "$P3_TMPDIR_UNRELATED" ] || [ "${P3_TMPDIR_UNRELATED#/tmp/}" != "$P3_TMPDIR_UNRELATED" ]; then
-  fail "P3 TMPDIR sibling: need an unrelated temp dir not under /tmp"
-fi
-HOME="$HOOK_HOME" TMPDIR="$P3_TMPDIR_UNRELATED" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
-  node "$HOOKS_DIR/foreman-guard.js" >"$_p3_stdout" 2>"$_p3_stderr" \
-  <<< "$(bash_payload agent-p3rmd "rm -rf ${P3_TMPDIR_CASE}/autopilot-p3-safe")"
-__RUN_EXIT=$?
-__RUN_STDOUT=$(cat "$_p3_stdout")
-__RUN_STDERR=$(cat "$_p3_stderr")
-rm -f "$_p3_stdout" "$_p3_stderr"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm not under \$TMPDIR denied in reserve"
-if [ "$_p3_tmpdir_was_set" -eq 1 ]; then
-  export TMPDIR="$_p3_saved_tmpdir"
+if [ ! -d /dev/shm ] || [ ! -w /dev/shm ]; then
+  echo "SKIP: P3 TMPDIR case needs a writable /dev/shm to get a temp dir not under /tmp"
 else
-  unset TMPDIR
+  P3_TMPDIR_CASE="$(mktemp -d /dev/shm/fg-p3-tmpdir-XXXXXX 2>/dev/null || true)"
+  if [ -z "$P3_TMPDIR_CASE" ] || [ "${P3_TMPDIR_CASE#/tmp/}" != "$P3_TMPDIR_CASE" ]; then
+    fail "P3 TMPDIR case: need a temp dir not under /tmp to exercise the TMPDIR branch"
+  fi
+  export TMPDIR="$P3_TMPDIR_CASE"
+  _p3_stdout="$TEST_TMP/.stdout.p3tmpdir"
+  _p3_stderr="$TEST_TMP/.stderr.p3tmpdir"
+  HOME="$HOOK_HOME" TMPDIR="$P3_TMPDIR_CASE" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    node "$HOOKS_DIR/foreman-guard.js" >"$_p3_stdout" 2>"$_p3_stderr" \
+    <<< "$(bash_payload agent-p3rmd "rm -rf ${TMPDIR}/autopilot-p3-safe")"
+  __RUN_EXIT=$?
+  __RUN_STDOUT=$(cat "$_p3_stdout")
+  __RUN_STDERR=$(cat "$_p3_stderr")
+  rm -f "$_p3_stdout" "$_p3_stderr"
+  assert_contains "$__RUN_STDOUT" 'additionalContext' "P3 rm under \$TMPDIR allowed in reserve: additionalContext"
+  assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "P3 rm under \$TMPDIR allowed in reserve: no permissionDecision"
+
+  P3_TMPDIR_UNRELATED="$(mktemp -d /dev/shm/fg-p3-tmpdir-unrel-XXXXXX 2>/dev/null || true)"
+  if [ -z "$P3_TMPDIR_UNRELATED" ] || [ "${P3_TMPDIR_UNRELATED#/tmp/}" != "$P3_TMPDIR_UNRELATED" ]; then
+    fail "P3 TMPDIR sibling: need an unrelated temp dir not under /tmp"
+  fi
+  HOME="$HOOK_HOME" TMPDIR="$P3_TMPDIR_UNRELATED" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    node "$HOOKS_DIR/foreman-guard.js" >"$_p3_stdout" 2>"$_p3_stderr" \
+    <<< "$(bash_payload agent-p3rmd "rm -rf ${P3_TMPDIR_CASE}/autopilot-p3-safe")"
+  __RUN_EXIT=$?
+  __RUN_STDOUT=$(cat "$_p3_stdout")
+  __RUN_STDERR=$(cat "$_p3_stderr")
+  rm -f "$_p3_stdout" "$_p3_stderr"
+  assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm not under \$TMPDIR denied in reserve"
+  if [ "$_p3_tmpdir_was_set" -eq 1 ]; then
+    export TMPDIR="$_p3_saved_tmpdir"
+  else
+    unset TMPDIR
+  fi
+  rm -rf "$P3_TMPDIR_CASE" "$P3_TMPDIR_UNRELATED"
 fi
-rm -rf "$P3_TMPDIR_CASE" "$P3_TMPDIR_UNRELATED"
 
 reset_state
 for i in $(seq 1 32); do

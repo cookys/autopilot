@@ -1,6 +1,6 @@
 # Rubric — 2026-09-25-foreman-guard-role-caps-reserve.md
 
-> Source plan: docs/plans/2026-09-25-foreman-guard-role-caps-reserve.md
+> Source plan: docs/plans/_archive/2026/09/2026-09-25-foreman-guard-role-caps-reserve.md
 
 R1: Node ≥ 20.10, built-ins only; foreman-guard stays fail-open (an internal error ⇒ exit 0, no output).
 R2: Default-on behavior under an ACTIVE l4–l6 marker is unchanged for any agent without a `Role:` line (still 40, still denied).

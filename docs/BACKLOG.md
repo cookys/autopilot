@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### foreman-guard needs a cost-shaped gate (cache-read tokens or lifetime); covers clone foremen w/ INACTIVE marker
+- **Status**: open
+- **Trigger**: a hook-readable cumulative per-agent token feed exists, or a clone-based foreman is measured running away
+- **Effort**: M
+- **Source**: plan §7
+- **Pointer**: docs/backlog/foreman-guard-cost-shaped-gate.md
+- **Context**: role/call-count caps say nothing about cost; a clone-based foreman whose l4-l6 marker is INACTIVE is invisible to both today.
+
 ### `dispatch-hetero.sh --timeout` is accepted and recorded but never applied to the grok rail
 - **Status**: open
 - **Trigger**: the next grok dispatch anyone needs to bound, or any audit of runner-branch parity

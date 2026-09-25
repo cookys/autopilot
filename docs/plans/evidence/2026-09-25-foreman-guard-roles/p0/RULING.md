@@ -1,6 +1,6 @@
 # P0 spike — can a PreToolUse hook read a subagent's own first prompt line?
 
-Plan: `docs/plans/2026-09-25-foreman-guard-role-caps-reserve.md` §4 P0
+Plan: `docs/plans/_archive/2026/09/2026-09-25-foreman-guard-role-caps-reserve.md` §4 P0
 
 ## Verdict
 

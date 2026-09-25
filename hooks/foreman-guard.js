@@ -514,12 +514,12 @@ function emit(decision, reason) {
 
 // Advisories that used to be stderr-only on an ALLOW (mode=warn, ambiguous-rows
 // diagnostic) never reached the model: stderr on exit 0 is debug-log only.
-// Same envelope as emit() deny, but permissionDecision allow + additionalContext.
+// additionalContext-only: no permissionDecision (an "allow" grant would bypass
+// the permission prompt for the underlying tool call).
 function emitAllowContext(text) {
   process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
-      permissionDecision: 'allow',
       additionalContext: text,
     },
   })}\n`);

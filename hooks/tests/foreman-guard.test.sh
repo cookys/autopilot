@@ -143,9 +143,11 @@ unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
 # ── 5. modes ───────────────────────────────────────────────────────────
 reset_state
 AUTOPILOT_FOREMAN_GUARD_MODE=warn run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 30')"
+# RED-by-inversion at b76283d7: these assertions currently pass by asserting
+# the defect (permissionDecision allow on advisory paths), and must be re-expected.
 assert_contains "$__RUN_STDOUT" '"hookSpecificOutput"' "warn mode: no deny JSON"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "warn mode: no deny JSON"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "warn mode: no deny JSON"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "warn mode: no permissionDecision"
 assert_contains "$__RUN_STDERR" 'mode=warn' "warn mode: stderr line"
 AUTOPILOT_FOREMAN_GUARD_MODE=off run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 30')"
 assert_eq "" "$__RUN_STDOUT" "off mode: silent"
@@ -158,7 +160,7 @@ run_hook foreman-guard.js "$(bash_payload agent-4 'echo 1')"; run_hook foreman-g
 run_hook foreman-guard.js "$(bash_payload agent-4 'echo 3')"
 assert_contains "$__RUN_STDOUT" '"hookSpecificOutput"' "config warn mode: cap breach is a warning"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "config warn mode: cap breach is a warning"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "config warn mode: cap breach is a warning"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "config warn mode: no permissionDecision"
 assert_contains "$__RUN_STDERR" 'exceeds the foreman cap of 2' "config bash_cap honoured"
 rm -f "$HOOK_HOME/.autopilot/config.json"
 
@@ -219,7 +221,7 @@ write_tasks fg-test-session '[{"id":"other-agent","tokenCount":190000,"contextWi
 run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
 assert_contains "$__RUN_STDOUT" '"hookSpecificOutput"' "context-ceiling: no matching row ⇒ allowed"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "context-ceiling: no matching row ⇒ allowed"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "context-ceiling: no matching row ⇒ allowed"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "context-ceiling: no matching row ⇒ no permissionDecision"
 assert_contains "$__RUN_STDERR" '0 tasks[] row' "context-ceiling: diagnostic names the count (0)"
 
 reset_state
@@ -227,7 +229,7 @@ write_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindow
 run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
 assert_contains "$__RUN_STDOUT" '"hookSpecificOutput"' "context-ceiling: two rows same id ⇒ allowed (ambiguous, never a gate)"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "context-ceiling: two rows same id ⇒ allowed (ambiguous, never a gate)"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "context-ceiling: two rows same id ⇒ allowed (ambiguous, never a gate)"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "context-ceiling: two rows same id ⇒ no permissionDecision (ambiguous, never a gate)"
 assert_contains "$__RUN_STDERR" '2 tasks[] row' "context-ceiling: diagnostic names the count (2)"
 
 reset_state

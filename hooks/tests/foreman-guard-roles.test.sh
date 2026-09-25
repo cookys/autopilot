@@ -44,9 +44,11 @@ reset_state
 AUTOPILOT_FOREMAN_GUARD_MODE=warn run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 30')"
 assert_eq 0 "$__RUN_EXIT" "warn poll: exit 0"
 assert_contains "$__RUN_STDERR" 'mode=warn' "warn poll: stderr copy still present"
+# RED-by-inversion at b76283d7: these assertions currently pass by asserting
+# the defect (permissionDecision allow on advisory paths), and must be re-expected.
 assert_contains "$__RUN_STDOUT" 'hookSpecificOutput' "warn poll: stdout has hookSpecificOutput"
 assert_contains "$__RUN_STDOUT" 'additionalContext' "warn poll: stdout has additionalContext"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "warn poll: permissionDecision allow"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "warn poll: no permissionDecision"
 
 reset_state
 export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=1
@@ -56,7 +58,7 @@ assert_eq 0 "$__RUN_EXIT" "warn over-cap: exit 0"
 assert_contains "$__RUN_STDERR" 'mode=warn' "warn over-cap: stderr copy still present"
 assert_contains "$__RUN_STDOUT" 'hookSpecificOutput' "warn over-cap: stdout has hookSpecificOutput"
 assert_contains "$__RUN_STDOUT" 'additionalContext' "warn over-cap: stdout has additionalContext"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "warn over-cap: permissionDecision allow"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "warn over-cap: no permissionDecision"
 unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
 
 # ── P1: ambiguous-rows diagnostic also emits additionalContext; still deduped ──
@@ -80,7 +82,7 @@ assert_eq 0 "$__RUN_EXIT" "0-row diagnostic: exit 0"
 assert_contains "$__RUN_STDERR" '0 tasks[] row' "0-row diagnostic: stderr still present"
 assert_contains "$__RUN_STDOUT" 'hookSpecificOutput' "0-row diagnostic: stdout has hookSpecificOutput"
 assert_contains "$__RUN_STDOUT" 'additionalContext' "0-row diagnostic: stdout has additionalContext"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "0-row diagnostic: permissionDecision allow"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "0-row diagnostic: no permissionDecision"
 assert_contains "$__RUN_STDOUT" '0 tasks[] row' "0-row diagnostic: additionalContext carries diagnostic text"
 run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
 assert_eq "" "$__RUN_STDERR" "0-row diagnostic NOT repeated on stderr"
@@ -93,7 +95,7 @@ assert_eq 0 "$__RUN_EXIT" "2-row diagnostic: exit 0"
 assert_contains "$__RUN_STDERR" '2 tasks[] row' "2-row diagnostic: stderr still present"
 assert_contains "$__RUN_STDOUT" 'hookSpecificOutput' "2-row diagnostic: stdout has hookSpecificOutput"
 assert_contains "$__RUN_STDOUT" 'additionalContext' "2-row diagnostic: stdout has additionalContext"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "2-row diagnostic: permissionDecision allow"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "2-row diagnostic: no permissionDecision"
 assert_contains "$__RUN_STDOUT" '2 tasks[] row' "2-row diagnostic: additionalContext carries diagnostic text"
 run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
 assert_eq "" "$__RUN_STDERR" "2-row diagnostic NOT repeated on stderr"
@@ -410,8 +412,46 @@ reset_state
 for i in $(seq 1 32); do
   run_hook foreman-guard.js "$(bash_payload agent-p3rmd "echo d $i")" >/dev/null
 done
-run_hook foreman-guard.js "$(bash_payload agent-p3rmd "rm -rf ${TMPDIR}/autopilot-p3-safe")"
-assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm under \$TMPDIR allowed in reserve"
+# Pin TMPDIR to a real non-/tmp prefix so isTmpSafePath cannot take the /tmp/
+# short-circuit. Restore afterward so later cases keep lib.sh's HOOK_TMPDIR.
+_p3_saved_tmpdir="${TMPDIR-}"
+_p3_tmpdir_was_set=0
+[ -n "${TMPDIR+x}" ] && _p3_tmpdir_was_set=1
+P3_TMPDIR_CASE="$(mktemp -d /dev/shm/fg-p3-tmpdir-XXXXXX 2>/dev/null || true)"
+if [ -z "$P3_TMPDIR_CASE" ] || [ "${P3_TMPDIR_CASE#/tmp/}" != "$P3_TMPDIR_CASE" ]; then
+  fail "P3 TMPDIR case: need a temp dir not under /tmp to exercise the TMPDIR branch"
+fi
+export TMPDIR="$P3_TMPDIR_CASE"
+_p3_stdout="$TEST_TMP/.stdout.p3tmpdir"
+_p3_stderr="$TEST_TMP/.stderr.p3tmpdir"
+HOME="$HOOK_HOME" TMPDIR="$P3_TMPDIR_CASE" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+  node "$HOOKS_DIR/foreman-guard.js" >"$_p3_stdout" 2>"$_p3_stderr" \
+  <<< "$(bash_payload agent-p3rmd "rm -rf ${TMPDIR}/autopilot-p3-safe")"
+__RUN_EXIT=$?
+__RUN_STDOUT=$(cat "$_p3_stdout")
+__RUN_STDERR=$(cat "$_p3_stderr")
+rm -f "$_p3_stdout" "$_p3_stderr"
+assert_contains "$__RUN_STDOUT" 'additionalContext' "P3 rm under \$TMPDIR allowed in reserve: additionalContext"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "P3 rm under \$TMPDIR allowed in reserve: no permissionDecision"
+
+P3_TMPDIR_UNRELATED="$(mktemp -d /dev/shm/fg-p3-tmpdir-unrel-XXXXXX 2>/dev/null || true)"
+if [ -z "$P3_TMPDIR_UNRELATED" ] || [ "${P3_TMPDIR_UNRELATED#/tmp/}" != "$P3_TMPDIR_UNRELATED" ]; then
+  fail "P3 TMPDIR sibling: need an unrelated temp dir not under /tmp"
+fi
+HOME="$HOOK_HOME" TMPDIR="$P3_TMPDIR_UNRELATED" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+  node "$HOOKS_DIR/foreman-guard.js" >"$_p3_stdout" 2>"$_p3_stderr" \
+  <<< "$(bash_payload agent-p3rmd "rm -rf ${P3_TMPDIR_CASE}/autopilot-p3-safe")"
+__RUN_EXIT=$?
+__RUN_STDOUT=$(cat "$_p3_stdout")
+__RUN_STDERR=$(cat "$_p3_stderr")
+rm -f "$_p3_stdout" "$_p3_stderr"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm not under \$TMPDIR denied in reserve"
+if [ "$_p3_tmpdir_was_set" -eq 1 ]; then
+  export TMPDIR="$_p3_saved_tmpdir"
+else
+  unset TMPDIR
+fi
+rm -rf "$P3_TMPDIR_CASE" "$P3_TMPDIR_UNRELATED"
 
 reset_state
 for i in $(seq 1 32); do
@@ -782,5 +822,36 @@ remain="$(find "$AUTOPILOT_FOREMAN_GUARD_DIR" -maxdepth 1 -name 'stale-bound-*.j
 remain="$(echo "$remain" | tr -d ' ')"
 # examined at most 500 entries; at least one stale-bound remains
 [ "$remain" -gt 0 ] || fail "P4 GC bound: expected leftover stale files, remain=$remain"
+
+# RED at b76283d7:
+# FAIL [foreman-guard-roles] emitAllowContext P1 warn: no permissionDecision: 'permissionDecision' found in output
+# FAIL [foreman-guard-roles] emitAllowContext P4 no-marker: no permissionDecision: 'permissionDecision' found in output
+# FAIL [foreman-guard-roles] emitAllowContext P3 reserve-entry: no permissionDecision: 'permissionDecision' found in output
+# ── emitAllowContext: no permissionDecision on any of the three call sites ──
+set_marker l4
+reset_state
+unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS
+AUTOPILOT_FOREMAN_GUARD_MODE=warn run_hook foreman-guard.js "$(bash_payload agent-eac-p1 'sleep 30')"
+assert_contains "$__RUN_STDOUT" 'additionalContext' "emitAllowContext P1 warn: additionalContext"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "emitAllowContext P1 warn: no permissionDecision"
+unset AUTOPILOT_FOREMAN_GUARD_MODE
+
+clear_marker
+reset_state
+write_child_transcript agent-eac-p4 "$(engine_content)"
+for i in $(seq 1 40); do
+  run_hook foreman-guard.js "$(bash_payload_tx agent-eac-p4 "echo eac $i")"
+done
+assert_contains "$__RUN_STDOUT" 'additionalContext' "emitAllowContext P4 no-marker: additionalContext"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "emitAllowContext P4 no-marker: no permissionDecision"
+
+set_marker l4
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-eac-p3 "echo eacp3 $i")" >/dev/null
+done
+run_hook foreman-guard.js "$(bash_payload agent-eac-p3 'git commit -m x')"
+assert_contains "$__RUN_STDOUT" 'additionalContext' "emitAllowContext P3 reserve-entry: additionalContext"
+assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "emitAllowContext P3 reserve-entry: no permissionDecision"
 
 finalize_test

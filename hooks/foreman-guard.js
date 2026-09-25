@@ -10,12 +10,16 @@
  * `while ! grep …; do sleep 10; done`, and lived 13–33 hours, at ≈$2,200 API-equivalent
  * in 36 hours. Nothing had stopped them because nothing was IN the loop.
  *
- * SCOPE (both must hold, else the hook is inert — exit 0, no output):
- *   - the session-mode marker is ACTIVE with level l4|l5|l6
- *     (scripts/session-mode.js readMarker; absent/expired/corrupt ⇒ inert), AND
- *   - the payload carries `agent_id` (SPIKE-1, CC 2.1.208: subagent identity —
- *     depth-0 never has it). Depth-0 keeps Monitor and unlimited Bash; it is the
- *     control loop.
+ * SCOPE (payload must carry `agent_id` — SPIKE-1, CC 2.1.208: subagent identity —
+ *     depth-0 never has it — else the hook is always inert — exit 0, no output):
+ *   - Marker path: session-mode marker ACTIVE with level l4|l5|l6
+ *     (scripts/session-mode.js readMarker). Cap, poll, reserve, Monitor deny, and
+ *     context-ceiling apply here only.
+ *   - No-marker advisory path: marker absent/expired/corrupt, or present at a
+ *     non-foreman level (e.g. l3). For a Bash call from an autopilot-dispatched
+ *     subagent (child first-user message line 1 starts with "Engine:"), increment
+ *     bash_calls and occasionally emit additionalContext. Never deny on this path.
+ *     Other subagents (Explore, Plan, …) stay inert and create no state.
  *
  * RULES (a deny names the rule and the sanctioned alternative):
  *   - Bash cap: per (session, agent_id) call counter; call N > bash_cap (default 40)
@@ -39,7 +43,8 @@
  * stripped); quoted strings are kept because `bash -c` executes them.
  *
  * MODES: ~/.autopilot/config.json {"foreman_guard": {"mode": "block"|"warn"|"off",
- * "bash_cap": 40}} or AUTOPILOT_FOREMAN_GUARD_MODE / AUTOPILOT_FOREMAN_GUARD_BASH_CAP.
+ * "bash_cap": 40, "advisory_every": 40}} or AUTOPILOT_FOREMAN_GUARD_MODE /
+ * AUTOPILOT_FOREMAN_GUARD_BASH_CAP / AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY.
  * warn ⇒ stderr line, allow. Fail-open: any internal error ⇒ exit 0 silently.
  * State: ~/.autopilot/foreman-guard/<session>-<agent>.json (host-stable, not TMPDIR).
  */
@@ -52,7 +57,12 @@ const { tiersForKnownWindow } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 
 const DEFAULT_BASH_CAP = 40;
+const DEFAULT_ADVISORY_EVERY = 40;
 const DEFAULT_WORKER_REVIEWER_CAP = 120;
+const GC_STAMP_NAME = 'gc.stamp';
+const GC_INTERVAL_MS = 60 * 60 * 1000;
+const GC_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const GC_MAX_ENTRIES = 500;
 const FIRST_LINE_MAX = 64 * 1024;
 const ROLE_LINE_RE = /^Role: (foreman|worker|reviewer)$/;
 const ROLE_KEYS = ['foreman', 'worker', 'reviewer'];
@@ -148,6 +158,15 @@ function overlayNonNegInt(raw) {
   if (!/^\d+$/.test(t)) return null;
   const n = Number(t);
   if (Number.isInteger(n) && n >= 0) return n;
+  return null;
+}
+
+function overlayPosInt(raw) {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim();
+  if (!/^\d+$/.test(t)) return null;
+  const n = Number(t);
+  if (Number.isInteger(n) && n > 0) return n;
   return null;
 }
 
@@ -256,7 +275,12 @@ function segmentMatchesAllowlist(seg) {
 }
 
 function loadConfig() {
-  const cfg = { mode: 'block', bashCap: DEFAULT_BASH_CAP, reserveCalls: DEFAULT_RESERVE_CALLS };
+  const cfg = {
+    mode: 'block',
+    bashCap: DEFAULT_BASH_CAP,
+    reserveCalls: DEFAULT_RESERVE_CALLS,
+    advisoryEvery: DEFAULT_ADVISORY_EVERY,
+  };
   let fileRoleCaps = null;
   try {
     const file = path.join(os.homedir(), '.autopilot', 'config.json');
@@ -267,6 +291,7 @@ function loadConfig() {
         if (['block', 'warn', 'off'].includes(fg.mode)) cfg.mode = fg.mode;
         if (Number.isInteger(fg.bash_cap) && fg.bash_cap > 0) cfg.bashCap = fg.bash_cap;
         if (Number.isInteger(fg.reserve_calls) && fg.reserve_calls >= 0) cfg.reserveCalls = fg.reserve_calls;
+        if (Number.isInteger(fg.advisory_every) && fg.advisory_every > 0) cfg.advisoryEvery = fg.advisory_every;
         if (fg.role_caps && typeof fg.role_caps === 'object') fileRoleCaps = fg.role_caps;
       }
     }
@@ -277,6 +302,8 @@ function loadConfig() {
   if (Number.isInteger(envCap) && envCap > 0) cfg.bashCap = envCap;
   const envReserve = overlayNonNegInt(process.env.AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS);
   if (envReserve !== null) cfg.reserveCalls = envReserve;
+  const envAdvisory = overlayPosInt(process.env.AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY);
+  if (envAdvisory !== null) cfg.advisoryEvery = envAdvisory;
   cfg.roleCaps = {
     foreman: cfg.bashCap,
     worker: DEFAULT_WORKER_REVIEWER_CAP,
@@ -287,12 +314,12 @@ function loadConfig() {
   return cfg;
 }
 
-// Role from the child's FIRST user message only. Own try/catch, own file read,
-// before the state lock. Any failure ⇒ "foreman" (never throw, never uncap).
-function resolveRole(payload) {
+// Bounded first-record read of the child's jsonl. Returns message.content or
+// null on any failure. Own try/catch — never throws.
+function readFirstUserMessageContent(payload) {
   try {
     const tpath = payload.transcript_path;
-    if (typeof tpath !== 'string' || !tpath) return 'foreman';
+    if (typeof tpath !== 'string' || !tpath) return null;
     const child = path.join(
       path.dirname(tpath),
       String(payload.session_id),
@@ -305,22 +332,41 @@ function resolveRole(payload) {
       const n = fs.readSync(fd, buf, 0, FIRST_LINE_MAX + 1, 0);
       const slice = buf.subarray(0, n);
       const nl = slice.indexOf(0x0a);
-      if (nl < 0 || nl > FIRST_LINE_MAX) return 'foreman';
+      if (nl < 0 || nl > FIRST_LINE_MAX) return null;
       let rec;
-      try { rec = JSON.parse(slice.subarray(0, nl).toString('utf8')); } catch { return 'foreman'; }
-      if (!rec || typeof rec !== 'object' || rec.type !== 'user') return 'foreman';
-      if (rec.agentId !== payload.agent_id) return 'foreman';
+      try { rec = JSON.parse(slice.subarray(0, nl).toString('utf8')); } catch { return null; }
+      if (!rec || typeof rec !== 'object' || rec.type !== 'user') return null;
+      if (rec.agentId !== payload.agent_id) return null;
       const content = rec.message && rec.message.content;
-      if (typeof content !== 'string') return 'foreman';
-      const lines = content.split('\n').slice(0, 5);
-      for (const line of lines) {
-        const m = ROLE_LINE_RE.exec(line);
-        if (m) return m[1];
-      }
-      return 'foreman';
+      if (typeof content !== 'string') return null;
+      return content;
     } finally {
       try { fs.closeSync(fd); } catch { /* ignore */ }
     }
+  } catch {
+    return null;
+  }
+}
+
+function isAutopilotDispatched(content) {
+  if (typeof content !== 'string') return false;
+  const nl = content.indexOf('\n');
+  const first = nl < 0 ? content : content.slice(0, nl);
+  return first.startsWith('Engine:');
+}
+
+// Role from the child's FIRST user message only. Own try/catch, before the
+// state lock. Any failure ⇒ "foreman" (never throw, never uncap).
+function resolveRole(payload) {
+  try {
+    const content = readFirstUserMessageContent(payload);
+    if (typeof content !== 'string') return 'foreman';
+    const lines = content.split('\n').slice(0, 5);
+    for (const line of lines) {
+      const m = ROLE_LINE_RE.exec(line);
+      if (m) return m[1];
+    }
+    return 'foreman';
   } catch {
     return 'foreman';
   }
@@ -406,6 +452,31 @@ function saveState(file, st) {
   const tmp = `${file}.tmp.${process.pid}.${Math.random().toString(16).slice(2)}`;
   fs.writeFileSync(tmp, JSON.stringify(st));
   fs.renameSync(tmp, file);
+}
+
+function maybeGcStateDir() {
+  try {
+    const dir = stateDir();
+    const stamp = path.join(dir, GC_STAMP_NAME);
+    try {
+      const st = fs.statSync(stamp);
+      if (Date.now() - st.mtimeMs < GC_INTERVAL_MS) return;
+    } catch { /* missing stamp ⇒ run */ }
+    fs.writeFileSync(stamp, `${Date.now()}\n`);
+    let names;
+    try { names = fs.readdirSync(dir); } catch { return; }
+    const cutoff = Date.now() - GC_MAX_AGE_MS;
+    const limit = Math.min(names.length, GC_MAX_ENTRIES);
+    for (let i = 0; i < limit; i++) {
+      const name = names[i];
+      if (!name.endsWith('.json')) continue;
+      const p = path.join(dir, name);
+      try {
+        const st = fs.statSync(p);
+        if (st.isFile() && st.mtimeMs < cutoff) fs.unlinkSync(p);
+      } catch { /* ignore one entry */ }
+    }
+  } catch { /* never throw out of main */ }
 }
 // Exclusive-create lock around load→modify→save so parallel PreToolUse invocations
 // (a foreman fanning out, or a retry storm) never lose an increment (review round 1,
@@ -522,7 +593,29 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
     try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { process.exit(0); }
     if (!payload || !payload.agent_id) process.exit(0); // depth-0 or unknown actor: inert
     const marker = readMarker();
-    if (!marker || !FOREMAN_LEVELS.has(marker.level)) process.exit(0); // not an orchestrated session
+    if (!marker || !FOREMAN_LEVELS.has(marker.level)) {
+      const content = readFirstUserMessageContent(payload);
+      if (!isAutopilotDispatched(content)) process.exit(0);
+      if ((payload.tool_name || '') !== 'Bash') process.exit(0);
+      const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
+        || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
+      const file = stateFile(sessionId, payload.agent_id);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const n = withLock(file, () => {
+        const st = loadState(file);
+        st.bash_calls += 1;
+        saveState(file, st);
+        return st.bash_calls;
+      });
+      try { maybeGcStateDir(); } catch { /* fail-open */ }
+      const every = cfg.advisoryEvery > 0 ? cfg.advisoryEvery : DEFAULT_ADVISORY_EVERY;
+      if (n > 0 && n % every === 0) {
+        emitAllowContext(
+          `foreman-guard: Bash call ${n}. Consider committing your work and writing a handoff.`,
+        );
+      }
+      process.exit(0);
+    }
     const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
       || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
     // v2.36.1 (P2): resolve this agent's own context-ceiling verdict BEFORE taking the

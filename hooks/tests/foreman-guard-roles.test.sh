@@ -522,4 +522,265 @@ run_hook foreman-guard.js "$(bash_payload agent-p3rmslash 'rm -rf /tmp/')"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm /tmp/ (bare trailing slash) denied in reserve"
 assert_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 rm /tmp/: reserve deny"
 
+# RED at 70dc78cb:
+# FAIL [foreman-guard-roles] P4 default cadence: call 40 names count: '40' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 40 commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 40 handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 80 names count: '80' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 80 commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 80 handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 120 names count: '120' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 120 commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 default cadence: call 120 handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 3 names count: '3' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 3 commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 3 handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 6 names count: '6' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 6 commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 6 handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 9 names count: '9' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 9 commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 every=3: call 9 handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 EVERY=0 falls back: advisory at 40: '40' not found in output
+# FAIL [foreman-guard-roles] P4 EVERY=0: commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 EVERY=0: handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 EVERY=abc falls back: advisory at 40: '40' not found in output
+# FAIL [foreman-guard-roles] P4 EVERY=abc: commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 EVERY=abc: handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 l3: advisory at 40: '40' not found in output
+# FAIL [foreman-guard-roles] P4 l3: commit: 'commit' not found in output
+# FAIL [foreman-guard-roles] P4 l3: handoff: 'handoff' not found in output
+# FAIL [foreman-guard-roles] P4 GC: stale json deleted: /tmp/autopilot-test-foreman-guard-roles-EQ207F/foreman-guard/stale-old.json exists but should not
+# FAIL [foreman-guard-roles] P4 GC: stamp file should exist
+# FAIL [foreman-guard-roles] P4 GC: stamp exists:  does not exist
+# FAIL [foreman-guard-roles] P4 GC: stale deleted after stamp aged: /tmp/autopilot-test-foreman-guard-roles-EQ207F/foreman-guard/stale-second.json exists but should not
+# FAIL [foreman-guard-roles] 915 passed, 31 failed
+
+engine_content() { printf 'Engine: sonnet\nRole: worker\nDo the work.\n'; }
+
+monitor_payload_tx() {
+  printf '{"tool_name":"Monitor","agent_id":"%s","session_id":"fg-test-session","transcript_path":%s,"tool_input":{"command":"tail -f x"},"hook_event_name":"PreToolUse"}' \
+    "$1" "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$TRANSCRIPT_PATH")"
+}
+
+state_for() { printf '%s/%s-%s.json' "$AUTOPILOT_FOREMAN_GUARD_DIR" "fg-test-session" "$1"; }
+
+# ── P4: no-marker Engine:-first, default advisory every 40 ──
+clear_marker
+reset_state
+unset AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS
+write_child_transcript agent-adv "$(engine_content)"
+for i in $(seq 1 120); do
+  run_hook foreman-guard.js "$(bash_payload_tx agent-adv "echo adv $i")"
+  assert_eq 0 "$__RUN_EXIT" "P4 default cadence: call $i exit 0"
+  assert_eq "" "$__RUN_STDERR" "P4 default cadence: call $i no stderr"
+  if [ "$i" -eq 40 ] || [ "$i" -eq 80 ] || [ "$i" -eq 120 ]; then
+    assert_contains "$__RUN_STDOUT" "$i" "P4 default cadence: call $i names count"
+    assert_contains "$__RUN_STDOUT" 'commit' "P4 default cadence: call $i commit"
+    assert_contains "$__RUN_STDOUT" 'handoff' "P4 default cadence: call $i handoff"
+    assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P4 default cadence: call $i never deny"
+  else
+    assert_eq "" "$__RUN_STDOUT" "P4 default cadence: call $i silent allow"
+  fi
+done
+
+# ── P4: advisory_every=3 ──
+reset_state
+write_child_transcript agent-adv3 "$(engine_content)"
+export AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY=3
+for i in $(seq 1 9); do
+  run_hook foreman-guard.js "$(bash_payload_tx agent-adv3 "echo every3 $i")"
+  assert_eq 0 "$__RUN_EXIT" "P4 every=3: call $i exit 0"
+  if [ "$i" -eq 3 ] || [ "$i" -eq 6 ] || [ "$i" -eq 9 ]; then
+    assert_contains "$__RUN_STDOUT" "$i" "P4 every=3: call $i names count"
+    assert_contains "$__RUN_STDOUT" 'commit' "P4 every=3: call $i commit"
+    assert_contains "$__RUN_STDOUT" 'handoff' "P4 every=3: call $i handoff"
+  else
+    assert_eq "" "$__RUN_STDOUT" "P4 every=3: call $i silent"
+  fi
+done
+unset AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY
+
+# ── P4: env 0 and non-numeric fall back to default 40 ──
+reset_state
+write_child_transcript agent-adv0 "$(engine_content)"
+export AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY=0
+for i in $(seq 1 40); do
+  run_hook foreman-guard.js "$(bash_payload_tx agent-adv0 "echo z $i")"
+  if [ "$i" -eq 40 ]; then
+    assert_contains "$__RUN_STDOUT" '40' "P4 EVERY=0 falls back: advisory at 40"
+    assert_contains "$__RUN_STDOUT" 'commit' "P4 EVERY=0: commit"
+    assert_contains "$__RUN_STDOUT" 'handoff' "P4 EVERY=0: handoff"
+  else
+    assert_eq "" "$__RUN_STDOUT" "P4 EVERY=0: call $i silent (not every-zero)"
+  fi
+done
+unset AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY
+
+reset_state
+write_child_transcript agent-advn "$(engine_content)"
+export AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY=abc
+for i in $(seq 1 40); do
+  run_hook foreman-guard.js "$(bash_payload_tx agent-advn "echo n $i")"
+  if [ "$i" -eq 40 ]; then
+    assert_contains "$__RUN_STDOUT" '40' "P4 EVERY=abc falls back: advisory at 40"
+    assert_contains "$__RUN_STDOUT" 'commit' "P4 EVERY=abc: commit"
+    assert_contains "$__RUN_STDOUT" 'handoff' "P4 EVERY=abc: handoff"
+  else
+    assert_eq "" "$__RUN_STDOUT" "P4 EVERY=abc: call $i silent"
+  fi
+done
+unset AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY
+
+# ── P4: never deny even with tiny bash cap + worker role_caps ──
+reset_state
+write_child_transcript agent-tiny "$(printf 'Engine: sonnet\nRole: worker\n')"
+export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=2
+export AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS='worker=2'
+for i in $(seq 1 8); do
+  run_hook foreman-guard.js "$(bash_payload_tx agent-tiny "echo tiny $i")"
+  assert_eq 0 "$__RUN_EXIT" "P4 tiny cap: call $i exit 0"
+  assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P4 tiny cap: call $i never deny"
+done
+unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS
+
+# ── P4: poll-shaped sleep allowed (poll rules marker-scoped) ──
+reset_state
+write_child_transcript agent-sleep "$(engine_content)"
+run_hook foreman-guard.js "$(bash_payload_tx agent-sleep 'sleep 30')"
+assert_eq 0 "$__RUN_EXIT" "P4 sleep poll: exit 0"
+assert_eq "" "$__RUN_STDOUT" "P4 sleep poll: no deny/advisory on call 1"
+assert_eq "" "$__RUN_STDERR" "P4 sleep poll: no stderr"
+
+# ── P4: context ceiling marker-scoped ──
+LIVE_DIR_P4="$(mktemp -d /dev/shm/fg-guard-live-p4-XXXXXX 2>/dev/null || mktemp -d "$TEST_TMP/live-p4-XXXXXX")"
+mkdir -p "$LIVE_DIR_P4/context"
+export AUTOPILOT_LIVE_DIR="$LIVE_DIR_P4"
+write_tasks() { # redefine if needed
+  node -e '
+    const fs = require("fs");
+    const [, sid, tasksJson, dir] = process.argv;
+    const obj = { schema_version: 1, session_id: sid, written_at: new Date().toISOString(), tasks: JSON.parse(tasksJson) };
+    fs.writeFileSync(`${dir}/context/${sid}.tasks.json`, JSON.stringify(obj));
+  ' "$1" "$2" "$LIVE_DIR_P4"
+}
+reset_state
+write_child_transcript agent-ceil "$(engine_content)"
+write_tasks fg-test-session '[{"id":"other-agent","tokenCount":190000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload_tx agent-ceil 'echo ceil')"
+assert_eq 0 "$__RUN_EXIT" "P4 ceiling no-marker: exit 0"
+assert_eq "" "$__RUN_STDOUT" "P4 ceiling no-marker: no deny/diagnostic stdout"
+assert_eq "" "$__RUN_STDERR" "P4 ceiling no-marker: no stderr diagnostic"
+unset AUTOPILOT_LIVE_DIR
+
+# ── P4: Monitor + Engine: still empty (not Bash) ──
+reset_state
+write_child_transcript agent-mon "$(engine_content)"
+run_hook foreman-guard.js "$(monitor_payload_tx agent-mon)"
+assert_eq 0 "$__RUN_EXIT" "P4 Monitor Engine: exit 0"
+assert_eq "" "$__RUN_STDOUT" "P4 Monitor Engine: empty stdout"
+assert_eq "" "$__RUN_STDERR" "P4 Monitor Engine: empty stderr"
+assert_file_absent "$(state_for agent-mon)" "P4 Monitor Engine: no state file"
+
+# ── P4: first line not Engine: — no state ──
+reset_state
+write_child_transcript agent-roleonly $'Role: worker\nno engine\n'
+run_hook foreman-guard.js "$(bash_payload_tx agent-roleonly 'echo explore')"
+assert_eq 0 "$__RUN_EXIT" "P4 Role-first: exit 0"
+assert_eq "" "$__RUN_STDOUT" "P4 Role-first: empty stdout"
+assert_eq "" "$__RUN_STDERR" "P4 Role-first: empty stderr"
+assert_file_absent "$(state_for agent-roleonly)" "P4 Role-first: no state file"
+
+write_child_transcript agent-explore 'Explore this repository'
+run_hook foreman-guard.js "$(bash_payload_tx agent-explore 'echo explore2')"
+assert_eq "" "$__RUN_STDOUT" "P4 Explore: empty stdout"
+assert_file_absent "$(state_for agent-explore)" "P4 Explore: no state file"
+
+# ── P4: Engine: on line 2 only ──
+write_child_transcript agent-e2 $'Hello first\nEngine: sonnet\n'
+run_hook foreman-guard.js "$(bash_payload_tx agent-e2 'echo line2')"
+assert_eq "" "$__RUN_STDOUT" "P4 Engine line2: empty stdout"
+assert_file_absent "$(state_for agent-e2)" "P4 Engine line2: no state file"
+
+# ── P4: no transcript_path ──
+run_hook foreman-guard.js "$(bash_payload agent-notx 'echo notx')"
+assert_eq 0 "$__RUN_EXIT" "P4 no transcript_path: exit 0"
+assert_eq "" "$__RUN_STDOUT" "P4 no transcript_path: empty stdout"
+assert_file_absent "$(state_for agent-notx)" "P4 no transcript_path: no state file"
+
+# ── P4: l3 marker still advisory path ──
+reset_state
+set_marker l3
+write_child_transcript agent-l3 "$(engine_content)"
+for i in $(seq 1 40); do
+  run_hook foreman-guard.js "$(bash_payload_tx agent-l3 "echo l3 $i")"
+  if [ "$i" -eq 40 ]; then
+    assert_contains "$__RUN_STDOUT" '40' "P4 l3: advisory at 40"
+    assert_contains "$__RUN_STDOUT" 'commit' "P4 l3: commit"
+    assert_contains "$__RUN_STDOUT" 'handoff' "P4 l3: handoff"
+  else
+    assert_eq "" "$__RUN_STDOUT" "P4 l3: call $i silent"
+  fi
+done
+clear_marker
+
+# ── P4: GC ──
+reset_state
+find "$AUTOPILOT_FOREMAN_GUARD_DIR" -maxdepth 1 -type f ! -name '*.json' -delete 2>/dev/null || true
+STALE_JSON="$AUTOPILOT_FOREMAN_GUARD_DIR/stale-old.json"
+FRESH_JSON="$AUTOPILOT_FOREMAN_GUARD_DIR/fresh-keep.json"
+STALE_OTHER="$AUTOPILOT_FOREMAN_GUARD_DIR/stale-keep.dat"
+echo '{"bash_calls":1}' > "$STALE_JSON"
+echo '{"bash_calls":1}' > "$FRESH_JSON"
+echo leftover > "$STALE_OTHER"
+touch -d '8 days ago' "$STALE_JSON" "$STALE_OTHER"
+write_child_transcript agent-gc1 "$(engine_content)"
+run_hook foreman-guard.js "$(bash_payload_tx agent-gc1 'echo gc1')"
+assert_file_absent "$STALE_JSON" "P4 GC: stale json deleted"
+assert_file_exists "$FRESH_JSON" "P4 GC: fresh json remains"
+assert_file_exists "$STALE_OTHER" "P4 GC: stale non-json remains"
+GC_STAMP=""
+for f in "$AUTOPILOT_FOREMAN_GUARD_DIR"/*; do
+  case "$f" in
+    *.json) continue ;;
+  esac
+  [ -f "$f" ] || continue
+  case "$(basename "$f")" in
+    stale-keep.dat) continue ;;
+  esac
+  GC_STAMP="$f"
+done
+[ -n "$GC_STAMP" ] || fail "P4 GC: stamp file should exist"
+assert_file_exists "$GC_STAMP" "P4 GC: stamp exists"
+
+STALE2="$AUTOPILOT_FOREMAN_GUARD_DIR/stale-second.json"
+echo '{"bash_calls":1}' > "$STALE2"
+touch -d '8 days ago' "$STALE2"
+write_child_transcript agent-gc2 "$(engine_content)"
+run_hook foreman-guard.js "$(bash_payload_tx agent-gc2 'echo gc2')"
+assert_file_exists "$STALE2" "P4 GC: second stale not deleted while stamp fresh"
+
+touch -d '2 hours ago' "$GC_STAMP"
+write_child_transcript agent-gc3 "$(engine_content)"
+run_hook foreman-guard.js "$(bash_payload_tx agent-gc3 'echo gc3')"
+assert_file_absent "$STALE2" "P4 GC: stale deleted after stamp aged"
+
+# ── P4: bounded GC pass ──
+reset_state
+rm -f "$AUTOPILOT_FOREMAN_GUARD_DIR"/gc.stamp "$AUTOPILOT_FOREMAN_GUARD_DIR"/*.stamp 2>/dev/null || true
+# drop leftover stamp from previous GC (unknown name): remove non-json except .dat we don't have
+find "$AUTOPILOT_FOREMAN_GUARD_DIR" -maxdepth 1 -type f ! -name '*.json' -delete 2>/dev/null || true
+i=0
+while [ "$i" -lt 520 ]; do
+  echo '{"bash_calls":1}' > "$AUTOPILOT_FOREMAN_GUARD_DIR/stale-bound-$i.json"
+  i=$((i + 1))
+done
+touch -d '8 days ago' "$AUTOPILOT_FOREMAN_GUARD_DIR"/stale-bound-*.json
+write_child_transcript agent-gcb "$(engine_content)"
+run_hook foreman-guard.js "$(bash_payload_tx agent-gcb 'echo gcb')"
+remain="$(find "$AUTOPILOT_FOREMAN_GUARD_DIR" -maxdepth 1 -name 'stale-bound-*.json' | wc -l)"
+remain="$(echo "$remain" | tr -d ' ')"
+# examined at most 500 entries; at least one stale-bound remains
+[ "$remain" -gt 0 ] || fail "P4 GC bound: expected leftover stale files, remain=$remain"
+
 finalize_test

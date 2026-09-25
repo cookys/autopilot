@@ -139,8 +139,124 @@ function overlayRoleCapsEnv(target, raw) {
   }
 }
 
+const DEFAULT_RESERVE_CALLS = 8;
+const GIT_RESERVE_SUBS = new Set(['status', 'diff', 'add', 'commit', 'log', 'show', 'rev-parse', 'restore']);
+
+function overlayNonNegInt(raw) {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim();
+  if (!/^\d+$/.test(t)) return null;
+  const n = Number(t);
+  if (Number.isInteger(n) && n >= 0) return n;
+  return null;
+}
+
+function splitExecutableSegments(text) {
+  const segs = [];
+  let cur = '';
+  let q = null;
+  const s = String(text);
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) {
+      if (c === '\\' && q === '"' && i + 1 < s.length) { cur += c + s[i + 1]; i += 1; continue; }
+      if (c === q) q = null;
+      cur += c;
+      continue;
+    }
+    if (c === '\\' && i + 1 < s.length) { cur += c + s[i + 1]; i += 1; continue; }
+    if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (c === '\n' || c === ';') { segs.push(cur); cur = ''; continue; }
+    if (c === '&' && s[i + 1] === '&') { segs.push(cur); cur = ''; i += 1; continue; }
+    if (c === '|' && s[i + 1] === '|') { segs.push(cur); cur = ''; i += 1; continue; }
+    if (c === '|') { segs.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  segs.push(cur);
+  return segs.map((x) => x.trim()).filter((x) => x.length > 0);
+}
+
+function tokenizeArgv(seg) {
+  const words = [];
+  let cur = '';
+  let q = null;
+  const s = String(seg);
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) {
+      if (c === '\\' && q === '"' && i + 1 < s.length) { cur += c + s[i + 1]; i += 1; continue; }
+      if (c === q) { q = null; cur += c; continue; }
+      cur += c;
+      continue;
+    }
+    if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (/\s/.test(c)) {
+      if (cur) { words.push(cur); cur = ''; }
+      continue;
+    }
+    cur += c;
+  }
+  if (cur) words.push(cur);
+  return words;
+}
+
+function stripOneQuoteLayer(word) {
+  if (word.length >= 2 && ((word[0] === "'" && word[word.length - 1] === "'")
+      || (word[0] === '"' && word[word.length - 1] === '"'))) {
+    return word.slice(1, -1);
+  }
+  return word;
+}
+
+function expandTmpdirPrefix(p) {
+  const tmp = process.env.TMPDIR;
+  if (!tmp) return p;
+  if (p.startsWith('${TMPDIR}/')) return `${tmp}${p.slice('${TMPDIR}'.length)}`;
+  if (p.startsWith('$TMPDIR/')) return `${tmp}${p.slice('$TMPDIR'.length)}`;
+  return p;
+}
+
+function isTmpSafePath(raw) {
+  let p = expandTmpdirPrefix(stripOneQuoteLayer(raw));
+  if (!p.startsWith('/') || p === '/tmp') return false;
+  if (p.startsWith('/tmp/')) return p.length > '/tmp/'.length;
+  const tmp = process.env.TMPDIR;
+  if (!tmp) return false;
+  const prefix = tmp.endsWith('/') ? tmp : `${tmp}/`;
+  return p.startsWith(prefix) && p.length > prefix.length;
+}
+
+function reserveDirective(left) {
+  return `Close-out reserve: ${left} call(s) left before the cap. Allowed now: cd; git status/diff/add/commit/log/show/rev-parse/restore --staged; kill <pid>; rm/rmdir under /tmp or $TMPDIR; mkdir -p; ls; test; writing a file (cat >, tee, printf >). Commit, clean up, write your handoff, and end the turn.`;
+}
+
+function segmentMatchesAllowlist(seg) {
+  const words = tokenizeArgv(seg);
+  if (words.length === 0) return false;
+  const cmd = words[0];
+  if (cmd === 'git') {
+    if (words.length < 2 || !GIT_RESERVE_SUBS.has(words[1])) return false;
+    if (words[1] === 'restore') return words[2] === '--staged';
+    return true;
+  }
+  if (cmd === 'kill') {
+    if (words.length < 2) return false;
+    return words.slice(1).every((w) => /^\d+$/.test(w));
+  }
+  if (cmd === 'rm' || cmd === 'rmdir') {
+    const operands = words.slice(1).filter((w) => !w.startsWith('-'));
+    if (operands.length === 0) return false;
+    return operands.every(isTmpSafePath);
+  }
+  if (cmd === 'cd') return words.length >= 2;
+  if (cmd === 'mkdir') return words.includes('-p');
+  if (cmd === 'ls' || cmd === 'test' || cmd === '[' || cmd === 'tee') return true;
+  if (cmd === 'cat' || cmd === 'printf') return seg.includes('>');
+  return false;
+}
+
 function loadConfig() {
-  const cfg = { mode: 'block', bashCap: DEFAULT_BASH_CAP };
+  const cfg = { mode: 'block', bashCap: DEFAULT_BASH_CAP, reserveCalls: DEFAULT_RESERVE_CALLS };
   let fileRoleCaps = null;
   try {
     const file = path.join(os.homedir(), '.autopilot', 'config.json');
@@ -150,6 +266,7 @@ function loadConfig() {
       if (fg && typeof fg === 'object') {
         if (['block', 'warn', 'off'].includes(fg.mode)) cfg.mode = fg.mode;
         if (Number.isInteger(fg.bash_cap) && fg.bash_cap > 0) cfg.bashCap = fg.bash_cap;
+        if (Number.isInteger(fg.reserve_calls) && fg.reserve_calls >= 0) cfg.reserveCalls = fg.reserve_calls;
         if (fg.role_caps && typeof fg.role_caps === 'object') fileRoleCaps = fg.role_caps;
       }
     }
@@ -158,6 +275,8 @@ function loadConfig() {
   if (['block', 'warn', 'off'].includes(envMode)) cfg.mode = envMode;
   const envCap = Number(process.env.AUTOPILOT_FOREMAN_GUARD_BASH_CAP);
   if (Number.isInteger(envCap) && envCap > 0) cfg.bashCap = envCap;
+  const envReserve = overlayNonNegInt(process.env.AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS);
+  if (envReserve !== null) cfg.reserveCalls = envReserve;
   cfg.roleCaps = {
     foreman: cfg.bashCap,
     worker: DEFAULT_WORKER_REVIEWER_CAP,
@@ -371,6 +490,25 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
       }
     }
   }
+  const configuredReserve = Number.isInteger(cfg.reserveCalls) ? cfg.reserveCalls : DEFAULT_RESERVE_CALLS;
+  const effReserve = Math.min(configuredReserve, Math.floor(cap / 2));
+  if (effReserve > 0 && n > cap - effReserve) {
+    const text = executableText(cmd);
+    const segs = splitExecutableSegments(text);
+    const left = cap - n + 1;
+    const directive = reserveDirective(left);
+    const first = n === cap - effReserve + 1;
+    const ok = segs.length > 0 && segs.every(segmentMatchesAllowlist);
+    if (!ok) {
+      return { deny: true, rule: 'reserve', count: n, reason: directive, diagnostic: ceiling.diagnostic };
+    }
+    return {
+      deny: false,
+      count: n,
+      diagnostic: ceiling.diagnostic,
+      reserveDirective: first ? directive : null,
+    };
+  }
   return { deny: false, count: n, diagnostic: ceiling.diagnostic };
 }
 
@@ -411,6 +549,7 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
       process.stderr.write(`${d.diagnostic}\n`); // ambiguous rows: never a gate
       advisory.push(d.diagnostic);
     }
+    if (d.reserveDirective) advisory.push(d.reserveDirective);
     if (!d.deny) {
       if (advisory.length) emitAllowContext(advisory.join('\n'));
       process.exit(0);

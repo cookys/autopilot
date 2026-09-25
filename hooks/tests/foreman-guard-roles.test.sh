@@ -151,8 +151,9 @@ assert_foreman_denies_at_3() { # <label>
   export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=2
   reset_state
   run_hook foreman-guard.js "$(bash_payload_tx "$2" 'echo 1')"
-  run_hook foreman-guard.js "$(bash_payload_tx "$2" 'echo 2')"
-  assert_eq "" "$__RUN_STDOUT" "$label: call 2 within foreman cap allowed"
+  run_hook foreman-guard.js "$(bash_payload_tx "$2" 'git status')"
+  assert_eq 0 "$__RUN_EXIT" "$label: call 2 within foreman cap allowed"
+  assert_contains "$__RUN_STDOUT" 'Close-out reserve' "$label: call 2 carries Close-out reserve directive"
   run_hook foreman-guard.js "$(bash_payload_tx "$2" 'echo 3')"
   assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "$label: call 3 denied"
   assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap of 2' "$label: deny names foreman cap"
@@ -164,8 +165,17 @@ set_marker l4
 reset_state
 write_child_transcript agent-w 'Role: worker'
 for i in $(seq 1 120); do
-  run_hook foreman-guard.js "$(bash_payload_tx agent-w "echo w $i")"
-  assert_eq "" "$__RUN_STDOUT" "worker call $i within 120 allowed"
+  if [ "$i" -ge 113 ]; then
+    run_hook foreman-guard.js "$(bash_payload_tx agent-w "git status")"
+    if [ "$i" -eq 113 ]; then
+      assert_contains "$__RUN_STDOUT" 'Close-out reserve' "worker call 113 carries Close-out reserve directive"
+    else
+      assert_eq "" "$__RUN_STDOUT" "worker call $i within 120 allowed"
+    fi
+  else
+    run_hook foreman-guard.js "$(bash_payload_tx agent-w "echo w $i")"
+    assert_eq "" "$__RUN_STDOUT" "worker call $i within 120 allowed"
+  fi
 done
 run_hook foreman-guard.js "$(bash_payload_tx agent-w 'echo w 121')"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "worker call 121 denied"
@@ -176,8 +186,17 @@ reset_state
 write_child_transcript agent-r 'Role: reviewer'
 export AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS='reviewer=6'
 for i in $(seq 1 6); do
-  run_hook foreman-guard.js "$(bash_payload_tx agent-r "echo r $i")"
-  assert_eq "" "$__RUN_STDOUT" "reviewer call $i within env cap 6 allowed"
+  if [ "$i" -ge 4 ]; then
+    run_hook foreman-guard.js "$(bash_payload_tx agent-r "git status")"
+    if [ "$i" -eq 4 ]; then
+      assert_contains "$__RUN_STDOUT" 'Close-out reserve' "reviewer call 4 carries Close-out reserve directive"
+    else
+      assert_eq "" "$__RUN_STDOUT" "reviewer call $i within env cap 6 allowed"
+    fi
+  else
+    run_hook foreman-guard.js "$(bash_payload_tx agent-r "echo r $i")"
+    assert_eq "" "$__RUN_STDOUT" "reviewer call $i within env cap 6 allowed"
+  fi
 done
 run_hook foreman-guard.js "$(bash_payload_tx agent-r 'echo r 7')"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "reviewer call 7 denied"
@@ -214,7 +233,8 @@ assert_foreman_denies_at_3 "bare worker word" agent-bare
 export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=2
 reset_state
 run_hook foreman-guard.js "$(bash_payload agent-nt 'echo 1')"
-run_hook foreman-guard.js "$(bash_payload agent-nt 'echo 2')"
+run_hook foreman-guard.js "$(bash_payload agent-nt 'git status')"
+assert_contains "$__RUN_STDOUT" 'Close-out reserve' "no transcript_path: call 2 carries Close-out reserve directive"
 run_hook foreman-guard.js "$(bash_payload agent-nt 'echo 3')"
 assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap of 2' "no transcript_path: foreman cap"
 unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
@@ -238,9 +258,10 @@ run_hook foreman-guard.js "$(node -e '
 run_hook foreman-guard.js "$(node -e '
   const p = JSON.parse(process.argv[1]);
   p.transcript_path = process.argv[2];
-  p.tool_input.command = "echo 2";
+  p.tool_input.command = "git status";
   process.stdout.write(JSON.stringify(p));
 ' "$MISSING_PAYLOAD" "$TEST_TMP/no-such-transcript-root/missing.jsonl")"
+assert_contains "$__RUN_STDOUT" 'Close-out reserve' "missing transcript_path file: call 2 carries Close-out reserve directive"
 run_hook foreman-guard.js "$(node -e '
   const p = JSON.parse(process.argv[1]);
   p.transcript_path = process.argv[2];
@@ -278,8 +299,17 @@ reset_state
 write_child_transcript agent-mal 'Role: reviewer'
 export AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS='worker=abc,reviewer=7'
 for i in $(seq 1 7); do
-  run_hook foreman-guard.js "$(bash_payload_tx agent-mal "echo m $i")"
-  assert_eq "" "$__RUN_STDOUT" "malformed env: reviewer call $i within 7 allowed"
+  if [ "$i" -ge 5 ]; then
+    run_hook foreman-guard.js "$(bash_payload_tx agent-mal "git status")"
+    if [ "$i" -eq 5 ]; then
+      assert_contains "$__RUN_STDOUT" 'Close-out reserve' "malformed env: call 5 carries Close-out reserve directive"
+    else
+      assert_eq "" "$__RUN_STDOUT" "malformed env: reviewer call $i within 7 allowed"
+    fi
+  else
+    run_hook foreman-guard.js "$(bash_payload_tx agent-mal "echo m $i")"
+    assert_eq "" "$__RUN_STDOUT" "malformed env: reviewer call $i within 7 allowed"
+  fi
 done
 run_hook foreman-guard.js "$(bash_payload_tx agent-mal 'echo m 8')"
 assert_contains "$__RUN_STDOUT" 'exceeds the reviewer cap of 7' "malformed worker=abc ignored; reviewer=7 applied"
@@ -309,5 +339,187 @@ export AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS='reviewer=6'
 run_hook foreman-guard.js "$(bash_payload_tx agent-poll 'sleep 30')"
 assert_contains "$__RUN_STDOUT" 'Bash call 1/6 spent' "poll deny suffix uses reviewer cap"
 unset AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS
+
+# RED at 9514ced7:
+# FAIL [foreman-guard-roles] worker call 113 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] reviewer call 4 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] Role on line 6: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] lowercase role:: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] Role line extra text: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] bare worker word: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] no transcript_path: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] missing transcript_path file: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] type not user: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] agentId mismatch: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] content array: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] first line >64KiB: call 2 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] malformed env: call 5 carries Close-out reserve directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 git commit at 33: additionalContext: 'additionalContext' not found in output
+# FAIL [foreman-guard-roles] P3 git commit at 33: reserve-entry directive: 'Close-out reserve: 8 call(s) left before the cap. Allowed now: cd; git status/diff/add/commit/log/show/rev-parse/restore --staged; kill <pid>; rm/rmdir under /tmp or $TMPDIR; mkdir -p; ls; test; writing a file (cat >, tee, printf >). Commit, clean up, write your handoff, and end the turn.' not found in output
+# FAIL [foreman-guard-roles] P3 cargo build in reserve denied: '"permissionDecision":"deny"' not found in output
+# FAIL [foreman-guard-roles] P3 cargo deny names allowed verbs via directive: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 cargo deny names allowed verbs: 'git status/diff/add/commit' not found in output
+# FAIL [foreman-guard-roles] P3 rm outside /tmp denied in reserve: '"permissionDecision":"deny"' not found in output
+# FAIL [foreman-guard-roles] P3 rm outside /tmp: reserve deny: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 1 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 2 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 3 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 4 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 5 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 6 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 7 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 exhaust cargo deny 8 is reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 cap 5: effective reserve 2: 'Close-out reserve: 2 call(s) left' not found in output
+# FAIL [foreman-guard-roles] 318 passed, 29 failed
+
+# ── P3: close-out reserve ──
+RESERVE_DIR='Close-out reserve: 8 call(s) left before the cap. Allowed now: cd; git status/diff/add/commit/log/show/rev-parse/restore --staged; kill <pid>; rm/rmdir under /tmp or $TMPDIR; mkdir -p; ls; test; writing a file (cat >, tee, printf >). Commit, clean up, write your handoff, and end the turn.'
+
+set_marker l4
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3a "echo ordinary $i")"
+  assert_eq "" "$__RUN_STDOUT" "P3 default cap: call $i ordinary allowed"
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3a 'git commit -m x')"
+assert_eq 0 "$__RUN_EXIT" "P3 git commit at 33: exit 0"
+assert_contains "$__RUN_STDOUT" 'additionalContext' "P3 git commit at 33: additionalContext"
+assert_contains "$__RUN_STDOUT" "$RESERVE_DIR" "P3 git commit at 33: reserve-entry directive"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 git commit at 33: allowed"
+run_hook foreman-guard.js "$(bash_payload agent-p3a 'cargo build')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 cargo build in reserve denied"
+assert_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 cargo deny names allowed verbs via directive"
+assert_contains "$__RUN_STDOUT" 'git status/diff/add/commit' "P3 cargo deny names allowed verbs"
+
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3rm "echo r $i")" >/dev/null
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3rm 'rm -rf /home/not-tmp/secret')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm outside /tmp denied in reserve"
+assert_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 rm outside /tmp: reserve deny"
+
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3rmt "echo t $i")" >/dev/null
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3rmt 'rm -rf /tmp/autopilot-p3-safe')"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm under /tmp allowed in reserve"
+
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3rmd "echo d $i")" >/dev/null
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3rmd "rm -rf ${TMPDIR}/autopilot-p3-safe")"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm under \$TMPDIR allowed in reserve"
+
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3ex "echo e $i")" >/dev/null
+done
+for i in $(seq 1 8); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3ex 'cargo build')"
+  assert_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 exhaust cargo deny $i is reserve"
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3ex 'git commit -m x')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 after reserve exhausted: deny"
+assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap of 40' "P3 after reserve exhausted: ordinary cap, role+cap"
+assert_not_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 after reserve exhausted: not a reserve deny"
+
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3sl "echo s $i")" >/dev/null
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3sl 'sleep 30')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 sleep in reserve denied"
+assert_contains "$__RUN_STDOUT" 'rule sleep' "P3 sleep in reserve denied as poll"
+assert_not_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 sleep in reserve is not a reserve deny"
+
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3q "echo q $i")" >/dev/null
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3q 'git commit -m "fix; a | b"')"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 quoted semicolon/pipe in commit message allowed"
+
+reset_state
+export AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS=0
+for i in $(seq 1 40); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3z "echo z $i")"
+  assert_eq "" "$__RUN_STDOUT" "P3 reserve_calls=0: call $i ordinary allowed"
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3z 'echo z 41')"
+assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap of 40' "P3 reserve_calls=0: 41st hits cap"
+unset AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS
+
+reset_state
+export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=5
+for i in $(seq 1 3); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3c5 "echo c $i")"
+  assert_eq "" "$__RUN_STDOUT" "P3 cap 5: call $i ordinary allowed"
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3c5 'git status')"
+assert_contains "$__RUN_STDOUT" 'Close-out reserve: 2 call(s) left' "P3 cap 5: effective reserve 2"
+run_hook foreman-guard.js "$(bash_payload agent-p3c5 'git status')"
+assert_eq "" "$__RUN_STDOUT" "P3 cap 5: call 5 allowed without repeating directive"
+run_hook foreman-guard.js "$(bash_payload agent-p3c5 'echo c 6')"
+assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap of 5' "P3 cap 5: 6th hits cap"
+unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
+
+reset_state
+export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=1
+run_hook foreman-guard.js "$(bash_payload agent-p3c1 'echo only')"
+assert_eq "" "$__RUN_STDOUT" "P3 cap 1: no reserve, first call ordinary allowed"
+run_hook foreman-guard.js "$(bash_payload agent-p3c1 'echo two')"
+assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap of 1' "P3 cap 1: second call is ordinary cap"
+assert_not_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 cap 1: no reserve deny"
+unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
+
+reset_state
+node -e '
+  const fs = require("fs");
+  const path = require("path");
+  const [, root, sid, aid] = process.argv;
+  const dir = path.join(root, sid, "subagents");
+  fs.mkdirSync(dir, { recursive: true });
+  const rec1 = { type: "user", agentId: aid, sessionId: sid, message: { content: "Hello, no role on first record." } };
+  const rec2 = { type: "user", agentId: aid, sessionId: sid, message: { content: "Role: worker" } };
+  fs.writeFileSync(path.join(dir, `agent-${aid}.jsonl`), `${JSON.stringify(rec1)}\n${JSON.stringify(rec2)}\n`);
+' "$TRANSCRIPT_ROOT" "fg-test-session" "agent-p3inv"
+for i in $(seq 1 40); do
+  if [ "$i" -ge 33 ]; then
+    run_hook foreman-guard.js "$(bash_payload_tx agent-p3inv 'git status')"
+  else
+    run_hook foreman-guard.js "$(bash_payload_tx agent-p3inv "echo inv $i")"
+    assert_eq "" "$__RUN_STDOUT" "P3 inversion: call $i allowed under foreman 40"
+  fi
+done
+run_hook foreman-guard.js "$(bash_payload_tx agent-p3inv 'echo inv 41')"
+assert_contains "$__RUN_STDOUT" 'exceeds the foreman cap of 40' "P3 inversion: first record wins, later Role: worker ignored"
+
+# RED at 6d7a8606:
+# FAIL [foreman-guard-roles] P3 empty RESERVE_CALLS env: cargo at 33 denied as reserve: '"permissionDecision":"deny"' not found in output
+# FAIL [foreman-guard-roles] P3 empty RESERVE_CALLS env: still Close-out reserve: 'Close-out reserve' not found in output
+# FAIL [foreman-guard-roles] P3 rm /tmp/ (bare trailing slash) denied in reserve: '"permissionDecision":"deny"' not found in output
+# FAIL [foreman-guard-roles] 380 passed, 3 failed
+
+reset_state
+export AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS=
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3empty "echo empty $i")"
+  assert_eq "" "$__RUN_STDOUT" "P3 empty RESERVE_CALLS env: call $i ordinary allowed"
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3empty 'cargo build')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 empty RESERVE_CALLS env: cargo at 33 denied as reserve"
+assert_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 empty RESERVE_CALLS env: still Close-out reserve"
+unset AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS
+
+reset_state
+for i in $(seq 1 32); do
+  run_hook foreman-guard.js "$(bash_payload agent-p3rmslash "echo slash $i")" >/dev/null
+done
+run_hook foreman-guard.js "$(bash_payload agent-p3rmslash 'rm -rf /tmp/')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P3 rm /tmp/ (bare trailing slash) denied in reserve"
+assert_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 rm /tmp/: reserve deny"
 
 finalize_test

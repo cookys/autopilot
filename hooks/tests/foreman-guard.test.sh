@@ -101,8 +101,16 @@ assert_contains "$__RUN_STDOUT" 'depth-0 only' "Monitor deny names the rule"
 reset_state
 export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=5
 for i in 1 2 3 4 5; do
-  run_hook foreman-guard.js "$(bash_payload agent-2 "echo step $i")"
-  assert_eq "" "$__RUN_STDOUT" "call $i within cap allowed"
+  if [ "$i" -ge 4 ]; then
+    run_hook foreman-guard.js "$(bash_payload agent-2 'git status')"
+  else
+    run_hook foreman-guard.js "$(bash_payload agent-2 "echo step $i")"
+  fi
+  if [ "$i" -eq 4 ]; then
+    assert_contains "$__RUN_STDOUT" 'Close-out reserve' "call 4 within cap allowed"
+  else
+    assert_eq "" "$__RUN_STDOUT" "call $i within cap allowed"
+  fi
 done
 run_hook foreman-guard.js "$(bash_payload agent-2 'echo step 6')"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "call 6 over cap denied"

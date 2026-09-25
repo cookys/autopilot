@@ -253,6 +253,19 @@ function emit(decision, reason) {
   })}\n`);
 }
 
+// Advisories that used to be stderr-only on an ALLOW (mode=warn, ambiguous-rows
+// diagnostic) never reached the model: stderr on exit 0 is debug-log only.
+// Same envelope as emit() deny, but permissionDecision allow + additionalContext.
+function emitAllowContext(text) {
+  process.stdout.write(`${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      additionalContext: text,
+    },
+  })}\n`);
+}
+
 function decide(payload, cfg, st, ceiling = {}) {
   const tool = payload.tool_name || '';
   const input = payload.tool_input || {};
@@ -322,10 +335,20 @@ function decide(payload, cfg, st, ceiling = {}) {
       saveState(file, st);
       return r;
     });
-    if (d.diagnostic) process.stderr.write(`${d.diagnostic}\n`); // ambiguous rows: never a gate
-    if (!d.deny) process.exit(0);
+    const advisory = [];
+    if (d.diagnostic) {
+      process.stderr.write(`${d.diagnostic}\n`); // ambiguous rows: never a gate
+      advisory.push(d.diagnostic);
+    }
+    if (!d.deny) {
+      if (advisory.length) emitAllowContext(advisory.join('\n'));
+      process.exit(0);
+    }
     if (cfg.mode === 'warn') {
-      process.stderr.write(`${d.reason} [mode=warn: allowed]\n`);
+      const warnLine = `${d.reason} [mode=warn: allowed]`;
+      process.stderr.write(`${warnLine}\n`);
+      advisory.push(warnLine);
+      emitAllowContext(advisory.join('\n'));
       process.exit(0);
     }
     emit('deny', d.reason);

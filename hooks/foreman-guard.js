@@ -52,6 +52,10 @@ const { tiersForKnownWindow } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 
 const DEFAULT_BASH_CAP = 40;
+const DEFAULT_WORKER_REVIEWER_CAP = 120;
+const FIRST_LINE_MAX = 64 * 1024;
+const ROLE_LINE_RE = /^Role: (foreman|worker|reviewer)$/;
+const ROLE_KEYS = ['foreman', 'worker', 'reviewer'];
 const FOREMAN_LEVELS = new Set(['l4', 'l5', 'l6']);
 
 // Foreground wait/poll shapes observed in the digest and the 5ca9b104 incident.
@@ -118,8 +122,26 @@ function isAffirmative(v) {
   return false;
 }
 
+function overlayRoleCaps(target, src) {
+  if (!src || typeof src !== 'object') return;
+  for (const key of ROLE_KEYS) {
+    if (Number.isInteger(src[key]) && src[key] > 0) target[key] = src[key];
+  }
+}
+
+function overlayRoleCapsEnv(target, raw) {
+  if (typeof raw !== 'string' || !raw) return;
+  for (const part of raw.split(',')) {
+    const m = /^(foreman|worker|reviewer)=(\d+)$/.exec(part.trim());
+    if (!m) continue; // malformed or unknown key: ignore
+    const n = Number(m[2]);
+    if (Number.isInteger(n) && n > 0) target[m[1]] = n;
+  }
+}
+
 function loadConfig() {
   const cfg = { mode: 'block', bashCap: DEFAULT_BASH_CAP };
+  let fileRoleCaps = null;
   try {
     const file = path.join(os.homedir(), '.autopilot', 'config.json');
     if (fs.existsSync(file)) {
@@ -128,6 +150,7 @@ function loadConfig() {
       if (fg && typeof fg === 'object') {
         if (['block', 'warn', 'off'].includes(fg.mode)) cfg.mode = fg.mode;
         if (Number.isInteger(fg.bash_cap) && fg.bash_cap > 0) cfg.bashCap = fg.bash_cap;
+        if (fg.role_caps && typeof fg.role_caps === 'object') fileRoleCaps = fg.role_caps;
       }
     }
   } catch { /* defaults */ }
@@ -135,7 +158,53 @@ function loadConfig() {
   if (['block', 'warn', 'off'].includes(envMode)) cfg.mode = envMode;
   const envCap = Number(process.env.AUTOPILOT_FOREMAN_GUARD_BASH_CAP);
   if (Number.isInteger(envCap) && envCap > 0) cfg.bashCap = envCap;
+  cfg.roleCaps = {
+    foreman: cfg.bashCap,
+    worker: DEFAULT_WORKER_REVIEWER_CAP,
+    reviewer: DEFAULT_WORKER_REVIEWER_CAP,
+  };
+  overlayRoleCaps(cfg.roleCaps, fileRoleCaps);
+  overlayRoleCapsEnv(cfg.roleCaps, process.env.AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS);
   return cfg;
+}
+
+// Role from the child's FIRST user message only. Own try/catch, own file read,
+// before the state lock. Any failure ⇒ "foreman" (never throw, never uncap).
+function resolveRole(payload) {
+  try {
+    const tpath = payload.transcript_path;
+    if (typeof tpath !== 'string' || !tpath) return 'foreman';
+    const child = path.join(
+      path.dirname(tpath),
+      String(payload.session_id),
+      'subagents',
+      `agent-${payload.agent_id}.jsonl`,
+    );
+    const fd = fs.openSync(child, 'r');
+    try {
+      const buf = Buffer.alloc(FIRST_LINE_MAX + 1);
+      const n = fs.readSync(fd, buf, 0, FIRST_LINE_MAX + 1, 0);
+      const slice = buf.subarray(0, n);
+      const nl = slice.indexOf(0x0a);
+      if (nl < 0 || nl > FIRST_LINE_MAX) return 'foreman';
+      let rec;
+      try { rec = JSON.parse(slice.subarray(0, nl).toString('utf8')); } catch { return 'foreman'; }
+      if (!rec || typeof rec !== 'object' || rec.type !== 'user') return 'foreman';
+      if (rec.agentId !== payload.agent_id) return 'foreman';
+      const content = rec.message && rec.message.content;
+      if (typeof content !== 'string') return 'foreman';
+      const lines = content.split('\n').slice(0, 5);
+      for (const line of lines) {
+        const m = ROLE_LINE_RE.exec(line);
+        if (m) return m[1];
+      }
+      return 'foreman';
+    } finally {
+      try { fs.closeSync(fd); } catch { /* ignore */ }
+    }
+  } catch {
+    return 'foreman';
+  }
 }
 
 // Same knob context-budget.js reads (context_budget.{t1,t2} / AUTOPILOT_CONTEXT_BUDGET_T1/T2)
@@ -266,7 +335,7 @@ function emitAllowContext(text) {
   })}\n`);
 }
 
-function decide(payload, cfg, st, ceiling = {}) {
+function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
   const tool = payload.tool_name || '';
   const input = payload.tool_input || {};
   if (tool === 'Monitor') {
@@ -274,6 +343,7 @@ function decide(payload, cfg, st, ceiling = {}) {
       'foreman-guard: Monitor is depth-0 only (ironlaw #6). A foreman waits with run_in_background + a paired dead-man `sleep <deadline>; echo WAKE`, then ENDS ITS TURN.' };
   }
   if (tool !== 'Bash') return { deny: false, diagnostic: ceiling.diagnostic };
+  const cap = cfg.roleCaps && Number.isInteger(cfg.roleCaps[role]) ? cfg.roleCaps[role] : cfg.bashCap;
   const cmd = typeof input.command === 'string' ? input.command : '';
   const background = isAffirmative(input.run_in_background);
   // Every Bash ATTEMPT is reserved against the cap before any rule runs — a denied
@@ -286,9 +356,9 @@ function decide(payload, cfg, st, ceiling = {}) {
   if (ceiling.deny) {
     return { deny: true, rule: 'context-ceiling', count: n, reason: ceiling.reason, diagnostic: ceiling.diagnostic };
   }
-  if (n > cfg.bashCap) {
+  if (n > cap) {
     return { deny: true, rule: 'bash-cap', count: n, reason:
-      `foreman-guard: Bash call ${n} exceeds the foreman cap of ${cfg.bashCap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`,
+      `foreman-guard: Bash call ${n} exceeds the ${role} cap of ${cap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`,
       diagnostic: ceiling.diagnostic };
   }
   if (!background) {
@@ -296,7 +366,7 @@ function decide(payload, cfg, st, ceiling = {}) {
     for (const r of POLL_RULES) {
       if (r.re.test(text)) {
         return { deny: true, rule: r.id, count: n, reason:
-          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cfg.bashCap} spent.)`,
+          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cap} spent.)`,
           diagnostic: ceiling.diagnostic };
       }
     }
@@ -321,11 +391,12 @@ function decide(payload, cfg, st, ceiling = {}) {
     // state lock (it does its own I/O — a live-file read and a findmnt shell-out — that
     // has no business holding the per-agent lock).
     const ceiling = payload.tool_name === 'Bash' ? checkContextCeiling(payload) : {};
+    const role = payload.tool_name === 'Bash' ? resolveRole(payload) : 'foreman';
     const file = stateFile(sessionId, payload.agent_id);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const d = withLock(file, () => {
       const st = loadState(file);
-      const r = decide(payload, cfg, st, ceiling);
+      const r = decide(payload, cfg, st, ceiling, role);
       if (Number.isInteger(r.count)) st.bash_calls = r.count; // every Bash attempt is counted
       if (r.deny) { st.denied += 1; st.last_denied_rule = r.rule; }
       // v2.36.2: the ambiguous-rows diagnostic is printed once per agent per distinct text

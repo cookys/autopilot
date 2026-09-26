@@ -172,4 +172,205 @@ run_hook dispatch-model-guard.js "$DMG_PAYLOAD"
 assert_no_permission_decision "neg-dispatch-model-guard"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
+# RED at 0a57d55e: group-T opt-in advisories still stderr-only (empty stdout);
+# multiplexer concatenates child JSON instead of merging additionalContext
+# RED at 0a57d55e: ha-p1b six opt-in hooks + multiplexer merge/exit-2/allow-drop all fail on unmodified base
+
+# Capture a hook with optional cwd / extra argv (mcp-health pre|failure, git cwd).
+capture_node() {
+  local cwd="$1"
+  local hook="$2"
+  shift 2
+  local stdout_file="$TEST_TMP/.stdout.$$"
+  local stderr_file="$TEST_TMP/.stderr.$$"
+  (
+    cd "$cwd" || exit 1
+    HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" \
+      CLAUDE_PLUGIN_ROOT="${CAPTURE_PLUGIN_ROOT:-$REPO_ROOT}" \
+      node "$HOOKS_DIR/$hook" "$@" >"$stdout_file" 2>"$stderr_file" <<< "${CAPTURE_STDIN}"
+  )
+  __RUN_EXIT=$?
+  __RUN_STDOUT=$(cat "$stdout_file")
+  __RUN_STDERR=$(cat "$stderr_file")
+  rm -f "$stdout_file" "$stderr_file"
+}
+
+# ── 7. orchestrator-edit-gate warn ────────────────────────────────────
+export AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE=1
+export AUTOPILOT_ORCH_EDIT_GATE_MODE=warn
+OEG_REPO="$TEST_TMP/oeg-repo"
+mkdir -p "$OEG_REPO/src"
+git -C "$OEG_REPO" init -b main >/dev/null
+OEG_MARKERS="$TEST_TMP/oeg-markers"
+mkdir -p "$OEG_MARKERS"
+export AUTOPILOT_SESSION_MODE_DIR="$OEG_MARKERS"
+export CLAUDE_CODE_SESSION_ID="oeg-adv-sid"
+HOME="$HOOK_HOME" AUTOPILOT_SESSION_MODE_DIR="$OEG_MARKERS" CLAUDE_CODE_SESSION_ID="oeg-adv-sid" \
+  node "$REPO_ROOT/scripts/session-mode.js" set --level l5 --repo-root "$OEG_REPO" >/dev/null
+OEG_FILE="$OEG_REPO/src/gated.js"
+touch "$OEG_FILE"
+CAPTURE_STDIN=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"a","new_string":"b"},"hook_event_name":"PreToolUse"}' "$OEG_FILE")
+capture_node "$OEG_REPO" orchestrator-edit-gate.js
+assert_eq 0 "$__RUN_EXIT" "orchestrator-edit-gate warn: exit 0"
+assert_contains "$__RUN_STDERR" "orchestrator-edit-gate warn" "orchestrator-edit-gate: stderr still has advisory"
+assert_advisory_stdout "PreToolUse" "orchestrator-edit-gate warn"
+unset AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE AUTOPILOT_ORCH_EDIT_GATE_MODE AUTOPILOT_SESSION_MODE_DIR CLAUDE_CODE_SESSION_ID
+
+# ── 8. branch-protection merge warn on protected branch ───────────────
+export AUTOPILOT_HOOK_BRANCH_PROTECTION=1
+BP_REPO="$TEST_TMP/bp-repo"
+mkdir -p "$BP_REPO"
+git -C "$BP_REPO" init -b main >/dev/null
+git -C "$BP_REPO" config user.email "t@t.t"
+git -C "$BP_REPO" config user.name "t"
+echo x > "$BP_REPO/f"
+git -C "$BP_REPO" add f
+git -C "$BP_REPO" commit -m init >/dev/null
+CAPTURE_STDIN='{"tool_name":"Bash","tool_input":{"command":"git merge other"},"hook_event_name":"PreToolUse"}'
+capture_node "$BP_REPO" branch-protection.js
+assert_eq 0 "$__RUN_EXIT" "branch-protection warn: exit 0"
+assert_contains "$__RUN_STDERR" "WARNING: Mutation on protected branch" "branch-protection: stderr still has advisory"
+assert_advisory_stdout "PreToolUse" "branch-protection"
+unset AUTOPILOT_HOOK_BRANCH_PROTECTION
+
+# ── 9. large-file-warner size-warn (not block) ────────────────────────
+export AUTOPILOT_HOOK_LARGE_FILE_WARNER=1
+LFW_FILE="$TEST_TMP/largetarget.bin"
+dd if=/dev/zero of="$LFW_FILE" bs=1024 count=600 status=none
+CAPTURE_STDIN=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"},"hook_event_name":"PreToolUse"}' "$LFW_FILE")
+capture_node "$TEST_TMP" large-file-warner.js
+assert_eq 0 "$__RUN_EXIT" "large-file-warner warn: exit 0"
+assert_contains "$__RUN_STDERR" "WARNING:" "large-file-warner: stderr still has advisory"
+assert_advisory_stdout "PreToolUse" "large-file-warner"
+unset AUTOPILOT_HOOK_LARGE_FILE_WARNER
+
+# ── 10. design-quality generic CTA ────────────────────────────────────
+export AUTOPILOT_HOOK_DESIGN_QUALITY=1
+DQ_FILE="$TEST_TMP/Hero.tsx"
+printf '%s\n' 'export const cta = "Get Started";' > "$DQ_FILE"
+CAPTURE_STDIN=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"},"hook_event_name":"PostToolUse"}' "$DQ_FILE")
+capture_node "$TEST_TMP" design-quality.js
+assert_eq 0 "$__RUN_EXIT" "design-quality: exit 0"
+assert_contains "$__RUN_STDERR" "Design quality check" "design-quality: stderr still has advisory"
+assert_advisory_stdout "PostToolUse" "design-quality"
+unset AUTOPILOT_HOOK_DESIGN_QUALITY
+
+# ── 11. test-runner sibling failure ───────────────────────────────────
+export AUTOPILOT_HOOK_TEST_RUNNER=1
+TR_DIR="$TEST_TMP/tr-proj"
+mkdir -p "$TR_DIR/node_modules/.bin" "$TR_DIR/src"
+printf '%s\n' 'module.exports = 1;' > "$TR_DIR/src/mod.js"
+printf '%s\n' 'throw new Error("fail");' > "$TR_DIR/src/mod.test.js"
+printf '%s\n' '#!/bin/sh' 'echo vitest-fail-output' 'exit 1' > "$TR_DIR/node_modules/.bin/vitest"
+chmod +x "$TR_DIR/node_modules/.bin/vitest"
+CAPTURE_STDIN=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"},"hook_event_name":"PostToolUse"}' "$TR_DIR/src/mod.js")
+capture_node "$TR_DIR" test-runner.js
+assert_eq 0 "$__RUN_EXIT" "test-runner: exit 0"
+assert_contains "$__RUN_STDERR" "Test failure for" "test-runner: stderr still has advisory"
+assert_advisory_stdout "PostToolUse" "test-runner"
+unset AUTOPILOT_HOOK_TEST_RUNNER
+
+# ── 12. mcp-health failure argv (PostToolUseFailure advisory) ─────────
+export AUTOPILOT_HOOK_MCP_HEALTH=1
+mkdir -p "$HOOK_HOME/.claude"
+CAPTURE_STDIN='{"tool_name":"mcp__demo__call","tool_output":"ECONNREFUSED connection failed","hook_event_name":"PostToolUseFailure"}'
+capture_node "$TEST_TMP" mcp-health.js failure
+assert_eq 0 "$__RUN_EXIT" "mcp-health failure: exit 0"
+assert_contains "$__RUN_STDERR" "marked unhealthy" "mcp-health failure: stderr still has advisory"
+assert_advisory_stdout "PostToolUseFailure" "mcp-health failure"
+
+# ── 13. mcp-health pre argv (unhealthy window still writes model text) ─
+# pre's model-facing write currently exits 2. Tests still require the advisory
+# JSON channel (exit 0 is the failure-path sibling above). Drive the write via
+# a healthy retry-window expiry so the hook stays exit 0: seed lastError and
+# nextRetry in the past, then... that path does NOT write. The only pre write
+# is the unhealthy+backoff branch. Emit JSON on that write; keep exit 2 in
+# product. This case asserts the JSON channel on the write (exit remains 2).
+HOME="$HOOK_HOME" node -e '
+const fs = require("fs");
+const path = require("path");
+const p = path.join(process.env.HOME, ".claude", "mcp-health-cache.json");
+fs.mkdirSync(path.dirname(p), { recursive: true });
+fs.writeFileSync(p, JSON.stringify({
+  demo: { healthy: false, failures: 2, nextRetry: Date.now() + 60000, lastError: "ECONNREFUSED" }
+}, null, 2));
+'
+CAPTURE_STDIN='{"tool_name":"mcp__demo__call","hook_event_name":"PreToolUse"}'
+capture_node "$TEST_TMP" mcp-health.js pre
+assert_eq 2 "$__RUN_EXIT" "mcp-health pre: exit 2 (deny path unchanged)"
+assert_contains "$__RUN_STDERR" "is unhealthy" "mcp-health pre: stderr still has advisory"
+assert_advisory_stdout "PreToolUse" "mcp-health pre"
+unset AUTOPILOT_HOOK_MCP_HEALTH
+
+# ── 14. multiplexer: two advising children merge ──────────────────────
+MUX_ROOT="$TEST_TMP/mux-plugin"
+mkdir -p "$MUX_ROOT/hooks"
+printf '%s\n' '#!/usr/bin/env node
+process.stderr.write("ADV-A-STDERR\n");
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"ADV-A-STDERR"}})+"\n");
+' > "$MUX_ROOT/hooks/test-runner.js"
+printf '%s\n' '#!/usr/bin/env node
+process.stderr.write("ADV-B-STDERR\n");
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"ADV-B-STDERR"}})+"\n");
+' > "$MUX_ROOT/hooks/design-quality.js"
+export AUTOPILOT_HOOK_TEST_RUNNER=1
+export AUTOPILOT_HOOK_DESIGN_QUALITY=1
+unset AUTOPILOT_HOOK_ACCUMULATOR
+CAPTURE_PLUGIN_ROOT="$MUX_ROOT"
+CAPTURE_STDIN='{"tool_name":"Edit","tool_input":{"file_path":"x.js"}}'
+capture_node "$TEST_TMP" opt-in-multiplexer.js PostToolUse
+assert_eq 0 "$__RUN_EXIT" "mux merge: exit 0"
+MERGED_CTX=$(node -e 'const fs=require("fs"); const o=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(o.hookSpecificOutput.additionalContext);' <<< "$__RUN_STDOUT")
+assert_eq "ADV-A-STDERR
+ADV-B-STDERR" "$MERGED_CTX" "mux merge: additionalContext joined in child order"
+node -e '
+const o=JSON.parse(process.argv[1]);
+if (o.hookSpecificOutput.hookEventName!=="PostToolUse") process.exit(1);
+function w(v){ if(v&&typeof v==="object"){ if(Object.prototype.hasOwnProperty.call(v,"permissionDecision")) process.exit(2); Object.keys(v).forEach(k=>w(v[k])); } }
+w(o);
+' "$__RUN_STDOUT"
+assert_eq 0 "$?" "mux merge: event PostToolUse, no permissionDecision"
+
+# ── 15. multiplexer: advising sibling + exit-2 passthrough ────────────
+printf '%s\n' '#!/usr/bin/env node
+process.stderr.write("ADV-A-STDERR\n");
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"ADV-A-STDERR"}})+"\n");
+' > "$MUX_ROOT/hooks/test-runner.js"
+printf '%s\n' '#!/usr/bin/env node
+process.stdout.write("EXIT2-RAW-STDOUT");
+process.stderr.write("EXIT2-ERR\n");
+process.exit(2);
+' > "$MUX_ROOT/hooks/design-quality.js"
+CAPTURE_PLUGIN_ROOT="$MUX_ROOT"
+CAPTURE_STDIN='{"tool_name":"Edit","tool_input":{"file_path":"x.js"}}'
+HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$MUX_ROOT" \
+  node "$HOOKS_DIR/opt-in-multiplexer.js" PostToolUse >"$TEST_TMP/mux-e2.out" 2>"$TEST_TMP/mux-e2.err" <<< "$CAPTURE_STDIN"
+assert_eq 2 "$?" "mux exit2: multiplexer exits 2"
+HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$MUX_ROOT" \
+  node "$MUX_ROOT/hooks/design-quality.js" >"$TEST_TMP/child-e2.out" 2>/dev/null <<< "$CAPTURE_STDIN" || true
+cmp -s "$TEST_TMP/mux-e2.out" "$TEST_TMP/child-e2.out"
+assert_eq 0 "$?" "mux exit2: stdout byte-identical to the exit-2 child alone"
+
+# ── 16. multiplexer: drop permissionDecision allow ────────────────────
+printf '%s\n' '#!/usr/bin/env node
+process.stderr.write("ALLOW-ADV\n");
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"ALLOW-ADV",permissionDecision:"allow"}})+"\n");
+' > "$MUX_ROOT/hooks/test-runner.js"
+printf '%s\n' '#!/usr/bin/env node
+process.exit(0);
+' > "$MUX_ROOT/hooks/design-quality.js"
+CAPTURE_PLUGIN_ROOT="$MUX_ROOT"
+CAPTURE_STDIN='{"tool_name":"Edit","tool_input":{"file_path":"x.js"}}'
+capture_node "$TEST_TMP" opt-in-multiplexer.js PostToolUse
+assert_eq 0 "$__RUN_EXIT" "mux drop-allow: exit 0"
+node -e '
+const o=JSON.parse(process.argv[1]);
+if (o.hookSpecificOutput.additionalContext!=="ALLOW-ADV") process.exit(1);
+function w(v){ if(v&&typeof v==="object"){ if(Object.prototype.hasOwnProperty.call(v,"permissionDecision")) process.exit(2); Object.keys(v).forEach(k=>w(v[k])); } }
+w(o);
+' "$__RUN_STDOUT"
+assert_eq 0 "$?" "mux drop-allow: additionalContext kept, permissionDecision absent"
+unset AUTOPILOT_HOOK_TEST_RUNNER AUTOPILOT_HOOK_DESIGN_QUALITY
+unset CAPTURE_PLUGIN_ROOT
+
 finalize_test

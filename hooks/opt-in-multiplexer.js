@@ -94,7 +94,8 @@ function main() {
     toolName = payload.tool_name || payload.toolName || '';
   } catch (_e) { /* unmatched matchers treated carefully below */ }
 
-  let exitCode = 0;
+  const ran = [];
+  let exit2Child = null;
   for (const reg of EVENT_TABLE[eventName]) {
     if (!isEnabled(reg.stem, userConfig)) continue;
     if (!matcherHits(reg.matcher, toolName)) continue;
@@ -105,13 +106,43 @@ function main() {
       env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT },
       maxBuffer: 16 * 1024 * 1024,
     });
-    if (child.stdout && child.stdout.length) process.stdout.write(child.stdout);
+    ran.push(child);
     if (child.stderr && child.stderr.length) process.stderr.write(child.stderr);
-    if (typeof child.status === 'number' && child.status !== 0) {
-      exitCode = child.status;
+    if (typeof child.status === 'number' && child.status === 2) {
+      exit2Child = child;
     }
   }
-  process.exit(exitCode);
+
+  if (exit2Child) {
+    if (exit2Child.stdout && exit2Child.stdout.length) {
+      process.stdout.write(exit2Child.stdout);
+    }
+    process.exit(2);
+  }
+
+  const contexts = [];
+  for (const child of ran) {
+    if (!child.stdout || !child.stdout.length) continue;
+    let obj;
+    try {
+      obj = JSON.parse(child.stdout.toString('utf8'));
+    } catch (_e) {
+      continue;
+    }
+    const hso = obj && obj.hookSpecificOutput;
+    if (!hso || typeof hso !== 'object') continue;
+    if (typeof hso.additionalContext !== 'string') continue;
+    contexts.push(hso.additionalContext);
+  }
+  if (contexts.length) {
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: eventName,
+        additionalContext: contexts.join('\n'),
+      },
+    })}\n`);
+  }
+  process.exit(0);
 }
 
 try {

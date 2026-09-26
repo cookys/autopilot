@@ -109,10 +109,24 @@ function hasWorktreeMarkerAbove(target) {
 
     if (d.action === 'gate') {
       if (mode === 'block') {
-        process.stderr.write(`${d.reason}\n`);
+        const text = `${d.reason}\n`;
+        process.stderr.write(text);
+        process.stdout.write(`${JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            additionalContext: d.reason,
+          },
+        })}\n`);
         exitCode = 2; // PreToolUse exit 2 ⇒ deny the tool call
       } else {
-        process.stderr.write(`[orchestrator-edit-gate warn] ${d.reason}\n`);
+        const text = `[orchestrator-edit-gate warn] ${d.reason}\n`;
+        process.stderr.write(text);
+        process.stdout.write(`${JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            additionalContext: `[orchestrator-edit-gate warn] ${d.reason}`,
+          },
+        })}\n`);
       }
     }
   } catch (e) {

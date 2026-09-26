@@ -54,9 +54,15 @@ try {
   }
 
   if (size >= WARN_BYTES) {
-    process.stderr.write(
-      `WARNING: ${filePath} is ${formatSize(size)}. Consider using offset/limit for large files.\n`
-    );
+    const text =
+      `WARNING: ${filePath} is ${formatSize(size)}. Consider using offset/limit for large files.\n`;
+    process.stderr.write(text);
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: text.replace(/\n$/, ''),
+      },
+    })}\n`);
     process.exit(0);
   }
 

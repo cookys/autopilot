@@ -89,9 +89,14 @@ try {
 
   // Warn on other mutations (merge, rebase, reset, cherry-pick)
   if (/\bgit\s+(merge|rebase|reset|cherry-pick|revert)\b/.test(command)) {
-    process.stderr.write(
-      `WARNING: Mutation on protected branch '${branch}'. Proceed with caution.\n`
-    );
+    const text = `WARNING: Mutation on protected branch '${branch}'. Proceed with caution.\n`;
+    process.stderr.write(text);
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: text.replace(/\n$/, ''),
+      },
+    })}\n`);
   }
 
   process.exit(0);

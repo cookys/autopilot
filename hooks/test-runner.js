@@ -81,7 +81,14 @@ try {
 
   if (r.status !== 0) {
     const lines = output.split('\n').slice(0, MAX_OUTPUT_LINES);
-    process.stderr.write(`Test failure for ${path.basename(filePath)}:\n${lines.join('\n')}\n`);
+    const text = `Test failure for ${path.basename(filePath)}:\n${lines.join('\n')}\n`;
+    process.stderr.write(text);
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: text.replace(/\n+$/, ''),
+      },
+    })}\n`);
   }
 
   process.exit(0);

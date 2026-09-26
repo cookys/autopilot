@@ -42,11 +42,17 @@ try {
   }
 
   if (found.length > 0) {
-    process.stderr.write(
+    const text =
       `Design quality check for ${path.basename(filePath)}:\n` +
       found.map(s => `  - ${s}`).join('\n') + '\n' +
-      `Consider more intentional, distinctive design choices.\n`
-    );
+      `Consider more intentional, distinctive design choices.\n`;
+    process.stderr.write(text);
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: text.replace(/\n$/, ''),
+      },
+    })}\n`);
   }
 
   process.exit(0);

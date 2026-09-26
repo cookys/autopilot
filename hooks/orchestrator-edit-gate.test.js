@@ -463,6 +463,10 @@ test('wrapper: warn mode ⇒ exit 0 with stderr warning', () => {
   const r = runHook(payload(path.join(repo, 'src', 'a.js')), { ...env, AUTOPILOT_ORCH_EDIT_GATE_MODE: 'warn' });
   assert.strictEqual(r.status, 0);
   assert.match(r.stderr, /orchestrator/i);
+  const obj = JSON.parse(r.stdout);
+  assert.strictEqual(obj.hookSpecificOutput.hookEventName, 'PreToolUse');
+  assert.strictEqual(obj.hookSpecificOutput.additionalContext, r.stderr.replace(/\n$/, ''));
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(obj.hookSpecificOutput, 'permissionDecision'), false);
 });
 
 test('wrapper: garbage stdin ⇒ fail-open exit 0', () => {

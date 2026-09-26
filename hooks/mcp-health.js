@@ -62,10 +62,16 @@ try {
   if (mode === 'pre') {
     if (!entry.healthy && Date.now() < entry.nextRetry) {
       const waitSec = Math.ceil((entry.nextRetry - Date.now()) / 1000);
-      process.stderr.write(
+      const text =
         `MCP server '${server}' is unhealthy (${entry.failures} failures). ` +
-        `Retry in ${waitSec}s. Last error: ${entry.lastError || 'unknown'}\n`
-      );
+        `Retry in ${waitSec}s. Last error: ${entry.lastError || 'unknown'}\n`;
+      process.stderr.write(text);
+      process.stdout.write(`${JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          additionalContext: text.replace(/\n$/, ''),
+        },
+      })}\n`);
       process.exit(2);
     }
     // Past retry window or healthy — clear and allow
@@ -84,10 +90,16 @@ try {
       entry.lastError = output.slice(0, 200);
       cache[server] = entry;
       writeCache(cache);
-      process.stderr.write(
+      const text =
         `MCP server '${server}' marked unhealthy (failure #${entry.failures}). ` +
-        `Backoff: ${Math.round(backoff / 1000)}s.\n`
-      );
+        `Backoff: ${Math.round(backoff / 1000)}s.\n`;
+      process.stderr.write(text);
+      process.stdout.write(`${JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PostToolUseFailure',
+          additionalContext: text.replace(/\n$/, ''),
+        },
+      })}\n`);
     }
   }
 
